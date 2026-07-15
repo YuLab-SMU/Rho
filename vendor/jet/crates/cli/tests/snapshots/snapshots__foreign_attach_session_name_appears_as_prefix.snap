@@ -1,0 +1,9 @@
+---
+source: crates/cli/tests/snapshots.rs
+expression: t1.snapshot_screen()
+---
+Python test banner
+┌─alpha
+│ > print("x")
+│ x
+>

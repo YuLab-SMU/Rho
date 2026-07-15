@@ -1,0 +1,7 @@
+{
+  "version": "0.1.252",
+  "windows-x64": {
+    "url": "https://github.com/posit-dev/ark/releases/download/0.1.252/ark-0.1.252-windows-x64.zip",
+    "sha256": "A6C2C6AE931D0DD5E1F771243BF3DF4F86968462BBD8E08CEEBA7F2E53567E58"
+  }
+}

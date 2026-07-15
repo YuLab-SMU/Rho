@@ -1,0 +1,12 @@
+[package]
+name = "rho-agent-transport"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rand.workspace = true
+rho-protocol = { path = "../rho-protocol" }
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true

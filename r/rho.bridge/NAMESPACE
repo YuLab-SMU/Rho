@@ -1,0 +1,6 @@
+export(rho_execute)
+export(rho_get_last_execution)
+export(rho_inspect_object)
+export(rho_list_objects)
+export(rho_workspace_snapshot)
+

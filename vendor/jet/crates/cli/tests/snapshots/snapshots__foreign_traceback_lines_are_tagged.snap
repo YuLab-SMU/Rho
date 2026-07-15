@@ -1,0 +1,14 @@
+---
+source: crates/cli/tests/snapshots.rs
+expression: t1.snapshot_screen()
+---
+Python test banner
+┌─jet
+│ > raise ValueError("oh no")
+│ ---------------------------------------------------------------------------
+│ ValueError                                Traceback (most recent call last)
+│ Cell In[1], line 1
+│ ----> 1 raise ValueError("oh no")
+│
+│ ValueError: oh no
+>

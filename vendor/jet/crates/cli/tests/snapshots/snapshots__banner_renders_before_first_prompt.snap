@@ -1,0 +1,6 @@
+---
+source: crates/cli/tests/snapshots.rs
+expression: h.snapshot_screen()
+---
+Python test banner
+>

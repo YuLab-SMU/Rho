@@ -1,0 +1,8 @@
+---
+source: crates/cli/tests/snapshots.rs
+expression: t1.snapshot_screen()
+---
+┌─jet
+│ > cat("HELLO_FROM_FOREIGN\n")
+│ HELLO_FROM_FOREIGN
+> abc

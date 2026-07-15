@@ -1,0 +1,16 @@
+[package]
+name = "rho-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+rho-kernel = { path = "../rho-kernel" }
+rho-agent-transport = { path = "../rho-agent-transport" }
+rho-protocol = { path = "../rho-protocol" }
+rho-store = { path = "../rho-store" }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true

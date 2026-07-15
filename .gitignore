@@ -1,0 +1,9 @@
+/target/
+/work/
+/node_modules/
+/.rho/
+/.Rproj.user/
+.Rhistory
+.RData
+.DS_Store
+*.log
