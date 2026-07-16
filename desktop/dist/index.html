@@ -154,6 +154,20 @@ plot(
               <div><strong>Workspace connected</strong><p>Ark session is ready for inspection and execution.</p></div>
             </div>
           </div>
+          <div id="approvalPanel" class="approval-panel hidden">
+            <div class="approval-header">
+              <strong>Approval Required</strong>
+              <span id="approvalRequestId" class="revision-badge">request</span>
+            </div>
+            <p id="approvalSummary" class="approval-summary">Review the exact tool request before Workspace R changes.</p>
+            <div id="approvalRevision" class="approval-revision"></div>
+            <code id="approvalCode" class="timeline-code hidden"></code>
+            <div class="approval-actions">
+              <button id="approvalApprove" type="button">Approve</button>
+              <button id="approvalReject" type="button">Reject</button>
+              <button id="approvalCancel" type="button">Cancel</button>
+            </div>
+          </div>
           <div class="agent-composer">
             <div class="mode-control" role="group" aria-label="Agent mode">
               <button class="active" data-agent-mode="ask" type="button">Ask</button>

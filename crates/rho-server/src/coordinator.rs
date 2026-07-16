@@ -1,6 +1,7 @@
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::Arc;
 
 use anyhow::{Context, Result, bail, ensure};
 use rho_agent_transport::{
@@ -9,9 +10,46 @@ use rho_agent_transport::{
 use rho_core::{BrokerState, ExecutionOrigin, ExecutionRequest};
 use rho_kernel::{ArkLaunchConfig, ArkSession};
 use rho_protocol::{Envelope, ExpectedWorkspace, MAX_FRAME_BYTES, MessageKind, OperationClass};
-use rho_store::{RunDraft, RunFinish, Store};
+use rho_store::{
+    AgentTurnEventDraft, AgentTurnFinish, ApprovalDecisionRecord, ApprovalRequestDraft, RunDraft,
+    RunFinish, Store,
+};
 use serde_json::{Value, json};
 use tokio::io::AsyncWriteExt;
+use tokio::sync::{Mutex, oneshot};
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ApprovalResponseInput {
+    pub decision: String,
+    pub reason: Option<String>,
+}
+
+#[derive(Default)]
+pub struct PendingApprovalRegistry {
+    waiters: Mutex<std::collections::HashMap<String, oneshot::Sender<ApprovalResponseInput>>>,
+}
+
+impl PendingApprovalRegistry {
+    pub async fn register(&self, request_id: String) -> oneshot::Receiver<ApprovalResponseInput> {
+        let (sender, receiver) = oneshot::channel();
+        self.waiters.lock().await.insert(request_id, sender);
+        receiver
+    }
+
+    pub async fn respond(&self, request_id: &str, decision: ApprovalResponseInput) -> bool {
+        let sender = self.waiters.lock().await.remove(request_id);
+        sender.is_some_and(|sender| sender.send(decision).is_ok())
+    }
+
+    pub async fn remove(&self, request_id: &str) {
+        self.waiters.lock().await.remove(request_id);
+    }
+}
+
+struct DesktopAgentCompletion {
+    events: Vec<Value>,
+    final_message: Option<String>,
+}
 
 pub async fn probe(
     kernelspec: PathBuf,
@@ -640,15 +678,18 @@ pub async fn run_agent_turn(
     model: String,
     prompt: String,
     mode: String,
+    turn_id: String,
+    approvals: Arc<PendingApprovalRegistry>,
 ) -> Result<Value> {
     ensure!(
         matches!(mode.as_str(), "ask" | "plan" | "act"),
         "unsupported Agent mode `{mode}`"
     );
-    let mut authenticator = AgentAuthenticator::bind().await?;
-    let address = authenticator.local_addr()?;
-    let token = authenticator.bootstrap_token()?.to_string();
-    let script = r#"
+    let result = async {
+        let mut authenticator = AgentAuthenticator::bind().await?;
+        let address = authenticator.local_addr()?;
+        let token = authenticator.bootstrap_token()?.to_string();
+        let script = r#"
 args <- commandArgs(TRUE)
 source(file.path(args[[2]], "R", "aaa-state.R"))
 source(file.path(args[[2]], "R", "transport.R"))
@@ -697,60 +738,95 @@ rho_agent_emit(
 close(connection)
 "#;
 
-    let mut child = tokio::process::Command::new(rscript)
-        .arg("-e")
-        .arg(script)
-        .arg(address.port().to_string())
-        .arg(agent_package)
-        .arg(&model)
-        .arg(prompt)
-        .arg(&mode)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .context("spawning desktop Agent R turn")?;
-    let mut stdin = child.stdin.take().context("opening Agent R stdin")?;
-    stdin.write_all(format!("{token}\n").as_bytes()).await?;
-    stdin.shutdown().await?;
+        let mut child = tokio::process::Command::new(rscript)
+            .arg("-e")
+            .arg(script)
+            .arg(address.port().to_string())
+            .arg(agent_package)
+            .arg(&model)
+            .arg(prompt)
+            .arg(&mode)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .context("spawning desktop Agent R turn")?;
+        let mut stdin = child.stdin.take().context("opening Agent R stdin")?;
+        stdin.write_all(format!("{token}\n").as_bytes()).await?;
+        stdin.shutdown().await?;
 
-    let mut agent = tokio::time::timeout(
-        std::time::Duration::from_secs(30),
-        authenticator.authenticate_next(),
-    )
-    .await
-    .context("timed out waiting for desktop Agent R authentication")??;
-    send_identity(&mut agent, broker, store).await?;
-    let completion_result =
-        serve_desktop_agent(&mut agent, session, broker, store, mode == "act").await;
-    let output = tokio::time::timeout(
-        std::time::Duration::from_secs(180),
-        child.wait_with_output(),
-    )
-    .await
-    .context("timed out waiting for desktop Agent R turn")??;
-    let completion = completion_result.with_context(|| {
-        format!(
-            "Agent R loop ended before completion; process status {}; stderr: {}",
+        let mut agent = tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            authenticator.authenticate_next(),
+        )
+        .await
+        .context("timed out waiting for desktop Agent R authentication")??;
+        send_identity(&mut agent, broker, store).await?;
+        let completion_result = serve_desktop_agent(
+            &mut agent,
+            session,
+            broker,
+            store,
+            &turn_id,
+            &mode,
+            approvals.clone(),
+        )
+        .await;
+        let output = tokio::time::timeout(
+            std::time::Duration::from_secs(180),
+            child.wait_with_output(),
+        )
+        .await
+        .context("timed out waiting for desktop Agent R turn")??;
+        let completion = completion_result.with_context(|| {
+            format!(
+                "Agent R loop ended before completion; process status {}; stderr: {}",
+                output.status,
+                redact_sensitive_text(&String::from_utf8_lossy(&output.stderr))
+            )
+        })?;
+        ensure!(
+            output.status.success(),
+            "desktop Agent R turn exited with {}: {}",
             output.status,
             redact_sensitive_text(&String::from_utf8_lossy(&output.stderr))
-        )
-    })?;
-    ensure!(
-        output.status.success(),
-        "desktop Agent R turn exited with {}: {}",
-        output.status,
-        redact_sensitive_text(&String::from_utf8_lossy(&output.stderr))
-    );
-    Ok(json!({
-        "model": model,
-        "mode": mode,
-        "workspace": broker.identity(),
-        "events": completion,
-        "stdout": redact_sensitive_text(&String::from_utf8_lossy(&output.stdout)),
-        "stderr": redact_sensitive_text(&String::from_utf8_lossy(&output.stderr))
-    }))
+        );
+        let after = broker.identity().clone();
+        store.finish_agent_turn(&AgentTurnFinish {
+            turn_id: turn_id.clone(),
+            status: "completed".to_string(),
+            workspace_id_after: Some(after.workspace_id),
+            state_revision_after: Some(after.state_revision as i64),
+            project_revision_after: Some(after.project_revision as i64),
+            final_message: completion.final_message.clone(),
+            error_message: None,
+        })?;
+        Ok(json!({
+            "turn_id": turn_id,
+            "model": model,
+            "mode": mode,
+            "workspace": broker.identity(),
+            "events": completion.events,
+            "stdout": redact_sensitive_text(&String::from_utf8_lossy(&output.stdout)),
+            "stderr": redact_sensitive_text(&String::from_utf8_lossy(&output.stderr))
+        }))
+    }
+    .await;
+
+    if let Err(error) = &result {
+        let after = broker.identity().clone();
+        store.finish_agent_turn(&AgentTurnFinish {
+            turn_id,
+            status: "failed".to_string(),
+            workspace_id_after: Some(after.workspace_id),
+            state_revision_after: Some(after.state_revision as i64),
+            project_revision_after: Some(after.project_revision as i64),
+            final_message: None,
+            error_message: Some(redact_sensitive_text(&error.to_string())),
+        })?;
+    }
+    result
 }
 
 async fn serve_desktop_agent(
@@ -758,9 +834,12 @@ async fn serve_desktop_agent(
     session: &ArkSession,
     broker: &mut BrokerState,
     store: &mut Store,
-    approve_execution: bool,
-) -> Result<Vec<Value>> {
+    turn_id: &str,
+    mode: &str,
+    approvals: Arc<PendingApprovalRegistry>,
+) -> Result<DesktopAgentCompletion> {
     let mut events = Vec::new();
+    let mut final_message = None;
     loop {
         let incoming = tokio::time::timeout(
             std::time::Duration::from_secs(120),
@@ -774,14 +853,15 @@ async fn serve_desktop_agent(
             MessageKind::Request => {
                 let request_type = incoming.payload["type"].as_str().unwrap_or_default();
                 let result = if request_type == "tool.approval_required" {
-                    Ok(json!({
-                        "approved": approve_execution,
-                        "policy": if approve_execution {
-                            "desktop_act_mode"
-                        } else {
-                            "desktop_read_only_mode"
-                        }
-                    }))
+                    handle_tool_approval_required(
+                        &incoming,
+                        turn_id,
+                        mode,
+                        broker,
+                        store,
+                        approvals.clone(),
+                    )
+                    .await
                 } else {
                     dispatch_workspace_request(
                         request_type,
@@ -822,9 +902,16 @@ async fn serve_desktop_agent(
             }
             MessageKind::Event => {
                 let completed = incoming.payload["type"] == "desktop.agent_completed";
+                if let Some(text) = event_message_text(&incoming.payload) {
+                    final_message = Some(text);
+                }
+                record_agent_turn_event(store, turn_id, &incoming.payload)?;
                 events.push(incoming.payload);
                 if completed {
-                    return Ok(events);
+                    return Ok(DesktopAgentCompletion {
+                        events,
+                        final_message,
+                    });
                 }
             }
             MessageKind::Response | MessageKind::Cancel => {
@@ -835,6 +922,333 @@ async fn serve_desktop_agent(
             }
         }
     }
+}
+
+async fn handle_tool_approval_required(
+    incoming: &Envelope,
+    turn_id: &str,
+    mode: &str,
+    broker: &BrokerState,
+    store: &mut Store,
+    approvals: Arc<PendingApprovalRegistry>,
+) -> Result<Value> {
+    let tool = incoming.payload["tool"]
+        .as_str()
+        .unwrap_or("run_r")
+        .to_string();
+    let arguments = incoming
+        .payload
+        .get("arguments")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    let policy = incoming.payload["policy"]
+        .as_str()
+        .unwrap_or("required")
+        .to_string();
+    let request_id = incoming.id.clone();
+    let identity = broker.identity().clone();
+    let code = arguments
+        .get("code")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+
+    store.create_approval_request(&ApprovalRequestDraft {
+        request_id: request_id.clone(),
+        turn_id: turn_id.to_string(),
+        tool: tool.clone(),
+        policy: policy.clone(),
+        arguments_json: serde_json::to_string(&arguments)?,
+        code: code.clone(),
+        workspace_id: identity.workspace_id.clone(),
+        state_revision: identity.state_revision as i64,
+        project_revision: identity.project_revision as i64,
+    })?;
+
+    if mode != "act" {
+        let reason = format!("{mode} mode is read-only and cannot execute `{tool}`");
+        store.resolve_approval_request(
+            &request_id,
+            &ApprovalDecisionRecord {
+                decision: "reject".to_string(),
+                status: "policy_denied".to_string(),
+                reason: Some(reason.clone()),
+                continuation_outcome: Some("mode_policy_denied".to_string()),
+            },
+        )?;
+        store.append_agent_turn_event(&AgentTurnEventDraft {
+            turn_id: turn_id.to_string(),
+            event_type: "approval.policy_denied".to_string(),
+            title: format!("Policy denied · {tool}"),
+            body: Some(reason.clone()),
+            status: "error".to_string(),
+            tool: Some(tool),
+            request_id: Some(request_id.clone()),
+            code,
+            details_json: serde_json::to_string(&incoming.payload)?,
+        })?;
+        return Ok(json!({
+            "approved": false,
+            "request_id": request_id,
+            "decision": "policy_denied",
+            "reason": reason,
+            "policy": "desktop_read_only_mode"
+        }));
+    }
+
+    store.update_agent_turn_status(turn_id, "waiting")?;
+    store.append_agent_turn_event(&AgentTurnEventDraft {
+        turn_id: turn_id.to_string(),
+        event_type: "approval.requested".to_string(),
+        title: format!("Approval requested · {tool}"),
+        body: Some("Workspace R remains unchanged until you approve this request.".to_string()),
+        status: "running".to_string(),
+        tool: Some(tool.clone()),
+        request_id: Some(request_id.clone()),
+        code: code.clone(),
+        details_json: serde_json::to_string(&incoming.payload)?,
+    })?;
+
+    let receiver = approvals.register(request_id.clone()).await;
+    let response = receiver.await.unwrap_or(ApprovalResponseInput {
+        decision: "cancel".to_string(),
+        reason: Some("Approval channel closed before a decision was delivered.".to_string()),
+    });
+    approvals.remove(&request_id).await;
+
+    let current = broker.identity();
+    if response.decision == "approve"
+        && (current.workspace_id != identity.workspace_id
+            || current.state_revision as i64 != identity.state_revision as i64
+            || current.project_revision as i64 != identity.project_revision as i64)
+    {
+        let reason = "Workspace state changed before approval was granted.".to_string();
+        store.resolve_approval_request(
+            &request_id,
+            &ApprovalDecisionRecord {
+                decision: response.decision,
+                status: "stale".to_string(),
+                reason: Some(reason.clone()),
+                continuation_outcome: Some("replan_required".to_string()),
+            },
+        )?;
+        store.update_agent_turn_status(turn_id, "running")?;
+        store.append_agent_turn_event(&AgentTurnEventDraft {
+            turn_id: turn_id.to_string(),
+            event_type: "approval.stale".to_string(),
+            title: format!("Approval stale · {tool}"),
+            body: Some(reason.clone()),
+            status: "error".to_string(),
+            tool: Some(tool),
+            request_id: Some(request_id.clone()),
+            code,
+            details_json: serde_json::to_string(&json!({"reason": reason}))?,
+        })?;
+        return Ok(json!({
+            "approved": false,
+            "request_id": request_id,
+            "decision": "stale",
+            "reason": reason,
+            "policy": "desktop_act_mode"
+        }));
+    }
+
+    let (status, title, body, approved, continuation) = match response.decision.as_str() {
+        "approve" => (
+            "approved",
+            format!("Approval granted · {tool}"),
+            "Broker resumed the pending tool call.".to_string(),
+            true,
+            "execute",
+        ),
+        "cancel" => (
+            "cancelled",
+            format!("Approval cancelled · {tool}"),
+            response
+                .reason
+                .clone()
+                .unwrap_or_else(|| "The pending execution was cancelled.".to_string()),
+            false,
+            "approval_cancelled",
+        ),
+        _ => (
+            "rejected",
+            format!("Approval rejected · {tool}"),
+            response
+                .reason
+                .clone()
+                .unwrap_or_else(|| "The pending execution was rejected.".to_string()),
+            false,
+            "approval_rejected",
+        ),
+    };
+    store.resolve_approval_request(
+        &request_id,
+        &ApprovalDecisionRecord {
+            decision: response.decision.clone(),
+            status: status.to_string(),
+            reason: response.reason.clone(),
+            continuation_outcome: Some(continuation.to_string()),
+        },
+    )?;
+    store.update_agent_turn_status(turn_id, "running")?;
+    store.append_agent_turn_event(&AgentTurnEventDraft {
+        turn_id: turn_id.to_string(),
+        event_type: format!("approval.{status}"),
+        title,
+        body: Some(body.clone()),
+        status: if approved {
+            "completed".to_string()
+        } else {
+            "error".to_string()
+        },
+        tool: Some(tool),
+        request_id: Some(request_id.clone()),
+        code,
+        details_json: serde_json::to_string(&json!({
+            "decision": response.decision,
+            "reason": response.reason,
+            "continuation_outcome": continuation
+        }))?,
+    })?;
+    Ok(json!({
+        "approved": approved,
+        "request_id": request_id,
+        "decision": status,
+        "reason": body,
+        "policy": "desktop_act_mode"
+    }))
+}
+
+fn record_agent_turn_event(store: &mut Store, turn_id: &str, payload: &Value) -> Result<()> {
+    let Some(event) = project_agent_turn_event(turn_id, payload)? else {
+        return Ok(());
+    };
+    store.append_agent_turn_event(&event)?;
+    Ok(())
+}
+
+fn project_agent_turn_event(turn_id: &str, payload: &Value) -> Result<Option<AgentTurnEventDraft>> {
+    let event_type = payload["type"].as_str().unwrap_or_default();
+    let mapped = match event_type {
+        "agent.run_started" => Some((
+            "agent.run_started",
+            "Agent started".to_string(),
+            payload
+                .get("tool_names")
+                .and_then(Value::as_array)
+                .map(|tools| {
+                    format!(
+                        "Tools available: {}",
+                        tools.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(", ")
+                    )
+                }),
+            "running".to_string(),
+            None,
+            None,
+            None,
+        )),
+        "tool.call_started" => Some((
+            "tool.call_started",
+            format!(
+                "Tool · {}",
+                payload["tool"].as_str().unwrap_or("workspace_tool")
+            ),
+            Some("Running against Workspace R".to_string()),
+            "running".to_string(),
+            payload["tool"].as_str().map(str::to_string),
+            None,
+            payload
+                .get("arguments")
+                .and_then(|value| value.get("code"))
+                .and_then(Value::as_str)
+                .map(str::to_string),
+        )),
+        "tool.call_completed" => Some((
+            "tool.call_completed",
+            format!(
+                "Tool completed · {}",
+                payload["tool"].as_str().unwrap_or("workspace_tool")
+            ),
+            payload["result_preview"].as_str().map(str::to_string).or_else(|| {
+                Some("Workspace result returned.".to_string())
+            }),
+            "completed".to_string(),
+            payload["tool"].as_str().map(str::to_string),
+            None,
+            payload
+                .get("arguments")
+                .and_then(|value| value.get("code"))
+                .and_then(Value::as_str)
+                .map(str::to_string),
+        )),
+        "tool.call_failed" => Some((
+            "tool.call_failed",
+            format!(
+                "Tool failed · {}",
+                payload["tool"].as_str().unwrap_or("workspace_tool")
+            ),
+            payload["error"]
+                .as_str()
+                .map(str::to_string)
+                .or_else(|| Some("Tool execution failed.".to_string())),
+            "error".to_string(),
+            payload["tool"].as_str().map(str::to_string),
+            None,
+            payload
+                .get("arguments")
+                .and_then(|value| value.get("code"))
+                .and_then(Value::as_str)
+                .map(str::to_string),
+        )),
+        "chat.message_completed" => Some((
+            "chat.message_completed",
+            "Rho".to_string(),
+            event_message_text(payload),
+            "completed".to_string(),
+            None,
+            None,
+            None,
+        )),
+        "desktop.agent_completed" => Some((
+            "desktop.agent_completed",
+            "Agent completed".to_string(),
+            Some("The turn finished without transport errors.".to_string()),
+            "completed".to_string(),
+            None,
+            None,
+            None,
+        )),
+        _ => None,
+    };
+
+    let details_json = serde_json::to_string(payload)?;
+    Ok(mapped.map(
+        |(event_type, title, body, status, tool, request_id, code)| AgentTurnEventDraft {
+            turn_id: turn_id.to_string(),
+            event_type: event_type.to_string(),
+            title,
+            body,
+            status,
+            tool,
+            request_id,
+            code,
+            details_json: details_json.clone(),
+        },
+    ))
+}
+
+fn event_message_text(payload: &Value) -> Option<String> {
+    payload
+        .get("event")
+        .and_then(|value| value.get("text").or_else(|| value.get("content")))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .or_else(|| {
+            payload
+                .get("text")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
 }
 
 fn bridge_expression(request_type: &str, arguments: &Value) -> Result<(OperationClass, String)> {

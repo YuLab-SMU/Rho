@@ -9,10 +9,16 @@ const initialEditorContent = $("#editor")?.value || "";
 const state = {
   busy: false,
   agentMode: "ask",
+  agentBusy: false,
   objects: [],
   plots: [],
   runs: [],
   problems: [],
+  agentTurns: [],
+  pendingApprovals: [],
+  selectedTurnId: null,
+  selectedTurnDetail: null,
+  agentPollTimer: null,
   activeRunId: null,
   revision: { state_revision: 1, project_revision: 0 },
   projectStatus: "loading",
@@ -60,10 +66,175 @@ let mockLastProject = "D:/Rho";
 const mockProjectSessions = {};
 let mockRunSequence = 0;
 const mockRuns = [];
+let mockAgentTurnSequence = 0;
+let mockApprovalSequence = 0;
+const mockAgentTurns = [];
+const mockApprovalRequests = [];
 
 function nextMockRunId() {
   mockRunSequence += 1;
   return `exec_mock_${mockRunSequence}`;
+}
+
+function nextMockTurnId() {
+  mockAgentTurnSequence += 1;
+  return `agent_turn_${mockAgentTurnSequence}`;
+}
+
+function nextMockApprovalId() {
+  mockApprovalSequence += 1;
+  return `approval_${mockApprovalSequence}`;
+}
+
+function mockTurnSummary(turn) {
+  const pending = mockApprovalRequests.find((item) => item.turn_id === turn.turn_id && item.status === "waiting");
+  return {
+    turn_id: turn.turn_id,
+    mode: turn.mode,
+    status: turn.status,
+    started_at: turn.started_at,
+    finished_at: turn.finished_at,
+    prompt_preview: turn.prompt_preview,
+    model: turn.model,
+    workspace_id_before: turn.workspace_id_before,
+    state_revision_before: turn.state_revision_before,
+    project_revision_before: turn.project_revision_before,
+    workspace_id_after: turn.workspace_id_after,
+    state_revision_after: turn.state_revision_after,
+    project_revision_after: turn.project_revision_after,
+    final_message: turn.final_message,
+    error_message: turn.error_message,
+    pending_request_id: pending?.request_id || null,
+  };
+}
+
+function createMockAgentTurn({ prompt, mode, model }) {
+  const startedAt = new Date().toISOString();
+  const turn = {
+    turn_id: nextMockTurnId(),
+    mode,
+    status: mode === "act" ? "waiting" : "completed",
+    started_at: startedAt,
+    finished_at: mode === "act" ? null : startedAt,
+    prompt_preview: prompt.replace(/\s+/g, " ").trim().slice(0, 120) || "<empty>",
+    model,
+    workspace_id_before: "desktop_mock",
+    state_revision_before: state.revision.state_revision,
+    project_revision_before: state.revision.project_revision,
+    workspace_id_after: mode === "act" ? null : "desktop_mock",
+    state_revision_after: mode === "act" ? null : state.revision.state_revision,
+    project_revision_after: mode === "act" ? null : state.revision.project_revision,
+    final_message: null,
+    error_message: null,
+    events: [
+      {
+        id: 1,
+        turn_id: null,
+        timestamp: startedAt,
+        event_type: "agent.user_prompt",
+        title: "You",
+        body: prompt,
+        status: "completed",
+        tool: null,
+        request_id: null,
+        code: null,
+        details_json: JSON.stringify({ prompt, mode }),
+      },
+      {
+        id: 2,
+        turn_id: null,
+        timestamp: startedAt,
+        event_type: "agent.run_started",
+        title: "Agent started",
+        body: mode === "act" ? "Act mode may request execution after approval." : `${mode[0].toUpperCase()}${mode.slice(1)} mode is running in read-only broker policy.`,
+        status: "running",
+        tool: null,
+        request_id: null,
+        code: null,
+        details_json: "{}",
+      },
+    ],
+  };
+  turn.events.forEach((event) => { event.turn_id = turn.turn_id; });
+  if (mode === "act") {
+    const requestId = nextMockApprovalId();
+    mockApprovalRequests.unshift({
+      request_id: requestId,
+      turn_id: turn.turn_id,
+      tool: "run_r",
+      policy: "required",
+      status: "waiting",
+      decision: null,
+      reason: null,
+      arguments_json: JSON.stringify({ code: "summary(qc)" }),
+      code: "summary(qc)",
+      workspace_id: "desktop_mock",
+      state_revision: state.revision.state_revision,
+      project_revision: state.revision.project_revision,
+      requested_at: startedAt,
+      responded_at: null,
+      continuation_outcome: null,
+    });
+    turn.events.push({
+      id: 3,
+      turn_id: turn.turn_id,
+      timestamp: startedAt,
+      event_type: "approval.requested",
+      title: "Approval requested · run_r",
+      body: "Workspace R remains unchanged until you approve this request.",
+      status: "running",
+      tool: "run_r",
+      request_id: requestId,
+      code: "summary(qc)",
+      details_json: JSON.stringify({ request_id: requestId }),
+    });
+  } else {
+    const text = "`qc` 包含 12 个样本和 3 个变量。reads 与 detected 的分布整体稳定，目前没有明显离群样本。";
+    turn.final_message = text;
+    turn.events.push(
+      {
+        id: 3,
+        turn_id: turn.turn_id,
+        timestamp: startedAt,
+        event_type: "tool.call_started",
+        title: "Tool · inspect_r_object",
+        body: "Running against Workspace R",
+        status: "running",
+        tool: "inspect_r_object",
+        request_id: null,
+        code: null,
+        details_json: "{}",
+      },
+      {
+        id: 4,
+        turn_id: turn.turn_id,
+        timestamp: startedAt,
+        event_type: "tool.call_completed",
+        title: "Tool completed · inspect_r_object",
+        body: "Workspace result returned.",
+        status: "completed",
+        tool: "inspect_r_object",
+        request_id: null,
+        code: null,
+        details_json: "{}",
+      },
+      {
+        id: 5,
+        turn_id: turn.turn_id,
+        timestamp: startedAt,
+        event_type: "chat.message_completed",
+        title: "Rho",
+        body: text,
+        status: "completed",
+        tool: null,
+        request_id: null,
+        code: null,
+        details_json: JSON.stringify({ text }),
+      },
+    );
+  }
+  mockAgentTurns.unshift(turn);
+  return turn;
 }
 
 function recordMockRun({
@@ -282,26 +453,134 @@ async function mockInvoke(command, args) {
     return { status: "interrupt_requested", run_id: active?.run_id || null };
   }
   if (command === "run_agent") {
-    const act = args.mode === "act";
-    if (act) {
+    const turn = createMockAgentTurn({
+      prompt: args.prompt || "",
+      mode: args.mode || "ask",
+      model: args.model || "deepseek:deepseek-v4-flash",
+    });
+    return { status: "started", turn_id: turn.turn_id };
+  }
+  if (command === "list_agent_turns") {
+    return structuredClone(mockAgentTurns.slice(0, args.limit || 50).map(mockTurnSummary));
+  }
+  if (command === "list_approval_requests") {
+    const filtered = (mockApprovalRequests || []).filter((item) => !args.status || item.status === args.status);
+    return structuredClone(filtered.slice(0, args.limit || 50));
+  }
+  if (command === "get_agent_turn_detail") {
+    const turn = mockAgentTurns.find((item) => item.turn_id === args.turn_id);
+    if (!turn) return null;
+    return structuredClone({
+      turn: mockTurnSummary(turn),
+      events: turn.events || [],
+      approvals: mockApprovalRequests.filter((item) => item.turn_id === turn.turn_id),
+    });
+  }
+  if (command === "respond_approval") {
+    const approval = mockApprovalRequests.find((item) => item.request_id === args.request.request_id);
+    if (!approval) throw new Error(`Approval request not found: ${args.request.request_id}`);
+    const turn = mockAgentTurns.find((item) => item.turn_id === approval.turn_id);
+    if (!turn) throw new Error(`Agent turn not found: ${approval.turn_id}`);
+    approval.decision = args.request.decision;
+    approval.responded_at = new Date().toISOString();
+    approval.reason = args.request.reason || null;
+    if (args.request.decision === "approve") {
+      approval.status = "approved";
+      approval.continuation_outcome = "execute";
+      turn.status = "completed";
+      turn.finished_at = approval.responded_at;
+      turn.workspace_id_after = "desktop_mock";
+      state.revision.state_revision += 1;
+      turn.state_revision_after = state.revision.state_revision;
+      turn.project_revision_after = state.revision.project_revision;
       recordMockRun({
         origin: "agent",
         status: "completed",
-        code: "summary(qc)",
+        code: approval.code || "summary(qc)",
         sourcePath: state.activeDocument,
         executionMode: "selection",
       });
+      turn.final_message = "我已经执行并检查结果，当前工作区状态已更新。";
+      turn.events.push(
+        {
+          id: turn.events.length + 1,
+          turn_id: turn.turn_id,
+          timestamp: approval.responded_at,
+          event_type: "approval.approved",
+          title: "Approval granted · run_r",
+          body: "Broker resumed the pending tool call.",
+          status: "completed",
+          tool: "run_r",
+          request_id: approval.request_id,
+          code: approval.code,
+          details_json: "{}",
+        },
+        {
+          id: turn.events.length + 2,
+          turn_id: turn.turn_id,
+          timestamp: approval.responded_at,
+          event_type: "tool.call_completed",
+          title: "Tool completed · run_r",
+          body: "Workspace result returned.",
+          status: "completed",
+          tool: "run_r",
+          request_id: approval.request_id,
+          code: approval.code,
+          details_json: "{}",
+        },
+        {
+          id: turn.events.length + 3,
+          turn_id: turn.turn_id,
+          timestamp: approval.responded_at,
+          event_type: "chat.message_completed",
+          title: "Rho",
+          body: turn.final_message,
+          status: "completed",
+          tool: null,
+          request_id: null,
+          code: null,
+          details_json: "{}",
+        },
+      );
+      return { status: "delivered", request_id: approval.request_id, turn_id: turn.turn_id };
     }
-    return {
-      workspace: state.revision,
-      events: [
-        { type: "agent.run_started", tool_names: act ? ["run_r", "inspect_r_object"] : ["get_workspace_snapshot", "inspect_r_object"] },
-        { type: "tool.call_started", tool: act ? "run_r" : "inspect_r_object", arguments: act ? { code: "summary(qc)" } : { name: "qc" } },
-        { type: "tool.call_completed", tool: act ? "run_r" : "inspect_r_object", success: true },
-        { type: "chat.message_completed", event: { text: "`qc` 包含 12 个样本和 3 个变量。reads 与 detected 的分布整体稳定，目前没有明显离群样本。" } },
-        { type: "desktop.agent_completed" },
-      ],
-    };
+    approval.status = args.request.decision === "cancel" ? "cancelled" : "rejected";
+    approval.continuation_outcome = args.request.decision === "cancel" ? "approval_cancelled" : "approval_rejected";
+    turn.status = "completed";
+    turn.finished_at = approval.responded_at;
+    turn.workspace_id_after = "desktop_mock";
+    turn.state_revision_after = state.revision.state_revision;
+    turn.project_revision_after = state.revision.project_revision;
+    turn.final_message = args.request.decision === "cancel" ? "这次执行已取消，Workspace R 保持不变。" : "我没有执行这段代码，Workspace R 保持不变。";
+    turn.events.push(
+      {
+        id: turn.events.length + 1,
+        turn_id: turn.turn_id,
+        timestamp: approval.responded_at,
+        event_type: `approval.${approval.status}`,
+        title: `${approval.status === "cancelled" ? "Approval cancelled" : "Approval rejected"} · run_r`,
+        body: approval.reason || turn.final_message,
+        status: "error",
+        tool: "run_r",
+        request_id: approval.request_id,
+        code: approval.code,
+        details_json: "{}",
+      },
+      {
+        id: turn.events.length + 2,
+        turn_id: turn.turn_id,
+        timestamp: approval.responded_at,
+        event_type: "chat.message_completed",
+        title: "Rho",
+        body: turn.final_message,
+        status: "completed",
+        tool: null,
+        request_id: null,
+        code: null,
+        details_json: "{}",
+      },
+    );
+    return { status: "delivered", request_id: approval.request_id, turn_id: turn.turn_id };
   }
   if (command === "restart_workspace") return mockInvoke("workspace_start", {});
   return { status: "ok" };
@@ -1125,6 +1404,187 @@ async function loadRunData() {
   }
 }
 
+function agentStatusTone(status) {
+  if (["completed", "approved"].includes(status)) return "completed";
+  if (["running", "waiting", "queued"].includes(status)) return "running";
+  return "error";
+}
+
+function prettyAgentMode(mode) {
+  return { ask: "Ask", plan: "Plan", act: "Act" }[mode] || mode || "Agent";
+}
+
+function parseApprovalArguments(argumentsJson) {
+  try {
+    return JSON.parse(argumentsJson || "{}");
+  } catch {
+    return {};
+  }
+}
+
+async function loadAgentData() {
+  try {
+    const [turns, approvals] = await Promise.all([
+      invoke("list_agent_turns", { limit: 20 }),
+      invoke("list_approval_requests", { limit: 20 }),
+    ]);
+    state.agentTurns = turns || [];
+    state.pendingApprovals = (approvals || []).filter((item) => item.status === "waiting");
+    const preferredTurnId = state.selectedTurnId
+      || state.pendingApprovals[0]?.turn_id
+      || state.agentTurns.find((turn) => ["running", "waiting"].includes(turn.status))?.turn_id
+      || state.agentTurns[0]?.turn_id
+      || null;
+    state.selectedTurnId = preferredTurnId;
+    state.selectedTurnDetail = preferredTurnId
+      ? await invoke("get_agent_turn_detail", { turn_id: preferredTurnId })
+      : null;
+    renderAgentTimeline();
+    renderApprovalPanel();
+    updateAgentHeader();
+    syncAgentPolling();
+  } catch (error) {
+    toast(`Agent history is unavailable: ${error}`, true);
+  }
+}
+
+function updateAgentHeader() {
+  const latest = state.agentTurns[0] || null;
+  if (state.pendingApprovals.length) {
+    $("#agentState").textContent = "Waiting approval";
+    $("#agentStateDot").className = "agent-state-dot busy";
+    return;
+  }
+  if (latest && ["running", "waiting"].includes(latest.status)) {
+    $("#agentState").textContent = "Working";
+    $("#agentStateDot").className = "agent-state-dot busy";
+    return;
+  }
+  if (latest?.status === "failed") {
+    $("#agentState").textContent = "Failed";
+    $("#agentStateDot").className = "agent-state-dot error";
+    return;
+  }
+  $("#agentState").textContent = "Ready";
+  $("#agentStateDot").className = "agent-state-dot";
+}
+
+function syncAgentPolling() {
+  const shouldPoll = state.agentTurns.some((turn) => ["running", "waiting"].includes(turn.status)) || state.pendingApprovals.length > 0;
+  if (shouldPoll && !state.agentPollTimer) {
+    state.agentPollTimer = window.setInterval(() => {
+      loadAgentData().catch(() => {});
+      loadRunData().catch(() => {});
+    }, 1500);
+  }
+  if (!shouldPoll && state.agentPollTimer) {
+    window.clearInterval(state.agentPollTimer);
+    state.agentPollTimer = null;
+  }
+}
+
+function renderAgentTimeline() {
+  const panel = $("#agentTimeline");
+  panel.replaceChildren();
+  if (!state.agentTurns.length) {
+    addTimeline("Workspace connected", "Ark session is ready for inspection and execution.", "completed");
+    return;
+  }
+  for (const turn of state.agentTurns.slice(0, 8)) {
+    const row = document.createElement("div");
+    row.className = `timeline-item ${agentStatusTone(turn.status)}`;
+    row.dataset.turnId = turn.turn_id;
+    const marker = document.createElement("span");
+    marker.className = "timeline-marker";
+    marker.textContent = agentStatusTone(turn.status) === "completed" ? "✓" : agentStatusTone(turn.status) === "error" ? "!" : "·";
+    const content = document.createElement("div");
+    const heading = document.createElement("strong");
+    heading.textContent = `${prettyAgentMode(turn.mode)} · ${turn.prompt_preview}`;
+    const paragraph = document.createElement("p");
+    paragraph.textContent = `${turn.status}${turn.pending_request_id ? ` · pending ${turn.pending_request_id}` : ""}`;
+    content.append(heading, paragraph);
+    row.append(marker, content);
+    row.addEventListener("click", async () => {
+      state.selectedTurnId = turn.turn_id;
+      state.selectedTurnDetail = await invoke("get_agent_turn_detail", { turn_id: turn.turn_id });
+      renderAgentTimeline();
+      renderApprovalPanel();
+      updateAgentHeader();
+    });
+    panel.append(row);
+    if (state.selectedTurnId === turn.turn_id && state.selectedTurnDetail?.events?.length) {
+      for (const event of state.selectedTurnDetail.events) {
+        const child = document.createElement("div");
+        child.className = `timeline-item ${agentStatusTone(event.status)}`;
+        const childMarker = document.createElement("span");
+        childMarker.className = "timeline-marker";
+        childMarker.textContent = agentStatusTone(event.status) === "completed" ? "✓" : agentStatusTone(event.status) === "error" ? "!" : "·";
+        const childContent = document.createElement("div");
+        const childHeading = document.createElement("strong");
+        childHeading.textContent = event.title;
+        childContent.append(childHeading);
+        if (event.body) {
+          const childBody = document.createElement("p");
+          childBody.textContent = event.body;
+          childContent.append(childBody);
+        }
+        if (event.code) {
+          const source = document.createElement("code");
+          source.className = "timeline-code";
+          source.textContent = event.code;
+          childContent.append(source);
+        }
+        child.append(childMarker, childContent);
+        panel.append(child);
+      }
+    }
+  }
+}
+
+function renderApprovalPanel() {
+  const approval = state.pendingApprovals.find((item) => item.turn_id === state.selectedTurnId) || state.pendingApprovals[0] || null;
+  $("#approvalPanel").classList.toggle("hidden", !approval);
+  if (!approval) return;
+  const argumentsObject = parseApprovalArguments(approval.arguments_json);
+  $("#approvalRequestId").textContent = approval.request_id;
+  $("#approvalSummary").textContent = `${approval.tool} is requesting mutation in ${prettyAgentMode(state.agentTurns.find((turn) => turn.turn_id === approval.turn_id)?.mode || "act")} mode.`;
+  $("#approvalRevision").textContent = `workspace ${approval.workspace_id || "?"} · state ${approval.state_revision ?? "?"} · project ${approval.project_revision ?? "?"}`;
+  const code = approval.code || argumentsObject.code || approval.arguments_json;
+  $("#approvalCode").textContent = code || "";
+  $("#approvalCode").classList.toggle("hidden", !code);
+  $("#approvalApprove").onclick = () => submitApproval("approve", approval);
+  $("#approvalReject").onclick = () => submitApproval("reject", approval);
+  $("#approvalCancel").onclick = () => submitApproval("cancel", approval);
+}
+
+async function submitApproval(decision, approval) {
+  const reason = decision === "approve"
+    ? null
+    : window.prompt(
+      decision === "cancel" ? "Provide a cancellation note (optional)." : "Provide a rejection reason (optional).",
+      "",
+    ) || null;
+  for (const id of ["approvalApprove", "approvalReject", "approvalCancel"]) {
+    $(["#", id].join("")).disabled = true;
+  }
+  try {
+    await invoke("respond_approval", {
+      request: {
+        request_id: approval.request_id,
+        decision,
+        reason,
+      },
+    });
+    await Promise.all([loadAgentData(), loadRunData(), refreshEnvironment()]);
+  } catch (error) {
+    toast(String(error), true);
+  } finally {
+    for (const id of ["approvalApprove", "approvalReject", "approvalCancel"]) {
+      $(["#", id].join("")).disabled = false;
+    }
+  }
+}
+
 function renderRuns() {
   const panel = $("#runsPanel");
   panel.replaceChildren();
@@ -1396,52 +1856,27 @@ function formatBytes(bytes) {
 
 async function sendAgentPrompt() {
   const prompt = $("#agentInput").value.trim();
-  if (!prompt || state.busy) return;
+  if (!prompt || state.agentBusy) return;
   $("#agentInput").value = "";
-  setBusy(true, "Agent is working");
+  state.agentBusy = true;
   $("#agentSendButton").disabled = true;
   $("#agentState").textContent = "Working";
   $("#agentStateDot").className = "agent-state-dot busy";
-  addTimeline("You", prompt, "completed");
   try {
-    const response = await invoke("run_agent", {
+    await invoke("run_agent", {
       prompt,
       mode: state.agentMode,
       model: "deepseek:deepseek-v4-flash",
     });
-    updateIdentity(response.workspace);
-    renderAgentEvents(response.events || []);
-    await refreshEnvironment();
-    await loadRunData();
-    $("#agentState").textContent = "Ready";
-    $("#agentStateDot").className = "agent-state-dot";
+    await Promise.all([loadAgentData(), loadRunData()]);
   } catch (error) {
     const message = String(error);
-    addTimeline("Agent failed", message, "error");
     $("#agentState").textContent = "Failed";
     $("#agentStateDot").className = "agent-state-dot error";
     toast(message, true);
   } finally {
+    state.agentBusy = false;
     $("#agentSendButton").disabled = false;
-    setBusy(false);
-  }
-}
-
-function renderAgentEvents(events) {
-  for (const event of events) {
-    const type = event.type || "";
-    if (type === "tool.approval_required") {
-      addTimeline(`Approval · ${event.tool}`, "Execution requested", "running", event.arguments?.code);
-    } else if (type === "tool.call_started") {
-      addTimeline(`Tool · ${event.tool}`, "Running against Workspace R", "running", event.arguments?.code || null);
-    } else if (type === "tool.call_completed") {
-      addTimeline(`Tool completed · ${event.tool}`, "Workspace result returned", "completed");
-    } else if (type === "tool.call_failed") {
-      addTimeline(`Tool failed · ${event.tool}`, event.error || "Tool execution failed", "error");
-    } else if (type === "chat.message_completed") {
-      const text = event.event?.text || event.event?.content || event.text;
-      if (text) addTimeline("Rho", text, "completed");
-    }
   }
 }
 
@@ -1704,7 +2139,13 @@ async function initialize() {
       renderActiveDocument();
     }
     await loadRunData();
+    await loadAgentData();
     await refreshEnvironment();
+    if (isDesktop && tauriEvent?.listen) {
+      tauriEvent.listen("rho://agent-turn-updated", async () => {
+        await Promise.all([loadAgentData(), loadRunData(), refreshEnvironment()]);
+      }).catch(() => {});
+    }
   } catch (error) {
     setKernelStatus("error", "R unavailable");
     addConsole("SYSTEM", String(error), "error");
@@ -1759,6 +2200,7 @@ $("#editor").addEventListener("keyup", () => {
 });
 $("#editor").addEventListener("scroll", () => { $("#lineNumbers").scrollTop = $("#editor").scrollTop; });
 window.addEventListener("beforeunload", () => {
+  if (state.agentPollTimer) window.clearInterval(state.agentPollTimer);
   flushSessionSnapshot().catch(() => {});
 });
 $("#editor").addEventListener("keydown", (event) => {

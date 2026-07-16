@@ -390,6 +390,15 @@ body.resizing-vertical { cursor: col-resize; }
 .timeline-item strong { display: block; margin: 1px 0 4px; font-size: 12.5px; }
 .timeline-item p { margin: 0; color: var(--muted); line-height: 1.48; white-space: pre-wrap; overflow-wrap: anywhere; }
 .timeline-code { display: block; margin-top: 6px; padding: 7px 8px; overflow: auto; border-left: 2px solid #8dbab5; color: #324247; background: #f2f6f6; font: 11px/1.5 "Cascadia Code", Consolas, monospace; white-space: pre-wrap; }
+.approval-panel { flex: 0 0 auto; margin: 0 10px 10px; padding: 10px; border: 1px solid #e0bf93; border-radius: 6px; background: #fff7ec; }
+.approval-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.approval-summary { margin: 0 0 6px; color: #6f5a43; font-size: 11.5px; line-height: 1.45; }
+.approval-revision { color: var(--muted); font: 10px "Cascadia Code", Consolas, monospace; }
+.approval-actions { display: flex; gap: 6px; margin-top: 8px; }
+.approval-actions button { flex: 1 1 0; min-height: 30px; border: 1px solid #d1b18b; border-radius: 4px; background: #fff; cursor: pointer; }
+.approval-actions button:first-child { color: #fff; border-color: #2d8a63; background: #2d8a63; }
+.approval-actions button:nth-child(2) { border-color: #d08d67; color: #8a4021; background: #fff3ec; }
+.approval-actions button:disabled { opacity: 0.6; cursor: wait; }
 .agent-composer { flex: 0 0 auto; margin: 0 10px 10px; border: 1px solid var(--border-strong); border-radius: 6px; background: #fff; }
 .mode-control { margin: 8px 8px 4px; }
 .mode-control button { min-width: 52px; padding: 4px 8px; font-size: 11px; }

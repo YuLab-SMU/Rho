@@ -14,11 +14,17 @@ use project::{
 };
 use rho_core::{BrokerState, ExecutionOrigin};
 use rho_kernel::{ArkLaunchConfig, ArkSession};
-use rho_server::coordinator::{bootstrap_bridge, dispatch_workspace_request, run_agent_turn};
-use rho_store::{ProblemSummary, RunDetail, RunSummary, Store};
+use rho_server::coordinator::{
+    ApprovalResponseInput, PendingApprovalRegistry, bootstrap_bridge, dispatch_workspace_request,
+    run_agent_turn,
+};
+use rho_store::{
+    AgentTurnDetail, AgentTurnDraft, AgentTurnEventDraft, AgentTurnSummary, ApprovalRequestSummary,
+    ProblemSummary, RunDetail, RunSummary, Store,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 
@@ -49,7 +55,8 @@ struct AppState {
     project_root: RwLock<PathBuf>,
     project_watcher: Mutex<Option<ProjectWatcherControl>>,
     session: RwLock<Option<Arc<ArkSession>>>,
-    context: Mutex<Option<RuntimeContext>>,
+    context: Mutex<Option<Arc<Mutex<RuntimeContext>>>>,
+    approvals: Arc<PendingApprovalRegistry>,
 }
 
 #[derive(Serialize)]
@@ -78,11 +85,17 @@ async fn workspace_start(state: State<'_, AppState>) -> Result<WorkspaceStatus, 
 #[tauri::command]
 async fn workspace_status(state: State<'_, AppState>) -> Result<Value, String> {
     let session = state.session.read().await.clone();
-    let context = state.context.lock().await;
+    let context = state.context.lock().await.clone();
+    let workspace = if let Some(context) = context {
+        let context = context.lock().await;
+        Some(serde_json::to_value(context.broker.identity()).unwrap_or(Value::Null))
+    } else {
+        None
+    };
     Ok(json!({
         "status": if session.is_some() { "idle" } else { "disconnected" },
         "kernel_pid": session.as_ref().and_then(|value| value.child_pid()),
-        "workspace": context.as_ref().map(|value| value.broker.identity()),
+        "workspace": workspace,
         "python_required": false
     }))
 }
@@ -208,11 +221,9 @@ async fn execute_r(request: ExecuteRequest, state: State<'_, AppState>) -> Resul
         return Err("R code is empty".to_string());
     }
     let session = active_session(&state).await.map_err(display_error)?;
-    let mut context = state.context.lock().await;
-    let context = context
-        .as_mut()
-        .context("Workspace context is not ready")
-        .map_err(display_error)?;
+    let context = active_context(&state).await.map_err(display_error)?;
+    let mut context = context.lock().await;
+    let RuntimeContext { broker, store } = &mut *context;
     let payload = json!({
         "arguments": {
             "code": request.code,
@@ -220,15 +231,15 @@ async fn execute_r(request: ExecuteRequest, state: State<'_, AppState>) -> Resul
             "execution_mode": request.execution_mode,
             "document_version": request.document_version
         },
-        "expected_workspace": context.broker.identity()
+        "expected_workspace": broker.identity()
     });
     dispatch_workspace_request(
         "workspace.execute",
         &payload,
         ExecutionOrigin::User,
         session.as_ref(),
-        &mut context.broker,
-        &mut context.store,
+        broker,
+        store,
     )
     .await
     .map_err(display_error)
@@ -237,22 +248,20 @@ async fn execute_r(request: ExecuteRequest, state: State<'_, AppState>) -> Resul
 #[tauri::command]
 async fn snapshot_workspace(state: State<'_, AppState>) -> Result<Value, String> {
     let session = active_session(&state).await.map_err(display_error)?;
-    let mut context = state.context.lock().await;
-    let context = context
-        .as_mut()
-        .context("Workspace context is not ready")
-        .map_err(display_error)?;
+    let context = active_context(&state).await.map_err(display_error)?;
+    let mut context = context.lock().await;
+    let RuntimeContext { broker, store } = &mut *context;
     let payload = json!({
         "arguments": {},
-        "expected_workspace": context.broker.identity()
+        "expected_workspace": broker.identity()
     });
     dispatch_workspace_request(
         "workspace.snapshot",
         &payload,
         ExecutionOrigin::System,
         session.as_ref(),
-        &mut context.broker,
-        &mut context.store,
+        broker,
+        store,
     )
     .await
     .map_err(display_error)
@@ -260,12 +269,10 @@ async fn snapshot_workspace(state: State<'_, AppState>) -> Result<Value, String>
 
 #[tauri::command]
 async fn list_runs(limit: Option<usize>, state: State<'_, AppState>) -> Result<Vec<RunSummary>, String> {
-    let context = state.context.lock().await;
-    let context = context
-        .as_ref()
-        .context("Workspace context is not ready")
-        .map_err(display_error)?;
-    context.store.list_runs(limit).map_err(display_error)
+    read_store(&state)
+        .map_err(display_error)?
+        .list_runs(limit)
+        .map_err(display_error)
 }
 
 #[tauri::command]
@@ -273,32 +280,25 @@ async fn list_problems(
     limit: Option<usize>,
     state: State<'_, AppState>,
 ) -> Result<Vec<ProblemSummary>, String> {
-    let context = state.context.lock().await;
-    let context = context
-        .as_ref()
-        .context("Workspace context is not ready")
-        .map_err(display_error)?;
-    context.store.list_problems(limit).map_err(display_error)
+    read_store(&state)
+        .map_err(display_error)?
+        .list_problems(limit)
+        .map_err(display_error)
 }
 
 #[tauri::command]
 async fn get_run_detail(run_id: String, state: State<'_, AppState>) -> Result<Option<RunDetail>, String> {
-    let context = state.context.lock().await;
-    let context = context
-        .as_ref()
-        .context("Workspace context is not ready")
-        .map_err(display_error)?;
-    context.store.get_run_detail(&run_id).map_err(display_error)
+    read_store(&state)
+        .map_err(display_error)?
+        .get_run_detail(&run_id)
+        .map_err(display_error)
 }
 
 #[tauri::command]
 async fn retry_run(run_id: String, state: State<'_, AppState>) -> Result<Value, String> {
     let session = active_session(&state).await.map_err(display_error)?;
-    let mut context_guard = state.context.lock().await;
-    let context = context_guard
-        .as_mut()
-        .context("Workspace context is not ready")
-        .map_err(display_error)?;
+    let context = active_context(&state).await.map_err(display_error)?;
+    let mut context = context.lock().await;
     let detail = context
         .store
         .get_run_detail(&run_id)
@@ -311,17 +311,18 @@ async fn retry_run(run_id: String, state: State<'_, AppState>) -> Result<Value, 
         .context("Stored run arguments are invalid")
         .map_err(display_error)?;
     object.insert("parent_run_id".to_string(), Value::String(detail.run_id.clone()));
+    let RuntimeContext { broker, store } = &mut *context;
     let payload = json!({
         "arguments": arguments,
-        "expected_workspace": context.broker.identity()
+        "expected_workspace": broker.identity()
     });
     dispatch_workspace_request(
         &detail.request_type,
         &payload,
         parse_execution_origin(&detail.origin),
         session.as_ref(),
-        &mut context.broker,
-        &mut context.store,
+        broker,
+        store,
     )
     .await
     .map_err(display_error)
@@ -332,29 +333,155 @@ async fn run_agent(
     prompt: String,
     mode: String,
     model: Option<String>,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
     if prompt.trim().is_empty() {
         return Err("Agent prompt is empty".to_string());
     }
+    if !matches!(mode.as_str(), "ask" | "plan" | "act") {
+        return Err(format!("unsupported Agent mode `{mode}`"));
+    }
     let session = active_session(&state).await.map_err(display_error)?;
-    let mut context = state.context.lock().await;
-    let context = context
-        .as_mut()
-        .context("Workspace context is not ready")
+    let context = active_context(&state).await.map_err(display_error)?;
+    let turn_id = format!("agent_turn_{}", Uuid::new_v4());
+    let model = model.unwrap_or_else(|| "deepseek:deepseek-v4-flash".to_string());
+    {
+        let mut context_guard = context.lock().await;
+        let identity = context_guard.broker.identity().clone();
+        context_guard
+            .store
+            .create_agent_turn(&AgentTurnDraft {
+                turn_id: turn_id.clone(),
+                mode: mode.clone(),
+                prompt: prompt.clone(),
+                model: model.clone(),
+                workspace_id: identity.workspace_id.clone(),
+                state_revision_before: identity.state_revision as i64,
+                project_revision_before: identity.project_revision as i64,
+            })
+            .map_err(display_error)?;
+        context_guard
+            .store
+            .append_agent_turn_event(&AgentTurnEventDraft {
+                turn_id: turn_id.clone(),
+                event_type: "agent.user_prompt".to_string(),
+                title: "You".to_string(),
+                body: Some(prompt.clone()),
+                status: "completed".to_string(),
+                tool: None,
+                request_id: None,
+                code: None,
+                details_json: serde_json::to_string(&json!({"prompt": prompt, "mode": mode}))
+                    .map_err(display_error)?,
+            })
+            .map_err(display_error)?;
+    }
+
+    let approvals = state.approvals.clone();
+    let rscript = state.config.rscript.clone();
+    let agent_package = state.config.agent_package.clone();
+    let task_turn_id = turn_id.clone();
+    tauri::async_runtime::spawn(async move {
+        let mut context_guard = context.lock().await;
+        let RuntimeContext { broker, store } = &mut *context_guard;
+        let _ = run_agent_turn(
+            session.as_ref(),
+            broker,
+            store,
+            rscript,
+            agent_package,
+            model,
+            prompt,
+            mode,
+            task_turn_id.clone(),
+            approvals,
+        )
+        .await;
+        drop(context_guard);
+        let _ = app.emit("rho://agent-turn-updated", json!({ "turn_id": task_turn_id }));
+    });
+    Ok(json!({
+        "status": "started",
+        "turn_id": turn_id
+    }))
+}
+
+#[derive(Deserialize)]
+struct ApprovalDecisionRequest {
+    request_id: String,
+    decision: String,
+    reason: Option<String>,
+}
+
+#[tauri::command]
+async fn list_agent_turns(
+    limit: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<Vec<AgentTurnSummary>, String> {
+    read_store(&state)
+        .map_err(display_error)?
+        .list_agent_turns(limit)
+        .map_err(display_error)
+}
+
+#[tauri::command]
+async fn list_approval_requests(
+    limit: Option<usize>,
+    status: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<ApprovalRequestSummary>, String> {
+    read_store(&state)
+        .map_err(display_error)?
+        .list_approval_requests(limit, status.as_deref())
+        .map_err(display_error)
+}
+
+#[tauri::command]
+async fn get_agent_turn_detail(
+    turn_id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<AgentTurnDetail>, String> {
+    read_store(&state)
+        .map_err(display_error)?
+        .get_agent_turn_detail(&turn_id)
+        .map_err(display_error)
+}
+
+#[tauri::command]
+async fn respond_approval(
+    request: ApprovalDecisionRequest,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    if !matches!(request.decision.as_str(), "approve" | "reject" | "cancel") {
+        return Err(format!(
+            "unsupported approval decision `{}`",
+            request.decision
+        ));
+    }
+    let pending = read_store(&state)
+        .map_err(display_error)?
+        .list_approval_requests(Some(1), Some("waiting"))
+        .map_err(display_error)?
+        .into_iter()
+        .find(|item| item.request_id == request.request_id)
+        .context(format!("Approval request not found or no longer waiting: {}", request.request_id))
         .map_err(display_error)?;
-    run_agent_turn(
-        session.as_ref(),
-        &mut context.broker,
-        &mut context.store,
-        state.config.rscript.clone(),
-        state.config.agent_package.clone(),
-        model.unwrap_or_else(|| "deepseek:deepseek-v4-flash".to_string()),
-        prompt,
-        mode,
-    )
-    .await
-    .map_err(display_error)
+    let delivered = state
+        .approvals
+        .respond(
+            &request.request_id,
+            ApprovalResponseInput {
+                decision: request.decision.clone(),
+                reason: request.reason.clone(),
+            },
+        )
+        .await;
+    Ok(json!({
+        "status": if delivered { "delivered" } else { "not_delivered" },
+        "request_id": request.request_id,
+        "turn_id": pending.turn_id
+    }))
 }
 
 #[tauri::command]
@@ -392,14 +519,24 @@ async fn active_session(state: &AppState) -> Result<Arc<ArkSession>> {
         .context("Workspace R is not running")
 }
 
+async fn active_context(state: &AppState) -> Result<Arc<Mutex<RuntimeContext>>> {
+    state.context.lock().await.clone().context("Workspace context is not ready")
+}
+
+fn read_store(state: &AppState) -> Result<Store> {
+    Store::open(&state.config.store_path).context("opening Rho event store")
+}
+
 async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus> {
     if let Some(session) = state.session.read().await.clone() {
-        let context = state.context.lock().await;
-        return status_from(
-            &state.config,
-            &session,
-            context.as_ref().map(|value| value.broker.identity()),
-        );
+        let context = state.context.lock().await.clone();
+        let identity = if let Some(context) = context {
+            let context = context.lock().await;
+            Some(context.broker.identity().clone())
+        } else {
+            None
+        };
+        return status_from(&state.config, &session, identity.as_ref());
     }
 
     let session = Arc::new(
@@ -411,6 +548,9 @@ async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus> {
     store
         .recover_incomplete_runs()
         .context("recovering incomplete runs after desktop restart")?;
+    store
+        .recover_incomplete_agent_turns()
+        .context("recovering incomplete agent turns after desktop restart")?;
     let mut broker = BrokerState::new(format!("desktop_{}", Uuid::new_v4()));
     store.save_identity(broker.identity())?;
     bootstrap_bridge(
@@ -421,29 +561,26 @@ async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus> {
     )
     .await?;
     let status = status_from(&state.config, &session, Some(broker.identity()))?;
-    *state.context.lock().await = Some(RuntimeContext { broker, store });
+    *state.context.lock().await = Some(Arc::new(Mutex::new(RuntimeContext { broker, store })));
     *state.session.write().await = Some(session);
     Ok(status)
 }
 
 async fn request_run_interrupt(run_id: Option<String>, state: &AppState) -> Result<Value> {
     let session = active_session(state).await?;
+    let context = active_context(state).await?;
     let target = {
-        let mut context_guard = state.context.lock().await;
-        let context = context_guard
-            .as_mut()
-            .context("Workspace context is not ready")?;
+        let mut context = context.lock().await;
+        let RuntimeContext { broker: _, store } = &mut *context;
         let run_id = match run_id {
             Some(value) => value,
-            None => context
-                .store
+            None => store
                 .latest_active_run_id()
                 .context("looking up active run")?
                 .context("No active run is available to interrupt")?,
         };
         ensure!(
-            context
-                .store
+            store
                 .request_cancel(&run_id)
                 .context("marking run as cancel-requested")?,
             "Run is not active: {run_id}"
@@ -484,21 +621,20 @@ async fn switch_project(
 
 async fn sync_workspace_project_root(state: &AppState, root: &Path) -> Result<()> {
     let session = active_session(state).await?;
-    let mut context_guard = state.context.lock().await;
-    let context = context_guard
-        .as_mut()
-        .context("Workspace context is not ready")?;
+    let context = active_context(state).await?;
+    let mut context = context.lock().await;
+    let RuntimeContext { broker, store } = &mut *context;
     let payload = json!({
         "arguments": {"code": format!("setwd({})", serde_json::to_string(&root.to_string_lossy()).unwrap())},
-        "expected_workspace": context.broker.identity()
+        "expected_workspace": broker.identity()
     });
     dispatch_workspace_request(
         "workspace.execute",
         &payload,
         ExecutionOrigin::System,
         session.as_ref(),
-        &mut context.broker,
-        &mut context.store,
+        broker,
+        store,
     )
     .await?;
     Ok(())
@@ -732,6 +868,8 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
             "deepseek:deepseek-v4-flash".to_string(),
             "请检查 rho_desktop_smoke 对象，告诉我它有多少行和多少列。不要修改工作区。".to_string(),
             "ask".to_string(),
+            "smoke_turn".to_string(),
+            Arc::new(PendingApprovalRegistry::default()),
         )
         .await?;
         let completed = result["events"]
@@ -793,6 +931,7 @@ fn main() {
                 project_watcher: Mutex::new(None),
                 session: RwLock::new(None),
                 context: Mutex::new(None),
+                approvals: Arc::new(PendingApprovalRegistry::default()),
             });
             Ok(())
         })
@@ -814,6 +953,10 @@ fn main() {
             get_run_detail,
             retry_run,
             run_agent,
+            list_agent_turns,
+            list_approval_requests,
+            get_agent_turn_detail,
+            respond_approval,
             interrupt_r,
             cancel_run,
             restart_workspace
