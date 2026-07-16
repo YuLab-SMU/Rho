@@ -383,12 +383,17 @@ body.resizing-vertical { cursor: col-resize; }
 .agent-timeline { flex: 1; min-height: 0; overflow: auto; padding: 13px 14px 18px; }
 .timeline-item { position: relative; display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; padding: 4px 0 15px; }
 .timeline-item:not(:last-child)::after { position: absolute; top: 22px; bottom: -1px; left: 8px; width: 1px; background: var(--border); content: ""; }
+.timeline-parent { padding: 7px 8px 14px 0; border-radius: 6px; cursor: pointer; }
+.timeline-parent.is-selected { margin-bottom: 4px; padding-left: 6px; background: #f6f8f8; }
+.timeline-child { margin-left: 16px; opacity: 0.96; }
+.timeline-child::after { left: 24px; }
 .timeline-marker { z-index: 1; display: grid; place-items: center; width: 17px; height: 17px; border: 1px solid var(--border-strong); border-radius: 50%; color: var(--subtle); background: #fff; font-size: 10px; }
 .timeline-item.completed .timeline-marker { border-color: var(--accent); color: #fff; background: var(--accent); }
 .timeline-item.running .timeline-marker { border-color: var(--warning); color: var(--warning); }
 .timeline-item.error .timeline-marker { border-color: var(--danger); color: var(--danger); }
 .timeline-item strong { display: block; margin: 1px 0 4px; font-size: 12.5px; }
 .timeline-item p { margin: 0; color: var(--muted); line-height: 1.48; white-space: pre-wrap; overflow-wrap: anywhere; }
+.timeline-item p + p { margin-top: 4px; }
 .timeline-code { display: block; margin-top: 6px; padding: 7px 8px; overflow: auto; border-left: 2px solid #8dbab5; color: #324247; background: #f2f6f6; font: 11px/1.5 "Cascadia Code", Consolas, monospace; white-space: pre-wrap; }
 .approval-panel { flex: 0 0 auto; margin: 0 10px 10px; padding: 10px; border: 1px solid #e0bf93; border-radius: 6px; background: #fff7ec; }
 .approval-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
@@ -403,7 +408,9 @@ body.resizing-vertical { cursor: col-resize; }
 .mode-control { margin: 8px 8px 4px; }
 .mode-control button { min-width: 52px; padding: 4px 8px; font-size: 11px; }
 .mode-control button[data-agent-mode="act"].active { color: #8e4c1e; background: #fff3e2; }
+.mode-control button:disabled { opacity: 0.6; cursor: wait; }
 #agentInput { display: block; width: 100%; min-height: 72px; padding: 8px 10px; resize: vertical; border: 0; outline: 0; color: var(--ink); background: transparent; line-height: 1.45; }
+#agentInput:disabled { color: var(--muted); background: #f7f9f9; }
 .composer-footer { display: flex; align-items: center; justify-content: space-between; padding: 5px 7px 7px 10px; color: var(--muted); font-size: 10px; }
 .send-button { display: grid; place-items: center; width: 29px; height: 29px; border: 0; border-radius: 4px; color: #fff; background: var(--accent); cursor: pointer; font-size: 16px; }
 .send-button:disabled { background: #aab6b7; cursor: wait; }

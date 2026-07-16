@@ -1414,6 +1414,33 @@ function prettyAgentMode(mode) {
   return { ask: "Ask", plan: "Plan", act: "Act" }[mode] || mode || "Agent";
 }
 
+function prettyAgentStatus(status) {
+  return {
+    queued: "Queued",
+    running: "Running",
+    waiting: "Waiting for approval",
+    completed: "Completed",
+    failed: "Failed",
+    rejected: "Rejected",
+    cancelled: "Cancelled",
+    interrupted: "Interrupted",
+    stale: "Stale",
+    policy_denied: "Policy denied",
+    approved: "Approved",
+  }[status] || status || "Unknown";
+}
+
+function truncateText(text, limit = 120) {
+  const compact = String(text || "").replace(/\s+/g, " ").trim();
+  if (!compact) return "";
+  return compact.length > limit ? `${compact.slice(0, limit)}…` : compact;
+}
+
+function approvalLabel(approval) {
+  if (!approval) return "";
+  return `${approval.tool} · ${approval.request_id}`;
+}
+
 function parseApprovalArguments(argumentsJson) {
   try {
     return JSON.parse(argumentsJson || "{}");
@@ -1465,6 +1492,11 @@ function updateAgentHeader() {
     $("#agentStateDot").className = "agent-state-dot error";
     return;
   }
+  if (latest?.status === "completed") {
+    $("#agentState").textContent = "Completed";
+    $("#agentStateDot").className = "agent-state-dot";
+    return;
+  }
   $("#agentState").textContent = "Ready";
   $("#agentStateDot").className = "agent-state-dot";
 }
@@ -1491,8 +1523,9 @@ function renderAgentTimeline() {
     return;
   }
   for (const turn of state.agentTurns.slice(0, 8)) {
+    const selected = state.selectedTurnId === turn.turn_id;
     const row = document.createElement("div");
-    row.className = `timeline-item ${agentStatusTone(turn.status)}`;
+    row.className = `timeline-item ${agentStatusTone(turn.status)} timeline-parent${selected ? " is-selected" : ""}`;
     row.dataset.turnId = turn.turn_id;
     const marker = document.createElement("span");
     marker.className = "timeline-marker";
@@ -1501,8 +1534,14 @@ function renderAgentTimeline() {
     const heading = document.createElement("strong");
     heading.textContent = `${prettyAgentMode(turn.mode)} · ${turn.prompt_preview}`;
     const paragraph = document.createElement("p");
-    paragraph.textContent = `${turn.status}${turn.pending_request_id ? ` · pending ${turn.pending_request_id}` : ""}`;
+    paragraph.textContent = `${prettyAgentStatus(turn.status)}${turn.pending_request_id ? ` · ${turn.pending_request_id}` : ""}`;
     content.append(heading, paragraph);
+    const detail = truncateText(turn.error_message || turn.final_message || "", 140);
+    if (detail) {
+      const detailLine = document.createElement("p");
+      detailLine.textContent = detail;
+      content.append(detailLine);
+    }
     row.append(marker, content);
     row.addEventListener("click", async () => {
       state.selectedTurnId = turn.turn_id;
@@ -1515,7 +1554,7 @@ function renderAgentTimeline() {
     if (state.selectedTurnId === turn.turn_id && state.selectedTurnDetail?.events?.length) {
       for (const event of state.selectedTurnDetail.events) {
         const child = document.createElement("div");
-        child.className = `timeline-item ${agentStatusTone(event.status)}`;
+        child.className = `timeline-item ${agentStatusTone(event.status)} timeline-child`;
         const childMarker = document.createElement("span");
         childMarker.className = "timeline-marker";
         childMarker.textContent = agentStatusTone(event.status) === "completed" ? "✓" : agentStatusTone(event.status) === "error" ? "!" : "·";
@@ -1523,6 +1562,14 @@ function renderAgentTimeline() {
         const childHeading = document.createElement("strong");
         childHeading.textContent = event.title;
         childContent.append(childHeading);
+        const meta = [];
+        if (event.request_id) meta.push(event.request_id);
+        if (event.tool) meta.push(event.tool);
+        if (meta.length) {
+          const metaLine = document.createElement("p");
+          metaLine.textContent = meta.join(" · ");
+          childContent.append(metaLine);
+        }
         if (event.body) {
           const childBody = document.createElement("p");
           childBody.textContent = event.body;
@@ -1544,14 +1591,31 @@ function renderAgentTimeline() {
 function renderApprovalPanel() {
   const approval = state.pendingApprovals.find((item) => item.turn_id === state.selectedTurnId) || state.pendingApprovals[0] || null;
   $("#approvalPanel").classList.toggle("hidden", !approval);
-  if (!approval) return;
+  if (!approval) {
+    $("#approvalRequestId").textContent = "request";
+    $("#approvalSummary").textContent = "Review the exact tool request before Workspace R changes.";
+    $("#approvalRevision").textContent = "";
+    $("#approvalCode").textContent = "";
+    $("#approvalCode").classList.add("hidden");
+    return;
+  }
   const argumentsObject = parseApprovalArguments(approval.arguments_json);
+  const turn = state.agentTurns.find((item) => item.turn_id === approval.turn_id) || null;
   $("#approvalRequestId").textContent = approval.request_id;
-  $("#approvalSummary").textContent = `${approval.tool} is requesting mutation in ${prettyAgentMode(state.agentTurns.find((turn) => turn.turn_id === approval.turn_id)?.mode || "act")} mode.`;
-  $("#approvalRevision").textContent = `workspace ${approval.workspace_id || "?"} · state ${approval.state_revision ?? "?"} · project ${approval.project_revision ?? "?"}`;
+  $("#approvalSummary").textContent = `${approval.tool} wants to mutate Workspace R in ${prettyAgentMode(turn?.mode || "act")} mode. Review the exact code before approving.`;
+  const staleHint = approval.state_revision !== state.revision.state_revision
+    || approval.project_revision !== state.revision.project_revision
+    ? ` · current state ${state.revision.state_revision ?? "?"}/${state.revision.project_revision ?? "?"}`
+    : "";
+  $("#approvalRevision").textContent = `captured ${approval.workspace_id || "?"} · state ${approval.state_revision ?? "?"} · project ${approval.project_revision ?? "?"}${staleHint}`;
   const code = approval.code || argumentsObject.code || approval.arguments_json;
   $("#approvalCode").textContent = code || "";
   $("#approvalCode").classList.toggle("hidden", !code);
+  $("#approvalApprove").textContent = `Approve ${approval.tool}`;
+  $("#approvalReject").textContent = `Reject ${approval.tool}`;
+  $("#approvalCancel").textContent = "Cancel pending";
+  $("#approvalPanel").dataset.requestId = approval.request_id;
+  $("#approvalPanel").dataset.label = approvalLabel(approval);
   $("#approvalApprove").onclick = () => submitApproval("approve", approval);
   $("#approvalReject").onclick = () => submitApproval("reject", approval);
   $("#approvalCancel").onclick = () => submitApproval("cancel", approval);
@@ -1859,7 +1923,10 @@ async function sendAgentPrompt() {
   if (!prompt || state.agentBusy) return;
   $("#agentInput").value = "";
   state.agentBusy = true;
+  switchContextTab("agent");
   $("#agentSendButton").disabled = true;
+  $("#agentInput").disabled = true;
+  $$("[data-agent-mode]").forEach((button) => { button.disabled = true; });
   $("#agentState").textContent = "Working";
   $("#agentStateDot").className = "agent-state-dot busy";
   try {
@@ -1877,6 +1944,8 @@ async function sendAgentPrompt() {
   } finally {
     state.agentBusy = false;
     $("#agentSendButton").disabled = false;
+    $("#agentInput").disabled = false;
+    $$("[data-agent-mode]").forEach((button) => { button.disabled = false; });
   }
 }
 
