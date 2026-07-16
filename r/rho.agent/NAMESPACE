@@ -1,5 +1,10 @@
 export(rho_agent_connect)
 export(rho_agent_emit)
+export(rho_agent_request)
+export(rho_agent_set_workspace_identity)
+export(rho_create_aisdk_hooks)
+export(rho_create_aisdk_session)
+export(rho_create_workspace_tools)
 export(rho_read_frame)
+export(rho_run_aisdk_turn)
 export(rho_write_frame)
-

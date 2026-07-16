@@ -88,6 +88,19 @@ impl Drop for ChildGuard {
                 let _ = libc::kill(pid as libc::pid_t, libc::SIGTERM);
             }
         }
+        #[cfg(windows)]
+        if let Some(pid) = self.pid {
+            use std::os::windows::process::CommandExt;
+
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            let _ = std::process::Command::new("taskkill")
+                .args(["/PID", &pid.to_string(), "/T", "/F"])
+                .creation_flags(CREATE_NO_WINDOW)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status();
+        }
     }
 }
 
@@ -652,6 +665,9 @@ fn build_kernel_command(spec: &KernelSpec, connection_path: &Path) -> Result<Com
     for (k, v) in &spec.env {
         cmd.env(k, v);
     }
+    for key in &spec.env_remove {
+        cmd.env_remove(key);
+    }
     Ok(cmd)
 }
 
@@ -680,6 +696,7 @@ mod tests {
                 .iter()
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect(),
+            env_remove: Vec::new(),
             metadata: HashMap::new(),
             kernel_protocol_version: None,
         }

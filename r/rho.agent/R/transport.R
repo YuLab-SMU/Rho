@@ -1,8 +1,3 @@
-.rho_agent_state <- new.env(parent = emptyenv())
-.rho_agent_state$connection <- NULL
-.rho_agent_state$protocol_version <- 1L
-.rho_agent_state$max_frame_bytes <- 8L * 1024L * 1024L
-
 read_exact <- function(connection, length) {
   output <- raw()
   while (length(output) < length) {
@@ -19,7 +14,7 @@ read_exact <- function(connection, length) {
 #' @export
 rho_write_frame <- function(connection, message) {
   payload <- charToRaw(jsonlite::toJSON(
-    message,
+    rho_protocol_jsonable(message),
     auto_unbox = TRUE,
     null = "null",
     digits = NA
@@ -93,4 +88,37 @@ rho_agent_emit <- function(type, payload = list(), connection = .rho_agent_state
     payload = c(list(type = type), payload)
   )
   rho_write_frame(connection, message)
+}
+
+#' Send a Correlated Request to the Broker
+#' @export
+rho_agent_request <- function(type,
+                              payload = list(),
+                              connection = .rho_agent_state$connection) {
+  if (is.null(connection)) {
+    stop("Agent R is not connected to the Rho broker.", call. = FALSE)
+  }
+  request <- list(
+    protocol_version = .rho_agent_state$protocol_version,
+    id = paste0("req_", as.integer(Sys.time()), "_", sample.int(.Machine$integer.max, 1L)),
+    kind = "request",
+    timestamp = format(Sys.time(), "%Y-%m-%dT%H:%M:%OS3%z"),
+    payload = c(list(type = type), payload)
+  )
+  rho_write_frame(connection, request)
+
+  repeat {
+    response <- rho_read_frame(connection)
+    if (identical(response$kind, "cancel") &&
+        identical(response$payload$request_id, request$id)) {
+      stop("Broker cancelled the Agent R request.", call. = FALSE)
+    }
+    if (identical(response$kind, "response") &&
+        identical(response$payload$request_id, request$id)) {
+      if (!isTRUE(response$payload$ok)) {
+        stop(response$payload$error %||% "Broker request failed.", call. = FALSE)
+      }
+      return(response$payload$result)
+    }
+  }
 }

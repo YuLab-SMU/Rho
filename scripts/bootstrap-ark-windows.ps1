@@ -18,6 +18,14 @@ $archive = Join-Path $RuntimeRoot ("ark-" + $manifest.version + "-windows-x64.zi
 $ark = Join-Path $installRoot "ark.exe"
 $kernelSpec = Join-Path $installRoot "kernel.json"
 $log = Join-Path $installRoot "ark.log"
+$emptyRenviron = Join-Path $installRoot "empty.Renviron"
+$rHome = (& Rscript -e "cat(normalizePath(R.home(), winslash='/', mustWork=TRUE))").Trim()
+$rBin = (& Rscript -e "cat(normalizePath(R.home('bin'), winslash='/', mustWork=TRUE))").Trim()
+$libraryExpression = 'cat(paste(normalizePath(.libPaths(), winslash=''/'' ,mustWork=TRUE), collapse=.Platform$path.sep))'
+$rLibraries = (& Rscript -e $libraryExpression).Trim()
+if (-not $rHome -or -not $rBin -or -not $rLibraries) {
+    throw "Unable to resolve R_HOME, the R DLL directory and R libraries through Rscript."
+}
 
 New-Item -ItemType Directory -Path $RuntimeRoot -Force | Out-Null
 if (-not (Test-Path -LiteralPath $ark)) {
@@ -28,6 +36,7 @@ if (-not (Test-Path -LiteralPath $ark)) {
     }
     Expand-Archive -LiteralPath $archive -DestinationPath $installRoot -Force
 }
+[System.IO.File]::WriteAllText($emptyRenviron, "", (New-Object System.Text.UTF8Encoding($false)))
 
 $spec = [ordered]@{
     argv = @(
@@ -40,6 +49,7 @@ $spec = [ordered]@{
         $log,
         "--",
         "--interactive",
+        "--no-environ",
         "--no-init-file",
         "--no-site-file"
     )
@@ -47,6 +57,12 @@ $spec = [ordered]@{
     language = "R"
     interrupt_mode = "message"
     kernel_protocol_version = "5.4"
+    env = [ordered]@{
+        R_HOME = $rHome
+        R_LIBS = $rLibraries
+        R_ENVIRON_USER = $emptyRenviron
+        PATH = $rBin + ";" + $env:PATH
+    }
 }
 $specJson = $spec | ConvertTo-Json -Depth 4
 $utf8WithoutBom = New-Object System.Text.UTF8Encoding($false)

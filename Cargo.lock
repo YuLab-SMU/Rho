@@ -1047,6 +1047,7 @@ dependencies = [
  "anyhow",
  "clap",
  "rho-agent-transport",
+ "rho-core",
  "rho-kernel",
  "rho-protocol",
  "rho-store",

@@ -1,0 +1,14 @@
+{
+  "audit_date": "2026-07-15",
+  "packages": {
+    "aisdk": {
+      "repository": "https://github.com/YuLab-SMU/aisdk",
+      "revision": "1e2fa54358dda647a6d5cbf64c0625642c673e4c"
+    },
+    "aisdk.console": {
+      "repository": "https://github.com/YuLab-SMU/aisdk.console",
+      "revision": "a985f05ba28308972f6e8c47575b56182558cf8b",
+      "role": "reference_frontend_and_developer_fallback"
+    }
+  }
+}

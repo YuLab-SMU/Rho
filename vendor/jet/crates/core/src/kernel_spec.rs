@@ -47,6 +47,12 @@ pub struct KernelSpec {
     #[serde(default)]
     pub env: HashMap<String, String>,
 
+    /// Parent environment variables removed from the kernel process after
+    /// kernelspec `env` entries are applied. This client-side extension is not
+    /// serialized into a standard kernelspec.
+    #[serde(default, skip_serializing)]
+    pub env_remove: Vec<String>,
+
     /// Free-form metadata for client-specific kernel selection.
     #[serde(default)]
     pub metadata: HashMap<String, Value>,

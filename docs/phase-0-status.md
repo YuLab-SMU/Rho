@@ -1,6 +1,6 @@
 # Phase 0 implementation status
 
-Date: 2026-07-15  
+Date: 2026-07-16
 Platform: Windows x64  
 R: 4.6.0  
 Ark: 0.1.252  
@@ -27,6 +27,46 @@ Jet revision: `52ae131dd168fe2e104d306cc4bf5bbeae749200`
 - A real Agent R process authenticates over loopback with a 256-bit single-use
   token delivered through stdin. Deliberate stdout/stderr contamination does
   not enter the framed protocol, and token replay is rejected.
+- `rho.agent` now contains an initial `aisdk` desktop adapter for ChatSession
+  streaming, run traces, tool lifecycle events, broker approvals and
+  revision-aware Workspace tool RPC. `aisdk.console` is recorded as the
+  reference frontend rather than an embedded terminal UI.
+- A complete mock `ChatSession` streaming turn validates the public `on_event`
+  API and forwards text, final, done, run-state and trace records as framed
+  broker events without a model API call.
+- The internally maintained `aisdk` family has been reviewed as a set of
+  co-evolving upstream packages. Reusable changes are separated from
+  Rho-specific Ark, broker, persistence and desktop concerns in
+  `docs/architecture/aisdk-family-change-proposals.md`.
+- The end-to-end coordinator now runs a real Agent R request through broker
+  revision checks, Ark, `rho.bridge`, a bounded structured result channel and
+  the broker-owned SQLite store. The successful probe returned value 42 and
+  persisted 21 correlated events without Python.
+- Two overlapping logical clients are exercised in the coordinator probe. A
+  user execution advances the workspace after Agent R receives its identity;
+  the stale Agent request is rejected, the broker pushes the new identity, and
+  the Agent retry succeeds. Final `execution_seq` and `state_revision` are 3.
+- An opt-in real-model coordinator probe passed with
+  `deepseek:deepseek-v4-flash`. The model called `run_r` exactly once with
+  `rho_model_probe_value <- 6 * 7`; the broker completed the approval RPC,
+  Workspace R returned value 42 and a revised workspace identity, and a
+  subsequent broker-backed inspection reported a 56-byte numeric object with
+  structure `num 42`. The run persisted 130 correlated events and all three
+  broker executions finished as `completed`.
+- Agent process diagnostics now apply broker-side defense-in-depth redaction
+  for common API-key/token query parameters, JSON credential fields, and
+  bearer tokens. The redaction path has a Rust regression test and is applied
+  to early-loop failures as well as final stdout/stderr reporting.
+- Ark code completeness is exposed through Rust and verified against complete,
+  incomplete (`+` indent), and invalid R input.
+- Ark comms are verified without Jet's Lua layer. The LSP comm reports
+  `server_started` and is visible through `comm_info`; `positron.ui` reports
+  distinct `prompt_state` and `working_directory` events.
+- Both rich-output modes are verified. Before the UI comm opens, plots emit
+  `image/png` display data. In dynamic mode, HTML is delivered through
+  `positron.ui/show_html_file`, and a `positron.plot` render RPC returns
+  `image/svg+xml`. The probes validate non-empty payloads rather than logging
+  full binary data.
 - Measured Windows process startup, Ark handshake, one execution, and graceful
   shutdown: 2.216 seconds on the development machine.
 
@@ -40,14 +80,44 @@ Jet revision: `52ae131dd168fe2e104d306cc4bf5bbeae749200`
 - User `.Rprofile` code can assume a terminal and break headless Ark startup.
   The bootstrap uses a controlled startup. Project `renv/.Rprofile` activation
   must later be explicit, broker-owned, and auditable.
+- A controlled Ark startup must still preserve the selected R package library
+  and Windows DLL search path. The generated kernelspec now pins `R_HOME`,
+  `R_LIBS`, and the R `bin/x64` PATH prefix; otherwise compiled packages can be
+  resolved from a stale site library or fail to load.
+- Ark 0.1.252 accepts `user_expressions` but returns an empty result map and has
+  no general R API for arbitrary MIME bundles. Phase 0 therefore returns the
+  bounded `rho.bridge` JSON through a broker-named temporary file, written by
+  atomic rename, capped at the Agent frame limit, read only after execution
+  completion, and deleted immediately. stdout remains diagnostic-only.
+- Jet transfers its Windows `Child` handle to a liveness watcher after startup,
+  but its PID-only `ChildGuard` previously had no Windows drop action. The
+  vendored guard now uses a hidden `taskkill /T /F` fallback so an abnormal
+  shutdown reclaims Ark and its LSP child tree. Desktop productization should
+  replace this fallback with a broker-owned Windows Job Object.
+- Ark execution now fails if its listener closes before both `execute_reply`
+  and `idle`; a kernel crash can no longer be reported as successful execution.
+- `aisdk.mcp` currently passes the complete Agent R environment to local MCP
+  children, including model credentials. Before local MCP is enabled in Rho,
+  the package must adopt an explicit environment allowlist or the broker must
+  enforce equivalent redaction and process ownership.
+- Provider errors may include credentials in request URLs. Rho therefore
+  redacts Agent R diagnostics at the broker boundary even when an upstream
+  package or HTTP client fails to sanitize its own error. Structured event and
+  SQLite payload redaction still needs an end-to-end adversarial fixture.
+
+## Before Phase 1A
+
+- Fix or broker-isolate `aisdk.mcp` child environments.
+- Add correlated public aisdk events and cooperative cancellation, or retain
+  the documented Rho adapter shims until those upstream APIs land.
+- Add injectable tool/context and skill-script executors so Workspace R remains
+  the only authority for project code and scientific objects.
 
 ## Remaining before Phase 0 exit
 
-- Exercise HTML and SVG bundles plus Ark comms and code completeness.
-- Prove two simultaneous logical clients through the broker.
-- Integrate `aisdk` task execution rather than only the Agent R transport.
-- Wire kernel, broker revisions, bridge probes, and SQLite into one end-to-end
-  execution coordinator.
+- Run the representative scientific-object inspect, error, diagnosis and
+  correction scenario through the real-model coordinator; the smaller
+  DeepSeek execution/approval/inspection proof now passes.
 - Add cancellation, timeout, crash, oversized-frame, and child credential
   redaction integration tests.
 - Compare arf headless against the measured Ark path and close ADR-009.

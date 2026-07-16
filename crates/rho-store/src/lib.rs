@@ -121,6 +121,12 @@ impl Store {
             .map_err(StoreError::from)
     }
 
+    pub fn event_count(&self) -> Result<u64, StoreError> {
+        self.connection
+            .query_row("SELECT COUNT(*) FROM events", [], |row| row.get(0))
+            .map_err(StoreError::from)
+    }
+
     pub fn begin_run(&mut self, run_id: &str) -> Result<(), StoreError> {
         self.connection.execute(
             "INSERT INTO runs(run_id, status, started_at) VALUES(?1, 'running', ?2)",
@@ -166,6 +172,7 @@ mod tests {
 
         let event = Envelope::new(MessageKind::Event, json!({"kind": "test"}));
         assert_eq!(store.append_event(&event).unwrap(), 1);
+        assert_eq!(store.event_count().unwrap(), 1);
     }
 
     #[test]

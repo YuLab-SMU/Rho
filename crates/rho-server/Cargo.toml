@@ -9,6 +9,7 @@ anyhow.workspace = true
 clap.workspace = true
 rho-kernel = { path = "../rho-kernel" }
 rho-agent-transport = { path = "../rho-agent-transport" }
+rho-core = { path = "../rho-core" }
 rho-protocol = { path = "../rho-protocol" }
 rho-store = { path = "../rho-store" }
 serde.workspace = true

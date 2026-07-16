@@ -316,6 +316,26 @@ Responsibilities:
 
 The broker embeds the Rust Ark client directly. There is no Python gateway process and no loopback Jupyter HTTP server. Kernel connection files, HMAC keys, ZeroMQ ports, and process handles stay private to the broker.
 
+For the Phase 0 bridge RPC, the broker supplies a unique result path below the
+operating system temporary directory. Workspace R serializes only the bounded
+`rho.bridge` result to JSON, writes a sibling temporary file, and atomically
+renames it to the supplied path. After receiving both iopub `idle` and shell
+`execute_reply`, the broker enforces the protocol frame-size limit, parses the
+JSON, and deletes both paths. This is an internal result transport, not event
+persistence or console scraping; SQLite remains the authoritative store.
+
+Ark 0.1.252 was tested with Jupyter `user_expressions`, but returns an empty
+result map, and its R-side display API only exposes specific HTML output rather
+than arbitrary MIME bundles. A future Ark custom-MIME or comm API may replace
+the temporary result transport behind the same broker RPC contract.
+
+Rich output follows Ark's two supported frontend modes. Without a UI comm,
+plots arrive as Jupyter display bundles such as `image/png`. Once
+`positron.ui` is open, HTML arrives as a `show_html_file` event and plots open
+`positron.plot` comms; Rho requests SVG/PNG/PDF renderings through correlated
+comm RPCs. The broker validates MIME type and bounded payload size before
+forwarding a Workbench Protocol display event.
+
 ### 3.3 Agent R
 
 Agent R starts with a restricted environment and loads `aisdk` plus a Rho frontend adapter.
@@ -329,6 +349,34 @@ Responsibilities:
 - context budgeting and summaries;
 - human approval hooks;
 - structured streaming of reasoning, messages, tool calls, costs, and run state.
+
+The `aisdk` family is treated as an existing application platform, not merely
+an LLM HTTP client. Rho reuses `aisdk` core's `ChatSession`, public
+`send_stream(..., on_event=)` typed event stream, run-trace sink, `HookHandler`, normalized run state, tool schema,
+context management, semantic adapter protocol, and session branching. The
+`aisdk.console` package is the reference implementation for turn handling,
+stream rendering, tool timelines, inspection, cancellation, and continuation.
+Rho does not call `console_chat()` or render its terminal frame inside the GUI;
+it implements another frontend over the same exported core extension seams.
+
+Other family packages are adopted by boundary:
+
+- `aisdk.bioc` supplies semantic adapter behavior, executed through bounded
+  Workspace R bridge probes rather than by copying Bioconductor objects to Agent R;
+- `aisdk.skills` supplies discovery and authoring, while project skill scripts
+  execute through broker-controlled Workspace R or isolated workers;
+- `aisdk.orchestration` is an optional later Agent R layer after the single-agent
+  execution coordinator is stable;
+- `aisdk.mcp` supplies protocol/client semantics, but local MCP child processes
+  must be launched by the broker with a stripped environment;
+- `aisdk.console` remains a supported developer/debug frontend and compatibility
+  reference, not Rho's primary desktop console.
+
+Cross-repository changes that would reduce Rho-specific adapter code are tracked
+in `docs/architecture/aisdk-family-change-proposals.md`. The highest-priority
+items are a correlated public event envelope, cooperative cancellation,
+pluggable tool/context and skill executors, and a secure `aisdk.mcp` process
+launcher that does not inherit all Agent R credentials.
 
 Agent R communicates with the broker over a dedicated, length-prefixed JSON frame protocol on a broker-owned loopback TCP connection. Protocol data must not share stdout or stderr with R packages or native libraries.
 
@@ -360,7 +408,7 @@ cancel    cancellation request for a specific operation
 
 Every message includes `protocol_version`, `id`, `type`, `timestamp`, and a schema-versioned payload. Requests include a deadline and an idempotency classification. Unknown message types or protocol versions fail closed.
 
-Agent R stdout and stderr are never parsed as protocol. They are captured into bounded rotating diagnostic logs with secret redaction. Structured `aisdk` content travels only over the authenticated frame connection. Phase 0 includes deliberate stdout/stderr contamination tests to verify protocol isolation.
+Agent R stdout and stderr are never parsed as protocol. They are captured into bounded rotating diagnostic logs with secret redaction. Structured `aisdk` content travels only over the authenticated frame connection. Phase 0 includes deliberate stdout/stderr contamination tests to verify protocol isolation. Broker-side defense-in-depth redaction covers common credential query parameters, JSON credential fields, and bearer tokens, including early Agent R failure diagnostics; this boundary is required even when provider libraries include a credential in an HTTP error.
 
 Tool requests block the active Agent R run until the broker returns a correlated response. Cancellation has two layers: a cooperative protocol `cancel` followed, after a bounded grace period, by an OS-level interrupt or Agent R restart. The broker remains responsive throughout.
 
@@ -412,6 +460,18 @@ Reuse or adapt existing `aisdk` capabilities where possible:
 - `inspect_r_function()`
 - `get_r_documentation()`
 - semantic adapter registries
+
+These functions currently inspect the R process in which `aisdk` is loaded.
+In desktop mode that process is Agent R, so their schemas and rendering logic
+may be reused but their execution targets must be replaced by broker RPC tools.
+In particular, `create_r_introspect_tools()`, `r_eval`, and
+`execute_r_code_local` must never be presented as Workspace R operations.
+
+These functions currently inspect the R process in which `aisdk` is loaded.
+In desktop mode that process is Agent R, so their schemas and rendering logic
+may be reused but their execution targets must be replaced by broker RPC tools.
+In particular, `create_r_introspect_tools()`, `r_eval`, and
+`execute_r_code_local` must never be presented as Workspace R operations.
 
 The bridge should return bounded, schema-stable summaries. Large data frames, matrices, genomic ranges, single-cell objects, model objects, and external pointers must remain inside Workspace R.
 
@@ -588,6 +648,42 @@ cost.updated
 ```
 
 The adapter should reuse existing `aisdk` hooks, run states, session semantics, and branching APIs, but Broker storage is authoritative. In desktop mode, Agent R emits normalized session events to the broker instead of independently appending the same events to `aisdk` JSONL. Import/export compatibility with the existing `aisdk` session event format is preserved at the boundary.
+
+Concrete integration seams audited in the current `aisdk` family:
+
+| Existing seam | Rho use | Constraint |
+|---|---|---|
+| `ChatSession$send_stream(..., on_event=)` | public typed text, thinking, final, and done events | normalize to Workbench Protocol |
+| `set_run_trace_sink()` | model calls, responses, policy decisions, tool-result traces, usage and latency | redact before broker persistence |
+| `create_hooks()` / `HookHandler` | tool start/end and synchronous approval round-trip | broker remains approval authority |
+| `new_run_state()` / `ChatSession$get_run_state()` / `continue_run()` | blocked, waiting, retry, explain, manual and completion states | do not invent a second agent state machine |
+| session event and branching API | import/export compatibility and branch semantics | broker SQLite is the only desktop writer |
+| `aisdk.console` frame/timeline logic | UX reference and behavior fixtures | no terminal markup or `console_chat()` embedding |
+| `create_console_agent()` and console tools | system-prompt/tool-design reference | default local R/file/shell tools bypass broker and are not used unchanged |
+
+`rho.agent` owns the desktop adapter. It builds an `aisdk` `ChatSession` with
+Rho Tool objects whose `execute` functions issue correlated broker requests.
+Workspace identity is injected by the adapter, not model-generated. Effectful
+tools synchronously wait for a broker approval response through the authenticated
+side channel. Agent R stdout/stderr remains diagnostic only.
+
+Concrete integration seams audited in the current `aisdk` family:
+
+| Existing seam | Rho use | Constraint |
+|---|---|---|
+| `ChatSession$send_stream(..., .stream_event_callback=)` | text, thinking, final, and done events | normalize to Workbench Protocol |
+| `set_run_trace_sink()` | model calls, responses, policy decisions, tool-result traces, usage and latency | redact before broker persistence |
+| `create_hooks()` / `HookHandler` | tool start/end and synchronous approval round-trip | broker remains approval authority |
+| `new_run_state()` / `ChatSession$get_run_state()` / `continue_run()` | blocked, waiting, retry, explain, manual and completion states | do not invent a second agent state machine |
+| session event and branching API | import/export compatibility and branch semantics | broker SQLite is the only desktop writer |
+| `aisdk.console` frame/timeline logic | UX reference and behavior fixtures | no terminal markup or `console_chat()` embedding |
+| `create_console_agent()` and console tools | system-prompt/tool-design reference | default local R/file/shell tools bypass broker and are not used unchanged |
+
+`rho.agent` owns the desktop adapter. It builds an `aisdk` `ChatSession` with
+Rho Tool objects whose `execute` functions issue correlated broker requests.
+Workspace identity is injected by the adapter, not model-generated. Effectful
+tools synchronously wait for a broker approval response through the authenticated
+side channel. Agent R stdout/stderr remains diagnostic only.
 
 ### 6.2 Workspace tools exposed to agents
 
@@ -807,6 +903,13 @@ Spike B is a decision input, not a second production runtime to maintain by defa
 8. Verify that model credentials are absent from Workspace R, MCP child environments, logs, and the project store.
 9. Stream kernel and agent events to a minimal browser UI using the Workbench Protocol.
 
+Current Windows evidence includes both a deterministic two-client coordinator
+probe and an opt-in `deepseek:deepseek-v4-flash` run. In the real-model run,
+Agent R emitted a single `run_r` tool request, the broker completed its approval
+round trip, Ark created `rho_model_probe_value <- 6 * 7`, the adapter consumed
+the revised workspace identity from the tool response, and a later inspection
+returned `num 42`. The broker persisted 130 correlated events without Python.
+
 Required demonstration:
 
 ```r
@@ -829,6 +932,7 @@ Exit gates:
 - kernel restart invalidates prior live object references.
 - broker restart recovers SQLite state and marks incomplete executions as interrupted.
 - deliberate Agent R stdout/stderr contamination does not corrupt the frame protocol, and a second client cannot replay the bootstrap token.
+- at least one opt-in real-model run completes an approved Workspace R tool call, consumes the returned workspace revision, and performs a subsequent inspection.
 - Windows x64 cold startup is measured and documented.
 
 ### Phase 1A: Windows vertical slice
