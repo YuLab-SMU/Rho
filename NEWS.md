@@ -13,19 +13,33 @@ this file records behavior that is already available in a released build.
 - Project paths are constrained to the selected root and editable extensions
   are explicitly allowlisted.
 - Opening a project synchronizes the Workspace R working directory.
+- Native Windows project selection now restores the last opened project and
+  its per-project session state.
+- Project session restore now tracks open documents, active document, cursor
+  positions, dirty drafts and panel sizes in the app-local data directory.
+- Missing project roots now show an explicit unavailable-project state instead
+  of silently falling back.
+- External file changes refresh the project tree and avoid overwriting dirty
+  editor content without an explicit choice.
+- Monaco now provides the primary R source editor with syntax highlighting,
+  bracket matching and textarea fallback when advanced loading fails.
+- The editor now distinguishes selection, current-line and whole-file
+  execution, and whole-file runs retain source-path metadata.
+- Executions now persist as durable run records with explicit lifecycle states,
+  retry links and restart recovery markers in the broker-owned SQLite store.
+- Problems now derive from structured execution records instead of transient
+  console-only output, and the Runs sidebar exposes cancellable active runs.
 
 ### Planned
 
 - Stabilize the Windows daily-use workflow around real projects and multiple
   R source files.
-- Replace the prototype textarea editor with a language-aware editor and add
-  project/file operations.
+- Add bounded local completion and richer R language features without pulling
+  in a heavyweight language server dependency.
 - Turn Agent approvals, errors and retries into durable, user-visible run
   records.
 - Add regression coverage for panel layout persistence, workspace restart,
   cancellation and crash recovery.
-- Persist document/session state across application restarts and add a real
-  project-directory picker.
 
 ## 0.2.0-dev.1 - 2026-07-16
 
