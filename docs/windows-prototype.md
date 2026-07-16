@@ -7,7 +7,7 @@ Date: 2026-07-16
 The current internal prototype installer is generated at:
 
 ```text
-D:\Rho\target\release\bundle\nsis\Rho_0.1.1_x64-setup.exe
+D:\Rho\target\release\bundle\nsis\Rho_0.2.0-dev.1_x64-setup.exe
 ```
 
 It is an unsigned 64-bit NSIS installer. Windows SmartScreen may therefore

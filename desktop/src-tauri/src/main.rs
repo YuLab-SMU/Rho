@@ -21,7 +21,6 @@ const BRIDGE_WORKSPACE: &str = include_str!("../../../r/rho.bridge/R/workspace.R
 const AGENT_STATE: &str = include_str!("../../../r/rho.agent/R/aaa-state.R");
 const AGENT_TRANSPORT: &str = include_str!("../../../r/rho.agent/R/transport.R");
 const AGENT_ADAPTER: &str = include_str!("../../../r/rho.agent/R/aisdk_adapter.R");
-
 #[derive(Clone)]
 struct RuntimeConfig {
     kernelspec: PathBuf,
@@ -38,8 +37,23 @@ struct RuntimeContext {
 
 struct AppState {
     config: RuntimeConfig,
+    project_root: RwLock<PathBuf>,
     session: RwLock<Option<Arc<ArkSession>>>,
     context: Mutex<Option<RuntimeContext>>,
+}
+
+#[derive(Serialize)]
+struct ProjectFile {
+    path: String,
+    name: String,
+    kind: &'static str,
+    size_bytes: u64,
+}
+
+#[derive(Serialize)]
+struct ProjectState {
+    root: String,
+    files: Vec<ProjectFile>,
 }
 
 #[derive(Serialize)]
@@ -67,6 +81,84 @@ async fn workspace_status(state: State<'_, AppState>) -> Result<Value, String> {
         "workspace": context.as_ref().map(|value| value.broker.identity()),
         "python_required": false
     }))
+}
+
+#[tauri::command]
+async fn project_state(state: State<'_, AppState>) -> Result<ProjectState, String> {
+    let root = state.project_root.read().await.clone();
+    list_project_files(&root).map_err(display_error)
+}
+
+#[tauri::command]
+async fn project_open(path: String, state: State<'_, AppState>) -> Result<ProjectState, String> {
+    let root = validate_project_root(Path::new(&path)).map_err(display_error)?;
+    std::fs::create_dir_all(&root).map_err(display_error)?;
+    let session = active_session(&state).await.map_err(display_error)?;
+    let mut context_guard = state.context.lock().await;
+    let context = context_guard
+        .as_mut()
+        .context("Workspace context is not ready")
+        .map_err(display_error)?;
+    let payload = json!({
+        "arguments": {"code": format!("setwd({})", serde_json::to_string(&root.to_string_lossy()).unwrap())},
+        "expected_workspace": context.broker.identity()
+    });
+    dispatch_workspace_request(
+        "workspace.execute",
+        &payload,
+        ExecutionOrigin::System,
+        session.as_ref(),
+        &mut context.broker,
+        &mut context.store,
+    )
+    .await
+    .map_err(display_error)?;
+    drop(context_guard);
+    *state.project_root.write().await = root;
+    project_state(state).await
+}
+
+#[tauri::command]
+async fn project_read_file(path: String, state: State<'_, AppState>) -> Result<Value, String> {
+    let root = state.project_root.read().await.clone();
+    let file = project_path(&root, &path).map_err(display_error)?;
+    let content = std::fs::read_to_string(&file).map_err(display_error)?;
+    Ok(json!({"path": path, "content": content}))
+}
+
+#[tauri::command]
+async fn project_write_file(
+    path: String,
+    content: String,
+    state: State<'_, AppState>,
+) -> Result<ProjectState, String> {
+    let root = state.project_root.read().await.clone();
+    let file = project_path(&root, &path).map_err(display_error)?;
+    ensure_editable_file(&file).map_err(display_error)?;
+    if let Some(parent) = file.parent() {
+        std::fs::create_dir_all(parent).map_err(display_error)?;
+    }
+    std::fs::write(file, content).map_err(display_error)?;
+    project_state(state).await
+}
+
+#[tauri::command]
+async fn project_create_file(
+    path: String,
+    content: String,
+    state: State<'_, AppState>,
+) -> Result<ProjectState, String> {
+    let root = state.project_root.read().await.clone();
+    let file = project_path(&root, &path).map_err(display_error)?;
+    ensure_editable_file(&file).map_err(display_error)?;
+    if file.exists() {
+        return Err(format!("Project file already exists: {path}"));
+    }
+    if let Some(parent) = file.parent() {
+        std::fs::create_dir_all(parent).map_err(display_error)?;
+    }
+    std::fs::write(file, content).map_err(display_error)?;
+    project_state(state).await
 }
 
 #[tauri::command]
@@ -202,6 +294,127 @@ async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus> {
     *state.context.lock().await = Some(RuntimeContext { broker, store });
     *state.session.write().await = Some(session);
     Ok(status)
+}
+
+fn default_project_root() -> PathBuf {
+    let development = PathBuf::from(r"D:\Rho");
+    if development.is_dir() {
+        return development;
+    }
+    std::env::var_os("USERPROFILE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("Documents")
+        .join("Rho")
+}
+
+fn validate_project_root(path: &Path) -> Result<PathBuf> {
+    let root = if path.exists() {
+        path.canonicalize()?
+    } else {
+        std::fs::create_dir_all(path)?;
+        path.canonicalize()?
+    };
+    ensure!(root.is_dir(), "Project path is not a directory");
+    Ok(root)
+}
+
+fn project_path(root: &Path, relative: &str) -> Result<PathBuf> {
+    ensure!(!relative.trim().is_empty(), "Project file path is empty");
+    let candidate = root.join(relative);
+    let normalized = if candidate.exists() {
+        candidate.canonicalize()?
+    } else {
+        let parent = candidate
+            .parent()
+            .context("Project file path has no parent")?;
+        std::fs::create_dir_all(parent)?;
+        parent.canonicalize()?.join(
+            candidate
+                .file_name()
+                .context("Project file path has no file name")?,
+        )
+    };
+    ensure!(normalized.starts_with(root), "Project file path escapes project root");
+    Ok(normalized)
+}
+
+fn ensure_editable_file(path: &Path) -> Result<()> {
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    ensure!(
+        matches!(extension.as_str(), "r" | "rmd" | "qmd" | "txt" | "csv" | "tsv"),
+        "Unsupported project file type: .{extension}"
+    );
+    Ok(())
+}
+
+fn list_project_files(root: &Path) -> Result<ProjectState> {
+    let mut files = Vec::new();
+    collect_project_files(root, root, &mut files, 0)?;
+    files.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(ProjectState {
+        root: root.to_string_lossy().replace('\\', "/"),
+        files,
+    })
+}
+
+fn collect_project_files(root: &Path, directory: &Path, files: &mut Vec<ProjectFile>, depth: usize) -> Result<()> {
+    if depth > 4 {
+        return Ok(());
+    }
+    for entry in std::fs::read_dir(directory)? {
+        let entry = entry?;
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with('.') || name == "target" || name == "renv" {
+            continue;
+        }
+        if path.is_dir() {
+            collect_project_files(root, &path, files, depth + 1)?;
+            continue;
+        }
+        if !path.is_file() || ensure_editable_file(&path).is_err() {
+            continue;
+        }
+        let relative = path.strip_prefix(root)?.to_string_lossy().replace('\\', "/");
+        files.push(ProjectFile {
+            path: relative,
+            name,
+            kind: "source",
+            size_bytes: path.metadata()?.len(),
+        });
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod project_tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn project_paths_stay_inside_root() {
+        let directory = TempDir::new().unwrap();
+        let root = directory.path().canonicalize().unwrap();
+        let nested = project_path(&root, "analysis.R").unwrap();
+        assert!(nested.starts_with(&root));
+        assert!(project_path(&root, "../outside.R").is_err());
+    }
+
+    #[test]
+    fn project_files_only_include_supported_sources() {
+        let directory = TempDir::new().unwrap();
+        std::fs::write(directory.path().join("analysis.R"), "1 + 1").unwrap();
+        std::fs::write(directory.path().join("notes.md"), "notes").unwrap();
+        let root = directory.path().canonicalize().unwrap();
+        let state = list_project_files(&root).unwrap();
+        assert_eq!(state.files.len(), 1);
+        assert_eq!(state.files[0].path, "analysis.R");
+    }
 }
 
 fn status_from(
@@ -482,6 +695,7 @@ fn main() {
             })?;
             app.manage(AppState {
                 config,
+                project_root: RwLock::new(default_project_root()),
                 session: RwLock::new(None),
                 context: Mutex::new(None),
             });
@@ -490,6 +704,11 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             workspace_start,
             workspace_status,
+            project_state,
+            project_open,
+            project_read_file,
+            project_write_file,
+            project_create_file,
             execute_r,
             snapshot_workspace,
             run_agent,

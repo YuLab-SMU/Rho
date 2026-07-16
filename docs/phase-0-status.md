@@ -17,6 +17,10 @@ Jet revision: `52ae131dd168fe2e104d306cc4bf5bbeae749200`
   and restart controls, plus an Ask/Plan/Act Agent timeline. The Files,
   execution and context regions now have draggable, persistent dividers; the
   execution panel also supports one-click expand and restore.
+- The first `0.2.x` project-file slice is implemented behind a broker-safe API:
+  source files are listed under a selected project root, paths cannot escape
+  that root, multiple document tabs can be read/edited/saved, new source files
+  can be created, and opening a project synchronizes Workspace R `setwd()`.
 - Desktop backend smoke tests create a data frame in Workspace R, receive a
   real plot and Environment object, then complete a read-only DeepSeek turn
   against the same Ark session. Browser UI checks cover 1280 by 720 and the

@@ -49,13 +49,17 @@ the GCC linker already provided by Rtools.
 The full reviewed implementation plan is in `Rho-implementation-plan.md`.
 Current evidence and remaining Phase 0 gates are tracked in
 `docs/phase-0-status.md`.
+Release changes are recorded in `NEWS.md`; the active post-prototype roadmap
+is in `docs/development-roadmap.md`.
+The implementation handoff for the remaining `0.2.x` work is in
+`docs/0.2x-agent-handoff.md`.
 
 ## Windows prototype
 
 The first installable Tauri prototype is available at:
 
 ```text
-target\release\bundle\nsis\Rho_0.1.1_x64-setup.exe
+target\release\bundle\nsis\Rho_0.2.0-dev.1_x64-setup.exe
 ```
 
 It provides a live R editor and Console, Environment, real plot output,

@@ -19,9 +19,9 @@
           <button type="button">Session</button>
           <button type="button">Tools</button>
         </nav>
-        <button class="project-switcher" type="button" title="Current project">
+        <button id="projectSwitcher" class="project-switcher" type="button" title="Open project directory">
           <span class="project-dot"></span>
-          <span>Rho Prototype</span>
+          <span id="projectName">Rho Prototype</span>
           <span class="chevron">⌄</span>
         </button>
         <div class="work-modes" role="group" aria-label="Workbench layout">
@@ -45,8 +45,9 @@
         </div>
         <div id="filesPanel" class="side-content">
           <div class="tree-root"><span class="tree-caret">⌄</span><strong>Rho Prototype</strong></div>
-          <button class="tree-item active" type="button"><span class="file-icon">R</span><span>scratch.R</span><span class="dirty-dot"></span></button>
-          <button class="tree-item" type="button"><span class="file-icon muted">R</span><span>analysis.R</span></button>
+          <div id="projectFileList" class="project-file-list">
+            <div class="empty-tree">Loading project files…</div>
+          </div>
           <div class="tree-section">OUTPUTS</div>
           <button class="tree-item" type="button"><span class="file-icon plot">▧</span><span>plots</span></button>
         </div>
@@ -65,10 +66,11 @@
       <main class="workspace">
         <section class="editor-region">
           <div class="document-tabs">
-            <button class="document-tab active" type="button"><span class="r-badge">R</span><span>scratch.R</span><span class="unsaved">●</span></button>
+            <div id="documentTabs" class="document-tab-list"></div>
             <button class="new-tab" type="button" title="New file" aria-label="New file">+</button>
             <div class="editor-actions">
               <span id="selectionStatus">R</span>
+              <button id="saveFileButton" type="button" title="Save file" aria-label="Save file">▣</button>
               <button id="editorRunButton" type="button" title="Run selection" aria-label="Run selection">▶</button>
             </div>
           </div>

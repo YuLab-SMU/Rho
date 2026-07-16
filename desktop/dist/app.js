@@ -8,6 +8,9 @@ const state = {
   plots: [],
   problems: [],
   revision: { state_revision: 1, project_revision: 0 },
+  project: { root: "", files: [] },
+  documents: {},
+  activeDocument: null,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -28,6 +31,22 @@ async function mockInvoke(command, args) {
       workspace: { execution_seq: 1, state_revision: 1, project_revision: 0 },
       python_required: false,
     };
+  }
+  if (command === "project_state") {
+    return { root: "D:/Rho", files: [
+      { path: "analysis.R", name: "analysis.R", kind: "source", size_bytes: 120 },
+      { path: "scratch.R", name: "scratch.R", kind: "source", size_bytes: 420 },
+    ] };
+  }
+  if (command === "project_read_file") {
+    const fallback = args.path === "analysis.R"
+      ? "# Project analysis\nsummary(qc)\n"
+      : "# Live analysis in Workspace R\nset.seed(42)\nqc <- data.frame(sample = paste0(\"S\", 1:12), reads = round(rlnorm(12, 11.2, 0.35)), detected = round(rnorm(12, 3200, 420)))\nsummary(qc)\nplot(qc$reads, qc$detected)\n";
+    return { path: args.path, content: state.documents[args.path]?.content || fallback };
+  }
+  if (command === "project_write_file" || command === "project_create_file") {
+    state.documents[args.path] = { path: args.path, content: args.content || "", savedContent: args.content || "" };
+    return mockInvoke("project_state", {});
   }
   if (command === "snapshot_workspace") {
     return {
@@ -94,6 +113,126 @@ function updateIdentity(workspace) {
   $("#stateRevision").textContent = `state ${state.revision.state_revision ?? 0}`;
   $("#projectRevision").textContent = `project ${state.revision.project_revision ?? 0}`;
   $("#revisionBadge").textContent = `rev ${state.revision.state_revision ?? 0}`;
+}
+
+function documentIsDirty(document) {
+  return document.content !== document.savedContent;
+}
+
+function activeDocument() {
+  return state.documents[state.activeDocument] || null;
+}
+
+function renderProjectFiles() {
+  const list = $("#projectFileList");
+  list.replaceChildren();
+  if (!state.project.files.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-tree";
+    empty.textContent = "No supported source files";
+    list.append(empty);
+    return;
+  }
+  for (const file of state.project.files) {
+    const button = document.createElement("button");
+    button.className = `tree-item ${file.path === state.activeDocument ? "active" : ""}`;
+    button.type = "button";
+    const icon = document.createElement("span");
+    icon.className = "file-icon";
+    icon.textContent = file.name.toLowerCase().endsWith(".r") ? "R" : "·";
+    const label = document.createElement("span");
+    label.textContent = file.name;
+    const dirty = document.createElement("span");
+    dirty.className = `dirty-dot ${documentIsDirty(state.documents[file.path] || { content: "", savedContent: "" }) ? "" : "hidden"}`;
+    button.append(icon, label, dirty);
+    button.addEventListener("click", () => openDocument(file.path));
+    list.append(button);
+  }
+}
+
+function renderDocumentTabs() {
+  const tabs = $("#documentTabs");
+  tabs.replaceChildren();
+  for (const fileDocument of Object.values(state.documents)) {
+    const button = document.createElement("button");
+    button.className = `document-tab ${fileDocument.path === state.activeDocument ? "active" : ""}`;
+    button.type = "button";
+    const icon = document.createElement("span");
+    icon.className = "r-badge";
+    icon.textContent = fileDocument.path.toLowerCase().endsWith(".r") ? "R" : "·";
+    const label = document.createElement("span");
+    label.textContent = fileDocument.path;
+    const dirty = document.createElement("span");
+    dirty.className = `unsaved ${documentIsDirty(fileDocument) ? "" : "hidden"}`;
+    dirty.textContent = "●";
+    button.append(icon, label, dirty);
+    button.addEventListener("click", () => openDocument(fileDocument.path));
+    tabs.append(button);
+  }
+}
+
+function renderActiveDocument() {
+  const document = activeDocument();
+  if (!document) return;
+  $("#editor").value = document.content;
+  $("#projectName").textContent = state.project.root.split(/[\\/]/).filter(Boolean).at(-1) || "Rho Project";
+  renderProjectFiles();
+  renderDocumentTabs();
+  updateEditorChrome();
+}
+
+async function openDocument(path) {
+  if (!state.documents[path]) {
+    try {
+      const result = await invoke("project_read_file", { path });
+      state.documents[path] = { path, content: result.content || "", savedContent: result.content || "" };
+    } catch (error) {
+      toast(String(error), true);
+      return;
+    }
+  }
+  state.activeDocument = path;
+  renderActiveDocument();
+}
+
+async function refreshProject() {
+  try {
+    state.project = await invoke("project_state");
+    renderProjectFiles();
+    const first = state.activeDocument && state.project.files.some((file) => file.path === state.activeDocument)
+      ? state.activeDocument
+      : state.project.files[0]?.path;
+    if (first) await openDocument(first);
+  } catch (error) {
+    toast(String(error), true);
+  }
+}
+
+async function saveActiveDocument() {
+  const document = activeDocument();
+  if (!document) return;
+  document.content = $("#editor").value;
+  try {
+    state.project = await invoke("project_write_file", { path: document.path, content: document.content });
+    document.savedContent = document.content;
+    renderProjectFiles();
+    renderDocumentTabs();
+    addConsole("SYSTEM", `Saved ${document.path}`);
+  } catch (error) {
+    toast(String(error), true);
+  }
+}
+
+async function createDocument() {
+  const name = window.prompt("New R file name", "analysis.R");
+  if (!name) return;
+  const path = name.replace(/^[\\/]+/, "");
+  try {
+    state.project = await invoke("project_create_file", { path, content: "" });
+    await openDocument(path);
+  } catch (error) {
+    toast(String(error), true);
+  }
 }
 
 function addConsole(origin, text, kind = "") {
@@ -480,7 +619,12 @@ function updateEditorChrome() {
   const before = editor.value.slice(0, editor.selectionStart).split("\n");
   $("#cursorLine").textContent = String(before.length);
   $("#cursorColumn").textContent = String(before.at(-1).length + 1);
-  localStorage.setItem("rho.scratch", editor.value);
+  const document = activeDocument();
+  if (document) {
+    document.content = editor.value;
+    renderProjectFiles();
+    renderDocumentTabs();
+  }
 }
 
 function toast(message, error = false) {
@@ -493,15 +637,13 @@ function toast(message, error = false) {
 
 async function initialize() {
   initializePanelLayout();
-  const saved = localStorage.getItem("rho.scratch");
-  if (saved) $("#editor").value = saved;
-  updateEditorChrome();
   try {
     const status = await invoke("workspace_start");
     updateIdentity(status.workspace);
     $("#rVersion").textContent = status.r_version || "R";
     setKernelStatus("idle", "R idle");
     addConsole("SYSTEM", `${status.r_version} · Ark PID ${status.kernel_pid}`);
+    await refreshProject();
     await refreshEnvironment();
   } catch (error) {
     setKernelStatus("error", "R unavailable");
@@ -513,6 +655,20 @@ async function initialize() {
 
 $("#runButton").addEventListener("click", () => executeCode(selectedEditorCode()));
 $("#editorRunButton").addEventListener("click", () => executeCode(selectedEditorCode()));
+$("#saveFileButton").addEventListener("click", saveActiveDocument);
+$(".new-tab").addEventListener("click", createDocument);
+$("#projectSwitcher").addEventListener("click", async () => {
+  const path = window.prompt("Project directory", state.project.root || "D:/Rho");
+  if (!path) return;
+  try {
+    state.project = await invoke("project_open", { path });
+    state.documents = {};
+    state.activeDocument = null;
+    await refreshProject();
+  } catch (error) {
+    toast(String(error), true);
+  }
+});
 $("#consoleRunButton").addEventListener("click", () => {
   const value = $("#consoleInput").value;
   $("#consoleInput").value = "";
@@ -529,6 +685,11 @@ $("#editor").addEventListener("click", updateEditorChrome);
 $("#editor").addEventListener("keyup", updateEditorChrome);
 $("#editor").addEventListener("scroll", () => { $("#lineNumbers").scrollTop = $("#editor").scrollTop; });
 $("#editor").addEventListener("keydown", (event) => {
+  if (event.ctrlKey && event.key.toLowerCase() === "s") {
+    event.preventDefault();
+    saveActiveDocument();
+    return;
+  }
   if (event.ctrlKey && event.key === "Enter") {
     event.preventDefault();
     executeCode(selectedEditorCode());

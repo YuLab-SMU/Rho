@@ -19,3 +19,6 @@ serde_json.workspace = true
 tauri = { version = "2", features = [] }
 tokio.workspace = true
 uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
