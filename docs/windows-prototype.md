@@ -44,10 +44,27 @@ in a nonstandard location.
 3. The source editor and Console execute against that same session.
 4. Structured output populates Console, Problems, Plots and Environment.
 5. Horizontal and vertical dividers resize the execution, Files and context
-   panels; sizes persist locally and the execution panel has expand/restore.
+   panels; sizes restore per project and the execution panel has
+   expand/restore.
 6. Ask and Plan are read-only Agent modes. Act may approve `run_r` calls.
 7. Agent R uses `YuLab-SMU/aisdk` and broker tools against the same Workspace R.
 8. The broker persists execution and agent events in its SQLite store.
+9. Native project selection restores the last opened project, open documents,
+   cursor positions and panel sizes from the app-local data directory.
+10. Missing project roots surface an explicit unavailable-project state instead
+    of silently falling back to another directory.
+11. External file changes refresh the tree and do not silently overwrite dirty
+    editor content.
+12. Monaco now provides the main R editing surface with syntax-aware
+    highlighting, bracket matching and safe textarea fallback.
+13. The editor can execute a selection, the current line or the whole source
+    file while keeping execution in the same authoritative Workspace R.
+14. User, agent and system executions now persist as durable run records with
+    explicit lifecycle states in the broker-owned SQLite store.
+15. Problems are now backed by structured execution records that retain
+    execution ID, source path, retry linkage and recovery semantics.
+16. Incomplete runs are marked on restart, active runs can be cancelled through
+    bounded interrupt, and the Runs panel now reflects durable run history.
 
 The installed build was verified to launch Ark from:
 
@@ -73,17 +90,16 @@ runs a DeepSeek read-only turn against that live workspace.
 Browser-mode UI verification covers 1280 by 720 and the minimum 1024 by 680
 window size. Run, Plots, Environment and the Act-mode Agent timeline were
 exercised without incoherent overlap. Resizer keyboard controls, persisted
-sizes, execution-panel expansion and minimum-window clamping are also covered.
+sizes, execution-panel expansion, minimum-window clamping and Monaco frontend
+loading are also covered.
 
 ## Deliberately deferred
 
-- Monaco Editor and language-aware completion;
-- native project selection and a real filesystem tree;
-- saving multiple source documents;
+- bounded local completion and richer R language features;
 - persistent ChatSession history across Agent R restarts;
 - interactive approval dialogs instead of mode-level Act approval;
 - paged data viewers, plot history and HTML viewers;
-- full cancellation/crash recovery UX;
+- richer cancellation/crash recovery UX beyond the current durable run model;
 - automatic R/aisdk installation and credential settings UI;
 - installer signing, auto-update and external distribution hardening;
 - macOS and Linux packaging.

@@ -1,6 +1,7 @@
 /target/
 /work/
 /node_modules/
+/desktop/node_modules/
 /.rho/
 /.Rproj.user/
 .Rhistory

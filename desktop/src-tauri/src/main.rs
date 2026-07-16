@@ -1,17 +1,24 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod project;
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail, ensure};
+use project::{
+    ProjectRestoreResponse, ProjectSessionSnapshot, ProjectSessionStore, ProjectState,
+    ProjectWatcherControl, default_project_root, ensure_editable_file, list_project_files,
+    normalize_existing_project_root, project_path, replace_project_watcher, validate_project_root,
+};
 use rho_core::{BrokerState, ExecutionOrigin};
 use rho_kernel::{ArkLaunchConfig, ArkSession};
 use rho_server::coordinator::{bootstrap_bridge, dispatch_workspace_request, run_agent_turn};
-use rho_store::Store;
-use serde::Serialize;
+use rho_store::{ProblemSummary, RunDetail, RunSummary, Store};
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use tauri::{Manager, State};
+use tauri::{AppHandle, Manager, State};
 use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 
@@ -23,6 +30,7 @@ const AGENT_TRANSPORT: &str = include_str!("../../../r/rho.agent/R/transport.R")
 const AGENT_ADAPTER: &str = include_str!("../../../r/rho.agent/R/aisdk_adapter.R");
 #[derive(Clone)]
 struct RuntimeConfig {
+    data_dir: PathBuf,
     kernelspec: PathBuf,
     rscript: PathBuf,
     bridge_package: PathBuf,
@@ -37,23 +45,11 @@ struct RuntimeContext {
 
 struct AppState {
     config: RuntimeConfig,
+    project_store: ProjectSessionStore,
     project_root: RwLock<PathBuf>,
+    project_watcher: Mutex<Option<ProjectWatcherControl>>,
     session: RwLock<Option<Arc<ArkSession>>>,
     context: Mutex<Option<RuntimeContext>>,
-}
-
-#[derive(Serialize)]
-struct ProjectFile {
-    path: String,
-    name: String,
-    kind: &'static str,
-    size_bytes: u64,
-}
-
-#[derive(Serialize)]
-struct ProjectState {
-    root: String,
-    files: Vec<ProjectFile>,
 }
 
 #[derive(Serialize)]
@@ -64,6 +60,14 @@ struct WorkspaceStatus {
     kernel_pid: Option<u32>,
     workspace: Option<Value>,
     python_required: bool,
+}
+
+#[derive(Deserialize)]
+struct ExecuteRequest {
+    code: String,
+    source_path: Option<String>,
+    execution_mode: Option<String>,
+    document_version: Option<i64>,
 }
 
 #[tauri::command]
@@ -90,32 +94,69 @@ async fn project_state(state: State<'_, AppState>) -> Result<ProjectState, Strin
 }
 
 #[tauri::command]
-async fn project_open(path: String, state: State<'_, AppState>) -> Result<ProjectState, String> {
+async fn project_open(
+    path: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<ProjectRestoreResponse, String> {
     let root = validate_project_root(Path::new(&path)).map_err(display_error)?;
-    std::fs::create_dir_all(&root).map_err(display_error)?;
-    let session = active_session(&state).await.map_err(display_error)?;
-    let mut context_guard = state.context.lock().await;
-    let context = context_guard
-        .as_mut()
-        .context("Workspace context is not ready")
+    let session_snapshot = state.project_store.load_session_or_default(&root);
+    switch_project(root, Some(session_snapshot), app, &state)
+        .await
+        .map_err(display_error)
+}
+
+#[tauri::command]
+async fn project_pick_directory(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<ProjectRestoreResponse, String> {
+    let Some(path) = rfd::FileDialog::new().pick_folder() else {
+        return Ok(ProjectRestoreResponse::cancelled());
+    };
+    let root = normalize_existing_project_root(&path).map_err(display_error)?;
+    let session_snapshot = state.project_store.load_session_or_default(&root);
+    switch_project(root, Some(session_snapshot), app, &state)
+        .await
+        .map_err(display_error)
+}
+
+#[tauri::command]
+async fn project_restore_session(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<ProjectRestoreResponse, String> {
+    let requested_root = state
+        .project_store
+        .last_opened_project()
+        .map_err(display_error)?
+        .unwrap_or_else(default_project_root);
+    let root = match normalize_existing_project_root(&requested_root) {
+        Ok(root) => root,
+        Err(error) => {
+            return Ok(ProjectRestoreResponse::unavailable(
+                requested_root.to_string_lossy().replace('\\', "/"),
+                error.to_string(),
+            ));
+        }
+    };
+    let session_snapshot = state.project_store.load_session_or_default(&root);
+    switch_project(root, Some(session_snapshot), app, &state)
+        .await
+        .map_err(display_error)
+}
+
+#[tauri::command]
+async fn project_save_session(
+    snapshot: ProjectSessionSnapshot,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    let root = state.project_root.read().await.clone();
+    state
+        .project_store
+        .save_session(&root, &snapshot)
         .map_err(display_error)?;
-    let payload = json!({
-        "arguments": {"code": format!("setwd({})", serde_json::to_string(&root.to_string_lossy()).unwrap())},
-        "expected_workspace": context.broker.identity()
-    });
-    dispatch_workspace_request(
-        "workspace.execute",
-        &payload,
-        ExecutionOrigin::System,
-        session.as_ref(),
-        &mut context.broker,
-        &mut context.store,
-    )
-    .await
-    .map_err(display_error)?;
-    drop(context_guard);
-    *state.project_root.write().await = root;
-    project_state(state).await
+    Ok(json!({"status": "saved"}))
 }
 
 #[tauri::command]
@@ -162,8 +203,8 @@ async fn project_create_file(
 }
 
 #[tauri::command]
-async fn execute_r(code: String, state: State<'_, AppState>) -> Result<Value, String> {
-    if code.trim().is_empty() {
+async fn execute_r(request: ExecuteRequest, state: State<'_, AppState>) -> Result<Value, String> {
+    if request.code.trim().is_empty() {
         return Err("R code is empty".to_string());
     }
     let session = active_session(&state).await.map_err(display_error)?;
@@ -173,7 +214,12 @@ async fn execute_r(code: String, state: State<'_, AppState>) -> Result<Value, St
         .context("Workspace context is not ready")
         .map_err(display_error)?;
     let payload = json!({
-        "arguments": {"code": code},
+        "arguments": {
+            "code": request.code,
+            "source_path": request.source_path,
+            "execution_mode": request.execution_mode,
+            "document_version": request.document_version
+        },
         "expected_workspace": context.broker.identity()
     });
     dispatch_workspace_request(
@@ -204,6 +250,75 @@ async fn snapshot_workspace(state: State<'_, AppState>) -> Result<Value, String>
         "workspace.snapshot",
         &payload,
         ExecutionOrigin::System,
+        session.as_ref(),
+        &mut context.broker,
+        &mut context.store,
+    )
+    .await
+    .map_err(display_error)
+}
+
+#[tauri::command]
+async fn list_runs(limit: Option<usize>, state: State<'_, AppState>) -> Result<Vec<RunSummary>, String> {
+    let context = state.context.lock().await;
+    let context = context
+        .as_ref()
+        .context("Workspace context is not ready")
+        .map_err(display_error)?;
+    context.store.list_runs(limit).map_err(display_error)
+}
+
+#[tauri::command]
+async fn list_problems(
+    limit: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<Vec<ProblemSummary>, String> {
+    let context = state.context.lock().await;
+    let context = context
+        .as_ref()
+        .context("Workspace context is not ready")
+        .map_err(display_error)?;
+    context.store.list_problems(limit).map_err(display_error)
+}
+
+#[tauri::command]
+async fn get_run_detail(run_id: String, state: State<'_, AppState>) -> Result<Option<RunDetail>, String> {
+    let context = state.context.lock().await;
+    let context = context
+        .as_ref()
+        .context("Workspace context is not ready")
+        .map_err(display_error)?;
+    context.store.get_run_detail(&run_id).map_err(display_error)
+}
+
+#[tauri::command]
+async fn retry_run(run_id: String, state: State<'_, AppState>) -> Result<Value, String> {
+    let session = active_session(&state).await.map_err(display_error)?;
+    let mut context_guard = state.context.lock().await;
+    let context = context_guard
+        .as_mut()
+        .context("Workspace context is not ready")
+        .map_err(display_error)?;
+    let detail = context
+        .store
+        .get_run_detail(&run_id)
+        .map_err(display_error)?
+        .context(format!("Run not found: {run_id}"))
+        .map_err(display_error)?;
+    let mut arguments: Value = serde_json::from_str(&detail.arguments_json).map_err(display_error)?;
+    let object = arguments
+        .as_object_mut()
+        .context("Stored run arguments are invalid")
+        .map_err(display_error)?;
+    object.insert("parent_run_id".to_string(), Value::String(detail.run_id.clone()));
+    let payload = json!({
+        "arguments": arguments,
+        "expected_workspace": context.broker.identity()
+    });
+    dispatch_workspace_request(
+        &detail.request_type,
+        &payload,
+        parse_execution_origin(&detail.origin),
         session.as_ref(),
         &mut context.broker,
         &mut context.store,
@@ -244,16 +359,28 @@ async fn run_agent(
 
 #[tauri::command]
 async fn interrupt_r(state: State<'_, AppState>) -> Result<Value, String> {
-    let session = active_session(&state).await.map_err(display_error)?;
-    session.interrupt().await.map_err(display_error)?;
-    Ok(json!({"status": "interrupt_requested"}))
+    request_run_interrupt(None, &state)
+        .await
+        .map_err(display_error)
+}
+
+#[tauri::command]
+async fn cancel_run(run_id: String, state: State<'_, AppState>) -> Result<Value, String> {
+    request_run_interrupt(Some(run_id), &state)
+        .await
+        .map_err(display_error)
 }
 
 #[tauri::command]
 async fn restart_workspace(state: State<'_, AppState>) -> Result<WorkspaceStatus, String> {
     state.context.lock().await.take();
     state.session.write().await.take();
-    start_workspace(&state).await.map_err(display_error)
+    let status = start_workspace(&state).await.map_err(display_error)?;
+    let root = state.project_root.read().await.clone();
+    sync_workspace_project_root(&state, &root)
+        .await
+        .map_err(display_error)?;
+    Ok(status)
 }
 
 async fn active_session(state: &AppState) -> Result<Arc<ArkSession>> {
@@ -281,6 +408,9 @@ async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus> {
             .context("starting Ark-backed Workspace R")?,
     );
     let mut store = Store::open(&state.config.store_path).context("opening Rho event store")?;
+    store
+        .recover_incomplete_runs()
+        .context("recovering incomplete runs after desktop restart")?;
     let mut broker = BrokerState::new(format!("desktop_{}", Uuid::new_v4()));
     store.save_identity(broker.identity())?;
     bootstrap_bridge(
@@ -296,125 +426,82 @@ async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus> {
     Ok(status)
 }
 
-fn default_project_root() -> PathBuf {
-    let development = PathBuf::from(r"D:\Rho");
-    if development.is_dir() {
-        return development;
-    }
-    std::env::var_os("USERPROFILE")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("Documents")
-        .join("Rho")
-}
-
-fn validate_project_root(path: &Path) -> Result<PathBuf> {
-    let root = if path.exists() {
-        path.canonicalize()?
-    } else {
-        std::fs::create_dir_all(path)?;
-        path.canonicalize()?
+async fn request_run_interrupt(run_id: Option<String>, state: &AppState) -> Result<Value> {
+    let session = active_session(state).await?;
+    let target = {
+        let mut context_guard = state.context.lock().await;
+        let context = context_guard
+            .as_mut()
+            .context("Workspace context is not ready")?;
+        let run_id = match run_id {
+            Some(value) => value,
+            None => context
+                .store
+                .latest_active_run_id()
+                .context("looking up active run")?
+                .context("No active run is available to interrupt")?,
+        };
+        ensure!(
+            context
+                .store
+                .request_cancel(&run_id)
+                .context("marking run as cancel-requested")?,
+            "Run is not active: {run_id}"
+        );
+        run_id
     };
-    ensure!(root.is_dir(), "Project path is not a directory");
-    Ok(root)
+    session.interrupt().await.context("interrupting Workspace R")?;
+    Ok(json!({
+        "status": "interrupt_requested",
+        "run_id": target
+    }))
 }
 
-fn project_path(root: &Path, relative: &str) -> Result<PathBuf> {
-    ensure!(!relative.trim().is_empty(), "Project file path is empty");
-    let candidate = root.join(relative);
-    let normalized = if candidate.exists() {
-        candidate.canonicalize()?
-    } else {
-        let parent = candidate
-            .parent()
-            .context("Project file path has no parent")?;
-        std::fs::create_dir_all(parent)?;
-        parent.canonicalize()?.join(
-            candidate
-                .file_name()
-                .context("Project file path has no file name")?,
-        )
-    };
-    ensure!(normalized.starts_with(root), "Project file path escapes project root");
-    Ok(normalized)
+fn parse_execution_origin(origin: &str) -> ExecutionOrigin {
+    match origin {
+        "agent" => ExecutionOrigin::Agent,
+        "system" => ExecutionOrigin::System,
+        _ => ExecutionOrigin::User,
+    }
 }
 
-fn ensure_editable_file(path: &Path) -> Result<()> {
-    let extension = path
-        .extension()
-        .and_then(|value| value.to_str())
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    ensure!(
-        matches!(extension.as_str(), "r" | "rmd" | "qmd" | "txt" | "csv" | "tsv"),
-        "Unsupported project file type: .{extension}"
-    );
+async fn switch_project(
+    root: PathBuf,
+    session_snapshot: Option<ProjectSessionSnapshot>,
+    app: AppHandle,
+    state: &AppState,
+) -> Result<ProjectRestoreResponse> {
+    sync_workspace_project_root(state, &root).await?;
+    state.project_store.save_last_opened_project(&root)?;
+    let session_snapshot =
+        session_snapshot.unwrap_or_else(|| state.project_store.load_session_or_default(&root));
+    *state.project_root.write().await = root.clone();
+    let mut watcher = state.project_watcher.lock().await;
+    replace_project_watcher(&mut watcher, app, root.clone())?;
+    let project = list_project_files(&root)?;
+    Ok(ProjectRestoreResponse::ready(project, session_snapshot))
+}
+
+async fn sync_workspace_project_root(state: &AppState, root: &Path) -> Result<()> {
+    let session = active_session(state).await?;
+    let mut context_guard = state.context.lock().await;
+    let context = context_guard
+        .as_mut()
+        .context("Workspace context is not ready")?;
+    let payload = json!({
+        "arguments": {"code": format!("setwd({})", serde_json::to_string(&root.to_string_lossy()).unwrap())},
+        "expected_workspace": context.broker.identity()
+    });
+    dispatch_workspace_request(
+        "workspace.execute",
+        &payload,
+        ExecutionOrigin::System,
+        session.as_ref(),
+        &mut context.broker,
+        &mut context.store,
+    )
+    .await?;
     Ok(())
-}
-
-fn list_project_files(root: &Path) -> Result<ProjectState> {
-    let mut files = Vec::new();
-    collect_project_files(root, root, &mut files, 0)?;
-    files.sort_by(|a, b| a.path.cmp(&b.path));
-    Ok(ProjectState {
-        root: root.to_string_lossy().replace('\\', "/"),
-        files,
-    })
-}
-
-fn collect_project_files(root: &Path, directory: &Path, files: &mut Vec<ProjectFile>, depth: usize) -> Result<()> {
-    if depth > 4 {
-        return Ok(());
-    }
-    for entry in std::fs::read_dir(directory)? {
-        let entry = entry?;
-        let path = entry.path();
-        let name = entry.file_name().to_string_lossy().to_string();
-        if name.starts_with('.') || name == "target" || name == "renv" {
-            continue;
-        }
-        if path.is_dir() {
-            collect_project_files(root, &path, files, depth + 1)?;
-            continue;
-        }
-        if !path.is_file() || ensure_editable_file(&path).is_err() {
-            continue;
-        }
-        let relative = path.strip_prefix(root)?.to_string_lossy().replace('\\', "/");
-        files.push(ProjectFile {
-            path: relative,
-            name,
-            kind: "source",
-            size_bytes: path.metadata()?.len(),
-        });
-    }
-    Ok(())
-}
-
-#[cfg(test)]
-mod project_tests {
-    use super::*;
-    use tempfile::TempDir;
-
-    #[test]
-    fn project_paths_stay_inside_root() {
-        let directory = TempDir::new().unwrap();
-        let root = directory.path().canonicalize().unwrap();
-        let nested = project_path(&root, "analysis.R").unwrap();
-        assert!(nested.starts_with(&root));
-        assert!(project_path(&root, "../outside.R").is_err());
-    }
-
-    #[test]
-    fn project_files_only_include_supported_sources() {
-        let directory = TempDir::new().unwrap();
-        std::fs::write(directory.path().join("analysis.R"), "1 + 1").unwrap();
-        std::fs::write(directory.path().join("notes.md"), "notes").unwrap();
-        let root = directory.path().canonicalize().unwrap();
-        let state = list_project_files(&root).unwrap();
-        assert_eq!(state.files.len(), 1);
-        assert_eq!(state.files[0].path, "analysis.R");
-    }
 }
 
 fn status_from(
@@ -492,6 +579,7 @@ fn prepare_runtime_files(data_dir: PathBuf, ark: PathBuf) -> Result<RuntimeConfi
         serde_json::to_vec_pretty(&json!({"r_version": r_version, "r_home": r_home}))?,
     )?;
     Ok(RuntimeConfig {
+        data_dir: data_dir.clone(),
         kernelspec,
         rscript,
         bridge_package,
@@ -693,9 +781,16 @@ fn main() {
                 write_startup_log(&format!("Rho desktop setup failed: {error:#}"));
                 error
             })?;
+            let project_store =
+                ProjectSessionStore::new(config.data_dir.clone()).map_err(|error| {
+                    write_startup_log(&format!("Rho project session setup failed: {error:#}"));
+                    error
+                })?;
             app.manage(AppState {
                 config,
+                project_store,
                 project_root: RwLock::new(default_project_root()),
+                project_watcher: Mutex::new(None),
                 session: RwLock::new(None),
                 context: Mutex::new(None),
             });
@@ -706,13 +801,21 @@ fn main() {
             workspace_status,
             project_state,
             project_open,
+            project_pick_directory,
+            project_restore_session,
+            project_save_session,
             project_read_file,
             project_write_file,
             project_create_file,
             execute_r,
             snapshot_workspace,
+            list_runs,
+            list_problems,
+            get_run_detail,
+            retry_run,
             run_agent,
             interrupt_r,
+            cancel_run,
             restart_workspace
         ])
         .run(tauri::generate_context!())

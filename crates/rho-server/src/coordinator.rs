@@ -9,7 +9,7 @@ use rho_agent_transport::{
 use rho_core::{BrokerState, ExecutionOrigin, ExecutionRequest};
 use rho_kernel::{ArkLaunchConfig, ArkSession};
 use rho_protocol::{Envelope, ExpectedWorkspace, MAX_FRAME_BYTES, MessageKind, OperationClass};
-use rho_store::Store;
+use rho_store::{RunDraft, RunFinish, Store};
 use serde_json::{Value, json};
 use tokio::io::AsyncWriteExt;
 
@@ -244,7 +244,23 @@ pub async fn bootstrap_bridge(
         ExpectedWorkspace::default(),
         code.clone(),
     );
-    store.begin_run(&request.execution_id)?;
+    let before = broker.identity().clone();
+    store.create_run(&RunDraft {
+        run_id: request.execution_id.clone(),
+        parent_run_id: None,
+        origin: execution_origin_name(request.origin).to_string(),
+        request_type: "workspace.bootstrap".to_string(),
+        operation_class: operation_class_name(request.operation_class).to_string(),
+        code: code.clone(),
+        arguments_json: "{}".to_string(),
+        source_path: None,
+        execution_mode: Some("bootstrap".to_string()),
+        document_version: None,
+        workspace_id: before.workspace_id.clone(),
+        state_revision_before: before.state_revision as i64,
+        project_revision_before: before.project_revision as i64,
+    })?;
+    store.update_run_status(&request.execution_id, "running", None)?;
     let result = session
         .execute(code, |event| {
             append_event(
@@ -263,11 +279,40 @@ pub async fn bootstrap_bridge(
         Ok(()) => {
             broker.complete(&request);
             store.save_identity(broker.identity())?;
-            store.finish_run(&request.execution_id, "completed")?;
+            let after = broker.identity().clone();
+            store.finish_run(&RunFinish {
+                run_id: request.execution_id,
+                status: "completed".to_string(),
+                terminal_reason: None,
+                workspace_id: Some(after.workspace_id),
+                state_revision_after: Some(after.state_revision as i64),
+                project_revision_after: Some(after.project_revision as i64),
+                stdout: None,
+                value_text: None,
+                messages: Vec::new(),
+                warnings: Vec::new(),
+                error_message: None,
+                error_call: None,
+                traceback: Vec::new(),
+            })?;
             Ok(())
         }
         Err(error) => {
-            store.finish_run(&request.execution_id, "failed")?;
+            store.finish_run(&RunFinish {
+                run_id: request.execution_id,
+                status: "failed".to_string(),
+                terminal_reason: Some("bootstrap_error".to_string()),
+                workspace_id: None,
+                state_revision_after: None,
+                project_revision_after: None,
+                stdout: None,
+                value_text: None,
+                messages: Vec::new(),
+                warnings: Vec::new(),
+                error_message: Some(redact_sensitive_text(&error.to_string())),
+                error_call: None,
+                traceback: Vec::new(),
+            })?;
             Err(error).context("bootstrapping rho.bridge in Ark")
         }
     }
@@ -422,7 +467,32 @@ pub async fn dispatch_workspace_request(
     let mut request =
         ExecutionRequest::new(origin, operation_class, expected, bridge_expression.clone());
     broker.authorize(&request)?;
-    store.begin_run(&request.execution_id)?;
+    let before = broker.identity().clone();
+    store.create_run(&RunDraft {
+        run_id: request.execution_id.clone(),
+        parent_run_id: arguments
+            .get("parent_run_id")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        origin: execution_origin_name(origin).to_string(),
+        request_type: request_type.to_string(),
+        operation_class: operation_class_name(operation_class).to_string(),
+        code: requested_code(request_type, &arguments, &bridge_expression),
+        arguments_json: serde_json::to_string(&arguments)?,
+        source_path: arguments
+            .get("source_path")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        execution_mode: arguments
+            .get("execution_mode")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        document_version: arguments.get("document_version").and_then(Value::as_i64),
+        workspace_id: before.workspace_id.clone(),
+        state_revision_before: before.state_revision as i64,
+        project_revision_before: before.project_revision as i64,
+    })?;
+    store.update_run_status(&request.execution_id, "running", None)?;
 
     let result_file = ResultFile::new(&request.execution_id)?;
     let result_path = r_string(&normalized_path(&result_file.path))?;
@@ -467,20 +537,91 @@ pub async fn dispatch_workspace_request(
     match execution {
         Ok(()) => {}
         Err(error) => {
-            store.finish_run(&request.execution_id, "failed")?;
+            let cancelled = store.cancel_requested(&request.execution_id).unwrap_or(false);
+            store.finish_run(&RunFinish {
+                run_id: request.execution_id.clone(),
+                status: if cancelled { "interrupted" } else { "failed" }.to_string(),
+                terminal_reason: Some(
+                    if cancelled {
+                        "user_interrupt"
+                    } else {
+                        "execution_error"
+                    }
+                    .to_string(),
+                ),
+                workspace_id: None,
+                state_revision_after: None,
+                project_revision_after: None,
+                stdout: None,
+                value_text: None,
+                messages: Vec::new(),
+                warnings: Vec::new(),
+                error_message: Some(redact_sensitive_text(&error.to_string())),
+                error_call: None,
+                traceback: Vec::new(),
+            })?;
             return Err(error).context("executing Workspace R request");
         }
     }
     let result = match result_file.read_json() {
         Ok(value) => value,
         Err(error) => {
-            store.finish_run(&request.execution_id, "failed")?;
+            let cancelled = store.cancel_requested(&request.execution_id).unwrap_or(false);
+            store.finish_run(&RunFinish {
+                run_id: request.execution_id.clone(),
+                status: if cancelled { "interrupted" } else { "failed" }.to_string(),
+                terminal_reason: Some(
+                    if cancelled {
+                        "user_interrupt"
+                    } else {
+                        "result_unavailable"
+                    }
+                    .to_string(),
+                ),
+                workspace_id: None,
+                state_revision_after: None,
+                project_revision_after: None,
+                stdout: None,
+                value_text: None,
+                messages: Vec::new(),
+                warnings: Vec::new(),
+                error_message: Some(redact_sensitive_text(&error.to_string())),
+                error_call: None,
+                traceback: Vec::new(),
+            })?;
             return Err(error);
         }
     };
     broker.complete(&request);
     store.save_identity(broker.identity())?;
-    store.finish_run(&request.execution_id, "completed")?;
+    let after = broker.identity().clone();
+    let failed = !result["ok"].as_bool().unwrap_or(false);
+    store.finish_run(&RunFinish {
+        run_id: request.execution_id.clone(),
+        status: if failed { "failed" } else { "completed" }.to_string(),
+        terminal_reason: failed.then_some("r_error".to_string()),
+        workspace_id: Some(after.workspace_id),
+        state_revision_after: Some(after.state_revision as i64),
+        project_revision_after: Some(after.project_revision as i64),
+        stdout: json_string(&result, "stdout"),
+        value_text: json_string(&result, "value"),
+        messages: json_string_list(&result, "messages"),
+        warnings: json_string_list(&result, "warnings"),
+        error_message: result
+            .get("error")
+            .and_then(|value| value.get("message"))
+            .and_then(Value::as_str)
+            .map(redact_sensitive_text),
+        error_call: result
+            .get("error")
+            .and_then(|value| value.get("call"))
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        traceback: json_string_list(&result, "traceback")
+            .into_iter()
+            .chain(json_string_list(&result, "calls"))
+            .collect(),
+    })?;
     Ok(json!({
         "execution_id": request.execution_id,
         "execution": result,
@@ -733,6 +874,57 @@ fn bridge_expression(request_type: &str, arguments: &Value) -> Result<(Operation
 
 fn append_event(store: &mut Store, kind: MessageKind, payload: Value) -> Result<i64> {
     Ok(store.append_event(&Envelope::new(kind, payload))?)
+}
+
+fn execution_origin_name(origin: ExecutionOrigin) -> &'static str {
+    match origin {
+        ExecutionOrigin::User => "user",
+        ExecutionOrigin::Agent => "agent",
+        ExecutionOrigin::System => "system",
+    }
+}
+
+fn operation_class_name(class: OperationClass) -> &'static str {
+    match class {
+        OperationClass::Probe => "probe",
+        OperationClass::StateCapable => "state_capable",
+        OperationClass::ProjectMutation => "project_mutation",
+        OperationClass::StateAndProjectMutation => "state_and_project_mutation",
+    }
+}
+
+fn requested_code(request_type: &str, arguments: &Value, bridge_expression: &str) -> String {
+    match request_type {
+        "workspace.execute" => arguments
+            .get("code")
+            .and_then(Value::as_str)
+            .unwrap_or(bridge_expression)
+            .to_string(),
+        "workspace.inspect_object" => arguments
+            .get("name")
+            .and_then(Value::as_str)
+            .map(|name| format!("inspect {name}"))
+            .unwrap_or_else(|| bridge_expression.to_string()),
+        _ => bridge_expression.to_string(),
+    }
+}
+
+fn json_string(value: &Value, key: &str) -> Option<String> {
+    value
+        .get(key)
+        .and_then(Value::as_str)
+        .map(redact_sensitive_text)
+}
+
+fn json_string_list(value: &Value, key: &str) -> Vec<String> {
+    value
+        .get(key)
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(redact_sensitive_text)
+        .collect()
 }
 
 fn normalized_path(path: &Path) -> String {

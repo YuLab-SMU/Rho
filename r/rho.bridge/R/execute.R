@@ -57,6 +57,7 @@ rho_execute <- function(code,
     warnings = warnings,
     messages = messages,
     error = error_info,
+    traceback = call_stack,
     calls = call_stack,
     timestamp = format(Sys.time(), "%Y-%m-%dT%H:%M:%OS3%z")
   )

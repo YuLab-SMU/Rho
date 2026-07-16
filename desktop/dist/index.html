@@ -44,10 +44,11 @@
           <button type="button" data-side-tab="runs">Runs</button>
         </div>
         <div id="filesPanel" class="side-content">
-          <div class="tree-root"><span class="tree-caret">⌄</span><strong>Rho Prototype</strong></div>
+          <div class="tree-root"><span class="tree-caret">⌄</span><strong id="projectTreeRoot">Loading project…</strong></div>
           <div id="projectFileList" class="project-file-list">
             <div class="empty-tree">Loading project files…</div>
           </div>
+          <div id="projectEmptyState" class="empty-tree hidden">Select a project to get started.</div>
           <div class="tree-section">OUTPUTS</div>
           <button class="tree-item" type="button"><span class="file-icon plot">▧</span><span>plots</span></button>
         </div>
@@ -71,12 +72,21 @@
             <div class="editor-actions">
               <span id="selectionStatus">R</span>
               <button id="saveFileButton" type="button" title="Save file" aria-label="Save file">▣</button>
-              <button id="editorRunButton" type="button" title="Run selection" aria-label="Run selection">▶</button>
+              <button id="editorRunButton" type="button" title="Run selection or current line" aria-label="Run selection or current line">▶</button>
+              <button id="editorRunFileButton" type="button" title="Run file" aria-label="Run file">⏵⏵</button>
             </div>
           </div>
+          <div id="projectBanner" class="project-banner hidden">
+            <div>
+              <strong id="projectBannerTitle">Project unavailable</strong>
+              <p id="projectBannerMessage">Select a project to continue.</p>
+            </div>
+            <button id="projectBannerAction" type="button">Choose Project</button>
+          </div>
           <div class="editor-wrap">
-            <pre id="lineNumbers" class="line-numbers" aria-hidden="true">1</pre>
-            <textarea id="editor" spellcheck="false" aria-label="R source editor"># Live analysis in Workspace R
+            <div id="editorFallback" class="editor-fallback">
+              <pre id="lineNumbers" class="line-numbers" aria-hidden="true">1</pre>
+              <textarea id="editor" spellcheck="false" aria-label="R source editor"># Live analysis in Workspace R
 set.seed(42)
 qc <- data.frame(
   sample = paste0("S", 1:12),
@@ -91,6 +101,9 @@ plot(
   xlab = "Reads", ylab = "Detected genes",
   main = "Sample QC"
 )</textarea>
+            </div>
+            <div id="editorMonaco" class="editor-monaco hidden" aria-label="R source editor"></div>
+            <div id="editorFallbackNotice" class="editor-fallback-notice hidden" role="status" aria-live="polite"></div>
           </div>
         </section>
 

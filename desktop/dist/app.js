@@ -1,20 +1,150 @@
 const tauriInvoke = window.__TAURI__?.core?.invoke;
 const isDesktop = typeof tauriInvoke === "function";
+const tauriEvent = window.__TAURI__?.event;
+
+const $ = (selector) => document.querySelector(selector);
+const $$ = (selector) => Array.from(document.querySelectorAll(selector));
+const initialEditorContent = $("#editor")?.value || "";
 
 const state = {
   busy: false,
   agentMode: "ask",
   objects: [],
   plots: [],
+  runs: [],
   problems: [],
+  activeRunId: null,
   revision: { state_revision: 1, project_revision: 0 },
+  projectStatus: "loading",
+  unavailable: null,
   project: { root: "", files: [] },
   documents: {},
+  closedDrafts: {},
   activeDocument: null,
+  sessionSaveTimer: null,
+  watcherUnlisten: null,
+  editor: {
+    mode: "textarea",
+    monaco: null,
+    editor: null,
+    models: new Map(),
+    workerUrl: null,
+    ready: false,
+    loading: false,
+    fallbackNotice: "",
+    suppressChange: false,
+  },
 };
 
-const $ = (selector) => document.querySelector(selector);
-const $$ = (selector) => Array.from(document.querySelectorAll(selector));
+const mockProjects = {
+  "D:/Rho": {
+    files: [
+      { path: "analysis.R", name: "analysis.R", kind: "source", size_bytes: 120 },
+      { path: "scratch.R", name: "scratch.R", kind: "source", size_bytes: 420 },
+    ],
+    contents: {
+      "analysis.R": "# Project analysis\nsummary(qc)\n",
+      "scratch.R": "# Live analysis in Workspace R\nset.seed(42)\nqc <- data.frame(sample = paste0(\"S\", 1:12), reads = round(rlnorm(12, 11.2, 0.35)), detected = round(rnorm(12, 3200, 420)))\nsummary(qc)\nplot(qc$reads, qc$detected)\n",
+    },
+  },
+  "D:/Rho-demo": {
+    files: [
+      { path: "demo.R", name: "demo.R", kind: "source", size_bytes: 64 },
+    ],
+    contents: {
+      "demo.R": "message('demo project')\n",
+    },
+  },
+};
+let mockLastProject = "D:/Rho";
+const mockProjectSessions = {};
+let mockRunSequence = 0;
+const mockRuns = [];
+
+function nextMockRunId() {
+  mockRunSequence += 1;
+  return `exec_mock_${mockRunSequence}`;
+}
+
+function recordMockRun({
+  origin = "user",
+  status = "completed",
+  requestType = "workspace.execute",
+  operationClass = "state_capable",
+  code = "",
+  sourcePath = null,
+  executionMode = null,
+  documentVersion = null,
+  errorMessage = null,
+  errorCall = null,
+  traceback = [],
+  parentRunId = null,
+}) {
+  const runId = nextMockRunId();
+  const startedAt = new Date().toISOString();
+  const entry = {
+    run_id: runId,
+    parent_run_id: parentRunId,
+    origin,
+    status,
+    started_at: startedAt,
+    finished_at: startedAt,
+    terminal_reason: errorMessage ? "r_error" : null,
+    request_type: requestType,
+    operation_class: operationClass,
+    source_path: sourcePath,
+    execution_mode: executionMode,
+    document_version: documentVersion,
+    workspace_id: "desktop_mock",
+    state_revision_before: state.revision.state_revision,
+    project_revision_before: state.revision.project_revision,
+    state_revision_after: state.revision.state_revision,
+    project_revision_after: state.revision.project_revision,
+    code_preview: code.split("\n").find((line) => line.trim())?.trim() || "<empty>",
+    error_message: errorMessage,
+    code,
+    arguments_json: JSON.stringify({
+      code,
+      source_path: sourcePath,
+      execution_mode: executionMode,
+      document_version: documentVersion,
+      parent_run_id: parentRunId,
+    }),
+    stdout: "",
+    value_text: errorMessage ? null : "Mock result",
+    messages: [],
+    warnings: [],
+    error_call: errorCall,
+    traceback,
+  };
+  mockRuns.unshift(entry);
+  return entry;
+}
+
+function mockProblemList() {
+  return mockRuns
+    .filter((run) => run.error_message)
+    .map((run) => ({
+      run_id: run.run_id,
+      parent_run_id: run.parent_run_id,
+      origin: run.origin,
+      status: run.status,
+      message: run.error_message,
+      call: run.error_call,
+      traceback: [...(run.traceback || [])],
+      source_path: run.source_path,
+      execution_mode: run.execution_mode,
+      document_version: run.document_version,
+      workspace_id: run.workspace_id,
+      started_at: run.started_at,
+      finished_at: run.finished_at,
+    }));
+}
+
+function mockProjectState(root = mockLastProject) {
+  const project = mockProjects[root] || mockProjects["D:/Rho"];
+  return { root, files: project.files.map((file) => ({ ...file })) };
+}
 
 async function invoke(command, args = {}) {
   if (isDesktop) return tauriInvoke(command, args);
@@ -32,53 +162,136 @@ async function mockInvoke(command, args) {
       python_required: false,
     };
   }
+  if (command === "project_restore_session") {
+    const project = mockProjectState(mockLastProject);
+    return {
+      status: "ready",
+      project,
+      session: mockProjectSessions[mockLastProject] || {
+        open_documents: [{ path: project.files[0]?.path || "", cursor_start: 1, cursor_end: 1, draft_content: null }].filter((item) => item.path),
+        active_document: project.files[0]?.path || null,
+        panels: { left: 214, right: 362, dock: 260 },
+      },
+      unavailable: null,
+    };
+  }
+  if (command === "project_pick_directory") {
+    const roots = Object.keys(mockProjects);
+    const currentIndex = roots.indexOf(mockLastProject);
+    mockLastProject = roots[(currentIndex + 1) % roots.length];
+    return mockInvoke("project_restore_session");
+  }
+  if (command === "project_save_session") {
+    mockProjectSessions[mockLastProject] = structuredClone(args.snapshot || {});
+    return { status: "saved" };
+  }
   if (command === "project_state") {
-    return { root: "D:/Rho", files: [
-      { path: "analysis.R", name: "analysis.R", kind: "source", size_bytes: 120 },
-      { path: "scratch.R", name: "scratch.R", kind: "source", size_bytes: 420 },
-    ] };
+    return mockProjectState(mockLastProject);
   }
   if (command === "project_read_file") {
-    const fallback = args.path === "analysis.R"
-      ? "# Project analysis\nsummary(qc)\n"
-      : "# Live analysis in Workspace R\nset.seed(42)\nqc <- data.frame(sample = paste0(\"S\", 1:12), reads = round(rlnorm(12, 11.2, 0.35)), detected = round(rnorm(12, 3200, 420)))\nsummary(qc)\nplot(qc$reads, qc$detected)\n";
-    return { path: args.path, content: state.documents[args.path]?.content || fallback };
+    const project = mockProjects[mockLastProject] || mockProjects["D:/Rho"];
+    return { path: args.path, content: project.contents[args.path] || "" };
   }
   if (command === "project_write_file" || command === "project_create_file") {
-    state.documents[args.path] = { path: args.path, content: args.content || "", savedContent: args.content || "" };
+    const project = mockProjects[mockLastProject] || mockProjects["D:/Rho"];
+    project.contents[args.path] = args.content || "";
+    if (!project.files.some((file) => file.path === args.path)) {
+      project.files.push({
+        path: args.path,
+        name: args.path.split("/").at(-1),
+        kind: "source",
+        size_bytes: (args.content || "").length,
+      });
+    }
     return mockInvoke("project_state", {});
   }
   if (command === "snapshot_workspace") {
     return {
       execution: {
         objects: state.objects,
-        r: { version: "R version 4.6.0", cwd: "D:/Rho" },
+        r: { version: "R version 4.6.0", cwd: mockLastProject },
       },
       workspace: state.revision,
     };
   }
   if (command === "execute_r") {
+    const request = args.request || {};
     state.revision.state_revision += 1;
     state.objects = [
       { name: "qc", classes: ["data.frame"], dimensions: [12, 3], size_bytes: 2184, typeof: "list" },
     ];
+    recordMockRun({
+      origin: "user",
+      status: request.code?.includes("stop(") ? "failed" : "completed",
+      code: request.code || "",
+      sourcePath: request.source_path ?? request.sourcePath ?? null,
+      executionMode: request.execution_mode ?? request.type ?? null,
+      documentVersion: request.document_version ?? request.documentVersion ?? null,
+      errorMessage: request.code?.includes("stop(") ? "boom" : null,
+      errorCall: request.code?.includes("stop(") ? "stop(\"boom\")" : null,
+      traceback: request.code?.includes("stop(") ? ["stop(\"boom\")"] : [],
+      parentRunId: request.parent_run_id ?? null,
+    });
     return {
       execution_id: "exec_demo",
       execution: {
-        ok: true,
-        code: args.code,
+        ok: !request.code?.includes("stop("),
+        code: request.code,
         stdout: "",
-        value: "     reads        detected   \n Min.   : 40122   Min.   :2511  \n Median : 72840   Median :3238  \n Mean   : 76114   Mean   :3216",
+        value: request.code?.includes("stop(") ? null : "     reads        detected   \n Min.   : 40122   Min.   :2511  \n Median : 72840   Median :3238  \n Mean   : 76114   Mean   :3216",
         warnings: [],
         messages: [],
-        error: null,
+        error: request.code?.includes("stop(") ? { message: "boom", call: "stop(\"boom\")" } : null,
+        traceback: request.code?.includes("stop(") ? ["stop(\"boom\")"] : [],
       },
       events: [{ event: { type: "display_data", data: { "rho/mock-image": "assets/demo-plot.png" } } }],
       workspace: state.revision,
     };
   }
+  if (command === "list_runs") {
+    return structuredClone(mockRuns.slice(0, args.limit || 50));
+  }
+  if (command === "list_problems") {
+    return structuredClone(mockProblemList().slice(0, args.limit || 50));
+  }
+  if (command === "get_run_detail") {
+    return structuredClone(mockRuns.find((run) => run.run_id === args.run_id) || null);
+  }
+  if (command === "retry_run") {
+    const detail = mockRuns.find((run) => run.run_id === args.run_id);
+    if (!detail) throw new Error(`Run not found: ${args.run_id}`);
+    return mockInvoke("execute_r", {
+      request: {
+        code: detail.code,
+        source_path: detail.source_path,
+        execution_mode: detail.execution_mode,
+        document_version: detail.document_version,
+        parent_run_id: detail.run_id,
+      },
+    });
+  }
+  if (command === "cancel_run" || command === "interrupt_r") {
+    const active = args.run_id
+      ? mockRuns.find((run) => run.run_id === args.run_id)
+      : mockRuns.find((run) => ["queued", "running", "waiting"].includes(run.status));
+    if (active) {
+      active.status = "interrupted";
+      active.terminal_reason = "user_interrupt";
+      active.finished_at = new Date().toISOString();
+    }
+    return { status: "interrupt_requested", run_id: active?.run_id || null };
+  }
   if (command === "run_agent") {
     const act = args.mode === "act";
+    if (act) {
+      recordMockRun({
+        origin: "agent",
+        status: "completed",
+        code: "summary(qc)",
+        sourcePath: state.activeDocument,
+        executionMode: "selection",
+      });
+    }
     return {
       workspace: state.revision,
       events: [
@@ -102,8 +315,9 @@ function setKernelStatus(status, label) {
 
 function setBusy(busy, label = "R is busy") {
   state.busy = busy;
-  $("#runButton").disabled = busy;
-  $("#editorRunButton").disabled = busy;
+  $("#runButton").disabled = busy || state.projectStatus !== "ready";
+  $("#editorRunButton").disabled = busy || state.projectStatus !== "ready";
+  $("#editorRunFileButton").disabled = busy || state.projectStatus !== "ready";
   setKernelStatus(busy ? "starting" : "idle", busy ? label : "R idle");
 }
 
@@ -123,9 +337,493 @@ function activeDocument() {
   return state.documents[state.activeDocument] || null;
 }
 
+function activeProjectName() {
+  return state.project.root.split(/[\\/]/).filter(Boolean).at(-1) || "Rho Project";
+}
+
+function supportsMonaco() {
+  return typeof window.Worker === "function";
+}
+
+function fallbackEditor() {
+  return $("#editor");
+}
+
+function fallbackNotice(message = "") {
+  state.editor.fallbackNotice = message;
+  const notice = $("#editorFallbackNotice");
+  notice.textContent = message;
+  notice.classList.toggle("hidden", !message || state.editor.mode === "monaco");
+}
+
+function setEditorMode(mode, notice = "") {
+  state.editor.mode = mode;
+  $("#editorMonaco").classList.toggle("hidden", mode !== "monaco");
+  $("#editorFallback").classList.toggle("hidden", mode === "monaco");
+  fallbackNotice(mode === "monaco" ? "" : notice);
+  fallbackEditor().disabled = state.projectStatus !== "ready";
+}
+
+function loadScript(source) {
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[data-src="${source}"]`);
+    if (existing) {
+      existing.addEventListener("load", resolve, { once: true });
+      existing.addEventListener("error", () => reject(new Error(`Failed to load ${source}`)), { once: true });
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = source;
+    script.dataset.src = source;
+    script.addEventListener("load", resolve, { once: true });
+    script.addEventListener("error", () => reject(new Error(`Failed to load ${source}`)), { once: true });
+    document.head.append(script);
+  });
+}
+
+function monacoWorkerUrl() {
+  if (state.editor.workerUrl) return state.editor.workerUrl;
+  const workerSource = `
+self.MonacoEnvironment = { baseUrl: "./vendor/monaco/" };
+importScripts("./vendor/monaco/vs/base/worker/workerMain.js");
+`;
+  state.editor.workerUrl = URL.createObjectURL(new Blob([workerSource], { type: "text/javascript" }));
+  return state.editor.workerUrl;
+}
+
+function registerRLanguage(monaco) {
+  if (monaco.languages.getLanguages().some((language) => language.id === "r")) return;
+  monaco.languages.register({
+    id: "r",
+    extensions: [".r", ".R", ".rmd", ".Rmd", ".qmd", ".Qmd"],
+    aliases: ["R", "r"],
+  });
+  monaco.languages.setLanguageConfiguration("r", {
+    comments: { lineComment: "#" },
+    brackets: [["{", "}"], ["[", "]"], ["(", ")"]],
+    autoClosingPairs: [
+      { open: "{", close: "}" },
+      { open: "[", close: "]" },
+      { open: "(", close: ")" },
+      { open: "\"", close: "\"" },
+      { open: "'", close: "'" },
+    ],
+    surroundingPairs: [
+      { open: "{", close: "}" },
+      { open: "[", close: "]" },
+      { open: "(", close: ")" },
+      { open: "\"", close: "\"" },
+      { open: "'", close: "'" },
+    ],
+  });
+  monaco.languages.setMonarchTokensProvider("r", {
+    tokenizer: {
+      root: [
+        [/#.*$/, "comment"],
+        [/\b(if|else|repeat|while|function|for|in|next|break)\b/, "keyword"],
+        [/\b(TRUE|FALSE|NULL|NA|NA_integer_|NA_real_|NA_complex_|NA_character_|Inf|NaN)\b/, "keyword"],
+        [/\b(library|require|source|return|setwd)\b/, "keyword"],
+        [/\b([A-Za-z.][\w.]*)\s*(?=\()/, "predefined"],
+        [/[{}()[\]]/, "@brackets"],
+        [/<<?-|->>?|==|!=|<=|>=|&&?|\|\|?|\$|@|:|=|\+|-|\*|\/|\^|~|!/, "operator"],
+        [/\d+\.\d*([eE][\-+]?\d+)?[Li]?/, "number.float"],
+        [/\d+([eE][\-+]?\d+)?[Li]?/, "number"],
+        [/"/, { token: "string.quote", bracket: "@open", next: "@string_double" }],
+        [/'/, { token: "string.quote", bracket: "@open", next: "@string_single" }],
+        [/[A-Za-z.][\w.]*/, "identifier"],
+      ],
+      string_double: [
+        [/[^\\"]+/, "string"],
+        [/\\./, "string.escape"],
+        [/"/, { token: "string.quote", bracket: "@close", next: "@pop" }],
+      ],
+      string_single: [
+        [/[^\\']+/, "string"],
+        [/\\./, "string.escape"],
+        [/'/, { token: "string.quote", bracket: "@close", next: "@pop" }],
+      ],
+    },
+  });
+}
+
+function modelUriForPath(path) {
+  return state.editor.monaco.Uri.parse(`rho:///${path.replace(/\\/g, "/")}`);
+}
+
+function ensureDocumentModel(documentState) {
+  if (!state.editor.monaco) return null;
+  let model = state.editor.models.get(documentState.path);
+  if (!model) {
+    model = state.editor.monaco.editor.createModel(
+      documentState.content,
+      documentState.language || "r",
+      modelUriForPath(documentState.path)
+    );
+    state.editor.models.set(documentState.path, model);
+  }
+  if (model.getValue() !== documentState.content) {
+    state.editor.suppressChange = true;
+    model.setValue(documentState.content);
+    state.editor.suppressChange = false;
+  }
+  documentState.versionId = model.getAlternativeVersionId();
+  return model;
+}
+
+function syncDocumentFromEditor(options = {}) {
+  const { render = true, persist = true } = options;
+  const documentState = activeDocument();
+  if (!documentState) return;
+  if (state.editor.mode === "monaco" && state.editor.editor) {
+    const model = state.editor.editor.getModel();
+    const selection = state.editor.editor.getSelection();
+    if (model) {
+      documentState.content = model.getValue();
+      documentState.versionId = model.getAlternativeVersionId();
+    }
+    if (selection && model) {
+      documentState.cursorStart = model.getOffsetAt(selection.getStartPosition());
+      documentState.cursorEnd = model.getOffsetAt(selection.getEndPosition());
+    }
+  } else {
+    const editor = fallbackEditor();
+    documentState.content = editor.value;
+    documentState.cursorStart = editor.selectionStart;
+    documentState.cursorEnd = editor.selectionEnd;
+  }
+  if (render) {
+    renderProjectFiles();
+    renderDocumentTabs();
+  }
+  if (persist) scheduleSessionSave();
+}
+
+function currentEditorValue() {
+  if (state.editor.mode === "monaco" && state.editor.editor?.getModel()) {
+    return state.editor.editor.getModel().getValue();
+  }
+  return fallbackEditor().value;
+}
+
+function currentEditorOffsets() {
+  if (state.editor.mode === "monaco" && state.editor.editor?.getModel()) {
+    const model = state.editor.editor.getModel();
+    const selection = state.editor.editor.getSelection();
+    return {
+      start: model.getOffsetAt(selection.getStartPosition()),
+      end: model.getOffsetAt(selection.getEndPosition()),
+    };
+  }
+  return {
+    start: fallbackEditor().selectionStart,
+    end: fallbackEditor().selectionEnd,
+  };
+}
+
+function currentCursorPosition() {
+  if (state.editor.mode === "monaco" && state.editor.editor) {
+    const position = state.editor.editor.getPosition();
+    return {
+      line: position?.lineNumber || 1,
+      column: position?.column || 1,
+    };
+  }
+  const before = fallbackEditor().value.slice(0, fallbackEditor().selectionStart).split("\n");
+  return {
+    line: before.length,
+    column: before.at(-1).length + 1,
+  };
+}
+
+function currentSelectionLabel() {
+  if (state.projectStatus !== "ready") return "Project unavailable";
+  const documentState = activeDocument();
+  if (!documentState) return "No file";
+  const { start, end } = currentEditorOffsets();
+  if (start !== end) {
+    return `Selection ${Math.abs(end - start)} ch`;
+  }
+  return `Line ${currentCursorPosition().line}`;
+}
+
+function updateEditorChrome() {
+  const position = currentCursorPosition();
+  $("#cursorLine").textContent = String(position.line);
+  $("#cursorColumn").textContent = String(position.column);
+  $("#selectionStatus").textContent = currentSelectionLabel();
+  if (state.editor.mode === "textarea") {
+    const editor = fallbackEditor();
+    const lines = editor.value.split("\n").length;
+    $("#lineNumbers").textContent = Array.from({ length: lines }, (_, index) => index + 1).join("\n");
+  }
+}
+
+function applyDocumentSelection(documentState) {
+  if (!documentState) return;
+  if (state.editor.mode === "monaco" && state.editor.editor) {
+    const model = ensureDocumentModel(documentState);
+    if (!model) return;
+    state.editor.editor.setModel(model);
+    const start = model.getPositionAt(documentState.cursorStart ?? 0);
+    const end = model.getPositionAt(documentState.cursorEnd ?? documentState.cursorStart ?? 0);
+    state.editor.editor.setSelection({
+      startLineNumber: start.lineNumber,
+      startColumn: start.column,
+      endLineNumber: end.lineNumber,
+      endColumn: end.column,
+    });
+    state.editor.editor.revealPositionInCenterIfOutsideViewport(end);
+    state.editor.editor.focus();
+  } else {
+    const editor = fallbackEditor();
+    editor.value = documentState.content;
+    editor.selectionStart = Math.min(documentState.cursorStart ?? 0, editor.value.length);
+    editor.selectionEnd = Math.min(documentState.cursorEnd ?? documentState.cursorStart ?? 0, editor.value.length);
+  }
+  updateEditorChrome();
+}
+
+async function initializeEditor() {
+  if (state.editor.ready) return;
+  state.editor.ready = true;
+  if (!supportsMonaco()) {
+    setEditorMode("textarea", "Advanced editor is unavailable here. Running in basic mode.");
+    updateEditorChrome();
+    return;
+  }
+  try {
+    await loadScript("./vendor/monaco/vs/loader.js");
+    await new Promise((resolve, reject) => {
+      window.MonacoEnvironment = {
+        getWorkerUrl: () => monacoWorkerUrl(),
+      };
+      window.require.config({ paths: { vs: "./vendor/monaco/vs" } });
+      window.require(["vs/editor/editor.main"], resolve, reject);
+    });
+    state.editor.monaco = window.monaco;
+    registerRLanguage(state.editor.monaco);
+    state.editor.monaco.editor.defineTheme("rho", {
+      base: "vs",
+      inherit: true,
+      rules: [
+        { token: "keyword", foreground: "1f746d" },
+        { token: "string", foreground: "8a4d00" },
+        { token: "comment", foreground: "70848a", fontStyle: "italic" },
+      ],
+      colors: {
+        "editorLineNumber.foreground": "#9aa6aa",
+        "editor.lineHighlightBackground": "#f6fbfa",
+        "editor.selectionBackground": "#cfe9e6",
+      },
+    });
+    state.editor.editor = state.editor.monaco.editor.create($("#editorMonaco"), {
+      value: initialEditorContent,
+      language: "r",
+      automaticLayout: false,
+      minimap: { enabled: false },
+      fontSize: 13,
+      lineHeight: 21,
+      tabSize: 2,
+      insertSpaces: true,
+      theme: "rho",
+      scrollBeyondLastLine: false,
+      wordWrap: "off",
+      bracketPairColorization: { enabled: true },
+      guides: { bracketPairs: true },
+    });
+    state.editor.editor.onDidChangeModelContent(() => {
+      if (state.editor.suppressChange) return;
+      syncDocumentFromEditor({ render: true, persist: true });
+      updateEditorChrome();
+    });
+    state.editor.editor.onDidChangeCursorSelection(() => {
+      syncDocumentFromEditor({ render: false, persist: true });
+      updateEditorChrome();
+    });
+    const KeyMod = state.editor.monaco.KeyMod;
+    const KeyCode = state.editor.monaco.KeyCode;
+    state.editor.editor.addCommand(KeyMod.CtrlCmd | KeyCode.Enter, () => runSelectionOrCurrentLine());
+    state.editor.editor.addCommand(KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.Enter, () => runActiveFile());
+    setEditorMode("monaco");
+    if (activeDocument()) applyDocumentSelection(activeDocument());
+  } catch (error) {
+    setEditorMode("textarea", `Advanced editor failed to load. Running in basic mode. ${error}`);
+  }
+  updateEditorChrome();
+}
+
+function setEditorDisabled(disabled) {
+  fallbackEditor().disabled = disabled;
+  if (state.editor.editor) {
+    state.editor.editor.updateOptions({ readOnly: disabled });
+  }
+}
+
+function layoutEditor() {
+  if (state.editor.mode === "monaco" && state.editor.editor) {
+    state.editor.editor.layout();
+  } else {
+    $("#lineNumbers").scrollTop = fallbackEditor().scrollTop;
+  }
+}
+
+function selectionExecution() {
+  const documentState = activeDocument();
+  if (!documentState) return null;
+  if (state.editor.mode === "monaco" && state.editor.editor?.getModel()) {
+    const model = state.editor.editor.getModel();
+    const selection = state.editor.editor.getSelection();
+    const start = model.getOffsetAt(selection.getStartPosition());
+    const end = model.getOffsetAt(selection.getEndPosition());
+    const text = model.getValueInRange(selection);
+    if (start === end || !text.trim()) return null;
+    return {
+      code: text,
+      type: "selection",
+      sourcePath: documentState.path,
+      documentVersion: documentState.versionId ?? model.getAlternativeVersionId(),
+      range: { start, end },
+    };
+  }
+  const editor = fallbackEditor();
+  if (editor.selectionStart === editor.selectionEnd) return null;
+  const text = editor.value.slice(editor.selectionStart, editor.selectionEnd);
+  if (!text.trim()) return null;
+  return {
+    code: text,
+    type: "selection",
+    sourcePath: documentState.path,
+    documentVersion: documentState.versionId ?? 0,
+    range: { start: editor.selectionStart, end: editor.selectionEnd },
+  };
+}
+
+function currentLineExecution() {
+  const documentState = activeDocument();
+  if (!documentState) return null;
+  if (state.editor.mode === "monaco" && state.editor.editor?.getModel()) {
+    const model = state.editor.editor.getModel();
+    const position = state.editor.editor.getPosition();
+    const line = position?.lineNumber || 1;
+    const code = model.getLineContent(line);
+    if (!code.trim()) return null;
+    return {
+      code,
+      type: "line",
+      sourcePath: documentState.path,
+      documentVersion: documentState.versionId ?? model.getAlternativeVersionId(),
+      range: {
+        start: model.getOffsetAt({ lineNumber: line, column: 1 }),
+        end: model.getOffsetAt({ lineNumber: line, column: model.getLineMaxColumn(line) }),
+      },
+      line,
+    };
+  }
+  const value = fallbackEditor().value;
+  const caret = fallbackEditor().selectionStart;
+  const lineStart = value.lastIndexOf("\n", Math.max(0, caret - 1)) + 1;
+  const nextBreak = value.indexOf("\n", caret);
+  const lineEnd = nextBreak === -1 ? value.length : nextBreak;
+  const code = value.slice(lineStart, lineEnd);
+  if (!code.trim()) return null;
+  return {
+    code,
+    type: "line",
+    sourcePath: documentState.path,
+    documentVersion: documentState.versionId ?? 0,
+    range: { start: lineStart, end: lineEnd },
+    line: value.slice(0, lineStart).split("\n").length,
+  };
+}
+
+function fileExecution() {
+  const documentState = activeDocument();
+  if (!documentState) return null;
+  syncDocumentFromEditor({ render: false, persist: false });
+  const code = documentState.content;
+  if (!code.trim()) return null;
+  return {
+    code,
+    type: "file",
+    sourcePath: documentState.path,
+    documentVersion: documentState.versionId ?? 0,
+    range: { start: 0, end: code.length },
+  };
+}
+
+function setProjectStatus(status, unavailable = null) {
+  state.projectStatus = status;
+  state.unavailable = unavailable;
+  const disabled = status !== "ready";
+  setEditorDisabled(disabled);
+  $("#runButton").disabled = disabled || state.busy;
+  $("#editorRunButton").disabled = disabled || state.busy;
+  $("#editorRunFileButton").disabled = disabled || state.busy;
+  $("#saveFileButton").disabled = disabled;
+  $(".new-tab").disabled = disabled;
+  $("#projectName").textContent = unavailable?.path?.split(/[\\/]/).filter(Boolean).at(-1) || activeProjectName();
+  $("#projectTreeRoot").textContent = unavailable?.path || state.project.root || "No project";
+  $("#projectBanner").classList.toggle("hidden", status === "ready");
+  $("#projectBannerTitle").textContent = status === "unavailable" ? "Project unavailable" : "No project loaded";
+  $("#projectBannerMessage").textContent = unavailable
+    ? `${unavailable.path} · ${unavailable.reason}`
+    : "Select a project to continue.";
+  $("#projectFileList").classList.toggle("hidden", status !== "ready");
+  $("#projectEmptyState").classList.toggle("hidden", status === "ready");
+  $("#projectEmptyState").textContent = status === "unavailable"
+    ? "Saved project is unavailable. Choose another directory."
+    : "Select a project to get started.";
+  updateEditorChrome();
+}
+
+function documentSession(document) {
+  return {
+    path: document.path,
+    cursor_start: document.cursorStart ?? 0,
+    cursor_end: document.cursorEnd ?? 0,
+    draft_content: documentIsDirty(document) ? document.content : null,
+  };
+}
+
+function currentPanelSnapshot() {
+  return {
+    left: Number($("#leftResizeHandle").getAttribute("aria-valuenow")) || panelDefaults.left,
+    right: Number($("#rightResizeHandle").getAttribute("aria-valuenow")) || panelDefaults.right,
+    dock: Number($("#dockResizeHandle").getAttribute("aria-valuenow")) || panelDefaults.dock,
+  };
+}
+
+function buildSessionSnapshot() {
+  return {
+    open_documents: Object.values(state.documents).map(documentSession),
+    active_document: state.activeDocument,
+    panels: currentPanelSnapshot(),
+  };
+}
+
+function scheduleSessionSave() {
+  if (state.projectStatus !== "ready" || !state.project.root) return;
+  clearTimeout(state.sessionSaveTimer);
+  state.sessionSaveTimer = setTimeout(async () => {
+    await flushSessionSnapshot();
+  }, 180);
+}
+
+async function flushSessionSnapshot() {
+  if (state.projectStatus !== "ready" || !state.project.root) return;
+  clearTimeout(state.sessionSaveTimer);
+  state.sessionSaveTimer = null;
+  try {
+    await invoke("project_save_session", { snapshot: buildSessionSnapshot() });
+  } catch (error) {
+    toast(`Session state was not saved: ${error}`, true);
+  }
+}
+
 function renderProjectFiles() {
   const list = $("#projectFileList");
   list.replaceChildren();
+  if (state.projectStatus !== "ready") return;
   if (!state.project.files.length) {
     const empty = document.createElement("div");
     empty.className = "empty-tree";
@@ -154,9 +852,8 @@ function renderDocumentTabs() {
   const tabs = $("#documentTabs");
   tabs.replaceChildren();
   for (const fileDocument of Object.values(state.documents)) {
-    const button = document.createElement("button");
+    const button = document.createElement("div");
     button.className = `document-tab ${fileDocument.path === state.activeDocument ? "active" : ""}`;
-    button.type = "button";
     const icon = document.createElement("span");
     icon.className = "r-badge";
     icon.textContent = fileDocument.path.toLowerCase().endsWith(".r") ? "R" : "·";
@@ -165,27 +862,84 @@ function renderDocumentTabs() {
     const dirty = document.createElement("span");
     dirty.className = `unsaved ${documentIsDirty(fileDocument) ? "" : "hidden"}`;
     dirty.textContent = "●";
-    button.append(icon, label, dirty);
-    button.addEventListener("click", () => openDocument(fileDocument.path));
+    const activate = document.createElement("button");
+    activate.type = "button";
+    activate.className = "document-tab-main";
+    activate.append(icon, label, dirty);
+    activate.addEventListener("click", () => openDocument(fileDocument.path));
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "document-tab-close";
+    close.setAttribute("aria-label", `Close ${fileDocument.path}`);
+    close.textContent = "×";
+    close.addEventListener("click", (event) => {
+      event.stopPropagation();
+      closeDocument(fileDocument.path);
+    });
+    button.append(activate, close);
     tabs.append(button);
   }
 }
 
 function renderActiveDocument() {
-  const document = activeDocument();
-  if (!document) return;
-  $("#editor").value = document.content;
-  $("#projectName").textContent = state.project.root.split(/[\\/]/).filter(Boolean).at(-1) || "Rho Project";
+  const documentState = activeDocument();
+  if (!documentState) {
+    if (state.editor.mode === "monaco" && state.editor.editor) {
+      state.editor.editor.setModel(null);
+    } else {
+      fallbackEditor().value = "";
+    }
+    renderProjectFiles();
+    renderDocumentTabs();
+    updateEditorChrome();
+    return;
+  }
+  $("#projectName").textContent = activeProjectName();
+  applyDocumentSelection(documentState);
   renderProjectFiles();
   renderDocumentTabs();
   updateEditorChrome();
 }
 
-async function openDocument(path) {
-  if (!state.documents[path]) {
+async function restoreDraftChoice(path, savedContent, draftContent) {
+  if (draftContent === null || draftContent === undefined || draftContent === savedContent) return savedContent;
+  const restore = window.confirm(
+    `Restore the unsaved draft for ${path}?\n\nOK restores the draft.\nCancel loads the on-disk file.`
+  );
+  return restore ? draftContent : savedContent;
+}
+
+async function openDocument(path, options = {}) {
+  const { sessionEntry = null, forceReload = false } = options;
+  if (state.activeDocument && state.activeDocument !== path) {
+    syncDocumentFromEditor({ render: false, persist: false });
+  }
+  if (!state.project.files.some((file) => file.path === path)) {
+    toast(`File is no longer available: ${path}`, true);
+    return;
+  }
+  if (!state.documents[path] || forceReload) {
     try {
       const result = await invoke("project_read_file", { path });
-      state.documents[path] = { path, content: result.content || "", savedContent: result.content || "" };
+      const savedContent = result.content || "";
+      const closedDraft = state.closedDrafts[path] || null;
+      const restoredContent = await restoreDraftChoice(
+        path,
+        savedContent,
+        sessionEntry?.draft_content ?? closedDraft?.draft_content ?? null
+      );
+      state.documents[path] = {
+        path,
+        content: restoredContent,
+        savedContent,
+        language: path.toLowerCase().endsWith(".r") ? "r" : "plaintext",
+        versionId: 0,
+        lastExecutedRange: null,
+        cursorStart: sessionEntry?.cursor_start ?? closedDraft?.cursor_start ?? 0,
+        cursorEnd: sessionEntry?.cursor_end ?? closedDraft?.cursor_end ?? 0,
+        conflictDiskContent: null,
+      };
+      delete state.closedDrafts[path];
     } catch (error) {
       toast(String(error), true);
       return;
@@ -193,9 +947,43 @@ async function openDocument(path) {
   }
   state.activeDocument = path;
   renderActiveDocument();
+  requestAnimationFrame(() => layoutEditor());
+  scheduleSessionSave();
+}
+
+function closeDocument(path) {
+  syncDocumentFromEditor({ render: false, persist: false });
+  const document = state.documents[path];
+  if (!document) return;
+  const model = state.editor.models.get(path);
+  if (model) {
+    model.dispose();
+    state.editor.models.delete(path);
+  }
+  if (documentIsDirty(document)) {
+    state.closedDrafts[path] = {
+      draft_content: document.content,
+      cursor_start: document.cursorStart ?? 0,
+      cursor_end: document.cursorEnd ?? 0,
+    };
+  } else {
+    delete state.closedDrafts[path];
+  }
+  delete state.documents[path];
+  if (state.activeDocument === path) {
+    const remaining = Object.keys(state.documents);
+    state.activeDocument = remaining.at(-1) || null;
+  }
+  renderActiveDocument();
+  scheduleSessionSave();
 }
 
 async function refreshProject() {
+  if (state.projectStatus !== "ready") {
+    renderProjectFiles();
+    renderDocumentTabs();
+    return;
+  }
   try {
     state.project = await invoke("project_state");
     renderProjectFiles();
@@ -209,27 +997,32 @@ async function refreshProject() {
 }
 
 async function saveActiveDocument() {
-  const document = activeDocument();
-  if (!document) return;
-  document.content = $("#editor").value;
+  const documentState = activeDocument();
+  if (!documentState) return;
+  syncDocumentFromEditor({ render: false, persist: false });
   try {
-    state.project = await invoke("project_write_file", { path: document.path, content: document.content });
-    document.savedContent = document.content;
+    state.project = await invoke("project_write_file", { path: documentState.path, content: documentState.content });
+    documentState.savedContent = documentState.content;
+    documentState.conflictDiskContent = null;
+    delete state.closedDrafts[documentState.path];
     renderProjectFiles();
     renderDocumentTabs();
-    addConsole("SYSTEM", `Saved ${document.path}`);
+    addConsole("SYSTEM", `Saved ${documentState.path}`);
+    scheduleSessionSave();
   } catch (error) {
     toast(String(error), true);
   }
 }
 
 async function createDocument() {
+  if (state.projectStatus !== "ready") return;
   const name = window.prompt("New R file name", "analysis.R");
   if (!name) return;
   const path = name.replace(/^[\\/]+/, "");
   try {
     state.project = await invoke("project_create_file", { path, content: "" });
     await openDocument(path);
+    scheduleSessionSave();
   } catch (error) {
     toast(String(error), true);
   }
@@ -275,55 +1068,217 @@ function addTimeline(title, body, status = "completed", code = null) {
   $("#agentTimeline").scrollTop = $("#agentTimeline").scrollHeight;
 }
 
-function addProblem(message, call = "") {
-  state.problems.push({ message, call });
-  $("#problemEmpty").classList.add("hidden");
-  const row = document.createElement("div");
-  row.className = "problem-row";
-  const icon = document.createElement("span");
-  icon.className = "problem-icon";
-  icon.textContent = "!";
-  const content = document.createElement("div");
-  const title = document.createElement("strong");
-  title.textContent = message;
-  content.append(title);
-  if (call) {
-    const detail = document.createElement("p");
-    detail.textContent = call;
-    content.append(detail);
-  }
-  const actions = document.createElement("div");
-  actions.className = "problem-actions";
-  const explain = document.createElement("button");
-  explain.type = "button";
-  explain.textContent = "Explain";
-  explain.addEventListener("click", () => {
-    switchContextTab("agent");
-    $("#agentInput").value = `请解释这个 R 错误并给出修复建议：${message}`;
-    $("#agentInput").focus();
-  });
-  actions.append(explain);
-  row.append(icon, content, actions);
-  $("#problemList").append(row);
-  $("#problemCount").textContent = String(state.problems.length);
-  $("#problemCount").classList.remove("quiet");
+function prettyOrigin(origin) {
+  if (origin === "agent") return "Agent";
+  if (origin === "system") return "System";
+  return "User";
 }
 
-function renderExecution(response, origin = "USER") {
+function prettyStatus(status) {
+  return {
+    queued: "Queued",
+    running: "Running",
+    waiting: "Waiting",
+    completed: "Completed",
+    failed: "Failed",
+    cancelled: "Cancelled",
+    interrupted: "Interrupted",
+    crashed: "Crashed",
+  }[status] || status || "Unknown";
+}
+
+function runStatusTone(status) {
+  if (status === "completed") return "success";
+  if (status === "running" || status === "queued" || status === "waiting") return "running";
+  if (status === "failed" || status === "crashed") return "error";
+  if (status === "interrupted" || status === "cancelled") return "warning";
+  return "";
+}
+
+function runTitle(run) {
+  if (run.execution_mode === "selection" && run.source_path) return `Selection · ${run.source_path}`;
+  if (run.execution_mode === "line" && run.source_path) return `Line · ${run.source_path}`;
+  if (run.execution_mode === "file" && run.source_path) return `File · ${run.source_path}`;
+  if (run.request_type === "workspace.snapshot") return "Workspace snapshot";
+  if (run.request_type === "workspace.inspect_object") return `Inspect · ${run.code_preview}`;
+  if (run.request_type === "workspace.bootstrap") return "Workspace bootstrap";
+  return run.code_preview || run.request_type || "Run";
+}
+
+function activeRunRecord() {
+  return state.runs.find((run) => ["queued", "running", "waiting"].includes(run.status)) || null;
+}
+
+async function loadRunData() {
+  try {
+    const [runs, problems] = await Promise.all([
+      invoke("list_runs", { limit: 50 }),
+      invoke("list_problems", { limit: 50 }),
+    ]);
+    state.runs = runs || [];
+    state.problems = problems || [];
+    state.activeRunId = activeRunRecord()?.run_id || null;
+    renderRuns();
+    renderProblems();
+  } catch (error) {
+    toast(`Run history is unavailable: ${error}`, true);
+  }
+}
+
+function renderRuns() {
+  const panel = $("#runsPanel");
+  panel.replaceChildren();
+  if (!state.runs.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-tree";
+    empty.textContent = "No run records yet.";
+    panel.append(empty);
+    return;
+  }
+  for (const run of state.runs) {
+    const row = document.createElement("div");
+    row.className = "run-row";
+    const marker = document.createElement("span");
+    marker.className = `run-state ${runStatusTone(run.status)}`.trim();
+    const content = document.createElement("span");
+    const title = document.createElement("strong");
+    title.textContent = runTitle(run);
+    const detail = document.createElement("small");
+    detail.textContent = `${prettyOrigin(run.origin)} · ${prettyStatus(run.status)}${run.error_message ? ` · ${run.error_message}` : ""}`;
+    content.append(title, detail);
+    row.append(marker, content);
+    if (["queued", "running", "waiting"].includes(run.status)) {
+      const cancel = document.createElement("button");
+      cancel.type = "button";
+      cancel.className = "run-action";
+      cancel.textContent = "Cancel";
+      cancel.addEventListener("click", async () => {
+        try {
+          await invoke("cancel_run", { run_id: run.run_id });
+          addConsole("SYSTEM", `Interrupt requested for ${run.run_id}`);
+          await loadRunData();
+        } catch (error) {
+          toast(String(error), true);
+        }
+      });
+      row.append(cancel);
+    }
+    panel.append(row);
+  }
+}
+
+function addProblem(message, call = "", options = {}) {
+  state.problems.unshift({
+    run_id: options.runId || `transient_${Date.now()}`,
+    parent_run_id: null,
+    origin: options.origin || "system",
+    status: options.status || "failed",
+    message,
+    call,
+    traceback: options.traceback || [],
+    source_path: options.sourcePath || null,
+    execution_mode: options.executionMode || null,
+    document_version: options.documentVersion || null,
+    workspace_id: options.workspaceId || null,
+    started_at: new Date().toISOString(),
+    finished_at: new Date().toISOString(),
+  });
+  renderProblems();
+}
+
+function renderProblems() {
+  const list = $("#problemList");
+  list.replaceChildren();
+  $("#problemEmpty").classList.toggle("hidden", state.problems.length > 0);
+  $("#problemCount").textContent = String(state.problems.length);
+  $("#problemCount").classList.toggle("quiet", state.problems.length === 0);
+  for (const problem of state.problems) {
+    const row = document.createElement("div");
+    row.className = "problem-row";
+    const icon = document.createElement("span");
+    icon.className = "problem-icon";
+    icon.textContent = "!";
+    const content = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = problem.message;
+    const detail = document.createElement("p");
+    detail.textContent = [
+      problem.call,
+      problem.source_path ? `Source: ${problem.source_path}` : null,
+      `${prettyOrigin(problem.origin)} · ${prettyStatus(problem.status)}`,
+    ].filter(Boolean).join(" · ");
+    content.append(title, detail);
+    const actions = document.createElement("div");
+    actions.className = "problem-actions";
+    const explain = document.createElement("button");
+    explain.type = "button";
+    explain.textContent = "Explain";
+    explain.addEventListener("click", () => {
+      switchContextTab("agent");
+      $("#agentInput").value = `请解释这个 R 错误并给出修复建议：${problem.message}`;
+      $("#agentInput").focus();
+    });
+    actions.append(explain);
+    if (problem.run_id && !String(problem.run_id).startsWith("transient_")) {
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.textContent = "Retry";
+      retry.addEventListener("click", async () => {
+        try {
+          const response = await invoke("retry_run", { run_id: problem.run_id });
+          renderExecution(response, {
+            type: problem.execution_mode || "file",
+            sourcePath: problem.source_path,
+            documentVersion: problem.document_version,
+          }, prettyOrigin(problem.origin).toUpperCase());
+          await refreshEnvironment();
+          await loadRunData();
+        } catch (error) {
+          addProblem(String(error));
+          toast(String(error), true);
+        }
+      });
+      actions.append(retry);
+    }
+    if (problem.source_path) {
+      const open = document.createElement("button");
+      open.type = "button";
+      open.textContent = "Open Source";
+      open.addEventListener("click", async () => {
+        await openDocument(problem.source_path);
+      });
+      actions.append(open);
+    }
+    row.append(icon, content, actions);
+    list.append(row);
+  }
+}
+
+function describeExecution(request) {
+  if (!request) return "Code";
+  if (request.type === "console") return "Console";
+  if (request.type === "selection") return `Selection · ${request.sourcePath}`;
+  if (request.type === "line") return `Line ${request.line} · ${request.sourcePath}`;
+  return `File · ${request.sourcePath} · rev ${request.documentVersion ?? 0}`;
+}
+
+function renderExecution(response, request, origin = "USER") {
   const execution = response.execution || {};
   updateIdentity(response.workspace);
+  if (request?.sourcePath) {
+    addConsole("SOURCE", describeExecution(request));
+  }
   addConsole(origin, execution.stdout);
   (execution.messages || []).forEach((message) => addConsole(origin, message));
   (execution.warnings || []).forEach((warning) => addConsole(origin, warning, "warning"));
   if (execution.value) addConsole(origin, execution.value);
   if (execution.error) {
     addConsole(origin, execution.error.message, "error");
-    addProblem(execution.error.message, execution.error.call || "");
   }
   for (const wrapped of response.events || []) {
     const event = wrapped.event || wrapped;
     if (event.type === "stream") addConsole(origin, event.text, event.name === "stderr" ? "error" : "");
-    if (event.type === "error") addProblem(event.traceback || "R execution failed");
+    if (event.type === "error") addConsole(origin, event.traceback || "R execution failed", "error");
     if (event.type === "display_data") renderDisplay(event.data || {});
   }
 }
@@ -341,13 +1296,22 @@ function renderDisplay(data) {
   $("#plotCount").textContent = String(state.plots.length);
 }
 
-async function executeCode(code, origin = "USER") {
-  if (state.busy || !code.trim()) return;
+async function executeCode(request, origin = "USER") {
+  if (state.busy || !request?.code?.trim()) return;
   setBusy(true);
-  addConsole(origin, `> ${code}`);
+  addConsole(origin, `> ${request.code}`);
   try {
-    const response = await invoke("execute_r", { code });
-    renderExecution(response, origin);
+    const response = await invoke("execute_r", {
+      request: {
+        code: request.code,
+        source_path: request.sourcePath ?? null,
+        execution_mode: request.type ?? null,
+        document_version: request.documentVersion ?? null,
+      },
+    });
+    const documentState = activeDocument();
+    if (documentState && request.type !== "console") documentState.lastExecutedRange = request.range || null;
+    renderExecution(response, request, origin);
     await refreshEnvironment();
   } catch (error) {
     const message = String(error);
@@ -355,15 +1319,27 @@ async function executeCode(code, origin = "USER") {
     addProblem(message);
     toast(message, true);
   } finally {
+    await loadRunData();
     setBusy(false);
   }
 }
 
-function selectedEditorCode() {
-  const editor = $("#editor");
-  return editor.selectionStart !== editor.selectionEnd
-    ? editor.value.slice(editor.selectionStart, editor.selectionEnd)
-    : editor.value;
+async function runSelectionOrCurrentLine() {
+  const request = selectionExecution() || currentLineExecution();
+  if (!request) {
+    toast("Current line is empty.", true);
+    return;
+  }
+  await executeCode(request);
+}
+
+async function runActiveFile() {
+  const request = fileExecution();
+  if (!request) {
+    toast("File has no executable content.", true);
+    return;
+  }
+  await executeCode(request);
 }
 
 async function refreshEnvironment() {
@@ -436,6 +1412,7 @@ async function sendAgentPrompt() {
     updateIdentity(response.workspace);
     renderAgentEvents(response.events || []);
     await refreshEnvironment();
+    await loadRunData();
     $("#agentState").textContent = "Ready";
     $("#agentStateDot").className = "agent-state-dot";
   } catch (error) {
@@ -510,7 +1487,10 @@ function setPanelSize(panel, requested, persist = true) {
   $(".app-shell").style.setProperty(property, `${value}px`);
   const handle = panel === "left" ? $("#leftResizeHandle") : panel === "right" ? $("#rightResizeHandle") : $("#dockResizeHandle");
   handle.setAttribute("aria-valuenow", String(value));
-  if (persist) localStorage.setItem(`rho.panel.${panel}`, String(value));
+  if (persist) {
+    if (!isDesktop) localStorage.setItem(`rho.panel.${panel}`, String(value));
+    scheduleSessionSave();
+  }
   return value;
 }
 
@@ -584,12 +1564,18 @@ function setupPanelResizer(handle, panel) {
 
 function initializePanelLayout() {
   for (const panel of ["left", "right", "dock"]) {
-    const stored = Number(localStorage.getItem(`rho.panel.${panel}`));
+    const stored = !isDesktop ? Number(localStorage.getItem(`rho.panel.${panel}`)) : NaN;
     setPanelSize(panel, Number.isFinite(stored) && stored > 0 ? stored : panelDefaults[panel], false);
   }
   setupPanelResizer($("#leftResizeHandle"), "left");
   setupPanelResizer($("#rightResizeHandle"), "right");
   setupPanelResizer($("#dockResizeHandle"), "dock");
+}
+
+function applySessionPanels(panels = {}) {
+  setPanelSize("left", panels.left || panelDefaults.left, false);
+  setPanelSize("right", panels.right || panelDefaults.right, false);
+  setPanelSize("dock", panels.dock || panelDefaults.dock, false);
 }
 
 function toggleDockMaximize() {
@@ -612,21 +1598,6 @@ function toggleDockMaximize() {
   button.setAttribute("aria-label", "Restore execution panel");
 }
 
-function updateEditorChrome() {
-  const editor = $("#editor");
-  const lines = editor.value.split("\n").length;
-  $("#lineNumbers").textContent = Array.from({ length: lines }, (_, index) => index + 1).join("\n");
-  const before = editor.value.slice(0, editor.selectionStart).split("\n");
-  $("#cursorLine").textContent = String(before.length);
-  $("#cursorColumn").textContent = String(before.at(-1).length + 1);
-  const document = activeDocument();
-  if (document) {
-    document.content = editor.value;
-    renderProjectFiles();
-    renderDocumentTabs();
-  }
-}
-
 function toast(message, error = false) {
   const element = document.createElement("div");
   element.className = `toast ${error ? "error" : ""}`;
@@ -635,15 +1606,104 @@ function toast(message, error = false) {
   setTimeout(() => element.remove(), 4500);
 }
 
+async function listenForProjectChanges() {
+  if (!isDesktop || !tauriEvent?.listen || state.watcherUnlisten) return;
+  state.watcherUnlisten = await tauriEvent.listen("project://files-changed", async (event) => {
+    const payload = event.payload || {};
+    if (payload.root && payload.root !== state.project.root) return;
+    await refreshProject();
+    for (const path of payload.changed_paths || []) {
+      await handleExternalDocumentChange(path);
+    }
+  });
+}
+
+async function handleExternalDocumentChange(path) {
+  const document = state.documents[path];
+  if (!document) return;
+  try {
+    const result = await invoke("project_read_file", { path });
+    const diskContent = result.content || "";
+    if (!documentIsDirty(document)) {
+      document.savedContent = diskContent;
+      document.content = diskContent;
+      if (state.activeDocument === path) renderActiveDocument();
+      toast(`Reloaded ${path} after an external change.`);
+      scheduleSessionSave();
+      return;
+    }
+    document.conflictDiskContent = diskContent;
+    const reload = window.confirm(
+      `${path} changed on disk while you have unsaved edits.\n\nOK reloads the disk version.\nCancel keeps your local draft.`
+    );
+    if (reload) {
+      document.savedContent = diskContent;
+      document.content = diskContent;
+      document.conflictDiskContent = null;
+      if (state.activeDocument === path) renderActiveDocument();
+      toast(`Reloaded ${path} from disk.`);
+    } else {
+      toast(`Kept your local draft for ${path}.`);
+    }
+    renderProjectFiles();
+    renderDocumentTabs();
+    scheduleSessionSave();
+  } catch (error) {
+    toast(`External change detected for ${path}, but reloading failed: ${error}`, true);
+  }
+}
+
+async function hydrateProject(response) {
+  state.documents = {};
+  state.closedDrafts = {};
+  state.activeDocument = null;
+  state.editor.models.forEach((model) => model.dispose());
+  state.editor.models.clear();
+  state.project = response.project || { root: "", files: [] };
+  applySessionPanels(response.session?.panels || {});
+  setProjectStatus("ready");
+  const sessionDocuments = response.session?.open_documents || [];
+  const activeDocumentPath = response.session?.active_document;
+  for (const entry of sessionDocuments) {
+    await openDocument(entry.path, { sessionEntry: entry });
+  }
+  const target = activeDocumentPath && state.project.files.some((file) => file.path === activeDocumentPath)
+    ? activeDocumentPath
+    : sessionDocuments[0]?.path || state.project.files[0]?.path || null;
+  if (target) {
+    await openDocument(target, {
+      sessionEntry: sessionDocuments.find((entry) => entry.path === target) || null,
+    });
+  } else {
+    renderActiveDocument();
+  }
+}
+
 async function initialize() {
   initializePanelLayout();
   try {
+    await initializeEditor();
+    await listenForProjectChanges();
     const status = await invoke("workspace_start");
     updateIdentity(status.workspace);
     $("#rVersion").textContent = status.r_version || "R";
     setKernelStatus("idle", "R idle");
     addConsole("SYSTEM", `${status.r_version} · Ark PID ${status.kernel_pid}`);
-    await refreshProject();
+    const response = await invoke("project_restore_session");
+    if (response.status === "ready") {
+      await hydrateProject(response);
+    } else if (response.status === "unavailable") {
+      state.project = { root: "", files: [] };
+      state.documents = {};
+      state.activeDocument = null;
+      applySessionPanels(panelDefaults);
+      setProjectStatus("unavailable", response.unavailable || null);
+      renderActiveDocument();
+    } else {
+      setProjectStatus("empty");
+      renderActiveDocument();
+    }
+    await loadRunData();
     await refreshEnvironment();
   } catch (error) {
     setKernelStatus("error", "R unavailable");
@@ -653,26 +1713,31 @@ async function initialize() {
   }
 }
 
-$("#runButton").addEventListener("click", () => executeCode(selectedEditorCode()));
-$("#editorRunButton").addEventListener("click", () => executeCode(selectedEditorCode()));
+$("#runButton").addEventListener("click", runSelectionOrCurrentLine);
+$("#editorRunButton").addEventListener("click", runSelectionOrCurrentLine);
+$("#editorRunFileButton").addEventListener("click", runActiveFile);
 $("#saveFileButton").addEventListener("click", saveActiveDocument);
 $(".new-tab").addEventListener("click", createDocument);
 $("#projectSwitcher").addEventListener("click", async () => {
-  const path = window.prompt("Project directory", state.project.root || "D:/Rho");
-  if (!path) return;
   try {
-    state.project = await invoke("project_open", { path });
-    state.documents = {};
-    state.activeDocument = null;
-    await refreshProject();
+    await flushSessionSnapshot();
+    const response = await invoke("project_pick_directory");
+    if (response.status === "cancelled") return;
+    if (response.status === "unavailable") {
+      setProjectStatus("unavailable", response.unavailable || null);
+      renderActiveDocument();
+      return;
+    }
+    await hydrateProject(response);
   } catch (error) {
     toast(String(error), true);
   }
 });
+$("#projectBannerAction").addEventListener("click", () => $("#projectSwitcher").click());
 $("#consoleRunButton").addEventListener("click", () => {
   const value = $("#consoleInput").value;
   $("#consoleInput").value = "";
-  executeCode(value);
+  executeCode({ code: value, type: "console", sourcePath: "<console>", documentVersion: null, range: null });
 });
 $("#consoleInput").addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
@@ -680,19 +1745,37 @@ $("#consoleInput").addEventListener("keydown", (event) => {
     $("#consoleRunButton").click();
   }
 });
-$("#editor").addEventListener("input", updateEditorChrome);
-$("#editor").addEventListener("click", updateEditorChrome);
-$("#editor").addEventListener("keyup", updateEditorChrome);
+$("#editor").addEventListener("input", () => {
+  syncDocumentFromEditor({ render: true, persist: true });
+  updateEditorChrome();
+});
+$("#editor").addEventListener("click", () => {
+  syncDocumentFromEditor({ render: false, persist: true });
+  updateEditorChrome();
+});
+$("#editor").addEventListener("keyup", () => {
+  syncDocumentFromEditor({ render: false, persist: true });
+  updateEditorChrome();
+});
 $("#editor").addEventListener("scroll", () => { $("#lineNumbers").scrollTop = $("#editor").scrollTop; });
+window.addEventListener("beforeunload", () => {
+  flushSessionSnapshot().catch(() => {});
+});
 $("#editor").addEventListener("keydown", (event) => {
   if (event.ctrlKey && event.key.toLowerCase() === "s") {
     event.preventDefault();
     saveActiveDocument();
     return;
   }
+  if (event.ctrlKey && event.shiftKey && event.key === "Enter") {
+    event.preventDefault();
+    runActiveFile();
+    return;
+  }
   if (event.ctrlKey && event.key === "Enter") {
     event.preventDefault();
-    executeCode(selectedEditorCode());
+    runSelectionOrCurrentLine();
+    return;
   }
   if (event.key === "Tab") {
     event.preventDefault();
@@ -700,6 +1783,7 @@ $("#editor").addEventListener("keydown", (event) => {
     const start = editor.selectionStart;
     editor.setRangeText("  ", start, editor.selectionEnd, "end");
     updateEditorChrome();
+    syncDocumentFromEditor({ render: true, persist: true });
   }
 });
 
@@ -735,11 +1819,16 @@ window.addEventListener("resize", () => {
     const handle = panel === "left" ? $("#leftResizeHandle") : panel === "right" ? $("#rightResizeHandle") : $("#dockResizeHandle");
     setPanelSize(panel, Number(handle.getAttribute("aria-valuenow")), false);
   }
+  layoutEditor();
 });
 $("#interruptButton").addEventListener("click", async () => {
   try {
-    await invoke("interrupt_r");
+    const response = state.activeRunId
+      ? await invoke("cancel_run", { run_id: state.activeRunId })
+      : await invoke("interrupt_r");
     addConsole("SYSTEM", "Interrupt requested");
+    if (response?.run_id) state.activeRunId = response.run_id;
+    await loadRunData();
   } catch (error) {
     toast(String(error), true);
   }
@@ -747,12 +1836,14 @@ $("#interruptButton").addEventListener("click", async () => {
 $("#restartButton").addEventListener("click", async () => {
   setKernelStatus("starting", "Restarting R…");
   try {
+    await flushSessionSnapshot();
     const status = await invoke("restart_workspace");
     updateIdentity(status.workspace);
     setKernelStatus("idle", "R idle");
     state.objects = [];
     renderEnvironment();
     addConsole("SYSTEM", `Workspace restarted · Ark PID ${status.kernel_pid}`);
+    await loadRunData();
   } catch (error) {
     setKernelStatus("error", "R unavailable");
     toast(String(error), true);
