@@ -8,11 +8,11 @@ use rho_agent_transport::{
     AgentAuthenticator, AuthenticatedAgent, read_async_frame, write_async_frame,
 };
 use rho_core::{BrokerState, ExecutionOrigin, ExecutionRequest};
-use rho_kernel::{ArkLaunchConfig, ArkSession};
+use rho_kernel::{ArkLaunchConfig, ArkSession, CorrelatedKernelEvent};
 use rho_protocol::{Envelope, ExpectedWorkspace, MAX_FRAME_BYTES, MessageKind, OperationClass};
 use rho_store::{
-    AgentTurnEventDraft, AgentTurnFinish, ApprovalDecisionRecord, ApprovalRequestDraft, RunDraft,
-    RunFinish, Store,
+    AgentTurnEventDraft, AgentTurnFinish, ApprovalDecisionRecord, ApprovalRequestDraft,
+    PlotArtifactDraft, RunDraft, RunFinish, Store,
 };
 use serde_json::{Value, json};
 use tokio::io::AsyncWriteExt;
@@ -638,7 +638,7 @@ pub async fn dispatch_workspace_request(
         run_id: request.execution_id.clone(),
         status: if failed { "failed" } else { "completed" }.to_string(),
         terminal_reason: failed.then_some("r_error".to_string()),
-        workspace_id: Some(after.workspace_id),
+        workspace_id: Some(after.workspace_id.clone()),
         state_revision_after: Some(after.state_revision as i64),
         project_revision_after: Some(after.project_revision as i64),
         stdout: json_string(&result, "stdout"),
@@ -660,6 +660,32 @@ pub async fn dispatch_workspace_request(
             .chain(json_string_list(&result, "calls"))
             .collect(),
     })?;
+    let plot_payloads = extract_plot_payloads(&kernel_events);
+    for (index, (media_type, payload_json)) in plot_payloads.into_iter().enumerate() {
+        let plot_id = format!("plot_{}_{}", request.execution_id, index + 1);
+        store.create_plot_artifact(&PlotArtifactDraft {
+            plot_id,
+            run_id: request.execution_id.clone(),
+            source_path: arguments
+                .get("source_path")
+                .and_then(Value::as_str)
+                .map(str::to_string),
+            execution_mode: arguments
+                .get("execution_mode")
+                .and_then(Value::as_str)
+                .map(str::to_string),
+            document_version: arguments.get("document_version").and_then(Value::as_i64),
+            workspace_id: Some(after.workspace_id.clone()),
+            state_revision: Some(after.state_revision as i64),
+            project_revision: Some(after.project_revision as i64),
+            media_type,
+            payload_json,
+            provenance_complete: arguments
+                .get("source_path")
+                .and_then(Value::as_str)
+                .is_some(),
+        })?;
+    }
     Ok(json!({
         "execution_id": request.execution_id,
         "execution": result,
@@ -1282,6 +1308,25 @@ fn bridge_expression(request_type: &str, arguments: &Value) -> Result<(Operation
                 ),
             ))
         }
+        "workspace.render_document" => {
+            let path = arguments["path"]
+                .as_str()
+                .context("workspace.render_document requires string argument `path`")?;
+            let format_argument = arguments
+                .get("format")
+                .and_then(Value::as_str)
+                .map(r_string)
+                .transpose()?
+                .unwrap_or_else(|| "NULL".to_string());
+            Ok((
+                OperationClass::ProjectMutation,
+                format!(
+                    "{bridge}$rho_render_document({}, format = {}, envir = .GlobalEnv)",
+                    r_string(path)?,
+                    format_argument
+                ),
+            ))
+        }
         _ => bail!("unsupported Agent R request type: {request_type}"),
     }
 }
@@ -1319,8 +1364,37 @@ fn requested_code(request_type: &str, arguments: &Value, bridge_expression: &str
             .and_then(Value::as_str)
             .map(|name| format!("inspect {name}"))
             .unwrap_or_else(|| bridge_expression.to_string()),
+        "workspace.render_document" => arguments
+            .get("path")
+            .and_then(Value::as_str)
+            .map(|path| format!("render {path}"))
+            .unwrap_or_else(|| bridge_expression.to_string()),
         _ => bridge_expression.to_string(),
     }
+}
+
+fn extract_plot_payloads(events: &[CorrelatedKernelEvent]) -> Vec<(String, String)> {
+    let mut plots = Vec::new();
+    for event in events {
+        let Ok(value) = serde_json::to_value(event) else {
+            continue;
+        };
+        let Some(data) = value.get("data").and_then(Value::as_object) else {
+            continue;
+        };
+        for media_type in ["image/png", "image/svg+xml", "rho/mock-image"] {
+            let Some(payload) = data.get(media_type) else {
+                continue;
+            };
+            plots.push((
+                media_type.to_string(),
+                serde_json::to_string(&json!({ media_type: payload }))
+                    .unwrap_or_else(|_| "{}".to_string()),
+            ));
+            break;
+        }
+    }
+    plots
 }
 
 fn json_string(value: &Value, key: &str) -> Option<String> {

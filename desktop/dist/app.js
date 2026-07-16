@@ -12,6 +12,9 @@ const state = {
   agentBusy: false,
   objects: [],
   plots: [],
+  environment: null,
+  selectedObjectName: null,
+  selectedObjectDetail: null,
   runs: [],
   problems: [],
   agentTurns: [],
@@ -66,6 +69,7 @@ let mockLastProject = "D:/Rho";
 const mockProjectSessions = {};
 let mockRunSequence = 0;
 const mockRuns = [];
+const mockPlots = [];
 let mockAgentTurnSequence = 0;
 let mockApprovalSequence = 0;
 const mockAgentTurns = [];
@@ -317,6 +321,99 @@ function mockProjectState(root = mockLastProject) {
   return { root, files: project.files.map((file) => ({ ...file })) };
 }
 
+function mockEnvironmentSnapshot() {
+  return {
+    execution: {
+      ok: true,
+      objects: state.objects,
+      r: {
+        version: "R version 4.6.0",
+        cwd: mockLastProject,
+        lib_paths: ["D:/R/library", "C:/R/site-library"],
+      },
+      environment: {
+        project_dir: mockLastProject,
+        renv: {
+          status: "present",
+          has_lockfile: false,
+          lockfile_path: null,
+          package_available: true,
+          project_library: `${mockLastProject}/renv`,
+          active: false,
+        },
+        bioconductor: {
+          status: "available",
+          version: "3.22",
+          package_available: true,
+        },
+        attached_packages: {
+          values: [
+            { name: "stats", version: "4.6.0" },
+            { name: "utils", version: "4.6.0" },
+          ],
+          truncated: false,
+        },
+        render: {
+          quarto: { available: false, binary: null },
+          rmarkdown: { available: true, version: "2.30" },
+          knitr: { available: true, version: "1.50" },
+          can_render_qmd: false,
+          can_render_rmd: true,
+        },
+      },
+    },
+    workspace: state.revision,
+  };
+}
+
+function mockInspectObject(name) {
+  if (name === "qc") {
+    return {
+      execution: {
+        ok: true,
+        name,
+        classes: ["data.frame"],
+        dimensions: [12, 3],
+        size_bytes: 2184,
+        typeof: "list",
+        preview_kind: "tabular",
+        preview: {
+          kind: "tabular",
+          columns: { values: ["sample", "reads", "detected"], truncated: false },
+          column_types: { sample: "character", reads: "numeric", detected: "numeric" },
+          rows: [
+            { sample: "S1", reads: 70231, detected: 3188 },
+            { sample: "S2", reads: 74412, detected: 3240 },
+            { sample: "S3", reads: 69103, detected: 3112 },
+          ],
+          truncated_rows: true,
+          truncated_columns: false,
+        },
+        structure: "'data.frame': 12 obs. of  3 variables:\n $ sample  : chr  \"S1\" \"S2\" \"S3\" ...\n $ reads   : num  70231 74412 69103 ...\n $ detected: num  3188 3240 3112 ...",
+      },
+      workspace: state.revision,
+    };
+  }
+  return {
+    execution: {
+      ok: true,
+      name,
+      classes: ["numeric"],
+      dimensions: null,
+      size_bytes: 96,
+      typeof: "integer",
+      preview_kind: "vector",
+      preview: {
+        kind: "vector",
+        values: [1, 2, 3, 4, 5],
+        truncated: false,
+      },
+      structure: " int [1:5] 1 2 3 4 5",
+    },
+    workspace: state.revision,
+  };
+}
+
 async function invoke(command, args = {}) {
   if (isDesktop) return tauriInvoke(command, args);
   return mockInvoke(command, args);
@@ -377,13 +474,10 @@ async function mockInvoke(command, args) {
     return mockInvoke("project_state", {});
   }
   if (command === "snapshot_workspace") {
-    return {
-      execution: {
-        objects: state.objects,
-        r: { version: "R version 4.6.0", cwd: mockLastProject },
-      },
-      workspace: state.revision,
-    };
+    return mockEnvironmentSnapshot();
+  }
+  if (command === "inspect_object") {
+    return mockInspectObject(args.request?.name || args.name || "qc");
   }
   if (command === "execute_r") {
     const request = args.request || {};
@@ -391,7 +485,7 @@ async function mockInvoke(command, args) {
     state.objects = [
       { name: "qc", classes: ["data.frame"], dimensions: [12, 3], size_bytes: 2184, typeof: "list" },
     ];
-    recordMockRun({
+    const run = recordMockRun({
       origin: "user",
       status: request.code?.includes("stop(") ? "failed" : "completed",
       code: request.code || "",
@@ -403,6 +497,22 @@ async function mockInvoke(command, args) {
       traceback: request.code?.includes("stop(") ? ["stop(\"boom\")"] : [],
       parentRunId: request.parent_run_id ?? null,
     });
+    if (!request.code?.includes("stop(")) {
+      mockPlots.unshift({
+        plot_id: `plot_${run.run_id}`,
+        run_id: run.run_id,
+        source_path: request.source_path ?? request.sourcePath ?? null,
+        execution_mode: request.execution_mode ?? request.type ?? null,
+        document_version: request.document_version ?? request.documentVersion ?? null,
+        workspace_id: "desktop_mock",
+        state_revision: state.revision.state_revision,
+        project_revision: state.revision.project_revision,
+        media_type: "rho/mock-image",
+        payload_json: JSON.stringify({ "rho/mock-image": "assets/demo-plot.png" }),
+        provenance_complete: Boolean(request.source_path ?? request.sourcePath ?? null),
+        created_at: new Date().toISOString(),
+      });
+    }
     return {
       execution_id: "exec_demo",
       execution: {
@@ -422,8 +532,68 @@ async function mockInvoke(command, args) {
   if (command === "list_runs") {
     return structuredClone(mockRuns.slice(0, args.limit || 50));
   }
+  if (command === "list_plot_artifacts") {
+    return structuredClone(mockPlots.slice(0, args.limit || 50));
+  }
   if (command === "list_problems") {
     return structuredClone(mockProblemList().slice(0, args.limit || 50));
+  }
+  if (command === "render_document") {
+    const path = args.request?.path || "analysis.Rmd";
+    const sourcePath = path;
+    const isQmd = path.toLowerCase().endsWith(".qmd");
+    if (isQmd) {
+      const run = recordMockRun({
+        origin: "user",
+        status: "failed",
+        requestType: "workspace.render_document",
+        operationClass: "project_mutation",
+        code: `render ${path}`,
+        sourcePath,
+        executionMode: "render",
+        documentVersion: args.request?.document_version ?? null,
+        errorMessage: "Quarto is not available in the current environment.",
+      });
+      return {
+        execution_id: run.run_id,
+        execution: {
+          ok: false,
+          kind: "render",
+          tool: "quarto",
+          capability: mockEnvironmentSnapshot().execution.environment.render,
+          error: { message: "Quarto is not available in the current environment.", phase: "capability", tool: "quarto" },
+          stdout: "",
+        },
+        events: [],
+        workspace: state.revision,
+      };
+    }
+    const run = recordMockRun({
+      origin: "user",
+      status: "completed",
+      requestType: "workspace.render_document",
+      operationClass: "project_mutation",
+      code: `render ${path}`,
+      sourcePath,
+      executionMode: "render",
+      documentVersion: args.request?.document_version ?? null,
+    });
+    return {
+      execution_id: run.run_id,
+      execution: {
+        ok: true,
+        kind: "render",
+        tool: "rmarkdown",
+        source_path: sourcePath,
+        output_path: sourcePath.replace(/\.Rmd$/i, ".html"),
+        stdout: "Output created.",
+        messages: [],
+        warnings: [],
+        error: null,
+      },
+      events: [],
+      workspace: state.revision,
+    };
   }
   if (command === "get_run_detail") {
     return structuredClone(mockRuns.find((run) => run.run_id === args.run_id) || null);
@@ -1390,15 +1560,18 @@ function activeRunRecord() {
 
 async function loadRunData() {
   try {
-    const [runs, problems] = await Promise.all([
+    const [runs, problems, plots] = await Promise.all([
       invoke("list_runs", { limit: 50 }),
       invoke("list_problems", { limit: 50 }),
+      invoke("list_plot_artifacts", { limit: 20 }),
     ]);
     state.runs = runs || [];
     state.problems = problems || [];
+    state.plots = plots || [];
     state.activeRunId = activeRunRecord()?.run_id || null;
     renderRuns();
     renderProblems();
+    renderPlots();
   } catch (error) {
     toast(`Run history is unavailable: ${error}`, true);
   }
@@ -1799,6 +1972,19 @@ function renderExecution(response, request, origin = "USER") {
   if (execution.error) {
     addConsole(origin, execution.error.message, "error");
   }
+  if (execution.kind === "render") {
+    if (execution.ok) {
+      addConsole("SYSTEM", `Render completed · ${execution.output_path || execution.source_path || "output"}`);
+    } else if (execution.error?.message) {
+      addProblem(execution.error.message, "", {
+        origin: "user",
+        status: "failed",
+        sourcePath: execution.source_path || request?.sourcePath || null,
+        executionMode: "render",
+        documentVersion: request?.documentVersion ?? null,
+      });
+    }
+  }
   for (const wrapped of response.events || []) {
     const event = wrapped.event || wrapped;
     if (event.type === "stream") addConsole(origin, event.text, event.name === "stderr" ? "error" : "");
@@ -1813,11 +1999,50 @@ function renderDisplay(data) {
   if (data["image/svg+xml"]) source = `data:image/svg+xml;base64,${data["image/svg+xml"]}`;
   if (data["rho/mock-image"]) source = data["rho/mock-image"];
   if (!source) return;
-  state.plots.push(source);
   $("#plotImage").src = source;
   $("#plotImage").classList.remove("hidden");
   $("#plotEmpty").classList.add("hidden");
-  $("#plotCount").textContent = String(state.plots.length);
+}
+
+function renderPlots() {
+  const history = $("#plotHistory");
+  history.replaceChildren();
+  const plots = state.plots || [];
+  $("#plotCount").textContent = String(plots.length);
+  if (!plots.length) {
+    $("#plotEmpty").classList.remove("hidden");
+    $("#plotImage").classList.add("hidden");
+    return;
+  }
+  $("#plotEmpty").classList.add("hidden");
+  const latest = plots[0];
+  try {
+    const payload = JSON.parse(latest.payload_json || "{}");
+    renderDisplay(payload);
+  } catch {
+    $("#plotImage").classList.add("hidden");
+  }
+  for (const plot of plots) {
+    const row = document.createElement("div");
+    row.className = "plot-history-row";
+    const title = document.createElement("strong");
+    title.textContent = plot.source_path || plot.run_id;
+    const line1 = document.createElement("p");
+    line1.textContent = `${plot.execution_mode || "plot"} · run ${plot.run_id} · state ${plot.state_revision ?? "?"}`;
+    const line2 = document.createElement("p");
+    line2.textContent = plot.provenance_complete
+      ? `Source ${plot.source_path || "available"} · rev ${plot.document_version ?? "?"}`
+      : "Provenance incomplete";
+    row.append(title, line1, line2);
+    row.addEventListener("click", () => {
+      try {
+        renderDisplay(JSON.parse(plot.payload_json || "{}"));
+      } catch {
+        toast("Plot payload is unavailable.", true);
+      }
+    });
+    history.append(row);
+  }
 }
 
 async function executeCode(request, origin = "USER") {
@@ -1871,6 +2096,65 @@ async function refreshEnvironment() {
     const response = await invoke("snapshot_workspace");
     updateIdentity(response.workspace);
     state.objects = response.execution?.objects || [];
+    state.environment = response.execution?.environment || null;
+    renderEnvironment();
+  } catch (error) {
+    toast(String(error), true);
+  }
+}
+
+function renderEnvironmentSummary() {
+  const environment = state.environment;
+  if (!environment) {
+    $("#environmentContract").textContent = "Environment snapshot unavailable.";
+    $("#renderCapability").textContent = "Render tooling not checked yet.";
+    return;
+  }
+  const renv = environment.renv || {};
+  const bioc = environment.bioconductor || {};
+  const render = environment.render || {};
+  const attached = (environment.attached_packages?.values || []).map((item) => `${item.name}${item.version ? ` ${item.version}` : ""}`).join(", ");
+  $("#environmentContract").textContent = [
+    `renv ${renv.status || "unknown"}`,
+    bioc.version ? `Bioc ${bioc.version}` : `Bioc ${bioc.status || "unknown"}`,
+    attached ? `packages ${attached}` : null,
+  ].filter(Boolean).join(" · ");
+  $("#renderCapability").textContent = [
+    render.can_render_qmd ? "Quarto ready" : "Quarto unavailable",
+    render.can_render_rmd ? "R Markdown ready" : "R Markdown unavailable",
+  ].join(" · ");
+}
+
+function previewSummary(detail) {
+  if (!detail) return "Select an object to inspect its bounded summary.";
+  const preview = detail.preview || {};
+  const lines = [
+    `${detail.name} · ${(detail.classes || []).join("/") || detail.typeof || "object"}`,
+    detail.dimensions?.length ? `shape: ${detail.dimensions.join(" × ")}` : `type: ${detail.typeof || "unknown"}`,
+    `size: ${formatBytes(detail.size_bytes || 0)}`,
+  ];
+  if (preview.kind === "tabular") {
+    lines.push(`columns: ${(preview.columns?.values || []).join(", ")}${preview.columns?.truncated ? " ..." : ""}`);
+    lines.push(`rows: ${(preview.rows || []).map((row) => Object.values(row).join(" | ")).join("\n")}`);
+  } else if (preview.kind === "vector") {
+    lines.push(`values: ${(preview.values || []).join(", ")}${preview.truncated ? " ..." : ""}`);
+  } else if (preview.kind === "list") {
+    lines.push(`items: ${(preview.items || []).join(", ")}${preview.truncated ? " ..." : ""}`);
+  } else if (preview.unsupported_preview) {
+    lines.push("Preview is bounded to structural metadata for this class.");
+  }
+  if (detail.structure) lines.push("", detail.structure);
+  return lines.filter((line) => line !== null && line !== undefined).join("\n");
+}
+
+async function inspectEnvironmentObject(name) {
+  try {
+    state.selectedObjectName = name;
+    const response = await invoke("inspect_object", {
+      request: { name },
+    });
+    updateIdentity(response.workspace);
+    state.selectedObjectDetail = response.execution || null;
     renderEnvironment();
   } catch (error) {
     toast(String(error), true);
@@ -1878,6 +2162,7 @@ async function refreshEnvironment() {
 }
 
 function renderEnvironment() {
+  renderEnvironmentSummary();
   const query = $("#environmentSearch").value.trim().toLowerCase();
   const objects = state.objects.filter((object) => object.name.toLowerCase().includes(query));
   $("#environmentList").replaceChildren();
@@ -1891,7 +2176,7 @@ function renderEnvironment() {
   }
   for (const object of objects) {
     const row = document.createElement("div");
-    row.className = "environment-row";
+    row.className = `environment-row${state.selectedObjectName === object.name ? " active" : ""}`;
     const name = document.createElement("div");
     name.className = "object-name";
     const symbol = document.createElement("span");
@@ -1907,9 +2192,51 @@ function renderEnvironment() {
     size.className = "object-size";
     size.textContent = formatBytes(object.size_bytes || 0);
     row.append(name, type, size);
+    row.addEventListener("click", () => {
+      inspectEnvironmentObject(object.name);
+    });
     $("#environmentList").append(row);
   }
   $("#objectCount").textContent = String(state.objects.length);
+  $("#objectPreviewTitle").textContent = state.selectedObjectDetail?.name || "Object Preview";
+  $("#objectPreviewMeta").textContent = state.selectedObjectDetail?.preview_kind || "bounded";
+  $("#objectPreviewBody").textContent = previewSummary(state.selectedObjectDetail);
+}
+
+async function renderActiveDocumentFile() {
+  const path = state.activeDocument;
+  if (!path) {
+    toast("Open a .Rmd or .qmd document first.", true);
+    return;
+  }
+  if (!/\.(rmd|qmd)$/i.test(path)) {
+    toast("Render only supports .Rmd or .qmd files.", true);
+    return;
+  }
+  $("#renderDocumentButton").disabled = true;
+  try {
+    const documentState = activeDocument();
+    const response = await invoke("render_document", {
+      request: {
+        path,
+        document_version: documentState?.version ?? null,
+      },
+    });
+    renderExecution(response, {
+      type: "render",
+      sourcePath: path,
+      documentVersion: documentState?.version ?? null,
+    }, "USER");
+    await Promise.all([loadRunData(), refreshEnvironment()]);
+  } catch (error) {
+    addProblem(String(error), "", {
+      sourcePath: path,
+      executionMode: "render",
+    });
+    toast(String(error), true);
+  } finally {
+    $("#renderDocumentButton").disabled = false;
+  }
 }
 
 function formatBytes(bytes) {
@@ -2324,6 +2651,7 @@ $("#agentInput").addEventListener("keydown", (event) => {
 });
 $("#refreshEnvironment").addEventListener("click", refreshEnvironment);
 $("#environmentSearch").addEventListener("input", renderEnvironment);
+$("#renderDocumentButton").addEventListener("click", renderActiveDocumentFile);
 $("#toggleDockMaximize").addEventListener("click", toggleDockMaximize);
 window.addEventListener("resize", () => {
   for (const panel of ["left", "right", "dock"]) {
@@ -2352,6 +2680,9 @@ $("#restartButton").addEventListener("click", async () => {
     updateIdentity(status.workspace);
     setKernelStatus("idle", "R idle");
     state.objects = [];
+    state.environment = null;
+    state.selectedObjectName = null;
+    state.selectedObjectDetail = null;
     renderEnvironment();
     addConsole("SYSTEM", `Workspace restarted · Ark PID ${status.kernel_pid}`);
     await loadRunData();

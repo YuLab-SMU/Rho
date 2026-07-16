@@ -20,7 +20,7 @@ use rho_server::coordinator::{
 };
 use rho_store::{
     AgentTurnDetail, AgentTurnDraft, AgentTurnEventDraft, AgentTurnSummary, ApprovalRequestSummary,
-    ProblemSummary, RunDetail, RunSummary, Store,
+    PlotArtifactSummary, ProblemSummary, RunDetail, RunSummary, Store,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -74,6 +74,18 @@ struct ExecuteRequest {
     code: String,
     source_path: Option<String>,
     execution_mode: Option<String>,
+    document_version: Option<i64>,
+}
+
+#[derive(Deserialize)]
+struct InspectObjectRequest {
+    name: String,
+}
+
+#[derive(Deserialize)]
+struct RenderRequest {
+    path: String,
+    format: Option<String>,
     document_version: Option<i64>,
 }
 
@@ -268,6 +280,64 @@ async fn snapshot_workspace(state: State<'_, AppState>) -> Result<Value, String>
 }
 
 #[tauri::command]
+async fn inspect_object(
+    request: InspectObjectRequest,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    let session = active_session(&state).await.map_err(display_error)?;
+    let context = active_context(&state).await.map_err(display_error)?;
+    let mut context = context.lock().await;
+    let RuntimeContext { broker, store } = &mut *context;
+    let payload = json!({
+        "arguments": {
+            "name": request.name
+        },
+        "expected_workspace": broker.identity()
+    });
+    dispatch_workspace_request(
+        "workspace.inspect_object",
+        &payload,
+        ExecutionOrigin::System,
+        session.as_ref(),
+        broker,
+        store,
+    )
+    .await
+    .map_err(display_error)
+}
+
+#[tauri::command]
+async fn render_document(
+    request: RenderRequest,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    let session = active_session(&state).await.map_err(display_error)?;
+    let context = active_context(&state).await.map_err(display_error)?;
+    let mut context = context.lock().await;
+    let RuntimeContext { broker, store } = &mut *context;
+    let payload = json!({
+        "arguments": {
+            "path": request.path,
+            "format": request.format,
+            "source_path": request.path,
+            "execution_mode": "render",
+            "document_version": request.document_version
+        },
+        "expected_workspace": broker.identity()
+    });
+    dispatch_workspace_request(
+        "workspace.render_document",
+        &payload,
+        ExecutionOrigin::User,
+        session.as_ref(),
+        broker,
+        store,
+    )
+    .await
+    .map_err(display_error)
+}
+
+#[tauri::command]
 async fn list_runs(limit: Option<usize>, state: State<'_, AppState>) -> Result<Vec<RunSummary>, String> {
     read_store(&state)
         .map_err(display_error)?
@@ -291,6 +361,17 @@ async fn get_run_detail(run_id: String, state: State<'_, AppState>) -> Result<Op
     read_store(&state)
         .map_err(display_error)?
         .get_run_detail(&run_id)
+        .map_err(display_error)
+}
+
+#[tauri::command]
+async fn list_plot_artifacts(
+    limit: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<Vec<PlotArtifactSummary>, String> {
+    read_store(&state)
+        .map_err(display_error)?
+        .list_plot_artifacts(limit)
         .map_err(display_error)
 }
 
@@ -948,7 +1029,10 @@ fn main() {
             project_create_file,
             execute_r,
             snapshot_workspace,
+            inspect_object,
+            render_document,
             list_runs,
+            list_plot_artifacts,
             list_problems,
             get_run_detail,
             retry_run,

@@ -127,6 +127,7 @@ plot(
           <div id="plotsPanel" class="dock-content plot-panel hidden">
             <div id="plotEmpty" class="empty-state"><span class="empty-icon">▧</span><strong>No plots yet</strong></div>
             <img id="plotImage" class="plot-image hidden" alt="Latest R plot" />
+            <div id="plotHistory" class="plot-history"></div>
           </div>
           <div id="problemsPanel" class="dock-content problems-panel hidden">
             <div id="problemEmpty" class="empty-state"><span class="status-check">✓</span><strong>No problems detected</strong></div>
@@ -187,9 +188,27 @@ plot(
             <input id="environmentSearch" type="search" placeholder="Filter objects" aria-label="Filter workspace objects" />
             <button id="refreshEnvironment" type="button" title="Refresh Environment" aria-label="Refresh Environment">↻</button>
           </div>
+          <div id="environmentSummary" class="environment-summary">
+            <div class="environment-card">
+              <strong>Project Environment</strong>
+              <div id="environmentContract" class="environment-contract">Environment snapshot unavailable.</div>
+            </div>
+            <div class="environment-card">
+              <strong>Render</strong>
+              <div id="renderCapability" class="environment-contract">Render tooling not checked yet.</div>
+              <button id="renderDocumentButton" type="button" class="environment-action">Render Active Document</button>
+            </div>
+          </div>
           <div class="environment-head"><span>Name</span><span>Type</span><span>Size</span></div>
           <div id="environmentList" class="environment-list">
             <div class="empty-state compact-empty"><strong>Workspace is empty</strong></div>
+          </div>
+          <div id="objectPreview" class="object-preview">
+            <div class="object-preview-header">
+              <strong id="objectPreviewTitle">Object Preview</strong>
+              <span id="objectPreviewMeta" class="revision-badge">bounded</span>
+            </div>
+            <pre id="objectPreviewBody" class="object-preview-body">Select an object to inspect its bounded summary.</pre>
           </div>
         </section>
       </aside>

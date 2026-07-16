@@ -6,7 +6,7 @@ use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_VERSION: i64 = 4;
 const DEFAULT_LIMIT: usize = 50;
 
 #[derive(Debug, Error)]
@@ -121,6 +121,37 @@ pub struct RunDetail {
     pub error_message: Option<String>,
     pub error_call: Option<String>,
     pub traceback: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlotArtifactDraft {
+    pub plot_id: String,
+    pub run_id: String,
+    pub source_path: Option<String>,
+    pub execution_mode: Option<String>,
+    pub document_version: Option<i64>,
+    pub workspace_id: Option<String>,
+    pub state_revision: Option<i64>,
+    pub project_revision: Option<i64>,
+    pub media_type: String,
+    pub payload_json: String,
+    pub provenance_complete: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlotArtifactSummary {
+    pub plot_id: String,
+    pub run_id: String,
+    pub source_path: Option<String>,
+    pub execution_mode: Option<String>,
+    pub document_version: Option<i64>,
+    pub workspace_id: Option<String>,
+    pub state_revision: Option<i64>,
+    pub project_revision: Option<i64>,
+    pub media_type: String,
+    pub payload_json: String,
+    pub provenance_complete: bool,
+    pub created_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -330,6 +361,20 @@ impl Store {
                 continuation_outcome TEXT,
                 FOREIGN KEY(turn_id) REFERENCES agent_turns(turn_id) ON DELETE CASCADE
             );
+            CREATE TABLE IF NOT EXISTS plot_artifacts (
+                plot_id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL,
+                source_path TEXT,
+                execution_mode TEXT,
+                document_version INTEGER,
+                workspace_id TEXT,
+                state_revision INTEGER,
+                project_revision INTEGER,
+                media_type TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                provenance_complete INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL
+            );
             CREATE INDEX IF NOT EXISTS idx_agent_turns_started_at
                 ON agent_turns(started_at DESC);
             CREATE INDEX IF NOT EXISTS idx_agent_turn_events_turn_id
@@ -338,6 +383,10 @@ impl Store {
                 ON approval_requests(turn_id, requested_at DESC);
             CREATE INDEX IF NOT EXISTS idx_approval_requests_status
                 ON approval_requests(status, requested_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_plot_artifacts_created_at
+                ON plot_artifacts(created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_plot_artifacts_run_id
+                ON plot_artifacts(run_id, created_at DESC);
             ",
         )?;
 
@@ -352,7 +401,7 @@ impl Store {
             .and_then(|value| value.parse().ok());
 
         match current {
-            None | Some(1) | Some(2) | Some(SCHEMA_VERSION) => {}
+            None | Some(1) | Some(2) | Some(3) | Some(SCHEMA_VERSION) => {}
             Some(other) => return Err(StoreError::SchemaVersion(other)),
         }
 
@@ -971,6 +1020,65 @@ impl Store {
             [Utc::now().to_rfc3339()],
         )?;
         Ok(changed)
+    }
+
+    pub fn create_plot_artifact(&mut self, draft: &PlotArtifactDraft) -> Result<(), StoreError> {
+        self.connection.execute(
+            "INSERT INTO plot_artifacts(
+                plot_id, run_id, source_path, execution_mode, document_version,
+                workspace_id, state_revision, project_revision, media_type, payload_json,
+                provenance_complete, created_at
+             ) VALUES(
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12
+             )",
+            params![
+                draft.plot_id,
+                draft.run_id,
+                draft.source_path,
+                draft.execution_mode,
+                draft.document_version,
+                draft.workspace_id,
+                draft.state_revision,
+                draft.project_revision,
+                draft.media_type,
+                draft.payload_json,
+                if draft.provenance_complete { 1 } else { 0 },
+                Utc::now().to_rfc3339(),
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn list_plot_artifacts(
+        &self,
+        limit: Option<usize>,
+    ) -> Result<Vec<PlotArtifactSummary>, StoreError> {
+        let mut statement = self.connection.prepare(
+            "SELECT
+                plot_id, run_id, source_path, execution_mode, document_version,
+                workspace_id, state_revision, project_revision, media_type, payload_json,
+                provenance_complete, created_at
+             FROM plot_artifacts
+             ORDER BY created_at DESC
+             LIMIT ?1",
+        )?;
+        let rows = statement.query_map([limit.unwrap_or(DEFAULT_LIMIT) as i64], |row| {
+            Ok(PlotArtifactSummary {
+                plot_id: row.get(0)?,
+                run_id: row.get(1)?,
+                source_path: row.get(2)?,
+                execution_mode: row.get(3)?,
+                document_version: row.get(4)?,
+                workspace_id: row.get(5)?,
+                state_revision: row.get(6)?,
+                project_revision: row.get(7)?,
+                media_type: row.get(8)?,
+                payload_json: row.get(9)?,
+                provenance_complete: row.get::<_, i64>(10)? != 0,
+                created_at: row.get(11)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(StoreError::from)
     }
 }
 
