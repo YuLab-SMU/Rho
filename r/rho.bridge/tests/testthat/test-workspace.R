@@ -17,6 +17,32 @@ test_that("errors and prior mutations are retained", {
   expect_gt(length(result$calls), 0L)
 })
 
+test_that("execution accepts a leading source marker", {
+  workspace <- new.env(parent = baseenv())
+  result <- rho_execute("\uFEFFvalue <- 7; value", envir = workspace)
+
+  expect_true(result$ok)
+  expect_equal(workspace$value, 7)
+  expect_match(result$value, "7")
+})
+
+test_that("execution normalizes Windows selection line endings", {
+  workspace <- new.env(parent = baseenv())
+  result <- rho_execute("\r\nvalue <- 9\r\nvalue", envir = workspace)
+
+  expect_true(result$ok)
+  expect_equal(workspace$value, 9)
+  expect_match(result$value, "9")
+})
+
+test_that("single conditions remain serializable for the desktop client", {
+  workspace <- new.env(parent = baseenv())
+  result <- rho_execute("message('loaded')", envir = workspace)
+  encoded <- jsonlite::fromJSON(jsonlite::toJSON(result, auto_unbox = TRUE, null = "null"))
+
+  expect_match(encoded$messages, "loaded")
+})
+
 test_that("object inspection is bounded metadata", {
   workspace <- new.env(parent = baseenv())
   workspace$x <- data.frame(a = 1:10, b = letters[1:10])

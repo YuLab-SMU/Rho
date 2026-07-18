@@ -1,7 +1,7 @@
 # Rho Windows Build Environment
 
-Date: 2026-07-16  
-Validated release: `0.2.0-dev.2`
+Date: 2026-07-17
+Validated release: `0.2.0-dev.8`
 Repository root: `D:\Rho`
 
 ## Purpose
@@ -53,6 +53,7 @@ that produced the validated installer.
 | WebView2Loader.dll | `1.0.3650.58`, x64 |
 | aisdk | `1.5.0` |
 | aisdk.console | `0.1.0` |
+| rlang | `1.3.0` (required by aisdk `1.5.0`) |
 
 Current R library paths are:
 
@@ -130,7 +131,9 @@ powershell -ExecutionPolicy Bypass -File scripts\bootstrap-ark-windows.ps1
 The bootstrap script:
 
 1. resolves `R_HOME`, the R DLL directory and `.libPaths()` through the active
-   `Rscript`;
+   `Rscript`; the probe reads the effective user library configuration once,
+   then Ark receives the resulting `R_LIBS` while still running without user or
+   site profile scripts;
 2. downloads Ark only when the pinned executable is absent;
 3. verifies the archive SHA-256 before extraction;
 4. writes `.rho\runtime\ark-0.1.252\kernel.json` as UTF-8 without BOM;
@@ -199,15 +202,16 @@ Expected outputs:
 
 ```text
 D:\Rho\target\release\rho-desktop.exe
-D:\Rho\target\release\bundle\nsis\Rho_0.2.0-dev.2_x64-setup.exe
+D:\Rho\target\release\bundle\nsis\Rho_0.2.0-dev.8_x64-setup.exe
 ```
 
-Validated `0.2.0-dev.2` artifact snapshot:
+Validated `0.2.0-dev.8` artifact snapshot:
 
 ```text
-Installer size: 15,572,612 bytes
-Installer SHA-256: 2923E54F286492D44C9B494D1268A8004E489FE15B8A3D5181F7A6B66B5D8C05
-rho-desktop.exe size: 38,139,476 bytes
+Installer size: 15,656,479 bytes
+Installer SHA-256: A27E6D4E991FD57C920E29C524758214C28B6BFAAC20E9AC393F96E69534D80E
+rho-desktop.exe size: 38,513,113 bytes
+rho-desktop.exe SHA-256: 6E2CFB428D6248866FE3CDD59B37E7A3FC762E6DF744E8551F18EC2B3BF901C3
 ```
 
 The hash identifies the already validated artifact only. A legitimate rebuild
@@ -228,7 +232,9 @@ The target machine must provide:
 - Windows 10 or Windows 11 x64;
 - Microsoft Edge WebView2 Runtime;
 - R 4.4 or later;
-- `aisdk` plus a configured provider only when Agent turns are used.
+- `aisdk` plus a configured provider only when Agent turns are used;
+- all `aisdk` runtime dependencies at their declared versions, including
+  `rlang >= 1.3.0` for `aisdk 1.5.0`.
 
 Rho supports `RHO_RSCRIPT` for an explicit `Rscript.exe` when automatic R
 discovery cannot find the intended installation.
@@ -282,6 +288,8 @@ directory override selects MSVC.
 
 Verify which `Rscript` is active, then inspect `R.home()` and `.libPaths()`.
 Regenerate the Ark kernelspec after changing R installations or libraries.
+Also run `Rscript -e "loadNamespace('aisdk')"`; a package directory can exist
+while namespace loading still fails because a dependency version is stale.
 
 ### `npx` hangs or attempts a download
 

@@ -1,6 +1,8 @@
+use std::collections::BTreeSet;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{RecvTimeoutError, Sender, channel};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, ensure};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
@@ -8,6 +10,10 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 
 pub const PROJECT_FILES_CHANGED_EVENT: &str = "project://files-changed";
+pub const MAX_EDITABLE_FILE_BYTES: u64 = 8 * 1024 * 1024;
+pub const MAX_PROJECT_FILES: usize = 2_000;
+pub const MAX_PROJECT_ENTRIES: usize = 10_000;
+pub const MAX_PROJECT_DEPTH: usize = 8;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct ProjectFile {
@@ -21,6 +27,7 @@ pub struct ProjectFile {
 pub struct ProjectState {
     pub root: String,
     pub files: Vec<ProjectFile>,
+    pub truncated: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
@@ -128,7 +135,7 @@ impl ProjectSessionStore {
     pub fn save_last_opened_project(&self, root: &Path) -> Result<()> {
         std::fs::create_dir_all(&self.sessions_dir)?;
         let index = GlobalProjectIndex {
-            last_opened_project: Some(root.to_string_lossy().replace('\\', "/")),
+            last_opened_project: Some(display_path(root)),
         };
         self.write_json(&self.index_path, &index)
     }
@@ -166,11 +173,7 @@ impl ProjectSessionStore {
     }
 
     fn write_json<T: Serialize>(&self, path: &Path, value: &T) -> Result<()> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        std::fs::write(path, serde_json::to_vec_pretty(value)?)?;
-        Ok(())
+        atomic_write(path, &serde_json::to_vec_pretty(value)?)
     }
 }
 
@@ -212,17 +215,32 @@ pub fn start_project_watcher(app: AppHandle, root: PathBuf) -> Result<ProjectWat
             }
             match event_rx.recv_timeout(Duration::from_millis(250)) {
                 Ok(Ok(event)) => {
-                    let changed_paths = event
-                        .paths
-                        .iter()
-                        .filter_map(|path| relative_project_path(&normalized_root, path).ok())
-                        .filter(|path| {
-                            path.is_empty() || ensure_editable_file(Path::new(path)).is_ok()
-                        })
-                        .collect::<Vec<_>>();
+                    let mut changed_paths = BTreeSet::new();
+                    collect_changed_paths(&normalized_root, &event.paths, &mut changed_paths);
+                    let coalesce_started = Instant::now();
+                    loop {
+                        let remaining =
+                            Duration::from_millis(500).saturating_sub(coalesce_started.elapsed());
+                        if remaining.is_zero() {
+                            break;
+                        }
+                        match event_rx.recv_timeout(remaining.min(Duration::from_millis(120))) {
+                            Ok(Ok(next)) => collect_changed_paths(
+                                &normalized_root,
+                                &next.paths,
+                                &mut changed_paths,
+                            ),
+                            Ok(Err(_)) => continue,
+                            Err(RecvTimeoutError::Timeout) => break,
+                            Err(RecvTimeoutError::Disconnected) => return,
+                        }
+                    }
+                    if changed_paths.is_empty() {
+                        continue;
+                    }
                     let payload = ProjectFileChangeEvent {
-                        root: normalized_root.to_string_lossy().replace('\\', "/"),
-                        changed_paths,
+                        root: display_path(&normalized_root),
+                        changed_paths: changed_paths.into_iter().collect(),
                     };
                     let _ = app.emit(PROJECT_FILES_CHANGED_EVENT, payload);
                 }
@@ -307,6 +325,11 @@ pub fn project_path(root: &Path, relative: &str) -> Result<PathBuf> {
 }
 
 pub fn ensure_editable_file(path: &Path) -> Result<()> {
+    let file_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
     let extension = path
         .extension()
         .and_then(|value| value.to_str())
@@ -314,21 +337,119 @@ pub fn ensure_editable_file(path: &Path) -> Result<()> {
         .to_ascii_lowercase();
     ensure!(
         matches!(
+            file_name.as_str(),
+            "description"
+                | "namespace"
+                | "license"
+                | "news"
+                | ".rbuildignore"
+                | ".gitignore"
+                | ".renviron"
+                | ".rprofile"
+        ) || matches!(
             extension.as_str(),
-            "r" | "rmd" | "qmd" | "txt" | "csv" | "tsv"
+            "r" | "rmd"
+                | "qmd"
+                | "rd"
+                | "rproj"
+                | "md"
+                | "txt"
+                | "csv"
+                | "tsv"
+                | "yaml"
+                | "yml"
+                | "json"
+                | "toml"
+                | "ini"
+                | "html"
+                | "css"
+                | "js"
+                | "ts"
+                | "jsx"
+                | "tsx"
+                | "sql"
+                | "stan"
+                | "c"
+                | "cc"
+                | "cpp"
+                | "h"
+                | "hpp"
+                | "sh"
+                | "ps1"
+                | "bat"
         ),
-        "Unsupported project file type: .{extension}"
+        "Unsupported or binary project file: {file_name}"
     );
+    Ok(())
+}
+
+fn ignored_project_directory(name: &str) -> bool {
+    matches!(
+        name.to_ascii_lowercase().as_str(),
+        ".git" | ".rho" | ".rproj.user" | ".worktrees" | "target" | "renv" | "node_modules"
+    )
+}
+
+fn collect_changed_paths(root: &Path, paths: &[PathBuf], output: &mut BTreeSet<String>) {
+    output.extend(
+        paths
+            .iter()
+            .filter_map(|path| relative_project_path(root, path).ok())
+            .filter(|path| path.is_empty() || ensure_editable_file(Path::new(path)).is_ok()),
+    );
+}
+
+pub fn ensure_editable_file_size(path: &Path) -> Result<()> {
+    let size = path.metadata()?.len();
+    ensure!(
+        size <= MAX_EDITABLE_FILE_BYTES,
+        "Project file is too large for the source editor: {size} bytes (limit: {MAX_EDITABLE_FILE_BYTES} bytes)"
+    );
+    Ok(())
+}
+
+pub fn ensure_editable_content_size(content: &str) -> Result<()> {
+    let size = content.len() as u64;
+    ensure!(
+        size <= MAX_EDITABLE_FILE_BYTES,
+        "Project file content is too large for the source editor: {size} bytes (limit: {MAX_EDITABLE_FILE_BYTES} bytes)"
+    );
+    Ok(())
+}
+
+pub fn atomic_write(path: &Path, content: &[u8]) -> Result<()> {
+    let parent = path.parent().context("Project file path has no parent")?;
+    std::fs::create_dir_all(parent)?;
+    let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+    temporary.write_all(content)?;
+    temporary.as_file().sync_all()?;
+    temporary
+        .persist(path)
+        .map_err(|error| anyhow::Error::new(error.error))?;
+    Ok(())
+}
+
+pub fn atomic_write_new(path: &Path, content: &[u8]) -> Result<()> {
+    let parent = path.parent().context("Project file path has no parent")?;
+    std::fs::create_dir_all(parent)?;
+    let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+    temporary.write_all(content)?;
+    temporary.as_file().sync_all()?;
+    temporary
+        .persist_noclobber(path)
+        .map_err(|error| anyhow::Error::new(error.error))?;
     Ok(())
 }
 
 pub fn list_project_files(root: &Path) -> Result<ProjectState> {
     let mut files = Vec::new();
-    collect_project_files(root, root, &mut files, 0)?;
+    let mut scanned_entries = 0;
+    let truncated = collect_project_files(root, root, &mut files, &mut scanned_entries, 0)?;
     files.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(ProjectState {
-        root: root.to_string_lossy().replace('\\', "/"),
+        root: display_path(root),
         files,
+        truncated,
     })
 }
 
@@ -336,23 +457,45 @@ fn collect_project_files(
     root: &Path,
     directory: &Path,
     files: &mut Vec<ProjectFile>,
+    scanned_entries: &mut usize,
     depth: usize,
-) -> Result<()> {
-    if depth > 4 {
-        return Ok(());
+) -> Result<bool> {
+    if depth > MAX_PROJECT_DEPTH {
+        return Ok(true);
     }
-    for entry in std::fs::read_dir(directory)? {
-        let entry = entry?;
+    let remaining_entries = MAX_PROJECT_ENTRIES.saturating_sub(*scanned_entries);
+    if remaining_entries == 0 {
+        return Ok(true);
+    }
+    let mut entries = std::fs::read_dir(directory)?
+        .take(remaining_entries + 1)
+        .collect::<std::io::Result<Vec<_>>>()?;
+    let entry_limit_reached = entries.len() > remaining_entries;
+    entries.truncate(remaining_entries);
+    *scanned_entries += entries.len();
+    entries.sort_by_key(|entry| entry.file_name().to_string_lossy().to_ascii_lowercase());
+    let mut directories = Vec::new();
+    for entry in entries {
+        if files.len() >= MAX_PROJECT_FILES {
+            return Ok(true);
+        }
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().to_string();
-        if name.starts_with('.') || name == "target" || name == "renv" {
+        let file_type = entry.file_type()?;
+        if file_type.is_symlink() {
             continue;
         }
-        if path.is_dir() {
-            collect_project_files(root, &path, files, depth + 1)?;
+        if file_type.is_dir() {
+            if ignored_project_directory(&name) {
+                continue;
+            }
+            let canonical = path.canonicalize()?;
+            if canonical.starts_with(root) {
+                directories.push(path);
+            }
             continue;
         }
-        if !path.is_file() || ensure_editable_file(&path).is_err() {
+        if !file_type.is_file() || ensure_editable_file(&path).is_err() {
             continue;
         }
         let relative = relative_project_path(root, &path)?;
@@ -363,7 +506,15 @@ fn collect_project_files(
             size_bytes: path.metadata()?.len(),
         });
     }
-    Ok(())
+    if entry_limit_reached {
+        return Ok(true);
+    }
+    for directory in directories {
+        if collect_project_files(root, &directory, files, scanned_entries, depth + 1)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 pub fn relative_project_path(root: &Path, path: &Path) -> Result<String> {
@@ -375,11 +526,22 @@ pub fn relative_project_path(root: &Path, path: &Path) -> Result<String> {
 
 pub fn stable_project_key(root: &Path) -> String {
     let mut hash = 0xcbf29ce484222325_u64;
-    for byte in root.to_string_lossy().replace('\\', "/").as_bytes() {
+    for byte in display_path(root).as_bytes() {
         hash ^= u64::from(*byte);
         hash = hash.wrapping_mul(0x100000001b3);
     }
     format!("{hash:016x}")
+}
+
+pub fn display_path(path: &Path) -> String {
+    let normalized = path.to_string_lossy().replace('\\', "/");
+    if let Some(rest) = normalized.strip_prefix("//?/UNC/") {
+        return format!("//{rest}");
+    }
+    normalized
+        .strip_prefix("//?/")
+        .unwrap_or(&normalized)
+        .to_string()
 }
 
 #[cfg(test)]
@@ -397,10 +559,10 @@ mod tests {
     }
 
     #[test]
-    fn project_files_only_include_supported_sources() {
+    fn project_files_exclude_unsupported_binary_files() {
         let directory = TempDir::new().unwrap();
         std::fs::write(directory.path().join("analysis.R"), "1 + 1").unwrap();
-        std::fs::write(directory.path().join("notes.md"), "notes").unwrap();
+        std::fs::write(directory.path().join("figure.png"), [0_u8, 1, 2]).unwrap();
         let root = directory.path().canonicalize().unwrap();
         let state = list_project_files(&root).unwrap();
         assert_eq!(state.files.len(), 1);
@@ -482,5 +644,88 @@ mod tests {
         let key = stable_project_key(&root);
         assert_eq!(key.len(), 16);
         assert!(key.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn project_files_preserve_r_package_content_for_the_frontend_tree() {
+        let directory = TempDir::new().unwrap();
+        std::fs::create_dir_all(directory.path().join("R")).unwrap();
+        std::fs::create_dir_all(directory.path().join("man")).unwrap();
+        std::fs::create_dir_all(directory.path().join("tests/testthat")).unwrap();
+        std::fs::write(directory.path().join("DESCRIPTION"), "Package: example").unwrap();
+        std::fs::write(directory.path().join("NAMESPACE"), "export(example)").unwrap();
+        std::fs::write(directory.path().join(".Rbuildignore"), "^notes$").unwrap();
+        std::fs::write(
+            directory.path().join("R/example.R"),
+            "example <- function() 1",
+        )
+        .unwrap();
+        std::fs::write(directory.path().join("man/example.Rd"), "\\name{example}").unwrap();
+        std::fs::write(
+            directory.path().join("tests/testthat/test-example.R"),
+            "testthat::expect_true(TRUE)",
+        )
+        .unwrap();
+        std::fs::write(directory.path().join("logo.png"), [0_u8, 1, 2]).unwrap();
+
+        let root = directory.path().canonicalize().unwrap();
+        let paths = list_project_files(&root)
+            .unwrap()
+            .files
+            .into_iter()
+            .map(|file| file.path)
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            paths,
+            vec![
+                ".Rbuildignore",
+                "DESCRIPTION",
+                "NAMESPACE",
+                "R/example.R",
+                "man/example.Rd",
+                "tests/testthat/test-example.R",
+            ]
+        );
+    }
+
+    #[test]
+    fn windows_extended_paths_are_user_readable_and_stable() {
+        assert_eq!(
+            display_path(Path::new(r"\\?\E:\YuNotebooks\project")),
+            "E:/YuNotebooks/project"
+        );
+        assert_eq!(
+            display_path(Path::new(r"\\?\UNC\server\share\project")),
+            "//server/share/project"
+        );
+        assert_eq!(
+            stable_project_key(Path::new(r"\\?\E:\YuNotebooks\project")),
+            stable_project_key(Path::new(r"E:\YuNotebooks\project"))
+        );
+    }
+
+    #[test]
+    fn oversized_project_files_are_rejected_before_editor_read() {
+        let directory = TempDir::new().unwrap();
+        let path = directory.path().join("large.csv");
+        let file = std::fs::File::create(&path).unwrap();
+        file.set_len(MAX_EDITABLE_FILE_BYTES + 1).unwrap();
+
+        assert!(ensure_editable_file_size(&path).is_err());
+        assert!(ensure_editable_content_size(&"x".repeat(1024)).is_ok());
+    }
+
+    #[test]
+    fn atomic_writes_replace_or_preserve_as_requested() {
+        let directory = TempDir::new().unwrap();
+        let path = directory.path().join("analysis.R");
+        std::fs::write(&path, "old").unwrap();
+
+        atomic_write(&path, b"new").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "new");
+
+        assert!(atomic_write_new(&path, b"unexpected").is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "new");
     }
 }

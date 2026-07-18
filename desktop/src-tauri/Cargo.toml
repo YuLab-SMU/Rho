@@ -19,8 +19,6 @@ rfd = "0.15"
 serde.workspace = true
 serde_json.workspace = true
 tauri = { version = "2", features = [] }
+tempfile.workspace = true
 tokio.workspace = true
 uuid.workspace = true
-
-[dev-dependencies]
-tempfile.workspace = true

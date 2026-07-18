@@ -650,6 +650,8 @@ fn build_kernel_command(spec: &KernelSpec, connection_path: &Path) -> Result<Com
         bail!("kernelspec argv is empty");
     }
     let mut cmd = Command::new(&spec.argv[0]);
+    #[cfg(windows)]
+    cmd.creation_flags(0x0800_0000);
     cmd.stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());

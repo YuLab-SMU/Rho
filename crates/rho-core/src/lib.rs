@@ -99,4 +99,18 @@ mod tests {
             Err(StaleWorkspace::State { .. })
         ));
     }
+
+    #[test]
+    fn project_file_change_only_advances_project_revision() {
+        let mut broker = BrokerState::new("ws_test");
+        let before = broker.identity().clone();
+
+        broker.project_changed();
+
+        assert_eq!(broker.identity().state_revision, before.state_revision);
+        assert_eq!(
+            broker.identity().project_revision,
+            before.project_revision + 1
+        );
+    }
 }

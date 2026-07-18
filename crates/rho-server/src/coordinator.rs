@@ -12,8 +12,8 @@ use rho_core::{BrokerState, ExecutionOrigin, ExecutionRequest};
 use rho_kernel::{ArkLaunchConfig, ArkSession, CorrelatedKernelEvent};
 use rho_protocol::{Envelope, ExpectedWorkspace, MAX_FRAME_BYTES, MessageKind, OperationClass};
 use rho_store::{
-    AgentTurnEventDraft, AgentTurnFinish, ApprovalDecisionRecord, ApprovalRequestDraft,
-    PlotArtifactDraft, RunDraft, RunFinish, Store,
+    AgentConversationTurn, AgentTurnEventDraft, AgentTurnFinish, ApprovalDecisionRecord,
+    ApprovalRequestDraft, PlotArtifactDraft, RunDraft, RunFinish, Store,
 };
 use serde_json::{Value, json};
 use tokio::io::AsyncWriteExt;
@@ -22,6 +22,11 @@ use tokio::sync::{Mutex, oneshot};
 pub struct CoordinatorRuntime {
     pub broker: BrokerState,
     pub store: Store,
+}
+
+fn hide_console_window(command: &mut tokio::process::Command) {
+    #[cfg(windows)]
+    command.creation_flags(0x0800_0000);
 }
 
 #[derive(Debug, Clone)]
@@ -77,6 +82,7 @@ impl PendingApprovalRegistry {
 struct DesktopAgentCompletion {
     events: Vec<Value>,
     final_message: Option<String>,
+    failed: bool,
 }
 
 pub async fn probe(
@@ -220,7 +226,9 @@ close(connection)
     let real_model = model.is_some();
     let model_arg = model.clone().unwrap_or_else(|| "mock".to_string());
 
-    let mut child = tokio::process::Command::new(rscript)
+    let mut command = tokio::process::Command::new(rscript);
+    hide_console_window(&mut command);
+    let mut child = command
         .arg("-e")
         .arg(script)
         .arg(address.port().to_string())
@@ -715,6 +723,7 @@ pub async fn dispatch_workspace_request(
         store.create_plot_artifact(&PlotArtifactDraft {
             plot_id,
             run_id: request.execution_id.clone(),
+            project_root: store.active_project_root()?,
             source_path: arguments
                 .get("source_path")
                 .and_then(Value::as_str)
@@ -747,6 +756,59 @@ pub async fn dispatch_workspace_request(
     }))
 }
 
+fn bounded_agent_context_text(value: &str, max_chars: usize) -> String {
+    let mut output = value.chars().take(max_chars).collect::<String>();
+    if value.chars().count() > max_chars {
+        output.push_str("... [truncated]");
+    }
+    output
+}
+
+fn is_contextual_follow_up(prompt: &str) -> bool {
+    let normalized = prompt.trim().to_lowercase();
+    normalized.chars().count() <= 32
+        && [
+            "再试",
+            "重试",
+            "继续",
+            "接着",
+            "重新来",
+            "again",
+            "retry",
+            "try again",
+            "continue",
+        ]
+        .iter()
+        .any(|marker| normalized.contains(marker))
+}
+
+fn contextual_agent_prompt(prompt: &str, history: &[AgentConversationTurn]) -> String {
+    if history.is_empty() {
+        return prompt.to_string();
+    }
+    let history = history
+        .iter()
+        .map(|turn| {
+            json!({
+                "mode": turn.mode,
+                "status": turn.status,
+                "user_request": bounded_agent_context_text(&turn.prompt, 1_000),
+                "assistant_result": turn.final_message.as_deref().map(|value| bounded_agent_context_text(value, 700)),
+                "failure": turn.error_message.as_deref().map(|value| bounded_agent_context_text(value, 700)),
+            })
+        })
+        .collect::<Vec<_>>();
+    let history = serde_json::to_string_pretty(&history).unwrap_or_else(|_| "[]".to_string());
+    let follow_up_instruction = if is_contextual_follow_up(prompt) {
+        "This is a short retry or continuation request. Continue the most recent unresolved user goal, preserving its concrete dataset, variables, requested output and constraints. Retry the original task instead of inventing an unrelated diagnostic action. Any mutation still requires a fresh approval."
+    } else {
+        "Use the prior turns only when they are relevant to the current request. The current request remains authoritative."
+    };
+    format!(
+        "Recent conversation context, ordered oldest to newest:\n{history}\n\n{follow_up_instruction}\n\nCurrent user request:\n{prompt}"
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
 pub async fn run_agent_turn(
     session: &ArkSession,
@@ -758,12 +820,18 @@ pub async fn run_agent_turn(
     mode: String,
     turn_id: String,
     approvals: Arc<PendingApprovalRegistry>,
+    auto_approve: bool,
 ) -> Result<Value> {
     ensure!(
         matches!(mode.as_str(), "ask" | "plan" | "act"),
         "unsupported Agent mode `{mode}`"
     );
     let result = async {
+        let history = {
+            let context = context.lock().await;
+            context.store.recent_agent_conversation(&turn_id, 4)?
+        };
+        let model_prompt = contextual_agent_prompt(&prompt, &history);
         let mut authenticator = AgentAuthenticator::bind().await?;
         let address = authenticator.local_addr()?;
         let token = authenticator.bootstrap_token()?.to_string();
@@ -807,22 +875,38 @@ session <- rho_create_aisdk_session(
   ),
   connection = connection
 )
-rho_run_aisdk_turn(session, args[[4]], connection = connection)
-rho_agent_emit(
-  "desktop.agent_completed",
-  list(model = args[[3]], mode = mode),
-  connection
+turn_error <- tryCatch(
+  {
+    rho_run_aisdk_turn(session, args[[4]], connection = connection)
+    NULL
+  },
+  error = function(error) conditionMessage(error)
 )
+if (is.null(turn_error)) {
+  rho_agent_emit(
+    "desktop.agent_completed",
+    list(model = args[[3]], mode = mode),
+    connection
+  )
+} else {
+  rho_agent_emit(
+    "desktop.agent_failed",
+    list(model = args[[3]], mode = mode, error = turn_error),
+    connection
+  )
+}
 close(connection)
 "#;
 
-        let mut child = tokio::process::Command::new(rscript)
+        let mut command = tokio::process::Command::new(rscript);
+        hide_console_window(&mut command);
+        let mut child = command
             .arg("-e")
             .arg(script)
             .arg(address.port().to_string())
             .arg(agent_package)
             .arg(&model)
-            .arg(prompt)
+            .arg(model_prompt)
             .arg(&mode)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -848,6 +932,7 @@ close(connection)
             &turn_id,
             &mode,
             approvals.clone(),
+            auto_approve,
         )
         .await;
         let output = tokio::time::timeout(
@@ -873,7 +958,12 @@ close(connection)
         let after = context.broker.identity().clone();
         context.store.finish_agent_turn(&AgentTurnFinish {
             turn_id: turn_id.clone(),
-            status: "completed".to_string(),
+            status: if completion.failed {
+                "failed"
+            } else {
+                "completed"
+            }
+            .to_string(),
             workspace_id_after: Some(after.workspace_id),
             state_revision_after: Some(after.state_revision as i64),
             project_revision_after: Some(after.project_revision as i64),
@@ -886,6 +976,7 @@ close(connection)
             "mode": mode,
             "workspace": context.broker.identity(),
             "events": completion.events,
+            "status": if completion.failed { "failed" } else { "completed" },
             "stdout": redact_sensitive_text(&String::from_utf8_lossy(&output.stdout)),
             "stderr": redact_sensitive_text(&String::from_utf8_lossy(&output.stderr))
         }))
@@ -915,6 +1006,7 @@ async fn serve_desktop_agent(
     turn_id: &str,
     mode: &str,
     approvals: Arc<PendingApprovalRegistry>,
+    auto_approve: bool,
 ) -> Result<DesktopAgentCompletion> {
     let mut events = Vec::new();
     let mut final_message = None;
@@ -939,6 +1031,7 @@ async fn serve_desktop_agent(
                         context.clone(),
                         approvals.clone(),
                         &mut approved_mutations,
+                        auto_approve,
                     )
                     .await
                 } else {
@@ -1002,11 +1095,13 @@ async fn serve_desktop_agent(
                     turn_id,
                     &incoming.payload,
                 )?;
+                let agent_failed = incoming.payload["type"] == "desktop.agent_failed";
                 events.push(incoming.payload);
-                if completed {
+                if completed || agent_failed {
                     return Ok(DesktopAgentCompletion {
                         events,
                         final_message,
+                        failed: agent_failed,
                     });
                 }
             }
@@ -1046,12 +1141,22 @@ fn authorize_agent_workspace_request(
                 .cloned()
                 .unwrap_or_else(|| json!({}));
             ensure!(
-                approved.arguments == arguments,
+                approved_arguments_match(&approved.arguments, &arguments),
                 "Agent mutation arguments differ from the approved request"
             );
             Ok(())
         }
         _ => bail!("Agent request type `{request_type}` is not allowed by desktop policy"),
+    }
+}
+
+fn approved_arguments_match(approved: &Value, actual: &Value) -> bool {
+    match (
+        approved.get("code").and_then(Value::as_str),
+        actual.get("code").and_then(Value::as_str),
+    ) {
+        (Some(approved_code), Some(actual_code)) => approved_code == actual_code,
+        _ => approved == actual,
     }
 }
 
@@ -1062,6 +1167,7 @@ async fn handle_tool_approval_required(
     context: Arc<Mutex<CoordinatorRuntime>>,
     approvals: Arc<PendingApprovalRegistry>,
     approved_mutations: &mut HashMap<String, ApprovedMutation>,
+    auto_approve: bool,
 ) -> Result<Value> {
     let tool = incoming.payload["tool"]
         .as_str()
@@ -1081,7 +1187,7 @@ async fn handle_tool_approval_required(
         "run_r" => Some("workspace.execute"),
         _ => None,
     };
-    let receiver = if mode == "act" && request_type.is_some() {
+    let receiver = if mode == "act" && request_type.is_some() && !auto_approve {
         Some(approvals.register(request_id.clone()).await)
     } else {
         None
@@ -1138,6 +1244,88 @@ async fn handle_tool_approval_required(
             "decision": "policy_denied",
             "reason": reason,
             "policy": "desktop_read_only_mode"
+        }));
+    }
+
+    if auto_approve && request_type.is_some() {
+        store.resolve_approval_request(
+            &request_id,
+            &ApprovalDecisionRecord {
+                decision: "approve".to_string(),
+                status: "approved".to_string(),
+                reason: Some("Act session authorization enabled by the user.".to_string()),
+                continuation_outcome: Some("execute".to_string()),
+            },
+        )?;
+        store.update_agent_turn_status(turn_id, "running")?;
+        store.append_agent_turn_event(&AgentTurnEventDraft {
+            turn_id: turn_id.to_string(),
+            event_type: "approval.auto_approved".to_string(),
+            title: format!("Act authorization granted · {tool}"),
+            body: Some(
+                "This Act session is authorized to execute R without repeated prompts.".to_string(),
+            ),
+            status: "completed".to_string(),
+            tool: Some(tool.clone()),
+            request_id: Some(request_id.clone()),
+            code: code.clone(),
+            details_json: serde_json::to_string(&json!({"policy": "act_session_authorized"}))?,
+        })?;
+        approved_mutations.insert(
+            request_id.clone(),
+            ApprovedMutation {
+                request_type: request_type.unwrap().to_string(),
+                arguments,
+            },
+        );
+        return Ok(json!({
+            "approved": true,
+            "request_id": request_id,
+            "approval_request_id": request_id,
+            "decision": "approved",
+            "reason": "Act session authorization enabled by the user.",
+            "policy": "act_session_authorized"
+        }));
+    }
+
+    if auto_approve && request_type.is_none() {
+        store.resolve_approval_request(
+            &request_id,
+            &ApprovalDecisionRecord {
+                decision: "approve".to_string(),
+                status: "approved".to_string(),
+                reason: Some("Act session authorization enabled by the user.".to_string()),
+                continuation_outcome: Some("execute".to_string()),
+            },
+        )?;
+        store.update_agent_turn_status(turn_id, "running")?;
+        store.append_agent_turn_event(&AgentTurnEventDraft {
+            turn_id: turn_id.to_string(),
+            event_type: "approval.auto_approved".to_string(),
+            title: format!("Act authorization granted · {tool}"),
+            body: Some(
+                "This Act session is authorized to execute R without repeated prompts.".to_string(),
+            ),
+            status: "completed".to_string(),
+            tool: Some(tool.clone()),
+            request_id: Some(request_id.clone()),
+            code: code.clone(),
+            details_json: serde_json::to_string(&json!({"policy": "act_session_authorized"}))?,
+        })?;
+        approved_mutations.insert(
+            request_id.clone(),
+            ApprovedMutation {
+                request_type: request_type.unwrap().to_string(),
+                arguments,
+            },
+        );
+        return Ok(json!({
+            "approved": true,
+            "request_id": request_id,
+            "approval_request_id": request_id,
+            "decision": "approved",
+            "reason": "Act session authorization enabled by the user.",
+            "policy": "act_session_authorized"
         }));
     }
 
@@ -1407,6 +1595,13 @@ fn event_message_text(payload: &Value) -> Option<String> {
         .and_then(|value| value.get("text").or_else(|| value.get("content")))
         .and_then(Value::as_str)
         .map(str::to_string)
+        .or_else(|| {
+            payload
+                .get("event")
+                .and_then(|value| value.get("error"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
         .or_else(|| {
             payload
                 .get("text")
@@ -1694,6 +1889,25 @@ mod tests {
     }
 
     #[test]
+    fn retry_prompt_carries_the_previous_failed_goal() {
+        let history = vec![AgentConversationTurn {
+            turn_id: "turn_plot".to_string(),
+            mode: "act".to_string(),
+            status: "failed".to_string(),
+            prompt: "用 iris 数据集画图，并按 species 上色。".to_string(),
+            final_message: None,
+            error_message: Some("provider network unavailable".to_string()),
+            started_at: "2026-07-18T00:00:00Z".to_string(),
+        }];
+
+        let prompt = contextual_agent_prompt("再试一下", &history);
+        assert!(prompt.contains("用 iris 数据集画图，并按 species 上色。"));
+        assert!(prompt.contains("provider network unavailable"));
+        assert!(prompt.contains("most recent unresolved user goal"));
+        assert!(prompt.contains("Current user request:\n再试一下"));
+    }
+
+    #[test]
     fn agent_mutation_requires_matching_single_use_approval() {
         let arguments = json!({"code": "x <- 1"});
         let payload = json!({
@@ -1754,5 +1968,28 @@ mod tests {
         )
         .is_err());
         assert!(approvals.is_empty());
+    }
+
+    #[test]
+    fn agent_mutation_allows_equivalent_run_r_arguments() {
+        let mut approvals = HashMap::from([(
+            "req_1".to_string(),
+            ApprovedMutation {
+                request_type: "workspace.execute".to_string(),
+                arguments: json!({"code": "x <- 1"}),
+            },
+        )]);
+        let payload = json!({
+            "arguments": {"code": "x <- 1", "detail": "normalised"},
+            "approval_request_id": "req_1"
+        });
+
+        assert!(authorize_agent_workspace_request(
+            "act",
+            "workspace.execute",
+            &payload,
+            &mut approvals,
+        )
+        .is_ok());
     }
 }

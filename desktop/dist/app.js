@@ -9,9 +9,13 @@ const initialEditorContent = $("#editor")?.value || "";
 const state = {
   busy: false,
   agentMode: "ask",
+  actAutoApprove: false,
   agentBusy: false,
+  activeAgentTurnId: null,
+  agentRuntime: null,
   objects: [],
   plots: [],
+  plotScope: "session",
   environment: null,
   selectedObjectName: null,
   selectedObjectDetail: null,
@@ -24,12 +28,17 @@ const state = {
   selectedTurnDetail: null,
   agentPollTimer: null,
   activeRunId: null,
+  agentConsoleHydrated: false,
+  renderedAgentRunIds: new Set(),
   revision: { state_revision: 1, project_revision: 0 },
   projectStatus: "loading",
   unavailable: null,
-  project: { root: "", files: [] },
+  project: { root: "", files: [], truncated: false },
+  expandedDirectories: new Set(),
+  collapsedDirectories: new Set(),
   documents: {},
   closedDrafts: {},
+  internalProjectWrites: new Map(),
   activeDocument: null,
   sessionSaveTimer: null,
   watcherUnlisten: null,
@@ -50,10 +59,14 @@ const mockProjects = {
   "D:/Rho": {
     files: [
       { path: "analysis.R", name: "analysis.R", kind: "source", size_bytes: 120 },
+      { path: "report.Rmd", name: "report.Rmd", kind: "source", size_bytes: 92 },
+      { path: "report.qmd", name: "report.qmd", kind: "source", size_bytes: 96 },
       { path: "scratch.R", name: "scratch.R", kind: "source", size_bytes: 420 },
     ],
     contents: {
       "analysis.R": "# Project analysis\nsummary(qc)\n",
+      "report.Rmd": "---\ntitle: QC report\noutput: html_document\n---\n\n```{r}\nsummary(qc)\n```\n",
+      "report.qmd": "---\ntitle: QC report\nformat: html\n---\n\n```{r}\nsummary(qc)\n```\n",
       "scratch.R": "# Live analysis in Workspace R\nset.seed(42)\nqc <- data.frame(sample = paste0(\"S\", 1:12), reads = round(rlnorm(12, 11.2, 0.35)), detected = round(rnorm(12, 3200, 420)))\nsummary(qc)\nplot(qc$reads, qc$detected)\n",
     },
   },
@@ -319,7 +332,7 @@ function mockProblemList() {
 
 function mockProjectState(root = mockLastProject) {
   const project = mockProjects[root] || mockProjects["D:/Rho"];
-  return { root, files: project.files.map((file) => ({ ...file })) };
+  return { root, files: project.files.map((file) => ({ ...file })), truncated: false };
 }
 
 function mockEnvironmentSnapshot() {
@@ -378,6 +391,7 @@ function activeDocumentCanRender() {
 function renderDocumentHintText() {
   if (!state.activeDocument) return "Open an `.Rmd` or `.qmd` document to render.";
   if (!activeDocumentCanRender()) return `Current document \`${state.activeDocument}\` is not renderable.`;
+  if (documentIsDirty(activeDocument())) return `Save \`${state.activeDocument}\` before rendering.`;
   return `Ready to render \`${state.activeDocument}\`.`;
 }
 
@@ -447,6 +461,7 @@ async function mockInvoke(command, args) {
       r_version: "R version 4.6.0",
       kernel_pid: 14208,
       workspace: { execution_seq: 1, state_revision: 1, project_revision: 0 },
+      agent_runtime: { available: true, aisdk_version: "1.5.0", error: null },
       python_required: false,
     };
   }
@@ -476,6 +491,10 @@ async function mockInvoke(command, args) {
   if (command === "project_state") {
     return mockProjectState(mockLastProject);
   }
+  if (command === "project_mark_files_changed") {
+    state.revision.project_revision += 1;
+    return structuredClone(state.revision);
+  }
   if (command === "project_read_file") {
     const project = mockProjects[mockLastProject] || mockProjects["D:/Rho"];
     return { path: args.path, content: project.contents[args.path] || "" };
@@ -491,6 +510,8 @@ async function mockInvoke(command, args) {
         size_bytes: (args.content || "").length,
       });
     }
+    state.revision.project_revision += 1;
+    updateIdentity(state.revision);
     return mockInvoke("project_state", {});
   }
   if (command === "snapshot_workspace") {
@@ -521,6 +542,7 @@ async function mockInvoke(command, args) {
       mockPlots.unshift({
         plot_id: `plot_${run.run_id}`,
         run_id: run.run_id,
+        project_root: mockLastProject,
         source_path: request.source_path ?? request.sourcePath ?? null,
         execution_mode: request.execution_mode ?? request.type ?? null,
         document_version: request.document_version ?? request.documentVersion ?? null,
@@ -553,7 +575,21 @@ async function mockInvoke(command, args) {
     return structuredClone(mockRuns.slice(0, args.limit || 50));
   }
   if (command === "list_plot_artifacts") {
-    return structuredClone(mockPlots.slice(0, args.limit || 50));
+    const plots = mockPlots.filter((plot) =>
+      plot.project_root === mockLastProject
+      && (!args.session_only || plot.workspace_id === "desktop_mock")
+    );
+    return structuredClone(plots.slice(0, args.limit || 50));
+  }
+  if (command === "clear_plot_artifacts") {
+    const before = mockPlots.length;
+    for (let index = mockPlots.length - 1; index >= 0; index -= 1) {
+      const plot = mockPlots[index];
+      if (plot.project_root !== mockLastProject) continue;
+      if (args.session_only && plot.workspace_id !== "desktop_mock") continue;
+      mockPlots.splice(index, 1);
+    }
+    return { deleted: before - mockPlots.length };
   }
   if (command === "list_problems") {
     return structuredClone(mockProblemList().slice(0, args.limit || 50));
@@ -616,11 +652,13 @@ async function mockInvoke(command, args) {
     };
   }
   if (command === "get_run_detail") {
-    return structuredClone(mockRuns.find((run) => run.run_id === args.run_id) || null);
+    const runId = args.runId ?? args.run_id;
+    return structuredClone(mockRuns.find((run) => run.run_id === runId) || null);
   }
   if (command === "retry_run") {
-    const detail = mockRuns.find((run) => run.run_id === args.run_id);
-    if (!detail) throw new Error(`Run not found: ${args.run_id}`);
+    const runId = args.runId ?? args.run_id;
+    const detail = mockRuns.find((run) => run.run_id === runId);
+    if (!detail) throw new Error(`Run not found: ${runId}`);
     return mockInvoke("execute_r", {
       request: {
         code: detail.code,
@@ -632,8 +670,9 @@ async function mockInvoke(command, args) {
     });
   }
   if (command === "cancel_run" || command === "interrupt_r") {
-    const active = args.run_id
-      ? mockRuns.find((run) => run.run_id === args.run_id)
+    const runId = args.runId ?? args.run_id;
+    const active = runId
+      ? mockRuns.find((run) => run.run_id === runId)
       : mockRuns.find((run) => ["queued", "running", "waiting"].includes(run.status));
     if (active) {
       active.status = "interrupted";
@@ -650,15 +689,40 @@ async function mockInvoke(command, args) {
     });
     return { status: "started", turn_id: turn.turn_id };
   }
+  if (command === "cancel_agent_turn") {
+    const turnId = args.turnId ?? args.turn_id;
+    const turn = mockAgentTurns.find((item) => item.turn_id === turnId);
+    if (!turn || !["running", "waiting"].includes(turn.status)) {
+      throw new Error(`Agent turn is not active: ${turnId}`);
+    }
+    turn.status = "interrupted";
+    turn.finished_at = new Date().toISOString();
+    turn.error_message = "Agent turn cancelled by the user.";
+    for (const approval of mockApprovalRequests.filter((item) => item.turn_id === turn.turn_id && item.status === "waiting")) {
+      approval.status = "interrupted";
+      approval.decision = "cancel";
+      approval.reason = "Agent turn cancelled by the user.";
+      approval.continuation_outcome = "user_cancelled";
+      approval.responded_at = turn.finished_at;
+    }
+    return { status: "cancelled", turn_id: turn.turn_id };
+  }
   if (command === "list_agent_turns") {
     return structuredClone(mockAgentTurns.slice(0, args.limit || 50).map(mockTurnSummary));
+  }
+  if (command === "clear_agent_history") {
+    const deleted = mockAgentTurns.length;
+    mockAgentTurns.splice(0, mockAgentTurns.length);
+    mockApprovalRequests.splice(0, mockApprovalRequests.length);
+    return { deleted };
   }
   if (command === "list_approval_requests") {
     const filtered = (mockApprovalRequests || []).filter((item) => !args.status || item.status === args.status);
     return structuredClone(filtered.slice(0, args.limit || 50));
   }
   if (command === "get_agent_turn_detail") {
-    const turn = mockAgentTurns.find((item) => item.turn_id === args.turn_id);
+    const turnId = args.turnId ?? args.turn_id;
+    const turn = mockAgentTurns.find((item) => item.turn_id === turnId);
     if (!turn) return null;
     return structuredClone({
       turn: mockTurnSummary(turn),
@@ -913,6 +977,82 @@ function registerRLanguage(monaco) {
       ],
     },
   });
+  const keywords = [
+    "if", "else", "repeat", "while", "function", "for", "in", "next", "break",
+    "return", "TRUE", "FALSE", "NULL", "NA", "Inf", "NaN",
+  ];
+  const functions = [
+    "c", "list", "data.frame", "matrix", "factor", "summary", "head", "tail",
+    "str", "names", "nrow", "ncol", "dim", "length", "class", "typeof", "print",
+    "message", "warning", "stop", "plot", "hist", "boxplot", "library", "require",
+    "requireNamespace", "source", "setwd", "getwd", "read.csv", "write.csv",
+    "readRDS", "saveRDS", "Sys.getenv",
+  ];
+  monaco.languages.registerCompletionItemProvider("r", {
+    provideCompletionItems(model, position) {
+      const word = model.getWordUntilPosition(position);
+      const range = new monaco.Range(
+        position.lineNumber,
+        word.startColumn,
+        position.lineNumber,
+        word.endColumn,
+      );
+      const keywordSuggestions = keywords.map((label) => ({
+        label,
+        kind: monaco.languages.CompletionItemKind.Keyword,
+        insertText: label,
+        range,
+        sortText: `1-${label}`,
+      }));
+      const functionSuggestions = functions.map((label) => ({
+        label,
+        kind: monaco.languages.CompletionItemKind.Function,
+        insertText: `${label}($0)`,
+        insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+        range,
+        sortText: `2-${label}`,
+        detail: "R function",
+      }));
+      const objectSuggestions = state.objects.slice(0, 200).map((object) => ({
+        label: object.name,
+        kind: monaco.languages.CompletionItemKind.Variable,
+        insertText: object.name,
+        range,
+        sortText: `0-${object.name}`,
+        detail: (object.classes || []).join("/") || object.typeof || "Workspace object",
+      }));
+      return { suggestions: [...objectSuggestions, ...keywordSuggestions, ...functionSuggestions] };
+    },
+  });
+  monaco.languages.registerDocumentSymbolProvider("r", {
+    provideDocumentSymbols(model) {
+      const symbols = [];
+      for (let index = 0; index < Math.min(model.getLineCount(), 5_000); index += 1) {
+        const lineNumber = index + 1;
+        const text = model.getLineContent(lineNumber);
+        const match = text.match(/^\s*([A-Za-z.][\w.]*)\s*(?:<-|=)\s*(function\s*\()?/);
+        if (!match) continue;
+        const name = match[1];
+        const startColumn = text.indexOf(name) + 1;
+        const range = new monaco.Range(lineNumber, 1, lineNumber, text.length + 1);
+        symbols.push({
+          name,
+          detail: match[2] ? "R function" : "R object",
+          kind: match[2]
+            ? monaco.languages.SymbolKind.Function
+            : monaco.languages.SymbolKind.Variable,
+          range,
+          selectionRange: new monaco.Range(
+            lineNumber,
+            startColumn,
+            lineNumber,
+            startColumn + name.length,
+          ),
+        });
+      }
+      return symbols;
+    },
+  });
 }
 
 function modelUriForPath(path) {
@@ -1025,6 +1165,7 @@ function updateEditorChrome() {
     const lines = editor.value.split("\n").length;
     $("#lineNumbers").textContent = Array.from({ length: lines }, (_, index) => index + 1).join("\n");
   }
+  renderEnvironmentSummary();
 }
 
 function applyDocumentSelection(documentState) {
@@ -1144,7 +1285,7 @@ function selectionExecution() {
     const selection = state.editor.editor.getSelection();
     const start = model.getOffsetAt(selection.getStartPosition());
     const end = model.getOffsetAt(selection.getEndPosition());
-    const text = model.getValueInRange(selection);
+    const text = normalizeExecutableCode(model.getValueInRange(selection));
     if (start === end || !text.trim()) return null;
     return {
       code: text,
@@ -1156,7 +1297,7 @@ function selectionExecution() {
   }
   const editor = fallbackEditor();
   if (editor.selectionStart === editor.selectionEnd) return null;
-  const text = editor.value.slice(editor.selectionStart, editor.selectionEnd);
+  const text = normalizeExecutableCode(editor.value.slice(editor.selectionStart, editor.selectionEnd));
   if (!text.trim()) return null;
   return {
     code: text,
@@ -1305,11 +1446,10 @@ function loadEmergencySession(root) {
 
 function scheduleSessionSave() {
   if (state.projectStatus !== "ready" || !state.project.root) return;
-  persistEmergencySession();
   clearTimeout(state.sessionSaveTimer);
   state.sessionSaveTimer = setTimeout(async () => {
     await flushSessionSnapshot();
-  }, 180);
+  }, 350);
 }
 
 async function flushSessionSnapshot() {
@@ -1326,6 +1466,95 @@ async function flushSessionSnapshot() {
   }
 }
 
+function projectFileIcon(file) {
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".r")) return "R";
+  if (name.endsWith(".rmd") || name.endsWith(".qmd") || name.endsWith(".md")) return "M";
+  if (name.endsWith(".rd")) return "D";
+  return "·";
+}
+
+function normalizeExecutableCode(code) {
+  if (typeof code !== "string") return "";
+  // Editors can preserve a UTF-8 BOM or zero-width marker at file start.
+  return code
+    .replace(/\r\n?/g, "\n")
+    .replace(/^[\uFEFF\u200B\u200C\u200D\u2060]+/, "");
+}
+
+function asMessageList(value) {
+  if (Array.isArray(value)) return value;
+  if (value === null || value === undefined || value === "") return [];
+  return [String(value)];
+}
+
+function projectFileButton(file) {
+  const button = document.createElement("button");
+  button.className = `tree-item ${file.path === state.activeDocument ? "active" : ""}`;
+  button.type = "button";
+  const icon = document.createElement("span");
+  icon.className = "file-icon";
+  icon.textContent = projectFileIcon(file);
+  const label = document.createElement("span");
+  label.textContent = file.name;
+  const dirty = document.createElement("span");
+  dirty.className = `dirty-dot ${documentIsDirty(state.documents[file.path] || { content: "", savedContent: "" }) ? "" : "hidden"}`;
+  button.append(icon, label, dirty);
+  button.addEventListener("click", () => openDocument(file.path));
+  return button;
+}
+
+function buildProjectTree(files) {
+  const root = { directories: new Map(), files: [] };
+  for (const file of files) {
+    const parts = file.path.split("/").filter(Boolean);
+    parts.pop();
+    let node = root;
+    let directoryPath = "";
+    for (const part of parts) {
+      directoryPath = directoryPath ? `${directoryPath}/${part}` : part;
+      if (!node.directories.has(part)) {
+        node.directories.set(part, {
+          name: part,
+          path: directoryPath,
+          directories: new Map(),
+          files: [],
+        });
+      }
+      node = node.directories.get(part);
+    }
+    node.files.push(file);
+  }
+  return root;
+}
+
+function renderProjectTreeNode(node, container, depth = 0) {
+  const directories = Array.from(node.directories.values())
+    .sort((left, right) => left.name.localeCompare(right.name));
+  const files = [...node.files].sort((left, right) => left.name.localeCompare(right.name));
+  for (const directory of directories) {
+    const details = document.createElement("details");
+    details.className = "tree-directory";
+    details.open = state.expandedDirectories.has(directory.path)
+      || (depth === 0 && !state.collapsedDirectories.has(directory.path));
+    const summary = document.createElement("summary");
+    summary.className = "tree-directory-label";
+    summary.textContent = directory.name;
+    const children = document.createElement("div");
+    children.className = "tree-directory-children";
+    renderProjectTreeNode(directory, children, depth + 1);
+    details.append(summary, children);
+    details.addEventListener("toggle", () => {
+      const method = details.open ? "add" : "delete";
+      const opposite = details.open ? "delete" : "add";
+      state.expandedDirectories[method](directory.path);
+      state.collapsedDirectories[opposite](directory.path);
+    });
+    container.append(details);
+  }
+  for (const file of files) container.append(projectFileButton(file));
+}
+
 function renderProjectFiles() {
   const list = $("#projectFileList");
   list.replaceChildren();
@@ -1333,24 +1562,16 @@ function renderProjectFiles() {
   if (!state.project.files.length) {
     const empty = document.createElement("div");
     empty.className = "empty-tree";
-    empty.textContent = "No supported source files";
+    empty.textContent = "No supported text files";
     list.append(empty);
     return;
   }
-  for (const file of state.project.files) {
-    const button = document.createElement("button");
-    button.className = `tree-item ${file.path === state.activeDocument ? "active" : ""}`;
-    button.type = "button";
-    const icon = document.createElement("span");
-    icon.className = "file-icon";
-    icon.textContent = file.name.toLowerCase().endsWith(".r") ? "R" : "·";
-    const label = document.createElement("span");
-    label.textContent = file.name;
-    const dirty = document.createElement("span");
-    dirty.className = `dirty-dot ${documentIsDirty(state.documents[file.path] || { content: "", savedContent: "" }) ? "" : "hidden"}`;
-    button.append(icon, label, dirty);
-    button.addEventListener("click", () => openDocument(file.path));
-    list.append(button);
+  renderProjectTreeNode(buildProjectTree(state.project.files), list);
+  if (state.project.truncated) {
+    const notice = document.createElement("div");
+    notice.className = "empty-tree";
+    notice.textContent = "Some files are hidden by project depth or file-count limits.";
+    list.append(notice);
   }
 }
 
@@ -1507,15 +1728,21 @@ async function saveActiveDocument() {
   if (!documentState) return;
   syncDocumentFromEditor({ render: false, persist: false });
   try {
+    state.internalProjectWrites.set(documentState.path, {
+      content: documentState.content,
+      expiresAt: Date.now() + 5000,
+    });
     state.project = await invoke("project_write_file", { path: documentState.path, content: documentState.content });
     documentState.savedContent = documentState.content;
     documentState.conflictDiskContent = null;
     delete state.closedDrafts[documentState.path];
     renderProjectFiles();
     renderDocumentTabs();
+    renderEnvironmentSummary();
     addConsole("SYSTEM", `Saved ${documentState.path}`);
     scheduleSessionSave();
   } catch (error) {
+    state.internalProjectWrites.delete(documentState.path);
     toast(String(error), true);
   }
 }
@@ -1526,10 +1753,12 @@ async function createDocument() {
   if (!name) return;
   const path = name.replace(/^[\\/]+/, "");
   try {
+    state.internalProjectWrites.set(path, { content: "", expiresAt: Date.now() + 5000 });
     state.project = await invoke("project_create_file", { path, content: "" });
     await openDocument(path);
     scheduleSessionSave();
   } catch (error) {
+    state.internalProjectWrites.delete(path);
     toast(String(error), true);
   }
 }
@@ -1620,12 +1849,13 @@ async function loadRunData() {
     const [runs, problems, plots] = await Promise.all([
       invoke("list_runs", { limit: 50 }),
       invoke("list_problems", { limit: 50 }),
-      invoke("list_plot_artifacts", { limit: 20 }),
+      invoke("list_plot_artifacts", { limit: 50, session_only: state.plotScope === "session" }),
     ]);
     state.runs = runs || [];
     state.problems = problems || [];
     state.plots = plots || [];
     state.activeRunId = activeRunRecord()?.run_id || null;
+    await syncAgentRunsToConsole(state.runs);
     renderRuns();
     renderProblems();
     renderPlots();
@@ -1694,7 +1924,7 @@ async function loadAgentData() {
       || null;
     state.selectedTurnId = preferredTurnId;
     state.selectedTurnDetail = preferredTurnId
-      ? await invoke("get_agent_turn_detail", { turn_id: preferredTurnId })
+      ? await invoke("get_agent_turn_detail", { turnId: preferredTurnId })
       : null;
     renderAgentTimeline();
     renderApprovalPanel();
@@ -1705,8 +1935,60 @@ async function loadAgentData() {
   }
 }
 
+function setAgentInputBusy(busy) {
+  state.agentBusy = busy;
+  $("#agentSendButton").disabled = busy;
+  $("#agentInput").disabled = busy;
+  $$("[data-agent-mode]").forEach((button) => { button.disabled = busy; });
+  $("#actAutoApprove").disabled = busy;
+}
+
+async function syncAgentRunsToConsole(runs) {
+  const completed = runs.filter((run) =>
+    run.origin === "agent" && ["completed", "failed", "interrupted"].includes(run.status)
+  );
+  if (!state.agentConsoleHydrated) {
+    completed.forEach((run) => state.renderedAgentRunIds.add(run.run_id));
+    state.agentConsoleHydrated = true;
+    return;
+  }
+  for (const run of completed) {
+    if (state.renderedAgentRunIds.has(run.run_id)) continue;
+    state.renderedAgentRunIds.add(run.run_id);
+    try {
+      const detail = await invoke("get_run_detail", { runId: run.run_id });
+      if (!detail) continue;
+      addConsole("AGENT", `run_r > ${detail.code || run.code_preview || ""}`);
+      if (detail.stdout) addConsole("AGENT", detail.stdout);
+      asMessageList(detail.messages).forEach((message) => addConsole("AGENT", message));
+      asMessageList(detail.warnings).forEach((warning) => addConsole("AGENT", warning, "warning"));
+      if (detail.value_text) addConsole("AGENT", detail.value_text);
+      if (detail.error_message) addConsole("AGENT", detail.error_message, "error");
+    } catch (error) {
+      addConsole("SYSTEM", `Could not display Agent run ${run.run_id}: ${error}`, "error");
+    }
+  }
+}
+
 function updateAgentHeader() {
   const latest = state.agentTurns[0] || null;
+  const runtime = state.agentRuntime;
+  $("#agentRuntimeLabel").textContent = runtime?.available
+    ? `DeepSeek V4 Flash · aisdk ${runtime.aisdk_version || "ready"}`
+    : "DeepSeek V4 Flash · aisdk unavailable";
+  if (runtime && !runtime.available) {
+    setAgentInputBusy(true);
+    $("#agentCancelButton").classList.add("hidden");
+    $("#agentState").textContent = "Unavailable";
+    $("#agentStateDot").className = "agent-state-dot error";
+    return;
+  }
+  const active = state.pendingApprovals.length > 0
+    || state.agentTurns.some((turn) => ["running", "waiting"].includes(turn.status));
+  setAgentInputBusy(active);
+  const activeTurn = state.agentTurns.find((turn) => ["running", "waiting"].includes(turn.status));
+  state.activeAgentTurnId = activeTurn?.turn_id || null;
+  $("#agentCancelButton").classList.toggle("hidden", !state.activeAgentTurnId);
   if (state.pendingApprovals.length) {
     $("#agentState").textContent = "Waiting approval";
     $("#agentStateDot").className = "agent-state-dot busy";
@@ -1749,7 +2031,16 @@ function renderAgentTimeline() {
   const panel = $("#agentTimeline");
   panel.replaceChildren();
   if (!state.agentTurns.length) {
-    addTimeline("Workspace connected", "Ark session is ready for inspection and execution.", "completed");
+    if (state.agentRuntime && !state.agentRuntime.available) {
+      addTimeline("Agent unavailable", state.agentRuntime.error || "aisdk could not be loaded in Agent R.", "error");
+    } else {
+      const version = state.agentRuntime?.aisdk_version;
+      addTimeline(
+        "Workspace connected",
+        `Ark session is ready. Agent R${version ? ` uses aisdk ${version}` : ""}.`,
+        "completed",
+      );
+    }
     return;
   }
   for (const turn of state.agentTurns.slice(0, 8)) {
@@ -1772,10 +2063,16 @@ function renderAgentTimeline() {
       detailLine.textContent = detail;
       content.append(detailLine);
     }
+    if (selected && turn.final_message) {
+      const fullMessage = document.createElement("div");
+      fullMessage.className = "timeline-final-message";
+      fullMessage.textContent = turn.final_message;
+      content.append(fullMessage);
+    }
     row.append(marker, content);
     row.addEventListener("click", async () => {
       state.selectedTurnId = turn.turn_id;
-      state.selectedTurnDetail = await invoke("get_agent_turn_detail", { turn_id: turn.turn_id });
+      state.selectedTurnDetail = await invoke("get_agent_turn_detail", { turnId: turn.turn_id });
       renderAgentTimeline();
       renderApprovalPanel();
       updateAgentHeader();
@@ -1908,7 +2205,7 @@ function renderRuns() {
       cancel.textContent = "Cancel";
       cancel.addEventListener("click", async () => {
         try {
-          await invoke("cancel_run", { run_id: run.run_id });
+          await invoke("cancel_run", { runId: run.run_id });
           addConsole("SYSTEM", `Interrupt requested for ${run.run_id}`);
           await loadRunData();
         } catch (error) {
@@ -1968,7 +2265,7 @@ function renderProblems() {
     explain.type = "button";
     explain.textContent = "Explain";
     explain.addEventListener("click", () => {
-      switchContextTab("agent");
+      applyWorkbenchLayout("agent");
       $("#agentInput").value = `请解释这个 R 错误并给出修复建议：${problem.message}`;
       $("#agentInput").focus();
     });
@@ -1979,7 +2276,7 @@ function renderProblems() {
       retry.textContent = "Retry";
       retry.addEventListener("click", async () => {
         try {
-          const response = await invoke("retry_run", { run_id: problem.run_id });
+          const response = await invoke("retry_run", { runId: problem.run_id });
           renderExecution(response, {
             type: problem.execution_mode || "file",
             sourcePath: problem.source_path,
@@ -2023,8 +2320,8 @@ function renderExecution(response, request, origin = "USER") {
     addConsole("SOURCE", describeExecution(request));
   }
   addConsole(origin, execution.stdout);
-  (execution.messages || []).forEach((message) => addConsole(origin, message));
-  (execution.warnings || []).forEach((warning) => addConsole(origin, warning, "warning"));
+  asMessageList(execution.messages).forEach((message) => addConsole(origin, message));
+  asMessageList(execution.warnings).forEach((warning) => addConsole(origin, warning, "warning"));
   if (execution.value) addConsole(origin, execution.value);
   if (execution.error) {
     addConsole(origin, execution.error.message, "error");
@@ -2051,7 +2348,7 @@ function renderExecution(response, request, origin = "USER") {
     }
     renderEnvironmentSummary();
   }
-  for (const wrapped of response.events || []) {
+  for (const wrapped of asMessageList(response.events)) {
     const event = wrapped.event || wrapped;
     if (event.type === "stream") addConsole(origin, event.text, event.name === "stderr" ? "error" : "");
     if (event.type === "error") addConsole(origin, event.traceback || "R execution failed", "error");
@@ -2072,9 +2369,13 @@ function renderDisplay(data) {
 
 function renderPlots() {
   const history = $("#plotHistory");
+  const outputList = $("#plotOutputList");
   history.replaceChildren();
+  outputList.replaceChildren();
   const plots = state.plots || [];
+  $$('[data-plot-scope]').forEach((button) => button.classList.toggle("active", button.dataset.plotScope === state.plotScope));
   $("#plotCount").textContent = String(plots.length);
+  $("#plotOutputCount").textContent = String(plots.length);
   if (!plots.length) {
     $("#plotEmpty").classList.remove("hidden");
     $("#plotImage").classList.add("hidden");
@@ -2108,6 +2409,24 @@ function renderPlots() {
       }
     });
     history.append(row);
+
+    const output = document.createElement("button");
+    output.type = "button";
+    output.className = "tree-item plot-output-item";
+    const outputLabel = document.createElement("span");
+    outputLabel.textContent = plot.source_path || plot.execution_mode || "Console plot";
+    const outputIndex = document.createElement("small");
+    outputIndex.textContent = plot.plot_id.split("_").at(-1) || "plot";
+    output.append(outputLabel, outputIndex);
+    output.addEventListener("click", () => {
+      switchDockTab("plots");
+      try {
+        renderDisplay(JSON.parse(plot.payload_json || "{}"));
+      } catch {
+        toast("Plot payload is unavailable.", true);
+      }
+    });
+    outputList.append(output);
   }
 }
 
@@ -2195,12 +2514,14 @@ function renderEnvironmentSummary() {
   $("#renderDocumentHint").textContent = renderDocumentHintText();
   const path = state.activeDocument || "";
   const renderable = activeDocumentCanRender();
+  const documentState = activeDocument();
+  const saved = Boolean(documentState && !documentIsDirty(documentState));
   const canRender = path.toLowerCase().endsWith(".qmd")
     ? Boolean(render.can_render_qmd)
     : path.toLowerCase().endsWith(".rmd")
       ? Boolean(render.can_render_rmd)
       : false;
-  $("#renderDocumentButton").disabled = !renderable || !canRender;
+  $("#renderDocumentButton").disabled = !renderable || !canRender || !saved;
   renderLastRenderCard();
 }
 
@@ -2322,9 +2643,13 @@ async function renderActiveDocumentFile() {
     toast("Render only supports .Rmd or .qmd files.", true);
     return;
   }
+  const documentState = activeDocument();
+  if (documentState && documentIsDirty(documentState)) {
+    toast("Save the document before rendering so the rendered file matches the editor.", true);
+    return;
+  }
   $("#renderDocumentButton").disabled = true;
   try {
-    const documentState = activeDocument();
     const response = await invoke("render_document", {
       request: {
         path,
@@ -2367,30 +2692,25 @@ async function sendAgentPrompt() {
   const prompt = $("#agentInput").value.trim();
   if (!prompt || state.agentBusy) return;
   $("#agentInput").value = "";
-  state.agentBusy = true;
-  switchContextTab("agent");
-  $("#agentSendButton").disabled = true;
-  $("#agentInput").disabled = true;
-  $$("[data-agent-mode]").forEach((button) => { button.disabled = true; });
+  setAgentInputBusy(true);
+  applyWorkbenchLayout("agent");
   $("#agentState").textContent = "Working";
   $("#agentStateDot").className = "agent-state-dot busy";
   try {
-    await invoke("run_agent", {
+    const response = await invoke("run_agent", {
       prompt,
       mode: state.agentMode,
       model: "deepseek:deepseek-v4-flash",
+      autoApprove: state.agentMode === "act" && state.actAutoApprove,
     });
+    state.activeAgentTurnId = response?.turn_id || null;
     await Promise.all([loadAgentData(), loadRunData()]);
   } catch (error) {
     const message = String(error);
     $("#agentState").textContent = "Failed";
     $("#agentStateDot").className = "agent-state-dot error";
+    setAgentInputBusy(false);
     toast(message, true);
-  } finally {
-    state.agentBusy = false;
-    $("#agentSendButton").disabled = false;
-    $("#agentInput").disabled = false;
-    $$("[data-agent-mode]").forEach((button) => { button.disabled = false; });
   }
 }
 
@@ -2403,6 +2723,57 @@ function switchContextTab(name) {
   $$("[data-context-tab]").forEach((button) => button.classList.toggle("active", button.dataset.contextTab === name));
   $("#agentPanel").classList.toggle("hidden", name !== "agent");
   $("#environmentPanel").classList.toggle("hidden", name !== "environment");
+}
+
+function applyWorkbenchLayout(layout) {
+  $(".app-shell").classList.toggle("layout-code", layout === "code");
+  $$("[data-layout]").forEach((button) => button.classList.toggle("active", button.dataset.layout === layout));
+  if (layout === "agent") switchContextTab("agent");
+  if (layout === "analyze") switchContextTab("environment");
+  requestAnimationFrame(() => layoutEditor());
+}
+
+function closeWorkbenchMenus(except = null) {
+  $$('[data-menu-trigger]').forEach((trigger) => {
+    const name = trigger.dataset.menuTrigger;
+    const keepOpen = name === except;
+    trigger.setAttribute("aria-expanded", String(keepOpen));
+    $(`[data-menu="${name}"]`).hidden = !keepOpen;
+  });
+}
+
+function runEditorMenuCommand(command) {
+  if (state.editor.mode === "monaco" && state.editor.editor) {
+    state.editor.editor.trigger("rho-menu", command, null);
+    state.editor.editor.focus();
+    return;
+  }
+  const editor = fallbackEditor();
+  editor.focus();
+  document.execCommand(command);
+}
+
+function runWorkbenchMenuCommand(command) {
+  const actions = {
+    "open-project": () => $("#projectSwitcher").click(),
+    "new-file": () => $(".new-tab").click(),
+    "save-file": () => $("#saveFileButton").click(),
+    undo: () => runEditorMenuCommand("undo"),
+    redo: () => runEditorMenuCommand("redo"),
+    interrupt: () => $("#interruptButton").click(),
+    restart: () => $("#restartButton").click(),
+    "show-agent": () => applyWorkbenchLayout("agent"),
+    "show-environment": () => applyWorkbenchLayout("analyze"),
+    "render-document": () => {
+      const button = $("#renderDocumentButton");
+      if (button.disabled) {
+        toast($("#renderDocumentHint").textContent, true);
+      } else {
+        button.click();
+      }
+    },
+  };
+  actions[command]?.();
 }
 
 const panelDefaults = {
@@ -2418,9 +2789,12 @@ function clamp(value, minimum, maximum) {
 function panelLimits() {
   const shell = $(".app-shell").getBoundingClientRect();
   const workspace = $(".workspace").getBoundingClientRect();
+  const currentLeft = Number($("#leftResizeHandle").getAttribute("aria-valuenow")) || panelDefaults.left;
+  const currentRight = Number($("#rightResizeHandle").getAttribute("aria-valuenow")) || panelDefaults.right;
+  const minimumWorkspaceWidth = 420;
   return {
-    left: [160, Math.min(380, shell.width - 760)],
-    right: [280, Math.min(620, shell.width - 640)],
+    left: [160, Math.max(160, Math.min(380, shell.width - currentRight - minimumWorkspaceWidth))],
+    right: [280, Math.max(280, Math.min(520, shell.width - currentLeft - minimumWorkspaceWidth))],
     dock: [130, Math.max(130, workspace.height - 156)],
   };
 }
@@ -2436,6 +2810,7 @@ function setPanelSize(panel, requested, persist = true) {
   $(".app-shell").style.setProperty(property, `${value}px`);
   const handle = panel === "left" ? $("#leftResizeHandle") : panel === "right" ? $("#rightResizeHandle") : $("#dockResizeHandle");
   handle.setAttribute("aria-valuenow", String(value));
+  if (panel === "dock") requestAnimationFrame(() => layoutEditor());
   if (persist) {
     if (!isDesktop) localStorage.setItem(`rho.panel.${panel}`, String(value));
     scheduleSessionSave();
@@ -2519,6 +2894,11 @@ function initializePanelLayout() {
   setupPanelResizer($("#leftResizeHandle"), "left");
   setupPanelResizer($("#rightResizeHandle"), "right");
   setupPanelResizer($("#dockResizeHandle"), "dock");
+  window.addEventListener("resize", () => {
+    setPanelSize("left", Number($("#leftResizeHandle").getAttribute("aria-valuenow")), false);
+    setPanelSize("right", Number($("#rightResizeHandle").getAttribute("aria-valuenow")), false);
+    setPanelSize("dock", Number($("#dockResizeHandle").getAttribute("aria-valuenow")), false);
+  });
 }
 
 function applySessionPanels(panels = {}) {
@@ -2560,8 +2940,51 @@ async function listenForProjectChanges() {
   state.watcherUnlisten = await tauriEvent.listen("project://files-changed", async (event) => {
     const payload = event.payload || {};
     if (payload.root && payload.root !== state.project.root) return;
+    const changedPaths = payload.changed_paths || [];
     await refreshProject();
-    for (const path of payload.changed_paths || []) {
+    const externalPaths = [];
+    let matchedInternalWrite = false;
+    for (const path of changedPaths) {
+      if (!path) continue;
+      const pending = state.internalProjectWrites.get(path);
+      if (pending && pending.expiresAt < Date.now()) {
+        state.internalProjectWrites.delete(path);
+      }
+      let selfGenerated = false;
+      if (pending && pending.expiresAt >= Date.now()) {
+        try {
+          const result = await invoke("project_read_file", { path });
+          selfGenerated = result.content === pending.content;
+        } catch {
+          selfGenerated = false;
+        }
+        if (selfGenerated) {
+          matchedInternalWrite = true;
+          state.internalProjectWrites.delete(path);
+        }
+      }
+      if (!selfGenerated) {
+        const documentState = state.documents[path];
+        if (documentState && !documentIsDirty(documentState)) {
+          try {
+            const result = await invoke("project_read_file", { path });
+            selfGenerated = result.content === documentState.savedContent;
+          } catch {
+            selfGenerated = false;
+          }
+        }
+      }
+      if (!selfGenerated) externalPaths.push(path);
+    }
+    if (changedPaths.includes("") && !matchedInternalWrite) externalPaths.push("");
+    if (externalPaths.length) {
+      try {
+        updateIdentity(await invoke("project_mark_files_changed"));
+      } catch (error) {
+        console.warn("Could not advance project revision after a file change", error);
+      }
+    }
+    for (const path of externalPaths) {
       await handleExternalDocumentChange(path);
     }
   });
@@ -2570,9 +2993,31 @@ async function listenForProjectChanges() {
 async function handleExternalDocumentChange(path) {
   const document = state.documents[path];
   if (!document) return;
+  const stillExists = state.project.files.some((file) => file.path === path);
+  if (!stillExists) {
+    if (documentIsDirty(document)) {
+      document.conflictDiskContent = "";
+      renderProjectFiles();
+      renderDocumentTabs();
+      toast(`${path} was removed on disk. Your local draft is preserved; Save will recreate it.`, true);
+      scheduleSessionSave();
+    } else {
+      closeDocument(path);
+      toast(`Closed ${path} after it was removed on disk.`);
+    }
+    return;
+  }
   try {
     const result = await invoke("project_read_file", { path });
     const diskContent = result.content || "";
+    if (diskContent === document.savedContent) return;
+    if (diskContent === document.content) {
+      document.savedContent = diskContent;
+      document.conflictDiskContent = null;
+      renderDocumentTabs();
+      scheduleSessionSave();
+      return;
+    }
     if (!documentIsDirty(document)) {
       document.savedContent = diskContent;
       document.content = diskContent;
@@ -2605,10 +3050,12 @@ async function handleExternalDocumentChange(path) {
 async function hydrateProject(response) {
   state.documents = {};
   state.closedDrafts = {};
+  state.expandedDirectories.clear();
+  state.collapsedDirectories.clear();
   state.activeDocument = null;
   state.editor.models.forEach((model) => model.dispose());
   state.editor.models.clear();
-  state.project = response.project || { root: "", files: [] };
+  state.project = response.project || { root: "", files: [], truncated: false };
   const session = loadEmergencySession(state.project.root) || response.session || {};
   for (const entry of session.closed_documents || []) {
     if (!entry?.path || entry.draft_content === null || entry.draft_content === undefined) continue;
@@ -2643,6 +3090,7 @@ async function initialize() {
     await initializeEditor();
     await listenForProjectChanges();
     const status = await invoke("workspace_start");
+    state.agentRuntime = status.agent_runtime || null;
     updateIdentity(status.workspace);
     $("#rVersion").textContent = status.r_version || "R";
     setKernelStatus("idle", "R idle");
@@ -2651,7 +3099,7 @@ async function initialize() {
     if (response.status === "ready") {
       await hydrateProject(response);
     } else if (response.status === "unavailable") {
-      state.project = { root: "", files: [] };
+      state.project = { root: "", files: [], truncated: false };
       state.documents = {};
       state.activeDocument = null;
       applySessionPanels(panelDefaults);
@@ -2755,7 +3203,9 @@ $("#editor").addEventListener("keydown", (event) => {
 });
 
 $$("[data-dock-tab]").forEach((button) => button.addEventListener("click", () => switchDockTab(button.dataset.dockTab)));
-$$("[data-context-tab]").forEach((button) => button.addEventListener("click", () => switchContextTab(button.dataset.contextTab)));
+$$("[data-context-tab]").forEach((button) => button.addEventListener("click", () => {
+  applyWorkbenchLayout(button.dataset.contextTab === "agent" ? "agent" : "analyze");
+}));
 $$("[data-side-tab]").forEach((button) => button.addEventListener("click", () => {
   $$("[data-side-tab]").forEach((value) => value.classList.toggle("active", value === button));
   $("#filesPanel").classList.toggle("hidden", button.dataset.sideTab !== "files");
@@ -2765,13 +3215,39 @@ $$("[data-agent-mode]").forEach((button) => button.addEventListener("click", () 
   state.agentMode = button.dataset.agentMode;
   $$("[data-agent-mode]").forEach((value) => value.classList.toggle("active", value === button));
 }));
+$("#actAutoApprove").addEventListener("change", (event) => {
+  state.actAutoApprove = Boolean(event.target.checked);
+});
 $$("[data-layout]").forEach((button) => button.addEventListener("click", () => {
-  $$("[data-layout]").forEach((value) => value.classList.toggle("active", value === button));
-  if (button.dataset.layout === "agent") switchContextTab("agent");
-  if (button.dataset.layout === "analyze") switchContextTab("environment");
+  applyWorkbenchLayout(button.dataset.layout);
 }));
 
 $("#agentSendButton").addEventListener("click", sendAgentPrompt);
+$("#agentCancelButton").addEventListener("click", async () => {
+  const turnId = state.activeAgentTurnId;
+  if (!turnId) return;
+  $("#agentCancelButton").disabled = true;
+  try {
+    await invoke("cancel_agent_turn", { turnId });
+    await Promise.all([loadAgentData(), loadRunData()]);
+  } catch (error) {
+    toast(String(error), true);
+  } finally {
+    $("#agentCancelButton").disabled = false;
+  }
+});
+$("#clearAgentHistoryButton").addEventListener("click", async () => {
+  if (!window.confirm("Clear all Agent history?")) return;
+  try {
+    await invoke("clear_agent_history");
+    state.selectedTurnId = null;
+    state.selectedTurnDetail = null;
+    await Promise.all([loadAgentData(), loadRunData()]);
+    toast("Agent history cleared.");
+  } catch (error) {
+    toast(`Could not clear Agent history: ${error}`, true);
+  }
+});
 $("#agentInput").addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
@@ -2793,7 +3269,40 @@ $("#renderShowPlotsButton").addEventListener("click", () => {
   if (!state.lastRender?.sourcePath) return;
   switchDockTab("plots");
 });
+$("#plotsShortcut").addEventListener("click", () => switchDockTab("plots"));
+async function clearPlots(sessionOnly) {
+  const scope = sessionOnly ? "this session" : "this project";
+  if (!window.confirm(`Clear plots from ${scope}?`)) return;
+  try {
+    await invoke("clear_plot_artifacts", { session_only: sessionOnly });
+    await loadRunData();
+    toast(`Cleared plots from ${scope}.`);
+  } catch (error) {
+    toast(`Could not clear plots: ${error}`, true);
+  }
+}
+$("#clearSessionPlotsButton").addEventListener("click", () => clearPlots(true));
+$("#clearProjectPlotsButton").addEventListener("click", () => clearPlots(false));
+$$('[data-plot-scope]').forEach((button) => button.addEventListener("click", async () => {
+  state.plotScope = button.dataset.plotScope;
+  await loadRunData();
+}));
 $("#toggleDockMaximize").addEventListener("click", toggleDockMaximize);
+$$('[data-menu-trigger]').forEach((trigger) => trigger.addEventListener("click", (event) => {
+  event.stopPropagation();
+  const name = trigger.dataset.menuTrigger;
+  closeWorkbenchMenus(trigger.getAttribute("aria-expanded") === "true" ? null : name);
+}));
+$$('[data-menu-command]').forEach((item) => item.addEventListener("click", () => {
+  closeWorkbenchMenus();
+  runWorkbenchMenuCommand(item.dataset.menuCommand);
+}));
+document.addEventListener("click", (event) => {
+  if (!event.target.closest(".menu-item")) closeWorkbenchMenus();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeWorkbenchMenus();
+});
 window.addEventListener("resize", () => {
   for (const panel of ["left", "right", "dock"]) {
     const handle = panel === "left" ? $("#leftResizeHandle") : panel === "right" ? $("#rightResizeHandle") : $("#dockResizeHandle");
@@ -2804,7 +3313,7 @@ window.addEventListener("resize", () => {
 $("#interruptButton").addEventListener("click", async () => {
   try {
     const response = state.activeRunId
-      ? await invoke("cancel_run", { run_id: state.activeRunId })
+      ? await invoke("cancel_run", { runId: state.activeRunId })
       : await invoke("interrupt_r");
     addConsole("SYSTEM", "Interrupt requested");
     if (response?.run_id) state.activeRunId = response.run_id;

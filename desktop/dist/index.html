@@ -4,20 +4,46 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Rho</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=0.2.0-dev.8" />
   </head>
   <body>
-    <div class="app-shell">
+    <div class="app-shell layout-code">
       <header class="topbar">
         <div class="brand" aria-label="Rho workbench">
           <span class="brand-mark">R</span>
           <span class="brand-name">Rho</span>
         </div>
         <nav class="menu" aria-label="主菜单">
-          <button type="button">File</button>
-          <button type="button">Edit</button>
-          <button type="button">Session</button>
-          <button type="button">Tools</button>
+          <div class="menu-item">
+            <button type="button" data-menu-trigger="file" aria-haspopup="menu" aria-expanded="false">File</button>
+            <div class="menu-popover" data-menu="file" role="menu" hidden>
+              <button type="button" role="menuitem" data-menu-command="open-project">Open Project...</button>
+              <button type="button" role="menuitem" data-menu-command="new-file">New File</button>
+              <button type="button" role="menuitem" data-menu-command="save-file">Save</button>
+            </div>
+          </div>
+          <div class="menu-item">
+            <button type="button" data-menu-trigger="edit" aria-haspopup="menu" aria-expanded="false">Edit</button>
+            <div class="menu-popover" data-menu="edit" role="menu" hidden>
+              <button type="button" role="menuitem" data-menu-command="undo">Undo</button>
+              <button type="button" role="menuitem" data-menu-command="redo">Redo</button>
+            </div>
+          </div>
+          <div class="menu-item">
+            <button type="button" data-menu-trigger="session" aria-haspopup="menu" aria-expanded="false">Session</button>
+            <div class="menu-popover" data-menu="session" role="menu" hidden>
+              <button type="button" role="menuitem" data-menu-command="interrupt">Interrupt R</button>
+              <button type="button" role="menuitem" data-menu-command="restart">Restart Workspace R</button>
+            </div>
+          </div>
+          <div class="menu-item">
+            <button type="button" data-menu-trigger="tools" aria-haspopup="menu" aria-expanded="false">Tools</button>
+            <div class="menu-popover" data-menu="tools" role="menu" hidden>
+              <button type="button" role="menuitem" data-menu-command="show-agent">Agent</button>
+              <button type="button" role="menuitem" data-menu-command="show-environment">Environment</button>
+              <button type="button" role="menuitem" data-menu-command="render-document">Render Active Document</button>
+            </div>
+          </div>
         </nav>
         <button id="projectSwitcher" class="project-switcher" type="button" title="Open project directory">
           <span class="project-dot"></span>
@@ -50,14 +76,14 @@
           </div>
           <div id="projectEmptyState" class="empty-tree hidden">Select a project to get started.</div>
           <div class="tree-section">OUTPUTS</div>
-          <button class="tree-item" type="button"><span class="file-icon plot">▧</span><span>plots</span></button>
+          <button id="plotsShortcut" class="tree-item output-root" type="button"><span class="file-icon plot">▧</span><span>plots</span><span id="plotOutputCount" class="tree-count">0</span></button>
+          <div id="plotOutputList" class="plot-output-list"></div>
         </div>
         <div id="runsPanel" class="side-content hidden">
           <div class="run-row"><span class="run-state success"></span><span><strong>Workspace started</strong><small>Current session</small></span></div>
           <div class="run-row"><span class="run-state"></span><span><strong>Waiting for execution</strong><small>Agent and user runs</small></span></div>
         </div>
         <div class="sidebar-footer">
-          <button type="button" title="Settings" aria-label="Settings">⚙</button>
           <span>Local workspace</span>
         </div>
       </aside>
@@ -125,6 +151,16 @@ plot(
             <div class="console-input"><span class="prompt">›</span><input id="consoleInput" type="text" aria-label="R console input" autocomplete="off" placeholder="R expression" /><button id="consoleRunButton" type="button" title="Execute" aria-label="Execute">↵</button></div>
           </div>
           <div id="plotsPanel" class="dock-content plot-panel hidden">
+            <div class="plot-toolbar">
+              <div class="plot-scope-control" role="group" aria-label="Plot history scope">
+                <button type="button" data-plot-scope="session">Session</button>
+                <button type="button" data-plot-scope="history">History</button>
+              </div>
+              <div class="plot-clear-actions">
+                <button id="clearSessionPlotsButton" type="button" title="Clear session plots">Clear session</button>
+                <button id="clearProjectPlotsButton" type="button" title="Clear current project plots">Clear project</button>
+              </div>
+            </div>
             <div id="plotEmpty" class="empty-state"><span class="empty-icon">▧</span><strong>No plots yet</strong></div>
             <img id="plotImage" class="plot-image hidden" alt="Latest R plot" />
             <div id="plotHistory" class="plot-history"></div>
@@ -136,7 +172,7 @@ plot(
         </section>
       </main>
 
-      <div id="rightResizeHandle" class="resize-handle vertical right-handle" role="separator" aria-label="Resize Agent panel" aria-orientation="vertical" aria-valuemin="280" aria-valuemax="620" tabindex="0"></div>
+      <div id="rightResizeHandle" class="resize-handle vertical right-handle" role="separator" aria-label="Resize Agent panel" aria-orientation="vertical" aria-valuemin="280" aria-valuemax="520" tabindex="0"></div>
 
       <aside class="context-panel">
         <div class="panel-tabs context-tabs" role="tablist">
@@ -147,7 +183,11 @@ plot(
         <section id="agentPanel" class="context-content agent-panel">
           <div class="agent-header">
             <div><span id="agentStateDot" class="agent-state-dot"></span><strong id="agentState">Ready</strong></div>
-            <span id="revisionBadge" class="revision-badge">rev 1</span>
+            <div class="agent-header-actions">
+              <button id="agentCancelButton" class="agent-cancel-button hidden" type="button" title="Cancel Agent turn" aria-label="Cancel Agent turn">■</button>
+              <button id="clearAgentHistoryButton" class="agent-clear-button" type="button" title="Clear Agent history">Clear</button>
+              <span id="revisionBadge" class="revision-badge">rev 1</span>
+            </div>
           </div>
           <div id="agentTimeline" class="agent-timeline" aria-live="polite">
             <div class="timeline-item completed">
@@ -175,9 +215,10 @@ plot(
               <button data-agent-mode="plan" type="button">Plan</button>
               <button data-agent-mode="act" type="button">Act</button>
             </div>
+            <label class="act-authorization"><input id="actAutoApprove" type="checkbox" /> Authorize Act R execution for this session</label>
             <textarea id="agentInput" rows="3" aria-label="Ask Rho" placeholder="Ask about the live R workspace…"></textarea>
             <div class="composer-footer">
-              <span>DeepSeek V4 Flash</span>
+              <span id="agentRuntimeLabel">DeepSeek V4 Flash</span>
               <button id="agentSendButton" class="send-button" type="button" title="Send" aria-label="Send">↑</button>
             </div>
           </div>
@@ -238,6 +279,6 @@ plot(
       </footer>
     </div>
     <div id="toastRegion" class="toast-region" aria-live="polite"></div>
-    <script src="app.js"></script>
+    <script src="app.js?v=0.2.0-dev.8"></script>
   </body>
 </html>

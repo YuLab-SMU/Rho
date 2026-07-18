@@ -8,6 +8,130 @@ this file records behavior that is already available in a released build.
 
 No unreleased user-visible changes.
 
+## 0.2.0-dev.8 - 2026-07-18
+
+### Fixed
+
+- Plot history is now isolated by project and defaults to the current
+  Workspace R session when the Plots panel opens.
+- The Plots panel now provides Session/History views and explicit actions to
+  clear session plots or all plots in the current project.
+- Startup package messages and warnings are rendered correctly when R returns
+  a single string instead of a JSON array.
+- Running selected R source no longer fails on a leading UTF-8 BOM or editor
+  zero-width marker; the marker is removed without changing ordinary Unicode
+  inside the code.
+- Act mode now offers a session-level authorization switch for `run_r`, so
+  approved sessions do not prompt for every individual execution.
+- The Act authorization checkbox now reaches Tauri using the correct command
+  argument name, and approved `run_r` calls compare their exact R code instead
+  of rejecting harmless argument normalization performed by aisdk.
+- Agent `run_r` executions use the same Ark Workspace R as manual Console
+  commands and now mirror their code, output, warnings and errors into Console.
+- Agent history can be cleared explicitly when no Agent turn is active.
+- Agent R failures now return a structured failure event and preserve the
+  underlying error instead of surfacing only an incomplete-loop message.
+- The Code, Analyze and Agent workbench buttons now switch to distinct layouts;
+  Code hides the context panel so it no longer opens on the Agent view.
+- Agent responses are shown in full in the selected turn, and Monaco is
+  relaid out after execution-panel resizing so the editor restores correctly.
+- R selections normalize Windows CRLF line endings before parsing, fixing the
+  `unexpected invalid token` error caused by a selected leading newline.
+
+## 0.2.0-dev.7 - 2026-07-18
+
+### Fixed
+
+- Agent turns now receive a bounded history of recent user requests, outcomes
+  and failure reasons instead of starting with only the latest message.
+- Short follow-ups such as `再试一下`, `重试`, `继续`, `retry` and `try again`
+  explicitly continue the most recent unresolved goal, preserving dataset,
+  variable, output and formatting details rather than inventing an unrelated
+  diagnostic action.
+- Retried mutations still create a fresh approval request; conversation context
+  never reuses a previous approval token.
+
+## 0.2.0-dev.6 - 2026-07-18
+
+### Fixed
+
+- The Files panel now renders an expandable directory hierarchy instead of
+  flattening project files into one list.
+- Project discovery now includes common R package and scientific text files,
+  including `DESCRIPTION`, `NAMESPACE`, `.Rbuildignore`, `.Rd`, Markdown,
+  YAML, JSON and compiled-language sources, while excluding binary files and
+  generated dependency directories.
+- Useful project structure is scanned up to eight directory levels while the
+  existing file-count and directory-entry bounds remain enforced.
+- Left and right panel limits now preserve the editor's minimum width, restore
+  safely after window resizing, and cap the right context panel at 520 pixels.
+- Plot, editor and Agent containers now shrink within their grid tracks instead
+  of overflowing across the right resize boundary or placing scrollbars inside
+  the adjacent panel.
+
+## 0.2.0-dev.5 - 2026-07-17
+
+### Fixed
+
+- Windows runtime probes, Ark Workspace R and Agent R now start with
+  `CREATE_NO_WINDOW`, preventing intermittent terminal windows from flashing
+  during startup, Workspace restarts and Agent turns.
+
+## 0.2.0-dev.4 - 2026-07-17
+
+### Fixed
+
+- Windows project roots no longer expose the internal `//?/` extended-path
+  prefix in the Files panel or project session metadata.
+- Agent and run-history commands now pass Tauri's required camel-case command
+  arguments, fixing Act history loading, Agent cancellation, run cancellation
+  and failed-run retry actions.
+- The Files panel now expands `OUTPUTS > plots` into the durable plot history;
+  each entry opens its corresponding plot and shows its source when available.
+
+## 0.2.0-dev.3 - 2026-07-17
+
+### Fixed
+
+- Rendering now requires the active `.Rmd` or `.qmd` document to be saved, so
+  output and provenance cannot silently refer to different source content.
+- Project file notifications advance `project_revision`, while duplicate or
+  self-generated save events no longer trigger false external-change prompts.
+- Project discovery skips symbolic links and out-of-root directory targets.
+- Source editor reads and writes reject files larger than 8 MiB with a clear
+  error instead of loading an unbounded CSV, TSV or text file into the UI.
+- Source files and project-session JSON now use same-directory atomic writes,
+  preventing a failed save or shutdown from truncating the previous content.
+- File-watcher events are coalesced, and externally deleted files now close
+  clean tabs while preserving dirty drafts that can be recreated with Save.
+- A timed-out Workspace restart restores the previous session handles instead
+  of leaving the desktop in a disconnected half-restarted state.
+- Only one Agent turn can run at a time, preventing accidental concurrent model
+  calls and competing Agent R processes.
+- Running Agent turns can now be cancelled from the Agent panel without
+  restarting Workspace R; pending approvals are marked interrupted as well.
+- Rho probes Agent R at startup and reports the installed aisdk version or a
+  dependency-loading error before the user sends a prompt.
+- Runtime discovery now carries the user's effective `.libPaths()` into the
+  profile-free Workspace R, so installed bioinformatics packages remain
+  available without executing project or user startup code inside Ark.
+- Startup now rejects R versions older than 4.4 with the documented minimum
+  version in the error message instead of failing later during Ark launch.
+
+### Changed
+
+- Project discovery reports depth/file-count truncation and stops after 2,000
+  supported files or 10,000 scanned directory entries instead of allowing a
+  large results tree to block the UI.
+- File, Edit, Session and Tools menus now invoke real workbench commands, and
+  the Plots shortcut opens the plot dock; unimplemented Settings chrome was
+  removed.
+- Monaco now provides bounded local completion for R keywords, common
+  functions and live Workspace objects, plus document symbols for simple R
+  assignments and functions.
+- The development roadmap now reflects the implemented `0.2.x` surface and
+  identifies clean-install acceptance as the remaining M1 release gate.
+
 ## 0.2.0-dev.2 - 2026-07-16
 
 ### Added

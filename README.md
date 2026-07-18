@@ -61,7 +61,7 @@ are documented in `docs/windows-build-environment.md`.
 The first installable Tauri prototype is available at:
 
 ```text
-target\release\bundle\nsis\Rho_0.2.0-dev.2_x64-setup.exe
+target\release\bundle\nsis\Rho_0.2.0-dev.8_x64-setup.exe
 ```
 
 It provides a live R editor and Console, Environment, real plot output,

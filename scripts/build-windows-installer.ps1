@@ -31,5 +31,5 @@ finally {
     Pop-Location
 }
 
-$installer = Join-Path $repo "target\release\bundle\nsis\Rho_0.2.0-dev.2_x64-setup.exe"
+$installer = Join-Path $repo "target\release\bundle\nsis\Rho_0.2.0-dev.8_x64-setup.exe"
 Write-Host "Rho installer: $installer"

@@ -127,6 +127,7 @@ pub struct RunDetail {
 pub struct PlotArtifactDraft {
     pub plot_id: String,
     pub run_id: String,
+    pub project_root: Option<String>,
     pub source_path: Option<String>,
     pub execution_mode: Option<String>,
     pub document_version: Option<i64>,
@@ -142,6 +143,7 @@ pub struct PlotArtifactDraft {
 pub struct PlotArtifactSummary {
     pub plot_id: String,
     pub run_id: String,
+    pub project_root: Option<String>,
     pub source_path: Option<String>,
     pub execution_mode: Option<String>,
     pub document_version: Option<i64>,
@@ -194,6 +196,17 @@ pub struct AgentTurnSummary {
     pub final_message: Option<String>,
     pub error_message: Option<String>,
     pub pending_request_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AgentConversationTurn {
+    pub turn_id: String,
+    pub mode: String,
+    pub status: String,
+    pub prompt: String,
+    pub final_message: Option<String>,
+    pub error_message: Option<String>,
+    pub started_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -364,6 +377,7 @@ impl Store {
             CREATE TABLE IF NOT EXISTS plot_artifacts (
                 plot_id TEXT PRIMARY KEY,
                 run_id TEXT NOT NULL,
+                project_root TEXT,
                 source_path TEXT,
                 execution_mode TEXT,
                 document_version INTEGER,
@@ -465,6 +479,7 @@ impl Store {
         )?;
         ensure_column(&self.connection, "runs", "error_message", "TEXT")?;
         ensure_column(&self.connection, "runs", "error_call", "TEXT")?;
+        ensure_column(&self.connection, "plot_artifacts", "project_root", "TEXT")?;
         ensure_column(
             &self.connection,
             "runs",
@@ -943,6 +958,36 @@ impl Store {
             .map_err(StoreError::from)
     }
 
+    pub fn recent_agent_conversation(
+        &self,
+        exclude_turn_id: &str,
+        limit: usize,
+    ) -> Result<Vec<AgentConversationTurn>, StoreError> {
+        let mut statement = self.connection.prepare(
+            "SELECT
+                turn_id, mode, status, prompt, final_message, error_message, started_at
+             FROM agent_turns
+             WHERE turn_id != ?1
+             ORDER BY started_at DESC, rowid DESC
+             LIMIT ?2",
+        )?;
+        let rows =
+            statement.query_map(params![exclude_turn_id, limit.clamp(1, 8) as i64], |row| {
+                Ok(AgentConversationTurn {
+                    turn_id: row.get(0)?,
+                    mode: row.get(1)?,
+                    status: row.get(2)?,
+                    prompt: row.get(3)?,
+                    final_message: row.get(4)?,
+                    error_message: row.get(5)?,
+                    started_at: row.get(6)?,
+                })
+            })?;
+        let mut turns = rows.collect::<Result<Vec<_>, _>>()?;
+        turns.reverse();
+        Ok(turns)
+    }
+
     pub fn list_approval_requests(
         &self,
         limit: Option<usize>,
@@ -1036,6 +1081,15 @@ impl Store {
         Ok(changed)
     }
 
+    pub fn clear_agent_history(&mut self) -> Result<usize, StoreError> {
+        let transaction = self.connection.transaction()?;
+        transaction.execute("DELETE FROM approval_requests", [])?;
+        transaction.execute("DELETE FROM agent_turn_events", [])?;
+        let deleted = transaction.execute("DELETE FROM agent_turns", [])?;
+        transaction.commit()?;
+        Ok(deleted)
+    }
+
     pub fn recover_incomplete_approvals(&mut self) -> Result<usize, StoreError> {
         let changed = self.connection.execute(
             "UPDATE approval_requests
@@ -1050,18 +1104,37 @@ impl Store {
         Ok(changed)
     }
 
+    pub fn interrupt_agent_approvals(
+        &mut self,
+        turn_id: &str,
+        reason: &str,
+    ) -> Result<usize, StoreError> {
+        let changed = self.connection.execute(
+            "UPDATE approval_requests
+             SET status = 'interrupted',
+                 decision = COALESCE(decision, 'cancel'),
+                 reason = COALESCE(reason, ?2),
+                 continuation_outcome = COALESCE(continuation_outcome, 'user_cancelled'),
+                 responded_at = COALESCE(responded_at, ?3)
+             WHERE turn_id = ?1 AND status = 'waiting'",
+            params![turn_id, reason, Utc::now().to_rfc3339()],
+        )?;
+        Ok(changed)
+    }
+
     pub fn create_plot_artifact(&mut self, draft: &PlotArtifactDraft) -> Result<(), StoreError> {
         self.connection.execute(
             "INSERT INTO plot_artifacts(
-                plot_id, run_id, source_path, execution_mode, document_version,
+                plot_id, run_id, project_root, source_path, execution_mode, document_version,
                 workspace_id, state_revision, project_revision, media_type, payload_json,
                 provenance_complete, created_at
              ) VALUES(
-                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13
              )",
             params![
                 draft.plot_id,
                 draft.run_id,
+                draft.project_root,
                 draft.source_path,
                 draft.execution_mode,
                 draft.document_version,
@@ -1077,37 +1150,87 @@ impl Store {
         Ok(())
     }
 
+    pub fn set_project_root(&mut self, root: Option<&str>) -> Result<(), StoreError> {
+        self.connection.execute(
+            "INSERT INTO metadata(key, value) VALUES('active_project_root', ?1)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            [root.unwrap_or_default()],
+        )?;
+        Ok(())
+    }
+
+    pub fn active_project_root(&self) -> Result<Option<String>, StoreError> {
+        self.connection
+            .query_row(
+                "SELECT value FROM metadata WHERE key = 'active_project_root'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map(|value| value.filter(|value| !value.is_empty()))
+            .map_err(StoreError::from)
+    }
+
     pub fn list_plot_artifacts(
         &self,
         limit: Option<usize>,
+        project_root: Option<&str>,
+        workspace_id: Option<&str>,
+        session_only: bool,
     ) -> Result<Vec<PlotArtifactSummary>, StoreError> {
         let mut statement = self.connection.prepare(
             "SELECT
-                plot_id, run_id, source_path, execution_mode, document_version,
+                plot_id, run_id, project_root, source_path, execution_mode, document_version,
                 workspace_id, state_revision, project_revision, media_type, payload_json,
                 provenance_complete, created_at
              FROM plot_artifacts
+             WHERE project_root IS ?1
+               AND (?2 = 0 OR workspace_id IS ?3)
              ORDER BY created_at DESC
-             LIMIT ?1",
+             LIMIT ?4",
         )?;
-        let rows = statement.query_map([limit.unwrap_or(DEFAULT_LIMIT) as i64], |row| {
-            Ok(PlotArtifactSummary {
-                plot_id: row.get(0)?,
-                run_id: row.get(1)?,
-                source_path: row.get(2)?,
-                execution_mode: row.get(3)?,
-                document_version: row.get(4)?,
-                workspace_id: row.get(5)?,
-                state_revision: row.get(6)?,
-                project_revision: row.get(7)?,
-                media_type: row.get(8)?,
-                payload_json: row.get(9)?,
-                provenance_complete: row.get::<_, i64>(10)? != 0,
-                created_at: row.get(11)?,
-            })
-        })?;
+        let rows = statement.query_map(
+            params![
+                project_root,
+                if session_only { 1 } else { 0 },
+                workspace_id,
+                limit.unwrap_or(DEFAULT_LIMIT) as i64
+            ],
+            |row| {
+                Ok(PlotArtifactSummary {
+                    plot_id: row.get(0)?,
+                    run_id: row.get(1)?,
+                    project_root: row.get(2)?,
+                    source_path: row.get(3)?,
+                    execution_mode: row.get(4)?,
+                    document_version: row.get(5)?,
+                    workspace_id: row.get(6)?,
+                    state_revision: row.get(7)?,
+                    project_revision: row.get(8)?,
+                    media_type: row.get(9)?,
+                    payload_json: row.get(10)?,
+                    provenance_complete: row.get::<_, i64>(11)? != 0,
+                    created_at: row.get(12)?,
+                })
+            },
+        )?;
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(StoreError::from)
+    }
+
+    pub fn clear_plot_artifacts(
+        &mut self,
+        project_root: Option<&str>,
+        workspace_id: Option<&str>,
+        session_only: bool,
+    ) -> Result<usize, StoreError> {
+        let changed = self.connection.execute(
+            "DELETE FROM plot_artifacts
+             WHERE project_root IS ?1
+               AND (?2 = 0 OR workspace_id IS ?3)",
+            params![project_root, if session_only { 1 } else { 0 }, workspace_id],
+        )?;
+        Ok(changed)
     }
 
     pub fn get_approval_request(
@@ -1464,6 +1587,49 @@ mod tests {
     }
 
     #[test]
+    fn returns_bounded_recent_agent_conversation_without_the_current_turn() {
+        let directory = TempDir::new().unwrap();
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        for (turn_id, prompt) in [
+            ("turn_plot", "用 iris 数据集画图，并按 species 上色。"),
+            ("turn_retry", "再试一下"),
+        ] {
+            store
+                .create_agent_turn(&AgentTurnDraft {
+                    turn_id: turn_id.to_string(),
+                    mode: "act".to_string(),
+                    prompt: prompt.to_string(),
+                    model: "test".to_string(),
+                    workspace_id: "ws_test".to_string(),
+                    state_revision_before: 1,
+                    project_revision_before: 0,
+                })
+                .unwrap();
+        }
+        store
+            .finish_agent_turn(&AgentTurnFinish {
+                turn_id: "turn_plot".to_string(),
+                status: "failed".to_string(),
+                workspace_id_after: Some("ws_test".to_string()),
+                state_revision_after: Some(1),
+                project_revision_after: Some(0),
+                final_message: None,
+                error_message: Some("provider network unavailable".to_string()),
+            })
+            .unwrap();
+
+        let history = store.recent_agent_conversation("turn_retry", 4).unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].turn_id, "turn_plot");
+        assert_eq!(history[0].prompt, "用 iris 数据集画图，并按 species 上色。");
+        assert_eq!(history[0].status, "failed");
+        assert_eq!(
+            history[0].error_message.as_deref(),
+            Some("provider network unavailable")
+        );
+    }
+
+    #[test]
     fn recovers_incomplete_agent_turns() {
         let directory = TempDir::new().unwrap();
         let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
@@ -1498,5 +1664,53 @@ mod tests {
         assert_eq!(detail.turn.status, "interrupted");
         assert!(detail.turn.error_message.is_some());
         assert_eq!(detail.approvals[0].status, "interrupted");
+    }
+
+    #[test]
+    fn interrupts_waiting_approvals_for_a_cancelled_agent_turn() {
+        let directory = TempDir::new().unwrap();
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        store
+            .create_agent_turn(&AgentTurnDraft {
+                turn_id: "turn_cancel".to_string(),
+                mode: "act".to_string(),
+                prompt: "run something".to_string(),
+                model: "test".to_string(),
+                workspace_id: "ws_test".to_string(),
+                state_revision_before: 1,
+                project_revision_before: 0,
+            })
+            .unwrap();
+        store
+            .create_approval_request(&ApprovalRequestDraft {
+                request_id: "req_cancel".to_string(),
+                turn_id: "turn_cancel".to_string(),
+                tool: "run_r".to_string(),
+                policy: "required".to_string(),
+                arguments_json: "{\"code\":\"x <- 1\"}".to_string(),
+                code: Some("x <- 1".to_string()),
+                workspace_id: "ws_test".to_string(),
+                state_revision: 1,
+                project_revision: 0,
+            })
+            .unwrap();
+
+        assert_eq!(
+            store
+                .interrupt_agent_approvals("turn_cancel", "Cancelled by user")
+                .unwrap(),
+            1
+        );
+        let detail = store.get_agent_turn_detail("turn_cancel").unwrap().unwrap();
+        assert_eq!(detail.approvals[0].status, "interrupted");
+        assert_eq!(detail.approvals[0].decision.as_deref(), Some("cancel"));
+        assert_eq!(
+            detail.approvals[0].reason.as_deref(),
+            Some("Cancelled by user")
+        );
+        assert_eq!(
+            detail.approvals[0].continuation_outcome.as_deref(),
+            Some("user_cancelled")
+        );
     }
 }

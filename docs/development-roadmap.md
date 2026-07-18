@@ -1,11 +1,13 @@
 # Rho Development Roadmap
 
-Date: 2026-07-16
-Current baseline: `0.2.0-dev.2` Windows workbench candidate
+Date: 2026-07-17
+Current baseline: `0.2.0-dev.8` Windows workbench candidate
 
-Progress: `0.2.x` project-file foundation in progress. The first slice now
-provides a broker-safe project root, source file listing, multi-document
-frontend state, reads/writes, new files and Workspace R `setwd()` synchronization.
+Progress: the core `0.2.x` daily-use workflow is implemented and is now in
+hardening. Project editing, Workspace R execution, Agent approvals, durable
+runs, restart recovery, Environment, Plots and render diagnostics are present;
+the remaining work is completion quality, broader mutation policy and release
+acceptance on representative projects.
 
 ## Direction
 
@@ -50,20 +52,31 @@ Deliverables:
   preserving the independent Workspace R session.
 - Add user-facing cancellation, timeout, crash and restart states.
 
-Completed in the first `0.2.x` slice:
+Completed in the current `0.2.x` candidate:
 
-- project root and source-file listing API;
-- path traversal protection and editable extension allowlist;
-- multiple open document state with file-tree and document-tab rendering;
-- read, save and create-file commands;
-- Workspace R working-directory synchronization on project open.
+- native project selection and project-scoped session restoration;
+- broker-safe file listing, reads, writes, new files and render paths;
+- Monaco multi-document editing and selection/current-line/file execution;
+- resizable Files, Agent, Environment, Console, Plots and Problems panels;
+- durable runs, retry links, cancellation, restart recovery and plot provenance;
+- Ask/Plan read-only enforcement and exact single-use Act approval for `run_r`;
+- Environment diagnostics for R, libraries, `renv`, Bioconductor and rendering;
+- bounded object previews and optional Quarto/R Markdown render diagnostics;
+- atomic source/session persistence, coalesced file watching and bounded file
+  discovery for large projects;
+- bounded local R completion and simple document-symbol navigation.
 
-Still required to close M1:
+Still required to release M1:
 
-- native directory picker and project-opening UX;
-- durable document/session restoration;
-- editor completion and source/run selection commands;
-- real approval, cancellation, error/retry and Agent restart flows.
+- clean-install acceptance on Unicode paths, paths with spaces and large projects;
+- a repeatable manual acceptance record for the complete QC correction workflow;
+- an explicit decision about unsigned internal versus signed public distribution.
+
+Post-release `0.2.x` quality work:
+
+- file rename/delete commands;
+- paged plot-history payload loading and retention controls;
+- package-aware completion and explicit policy for future shell-like tools.
 
 Acceptance gate:
 
@@ -130,13 +143,12 @@ Acceptance gate:
 
 ## Work order for the next iterations
 
-1. Fix the current prototype's remaining correctness gaps: durable run state,
-   cancellation, crash recovery, structured error/retry flow and real project
-   files.
-2. Productize the Windows workbench surface: multi-file editor, file tree,
-   approval dialogs, Environment/Plot viewers and session restoration.
-3. Add scientific environment operations: `renv`, Bioconductor, Quarto and
-   bounded object adapters.
+1. Close M1 with completion, atomic persistence, watcher coalescing and a
+   repeatable clean-install acceptance run.
+2. Add scientific environment operations beyond detection: `renv` initialize,
+   restore and snapshot, plus package/Bioconductor repair workflows.
+3. Strengthen data, plot and document viewers while preserving bounded broker
+   responses and provenance.
 4. Freeze the Workbench Protocol and run the cross-platform transport and UI
    matrix.
 5. Only then expand to remote compute, MCP-heavy workflows, debugger support

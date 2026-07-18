@@ -10,8 +10,10 @@ use std::sync::Arc;
 use anyhow::{Context, Result, bail, ensure};
 use project::{
     ProjectRestoreResponse, ProjectSessionSnapshot, ProjectSessionStore, ProjectState,
-    ProjectWatcherControl, default_project_root, ensure_editable_file, list_project_files,
-    normalize_existing_project_root, project_path, replace_project_watcher, validate_project_root,
+    ProjectWatcherControl, atomic_write, atomic_write_new, default_project_root,
+    ensure_editable_content_size, ensure_editable_file, ensure_editable_file_size,
+    list_project_files, normalize_existing_project_root, project_path, replace_project_watcher,
+    validate_project_root,
 };
 use rho_core::{BrokerState, ExecutionOrigin};
 use rho_kernel::{ArkLaunchConfig, ArkSession};
@@ -20,8 +22,8 @@ use rho_server::coordinator::{
     dispatch_workspace_request, run_agent_turn,
 };
 use rho_store::{
-    AgentTurnDetail, AgentTurnDraft, AgentTurnEventDraft, AgentTurnSummary, ApprovalRequestSummary,
-    PlotArtifactSummary, ProblemSummary, RunDetail, RunSummary, Store,
+    AgentTurnDetail, AgentTurnDraft, AgentTurnEventDraft, AgentTurnFinish, AgentTurnSummary,
+    ApprovalRequestSummary, PlotArtifactSummary, ProblemSummary, RunDetail, RunSummary, Store,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -42,7 +44,22 @@ struct RuntimeConfig {
     rscript: PathBuf,
     bridge_package: PathBuf,
     agent_package: PathBuf,
+    agent_runtime: AgentRuntimeStatus,
     store_path: PathBuf,
+}
+
+#[derive(Clone, Serialize)]
+struct AgentRuntimeStatus {
+    available: bool,
+    aisdk_version: Option<String>,
+    error: Option<String>,
+}
+
+struct RRuntimeProbe {
+    r_home: String,
+    r_version: String,
+    r_libs: String,
+    agent_runtime: AgentRuntimeStatus,
 }
 
 struct AppState {
@@ -63,6 +80,7 @@ struct WorkspaceStatus {
     r_home: String,
     kernel_pid: Option<u32>,
     workspace: Option<Value>,
+    agent_runtime: AgentRuntimeStatus,
     python_required: bool,
 }
 
@@ -113,6 +131,19 @@ async fn workspace_status(state: State<'_, AppState>) -> Result<Value, String> {
 async fn project_state(state: State<'_, AppState>) -> Result<ProjectState, String> {
     let root = state.project_root.read().await.clone();
     list_project_files(&root).map_err(display_error)
+}
+
+#[tauri::command]
+async fn project_mark_files_changed(state: State<'_, AppState>) -> Result<Value, String> {
+    let context = active_context(&state).await.map_err(display_error)?;
+    let mut context = context.lock().await;
+    context.broker.project_changed();
+    let identity = context.broker.identity().clone();
+    context
+        .store
+        .save_identity(&identity)
+        .map_err(display_error)?;
+    serde_json::to_value(identity).map_err(display_error)
 }
 
 #[tauri::command]
@@ -185,6 +216,7 @@ async fn project_save_session(
 async fn project_read_file(path: String, state: State<'_, AppState>) -> Result<Value, String> {
     let root = state.project_root.read().await.clone();
     let file = project_path(&root, &path).map_err(display_error)?;
+    ensure_editable_file_size(&file).map_err(display_error)?;
     let content = std::fs::read_to_string(&file).map_err(display_error)?;
     Ok(json!({"path": path, "content": content}))
 }
@@ -195,15 +227,13 @@ async fn project_write_file(
     content: String,
     state: State<'_, AppState>,
 ) -> Result<ProjectState, String> {
+    ensure_editable_content_size(&content).map_err(display_error)?;
     let root = state.project_root.read().await.clone();
     let file = project_path(&root, &path).map_err(display_error)?;
     ensure_editable_file(&file).map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    if let Some(parent) = file.parent() {
-        std::fs::create_dir_all(parent).map_err(display_error)?;
-    }
-    std::fs::write(file, content).map_err(display_error)?;
+    atomic_write(&file, content.as_bytes()).map_err(display_error)?;
     context.broker.project_changed();
     let identity = context.broker.identity().clone();
     context
@@ -220,6 +250,7 @@ async fn project_create_file(
     content: String,
     state: State<'_, AppState>,
 ) -> Result<ProjectState, String> {
+    ensure_editable_content_size(&content).map_err(display_error)?;
     let root = state.project_root.read().await.clone();
     let file = project_path(&root, &path).map_err(display_error)?;
     ensure_editable_file(&file).map_err(display_error)?;
@@ -228,10 +259,7 @@ async fn project_create_file(
     }
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    if let Some(parent) = file.parent() {
-        std::fs::create_dir_all(parent).map_err(display_error)?;
-    }
-    std::fs::write(file, content).map_err(display_error)?;
+    atomic_write_new(&file, content.as_bytes()).map_err(display_error)?;
     context.broker.project_changed();
     let identity = context.broker.identity().clone();
     context
@@ -402,12 +430,40 @@ async fn get_run_detail(
 #[tauri::command]
 async fn list_plot_artifacts(
     limit: Option<usize>,
+    session_only: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<Vec<PlotArtifactSummary>, String> {
+    let root = state.project_root.read().await.clone();
+    let context = active_context(&state).await.map_err(display_error)?;
+    let workspace_id = context.lock().await.broker.identity().workspace_id.clone();
     read_store(&state)
         .map_err(display_error)?
-        .list_plot_artifacts(limit)
+        .list_plot_artifacts(
+            limit,
+            Some(root.to_string_lossy().as_ref()),
+            Some(&workspace_id),
+            session_only.unwrap_or(true),
+        )
         .map_err(display_error)
+}
+
+#[tauri::command]
+async fn clear_plot_artifacts(
+    session_only: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    let root = state.project_root.read().await.clone();
+    let context = active_context(&state).await.map_err(display_error)?;
+    let workspace_id = context.lock().await.broker.identity().workspace_id.clone();
+    let mut store = read_store(&state).map_err(display_error)?;
+    let deleted = store
+        .clear_plot_artifacts(
+            Some(root.to_string_lossy().as_ref()),
+            Some(&workspace_id),
+            session_only.unwrap_or(true),
+        )
+        .map_err(display_error)?;
+    Ok(json!({"deleted": deleted}))
 }
 
 #[tauri::command]
@@ -453,6 +509,7 @@ async fn run_agent(
     prompt: String,
     mode: String,
     model: Option<String>,
+    auto_approve: Option<bool>,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
@@ -462,10 +519,23 @@ async fn run_agent(
     if !matches!(mode.as_str(), "ask" | "plan" | "act") {
         return Err(format!("unsupported Agent mode `{mode}`"));
     }
+    if !state.config.agent_runtime.available {
+        return Err(state
+            .config
+            .agent_runtime
+            .error
+            .clone()
+            .unwrap_or_else(|| "aisdk is unavailable in Agent R".to_string()));
+    }
+    let mut tasks = state.agent_tasks.lock().await;
+    if !tasks.is_empty() {
+        return Err("An Agent turn is already running".to_string());
+    }
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let turn_id = format!("agent_turn_{}", Uuid::new_v4());
     let model = model.unwrap_or_else(|| "deepseek:deepseek-v4-flash".to_string());
+    let auto_approve = auto_approve.unwrap_or(false) && mode == "act";
     {
         let mut context_guard = context.lock().await;
         let identity = context_guard.broker.identity().clone();
@@ -492,8 +562,12 @@ async fn run_agent(
                 tool: None,
                 request_id: None,
                 code: None,
-                details_json: serde_json::to_string(&json!({"prompt": prompt, "mode": mode}))
-                    .map_err(display_error)?,
+                details_json: serde_json::to_string(&json!({
+                    "prompt": prompt,
+                    "mode": mode,
+                    "auto_approve": auto_approve
+                }))
+                .map_err(display_error)?,
             })
             .map_err(display_error)?;
     }
@@ -502,8 +576,7 @@ async fn run_agent(
     let rscript = state.config.rscript.clone();
     let agent_package = state.config.agent_package.clone();
     let task_turn_id = turn_id.clone();
-    let agent_tasks = state.agent_tasks.clone();
-    let task_agent_tasks = agent_tasks.clone();
+    let task_agent_tasks = state.agent_tasks.clone();
     let (registered_tx, registered_rx) = oneshot::channel();
     let task = tauri::async_runtime::spawn(async move {
         let _ = registered_rx.await;
@@ -517,21 +590,22 @@ async fn run_agent(
             mode,
             task_turn_id.clone(),
             approvals,
+            auto_approve,
         )
         .await;
+        task_agent_tasks.lock().await.remove(&task_turn_id);
         let _ = app.emit(
             "rho://agent-turn-updated",
             json!({ "turn_id": task_turn_id.clone() }),
         );
-        task_agent_tasks.lock().await.remove(&task_turn_id);
     });
-    let mut tasks = agent_tasks.lock().await;
     tasks.insert(turn_id.clone(), task);
     drop(tasks);
     let _ = registered_tx.send(());
     Ok(json!({
         "status": "started",
-        "turn_id": turn_id
+        "turn_id": turn_id,
+        "auto_approve": auto_approve
     }))
 }
 
@@ -657,23 +731,33 @@ async fn restart_workspace(state: State<'_, AppState>) -> Result<WorkspaceStatus
         let _ = task.await;
     }
 
+    let active_run_id = {
+        let mut store = read_store(&state).map_err(display_error)?;
+        let run_id = store.latest_active_run_id().map_err(display_error)?;
+        if let Some(run_id) = run_id.as_ref() {
+            let _ = store.request_cancel(run_id).map_err(display_error)?;
+        }
+        run_id
+    };
+
     let old_context = state.context.lock().await.take();
     let old_session = state.session.write().await.take();
-    if let Some(session) = old_session.as_ref() {
-        let mut store = read_store(&state).map_err(display_error)?;
-        if let Some(run_id) = store.latest_active_run_id().map_err(display_error)? {
-            store.request_cancel(&run_id).map_err(display_error)?;
-            drop(store);
-            session.interrupt().await.map_err(display_error)?;
+    if active_run_id.is_some() {
+        if let Some(session) = old_session.as_ref() {
+            let _ = session.interrupt().await;
         }
     }
-    if let Some(context) = old_context.as_ref() {
-        let guard = tokio::time::timeout(std::time::Duration::from_secs(15), context.lock())
-            .await
-            .map_err(|_| {
-                "Timed out waiting for the previous Workspace R run to stop".to_string()
-            })?;
-        drop(guard);
+    if let Some(context) = old_context.clone() {
+        match tokio::time::timeout(std::time::Duration::from_secs(15), context.lock()).await {
+            Ok(guard) => drop(guard),
+            Err(_) => {
+                *state.context.lock().await = old_context;
+                *state.session.write().await = old_session;
+                return Err(
+                    "Timed out waiting for the previous Workspace R run to stop".to_string()
+                );
+            }
+        }
     }
     drop(old_session);
     drop(old_context);
@@ -791,6 +875,14 @@ async fn switch_project(
     state: &AppState,
 ) -> Result<ProjectRestoreResponse> {
     sync_workspace_project_root(state, &root).await?;
+    {
+        let context = active_context(state).await?;
+        context
+            .lock()
+            .await
+            .store
+            .set_project_root(Some(root.to_string_lossy().as_ref()))?;
+    }
     state.project_store.save_last_opened_project(&root)?;
     let session_snapshot =
         session_snapshot.unwrap_or_else(|| state.project_store.load_session_or_default(&root));
@@ -835,6 +927,7 @@ fn status_from(
         r_home: metadata["r_home"].as_str().unwrap_or_default().to_string(),
         kernel_pid: session.child_pid(),
         workspace: identity.map(|value| serde_json::to_value(value).unwrap_or(Value::Null)),
+        agent_runtime: config.agent_runtime.clone(),
         python_required: false,
     })
 }
@@ -860,12 +953,13 @@ fn prepare_runtime_files(data_dir: PathBuf, ark: PathBuf) -> Result<RuntimeConfi
     write_source(&agent_package.join("R/aisdk_adapter.R"), AGENT_ADAPTER)?;
 
     let rscript = locate_rscript()?;
-    let r_home = r_output(&rscript, "cat(normalizePath(R.home(), winslash = '/'))")?;
-    let r_version = r_output(&rscript, "cat(R.version.string)")?;
-    let r_libs = r_output(
-        &rscript,
-        "cat(paste(normalizePath(.libPaths(), winslash = '/', mustWork = FALSE), collapse = ';'))",
-    )?;
+    let probe = probe_r_runtime(&rscript)?;
+    let RRuntimeProbe {
+        r_home,
+        r_version,
+        r_libs,
+        agent_runtime,
+    } = probe;
     let runtime_dir = data_dir.join("runtime");
     std::fs::create_dir_all(&runtime_dir)?;
     let empty_renviron = runtime_dir.join("empty.Renviron");
@@ -891,10 +985,10 @@ fn prepare_runtime_files(data_dir: PathBuf, ark: PathBuf) -> Result<RuntimeConfi
             "PATH": path
         }
     });
-    std::fs::write(&kernelspec, serde_json::to_vec_pretty(&spec)?)?;
-    std::fs::write(
-        kernelspec.with_extension("runtime.json"),
-        serde_json::to_vec_pretty(&json!({"r_version": r_version, "r_home": r_home}))?,
+    atomic_write(&kernelspec, &serde_json::to_vec_pretty(&spec)?)?;
+    atomic_write(
+        &kernelspec.with_extension("runtime.json"),
+        &serde_json::to_vec_pretty(&json!({"r_version": r_version, "r_home": r_home}))?,
     )?;
     Ok(RuntimeConfig {
         data_dir: data_dir.clone(),
@@ -902,6 +996,7 @@ fn prepare_runtime_files(data_dir: PathBuf, ark: PathBuf) -> Result<RuntimeConfi
         rscript,
         bridge_package,
         agent_package,
+        agent_runtime,
         store_path: data_dir.join("rho-desktop.sqlite"),
     })
 }
@@ -925,7 +1020,9 @@ fn locate_rscript() -> Result<PathBuf> {
         ensure!(path.is_file(), "RHO_RSCRIPT does not point to a file");
         return Ok(path);
     }
-    let output = Command::new("where.exe")
+    let mut command = Command::new("where.exe");
+    hide_console_window(&mut command);
+    let output = command
         .arg("Rscript.exe")
         .output()
         .context("searching for Rscript.exe")?;
@@ -954,9 +1051,32 @@ fn locate_rscript() -> Result<PathBuf> {
     bail!("Rscript.exe was not found. Install R 4.4 or later, then restart Rho.")
 }
 
-fn r_output(rscript: &Path, expression: &str) -> Result<String> {
-    let output = Command::new(rscript)
-        .args(["--vanilla", "-e", expression])
+fn probe_r_runtime(rscript: &Path) -> Result<RRuntimeProbe> {
+    let expression = r#"
+cat("__RHO_HOME__", normalizePath(R.home(), winslash = "/"), "\n", sep = "")
+cat("__RHO_VERSION__", R.version.string, "\n", sep = "")
+cat("__RHO_VERSION_NUMBER__", as.character(getRversion()), "\n", sep = "")
+cat(
+  "__RHO_LIBS__",
+  paste(
+    normalizePath(.libPaths(), winslash = "/", mustWork = FALSE),
+    collapse = .Platform$path.sep
+  ),
+  "\n",
+  sep = ""
+)
+tryCatch({
+  loadNamespace("aisdk")
+  cat("__RHO_AISDK__", as.character(utils::packageVersion("aisdk")), "\n", sep = "")
+}, error = function(error) {
+  message <- gsub("[\r\n]+", " ", conditionMessage(error))
+  cat("__RHO_AISDK_ERROR__", message, "\n", sep = "")
+})
+"#;
+    let mut command = Command::new(rscript);
+    hide_console_window(&mut command);
+    let output = command
+        .args(["-e", expression])
         .output()
         .with_context(|| format!("running {}", rscript.display()))?;
     ensure!(
@@ -964,15 +1084,153 @@ fn r_output(rscript: &Path, expression: &str) -> Result<String> {
         "R runtime probe failed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let value = |prefix: &str| {
+        stdout
+            .lines()
+            .find_map(|line| line.strip_prefix(prefix).map(str::trim))
+            .map(str::to_string)
+    };
+    let r_home = value("__RHO_HOME__").context("R home was absent from runtime probe")?;
+    let r_version = value("__RHO_VERSION__").context("R version was absent from runtime probe")?;
+    let r_version_number = value("__RHO_VERSION_NUMBER__")
+        .context("R version number was absent from runtime probe")?;
+    ensure_supported_r_version(&r_version_number)?;
+    let r_libs = value("__RHO_LIBS__").context("R library paths were absent from runtime probe")?;
+    let agent_runtime = match value("__RHO_AISDK__") {
+        Some(version) => AgentRuntimeStatus {
+            available: true,
+            aisdk_version: Some(version),
+            error: None,
+        },
+        None => AgentRuntimeStatus {
+            available: false,
+            aisdk_version: None,
+            error: Some(format!(
+                "Agent R cannot load aisdk: {}",
+                value("__RHO_AISDK_ERROR__")
+                    .unwrap_or_else(|| "unknown namespace loading error".to_string())
+            )),
+        },
+    };
+    Ok(RRuntimeProbe {
+        r_home,
+        r_version,
+        r_libs,
+        agent_runtime,
+    })
+}
+
+#[tauri::command]
+async fn clear_agent_history(state: State<'_, AppState>) -> Result<Value, String> {
+    if !state.agent_tasks.lock().await.is_empty() {
+        return Err("Stop the active Agent turn before clearing its history.".to_string());
+    }
+    let mut store = read_store(&state).map_err(display_error)?;
+    let deleted = store.clear_agent_history().map_err(display_error)?;
+    Ok(json!({"deleted": deleted}))
+}
+
+fn hide_console_window(command: &mut Command) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000);
+    }
+}
+
+fn ensure_supported_r_version(version: &str) -> Result<()> {
+    let mut components = version.split('.');
+    let major = components
+        .next()
+        .context("R version has no major component")?
+        .parse::<u64>()
+        .with_context(|| format!("invalid R version `{version}`"))?;
+    let minor = components
+        .next()
+        .context("R version has no minor component")?
+        .parse::<u64>()
+        .with_context(|| format!("invalid R version `{version}`"))?;
+    ensure!(
+        (major, minor) >= (4, 4),
+        "Rho requires R 4.4 or later; found R {version}"
+    );
+    Ok(())
+}
+
+#[tauri::command]
+async fn cancel_agent_turn(
+    turn_id: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    let task = state
+        .agent_tasks
+        .lock()
+        .await
+        .remove(&turn_id)
+        .context(format!("Agent turn is not active: {turn_id}"))
+        .map_err(display_error)?;
+    state
+        .approvals
+        .cancel_all("Agent turn cancelled by the user.")
+        .await;
+    task.abort();
+    let _ = task.await;
+
+    let context = active_context(&state).await.map_err(display_error)?;
+    let mut context = context.lock().await;
+    let detail = context
+        .store
+        .get_agent_turn_detail(&turn_id)
+        .map_err(display_error)?;
+    let status = detail
+        .as_ref()
+        .map(|detail| detail.turn.status.as_str())
+        .unwrap_or("missing");
+    if matches!(status, "running" | "waiting") {
+        let identity = context.broker.identity().clone();
+        context
+            .store
+            .interrupt_agent_approvals(&turn_id, "Agent turn cancelled by the user.")
+            .map_err(display_error)?;
+        context
+            .store
+            .append_agent_turn_event(&AgentTurnEventDraft {
+                turn_id: turn_id.clone(),
+                event_type: "agent.cancelled".to_string(),
+                title: "Agent turn cancelled".to_string(),
+                body: Some("The user stopped this Agent turn.".to_string()),
+                status: "interrupted".to_string(),
+                tool: None,
+                request_id: None,
+                code: None,
+                details_json: "{}".to_string(),
+            })
+            .map_err(display_error)?;
+        context
+            .store
+            .finish_agent_turn(&AgentTurnFinish {
+                turn_id: turn_id.clone(),
+                status: "interrupted".to_string(),
+                workspace_id_after: Some(identity.workspace_id),
+                state_revision_after: Some(identity.state_revision as i64),
+                project_revision_after: Some(identity.project_revision as i64),
+                final_message: None,
+                error_message: Some("Agent turn cancelled by the user.".to_string()),
+            })
+            .map_err(display_error)?;
+    }
+    drop(context);
+    let _ = app.emit(
+        "rho://agent-turn-updated",
+        json!({ "turn_id": turn_id.clone() }),
+    );
+    Ok(json!({ "status": "cancelled", "turn_id": turn_id }))
 }
 
 fn write_source(path: &Path, content: &str) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::write(path, content)?;
-    Ok(())
+    atomic_write(path, content.as_bytes())
 }
 
 fn display_error(error: impl std::fmt::Display) -> String {
@@ -985,6 +1243,19 @@ fn startup_log_path() -> PathBuf {
 
 fn write_startup_log(message: &str) {
     let _ = std::fs::write(startup_log_path(), message);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ensure_supported_r_version;
+
+    #[test]
+    fn enforces_the_documented_minimum_r_version() {
+        assert!(ensure_supported_r_version("4.3.3").is_err());
+        assert!(ensure_supported_r_version("4.4.0").is_ok());
+        assert!(ensure_supported_r_version("5.0.0").is_ok());
+        assert!(ensure_supported_r_version("invalid").is_err());
+    }
 }
 
 async fn smoke_test(include_agent: bool) -> Result<Value> {
@@ -1042,16 +1313,48 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
     );
     let context = Arc::new(Mutex::new(CoordinatorRuntime { broker, store }));
     let agent = if include_agent {
+        let turn_id = format!("smoke_turn_{}", Uuid::new_v4());
+        let prompt =
+            "请检查 rho_desktop_smoke 对象，告诉我它有多少行和多少列。不要修改工作区。".to_string();
+        {
+            let mut context_guard = context.lock().await;
+            let identity = context_guard.broker.identity().clone();
+            context_guard.store.create_agent_turn(&AgentTurnDraft {
+                turn_id: turn_id.clone(),
+                mode: "ask".to_string(),
+                prompt: prompt.clone(),
+                model: "deepseek:deepseek-v4-flash".to_string(),
+                workspace_id: identity.workspace_id,
+                state_revision_before: identity.state_revision as i64,
+                project_revision_before: identity.project_revision as i64,
+            })?;
+            context_guard
+                .store
+                .append_agent_turn_event(&AgentTurnEventDraft {
+                    turn_id: turn_id.clone(),
+                    event_type: "agent.user_prompt".to_string(),
+                    title: "You".to_string(),
+                    body: Some(prompt.clone()),
+                    status: "completed".to_string(),
+                    tool: None,
+                    request_id: None,
+                    code: None,
+                    details_json: serde_json::to_string(
+                        &json!({"prompt": prompt.clone(), "mode": "ask"}),
+                    )?,
+                })?;
+        }
         let result = run_agent_turn(
             &session,
             context.clone(),
             config.rscript.clone(),
             config.agent_package.clone(),
             "deepseek:deepseek-v4-flash".to_string(),
-            "请检查 rho_desktop_smoke 对象，告诉我它有多少行和多少列。不要修改工作区。".to_string(),
+            prompt,
             "ask".to_string(),
-            "smoke_turn".to_string(),
+            turn_id,
             Arc::new(PendingApprovalRegistry::default()),
+            false,
         )
         .await?;
         let completed = result["events"]
@@ -1123,6 +1426,7 @@ fn main() {
             workspace_start,
             workspace_status,
             project_state,
+            project_mark_files_changed,
             project_open,
             project_pick_directory,
             project_restore_session,
@@ -1136,16 +1440,19 @@ fn main() {
             render_document,
             list_runs,
             list_plot_artifacts,
+            clear_plot_artifacts,
             list_problems,
             get_run_detail,
             retry_run,
             run_agent,
             list_agent_turns,
+            clear_agent_history,
             list_approval_requests,
             get_agent_turn_detail,
             respond_approval,
             interrupt_r,
             cancel_run,
+            cancel_agent_turn,
             restart_workspace
         ])
         .run(tauri::generate_context!())

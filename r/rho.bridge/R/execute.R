@@ -4,6 +4,15 @@ rho_execute <- function(code,
                         envir = .GlobalEnv,
                         max_output_chars = 16000L) {
   stopifnot(is.character(code), length(code) == 1L, nzchar(code))
+  # Source files may carry a BOM or editor-only zero-width marker at byte 0.
+  # Remove only these leading markers; ordinary Unicode inside R strings stays intact.
+  leading_markers <- paste0(
+    "^[",
+    intToUtf8(c(0xFEFF, 0x200B, 0x200C, 0x200D, 0x2060)),
+    "]+"
+  )
+  code <- sub(leading_markers, "", code, perl = TRUE)
+  code <- gsub("\r\n?", "\n", code, perl = TRUE)
 
   warnings <- character()
   messages <- character()
