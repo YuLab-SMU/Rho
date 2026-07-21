@@ -2,7 +2,7 @@
 
 Date: 2026-07-16
 Status: Approved design baseline
-Scope: `docs/0.2x-agent-handoff.md` WP1
+Scope: `docs/plans/0.2x-agent-handoff.md` WP1
 
 ## Goal
 
@@ -314,7 +314,7 @@ The preferred implementation touchpoints are:
 - `desktop/dist/app.js`;
 - `desktop/dist/index.html`;
 - `desktop/dist/styles.css`;
-- `docs/windows-prototype.md`;
+- `docs/implementation/windows-prototype.md`;
 - targeted tests.
 
 ## Done Criteria For WP1

@@ -2,7 +2,7 @@
 
 Status: required fixes before release
 
-Related design: `docs/agent-file-editing-design.md`
+Related design: `docs/design/agent-file-editing-design.md`
 
 ## 1. Purpose
 
@@ -425,4 +425,3 @@ Do not build or distribute a new installer until:
 - the prompt is not transported through Windows command-line arguments;
 - all automated checks pass;
 - the core interaction is manually verified in the desktop application.
-

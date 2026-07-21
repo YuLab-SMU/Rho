@@ -2,7 +2,7 @@
 
 Date: 2026-07-16
 Status: Approved design baseline
-Scope: `docs/0.2x-agent-handoff.md` WP2
+Scope: `docs/plans/0.2x-agent-handoff.md` WP2
 
 ## Goal
 

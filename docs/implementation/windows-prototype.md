@@ -48,9 +48,14 @@ of terminating the desktop process. The recovery view supports Retry, native
 %LOCALAPPDATA%\org.yulab.rho\logs\startup.jsonl
 ```
 
-The required base-R probe and optional `aisdk` probe run in separate bounded
-processes. If only `aisdk` fails, the workbench remains available and the Agent
-panel reports `Unavailable` with an independent Retry Agent action.
+The required base-R probe, effective user-profile `.libPaths()` probe and
+optional `aisdk` probe run in separate bounded processes. Rho passes successful
+profile-derived library paths to Ark through `R_LIBS` and explicitly loads the
+user `~/.Rprofile` and `~/.Renviron` in Workspace R. Project startup files do
+not take precedence, and site profile code remains disabled. Values in the user
+`.Renviron`, including credentials, are consequently visible to Workspace R.
+If only `aisdk` fails, the workbench remains available and the Agent panel
+reports `Unavailable` with an independent Retry Agent action.
 
 ## Implemented workflow
 

@@ -180,16 +180,28 @@ Rho-owned settings file and immediately retried. Users should not have to edit
 
 ### 5.2 Required base probe
 
-The required probe runs only bounded base-R operations:
+The required controlled probe runs only bounded base-R operations:
 
 - `R.home()`;
 - `R.version.string` and `getRversion()`;
-- effective `.libPaths()`;
+- controlled `.libPaths()` fallback;
+- resolved user `.Rprofile` and `.Renviron` paths;
 - normalization of the R DLL directory required by Ark.
 
-Run it with `--no-init-file --no-site-file` so user and project `.Rprofile`
-code cannot abort a headless probe. Preserve the effective user environment
-file because it can define `R_LIBS_USER`; never log its content.
+Run it with `--no-environ --no-init-file --no-site-file` so startup files
+cannot abort the required metadata probe. Use R's own `path.expand()` to resolve
+the user `.Rprofile` and `.Renviron`; never log their contents.
+
+After the controlled probe succeeds, run a separate bounded library-path probe
+with the normal user R startup and read only a marked `.libPaths()` result. If
+it succeeds, pass those effective paths to Ark through `R_LIBS`. Ark explicitly
+sets `R_PROFILE_USER` and `R_ENVIRON_USER` to the resolved user files, sets
+`R_ENVIRON` to an empty Rho-owned site environment, and keeps
+`--no-site-file`. It therefore loads user startup configuration while blocking
+project startup-file precedence and site profile code. If the profile probe
+exits, times out or omits its marker, fall back to the controlled library paths
+and append a diagnostic that excludes stdout; Ark still attempts to load the
+explicit user startup files.
 
 The required probe has a 15-second timeout. Capture and retain:
 
@@ -205,7 +217,8 @@ Non-zero exit, timeout and malformed output are different error codes.
 ### 5.3 Optional Agent probe
 
 After the base probe succeeds, run `loadNamespace("aisdk")` in a separate
-short-lived R process with a 30-second timeout. Its failure produces an
+short-lived R process with the normal user R startup and a 30-second timeout.
+Its failure produces an
 `AgentRuntimeStatus` with the exit code and a redacted, bounded diagnostic. It
 does not modify the successful base-runtime result.
 
@@ -319,7 +332,7 @@ could not open its interface and gives the fallback log path. The top-level
 
 The Windows installer should detect or bootstrap the supported Microsoft Edge
 WebView2 Runtime. Installer behavior and clean-Windows-10 evidence must be
-recorded in `docs/windows-build-environment.md`.
+recorded in `docs/implementation/windows-build-environment.md`.
 
 ## 8. Diagnostics And Privacy
 
@@ -437,8 +450,9 @@ The Windows installer is not ready for general distribution until:
 After implementation:
 
 - add the new startup behavior and prerequisites to
-  `docs/windows-prototype.md`;
+  `docs/implementation/windows-prototype.md`;
 - add the exact build flags, WebView2 installation mode and acceptance evidence
-  to `docs/windows-build-environment.md`;
-- add the startup cases as P0 gates in `docs/0.2-release-checklist.md`;
+  to `docs/implementation/windows-build-environment.md`;
+- add the startup cases as P0 gates in
+  `docs/release/0.2-release-checklist.md`;
 - record the user-visible change in `NEWS.md`.

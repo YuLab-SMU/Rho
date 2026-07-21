@@ -77,14 +77,17 @@ If Rho itself was launched with a non-empty `R_ENVIRON_USER`, preserve that
 choice. The UI should identify it as a custom user environment file rather
 than silently replacing it with `~/.Renviron`.
 
-### 2.3 Workspace R remains credential-isolated
+### 2.3 Workspace R uses explicit user startup files
 
-The Ark-backed Workspace R currently starts with `--no-environ` and an empty
-`R_ENVIRON_USER`. Keep that behavior.
+The Ark-backed Workspace R receives explicit absolute paths for the user's
+`~/.Rprofile` and `~/.Renviron`. This preserves user-level library paths,
+proxies and R configuration without allowing an active project's startup files
+to take precedence.
 
-Only the temporary Agent R process receives the effective user environment
-file. Model credentials must not appear in the user's live Workspace R unless
-the user explicitly adds them there through an unrelated action.
+This means model credentials stored in the user `.Renviron` are visible to
+code running in Workspace R. The UI and documentation must state this boundary.
+Rho still must not copy credential values into its own settings, logs, SQLite
+records, prompts or command-line arguments.
 
 ### 2.4 Model choice is explicit
 
@@ -549,8 +552,8 @@ Every Agent and connection-test child process must receive:
 R_ENVIRON_USER=<resolved path>
 ```
 
-Do not add `--no-environ` to Agent R. Do not change the Ark kernelspec, which
-must remain isolated.
+Do not add `--no-environ` to Agent R. The Ark kernelspec uses the same explicit
+user `R_ENVIRON_USER` path and an explicit user `R_PROFILE_USER` path.
 
 Because `R_ENVIRON_USER` is explicit, a `.Renviron` inside the active project
 must not take precedence.
@@ -805,13 +808,14 @@ Responsibilities:
 - resolve stable model IDs in `run_agent`;
 - remove the hardcoded backend fallback after migration exists;
 - add model attribution to prompt event details;
-- keep Workspace R environment isolation unchanged.
+- bind Workspace R to explicit user startup paths without allowing project
+  startup-file precedence.
 
 ### `crates/rho-server/src/coordinator.rs`
 
 - accept a typed non-secret runtime model profile;
 - extend stdin framing with the compact profile JSON line;
-- set `R_ENVIRON_USER` only on Agent R child processes;
+- set the resolved `R_ENVIRON_USER` on Agent R child processes;
 - pass the resolved tool policy to Agent R;
 - preserve hidden-window and prompt-stdin behavior;
 - strengthen credential redaction tests.
@@ -869,8 +873,8 @@ copies an explicit file list and must be updated.
 Update:
 
 - `NEWS.md`;
-- `docs/windows-prototype.md`;
-- `docs/windows-build-environment.md`;
+- `docs/implementation/windows-prototype.md`;
+- `docs/implementation/windows-build-environment.md`;
 - release checklist and smoke-test instructions.
 
 Document `.Renviron` setup without including a real key in examples or test
@@ -900,7 +904,8 @@ Required cases:
 - credential probe returns status only;
 - connection-test errors are redacted;
 - Agent subprocesses keep the hidden-window flag;
-- Workspace kernelspec remains credential-isolated;
+- Workspace kernelspec binds the resolved user `.Rprofile` and `.Renviron` and
+  does not load project startup files;
 - long prompts remain on stdin and outside command arguments.
 
 ### 12.2 R tests

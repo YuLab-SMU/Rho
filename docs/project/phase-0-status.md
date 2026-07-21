@@ -168,4 +168,4 @@ cargo run -p rho-server -- probe-coordinator --kernelspec .rho/runtime/ark-0.1.2
 ```
 
 The bootstrap and Windows toolchain contract are documented in
-`docs/windows-build-environment.md`.
+`docs/implementation/windows-build-environment.md`.
