@@ -1,8 +1,8 @@
 # WP5 Project-Scoped Scientific Environment Basics Design
 
 Date: 2026-07-16
-Status: Approved design baseline
-Scope: `docs/plans/0.2x-agent-handoff.md` WP5
+Status: Implemented in `0.2.0-dev.2`
+Scope: `docs/plans/implemented-0.2x-agent-handoff.md` WP5
 
 ## Goal
 

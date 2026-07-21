@@ -1,5 +1,7 @@
 # Windows prototype
 
+Status: implemented in the current Windows baseline
+
 Date: 2026-07-21
 
 ## Installer

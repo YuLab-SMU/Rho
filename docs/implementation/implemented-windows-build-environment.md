@@ -1,5 +1,7 @@
 # Rho Windows Build Environment
 
+Status: implemented and actively maintained
+
 Date: 2026-07-21
 Validated release: `0.2.0-dev.11`
 Repository root: `D:\Rho`

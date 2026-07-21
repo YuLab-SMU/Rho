@@ -1,5 +1,7 @@
 # Rho 0.2 Release Checklist
 
+Status: active release acceptance
+
 Date: 2026-07-21
 Candidate: `0.2.0-dev.11`
 
@@ -56,7 +58,7 @@ release. A box is complete only when another person can locate the evidence.
   attempt reached the provider but ended after repeated network retries; rerun
   this gate on a stable network before release.
 - [x] Final NSIS package contents, byte size and SHA-256 are recorded in
-  `docs/implementation/windows-build-environment.md`.
+  `docs/implementation/implemented-windows-build-environment.md`.
 
 ## P1 Daily-Use Quality
 

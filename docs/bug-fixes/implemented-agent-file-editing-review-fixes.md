@@ -1,8 +1,11 @@
 # Agent File Editing Review Fixes
 
-Status: required fixes before release
+Status: implemented in `0.2.0-dev.10`
 
-Related design: `docs/design/agent-file-editing-design.md`
+Related design: `docs/design/implemented-agent-file-editing-design.md`
+
+Implementation note: the blocking instructions below are retained as the
+original repair and regression contract; the listed P1 fixes are implemented.
 
 ## 1. Purpose
 

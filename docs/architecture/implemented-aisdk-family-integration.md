@@ -1,6 +1,6 @@
 # aisdk family integration
 
-Status: Phase 0 integration baseline
+Status: implemented in the current product baseline
 
 Audit date: 2026-07-15
 
@@ -84,7 +84,7 @@ event IDs, divergent branches and recovery races.
 2. Add a real-provider opt-in test with credential redaction assertions. The
    mocked typed stream, trace and run-state mapping is already verified.
 3. Implement the organization-owned family package changes in
-   `aisdk-family-change-proposals.md`, beginning with MCP environment isolation,
+   `proposed-aisdk-family-change-proposals.md`, beginning with MCP environment isolation,
    correlated events and cooperative cancellation. Typed streaming is already
    public as `on_event`, and Rho must not depend on unexported `aisdk.console`
    functions.

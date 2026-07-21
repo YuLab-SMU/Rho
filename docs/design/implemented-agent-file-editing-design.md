@@ -1,8 +1,12 @@
 # Agent File Editing V1 Design
 
-Status: implementation handoff
+Status: implemented in `0.2.0-dev.10`
 
 Target release: `0.2.0-dev.10` or later
+
+Implementation note: the requirements and remaining-work language below are
+retained as the original delivery contract; the V1 workflow and its required
+review fixes are implemented in the current baseline.
 
 ## 1. Goal
 
@@ -617,4 +621,3 @@ Do not include these in V1:
 - persistent proposal decisions across application restarts;
 - full side-by-side Monaco diff editor;
 - automatic fuzzy relocation of stale insertion anchors.
-

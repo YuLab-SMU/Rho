@@ -1,8 +1,11 @@
 # Configurable Agent LLMs V1 Specification
 
-Status: implementation handoff
+Status: implemented in `0.2.0-dev.10`
 
 Target release: `0.2.0-dev.10` or later
+
+Implementation note: this specification is retained as the delivered contract
+for the configurable model workflow.
 
 ## 1. Goal
 
@@ -873,8 +876,8 @@ copies an explicit file list and must be updated.
 Update:
 
 - `NEWS.md`;
-- `docs/implementation/windows-prototype.md`;
-- `docs/implementation/windows-build-environment.md`;
+- `docs/implementation/implemented-windows-prototype.md`;
+- `docs/implementation/implemented-windows-build-environment.md`;
 - release checklist and smoke-test instructions.
 
 Document `.Renviron` setup without including a real key in examples or test

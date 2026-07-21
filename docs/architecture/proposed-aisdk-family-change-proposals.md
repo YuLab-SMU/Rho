@@ -1,6 +1,6 @@
 # aisdk family changes proposed for Rho
 
-Status: proposal, no external repository changes made
+Status: proposed; no external repository changes made
 
 Date: 2026-07-15
 

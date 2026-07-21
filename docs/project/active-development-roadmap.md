@@ -1,5 +1,7 @@
 # Rho Development Roadmap
 
+Status: active
+
 Date: 2026-07-21
 Current baseline: `0.2.0-dev.11` Windows workbench candidate
 

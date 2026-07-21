@@ -1,5 +1,7 @@
 # Phase 0 implementation status
 
+Status: historical completed baseline
+
 Date: 2026-07-16
 Platform: Windows x64  
 R: 4.6.0  
@@ -55,7 +57,7 @@ Jet revision: `52ae131dd168fe2e104d306cc4bf5bbeae749200`
 - The internally maintained `aisdk` family has been reviewed as a set of
   co-evolving upstream packages. Reusable changes are separated from
   Rho-specific Ark, broker, persistence and desktop concerns in
-  `docs/architecture/aisdk-family-change-proposals.md`.
+  `docs/architecture/proposed-aisdk-family-change-proposals.md`.
 - The end-to-end coordinator now runs a real Agent R request through broker
   revision checks, Ark, `rho.bridge`, a bounded structured result channel and
   the broker-owned SQLite store. The successful probe returned value 42 and
@@ -168,4 +170,4 @@ cargo run -p rho-server -- probe-coordinator --kernelspec .rho/runtime/ark-0.1.2
 ```
 
 The bootstrap and Windows toolchain contract are documented in
-`docs/implementation/windows-build-environment.md`.
+`docs/implementation/implemented-windows-build-environment.md`.

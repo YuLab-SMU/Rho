@@ -1,10 +1,14 @@
 # Windows Startup Diagnostics and Recovery Specification
 
-Status: implementation handoff
+Status: implemented after `0.2.0-dev.11`
 
 Target release: `0.2.0-dev.11` or the next Windows installer
 
 Date: 2026-07-21
+
+Implementation note: descriptions of the former startup architecture and
+implementation tasks below are retained for design traceability; the recovery
+flow is present in the current baseline.
 
 ## 1. Goal
 
@@ -332,7 +336,7 @@ could not open its interface and gives the fallback log path. The top-level
 
 The Windows installer should detect or bootstrap the supported Microsoft Edge
 WebView2 Runtime. Installer behavior and clean-Windows-10 evidence must be
-recorded in `docs/implementation/windows-build-environment.md`.
+recorded in `docs/implementation/implemented-windows-build-environment.md`.
 
 ## 8. Diagnostics And Privacy
 
@@ -450,9 +454,9 @@ The Windows installer is not ready for general distribution until:
 After implementation:
 
 - add the new startup behavior and prerequisites to
-  `docs/implementation/windows-prototype.md`;
+  `docs/implementation/implemented-windows-prototype.md`;
 - add the exact build flags, WebView2 installation mode and acceptance evidence
-  to `docs/implementation/windows-build-environment.md`;
+  to `docs/implementation/implemented-windows-build-environment.md`;
 - add the startup cases as P0 gates in
-  `docs/release/0.2-release-checklist.md`;
+  `docs/release/active-0.2-release-checklist.md`;
 - record the user-visible change in `NEWS.md`.

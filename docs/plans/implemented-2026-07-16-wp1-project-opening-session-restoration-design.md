@@ -1,8 +1,8 @@
 # WP1 Project Opening And Session Restoration Design
 
 Date: 2026-07-16
-Status: Approved design baseline
-Scope: `docs/plans/0.2x-agent-handoff.md` WP1
+Status: Implemented in `0.2.0-dev.2`
+Scope: `docs/plans/implemented-0.2x-agent-handoff.md` WP1
 
 ## Goal
 
@@ -314,7 +314,7 @@ The preferred implementation touchpoints are:
 - `desktop/dist/app.js`;
 - `desktop/dist/index.html`;
 - `desktop/dist/styles.css`;
-- `docs/implementation/windows-prototype.md`;
+- `docs/implementation/implemented-windows-prototype.md`;
 - targeted tests.
 
 ## Done Criteria For WP1

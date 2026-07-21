@@ -1,7 +1,13 @@
 # Rho 0.2.x Agent Handoff Plan
 
+Status: implemented in `0.2.0-dev.2` and subsequent `0.2.x` builds
+
 Date: 2026-07-16  
 Baseline: `0.2.0-dev.1`
+
+Implementation note: this handoff is retained as the original WP1-WP5 delivery
+contract. Its future-tense instructions describe the preimplementation state;
+the work packages are present in the current `0.2.x` baseline.
 
 ## How To Use This Brief
 
@@ -11,7 +17,7 @@ time, run the listed gates, and report changed files and residual risks. A
 separate review agent will then inspect the diff and rerun the gates.
 
 Before implementation or packaging, read
-`docs/implementation/windows-build-environment.md`.
+`docs/implementation/implemented-windows-build-environment.md`.
 It records the current machine's verified toolchain, release target, build
 commands, artifact checks and required handoff report.
 
@@ -64,7 +70,7 @@ Preferred files:
 
 - `desktop/src-tauri/src/main.rs` or a new small `project.rs` module;
 - `desktop/dist/app.js`, `index.html`, `styles.css`;
-- `docs/implementation/windows-prototype.md` and tests.
+- `docs/implementation/implemented-windows-prototype.md` and tests.
 
 Acceptance tests:
 
