@@ -624,8 +624,22 @@ pub async fn dispatch_workspace_request(
   writeBin(payload, connection)
   close(connection)
   on.exit(NULL)
-  if (!file.rename({temporary_path}, {result_path})) {{
-    stop("Failed to publish the structured rho.bridge result.", call. = FALSE)
+  published <- isTRUE(file.rename({temporary_path}, {result_path}))
+  if (!published && file.exists({temporary_path})) {{
+    if (file.exists({result_path})) {{
+      unlink({result_path}, force = TRUE)
+    }}
+    published <- isTRUE(file.copy({temporary_path}, {result_path}, overwrite = TRUE, copy.mode = FALSE))
+    unlink({temporary_path}, force = TRUE)
+  }}
+  if (!published || !file.exists({result_path})) {{
+    stop(
+      sprintf(
+        "Failed to publish the structured rho.bridge result to %s.",
+        {result_path}
+      ),
+      call. = FALSE
+    )
   }}
   invisible(NULL)
 }})"#
@@ -1891,14 +1905,21 @@ impl ResultFile {
     }
 
     fn read_json(&self) -> Result<Value> {
-        let mut file = std::fs::File::open(&self.path).with_context(|| {
-            format!(
-                "Workspace R did not publish structured result {}",
-                self.path.display()
-            )
-        })?;
+        let target = if self.path.is_file() {
+            &self.path
+        } else if self.temporary_path.is_file() {
+            &self.temporary_path
+        } else {
+            bail!(
+                "Workspace R did not publish structured result {} or fallback {}",
+                self.path.display(),
+                self.temporary_path.display()
+            );
+        };
+        let mut file = std::fs::File::open(target)
+            .with_context(|| format!("opening Workspace R result {}", target.display()))?;
         read_bounded_json(&mut file)
-            .with_context(|| format!("reading Workspace R result {}", self.path.display()))
+            .with_context(|| format!("reading Workspace R result {}", target.display()))
     }
 }
 

@@ -133,8 +133,8 @@ jobs:
           if (-not (Test-Path -LiteralPath $binary)) {
               throw "Smoke-test binary not found at $binary."
           }
-          & $binary --smoke-test
-          $exitCode = $LASTEXITCODE
+          $process = Start-Process -FilePath $binary -ArgumentList "--smoke-test" -NoNewWindow -Wait -PassThru
+          $exitCode = $process.ExitCode
           if ($exitCode -ne 0) {
               throw "Smoke test failed with exit code $exitCode."
           }
