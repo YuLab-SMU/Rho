@@ -220,10 +220,10 @@ D:\Rho\target\release\bundle\nsis\Rho_0.2.0-dev.11_x64-setup.exe
 Validated `0.2.0-dev.11` artifact snapshot:
 
 ```text
-Installer size: 15,806,011 bytes
-Installer SHA-256: 8F687A2C228D8F7B7DAB26544AC43FCB4A5B765175CA291F7B5D926A47AFC8DA
-rho-desktop.exe size: 39,445,885 bytes
-rho-desktop.exe SHA-256: AD7415CC3D4550AA76F9FB940BF847B947DB981AD2294B1EF6302311CE385970
+Installer size: 15,844,587 bytes
+Installer SHA-256: DF73E50EBAC8A481910DF61E5E4392DF57536E88A78FDCD7136A323DA1EDE551
+rho-desktop.exe size: 39,631,081 bytes
+rho-desktop.exe SHA-256: 5435DBA00D6784148A3530248DF6243FADEE8450464CC6BC3381E4C94EBF16D4
 ```
 
 The hash identifies the already validated artifact only. A legitimate rebuild

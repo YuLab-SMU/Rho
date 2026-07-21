@@ -114,6 +114,12 @@ struct ProbeProcessOutput {
     timed_out: bool,
 }
 
+#[derive(Clone, Copy)]
+enum RProbeStartup {
+    Controlled,
+    UserProfile,
+}
+
 struct AppState {
     data_dir: PathBuf,
     ark: PathBuf,
@@ -1506,7 +1512,12 @@ cat(
   sep = ""
 )
 "#;
-    let output = run_r_probe(rscript, expression, Duration::from_secs(15))?;
+    let output = run_r_probe(
+        rscript,
+        expression,
+        Duration::from_secs(15),
+        RProbeStartup::Controlled,
+    )?;
     ensure!(
         output.success,
         "R runtime probe failed (exit_code={:?}, timed_out={}, elapsed_ms={}): stdout={} stderr={}",
@@ -1516,22 +1527,59 @@ cat(
         bounded_diagnostic(&output.stdout),
         bounded_diagnostic(&output.stderr)
     );
-    parse_r_runtime_probe(&output.stdout)
+    let mut probe = parse_r_runtime_probe(&output.stdout)?;
+    let library_expression = r#"
+cat(
+  "__RHO_EFFECTIVE_LIBS__",
+  paste(
+    normalizePath(.libPaths(), winslash = "/", mustWork = FALSE),
+    collapse = .Platform$path.sep
+  ),
+  "\n",
+  sep = ""
+)
+"#;
+    match run_r_probe(
+        rscript,
+        library_expression,
+        Duration::from_secs(15),
+        RProbeStartup::UserProfile,
+    ) {
+        Ok(output) if output.success => {
+            if let Some(libraries) = probe_value(&output.stdout, "__RHO_EFFECTIVE_LIBS__") {
+                if !libraries.is_empty() {
+                    probe.r_libs = libraries;
+                }
+            } else {
+                write_startup_log(
+                    "User R profile library probe returned no marker; using controlled library paths",
+                );
+            }
+        }
+        Ok(output) => write_startup_log(&format!(
+            "User R profile library probe failed; using controlled library paths (exit_code={:?}, timed_out={}, stdout={}, stderr={})",
+            output.exit_code,
+            output.timed_out,
+            bounded_diagnostic(&output.stdout),
+            bounded_diagnostic(&output.stderr)
+        )),
+        Err(error) => write_startup_log(&format!(
+            "User R profile library probe could not start; using controlled library paths: {error:#}"
+        )),
+    }
+    Ok(probe)
 }
 
 fn parse_r_runtime_probe(stdout: &str) -> Result<RRuntimeProbe> {
-    let value = |prefix: &str| {
-        stdout
-            .lines()
-            .find_map(|line| line.strip_prefix(prefix).map(str::trim))
-            .map(str::to_string)
-    };
-    let r_home = value("__RHO_HOME__").context("R home was absent from runtime probe")?;
-    let r_version = value("__RHO_VERSION__").context("R version was absent from runtime probe")?;
-    let r_version_number = value("__RHO_VERSION_NUMBER__")
+    let r_home =
+        probe_value(stdout, "__RHO_HOME__").context("R home was absent from runtime probe")?;
+    let r_version = probe_value(stdout, "__RHO_VERSION__")
+        .context("R version was absent from runtime probe")?;
+    let r_version_number = probe_value(stdout, "__RHO_VERSION_NUMBER__")
         .context("R version number was absent from runtime probe")?;
     ensure_supported_r_version(&r_version_number)?;
-    let r_libs = value("__RHO_LIBS__").context("R library paths were absent from runtime probe")?;
+    let r_libs = probe_value(stdout, "__RHO_LIBS__")
+        .context("R library paths were absent from runtime probe")?;
     Ok(RRuntimeProbe {
         r_home,
         r_version,
@@ -1539,12 +1587,24 @@ fn parse_r_runtime_probe(stdout: &str) -> Result<RRuntimeProbe> {
     })
 }
 
+fn probe_value(stdout: &str, prefix: &str) -> Option<String> {
+    stdout
+        .lines()
+        .find_map(|line| line.strip_prefix(prefix).map(str::trim))
+        .map(str::to_string)
+}
+
 fn probe_agent_runtime(rscript: &Path) -> AgentRuntimeStatus {
     let expression = r#"
 loadNamespace("aisdk")
 cat("__RHO_AISDK__", as.character(utils::packageVersion("aisdk")), "\n", sep = "")
 "#;
-    let output = match run_r_probe(rscript, expression, Duration::from_secs(30)) {
+    let output = match run_r_probe(
+        rscript,
+        expression,
+        Duration::from_secs(30),
+        RProbeStartup::UserProfile,
+    ) {
         Ok(output) => output,
         Err(error) => {
             return AgentRuntimeStatus {
@@ -1586,13 +1646,21 @@ cat("__RHO_AISDK__", as.character(utils::packageVersion("aisdk")), "\n", sep = "
     }
 }
 
-fn run_r_probe(rscript: &Path, expression: &str, timeout: Duration) -> Result<ProbeProcessOutput> {
+fn run_r_probe(
+    rscript: &Path,
+    expression: &str,
+    timeout: Duration,
+    startup: RProbeStartup,
+) -> Result<ProbeProcessOutput> {
     let stdout_file = tempfile::NamedTempFile::new().context("creating R probe stdout file")?;
     let stderr_file = tempfile::NamedTempFile::new().context("creating R probe stderr file")?;
     let mut command = Command::new(rscript);
     hide_console_window(&mut command);
+    if matches!(startup, RProbeStartup::Controlled) {
+        command.args(["--no-init-file", "--no-site-file"]);
+    }
     command
-        .args(["--no-init-file", "--no-site-file", "-e", expression])
+        .args(["-e", expression])
         .stdin(Stdio::null())
         .stdout(Stdio::from(stdout_file.reopen()?))
         .stderr(Stdio::from(stderr_file.reopen()?));

@@ -7,7 +7,32 @@
     <link rel="stylesheet" href="styles.css?v=0.2.0-dev.11" />
   </head>
   <body>
-    <div class="app-shell layout-code">
+    <section id="startupGate" class="startup-gate" aria-live="polite">
+      <div class="startup-panel">
+        <div class="startup-brand"><span class="brand-mark">R</span><strong>Rho</strong></div>
+        <div id="startupProgress" class="startup-progress">
+          <span class="startup-spinner" aria-hidden="true"></span>
+          <div><strong id="startupTitle">Preparing Rho</strong><p id="startupMessage">Checking the local R environment...</p></div>
+        </div>
+        <div id="startupIssue" class="startup-issue hidden">
+          <span class="startup-issue-icon" aria-hidden="true">!</span>
+          <div><strong id="startupIssueTitle">R needs attention</strong><p id="startupIssueMessage"></p></div>
+        </div>
+        <details id="startupDetails" class="startup-details hidden">
+          <summary>Technical details</summary>
+          <pre id="startupTechnicalDetail"></pre>
+        </details>
+        <div id="startupActions" class="startup-actions hidden">
+          <button id="startupRetry" class="primary" type="button">Retry</button>
+          <button id="startupChooseR" type="button">Choose Rscript.exe</button>
+          <button id="startupCopyDiagnostics" type="button">Copy diagnostics</button>
+          <button id="startupOpenLog" type="button">Open log folder</button>
+          <button id="startupExit" type="button">Exit</button>
+        </div>
+        <p id="startupLogPath" class="startup-log-path hidden"></p>
+      </div>
+    </section>
+    <div id="appShell" class="app-shell layout-code hidden" aria-hidden="true">
       <header class="topbar">
         <div class="brand" aria-label="Rho workbench">
           <span class="brand-mark">R</span>
@@ -184,6 +209,7 @@ plot(
           <div class="agent-header">
             <div><span id="agentStateDot" class="agent-state-dot"></span><strong id="agentState">Ready</strong></div>
             <div class="agent-header-actions">
+              <button id="agentRuntimeRetryButton" class="agent-clear-button hidden" type="button" title="Retry Agent runtime check">Retry Agent</button>
               <button id="agentCancelButton" class="agent-cancel-button hidden" type="button" title="Cancel Agent turn" aria-label="Cancel Agent turn">■</button>
               <button id="clearAgentHistoryButton" class="agent-clear-button" type="button" title="Clear Agent history">Clear</button>
               <span id="revisionBadge" class="revision-badge">rev 1</span>

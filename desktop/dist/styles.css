@@ -31,6 +31,76 @@ button, input, textarea { font: inherit; letter-spacing: 0; }
 button { color: inherit; }
 button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid #4b9f98; outline-offset: -1px; }
 
+.startup-gate {
+  display: grid;
+  place-items: center;
+  width: 100vw;
+  height: 100vh;
+  padding: 24px;
+  background: #eef2f2;
+}
+.startup-panel {
+  display: grid;
+  gap: 18px;
+  width: min(560px, 100%);
+  padding: 28px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 16px 40px rgba(24, 41, 45, 0.13);
+}
+.startup-brand { display: flex; align-items: center; gap: 9px; font: 20px Georgia, serif; }
+.startup-progress,
+.startup-issue { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 12px; align-items: start; }
+.startup-progress strong,
+.startup-issue strong { display: block; margin: 1px 0 5px; font-size: 15px; }
+.startup-progress p,
+.startup-issue p { margin: 0; color: var(--muted); line-height: 1.5; }
+.startup-spinner {
+  width: 22px;
+  height: 22px;
+  border: 2px solid #c7d8d6;
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: startup-spin 0.9s linear infinite;
+}
+.startup-issue-icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--danger);
+  font-weight: 700;
+}
+.startup-details { border-top: 1px solid var(--border); padding-top: 12px; }
+.startup-details summary { color: var(--muted); cursor: pointer; font-size: 11px; }
+.startup-details pre {
+  max-height: 180px;
+  margin: 10px 0 0;
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #f7f9f9;
+  font: 10.5px/1.45 "Cascadia Code", Consolas, monospace;
+  white-space: pre-wrap;
+}
+.startup-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.startup-actions button {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+}
+.startup-actions button.primary { border-color: var(--accent); color: #fff; background: var(--accent); }
+.startup-actions button:disabled { opacity: 0.55; cursor: wait; }
+.startup-log-path { margin: -8px 0 0; color: var(--subtle); font-size: 10px; overflow-wrap: anywhere; }
+@keyframes startup-spin { to { transform: rotate(360deg); } }
+
 .app-shell {
   position: relative;
   display: grid;

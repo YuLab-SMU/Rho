@@ -7,6 +7,9 @@ const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 const initialEditorContent = $("#editor")?.value || "";
 
 const state = {
+  startupBusy: false,
+  startupView: null,
+  startupPrepared: false,
   busy: false,
   agentMode: "ask",
   actAutoApprove: false,
@@ -677,6 +680,21 @@ async function invoke(command, args = {}) {
 
 async function mockInvoke(command, args) {
   await new Promise((resolve) => setTimeout(resolve, command === "run_agent" ? 800 : 300));
+  if (["startup_bootstrap", "startup_choose_rscript", "startup_status"].includes(command)) {
+    return {
+      phase: "runtime_ready",
+      busy: false,
+      runtime: {
+        rscript: "C:/Program Files/R/R-4.6.0/bin/Rscript.exe",
+        r_version: "R version 4.6.0",
+        agent_runtime: { available: true, aisdk_version: "1.5.0", error: null },
+      },
+      issue: null,
+    };
+  }
+  if (command === "startup_diagnostics") return "Rho mock startup diagnostics";
+  if (command === "startup_open_log_directory") return { path: "C:/Users/example/AppData/Local/Rho/logs/startup.log" };
+  if (command === "agent_runtime_retry") return { available: true, aisdk_version: "1.5.0", error: null };
   if (command === "workspace_start") {
     return {
       status: "idle",
@@ -2592,6 +2610,7 @@ function updateAgentHeader() {
   updateAgentModelLabel();
   renderAgentModelSelector();
   if (runtime && !runtime.available) {
+    $("#agentRuntimeRetryButton").classList.remove("hidden");
     state.agentBusy = true;
     syncAgentComposerState();
     $("#agentCancelButton").classList.add("hidden");
@@ -2599,6 +2618,7 @@ function updateAgentHeader() {
     $("#agentStateDot").className = "agent-state-dot error";
     return;
   }
+  $("#agentRuntimeRetryButton").classList.add("hidden");
   const active = state.pendingApprovals.length > 0
     || state.agentTurns.some((turn) => ["running", "waiting"].includes(turn.status));
   state.agentBusy = active;
@@ -4733,17 +4753,71 @@ async function hydrateProject(response) {
   }
 }
 
-async function initialize() {
-  initializePanelLayout();
+function setStartupBusy(busy) {
+  state.startupBusy = busy;
+  $$("#startupActions button").forEach((button) => { button.disabled = busy; });
+}
+
+function showStartupProgress(title, message) {
+  $("#startupProgress").classList.remove("hidden");
+  $("#startupIssue").classList.add("hidden");
+  $("#startupDetails").classList.add("hidden");
+  $("#startupActions").classList.add("hidden");
+  $("#startupLogPath").classList.add("hidden");
+  $("#startupTitle").textContent = title;
+  $("#startupMessage").textContent = message;
+}
+
+function renderStartupIssue(issue) {
+  const fallback = {
+    title: "Rho could not start",
+    message: "Retry startup or open the diagnostic log for more information.",
+    technical_detail: "No diagnostic detail was returned.",
+    actions: ["retry", "copy_diagnostics", "open_log", "exit"],
+    diagnostics_path: "",
+  };
+  const value = { ...fallback, ...(issue || {}) };
+  const actions = new Set(value.actions || fallback.actions);
+  state.startupView = { ...(state.startupView || {}), issue: value };
+  $("#startupProgress").classList.add("hidden");
+  $("#startupIssue").classList.remove("hidden");
+  $("#startupIssueTitle").textContent = value.title;
+  $("#startupIssueMessage").textContent = value.message;
+  $("#startupTechnicalDetail").textContent = value.technical_detail;
+  $("#startupDetails").classList.toggle("hidden", !value.technical_detail);
+  $("#startupActions").classList.remove("hidden");
+  $("#startupRetry").classList.toggle("hidden", !actions.has("retry"));
+  $("#startupChooseR").classList.toggle("hidden", !actions.has("choose_rscript"));
+  $("#startupCopyDiagnostics").classList.toggle("hidden", !actions.has("copy_diagnostics"));
+  $("#startupOpenLog").classList.toggle("hidden", !actions.has("open_log"));
+  $("#startupExit").classList.toggle("hidden", !actions.has("exit"));
+  $("#startupLogPath").textContent = value.diagnostics_path ? `Diagnostic log: ${value.diagnostics_path}` : "";
+  $("#startupLogPath").classList.toggle("hidden", !value.diagnostics_path);
+  setStartupBusy(false);
+}
+
+function revealWorkbench() {
+  $("#startupGate").classList.add("hidden");
+  $("#appShell").classList.remove("hidden");
+  $("#appShell").setAttribute("aria-hidden", "false");
+}
+
+async function finishWorkbenchStartup(startupView) {
+  showStartupProgress("Starting Workspace R", "Opening the Ark-backed R session...");
   try {
-    await initializeEditor();
-    await listenForProjectChanges();
+    if (!state.startupPrepared) {
+      initializePanelLayout();
+      await initializeEditor();
+      await listenForProjectChanges();
+      state.startupPrepared = true;
+    }
     const status = await invoke("workspace_start");
-    state.agentRuntime = status.agent_runtime || null;
+    state.agentRuntime = status.agent_runtime || startupView?.runtime?.agent_runtime || null;
     updateIdentity(status.workspace);
     $("#rVersion").textContent = status.r_version || "R";
     setKernelStatus("idle", "R idle");
     addConsole("SYSTEM", `${status.r_version} · Ark PID ${status.kernel_pid}`);
+    revealWorkbench();
     await loadAgentLlmSettings();
     const response = await invoke("project_restore_session");
     if (response.status === "ready") {
@@ -4768,12 +4842,71 @@ async function initialize() {
       }).catch(() => {});
     }
   } catch (error) {
-    setKernelStatus("error", "R unavailable");
-    addConsole("SYSTEM", String(error), "error");
-    addProblem(String(error));
-    toast(String(error), true);
+    if ($("#startupGate").classList.contains("hidden")) {
+      setKernelStatus("error", "R unavailable");
+      addConsole("SYSTEM", String(error), "error");
+      addProblem(String(error));
+      toast(String(error), true);
+      return;
+    }
+    renderStartupIssue({
+      code: "ARK_START_FAILED",
+      title: "Workspace R could not start",
+      message: "R is available, but Rho could not start the Workspace. Retry or copy diagnostics.",
+      technical_detail: String(error),
+      actions: ["retry", "copy_diagnostics", "open_log", "exit"],
+      diagnostics_path: state.startupView?.issue?.diagnostics_path || "",
+    });
   }
 }
+
+async function runStartup(command = "startup_bootstrap") {
+  if (state.startupBusy) return;
+  setStartupBusy(true);
+  showStartupProgress(
+    "Preparing Rho",
+    command === "startup_choose_rscript" ? "Checking the selected R installation..." : "Checking the local R environment...",
+  );
+  try {
+    const view = await invoke(command);
+    state.startupView = view;
+    if (view?.phase === "runtime_ready" && !view.issue) {
+      await finishWorkbenchStartup(view);
+      return;
+    }
+    renderStartupIssue(view?.issue);
+  } catch (error) {
+    renderStartupIssue({
+      title: "Rho could not check its runtime",
+      message: "Retry startup or copy diagnostics for support.",
+      technical_detail: String(error),
+      actions: ["retry", "choose_rscript", "copy_diagnostics", "open_log", "exit"],
+    });
+  } finally {
+    setStartupBusy(false);
+  }
+}
+
+async function initialize() {
+  await runStartup();
+}
+
+$("#startupRetry").addEventListener("click", () => runStartup("startup_bootstrap"));
+$("#startupChooseR").addEventListener("click", () => runStartup("startup_choose_rscript"));
+$("#startupCopyDiagnostics").addEventListener("click", async () => {
+  try {
+    await copyText(await invoke("startup_diagnostics"));
+    $("#startupCopyDiagnostics").textContent = "Copied";
+    setTimeout(() => { $("#startupCopyDiagnostics").textContent = "Copy diagnostics"; }, 1600);
+  } catch (error) {
+    renderStartupIssue({ ...state.startupView?.issue, technical_detail: String(error) });
+  }
+});
+$("#startupOpenLog").addEventListener("click", async () => {
+  try { await invoke("startup_open_log_directory"); }
+  catch (error) { renderStartupIssue({ ...state.startupView?.issue, technical_detail: String(error) }); }
+});
+$("#startupExit").addEventListener("click", () => window.close());
 
 $("#runButton").addEventListener("click", runSelectionOrCurrentLine);
 $("#editorRunButton").addEventListener("click", runSelectionOrCurrentLine);
@@ -4917,6 +5050,20 @@ $$("[data-layout]").forEach((button) => button.addEventListener("click", () => {
 }));
 
 $("#agentSendButton").addEventListener("click", sendAgentPrompt);
+$("#agentRuntimeRetryButton").addEventListener("click", async () => {
+  const button = $("#agentRuntimeRetryButton");
+  button.disabled = true;
+  try {
+    state.agentRuntime = await invoke("agent_runtime_retry");
+    updateAgentHeader();
+    renderAgentTimeline();
+    toast(state.agentRuntime.available ? "Agent runtime is ready." : state.agentRuntime.error, !state.agentRuntime.available);
+  } catch (error) {
+    toast(String(error), true);
+  } finally {
+    button.disabled = false;
+  }
+});
 $("#agentCancelButton").addEventListener("click", async () => {
   const turnId = state.activeAgentTurnId;
   if (!turnId) return;
