@@ -373,7 +373,7 @@ Other family packages are adopted by boundary:
   reference, not Rho's primary desktop console.
 
 Cross-repository changes that would reduce Rho-specific adapter code are tracked
-in `docs/architecture/aisdk-family-change-proposals.md`. The highest-priority
+in `docs/architecture/proposed-aisdk-family-change-proposals.md`. The highest-priority
 items are a correlated public event envelope, cooperative cancellation,
 pluggable tool/context and skill executors, and a secure `aisdk.mcp` process
 launcher that does not inherit all Agent R credentials.
@@ -947,7 +947,7 @@ controls, and an Ask/Plan/Act DeepSeek Agent panel using the same Workspace R.
 This checkpoint intentionally uses a lightweight textarea editor and a scratch
 document; Monaco, native project/file operations, durable ChatSession history,
 interactive approval dialogs and installer signing remain Phase 1A work. See
-`docs/implementation/windows-prototype.md` for the exact boundary.
+`docs/implementation/implemented-windows-prototype.md` for the exact boundary.
 
 Frontend:
 

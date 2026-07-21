@@ -8,6 +8,9 @@ this file records behavior that is already available in a released build.
 
 ### Fixed
 
+- Closing Rho now shuts down the Ark-backed Workspace R session and terminates
+  its process tree if graceful shutdown cannot complete, preventing orphaned
+  `ark.exe` processes on Windows.
 - Rho now keeps a recovery window open when R discovery or runtime preparation
   fails, with Retry, Rscript selection and diagnostic actions instead of a
   silent startup exit.

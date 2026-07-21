@@ -8,6 +8,7 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock, RwLock as SyncRwLock};
 use std::time::{Duration, Instant};
 
@@ -138,6 +139,7 @@ struct AppState {
     approvals: Arc<PendingApprovalRegistry>,
     agent_tasks: Arc<Mutex<HashMap<String, tauri::async_runtime::JoinHandle<()>>>>,
     agent_llm_test_control: AgentModelTestControl,
+    shutdown_started: AtomicBool,
 }
 
 static STARTUP_LOG_PATH: OnceLock<PathBuf> = OnceLock::new();
@@ -1208,6 +1210,91 @@ async fn restart_workspace(state: State<'_, AppState>) -> Result<WorkspaceStatus
         .await
         .map_err(display_error)?;
     Ok(status)
+}
+
+async fn shutdown_application(state: &AppState) {
+    write_startup_log("Rho desktop shutdown started");
+    state.approvals.cancel_all("Rho is closing.").await;
+
+    if let Err(error) = agent_llm::cancel_test(&state.agent_llm_test_control) {
+        write_startup_log(&format!("Agent model test shutdown failed: {error:#}"));
+    }
+
+    if let Some(watcher) = state.project_watcher.lock().await.take() {
+        watcher.stop();
+    }
+
+    let tasks = {
+        let mut tasks = state.agent_tasks.lock().await;
+        tasks.drain().map(|(_, task)| task).collect::<Vec<_>>()
+    };
+    for task in tasks {
+        task.abort();
+        let _ = task.await;
+    }
+
+    let context = state.context.lock().await.take();
+    let session = state.session.write().await.take();
+    let kernel_pid = session.as_ref().and_then(|session| session.child_pid());
+
+    if let Some(session) = session.as_ref() {
+        let _ = session.interrupt().await;
+    }
+
+    if let Some(context) = context.as_ref() {
+        if tokio::time::timeout(Duration::from_secs(5), context.lock())
+            .await
+            .is_err()
+        {
+            write_startup_log("Timed out waiting for Workspace R execution during shutdown");
+        }
+    }
+    drop(context);
+
+    if let Some(session) = session {
+        match Arc::try_unwrap(session) {
+            Ok(mut session) => {
+                if let Err(error) = session.shutdown().await {
+                    write_startup_log(&format!("Graceful Ark shutdown failed: {error:#}"));
+                }
+            }
+            Err(session) => {
+                write_startup_log(&format!(
+                    "Ark session still has {} active references; terminating its process tree",
+                    Arc::strong_count(&session)
+                ));
+                drop(session);
+                if let Some(pid) = kernel_pid
+                    && let Err(error) = terminate_process_tree(pid)
+                {
+                    write_startup_log(&format!("Ark process-tree termination failed: {error:#}"));
+                }
+            }
+        }
+    }
+    write_startup_log("Rho desktop shutdown completed");
+}
+
+#[cfg(windows)]
+fn terminate_process_tree(pid: u32) -> Result<()> {
+    use std::os::windows::process::CommandExt;
+
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let status = Command::new("taskkill")
+        .args(["/PID", &pid.to_string(), "/T", "/F"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .context("starting taskkill for Ark")?;
+    ensure!(status.success(), "taskkill failed with status {status}");
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn terminate_process_tree(_pid: u32) -> Result<()> {
+    Ok(())
 }
 
 async fn active_session(state: &AppState) -> Result<Arc<ArkSession>> {
@@ -2373,6 +2460,7 @@ fn main() {
                 approvals: Arc::new(PendingApprovalRegistry::default()),
                 agent_tasks: Arc::new(Mutex::new(HashMap::new())),
                 agent_llm_test_control: AgentModelTestControl::default(),
+                shutdown_started: AtomicBool::new(false),
             });
             Ok(())
         })
@@ -2427,18 +2515,40 @@ fn main() {
             cancel_agent_turn,
             restart_workspace
         ])
-        .run(tauri::generate_context!());
-    if let Err(error) = run_result {
-        let detail = format!("Rho desktop could not start: {error:#}");
-        write_startup_log(&detail);
-        let _ = rfd::MessageDialog::new()
-            .set_title("Rho could not start")
-            .set_description(format!(
-                "Rho could not open its interface.\n\n{error}\n\nDiagnostic log:\n{}",
-                startup_log_path().display()
-            ))
-            .set_level(rfd::MessageLevel::Error)
-            .set_buttons(rfd::MessageButtons::Ok)
-            .show();
+        .build(tauri::generate_context!());
+    match run_result {
+        Ok(app) => {
+            app.run(|app_handle, event| {
+                if let tauri::RunEvent::ExitRequested { api, code, .. } = event
+                    && code.is_none()
+                {
+                    api.prevent_exit();
+                    let state = app_handle.state::<AppState>();
+                    if state.shutdown_started.swap(true, Ordering::SeqCst) {
+                        return;
+                    }
+
+                    let app_handle = app_handle.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let state = app_handle.state::<AppState>();
+                        shutdown_application(&state).await;
+                        app_handle.exit(0);
+                    });
+                }
+            });
+        }
+        Err(error) => {
+            let detail = format!("Rho desktop could not start: {error:#}");
+            write_startup_log(&detail);
+            let _ = rfd::MessageDialog::new()
+                .set_title("Rho could not start")
+                .set_description(format!(
+                    "Rho could not open its interface.\n\n{error}\n\nDiagnostic log:\n{}",
+                    startup_log_path().display()
+                ))
+                .set_level(rfd::MessageLevel::Error)
+                .set_buttons(rfd::MessageButtons::Ok)
+                .show();
+        }
     }
 }
