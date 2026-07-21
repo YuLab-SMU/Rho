@@ -20,6 +20,9 @@ this file records behavior that is already available in a released build.
 - Rho now resolves and explicitly loads the user's `~/.Rprofile` and
   `~/.Renviron` in Workspace R, preserving custom library paths and user-level
   configuration without allowing project startup files to take precedence.
+- Missing user `~/.Rprofile` and `~/.Renviron` files are now treated as absent
+  optional configuration. Rho no longer exports placeholder paths for them,
+  while still preventing project startup files from being loaded implicitly.
 - Windows startup diagnostics now retain subprocess exit codes, bounded stdout
   and stderr, elapsed time and append-only error history.
 - Kept the Agent model selector menu within the visible Agent panel when the

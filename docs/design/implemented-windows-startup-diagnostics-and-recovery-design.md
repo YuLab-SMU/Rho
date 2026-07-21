@@ -199,13 +199,16 @@ the user `.Rprofile` and `.Renviron`; never log their contents.
 After the controlled probe succeeds, run a separate bounded library-path probe
 with the normal user R startup and read only a marked `.libPaths()` result. If
 it succeeds, pass those effective paths to Ark through `R_LIBS`. Ark explicitly
-sets `R_PROFILE_USER` and `R_ENVIRON_USER` to the resolved user files, sets
-`R_ENVIRON` to an empty Rho-owned site environment, and keeps
-`--no-site-file`. It therefore loads user startup configuration while blocking
-project startup-file precedence and site profile code. If the profile probe
-exits, times out or omits its marker, fall back to the controlled library paths
-and append a diagnostic that excludes stdout; Ark still attempts to load the
-explicit user startup files.
+sets `R_PROFILE_USER` and `R_ENVIRON_USER` only when the corresponding resolved
+user file exists. When either file is absent, Rho omits its environment variable
+and uses `--no-init-file` or `--no-environ` for that startup channel so a project
+file cannot silently take its place. When the user environment file exists,
+Rho also sets `R_ENVIRON` to an empty Rho-owned site environment. The probe
+continues to use `--no-site-file`, loading available user configuration while
+blocking project startup-file precedence and site profile code. If the profile
+probe exits, times out or omits its marker, fall back to the controlled library
+paths and append a diagnostic that excludes stdout; Ark still attempts to load
+the user startup files that were present during the controlled probe.
 
 The required probe has a 15-second timeout. Capture and retain:
 

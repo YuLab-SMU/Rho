@@ -53,8 +53,8 @@ struct RuntimeConfig {
     rscript: PathBuf,
     r_version: String,
     r_home: String,
-    r_profile_user: PathBuf,
-    r_environ_user: PathBuf,
+    r_profile_user: Option<PathBuf>,
+    r_environ_user: Option<PathBuf>,
     bridge_package: PathBuf,
     agent_package: PathBuf,
     agent_runtime: AgentRuntimeStatus,
@@ -106,8 +106,8 @@ struct RRuntimeProbe {
     r_home: String,
     r_version: String,
     r_libs: String,
-    r_profile_user: PathBuf,
-    r_environ_user: PathBuf,
+    r_profile_user: Option<PathBuf>,
+    r_environ_user: Option<PathBuf>,
 }
 
 struct ProbeProcessOutput {
@@ -123,6 +123,12 @@ struct ProbeProcessOutput {
 enum RProbeStartup {
     Controlled,
     UserProfile,
+}
+
+#[derive(Clone, Copy)]
+struct RUserStartupFiles<'a> {
+    profile: Option<&'a Path>,
+    environ: Option<&'a Path>,
 }
 
 struct AppState {
@@ -361,7 +367,11 @@ async fn agent_runtime_retry(state: State<'_, AppState>) -> Result<AgentRuntimeS
     let r_profile_user = config.r_profile_user.clone();
     let r_environ_user = config.r_environ_user.clone();
     let status = tauri::async_runtime::spawn_blocking(move || {
-        probe_agent_runtime(&rscript, &r_profile_user, &r_environ_user)
+        probe_agent_runtime(
+            &rscript,
+            r_profile_user.as_deref(),
+            r_environ_user.as_deref(),
+        )
     })
     .await
     .map_err(display_error)?;
@@ -1490,7 +1500,11 @@ fn prepare_runtime_files_with_rscript(
         r_profile_user,
         r_environ_user,
     } = probe;
-    let agent_runtime = probe_agent_runtime(&rscript, &r_profile_user, &r_environ_user);
+    let agent_runtime = probe_agent_runtime(
+        &rscript,
+        r_profile_user.as_deref(),
+        r_environ_user.as_deref(),
+    );
     let runtime_dir = data_dir.join("runtime");
     std::fs::create_dir_all(&runtime_dir)?;
     let empty_site_environ = runtime_dir.join("empty-site.Renviron");
@@ -1503,20 +1517,41 @@ fn prepare_runtime_files_with_rscript(
         r_bin.display(),
         std::env::var("PATH").unwrap_or_default()
     );
+    let mut argv = vec![
+        json!(ark),
+        json!("--connection_file"),
+        json!("{connection_file}"),
+        json!("--session-mode"),
+        json!("console"),
+        json!("--log"),
+        json!(log_path),
+        json!("--"),
+        json!("--interactive"),
+        json!("--no-site-file"),
+    ];
+    let mut environment = serde_json::Map::from_iter([
+        ("R_HOME".to_string(), json!(r_home)),
+        ("R_LIBS".to_string(), json!(r_libs)),
+        ("PATH".to_string(), json!(path)),
+    ]);
+    if let Some(r_profile_user) = &r_profile_user {
+        environment.insert("R_PROFILE_USER".to_string(), json!(r_profile_user));
+    } else {
+        argv.push(json!("--no-init-file"));
+    }
+    if let Some(r_environ_user) = &r_environ_user {
+        environment.insert("R_ENVIRON".to_string(), json!(empty_site_environ));
+        environment.insert("R_ENVIRON_USER".to_string(), json!(r_environ_user));
+    } else {
+        argv.push(json!("--no-environ"));
+    }
     let spec = json!({
-        "argv": [ark, "--connection_file", "{connection_file}", "--session-mode", "console", "--log", log_path, "--", "--interactive", "--no-site-file"],
+        "argv": argv,
         "display_name": "Ark R 0.1.252 (Rho Desktop)",
         "language": "R",
         "interrupt_mode": "message",
         "kernel_protocol_version": "5.4",
-        "env": {
-            "R_HOME": r_home,
-            "R_LIBS": r_libs,
-            "R_ENVIRON": empty_site_environ,
-            "R_ENVIRON_USER": r_environ_user,
-            "R_PROFILE_USER": r_profile_user,
-            "PATH": path
-        }
+        "env": environment
     });
     atomic_write(&kernelspec, &serde_json::to_vec_pretty(&spec)?)?;
     atomic_write(
@@ -1648,7 +1683,10 @@ cat(
         library_expression,
         Duration::from_secs(15),
         RProbeStartup::UserProfile,
-        Some((&probe.r_profile_user, &probe.r_environ_user)),
+        Some(RUserStartupFiles {
+            profile: probe.r_profile_user.as_deref(),
+            environ: probe.r_environ_user.as_deref(),
+        }),
     ) {
         Ok(output) if output.success => {
             if let Some(libraries) = probe_value(&output.stdout, "__RHO_EFFECTIVE_LIBS__") {
@@ -1684,12 +1722,14 @@ fn parse_r_runtime_probe(stdout: &str) -> Result<RRuntimeProbe> {
     ensure_supported_r_version(&r_version_number)?;
     let r_libs = probe_value(stdout, "__RHO_LIBS__")
         .context("R library paths were absent from runtime probe")?;
-    let r_profile_user = probe_value(stdout, "__RHO_PROFILE_USER__")
-        .map(PathBuf::from)
-        .context("R user profile path was absent from runtime probe")?;
-    let r_environ_user = probe_value(stdout, "__RHO_ENVIRON_USER__")
-        .map(PathBuf::from)
-        .context("R user environment path was absent from runtime probe")?;
+    let r_profile_user = existing_startup_file(
+        probe_value(stdout, "__RHO_PROFILE_USER__")
+            .context("R user profile path was absent from runtime probe")?,
+    );
+    let r_environ_user = existing_startup_file(
+        probe_value(stdout, "__RHO_ENVIRON_USER__")
+            .context("R user environment path was absent from runtime probe")?,
+    );
     Ok(RRuntimeProbe {
         r_home,
         r_version,
@@ -1697,6 +1737,11 @@ fn parse_r_runtime_probe(stdout: &str) -> Result<RRuntimeProbe> {
         r_profile_user,
         r_environ_user,
     })
+}
+
+fn existing_startup_file(path: String) -> Option<PathBuf> {
+    let path = PathBuf::from(path);
+    path.is_file().then_some(path)
 }
 
 fn probe_value(stdout: &str, prefix: &str) -> Option<String> {
@@ -1708,8 +1753,8 @@ fn probe_value(stdout: &str, prefix: &str) -> Option<String> {
 
 fn probe_agent_runtime(
     rscript: &Path,
-    r_profile_user: &Path,
-    r_environ_user: &Path,
+    r_profile_user: Option<&Path>,
+    r_environ_user: Option<&Path>,
 ) -> AgentRuntimeStatus {
     let expression = r#"
 loadNamespace("aisdk")
@@ -1720,7 +1765,10 @@ cat("__RHO_AISDK__", as.character(utils::packageVersion("aisdk")), "\n", sep = "
         expression,
         Duration::from_secs(30),
         RProbeStartup::UserProfile,
-        Some((r_profile_user, r_environ_user)),
+        Some(RUserStartupFiles {
+            profile: r_profile_user,
+            environ: r_environ_user,
+        }),
     ) {
         Ok(output) => output,
         Err(error) => {
@@ -1767,23 +1815,40 @@ fn run_r_probe(
     expression: &str,
     timeout: Duration,
     startup: RProbeStartup,
-    user_files: Option<(&Path, &Path)>,
+    user_files: Option<RUserStartupFiles<'_>>,
 ) -> Result<ProbeProcessOutput> {
     let mut command = Command::new(rscript);
     hide_console_window(&mut command);
     if matches!(startup, RProbeStartup::Controlled) {
         command.args(["--no-environ", "--no-init-file", "--no-site-file"]);
-    } else if let Some((r_profile_user, r_environ_user)) = user_files {
+    } else if let Some(user_files) = user_files {
+        let empty_site_environ = configure_user_startup(&mut command, user_files)?;
+        return run_prepared_r_probe(command, expression, timeout, empty_site_environ);
+    }
+    run_prepared_r_probe(command, expression, timeout, None)
+}
+
+fn configure_user_startup(
+    command: &mut Command,
+    user_files: RUserStartupFiles<'_>,
+) -> Result<Option<tempfile::NamedTempFile>> {
+    command.arg("--no-site-file");
+    if let Some(r_profile_user) = user_files.profile {
+        command.env("R_PROFILE_USER", r_profile_user);
+    } else {
+        command.arg("--no-init-file");
+    }
+    if let Some(r_environ_user) = user_files.environ {
         let empty_site_environ =
             tempfile::NamedTempFile::new().context("creating empty site R environment file")?;
         command
-            .arg("--no-site-file")
             .env("R_ENVIRON", empty_site_environ.path())
-            .env("R_ENVIRON_USER", r_environ_user)
-            .env("R_PROFILE_USER", r_profile_user);
-        return run_prepared_r_probe(command, expression, timeout, Some(empty_site_environ));
+            .env("R_ENVIRON_USER", r_environ_user);
+        Ok(Some(empty_site_environ))
+    } else {
+        command.arg("--no-environ");
+        Ok(None)
     }
-    run_prepared_r_probe(command, expression, timeout, None)
 }
 
 fn run_prepared_r_probe(
@@ -2149,9 +2214,12 @@ fn classify_startup_error(detail: &str) -> StartupIssue {
 #[cfg(test)]
 mod tests {
     use super::{
-        bounded_diagnostic, classify_startup_error, ensure_supported_r_version,
-        parse_r_runtime_probe, safe_delete_project_file,
+        RUserStartupFiles, bounded_diagnostic, classify_startup_error, configure_user_startup,
+        ensure_supported_r_version, existing_startup_file, parse_r_runtime_probe,
+        safe_delete_project_file,
     };
+    use std::path::Path;
+    use std::process::Command;
     use tempfile::TempDir;
 
     #[test]
@@ -2163,7 +2231,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_base_r_probe_without_requiring_aisdk_output() {
+    fn parses_base_r_probe_without_requiring_user_startup_files() {
         let probe = parse_r_runtime_probe(
             "__RHO_HOME__C:/Program Files/R/R-4.4.2\n\
              __RHO_VERSION__R version 4.4.2\n\
@@ -2176,8 +2244,106 @@ mod tests {
         assert_eq!(probe.r_home, "C:/Program Files/R/R-4.4.2");
         assert_eq!(probe.r_version, "R version 4.4.2");
         assert!(probe.r_libs.contains("win-library"));
-        assert!(probe.r_profile_user.ends_with(".Rprofile"));
-        assert!(probe.r_environ_user.ends_with(".Renviron"));
+        assert!(probe.r_profile_user.is_none());
+        assert!(probe.r_environ_user.is_none());
+    }
+
+    #[test]
+    fn retains_only_user_startup_paths_that_are_files() {
+        let directory = TempDir::new().unwrap();
+        let profile = directory.path().join(".Rprofile");
+        std::fs::write(&profile, "options(rho.test = TRUE)").unwrap();
+        let environ = directory.path().join(".Renviron");
+        let nested_directory = directory.path().join("not-a-file");
+        std::fs::create_dir(&nested_directory).unwrap();
+
+        assert_eq!(
+            existing_startup_file(profile.to_string_lossy().into_owned()),
+            Some(profile)
+        );
+        assert_eq!(
+            existing_startup_file(environ.to_string_lossy().into_owned()),
+            None
+        );
+        assert_eq!(
+            existing_startup_file(nested_directory.to_string_lossy().into_owned()),
+            None
+        );
+    }
+
+    #[test]
+    fn disables_missing_user_startup_files_without_placeholder_environment_paths() {
+        let mut command = Command::new("Rscript");
+        let empty_site = configure_user_startup(
+            &mut command,
+            RUserStartupFiles {
+                profile: None,
+                environ: None,
+            },
+        )
+        .unwrap();
+        let arguments = command
+            .get_args()
+            .map(|value| value.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        let environment = command
+            .get_envs()
+            .map(|(name, _)| name.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+
+        assert!(empty_site.is_none());
+        assert!(arguments.contains(&"--no-init-file".to_string()));
+        assert!(arguments.contains(&"--no-environ".to_string()));
+        assert!(!environment.contains(&"R_PROFILE_USER".to_string()));
+        assert!(!environment.contains(&"R_ENVIRON_USER".to_string()));
+    }
+
+    #[test]
+    fn binds_each_existing_user_startup_file_independently() {
+        let mut profile_only = Command::new("Rscript");
+        configure_user_startup(
+            &mut profile_only,
+            RUserStartupFiles {
+                profile: Some(Path::new("C:/Users/test/.Rprofile")),
+                environ: None,
+            },
+        )
+        .unwrap();
+        let profile_arguments = profile_only
+            .get_args()
+            .map(|value| value.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        let profile_environment = profile_only
+            .get_envs()
+            .map(|(name, _)| name.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        assert!(!profile_arguments.contains(&"--no-init-file".to_string()));
+        assert!(profile_arguments.contains(&"--no-environ".to_string()));
+        assert!(profile_environment.contains(&"R_PROFILE_USER".to_string()));
+        assert!(!profile_environment.contains(&"R_ENVIRON_USER".to_string()));
+
+        let mut environ_only = Command::new("Rscript");
+        let empty_site = configure_user_startup(
+            &mut environ_only,
+            RUserStartupFiles {
+                profile: None,
+                environ: Some(Path::new("C:/Users/test/.Renviron")),
+            },
+        )
+        .unwrap();
+        let environ_arguments = environ_only
+            .get_args()
+            .map(|value| value.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        let environ_environment = environ_only
+            .get_envs()
+            .map(|(name, _)| name.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        assert!(empty_site.is_some());
+        assert!(environ_arguments.contains(&"--no-init-file".to_string()));
+        assert!(!environ_arguments.contains(&"--no-environ".to_string()));
+        assert!(!environ_environment.contains(&"R_PROFILE_USER".to_string()));
+        assert!(environ_environment.contains(&"R_ENVIRON_USER".to_string()));
     }
 
     #[test]

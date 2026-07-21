@@ -53,9 +53,11 @@ of terminating the desktop process. The recovery view supports Retry, native
 The required base-R probe, effective user-profile `.libPaths()` probe and
 optional `aisdk` probe run in separate bounded processes. Rho passes successful
 profile-derived library paths to Ark through `R_LIBS` and explicitly loads the
-user `~/.Rprofile` and `~/.Renviron` in Workspace R. Project startup files do
-not take precedence, and site profile code remains disabled. Values in the user
-`.Renviron`, including credentials, are consequently visible to Workspace R.
+user `~/.Rprofile` and `~/.Renviron` in Workspace R only when those files exist.
+An absent file is not exported as a placeholder path; its startup channel is
+disabled so a project file cannot silently take its place. Site profile code
+remains disabled. Values in an existing user `.Renviron`, including credentials,
+are consequently visible to Workspace R.
 If only `aisdk` fails, the workbench remains available and the Agent panel
 reports `Unavailable` with an independent Retry Agent action.
 
