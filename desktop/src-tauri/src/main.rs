@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod agent_llm;
 mod project;
 
 use std::collections::HashMap;
@@ -7,6 +8,10 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
 
+use agent_llm::{
+    AgentLlmSettingsView, AgentModelProfile, AgentModelTestControl, AgentProviderProfile,
+    DeleteModelRequest,
+};
 use anyhow::{Context, Result, bail, ensure};
 use project::{
     ProjectRestoreResponse, ProjectSessionSnapshot, ProjectSessionStore, ProjectState,
@@ -71,6 +76,7 @@ struct AppState {
     context: Mutex<Option<Arc<Mutex<CoordinatorRuntime>>>>,
     approvals: Arc<PendingApprovalRegistry>,
     agent_tasks: Arc<Mutex<HashMap<String, tauri::async_runtime::JoinHandle<()>>>>,
+    agent_llm_test_control: AgentModelTestControl,
 }
 
 #[derive(Serialize)]
@@ -102,6 +108,11 @@ struct RenderRequest {
     path: String,
     format: Option<String>,
     document_version: Option<i64>,
+}
+
+#[derive(Deserialize)]
+struct AgentLlmSelectRequest {
+    model_id: String,
 }
 
 #[tauri::command]
@@ -268,6 +279,39 @@ async fn project_create_file(
         .map_err(display_error)?;
     drop(context);
     project_state(state).await
+}
+
+#[tauri::command]
+async fn project_delete_file(
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<ProjectState, String> {
+    let root = state.project_root.read().await.clone();
+    let context = active_context(&state).await.map_err(display_error)?;
+    let mut context = context.lock().await;
+    safe_delete_project_file(&root, &path).map_err(display_error)?;
+    context.broker.project_changed();
+    let identity = context.broker.identity().clone();
+    context
+        .store
+        .save_identity(&identity)
+        .map_err(display_error)?;
+    drop(context);
+    project_state(state).await
+}
+
+fn project_delete_target(root: &Path, path: &str) -> Result<PathBuf> {
+    let file = project_path(root, path)?;
+    ensure_editable_file(&file)?;
+    ensure!(file.exists(), "Project file does not exist: {path}");
+    ensure!(file.is_file(), "Project path is not a file: {path}");
+    Ok(file)
+}
+
+fn safe_delete_project_file(root: &Path, path: &str) -> Result<()> {
+    let file = project_delete_target(root, path)?;
+    std::fs::remove_file(&file)?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -508,8 +552,9 @@ async fn retry_run(run_id: String, state: State<'_, AppState>) -> Result<Value, 
 async fn run_agent(
     prompt: String,
     mode: String,
-    model: Option<String>,
+    model_id: Option<String>,
     auto_approve: Option<bool>,
+    editor_context: Option<Value>,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
@@ -534,7 +579,15 @@ async fn run_agent(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let turn_id = format!("agent_turn_{}", Uuid::new_v4());
-    let model = model.unwrap_or_else(|| "deepseek:deepseek-v4-flash".to_string());
+    let resolved_model =
+        agent_llm::resolve_model_for_turn(&state.config.data_dir, model_id.as_deref())
+            .map_err(display_error)?;
+    let user_environ = agent_llm::resolve_user_environ(&state.config.rscript)
+        .map_err(display_error)?
+        .path;
+    if mode == "act" && resolved_model.runtime_profile.tool_calling != "yes" {
+        return Err("The selected model does not support Act mode.".to_string());
+    }
     let auto_approve = auto_approve.unwrap_or(false) && mode == "act";
     {
         let mut context_guard = context.lock().await;
@@ -545,7 +598,7 @@ async fn run_agent(
                 turn_id: turn_id.clone(),
                 mode: mode.clone(),
                 prompt: prompt.clone(),
-                model: model.clone(),
+                model: resolved_model.effective_model_ref.clone(),
                 workspace_id: identity.workspace_id.clone(),
                 state_revision_before: identity.state_revision as i64,
                 project_revision_before: identity.project_revision as i64,
@@ -565,7 +618,12 @@ async fn run_agent(
                 details_json: serde_json::to_string(&json!({
                     "prompt": prompt,
                     "mode": mode,
-                    "auto_approve": auto_approve
+                    "auto_approve": auto_approve,
+                    "editor_context": editor_context.clone(),
+                    "model_profile_id": resolved_model.runtime_profile.profile_id,
+                    "model_display_name": resolved_model.model_display_name,
+                    "provider_display_name": resolved_model.provider_display_name,
+                    "effective_model": resolved_model.effective_model_ref
                 }))
                 .map_err(display_error)?,
             })
@@ -577,6 +635,7 @@ async fn run_agent(
     let agent_package = state.config.agent_package.clone();
     let task_turn_id = turn_id.clone();
     let task_agent_tasks = state.agent_tasks.clone();
+    let runtime_profile = resolved_model.runtime_profile.clone();
     let (registered_tx, registered_rx) = oneshot::channel();
     let task = tauri::async_runtime::spawn(async move {
         let _ = registered_rx.await;
@@ -585,12 +644,15 @@ async fn run_agent(
             context,
             rscript,
             agent_package,
-            model,
+            resolved_model.effective_model_ref,
+            Some(runtime_profile),
+            Some(user_environ),
             prompt,
             mode,
             task_turn_id.clone(),
             approvals,
             auto_approve,
+            editor_context,
         )
         .await;
         task_agent_tasks.lock().await.remove(&task_turn_id);
@@ -607,6 +669,105 @@ async fn run_agent(
         "turn_id": turn_id,
         "auto_approve": auto_approve
     }))
+}
+
+#[tauri::command]
+async fn agent_llm_settings(state: State<'_, AppState>) -> Result<AgentLlmSettingsView, String> {
+    agent_llm::settings_view(&state.config.data_dir, &state.config.rscript).map_err(display_error)
+}
+
+#[tauri::command]
+async fn agent_llm_save_provider(
+    provider: AgentProviderProfile,
+    state: State<'_, AppState>,
+) -> Result<AgentLlmSettingsView, String> {
+    agent_llm::save_provider(&state.config.data_dir, provider).map_err(display_error)?;
+    agent_llm::settings_view(&state.config.data_dir, &state.config.rscript).map_err(display_error)
+}
+
+#[tauri::command]
+async fn agent_llm_delete_provider(
+    provider_id: String,
+    state: State<'_, AppState>,
+) -> Result<AgentLlmSettingsView, String> {
+    agent_llm::delete_provider(&state.config.data_dir, &provider_id).map_err(display_error)?;
+    agent_llm::settings_view(&state.config.data_dir, &state.config.rscript).map_err(display_error)
+}
+
+#[tauri::command]
+async fn agent_llm_save_model(
+    model: AgentModelProfile,
+    state: State<'_, AppState>,
+) -> Result<AgentLlmSettingsView, String> {
+    agent_llm::save_model(&state.config.data_dir, model).map_err(display_error)?;
+    agent_llm::settings_view(&state.config.data_dir, &state.config.rscript).map_err(display_error)
+}
+
+#[tauri::command]
+async fn agent_llm_delete_model(
+    request: DeleteModelRequest,
+    state: State<'_, AppState>,
+) -> Result<AgentLlmSettingsView, String> {
+    agent_llm::delete_model(&state.config.data_dir, &request).map_err(display_error)?;
+    agent_llm::settings_view(&state.config.data_dir, &state.config.rscript).map_err(display_error)
+}
+
+#[tauri::command]
+async fn agent_llm_select_model(
+    request: AgentLlmSelectRequest,
+    state: State<'_, AppState>,
+) -> Result<AgentLlmSettingsView, String> {
+    agent_llm::select_model(&state.config.data_dir, &request.model_id).map_err(display_error)?;
+    agent_llm::settings_view(&state.config.data_dir, &state.config.rscript).map_err(display_error)
+}
+
+#[tauri::command]
+async fn agent_llm_refresh_credentials(
+    state: State<'_, AppState>,
+) -> Result<AgentLlmSettingsView, String> {
+    agent_llm::refresh_credentials_view(&state.config.data_dir, &state.config.rscript)
+        .map_err(display_error)
+}
+
+#[tauri::command]
+async fn agent_llm_open_user_environ(state: State<'_, AppState>) -> Result<Value, String> {
+    let info = agent_llm::open_user_environ(&state.config.rscript).map_err(display_error)?;
+    Ok(json!({ "path": info.path, "source": info.source }))
+}
+
+#[tauri::command]
+async fn agent_llm_test_model(
+    model_id: String,
+    state: State<'_, AppState>,
+) -> Result<AgentLlmSettingsView, String> {
+    let data_dir = state.config.data_dir.clone();
+    let rscript = state.config.rscript.clone();
+    let agent_package = state.config.agent_package.clone();
+    let test_control = state.agent_llm_test_control.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        agent_llm::test_model(
+            &data_dir,
+            &rscript,
+            &agent_package,
+            &model_id,
+            Some(&test_control),
+        )
+    })
+    .await
+    .map_err(display_error)?
+    .map_err(display_error)
+}
+
+#[tauri::command]
+async fn agent_llm_cancel_test(state: State<'_, AppState>) -> Result<Value, String> {
+    let cancelled = agent_llm::cancel_test(&state.agent_llm_test_control).map_err(display_error)?;
+    Ok(json!({ "status": if cancelled { "cancelled" } else { "idle" } }))
+}
+
+#[tauri::command]
+async fn agent_llm_catalog(state: State<'_, AppState>) -> Result<Value, String> {
+    let entries = agent_llm::catalog(&state.config.rscript).map_err(display_error)?;
+    serde_json::to_value(entries).map_err(display_error)
 }
 
 #[derive(Deserialize)]
@@ -1247,7 +1408,8 @@ fn write_startup_log(message: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::ensure_supported_r_version;
+    use super::{ensure_supported_r_version, safe_delete_project_file};
+    use tempfile::TempDir;
 
     #[test]
     fn enforces_the_documented_minimum_r_version() {
@@ -1255,6 +1417,75 @@ mod tests {
         assert!(ensure_supported_r_version("4.4.0").is_ok());
         assert!(ensure_supported_r_version("5.0.0").is_ok());
         assert!(ensure_supported_r_version("invalid").is_err());
+    }
+
+    #[test]
+    fn safe_delete_project_file_deletes_supported_project_file() {
+        let directory = TempDir::new().unwrap();
+        let root = directory.path().canonicalize().unwrap();
+        let file = root.join("analysis.R");
+        std::fs::write(&file, "x <- 1").unwrap();
+        safe_delete_project_file(&root, "analysis.R").unwrap();
+        assert!(!file.exists());
+    }
+
+    #[test]
+    fn safe_delete_project_file_rejects_missing_file() {
+        let directory = TempDir::new().unwrap();
+        let root = directory.path().canonicalize().unwrap();
+        let error = safe_delete_project_file(&root, "missing.R").unwrap_err();
+        assert!(error.to_string().contains("does not exist"));
+    }
+
+    #[test]
+    fn safe_delete_project_file_rejects_unsupported_extension() {
+        let directory = TempDir::new().unwrap();
+        let root = directory.path().canonicalize().unwrap();
+        let file = root.join("figure.png");
+        std::fs::write(&file, [0_u8, 1, 2]).unwrap();
+        let error = safe_delete_project_file(&root, "figure.png").unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("Unsupported or binary project file")
+        );
+    }
+
+    #[test]
+    fn safe_delete_project_file_rejects_parent_escape() {
+        let directory = TempDir::new().unwrap();
+        let root = directory.path().canonicalize().unwrap();
+        let error = safe_delete_project_file(&root, "../outside.R").unwrap_err();
+        assert!(error.to_string().contains("parent, root or drive prefix"));
+    }
+
+    #[test]
+    fn safe_delete_project_file_rejects_symlink_escape() {
+        let directory = TempDir::new().unwrap();
+        let outside_dir = TempDir::new().unwrap();
+        let root = directory.path().canonicalize().unwrap();
+        let outside = outside_dir.path().join("outside.R");
+        std::fs::write(&outside, "outside <- TRUE").unwrap();
+        let link = root.join("link-outside.R");
+        if let Err(error) = std::os::windows::fs::symlink_file(&outside, &link) {
+            if error.raw_os_error() == Some(1314) {
+                return;
+            }
+            panic!("Could not create symlink test fixture: {error}");
+        }
+        let error = safe_delete_project_file(&root, "link-outside.R").unwrap_err();
+        assert!(error.to_string().contains("escapes project root"));
+        assert!(outside.exists());
+    }
+
+    #[test]
+    fn safe_delete_project_file_rejects_directories() {
+        let directory = TempDir::new().unwrap();
+        let root = directory.path().canonicalize().unwrap();
+        std::fs::create_dir(root.join("folder.R")).unwrap();
+        let error = safe_delete_project_file(&root, "folder.R").unwrap_err();
+        assert!(error.to_string().contains("is not a file"));
+        assert!(root.join("folder.R").is_dir());
     }
 }
 
@@ -1316,6 +1547,8 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
         let turn_id = format!("smoke_turn_{}", Uuid::new_v4());
         let prompt =
             "请检查 rho_desktop_smoke 对象，告诉我它有多少行和多少列。不要修改工作区。".to_string();
+        let resolved_model = agent_llm::resolve_model_for_turn(&config.data_dir, None)?;
+        let user_environ = agent_llm::resolve_user_environ(&config.rscript)?.path;
         {
             let mut context_guard = context.lock().await;
             let identity = context_guard.broker.identity().clone();
@@ -1323,7 +1556,7 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
                 turn_id: turn_id.clone(),
                 mode: "ask".to_string(),
                 prompt: prompt.clone(),
-                model: "deepseek:deepseek-v4-flash".to_string(),
+                model: resolved_model.effective_model_ref.clone(),
                 workspace_id: identity.workspace_id,
                 state_revision_before: identity.state_revision as i64,
                 project_revision_before: identity.project_revision as i64,
@@ -1349,12 +1582,15 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
             context.clone(),
             config.rscript.clone(),
             config.agent_package.clone(),
-            "deepseek:deepseek-v4-flash".to_string(),
+            resolved_model.effective_model_ref.clone(),
+            Some(resolved_model.runtime_profile),
+            Some(user_environ),
             prompt,
             "ask".to_string(),
             turn_id,
             Arc::new(PendingApprovalRegistry::default()),
             false,
+            None,
         )
         .await?;
         let completed = result["events"]
@@ -1419,6 +1655,7 @@ fn main() {
                 context: Mutex::new(None),
                 approvals: Arc::new(PendingApprovalRegistry::default()),
                 agent_tasks: Arc::new(Mutex::new(HashMap::new())),
+                agent_llm_test_control: AgentModelTestControl::default(),
             });
             Ok(())
         })
@@ -1434,6 +1671,7 @@ fn main() {
             project_read_file,
             project_write_file,
             project_create_file,
+            project_delete_file,
             execute_r,
             snapshot_workspace,
             inspect_object,
@@ -1445,6 +1683,17 @@ fn main() {
             get_run_detail,
             retry_run,
             run_agent,
+            agent_llm_settings,
+            agent_llm_save_provider,
+            agent_llm_delete_provider,
+            agent_llm_save_model,
+            agent_llm_delete_model,
+            agent_llm_select_model,
+            agent_llm_refresh_credentials,
+            agent_llm_open_user_environ,
+            agent_llm_test_model,
+            agent_llm_cancel_test,
+            agent_llm_catalog,
             list_agent_turns,
             clear_agent_history,
             list_approval_requests,

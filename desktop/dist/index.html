@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Rho</title>
-    <link rel="stylesheet" href="styles.css?v=0.2.0-dev.8" />
+    <link rel="stylesheet" href="styles.css?v=0.2.0-dev.11" />
   </head>
   <body>
     <div class="app-shell layout-code">
@@ -209,6 +209,30 @@ plot(
               <button id="approvalCancel" type="button">Cancel</button>
             </div>
           </div>
+          <div id="fileEditPanel" class="file-edit-panel hidden">
+            <div class="file-edit-header">
+              <strong>Proposed File Edit</strong>
+              <span id="fileEditPath" class="revision-badge">file</span>
+            </div>
+            <p id="fileEditSummary" class="file-edit-summary"></p>
+            <p id="fileEditDecisionNote" class="file-edit-note hidden"></p>
+            <div class="file-edit-diff" aria-label="File edit diff">
+              <div id="fileEditBeforeBlock">
+                <span>Before</span>
+                <pre id="fileEditBefore"></pre>
+              </div>
+              <div>
+                <span>After</span>
+                <pre id="fileEditAfter"></pre>
+              </div>
+            </div>
+            <div class="file-edit-actions">
+              <button id="fileEditAccept" type="button">Accept</button>
+              <button id="fileEditReject" type="button">Reject</button>
+              <button id="fileEditUndo" class="hidden" type="button">Undo</button>
+            </div>
+          </div>
+          <div id="agentComposerResizeHandle" class="agent-composer-resize" role="separator" aria-label="Resize Agent input" aria-orientation="horizontal" aria-valuemin="140" aria-valuenow="190" tabindex="0"></div>
           <div class="agent-composer">
             <div class="mode-control" role="group" aria-label="Agent mode">
               <button class="active" data-agent-mode="ask" type="button">Ask</button>
@@ -216,9 +240,27 @@ plot(
               <button data-agent-mode="act" type="button">Act</button>
             </div>
             <label class="act-authorization"><input id="actAutoApprove" type="checkbox" /> Authorize Act R execution for this session</label>
+            <p id="agentCapabilityNote" class="agent-capability-note hidden"></p>
+            <div id="agentFileMentions" class="agent-file-mentions hidden" role="listbox" aria-label="Project files"></div>
             <textarea id="agentInput" rows="3" aria-label="Ask Rho" placeholder="Ask about the live R workspace…"></textarea>
             <div class="composer-footer">
-              <span id="agentRuntimeLabel">DeepSeek V4 Flash</span>
+              <div class="composer-footer-left">
+                <button id="agentContextButton" class="agent-context-button" type="button" title="Add project context" aria-label="Add project context">+</button>
+                <div id="agentContextMenu" class="agent-context-menu hidden" role="menu" aria-label="Agent context">
+                  <button id="agentContextChooseFile" type="button" role="menuitem">Choose project file...</button>
+                  <button id="agentContextUseCurrentFile" type="button" role="menuitem">Use current file</button>
+                  <button id="agentContextUseSelection" type="button" role="menuitem">Use current selection</button>
+                  <button id="agentContextNewFile" type="button" role="menuitem">New file...</button>
+                </div>
+                <span id="agentContextBadge" class="agent-context-badge hidden"></span>
+                <div class="agent-llm-selector">
+                  <button id="agentModelSelector" class="agent-model-selector" type="button" aria-haspopup="menu" aria-expanded="false" title="Select Agent model">
+                    <span id="agentRuntimeLabel">DeepSeek V4 Flash</span>
+                    <span class="chevron">⌄</span>
+                  </button>
+                  <div id="agentModelSelectorMenu" class="agent-model-menu hidden" role="menu" aria-label="Agent models"></div>
+                </div>
+              </div>
               <button id="agentSendButton" class="send-button" type="button" title="Send" aria-label="Send">↑</button>
             </div>
           </div>
@@ -278,7 +320,121 @@ plot(
         <span>Ln <b id="cursorLine">1</b>, Col <b id="cursorColumn">1</b></span>
       </footer>
     </div>
+    <div id="agentLlmDialog" class="agent-llm-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="agentLlmDialogTitle">
+      <div class="agent-llm-scrim" data-agent-llm-close="true"></div>
+      <div class="agent-llm-surface">
+        <div class="agent-llm-header">
+          <div>
+            <strong id="agentLlmDialogTitle">Manage LLMs</strong>
+            <p id="agentLlmUserEnviron" class="agent-llm-subtitle">Loading effective user environment…</p>
+          </div>
+          <button id="agentLlmClose" type="button" aria-label="Close Manage LLMs">✕</button>
+        </div>
+        <div id="agentLlmValidation" class="agent-llm-banner hidden"></div>
+        <div class="agent-llm-layout">
+          <section class="agent-llm-column">
+            <div class="agent-llm-toolbar">
+              <strong>Providers</strong>
+              <div class="agent-llm-toolbar-actions">
+                <button id="agentLlmAddProvider" type="button">Add provider</button>
+                <button id="agentLlmReloadCredentials" type="button">Reload environment</button>
+                <button id="agentLlmOpenEnviron" type="button">Open user env</button>
+                <button id="agentLlmCopySetupLine" type="button">Copy setup line</button>
+              </div>
+            </div>
+            <div id="agentLlmProviderList" class="agent-llm-list" role="listbox" aria-label="Providers"></div>
+            <div class="agent-llm-form">
+              <label>Display name<input id="agentLlmProviderDisplayName" type="text" /></label>
+              <label>Provider type
+                <select id="agentLlmProviderKind">
+                  <option value="registered">Registered aisdk provider</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="anthropic">Anthropic</option>
+                  <option value="gemini">Gemini</option>
+                  <option value="openai_compatible">OpenAI-compatible</option>
+                  <option value="local_openai_compatible">Local OpenAI-compatible</option>
+                </select>
+              </label>
+              <label>Provider ID<input id="agentLlmRegisteredProviderId" type="text" placeholder="deepseek" /></label>
+              <label>API key environment<input id="agentLlmProviderApiKeyEnv" type="text" placeholder="OPENAI_API_KEY" /></label>
+              <label>Base URL<input id="agentLlmProviderBaseUrl" type="url" placeholder="http://127.0.0.1:11434/v1" /></label>
+              <label>Base URL environment<input id="agentLlmProviderBaseUrlEnv" type="text" placeholder="OPENAI_BASE_URL" /></label>
+              <label>Wire API
+                <select id="agentLlmProviderWireApi">
+                  <option value="">Default</option>
+                  <option value="chat_completions">chat_completions</option>
+                  <option value="responses">responses</option>
+                  <option value="anthropic_messages">anthropic_messages</option>
+                </select>
+              </label>
+              <label class="agent-llm-checkbox"><input id="agentLlmProviderApiKeyRequired" type="checkbox" checked /> API key required</label>
+              <label class="agent-llm-checkbox"><input id="agentLlmProviderDisableStreamOptions" type="checkbox" /> Disable stream options</label>
+            </div>
+            <div class="agent-llm-actions">
+              <button id="agentLlmSaveProvider" type="button">Save provider</button>
+              <button id="agentLlmDeleteProvider" type="button">Delete provider</button>
+            </div>
+          </section>
+          <section class="agent-llm-column">
+            <div class="agent-llm-toolbar">
+              <strong>Models</strong>
+              <div class="agent-llm-toolbar-actions">
+                <button id="agentLlmAddModel" type="button">Add model</button>
+                <button id="agentLlmLoadCatalog" type="button">Load catalog</button>
+                <button id="agentLlmTestModel" type="button">Test connection</button>
+                <button id="agentLlmCancelTest" type="button">Cancel test</button>
+                <button id="agentLlmSelectDefault" type="button">Select default</button>
+              </div>
+            </div>
+            <div id="agentLlmModelList" class="agent-llm-list" role="listbox" aria-label="Models"></div>
+            <div class="agent-llm-form">
+              <label>Model catalog<select id="agentLlmCatalogModel"><option value="">Choose a catalog model...</option></select></label>
+              <label>Display name<input id="agentLlmModelDisplayName" type="text" /></label>
+              <label>Provider
+                <select id="agentLlmModelProvider"></select>
+              </label>
+              <label>Model ID<input id="agentLlmModelId" type="text" placeholder="gpt-4.1-mini" /></label>
+              <label>Tool calling
+                <select id="agentLlmModelToolCalling">
+                  <option value="yes">yes</option>
+                  <option value="no">no</option>
+                  <option value="unknown">unknown</option>
+                </select>
+              </label>
+              <label>Reasoning
+                <select id="agentLlmModelReasoning">
+                  <option value="unknown">unknown</option>
+                  <option value="yes">yes</option>
+                  <option value="no">no</option>
+                </select>
+              </label>
+              <label>Vision input
+                <select id="agentLlmModelVisionInput">
+                  <option value="unknown">unknown</option>
+                  <option value="yes">yes</option>
+                  <option value="no">no</option>
+                </select>
+              </label>
+              <label>Capability source
+                <select id="agentLlmModelCapabilitySource">
+                  <option value="declared">declared</option>
+                  <option value="catalog">catalog</option>
+                  <option value="probe">probe</option>
+                  <option value="unknown">unknown</option>
+                </select>
+              </label>
+              <label class="agent-llm-checkbox"><input id="agentLlmModelEnabled" type="checkbox" checked /> Enabled</label>
+            </div>
+            <div id="agentLlmTestResult" class="agent-llm-test-result hidden"></div>
+            <div class="agent-llm-actions">
+              <button id="agentLlmSaveModel" type="button">Save model</button>
+              <button id="agentLlmDeleteModel" type="button">Delete model</button>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
     <div id="toastRegion" class="toast-region" aria-live="polite"></div>
-    <script src="app.js?v=0.2.0-dev.8"></script>
+    <script src="app.js?v=0.2.0-dev.11"></script>
   </body>
 </html>

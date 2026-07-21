@@ -9,6 +9,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 anyhow.workspace = true
+chrono.workspace = true
 notify = "8.2"
 rho-core = { path = "../../crates/rho-core" }
 rho-kernel = { path = "../../crates/rho-kernel" }

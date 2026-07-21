@@ -570,6 +570,14 @@ mod tests {
     }
 
     #[test]
+    fn editable_file_check_rejects_unsupported_extensions() {
+        let directory = TempDir::new().unwrap();
+        let file = directory.path().join("figure.png");
+        std::fs::write(&file, [0_u8, 1, 2]).unwrap();
+        assert!(ensure_editable_file(&file).is_err());
+    }
+
+    #[test]
     fn project_session_store_round_trips() {
         let directory = TempDir::new().unwrap();
         let project_dir = directory.path().join("analysis");

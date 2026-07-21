@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -22,6 +23,24 @@ use tokio::sync::{Mutex, oneshot};
 pub struct CoordinatorRuntime {
     pub broker: BrokerState,
     pub store: Store,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct AgentRuntimeModelProfile {
+    pub profile_id: String,
+    pub provider_kind: String,
+    pub runtime_provider_id: String,
+    pub registered_provider_id: Option<String>,
+    pub model_id: String,
+    pub api_key_env: Option<String>,
+    pub api_key_required: bool,
+    pub base_url: Option<String>,
+    pub base_url_env: Option<String>,
+    pub wire_api: Option<String>,
+    pub disable_stream_options: bool,
+    pub tool_calling: String,
+    pub provider_display_name: String,
+    pub model_display_name: String,
 }
 
 fn hide_console_window(command: &mut tokio::process::Command) {
@@ -147,7 +166,10 @@ async fn run_probe(
 args <- commandArgs(TRUE)
 source(file.path(args[[2]], "R", "aaa-state.R"))
 source(file.path(args[[2]], "R", "transport.R"))
-token <- readLines(file("stdin"), n = 1L, warn = FALSE)
+input <- file("stdin", open = "r", encoding = "UTF-8")
+token <- readLines(input, n = 1L, warn = FALSE)
+model_prompt <- paste(readLines(input, warn = FALSE), collapse = "\n")
+close(input)
 connection <- rho_agent_connect(port = as.integer(args[[1]]), token = token)
 identity_message <- rho_read_frame(connection)
 stopifnot(
@@ -782,10 +804,11 @@ fn is_contextual_follow_up(prompt: &str) -> bool {
         .any(|marker| normalized.contains(marker))
 }
 
-fn contextual_agent_prompt(prompt: &str, history: &[AgentConversationTurn]) -> String {
-    if history.is_empty() {
-        return prompt.to_string();
-    }
+fn contextual_agent_prompt(
+    prompt: &str,
+    history: &[AgentConversationTurn],
+    editor_context: Option<&Value>,
+) -> String {
     let history = history
         .iter()
         .map(|turn| {
@@ -799,48 +822,31 @@ fn contextual_agent_prompt(prompt: &str, history: &[AgentConversationTurn]) -> S
         })
         .collect::<Vec<_>>();
     let history = serde_json::to_string_pretty(&history).unwrap_or_else(|_| "[]".to_string());
+    let editor_context = editor_context
+        .map(|value| serde_json::to_string_pretty(value).unwrap_or_else(|_| "null".to_string()))
+        .unwrap_or_else(|| "null".to_string());
     let follow_up_instruction = if is_contextual_follow_up(prompt) {
         "This is a short retry or continuation request. Continue the most recent unresolved user goal, preserving its concrete dataset, variables, requested output and constraints. Retry the original task instead of inventing an unrelated diagnostic action. Any mutation still requires a fresh approval."
     } else {
         "Use the prior turns only when they are relevant to the current request. The current request remains authoritative."
     };
     format!(
-        "Recent conversation context, ordered oldest to newest:\n{history}\n\n{follow_up_instruction}\n\nCurrent user request:\n{prompt}"
+        "Recent conversation context, ordered oldest to newest:\n{history}\n\n{follow_up_instruction}\n\nCurrent editor context:\n{editor_context}\n\nCurrent user request:\n{prompt}"
     )
 }
 
-#[allow(clippy::too_many_arguments)]
-pub async fn run_agent_turn(
-    session: &ArkSession,
-    context: Arc<Mutex<CoordinatorRuntime>>,
-    rscript: PathBuf,
-    agent_package: PathBuf,
-    model: String,
-    prompt: String,
-    mode: String,
-    turn_id: String,
-    approvals: Arc<PendingApprovalRegistry>,
-    auto_approve: bool,
-) -> Result<Value> {
-    ensure!(
-        matches!(mode.as_str(), "ask" | "plan" | "act"),
-        "unsupported Agent mode `{mode}`"
-    );
-    let result = async {
-        let history = {
-            let context = context.lock().await;
-            context.store.recent_agent_conversation(&turn_id, 4)?
-        };
-        let model_prompt = contextual_agent_prompt(&prompt, &history);
-        let mut authenticator = AgentAuthenticator::bind().await?;
-        let address = authenticator.local_addr()?;
-        let token = authenticator.bootstrap_token()?.to_string();
-        let script = r#"
+fn desktop_agent_turn_script() -> &'static str {
+    r#"
 args <- commandArgs(TRUE)
 source(file.path(args[[2]], "R", "aaa-state.R"))
 source(file.path(args[[2]], "R", "transport.R"))
 source(file.path(args[[2]], "R", "aisdk_adapter.R"))
-token <- readLines(file("stdin"), n = 1L, warn = FALSE)
+input <- file("stdin", open = "r", encoding = "UTF-8")
+token <- readLines(input, n = 1L, warn = FALSE)
+profile_json <- readLines(input, n = 1L, warn = FALSE)
+model_prompt <- paste(readLines(input, warn = FALSE), collapse = "\n")
+close(input)
+profile <- jsonlite::fromJSON(profile_json, simplifyVector = FALSE)
 connection <- rho_agent_connect(port = as.integer(args[[1]]), token = token)
 identity_message <- rho_read_frame(connection)
 stopifnot(
@@ -848,7 +854,7 @@ stopifnot(
   identical(identity_message$payload$type, "workspace.identity")
 )
 rho_agent_set_workspace_identity(identity_message$payload$identity)
-mode <- args[[5]]
+mode <- args[[3]]
 mode_policy <- switch(
   mode,
   ask = paste(
@@ -864,50 +870,118 @@ mode_policy <- switch(
     "Keep code focused and inspect results before concluding."
   )
 )
+resolved_model <- rho_resolve_model_profile(profile)
+tools <- if (identical(profile$tool_calling %||% "unknown", "yes")) rho_create_workspace_tools() else list()
+tool_notice <- if (identical(profile$tool_calling %||% "unknown", "yes")) {
+  "Workspace and file proposal tools are enabled."
+} else {
+  "This selected model is running in chat-only mode without workspace or file-edit tools."
+}
 session <- rho_create_aisdk_session(
-  model = args[[3]],
+  model = resolved_model,
   system_prompt = paste(
     "You are Rho, an AI collaborator inside an R scientific workbench.",
     "The Ark-backed Workspace R is authoritative and persistent.",
     "Use broker tools to observe or change it; do not pretend code ran.",
+    "When the user explicitly asks to write, insert, replace, append, or create a project file, use propose_file_edit exactly once.",
+    "propose_file_edit creates a reviewable diff and never writes a file, so do not claim the edit was applied.",
+    "Use replace_selection only for a non-empty selection in the same path, insert_at_cursor only for the active path, append only when requested, and create only for a new path.",
+    "Treat @file references as project-relative paths. If destination or placement is ambiguous, ask instead of guessing.",
     "Respond in the language used by the user and keep the answer concise.",
+    tool_notice,
     mode_policy
   ),
+  tools = tools,
   connection = connection
 )
 turn_error <- tryCatch(
   {
-    rho_run_aisdk_turn(session, args[[4]], connection = connection)
+    rho_run_aisdk_turn(session, model_prompt, connection = connection)
     NULL
   },
-  error = function(error) conditionMessage(error)
+  error = function(error) rho_redact_known_values(
+    conditionMessage(error),
+    rho_runtime_profile_sensitive_values(profile)
+  )
 )
 if (is.null(turn_error)) {
   rho_agent_emit(
     "desktop.agent_completed",
-    list(model = args[[3]], mode = mode),
+    list(model = resolved_model, mode = mode),
     connection
   )
 } else {
   rho_agent_emit(
     "desktop.agent_failed",
-    list(model = args[[3]], mode = mode, error = turn_error),
+    list(model = resolved_model, mode = mode, error = turn_error),
     connection
   )
 }
 close(connection)
-"#;
+"#
+}
 
+fn desktop_agent_turn_args(port: u16, agent_package: &Path, mode: &str) -> Vec<OsString> {
+    vec![
+        OsString::from("-e"),
+        OsString::from(desktop_agent_turn_script()),
+        OsString::from(port.to_string()),
+        agent_package.as_os_str().to_os_string(),
+        OsString::from(mode),
+    ]
+}
+
+fn desktop_agent_turn_stdin(
+    token: &str,
+    runtime_profile: &AgentRuntimeModelProfile,
+    model_prompt: &str,
+) -> Result<String> {
+    Ok(format!(
+        "{token}\n{}\n{model_prompt}",
+        serde_json::to_string(runtime_profile)?
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn run_agent_turn(
+    session: &ArkSession,
+    context: Arc<Mutex<CoordinatorRuntime>>,
+    rscript: PathBuf,
+    agent_package: PathBuf,
+    model: String,
+    runtime_profile: Option<AgentRuntimeModelProfile>,
+    user_environ: Option<String>,
+    prompt: String,
+    mode: String,
+    turn_id: String,
+    approvals: Arc<PendingApprovalRegistry>,
+    auto_approve: bool,
+    editor_context: Option<Value>,
+) -> Result<Value> {
+    ensure!(
+        matches!(mode.as_str(), "ask" | "plan" | "act"),
+        "unsupported Agent mode `{mode}`"
+    );
+    let result = async {
+        let history = {
+            let context = context.lock().await;
+            context.store.recent_agent_conversation(&turn_id, 4)?
+        };
+        let model_prompt = contextual_agent_prompt(&prompt, &history, editor_context.as_ref());
+        let mut authenticator = AgentAuthenticator::bind().await?;
+        let address = authenticator.local_addr()?;
+        let token = authenticator.bootstrap_token()?.to_string();
+        let runtime_profile = runtime_profile
+            .with_context(|| format!("missing runtime profile for Agent model `{model}`"))?;
+        let args = desktop_agent_turn_args(address.port(), &agent_package, &mode);
+        let stdin_payload = desktop_agent_turn_stdin(&token, &runtime_profile, &model_prompt)?;
         let mut command = tokio::process::Command::new(rscript);
         hide_console_window(&mut command);
+        if let Some(path) = user_environ {
+            command.env("R_ENVIRON_USER", path);
+        }
         let mut child = command
-            .arg("-e")
-            .arg(script)
-            .arg(address.port().to_string())
-            .arg(agent_package)
-            .arg(&model)
-            .arg(model_prompt)
-            .arg(&mode)
+            .args(&args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -915,7 +989,7 @@ close(connection)
             .spawn()
             .context("spawning desktop Agent R turn")?;
         let mut stdin = child.stdin.take().context("opening Agent R stdin")?;
-        stdin.write_all(format!("{token}\n").as_bytes()).await?;
+        stdin.write_all(stdin_payload.as_bytes()).await?;
         stdin.shutdown().await?;
 
         let mut agent = tokio::time::timeout(
@@ -1900,11 +1974,80 @@ mod tests {
             started_at: "2026-07-18T00:00:00Z".to_string(),
         }];
 
-        let prompt = contextual_agent_prompt("再试一下", &history);
+        let prompt = contextual_agent_prompt("再试一下", &history, None);
         assert!(prompt.contains("用 iris 数据集画图，并按 species 上色。"));
         assert!(prompt.contains("provider network unavailable"));
         assert!(prompt.contains("most recent unresolved user goal"));
         assert!(prompt.contains("Current user request:\n再试一下"));
+    }
+
+    #[test]
+    fn contextual_prompt_includes_supplied_editor_context() {
+        let context = json!({
+            "active_path": "R/plot.R",
+            "context_source": "selection",
+            "context_path": "R/plot.R",
+            "selection_text": "old_plot <- function(x) {}"
+        });
+
+        let prompt = contextual_agent_prompt("替换当前选区", &[], Some(&context));
+        assert!(prompt.contains("\"context_source\": \"selection\""));
+        assert!(prompt.contains("\"active_path\": \"R/plot.R\""));
+        assert!(prompt.contains("\"selection_text\": \"old_plot <- function(x) {}\""));
+        assert!(prompt.contains("Current user request:\n替换当前选区"));
+    }
+
+    #[test]
+    fn desktop_agent_prompt_transport_uses_stdin_instead_of_command_args() {
+        let prompt = "x".repeat(40_000);
+        let profile = AgentRuntimeModelProfile {
+            profile_id: "model-deepseek-v4-flash".to_string(),
+            provider_kind: "registered".to_string(),
+            runtime_provider_id: "rho_profile_provider_deepseek".to_string(),
+            registered_provider_id: Some("deepseek".to_string()),
+            model_id: "deepseek-v4-flash".to_string(),
+            api_key_env: Some("DEEPSEEK_API_KEY".to_string()),
+            api_key_required: true,
+            base_url: None,
+            base_url_env: None,
+            wire_api: None,
+            disable_stream_options: false,
+            tool_calling: "yes".to_string(),
+            provider_display_name: "DeepSeek".to_string(),
+            model_display_name: "DeepSeek V4 Flash".to_string(),
+        };
+        let args = desktop_agent_turn_args(4321, Path::new("r/rho.agent"), "ask");
+        let stdin_payload = desktop_agent_turn_stdin("secret-token", &profile, &prompt).unwrap();
+        let script = desktop_agent_turn_script();
+
+        assert!(script.contains(r#"input <- file("stdin", open = "r", encoding = "UTF-8")"#));
+        assert!(script.contains("profile_json <- readLines(input, n = 1L, warn = FALSE)"));
+        assert!(
+            script.contains(
+                r#"model_prompt <- paste(readLines(input, warn = FALSE), collapse = "\n")"#
+            )
+        );
+        assert_eq!(args.len(), 5);
+        assert!(
+            !args
+                .iter()
+                .any(|arg| arg.to_string_lossy().contains(&prompt))
+        );
+        assert!(
+            !args
+                .iter()
+                .any(|arg| arg.to_string_lossy().contains("DEEPSEEK_API_KEY"))
+        );
+        assert!(stdin_payload.starts_with("secret-token\n"));
+        assert!(stdin_payload.ends_with(&prompt));
+        assert!(stdin_payload.len() > 32 * 1024);
+    }
+
+    #[test]
+    fn desktop_agent_errors_redact_runtime_profile_secrets_before_emitting() {
+        let script = desktop_agent_turn_script();
+        assert!(script.contains("rho_runtime_profile_sensitive_values(profile)"));
+        assert!(script.contains("rho_redact_known_values("));
     }
 
     #[test]

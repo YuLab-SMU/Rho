@@ -6,7 +6,40 @@ this file records behavior that is already available in a released build.
 
 ## Unreleased
 
-No unreleased user-visible changes.
+## 0.2.0-dev.11 - 2026-07-21
+
+### Fixed
+
+- Fixed a frontend initialization ordering error that left the application at
+  `Starting R` and `Loading project files` before Workspace startup could run.
+
+## 0.2.0-dev.10 - 2026-07-20
+
+### Improved
+
+- Agent prompts now support project file references through both `@` mentions
+  and the composer `+` menu, including current file, current selection,
+  project file, and new-file context badges.
+- Proposed Agent file edits now render as a review panel instead of raw JSON in
+  the timeline, with explicit Accept, Reject, and one-step Undo actions.
+- Accepted Agent edits now reopen the target file, highlight the inserted
+  range, and clear stale highlights when you edit, switch files, or dismiss the
+  review state.
+- File edit proposals now carry explicit editor context source metadata, so
+  stale selection and cursor anchors remain reviewable before any write occurs.
+- The Agent composer now uses a configurable model selector instead of a
+  hardcoded DeepSeek label, and `Manage LLMs...` adds provider/model editing,
+  user `.Renviron` opening, credential refresh and bounded connection tests.
+
+## 0.2.0-dev.9 - 2026-07-20
+
+### Improved
+
+- The Agent composer now resizes from a separator along its upper edge, with
+  mouse, keyboard and double-click reset support consistent with other panels.
+- `get_workspace_snapshot` tool events now show a compact workspace summary
+  instead of escaped raw JSON, including R, project, objects, packages and
+  rendering capabilities.
 
 ## 0.2.0-dev.8 - 2026-07-18
 

@@ -13,6 +13,20 @@ const state = {
   agentBusy: false,
   activeAgentTurnId: null,
   agentRuntime: null,
+  agentLlm: {
+    settings: null,
+    selectedModelId: null,
+    selectorOpen: false,
+    settingsOpen: false,
+    selectedProviderId: null,
+    editingProviderId: null,
+    selectedModelEditorId: null,
+    editingModelId: null,
+    lastTestResult: null,
+    testInFlight: false,
+    catalog: [],
+    catalogLoaded: false,
+  },
   objects: [],
   plots: [],
   plotScope: "session",
@@ -26,6 +40,12 @@ const state = {
   pendingApprovals: [],
   selectedTurnId: null,
   selectedTurnDetail: null,
+  fileEditProposal: null,
+  fileEditUndo: null,
+  fileEditDecisions: new Map(),
+  agentFileMention: { items: [], index: 0, start: -1, end: -1, mode: "mention", contextSource: null },
+  agentContextSource: "editor",
+  agentContextPath: null,
   agentPollTimer: null,
   activeRunId: null,
   agentConsoleHydrated: false,
@@ -52,6 +72,7 @@ const state = {
     loading: false,
     fallbackNotice: "",
     suppressChange: false,
+    highlightDecorations: [],
   },
 };
 
@@ -88,6 +109,148 @@ let mockAgentTurnSequence = 0;
 let mockApprovalSequence = 0;
 const mockAgentTurns = [];
 const mockApprovalRequests = [];
+let mockAgentLlmSettings = defaultMockAgentLlmSettingsView();
+
+function slugifyAgentId(value, fallback = "item") {
+  const slug = String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || fallback;
+}
+
+function uniqueAgentId(prefix, label, values) {
+  const existing = new Set(values || []);
+  const stem = `${prefix}-${slugifyAgentId(label, prefix)}`;
+  let candidate = stem;
+  let index = 2;
+  while (existing.has(candidate)) {
+    candidate = `${stem}-${index}`;
+    index += 1;
+  }
+  return candidate;
+}
+
+function mockEffectiveModelRef(provider, model) {
+  if (!provider || !model) return model?.model_id || "unknown";
+  if (provider.kind === "registered") {
+    return `${provider.registered_provider_id || "provider"}:${model.model_id}`;
+  }
+  const runtimeProviderId = `rho_profile_provider_${provider.id.replace(/[^a-z0-9]/gi, "_")}`;
+  return `${runtimeProviderId}:${model.model_id}`;
+}
+
+function mockSelectorStatus(model, provider) {
+  if (!model.enabled) return "Disabled";
+  if (provider?.credential_status === "not_detected" && provider.api_key_required) return "Key missing";
+  if (model.last_test?.status === "ready") return "Ready";
+  if (model.last_test?.status === "error") return "Error";
+  return "Untested";
+}
+
+function rebuildMockAgentLlmSettings(settings = mockAgentLlmSettings) {
+  const providerMap = new Map((settings.providers || []).map((provider) => [provider.id, provider]));
+  settings.providers = (settings.providers || []).map((provider) => ({
+    ...provider,
+    credential_status: provider.credential_status || (provider.api_key_required ? "not_detected" : "not_required"),
+  }));
+  settings.models = (settings.models || []).map((model) => {
+    const provider = providerMap.get(model.provider_id);
+    const selectorStatus = mockSelectorStatus(model, provider);
+    return {
+      ...model,
+      provider_display_name: provider?.display_name || "Provider",
+      selected: model.id === settings.selected_model_id,
+      selector_status: selectorStatus,
+      act_enabled: Boolean(model.enabled && model.capabilities?.tool_calling === "yes"),
+    };
+  });
+  const selected = settings.models.find((model) => model.id === settings.selected_model_id) || null;
+  settings.selected_model = selected
+    ? {
+      id: selected.id,
+      display_name: selected.display_name,
+      provider_display_name: selected.provider_display_name,
+      selector_status: selected.selector_status,
+      tool_calling: selected.capabilities?.tool_calling || "unknown",
+      act_enabled: selected.act_enabled,
+    }
+    : null;
+  return settings;
+}
+
+function defaultMockAgentLlmSettingsView() {
+  const settings = {
+    schema_version: 1,
+    selected_model_id: "model-deepseek-v4-flash",
+    providers: [
+      {
+        id: "provider-deepseek-existing",
+        display_name: "DeepSeek",
+        kind: "registered",
+        registered_provider_id: "deepseek",
+        api_key_env: "DEEPSEEK_API_KEY",
+        api_key_required: true,
+        base_url: null,
+        base_url_env: null,
+        wire_api: null,
+        disable_stream_options: null,
+        credential_status: "detected",
+      },
+    ],
+    models: [
+      {
+        id: "model-deepseek-v4-flash",
+        provider_id: "provider-deepseek-existing",
+        display_name: "DeepSeek V4 Flash",
+        model_id: "deepseek-v4-flash",
+        enabled: true,
+        capabilities: {
+          tool_calling: "yes",
+          reasoning: "yes",
+          vision_input: "no",
+          source: "catalog",
+        },
+        last_test: {
+          status: "ready",
+          checked_at: new Date().toISOString(),
+          latency_ms: 842,
+          error_class: null,
+          message: "Connection succeeded.",
+        },
+        provider_display_name: "DeepSeek",
+        selected: true,
+        selector_status: "Ready",
+        act_enabled: true,
+      },
+      {
+        id: "model-chat-only-demo",
+        provider_id: "provider-deepseek-existing",
+        display_name: "Chat-only Demo",
+        model_id: "deepseek-chat-demo",
+        enabled: true,
+        capabilities: {
+          tool_calling: "no",
+          reasoning: "unknown",
+          vision_input: "no",
+          source: "declared",
+        },
+        last_test: null,
+        provider_display_name: "DeepSeek",
+        selected: false,
+        selector_status: "Untested",
+        act_enabled: false,
+      },
+    ],
+    selected_model: null,
+    user_environ: {
+      path: "C:/Users/demo/.Renviron",
+      source: "default",
+    },
+    validation_error: null,
+  };
+  return rebuildMockAgentLlmSettings(settings);
+}
 
 function nextMockRunId() {
   mockRunSequence += 1;
@@ -126,7 +289,7 @@ function mockTurnSummary(turn) {
   };
 }
 
-function createMockAgentTurn({ prompt, mode, model }) {
+function createMockAgentTurn({ prompt, mode, model, editorContext = null }) {
   const startedAt = new Date().toISOString();
   const turn = {
     turn_id: nextMockTurnId(),
@@ -156,7 +319,7 @@ function createMockAgentTurn({ prompt, mode, model }) {
         tool: null,
         request_id: null,
         code: null,
-        details_json: JSON.stringify({ prompt, mode }),
+        details_json: JSON.stringify({ prompt, mode, editor_context: editorContext }),
       },
       {
         id: 2,
@@ -206,6 +369,65 @@ function createMockAgentTurn({ prompt, mode, model }) {
       code: "summary(qc)",
       details_json: JSON.stringify({ request_id: requestId }),
     });
+  } else if (prompt.includes("@")) {
+    const match = prompt.match(/@(?:"([^"]+)"|([^\s，。]+))/);
+    const path = match?.[1] || match?.[2] || editorContext?.active_path || "analysis.R";
+    const operation = /追加|append/i.test(prompt)
+      ? "append"
+      : /新建|create/i.test(prompt)
+        ? "create"
+        : editorContext?.selection_end > editorContext?.selection_start
+          ? "replace_selection"
+          : "insert_at_cursor";
+    const proposal = {
+      kind: "rho.file_edit_proposal",
+      path,
+      operation,
+      content: "# Proposed by Rho\nsummary(qc)\n",
+    };
+    const text = `已为 ${path} 创建编辑提案，请在应用前检查差异。`;
+    turn.final_message = text;
+    turn.events.push(
+      {
+        id: 3,
+        turn_id: turn.turn_id,
+        timestamp: startedAt,
+        event_type: "tool.call_started",
+        title: "Tool · propose_file_edit",
+        body: "Preparing a reviewable file edit.",
+        status: "running",
+        tool: "propose_file_edit",
+        request_id: null,
+        code: null,
+        details_json: "{}",
+      },
+      {
+        id: 4,
+        turn_id: turn.turn_id,
+        timestamp: startedAt,
+        event_type: "tool.call_completed",
+        title: "Tool completed · propose_file_edit",
+        body: JSON.stringify(proposal),
+        status: "completed",
+        tool: "propose_file_edit",
+        request_id: null,
+        code: null,
+        details_json: "{}",
+      },
+      {
+        id: 5,
+        turn_id: turn.turn_id,
+        timestamp: startedAt,
+        event_type: "chat.message_completed",
+        title: "Rho",
+        body: text,
+        status: "completed",
+        tool: null,
+        request_id: null,
+        code: null,
+        details_json: JSON.stringify({ text }),
+      },
+    );
   } else {
     const text = "`qc` 包含 12 个样本和 3 个变量。reads 与 detected 的分布整体稳定，目前没有明显离群样本。";
     turn.final_message = text;
@@ -514,6 +736,14 @@ async function mockInvoke(command, args) {
     updateIdentity(state.revision);
     return mockInvoke("project_state", {});
   }
+  if (command === "project_delete_file") {
+    const project = mockProjects[mockLastProject] || mockProjects["D:/Rho"];
+    delete project.contents[args.path];
+    project.files = project.files.filter((file) => file.path !== args.path);
+    state.revision.project_revision += 1;
+    updateIdentity(state.revision);
+    return mockInvoke("project_state", {});
+  }
   if (command === "snapshot_workspace") {
     return mockEnvironmentSnapshot();
   }
@@ -681,11 +911,96 @@ async function mockInvoke(command, args) {
     }
     return { status: "interrupt_requested", run_id: active?.run_id || null };
   }
+  if (command === "agent_llm_settings" || command === "agent_llm_refresh_credentials") {
+    return structuredClone(rebuildMockAgentLlmSettings());
+  }
+  if (command === "agent_llm_open_user_environ") {
+    return structuredClone(mockAgentLlmSettings.user_environ);
+  }
+  if (command === "agent_llm_catalog") {
+    return [
+      {
+        provider: "openai",
+        id: "gpt-4.1-mini",
+        display_name: "GPT-4.1 Mini",
+        description: "OpenAI catalog entry",
+        capabilities: { tool_calling: "yes", reasoning: "yes", vision_input: "no", source: "catalog" },
+      },
+      {
+        provider: "anthropic",
+        id: "claude-sonnet-4",
+        display_name: "Claude Sonnet 4",
+        description: "Anthropic catalog entry",
+        capabilities: { tool_calling: "yes", reasoning: "yes", vision_input: "yes", source: "catalog" },
+      },
+    ];
+  }
+  if (command === "agent_llm_save_provider") {
+    const provider = structuredClone(args.provider || {});
+    const index = mockAgentLlmSettings.providers.findIndex((item) => item.id === provider.id);
+    provider.credential_status = provider.api_key_required ? "not_detected" : "not_required";
+    if (index >= 0) mockAgentLlmSettings.providers[index] = provider;
+    else mockAgentLlmSettings.providers.push(provider);
+    return structuredClone(rebuildMockAgentLlmSettings());
+  }
+  if (command === "agent_llm_delete_provider") {
+    const providerId = args.providerId ?? args.provider_id;
+    if (mockAgentLlmSettings.models.some((model) => model.provider_id === providerId)) {
+      throw new Error("Delete the provider's models before removing the provider.");
+    }
+    mockAgentLlmSettings.providers = mockAgentLlmSettings.providers.filter((provider) => provider.id !== providerId);
+    return structuredClone(rebuildMockAgentLlmSettings());
+  }
+  if (command === "agent_llm_save_model") {
+    const model = structuredClone(args.model || {});
+    const index = mockAgentLlmSettings.models.findIndex((item) => item.id === model.id);
+    if (index >= 0) mockAgentLlmSettings.models[index] = model;
+    else mockAgentLlmSettings.models.push(model);
+    return structuredClone(rebuildMockAgentLlmSettings());
+  }
+  if (command === "agent_llm_delete_model") {
+    const request = args.request || {};
+    const modelId = request.modelId ?? request.model_id;
+    const replacementModelId = request.replacementModelId ?? request.replacement_model_id;
+    if (mockAgentLlmSettings.selected_model_id === modelId) {
+      if (!replacementModelId) throw new Error("Select another enabled model before deleting the current default.");
+      mockAgentLlmSettings.selected_model_id = replacementModelId;
+    }
+    mockAgentLlmSettings.models = mockAgentLlmSettings.models.filter((model) => model.id !== modelId);
+    return structuredClone(rebuildMockAgentLlmSettings());
+  }
+  if (command === "agent_llm_select_model") {
+    const request = args.request || {};
+    const modelId = request.modelId ?? request.model_id;
+    mockAgentLlmSettings.selected_model_id = modelId;
+    return structuredClone(rebuildMockAgentLlmSettings());
+  }
+  if (command === "agent_llm_test_model") {
+    const modelId = args.modelId ?? args.model_id;
+    const model = mockAgentLlmSettings.models.find((item) => item.id === modelId);
+    if (!model) throw new Error(`Unknown model: ${modelId}`);
+    model.last_test = {
+      status: "ready",
+      checked_at: new Date().toISOString(),
+      latency_ms: 420,
+      error_class: null,
+      message: "Connection succeeded.",
+    };
+    return structuredClone(rebuildMockAgentLlmSettings());
+  }
   if (command === "run_agent") {
+    const selectedModelId = args.modelId ?? args.model_id ?? mockAgentLlmSettings.selected_model_id;
+    const modelProfile = mockAgentLlmSettings.models.find((item) => item.id === selectedModelId)
+      || mockAgentLlmSettings.models.find((item) => item.id === mockAgentLlmSettings.selected_model_id)
+      || null;
+    const providerProfile = modelProfile
+      ? mockAgentLlmSettings.providers.find((item) => item.id === modelProfile.provider_id)
+      : null;
     const turn = createMockAgentTurn({
       prompt: args.prompt || "",
       mode: args.mode || "ask",
-      model: args.model || "deepseek:deepseek-v4-flash",
+      model: modelProfile ? mockEffectiveModelRef(providerProfile, modelProfile) : "deepseek:deepseek-v4-flash",
+      editorContext: args.editorContext || null,
     });
     return { status: "started", turn_id: turn.turn_id };
   }
@@ -1243,6 +1558,7 @@ async function initializeEditor() {
     });
     state.editor.editor.onDidChangeModelContent(() => {
       if (state.editor.suppressChange) return;
+      clearAgentEditHighlight();
       syncDocumentFromEditor({ render: true, persist: true });
       updateEditorChrome();
     });
@@ -1611,6 +1927,7 @@ function renderDocumentTabs() {
 function renderActiveDocument() {
   const documentState = activeDocument();
   if (!documentState) {
+    clearAgentEditHighlight();
     if (state.editor.mode === "monaco" && state.editor.editor) {
       state.editor.editor.setModel(null);
     } else {
@@ -1640,6 +1957,7 @@ async function openDocument(path, options = {}) {
   const { sessionEntry = null, forceReload = false } = options;
   if (state.activeDocument && state.activeDocument !== path) {
     syncDocumentFromEditor({ render: false, persist: false });
+    clearAgentEditHighlight();
   }
   if (!state.project.files.some((file) => file.path === path)) {
     toast(`File is no longer available: ${path}`, true);
@@ -1680,6 +1998,7 @@ async function openDocument(path, options = {}) {
 
 function closeDocument(path) {
   syncDocumentFromEditor({ render: false, persist: false });
+  if (state.activeDocument === path) clearAgentEditHighlight();
   const document = state.documents[path];
   if (!document) return;
   const model = state.editor.models.get(path);
@@ -1896,6 +2215,188 @@ function truncateText(text, limit = 120) {
   return compact.length > limit ? `${compact.slice(0, limit)}…` : compact;
 }
 
+function fileEditDecisionStorageKey(root = state.project.root) {
+  return `rho.fileEditDecisions:${root || "default"}`;
+}
+
+function loadFileEditDecisions(root = state.project.root) {
+  try {
+    const value = JSON.parse(localStorage.getItem(fileEditDecisionStorageKey(root)) || "{}");
+    return new Map(Object.entries(value));
+  } catch (_) {
+    return new Map();
+  }
+}
+
+function persistFileEditDecisions() {
+  try {
+    localStorage.setItem(
+      fileEditDecisionStorageKey(),
+      JSON.stringify(Object.fromEntries(state.fileEditDecisions.entries()))
+    );
+  } catch {
+    // File edit review state is best-effort in browser storage for V1.
+  }
+}
+
+function clearFileEditDecisions(root = state.project.root) {
+  try {
+    localStorage.removeItem(fileEditDecisionStorageKey(root));
+  } catch {
+    // Ignore browser storage failures; explicit clear still resets in-memory state.
+  }
+}
+
+function rankedProjectFileMentions(query) {
+  const seen = new Set();
+  const active = state.activeDocument ? [state.activeDocument] : [];
+  const openDocuments = Object.keys(state.documents)
+    .filter((path) => path !== state.activeDocument)
+    .reverse();
+  const projectFiles = state.project.files
+    .map((file) => file.path)
+    .sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }));
+  return [...active, ...openDocuments, ...projectFiles]
+    .filter((path) => {
+      if (!path || seen.has(path)) return false;
+      seen.add(path);
+      return path.toLowerCase().includes(query);
+    })
+    .slice(0, 8);
+}
+
+function parseAgentMentionInput(value, cursor) {
+  const before = value.slice(0, cursor);
+  const match = before.match(/(?:^|\s)@(?:"([^"\n]*)|([^\s@"]*))$/);
+  if (!match) return null;
+  return {
+    query: String(match[1] ?? match[2] ?? "").toLowerCase(),
+    start: before.lastIndexOf("@"),
+    end: cursor,
+  };
+}
+
+function agentTimelineEventBody(event) {
+  if (event.event_type === "tool.call_completed" && event.tool === "propose_file_edit") {
+    return "Review the proposed file edit below. No file has been changed yet.";
+  }
+  return event.body;
+}
+
+function hasVisibleAgentFileMentions() {
+  return state.agentFileMention.items.length > 0;
+}
+
+function moveAgentFileMention(delta) {
+  if (!hasVisibleAgentFileMentions()) return;
+  const count = state.agentFileMention.items.length;
+  state.agentFileMention.index = (state.agentFileMention.index + delta + count) % count;
+  renderAgentFileMentions();
+}
+
+function agentMentionToken(path) {
+  return path.includes(" ") ? `@"${path}"` : `@${path}`;
+}
+
+function activeSelectionExists() {
+  if (!activeDocument()) return false;
+  const { start, end } = currentEditorOffsets();
+  return start !== end;
+}
+
+function closeAgentContextMenu() {
+  $("#agentContextMenu").classList.add("hidden");
+  $("#agentContextButton").setAttribute("aria-expanded", "false");
+}
+
+function openAgentContextMenu() {
+  const hasDocument = Boolean(activeDocument());
+  $("#agentContextChooseFile").disabled = state.projectStatus !== "ready" || !state.project.files.length;
+  $("#agentContextUseCurrentFile").disabled = !hasDocument;
+  $("#agentContextUseSelection").disabled = !activeSelectionExists();
+  $("#agentContextNewFile").disabled = state.projectStatus !== "ready";
+  $("#agentContextMenu").classList.remove("hidden");
+  $("#agentContextButton").setAttribute("aria-expanded", "true");
+}
+
+function renderAgentContextBadge() {
+  const badge = $("#agentContextBadge");
+  if (state.agentContextSource === "editor" || !state.agentContextPath) {
+    badge.textContent = "";
+    badge.classList.add("hidden");
+    return;
+  }
+  const suffix = {
+    current_file: "",
+    selection: " · selection",
+    project_file: "",
+    new_file: " · new",
+  }[state.agentContextSource] || "";
+  badge.textContent = `${state.agentContextPath}${suffix}`;
+  badge.classList.remove("hidden");
+}
+
+function setAgentContext(source, path = null) {
+  state.agentContextSource = source;
+  state.agentContextPath = path;
+  renderAgentContextBadge();
+}
+
+function resetAgentContext() {
+  setAgentContext("editor", null);
+}
+
+function validateProjectRelativePath(path) {
+  const normalized = String(path || "").trim().replace(/\\/g, "/").replace(/^\.\/+/, "");
+  if (!normalized) {
+    throw new Error("Project-relative path is required.");
+  }
+  if (/^[A-Za-z]:/.test(normalized) || normalized.startsWith("/")) {
+    throw new Error("Use a project-relative path, not an absolute path.");
+  }
+  const segments = normalized.split("/");
+  if (segments.some((segment) => !segment || segment === "." || segment === "..")) {
+    throw new Error("Use a clean project-relative path without . or .. segments.");
+  }
+  return normalized;
+}
+
+function syncAgentContextFromInput() {
+  const input = $("#agentInput").value;
+  if (!state.agentContextPath || state.agentContextSource === "editor") return;
+  if (!input.includes(agentMentionToken(state.agentContextPath))) {
+    resetAgentContext();
+  }
+}
+
+function insertAgentReference(path, options = {}) {
+  const { source = null, range = null } = options;
+  const input = $("#agentInput");
+  const mention = agentMentionToken(path);
+  const start = range?.start ?? input.selectionStart ?? input.value.length;
+  const end = range?.end ?? input.selectionEnd ?? start;
+  const prefix = start > 0 && /\S/.test(input.value[start - 1]) ? " " : "";
+  const suffix = end < input.value.length && /\S/.test(input.value[end]) ? " " : " ";
+  input.setRangeText(`${prefix}${mention}${suffix}`, start, end, "end");
+  if (source) setAgentContext(source, path);
+  input.focus();
+}
+
+function showAgentProjectFilePicker(contextSource = "project_file") {
+  if (state.projectStatus !== "ready" || !state.project.files.length) return;
+  const input = $("#agentInput");
+  input.focus();
+  state.agentFileMention = {
+    items: rankedProjectFileMentions(""),
+    index: 0,
+    start: input.selectionStart ?? input.value.length,
+    end: input.selectionEnd ?? input.selectionStart ?? input.value.length,
+    mode: "picker",
+    contextSource,
+  };
+  renderAgentFileMentions();
+}
+
 function approvalLabel(approval) {
   if (!approval) return "";
   return `${approval.tool} · ${approval.request_id}`;
@@ -1917,17 +2418,24 @@ async function loadAgentData() {
     ]);
     state.agentTurns = turns || [];
     state.pendingApprovals = (approvals || []).filter((item) => item.status === "waiting");
-    const preferredTurnId = state.selectedTurnId
+    const selectedTurnStillExists = state.selectedTurnId
+      && state.agentTurns.some((turn) => turn.turn_id === state.selectedTurnId);
+    const preferredTurnId = selectedTurnStillExists
+      ? state.selectedTurnId
       || state.pendingApprovals[0]?.turn_id
       || state.agentTurns.find((turn) => ["running", "waiting"].includes(turn.status))?.turn_id
       || state.agentTurns[0]?.turn_id
-      || null;
+      : state.pendingApprovals[0]?.turn_id
+        || state.agentTurns.find((turn) => ["running", "waiting"].includes(turn.status))?.turn_id
+        || state.agentTurns[0]?.turn_id
+        || null;
     state.selectedTurnId = preferredTurnId;
     state.selectedTurnDetail = preferredTurnId
       ? await invoke("get_agent_turn_detail", { turnId: preferredTurnId })
       : null;
     renderAgentTimeline();
     renderApprovalPanel();
+    renderFileEditPanel();
     updateAgentHeader();
     syncAgentPolling();
   } catch (error) {
@@ -1935,12 +2443,120 @@ async function loadAgentData() {
   }
 }
 
+function emptyAgentLlmSettings(message) {
+  return {
+    schema_version: 1,
+    selected_model_id: null,
+    providers: [],
+    models: [],
+    selected_model: null,
+    user_environ: { path: "", source: "default" },
+    validation_error: message,
+  };
+}
+
+function selectedAgentModel() {
+  return state.agentLlm.settings?.selected_model || null;
+}
+
+function ensureAgentLlmSelectionState() {
+  const settings = state.agentLlm.settings;
+  if (!settings) return;
+  if (!settings.providers.some((provider) => provider.id === state.agentLlm.selectedProviderId)) {
+    state.agentLlm.selectedProviderId = settings.providers[0]?.id || null;
+    state.agentLlm.editingProviderId = settings.providers[0]?.id || null;
+  }
+  if (!settings.models.some((model) => model.id === state.agentLlm.selectedModelEditorId)) {
+    state.agentLlm.selectedModelEditorId = settings.selected_model_id || settings.models[0]?.id || null;
+    state.agentLlm.editingModelId = state.agentLlm.selectedModelEditorId;
+  }
+}
+
+function prettyToolCalling(value) {
+  if (value === "yes") return "Act enabled";
+  if (value === "no") return "Chat only";
+  return "Act unavailable";
+}
+
+function agentSendDisabledReason() {
+  if (state.agentRuntime && !state.agentRuntime.available) {
+    return state.agentRuntime.error || "aisdk is unavailable in Agent R.";
+  }
+  if (state.agentLlm.settings?.validation_error) return state.agentLlm.settings.validation_error;
+  if (!selectedAgentModel()) return "No enabled Agent model is configured.";
+  return null;
+}
+
+function syncAgentComposerState() {
+  const selected = selectedAgentModel();
+  const reason = agentSendDisabledReason();
+  const actBlocked = !selected?.act_enabled;
+  const selectorLocked = state.pendingApprovals.length > 0
+    || state.agentTurns.some((turn) => ["running", "waiting"].includes(turn.status));
+  if (state.agentMode === "act" && actBlocked) {
+    state.agentMode = "ask";
+  }
+  $("#agentSendButton").disabled = state.agentBusy || Boolean(reason);
+  $("#agentInput").disabled = state.agentBusy || Boolean(reason);
+  $$("[data-agent-mode]").forEach((button) => {
+    const disabled = state.agentBusy || (button.dataset.agentMode === "act" && actBlocked);
+    button.disabled = disabled;
+    button.classList.toggle("active", button.dataset.agentMode === state.agentMode);
+  });
+  $("#actAutoApprove").disabled = state.agentBusy || state.agentMode !== "act" || actBlocked;
+  $("#agentModelSelector").disabled = selectorLocked || !(state.agentLlm.settings?.models || []).length;
+  const note = $("#agentCapabilityNote");
+  if (reason && !state.agentBusy) {
+    note.textContent = reason;
+    note.className = "agent-capability-note warn";
+    note.classList.remove("hidden");
+    return;
+  }
+  if (selected && selected.tool_calling === "no") {
+    note.textContent = "This model runs Ask and Plan as chat-only turns. It cannot inspect or modify the workspace.";
+    note.className = "agent-capability-note warn";
+    note.classList.remove("hidden");
+    return;
+  }
+  if (selected && selected.tool_calling === "unknown") {
+    note.textContent = "Test or declare tool support to use Act with this model.";
+    note.className = "agent-capability-note warn";
+    note.classList.remove("hidden");
+    return;
+  }
+  note.classList.add("hidden");
+}
+
+function updateAgentModelLabel() {
+  const selected = selectedAgentModel();
+  $("#agentRuntimeLabel").textContent = selected?.display_name || "Select model";
+  $("#agentModelSelector").title = selected
+    ? `${selected.display_name} · ${selected.provider_display_name} · ${selected.selector_status}`
+    : "Select Agent model";
+}
+
+async function loadAgentLlmSettings() {
+  try {
+    const settings = await invoke("agent_llm_settings");
+    state.agentLlm.settings = settings || emptyAgentLlmSettings("Agent LLM settings are unavailable.");
+    state.agentLlm.selectedModelId = state.agentLlm.settings.selected_model_id || null;
+    state.agentLlm.lastTestResult = null;
+  } catch (error) {
+    state.agentLlm.settings = emptyAgentLlmSettings(String(error));
+    state.agentLlm.selectedModelId = null;
+  }
+  ensureAgentLlmSelectionState();
+  updateAgentModelLabel();
+  renderAgentModelSelector();
+  renderAgentLlmDialog();
+  syncAgentComposerState();
+}
+
 function setAgentInputBusy(busy) {
   state.agentBusy = busy;
-  $("#agentSendButton").disabled = busy;
-  $("#agentInput").disabled = busy;
-  $$("[data-agent-mode]").forEach((button) => { button.disabled = busy; });
-  $("#actAutoApprove").disabled = busy;
+  if (busy) hideAgentFileMentions();
+  if (!busy) state.agentLlm.lastTestResult = state.agentLlm.lastTestResult;
+  syncAgentComposerState();
 }
 
 async function syncAgentRunsToConsole(runs) {
@@ -1973,11 +2589,11 @@ async function syncAgentRunsToConsole(runs) {
 function updateAgentHeader() {
   const latest = state.agentTurns[0] || null;
   const runtime = state.agentRuntime;
-  $("#agentRuntimeLabel").textContent = runtime?.available
-    ? `DeepSeek V4 Flash · aisdk ${runtime.aisdk_version || "ready"}`
-    : "DeepSeek V4 Flash · aisdk unavailable";
+  updateAgentModelLabel();
+  renderAgentModelSelector();
   if (runtime && !runtime.available) {
-    setAgentInputBusy(true);
+    state.agentBusy = true;
+    syncAgentComposerState();
     $("#agentCancelButton").classList.add("hidden");
     $("#agentState").textContent = "Unavailable";
     $("#agentStateDot").className = "agent-state-dot error";
@@ -1985,7 +2601,8 @@ function updateAgentHeader() {
   }
   const active = state.pendingApprovals.length > 0
     || state.agentTurns.some((turn) => ["running", "waiting"].includes(turn.status));
-  setAgentInputBusy(active);
+  state.agentBusy = active;
+  syncAgentComposerState();
   const activeTurn = state.agentTurns.find((turn) => ["running", "waiting"].includes(turn.status));
   state.activeAgentTurnId = activeTurn?.turn_id || null;
   $("#agentCancelButton").classList.toggle("hidden", !state.activeAgentTurnId);
@@ -2011,6 +2628,524 @@ function updateAgentHeader() {
   }
   $("#agentState").textContent = "Ready";
   $("#agentStateDot").className = "agent-state-dot";
+}
+
+function closeAgentModelSelector() {
+  state.agentLlm.selectorOpen = false;
+  $("#agentModelSelector").setAttribute("aria-expanded", "false");
+  $("#agentModelSelectorMenu").classList.add("hidden");
+}
+
+function focusAgentModelMenuItem(position = "first") {
+  const items = Array.from($("#agentModelSelectorMenu").querySelectorAll("button:not(:disabled)"));
+  if (!items.length) return;
+  if (position === "last") items[items.length - 1].focus();
+  else items[0].focus();
+}
+
+function moveAgentModelMenuFocus(delta) {
+  const items = Array.from($("#agentModelSelectorMenu").querySelectorAll("button:not(:disabled)"));
+  if (!items.length) return;
+  const current = items.indexOf(document.activeElement);
+  const next = current < 0 ? 0 : (current + delta + items.length) % items.length;
+  items[next].focus();
+}
+
+function openAgentModelSelector(focusPosition = null) {
+  if (!state.agentLlm.settings?.models?.length) return;
+  state.agentLlm.selectorOpen = true;
+  $("#agentModelSelector").setAttribute("aria-expanded", "true");
+  $("#agentModelSelectorMenu").classList.remove("hidden");
+  if (focusPosition) requestAnimationFrame(() => focusAgentModelMenuItem(focusPosition));
+}
+
+function renderAgentModelSelector() {
+  const menu = $("#agentModelSelectorMenu");
+  menu.replaceChildren();
+  const settings = state.agentLlm.settings;
+  const models = settings?.models || [];
+  if (!models.length) {
+    const empty = document.createElement("div");
+    empty.className = "agent-model-empty";
+    empty.textContent = settings?.validation_error || "No Agent models configured.";
+    menu.append(empty);
+  } else {
+    for (const model of models.filter((item) => item.enabled)) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "agent-model-option";
+      button.setAttribute("role", "menuitemradio");
+      button.setAttribute("aria-checked", String(Boolean(model.selected)));
+      const title = document.createElement("div");
+      title.className = "agent-model-option-title";
+      const strong = document.createElement("strong");
+      strong.textContent = model.display_name;
+      const meta = document.createElement("span");
+      meta.className = model.selected ? "agent-model-check" : "agent-model-status";
+      meta.textContent = model.selected ? "Selected" : model.selector_status;
+      title.append(strong, meta);
+      const info = document.createElement("p");
+      info.textContent = `${model.provider_display_name} · ${prettyToolCalling(model.capabilities?.tool_calling || "unknown")}`;
+      button.append(title, info);
+      button.addEventListener("click", async () => {
+        closeAgentModelSelector();
+        try {
+          const view = await invoke("agent_llm_select_model", { request: { model_id: model.id } });
+          state.agentLlm.settings = view;
+          state.agentLlm.selectedModelId = view.selected_model_id;
+          ensureAgentLlmSelectionState();
+          updateAgentHeader();
+          renderAgentLlmDialog();
+        } catch (error) {
+          toast(String(error), true);
+        }
+      });
+      menu.append(button);
+    }
+  }
+  const manage = document.createElement("button");
+  manage.type = "button";
+  manage.className = "agent-model-manage";
+  manage.setAttribute("role", "menuitem");
+  manage.innerHTML = "<strong>Manage LLMs...</strong><p>Edit providers, models and connection checks.</p>";
+  manage.addEventListener("click", () => {
+    closeAgentModelSelector();
+    openAgentLlmDialog();
+  });
+  menu.append(manage);
+}
+
+function currentProviderRecord() {
+  return state.agentLlm.settings?.providers?.find((provider) => provider.id === state.agentLlm.editingProviderId) || null;
+}
+
+function currentModelRecord() {
+  return state.agentLlm.settings?.models?.find((model) => model.id === state.agentLlm.editingModelId) || null;
+}
+
+function createAgentLlmListRow(titleText, metaText, active) {
+  const row = document.createElement("button");
+  row.type = "button";
+  row.className = `agent-llm-row${active ? " active" : ""}`;
+  const title = document.createElement("strong");
+  title.textContent = titleText;
+  const meta = document.createElement("p");
+  meta.textContent = metaText;
+  row.append(title, meta);
+  return row;
+}
+
+function catalogProviderId(provider) {
+  if (!provider) return null;
+  if (provider.kind === "registered") return provider.registered_provider_id || null;
+  if (["openai", "anthropic", "gemini"].includes(provider.kind)) return provider.kind;
+  return null;
+}
+
+function renderAgentLlmCatalogOptions() {
+  const select = $("#agentLlmCatalogModel");
+  select.replaceChildren();
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = state.agentLlm.catalogLoaded
+    ? "Choose a catalog model..."
+    : "Load the model catalog first...";
+  select.append(placeholder);
+  const provider = (state.agentLlm.settings?.providers || [])
+    .find((item) => item.id === $("#agentLlmModelProvider").value);
+  const providerId = catalogProviderId(provider);
+  for (const entry of state.agentLlm.catalog.filter((item) => !providerId || item.provider === providerId)) {
+    const option = document.createElement("option");
+    option.value = `${entry.provider}:${entry.id}`;
+    option.textContent = `${entry.display_name || entry.id} (${entry.provider})`;
+    select.append(option);
+  }
+  select.disabled = !state.agentLlm.catalog.length;
+}
+
+function renderAgentProviderForm() {
+  const provider = currentProviderRecord();
+  $("#agentLlmProviderDisplayName").value = provider?.display_name || "";
+  $("#agentLlmProviderKind").value = provider?.kind || "registered";
+  $("#agentLlmRegisteredProviderId").value = provider?.registered_provider_id || "";
+  $("#agentLlmProviderApiKeyEnv").value = provider?.api_key_env || "";
+  $("#agentLlmProviderBaseUrl").value = provider?.base_url || "";
+  $("#agentLlmProviderBaseUrlEnv").value = provider?.base_url_env || "";
+  $("#agentLlmProviderWireApi").value = provider?.wire_api || "";
+  $("#agentLlmProviderApiKeyRequired").checked = provider ? Boolean(provider.api_key_required) : true;
+  $("#agentLlmProviderDisableStreamOptions").checked = Boolean(provider?.disable_stream_options);
+}
+
+function renderAgentModelForm() {
+  const model = currentModelRecord();
+  const providerSelect = $("#agentLlmModelProvider");
+  providerSelect.replaceChildren();
+  for (const provider of state.agentLlm.settings?.providers || []) {
+    const option = document.createElement("option");
+    option.value = provider.id;
+    option.textContent = provider.display_name;
+    providerSelect.append(option);
+  }
+  $("#agentLlmModelDisplayName").value = model?.display_name || "";
+  $("#agentLlmModelProvider").value = model?.provider_id || state.agentLlm.settings?.providers?.[0]?.id || "";
+  renderAgentLlmCatalogOptions();
+  $("#agentLlmModelId").value = model?.model_id || "";
+  $("#agentLlmModelToolCalling").value = model?.capabilities?.tool_calling || "unknown";
+  $("#agentLlmModelReasoning").value = model?.capabilities?.reasoning || "unknown";
+  $("#agentLlmModelVisionInput").value = model?.capabilities?.vision_input || "unknown";
+  $("#agentLlmModelCapabilitySource").value = model?.capabilities?.source || "declared";
+  $("#agentLlmModelEnabled").checked = model ? Boolean(model.enabled) : true;
+}
+
+function renderAgentLlmDialog() {
+  const settings = state.agentLlm.settings || emptyAgentLlmSettings("Agent LLM settings are unavailable.");
+  ensureAgentLlmSelectionState();
+  $("#agentLlmUserEnviron").textContent = settings.user_environ?.path
+    ? `Effective user environment: ${settings.user_environ.path}`
+    : "Effective user environment is unavailable.";
+  $("#agentLlmValidation").textContent = settings.validation_error || "";
+  $("#agentLlmValidation").classList.toggle("hidden", !settings.validation_error);
+  const providerList = $("#agentLlmProviderList");
+  providerList.replaceChildren();
+  if (!settings.providers.length) {
+    const empty = document.createElement("div");
+    empty.className = "agent-llm-empty";
+    empty.textContent = "No providers yet.";
+    providerList.append(empty);
+  } else {
+    for (const provider of settings.providers) {
+      const row = createAgentLlmListRow(
+        provider.display_name,
+        `${provider.kind} · credential ${provider.credential_status}`,
+        provider.id === state.agentLlm.selectedProviderId
+      );
+      row.addEventListener("click", () => {
+        state.agentLlm.selectedProviderId = provider.id;
+        state.agentLlm.editingProviderId = provider.id;
+        renderAgentLlmDialog();
+      });
+      providerList.append(row);
+    }
+  }
+  const modelList = $("#agentLlmModelList");
+  modelList.replaceChildren();
+  if (!settings.models.length) {
+    const empty = document.createElement("div");
+    empty.className = "agent-llm-empty";
+    empty.textContent = "No models yet.";
+    modelList.append(empty);
+  } else {
+    for (const model of settings.models) {
+      const row = createAgentLlmListRow(
+        model.display_name,
+        `${model.provider_display_name} · ${model.selector_status} · ${prettyToolCalling(model.capabilities?.tool_calling || "unknown")}`,
+        model.id === state.agentLlm.selectedModelEditorId
+      );
+      row.addEventListener("click", () => {
+        state.agentLlm.selectedModelEditorId = model.id;
+        state.agentLlm.editingModelId = model.id;
+        state.agentLlm.lastTestResult = model.last_test || null;
+        renderAgentLlmDialog();
+      });
+      modelList.append(row);
+    }
+  }
+  renderAgentProviderForm();
+  renderAgentModelForm();
+  const result = state.agentLlm.lastTestResult;
+  $("#agentLlmTestResult").className = `agent-llm-test-result${result ? ` ${result.status}` : " hidden"}`;
+  $("#agentLlmTestResult").textContent = result
+    ? `${result.message || "Connection checked."}${result.latency_ms ? ` · ${result.latency_ms} ms` : ""}`
+    : "";
+  $("#agentLlmTestModel").disabled = state.agentLlm.testInFlight;
+  $("#agentLlmCancelTest").disabled = !state.agentLlm.testInFlight;
+}
+
+function openAgentLlmDialog() {
+  state.agentLlm.settingsOpen = true;
+  renderAgentLlmDialog();
+  $("#agentLlmDialog").classList.remove("hidden");
+}
+
+function closeAgentLlmDialog() {
+  state.agentLlm.settingsOpen = false;
+  $("#agentLlmDialog").classList.add("hidden");
+}
+
+function applyAgentLlmView(view) {
+  state.agentLlm.settings = view || emptyAgentLlmSettings("Agent LLM settings are unavailable.");
+  state.agentLlm.selectedModelId = state.agentLlm.settings.selected_model_id || null;
+  ensureAgentLlmSelectionState();
+  updateAgentHeader();
+  renderAgentLlmDialog();
+}
+
+function clearAgentProviderForm() {
+  state.agentLlm.editingProviderId = null;
+  $("#agentLlmProviderDisplayName").value = "";
+  $("#agentLlmProviderKind").value = "registered";
+  $("#agentLlmRegisteredProviderId").value = "";
+  $("#agentLlmProviderApiKeyEnv").value = "";
+  $("#agentLlmProviderBaseUrl").value = "";
+  $("#agentLlmProviderBaseUrlEnv").value = "";
+  $("#agentLlmProviderWireApi").value = "";
+  $("#agentLlmProviderApiKeyRequired").checked = true;
+  $("#agentLlmProviderDisableStreamOptions").checked = false;
+}
+
+function clearAgentModelForm() {
+  state.agentLlm.editingModelId = null;
+  $("#agentLlmModelDisplayName").value = "";
+  $("#agentLlmModelProvider").value = state.agentLlm.settings?.providers?.[0]?.id || "";
+  $("#agentLlmModelId").value = "";
+  $("#agentLlmModelToolCalling").value = "unknown";
+  $("#agentLlmModelReasoning").value = "unknown";
+  $("#agentLlmModelVisionInput").value = "unknown";
+  $("#agentLlmModelCapabilitySource").value = "declared";
+  $("#agentLlmModelEnabled").checked = true;
+  state.agentLlm.lastTestResult = null;
+  $("#agentLlmTestResult").className = "agent-llm-test-result hidden";
+  $("#agentLlmTestResult").textContent = "";
+}
+
+function readAgentProviderForm() {
+  const settings = state.agentLlm.settings || emptyAgentLlmSettings("Agent LLM settings are unavailable.");
+  const displayName = $("#agentLlmProviderDisplayName").value.trim();
+  const ids = settings.providers.map((provider) => provider.id);
+  return {
+    id: state.agentLlm.editingProviderId || uniqueAgentId("provider", displayName || "provider", ids),
+    display_name: displayName,
+    kind: $("#agentLlmProviderKind").value,
+    registered_provider_id: $("#agentLlmRegisteredProviderId").value.trim() || null,
+    api_key_env: $("#agentLlmProviderApiKeyEnv").value.trim() || null,
+    api_key_required: $("#agentLlmProviderApiKeyRequired").checked,
+    base_url: $("#agentLlmProviderBaseUrl").value.trim() || null,
+    base_url_env: $("#agentLlmProviderBaseUrlEnv").value.trim() || null,
+    wire_api: $("#agentLlmProviderWireApi").value || null,
+    disable_stream_options: $("#agentLlmProviderDisableStreamOptions").checked ? true : null,
+  };
+}
+
+function readAgentModelForm() {
+  const settings = state.agentLlm.settings || emptyAgentLlmSettings("Agent LLM settings are unavailable.");
+  const displayName = $("#agentLlmModelDisplayName").value.trim();
+  const ids = settings.models.map((model) => model.id);
+  return {
+    id: state.agentLlm.editingModelId || uniqueAgentId("model", displayName || "model", ids),
+    provider_id: $("#agentLlmModelProvider").value,
+    display_name: displayName,
+    model_id: $("#agentLlmModelId").value.trim(),
+    enabled: $("#agentLlmModelEnabled").checked,
+    capabilities: {
+      tool_calling: $("#agentLlmModelToolCalling").value,
+      reasoning: $("#agentLlmModelReasoning").value,
+      vision_input: $("#agentLlmModelVisionInput").value,
+      source: $("#agentLlmModelCapabilitySource").value,
+    },
+    last_test: currentModelRecord()?.last_test || null,
+  };
+}
+
+async function copyText(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const input = document.createElement("textarea");
+  input.value = text;
+  document.body.append(input);
+  input.select();
+  document.execCommand("copy");
+  input.remove();
+}
+
+async function saveAgentProvider() {
+  try {
+    const provider = readAgentProviderForm();
+    const view = await invoke("agent_llm_save_provider", { provider });
+    state.agentLlm.selectedProviderId = provider.id;
+    state.agentLlm.editingProviderId = provider.id;
+    applyAgentLlmView(view);
+    toast(`Saved provider ${provider.display_name || provider.id}.`);
+  } catch (error) {
+    toast(String(error), true);
+  }
+}
+
+async function deleteAgentProvider() {
+  const provider = currentProviderRecord();
+  if (!provider) {
+    toast("Select a provider to delete.", true);
+    return;
+  }
+  if (!window.confirm(`Delete provider ${provider.display_name}?`)) return;
+  try {
+    const view = await invoke("agent_llm_delete_provider", { providerId: provider.id });
+    state.agentLlm.selectedProviderId = view.providers[0]?.id || null;
+    state.agentLlm.editingProviderId = state.agentLlm.selectedProviderId;
+    applyAgentLlmView(view);
+    renderAgentProviderForm();
+    toast(`Deleted provider ${provider.display_name}.`);
+  } catch (error) {
+    toast(String(error), true);
+  }
+}
+
+async function saveAgentModel() {
+  try {
+    const model = readAgentModelForm();
+    const view = await invoke("agent_llm_save_model", { model });
+    state.agentLlm.selectedModelEditorId = model.id;
+    state.agentLlm.editingModelId = model.id;
+    applyAgentLlmView(view);
+    toast(`Saved model ${model.display_name || model.id}.`);
+  } catch (error) {
+    toast(String(error), true);
+  }
+}
+
+async function deleteAgentModel() {
+  const model = currentModelRecord();
+  if (!model) {
+    toast("Select a model to delete.", true);
+    return;
+  }
+  if (!window.confirm(`Delete model ${model.display_name}?`)) return;
+  try {
+    let replacementModelId = null;
+    if (state.agentLlm.settings?.selected_model_id === model.id) {
+      replacementModelId = (state.agentLlm.settings.models || []).find((item) => item.enabled && item.id !== model.id)?.id || null;
+      if (!replacementModelId) {
+        toast("Select another enabled model before deleting the current default.", true);
+        return;
+      }
+    }
+    const view = await invoke("agent_llm_delete_model", {
+      request: {
+        model_id: model.id,
+        replacement_model_id: replacementModelId,
+      },
+    });
+    state.agentLlm.selectedModelEditorId = view.selected_model_id || view.models[0]?.id || null;
+    state.agentLlm.editingModelId = state.agentLlm.selectedModelEditorId;
+    state.agentLlm.lastTestResult = null;
+    applyAgentLlmView(view);
+    toast(`Deleted model ${model.display_name}.`);
+  } catch (error) {
+    toast(String(error), true);
+  }
+}
+
+async function selectAgentDefaultModel() {
+  const model = currentModelRecord();
+  if (!model) {
+    toast("Select a model to use as default.", true);
+    return;
+  }
+  try {
+    const view = await invoke("agent_llm_select_model", { request: { model_id: model.id } });
+    applyAgentLlmView(view);
+    toast(`Selected ${model.display_name} for the next Agent turns.`);
+  } catch (error) {
+    toast(String(error), true);
+  }
+}
+
+async function testAgentModelConnection() {
+  const model = currentModelRecord();
+  if (!model) {
+    toast("Select a model to test.", true);
+    return;
+  }
+  try {
+    state.agentLlm.testInFlight = true;
+    renderAgentLlmDialog();
+    $("#agentLlmTestResult").className = "agent-llm-test-result";
+    $("#agentLlmTestResult").textContent = "Testing connection...";
+    const view = await invoke("agent_llm_test_model", { modelId: model.id });
+    state.agentLlm.lastTestResult = view.models.find((item) => item.id === model.id)?.last_test || null;
+    applyAgentLlmView(view);
+  } catch (error) {
+    const message = String(error);
+    state.agentLlm.lastTestResult = {
+      status: message.includes("cancelled") ? "warn" : "error",
+      latency_ms: null,
+      message: message.includes("cancelled") ? "Connection test cancelled." : message,
+    };
+    renderAgentLlmDialog();
+    if (!message.includes("cancelled")) toast(message, true);
+  } finally {
+    state.agentLlm.testInFlight = false;
+    renderAgentLlmDialog();
+  }
+}
+
+async function loadAgentLlmCatalog() {
+  const button = $("#agentLlmLoadCatalog");
+  button.disabled = true;
+  try {
+    const catalog = await invoke("agent_llm_catalog");
+    state.agentLlm.catalog = Array.isArray(catalog) ? catalog : [];
+    state.agentLlm.catalogLoaded = true;
+    renderAgentLlmCatalogOptions();
+    toast(`Loaded ${state.agentLlm.catalog.length} catalog models.`);
+  } catch (error) {
+    toast(`Could not load model catalog: ${error}`, true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function applySelectedCatalogModel() {
+  const value = $("#agentLlmCatalogModel").value;
+  if (!value) return;
+  const entry = state.agentLlm.catalog.find((item) => `${item.provider}:${item.id}` === value);
+  if (!entry) return;
+  $("#agentLlmModelId").value = entry.id;
+  $("#agentLlmModelDisplayName").value = entry.display_name || entry.id;
+  $("#agentLlmModelToolCalling").value = entry.capabilities?.tool_calling || "unknown";
+  $("#agentLlmModelReasoning").value = entry.capabilities?.reasoning || "unknown";
+  $("#agentLlmModelVisionInput").value = entry.capabilities?.vision_input || "unknown";
+  $("#agentLlmModelCapabilitySource").value = entry.capabilities?.source || "catalog";
+}
+
+async function cancelAgentModelTest() {
+  if (!state.agentLlm.testInFlight) return;
+  try {
+    await invoke("agent_llm_cancel_test");
+    $("#agentLlmTestResult").className = "agent-llm-test-result";
+    $("#agentLlmTestResult").textContent = "Cancelling connection test...";
+  } catch (error) {
+    toast(String(error), true);
+  }
+}
+
+async function reloadAgentCredentials() {
+  try {
+    applyAgentLlmView(await invoke("agent_llm_refresh_credentials"));
+    toast("Reloaded Agent credential detection.");
+  } catch (error) {
+    toast(String(error), true);
+  }
+}
+
+async function openAgentUserEnviron() {
+  try {
+    const info = await invoke("agent_llm_open_user_environ");
+    toast(`Opened ${info.path}.`);
+  } catch (error) {
+    toast(String(error), true);
+  }
+}
+
+async function copyAgentSetupLine() {
+  const envName = $("#agentLlmProviderApiKeyEnv").value.trim() || currentProviderRecord()?.api_key_env || "API_KEY";
+  try {
+    await copyText(`${envName}=""`);
+    toast(`Copied ${envName} setup line.`);
+  } catch (error) {
+    toast(String(error), true);
+  }
 }
 
 function syncAgentPolling() {
@@ -2055,7 +3190,7 @@ function renderAgentTimeline() {
     const heading = document.createElement("strong");
     heading.textContent = `${prettyAgentMode(turn.mode)} · ${turn.prompt_preview}`;
     const paragraph = document.createElement("p");
-    paragraph.textContent = `${prettyAgentStatus(turn.status)}${turn.pending_request_id ? ` · ${turn.pending_request_id}` : ""}`;
+    paragraph.textContent = `${prettyAgentStatus(turn.status)} · ${turn.model || "model?"}${turn.pending_request_id ? ` · ${turn.pending_request_id}` : ""}`;
     content.append(heading, paragraph);
     const detail = truncateText(turn.error_message || turn.final_message || "", 140);
     if (detail) {
@@ -2075,6 +3210,7 @@ function renderAgentTimeline() {
       state.selectedTurnDetail = await invoke("get_agent_turn_detail", { turnId: turn.turn_id });
       renderAgentTimeline();
       renderApprovalPanel();
+      renderFileEditPanel();
       updateAgentHeader();
     });
     panel.append(row);
@@ -2097,9 +3233,10 @@ function renderAgentTimeline() {
           metaLine.textContent = meta.join(" · ");
           childContent.append(metaLine);
         }
-        if (event.body) {
+        const body = agentTimelineEventBody(event);
+        if (body) {
           const childBody = document.createElement("p");
-          childBody.textContent = event.body;
+          childBody.textContent = body;
           childContent.append(childBody);
         }
         if (event.code) {
@@ -2688,21 +3825,443 @@ function formatBytes(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function buildAgentEditorContext() {
+  syncDocumentFromEditor({ render: false, persist: false });
+  const documentState = activeDocument();
+  const files = state.project.files.map((file) => file.path).slice(0, 500);
+  if (!documentState) {
+    return {
+      project_root: state.project.root,
+      files,
+      active_path: null,
+      context_source: state.agentContextSource,
+      context_path: state.agentContextPath,
+    };
+  }
+  const offsets = currentEditorOffsets();
+  const start = Math.min(offsets.start, offsets.end);
+  const end = Math.max(offsets.start, offsets.end);
+  const content = currentEditorValue();
+  const position = currentCursorPosition();
+  return {
+    project_root: state.project.root,
+    files,
+    active_path: documentState.path,
+    document_version: documentState.versionId ?? null,
+    selection_start: start,
+    selection_end: end,
+    selection_text: content.slice(start, end),
+    cursor_line: position.line,
+    cursor_column: position.column,
+    anchor_before: content.slice(Math.max(0, start - 160), start),
+    anchor_after: content.slice(end, Math.min(content.length, end + 160)),
+    nearby_before: content.slice(Math.max(0, start - 2000), start),
+    nearby_after: content.slice(end, Math.min(content.length, end + 2000)),
+    file_tail: content.slice(Math.max(0, content.length - 2000)),
+    context_source: state.agentContextSource,
+    context_path: state.agentContextPath,
+  };
+}
+
+function parseJsonObject(value) {
+  try {
+    const parsed = JSON.parse(value || "null");
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function selectedFileEditProposal() {
+  const detail = state.selectedTurnDetail;
+  if (!detail?.events?.length) return null;
+  const event = [...detail.events].reverse().find((item) =>
+    item.event_type === "tool.call_completed" && item.tool === "propose_file_edit"
+  );
+  if (!event) return null;
+  const proposal = parseJsonObject(event.body);
+  if (proposal?.kind !== "rho.file_edit_proposal") return null;
+  const userEvent = detail.events.find((item) => item.event_type === "agent.user_prompt");
+  const editorContext = parseJsonObject(userEvent?.details_json)?.editor_context || null;
+  return {
+    ...proposal,
+    turnId: detail.turn_id || state.selectedTurnId,
+    eventId: event.id,
+    key: `${detail.turn_id || state.selectedTurnId}:${event.id}`,
+    editorContext,
+  };
+}
+
+function fileEditOperationLabel(operation) {
+  return {
+    replace_selection: "Replace selection",
+    insert_at_cursor: "Insert at cursor",
+    append: "Append to file",
+    create: "Create file",
+  }[operation] || operation;
+}
+
+function renderFileEditDecisionNote(decision, undoAvailable) {
+  const note = $("#fileEditDecisionNote");
+  if (decision === "accepted" && undoAvailable) {
+    note.textContent = "Already applied. Undo is available for this latest accepted proposal.";
+    note.className = "file-edit-note";
+    note.classList.remove("hidden");
+    return;
+  }
+  if (decision === "accepted") {
+    note.textContent = "Already applied. Undo is no longer available.";
+    note.className = "file-edit-note";
+    note.classList.remove("hidden");
+    return;
+  }
+  if (decision === "rejected") {
+    note.textContent = "This proposal was rejected.";
+    note.className = "file-edit-note rejected";
+    note.classList.remove("hidden");
+    return;
+  }
+  note.textContent = "";
+  note.className = "file-edit-note hidden";
+}
+
+function boundedFileEditPreview(text, limit = 4000) {
+  const value = String(text || "");
+  if (!value) return "(empty)";
+  if (value.length <= limit) return value;
+  const half = Math.max(1, Math.floor(limit / 2));
+  return `${value.slice(0, half)}\n...\n${value.slice(-half)}`;
+}
+
+function contextualFileEditPreview(proposal) {
+  const context = proposal.editorContext || {};
+  const nearbyBefore = String(context.nearby_before || "");
+  const nearbyAfter = String(context.nearby_after || "");
+  const selectionText = String(context.selection_text || "");
+  const inserted = String(proposal.content || "");
+  if (proposal.operation === "replace_selection") {
+    return {
+      before: `${nearbyBefore}${selectionText || "(empty selection)"}${nearbyAfter}`,
+      after: `${nearbyBefore}${inserted}${nearbyAfter}`,
+    };
+  }
+  if (proposal.operation === "insert_at_cursor") {
+    return {
+      before: `${nearbyBefore}\n| cursor |\n${nearbyAfter}`,
+      after: `${nearbyBefore}${inserted}${nearbyAfter}`,
+    };
+  }
+  if (proposal.operation === "append") {
+    if (context.active_path === proposal.path && context.file_tail) {
+      return {
+        before: context.file_tail,
+        after: `${context.file_tail}${inserted}`,
+      };
+    }
+    return {
+      before: "(Latest file tail will be loaded on Accept for this append target.)",
+      after: inserted || "(empty)",
+    };
+  }
+  if (proposal.operation === "create") {
+    return {
+      before: "(new file)",
+      after: inserted || "(empty)",
+    };
+  }
+  return {
+    before: "(preview unavailable)",
+    after: inserted || "(empty)",
+  };
+}
+
+function renderFileEditPanel() {
+  const proposal = selectedFileEditProposal();
+  state.fileEditProposal = proposal;
+  const decision = proposal ? state.fileEditDecisions.get(proposal.key) : null;
+  const visible = Boolean(proposal);
+  $("#fileEditPanel").classList.toggle("hidden", !visible);
+  if (!visible) return;
+  $("#fileEditPath").textContent = proposal.path;
+  const summaryState = decision === "accepted"
+    ? "Already applied"
+    : decision === "rejected"
+      ? "Rejected"
+      : "Review before applying";
+  $("#fileEditSummary").textContent = `${fileEditOperationLabel(proposal.operation)} · ${summaryState}`;
+  const preview = contextualFileEditPreview(proposal);
+  $("#fileEditBefore").textContent = boundedFileEditPreview(preview.before, 4000);
+  $("#fileEditAfter").textContent = boundedFileEditPreview(preview.after, 8000);
+  const accepted = decision === "accepted";
+  const rejected = decision === "rejected";
+  const undoAvailable = accepted && state.fileEditUndo?.key === proposal.key;
+  renderFileEditDecisionNote(decision, undoAvailable);
+  $("#fileEditAccept").classList.toggle("hidden", accepted || rejected);
+  $("#fileEditReject").classList.toggle("hidden", accepted || rejected);
+  $("#fileEditUndo").classList.toggle("hidden", !undoAvailable);
+}
+
+async function projectFileContent(path) {
+  if (state.activeDocument === path) {
+    syncDocumentFromEditor({ render: false, persist: false });
+  }
+  if (state.documents[path]) return state.documents[path].content;
+  if (state.closedDrafts[path]) return state.closedDrafts[path].draft_content;
+  const result = await invoke("project_read_file", { path });
+  return result.content || "";
+}
+
+function calculateProposedFileEdit(proposal, beforeContent) {
+  const context = proposal.editorContext || {};
+  const inserted = String(proposal.content || "");
+  if (proposal.operation === "create") {
+    return { content: inserted, start: 0, end: inserted.length };
+  }
+  if (proposal.operation === "append") {
+    return { content: beforeContent + inserted, start: beforeContent.length, end: beforeContent.length + inserted.length };
+  }
+  if (context.active_path !== proposal.path) {
+    throw new Error(`${fileEditOperationLabel(proposal.operation)} requires the proposal target to remain the active file.`);
+  }
+  const start = Number(context.selection_start);
+  const end = Number(context.selection_end);
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start || end > beforeContent.length) {
+    throw new Error("The saved editor range is no longer valid. Ask the Agent to create a fresh proposal.");
+  }
+  if (proposal.operation === "replace_selection") {
+    if (start === end || beforeContent.slice(start, end) !== String(context.selection_text || "")) {
+      throw new Error("The selected text changed after this proposal was created. Ask the Agent to regenerate it.");
+    }
+  } else if (proposal.operation === "insert_at_cursor") {
+    const beforeAnchor = String(context.anchor_before || "");
+    const afterAnchor = String(context.anchor_after || "");
+    if (!beforeContent.slice(Math.max(0, start - beforeAnchor.length), start).endsWith(beforeAnchor)
+      || !beforeContent.slice(end, end + afterAnchor.length).startsWith(afterAnchor)) {
+      throw new Error("The cursor context changed after this proposal was created. Ask the Agent to regenerate it.");
+    }
+  } else {
+    throw new Error(`Unsupported file edit operation: ${proposal.operation}`);
+  }
+  return {
+    content: beforeContent.slice(0, start) + inserted + beforeContent.slice(end),
+    start,
+    end: start + inserted.length,
+  };
+}
+
+function clearAgentEditHighlight() {
+  if (state.editor.editor && state.editor.highlightDecorations.length) {
+    state.editor.highlightDecorations = state.editor.editor.deltaDecorations(state.editor.highlightDecorations, []);
+  }
+}
+
+function highlightAgentEdit(path, start, end) {
+  if (state.activeDocument !== path) return;
+  const documentState = state.documents[path];
+  documentState.cursorStart = end;
+  documentState.cursorEnd = end;
+  applyDocumentSelection(documentState);
+  if (state.editor.mode !== "monaco" || !state.editor.editor?.getModel()) return;
+  const model = state.editor.editor.getModel();
+  const startPosition = model.getPositionAt(start);
+  const endPosition = model.getPositionAt(Math.max(start, end));
+  const range = new state.editor.monaco.Range(
+    startPosition.lineNumber,
+    startPosition.column,
+    endPosition.lineNumber,
+    endPosition.column,
+  );
+  state.editor.highlightDecorations = state.editor.editor.deltaDecorations(
+    state.editor.highlightDecorations,
+    [{ range, options: { inlineClassName: "agent-edit-highlight" } }],
+  );
+  state.editor.editor.revealRangeInCenter(range);
+}
+
+async function updateDocumentAfterFileEdit(path, content, start, end) {
+  if (!state.documents[path]) {
+    await openDocument(path, { forceReload: true });
+  } else {
+    const documentState = state.documents[path];
+    documentState.content = content;
+    documentState.savedContent = content;
+    documentState.conflictDiskContent = null;
+    documentState.cursorStart = end;
+    documentState.cursorEnd = end;
+    ensureDocumentModel(documentState);
+    state.activeDocument = path;
+    renderActiveDocument();
+  }
+  highlightAgentEdit(path, start, end);
+  renderProjectFiles();
+  renderDocumentTabs();
+  scheduleSessionSave();
+}
+
+async function acceptFileEditProposal() {
+  const proposal = state.fileEditProposal;
+  if (!proposal) return;
+  const button = $("#fileEditAccept");
+  button.disabled = true;
+  try {
+    const exists = state.project.files.some((file) => file.path === proposal.path);
+    if (proposal.operation === "create" && exists) {
+      throw new Error(`Cannot create ${proposal.path}: the file already exists.`);
+    }
+    if (proposal.operation !== "create" && !exists) {
+      throw new Error(`Cannot edit ${proposal.path}: the file does not exist.`);
+    }
+    const beforeContent = proposal.operation === "create" ? "" : await projectFileContent(proposal.path);
+    const edit = calculateProposedFileEdit(proposal, beforeContent);
+    state.internalProjectWrites.set(proposal.path, { content: edit.content, expiresAt: Date.now() + 5000 });
+    state.project = await invoke(
+      proposal.operation === "create" ? "project_create_file" : "project_write_file",
+      { path: proposal.path, content: edit.content },
+    );
+    delete state.closedDrafts[proposal.path];
+    await updateDocumentAfterFileEdit(proposal.path, edit.content, edit.start, edit.end);
+    state.fileEditUndo = {
+      key: proposal.key,
+      path: proposal.path,
+      beforeContent,
+      afterContent: edit.content,
+      created: proposal.operation === "create",
+      start: edit.start,
+    };
+    state.fileEditDecisions.set(proposal.key, "accepted");
+    persistFileEditDecisions();
+    scheduleSessionSave();
+    renderFileEditPanel();
+    toast(`Applied Agent edit to ${proposal.path}.`);
+  } catch (error) {
+    state.internalProjectWrites.delete(proposal.path);
+    toast(String(error), true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function rejectFileEditProposal() {
+  const proposal = state.fileEditProposal;
+  if (!proposal) return;
+  state.fileEditDecisions.set(proposal.key, "rejected");
+  persistFileEditDecisions();
+  renderFileEditPanel();
+  toast(`Rejected Agent edit for ${proposal.path}.`);
+}
+
+async function undoFileEditProposal() {
+  const undo = state.fileEditUndo;
+  if (!undo) return;
+  const button = $("#fileEditUndo");
+  button.disabled = true;
+  try {
+    const current = await projectFileContent(undo.path);
+    if (current !== undo.afterContent) {
+      throw new Error("The file changed after the Agent edit, so automatic undo was stopped.");
+    }
+    if (undo.created) {
+      state.project = await invoke("project_delete_file", { path: undo.path });
+      if (state.documents[undo.path]) closeDocument(undo.path);
+    } else {
+      state.internalProjectWrites.set(undo.path, { content: undo.beforeContent, expiresAt: Date.now() + 5000 });
+      state.project = await invoke("project_write_file", { path: undo.path, content: undo.beforeContent });
+      await updateDocumentAfterFileEdit(undo.path, undo.beforeContent, undo.start, undo.start);
+    }
+    state.fileEditDecisions.set(undo.key, "undone");
+    state.fileEditUndo = null;
+    persistFileEditDecisions();
+    scheduleSessionSave();
+    renderFileEditPanel();
+    renderProjectFiles();
+    renderDocumentTabs();
+    toast(`Undid Agent edit in ${undo.path}.`);
+  } catch (error) {
+    toast(String(error), true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function hideAgentFileMentions() {
+  state.agentFileMention = { items: [], index: 0, start: -1, end: -1, mode: "mention", contextSource: null };
+  $("#agentFileMentions").classList.add("hidden");
+  $("#agentFileMentions").replaceChildren();
+}
+
+function insertAgentFileMention(path) {
+  const { start, end, contextSource } = state.agentFileMention;
+  insertAgentReference(path, {
+    source: contextSource,
+    range: start >= 0 ? { start, end } : null,
+  });
+  hideAgentFileMentions();
+  closeAgentContextMenu();
+}
+
+function renderAgentFileMentions() {
+  const panel = $("#agentFileMentions");
+  panel.replaceChildren();
+  state.agentFileMention.items.forEach((path, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `agent-file-mention${index === state.agentFileMention.index ? " active" : ""}`;
+    button.setAttribute("role", "option");
+    button.setAttribute("aria-selected", index === state.agentFileMention.index ? "true" : "false");
+    button.textContent = path;
+    button.addEventListener("pointerdown", (event) => event.preventDefault());
+    button.addEventListener("click", () => insertAgentFileMention(path));
+    panel.append(button);
+  });
+  panel.classList.toggle("hidden", !state.agentFileMention.items.length);
+}
+
+function updateAgentFileMentions() {
+  const input = $("#agentInput");
+  if (state.agentFileMention.mode === "picker") return;
+  const mention = parseAgentMentionInput(input.value, input.selectionStart);
+  if (!mention) {
+    hideAgentFileMentions();
+    return;
+  }
+  const items = rankedProjectFileMentions(mention.query);
+  state.agentFileMention = {
+    items,
+    index: 0,
+    start: mention.start,
+    end: mention.end,
+    mode: "mention",
+    contextSource: ["editor", "project_file"].includes(state.agentContextSource) ? "project_file" : null,
+  };
+  renderAgentFileMentions();
+}
+
 async function sendAgentPrompt() {
   const prompt = $("#agentInput").value.trim();
   if (!prompt || state.agentBusy) return;
+  const selectedModelId = state.agentLlm.selectedModelId || state.agentLlm.settings?.selected_model_id || null;
+  if (!selectedModelId) {
+    toast(agentSendDisabledReason() || "No Agent model is selected.", true);
+    return;
+  }
+  hideAgentFileMentions();
+  closeAgentModelSelector();
+  closeAgentContextMenu();
   $("#agentInput").value = "";
   setAgentInputBusy(true);
   applyWorkbenchLayout("agent");
   $("#agentState").textContent = "Working";
   $("#agentStateDot").className = "agent-state-dot busy";
   try {
+    const editorContext = buildAgentEditorContext();
     const response = await invoke("run_agent", {
       prompt,
       mode: state.agentMode,
-      model: "deepseek:deepseek-v4-flash",
+      modelId: selectedModelId,
       autoApprove: state.agentMode === "act" && state.actAutoApprove,
+      editorContext,
     });
+    resetAgentContext();
     state.activeAgentTurnId = response?.turn_id || null;
     await Promise.all([loadAgentData(), loadRunData()]);
   } catch (error) {
@@ -2730,6 +4289,7 @@ function applyWorkbenchLayout(layout) {
   $$("[data-layout]").forEach((button) => button.classList.toggle("active", button.dataset.layout === layout));
   if (layout === "agent") switchContextTab("agent");
   if (layout === "analyze") switchContextTab("environment");
+  if (layout === "agent") setAgentComposerHeight(Number($("#agentComposerResizeHandle").getAttribute("aria-valuenow")), false);
   requestAnimationFrame(() => layoutEditor());
 }
 
@@ -2781,6 +4341,61 @@ const panelDefaults = {
   right: 362,
   dock: 260,
 };
+
+function agentComposerLimits() {
+  const height = $("#agentPanel").getBoundingClientRect().height;
+  return [140, Math.max(140, height > 0 ? height - 180 : 480)];
+}
+
+function setAgentComposerHeight(requested, persist = true) {
+  const limits = agentComposerLimits();
+  const value = Math.round(clamp(Number(requested) || 190, limits[0], limits[1]));
+  $("#agentPanel").style.setProperty("--agent-composer-height", `${value}px`);
+  $("#agentComposerResizeHandle").setAttribute("aria-valuenow", String(value));
+  if (persist) localStorage.setItem("rho.agentComposerHeight", String(value));
+  return value;
+}
+
+function setupAgentComposerResizer() {
+  const handle = $("#agentComposerResizeHandle");
+  let active = false;
+  let startingPointer = 0;
+  let startingHeight = 0;
+  handle.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    active = true;
+    startingPointer = event.clientY;
+    startingHeight = Number(handle.getAttribute("aria-valuenow")) || 190;
+    handle.setPointerCapture(event.pointerId);
+    handle.classList.add("active");
+    document.body.classList.add("resizing", "resizing-horizontal");
+    event.preventDefault();
+  });
+  handle.addEventListener("pointermove", (event) => {
+    if (!active) return;
+    setAgentComposerHeight(startingHeight - (event.clientY - startingPointer));
+  });
+  const stop = (event) => {
+    if (!active) return;
+    active = false;
+    if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+    handle.classList.remove("active");
+    document.body.classList.remove("resizing", "resizing-horizontal");
+  };
+  handle.addEventListener("pointerup", stop);
+  handle.addEventListener("pointercancel", stop);
+  handle.addEventListener("dblclick", () => setAgentComposerHeight(190));
+  handle.addEventListener("keydown", (event) => {
+    const amount = event.shiftKey ? 40 : 12;
+    if (!['ArrowUp', 'ArrowDown'].includes(event.key)) return;
+    event.preventDefault();
+    const current = Number(handle.getAttribute("aria-valuenow")) || 190;
+    setAgentComposerHeight(current + (event.key === "ArrowUp" ? amount : -amount));
+  });
+  const stored = Number(localStorage.getItem("rho.agentComposerHeight"));
+  $("#agentPanel").style.setProperty("--agent-composer-height", `${Number.isFinite(stored) && stored > 0 ? stored : 190}px`);
+  handle.setAttribute("aria-valuenow", String(Number.isFinite(stored) && stored > 0 ? stored : 190));
+}
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -2894,10 +4509,14 @@ function initializePanelLayout() {
   setupPanelResizer($("#leftResizeHandle"), "left");
   setupPanelResizer($("#rightResizeHandle"), "right");
   setupPanelResizer($("#dockResizeHandle"), "dock");
+  setupAgentComposerResizer();
   window.addEventListener("resize", () => {
     setPanelSize("left", Number($("#leftResizeHandle").getAttribute("aria-valuenow")), false);
     setPanelSize("right", Number($("#rightResizeHandle").getAttribute("aria-valuenow")), false);
     setPanelSize("dock", Number($("#dockResizeHandle").getAttribute("aria-valuenow")), false);
+    if (!$("#agentPanel").classList.contains("hidden")) {
+      setAgentComposerHeight(Number($("#agentComposerResizeHandle").getAttribute("aria-valuenow")), false);
+    }
   });
 }
 
@@ -3048,6 +4667,12 @@ async function handleExternalDocumentChange(path) {
 }
 
 async function hydrateProject(response) {
+  closeAgentContextMenu();
+  hideAgentFileMentions();
+  clearAgentEditHighlight();
+  resetAgentContext();
+  state.fileEditProposal = null;
+  state.fileEditUndo = null;
   state.documents = {};
   state.closedDrafts = {};
   state.expandedDirectories.clear();
@@ -3056,6 +4681,7 @@ async function hydrateProject(response) {
   state.editor.models.forEach((model) => model.dispose());
   state.editor.models.clear();
   state.project = response.project || { root: "", files: [], truncated: false };
+  state.fileEditDecisions = loadFileEditDecisions(state.project.root);
   const session = loadEmergencySession(state.project.root) || response.session || {};
   for (const entry of session.closed_documents || []) {
     if (!entry?.path || entry.draft_content === null || entry.draft_content === undefined) continue;
@@ -3095,6 +4721,7 @@ async function initialize() {
     $("#rVersion").textContent = status.r_version || "R";
     setKernelStatus("idle", "R idle");
     addConsole("SYSTEM", `${status.r_version} · Ark PID ${status.kernel_pid}`);
+    await loadAgentLlmSettings();
     const response = await invoke("project_restore_session");
     if (response.status === "ready") {
       await hydrateProject(response);
@@ -3158,6 +4785,7 @@ $("#consoleInput").addEventListener("keydown", (event) => {
   }
 });
 $("#editor").addEventListener("input", () => {
+  clearAgentEditHighlight();
   syncDocumentFromEditor({ render: true, persist: true });
   updateEditorChrome();
 });
@@ -3218,6 +4846,49 @@ $$("[data-agent-mode]").forEach((button) => button.addEventListener("click", () 
 $("#actAutoApprove").addEventListener("change", (event) => {
   state.actAutoApprove = Boolean(event.target.checked);
 });
+$("#agentModelSelector").addEventListener("click", (event) => {
+  event.stopPropagation();
+  if (state.agentLlm.selectorOpen) closeAgentModelSelector();
+  else openAgentModelSelector();
+});
+$("#agentModelSelector").addEventListener("keydown", (event) => {
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    event.preventDefault();
+    openAgentModelSelector(event.key === "ArrowUp" ? "last" : "first");
+  }
+});
+$("#agentModelSelectorMenu").addEventListener("keydown", (event) => {
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    event.preventDefault();
+    moveAgentModelMenuFocus(event.key === "ArrowDown" ? 1 : -1);
+  } else if (event.key === "Home" || event.key === "End") {
+    event.preventDefault();
+    focusAgentModelMenuItem(event.key === "End" ? "last" : "first");
+  } else if (event.key === "Escape") {
+    event.preventDefault();
+    closeAgentModelSelector();
+    $("#agentModelSelector").focus();
+  }
+});
+$("#agentLlmClose").addEventListener("click", closeAgentLlmDialog);
+$("#agentLlmDialog").addEventListener("click", (event) => {
+  if (event.target?.dataset?.agentLlmClose === "true") closeAgentLlmDialog();
+});
+$("#agentLlmAddProvider").addEventListener("click", clearAgentProviderForm);
+$("#agentLlmSaveProvider").addEventListener("click", saveAgentProvider);
+$("#agentLlmDeleteProvider").addEventListener("click", deleteAgentProvider);
+$("#agentLlmReloadCredentials").addEventListener("click", reloadAgentCredentials);
+$("#agentLlmOpenEnviron").addEventListener("click", openAgentUserEnviron);
+$("#agentLlmCopySetupLine").addEventListener("click", copyAgentSetupLine);
+$("#agentLlmAddModel").addEventListener("click", clearAgentModelForm);
+$("#agentLlmLoadCatalog").addEventListener("click", loadAgentLlmCatalog);
+$("#agentLlmCatalogModel").addEventListener("change", applySelectedCatalogModel);
+$("#agentLlmModelProvider").addEventListener("change", renderAgentLlmCatalogOptions);
+$("#agentLlmSaveModel").addEventListener("click", saveAgentModel);
+$("#agentLlmDeleteModel").addEventListener("click", deleteAgentModel);
+$("#agentLlmTestModel").addEventListener("click", testAgentModelConnection);
+$("#agentLlmCancelTest").addEventListener("click", cancelAgentModelTest);
+$("#agentLlmSelectDefault").addEventListener("click", selectAgentDefaultModel);
 $$("[data-layout]").forEach((button) => button.addEventListener("click", () => {
   applyWorkbenchLayout(button.dataset.layout);
 }));
@@ -3242,6 +4913,11 @@ $("#clearAgentHistoryButton").addEventListener("click", async () => {
     await invoke("clear_agent_history");
     state.selectedTurnId = null;
     state.selectedTurnDetail = null;
+    state.fileEditProposal = null;
+    state.fileEditUndo = null;
+    state.fileEditDecisions = new Map();
+    clearFileEditDecisions();
+    clearAgentEditHighlight();
     await Promise.all([loadAgentData(), loadRunData()]);
     toast("Agent history cleared.");
   } catch (error) {
@@ -3249,9 +4925,79 @@ $("#clearAgentHistoryButton").addEventListener("click", async () => {
   }
 });
 $("#agentInput").addEventListener("keydown", (event) => {
+  if (hasVisibleAgentFileMentions()) {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      moveAgentFileMention(1);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      moveAgentFileMention(-1);
+      return;
+    }
+    if (event.key === "Enter" || event.key === "Tab") {
+      event.preventDefault();
+      insertAgentFileMention(state.agentFileMention.items[state.agentFileMention.index]);
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      hideAgentFileMentions();
+      return;
+    }
+  }
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
     sendAgentPrompt();
+  }
+});
+$("#agentInput").addEventListener("input", updateAgentFileMentions);
+$("#agentInput").addEventListener("input", syncAgentContextFromInput);
+$("#agentInput").addEventListener("click", updateAgentFileMentions);
+$("#agentInput").addEventListener("keyup", (event) => {
+  if (["ArrowUp", "ArrowDown", "Enter", "Tab", "Escape"].includes(event.key)) return;
+  updateAgentFileMentions();
+});
+$("#fileEditAccept").addEventListener("click", acceptFileEditProposal);
+$("#fileEditReject").addEventListener("click", rejectFileEditProposal);
+$("#fileEditUndo").addEventListener("click", undoFileEditProposal);
+$("#agentContextButton").addEventListener("click", (event) => {
+  event.stopPropagation();
+  if ($("#agentContextMenu").classList.contains("hidden")) {
+    openAgentContextMenu();
+  } else {
+    closeAgentContextMenu();
+  }
+});
+$("#agentContextChooseFile").addEventListener("click", () => {
+  closeAgentContextMenu();
+  showAgentProjectFilePicker("project_file");
+});
+$("#agentContextUseCurrentFile").addEventListener("click", () => {
+  const documentState = activeDocument();
+  if (!documentState) return;
+  insertAgentReference(documentState.path, { source: "current_file" });
+  closeAgentContextMenu();
+});
+$("#agentContextUseSelection").addEventListener("click", () => {
+  const documentState = activeDocument();
+  if (!documentState || !activeSelectionExists()) return;
+  insertAgentReference(documentState.path, { source: "selection" });
+  closeAgentContextMenu();
+});
+$("#agentContextNewFile").addEventListener("click", () => {
+  const value = window.prompt("New project-relative path", "report.qmd");
+  if (!value) {
+    closeAgentContextMenu();
+    return;
+  }
+  try {
+    const path = validateProjectRelativePath(value);
+    insertAgentReference(path, { source: "new_file" });
+    closeAgentContextMenu();
+  } catch (error) {
+    toast(String(error), true);
   }
 });
 $("#refreshEnvironment").addEventListener("click", refreshEnvironment);
@@ -3299,9 +5045,24 @@ $$('[data-menu-command]').forEach((item) => item.addEventListener("click", () =>
 }));
 document.addEventListener("click", (event) => {
   if (!event.target.closest(".menu-item")) closeWorkbenchMenus();
+  if (!event.target.closest("#agentContextButton") && !event.target.closest("#agentContextMenu")) {
+    closeAgentContextMenu();
+  }
+  if (!event.target.closest("#agentModelSelector") && !event.target.closest("#agentModelSelectorMenu")) {
+    closeAgentModelSelector();
+  }
+  if (!event.target.closest("#agentInput") && !event.target.closest("#agentFileMentions")) {
+    hideAgentFileMentions();
+  }
 });
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") closeWorkbenchMenus();
+  if (event.key === "Escape") {
+    closeWorkbenchMenus();
+    hideAgentFileMentions();
+    closeAgentModelSelector();
+    closeAgentLlmDialog();
+    clearAgentEditHighlight();
+  }
 });
 window.addEventListener("resize", () => {
   for (const panel of ["left", "right", "dock"]) {

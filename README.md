@@ -32,12 +32,6 @@ Rho is currently an unsigned Windows x64 development prototype. It requires:
 - R 4.4 or later;
 - `aisdk` and a configured model only for Agent features.
 
-The current internal installer is generated at:
-
-```text
-target\release\bundle\nsis\Rho_0.2.0-dev.11_x64-setup.exe
-```
-
 Windows SmartScreen may display an unrecognized-publisher warning. See the
 [Windows prototype guide](docs/windows-prototype.md) for prerequisites and
 installation details.
@@ -67,11 +61,4 @@ Rho `0.2.x` is under active development as a Windows daily-use prototype.
 Windows packaging and the core project workflow are implemented; release
 hardening, signing, and macOS/Linux packaging remain in progress.
 
-## Documentation
 
-- [Windows prototype and user workflow](docs/windows-prototype.md)
-- [Windows build and acceptance guide](docs/windows-build-environment.md)
-- [Development roadmap](docs/development-roadmap.md)
-- [Phase 0 implementation evidence](docs/phase-0-status.md)
-- [Agent and aisdk architecture](docs/architecture/aisdk-family-integration.md)
-- [Release notes](NEWS.md)

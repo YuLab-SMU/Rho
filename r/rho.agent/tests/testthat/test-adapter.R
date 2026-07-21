@@ -23,10 +23,64 @@ test_that("aisdk workspace tools target the broker boundary", {
 
   expect_identical(
     vapply(tools, function(tool) tool$name, character(1L)),
-    c("get_workspace_snapshot", "inspect_r_object", "run_r")
+    c("get_workspace_snapshot", "inspect_r_object", "run_r", "propose_file_edit")
   )
   expect_identical(tools[[1L]]$meta$rho_approval, "automatic")
   expect_identical(tools[[3L]]$meta$rho_approval, "required")
+  expect_identical(tools[[4L]]$meta$rho_approval, "automatic")
+})
+
+test_that("workspace snapshot preview is concise and readable", {
+  value <- list(execution = list(
+    r = list(version = "R version 4.6.0", platform = "x86_64-w64-mingw32", cwd = "D:/project"),
+    environment = list(
+      project_dir = "D:/project",
+      attached_packages = list(values = list(list(name = "ggplot2", version = "4.0.3"))),
+      renv = list(status = "absent"),
+      bioconductor = list(version = "3.22"),
+      render = list(can_render_rmd = TRUE, can_render_qmd = FALSE)
+    ),
+    objects = list(list(name = "iris"), list(name = "fit"))
+  ))
+
+  preview <- rho.agent:::rho_tool_result_preview("get_workspace_snapshot", value)
+  expect_match(preview, "Workspace R ready", fixed = TRUE)
+  expect_match(preview, "Objects (2): iris, fit", fixed = TRUE)
+  expect_match(preview, "ggplot2 4.0.3", fixed = TRUE)
+  expect_false(grepl("execution_id", preview, fixed = TRUE))
+
+  serialized <- jsonlite::toJSON(value, auto_unbox = TRUE)
+  serialized_preview <- rho.agent:::rho_tool_result_preview(
+    "get_workspace_snapshot",
+    serialized
+  )
+  expect_identical(serialized_preview, preview)
+  expect_false(grepl("\\\"execution_id\\\"", serialized_preview, fixed = TRUE))
+})
+
+test_that("file edit proposals remain structured for desktop review", {
+  proposal <- list(
+    kind = "rho.file_edit_proposal",
+    path = "R/plot.R",
+    operation = "insert_at_cursor",
+    content = "plot(x)\n"
+  )
+  preview <- rho.agent:::rho_tool_result_preview("propose_file_edit", proposal)
+  parsed <- jsonlite::fromJSON(preview, simplifyVector = FALSE)
+  expect_identical(parsed, proposal)
+})
+
+test_that("large file edit proposals are not truncated to the default preview limit", {
+  proposal <- list(
+    kind = "rho.file_edit_proposal",
+    path = "R/plot.R",
+    operation = "append",
+    content = paste(rep("plot(x, y)\n", 500L), collapse = "")
+  )
+  preview <- rho.agent:::rho_tool_result_preview("propose_file_edit", proposal)
+  expect_false(grepl("\\[truncated\\]", preview, fixed = TRUE))
+  parsed <- jsonlite::fromJSON(preview, simplifyVector = FALSE)
+  expect_identical(parsed, proposal)
 })
 
 test_that("broker tool results refresh the workspace identity", {
@@ -131,4 +185,30 @@ test_that("public aisdk typed events are forwarded as broker frames", {
   expect_true("agent.stream_completed" %in% types)
   expect_true("agent.run_state_changed" %in% types)
   expect_true("agent.trace" %in% types)
+})
+
+test_that("runtime profile sensitive values are redacted", {
+  old_key <- Sys.getenv("RHO_TEST_MODEL_KEY", unset = NA_character_)
+  old_url <- Sys.getenv("RHO_TEST_MODEL_URL", unset = NA_character_)
+  on.exit({
+    if (is.na(old_key)) Sys.unsetenv("RHO_TEST_MODEL_KEY") else Sys.setenv(RHO_TEST_MODEL_KEY = old_key)
+    if (is.na(old_url)) Sys.unsetenv("RHO_TEST_MODEL_URL") else Sys.setenv(RHO_TEST_MODEL_URL = old_url)
+  }, add = TRUE)
+  Sys.setenv(
+    RHO_TEST_MODEL_KEY = "rho-secret-key",
+    RHO_TEST_MODEL_URL = "https://example.test/v1?signed=rho-secret-url"
+  )
+  profile <- list(
+    api_key_env = "RHO_TEST_MODEL_KEY",
+    base_url_env = "RHO_TEST_MODEL_URL",
+    base_url = NULL
+  )
+  values <- rho.agent:::rho_runtime_profile_sensitive_values(profile)
+  redacted <- rho.agent:::rho_redact_known_values(
+    "key=rho-secret-key url=https://example.test/v1?signed=rho-secret-url",
+    values
+  )
+  expect_false(grepl("rho-secret-key", redacted, fixed = TRUE))
+  expect_false(grepl("rho-secret-url", redacted, fixed = TRUE))
+  expect_match(redacted, "[REDACTED]", fixed = TRUE)
 })

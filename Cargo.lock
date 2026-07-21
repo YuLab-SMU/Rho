@@ -3267,7 +3267,7 @@ dependencies = [
 
 [[package]]
 name = "rho-agent-transport"
-version = "0.2.0-dev.8"
+version = "0.2.0-dev.11"
 dependencies = [
  "rand 0.9.5",
  "rho-protocol",
@@ -3278,7 +3278,7 @@ dependencies = [
 
 [[package]]
 name = "rho-core"
-version = "0.2.0-dev.8"
+version = "0.2.0-dev.11"
 dependencies = [
  "rho-protocol",
  "serde",
@@ -3287,9 +3287,10 @@ dependencies = [
 
 [[package]]
 name = "rho-desktop"
-version = "0.2.0-dev.8"
+version = "0.2.0-dev.11"
 dependencies = [
  "anyhow",
+ "chrono",
  "notify",
  "rfd",
  "rho-core",
@@ -3308,7 +3309,7 @@ dependencies = [
 
 [[package]]
 name = "rho-kernel"
-version = "0.2.0-dev.8"
+version = "0.2.0-dev.11"
 dependencies = [
  "anyhow",
  "jet_core",
@@ -3319,7 +3320,7 @@ dependencies = [
 
 [[package]]
 name = "rho-protocol"
-version = "0.2.0-dev.8"
+version = "0.2.0-dev.11"
 dependencies = [
  "chrono",
  "serde",
@@ -3330,7 +3331,7 @@ dependencies = [
 
 [[package]]
 name = "rho-server"
-version = "0.2.0-dev.8"
+version = "0.2.0-dev.11"
 dependencies = [
  "anyhow",
  "clap",
@@ -3346,7 +3347,7 @@ dependencies = [
 
 [[package]]
 name = "rho-store"
-version = "0.2.0-dev.8"
+version = "0.2.0-dev.11"
 dependencies = [
  "chrono",
  "rho-protocol",
