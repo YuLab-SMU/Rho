@@ -12,10 +12,20 @@ $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Split-Path -Parent $PSScriptRoot)).Path
 
 if (-not $CargoHome) {
-    $CargoHome = "E:\software-data\scoop\persist\rustup\.cargo"
+    $userCargoHome = Join-Path $env:USERPROFILE ".cargo"
+    $CargoHome = if (Test-Path -LiteralPath $userCargoHome) {
+        $userCargoHome
+    } else {
+        "E:\software-data\scoop\persist\rustup\.cargo"
+    }
 }
 if (-not $RustupHome) {
-    $RustupHome = "E:\software-data\scoop\persist\rustup\.rustup"
+    $userRustupHome = Join-Path $env:USERPROFILE ".rustup"
+    $RustupHome = if (Test-Path -LiteralPath $userRustupHome) {
+        $userRustupHome
+    } else {
+        "E:\software-data\scoop\persist\rustup\.rustup"
+    }
 }
 if (-not $RtoolsBin) {
     $RtoolsBin = "C:\rtools45\x86_64-w64-mingw32.static.posix\bin"
@@ -36,6 +46,8 @@ $env:CARGO_HOME = $CargoHome
 $env:RUSTUP_HOME = $RustupHome
 $env:RUSTUP_TOOLCHAIN = $RustupToolchain
 $env:PATH = "$RtoolsBin;$cargoBin;$env:PATH"
+$sourceRemap = "--remap-path-prefix=$CargoHome=/cargo --remap-path-prefix=$repo=/rho"
+$env:RUSTFLAGS = "$sourceRemap $env:RUSTFLAGS".Trim()
 
 if (-not (Get-Command npx.cmd -ErrorAction SilentlyContinue)) {
     throw "npx.cmd was not found on PATH after applying Cargo and Rtools paths."

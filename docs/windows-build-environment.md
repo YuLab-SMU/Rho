@@ -98,6 +98,10 @@ There are two Rust selections to distinguish:
 The installer script is the release authority. An agent must not assume the
 interactive `rustup` default is the packaging target.
 
+The installer script also applies Rust `--remap-path-prefix` flags to the Cargo
+home and repository root. Release panic metadata must not present a developer
+machine path as if it were a runtime dependency.
+
 ## External And Cached Inputs
 
 A clean first build may require network access for:
@@ -202,7 +206,9 @@ The script performs these steps:
 For GitHub Actions, the same script also supports environment-variable
 injection for `CARGO_HOME`, `RUSTUP_HOME`, `RTOOLS_BIN` and
 `RUSTUP_TOOLCHAIN`, and it exports the resolved installer path through
-`GITHUB_OUTPUT`.
+`GITHUB_OUTPUT`. When those variables are absent, the script still keeps the
+local-machine fallback behavior and prefers the standard user-profile Rust
+directories before using the existing workstation-specific defaults.
 
 Expected outputs:
 
@@ -255,15 +261,12 @@ The repository now provides `.github/workflows/windows-manual-publish.yml` for
 a manually triggered Windows release that publishes directly to GitHub
 Releases.
 
-This workflow is designed for a self-hosted Windows x64 runner and expects the
-validated build environment to already exist on that machine. Configure these
-repository variables when the runner does not use the same default paths as the
-local build script:
-
-- `RHO_CARGO_HOME`
-- `RHO_RUSTUP_HOME`
-- `RHO_RTOOLS_BIN`
-- `RHO_RUSTUP_TOOLCHAIN`
+This workflow now runs on GitHub-hosted `windows-latest`. It installs Node.js,
+R, Rtools45 and the GNU Rust toolchain explicitly, then calls the same
+repository scripts used for local builds. The workflow injects `CARGO_HOME`,
+`RUSTUP_HOME`, `RTOOLS_BIN` and `RUSTUP_TOOLCHAIN` into
+`scripts/build-windows-installer.ps1`, while the local script keeps working
+without those overrides.
 
 The workflow inputs are:
 
@@ -341,6 +344,14 @@ Electron as a workaround.
 
 Verify the Microsoft Edge WebView2 Runtime on the machine and ensure the x64
 `WebView2Loader.dll` remains in the bundle resources.
+
+### R discovery or runtime probe fails
+
+Rho must keep its recovery window open. Use Retry or choose `Rscript.exe`
+directly, then copy diagnostics from the recovery view. Startup events append
+to `%LOCALAPPDATA%\org.yulab.rho\logs\startup.jsonl`; the log includes the selected R path,
+exit code, bounded stdout/stderr and elapsed time. An `aisdk` failure is an
+optional Agent capability failure and must not block Workspace R.
 
 ### Agent smoke test fails while R execution works
 

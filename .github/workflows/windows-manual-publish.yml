@@ -34,10 +34,7 @@ concurrency:
 jobs:
   publish-windows:
     name: Build and publish Windows installer
-    runs-on:
-      - self-hosted
-      - windows
-      - x64
+    runs-on: windows-latest
 
     steps:
       - name: Check out target ref
@@ -46,18 +43,53 @@ jobs:
           ref: ${{ inputs.ref }}
           fetch-depth: 0
 
+      - name: Configure hosted toolchain environment
+        shell: pwsh
+        run: |
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "CARGO_HOME=$env:USERPROFILE\.cargo"
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "RUSTUP_HOME=$env:USERPROFILE\.rustup"
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "RTOOLS_BIN=C:\rtools45\x86_64-w64-mingw32.static.posix\bin"
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "RUSTUP_TOOLCHAIN=stable-x86_64-pc-windows-gnu"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up R
+        uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: "4.6.1"
+          rtools-version: "45"
+          use-public-rspm: true
+
+      - name: Install GNU Rust toolchain
+        shell: bash
+        run: |
+          rustup set profile minimal
+          rustup toolchain install stable-x86_64-pc-windows-gnu --no-self-update
+          rustup default stable-x86_64-pc-windows-gnu
+          rustc -vV
+          cargo -vV
+
+      - name: Verify hosted build environment
+        shell: pwsh
+        run: |
+          if (-not (Test-Path -LiteralPath $env:RTOOLS_BIN)) {
+              throw "Expected Rtools bin directory was not found at $env:RTOOLS_BIN."
+          }
+          Rscript -e "cat(R.version.string)"
+          Write-Host ""
+          & "$env:RTOOLS_BIN\gcc.exe" --version
+          rustup show active-toolchain
+
       - name: Bootstrap Ark runtime
         shell: pwsh
-        run: ./scripts/bootstrap-ark-windows.ps1
+        run: ./scripts/bootstrap-ark-windows.ps1 -RscriptPath "Rscript"
 
       - name: Build NSIS installer
         id: build
         shell: pwsh
-        env:
-          CARGO_HOME: ${{ vars.RHO_CARGO_HOME }}
-          RUSTUP_HOME: ${{ vars.RHO_RUSTUP_HOME }}
-          RTOOLS_BIN: ${{ vars.RHO_RTOOLS_BIN }}
-          RUSTUP_TOOLCHAIN: ${{ vars.RHO_RUSTUP_TOOLCHAIN }}
         run: ./scripts/build-windows-installer.ps1
 
       - name: Collect installer metadata
@@ -111,7 +143,7 @@ jobs:
           script: |
             const prerelease = String(process.env.RELEASE_PRERELEASE).toLowerCase() === "true";
             const body = [
-              "Windows self-hosted release build.",
+              "GitHub-hosted windows-latest release build.",
               "",
               `- Ref: \`${{ inputs.ref }}\``,
               `- Commit: \`${process.env.RELEASE_TARGET}\``,

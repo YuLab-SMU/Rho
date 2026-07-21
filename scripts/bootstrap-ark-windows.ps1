@@ -1,5 +1,6 @@
 param(
-    [string]$RuntimeRoot = (Join-Path $PSScriptRoot "..\.rho\runtime")
+    [string]$RuntimeRoot = (Join-Path $PSScriptRoot "..\.rho\runtime"),
+    [string]$RscriptPath = $env:RHO_RSCRIPT
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,12 +20,16 @@ $ark = Join-Path $installRoot "ark.exe"
 $kernelSpec = Join-Path $installRoot "kernel.json"
 $log = Join-Path $installRoot "ark.log"
 $emptyRenviron = Join-Path $installRoot "empty.Renviron"
-$rHome = (& Rscript -e "cat(normalizePath(R.home(), winslash='/', mustWork=TRUE))").Trim()
-$rBin = (& Rscript -e "cat(normalizePath(R.home('bin'), winslash='/', mustWork=TRUE))").Trim()
+$rscriptCommand = if ($RscriptPath) { $RscriptPath } else { "Rscript" }
+if (-not (Get-Command $rscriptCommand -ErrorAction SilentlyContinue)) {
+    throw "Rscript was not found. Set RHO_RSCRIPT or pass -RscriptPath explicitly."
+}
+$rHome = (& $rscriptCommand -e "cat(normalizePath(R.home(), winslash='/', mustWork=TRUE))").Trim()
+$rBin = (& $rscriptCommand -e "cat(normalizePath(R.home('bin'), winslash='/', mustWork=TRUE))").Trim()
 $libraryExpression = 'cat(paste(normalizePath(.libPaths(), winslash=''/'' ,mustWork=TRUE), collapse=.Platform$path.sep))'
-$rLibraries = (& Rscript -e $libraryExpression).Trim()
+$rLibraries = (& $rscriptCommand -e $libraryExpression).Trim()
 if (-not $rHome -or -not $rBin -or -not $rLibraries) {
-    throw "Unable to resolve R_HOME, the R DLL directory and R libraries through Rscript."
+    throw "Unable to resolve R_HOME, the R DLL directory and R libraries through $rscriptCommand."
 }
 
 New-Item -ItemType Directory -Path $RuntimeRoot -Force | Out-Null
