@@ -10,7 +10,7 @@ use rho_agent_transport::{
     AgentAuthenticator, AuthenticatedAgent, read_async_frame, write_async_frame,
 };
 use rho_core::{BrokerState, ExecutionOrigin, ExecutionRequest};
-use rho_kernel::{ArkLaunchConfig, ArkSession, CorrelatedKernelEvent};
+use rho_kernel::{ArkLaunchConfig, ArkSession, CorrelatedKernelEvent, KernelEvent};
 use rho_protocol::{Envelope, ExpectedWorkspace, MAX_FRAME_BYTES, MessageKind, OperationClass};
 use rho_store::{
     AgentConversationTurn, AgentTurnEventDraft, AgentTurnFinish, ApprovalDecisionRecord,
@@ -660,7 +660,8 @@ pub async fn dispatch_workspace_request(
             )?;
             Ok(())
         })
-        .await;
+        .await
+        .and_then(|_| ensure_no_kernel_errors(&kernel_events));
     match execution {
         Ok(()) => {}
         Err(error) => {
@@ -1830,6 +1831,16 @@ fn extract_plot_payloads(events: &[CorrelatedKernelEvent]) -> Vec<(String, Strin
     plots
 }
 
+fn ensure_no_kernel_errors(events: &[CorrelatedKernelEvent]) -> Result<()> {
+    if let Some(traceback) = events.iter().find_map(|event| match &event.event {
+        KernelEvent::Error { traceback } => Some(traceback),
+        _ => None,
+    }) {
+        bail!("Workspace R execution failed: {traceback}");
+    }
+    Ok(())
+}
+
 fn json_string(value: &Value, key: &str) -> Option<String> {
     value
         .get(key)
@@ -1966,6 +1977,19 @@ mod tests {
         let bytes = vec![b' '; MAX_FRAME_BYTES + 1];
         let error = read_bounded_json(bytes.as_slice()).unwrap_err();
         assert!(error.to_string().contains("exceeds"));
+    }
+
+    #[test]
+    fn reports_workspace_r_errors_before_result_file_errors() {
+        let events = vec![CorrelatedKernelEvent {
+            parent_id: Some("request-1".to_string()),
+            event: KernelEvent::Error {
+                traceback: "there is no package called 'jsonlite'".to_string(),
+            },
+        }];
+
+        let error = ensure_no_kernel_errors(&events).unwrap_err();
+        assert!(error.to_string().contains("no package called 'jsonlite'"));
     }
 
     #[test]

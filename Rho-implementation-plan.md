@@ -947,7 +947,7 @@ controls, and an Ask/Plan/Act DeepSeek Agent panel using the same Workspace R.
 This checkpoint intentionally uses a lightweight textarea editor and a scratch
 document; Monaco, native project/file operations, durable ChatSession history,
 interactive approval dialogs and installer signing remain Phase 1A work. See
-`docs/windows-prototype.md` for the exact boundary.
+`docs/implementation/windows-prototype.md` for the exact boundary.
 
 Frontend:
 

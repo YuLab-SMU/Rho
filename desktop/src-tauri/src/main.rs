@@ -52,6 +52,8 @@ struct RuntimeConfig {
     rscript: PathBuf,
     r_version: String,
     r_home: String,
+    r_profile_user: PathBuf,
+    r_environ_user: PathBuf,
     bridge_package: PathBuf,
     agent_package: PathBuf,
     agent_runtime: AgentRuntimeStatus,
@@ -103,6 +105,8 @@ struct RRuntimeProbe {
     r_home: String,
     r_version: String,
     r_libs: String,
+    r_profile_user: PathBuf,
+    r_environ_user: PathBuf,
 }
 
 struct ProbeProcessOutput {
@@ -352,9 +356,13 @@ async fn startup_open_log_directory() -> Result<Value, String> {
 async fn agent_runtime_retry(state: State<'_, AppState>) -> Result<AgentRuntimeStatus, String> {
     let config = runtime_config(&state).map_err(display_error)?;
     let rscript = config.rscript.clone();
-    let status = tauri::async_runtime::spawn_blocking(move || probe_agent_runtime(&rscript))
-        .await
-        .map_err(display_error)?;
+    let r_profile_user = config.r_profile_user.clone();
+    let r_environ_user = config.r_environ_user.clone();
+    let status = tauri::async_runtime::spawn_blocking(move || {
+        probe_agent_runtime(&rscript, &r_profile_user, &r_environ_user)
+    })
+    .await
+    .map_err(display_error)?;
     if let Ok(mut stored) = state.config.write()
         && let Some(config) = stored.as_mut()
     {
@@ -1392,12 +1400,14 @@ fn prepare_runtime_files_with_rscript(
         r_home,
         r_version,
         r_libs,
+        r_profile_user,
+        r_environ_user,
     } = probe;
-    let agent_runtime = probe_agent_runtime(&rscript);
+    let agent_runtime = probe_agent_runtime(&rscript, &r_profile_user, &r_environ_user);
     let runtime_dir = data_dir.join("runtime");
     std::fs::create_dir_all(&runtime_dir)?;
-    let empty_renviron = runtime_dir.join("empty.Renviron");
-    write_source(&empty_renviron, "")?;
+    let empty_site_environ = runtime_dir.join("empty-site.Renviron");
+    write_source(&empty_site_environ, "")?;
     let log_path = runtime_dir.join("ark.log");
     let kernelspec = runtime_dir.join("kernel.json");
     let r_bin = Path::new(&r_home).join("bin").join("x64");
@@ -1407,7 +1417,7 @@ fn prepare_runtime_files_with_rscript(
         std::env::var("PATH").unwrap_or_default()
     );
     let spec = json!({
-        "argv": [ark, "--connection_file", "{connection_file}", "--session-mode", "console", "--log", log_path, "--", "--interactive", "--no-environ", "--no-init-file", "--no-site-file"],
+        "argv": [ark, "--connection_file", "{connection_file}", "--session-mode", "console", "--log", log_path, "--", "--interactive", "--no-site-file"],
         "display_name": "Ark R 0.1.252 (Rho Desktop)",
         "language": "R",
         "interrupt_mode": "message",
@@ -1415,7 +1425,9 @@ fn prepare_runtime_files_with_rscript(
         "env": {
             "R_HOME": r_home,
             "R_LIBS": r_libs,
-            "R_ENVIRON_USER": empty_renviron,
+            "R_ENVIRON": empty_site_environ,
+            "R_ENVIRON_USER": r_environ_user,
+            "R_PROFILE_USER": r_profile_user,
             "PATH": path
         }
     });
@@ -1430,6 +1442,8 @@ fn prepare_runtime_files_with_rscript(
         rscript,
         r_version,
         r_home,
+        r_profile_user,
+        r_environ_user,
         bridge_package,
         agent_package,
         agent_runtime,
@@ -1502,6 +1516,8 @@ fn probe_r_runtime(rscript: &Path) -> Result<RRuntimeProbe> {
 cat("__RHO_HOME__", normalizePath(R.home(), winslash = "/"), "\n", sep = "")
 cat("__RHO_VERSION__", R.version.string, "\n", sep = "")
 cat("__RHO_VERSION_NUMBER__", as.character(getRversion()), "\n", sep = "")
+cat("__RHO_PROFILE_USER__", normalizePath(path.expand("~/.Rprofile"), winslash = "/", mustWork = FALSE), "\n", sep = "")
+cat("__RHO_ENVIRON_USER__", normalizePath(path.expand("~/.Renviron"), winslash = "/", mustWork = FALSE), "\n", sep = "")
 cat(
   "__RHO_LIBS__",
   paste(
@@ -1517,6 +1533,7 @@ cat(
         expression,
         Duration::from_secs(15),
         RProbeStartup::Controlled,
+        None,
     )?;
     ensure!(
         output.success,
@@ -1544,6 +1561,7 @@ cat(
         library_expression,
         Duration::from_secs(15),
         RProbeStartup::UserProfile,
+        Some((&probe.r_profile_user, &probe.r_environ_user)),
     ) {
         Ok(output) if output.success => {
             if let Some(libraries) = probe_value(&output.stdout, "__RHO_EFFECTIVE_LIBS__") {
@@ -1557,10 +1575,9 @@ cat(
             }
         }
         Ok(output) => write_startup_log(&format!(
-            "User R profile library probe failed; using controlled library paths (exit_code={:?}, timed_out={}, stdout={}, stderr={})",
+            "User R profile library probe failed; using controlled library paths (exit_code={:?}, timed_out={}, stderr={})",
             output.exit_code,
             output.timed_out,
-            bounded_diagnostic(&output.stdout),
             bounded_diagnostic(&output.stderr)
         )),
         Err(error) => write_startup_log(&format!(
@@ -1580,10 +1597,18 @@ fn parse_r_runtime_probe(stdout: &str) -> Result<RRuntimeProbe> {
     ensure_supported_r_version(&r_version_number)?;
     let r_libs = probe_value(stdout, "__RHO_LIBS__")
         .context("R library paths were absent from runtime probe")?;
+    let r_profile_user = probe_value(stdout, "__RHO_PROFILE_USER__")
+        .map(PathBuf::from)
+        .context("R user profile path was absent from runtime probe")?;
+    let r_environ_user = probe_value(stdout, "__RHO_ENVIRON_USER__")
+        .map(PathBuf::from)
+        .context("R user environment path was absent from runtime probe")?;
     Ok(RRuntimeProbe {
         r_home,
         r_version,
         r_libs,
+        r_profile_user,
+        r_environ_user,
     })
 }
 
@@ -1594,7 +1619,11 @@ fn probe_value(stdout: &str, prefix: &str) -> Option<String> {
         .map(str::to_string)
 }
 
-fn probe_agent_runtime(rscript: &Path) -> AgentRuntimeStatus {
+fn probe_agent_runtime(
+    rscript: &Path,
+    r_profile_user: &Path,
+    r_environ_user: &Path,
+) -> AgentRuntimeStatus {
     let expression = r#"
 loadNamespace("aisdk")
 cat("__RHO_AISDK__", as.character(utils::packageVersion("aisdk")), "\n", sep = "")
@@ -1604,6 +1633,7 @@ cat("__RHO_AISDK__", as.character(utils::packageVersion("aisdk")), "\n", sep = "
         expression,
         Duration::from_secs(30),
         RProbeStartup::UserProfile,
+        Some((r_profile_user, r_environ_user)),
     ) {
         Ok(output) => output,
         Err(error) => {
@@ -1619,11 +1649,10 @@ cat("__RHO_AISDK__", as.character(utils::packageVersion("aisdk")), "\n", sep = "
             available: false,
             aisdk_version: None,
             error: Some(format!(
-                "Agent R cannot load aisdk (exit_code={:?}, timed_out={}): {}{}",
+                "Agent R cannot load aisdk (exit_code={:?}, timed_out={}): {}",
                 output.exit_code,
                 output.timed_out,
-                bounded_diagnostic(&output.stderr),
-                bounded_diagnostic(&output.stdout)
+                bounded_diagnostic(&output.stderr)
             )),
         };
     }
@@ -1651,23 +1680,43 @@ fn run_r_probe(
     expression: &str,
     timeout: Duration,
     startup: RProbeStartup,
+    user_files: Option<(&Path, &Path)>,
 ) -> Result<ProbeProcessOutput> {
-    let stdout_file = tempfile::NamedTempFile::new().context("creating R probe stdout file")?;
-    let stderr_file = tempfile::NamedTempFile::new().context("creating R probe stderr file")?;
     let mut command = Command::new(rscript);
     hide_console_window(&mut command);
     if matches!(startup, RProbeStartup::Controlled) {
-        command.args(["--no-init-file", "--no-site-file"]);
+        command.args(["--no-environ", "--no-init-file", "--no-site-file"]);
+    } else if let Some((r_profile_user, r_environ_user)) = user_files {
+        let empty_site_environ =
+            tempfile::NamedTempFile::new().context("creating empty site R environment file")?;
+        command
+            .arg("--no-site-file")
+            .env("R_ENVIRON", empty_site_environ.path())
+            .env("R_ENVIRON_USER", r_environ_user)
+            .env("R_PROFILE_USER", r_profile_user);
+        return run_prepared_r_probe(command, expression, timeout, Some(empty_site_environ));
     }
+    run_prepared_r_probe(command, expression, timeout, None)
+}
+
+fn run_prepared_r_probe(
+    mut command: Command,
+    expression: &str,
+    timeout: Duration,
+    _empty_site_environ: Option<tempfile::NamedTempFile>,
+) -> Result<ProbeProcessOutput> {
+    let stdout_file = tempfile::NamedTempFile::new().context("creating R probe stdout file")?;
+    let stderr_file = tempfile::NamedTempFile::new().context("creating R probe stderr file")?;
     command
         .args(["-e", expression])
         .stdin(Stdio::null())
         .stdout(Stdio::from(stdout_file.reopen()?))
         .stderr(Stdio::from(stderr_file.reopen()?));
+    let program = command.get_program().to_string_lossy().into_owned();
     let started = Instant::now();
     let mut child = command
         .spawn()
-        .with_context(|| format!("running {}", rscript.display()))?;
+        .with_context(|| format!("running {program}"))?;
     let (status, timed_out) = loop {
         if let Some(status) = child.try_wait().context("waiting for R runtime probe")? {
             break (status, false);
@@ -2032,12 +2081,16 @@ mod tests {
             "__RHO_HOME__C:/Program Files/R/R-4.4.2\n\
              __RHO_VERSION__R version 4.4.2\n\
              __RHO_VERSION_NUMBER__4.4.2\n\
+             __RHO_PROFILE_USER__C:/Users/test/Documents/.Rprofile\n\
+             __RHO_ENVIRON_USER__C:/Users/test/Documents/.Renviron\n\
              __RHO_LIBS__C:/Users/test/R/win-library/4.4;C:/Program Files/R/R-4.4.2/library\n",
         )
         .unwrap();
         assert_eq!(probe.r_home, "C:/Program Files/R/R-4.4.2");
         assert_eq!(probe.r_version, "R version 4.4.2");
         assert!(probe.r_libs.contains("win-library"));
+        assert!(probe.r_profile_user.ends_with(".Rprofile"));
+        assert!(probe.r_environ_user.ends_with(".Renviron"));
     }
 
     #[test]
@@ -2142,7 +2195,7 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
     let data_dir = std::env::temp_dir().join("rho-desktop-smoke");
     let ark = Path::new(env!("CARGO_MANIFEST_DIR")).join("../resources/runtime/ark.exe");
     let config = prepare_runtime_files(data_dir, ark)?;
-    let session = ArkSession::launch(&ArkLaunchConfig::new(&config.kernelspec)).await?;
+    let mut session = ArkSession::launch(&ArkLaunchConfig::new(&config.kernelspec)).await?;
     let mut store = Store::open(&config.store_path)?;
     let mut broker = BrokerState::new("desktop_smoke");
     store.save_identity(broker.identity())?;
@@ -2252,16 +2305,20 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
     } else {
         None
     };
-    let context = context.lock().await;
-    Ok(json!({
-        "type": "rho_desktop_smoke",
-        "workspace": context.broker.identity(),
-        "plot_count": plot_count,
-        "environment_object_found": object_found,
-        "agent": agent,
-        "event_count": context.store.event_count()?,
-        "python_required": false
-    }))
+    let report = {
+        let context = context.lock().await;
+        json!({
+            "type": "rho_desktop_smoke",
+            "workspace": context.broker.identity(),
+            "plot_count": plot_count,
+            "environment_object_found": object_found,
+            "agent": agent,
+            "event_count": context.store.event_count()?,
+            "python_required": false
+        })
+    };
+    session.shutdown().await?;
+    Ok(report)
 }
 
 fn main() {

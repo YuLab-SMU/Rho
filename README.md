@@ -33,7 +33,7 @@ Rho is currently an unsigned Windows x64 development prototype. It requires:
 - `aisdk` and a configured model only for Agent features.
 
 Windows SmartScreen may display an unrecognized-publisher warning. See the
-[Windows prototype guide](docs/windows-prototype.md) for prerequisites and
+[Windows prototype guide](docs/implementation/windows-prototype.md) for prerequisites and
 installation details.
 
 ## Quick Start
@@ -53,11 +53,11 @@ Workspace R is authoritative for project execution and scientific objects.
 Agent R handles LLM orchestration, while the Rust broker owns transport,
 approvals, revisions, persistence, and process lifecycle. See the
 [architecture documentation](docs/architecture/aisdk-family-integration.md)
-for details.
+for details, or use the [documentation index](docs/README.md) to browse design,
+implementation, project, bug-fix, and release documents.
 
 ## Project Status
 
 Rho `0.2.x` is under active development as a Windows daily-use prototype.
 Windows packaging and the core project workflow are implemented; release
 hardening, signing, and macOS/Linux packaging remain in progress.
-

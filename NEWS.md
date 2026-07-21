@@ -14,6 +14,9 @@ this file records behavior that is already available in a released build.
 - Base R startup checks no longer load `aisdk` in the required probe. A broken
   or missing Agent dependency now disables only the Agent panel and can be
   retried without blocking the editor or Workspace R.
+- Rho now resolves and explicitly loads the user's `~/.Rprofile` and
+  `~/.Renviron` in Workspace R, preserving custom library paths and user-level
+  configuration without allowing project startup files to take precedence.
 - Windows startup diagnostics now retain subprocess exit codes, bounded stdout
   and stderr, elapsed time and append-only error history.
 - Kept the Agent model selector menu within the visible Agent panel when the

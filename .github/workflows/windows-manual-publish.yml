@@ -72,6 +72,12 @@ jobs:
           }
           Add-Content -LiteralPath $env:GITHUB_ENV -Value "RHO_RSCRIPT=$rscript"
 
+      - name: Install Workspace smoke-test R dependencies
+        shell: pwsh
+        run: |
+          Rscript -e "if (!requireNamespace('jsonlite', quietly = TRUE)) install.packages('jsonlite')"
+          Rscript -e "stopifnot(requireNamespace('jsonlite', quietly = TRUE)); cat('jsonlite ', as.character(packageVersion('jsonlite')), '\n', sep = '')"
+
       - name: Install GNU Rust toolchain
         shell: bash
         run: |
@@ -133,7 +139,28 @@ jobs:
           if (-not (Test-Path -LiteralPath $binary)) {
               throw "Smoke-test binary not found at $binary."
           }
-          $process = Start-Process -FilePath $binary -ArgumentList "--smoke-test" -NoNewWindow -Wait -PassThru
+          $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+          $startInfo.FileName = $binary
+          $startInfo.Arguments = "--smoke-test"
+          $startInfo.UseShellExecute = $false
+          $startInfo.CreateNoWindow = $true
+          $startInfo.RedirectStandardOutput = $true
+          $startInfo.RedirectStandardError = $true
+          $process = [System.Diagnostics.Process]::Start($startInfo)
+          $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+          $stderrTask = $process.StandardError.ReadToEndAsync()
+          if (-not $process.WaitForExit(120000)) {
+              $process.Kill($true)
+              throw "Smoke test timed out after 120 seconds."
+          }
+          $stdout = $stdoutTask.Result
+          $stderr = $stderrTask.Result
+          if ($stdout) {
+              [Console]::Out.Write($stdout)
+          }
+          if ($stderr) {
+              [Console]::Error.Write($stderr)
+          }
           $exitCode = $process.ExitCode
           if ($exitCode -ne 0) {
               throw "Smoke test failed with exit code $exitCode."
