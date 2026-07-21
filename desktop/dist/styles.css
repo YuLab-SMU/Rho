@@ -587,8 +587,9 @@ body.resizing-vertical { cursor: col-resize; }
 .agent-model-selector .chevron { color: var(--subtle); font-size: 10px; }
 .agent-model-menu {
   position: absolute;
-  right: 0;
+  right: auto;
   bottom: calc(100% + 6px);
+  left: 0;
   z-index: 24;
   display: grid;
   gap: 4px;

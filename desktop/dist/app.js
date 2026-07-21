@@ -2651,11 +2651,34 @@ function moveAgentModelMenuFocus(delta) {
   items[next].focus();
 }
 
+function positionAgentModelMenu() {
+  const selector = $("#agentModelSelector");
+  const menu = $("#agentModelSelectorMenu");
+  const panel = selector.closest(".agent-panel");
+  if (!panel || menu.classList.contains("hidden")) return;
+
+  const panelRect = panel.getBoundingClientRect();
+  const selectorRect = selector.getBoundingClientRect();
+  const gutter = 8;
+  const width = Math.max(0, Math.min(280, panelRect.width - gutter * 2));
+  const left = Math.min(
+    Math.max(selectorRect.left, panelRect.left + gutter),
+    panelRect.right - gutter - width,
+  );
+  const availableHeight = selectorRect.top - panelRect.top - gutter - 6;
+
+  menu.style.width = `${Math.floor(width)}px`;
+  menu.style.left = `${Math.floor(left - selectorRect.left)}px`;
+  menu.style.right = "auto";
+  menu.style.maxHeight = `${Math.max(80, Math.min(280, Math.floor(availableHeight)))}px`;
+}
+
 function openAgentModelSelector(focusPosition = null) {
   if (!state.agentLlm.settings?.models?.length) return;
   state.agentLlm.selectorOpen = true;
   $("#agentModelSelector").setAttribute("aria-expanded", "true");
   $("#agentModelSelectorMenu").classList.remove("hidden");
+  positionAgentModelMenu();
   if (focusPosition) requestAnimationFrame(() => focusAgentModelMenuItem(focusPosition));
 }
 
@@ -5069,6 +5092,7 @@ window.addEventListener("resize", () => {
     const handle = panel === "left" ? $("#leftResizeHandle") : panel === "right" ? $("#rightResizeHandle") : $("#dockResizeHandle");
     setPanelSize(panel, Number(handle.getAttribute("aria-valuenow")), false);
   }
+  if (state.agentLlm.selectorOpen) positionAgentModelMenu();
   layoutEditor();
 });
 $("#interruptButton").addEventListener("click", async () => {

@@ -6,6 +6,11 @@ this file records behavior that is already available in a released build.
 
 ## Unreleased
 
+### Fixed
+
+- Kept the Agent model selector menu within the visible Agent panel when the
+  panel is narrow, instead of allowing the menu to be clipped on its left edge.
+
 ## 0.2.0-dev.11 - 2026-07-21
 
 ### Fixed
