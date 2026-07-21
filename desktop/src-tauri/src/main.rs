@@ -4,9 +4,12 @@ mod agent_llm;
 mod project;
 
 use std::collections::HashMap;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::sync::Arc;
+use std::process::{Command, Stdio};
+use std::sync::{Arc, OnceLock, RwLock as SyncRwLock};
+use std::time::{Duration, Instant};
 
 use agent_llm::{
     AgentLlmSettingsView, AgentModelProfile, AgentModelTestControl, AgentProviderProfile,
@@ -47,10 +50,46 @@ struct RuntimeConfig {
     data_dir: PathBuf,
     kernelspec: PathBuf,
     rscript: PathBuf,
+    r_version: String,
+    r_home: String,
     bridge_package: PathBuf,
     agent_package: PathBuf,
     agent_runtime: AgentRuntimeStatus,
     store_path: PathBuf,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum StartupSeverity {
+    Recoverable,
+    Fatal,
+}
+
+#[derive(Clone, Serialize)]
+struct StartupIssue {
+    code: String,
+    phase: String,
+    severity: StartupSeverity,
+    title: String,
+    message: String,
+    technical_detail: String,
+    actions: Vec<String>,
+    diagnostics_path: String,
+}
+
+#[derive(Clone, Serialize)]
+struct StartupRuntimeView {
+    rscript: String,
+    r_version: String,
+    agent_runtime: AgentRuntimeStatus,
+}
+
+#[derive(Clone, Serialize)]
+struct StartupView {
+    phase: String,
+    busy: bool,
+    runtime: Option<StartupRuntimeView>,
+    issue: Option<StartupIssue>,
 }
 
 #[derive(Clone, Serialize)]
@@ -64,11 +103,23 @@ struct RRuntimeProbe {
     r_home: String,
     r_version: String,
     r_libs: String,
-    agent_runtime: AgentRuntimeStatus,
+}
+
+struct ProbeProcessOutput {
+    success: bool,
+    exit_code: Option<i32>,
+    stdout: String,
+    stderr: String,
+    elapsed_ms: u128,
+    timed_out: bool,
 }
 
 struct AppState {
-    config: RuntimeConfig,
+    data_dir: PathBuf,
+    ark: PathBuf,
+    config: SyncRwLock<Option<RuntimeConfig>>,
+    selected_rscript: SyncRwLock<Option<PathBuf>>,
+    startup: SyncRwLock<StartupView>,
     project_store: ProjectSessionStore,
     project_root: RwLock<PathBuf>,
     project_watcher: Mutex<Option<ProjectWatcherControl>>,
@@ -78,6 +129,8 @@ struct AppState {
     agent_tasks: Arc<Mutex<HashMap<String, tauri::async_runtime::JoinHandle<()>>>>,
     agent_llm_test_control: AgentModelTestControl,
 }
+
+static STARTUP_LOG_PATH: OnceLock<PathBuf> = OnceLock::new();
 
 #[derive(Serialize)]
 struct WorkspaceStatus {
@@ -115,9 +168,214 @@ struct AgentLlmSelectRequest {
     model_id: String,
 }
 
+fn runtime_config(state: &AppState) -> Result<RuntimeConfig> {
+    state
+        .config
+        .read()
+        .map_err(|_| anyhow::anyhow!("STARTUP_NOT_READY: runtime state lock is unavailable"))?
+        .clone()
+        .context("STARTUP_NOT_READY: finish Rho startup before using the workbench")
+}
+
+fn current_startup_view(state: &AppState) -> StartupView {
+    state
+        .startup
+        .read()
+        .map(|view| view.clone())
+        .unwrap_or_else(|_| StartupView {
+            phase: "failed".to_string(),
+            busy: false,
+            runtime: None,
+            issue: Some(startup_issue(
+                "APP_STATE_UNAVAILABLE",
+                "shell_ready",
+                StartupSeverity::Fatal,
+                "Rho could not read its startup state",
+                "Restart Rho. If the problem continues, open the diagnostic log.",
+                "startup state lock was poisoned".to_string(),
+                vec!["open_log".to_string(), "exit".to_string()],
+            )),
+        })
+}
+
+#[tauri::command]
+async fn startup_status(state: State<'_, AppState>) -> Result<StartupView, String> {
+    Ok(current_startup_view(&state))
+}
+
+async fn bootstrap_runtime(state: &AppState, selected: Option<PathBuf>) -> StartupView {
+    if selected.is_none()
+        && state
+            .config
+            .read()
+            .map(|config| config.is_some())
+            .unwrap_or(false)
+    {
+        return current_startup_view(state);
+    }
+    if let Ok(mut view) = state.startup.write() {
+        if view.busy {
+            return view.clone();
+        }
+        view.phase = "probing_runtime".to_string();
+        view.busy = true;
+        view.issue = None;
+    }
+
+    if let Some(path) = selected {
+        if let Ok(mut preferred) = state.selected_rscript.write() {
+            *preferred = Some(path.clone());
+        }
+        if let Err(error) = persist_selected_rscript(&state.data_dir, &path) {
+            write_startup_log(&format!("Could not persist selected Rscript: {error:#}"));
+        }
+    }
+
+    let data_dir = state.data_dir.clone();
+    let ark = state.ark.clone();
+    let preferred = state
+        .selected_rscript
+        .read()
+        .ok()
+        .and_then(|path| path.clone());
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        prepare_runtime_files_with_rscript(data_dir, ark, preferred.as_deref())
+    })
+    .await;
+
+    let view = match result {
+        Ok(Ok(config)) => {
+            let runtime = StartupRuntimeView {
+                rscript: config.rscript.to_string_lossy().replace('\\', "/"),
+                r_version: config.r_version.clone(),
+                agent_runtime: config.agent_runtime.clone(),
+            };
+            if let Ok(mut stored) = state.config.write() {
+                *stored = Some(config);
+            }
+            write_startup_log("Runtime bootstrap completed");
+            StartupView {
+                phase: "runtime_ready".to_string(),
+                busy: false,
+                runtime: Some(runtime),
+                issue: None,
+            }
+        }
+        Ok(Err(error)) => {
+            let detail = format!("{error:#}");
+            write_startup_log(&format!("Runtime bootstrap failed: {detail}"));
+            StartupView {
+                phase: "needs_attention".to_string(),
+                busy: false,
+                runtime: None,
+                issue: Some(classify_startup_error(&detail)),
+            }
+        }
+        Err(error) => {
+            let detail = format!("runtime bootstrap task failed: {error}");
+            write_startup_log(&detail);
+            StartupView {
+                phase: "needs_attention".to_string(),
+                busy: false,
+                runtime: None,
+                issue: Some(startup_issue(
+                    "R_PROBE_SPAWN_FAILED",
+                    "probing_base_r",
+                    StartupSeverity::Recoverable,
+                    "Rho could not check R",
+                    "Retry the check or choose Rscript.exe manually.",
+                    detail,
+                    startup_recovery_actions(),
+                )),
+            }
+        }
+    };
+    if let Ok(mut stored) = state.startup.write() {
+        *stored = view.clone();
+    }
+    view
+}
+
+#[tauri::command]
+async fn startup_bootstrap(state: State<'_, AppState>) -> Result<StartupView, String> {
+    Ok(bootstrap_runtime(&state, None).await)
+}
+
+#[tauri::command]
+async fn startup_choose_rscript(state: State<'_, AppState>) -> Result<StartupView, String> {
+    let Some(path) = rfd::FileDialog::new()
+        .set_title("Choose Rscript.exe")
+        .add_filter("Rscript", &["exe"])
+        .pick_file()
+    else {
+        return Ok(current_startup_view(&state));
+    };
+    Ok(bootstrap_runtime(&state, Some(path)).await)
+}
+
+#[tauri::command]
+async fn startup_diagnostics(state: State<'_, AppState>) -> Result<String, String> {
+    let path = startup_log_path();
+    let content = std::fs::read_to_string(&path).unwrap_or_default();
+    let log_tail = content
+        .chars()
+        .rev()
+        .take(65_536)
+        .collect::<String>()
+        .chars()
+        .rev()
+        .collect::<String>();
+    let view = serde_json::to_string_pretty(&current_startup_view(&state)).unwrap_or_default();
+    Ok(format!(
+        "Rho startup status\n{view}\n\nStartup log\n{log_tail}"
+    ))
+}
+
+#[tauri::command]
+async fn startup_open_log_directory() -> Result<Value, String> {
+    let path = startup_log_path();
+    let mut command = Command::new("explorer.exe");
+    command.arg("/select,").arg(&path);
+    command
+        .spawn()
+        .map_err(|error| format!("Could not open the startup log directory: {error}"))?;
+    Ok(json!({"path": path}))
+}
+
+#[tauri::command]
+async fn agent_runtime_retry(state: State<'_, AppState>) -> Result<AgentRuntimeStatus, String> {
+    let config = runtime_config(&state).map_err(display_error)?;
+    let rscript = config.rscript.clone();
+    let status = tauri::async_runtime::spawn_blocking(move || probe_agent_runtime(&rscript))
+        .await
+        .map_err(display_error)?;
+    if let Ok(mut stored) = state.config.write()
+        && let Some(config) = stored.as_mut()
+    {
+        config.agent_runtime = status.clone();
+    }
+    if let Ok(mut startup) = state.startup.write()
+        && let Some(runtime) = startup.runtime.as_mut()
+    {
+        runtime.agent_runtime = status.clone();
+    }
+    write_startup_log(if status.available {
+        "Agent runtime retry completed"
+    } else {
+        "Agent runtime retry remains unavailable"
+    });
+    Ok(status)
+}
+
 #[tauri::command]
 async fn workspace_start(state: State<'_, AppState>) -> Result<WorkspaceStatus, String> {
-    start_workspace(&state).await.map_err(display_error)
+    match start_workspace(&state).await {
+        Ok(status) => Ok(status),
+        Err(error) => {
+            write_startup_log(&format!("Workspace R startup failed: {error:#}"));
+            Err(display_error(error))
+        }
+    }
 }
 
 #[tauri::command]
@@ -564,9 +822,9 @@ async fn run_agent(
     if !matches!(mode.as_str(), "ask" | "plan" | "act") {
         return Err(format!("unsupported Agent mode `{mode}`"));
     }
-    if !state.config.agent_runtime.available {
-        return Err(state
-            .config
+    let config = runtime_config(&state).map_err(display_error)?;
+    if !config.agent_runtime.available {
+        return Err(config
             .agent_runtime
             .error
             .clone()
@@ -579,10 +837,9 @@ async fn run_agent(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let turn_id = format!("agent_turn_{}", Uuid::new_v4());
-    let resolved_model =
-        agent_llm::resolve_model_for_turn(&state.config.data_dir, model_id.as_deref())
-            .map_err(display_error)?;
-    let user_environ = agent_llm::resolve_user_environ(&state.config.rscript)
+    let resolved_model = agent_llm::resolve_model_for_turn(&config.data_dir, model_id.as_deref())
+        .map_err(display_error)?;
+    let user_environ = agent_llm::resolve_user_environ(&config.rscript)
         .map_err(display_error)?
         .path;
     if mode == "act" && resolved_model.runtime_profile.tool_calling != "yes" {
@@ -631,8 +888,8 @@ async fn run_agent(
     }
 
     let approvals = state.approvals.clone();
-    let rscript = state.config.rscript.clone();
-    let agent_package = state.config.agent_package.clone();
+    let rscript = config.rscript.clone();
+    let agent_package = config.agent_package.clone();
     let task_turn_id = turn_id.clone();
     let task_agent_tasks = state.agent_tasks.clone();
     let runtime_profile = resolved_model.runtime_profile.clone();
@@ -673,7 +930,8 @@ async fn run_agent(
 
 #[tauri::command]
 async fn agent_llm_settings(state: State<'_, AppState>) -> Result<AgentLlmSettingsView, String> {
-    agent_llm::settings_view(&state.config.data_dir, &state.config.rscript).map_err(display_error)
+    let config = runtime_config(&state).map_err(display_error)?;
+    agent_llm::settings_view(&config.data_dir, &config.rscript).map_err(display_error)
 }
 
 #[tauri::command]
@@ -681,8 +939,9 @@ async fn agent_llm_save_provider(
     provider: AgentProviderProfile,
     state: State<'_, AppState>,
 ) -> Result<AgentLlmSettingsView, String> {
-    agent_llm::save_provider(&state.config.data_dir, provider).map_err(display_error)?;
-    agent_llm::settings_view(&state.config.data_dir, &state.config.rscript).map_err(display_error)
+    let config = runtime_config(&state).map_err(display_error)?;
+    agent_llm::save_provider(&config.data_dir, provider).map_err(display_error)?;
+    agent_llm::settings_view(&config.data_dir, &config.rscript).map_err(display_error)
 }
 
 #[tauri::command]
@@ -690,8 +949,9 @@ async fn agent_llm_delete_provider(
     provider_id: String,
     state: State<'_, AppState>,
 ) -> Result<AgentLlmSettingsView, String> {
-    agent_llm::delete_provider(&state.config.data_dir, &provider_id).map_err(display_error)?;
-    agent_llm::settings_view(&state.config.data_dir, &state.config.rscript).map_err(display_error)
+    let config = runtime_config(&state).map_err(display_error)?;
+    agent_llm::delete_provider(&config.data_dir, &provider_id).map_err(display_error)?;
+    agent_llm::settings_view(&config.data_dir, &config.rscript).map_err(display_error)
 }
 
 #[tauri::command]
@@ -699,8 +959,9 @@ async fn agent_llm_save_model(
     model: AgentModelProfile,
     state: State<'_, AppState>,
 ) -> Result<AgentLlmSettingsView, String> {
-    agent_llm::save_model(&state.config.data_dir, model).map_err(display_error)?;
-    agent_llm::settings_view(&state.config.data_dir, &state.config.rscript).map_err(display_error)
+    let config = runtime_config(&state).map_err(display_error)?;
+    agent_llm::save_model(&config.data_dir, model).map_err(display_error)?;
+    agent_llm::settings_view(&config.data_dir, &config.rscript).map_err(display_error)
 }
 
 #[tauri::command]
@@ -708,8 +969,9 @@ async fn agent_llm_delete_model(
     request: DeleteModelRequest,
     state: State<'_, AppState>,
 ) -> Result<AgentLlmSettingsView, String> {
-    agent_llm::delete_model(&state.config.data_dir, &request).map_err(display_error)?;
-    agent_llm::settings_view(&state.config.data_dir, &state.config.rscript).map_err(display_error)
+    let config = runtime_config(&state).map_err(display_error)?;
+    agent_llm::delete_model(&config.data_dir, &request).map_err(display_error)?;
+    agent_llm::settings_view(&config.data_dir, &config.rscript).map_err(display_error)
 }
 
 #[tauri::command]
@@ -717,21 +979,23 @@ async fn agent_llm_select_model(
     request: AgentLlmSelectRequest,
     state: State<'_, AppState>,
 ) -> Result<AgentLlmSettingsView, String> {
-    agent_llm::select_model(&state.config.data_dir, &request.model_id).map_err(display_error)?;
-    agent_llm::settings_view(&state.config.data_dir, &state.config.rscript).map_err(display_error)
+    let config = runtime_config(&state).map_err(display_error)?;
+    agent_llm::select_model(&config.data_dir, &request.model_id).map_err(display_error)?;
+    agent_llm::settings_view(&config.data_dir, &config.rscript).map_err(display_error)
 }
 
 #[tauri::command]
 async fn agent_llm_refresh_credentials(
     state: State<'_, AppState>,
 ) -> Result<AgentLlmSettingsView, String> {
-    agent_llm::refresh_credentials_view(&state.config.data_dir, &state.config.rscript)
-        .map_err(display_error)
+    let config = runtime_config(&state).map_err(display_error)?;
+    agent_llm::refresh_credentials_view(&config.data_dir, &config.rscript).map_err(display_error)
 }
 
 #[tauri::command]
 async fn agent_llm_open_user_environ(state: State<'_, AppState>) -> Result<Value, String> {
-    let info = agent_llm::open_user_environ(&state.config.rscript).map_err(display_error)?;
+    let config = runtime_config(&state).map_err(display_error)?;
+    let info = agent_llm::open_user_environ(&config.rscript).map_err(display_error)?;
     Ok(json!({ "path": info.path, "source": info.source }))
 }
 
@@ -740,9 +1004,10 @@ async fn agent_llm_test_model(
     model_id: String,
     state: State<'_, AppState>,
 ) -> Result<AgentLlmSettingsView, String> {
-    let data_dir = state.config.data_dir.clone();
-    let rscript = state.config.rscript.clone();
-    let agent_package = state.config.agent_package.clone();
+    let config = runtime_config(&state).map_err(display_error)?;
+    let data_dir = config.data_dir.clone();
+    let rscript = config.rscript.clone();
+    let agent_package = config.agent_package.clone();
     let test_control = state.agent_llm_test_control.clone();
     tauri::async_runtime::spawn_blocking(move || {
         agent_llm::test_model(
@@ -766,7 +1031,8 @@ async fn agent_llm_cancel_test(state: State<'_, AppState>) -> Result<Value, Stri
 
 #[tauri::command]
 async fn agent_llm_catalog(state: State<'_, AppState>) -> Result<Value, String> {
-    let entries = agent_llm::catalog(&state.config.rscript).map_err(display_error)?;
+    let config = runtime_config(&state).map_err(display_error)?;
+    let entries = agent_llm::catalog(&config.rscript).map_err(display_error)?;
     serde_json::to_value(entries).map_err(display_error)
 }
 
@@ -949,10 +1215,12 @@ async fn active_context(state: &AppState) -> Result<Arc<Mutex<CoordinatorRuntime
 }
 
 fn read_store(state: &AppState) -> Result<Store> {
-    Store::open(&state.config.store_path).context("opening Rho event store")
+    let config = runtime_config(state)?;
+    Store::open(&config.store_path).context("opening Rho event store")
 }
 
 async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus> {
+    let config = runtime_config(state)?;
     if let Some(session) = state.session.read().await.clone() {
         let context = state.context.lock().await.clone();
         let identity = if let Some(context) = context {
@@ -961,15 +1229,15 @@ async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus> {
         } else {
             None
         };
-        return status_from(&state.config, &session, identity.as_ref());
+        return status_from(&config, &session, identity.as_ref());
     }
 
     let session = Arc::new(
-        ArkSession::launch(&ArkLaunchConfig::new(&state.config.kernelspec))
+        ArkSession::launch(&ArkLaunchConfig::new(&config.kernelspec))
             .await
             .context("starting Ark-backed Workspace R")?,
     );
-    let mut store = Store::open(&state.config.store_path).context("opening Rho event store")?;
+    let mut store = Store::open(&config.store_path).context("opening Rho event store")?;
     store
         .recover_incomplete_runs()
         .context("recovering incomplete runs after desktop restart")?;
@@ -985,10 +1253,10 @@ async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus> {
         session.as_ref(),
         &mut broker,
         &mut store,
-        &state.config.bridge_package,
+        &config.bridge_package,
     )
     .await?;
-    let status = status_from(&state.config, &session, Some(broker.identity()))?;
+    let status = status_from(&config, &session, Some(broker.identity()))?;
     *state.context.lock().await = Some(Arc::new(Mutex::new(CoordinatorRuntime { broker, store })));
     *state.session.write().await = Some(session);
     Ok(status)
@@ -1080,12 +1348,10 @@ fn status_from(
     session: &ArkSession,
     identity: Option<&rho_protocol::WorkspaceIdentity>,
 ) -> Result<WorkspaceStatus> {
-    let metadata = std::fs::read_to_string(config.kernelspec.with_extension("runtime.json"))?;
-    let metadata: Value = serde_json::from_str(&metadata)?;
     Ok(WorkspaceStatus {
         status: "idle",
-        r_version: metadata["r_version"].as_str().unwrap_or("R").to_string(),
-        r_home: metadata["r_home"].as_str().unwrap_or_default().to_string(),
+        r_version: config.r_version.clone(),
+        r_home: config.r_home.clone(),
         kernel_pid: session.child_pid(),
         workspace: identity.map(|value| serde_json::to_value(value).unwrap_or(Value::Null)),
         agent_runtime: config.agent_runtime.clone(),
@@ -1093,15 +1359,16 @@ fn status_from(
     })
 }
 
-fn prepare_runtime(app: &tauri::App) -> Result<RuntimeConfig> {
-    let data_dir = app
-        .path()
-        .app_local_data_dir()
-        .context("resolving Rho application data directory")?;
-    prepare_runtime_files(data_dir, locate_ark(app)?)
+fn prepare_runtime_files(data_dir: PathBuf, ark: PathBuf) -> Result<RuntimeConfig> {
+    prepare_runtime_files_with_rscript(data_dir, ark, None)
 }
 
-fn prepare_runtime_files(data_dir: PathBuf, ark: PathBuf) -> Result<RuntimeConfig> {
+fn prepare_runtime_files_with_rscript(
+    data_dir: PathBuf,
+    ark: PathBuf,
+    selected_rscript: Option<&Path>,
+) -> Result<RuntimeConfig> {
+    ensure!(ark.is_file(), "bundled Ark executable was not found");
     std::fs::create_dir_all(&data_dir)?;
     let source_dir = data_dir.join("sources");
     let bridge_package = source_dir.join("rho.bridge");
@@ -1113,14 +1380,14 @@ fn prepare_runtime_files(data_dir: PathBuf, ark: PathBuf) -> Result<RuntimeConfi
     write_source(&agent_package.join("R/transport.R"), AGENT_TRANSPORT)?;
     write_source(&agent_package.join("R/aisdk_adapter.R"), AGENT_ADAPTER)?;
 
-    let rscript = locate_rscript()?;
+    let rscript = locate_rscript(selected_rscript)?;
     let probe = probe_r_runtime(&rscript)?;
     let RRuntimeProbe {
         r_home,
         r_version,
         r_libs,
-        agent_runtime,
     } = probe;
+    let agent_runtime = probe_agent_runtime(&rscript);
     let runtime_dir = data_dir.join("runtime");
     std::fs::create_dir_all(&runtime_dir)?;
     let empty_renviron = runtime_dir.join("empty.Renviron");
@@ -1155,6 +1422,8 @@ fn prepare_runtime_files(data_dir: PathBuf, ark: PathBuf) -> Result<RuntimeConfi
         data_dir: data_dir.clone(),
         kernelspec,
         rscript,
+        r_version,
+        r_home,
         bridge_package,
         agent_package,
         agent_runtime,
@@ -1169,13 +1438,23 @@ fn locate_ark(app: &tauri::App) -> Result<PathBuf> {
         .resource_dir()
         .context("resolving Rho resource directory")?
         .join("resources/runtime/ark.exe");
-    [installed, development]
-        .into_iter()
-        .find(|path| path.is_file())
-        .context("bundled Ark executable was not found")
+    Ok(if installed.is_file() {
+        installed
+    } else if development.is_file() {
+        development
+    } else {
+        installed
+    })
 }
 
-fn locate_rscript() -> Result<PathBuf> {
+fn locate_rscript(selected: Option<&Path>) -> Result<PathBuf> {
+    if let Some(path) = selected {
+        ensure!(
+            path.is_file(),
+            "selected Rscript path does not point to a file"
+        );
+        return Ok(path.to_path_buf());
+    }
     if let Some(path) = std::env::var_os("RHO_RSCRIPT") {
         let path = PathBuf::from(path);
         ensure!(path.is_file(), "RHO_RSCRIPT does not point to a file");
@@ -1226,26 +1505,21 @@ cat(
   "\n",
   sep = ""
 )
-tryCatch({
-  loadNamespace("aisdk")
-  cat("__RHO_AISDK__", as.character(utils::packageVersion("aisdk")), "\n", sep = "")
-}, error = function(error) {
-  message <- gsub("[\r\n]+", " ", conditionMessage(error))
-  cat("__RHO_AISDK_ERROR__", message, "\n", sep = "")
-})
 "#;
-    let mut command = Command::new(rscript);
-    hide_console_window(&mut command);
-    let output = command
-        .args(["-e", expression])
-        .output()
-        .with_context(|| format!("running {}", rscript.display()))?;
+    let output = run_r_probe(rscript, expression, Duration::from_secs(15))?;
     ensure!(
-        output.status.success(),
-        "R runtime probe failed: {}",
-        String::from_utf8_lossy(&output.stderr)
+        output.success,
+        "R runtime probe failed (exit_code={:?}, timed_out={}, elapsed_ms={}): stdout={} stderr={}",
+        output.exit_code,
+        output.timed_out,
+        output.elapsed_ms,
+        bounded_diagnostic(&output.stdout),
+        bounded_diagnostic(&output.stderr)
     );
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    parse_r_runtime_probe(&output.stdout)
+}
+
+fn parse_r_runtime_probe(stdout: &str) -> Result<RRuntimeProbe> {
     let value = |prefix: &str| {
         stdout
             .lines()
@@ -1258,7 +1532,47 @@ tryCatch({
         .context("R version number was absent from runtime probe")?;
     ensure_supported_r_version(&r_version_number)?;
     let r_libs = value("__RHO_LIBS__").context("R library paths were absent from runtime probe")?;
-    let agent_runtime = match value("__RHO_AISDK__") {
+    Ok(RRuntimeProbe {
+        r_home,
+        r_version,
+        r_libs,
+    })
+}
+
+fn probe_agent_runtime(rscript: &Path) -> AgentRuntimeStatus {
+    let expression = r#"
+loadNamespace("aisdk")
+cat("__RHO_AISDK__", as.character(utils::packageVersion("aisdk")), "\n", sep = "")
+"#;
+    let output = match run_r_probe(rscript, expression, Duration::from_secs(30)) {
+        Ok(output) => output,
+        Err(error) => {
+            return AgentRuntimeStatus {
+                available: false,
+                aisdk_version: None,
+                error: Some(format!("Agent R check could not start: {error:#}")),
+            };
+        }
+    };
+    if !output.success {
+        return AgentRuntimeStatus {
+            available: false,
+            aisdk_version: None,
+            error: Some(format!(
+                "Agent R cannot load aisdk (exit_code={:?}, timed_out={}): {}{}",
+                output.exit_code,
+                output.timed_out,
+                bounded_diagnostic(&output.stderr),
+                bounded_diagnostic(&output.stdout)
+            )),
+        };
+    }
+    let version = output.stdout.lines().find_map(|line| {
+        line.strip_prefix("__RHO_AISDK__")
+            .map(str::trim)
+            .map(str::to_string)
+    });
+    match version {
         Some(version) => AgentRuntimeStatus {
             available: true,
             aisdk_version: Some(version),
@@ -1267,19 +1581,84 @@ tryCatch({
         None => AgentRuntimeStatus {
             available: false,
             aisdk_version: None,
-            error: Some(format!(
-                "Agent R cannot load aisdk: {}",
-                value("__RHO_AISDK_ERROR__")
-                    .unwrap_or_else(|| "unknown namespace loading error".to_string())
-            )),
+            error: Some("Agent R check returned no aisdk version".to_string()),
         },
+    }
+}
+
+fn run_r_probe(rscript: &Path, expression: &str, timeout: Duration) -> Result<ProbeProcessOutput> {
+    let stdout_file = tempfile::NamedTempFile::new().context("creating R probe stdout file")?;
+    let stderr_file = tempfile::NamedTempFile::new().context("creating R probe stderr file")?;
+    let mut command = Command::new(rscript);
+    hide_console_window(&mut command);
+    command
+        .args(["--no-init-file", "--no-site-file", "-e", expression])
+        .stdin(Stdio::null())
+        .stdout(Stdio::from(stdout_file.reopen()?))
+        .stderr(Stdio::from(stderr_file.reopen()?));
+    let started = Instant::now();
+    let mut child = command
+        .spawn()
+        .with_context(|| format!("running {}", rscript.display()))?;
+    let (status, timed_out) = loop {
+        if let Some(status) = child.try_wait().context("waiting for R runtime probe")? {
+            break (status, false);
+        }
+        if started.elapsed() >= timeout {
+            let _ = child.kill();
+            break (
+                child.wait().context("stopping timed-out R runtime probe")?,
+                true,
+            );
+        }
+        std::thread::sleep(Duration::from_millis(50));
     };
-    Ok(RRuntimeProbe {
-        r_home,
-        r_version,
-        r_libs,
-        agent_runtime,
+    let stdout = std::fs::read(stdout_file.path())
+        .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+        .unwrap_or_default();
+    let stderr = std::fs::read(stderr_file.path())
+        .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+        .unwrap_or_default();
+    Ok(ProbeProcessOutput {
+        success: status.success() && !timed_out,
+        exit_code: status.code(),
+        stdout,
+        stderr,
+        elapsed_ms: started.elapsed().as_millis(),
+        timed_out,
     })
+}
+
+fn bounded_diagnostic(value: &str) -> String {
+    let mut tokens = Vec::new();
+    let mut redact_next = false;
+    for token in value.split_whitespace() {
+        if redact_next {
+            tokens.push("<redacted>".to_string());
+            redact_next = false;
+            continue;
+        }
+        let lower = token.to_ascii_lowercase();
+        if lower == "bearer" {
+            tokens.push("Bearer".to_string());
+            redact_next = true;
+            continue;
+        }
+        let secret_assignment = ["api_key=", "apikey=", "token=", "authorization="]
+            .iter()
+            .find_map(|marker| lower.find(marker).map(|index| (marker, index)));
+        if let Some((marker, index)) = secret_assignment {
+            tokens.push(format!(
+                "{}{}<redacted>",
+                &token[..index],
+                &token[index..index + marker.len()]
+            ));
+        } else {
+            tokens.push(token.to_string());
+        }
+    }
+    let sanitized = tokens.join(" ");
+    sanitized.chars().take(4096).collect()
 }
 
 #[tauri::command]
@@ -1399,16 +1778,176 @@ fn display_error(error: impl std::fmt::Display) -> String {
 }
 
 fn startup_log_path() -> PathBuf {
-    std::env::temp_dir().join("rho-desktop-startup.log")
+    STARTUP_LOG_PATH
+        .get()
+        .cloned()
+        .unwrap_or_else(|| std::env::temp_dir().join("rho-desktop-startup.log"))
+}
+
+fn initialize_startup_log(data_dir: &Path) {
+    let directory = data_dir.join("logs");
+    let path = if std::fs::create_dir_all(&directory).is_ok() {
+        directory.join("startup.jsonl")
+    } else {
+        std::env::temp_dir().join("rho-desktop-startup.log")
+    };
+    let _ = STARTUP_LOG_PATH.set(path);
 }
 
 fn write_startup_log(message: &str) {
-    let _ = std::fs::write(startup_log_path(), message);
+    let path = startup_log_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+        let timestamp = chrono::Utc::now().to_rfc3339();
+        let event = json!({
+            "timestamp": timestamp,
+            "message": bounded_diagnostic(message),
+        });
+        let _ = writeln!(file, "{event}");
+    }
+}
+
+fn selected_rscript_path(data_dir: &Path) -> PathBuf {
+    data_dir.join("runtime").join("selected-rscript.txt")
+}
+
+fn load_selected_rscript(data_dir: &Path) -> Option<PathBuf> {
+    std::fs::read_to_string(selected_rscript_path(data_dir))
+        .ok()
+        .map(|value| PathBuf::from(value.trim()))
+        .filter(|path| !path.as_os_str().is_empty())
+}
+
+fn persist_selected_rscript(data_dir: &Path, path: &Path) -> Result<()> {
+    if let Some(parent) = selected_rscript_path(data_dir).parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    atomic_write(
+        &selected_rscript_path(data_dir),
+        path.to_string_lossy().as_bytes(),
+    )
+}
+
+fn startup_recovery_actions() -> Vec<String> {
+    vec![
+        "retry".to_string(),
+        "choose_rscript".to_string(),
+        "copy_diagnostics".to_string(),
+        "open_log".to_string(),
+        "exit".to_string(),
+    ]
+}
+
+fn startup_issue(
+    code: &str,
+    phase: &str,
+    severity: StartupSeverity,
+    title: &str,
+    message: &str,
+    technical_detail: String,
+    actions: Vec<String>,
+) -> StartupIssue {
+    StartupIssue {
+        code: code.to_string(),
+        phase: phase.to_string(),
+        severity,
+        title: title.to_string(),
+        message: message.to_string(),
+        technical_detail,
+        actions,
+        diagnostics_path: startup_log_path().to_string_lossy().replace('\\', "/"),
+    }
+}
+
+fn classify_startup_error(detail: &str) -> StartupIssue {
+    let (code, phase, title, message, actions) = if detail.contains("bundled Ark executable") {
+        (
+            "ARK_RESOURCE_MISSING",
+            "checking_installation",
+            "Rho installation needs repair",
+            "The bundled Workspace R engine is missing. Reinstall Rho, then retry.",
+            vec![
+                "retry".to_string(),
+                "open_log".to_string(),
+                "exit".to_string(),
+            ],
+        )
+    } else if detail.contains("selected Rscript path") || detail.contains("RHO_RSCRIPT") {
+        (
+            "R_PATH_INVALID",
+            "locating_r",
+            "The selected R installation is unavailable",
+            "Choose Rscript.exe from an R 4.4 or later installation.",
+            startup_recovery_actions(),
+        )
+    } else if detail.contains("Rscript.exe was not found") {
+        (
+            "R_NOT_FOUND",
+            "locating_r",
+            "R was not found",
+            "Rho requires R 4.4 or later. Install R or choose Rscript.exe manually.",
+            startup_recovery_actions(),
+        )
+    } else if detail.contains("requires R 4.4") {
+        (
+            "R_VERSION_UNSUPPORTED",
+            "probing_base_r",
+            "This R version is not supported",
+            "Choose an R 4.4 or later installation, then retry.",
+            startup_recovery_actions(),
+        )
+    } else if detail.contains("timed_out=true") {
+        (
+            "R_PROBE_TIMED_OUT",
+            "probing_base_r",
+            "R took too long to start",
+            "Retry the runtime check or choose another Rscript.exe.",
+            startup_recovery_actions(),
+        )
+    } else if detail.contains("R runtime probe failed") {
+        (
+            "R_PROBE_EXITED",
+            "probing_base_r",
+            "R could not complete its runtime check",
+            "Your R installation was not changed. Retry or choose another Rscript.exe.",
+            startup_recovery_actions(),
+        )
+    } else if detail.contains("absent from runtime probe") {
+        (
+            "R_PROBE_OUTPUT_INVALID",
+            "probing_base_r",
+            "R returned an incomplete runtime result",
+            "Retry the runtime check and copy diagnostics if it continues.",
+            startup_recovery_actions(),
+        )
+    } else {
+        (
+            "R_PROBE_SPAWN_FAILED",
+            "probing_base_r",
+            "Rho could not prepare the R runtime",
+            "Retry the check or choose Rscript.exe manually.",
+            startup_recovery_actions(),
+        )
+    };
+    startup_issue(
+        code,
+        phase,
+        StartupSeverity::Recoverable,
+        title,
+        message,
+        detail.to_string(),
+        actions,
+    )
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ensure_supported_r_version, safe_delete_project_file};
+    use super::{
+        bounded_diagnostic, classify_startup_error, ensure_supported_r_version,
+        parse_r_runtime_probe, safe_delete_project_file,
+    };
     use tempfile::TempDir;
 
     #[test]
@@ -1417,6 +1956,48 @@ mod tests {
         assert!(ensure_supported_r_version("4.4.0").is_ok());
         assert!(ensure_supported_r_version("5.0.0").is_ok());
         assert!(ensure_supported_r_version("invalid").is_err());
+    }
+
+    #[test]
+    fn parses_base_r_probe_without_requiring_aisdk_output() {
+        let probe = parse_r_runtime_probe(
+            "__RHO_HOME__C:/Program Files/R/R-4.4.2\n\
+             __RHO_VERSION__R version 4.4.2\n\
+             __RHO_VERSION_NUMBER__4.4.2\n\
+             __RHO_LIBS__C:/Users/test/R/win-library/4.4;C:/Program Files/R/R-4.4.2/library\n",
+        )
+        .unwrap();
+        assert_eq!(probe.r_home, "C:/Program Files/R/R-4.4.2");
+        assert_eq!(probe.r_version, "R version 4.4.2");
+        assert!(probe.r_libs.contains("win-library"));
+    }
+
+    #[test]
+    fn classifies_empty_stderr_probe_exit_as_recoverable() {
+        let issue = classify_startup_error(
+            "R runtime probe failed (exit_code=Some(1), timed_out=false): stdout= stderr=",
+        );
+        assert_eq!(issue.code, "R_PROBE_EXITED");
+        assert!(issue.actions.contains(&"choose_rscript".to_string()));
+    }
+
+    #[test]
+    fn bounds_multiline_subprocess_diagnostics() {
+        let value = format!("secret-free\r\n{}", "x".repeat(5000));
+        let bounded = bounded_diagnostic(&value);
+        assert!(!bounded.contains(['\r', '\n']));
+        assert_eq!(bounded.chars().count(), 4096);
+    }
+
+    #[test]
+    fn redacts_common_secret_shapes_from_diagnostics() {
+        let bounded = bounded_diagnostic(
+            "DEEPSEEK_API_KEY=secret Authorization=token Bearer another-secret safe",
+        );
+        assert!(!bounded.contains("secret"));
+        assert!(!bounded.contains("another-secret"));
+        assert!(bounded.contains("<redacted>"));
+        assert!(bounded.ends_with("safe"));
     }
 
     #[test]
@@ -1616,7 +2197,6 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
 }
 
 fn main() {
-    let _ = std::fs::remove_file(startup_log_path());
     std::panic::set_hook(Box::new(|information| {
         write_startup_log(&format!("Rho desktop panic: {information}"));
     }));
@@ -1635,19 +2215,31 @@ fn main() {
             }
         }
     }
-    tauri::Builder::default()
+    let run_result = tauri::Builder::default()
         .setup(|app| {
-            let config = prepare_runtime(app).map_err(|error| {
-                write_startup_log(&format!("Rho desktop setup failed: {error:#}"));
+            let data_dir = app
+                .path()
+                .app_local_data_dir()
+                .context("resolving Rho application data directory")?;
+            initialize_startup_log(&data_dir);
+            write_startup_log("Rho desktop shell setup started");
+            let ark = locate_ark(app)?;
+            let project_store = ProjectSessionStore::new(data_dir.clone()).map_err(|error| {
+                write_startup_log(&format!("Rho project session setup failed: {error:#}"));
                 error
             })?;
-            let project_store =
-                ProjectSessionStore::new(config.data_dir.clone()).map_err(|error| {
-                    write_startup_log(&format!("Rho project session setup failed: {error:#}"));
-                    error
-                })?;
+            let selected_rscript = load_selected_rscript(&data_dir);
             app.manage(AppState {
-                config,
+                data_dir,
+                ark,
+                config: SyncRwLock::new(None),
+                selected_rscript: SyncRwLock::new(selected_rscript),
+                startup: SyncRwLock::new(StartupView {
+                    phase: "shell_ready".to_string(),
+                    busy: false,
+                    runtime: None,
+                    issue: None,
+                }),
                 project_store,
                 project_root: RwLock::new(default_project_root()),
                 project_watcher: Mutex::new(None),
@@ -1660,6 +2252,12 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            startup_status,
+            startup_bootstrap,
+            startup_choose_rscript,
+            startup_diagnostics,
+            startup_open_log_directory,
+            agent_runtime_retry,
             workspace_start,
             workspace_status,
             project_state,
@@ -1704,6 +2302,18 @@ fn main() {
             cancel_agent_turn,
             restart_workspace
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Rho desktop");
+        .run(tauri::generate_context!());
+    if let Err(error) = run_result {
+        let detail = format!("Rho desktop could not start: {error:#}");
+        write_startup_log(&detail);
+        let _ = rfd::MessageDialog::new()
+            .set_title("Rho could not start")
+            .set_description(format!(
+                "Rho could not open its interface.\n\n{error}\n\nDiagnostic log:\n{}",
+                startup_log_path().display()
+            ))
+            .set_level(rfd::MessageLevel::Error)
+            .set_buttons(rfd::MessageButtons::Ok)
+            .show();
+    }
 }

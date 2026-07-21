@@ -63,6 +63,15 @@ jobs:
           rtools-version: "45"
           use-public-rspm: true
 
+      - name: Resolve Rscript path
+        shell: pwsh
+        run: |
+          $rscript = (& Rscript -e "cat(normalizePath(file.path(R.home('bin'), 'Rscript.exe'), winslash='/', mustWork=TRUE))").Trim()
+          if (-not $rscript) {
+              throw "Could not resolve the hosted Rscript.exe path."
+          }
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "RHO_RSCRIPT=$rscript"
+
       - name: Install GNU Rust toolchain
         shell: bash
         run: |
@@ -80,12 +89,13 @@ jobs:
           }
           Rscript -e "cat(R.version.string)"
           Write-Host ""
+          Write-Host "RHO_RSCRIPT=$env:RHO_RSCRIPT"
           & "$env:RTOOLS_BIN\gcc.exe" --version
           rustup show active-toolchain
 
       - name: Bootstrap Ark runtime
         shell: pwsh
-        run: ./scripts/bootstrap-ark-windows.ps1 -RscriptPath "Rscript"
+        run: ./scripts/bootstrap-ark-windows.ps1 -RscriptPath "$env:RHO_RSCRIPT"
 
       - name: Build NSIS installer
         id: build
@@ -124,8 +134,9 @@ jobs:
               throw "Smoke-test binary not found at $binary."
           }
           & $binary --smoke-test
-          if ($LASTEXITCODE -ne 0) {
-              throw "Smoke test failed with exit code $LASTEXITCODE."
+          $exitCode = $LASTEXITCODE
+          if ($exitCode -ne 0) {
+              throw "Smoke test failed with exit code $exitCode."
           }
 
       - name: Create GitHub release
