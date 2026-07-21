@@ -1,7 +1,7 @@
 # Rho Windows Build Environment
 
-Date: 2026-07-17
-Validated release: `0.2.0-dev.8`
+Date: 2026-07-21
+Validated release: `0.2.0-dev.11`
 Repository root: `D:\Rho`
 
 ## Purpose
@@ -178,7 +178,8 @@ cargo test --workspace
 
 The model credential and network are not required for Rust tests, bridge
 tests, editor/Console use, plot generation or Environment inspection. They are
-required only for a real Agent-model smoke test.
+required only for a real Agent-model smoke test and Manage LLMs connection
+checks.
 
 ## Building The Installer
 
@@ -202,16 +203,16 @@ Expected outputs:
 
 ```text
 D:\Rho\target\release\rho-desktop.exe
-D:\Rho\target\release\bundle\nsis\Rho_0.2.0-dev.8_x64-setup.exe
+D:\Rho\target\release\bundle\nsis\Rho_0.2.0-dev.11_x64-setup.exe
 ```
 
-Validated `0.2.0-dev.8` artifact snapshot:
+Validated `0.2.0-dev.11` artifact snapshot:
 
 ```text
-Installer size: 15,656,479 bytes
-Installer SHA-256: A27E6D4E991FD57C920E29C524758214C28B6BFAAC20E9AC393F96E69534D80E
-rho-desktop.exe size: 38,513,113 bytes
-rho-desktop.exe SHA-256: 6E2CFB428D6248866FE3CDD59B37E7A3FC762E6DF744E8551F18EC2B3BF901C3
+Installer size: 15,806,011 bytes
+Installer SHA-256: 8F687A2C228D8F7B7DAB26544AC43FCB4A5B765175CA291F7B5D926A47AFC8DA
+rho-desktop.exe size: 39,445,885 bytes
+rho-desktop.exe SHA-256: AD7415CC3D4550AA76F9FB940BF847B947DB981AD2294B1EF6302311CE385970
 ```
 
 The hash identifies the already validated artifact only. A legitimate rebuild
@@ -232,7 +233,8 @@ The target machine must provide:
 - Windows 10 or Windows 11 x64;
 - Microsoft Edge WebView2 Runtime;
 - R 4.4 or later;
-- `aisdk` plus a configured provider only when Agent turns are used;
+- `aisdk` plus at least one valid configured Agent model only when Agent turns
+  are used;
 - all `aisdk` runtime dependencies at their declared versions, including
   `rlang >= 1.3.0` for `aisdk 1.5.0`.
 
@@ -253,7 +255,7 @@ target\debug\rho-desktop.exe --smoke-agent
 
 `--smoke-test` must verify that the same persistent Workspace R can execute R
 code, create a data frame, return a plot and expose the object in Environment.
-`--smoke-agent` additionally requires a configured DeepSeek provider and must
+`--smoke-agent` additionally requires a configured Agent model and must
 exercise Agent R without creating a second scientific workspace.
 
 For an installer acceptance run:
@@ -265,8 +267,12 @@ For an installer acceptance run:
 5. execute `x <- 1:5`, inspect `x` in Environment and create a plot;
 6. resize each workbench divider and confirm the sizes persist after restart;
 7. open, edit and save a project file without leaving the project root;
-8. run a DeepSeek Agent turn only when credentials and network are available;
-9. record the installer path, size, hash and all failed or skipped checks.
+8. open `Manage LLMs...`, verify the effective user `.Renviron` path, refresh
+   credential detection and run one bounded connection test without exposing a
+   key value;
+9. run an Ask and an Act Agent turn only when credentials and network are
+   available, including a chat-only model if one is configured;
+10. record the installer path, size, hash and all failed or skipped checks.
 
 Do not overwrite an installed build while its Workspace R is active. Building
 an installer does not require automatically installing it.
@@ -307,7 +313,7 @@ Verify the Microsoft Edge WebView2 Runtime on the machine and ensure the x64
 Treat provider credentials, provider network access and `aisdk` configuration
 as a separate runtime concern. A model-network failure does not invalidate the
 non-Agent desktop build, but it must be reported as a skipped or failed Agent
-acceptance gate.
+acceptance gate. The same rule applies to Manage LLMs connection tests.
 
 ## Required Build Report
 

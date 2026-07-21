@@ -1,13 +1,13 @@
 # Windows prototype
 
-Date: 2026-07-17
+Date: 2026-07-21
 
 ## Installer
 
 The current internal prototype installer is generated at:
 
 ```text
-D:\Rho\target\release\bundle\nsis\Rho_0.2.0-dev.8_x64-setup.exe
+D:\Rho\target\release\bundle\nsis\Rho_0.2.0-dev.11_x64-setup.exe
 ```
 
 It is an unsigned 64-bit NSIS installer. Windows SmartScreen may therefore
@@ -27,11 +27,12 @@ shortcut, and includes:
 - Windows 10 or Windows 11 x64 with the Microsoft Edge WebView2 runtime;
 - R 4.4 or later, available through `PATH` or installed below
   `C:\Program Files\R`;
-- `aisdk` and a configured DeepSeek provider for Agent turns.
+- `aisdk` for Agent turns; provider metadata is managed in Rho and credentials
+  come from the effective user `.Renviron`.
 
 The editor, Console, Environment and Plots work without a model credential.
-Only the Agent panel requires aisdk and its provider configuration. Python,
-Jupyter Server and JupyterLab are not installed or used.
+Only the Agent panel requires aisdk plus at least one valid configured model.
+Python, Jupyter Server and JupyterLab are not installed or used.
 
 `RHO_RSCRIPT` may be set to an explicit `Rscript.exe` path when R is installed
 in a nonstandard location.
@@ -77,6 +78,11 @@ in a nonstandard location.
     workspace revision, marking incomplete provenance explicitly.
 22. `.Rmd` and `.qmd` rendering is restricted to the active project root and
     reports missing tooling or render failures through structured runs.
+23. The Agent composer now exposes a compact model selector for the next turn
+    and disables Act automatically for models without confirmed tool support.
+24. `Manage LLMs...` provides global provider/model configuration, effective
+    user `.Renviron` opening, credential refresh and bounded connection tests
+    without storing API keys in Rho-owned files.
 
 The installed build was verified to launch Ark from:
 
@@ -97,13 +103,13 @@ the pinned, checksum-verified binary into the temporary desktop resource tree.
 
 The desktop smoke test creates a data frame, receives a real plot, and finds
 the object in the Environment snapshot. The Agent smoke test additionally
-runs a DeepSeek read-only turn against that live workspace.
+runs a real configured Agent model turn against that live workspace.
 
 Browser-mode UI verification covers 1280 by 720 and the minimum 1024 by 680
-window size. Run, Plots, Environment and the Act-mode Agent timeline were
-exercised without incoherent overlap. Resizer keyboard controls, persisted
-sizes, execution-panel expansion, minimum-window clamping and Monaco frontend
-loading are also covered.
+window size. Run, Plots, Environment, the Agent model selector and the
+Manage LLMs dialog were exercised without incoherent overlap. Resizer keyboard
+controls, persisted sizes, execution-panel expansion, minimum-window clamping
+and Monaco frontend loading are also covered.
 
 ## Deliberately deferred
 
@@ -111,7 +117,8 @@ loading are also covered.
 - persistent multi-turn ChatSession context beyond durable turn history;
 - paged full-table viewers and standalone HTML artifact viewers;
 - richer job management beyond the current bounded cancellation/restart model;
-- automatic R/aisdk installation and credential settings UI;
+- automatic R/aisdk installation and operating-system credential vault
+  integration;
 - installer signing, auto-update and external distribution hardening;
 - macOS and Linux packaging.
 

@@ -143,3 +143,29 @@ Jet revision: `52ae131dd168fe2e104d306cc4bf5bbeae749200`
   Workbench Protocol types and incremental event streaming.
 - Run equivalent runtime probes on macOS and Linux and add signed packaging
   inputs for each target.
+
+## Reproducing the Phase 0 probes
+
+Bootstrap the pinned Ark runtime before running the broker probes:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/bootstrap-ark-windows.ps1
+cargo test --workspace
+cargo run -p rho-server -- doctor
+cargo run -p rho-server -- probe-agent-r
+cargo run -p rho-server -- probe-ark --kernelspec .rho/runtime/ark-0.1.252/kernel.json --code "1 + 1"
+cargo run -p rho-server -- probe-coordinator --kernelspec .rho/runtime/ark-0.1.252/kernel.json
+cargo run -p rho-server -- probe-completeness --kernelspec .rho/runtime/ark-0.1.252/kernel.json
+cargo run -p rho-server -- probe-comms --kernelspec .rho/runtime/ark-0.1.252/kernel.json
+cargo run -p rho-server -- probe-rich-output --kernelspec .rho/runtime/ark-0.1.252/kernel.json
+```
+
+The real-model coordinator probe is opt-in and requires the selected provider
+credential to be available to Agent R:
+
+```powershell
+cargo run -p rho-server -- probe-coordinator --kernelspec .rho/runtime/ark-0.1.252/kernel.json --store .rho/state/coordinator-probe-deepseek.sqlite --model deepseek:deepseek-v4-flash
+```
+
+The bootstrap and Windows toolchain contract are documented in
+`docs/windows-build-environment.md`.
