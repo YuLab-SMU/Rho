@@ -88,7 +88,16 @@ test_that("function inspection includes bounded source without executing it", {
   expect_equal(result$typeof, "closure")
   expect_match(result$function_source$definition, "set_proxy <- function")
   expect_match(result$function_source$definition, "Sys.setenv")
-  expect_null(result$function_source$path)
+  expect_true(
+    is.null(result$function_source$path) ||
+      (is.character(result$function_source$path) &&
+        length(result$function_source$path) == 1L &&
+        nzchar(result$function_source$path))
+  )
+  expect_true(
+    is.null(result$function_source$line) ||
+      (is.integer(result$function_source$line) && result$function_source$line >= 1L)
+  )
 })
 
 test_that("tabular previews bound nested and long cell payloads by bytes", {

@@ -74,7 +74,21 @@ foreach ($name in @("ark.exe", "LICENSE", "NOTICE")) {
     if (-not (Test-Path -LiteralPath $source)) {
         throw "Required runtime file missing: $source"
     }
-    Copy-Item -LiteralPath $source -Destination $runtimeDestination -Force
+    $destination = Join-Path $runtimeDestination $name
+    if (Test-Path -LiteralPath $destination -PathType Leaf) {
+        $sourceHash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash
+        $destinationHash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash
+        if ($sourceHash -eq $destinationHash) {
+            Write-Host "Runtime resource is current: $destination"
+            continue
+        }
+    }
+    try {
+        Copy-Item -LiteralPath $source -Destination $destination -Force
+    }
+    catch [System.UnauthorizedAccessException] {
+        throw "Could not update runtime resource $destination. Close any Rho process using this runtime and retry. $($_.Exception.Message)"
+    }
 }
 
 Push-Location (Join-Path $repo "desktop\src-tauri")

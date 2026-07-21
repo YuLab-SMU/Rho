@@ -6,8 +6,29 @@ this file records behavior that is already available in a released build.
 
 ## Unreleased
 
+### Added
+
+- Added a `0.2.0` release-hardening specification, version/tag/resource
+  validation and a one-command Rust, R and frontend verification runner that
+  writes machine-readable release evidence.
+- Added Windows publish gates that verify a clean source checkout, build the
+  installer, run bounded Workspace and optional Agent smoke tests, and attach
+  the installer checksum and evidence JSON to the GitHub release.
+- Added project regression coverage for paths containing spaces and non-ASCII
+  text, session and atomic-write behavior under those paths, and deterministic
+  truncation at the 2,000-file discovery limit.
+
 ### Fixed
 
+- Agent R now receives an explicit stdin EOF after its broker token, model
+  profile and prompt are written. This prevents Windows Agent turns from
+  stalling before local broker authentication.
+- Agent authentication failures now terminate the child process and retain
+  bounded, credential-redacted startup stdout and stderr, making pre-provider
+  failures diagnosable.
+- Windows installer builds now skip copying Ark and its notices when the
+  bundled resources already have the expected SHA-256, avoiding a false build
+  failure when an identical runtime executable is in use.
 - Closing Rho now shuts down the Ark-backed Workspace R session and terminates
   its process tree if graceful shutdown cannot complete, preventing orphaned
   `ark.exe` processes on Windows.

@@ -2,14 +2,16 @@
 
 Status: active
 
-Date: 2026-07-21
+Date: 2026-07-22
 Current baseline: `0.2.0-dev.11` Windows workbench candidate
 
 Progress: the core `0.2.x` daily-use workflow is implemented and is now in
 hardening. Project editing, Workspace R execution, Agent approvals, durable
 runs, restart recovery, Environment, Plots and render diagnostics are present;
-the remaining work is completion quality, broader mutation policy and release
-acceptance on representative projects.
+the remaining work is release acceptance on representative projects and a
+distribution decision. Automated release metadata, source checks, evidence
+generation, and Unicode/space/large-project regressions are now part of the
+release path.
 
 ## Direction
 
@@ -48,8 +50,8 @@ Deliverables:
 - Keep Console, Plots, Problems, Environment and the resizable panel layout
   working with real project files.
 - Add explicit user/agent/system execution origin, timestamps and run links.
-- Add a real approval surface for Act-mode `run_r`, package installation and
-  shell-like operations.
+- Add a real approval surface for Act-mode `run_r` and reviewed Agent file
+  edits.
 - Persist the Agent timeline and restore it after Agent R restarts while
   preserving the independent Workspace R session.
 - Add user-facing cancellation, timeout, crash and restart states.
@@ -67,6 +69,10 @@ Completed in the current `0.2.x` candidate:
 - atomic source/session persistence, coalesced file watching and bounded file
   discovery for large projects;
 - bounded local R completion and simple document-symbol navigation.
+- version/tag/resource validation, one-command source verification,
+  machine-readable release evidence and pre-publication workflow gates;
+- automated project regressions for spaces, non-ASCII paths and the 2,000-file
+  discovery boundary.
 
 Still required to release M1:
 
@@ -78,7 +84,8 @@ Post-release `0.2.x` quality work:
 
 - file rename/delete commands;
 - paged plot-history payload loading and retention controls;
-- package-aware completion and explicit policy for future shell-like tools.
+- package-aware completion, package-management workflows and an explicit policy
+  for future shell-like tools.
 
 Acceptance gate:
 
@@ -145,8 +152,8 @@ Acceptance gate:
 
 ## Work order for the next iterations
 
-1. Close M1 with completion, atomic persistence, watcher coalescing and a
-   repeatable clean-install acceptance run.
+1. Close M1 with a repeatable clean-install acceptance run and the distribution
+   decision.
 2. Add scientific environment operations beyond detection: `renv` initialize,
    restore and snapshot, plus package/Bioconductor repair workflows.
 3. Strengthen data, plot and document viewers while preserving bounded broker

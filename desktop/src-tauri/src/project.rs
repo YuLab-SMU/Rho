@@ -614,6 +614,51 @@ mod tests {
     }
 
     #[test]
+    fn unicode_and_space_project_paths_round_trip_files_and_session_state() {
+        let directory = TempDir::new().unwrap();
+        let project_dir = directory.path().join("Rho release 空格项目");
+        let source_dir = project_dir.join("分析 scripts");
+        std::fs::create_dir_all(&source_dir).unwrap();
+        let source = source_dir.join("质控.R");
+        std::fs::write(&source, "结果 <- data.frame(样本 = 'A')\n").unwrap();
+
+        let root = project_dir.canonicalize().unwrap();
+        let state = list_project_files(&root).unwrap();
+        assert_eq!(state.files.len(), 1);
+        assert_eq!(state.files[0].path, "分析 scripts/质控.R");
+
+        let resolved = project_path(&root, "分析 scripts/质控.R").unwrap();
+        atomic_write(&resolved, "结果 <- data.frame(样本 = 'B')\n".as_bytes()).unwrap();
+        assert!(std::fs::read_to_string(&resolved).unwrap().contains("'B'"));
+
+        let store = ProjectSessionStore::new(directory.path().join("session data")).unwrap();
+        let snapshot = ProjectSessionSnapshot {
+            open_documents: vec![ProjectDocumentSession {
+                path: "分析 scripts/质控.R".to_string(),
+                cursor_start: 7,
+                cursor_end: 7,
+                draft_content: Some("结果 <- 42".to_string()),
+            }],
+            closed_documents: Vec::new(),
+            active_document: Some("分析 scripts/质控.R".to_string()),
+            panels: PanelSizes::default(),
+        };
+        store.save_last_opened_project(&root).unwrap();
+        store.save_session(&root, &snapshot).unwrap();
+
+        let restored = store.load_session(&root).unwrap();
+        assert_eq!(restored.active_document, snapshot.active_document);
+        assert_eq!(
+            restored.open_documents[0].draft_content.as_deref(),
+            Some("结果 <- 42")
+        );
+        assert_eq!(
+            store.last_opened_project().unwrap().unwrap(),
+            PathBuf::from(display_path(&root))
+        );
+    }
+
+    #[test]
     fn missing_or_invalid_session_degrades_to_default() {
         let directory = TempDir::new().unwrap();
         let project_dir = directory.path().join("analysis");
@@ -722,6 +767,24 @@ mod tests {
 
         assert!(ensure_editable_file_size(&path).is_err());
         assert!(ensure_editable_content_size(&"x".repeat(1024)).is_ok());
+    }
+
+    #[test]
+    fn project_discovery_stops_at_the_supported_file_limit() {
+        let directory = TempDir::new().unwrap();
+        for index in 0..=MAX_PROJECT_FILES {
+            std::fs::write(
+                directory.path().join(format!("analysis-{index:04}.R")),
+                "value <- 1",
+            )
+            .unwrap();
+        }
+
+        let root = directory.path().canonicalize().unwrap();
+        let state = list_project_files(&root).unwrap();
+        assert_eq!(state.files.len(), MAX_PROJECT_FILES);
+        assert!(state.truncated);
+        assert_eq!(state.files.first().unwrap().path, "analysis-0000.R");
     }
 
     #[test]

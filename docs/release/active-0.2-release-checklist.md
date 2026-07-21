@@ -2,11 +2,13 @@
 
 Status: active release acceptance
 
-Date: 2026-07-21
+Date: 2026-07-22
 Candidate: `0.2.0-dev.11`
 
 This checklist is the go/no-go contract for the first daily-use Windows
 release. A box is complete only when another person can locate the evidence.
+The implementation and evidence contract is defined in
+[`active-0.2.0-release-hardening-spec.md`](active-0.2.0-release-hardening-spec.md).
 
 ## P0 Release Gates
 
@@ -47,18 +49,26 @@ release. A box is complete only when another person can locate the evidence.
 
 ## Automated Evidence
 
-- [x] Rust workspace tests cover protocol bounds, revisions, project paths,
-  atomic persistence, restart recovery records and approval authorization.
+- [x] Rust workspace tests cover protocol bounds, revisions, Unicode/space
+  project paths, the 2,000-file discovery boundary, atomic persistence,
+  restart recovery records and approval authorization.
 - [x] `rho.bridge` tests cover bounded Workspace/object previews.
 - [x] `rho.agent` tests cover broker identity and single-use approval handoff.
 - [x] Browser-mode validation covers saved/dirty Render state, project revision,
   successful R Markdown render and zero browser console errors.
 - [x] Workspace smoke passes against the release binary.
-- [ ] DeepSeek Agent smoke passes against the release binary. The 2026-07-17
-  attempt reached the provider but ended after repeated network retries; rerun
-  this gate on a stable network before release.
+- [x] DeepSeek Agent smoke passes against the release binary. The 2026-07-22
+  release check completed a real `deepseek:deepseek-v4-flash` turn against the
+  shared Workspace R and recorded it in
+  `target/release-evidence/rho-0.2-release.json`.
 - [x] Final NSIS package contents, byte size and SHA-256 are recorded in
   `docs/implementation/implemented-windows-build-environment.md`.
+- [x] `scripts/test-release-metadata.ps1` rejects version/tag mismatch, missing
+  bundle inputs, whitespace errors and a dirty publication worktree.
+- [x] `scripts/invoke-0.2-release-checks.ps1` runs Rust, R and frontend checks,
+  supports bounded release smoke tests and writes machine-readable evidence.
+- [x] The manual GitHub publish workflow runs verification before release
+  creation and uploads the installer, checksum and release evidence together.
 
 ## P1 Daily-Use Quality
 

@@ -852,16 +852,24 @@ fn contextual_agent_prompt(
 
 fn desktop_agent_turn_script() -> &'static str {
     r#"
+rho_agent_startup_trace <- function(stage) {
+  cat(sprintf("[rho-agent-startup] %s\n", stage), file = stderr())
+  flush(stderr())
+}
+rho_agent_startup_trace("script_started")
 args <- commandArgs(TRUE)
 source(file.path(args[[2]], "R", "aaa-state.R"))
 source(file.path(args[[2]], "R", "transport.R"))
 source(file.path(args[[2]], "R", "aisdk_adapter.R"))
+rho_agent_startup_trace("adapter_loaded")
 input <- file("stdin", open = "r", encoding = "UTF-8")
 token <- readLines(input, n = 1L, warn = FALSE)
 profile_json <- readLines(input, n = 1L, warn = FALSE)
 model_prompt <- paste(readLines(input, warn = FALSE), collapse = "\n")
 close(input)
+rho_agent_startup_trace("stdin_read")
 profile <- jsonlite::fromJSON(profile_json, simplifyVector = FALSE)
+rho_agent_startup_trace("profile_parsed")
 connection <- rho_agent_connect(port = as.integer(args[[1]]), token = token)
 identity_message <- rho_read_frame(connection)
 stopifnot(
@@ -1006,13 +1014,48 @@ pub async fn run_agent_turn(
         let mut stdin = child.stdin.take().context("opening Agent R stdin")?;
         stdin.write_all(stdin_payload.as_bytes()).await?;
         stdin.shutdown().await?;
+        drop(stdin);
 
-        let mut agent = tokio::time::timeout(
+        let authentication = tokio::time::timeout(
             std::time::Duration::from_secs(30),
             authenticator.authenticate_next(),
         )
-        .await
-        .context("timed out waiting for desktop Agent R authentication")??;
+        .await;
+        let mut agent = match authentication {
+            Ok(Ok(agent)) => agent,
+            Ok(Err(error)) => {
+                let _ = child.kill().await;
+                let output = child.wait_with_output().await?;
+                bail!(
+                    "desktop Agent R authentication failed: {error}; process status {}; stdout: {}; stderr: {}",
+                    output.status,
+                    bounded_agent_context_text(
+                        &redact_sensitive_text(&String::from_utf8_lossy(&output.stdout)),
+                        4_000
+                    ),
+                    bounded_agent_context_text(
+                        &redact_sensitive_text(&String::from_utf8_lossy(&output.stderr)),
+                        4_000
+                    )
+                );
+            }
+            Err(_) => {
+                let _ = child.kill().await;
+                let output = child.wait_with_output().await?;
+                bail!(
+                    "timed out waiting for desktop Agent R authentication; process status {}; stdout: {}; stderr: {}",
+                    output.status,
+                    bounded_agent_context_text(
+                        &redact_sensitive_text(&String::from_utf8_lossy(&output.stdout)),
+                        4_000
+                    ),
+                    bounded_agent_context_text(
+                        &redact_sensitive_text(&String::from_utf8_lossy(&output.stderr)),
+                        4_000
+                    )
+                );
+            }
+        };
         send_shared_identity(&mut agent, context.clone()).await?;
         let completion_result = serve_desktop_agent(
             &mut agent,
