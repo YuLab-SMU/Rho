@@ -52,6 +52,38 @@ rho_preview_kind <- function(value) {
   "opaque"
 }
 
+rho_function_source <- function(value, name, max_chars = 12000L) {
+  if (!is.function(value)) {
+    return(NULL)
+  }
+
+  source_lines <- deparse(value, width.cutoff = 500L)
+  source_lines[[1L]] <- sprintf("%s <- %s", name, source_lines[[1L]])
+  srcref <- attr(value, "srcref", exact = TRUE)
+  srcfile <- if (is.null(srcref)) NULL else attr(srcref, "srcfile", exact = TRUE)
+  source_path <- tryCatch({
+    if (is.environment(srcfile) && exists("filename", envir = srcfile, inherits = FALSE)) {
+      get("filename", envir = srcfile, inherits = FALSE)
+    } else if (is.list(srcfile)) {
+      srcfile$filename
+    } else {
+      NULL
+    }
+  }, error = function(e) NULL)
+  if (is.character(source_path) && length(source_path) == 1L && nzchar(source_path)) {
+    source_path <- normalizePath(source_path, winslash = "/", mustWork = FALSE)
+  } else {
+    source_path <- NULL
+  }
+
+  list(
+    definition = compact_text(source_lines, max_chars = max_chars),
+    path = source_path,
+    line = if (length(srcref) >= 1L) as.integer(srcref[[1L]]) else NULL,
+    column = if (length(srcref) >= 5L) as.integer(srcref[[5L]]) else NULL
+  )
+}
+
 rho_detect_renv_state <- function(project_dir = getwd()) {
   lockfile <- file.path(project_dir, "renv.lock")
   renv_library <- normalizePath(
@@ -333,6 +365,7 @@ rho_inspect_object <- function(name,
     size_bytes = as.numeric(object.size(value)),
     typeof = typeof(value),
     preview_kind = rho_preview_kind(value),
+    function_source = rho_function_source(value, name),
     preview = rho_bounded_preview(
       value,
       max_rows = max_rows,

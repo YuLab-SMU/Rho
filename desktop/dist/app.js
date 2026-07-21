@@ -36,6 +36,7 @@ const state = {
   environment: null,
   selectedObjectName: null,
   selectedObjectDetail: null,
+  objectInspection: null,
   lastRender: null,
   runs: [],
   problems: [],
@@ -78,6 +79,12 @@ const state = {
     highlightDecorations: [],
   },
 };
+
+function stringValues(value) {
+  if (Array.isArray(value)) return value.map(String);
+  if (value === null || value === undefined || value === "") return [];
+  return [String(value)];
+}
 
 const mockProjects = {
   "D:/Rho": {
@@ -1352,7 +1359,7 @@ function registerRLanguage(monaco) {
         insertText: object.name,
         range,
         sortText: `0-${object.name}`,
-        detail: (object.classes || []).join("/") || object.typeof || "Workspace object",
+        detail: stringValues(object.classes).join("/") || object.typeof || "Workspace object",
       }));
       return { suggestions: [...objectSuggestions, ...keywordSuggestions, ...functionSuggestions] };
     },
@@ -1498,6 +1505,12 @@ function updateEditorChrome() {
     const lines = editor.value.split("\n").length;
     $("#lineNumbers").textContent = Array.from({ length: lines }, (_, index) => index + 1).join("\n");
   }
+  const documentReadOnly = Boolean(activeDocument()?.readOnly);
+  const documentActionsDisabled = state.projectStatus !== "ready" || state.busy || documentReadOnly;
+  $("#runButton").disabled = documentActionsDisabled;
+  $("#editorRunButton").disabled = documentActionsDisabled;
+  $("#editorRunFileButton").disabled = documentActionsDisabled;
+  $("#saveFileButton").disabled = state.projectStatus !== "ready" || documentReadOnly;
   renderEnvironmentSummary();
 }
 
@@ -1507,6 +1520,9 @@ function applyDocumentSelection(documentState) {
     const model = ensureDocumentModel(documentState);
     if (!model) return;
     state.editor.editor.setModel(model);
+    state.editor.editor.updateOptions({
+      readOnly: state.projectStatus !== "ready" || Boolean(documentState.readOnly),
+    });
     const start = model.getPositionAt(documentState.cursorStart ?? 0);
     const end = model.getPositionAt(documentState.cursorEnd ?? documentState.cursorStart ?? 0);
     state.editor.editor.setSelection({
@@ -1519,6 +1535,7 @@ function applyDocumentSelection(documentState) {
     state.editor.editor.focus();
   } else {
     const editor = fallbackEditor();
+    editor.disabled = state.projectStatus !== "ready" || Boolean(documentState.readOnly);
     editor.value = documentState.content;
     editor.selectionStart = Math.min(documentState.cursorStart ?? 0, editor.value.length);
     editor.selectionEnd = Math.min(documentState.cursorEnd ?? documentState.cursorStart ?? 0, editor.value.length);
@@ -1738,15 +1755,16 @@ function currentPanelSnapshot() {
 }
 
 function buildSessionSnapshot() {
+  const persistentDocuments = Object.values(state.documents).filter((document) => !document.transient);
   return {
-    open_documents: Object.values(state.documents).map(documentSession),
+    open_documents: persistentDocuments.map(documentSession),
     closed_documents: Object.entries(state.closedDrafts).map(([path, draft]) => ({
       path,
       cursor_start: draft.cursor_start ?? 0,
       cursor_end: draft.cursor_end ?? 0,
       draft_content: draft.draft_content ?? null,
     })),
-    active_document: state.activeDocument,
+    active_document: activeDocument()?.transient ? null : state.activeDocument,
     panels: currentPanelSnapshot(),
   };
 }
@@ -1919,7 +1937,7 @@ function renderDocumentTabs() {
     icon.className = "r-badge";
     icon.textContent = fileDocument.path.toLowerCase().endsWith(".r") ? "R" : "·";
     const label = document.createElement("span");
-    label.textContent = fileDocument.path;
+    label.textContent = fileDocument.displayName || fileDocument.path;
     const dirty = document.createElement("span");
     dirty.className = `unsaved ${documentIsDirty(fileDocument) ? "" : "hidden"}`;
     dirty.textContent = "●";
@@ -1976,6 +1994,12 @@ async function openDocument(path, options = {}) {
   if (state.activeDocument && state.activeDocument !== path) {
     syncDocumentFromEditor({ render: false, persist: false });
     clearAgentEditHighlight();
+  }
+  if (state.documents[path]?.transient) {
+    state.activeDocument = path;
+    renderActiveDocument();
+    requestAnimationFrame(() => layoutEditor());
+    return;
   }
   if (!state.project.files.some((file) => file.path === path)) {
     toast(`File is no longer available: ${path}`, true);
@@ -2063,6 +2087,7 @@ async function refreshProject() {
 async function saveActiveDocument() {
   const documentState = activeDocument();
   if (!documentState) return;
+  if (documentState.readOnly) return;
   syncDocumentFromEditor({ render: false, persist: false });
   try {
     state.internalProjectWrites.set(documentState.path, {
@@ -3739,7 +3764,7 @@ function previewSummary(detail) {
   if (!detail) return "Select an object to inspect its bounded summary.";
   const preview = detail.preview || {};
   const lines = [
-    `${detail.name} · ${(detail.classes || []).join("/") || detail.typeof || "object"}`,
+    `${detail.name} · ${stringValues(detail.classes).join("/") || detail.typeof || "object"}`,
     detail.dimensions?.length ? `shape: ${detail.dimensions.join(" × ")}` : `type: ${detail.typeof || "unknown"}`,
     `size: ${formatBytes(detail.size_bytes || 0)}`,
   ];
@@ -3758,17 +3783,94 @@ function previewSummary(detail) {
 }
 
 async function inspectEnvironmentObject(name) {
-  try {
-    state.selectedObjectName = name;
-    const response = await invoke("inspect_object", {
-      request: { name },
-    });
-    updateIdentity(response.workspace);
-    state.selectedObjectDetail = response.execution || null;
+  state.selectedObjectName = name;
+  if (state.selectedObjectDetail?.name === name) {
     renderEnvironment();
-  } catch (error) {
-    toast(String(error), true);
+    return state.selectedObjectDetail;
   }
+  if (state.objectInspection?.name === name) return state.objectInspection.promise;
+  const promise = invoke("inspect_object", { request: { name } })
+    .then((response) => {
+      updateIdentity(response.workspace);
+      state.selectedObjectDetail = response.execution || null;
+      renderEnvironment();
+      return state.selectedObjectDetail;
+    })
+    .catch((error) => {
+      toast(String(error), true);
+      return null;
+    })
+    .finally(() => {
+      if (state.objectInspection?.promise === promise) state.objectInspection = null;
+    });
+  state.objectInspection = { name, promise };
+  return promise;
+}
+
+function projectPathForSource(sourcePath) {
+  if (!sourcePath || !state.project.root) return null;
+  const normalize = (value) => String(value).replace(/\\/g, "/").replace(/\/+$/, "");
+  const root = normalize(state.project.root);
+  const source = normalize(sourcePath);
+  const prefix = `${root}/`;
+  if (!source.toLowerCase().startsWith(prefix.toLowerCase())) return null;
+  const relative = source.slice(prefix.length);
+  return state.project.files.find((file) => file.path.toLowerCase() === relative.toLowerCase())?.path || null;
+}
+
+function documentOffsetAtLine(documentState, line, column = 1) {
+  const lines = documentState.content.split("\n");
+  const targetLine = Math.max(1, Math.min(Number(line) || 1, lines.length));
+  const prefix = lines.slice(0, targetLine - 1).reduce((length, value) => length + value.length + 1, 0);
+  return prefix + Math.max(0, Math.min((Number(column) || 1) - 1, lines[targetLine - 1].length));
+}
+
+function openFunctionSourceViewer(detail) {
+  const source = detail.function_source;
+  const path = `@function/${encodeURIComponent(detail.name)}.R`;
+  const location = source.path
+    ? `# Defined in ${source.path}${source.line ? `:${source.line}` : ""}\n\n`
+    : "";
+  const content = `${location}${source.definition || `${detail.name} <- <source unavailable>`}`;
+  state.documents[path] = {
+    path,
+    displayName: `${detail.name} (Function)`,
+    content,
+    savedContent: content,
+    language: "r",
+    versionId: 0,
+    lastExecutedRange: null,
+    cursorStart: 0,
+    cursorEnd: 0,
+    conflictDiskContent: null,
+    readOnly: true,
+    transient: true,
+  };
+  state.activeDocument = path;
+  renderActiveDocument();
+  requestAnimationFrame(() => layoutEditor());
+}
+
+async function openEnvironmentObject(name) {
+  const detail = await inspectEnvironmentObject(name);
+  if (!detail?.function_source) return;
+  const projectPath = projectPathForSource(detail.function_source.path);
+  if (projectPath) {
+    await openDocument(projectPath);
+    const documentState = activeDocument();
+    if (documentState && detail.function_source.line) {
+      const offset = documentOffsetAtLine(
+        documentState,
+        detail.function_source.line,
+        detail.function_source.column,
+      );
+      documentState.cursorStart = offset;
+      documentState.cursorEnd = offset;
+      applyDocumentSelection(documentState);
+    }
+    return;
+  }
+  openFunctionSourceViewer(detail);
 }
 
 function renderEnvironment() {
@@ -3791,19 +3893,23 @@ function renderEnvironment() {
     name.className = "object-name";
     const symbol = document.createElement("span");
     symbol.className = "object-symbol";
-    symbol.textContent = (object.classes?.[0] || object.typeof || "R").slice(0, 1).toUpperCase();
+    const classes = stringValues(object.classes);
+    symbol.textContent = (classes[0] || object.typeof || "R").slice(0, 1).toUpperCase();
     const label = document.createElement("span");
     label.textContent = object.name;
     name.append(symbol, label);
     const type = document.createElement("span");
     type.className = "object-type";
-    type.textContent = object.dimensions?.length ? object.dimensions.join(" × ") : object.classes?.[0] || object.typeof;
+    type.textContent = object.dimensions?.length ? object.dimensions.join(" × ") : classes[0] || object.typeof;
     const size = document.createElement("span");
     size.className = "object-size";
     size.textContent = formatBytes(object.size_bytes || 0);
     row.append(name, type, size);
     row.addEventListener("click", () => {
       inspectEnvironmentObject(object.name);
+    });
+    row.addEventListener("dblclick", () => {
+      openEnvironmentObject(object.name);
     });
     $("#environmentList").append(row);
   }

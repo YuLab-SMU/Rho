@@ -77,6 +77,20 @@ test_that("vector previews stay bounded", {
   expect_true(result$preview$truncated)
 })
 
+test_that("function inspection includes bounded source without executing it", {
+  workspace <- new.env(parent = baseenv())
+  workspace$set_proxy <- function(url = "http://localhost:7890") {
+    Sys.setenv(http_proxy = url)
+  }
+
+  result <- rho_inspect_object("set_proxy", envir = workspace)
+
+  expect_equal(result$typeof, "closure")
+  expect_match(result$function_source$definition, "set_proxy <- function")
+  expect_match(result$function_source$definition, "Sys.setenv")
+  expect_null(result$function_source$path)
+})
+
 test_that("tabular previews bound nested and long cell payloads by bytes", {
   workspace <- new.env(parent = baseenv())
   workspace$x <- data.frame(id = 1L)
