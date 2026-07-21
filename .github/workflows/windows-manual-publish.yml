@@ -1,0 +1,198 @@
+name: Windows Manual Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to build and release
+        required: true
+        default: main
+      release_tag:
+        description: New GitHub release tag, for example v0.2.0-dev.11
+        required: true
+      release_name:
+        description: GitHub release title
+        required: true
+      prerelease:
+        description: Mark the published release as a prerelease
+        required: true
+        type: boolean
+        default: true
+      run_smoke_test:
+        description: Run rho-desktop.exe --smoke-test before publishing
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-manual-publish-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  publish-windows:
+    name: Build and publish Windows installer
+    runs-on:
+      - self-hosted
+      - windows
+      - x64
+
+    steps:
+      - name: Check out target ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - name: Bootstrap Ark runtime
+        shell: pwsh
+        run: ./scripts/bootstrap-ark-windows.ps1
+
+      - name: Build NSIS installer
+        id: build
+        shell: pwsh
+        env:
+          CARGO_HOME: ${{ vars.RHO_CARGO_HOME }}
+          RUSTUP_HOME: ${{ vars.RHO_RUSTUP_HOME }}
+          RTOOLS_BIN: ${{ vars.RHO_RTOOLS_BIN }}
+          RUSTUP_TOOLCHAIN: ${{ vars.RHO_RUSTUP_TOOLCHAIN }}
+        run: ./scripts/build-windows-installer.ps1
+
+      - name: Collect installer metadata
+        id: artifact
+        shell: pwsh
+        run: |
+          $installerPath = "${{ steps.build.outputs.installer_path }}"
+          if (-not $installerPath) {
+              throw "Installer path was not exported by build-windows-installer.ps1."
+          }
+          if (-not (Test-Path -LiteralPath $installerPath)) {
+              throw "Installer not found at $installerPath."
+          }
+          $installer = Get-Item -LiteralPath $installerPath
+          $hash = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          $hashPath = "$($installer.FullName).sha256"
+          $hashLine = "$hash *$($installer.Name)"
+          [System.IO.File]::WriteAllText($hashPath, "$hashLine`n", (New-Object System.Text.UTF8Encoding($false)))
+          $commitSha = (git rev-parse HEAD).Trim()
+          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "installer_path=$($installer.FullName)"
+          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "installer_name=$($installer.Name)"
+          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "hash_path=$hashPath"
+          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "hash_value=$hash"
+          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "commit_sha=$commitSha"
+
+      - name: Run smoke test
+        if: ${{ inputs.run_smoke_test }}
+        shell: pwsh
+        run: |
+          $binary = Join-Path $PWD "target\release\rho-desktop.exe"
+          if (-not (Test-Path -LiteralPath $binary)) {
+              throw "Smoke-test binary not found at $binary."
+          }
+          & $binary --smoke-test
+          if ($LASTEXITCODE -ne 0) {
+              throw "Smoke test failed with exit code $LASTEXITCODE."
+          }
+
+      - name: Create GitHub release
+        id: release
+        uses: actions/github-script@v7
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_NAME: ${{ inputs.release_name }}
+          RELEASE_PRERELEASE: ${{ inputs.prerelease }}
+          RELEASE_TARGET: ${{ steps.artifact.outputs.commit_sha }}
+          INSTALLER_NAME: ${{ steps.artifact.outputs.installer_name }}
+          INSTALLER_SHA256: ${{ steps.artifact.outputs.hash_value }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prerelease = String(process.env.RELEASE_PRERELEASE).toLowerCase() === "true";
+            const body = [
+              "Windows self-hosted release build.",
+              "",
+              `- Ref: \`${{ inputs.ref }}\``,
+              `- Commit: \`${process.env.RELEASE_TARGET}\``,
+              `- Installer: \`${process.env.INSTALLER_NAME}\``,
+              `- SHA-256: \`${process.env.INSTALLER_SHA256}\``,
+            ].join("\n");
+            let release;
+            try {
+              release = await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag: process.env.RELEASE_TAG,
+              });
+              release = await github.rest.repos.updateRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: release.data.id,
+                tag_name: process.env.RELEASE_TAG,
+                target_commitish: process.env.RELEASE_TARGET,
+                name: process.env.RELEASE_NAME,
+                body,
+                draft: false,
+                prerelease,
+              });
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error;
+              }
+              release = await github.rest.repos.createRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag_name: process.env.RELEASE_TAG,
+                target_commitish: process.env.RELEASE_TARGET,
+                name: process.env.RELEASE_NAME,
+                body,
+                draft: false,
+                prerelease,
+              });
+            }
+            core.setOutput("release_id", String(release.data.id));
+
+      - name: Upload release assets
+        uses: actions/github-script@v7
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.release_id }}
+          INSTALLER_PATH: ${{ steps.artifact.outputs.installer_path }}
+          HASH_PATH: ${{ steps.artifact.outputs.hash_path }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require("fs");
+            const path = require("path");
+            const releaseId = Number(process.env.RELEASE_ID);
+            const release = await github.rest.repos.getRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: releaseId,
+            });
+            const existingAssets = release.data.assets || [];
+            const assets = [process.env.INSTALLER_PATH, process.env.HASH_PATH];
+            for (const assetPath of assets) {
+              const assetName = path.basename(assetPath);
+              const existing = existingAssets.find((asset) => asset.name === assetName);
+              if (existing) {
+                await github.rest.repos.deleteReleaseAsset({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  asset_id: existing.id,
+                });
+              }
+              const stat = fs.statSync(assetPath);
+              const data = fs.readFileSync(assetPath);
+              await github.rest.repos.uploadReleaseAsset({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: releaseId,
+                name: assetName,
+                data,
+                headers: {
+                  "content-type": "application/octet-stream",
+                  "content-length": stat.size,
+                },
+              });
+            }

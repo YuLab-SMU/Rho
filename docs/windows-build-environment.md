@@ -199,6 +199,11 @@ The script performs these steps:
    `desktop\src-tauri`;
 5. creates the per-user x64 NSIS installer.
 
+For GitHub Actions, the same script also supports environment-variable
+injection for `CARGO_HOME`, `RUSTUP_HOME`, `RTOOLS_BIN` and
+`RUSTUP_TOOLCHAIN`, and it exports the resolved installer path through
+`GITHUB_OUTPUT`.
+
 Expected outputs:
 
 ```text
@@ -243,6 +248,35 @@ discovery cannot find the intended installation.
 
 The installer is currently unsigned. A SmartScreen unrecognized-publisher
 warning is expected and is not itself a build failure.
+
+## Manual GitHub Release Workflow
+
+The repository now provides `.github/workflows/windows-manual-publish.yml` for
+a manually triggered Windows release that publishes directly to GitHub
+Releases.
+
+This workflow is designed for a self-hosted Windows x64 runner and expects the
+validated build environment to already exist on that machine. Configure these
+repository variables when the runner does not use the same default paths as the
+local build script:
+
+- `RHO_CARGO_HOME`
+- `RHO_RUSTUP_HOME`
+- `RHO_RTOOLS_BIN`
+- `RHO_RUSTUP_TOOLCHAIN`
+
+The workflow inputs are:
+
+- `ref`: the ref to build;
+- `release_tag`: a new GitHub release tag;
+- `release_name`: the release title shown on GitHub;
+- `prerelease`: whether the release should be published as a prerelease;
+- `run_smoke_test`: whether to run `target\release\rho-desktop.exe --smoke-test`
+  before publishing.
+
+Each run bootstraps Ark, builds the NSIS installer, computes a `.sha256` asset,
+optionally runs the non-Agent smoke test, creates or updates a GitHub Release,
+and uploads both files without using a draft stage.
 
 ## Smoke And Acceptance Checks
 
