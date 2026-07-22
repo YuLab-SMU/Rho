@@ -92,9 +92,11 @@ jobs:
         run: |
           rustup set profile minimal
           rustup toolchain install stable-x86_64-pc-windows-gnu --no-self-update
+          rustup component add rustfmt --toolchain stable-x86_64-pc-windows-gnu
           rustup default stable-x86_64-pc-windows-gnu
           rustc -vV
           cargo -vV
+          cargo fmt --version
 
       - name: Verify hosted build environment
         shell: pwsh

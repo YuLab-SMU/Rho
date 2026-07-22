@@ -10,6 +10,10 @@ Release automation for later candidates runs
 metadata validation. The script copies the ignored `ark.exe`, `LICENSE` and
 `NOTICE` resources into the Tauri resource directory with SHA-256 verification;
 the installer builder reuses the same script.
+
+The GitHub-hosted release job uses Rust's `minimal` profile, then explicitly
+installs `rustfmt` for `stable-x86_64-pc-windows-gnu` and verifies it with
+`cargo fmt --version` before entering the release checks.
 Repository root: `D:\Rho`
 
 ## Purpose

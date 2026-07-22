@@ -22,6 +22,8 @@ this file records behavior that is already available in a released build.
 
 ### Fixed
 
+- Windows publish CI now installs and verifies the `rustfmt` component for its
+  minimal GNU Rust toolchain before running the mandatory formatting gate.
 - Windows release checks now materialize the bootstrapped Ark executable and
   notices before validating release metadata, fixing clean-checkout CI builds
   where ignored Tauri runtime resources do not exist yet.
