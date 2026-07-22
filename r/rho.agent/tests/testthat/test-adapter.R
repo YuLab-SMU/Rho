@@ -70,6 +70,23 @@ test_that("file edit proposals remain structured for desktop review", {
   expect_identical(parsed, proposal)
 })
 
+test_that("file edit proposals discard aisdk execution environments", {
+  args <- list(
+    path = "analysis.R",
+    operation = "replace_selection",
+    content = "geom_point(size = 5)",
+    .envir = new.env(parent = emptyenv())
+  )
+
+  proposal <- rho.agent:::rho_file_edit_proposal(args)
+  expect_named(proposal, c("kind", "path", "operation", "content"))
+  expect_identical(proposal$kind, "rho.file_edit_proposal")
+  expect_identical(proposal$path, "analysis.R")
+  expect_identical(proposal$operation, "replace_selection")
+  expect_identical(proposal$content, "geom_point(size = 5)")
+  expect_silent(jsonlite::toJSON(proposal, auto_unbox = TRUE, null = "null"))
+})
+
 test_that("large file edit proposals are not truncated to the default preview limit", {
   proposal <- list(
     kind = "rho.file_edit_proposal",
@@ -81,6 +98,44 @@ test_that("large file edit proposals are not truncated to the default preview li
   expect_false(grepl("\\[truncated\\]", preview, fixed = TRUE))
   parsed <- jsonlite::fromJSON(preview, simplifyVector = FALSE)
   expect_identical(parsed, proposal)
+})
+
+test_that("run_r previews omit broker internals and decode nested JSON", {
+  result <- list(
+    execution_id = "exec_internal",
+    execution = list(
+      ok = TRUE,
+      code = "readLines('analysis.R')",
+      stdout = "",
+      value = "[1] \"geom_point()\"",
+      warnings = "package was built under R 4.6.0",
+      messages = character(),
+      error = NULL,
+      traceback = list()
+    ),
+    events = list(list(type = "busy")),
+    workspace = list(state_revision = 4L)
+  )
+  encoded <- jsonlite::toJSON(result, auto_unbox = TRUE, null = "null")
+  preview <- rho.agent:::rho_tool_result_preview("run_r", encoded)
+
+  expect_match(preview, "Result\n[1] \"geom_point()\"", fixed = TRUE)
+  expect_match(preview, "Warnings\npackage was built", fixed = TRUE)
+  expect_false(grepl("execution_id|state_revision|traceback|events", preview))
+})
+
+test_that("run_r previews report concise empty and error states", {
+  empty <- rho.agent:::rho_tool_result_preview(
+    "run_r",
+    list(execution = list(ok = TRUE, stdout = "", value = NULL))
+  )
+  failed <- rho.agent:::rho_tool_result_preview(
+    "run_r",
+    list(execution = list(ok = FALSE, error = list(message = "object 'x' not found")))
+  )
+
+  expect_identical(empty, "R completed successfully with no printed output.")
+  expect_identical(failed, "Error\nobject 'x' not found")
 })
 
 test_that("broker tool results refresh the workspace identity", {

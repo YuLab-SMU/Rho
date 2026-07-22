@@ -28,6 +28,23 @@ rho_broker_tool_request <- function(type, arguments = list()) {
   response
 }
 
+rho_file_edit_proposal <- function(args) {
+  stopifnot(is.list(args) || is.environment(args))
+  value <- function(name) {
+    item <- args[[name]]
+    if (!is.character(item) || length(item) != 1L || is.na(item)) {
+      stop(sprintf("File edit argument `%s` must be one string.", name))
+    }
+    item
+  }
+  list(
+    kind = "rho.file_edit_proposal",
+    path = value("path"),
+    operation = value("operation"),
+    content = value("content")
+  )
+}
+
 #' Create aisdk Tools Backed by the Rho Broker
 #' @export
 rho_create_workspace_tools <- function() {
@@ -85,9 +102,7 @@ rho_create_workspace_tools <- function() {
         content = aisdk::z_string("Exact text to insert, replace with, append, or place in the new file"),
         .required = c("path", "operation", "content")
       ),
-      execute = function(args) {
-        c(list(kind = "rho.file_edit_proposal"), args)
-      },
+      execute = rho_file_edit_proposal,
       meta = list(validate_arguments = TRUE, rho_approval = "automatic")
     )
   )
@@ -160,6 +175,40 @@ rho_parse_tool_result <- function(value) {
   )
 }
 
+rho_run_r_preview <- function(value) {
+  parsed <- rho_parse_tool_result(value)
+  if (!is.list(parsed)) {
+    return(rho_compact_event_value(parsed))
+  }
+  execution <- if (is.list(parsed$execution)) parsed$execution else parsed
+
+  text_value <- function(value) {
+    if (is.null(value) || !length(value)) return("")
+    if (is.character(value)) return(paste(value, collapse = "\n"))
+    rho_compact_event_value(value)
+  }
+  error <- execution$error %||% NULL
+  if (!is.null(error) || identical(execution$ok, FALSE)) {
+    message <- if (is.list(error)) error$message %||% error$error %||% error else error
+    message <- text_value(message)
+    return(sprintf("Error\n%s", if (nzchar(message)) message else "R execution failed."))
+  }
+
+  sections <- character()
+  add_section <- function(label, content) {
+    content <- text_value(content)
+    if (nzchar(content)) sections <<- c(sections, sprintf("%s\n%s", label, content))
+  }
+  add_section("Output", execution$stdout %||% "")
+  add_section("Result", execution$value %||% execution$value_text %||% "")
+  add_section("Messages", execution$messages %||% character())
+  add_section("Warnings", execution$warnings %||% character())
+  if (!length(sections)) {
+    return("R completed successfully with no printed output.")
+  }
+  paste(sections, collapse = "\n\n")
+}
+
 rho_tool_result_preview <- function(tool, value) {
   parsed <- rho_parse_tool_result(value)
   if (identical(tool, "propose_file_edit") && is.list(parsed)) {
@@ -168,7 +217,10 @@ rho_tool_result_preview <- function(tool, value) {
   if (identical(tool, "get_workspace_snapshot") && is.list(parsed)) {
     return(rho_workspace_snapshot_preview(parsed))
   }
-  rho_compact_event_value(value)
+  if (identical(tool, "run_r")) {
+    return(rho_run_r_preview(parsed))
+  }
+  rho_compact_event_value(parsed)
 }
 
 rho_validate_runtime_model_profile <- function(profile) {

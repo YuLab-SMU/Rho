@@ -2323,7 +2323,60 @@ function agentTimelineEventBody(event) {
   if (event.event_type === "tool.call_completed" && event.tool === "propose_file_edit") {
     return "Review the proposed file edit below. No file has been changed yet.";
   }
+  if (event.event_type === "tool.call_completed" && event.tool === "run_r") {
+    return friendlyRunRResult(event.body);
+  }
   return event.body;
+}
+
+function agentTimelineEventTitle(event) {
+  const key = `${event.event_type}:${event.tool || ""}`;
+  return {
+    "tool.call_started:run_r": "Running R",
+    "tool.call_completed:run_r": "R completed",
+    "tool.call_failed:run_r": "R failed",
+    "tool.call_started:get_workspace_snapshot": "Inspecting workspace",
+    "tool.call_completed:get_workspace_snapshot": "Workspace inspected",
+    "tool.call_started:inspect_r_object": "Inspecting R object",
+    "tool.call_completed:inspect_r_object": "R object inspected",
+    "tool.call_started:propose_file_edit": "Preparing file edit",
+    "tool.call_completed:propose_file_edit": "File edit ready",
+  }[key] || event.title;
+}
+
+function parseNestedJsonObject(value) {
+  let parsed = value;
+  for (let depth = 0; depth < 2; depth += 1) {
+    if (typeof parsed !== "string") break;
+    try {
+      parsed = JSON.parse(parsed);
+    } catch (_) {
+      return null;
+    }
+  }
+  return parsed && typeof parsed === "object" ? parsed : null;
+}
+
+function friendlyRunRResult(body) {
+  const parsed = parseNestedJsonObject(body);
+  if (!parsed) return body;
+  const execution = parsed.execution && typeof parsed.execution === "object" ? parsed.execution : parsed;
+  if (execution.ok === false || execution.error) {
+    const error = execution.error;
+    const message = typeof error === "string" ? error : error?.message || error?.error;
+    return `Error\n${message || "R execution failed."}`;
+  }
+  const sections = [];
+  const addSection = (label, value) => {
+    const values = Array.isArray(value) ? value : [value];
+    const text = values.filter((item) => item !== null && item !== undefined && item !== "").join("\n");
+    if (text) sections.push(`${label}\n${text}`);
+  };
+  addSection("Output", execution.stdout);
+  addSection("Result", execution.value ?? execution.value_text);
+  addSection("Messages", execution.messages);
+  addSection("Warnings", execution.warnings);
+  return sections.join("\n\n") || "R completed successfully with no printed output.";
 }
 
 function hasVisibleAgentFileMentions() {
@@ -3291,11 +3344,10 @@ function renderAgentTimeline() {
         childMarker.textContent = agentStatusTone(event.status) === "completed" ? "✓" : agentStatusTone(event.status) === "error" ? "!" : "·";
         const childContent = document.createElement("div");
         const childHeading = document.createElement("strong");
-        childHeading.textContent = event.title;
+        childHeading.textContent = agentTimelineEventTitle(event);
         childContent.append(childHeading);
         const meta = [];
         if (event.request_id) meta.push(event.request_id);
-        if (event.tool) meta.push(event.tool);
         if (meta.length) {
           const metaLine = document.createElement("p");
           metaLine.textContent = meta.join(" · ");
@@ -3303,11 +3355,13 @@ function renderAgentTimeline() {
         }
         const body = agentTimelineEventBody(event);
         if (body) {
-          const childBody = document.createElement("p");
+          const runResult = event.event_type === "tool.call_completed" && event.tool === "run_r";
+          const childBody = document.createElement(runResult ? "pre" : "p");
+          if (runResult) childBody.className = "timeline-result";
           childBody.textContent = body;
           childContent.append(childBody);
         }
-        if (event.code) {
+        if (event.code && !(event.event_type === "tool.call_completed" && event.tool === "run_r")) {
           const source = document.createElement("code");
           source.className = "timeline-code";
           source.textContent = event.code;
@@ -4028,8 +4082,17 @@ function selectedFileEditProposal() {
     item.event_type === "tool.call_completed" && item.tool === "propose_file_edit"
   );
   if (!event) return null;
-  const proposal = parseJsonObject(event.body);
-  if (proposal?.kind !== "rho.file_edit_proposal") return null;
+  let proposal = parseJsonObject(event.body);
+  if (proposal?.kind !== "rho.file_edit_proposal") {
+    const toolEvent = parseJsonObject(event.details_json);
+    if (toolEvent?.success !== true || !toolEvent.arguments) return null;
+    proposal = { kind: "rho.file_edit_proposal", ...toolEvent.arguments };
+  }
+  if (typeof proposal.path !== "string"
+    || typeof proposal.content !== "string"
+    || !["replace_selection", "insert_at_cursor", "append", "create"].includes(proposal.operation)) {
+    return null;
+  }
   const userEvent = detail.events.find((item) => item.event_type === "agent.user_prompt");
   const editorContext = parseJsonObject(userEvent?.details_json)?.editor_context || null;
   return {

@@ -22,6 +22,14 @@ this file records behavior that is already available in a released build.
 
 ### Fixed
 
+- Agent `run_r` timeline results now show concise Output, Result, Messages,
+  Warnings or Error sections instead of escaped broker JSON, execution IDs,
+  protocol events and internal bridge code. Existing stored results are decoded
+  by the desktop when displayed.
+- Agent file-edit proposals now discard aisdk's internal execution environment
+  before JSON serialization. The desktop can also recover a valid proposal
+  from stored tool arguments, so the review diff and Accept action are shown
+  instead of a false completion with no file change.
 - Windows publish CI now installs and verifies the `rustfmt` component for its
   minimal GNU Rust toolchain before running the mandatory formatting gate.
 - Windows release checks now materialize the bootstrapped Ark executable and

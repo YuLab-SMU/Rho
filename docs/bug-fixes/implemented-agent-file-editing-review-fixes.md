@@ -1,5 +1,15 @@
 # Agent File Editing Review Fixes
 
+## Serialized proposal boundary
+
+The `propose_file_edit` executor must return a newly constructed plain list
+containing only `kind`, `path`, `operation` and `content`. aisdk may attach an
+internal `.envir` value to its arguments; copying the full argument object makes
+`jsonlite` reject the tool result and prevents the desktop from rendering the
+review panel. As a compatibility fallback, the desktop may reconstruct a
+successful proposal from the validated `details_json.arguments` recorded with
+the tool event.
+
 Status: implemented in `0.2.0-dev.10`
 
 Related design: `docs/design/implemented-agent-file-editing-design.md`
