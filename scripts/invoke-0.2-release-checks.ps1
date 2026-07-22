@@ -163,6 +163,13 @@ function Write-Evidence {
 
 Push-Location $repo
 try {
+    if ($BuildInstaller) {
+        Invoke-RecordedCheck "Ark runtime resources" "powershell.exe" @(
+            "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+            (Join-Path $PSScriptRoot "prepare-runtime-resources.ps1")
+        )
+    }
+
     $metadataArguments = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $PSScriptRoot "test-release-metadata.ps1"))
     if ($ExpectedVersion) { $metadataArguments += @("-ExpectedVersion", $ExpectedVersion) }
     if ($ReleaseTag) { $metadataArguments += @("-ReleaseTag", $ReleaseTag) }

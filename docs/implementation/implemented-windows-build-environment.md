@@ -4,6 +4,12 @@ Status: implemented and actively maintained
 
 Date: 2026-07-21
 Validated release: `0.2.0-dev.11`
+
+Release automation for later candidates runs
+`scripts/prepare-runtime-resources.ps1` after Ark bootstrap and before release
+metadata validation. The script copies the ignored `ark.exe`, `LICENSE` and
+`NOTICE` resources into the Tauri resource directory with SHA-256 verification;
+the installer builder reuses the same script.
 Repository root: `D:\Rho`
 
 ## Purpose

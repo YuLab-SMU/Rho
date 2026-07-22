@@ -58,38 +58,7 @@ $tauriConfig = Get-Content $tauriConfigPath -Raw | ConvertFrom-Json
 $productName = $tauriConfig.productName
 $version = $tauriConfig.version
 
-$arkManifestPath = Join-Path $repo "runtime\ark.json"
-$arkManifest = Get-Content $arkManifestPath -Raw | ConvertFrom-Json
-$runtimeSource = Join-Path $RuntimeRoot ("ark-" + $arkManifest.version)
-$runtimeDestination = Join-Path $repo "desktop\resources\runtime"
-New-Item -ItemType Directory -Path $runtimeDestination -Force | Out-Null
-
-$arkSource = Join-Path $runtimeSource "ark.exe"
-if (-not (Test-Path -LiteralPath $arkSource)) {
-    throw "Ark runtime not found at $runtimeSource. Run scripts/bootstrap-ark-windows.ps1 first."
-}
-
-foreach ($name in @("ark.exe", "LICENSE", "NOTICE")) {
-    $source = Join-Path $runtimeSource $name
-    if (-not (Test-Path -LiteralPath $source)) {
-        throw "Required runtime file missing: $source"
-    }
-    $destination = Join-Path $runtimeDestination $name
-    if (Test-Path -LiteralPath $destination -PathType Leaf) {
-        $sourceHash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash
-        $destinationHash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash
-        if ($sourceHash -eq $destinationHash) {
-            Write-Host "Runtime resource is current: $destination"
-            continue
-        }
-    }
-    try {
-        Copy-Item -LiteralPath $source -Destination $destination -Force
-    }
-    catch [System.UnauthorizedAccessException] {
-        throw "Could not update runtime resource $destination. Close any Rho process using this runtime and retry. $($_.Exception.Message)"
-    }
-}
+& (Join-Path $PSScriptRoot "prepare-runtime-resources.ps1") -RuntimeRoot $RuntimeRoot
 
 Push-Location (Join-Path $repo "desktop\src-tauri")
 try {

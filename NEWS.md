@@ -22,6 +22,9 @@ this file records behavior that is already available in a released build.
 
 ### Fixed
 
+- Windows release checks now materialize the bootstrapped Ark executable and
+  notices before validating release metadata, fixing clean-checkout CI builds
+  where ignored Tauri runtime resources do not exist yet.
 - Agent R now receives an explicit stdin EOF after its broker token, model
   profile and prompt are written. This prevents Windows Agent turns from
   stalling before local broker authentication.
