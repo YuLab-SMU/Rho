@@ -1857,10 +1857,11 @@ fn run_prepared_r_probe(
     timeout: Duration,
     _empty_site_environ: Option<tempfile::NamedTempFile>,
 ) -> Result<ProbeProcessOutput> {
+    let script_file = write_r_probe_script(expression)?;
     let stdout_file = tempfile::NamedTempFile::new().context("creating R probe stdout file")?;
     let stderr_file = tempfile::NamedTempFile::new().context("creating R probe stderr file")?;
     command
-        .args(["-e", expression])
+        .arg(script_file.path())
         .stdin(Stdio::null())
         .stdout(Stdio::from(stdout_file.reopen()?))
         .stderr(Stdio::from(stderr_file.reopen()?));
@@ -1896,6 +1897,21 @@ fn run_prepared_r_probe(
         elapsed_ms: started.elapsed().as_millis(),
         timed_out,
     })
+}
+
+fn write_r_probe_script(expression: &str) -> Result<tempfile::NamedTempFile> {
+    let mut script_file = tempfile::Builder::new()
+        .prefix("rho-probe-")
+        .suffix(".R")
+        .tempfile()
+        .context("creating R probe script file")?;
+    script_file
+        .write_all(expression.as_bytes())
+        .context("writing R probe script file")?;
+    script_file
+        .flush()
+        .context("flushing R probe script file")?;
+    Ok(script_file)
 }
 
 fn bounded_diagnostic(value: &str) -> String {
@@ -2216,7 +2232,7 @@ mod tests {
     use super::{
         RUserStartupFiles, bounded_diagnostic, classify_startup_error, configure_user_startup,
         ensure_supported_r_version, existing_startup_file, parse_r_runtime_probe,
-        safe_delete_project_file,
+        safe_delete_project_file, write_r_probe_script,
     };
     use std::path::Path;
     use std::process::Command;
@@ -2228,6 +2244,17 @@ mod tests {
         assert!(ensure_supported_r_version("4.4.0").is_ok());
         assert!(ensure_supported_r_version("5.0.0").is_ok());
         assert!(ensure_supported_r_version("invalid").is_err());
+    }
+
+    #[test]
+    fn writes_probe_code_to_a_utf8_r_script() {
+        let expression = "cat('Rho UTF-8: 中文')\n";
+        let script = write_r_probe_script(expression).unwrap();
+        assert_eq!(
+            script.path().extension().and_then(|value| value.to_str()),
+            Some("R")
+        );
+        assert_eq!(std::fs::read_to_string(script.path()).unwrap(), expression);
     }
 
     #[test]

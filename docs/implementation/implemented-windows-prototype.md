@@ -61,6 +61,10 @@ are consequently visible to Workspace R.
 If only `aisdk` fails, the workbench remains available and the Agent panel
 reports `Unavailable` with an independent Retry Agent action.
 
+All desktop-owned R probes, including Agent configuration and connection
+checks, run from temporary UTF-8 `.R` files rather than multiline `Rscript -e`
+arguments. The temporary file remains available until its R process exits.
+
 ## Implemented workflow
 
 1. Rho discovers the local R installation and writes a controlled kernelspec

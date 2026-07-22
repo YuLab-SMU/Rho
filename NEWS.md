@@ -6,6 +6,8 @@ this file records behavior that is already available in a released build.
 
 ## Unreleased
 
+## 0.2.0-dev.12 - 2026-07-22
+
 ### Added
 
 - Added a `0.2.0` release-hardening specification, version/tag/resource
@@ -44,6 +46,9 @@ this file records behavior that is already available in a released build.
 - Missing user `~/.Rprofile` and `~/.Renviron` files are now treated as absent
   optional configuration. Rho no longer exports placeholder paths for them,
   while still preventing project startup files from being loaded implicitly.
+- R runtime and Agent configuration probes now execute UTF-8 temporary `.R`
+  scripts instead of passing multiline code through `Rscript -e`, avoiding a
+  Windows argument-handling failure observed with R 4.4.2.
 - Windows startup diagnostics now retain subprocess exit codes, bounded stdout
   and stderr, elapsed time and append-only error history.
 - Kept the Agent model selector menu within the visible Agent panel when the

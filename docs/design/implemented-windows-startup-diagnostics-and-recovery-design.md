@@ -2,7 +2,7 @@
 
 Status: implemented after `0.2.0-dev.11`
 
-Target release: `0.2.0-dev.11` or the next Windows installer
+Target release: `0.2.0-dev.12`
 
 Date: 2026-07-21
 
@@ -218,6 +218,11 @@ The required probe has a 15-second timeout. Capture and retain:
 - elapsed time;
 - selected executable path;
 - output-parse result.
+
+Write each probe expression to a UTF-8 temporary `.R` file and pass that file
+to `Rscript`; keep it alive until the subprocess exits. Do not pass multiline
+probe code through `Rscript -e`, because Windows native argument handling can
+fail before R emits stdout or stderr on otherwise healthy installations.
 
 Non-zero exit, timeout and malformed output are different error codes.
 

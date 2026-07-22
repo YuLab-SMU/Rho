@@ -3,7 +3,7 @@
 Status: active
 
 Date: 2026-07-22
-Current baseline: `0.2.0-dev.11` Windows workbench candidate
+Current baseline: `0.2.0-dev.12` Windows workbench candidate
 
 Progress: the core `0.2.x` daily-use workflow is implemented and is now in
 hardening. Project editing, Workspace R execution, Agent approvals, durable

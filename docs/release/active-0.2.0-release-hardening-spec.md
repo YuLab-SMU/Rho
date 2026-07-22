@@ -8,7 +8,7 @@ Target: `0.2.0` Windows x64 release
 
 ## 1. Goal
 
-Close the engineering and evidence gaps between the current `0.2.0-dev.11`
+Close the engineering and evidence gaps between the current `0.2.0-dev.12`
 candidate and a reproducible `0.2.0` Windows release without expanding the
 product into unfinished package-management, shell, or cross-platform work.
 
@@ -188,6 +188,6 @@ Implementation of this specification is complete when:
 7. remaining clean-install and network-dependent gates are reported as open,
    not inferred as complete.
 
-Promotion from `0.2.0-dev.11` to `0.2.0` is a separate finalization action. It
+Promotion from `0.2.0-dev.12` to `0.2.0` is a separate finalization action. It
 occurs only after the exact candidate installer passes every P0 gate and the
 distribution decision is recorded.

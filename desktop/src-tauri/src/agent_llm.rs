@@ -991,10 +991,11 @@ fn run_r_text(
     args: &[String],
     user_environ: Option<&str>,
 ) -> Result<String> {
+    let script_file = write_r_probe_script(script)?;
     let mut command = Command::new(rscript);
     hide_console_window(&mut command);
     configure_r_probe(&mut command, user_environ);
-    command.arg("-e").arg(script).args(args);
+    command.arg(script_file.path()).args(args);
     let output = command.output().context("running Rscript probe")?;
     ensure!(
         output.status.success(),
@@ -1012,10 +1013,11 @@ fn run_r_json<T: for<'de> Deserialize<'de>>(
     stdin: Option<String>,
     test_control: Option<&AgentModelTestControl>,
 ) -> Result<T> {
+    let script_file = write_r_probe_script(script)?;
     let mut command = Command::new(rscript);
     hide_console_window(&mut command);
     configure_r_probe(&mut command, user_environ);
-    command.arg("-e").arg(script).args(args);
+    command.arg(script_file.path()).args(args);
     if stdin.is_some() {
         command.stdin(Stdio::piped());
     }
@@ -1094,6 +1096,23 @@ fn run_r_json<T: for<'de> Deserialize<'de>>(
         String::from_utf8_lossy(&stderr_bytes)
     );
     serde_json::from_slice(&stdout_bytes).context("decoding R JSON probe result")
+}
+
+fn write_r_probe_script(script: &str) -> Result<tempfile::NamedTempFile> {
+    use std::io::Write;
+
+    let mut script_file = tempfile::Builder::new()
+        .prefix("rho-agent-probe-")
+        .suffix(".R")
+        .tempfile()
+        .context("creating Agent R probe script file")?;
+    script_file
+        .write_all(script.as_bytes())
+        .context("writing Agent R probe script file")?;
+    script_file
+        .flush()
+        .context("flushing Agent R probe script file")?;
+    Ok(script_file)
 }
 
 pub fn cancel_test(test_control: &AgentModelTestControl) -> Result<bool> {
@@ -1288,6 +1307,17 @@ mod tests {
         let mut command = Command::new("Rscript");
         configure_r_probe(&mut command, None);
         assert!(command.get_args().any(|value| value == "--vanilla"));
+    }
+
+    #[test]
+    fn writes_agent_probe_code_to_a_utf8_r_script() {
+        let script_text = "cat('Agent UTF-8: 中文')\n";
+        let script = write_r_probe_script(script_text).unwrap();
+        assert_eq!(
+            script.path().extension().and_then(|value| value.to_str()),
+            Some("R")
+        );
+        assert_eq!(std::fs::read_to_string(script.path()).unwrap(), script_text);
     }
 
     #[test]

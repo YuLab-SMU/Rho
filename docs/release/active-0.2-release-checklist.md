@@ -3,7 +3,7 @@
 Status: active release acceptance
 
 Date: 2026-07-22
-Candidate: `0.2.0-dev.11`
+Candidate: `0.2.0-dev.12`
 
 This checklist is the go/no-go contract for the first daily-use Windows
 release. A box is complete only when another person can locate the evidence.
