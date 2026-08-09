@@ -100,10 +100,14 @@ candidate workflows. Findings:
 
 No unresolved P0/P1 finding remains. The release decision is still `NO-GO`.
 
+The reviewed replacement repair was committed as
+`b243fdb07578e7f05b5150fdcf939492c02cfaa5`. This following evidence update
+changes no compiled application or validation behavior.
+
 ## Remaining Gates
 
-- commit and review the exact replacement source;
-- integrate it into upstream `main` and record the exact authoritative SHA;
+- push/review the exact replacement source and integrate it into upstream
+  `main`, then record the exact authoritative SHA;
 - run a fresh protected two-platform candidate workflow for `dev.26`;
 - verify the immutable draft and download the exact signed/notarized DMG;
 - obtain owner-installed acceptance for all seven Issue #5 workflows;

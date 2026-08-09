@@ -51,7 +51,7 @@ this checklist.
 | Release channel | development prerelease | fixed by SemVer |
 | Source repository | `YuLab-SMU/Rho` | authoritative-candidate restriction unchanged |
 | Reviewed behavior source commit | one exact 40-character SHA | `a06d234bdd18ab46177f1d3be312ef81c99accbc` |
-| Reviewed replacement repair commit | one exact 40-character SHA | pending reviewed commit |
+| Reviewed replacement repair commit | one exact 40-character SHA | `b243fdb07578e7f05b5150fdcf939492c02cfaa5` |
 | Authoritative source commit | reviewed upstream default-branch SHA | pending integration of the bounded portability repair |
 | macOS platform | `macos_aarch64` | exact candidate artifact not built |
 | Minimum macOS | 14.0 | configuration unchanged |
@@ -136,8 +136,8 @@ scripts pass; JavaScript syntax, Rust formatting, `cargo check` and the complete
 Rust workspace tests pass with the unchanged 167/58/108 Desktop/Server/Store
 counts; both R package suites and `git diff --check` pass. Independent R4
 contract review found no unresolved P0/P1 finding. The exact replacement commit
-and authoritative upstream SHA remain pending until the reviewed changes are
-committed and integrated.
+is `b243fdb07578e7f05b5150fdcf939492c02cfaa5`; the authoritative upstream SHA
+remains pending until the reviewed changes are integrated.
 
 ## Exact Candidate And Installed Acceptance Gate
 
