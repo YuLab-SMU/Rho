@@ -39,7 +39,7 @@ and update manifest remain historical and cannot satisfy this checklist.
 
 | Field | Required value | Current evidence |
 | --- | --- | --- |
-| Application version | `0.4.0-dev.25` | source metadata and `NEWS.md` synchronized; exact commit pending |
+| Application version | `0.4.0-dev.25` | source metadata and `NEWS.md` synchronized at reviewed source commit |
 | `rho.bridge` version | `0.1.13` | unchanged; no exported package contract changed |
 | `rho.agent` version | `0.1.5` | unchanged; no exported package contract changed |
 | Store schema | `12` | Conversation migration, reopen, failure injection, and recovery matrix pass |
@@ -47,7 +47,7 @@ and update manifest remain historical and cannot satisfy this checklist.
 | Release name | `Rho 0.4.0-dev.25` | workflow default only; Release/draft not created |
 | Release channel | development prerelease | fixed by SemVer |
 | Source repository | `YuLab-SMU/Rho` | authoritative-candidate restriction unchanged |
-| Reviewed source commit | one exact 40-character SHA | pending final CONV-3 commit |
+| Reviewed source commit | one exact 40-character SHA | `a06d234bdd18ab46177f1d3be312ef81c99accbc` |
 | Authoritative source commit | reviewed upstream default-branch SHA | pending integration |
 | macOS platform | `macos_aarch64` | exact candidate artifact not built |
 | Minimum macOS | 14.0 | configuration unchanged |
@@ -111,8 +111,10 @@ one opt-in Keychain smoke ignored, Server 58 passed, Store 108 passed, and all
 other targets passed; both complete R package suites PASS; all 48
 `scripts/test-*.mjs` contracts PASS; JavaScript syntax, Rust formatting, and
 `git diff --check` PASS. Deterministic wide/narrow browser review and the
-separate R3 contract review pass with no unresolved P0/P1 finding. The exact
-reviewed commit is recorded after the source checkpoint commit is created.
+separate R3 contract review pass with no unresolved P0/P1 finding. The reviewed
+application source commit is
+`a06d234bdd18ab46177f1d3be312ef81c99accbc`; this following evidence-only
+commit does not change the compiled application source.
 
 ## Exact Candidate And Installed Acceptance Gate
 

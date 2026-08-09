@@ -4,7 +4,7 @@ Date: 2026-08-09
 Work package: CONV-3 mutation scheduling, Retry, and selected Conversation deletion
 Issue: GitHub #5
 Application identity: `0.4.0-dev.25`
-Source checkpoint commit: recorded by the following documentation-only commit
+Source checkpoint commit: `a06d234bdd18ab46177f1d3be312ef81c99accbc`
 
 ## Implemented Boundary
 
