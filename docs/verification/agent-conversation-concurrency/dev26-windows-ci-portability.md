@@ -1,8 +1,8 @@
 # DEV26 Windows Candidate Contract Portability Evidence
 
-Status: source verification and independent R4 contract review pass;
-replacement upstream integration, hosted candidate, and installed acceptance
-remain open
+Status: source verification, independent R4 contract review, upstream
+integration, and exact two-platform hosted candidate pass; installed acceptance
+remains open
 
 Date: 2026-08-09
 
@@ -104,11 +104,35 @@ The reviewed replacement repair was committed as
 `b243fdb07578e7f05b5150fdcf939492c02cfaa5`. This following evidence update
 changes no compiled application or validation behavior.
 
+## Hosted Replacement Evidence
+
+PR #12 rebase-integrated the repair into upstream `main` as
+`a5fc4a153bb420968155984bf8e980973c775015`. Protected candidate run
+`31337666426` bound both platforms to that exact SHA and passed:
+
+- immutable candidate identity resolution;
+- complete Windows validation, including the previously failing Conversation
+  contract, followed by installer build and smoke;
+- complete macOS validation, Developer ID signing, exact final-DMG submission,
+  Apple acceptance, staple, Gatekeeper, read-only mount, and Workspace smoke;
+- exact platform evidence aggregation and one unpublished Draft prerelease.
+
+Draft Release `367596197` is `draft=true`, `prerelease=true`, carries tag name
+`v0.4.0-dev.26`, targets the exact authoritative SHA, and contains seven
+pre-acceptance assets. The DMG is
+`Rho_0.4.0-dev.26_aarch64.dmg`, 21120068 bytes, SHA-256
+`6fdfd492e07cfc5c0aa70e77fbc781206f43d87dd81063e3ef85170c2fdfd540`.
+Candidate evidence SHA-256 is
+`566b1b765412e91580494e47e6c13a296a551c80b273ef223e5afaa35e3ef483`.
+
+An independent local download matched the DMG checksum and Draft digest;
+`hdiutil verify`, `xcrun stapler validate`, and Gatekeeper assessment passed.
+The Draft is not public, the Git tag ref is not created, and the acceptance
+asset is intentionally absent. Release decision remains `NO-GO` pending the
+owner-installed workflows.
+
 ## Remaining Gates
 
-- push/review the exact replacement source and integrate it into upstream
-  `main`, then record the exact authoritative SHA;
-- run a fresh protected two-platform candidate workflow for `dev.26`;
-- verify the immutable draft and download the exact signed/notarized DMG;
 - obtain owner-installed acceptance for all seven Issue #5 workflows;
+- bind the acceptance record to the exact candidate evidence and DMG hashes;
 - add the final Issue evidence comment, then close Issue #5.

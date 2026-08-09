@@ -2,9 +2,9 @@
 
 Status: active replacement-candidate record; Issue #5 CONV-1 through CONV-3
 source implementation, automated/browser verification, independent R3 review,
-and initial upstream integration pass; the `dev.25` attempt was rejected by a
-Windows CRLF-only contract assertion, and exact `dev.26` integration, hosted
-artifacts, installed acceptance, MAC5, and publication are not yet established
+upstream integration, exact `dev.26` two-platform candidate CI, and immutable
+Draft assembly pass; the `dev.25` attempt remains rejected, while installed
+acceptance, MAC5, and publication are not yet established
 
 Date: 2026-08-09
 Last updated: 2026-08-09
@@ -46,14 +46,15 @@ this checklist.
 | `rho.bridge` version | `0.1.13` | unchanged; no exported package contract changed |
 | `rho.agent` version | `0.1.5` | unchanged; no exported package contract changed |
 | Store schema | `12` | Conversation migration, reopen, failure injection, and recovery matrix pass |
-| Release tag | `v0.4.0-dev.26` | workflow default only; tag not created |
-| Release name | `Rho 0.4.0-dev.26` | workflow default only; Release/draft not created |
+| Release tag | `v0.4.0-dev.26` | reserved by Draft Release `367596197`; Git tag ref remains absent before publication |
+| Release name | `Rho 0.4.0-dev.26` | one unpublished Draft prerelease exists |
 | Release channel | development prerelease | fixed by SemVer |
 | Source repository | `YuLab-SMU/Rho` | authoritative-candidate restriction unchanged |
 | Reviewed behavior source commit | one exact 40-character SHA | `a06d234bdd18ab46177f1d3be312ef81c99accbc` |
 | Reviewed replacement repair commit | one exact 40-character SHA | `b243fdb07578e7f05b5150fdcf939492c02cfaa5` |
-| Authoritative source commit | reviewed upstream default-branch SHA | pending integration of the bounded portability repair |
-| macOS platform | `macos_aarch64` | exact candidate artifact not built |
+| Authoritative source commit | reviewed upstream default-branch SHA | `a5fc4a153bb420968155984bf8e980973c775015` |
+| Windows platform | `windows_x86_64` | candidate evidence passed in run `31337666426` |
+| macOS platform | `macos_aarch64` | signed/notarized/stapled candidate evidence passed in run `31337666426` |
 | Minimum macOS | 14.0 | configuration unchanged |
 | Release decision | `NO-GO` | installed acceptance and release gates remain open |
 
@@ -136,15 +137,47 @@ scripts pass; JavaScript syntax, Rust formatting, `cargo check` and the complete
 Rust workspace tests pass with the unchanged 167/58/108 Desktop/Server/Store
 counts; both R package suites and `git diff --check` pass. Independent R4
 contract review found no unresolved P0/P1 finding. The exact replacement commit
-is `b243fdb07578e7f05b5150fdcf939492c02cfaa5`; the authoritative upstream SHA
-remains pending until the reviewed changes are integrated.
+is `b243fdb07578e7f05b5150fdcf939492c02cfaa5`; PR #12 was rebase-integrated as
+authoritative upstream commit
+`a5fc4a153bb420968155984bf8e980973c775015`.
+
+## Exact Candidate Evidence
+
+Protected candidate run `31337666426` passed against that authoritative SHA.
+Its Windows lane passed the complete candidate validation, including the exact
+CRLF regression, then built and smoke-tested the x64 installer. Its macOS lane
+passed complete validation, Developer ID signing, single exact-DMG submission,
+Apple notarization, staple, Gatekeeper assessment, read-only mount, and real
+Workspace smoke. The aggregate job validated both platform records and created
+one unpublished Draft prerelease, ID `367596197`, with exactly seven
+pre-acceptance assets. The acceptance asset is intentionally absent until the
+owner-installed workflow is complete.
+
+| Evidence | Exact value |
+| --- | --- |
+| Candidate workflow | `31337666426` — PASS |
+| Candidate commit | `a5fc4a153bb420968155984bf8e980973c775015` |
+| Candidate evidence SHA-256 | `566b1b765412e91580494e47e6c13a296a551c80b273ef223e5afaa35e3ef483` |
+| macOS DMG | `Rho_0.4.0-dev.26_aarch64.dmg` |
+| macOS size | `21120068` bytes |
+| macOS SHA-256 | `6fdfd492e07cfc5c0aa70e77fbc781206f43d87dd81063e3ef85170c2fdfd540` |
+| Windows installer | `Rho_0.4.0-dev.26_x64-setup.exe` |
+| Windows size | `18271087` bytes |
+| Windows SHA-256 | `883302ad2fd684d9f1140eb6971f0c768c76fd3a4ef7917a120ad56330d41bb8` |
+
+The downloaded DMG independently matched its checksum and Draft digest.
+`hdiutil verify`, `xcrun stapler validate`, and local Gatekeeper open assessment
+all passed; Gatekeeper reported `Notarized Developer ID` and origin
+`Developer ID Application: Yonghe Xia (GAAY6Z9874)`. These automated and local
+trust checks do not substitute for the seven owner-installed workflows below.
 
 ## Exact Candidate And Installed Acceptance Gate
 
-If a candidate is authorized, the combined workflow must bind Windows and
+The combined workflow binds Windows and
 signed/notarized macOS artifacts to one reviewed upstream default-branch
 commit, validate all existing immutable evidence contracts, and create at most
-one draft prerelease. Review-only fork artifacts cannot satisfy this gate.
+one draft prerelease. Run `31337666426` satisfies this automated candidate
+portion. Review-only fork artifacts cannot satisfy this gate.
 
 The owner-installed macOS application workflow must demonstrate, against that
 exact candidate:
@@ -178,8 +211,8 @@ commit, checks, and installed evidence.
 
 ## Current Decision
 
-`NO-GO` for artifact promotion or publication. The behavior source checkpoint
-and initial integration pass, but the `dev.25` combined candidate failed and is
-historical. No integrated replacement commit, `dev.26` tag, draft, artifact,
-installed acceptance, MAC5 record, public Release, or update-site entry exists
-yet.
+`NO-GO` for publication. The behavior source, replacement repair, upstream
+integration, two-platform candidate, and unpublished Draft pass. Installed
+acceptance, its exact acceptance asset, MAC5 GO, public Release, and update-site
+entry do not exist yet. The Draft must remain unpublished and its existing
+assets immutable until the owner-installed gate is resolved.

@@ -1,9 +1,9 @@
 # Agent Conversation Concurrency And Resource Scheduling
 
 Status: active; Issue #5 authorized end-to-end, CONV-1 through CONV-3 source
-checkpoints accepted 2026-08-09; upstream integration is accepted, the first
-hosted candidate attempt was rejected by the Windows portability gate, and
-replacement candidate plus installed acceptance remain open
+checkpoints accepted 2026-08-09; upstream integration and the replacement
+two-platform candidate pass after the first candidate was rejected by the
+Windows portability gate; installed acceptance and Issue closure remain open
 
 Date: 2026-08-09
 
@@ -16,12 +16,12 @@ and desktop workflow
 Risk class: R3 schema migration, execution admission, cancellation, approval,
 project switching, recovery, and project-file mutation
 
-Current work package: Windows source-contract portability repair, replacement
-required CI, installed-app acceptance, and Issue closure
+Current work package: exact owner-installed acceptance, final evidence, and
+Issue closure
 
-Mandatory stop: the CONV-3 source checkpoint and initial upstream integration
-have been reached; do not close Issue #5 until replacement exact-commit CI and
-representative installed macOS acceptance are recorded
+Mandatory stop: the CONV-3 source checkpoint, upstream integration, and
+replacement exact-commit CI have been reached; do not close Issue #5 until
+representative installed macOS acceptance is recorded
 
 ## Problem And Reproduction
 
@@ -441,8 +441,8 @@ The mandatory source stop was reached on 2026-08-09. Evidence is recorded in
 durable recovery, exact Apply/Undo state, project-transition ordering,
 Retry/Delete, two-project isolation, browser/mock parity, the complete affected
 matrix, and independent R3 review pass with no unresolved P0/P1 finding.
-Replacement integration, hosted candidate, owner-installed acceptance, and
-Issue closure remain open factual gates.
+Replacement integration and hosted candidate evidence pass. Owner-installed
+acceptance and Issue closure remain open factual gates.
 
 ### Hosted Windows contract portability amendment
 
@@ -470,6 +470,18 @@ must advance all application and candidate defaults to `0.4.0-dev.26`, retain
 schema v12 and the existing R package versions, pass the focused portability
 contract locally, and then pass a fresh exact-commit two-platform candidate
 run. Cross-run artifacts, receipts, or hashes remain non-composable.
+
+The bounded correction was source-verified, rebase-integrated through PR #12,
+and became authoritative upstream commit
+`a5fc4a153bb420968155984bf8e980973c775015`. Protected candidate run
+`31337666426` then passed the complete Windows validation and installer smoke,
+the signed/notarized/stapled macOS DMG chain and Workspace smoke, and immutable
+candidate aggregation. It created one unpublished `v0.4.0-dev.26` Draft
+prerelease. The exact DMG is 21120068 bytes with SHA-256
+`6fdfd492e07cfc5c0aa70e77fbc781206f43d87dd81063e3ef85170c2fdfd540`.
+The Draft and its seven existing assets remain immutable and unpublished;
+installed acceptance is still required and no acceptance asset, MAC5 GO,
+public Release, or update-site mutation exists.
 
 ## Verification Matrix
 
