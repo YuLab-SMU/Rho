@@ -41,12 +41,13 @@ use rho_server::coordinator::{
     dispatch_workspace_request_with_execution_id, request_environment_operation, run_agent_turn,
 };
 use rho_store::{
-    AgentTurnDetail, AgentTurnDraft, AgentTurnEventDraft, AgentTurnFinish, AgentTurnSummary,
-    ApprovalRequestSummary, ArtifactRecordDraft, ArtifactRecordSummary, AuditLimits, AuditResponse,
-    AuditScope, CompareRunsResponse, EnvironmentOperationRequestSummary, EvidenceClaim,
-    EvidenceClaimDraft, EvidenceClaimReview, EvidenceEntry, EvidenceEntryDraft,
-    PlotArtifactSummary, PlotPayloadPruneResult, ProblemSummary, ProjectRetentionSummary,
-    RetentionPolicy, RunDetail, RunSummary, Store, normalize_project_root,
+    AgentConversationDraft, AgentConversationSummary, AgentTurnDetail, AgentTurnDraft,
+    AgentTurnEventDraft, AgentTurnFinish, AgentTurnSummary, ApprovalRequestSummary,
+    ArtifactRecordDraft, ArtifactRecordSummary, AuditLimits, AuditResponse, AuditScope,
+    CompareRunsResponse, EnvironmentOperationRequestSummary, EvidenceClaim, EvidenceClaimDraft,
+    EvidenceClaimReview, EvidenceEntry, EvidenceEntryDraft, PlotArtifactSummary,
+    PlotPayloadPruneResult, ProblemSummary, ProjectRetentionSummary, RetentionPolicy, RunDetail,
+    RunSummary, Store, normalize_project_root,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -2936,6 +2937,7 @@ async fn run_agent(
     model_id: Option<String>,
     auto_approve: Option<bool>,
     editor_context: Option<Value>,
+    conversation_id: Option<String>,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
@@ -2983,6 +2985,11 @@ async fn run_agent(
     }
     .map_err(display_error)?;
     let auto_approve = task_kind == "agent_turn" && auto_approve.unwrap_or(false) && mode == "act";
+    let requested_conversation_id = conversation_id.map(|value| value.trim().to_string());
+    if requested_conversation_id.as_deref() == Some("") {
+        return Err("Agent Conversation identity cannot be empty".to_string());
+    }
+    let conversation_id;
     {
         let mut context_guard = context.lock().await;
         let identity = context_guard.broker.identity().clone();
@@ -2992,20 +2999,39 @@ async fn run_agent(
             .map_err(display_error)?
             .context("Cannot start Agent without an active project identity")
             .map_err(display_error)?;
-        context_guard
-            .store
-            .create_agent_turn(&AgentTurnDraft {
-                turn_id: turn_id.clone(),
-                project_root,
-                mode: mode.clone(),
-                prompt: prompt.clone(),
-                model: resolved_model.effective_model_ref.clone(),
-                workspace_id: identity.workspace_id.clone(),
-                state_revision_before: identity.state_revision as i64,
-                project_revision_before: identity.project_revision as i64,
-            })
-            .map_err(display_error)?;
-        context_guard
+        let turn_draft = AgentTurnDraft {
+            turn_id: turn_id.clone(),
+            project_root: project_root.clone(),
+            mode: mode.clone(),
+            prompt: prompt.clone(),
+            model: resolved_model.effective_model_ref.clone(),
+            workspace_id: identity.workspace_id.clone(),
+            state_revision_before: identity.state_revision as i64,
+            project_revision_before: identity.project_revision as i64,
+        };
+        conversation_id = if let Some(conversation_id) = requested_conversation_id {
+            context_guard
+                .store
+                .create_agent_turn_in_conversation(&conversation_id, None, &turn_draft)
+                .map_err(display_error)?;
+            conversation_id
+        } else {
+            let conversation_id = format!("agent_conversation_{}", Uuid::new_v4());
+            context_guard
+                .store
+                .create_agent_turn_with_conversation(
+                    &AgentConversationDraft {
+                        conversation_id: conversation_id.clone(),
+                        project_root,
+                        title: "New conversation".to_string(),
+                        legacy_unthreaded: false,
+                    },
+                    &turn_draft,
+                )
+                .map_err(display_error)?;
+            conversation_id
+        };
+        let event_result = context_guard
             .store
             .append_agent_turn_event(&AgentTurnEventDraft {
                 turn_id: turn_id.clone(),
@@ -3020,6 +3046,7 @@ async fn run_agent(
                     "prompt": prompt,
                     "mode": mode,
                     "task_kind": task_kind,
+                    "conversation_id": conversation_id,
                     "auto_approve": auto_approve,
                     "editor_context": editor_context.clone(),
                     "model_profile_id": resolved_model.runtime_profile.profile_id,
@@ -3030,8 +3057,23 @@ async fn run_agent(
                     "capability_route": resolved_model.route_capability
                 }))
                 .map_err(display_error)?,
-            })
-            .map_err(display_error)?;
+            });
+        if let Err(error) = event_result {
+            let _ = context_guard.store.finish_agent_turn(&AgentTurnFinish {
+                turn_id: turn_id.clone(),
+                status: "failed".to_string(),
+                terminal_reason: Some("agent_failure".to_string()),
+                workspace_id_after: Some(identity.workspace_id.clone()),
+                state_revision_after: Some(identity.state_revision as i64),
+                project_revision_after: Some(identity.project_revision as i64),
+                final_message: None,
+                error_message: Some(
+                    "Agent turn could not start because its initial event was not persisted."
+                        .to_string(),
+                ),
+            });
+            return Err(display_error(error));
+        }
     }
 
     let approvals = state.approvals.clone();
@@ -3040,6 +3082,7 @@ async fn run_agent(
     let process_path = config.process_path.clone();
     let agent_package = config.agent_package.clone();
     let task_turn_id = turn_id.clone();
+    let task_conversation_id = conversation_id.clone();
     let task_agent_tasks = state.agent_tasks.clone();
     let runtime_profile = resolved_model.runtime_profile.clone();
     let (registered_tx, registered_rx) = oneshot::channel();
@@ -3058,6 +3101,7 @@ async fn run_agent(
             prompt,
             mode,
             task_turn_id.clone(),
+            task_conversation_id,
             approvals,
             environment_approvals,
             auto_approve,
@@ -3076,6 +3120,7 @@ async fn run_agent(
     Ok(json!({
         "status": "started",
         "turn_id": turn_id,
+        "conversation_id": conversation_id,
         "auto_approve": auto_approve,
         "task_kind": task_kind
     }))
@@ -3293,16 +3338,52 @@ struct ApprovalDecisionRequest {
 }
 
 #[tauri::command]
+async fn list_agent_conversations(
+    limit: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<Vec<AgentConversationSummary>, String> {
+    let root = state.project_root.read().await.clone();
+    let project_root = durable_project_root(&root);
+    read_store(&state)
+        .map_err(display_error)?
+        .list_agent_conversations(&project_root, limit)
+        .map_err(display_error)
+}
+
+#[tauri::command]
+async fn create_agent_conversation(
+    state: State<'_, AppState>,
+) -> Result<AgentConversationSummary, String> {
+    let root = state.project_root.read().await.clone();
+    let project_root = durable_project_root(&root);
+    let mut store = read_store(&state).map_err(display_error)?;
+    store
+        .create_agent_conversation(&AgentConversationDraft {
+            conversation_id: format!("agent_conversation_{}", Uuid::new_v4()),
+            project_root,
+            title: "New conversation".to_string(),
+            legacy_unthreaded: false,
+        })
+        .map_err(display_error)
+}
+
+#[tauri::command]
 async fn list_agent_turns(
+    conversation_id: Option<String>,
     limit: Option<usize>,
     state: State<'_, AppState>,
 ) -> Result<Vec<AgentTurnSummary>, String> {
     let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy().replace('\\', "/");
-    read_store(&state)
-        .map_err(display_error)?
-        .list_agent_turns(&project_root, limit)
-        .map_err(display_error)
+    let project_root = durable_project_root(&root);
+    let store = read_store(&state).map_err(display_error)?;
+    match conversation_id {
+        Some(conversation_id) => store
+            .list_agent_turns_for_conversation(&project_root, &conversation_id, limit)
+            .map_err(display_error),
+        None => store
+            .list_agent_turns(&project_root, limit)
+            .map_err(display_error),
+    }
 }
 
 #[tauri::command]
@@ -5137,6 +5218,7 @@ async fn cancel_agent_turn(
             .finish_agent_turn(&AgentTurnFinish {
                 turn_id: turn_id.clone(),
                 status: "interrupted".to_string(),
+                terminal_reason: Some("user_cancelled".to_string()),
                 workspace_id_after: Some(identity.workspace_id),
                 state_revision_after: Some(identity.state_revision as i64),
                 project_revision_after: Some(identity.project_revision as i64),
@@ -7146,6 +7228,7 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
     let context = Arc::new(Mutex::new(CoordinatorRuntime { broker, store }));
     let agent = if include_agent {
         let turn_id = format!("smoke_turn_{}", Uuid::new_v4());
+        let conversation_id = format!("conversation_{turn_id}");
         let prompt =
             "请检查 rho_desktop_smoke 对象，告诉我它有多少行和多少列。不要修改工作区。".to_string();
         let resolved_model = agent_llm::resolve_model_for_turn(&config.data_dir, None, "ask")?;
@@ -7195,6 +7278,7 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
             prompt,
             "ask".to_string(),
             turn_id,
+            conversation_id,
             Arc::new(PendingApprovalRegistry::default()),
             Arc::new(PendingApprovalRegistry::default()),
             false,
@@ -7414,6 +7498,8 @@ fn main() {
             agent_llm_cancel_test,
             agent_llm_catalog,
             agent_llm_discover_models,
+            list_agent_conversations,
+            create_agent_conversation,
             list_agent_turns,
             clear_agent_history,
             list_approval_requests,

@@ -121,6 +121,27 @@ pub(crate) fn v8_schema_sql() -> &'static str {
         final_message TEXT,
         error_message TEXT
     );
+    CREATE TABLE agent_conversations (
+        conversation_id TEXT PRIMARY KEY,
+        project_root TEXT NOT NULL CHECK (project_root <> ''),
+        title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 240),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        archived_at TEXT,
+        legacy_unthreaded INTEGER NOT NULL DEFAULT 0
+            CHECK (legacy_unthreaded IN (0, 1))
+    );
+    CREATE TABLE agent_conversation_turns (
+        turn_id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL,
+        retry_of_turn_id TEXT,
+        terminal_reason TEXT,
+        FOREIGN KEY(turn_id) REFERENCES agent_turns(turn_id) ON DELETE CASCADE,
+        FOREIGN KEY(conversation_id) REFERENCES agent_conversations(conversation_id)
+            ON DELETE RESTRICT,
+        FOREIGN KEY(retry_of_turn_id) REFERENCES agent_turns(turn_id)
+            ON DELETE SET NULL
+    );
     CREATE TABLE agent_turn_events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         turn_id TEXT NOT NULL,
@@ -219,6 +240,10 @@ pub(crate) fn v8_schema_sql() -> &'static str {
     );
     CREATE INDEX idx_agent_turns_started_at
         ON agent_turns(started_at DESC);
+    CREATE INDEX idx_agent_conversations_project_updated
+        ON agent_conversations(project_root, updated_at DESC);
+    CREATE INDEX idx_agent_conversation_turns_conversation
+        ON agent_conversation_turns(conversation_id, turn_id);
     CREATE INDEX idx_agent_turn_events_turn_id
         ON agent_turn_events(turn_id, id);
     CREATE INDEX idx_approval_requests_turn_id
@@ -343,6 +368,143 @@ pub(crate) fn create_claim_review_schema(
             ON claim_evidence_links(project_root, claim_id);
         ",
     )?;
+    Ok(())
+}
+
+pub(crate) fn create_agent_conversation_schema(
+    transaction: &rusqlite::Transaction<'_>,
+) -> Result<(), StoreError> {
+    transaction.execute_batch(
+        "
+        CREATE TABLE agent_conversations (
+            conversation_id TEXT PRIMARY KEY,
+            project_root TEXT NOT NULL CHECK (project_root <> ''),
+            title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 240),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            archived_at TEXT,
+            legacy_unthreaded INTEGER NOT NULL DEFAULT 0
+                CHECK (legacy_unthreaded IN (0, 1))
+        );
+        CREATE TABLE agent_conversation_turns (
+            turn_id TEXT PRIMARY KEY,
+            conversation_id TEXT NOT NULL,
+            retry_of_turn_id TEXT,
+            terminal_reason TEXT,
+            FOREIGN KEY(turn_id) REFERENCES agent_turns(turn_id) ON DELETE CASCADE,
+            FOREIGN KEY(conversation_id) REFERENCES agent_conversations(conversation_id)
+                ON DELETE RESTRICT,
+            FOREIGN KEY(retry_of_turn_id) REFERENCES agent_turns(turn_id)
+                ON DELETE SET NULL
+        );
+        CREATE INDEX idx_agent_conversations_project_updated
+            ON agent_conversations(project_root, updated_at DESC);
+        CREATE INDEX idx_agent_conversation_turns_conversation
+            ON agent_conversation_turns(conversation_id, turn_id);
+
+        INSERT INTO agent_conversations(
+            conversation_id, project_root, title, created_at, updated_at,
+            archived_at, legacy_unthreaded
+        )
+        SELECT
+            'legacy_' || lower(hex(CAST(project_root AS BLOB))),
+            project_root,
+            'Legacy project history',
+            MIN(started_at),
+            MAX(COALESCE(finished_at, started_at)),
+            NULL,
+            1
+        FROM agent_turns
+        GROUP BY project_root;
+
+        INSERT INTO agent_conversation_turns(
+            turn_id, conversation_id, retry_of_turn_id, terminal_reason
+        )
+        SELECT
+            turn_id,
+            'legacy_' || lower(hex(CAST(project_root AS BLOB))),
+            NULL,
+            CASE
+                WHEN status = 'interrupted' THEN 'legacy_interrupted'
+                WHEN status = 'failed' THEN 'agent_failure'
+                ELSE NULL
+            END
+        FROM agent_turns;
+        ",
+    )?;
+    Ok(())
+}
+
+pub(crate) fn assert_agent_conversation_schema(connection: &Connection) -> Result<(), StoreError> {
+    for table in ["agent_conversations", "agent_conversation_turns"] {
+        let exists = connection
+            .query_row(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                [table],
+                |_row| Ok(()),
+            )
+            .optional()?
+            .is_some();
+        if !exists {
+            return Err(StoreError::MigrationRejected {
+                message: format!("required table {table} is missing"),
+                outcome: MigrationOutcome::rejected(
+                    Some(SCHEMA_VERSION),
+                    None,
+                    MigrationRecordCounts::default(),
+                    "invalid_conversation_schema",
+                ),
+            });
+        }
+    }
+
+    assert_not_null_project_identity(connection, "agent_conversations")?;
+    assert_index_exists(connection, "idx_agent_conversations_project_updated")?;
+    assert_index_exists(connection, "idx_agent_conversation_turns_conversation")?;
+
+    let turn_count: i64 =
+        connection.query_row("SELECT COUNT(*) FROM agent_turns", [], |row| row.get(0))?;
+    let mapping_count: i64 =
+        connection.query_row("SELECT COUNT(*) FROM agent_conversation_turns", [], |row| {
+            row.get(0)
+        })?;
+    let mismatched_project_count: i64 = connection.query_row(
+        "SELECT COUNT(*)
+         FROM agent_conversation_turns AS link
+         JOIN agent_turns AS turn ON turn.turn_id = link.turn_id
+         JOIN agent_conversations AS conversation
+           ON conversation.conversation_id = link.conversation_id
+         WHERE turn.project_root <> conversation.project_root",
+        [],
+        |row| row.get(0),
+    )?;
+    let foreign_key_failure_count: i64 = {
+        let mut statement =
+            connection.prepare("PRAGMA foreign_key_check(agent_conversation_turns)")?;
+        statement.query_map([], |_row| Ok(()))?.count() as i64
+    };
+
+    if turn_count != mapping_count
+        || mismatched_project_count != 0
+        || foreign_key_failure_count != 0
+    {
+        return Err(StoreError::MigrationRejected {
+            message: format!(
+                "Agent Conversation mapping is inconsistent: turns={turn_count}, mappings={mapping_count}, project_mismatches={mismatched_project_count}, foreign_key_failures={foreign_key_failure_count}"
+            ),
+            outcome: MigrationOutcome::rejected(
+                Some(SCHEMA_VERSION),
+                None,
+                MigrationRecordCounts {
+                    rejected: (turn_count - mapping_count).abs()
+                        + mismatched_project_count
+                        + foreign_key_failure_count,
+                    ..MigrationRecordCounts::default()
+                },
+                "invalid_conversation_mapping",
+            ),
+        });
+    }
     Ok(())
 }
 

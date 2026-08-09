@@ -2,6 +2,32 @@ use rusqlite::Row;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentConversationDraft {
+    pub conversation_id: String,
+    pub project_root: String,
+    pub title: String,
+    pub legacy_unthreaded: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AgentConversationSummary {
+    pub conversation_id: String,
+    pub project_root: String,
+    pub title: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub archived_at: Option<String>,
+    pub legacy_unthreaded: bool,
+    pub turn_count: i64,
+    pub status: String,
+    pub latest_turn_id: Option<String>,
+    pub latest_mode: Option<String>,
+    pub latest_prompt_preview: Option<String>,
+    pub terminal_reason: Option<String>,
+    pub pending_request_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentTurnDraft {
     pub turn_id: String,
     pub project_root: String,
@@ -17,6 +43,7 @@ pub struct AgentTurnDraft {
 pub struct AgentTurnFinish {
     pub turn_id: String,
     pub status: String,
+    pub terminal_reason: Option<String>,
     pub workspace_id_after: Option<String>,
     pub state_revision_after: Option<i64>,
     pub project_revision_after: Option<i64>,
@@ -27,6 +54,7 @@ pub struct AgentTurnFinish {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentTurnSummary {
     pub turn_id: String,
+    pub conversation_id: String,
     pub project_root: String,
     pub mode: String,
     pub status: String,
@@ -43,6 +71,8 @@ pub struct AgentTurnSummary {
     pub final_message: Option<String>,
     pub error_message: Option<String>,
     pub pending_request_id: Option<String>,
+    pub retry_of_turn_id: Option<String>,
+    pub terminal_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -136,22 +166,25 @@ pub struct AgentTurnDetail {
 pub(crate) fn decode_agent_turn_summary(row: &Row<'_>) -> rusqlite::Result<AgentTurnSummary> {
     Ok(AgentTurnSummary {
         turn_id: row.get(0)?,
-        project_root: row.get(1)?,
-        mode: row.get(2)?,
-        status: row.get(3)?,
-        started_at: row.get(4)?,
-        finished_at: row.get(5)?,
-        prompt_preview: row.get(6)?,
-        model: row.get(7)?,
-        workspace_id_before: row.get(8)?,
-        state_revision_before: row.get(9)?,
-        project_revision_before: row.get(10)?,
-        workspace_id_after: row.get(11)?,
-        state_revision_after: row.get(12)?,
-        project_revision_after: row.get(13)?,
-        final_message: row.get(14)?,
-        error_message: row.get(15)?,
-        pending_request_id: row.get(16)?,
+        conversation_id: row.get(1)?,
+        project_root: row.get(2)?,
+        mode: row.get(3)?,
+        status: row.get(4)?,
+        started_at: row.get(5)?,
+        finished_at: row.get(6)?,
+        prompt_preview: row.get(7)?,
+        model: row.get(8)?,
+        workspace_id_before: row.get(9)?,
+        state_revision_before: row.get(10)?,
+        project_revision_before: row.get(11)?,
+        workspace_id_after: row.get(12)?,
+        state_revision_after: row.get(13)?,
+        project_revision_after: row.get(14)?,
+        final_message: row.get(15)?,
+        error_message: row.get(16)?,
+        pending_request_id: row.get(17)?,
+        retry_of_turn_id: row.get(18)?,
+        terminal_reason: row.get(19)?,
     })
 }
 

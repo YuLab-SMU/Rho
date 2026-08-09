@@ -6,8 +6,9 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub(crate) const SCHEMA_VERSION: i64 = 11;
+pub(crate) const SCHEMA_VERSION: i64 = 12;
 const DEFAULT_LIMIT: usize = 50;
+const MAX_AGENT_LIST_LIMIT: usize = 100;
 const MAX_DIAGNOSTIC_LINE: u32 = 10_000_000;
 const MAX_DIAGNOSTIC_COLUMN: u32 = 1_000_000;
 #[cfg(test)]
@@ -25,9 +26,9 @@ mod run;
 mod workbench;
 
 pub use agent::{
-    AgentConversationTurn, AgentTurnDetail, AgentTurnDraft, AgentTurnEvent, AgentTurnEventDraft,
-    AgentTurnFinish, AgentTurnSummary, ApprovalDecisionRecord, ApprovalRequestDraft,
-    ApprovalRequestSummary,
+    AgentConversationDraft, AgentConversationSummary, AgentConversationTurn, AgentTurnDetail,
+    AgentTurnDraft, AgentTurnEvent, AgentTurnEventDraft, AgentTurnFinish, AgentTurnSummary,
+    ApprovalDecisionRecord, ApprovalRequestDraft, ApprovalRequestSummary,
 };
 pub use artifact::{
     ArtifactRecordDraft, ArtifactRecordSummary, PlotArtifactDraft, PlotArtifactSummary,
@@ -235,6 +236,8 @@ struct StoreOpenOptions {
     inject_v9_failure_before_commit: bool,
     #[cfg(test)]
     inject_v10_failure_before_commit: bool,
+    #[cfg(test)]
+    inject_v11_failure_before_commit: bool,
 }
 
 #[derive(Debug)]
@@ -300,6 +303,12 @@ impl Store {
                 let outcome = self.migrate_v10_to_v11(backup_path, options)?;
                 self.migration_outcome = outcome;
             }
+            Some(11) => {
+                let backup_path =
+                    migration::create_pre_migration_backup(&self.connection, path, 11)?;
+                let outcome = self.migrate_v11_to_v12(backup_path, options)?;
+                self.migration_outcome = outcome;
+            }
             Some(other) => {
                 return Err(StoreError::MigrationRejected {
                     message: format!("unsupported schema version {other}"),
@@ -357,6 +366,7 @@ impl Store {
         migration::rebuild_approval_requests_v8(&transaction)?;
         migration::rebuild_plot_artifacts_v8(&transaction)?;
         migration::create_claim_review_schema(&transaction)?;
+        migration::create_agent_conversation_schema(&transaction)?;
         transaction.execute_batch(
             "
             CREATE INDEX IF NOT EXISTS idx_runs_project_started
@@ -410,6 +420,7 @@ impl Store {
         let transaction = self.connection.transaction()?;
         migration::create_claim_review_schema(&transaction)?;
         migration::add_run_error_range_columns(&transaction)?;
+        migration::create_agent_conversation_schema(&transaction)?;
         transaction.execute(
             "INSERT INTO metadata(key, value) VALUES('schema_version', ?1)
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -448,6 +459,7 @@ impl Store {
             .map(|path| path.to_string_lossy().replace('\\', "/"));
         let transaction = self.connection.transaction()?;
         migration::add_run_error_range_columns(&transaction)?;
+        migration::create_agent_conversation_schema(&transaction)?;
         transaction.execute(
             "INSERT INTO metadata(key, value) VALUES('schema_version', ?1)
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -509,6 +521,7 @@ impl Store {
         let before_count: i64 =
             transaction.query_row("SELECT COUNT(*) FROM runs", [], |row| row.get(0))?;
         migration::rebuild_runs_error_range_kind_v11(&transaction)?;
+        migration::create_agent_conversation_schema(&transaction)?;
         let after_count: i64 =
             transaction.query_row("SELECT COUNT(*) FROM runs", [], |row| row.get(0))?;
         if before_count != after_count {
@@ -566,6 +579,84 @@ impl Store {
         ))
     }
 
+    fn migrate_v11_to_v12(
+        &mut self,
+        backup_path: Option<PathBuf>,
+        _options: &StoreOpenOptions,
+    ) -> Result<MigrationOutcome, StoreError> {
+        let backup_path_string = backup_path
+            .as_ref()
+            .map(|path| path.to_string_lossy().replace('\\', "/"));
+        let transaction = self.connection.transaction()?;
+        let before_count: i64 =
+            transaction.query_row("SELECT COUNT(*) FROM agent_turns", [], |row| row.get(0))?;
+        let malformed_project_count: i64 = transaction.query_row(
+            "SELECT COUNT(*) FROM agent_turns
+             WHERE project_root IS NULL OR TRIM(project_root) = ''",
+            [],
+            |row| row.get(0),
+        )?;
+        if malformed_project_count > 0 {
+            return Err(StoreError::MigrationRejected {
+                message: "schema v11 contains malformed Agent project identity".to_string(),
+                outcome: MigrationOutcome::rejected(
+                    Some(11),
+                    backup_path_string,
+                    MigrationRecordCounts {
+                        rejected: malformed_project_count,
+                        ..MigrationRecordCounts::default()
+                    },
+                    "malformed_v11_agent_identity",
+                ),
+            });
+        }
+        migration::create_agent_conversation_schema(&transaction)?;
+        let mapping_count: i64 =
+            transaction.query_row("SELECT COUNT(*) FROM agent_conversation_turns", [], |row| {
+                row.get(0)
+            })?;
+        if before_count != mapping_count {
+            return Err(StoreError::MigrationRejected {
+                message: "schema v11 Agent turn mapping count changed during migration".to_string(),
+                outcome: MigrationOutcome::rejected(
+                    Some(11),
+                    backup_path_string,
+                    MigrationRecordCounts {
+                        rejected: (before_count - mapping_count).abs(),
+                        ..MigrationRecordCounts::default()
+                    },
+                    "v11_conversation_copy_mismatch",
+                ),
+            });
+        }
+        transaction.execute(
+            "INSERT INTO metadata(key, value) VALUES('schema_version', ?1)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            [SCHEMA_VERSION.to_string()],
+        )?;
+        #[cfg(test)]
+        if _options.inject_v11_failure_before_commit {
+            return Err(StoreError::MigrationRejected {
+                message: "injected v11 migration failure".to_string(),
+                outcome: MigrationOutcome::rejected(
+                    Some(11),
+                    backup_path_string,
+                    MigrationRecordCounts::default(),
+                    "injected_failure",
+                ),
+            });
+        }
+        transaction.commit()?;
+        self.assert_current_schema()?;
+        Ok(MigrationOutcome::migrated(
+            11,
+            backup_path
+                .as_ref()
+                .map(|path| path.to_string_lossy().replace('\\', "/")),
+            MigrationRecordCounts::default(),
+        ))
+    }
+
     fn set_schema_version(&self, version: i64) -> Result<(), StoreError> {
         migration::set_schema_version(&self.connection, version)?;
         Ok(())
@@ -594,6 +685,7 @@ impl Store {
             migration::assert_column_exists(&self.connection, "runs", column)?;
         }
         migration::assert_runs_error_range_kind_constraint(&self.connection)?;
+        migration::assert_agent_conversation_schema(&self.connection)?;
         Ok(())
     }
 
@@ -934,8 +1026,102 @@ impl Store {
         Ok(changed)
     }
 
-    pub fn create_agent_turn(&mut self, draft: &AgentTurnDraft) -> Result<(), StoreError> {
+    pub fn create_agent_conversation(
+        &mut self,
+        draft: &AgentConversationDraft,
+    ) -> Result<AgentConversationSummary, StoreError> {
+        let conversation_id = draft.conversation_id.trim();
+        let project_root = normalize_project_root(&draft.project_root);
+        let title = draft.title.trim();
+        if conversation_id.is_empty() || project_root.is_empty() {
+            return Err(StoreError::Validation(
+                "Agent Conversation identity and project root are required".to_string(),
+            ));
+        }
+        if title.is_empty() || title.chars().count() > 240 {
+            return Err(StoreError::Validation(
+                "Agent Conversation title must contain 1 to 240 characters".to_string(),
+            ));
+        }
+        let timestamp = Utc::now().to_rfc3339();
         self.connection.execute(
+            "INSERT INTO agent_conversations(
+                conversation_id, project_root, title, created_at, updated_at,
+                archived_at, legacy_unthreaded
+             ) VALUES(?1, ?2, ?3, ?4, ?4, NULL, ?5)",
+            params![
+                conversation_id,
+                project_root,
+                title,
+                timestamp,
+                i64::from(draft.legacy_unthreaded),
+            ],
+        )?;
+        self.get_agent_conversation(&project_root, conversation_id)?
+            .ok_or_else(|| {
+                StoreError::Validation(
+                    "new Agent Conversation could not be reloaded after persistence".to_string(),
+                )
+            })
+    }
+
+    pub fn create_agent_turn(&mut self, draft: &AgentTurnDraft) -> Result<(), StoreError> {
+        let conversation_id = format!("conversation_{}", draft.turn_id);
+        self.create_agent_turn_with_conversation(
+            &AgentConversationDraft {
+                conversation_id,
+                project_root: draft.project_root.clone(),
+                title: text_preview(&draft.prompt, 120),
+                legacy_unthreaded: false,
+            },
+            draft,
+        )
+    }
+
+    pub fn create_agent_turn_with_conversation(
+        &mut self,
+        conversation: &AgentConversationDraft,
+        draft: &AgentTurnDraft,
+    ) -> Result<(), StoreError> {
+        let conversation_id = conversation.conversation_id.trim();
+        let conversation_project_root = normalize_project_root(&conversation.project_root);
+        let turn_project_root = normalize_project_root(&draft.project_root);
+        let title = conversation.title.trim();
+        if conversation_id.is_empty()
+            || conversation_project_root.is_empty()
+            || turn_project_root.is_empty()
+        {
+            return Err(StoreError::Validation(
+                "Agent Conversation identity and project root are required".to_string(),
+            ));
+        }
+        if conversation_project_root != turn_project_root {
+            return Err(StoreError::Validation(
+                "Agent Conversation and first turn must belong to the same project".to_string(),
+            ));
+        }
+        if title.is_empty() || title.chars().count() > 240 {
+            return Err(StoreError::Validation(
+                "Agent Conversation title must contain 1 to 240 characters".to_string(),
+            ));
+        }
+        if conversation.legacy_unthreaded {
+            return Err(StoreError::Validation(
+                "Legacy project history cannot be created with a new turn".to_string(),
+            ));
+        }
+
+        let timestamp = Utc::now().to_rfc3339();
+        let prompt_preview = text_preview(&draft.prompt, 120);
+        let transaction = self.connection.transaction()?;
+        transaction.execute(
+            "INSERT INTO agent_conversations(
+                conversation_id, project_root, title, created_at, updated_at,
+                archived_at, legacy_unthreaded
+             ) VALUES(?1, ?2, ?3, ?4, ?4, NULL, 0)",
+            params![conversation_id, conversation_project_root, title, timestamp],
+        )?;
+        transaction.execute(
             "INSERT INTO agent_turns(
                 turn_id, project_root, mode, prompt, prompt_preview, model, status, started_at,
                 workspace_id_before, state_revision_before, project_revision_before
@@ -944,17 +1130,153 @@ impl Store {
              )",
             params![
                 draft.turn_id,
-                draft.project_root,
+                turn_project_root,
                 draft.mode,
                 draft.prompt,
-                text_preview(&draft.prompt, 120),
+                prompt_preview,
                 draft.model,
-                Utc::now().to_rfc3339(),
+                timestamp,
                 draft.workspace_id,
                 draft.state_revision_before,
                 draft.project_revision_before,
             ],
         )?;
+        transaction.execute(
+            "INSERT INTO agent_conversation_turns(
+                turn_id, conversation_id, retry_of_turn_id, terminal_reason
+             ) VALUES(?1, ?2, NULL, NULL)",
+            params![draft.turn_id, conversation_id],
+        )?;
+        transaction.execute(
+            "UPDATE agent_conversations
+             SET title = CASE WHEN title = 'New conversation' THEN ?2 ELSE title END
+             WHERE conversation_id = ?1",
+            params![conversation_id, prompt_preview],
+        )?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    pub fn create_agent_turn_in_conversation(
+        &mut self,
+        conversation_id: &str,
+        retry_of_turn_id: Option<&str>,
+        draft: &AgentTurnDraft,
+    ) -> Result<(), StoreError> {
+        let conversation_id = conversation_id.trim();
+        let project_root = normalize_project_root(&draft.project_root);
+        if conversation_id.is_empty() || project_root.is_empty() {
+            return Err(StoreError::Validation(
+                "Agent Conversation identity and project root are required".to_string(),
+            ));
+        }
+        let transaction = self.connection.transaction()?;
+        let conversation = transaction
+            .query_row(
+                "SELECT project_root, archived_at, legacy_unthreaded,
+                    (SELECT COUNT(*) FROM agent_conversation_turns
+                     WHERE conversation_id = agent_conversations.conversation_id)
+                 FROM agent_conversations
+                 WHERE conversation_id = ?1",
+                [conversation_id],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, Option<String>>(1)?,
+                        row.get::<_, i64>(2)?,
+                        row.get::<_, i64>(3)?,
+                    ))
+                },
+            )
+            .optional()?;
+        let Some((conversation_project, archived_at, legacy_unthreaded, turn_count)) = conversation
+        else {
+            return Err(StoreError::Validation(
+                "Agent Conversation was not found".to_string(),
+            ));
+        };
+        if conversation_project != project_root {
+            return Err(StoreError::Validation(
+                "Agent Conversation belongs to a different project".to_string(),
+            ));
+        }
+        if archived_at.is_some() {
+            return Err(StoreError::Validation(
+                "Archived Agent Conversation cannot accept a new turn".to_string(),
+            ));
+        }
+        if legacy_unthreaded != 0 {
+            return Err(StoreError::Validation(
+                "Legacy project history is read-only; start a new conversation".to_string(),
+            ));
+        }
+        let nonterminal_count: i64 = transaction.query_row(
+            "SELECT COUNT(*)
+             FROM agent_conversation_turns AS link
+             JOIN agent_turns AS turn ON turn.turn_id = link.turn_id
+             WHERE link.conversation_id = ?1
+               AND turn.status IN ('running', 'waiting')",
+            [conversation_id],
+            |row| row.get(0),
+        )?;
+        if nonterminal_count > 0 {
+            return Err(StoreError::Validation(
+                "Agent Conversation already has a running turn".to_string(),
+            ));
+        }
+        if let Some(retry_turn_id) = retry_of_turn_id {
+            let retry_belongs: bool = transaction
+                .query_row(
+                    "SELECT 1 FROM agent_conversation_turns
+                     WHERE turn_id = ?1 AND conversation_id = ?2",
+                    params![retry_turn_id, conversation_id],
+                    |_row| Ok(true),
+                )
+                .optional()?
+                .unwrap_or(false);
+            if !retry_belongs {
+                return Err(StoreError::Validation(
+                    "Retry source does not belong to the Agent Conversation".to_string(),
+                ));
+            }
+        }
+
+        let timestamp = Utc::now().to_rfc3339();
+        let prompt_preview = text_preview(&draft.prompt, 120);
+        transaction.execute(
+            "INSERT INTO agent_turns(
+                turn_id, project_root, mode, prompt, prompt_preview, model, status, started_at,
+                workspace_id_before, state_revision_before, project_revision_before
+             ) VALUES(
+                ?1, ?2, ?3, ?4, ?5, ?6, 'running', ?7, ?8, ?9, ?10
+             )",
+            params![
+                draft.turn_id,
+                project_root,
+                draft.mode,
+                draft.prompt,
+                prompt_preview,
+                draft.model,
+                timestamp,
+                draft.workspace_id,
+                draft.state_revision_before,
+                draft.project_revision_before,
+            ],
+        )?;
+        transaction.execute(
+            "INSERT INTO agent_conversation_turns(
+                turn_id, conversation_id, retry_of_turn_id, terminal_reason
+             ) VALUES(?1, ?2, ?3, NULL)",
+            params![draft.turn_id, conversation_id, retry_of_turn_id],
+        )?;
+        transaction.execute(
+            "UPDATE agent_conversations
+             SET title = CASE WHEN ?3 = 0 AND title = 'New conversation' THEN ?2 ELSE title END,
+                 updated_at = ?4
+             WHERE conversation_id = ?1",
+            params![conversation_id, prompt_preview, turn_count, timestamp],
+        )?;
+        transaction.commit()?;
         Ok(())
     }
 
@@ -963,17 +1285,37 @@ impl Store {
         turn_id: &str,
         status: &str,
     ) -> Result<usize, StoreError> {
-        let changed = self.connection.execute(
+        let timestamp = Utc::now().to_rfc3339();
+        let transaction = self.connection.transaction()?;
+        let changed = transaction.execute(
             "UPDATE agent_turns
              SET status = ?2
              WHERE turn_id = ?1",
             params![turn_id, status],
         )?;
+        if changed == 1 {
+            let conversation_changed = transaction.execute(
+                "UPDATE agent_conversations
+                 SET updated_at = ?2
+                 WHERE conversation_id = (
+                    SELECT conversation_id FROM agent_conversation_turns WHERE turn_id = ?1
+                 )",
+                params![turn_id, timestamp],
+            )?;
+            if conversation_changed != 1 {
+                return Err(StoreError::Validation(
+                    "Agent turn was not mapped to a Conversation while updating status".to_string(),
+                ));
+            }
+        }
+        transaction.commit()?;
         Ok(changed)
     }
 
     pub fn finish_agent_turn(&mut self, result: &AgentTurnFinish) -> Result<(), StoreError> {
-        self.connection.execute(
+        let timestamp = Utc::now().to_rfc3339();
+        let transaction = self.connection.transaction()?;
+        let changed = transaction.execute(
             "UPDATE agent_turns
              SET status = ?2,
                  finished_at = ?3,
@@ -986,7 +1328,7 @@ impl Store {
             params![
                 result.turn_id,
                 result.status,
-                Utc::now().to_rfc3339(),
+                timestamp,
                 result.workspace_id_after,
                 result.state_revision_after,
                 result.project_revision_after,
@@ -994,6 +1336,36 @@ impl Store {
                 result.error_message,
             ],
         )?;
+        if changed != 1 {
+            return Err(StoreError::Validation(
+                "Agent turn was not found while finishing it".to_string(),
+            ));
+        }
+        let mapping_changed = transaction.execute(
+            "UPDATE agent_conversation_turns
+             SET terminal_reason = ?2
+             WHERE turn_id = ?1",
+            params![result.turn_id, result.terminal_reason],
+        )?;
+        if mapping_changed != 1 {
+            return Err(StoreError::Validation(
+                "Agent turn was not mapped to a Conversation while finishing it".to_string(),
+            ));
+        }
+        let conversation_changed = transaction.execute(
+            "UPDATE agent_conversations
+             SET updated_at = ?2
+             WHERE conversation_id = (
+                SELECT conversation_id FROM agent_conversation_turns WHERE turn_id = ?1
+             )",
+            params![result.turn_id, timestamp],
+        )?;
+        if conversation_changed != 1 {
+            return Err(StoreError::Validation(
+                "Agent Conversation was not found while finishing its turn".to_string(),
+            ));
+        }
+        transaction.commit()?;
         Ok(())
     }
 
@@ -1083,7 +1455,8 @@ impl Store {
     ) -> Result<Vec<AgentTurnSummary>, StoreError> {
         let mut statement = self.connection.prepare(
             "SELECT
-                turn_id, project_root, mode, status, started_at, finished_at, prompt_preview, model,
+                agent_turns.turn_id, link.conversation_id, project_root, mode, status,
+                started_at, finished_at, prompt_preview, model,
                 workspace_id_before, state_revision_before, project_revision_before,
                 workspace_id_after, state_revision_after, project_revision_after,
                 final_message, error_message,
@@ -1094,33 +1467,151 @@ impl Store {
                       AND status = 'waiting'
                     ORDER BY requested_at DESC
                     LIMIT 1
-                ) AS pending_request_id
+                ) AS pending_request_id,
+                link.retry_of_turn_id,
+                link.terminal_reason
              FROM agent_turns
+             JOIN agent_conversation_turns AS link ON link.turn_id = agent_turns.turn_id
              WHERE project_root = ?1
              ORDER BY started_at DESC
              LIMIT ?2",
         )?;
         let rows = statement.query_map(
-            params![project_root, limit.unwrap_or(DEFAULT_LIMIT) as i64],
+            params![
+                normalize_project_root(project_root),
+                limit
+                    .unwrap_or(DEFAULT_LIMIT)
+                    .clamp(1, MAX_AGENT_LIST_LIMIT) as i64
+            ],
+            agent::decode_agent_turn_summary,
+        )?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(StoreError::from)
+    }
+
+    pub fn list_agent_turns_for_conversation(
+        &self,
+        project_root: &str,
+        conversation_id: &str,
+        limit: Option<usize>,
+    ) -> Result<Vec<AgentTurnSummary>, StoreError> {
+        let conversation_id = conversation_id.trim();
+        if conversation_id.is_empty() {
+            return Err(StoreError::Validation(
+                "Agent Conversation identity is required".to_string(),
+            ));
+        }
+        let mut statement = self.connection.prepare(
+            "SELECT
+                agent_turns.turn_id, link.conversation_id, agent_turns.project_root,
+                mode, status, started_at, finished_at, prompt_preview, model,
+                workspace_id_before, state_revision_before, project_revision_before,
+                workspace_id_after, state_revision_after, project_revision_after,
+                final_message, error_message,
+                (
+                    SELECT request_id
+                    FROM approval_requests
+                    WHERE approval_requests.turn_id = agent_turns.turn_id
+                      AND status = 'waiting'
+                    ORDER BY requested_at DESC
+                    LIMIT 1
+                ) AS pending_request_id,
+                link.retry_of_turn_id,
+                link.terminal_reason
+             FROM agent_turns
+             JOIN agent_conversation_turns AS link ON link.turn_id = agent_turns.turn_id
+             JOIN agent_conversations AS conversation
+               ON conversation.conversation_id = link.conversation_id
+             WHERE agent_turns.project_root = ?1
+               AND conversation.project_root = ?1
+               AND link.conversation_id = ?2
+             ORDER BY started_at DESC
+             LIMIT ?3",
+        )?;
+        let rows = statement.query_map(
+            params![
+                normalize_project_root(project_root),
+                conversation_id,
+                limit
+                    .unwrap_or(DEFAULT_LIMIT)
+                    .clamp(1, MAX_AGENT_LIST_LIMIT) as i64,
+            ],
+            agent::decode_agent_turn_summary,
+        )?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(StoreError::from)
+    }
+
+    pub fn list_agent_conversations(
+        &self,
+        project_root: &str,
+        limit: Option<usize>,
+    ) -> Result<Vec<AgentConversationSummary>, StoreError> {
+        let mut statement = self.connection.prepare(
+            "SELECT
+                conversation.conversation_id,
+                conversation.project_root,
+                conversation.title,
+                conversation.created_at,
+                conversation.updated_at,
+                conversation.archived_at,
+                conversation.legacy_unthreaded,
+                (SELECT COUNT(*) FROM agent_conversation_turns AS count_link
+                 WHERE count_link.conversation_id = conversation.conversation_id) AS turn_count,
+                COALESCE(latest_turn.status, 'empty') AS status,
+                latest_turn.turn_id,
+                latest_turn.mode,
+                latest_turn.prompt_preview,
+                latest_link.terminal_reason,
+                (
+                    SELECT request_id
+                    FROM approval_requests
+                    WHERE approval_requests.turn_id = latest_turn.turn_id
+                      AND status = 'waiting'
+                    ORDER BY requested_at DESC
+                    LIMIT 1
+                ) AS pending_request_id
+             FROM agent_conversations AS conversation
+             LEFT JOIN agent_conversation_turns AS latest_link
+               ON latest_link.turn_id = (
+                    SELECT candidate_link.turn_id
+                    FROM agent_conversation_turns AS candidate_link
+                    JOIN agent_turns AS candidate_turn
+                      ON candidate_turn.turn_id = candidate_link.turn_id
+                    WHERE candidate_link.conversation_id = conversation.conversation_id
+                    ORDER BY candidate_turn.started_at DESC, candidate_turn.rowid DESC
+                    LIMIT 1
+               )
+             LEFT JOIN agent_turns AS latest_turn
+               ON latest_turn.turn_id = latest_link.turn_id
+             WHERE conversation.project_root = ?1
+               AND conversation.archived_at IS NULL
+             ORDER BY conversation.updated_at DESC, conversation.rowid DESC
+             LIMIT ?2",
+        )?;
+        let rows = statement.query_map(
+            params![
+                normalize_project_root(project_root),
+                limit
+                    .unwrap_or(DEFAULT_LIMIT)
+                    .clamp(1, MAX_AGENT_LIST_LIMIT) as i64,
+            ],
             |row| {
-                Ok(AgentTurnSummary {
-                    turn_id: row.get(0)?,
+                Ok(AgentConversationSummary {
+                    conversation_id: row.get(0)?,
                     project_root: row.get(1)?,
-                    mode: row.get(2)?,
-                    status: row.get(3)?,
-                    started_at: row.get(4)?,
-                    finished_at: row.get(5)?,
-                    prompt_preview: row.get(6)?,
-                    model: row.get(7)?,
-                    workspace_id_before: row.get(8)?,
-                    state_revision_before: row.get(9)?,
-                    project_revision_before: row.get(10)?,
-                    workspace_id_after: row.get(11)?,
-                    state_revision_after: row.get(12)?,
-                    project_revision_after: row.get(13)?,
-                    final_message: row.get(14)?,
-                    error_message: row.get(15)?,
-                    pending_request_id: row.get(16)?,
+                    title: row.get(2)?,
+                    created_at: row.get(3)?,
+                    updated_at: row.get(4)?,
+                    archived_at: row.get(5)?,
+                    legacy_unthreaded: row.get::<_, i64>(6)? != 0,
+                    turn_count: row.get(7)?,
+                    status: row.get(8)?,
+                    latest_turn_id: row.get(9)?,
+                    latest_mode: row.get(10)?,
+                    latest_prompt_preview: row.get(11)?,
+                    terminal_reason: row.get(12)?,
+                    pending_request_id: row.get(13)?,
                 })
             },
         )?;
@@ -1128,22 +1619,197 @@ impl Store {
             .map_err(StoreError::from)
     }
 
+    pub fn get_agent_conversation(
+        &self,
+        project_root: &str,
+        conversation_id: &str,
+    ) -> Result<Option<AgentConversationSummary>, StoreError> {
+        let conversation_id = conversation_id.trim();
+        if conversation_id.is_empty() {
+            return Err(StoreError::Validation(
+                "Agent Conversation identity is required".to_string(),
+            ));
+        }
+        self.connection
+            .query_row(
+                "SELECT
+                    conversation.conversation_id,
+                    conversation.project_root,
+                    conversation.title,
+                    conversation.created_at,
+                    conversation.updated_at,
+                    conversation.archived_at,
+                    conversation.legacy_unthreaded,
+                    (SELECT COUNT(*) FROM agent_conversation_turns AS count_link
+                     WHERE count_link.conversation_id = conversation.conversation_id),
+                    COALESCE(latest_turn.status, 'empty'),
+                    latest_turn.turn_id,
+                    latest_turn.mode,
+                    latest_turn.prompt_preview,
+                    latest_link.terminal_reason,
+                    (
+                        SELECT request_id FROM approval_requests
+                        WHERE approval_requests.turn_id = latest_turn.turn_id
+                          AND status = 'waiting'
+                        ORDER BY requested_at DESC LIMIT 1
+                    )
+                 FROM agent_conversations AS conversation
+                 LEFT JOIN agent_conversation_turns AS latest_link
+                   ON latest_link.turn_id = (
+                        SELECT candidate_link.turn_id
+                        FROM agent_conversation_turns AS candidate_link
+                        JOIN agent_turns AS candidate_turn
+                          ON candidate_turn.turn_id = candidate_link.turn_id
+                        WHERE candidate_link.conversation_id = conversation.conversation_id
+                        ORDER BY candidate_turn.started_at DESC, candidate_turn.rowid DESC
+                        LIMIT 1
+                   )
+                 LEFT JOIN agent_turns AS latest_turn
+                   ON latest_turn.turn_id = latest_link.turn_id
+                 WHERE conversation.project_root = ?1
+                   AND conversation.conversation_id = ?2",
+                params![normalize_project_root(project_root), conversation_id],
+                |row| {
+                    Ok(AgentConversationSummary {
+                        conversation_id: row.get(0)?,
+                        project_root: row.get(1)?,
+                        title: row.get(2)?,
+                        created_at: row.get(3)?,
+                        updated_at: row.get(4)?,
+                        archived_at: row.get(5)?,
+                        legacy_unthreaded: row.get::<_, i64>(6)? != 0,
+                        turn_count: row.get(7)?,
+                        status: row.get(8)?,
+                        latest_turn_id: row.get(9)?,
+                        latest_mode: row.get(10)?,
+                        latest_prompt_preview: row.get(11)?,
+                        terminal_reason: row.get(12)?,
+                        pending_request_id: row.get(13)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(StoreError::from)
+    }
+
+    pub fn agent_conversation_id_for_turn(
+        &self,
+        project_root: &str,
+        turn_id: &str,
+    ) -> Result<Option<String>, StoreError> {
+        let turn_id = turn_id.trim();
+        if turn_id.is_empty() {
+            return Err(StoreError::Validation(
+                "Agent turn identity is required".to_string(),
+            ));
+        }
+        self.connection
+            .query_row(
+                "SELECT link.conversation_id
+                 FROM agent_conversation_turns AS link
+                 JOIN agent_turns AS turn ON turn.turn_id = link.turn_id
+                 JOIN agent_conversations AS conversation
+                   ON conversation.conversation_id = link.conversation_id
+                 WHERE turn.turn_id = ?1
+                   AND turn.project_root = ?2
+                   AND conversation.project_root = ?2",
+                params![turn_id, normalize_project_root(project_root)],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(StoreError::from)
+    }
+
+    pub fn delete_agent_conversation(
+        &mut self,
+        project_root: &str,
+        conversation_id: &str,
+    ) -> Result<usize, StoreError> {
+        let project_root = normalize_project_root(project_root);
+        let conversation_id = conversation_id.trim();
+        if project_root.is_empty() || conversation_id.is_empty() {
+            return Err(StoreError::Validation(
+                "Agent Conversation identity and project root are required".to_string(),
+            ));
+        }
+        let transaction = self.connection.transaction()?;
+        let nonterminal_count: i64 = transaction.query_row(
+            "SELECT COUNT(*)
+             FROM agent_conversation_turns AS link
+             JOIN agent_turns AS turn ON turn.turn_id = link.turn_id
+             JOIN agent_conversations AS conversation
+               ON conversation.conversation_id = link.conversation_id
+             WHERE link.conversation_id = ?1
+               AND turn.project_root = ?2
+               AND conversation.project_root = ?2
+               AND turn.status IN ('running', 'waiting')",
+            params![conversation_id, project_root],
+            |row| row.get(0),
+        )?;
+        if nonterminal_count > 0 {
+            return Err(StoreError::Validation(
+                "A running Agent Conversation cannot be deleted".to_string(),
+            ));
+        }
+        let deleted_turns = transaction.execute(
+            "DELETE FROM agent_turns
+             WHERE project_root = ?1
+               AND turn_id IN (
+                    SELECT turn_id FROM agent_conversation_turns
+                    WHERE conversation_id = ?2
+               )",
+            params![project_root, conversation_id],
+        )?;
+        let deleted_conversations = transaction.execute(
+            "DELETE FROM agent_conversations
+             WHERE project_root = ?1 AND conversation_id = ?2",
+            params![project_root, conversation_id],
+        )?;
+        if deleted_conversations != 1 {
+            return Err(StoreError::Validation(
+                "Agent Conversation was not found in the active project".to_string(),
+            ));
+        }
+        transaction.commit()?;
+        Ok(deleted_turns)
+    }
+
     pub fn recent_agent_conversation(
         &self,
         project_root: &str,
+        conversation_id: &str,
         exclude_turn_id: &str,
         limit: usize,
     ) -> Result<Vec<AgentConversationTurn>, StoreError> {
+        let conversation_id = conversation_id.trim();
+        let exclude_turn_id = exclude_turn_id.trim();
+        if conversation_id.is_empty() || exclude_turn_id.is_empty() {
+            return Err(StoreError::Validation(
+                "Agent Conversation and turn identities are required".to_string(),
+            ));
+        }
         let mut statement = self.connection.prepare(
             "SELECT
-                turn_id, mode, status, prompt, final_message, error_message, started_at
+                agent_turns.turn_id, mode, status, prompt, final_message, error_message, started_at
              FROM agent_turns
-             WHERE project_root = ?1 AND turn_id != ?2
-             ORDER BY started_at DESC, rowid DESC
-             LIMIT ?3",
+             JOIN agent_conversation_turns AS link ON link.turn_id = agent_turns.turn_id
+             JOIN agent_conversations AS conversation
+               ON conversation.conversation_id = link.conversation_id
+             WHERE agent_turns.project_root = ?1
+               AND conversation.project_root = ?1
+               AND link.conversation_id = ?2
+               AND agent_turns.turn_id != ?3
+               AND status IN ('completed', 'failed')
+             ORDER BY started_at DESC, agent_turns.rowid DESC
+             LIMIT ?4",
         )?;
         let rows = statement.query_map(
-            params![project_root, exclude_turn_id, limit.clamp(1, 8) as i64],
+            params![
+                normalize_project_root(project_root),
+                conversation_id,
+                exclude_turn_id,
+                limit.clamp(1, 4) as i64,
+            ],
             |row| {
                 Ok(AgentConversationTurn {
                     turn_id: row.get(0)?,
@@ -1178,7 +1844,11 @@ impl Store {
              LIMIT ?2",
         )?;
         let rows = statement.query_map(
-            params![project_root, limit.unwrap_or(DEFAULT_LIMIT) as i64, status],
+            params![
+                normalize_project_root(project_root),
+                limit.unwrap_or(DEFAULT_LIMIT) as i64,
+                status
+            ],
             agent::decode_approval_request,
         )?;
         rows.collect::<Result<Vec<_>, _>>()
@@ -1190,11 +1860,13 @@ impl Store {
         project_root: &str,
         turn_id: &str,
     ) -> Result<Option<AgentTurnDetail>, StoreError> {
+        let project_root = normalize_project_root(project_root);
         let turn = self
             .connection
             .query_row(
                 "SELECT
-                    turn_id, project_root, mode, status, started_at, finished_at, prompt_preview, model,
+                    agent_turns.turn_id, link.conversation_id, agent_turns.project_root,
+                    mode, status, started_at, finished_at, prompt_preview, model,
                     workspace_id_before, state_revision_before, project_revision_before,
                     workspace_id_after, state_revision_after, project_revision_after,
                     final_message, error_message,
@@ -1205,10 +1877,17 @@ impl Store {
                           AND status = 'waiting'
                         ORDER BY requested_at DESC
                         LIMIT 1
-                    ) AS pending_request_id
+                    ) AS pending_request_id,
+                    link.retry_of_turn_id,
+                    link.terminal_reason
                  FROM agent_turns
-                 WHERE project_root = ?1 AND turn_id = ?2",
-                params![project_root, turn_id],
+                 JOIN agent_conversation_turns AS link ON link.turn_id = agent_turns.turn_id
+                 JOIN agent_conversations AS conversation
+                   ON conversation.conversation_id = link.conversation_id
+                 WHERE agent_turns.project_root = ?1
+                   AND conversation.project_root = ?1
+                   AND agent_turns.turn_id = ?2",
+                params![&project_root, turn_id],
                 agent::decode_agent_turn_summary,
             )
             .optional()?;
@@ -1235,7 +1914,7 @@ impl Store {
              ORDER BY requested_at DESC",
         )?;
         let approval_rows = approval_statement.query_map(
-            params![project_root, turn_id],
+            params![&project_root, turn_id],
             agent::decode_approval_request,
         )?;
         let approvals = approval_rows.collect::<Result<Vec<_>, _>>()?;
@@ -1248,31 +1927,64 @@ impl Store {
     }
 
     pub fn recover_incomplete_agent_turns(&mut self) -> Result<usize, StoreError> {
-        let changed = self.connection.execute(
+        let timestamp = Utc::now().to_rfc3339();
+        let transaction = self.connection.transaction()?;
+        let changed = transaction.execute(
             "UPDATE agent_turns
              SET status = 'interrupted',
                  finished_at = ?1,
                  error_message = COALESCE(error_message, 'Agent turn interrupted by desktop restart')
              WHERE status IN ('running', 'waiting')",
-            [Utc::now().to_rfc3339()],
+            [&timestamp],
         )?;
+        transaction.execute(
+            "UPDATE agent_conversation_turns
+             SET terminal_reason = COALESCE(terminal_reason, 'desktop_restart')
+             WHERE turn_id IN (
+                SELECT turn_id FROM agent_turns
+                WHERE status = 'interrupted' AND finished_at = ?1
+             )",
+            [&timestamp],
+        )?;
+        transaction.execute(
+            "UPDATE agent_conversations
+             SET updated_at = ?1
+             WHERE conversation_id IN (
+                SELECT link.conversation_id
+                FROM agent_conversation_turns AS link
+                JOIN agent_turns AS turn ON turn.turn_id = link.turn_id
+                WHERE turn.status = 'interrupted' AND turn.finished_at = ?1
+             )",
+            [&timestamp],
+        )?;
+        transaction.commit()?;
         Ok(changed)
     }
 
     pub fn clear_agent_history(&mut self, project_root: &str) -> Result<usize, StoreError> {
+        let project_root = normalize_project_root(project_root);
+        if project_root.is_empty() {
+            return Err(StoreError::Validation(
+                "project root is required to clear Agent history".to_string(),
+            ));
+        }
         let transaction = self.connection.transaction()?;
         transaction.execute(
             "DELETE FROM approval_requests WHERE project_root = ?1",
-            [project_root],
+            [&project_root],
         )?;
         transaction.execute(
             "DELETE FROM agent_turn_events
              WHERE turn_id IN (SELECT turn_id FROM agent_turns WHERE project_root = ?1)",
-            [project_root],
+            [&project_root],
         )?;
         let deleted = transaction.execute(
             "DELETE FROM agent_turns WHERE project_root = ?1",
-            [project_root],
+            [&project_root],
+        )?;
+        transaction.execute(
+            "DELETE FROM agent_conversations WHERE project_root = ?1",
+            [&project_root],
         )?;
         transaction.commit()?;
         Ok(deleted)
@@ -3257,6 +3969,7 @@ mod tests {
             .finish_agent_turn(&AgentTurnFinish {
                 turn_id: "turn_1".to_string(),
                 status: "completed".to_string(),
+                terminal_reason: None,
                 workspace_id_after: Some("ws_test".to_string()),
                 state_revision_after: Some(4),
                 project_revision_after: Some(1),
@@ -3266,7 +3979,7 @@ mod tests {
             .unwrap();
 
         let detail = store
-            .get_agent_turn_detail("D:/Rho/project", "turn_1")
+            .get_agent_turn_detail("D:\\Rho\\project\\", "turn_1")
             .unwrap()
             .unwrap();
         assert_eq!(detail.turn.status, "completed");
@@ -3283,37 +3996,52 @@ mod tests {
     fn returns_bounded_recent_agent_conversation_without_the_current_turn() {
         let directory = TempDir::new().unwrap();
         let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        store
+            .create_agent_conversation(&AgentConversationDraft {
+                conversation_id: "conversation_plot".to_string(),
+                project_root: "D:/Rho/project".to_string(),
+                title: "Plot analysis".to_string(),
+                legacy_unthreaded: false,
+            })
+            .unwrap();
         for (turn_id, prompt) in [
             ("turn_plot", "用 iris 数据集画图，并按 species 上色。"),
             ("turn_retry", "再试一下"),
         ] {
             store
-                .create_agent_turn(&AgentTurnDraft {
-                    turn_id: turn_id.to_string(),
-                    project_root: "D:/Rho/project".to_string(),
-                    mode: "act".to_string(),
-                    prompt: prompt.to_string(),
-                    model: "test".to_string(),
-                    workspace_id: "ws_test".to_string(),
-                    state_revision_before: 1,
-                    project_revision_before: 0,
-                })
+                .create_agent_turn_in_conversation(
+                    "conversation_plot",
+                    None,
+                    &AgentTurnDraft {
+                        turn_id: turn_id.to_string(),
+                        project_root: "D:/Rho/project".to_string(),
+                        mode: "act".to_string(),
+                        prompt: prompt.to_string(),
+                        model: "test".to_string(),
+                        workspace_id: "ws_test".to_string(),
+                        state_revision_before: 1,
+                        project_revision_before: 0,
+                    },
+                )
                 .unwrap();
+            if turn_id == "turn_plot" {
+                store
+                    .finish_agent_turn(&AgentTurnFinish {
+                        turn_id: "turn_plot".to_string(),
+                        status: "failed".to_string(),
+                        terminal_reason: Some("agent_failure".to_string()),
+                        workspace_id_after: Some("ws_test".to_string()),
+                        state_revision_after: Some(1),
+                        project_revision_after: Some(0),
+                        final_message: None,
+                        error_message: Some("provider network unavailable".to_string()),
+                    })
+                    .unwrap();
+            }
         }
-        store
-            .finish_agent_turn(&AgentTurnFinish {
-                turn_id: "turn_plot".to_string(),
-                status: "failed".to_string(),
-                workspace_id_after: Some("ws_test".to_string()),
-                state_revision_after: Some(1),
-                project_revision_after: Some(0),
-                final_message: None,
-                error_message: Some("provider network unavailable".to_string()),
-            })
-            .unwrap();
 
         let history = store
-            .recent_agent_conversation("D:/Rho/project", "turn_retry", 4)
+            .recent_agent_conversation("D:/Rho/project", "conversation_plot", "turn_retry", 4)
             .unwrap();
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].turn_id, "turn_plot");
@@ -3322,6 +4050,320 @@ mod tests {
         assert_eq!(
             history[0].error_message.as_deref(),
             Some("provider network unavailable")
+        );
+    }
+
+    #[test]
+    fn isolates_agent_conversations_and_enforces_one_active_turn_per_conversation() {
+        let directory = TempDir::new().unwrap();
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        for (conversation_id, project_root) in [
+            ("conversation_a", "D:/Rho/project"),
+            ("conversation_b", "D:/Rho/project"),
+            ("conversation_other", "D:/Rho/other"),
+        ] {
+            store
+                .create_agent_conversation(&AgentConversationDraft {
+                    conversation_id: conversation_id.to_string(),
+                    project_root: project_root.to_string(),
+                    title: "New conversation".to_string(),
+                    legacy_unthreaded: false,
+                })
+                .unwrap();
+        }
+
+        store
+            .create_agent_turn_in_conversation(
+                "conversation_a",
+                None,
+                &AgentTurnDraft {
+                    turn_id: "turn_a1".to_string(),
+                    project_root: "D:/Rho/project".to_string(),
+                    mode: "ask".to_string(),
+                    prompt: "Explain project A".to_string(),
+                    model: "test".to_string(),
+                    workspace_id: "ws_test".to_string(),
+                    state_revision_before: 1,
+                    project_revision_before: 0,
+                },
+            )
+            .unwrap();
+        let competing = store
+            .create_agent_turn_in_conversation(
+                "conversation_a",
+                None,
+                &AgentTurnDraft {
+                    turn_id: "turn_a_competing".to_string(),
+                    project_root: "D:/Rho/project".to_string(),
+                    mode: "plan".to_string(),
+                    prompt: "Compete with A".to_string(),
+                    model: "test".to_string(),
+                    workspace_id: "ws_test".to_string(),
+                    state_revision_before: 1,
+                    project_revision_before: 0,
+                },
+            )
+            .unwrap_err();
+        assert!(matches!(
+            competing,
+            StoreError::Validation(message)
+                if message == "Agent Conversation already has a running turn"
+        ));
+
+        store
+            .create_agent_turn_in_conversation(
+                "conversation_b",
+                None,
+                &AgentTurnDraft {
+                    turn_id: "turn_b1".to_string(),
+                    project_root: "D:/Rho/project".to_string(),
+                    mode: "ask".to_string(),
+                    prompt: "Explain project B".to_string(),
+                    model: "test".to_string(),
+                    workspace_id: "ws_test".to_string(),
+                    state_revision_before: 1,
+                    project_revision_before: 0,
+                },
+            )
+            .unwrap();
+        let cross_project = store
+            .create_agent_turn_in_conversation(
+                "conversation_other",
+                None,
+                &AgentTurnDraft {
+                    turn_id: "turn_wrong_project".to_string(),
+                    project_root: "D:/Rho/project".to_string(),
+                    mode: "ask".to_string(),
+                    prompt: "Wrong project".to_string(),
+                    model: "test".to_string(),
+                    workspace_id: "ws_test".to_string(),
+                    state_revision_before: 1,
+                    project_revision_before: 0,
+                },
+            )
+            .unwrap_err();
+        assert!(matches!(
+            cross_project,
+            StoreError::Validation(message)
+                if message == "Agent Conversation belongs to a different project"
+        ));
+
+        for turn_id in ["turn_a1", "turn_b1"] {
+            store
+                .finish_agent_turn(&AgentTurnFinish {
+                    turn_id: turn_id.to_string(),
+                    status: "completed".to_string(),
+                    terminal_reason: None,
+                    workspace_id_after: Some("ws_test".to_string()),
+                    state_revision_after: Some(1),
+                    project_revision_after: Some(0),
+                    final_message: Some(format!("answer for {turn_id}")),
+                    error_message: None,
+                })
+                .unwrap();
+        }
+
+        let conversations = store
+            .list_agent_conversations("D:/Rho/project", None)
+            .unwrap();
+        assert_eq!(conversations.len(), 2);
+        let conversation_a = conversations
+            .iter()
+            .find(|conversation| conversation.conversation_id == "conversation_a")
+            .unwrap();
+        assert_eq!(conversation_a.title, "Explain project A");
+        assert_eq!(conversation_a.turn_count, 1);
+        assert_eq!(conversation_a.status, "completed");
+        assert_eq!(conversation_a.latest_turn_id.as_deref(), Some("turn_a1"));
+
+        assert_eq!(
+            store
+                .recent_agent_conversation("D:/Rho/project", "conversation_a", "turn_future", 4,)
+                .unwrap()
+                .iter()
+                .map(|turn| turn.turn_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["turn_a1"]
+        );
+        assert_eq!(
+            store
+                .recent_agent_conversation("D:/Rho/project", "conversation_b", "turn_future", 4,)
+                .unwrap()
+                .iter()
+                .map(|turn| turn.turn_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["turn_b1"]
+        );
+        assert!(
+            store
+                .get_agent_turn_detail("D:/Rho/project", "turn_a_competing")
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn rolls_back_new_conversation_when_first_turn_persistence_fails() {
+        let directory = TempDir::new().unwrap();
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let existing_turn = AgentTurnDraft {
+            turn_id: "duplicate_turn".to_string(),
+            project_root: "D:/Rho/project".to_string(),
+            mode: "ask".to_string(),
+            prompt: "Existing turn".to_string(),
+            model: "test".to_string(),
+            workspace_id: "ws_test".to_string(),
+            state_revision_before: 1,
+            project_revision_before: 0,
+        };
+        store.create_agent_turn(&existing_turn).unwrap();
+
+        let error = store
+            .create_agent_turn_with_conversation(
+                &AgentConversationDraft {
+                    conversation_id: "conversation_must_roll_back".to_string(),
+                    project_root: "D:/Rho/project".to_string(),
+                    title: "New conversation".to_string(),
+                    legacy_unthreaded: false,
+                },
+                &AgentTurnDraft {
+                    prompt: "Conflicting turn".to_string(),
+                    ..existing_turn
+                },
+            )
+            .unwrap_err();
+        assert!(matches!(error, StoreError::Sqlite(_)));
+        assert!(
+            store
+                .get_agent_conversation("D:/Rho/project", "conversation_must_roll_back")
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(
+            store
+                .list_agent_conversations("D:/Rho/project", None)
+                .unwrap()
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn deletes_only_a_terminal_agent_conversation_and_cascades_its_records() {
+        let directory = TempDir::new().unwrap();
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        for conversation_id in ["conversation_delete", "conversation_keep"] {
+            store
+                .create_agent_conversation(&AgentConversationDraft {
+                    conversation_id: conversation_id.to_string(),
+                    project_root: "D:/Rho/project".to_string(),
+                    title: "New conversation".to_string(),
+                    legacy_unthreaded: false,
+                })
+                .unwrap();
+        }
+        for (conversation_id, turn_id) in [
+            ("conversation_delete", "turn_delete"),
+            ("conversation_keep", "turn_keep"),
+        ] {
+            store
+                .create_agent_turn_in_conversation(
+                    conversation_id,
+                    None,
+                    &AgentTurnDraft {
+                        turn_id: turn_id.to_string(),
+                        project_root: "D:/Rho/project".to_string(),
+                        mode: "ask".to_string(),
+                        prompt: format!("Prompt for {turn_id}"),
+                        model: "test".to_string(),
+                        workspace_id: "ws_test".to_string(),
+                        state_revision_before: 1,
+                        project_revision_before: 0,
+                    },
+                )
+                .unwrap();
+        }
+        store
+            .append_agent_turn_event(&AgentTurnEventDraft {
+                turn_id: "turn_delete".to_string(),
+                event_type: "agent.user_prompt".to_string(),
+                title: "You".to_string(),
+                body: Some("Prompt for turn_delete".to_string()),
+                status: "completed".to_string(),
+                tool: None,
+                request_id: None,
+                code: None,
+                details_json: "{}".to_string(),
+            })
+            .unwrap();
+        store
+            .create_approval_request(&ApprovalRequestDraft {
+                request_id: "req_delete".to_string(),
+                turn_id: "turn_delete".to_string(),
+                project_root: "D:/Rho/project".to_string(),
+                tool: "run_r".to_string(),
+                policy: "required".to_string(),
+                arguments_json: "{\"code\":\"x <- 1\"}".to_string(),
+                code: Some("x <- 1".to_string()),
+                workspace_id: "ws_test".to_string(),
+                state_revision: 1,
+                project_revision: 0,
+            })
+            .unwrap();
+
+        let active_delete = store
+            .delete_agent_conversation("D:/Rho/project", "conversation_delete")
+            .unwrap_err();
+        assert!(matches!(
+            active_delete,
+            StoreError::Validation(message)
+                if message == "A running Agent Conversation cannot be deleted"
+        ));
+        for turn_id in ["turn_delete", "turn_keep"] {
+            store
+                .finish_agent_turn(&AgentTurnFinish {
+                    turn_id: turn_id.to_string(),
+                    status: "completed".to_string(),
+                    terminal_reason: None,
+                    workspace_id_after: Some("ws_test".to_string()),
+                    state_revision_after: Some(1),
+                    project_revision_after: Some(0),
+                    final_message: Some("done".to_string()),
+                    error_message: None,
+                })
+                .unwrap();
+        }
+
+        assert_eq!(
+            store
+                .delete_agent_conversation("D:/Rho/project", "conversation_delete")
+                .unwrap(),
+            1
+        );
+        assert!(
+            store
+                .get_agent_conversation("D:/Rho/project", "conversation_delete")
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            store
+                .get_agent_turn_detail("D:/Rho/project", "turn_delete")
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            store
+                .get_approval_request("D:/Rho/project", "req_delete")
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(
+            store
+                .list_agent_turns_for_conversation("D:/Rho/project", "conversation_keep", None,)
+                .unwrap()
+                .len(),
+            1
         );
     }
 
@@ -3542,12 +4584,17 @@ mod tests {
         assert_eq!(turns_a[0].turn_id, "turn_a");
         assert_eq!(
             store
-                .recent_agent_conversation("D:/projects/A", "turn_current", 8)
+                .recent_agent_conversation(
+                    "D:/projects/A",
+                    "conversation_turn_a",
+                    "turn_current",
+                    8,
+                )
                 .unwrap()
                 .iter()
                 .map(|turn| turn.turn_id.as_str())
                 .collect::<Vec<_>>(),
-            vec!["turn_a"]
+            Vec::<&str>::new()
         );
         assert!(
             store
@@ -3594,7 +4641,7 @@ mod tests {
     }
 
     #[test]
-    fn bootstraps_empty_store_to_v11_and_reopens_idempotently() {
+    fn bootstraps_empty_store_to_v12_and_reopens_idempotently() {
         let directory = TempDir::new().unwrap();
         let database = directory.path().join("rho.sqlite");
 
@@ -3613,7 +4660,7 @@ mod tests {
     }
 
     #[test]
-    fn migrates_v7_to_v11_and_marks_legacy_unscoped_records() {
+    fn migrates_v7_to_v12_and_marks_legacy_unscoped_records() {
         let directory = TempDir::new().unwrap();
         let database = directory.path().join("rho.sqlite");
         create_v7_fixture(&database);
@@ -3621,7 +4668,7 @@ mod tests {
         let store = Store::open(&database).unwrap();
         assert_eq!(store.migration_outcome().status, MigrationStatus::Migrated);
         assert_eq!(store.migration_outcome().from_schema_version, Some(7));
-        assert_eq!(store.migration_outcome().to_schema_version, Some(11));
+        assert_eq!(store.migration_outcome().to_schema_version, Some(12));
         assert_eq!(store.migration_outcome().scoped_count, 4);
         assert_eq!(store.migration_outcome().legacy_unscoped_count, 4);
         assert_eq!(store.migration_outcome().rejected_count, 0);
@@ -3761,14 +4808,18 @@ mod tests {
                  DROP TABLE claim_evidence_links;
                  DROP TABLE evidence_claims;
                  DROP INDEX IF EXISTS idx_claim_evidence_links_project;
-                 DROP INDEX IF EXISTS idx_evidence_claims_project;",
+                 DROP INDEX IF EXISTS idx_evidence_claims_project;
+                 DROP INDEX IF EXISTS idx_agent_conversation_turns_conversation;
+                 DROP INDEX IF EXISTS idx_agent_conversations_project_updated;
+                 DROP TABLE agent_conversation_turns;
+                 DROP TABLE agent_conversations;",
             )
             .unwrap();
         set_schema_version(&connection, 8).unwrap();
     }
 
     #[test]
-    fn migrates_v8_to_v11_with_backup_and_reopens() {
+    fn migrates_v8_to_v12_with_backup_and_reopens() {
         let directory = TempDir::new().unwrap();
         let database = directory.path().join("rho.sqlite");
         create_v8_fixture(&database);
@@ -3776,7 +4827,7 @@ mod tests {
         let store = Store::open(&database).unwrap();
         assert_eq!(store.migration_outcome().status, MigrationStatus::Migrated);
         assert_eq!(store.migration_outcome().from_schema_version, Some(8));
-        assert_eq!(store.migration_outcome().to_schema_version, Some(11));
+        assert_eq!(store.migration_outcome().to_schema_version, Some(12));
         assert!(Path::new(store.migration_outcome().backup_path.as_deref().unwrap()).exists());
         assert_index_exists(&store.connection, "idx_evidence_claims_project").unwrap();
         drop(store);
@@ -3816,7 +4867,7 @@ mod tests {
         drop(verification);
 
         let recovered = Store::open(&database).unwrap();
-        assert_eq!(recovered.migration_outcome().to_schema_version, Some(11));
+        assert_eq!(recovered.migration_outcome().to_schema_version, Some(12));
     }
 
     fn create_v9_fixture(path: &Path) {
@@ -3829,14 +4880,18 @@ mod tests {
                  ALTER TABLE runs DROP COLUMN error_start_column;
                  ALTER TABLE runs DROP COLUMN error_end_line;
                  ALTER TABLE runs DROP COLUMN error_end_column;
-                 ALTER TABLE runs DROP COLUMN error_range_kind;",
+                 ALTER TABLE runs DROP COLUMN error_range_kind;
+                 DROP INDEX IF EXISTS idx_agent_conversation_turns_conversation;
+                 DROP INDEX IF EXISTS idx_agent_conversations_project_updated;
+                 DROP TABLE agent_conversation_turns;
+                 DROP TABLE agent_conversations;",
             )
             .unwrap();
         set_schema_version(&connection, 9).unwrap();
     }
 
     #[test]
-    fn migrates_v9_to_v11_without_guessing_historical_ranges_and_reopens() {
+    fn migrates_v9_to_v12_without_guessing_historical_ranges_and_reopens() {
         let directory = TempDir::new().unwrap();
         let database = directory.path().join("rho.sqlite");
         create_v9_fixture(&database);
@@ -3860,7 +4915,7 @@ mod tests {
         let store = Store::open(&database).unwrap();
         assert_eq!(store.migration_outcome().status, MigrationStatus::Migrated);
         assert_eq!(store.migration_outcome().from_schema_version, Some(9));
-        assert_eq!(store.migration_outcome().to_schema_version, Some(11));
+        assert_eq!(store.migration_outcome().to_schema_version, Some(12));
         assert!(
             store
                 .migration_outcome()
@@ -3912,7 +4967,7 @@ mod tests {
         drop(verification);
 
         let recovered = Store::open(&database).unwrap();
-        assert_eq!(recovered.migration_outcome().to_schema_version, Some(11));
+        assert_eq!(recovered.migration_outcome().to_schema_version, Some(12));
     }
 
     fn create_v10_fixture(path: &Path) {
@@ -3933,7 +4988,7 @@ mod tests {
     }
 
     #[test]
-    fn migrates_v10_to_v11_preserving_expression_ranges_without_parse_backfill() {
+    fn migrates_v10_to_v12_preserving_expression_ranges_without_parse_backfill() {
         let directory = TempDir::new().unwrap();
         let database = directory.path().join("rho.sqlite");
         create_v10_fixture(&database);
@@ -3975,7 +5030,7 @@ mod tests {
         let store = Store::open(&database).unwrap();
         assert_eq!(store.migration_outcome().status, MigrationStatus::Migrated);
         assert_eq!(store.migration_outcome().from_schema_version, Some(10));
-        assert_eq!(store.migration_outcome().to_schema_version, Some(11));
+        assert_eq!(store.migration_outcome().to_schema_version, Some(12));
         assert!(
             store
                 .migration_outcome()
@@ -4067,7 +5122,7 @@ mod tests {
         drop(verification);
 
         let recovered = Store::open(&database).unwrap();
-        assert_eq!(recovered.migration_outcome().to_schema_version, Some(11));
+        assert_eq!(recovered.migration_outcome().to_schema_version, Some(12));
         assert_runs_error_range_kind_constraint(&recovered.connection).unwrap();
     }
 
@@ -4116,6 +5171,280 @@ mod tests {
             )
             .unwrap();
         assert_eq!(retained, "message_guess");
+    }
+
+    fn create_v11_fixture(path: &Path) {
+        let mut store = Store::open(path).unwrap();
+        for (turn_id, project_root, status) in [
+            ("legacy_turn_a1", "D:/projects/A", "failed"),
+            ("legacy_turn_a2", "D:/projects/A", "interrupted"),
+            ("legacy_turn_b1", "D:/projects/B", "completed"),
+        ] {
+            store
+                .create_agent_turn(&AgentTurnDraft {
+                    turn_id: turn_id.to_string(),
+                    project_root: project_root.to_string(),
+                    mode: "ask".to_string(),
+                    prompt: format!("Historical prompt for {turn_id}"),
+                    model: "test".to_string(),
+                    workspace_id: format!("ws_{turn_id}"),
+                    state_revision_before: 1,
+                    project_revision_before: 0,
+                })
+                .unwrap();
+            store
+                .finish_agent_turn(&AgentTurnFinish {
+                    turn_id: turn_id.to_string(),
+                    status: status.to_string(),
+                    terminal_reason: Some(format!("old_reason_{status}")),
+                    workspace_id_after: Some(format!("ws_{turn_id}")),
+                    state_revision_after: Some(1),
+                    project_revision_after: Some(0),
+                    final_message: (status == "completed").then(|| "done".to_string()),
+                    error_message: (status != "completed").then(|| status.to_string()),
+                })
+                .unwrap();
+        }
+        drop(store);
+
+        let connection = Connection::open(path).unwrap();
+        connection
+            .execute_batch(
+                "DROP INDEX IF EXISTS idx_agent_conversation_turns_conversation;
+                 DROP INDEX IF EXISTS idx_agent_conversations_project_updated;
+                 DROP TABLE agent_conversation_turns;
+                 DROP TABLE agent_conversations;",
+            )
+            .unwrap();
+        set_schema_version(&connection, 11).unwrap();
+    }
+
+    #[test]
+    fn migrates_v11_agent_turns_into_read_only_project_conversations() {
+        let directory = TempDir::new().unwrap();
+        let database = directory.path().join("rho.sqlite");
+        create_v11_fixture(&database);
+
+        let mut store = Store::open(&database).unwrap();
+        assert_eq!(store.migration_outcome().status, MigrationStatus::Migrated);
+        assert_eq!(store.migration_outcome().from_schema_version, Some(11));
+        assert_eq!(store.migration_outcome().to_schema_version, Some(12));
+        assert!(
+            store
+                .migration_outcome()
+                .backup_path
+                .as_deref()
+                .unwrap()
+                .ends_with("rho.sqlite.schema-v11.bak")
+        );
+
+        let conversations_a = store
+            .list_agent_conversations("D:/projects/A", None)
+            .unwrap();
+        assert_eq!(conversations_a.len(), 1);
+        let legacy_a = &conversations_a[0];
+        assert_eq!(legacy_a.title, "Legacy project history");
+        assert!(legacy_a.legacy_unthreaded);
+        assert_eq!(legacy_a.turn_count, 2);
+        assert_eq!(
+            store
+                .list_agent_turns_for_conversation(
+                    "D:/projects/A",
+                    &legacy_a.conversation_id,
+                    None,
+                )
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(
+            store
+                .list_agent_conversations("D:/projects/B", None)
+                .unwrap()[0]
+                .turn_count,
+            1
+        );
+        let legacy_write = store
+            .create_agent_turn_in_conversation(
+                &legacy_a.conversation_id,
+                None,
+                &AgentTurnDraft {
+                    turn_id: "new_turn_in_legacy".to_string(),
+                    project_root: "D:/projects/A".to_string(),
+                    mode: "ask".to_string(),
+                    prompt: "Do not append".to_string(),
+                    model: "test".to_string(),
+                    workspace_id: "ws_test".to_string(),
+                    state_revision_before: 1,
+                    project_revision_before: 0,
+                },
+            )
+            .unwrap_err();
+        assert!(matches!(
+            legacy_write,
+            StoreError::Validation(message)
+                if message == "Legacy project history is read-only; start a new conversation"
+        ));
+        drop(store);
+
+        let reopened = Store::open(&database).unwrap();
+        assert_eq!(
+            reopened.migration_outcome(),
+            &MigrationOutcome::opened_current()
+        );
+    }
+
+    #[test]
+    fn rolls_back_v11_conversation_migration_after_injected_failure_and_recovers() {
+        let directory = TempDir::new().unwrap();
+        let database = directory.path().join("rho.sqlite");
+        create_v11_fixture(&database);
+
+        let error = Store::open_with_options(
+            &database,
+            StoreOpenOptions {
+                inject_v11_failure_before_commit: true,
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+        let outcome = error.migration_outcome().unwrap();
+        assert_eq!(outcome.status, MigrationStatus::Rejected);
+        assert_eq!(outcome.from_schema_version, Some(11));
+        assert_eq!(outcome.reason_code.as_deref(), Some("injected_failure"));
+        assert!(Path::new(outcome.backup_path.as_deref().unwrap()).exists());
+
+        let verification = Connection::open(&database).unwrap();
+        assert_eq!(read_schema_version(&verification).unwrap(), Some(11));
+        assert_eq!(
+            verification
+                .query_row("SELECT COUNT(*) FROM agent_turns", [], |row| {
+                    row.get::<_, i64>(0)
+                })
+                .unwrap(),
+            3
+        );
+        assert!(
+            verification
+                .prepare("SELECT * FROM agent_conversations")
+                .is_err()
+        );
+        drop(verification);
+
+        let recovered = Store::open(&database).unwrap();
+        assert_eq!(recovered.migration_outcome().to_schema_version, Some(12));
+        assert_eq!(
+            recovered
+                .list_agent_conversations("D:/projects/A", None)
+                .unwrap()[0]
+                .turn_count,
+            2
+        );
+    }
+
+    #[test]
+    fn rejects_malformed_v11_agent_project_identity_without_advancing_schema() {
+        let directory = TempDir::new().unwrap();
+        let database = directory.path().join("rho.sqlite");
+        create_v11_fixture(&database);
+        let connection = Connection::open(&database).unwrap();
+        connection
+            .execute_batch(
+                "PRAGMA ignore_check_constraints = ON;
+                 UPDATE agent_turns
+                 SET project_root = ''
+                 WHERE turn_id = 'legacy_turn_a1';
+                 PRAGMA ignore_check_constraints = OFF;",
+            )
+            .unwrap();
+        drop(connection);
+
+        let error = Store::open(&database).unwrap_err();
+        let outcome = error.migration_outcome().unwrap();
+        assert_eq!(outcome.status, MigrationStatus::Rejected);
+        assert_eq!(outcome.from_schema_version, Some(11));
+        assert_eq!(
+            outcome.reason_code.as_deref(),
+            Some("malformed_v11_agent_identity")
+        );
+        assert_eq!(outcome.rejected_count, 1);
+        assert!(Path::new(outcome.backup_path.as_deref().unwrap()).exists());
+
+        let verification = Connection::open(&database).unwrap();
+        assert_eq!(read_schema_version(&verification).unwrap(), Some(11));
+        assert!(
+            verification
+                .prepare("SELECT * FROM agent_conversations")
+                .is_err()
+        );
+        assert_eq!(
+            verification
+                .query_row(
+                    "SELECT project_root FROM agent_turns WHERE turn_id = 'legacy_turn_a1'",
+                    [],
+                    |row| row.get::<_, String>(0),
+                )
+                .unwrap(),
+            ""
+        );
+    }
+
+    #[test]
+    fn rejects_current_schema_with_a_cross_project_conversation_mapping() {
+        let directory = TempDir::new().unwrap();
+        let database = directory.path().join("rho.sqlite");
+        let mut store = Store::open(&database).unwrap();
+        for (conversation_id, project_root) in [
+            ("conversation_a", "D:/projects/A"),
+            ("conversation_b", "D:/projects/B"),
+        ] {
+            store
+                .create_agent_conversation(&AgentConversationDraft {
+                    conversation_id: conversation_id.to_string(),
+                    project_root: project_root.to_string(),
+                    title: "Conversation".to_string(),
+                    legacy_unthreaded: false,
+                })
+                .unwrap();
+        }
+        store
+            .create_agent_turn_in_conversation(
+                "conversation_a",
+                None,
+                &AgentTurnDraft {
+                    turn_id: "turn_a".to_string(),
+                    project_root: "D:/projects/A".to_string(),
+                    mode: "ask".to_string(),
+                    prompt: "Project A prompt".to_string(),
+                    model: "test".to_string(),
+                    workspace_id: "ws_test".to_string(),
+                    state_revision_before: 1,
+                    project_revision_before: 0,
+                },
+            )
+            .unwrap();
+        drop(store);
+
+        let connection = Connection::open(&database).unwrap();
+        connection
+            .execute(
+                "UPDATE agent_conversation_turns
+                 SET conversation_id = 'conversation_b'
+                 WHERE turn_id = 'turn_a'",
+                [],
+            )
+            .unwrap();
+        drop(connection);
+
+        let error = Store::open(&database).unwrap_err();
+        let outcome = error.migration_outcome().unwrap();
+        assert_eq!(outcome.status, MigrationStatus::Rejected);
+        assert_eq!(outcome.from_schema_version, Some(12));
+        assert_eq!(
+            outcome.reason_code.as_deref(),
+            Some("invalid_conversation_mapping")
+        );
+        assert_eq!(outcome.rejected_count, 1);
     }
 
     #[test]

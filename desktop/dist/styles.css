@@ -544,9 +544,13 @@ body.agent-posture .git-conflict-banner .conflict-list { display: none; }
 .task-rail-item.active .task-mode-icon,
 .task-rail-item:focus-visible .task-mode-icon { color: var(--accent-strong); }
 .task-rail-item .status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-.task-rail-item .status-dot.running { background: var(--accent); }
+.task-rail-item .status-dot.running,
+.task-rail-item .status-dot.waiting,
+.task-rail-item .status-dot.queued { background: var(--accent); }
 .task-rail-item .status-dot.completed { background: var(--success); }
 .task-rail-item .status-dot.failed { background: var(--error); }
+.task-rail-item .status-dot.empty,
+.task-rail-item .status-dot.interrupted { background: var(--muted); }
 .task-rail-preview { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
 .task-rail-empty { display: grid; gap: 7px; justify-items: start; padding: 18px 12px; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .task-rail-empty strong { color: var(--ink); font-size: 12px; }

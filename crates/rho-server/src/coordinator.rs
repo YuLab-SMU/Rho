@@ -1761,6 +1761,7 @@ pub async fn run_agent_turn(
     prompt: String,
     mode: String,
     turn_id: String,
+    conversation_id: String,
     approvals: Arc<PendingApprovalRegistry>,
     environment_approvals: Arc<PendingApprovalRegistry>,
     auto_approve: bool,
@@ -1779,7 +1780,7 @@ pub async fn run_agent_turn(
                 .context("Cannot load Agent context without an active project identity")?;
             context
                 .store
-                .recent_agent_conversation(&project_root, &turn_id, 4)?
+                .recent_agent_conversation(&project_root, &conversation_id, &turn_id, 4)?
         };
         let project_skills = {
             let context = context.lock().await;
@@ -1905,6 +1906,7 @@ pub async fn run_agent_turn(
                 "completed"
             }
             .to_string(),
+            terminal_reason: completion.failed.then(|| "agent_failure".to_string()),
             workspace_id_after: Some(after.workspace_id),
             state_revision_after: Some(after.state_revision as i64),
             project_revision_after: Some(after.project_revision as i64),
@@ -1930,6 +1932,7 @@ pub async fn run_agent_turn(
         context.store.finish_agent_turn(&AgentTurnFinish {
             turn_id,
             status: "failed".to_string(),
+            terminal_reason: Some("agent_failure".to_string()),
             workspace_id_after: Some(after.workspace_id),
             state_revision_after: Some(after.state_revision as i64),
             project_revision_after: Some(after.project_revision as i64),

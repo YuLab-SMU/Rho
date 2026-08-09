@@ -39,7 +39,7 @@ for (const [mode, label, icon] of [
 }
 assert.match(js, /function taskRailModePresentation\(mode\)/);
 assert.match(js, /function createTaskRailModeIcon\(mode\)/);
-assert.match(js, /function createTaskRailStatusDot\(status\)/);
+assert.match(js, /function createTaskRailStatusDot\(status, terminalReason = null\)/);
 assert.match(js, /key: "unknown",\s*label: "Agent",\s*icon: "bot"/);
 assert.match(js, /wrapper\.setAttribute\("role", "img"\)/);
 assert.match(js, /wrapper\.setAttribute\("aria-label", `\$\{presentation\.label\} mode`\)/);
@@ -48,8 +48,12 @@ assert.match(js, /icon\.setAttribute\("aria-hidden", "true"\)/);
 assert.match(js, /dot\.setAttribute\("aria-label", `\$\{label\} status`\)/);
 assert.match(js, /dot\.title = `\$\{label\} status`/);
 assert.match(js, /item\.setAttribute\("aria-current", "true"\)/);
-assert.match(js, /item\.setAttribute\("aria-label", `\$\{modePresentation\.label\} mode, \$\{statusLabel\} status: \$\{previewText\}`\)/);
-assert.match(js, /item\.append\(status, modeIcon, preview\)/);
+assert.match(
+  js,
+  /item\.setAttribute\("aria-label", conversation\.latest_mode[\s\S]{0,180}`\$\{modePresentation\.label\} mode, \$\{statusLabel\} status: \$\{previewText\}`[\s\S]{0,120}`\$\{statusLabel\} conversation: \$\{previewText\}`\)/,
+  "Populated conversations keep separate mode/status semantics while empty conversations remain truthfully mode-less",
+);
+assert.match(js, /item\.append\(status\);\s*if \(modeIcon\) item\.append\(modeIcon\);\s*item\.append\(preview\)/);
 
 assert.doesNotMatch(css, /\.mode-badge\.act/);
 assert.doesNotMatch(css, /\.task-rail-item \.mode-badge/);
@@ -61,9 +65,9 @@ assert.match(css, /\.task-mode-icon \.ui-icon\s*\{[^}]*width:\s*15px[^}]*height:
 assert.match(css, /\.task-rail-item\.active \.task-mode-icon[^}]*color:\s*var\(--accent-strong\)/s);
 assert.match(css, /\.task-rail-item:focus-visible \.task-mode-icon[^}]*color:\s*var\(--accent-strong\)/s);
 assert.match(css, /\.task-rail-preview\s*\{[^}]*min-width:\s*0/s);
-assert.match(css, /\.status-dot\.running\s*\{\s*background:\s*var\(--accent\)/);
-assert.match(css, /\.status-dot\.completed\s*\{\s*background:\s*var\(--success\)/);
-assert.match(css, /\.status-dot\.failed\s*\{\s*background:\s*var\(--error\)/);
+assert.match(css, /\.task-rail-item \.status-dot\.running,[\s\S]{0,180}background:\s*var\(--accent\)/);
+assert.match(css, /\.task-rail-item \.status-dot\.completed\s*\{\s*background:\s*var\(--success\)/);
+assert.match(css, /\.task-rail-item \.status-dot\.failed\s*\{\s*background:\s*var\(--error\)/);
 
 assert.match(js, /previewState === "task-rail"/);
 for (const state of ["completed", "running", "failed"]) {

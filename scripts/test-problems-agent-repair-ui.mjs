@@ -32,7 +32,7 @@ assert.ok(bridge.includes('"^<text>:([1-9][0-9]{0,7}):([1-9][0-9]{0,6}):"'));
 assert.match(bridge, /rho_execution_parse_token_range\(error, code\)/);
 assert.doesNotMatch(bridge, /unexpected.*source_range/i);
 
-assert.match(store, /pub\(crate\) const SCHEMA_VERSION: i64 = 11/);
+assert.match(store, /pub\(crate\) const SCHEMA_VERSION: i64 = 12/);
 for (const column of [
   "error_start_line",
   "error_start_column",

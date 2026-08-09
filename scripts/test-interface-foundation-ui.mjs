@@ -35,7 +35,7 @@ assert.ok(topActions, "Top actions must remain a bounded shell group");
 assert.doesNotMatch(topActions, /[↻■▶]/, "Primary shell actions must not use text glyph icons");
 assert.match(topActions, /id="restartButton"[^>]*title="Restart Workspace R"[^>]*aria-label="Restart Workspace R"/);
 assert.match(topActions, /id="interruptButton"[^>]*title="Interrupt R"[^>]*aria-label="Interrupt R"/);
-assert.match(html, /id="taskRailNew"[^>]*title="New task"[^>]*aria-label="New task"/);
+assert.match(html, /id="taskRailNew"[^>]*title="New conversation"[^>]*aria-label="New conversation"/);
 
 assert.match(css, /\.ui-icon\s*\{[^}]*stroke-width:\s*1\.75/);
 assert.match(css, /button:focus-visible,[\s\S]*outline-offset:\s*2px/);

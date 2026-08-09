@@ -49,6 +49,7 @@ const state = {
   agentRuntime: null,
   projectSkills: { project_root: "", trust_status: "untrusted_project_content", skills: [], discovery_error: null },
   projectRefreshSequence: 0,
+  agentRefreshRequestSequence: 0,
   agentLlm: {
     settings: null,
     activeView: "connections",
@@ -178,9 +179,11 @@ const state = {
   consoleRepairPreviewProbe: null,
   lint: { status: "idle", response: null, proposal: null, projectRoot: null, error: null },
   refactor: { status: "idle", proposal: null, undo: null, error: null, returnFocus: null },
+  agentConversations: [],
   agentTurns: [],
   agentActivityExpanded: new Set(),
   pendingApprovals: [],
+  selectedConversationId: null,
   selectedTurnId: null,
   selectedTurnDetail: null,
   fileEditProposal: null,
@@ -429,9 +432,11 @@ const mockPlots = [];
 const mockArtifacts = [];
 let mockArtifactSequence = 0;
 let mockAgentTurnSequence = 0;
+let mockAgentConversationSequence = 0;
 let mockApprovalSequence = 0;
 let mockEnvironmentOperationSequence = 0;
 const mockAgentTurns = [];
+const mockAgentConversations = [];
 const mockApprovalRequests = [];
 const mockEnvironmentOperationRequests = [];
 const mockEvidenceEntries = [];
@@ -1015,6 +1020,11 @@ function nextMockTurnId() {
   return `agent_turn_${mockAgentTurnSequence}`;
 }
 
+function nextMockConversationId() {
+  mockAgentConversationSequence += 1;
+  return `agent_conversation_${mockAgentConversationSequence}`;
+}
+
 function nextMockApprovalId() {
   mockApprovalSequence += 1;
   return `approval_${mockApprovalSequence}`;
@@ -1029,6 +1039,8 @@ function mockTurnSummary(turn) {
   const pending = mockApprovalRequests.find((item) => item.turn_id === turn.turn_id && item.status === "waiting");
   return {
     turn_id: turn.turn_id,
+    conversation_id: turn.conversation_id,
+    project_root: turn.project_root,
     mode: turn.mode,
     status: turn.status,
     started_at: turn.started_at,
@@ -1044,7 +1056,51 @@ function mockTurnSummary(turn) {
     final_message: turn.final_message,
     error_message: turn.error_message,
     pending_request_id: pending?.request_id || null,
+    retry_of_turn_id: turn.retry_of_turn_id || null,
+    terminal_reason: turn.terminal_reason || null,
   };
+}
+
+function createMockAgentConversation({ projectRoot = mockLastProject, legacyUnthreaded = false } = {}) {
+  const timestamp = new Date().toISOString();
+  const conversation = {
+    conversation_id: nextMockConversationId(),
+    project_root: projectRoot,
+    title: legacyUnthreaded ? "Legacy project history" : "New conversation",
+    created_at: timestamp,
+    updated_at: timestamp,
+    archived_at: null,
+    legacy_unthreaded: legacyUnthreaded,
+  };
+  mockAgentConversations.unshift(conversation);
+  return conversation;
+}
+
+function mockConversationSummary(conversation) {
+  const turns = mockAgentTurns
+    .filter((turn) => turn.project_root === conversation.project_root
+      && turn.conversation_id === conversation.conversation_id)
+    .sort((left, right) => String(right.started_at).localeCompare(String(left.started_at)));
+  const latest = turns[0] || null;
+  const pending = latest
+    ? mockApprovalRequests.find((item) => item.turn_id === latest.turn_id && item.status === "waiting")
+    : null;
+  return {
+    ...conversation,
+    turn_count: turns.length,
+    status: latest?.status || "empty",
+    latest_turn_id: latest?.turn_id || null,
+    latest_mode: latest?.mode || null,
+    latest_prompt_preview: latest?.prompt_preview || null,
+    terminal_reason: latest?.terminal_reason || null,
+    pending_request_id: pending?.request_id || null,
+  };
+}
+
+function touchMockAgentConversation(turn, timestamp = new Date().toISOString()) {
+  const conversation = mockAgentConversations.find((item) =>
+    item.conversation_id === turn.conversation_id && item.project_root === turn.project_root);
+  if (conversation) conversation.updated_at = timestamp;
 }
 
 function createMockAgentTurn({
@@ -1055,11 +1111,24 @@ function createMockAgentTurn({
   autoApprove = false,
   taskKind = "agent_turn",
   capabilityRoute = null,
+  conversationId = null,
 }) {
+  let conversation = conversationId
+    ? mockAgentConversations.find((item) => item.conversation_id === conversationId && item.project_root === mockLastProject)
+    : null;
+  if (conversationId && !conversation) throw new Error("Agent Conversation was not found");
+  if (!conversation) conversation = createMockAgentConversation();
+  if (conversation.legacy_unthreaded) throw new Error("Legacy project history is read-only; start a new conversation");
+  if (mockAgentTurns.some((item) => item.conversation_id === conversation.conversation_id
+    && ["running", "waiting"].includes(item.status))) {
+    throw new Error("Agent Conversation already has a running turn");
+  }
   const startedAt = new Date().toISOString();
   const waitingForApproval = mode === "act" && !autoApprove;
   const turn = {
     turn_id: nextMockTurnId(),
+    conversation_id: conversation.conversation_id,
+    project_root: mockLastProject,
     mode,
     status: waitingForApproval ? "waiting" : "completed",
     started_at: startedAt,
@@ -1074,6 +1143,8 @@ function createMockAgentTurn({
     project_revision_after: waitingForApproval ? null : state.revision.project_revision,
     final_message: null,
     error_message: null,
+    retry_of_turn_id: null,
+    terminal_reason: null,
     events: [
       {
         id: 1,
@@ -1116,6 +1187,7 @@ function createMockAgentTurn({
     mockApprovalRequests.unshift({
       request_id: requestId,
       turn_id: turn.turn_id,
+      project_root: mockLastProject,
       tool: "run_r",
       policy: "required",
       status: "waiting",
@@ -1248,6 +1320,8 @@ function createMockAgentTurn({
     );
   }
   mockAgentTurns.unshift(turn);
+  if (conversation.title === "New conversation") conversation.title = turn.prompt_preview;
+  conversation.updated_at = startedAt;
   return turn;
 }
 
@@ -2987,54 +3061,94 @@ async function mockInvoke(command, args) {
       autoApprove: Boolean(args.autoApprove ?? args.auto_approve),
       taskKind,
       capabilityRoute: effectiveRoute?.capability || null,
+      conversationId: args.conversationId ?? args.conversation_id ?? null,
     });
-    return { status: "started", turn_id: turn.turn_id, task_kind: taskKind };
+    return {
+      status: "started",
+      turn_id: turn.turn_id,
+      conversation_id: turn.conversation_id,
+      task_kind: taskKind,
+    };
   }
   if (command === "cancel_agent_turn") {
     const turnId = args.turnId ?? args.turn_id;
-    const turn = mockAgentTurns.find((item) => item.turn_id === turnId);
+    const turn = mockAgentTurns.find((item) => item.turn_id === turnId && item.project_root === mockLastProject);
     if (!turn || !["running", "waiting"].includes(turn.status)) {
       throw new Error(`Agent turn is not active: ${turnId}`);
     }
     turn.status = "interrupted";
+    turn.terminal_reason = "user_cancelled";
     turn.finished_at = new Date().toISOString();
     turn.error_message = "Agent turn cancelled by the user.";
-    for (const approval of mockApprovalRequests.filter((item) => item.turn_id === turn.turn_id && item.status === "waiting")) {
+    for (const approval of mockApprovalRequests.filter((item) =>
+      item.turn_id === turn.turn_id
+      && item.project_root === mockLastProject
+      && item.status === "waiting")) {
       approval.status = "interrupted";
       approval.decision = "cancel";
       approval.reason = "Agent turn cancelled by the user.";
       approval.continuation_outcome = "user_cancelled";
       approval.responded_at = turn.finished_at;
     }
+    touchMockAgentConversation(turn, turn.finished_at);
     return { status: "cancelled", turn_id: turn.turn_id };
   }
+  if (command === "create_agent_conversation") {
+    return structuredClone(mockConversationSummary(createMockAgentConversation()));
+  }
+  if (command === "list_agent_conversations") {
+    return structuredClone(mockAgentConversations
+      .filter((item) => item.project_root === mockLastProject && !item.archived_at)
+      .sort((left, right) => String(right.updated_at).localeCompare(String(left.updated_at)))
+      .slice(0, args.limit || 50)
+      .map(mockConversationSummary));
+  }
   if (command === "list_agent_turns") {
-    return structuredClone(mockAgentTurns.slice(0, args.limit || 50).map(mockTurnSummary));
+    const conversationId = args.conversationId ?? args.conversation_id ?? null;
+    return structuredClone(mockAgentTurns
+      .filter((item) => item.project_root === mockLastProject
+        && (!conversationId || item.conversation_id === conversationId))
+      .slice(0, args.limit || 50)
+      .map(mockTurnSummary));
   }
   if (command === "clear_agent_history") {
-    const deleted = mockAgentTurns.length;
-    mockAgentTurns.splice(0, mockAgentTurns.length);
-    mockApprovalRequests.splice(0, mockApprovalRequests.length);
+    const deletedTurnIds = new Set(mockAgentTurns
+      .filter((item) => item.project_root === mockLastProject)
+      .map((item) => item.turn_id));
+    const deleted = deletedTurnIds.size;
+    for (let index = mockAgentTurns.length - 1; index >= 0; index -= 1) {
+      if (deletedTurnIds.has(mockAgentTurns[index].turn_id)) mockAgentTurns.splice(index, 1);
+    }
+    for (let index = mockApprovalRequests.length - 1; index >= 0; index -= 1) {
+      if (deletedTurnIds.has(mockApprovalRequests[index].turn_id)) mockApprovalRequests.splice(index, 1);
+    }
+    for (let index = mockAgentConversations.length - 1; index >= 0; index -= 1) {
+      if (mockAgentConversations[index].project_root === mockLastProject) mockAgentConversations.splice(index, 1);
+    }
     return { deleted };
   }
   if (command === "list_approval_requests") {
-    const filtered = (mockApprovalRequests || []).filter((item) => !args.status || item.status === args.status);
+    const filtered = (mockApprovalRequests || []).filter((item) =>
+      item.project_root === mockLastProject && (!args.status || item.status === args.status));
     return structuredClone(filtered.slice(0, args.limit || 50));
   }
   if (command === "get_agent_turn_detail") {
     const turnId = args.turnId ?? args.turn_id;
-    const turn = mockAgentTurns.find((item) => item.turn_id === turnId);
+    const turn = mockAgentTurns.find((item) => item.turn_id === turnId && item.project_root === mockLastProject);
     if (!turn) return null;
     return structuredClone({
       turn: mockTurnSummary(turn),
       events: turn.events || [],
-      approvals: mockApprovalRequests.filter((item) => item.turn_id === turn.turn_id),
+      approvals: mockApprovalRequests.filter((item) =>
+        item.turn_id === turn.turn_id && item.project_root === mockLastProject),
     });
   }
   if (command === "respond_approval") {
-    const approval = mockApprovalRequests.find((item) => item.request_id === args.request.request_id);
+    const approval = mockApprovalRequests.find((item) =>
+      item.request_id === args.request.request_id && item.project_root === mockLastProject);
     if (!approval) throw new Error(`Approval request not found: ${args.request.request_id}`);
-    const turn = mockAgentTurns.find((item) => item.turn_id === approval.turn_id);
+    const turn = mockAgentTurns.find((item) =>
+      item.turn_id === approval.turn_id && item.project_root === mockLastProject);
     if (!turn) throw new Error(`Agent turn not found: ${approval.turn_id}`);
     approval.decision = args.request.decision;
     approval.responded_at = new Date().toISOString();
@@ -3097,6 +3211,7 @@ async function mockInvoke(command, args) {
           details_json: "{}",
         },
       );
+      touchMockAgentConversation(turn, approval.responded_at);
       return { status: "delivered", request_id: approval.request_id, turn_id: turn.turn_id };
     }
     approval.status = args.request.decision === "cancel" ? "cancelled" : "rejected";
@@ -3135,6 +3250,7 @@ async function mockInvoke(command, args) {
         details_json: "{}",
       },
     );
+    touchMockAgentConversation(turn, approval.responded_at);
     return { status: "delivered", request_id: approval.request_id, turn_id: turn.turn_id };
   }
   if (command === "request_environment_operation_preview") {
@@ -6012,9 +6128,11 @@ function prettyAgentMode(mode) {
   return { ask: "Ask", plan: "Plan", act: "Act" }[mode] || mode || "Agent";
 }
 
-function prettyAgentStatus(status) {
+function prettyAgentStatus(status, terminalReason = null) {
+  if (status === "interrupted" && terminalReason === "user_cancelled") return "Cancelled";
   return userFacingStatus(status, {
     queued: "Queued",
+    empty: "Empty",
     running: "Running",
     waiting: "Waiting for approval",
     completed: "Completed",
@@ -6065,9 +6183,9 @@ function createTaskRailModeIcon(mode) {
   return wrapper;
 }
 
-function createTaskRailStatusDot(status) {
+function createTaskRailStatusDot(status, terminalReason = null) {
   const key = String(status || "unknown").toLowerCase().replace(/[^a-z0-9_-]/g, "-");
-  const label = prettyAgentStatus(status);
+  const label = prettyAgentStatus(status, terminalReason);
   const dot = document.createElement("span");
   dot.className = `status-dot ${key}`;
   dot.dataset.status = String(status || "unknown");
@@ -6524,38 +6642,60 @@ function restorePanelViewport(panel, viewport, keySelector = null) {
 }
 
 async function loadAgentData({ quiet = false } = {}) {
+  state.agentRefreshRequestSequence += 1;
+  const requestSequence = state.agentRefreshRequestSequence;
+  const refreshSequence = state.projectRefreshSequence;
+  const projectRoot = state.project.root;
+  const requestIsCurrent = () => requestSequence === state.agentRefreshRequestSequence
+    && refreshSequence === state.projectRefreshSequence
+    && projectRoot === state.project.root;
   try {
-    const [turns, approvals] = await Promise.all([
-      invoke("list_agent_turns", { limit: 20 }),
+    const [conversationResponse, approvalResponse] = await Promise.all([
+      invoke("list_agent_conversations", { limit: 50 }),
       invoke("list_approval_requests", { limit: 20 }),
     ]);
-    state.agentTurns = turns || [];
-    const turnIds = new Set(state.agentTurns.map((turn) => turn.turn_id));
-    state.agentActivityExpanded = new Set(
-      Array.from(state.agentActivityExpanded).filter((turnId) => turnIds.has(turnId)),
-    );
-    state.pendingApprovals = (approvals || []).filter((item) => item.status === "waiting");
-    const selectedTurnStillExists = state.selectedTurnId
-      && state.agentTurns.some((turn) => turn.turn_id === state.selectedTurnId);
-    const preferredTurnId = selectedTurnStillExists
-      ? state.selectedTurnId
-      || state.pendingApprovals[0]?.turn_id
-      || state.agentTurns.find((turn) => ["running", "waiting"].includes(turn.status))?.turn_id
-      || state.agentTurns[0]?.turn_id
-      : state.pendingApprovals[0]?.turn_id
-        || state.agentTurns.find((turn) => ["running", "waiting"].includes(turn.status))?.turn_id
-        || state.agentTurns[0]?.turn_id
+    if (!requestIsCurrent()) return false;
+    const conversations = conversationResponse || [];
+    const pendingApprovals = (approvalResponse || []).filter((item) => item.status === "waiting");
+    const selectedConversationStillExists = state.selectedConversationId
+      && conversations.some((conversation) => conversation.conversation_id === state.selectedConversationId);
+    const preferredConversationId = selectedConversationStillExists
+      ? state.selectedConversationId
+      : conversations.find((conversation) => conversation.pending_request_id)?.conversation_id
+        || conversations.find((conversation) => ["running", "waiting"].includes(conversation.status))?.conversation_id
+        || conversations[0]?.conversation_id
         || null;
-    state.selectedTurnId = preferredTurnId;
-    state.selectedTurnDetail = null;
+    const turns = preferredConversationId
+      ? await invoke("list_agent_turns", { conversationId: preferredConversationId, limit: 50 }) || []
+      : [];
+    if (!requestIsCurrent()) return false;
+    const selectedTurnStillExists = state.selectedTurnId
+      && turns.some((turn) => turn.turn_id === state.selectedTurnId);
+    let preferredTurnId = selectedTurnStillExists
+      ? state.selectedTurnId
+      || pendingApprovals.find((approval) => turns.some((turn) => turn.turn_id === approval.turn_id))?.turn_id
+      || turns.find((turn) => ["running", "waiting"].includes(turn.status))?.turn_id
+      || turns[0]?.turn_id
+      : pendingApprovals.find((approval) => turns.some((turn) => turn.turn_id === approval.turn_id))?.turn_id
+        || turns.find((turn) => ["running", "waiting"].includes(turn.status))?.turn_id
+        || turns[0]?.turn_id
+        || null;
+    let selectedTurnDetail = null;
     if (preferredTurnId) {
       try {
-        state.selectedTurnDetail = await invoke("get_agent_turn_detail", { turnId: preferredTurnId });
+        selectedTurnDetail = await invoke("get_agent_turn_detail", { turnId: preferredTurnId });
       } catch (error) {
         if (!isStaleInformationError(error)) throw error;
-        state.selectedTurnId = null;
+        preferredTurnId = null;
       }
     }
+    if (!requestIsCurrent()) return false;
+    state.agentConversations = conversations;
+    state.pendingApprovals = pendingApprovals;
+    state.selectedConversationId = preferredConversationId;
+    state.agentTurns = turns;
+    state.selectedTurnId = preferredTurnId;
+    state.selectedTurnDetail = selectedTurnDetail;
     renderAgentTimeline();
     renderApprovalPanel();
     renderFileEditPanel();
@@ -6563,8 +6703,12 @@ async function loadAgentData({ quiet = false } = {}) {
     renderTaskRail();
     updateAgentHeader();
     syncAgentPolling();
+    return true;
   } catch (error) {
-    if (!quiet) toast(reportUiFailure("load Agent history", error, "Conversation history could not be loaded. Refresh and try again."), true);
+    if (requestIsCurrent() && !quiet) {
+      toast(reportUiFailure("load Agent history", error, "Conversation history could not be loaded. Refresh and try again."), true);
+    }
+    return false;
   }
 }
 
@@ -6634,7 +6778,7 @@ function syncAgentComposerState() {
   const actBlocked = actRoute?.compatibility !== "compatible"
     || ["not_detected", "unavailable"].includes(actRoute?.credential_status);
   const selectorLocked = state.pendingApprovals.length > 0
-    || state.agentTurns.some((turn) => ["running", "waiting"].includes(turn.status));
+    || state.agentConversations.some((conversation) => ["running", "waiting"].includes(conversation.status));
   if (state.agentMode === "act" && actBlocked) {
     state.agentMode = "ask";
   }
@@ -6775,7 +6919,9 @@ async function syncAgentRunsToConsole(runs) {
 }
 
 function updateAgentHeader() {
-  const latest = state.agentTurns[0] || null;
+  const selectedConversation = state.agentConversations.find(
+    (conversation) => conversation.conversation_id === state.selectedConversationId,
+  ) || null;
   const runtime = state.agentRuntime;
   updateAgentModelLabel();
   renderAgentModelSelector();
@@ -6790,29 +6936,38 @@ function updateAgentHeader() {
   }
   $("#agentRuntimeRetryButton").classList.add("hidden");
   const active = state.pendingApprovals.length > 0
-    || state.agentTurns.some((turn) => ["running", "waiting"].includes(turn.status));
+    || state.agentConversations.some((conversation) => ["running", "waiting"].includes(conversation.status));
   state.agentBusy = active;
   syncAgentComposerState();
-  const activeTurn = state.agentTurns.find((turn) => ["running", "waiting"].includes(turn.status));
-  state.activeAgentTurnId = activeTurn?.turn_id || null;
+  state.activeAgentTurnId = selectedConversation && ["running", "waiting"].includes(selectedConversation.status)
+    ? selectedConversation.latest_turn_id
+    : null;
   $("#agentCancelButton").classList.toggle("hidden", !state.activeAgentTurnId);
   if (state.pendingApprovals.length) {
     $("#agentState").textContent = "Waiting approval";
     $("#agentStateDot").className = "agent-state-dot busy";
     return;
   }
-  if (latest && ["running", "waiting"].includes(latest.status)) {
+  if (active) {
     $("#agentState").textContent = "Working";
     $("#agentStateDot").className = "agent-state-dot busy";
     return;
   }
-  if (latest?.status === "failed") {
+  if (selectedConversation?.status === "failed") {
     $("#agentState").textContent = "Failed";
     $("#agentStateDot").className = "agent-state-dot error";
     return;
   }
-  if (latest?.status === "completed") {
+  if (selectedConversation?.status === "completed") {
     $("#agentState").textContent = "Completed";
+    $("#agentStateDot").className = "agent-state-dot";
+    return;
+  }
+  if (selectedConversation?.status === "interrupted") {
+    $("#agentState").textContent = prettyAgentStatus(
+      selectedConversation.status,
+      selectedConversation.terminal_reason,
+    );
     $("#agentStateDot").className = "agent-state-dot";
     return;
   }
@@ -8781,7 +8936,8 @@ async function cancelAgentModelTest() {
 }
 
 function syncAgentPolling() {
-  const shouldPoll = state.agentTurns.some((turn) => ["running", "waiting"].includes(turn.status)) || state.pendingApprovals.length > 0;
+  const shouldPoll = state.agentConversations.some((conversation) => ["running", "waiting"].includes(conversation.status))
+    || state.pendingApprovals.length > 0;
   if (shouldPoll && !state.agentPollTimer) {
     state.agentPollTimer = window.setInterval(() => {
       loadAgentData({ quiet: true }).catch(() => {});
@@ -8801,6 +8957,8 @@ function renderAgentTimeline() {
   if (!state.agentTurns.length) {
     if (state.agentRuntime && !state.agentRuntime.available) {
       addTimeline("Assistant unavailable", userFacingError(state.agentRuntime.error, "Retry the assistant connection when you are ready."), "error");
+    } else if (state.selectedConversationId) {
+      addTimeline("New conversation", "Describe the scientific goal to start this independent conversation.", "completed");
     } else {
       addTimeline("R session ready", "Ask Rho about the current project or attach a file for review.", "completed");
     }
@@ -8812,14 +8970,15 @@ function renderAgentTimeline() {
     const row = document.createElement("div");
     row.className = `timeline-item ${agentStatusTone(turn.status)} timeline-parent${selected ? " is-selected" : ""}`;
     row.dataset.turnId = turn.turn_id;
-    const marker = createStateMarker(turn.status, prettyAgentStatus(turn.status));
+    const statusLabel = prettyAgentStatus(turn.status, turn.terminal_reason);
+    const marker = createStateMarker(turn.status, statusLabel);
     marker.classList.add("timeline-marker");
     const content = document.createElement("div");
     const headingRow = document.createElement("div");
     headingRow.className = "timeline-heading-row";
     const heading = document.createElement("strong");
     heading.textContent = turn.prompt_preview;
-    headingRow.append(heading, createStateChip(prettyAgentStatus(turn.status), turn.status));
+    headingRow.append(heading, createStateChip(statusLabel, turn.status));
     const paragraph = document.createElement("p");
     paragraph.className = "timeline-meta technical-meta";
     paragraph.textContent = `${prettyAgentMode(turn.mode)} · ${agentModelDisplayName(turn.model)}`;
@@ -8938,11 +9097,11 @@ function renderAgentTimeline() {
 
 function renderTaskRail() {
   const list = $("#taskRailList");
-  const viewport = capturePanelViewport(list, "data-turn-id");
+  const viewport = capturePanelViewport(list, "data-conversation-id");
   list.replaceChildren();
 
-  const turns = state.agentTurns.slice(0, 12);
-  if (!turns.length) {
+  const conversations = state.agentConversations.slice(0, 50);
+  if (!conversations.length) {
     const empty = document.createElement("div");
     empty.className = "task-rail-empty";
     const heading = document.createElement("strong");
@@ -8955,70 +9114,72 @@ function renderTaskRail() {
     start.addEventListener("click", startNewAgentTask);
     empty.append(heading, description, start);
     list.append(empty);
-    restorePanelViewport(list, viewport, "data-turn-id");
+    restorePanelViewport(list, viewport, "data-conversation-id");
     syncAgentWorkSurfaceLayout();
     return;
   }
 
-  for (const turn of turns) {
-    const active = state.selectedTurnId === turn.turn_id;
-    const modePresentation = taskRailModePresentation(turn.mode);
-    const statusLabel = prettyAgentStatus(turn.status);
-    const previewText = turn.prompt_preview
-      || turn.final_message
-      || (turn.error_message ? userFacingError(turn.error_message, "The Agent could not complete this task.") : "")
-      || "(empty)";
+  for (const conversation of conversations) {
+    const active = state.selectedConversationId === conversation.conversation_id;
+    const modePresentation = taskRailModePresentation(conversation.latest_mode);
+    const statusLabel = conversation.status === "empty"
+      ? "Empty"
+      : prettyAgentStatus(conversation.status, conversation.terminal_reason);
+    const previewText = conversation.title || conversation.latest_prompt_preview || "(empty)";
     const item = document.createElement("button");
     item.type = "button";
     item.className = `task-rail-item${active ? " active" : ""}`;
-    item.dataset.turnId = turn.turn_id;
-    item.setAttribute("aria-label", `${modePresentation.label} mode, ${statusLabel} status: ${previewText}`);
+    item.dataset.conversationId = conversation.conversation_id;
+    item.dataset.turnId = conversation.latest_turn_id || "";
+    item.setAttribute("aria-label", conversation.latest_mode
+      ? `${modePresentation.label} mode, ${statusLabel} status: ${previewText}`
+      : `${statusLabel} conversation: ${previewText}`);
     if (active) item.setAttribute("aria-current", "true");
 
-    const status = createTaskRailStatusDot(turn.status);
-    const modeIcon = createTaskRailModeIcon(turn.mode);
+    const status = createTaskRailStatusDot(conversation.status, conversation.terminal_reason);
+    const modeIcon = conversation.latest_mode ? createTaskRailModeIcon(conversation.latest_mode) : null;
 
     const preview = document.createElement("span");
     preview.className = "task-rail-preview";
     preview.textContent = previewText;
 
-    item.append(status, modeIcon, preview);
-    item.addEventListener("click", async () => selectTaskTurn(turn.turn_id));
+    item.append(status);
+    if (modeIcon) item.append(modeIcon);
+    item.append(preview);
+    item.addEventListener("click", async () => selectTaskConversation(conversation.conversation_id));
     list.append(item);
   }
 
   const header = document.querySelector(".task-rail-header span");
-  if (header) header.textContent = `Tasks (${state.agentTurns.length})`;
-  restorePanelViewport(list, viewport, "data-turn-id");
+  if (header) header.textContent = `Conversations (${state.agentConversations.length})`;
+  restorePanelViewport(list, viewport, "data-conversation-id");
   syncAgentWorkSurfaceLayout();
 }
 
-function startNewAgentTask() {
-  state.selectedTurnId = null;
-  state.selectedTurnDetail = null;
-  renderTaskRail();
-  renderAgentTimeline();
-  renderApprovalPanel();
-  renderFileEditPanel();
-  updateAgentHeader();
-  $("#agentInput").focus();
+async function startNewAgentTask() {
+  try {
+    const conversation = await invoke("create_agent_conversation");
+    state.selectedConversationId = conversation.conversation_id;
+    state.selectedTurnId = null;
+    state.selectedTurnDetail = null;
+    await loadAgentData();
+    $("#agentInput").focus();
+  } catch (error) {
+    toast(reportUiFailure("create Agent conversation", error, "A new conversation could not be created."), true);
+  }
 }
 
-async function selectTaskTurn(turnId) {
-  state.selectedTurnId = turnId;
-  state.selectedTurnDetail = await invoke("get_agent_turn_detail", { turnId });
-  renderTaskRail();
-  renderAgentTimeline();
-  renderApprovalPanel();
-  renderFileEditPanel();
-  maybeAutoApplyFileEditProposal();
-  updateAgentHeader();
+async function selectTaskConversation(conversationId) {
+  state.selectedConversationId = conversationId;
+  state.selectedTurnId = null;
+  state.selectedTurnDetail = null;
+  await loadAgentData();
 }
 
 $("#taskRailNew").addEventListener("click", startNewAgentTask);
 
 function renderApprovalPanel() {
-  const approval = state.pendingApprovals.find((item) => item.turn_id === state.selectedTurnId) || state.pendingApprovals[0] || null;
+  const approval = state.pendingApprovals.find((item) => item.turn_id === state.selectedTurnId) || null;
   $("#approvalPanel").classList.toggle("hidden", !approval);
   $("#approvalPanel").dataset.state = approval ? "waiting" : "empty";
   if (!approval) {
@@ -13255,6 +13416,8 @@ async function maybeApplyPreviewScenario() {
       askTurn.prompt_preview = "";
       askTurn.final_message = "";
       askTurn.error_message = null;
+      const askConversation = mockAgentConversations.find((item) => item.conversation_id === askTurn.conversation_id);
+      if (askConversation) askConversation.title = "";
 
       const planTurn = createMockAgentTurn({
         prompt: "Plan a reproducible 单细胞 RNA-seq quality-control workflow with deliberately long context that must stay inside the Task Rail row without widening the page.",
@@ -13275,6 +13438,18 @@ async function maybeApplyPreviewScenario() {
       actTurn.finished_at = new Date().toISOString();
       actTurn.final_message = null;
       actTurn.error_message = "The reviewed edit could not be applied.";
+      await loadAgentData();
+    } else if (previewState === "conversation-switch") {
+      const runningTurn = createMockAgentTurn({
+        prompt: "Plan a long-running analysis in the first conversation.",
+        mode: "plan",
+        model: "mock-read-only",
+      });
+      runningTurn.status = "running";
+      runningTurn.finished_at = null;
+      runningTurn.final_message = null;
+      const emptyConversation = createMockAgentConversation();
+      state.selectedConversationId = emptyConversation.conversation_id;
       await loadAgentData();
     } else if (!["empty", "outputs-empty"].includes(previewState)) {
       const approvalPreview = previewState === "approval";
@@ -14334,6 +14509,7 @@ function recordPreviewLayoutEvidence() {
       const statusDot = item.querySelector(".status-dot");
       const preview = item.querySelector(".task-rail-preview");
       return {
+        conversation_id: item.dataset.conversationId || null,
         turn_id: item.dataset.turnId || null,
         mode: modeIcon?.dataset.mode || null,
         mode_label: modeIcon?.getAttribute("aria-label") || null,
@@ -14358,7 +14534,13 @@ function recordPreviewLayoutEvidence() {
       surface: state.agentSurface,
       work_surface: state.agentWorkSurface,
       mode: state.agentMode,
-      counts: { tasks: state.agentTurns.length },
+      counts: {
+        tasks: state.agentConversations.length,
+        conversations: state.agentConversations.length,
+      },
+      selected_conversation_id: state.selectedConversationId,
+      composer_disabled: $("#agentInput").disabled,
+      new_conversation_disabled: $("#taskRailNew").disabled,
       visible: {
         task_rail: Boolean(taskRail && taskRail.width > 0 && taskRail.height > 0),
         editor: Boolean(workSurface && workSurface.width > 0 && workSurface.height > 0),
@@ -16330,17 +16512,25 @@ async function sendAgentPrompt(options = {}) {
   try {
     const editorContext = buildAgentEditorContext();
     const authorizeChanges = taskKind === "agent_turn" && mode === "act" && state.actAutoApprove;
+    const selectedConversation = state.agentConversations.find(
+      (conversation) => conversation.conversation_id === state.selectedConversationId,
+    ) || null;
+    const conversationId = taskKind === "agent_turn" && !selectedConversation?.legacy_unthreaded
+      ? state.selectedConversationId
+      : null;
     const response = await invoke("run_agent", {
       prompt,
       mode,
       taskKind,
       autoApprove: authorizeChanges,
       editorContext,
+      conversationId,
     });
     if (authorizeChanges && response?.turn_id) state.actAuthorizedTurnIds.add(response.turn_id);
     resetAgentContext();
     resetAgentLocalHelpContext();
     state.activeAgentTurnId = response?.turn_id || null;
+    state.selectedConversationId = response?.conversation_id || state.selectedConversationId;
     state.selectedTurnId = response?.turn_id || state.selectedTurnId;
     state.selectedTurnDetail = null;
     await Promise.all([loadAgentData(), loadRunData()]);
@@ -16431,10 +16621,10 @@ function syncAgentWorkSurfaceLayout() {
   shell.classList.toggle("agent-work-open", isAgent && kind !== "none");
   shell.classList.toggle("agent-work-file", isAgent && kind === "file");
   shell.classList.toggle("agent-work-review", isAgent && isReview);
-  shell.classList.toggle("has-task-rail", isAgent && kind === "none" && state.agentTurns.length > 0);
+  shell.classList.toggle("has-task-rail", isAgent && kind === "none" && state.agentConversations.length > 0);
   shell.dataset.agentWorkSurface = isAgent ? kind : "none";
 
-  $("#taskRail").classList.toggle("hidden", !(isAgent && kind === "none" && state.agentTurns.length > 0));
+  $("#taskRail").classList.toggle("hidden", !(isAgent && kind === "none" && state.agentConversations.length > 0));
   $("#agentFileSurfaceHeader").classList.toggle("hidden", !(isAgent && kind === "file"));
   $("#agentReviewWorkspace").classList.toggle("hidden", !(isAgent && isReview));
   $("#agentFileSurfaceTitle").textContent = displayPath(state.activeDocument) || "No file selected";
@@ -18480,6 +18670,13 @@ async function hydrateProject(response) {
   state.fileEditProposal = null;
   state.fileEditUndo = null;
   state.fileEditUndoVerifiedKey = null;
+  state.agentConversations = [];
+  state.agentTurns = [];
+  state.pendingApprovals = [];
+  state.selectedConversationId = null;
+  state.selectedTurnId = null;
+  state.selectedTurnDetail = null;
+  state.agentActivityExpanded.clear();
   state.actAuthorizedTurnIds.clear();
   state.fileEditAutoApplyAttempts.clear();
   state.fileEditApplyBusy = false;
@@ -18759,7 +18956,11 @@ $("#projectSwitcher").addEventListener("click", async () => {
       return;
     }
     await hydrateProject(response);
-    void Promise.all([loadRunData({ quiet: true }), refreshEnvironment({ quiet: true })]);
+    void Promise.all([
+      loadAgentData({ quiet: true }),
+      loadRunData({ quiet: true }),
+      refreshEnvironment({ quiet: true }),
+    ]);
   } catch (error) {
     toast(reportUiFailure("switch project", error, "The project could not be switched. The current project remains active."), true);
   }
@@ -19122,6 +19323,8 @@ $("#clearAgentHistoryButton").addEventListener("click", async () => {
   })) return;
   try {
     await invoke("clear_agent_history");
+    state.agentConversations = [];
+    state.selectedConversationId = null;
     state.selectedTurnId = null;
     state.selectedTurnDetail = null;
     state.agentActivityExpanded.clear();

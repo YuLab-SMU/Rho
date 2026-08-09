@@ -2,7 +2,7 @@
 
 Status: active
 
-Date: 2026-08-08
+Date: 2026-08-09
 Current source baseline: `0.4.0-dev.24`
 Active published identity: `0.4.0-dev.24` (authoritative candidate,
 owner-installed acceptance, MAC5 GO, protected public prerelease, and live
@@ -10,6 +10,11 @@ development update manifest pass)
 Implemented successor correction: Issue #9 `TASK-RAIL-SEMANTICS-1` separates
 mode shape, status color, and risk ownership. It advances the user-visible
 source identity rather than relabelling the historical `dev.23` source.
+Active successor stream: Issue #5 Agent Conversation concurrency is governed
+by `plans/active-2026-08-09-agent-conversation-concurrency-spec.md`. CONV-1
+reached its source checkpoint on 2026-08-09 and preserves the existing
+single-running-turn rule while introducing durable project-scoped Conversation
+identity and switching. CONV-2 and CONV-3 remain inactive.
 
 Progress: Waves 1-14 implementation code is present in the current source
 baseline. BH1-BH5, RA-RC1, WB1, WB2, UX4, RA-RC2, WS2 (Air backend selected),
@@ -329,6 +334,7 @@ RA-RC1) have prior acceptance evidence.
 | 12 | WS4 staging/commit mutations | Quarto local-job contract design may proceed without code | Exact diff/repository revision, dirty-worktree preservation, hook policy, rejection, failure and recovery evidence. **Implemented 2026-08-01.** |
 | 13 | WS6 narrow local-job contract with Quarto as the first adapter | WS5 chunk discovery and source-linked diagnostic fixtures | Saved-input revision, environment, cancellation, restart reconciliation, bounded logs and Artifact provenance. **Implemented 2026-08-01** (async render_document_job). |
 | 14 | WS6A read-only `targets` inspection | Package-development job design only after the Quarto job gate | `_targets` ownership is preserved. **Implemented 2026-08-01** (read-only inspection only; pipeline execution not yet authorized). |
+| 15 | Issue #5 Agent Conversation concurrency, beginning with CONV-1 durable identity and switching | Immutable `0.4.0-dev.24` release evidence remains maintenance-only | Each CONV package stops for its own schema/admission/approval/resource evidence; no second Workspace R or cross-conversation authority is introduced. **CONV-1 source checkpoint accepted 2026-08-09; CONV-2/CONV-3 inactive.** |
 
 ### Wave 0: Close Current Acceptance Work
 

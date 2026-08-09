@@ -88,7 +88,7 @@ assert.match(js, /projectRefreshSequence: 0/);
 assert.match(loadRunData, /const refreshSequence = state\.projectRefreshSequence/);
 assert.match(loadRunData, /const projectRoot = state\.project\.root/);
 assert.match(loadRunData, /refreshSequence !== state\.projectRefreshSequence \|\| projectRoot !== state\.project\.root/);
-assert.match(js, /await hydrateProject\(response\);\s*void Promise\.all\(\[loadRunData\(\{ quiet: true \}\), refreshEnvironment\(\{ quiet: true \}\)\]\);/);
+assert.match(js, /await hydrateProject\(response\);\s*void Promise\.all\(\[[\s\S]{0,180}loadAgentData\(\{ quiet: true \}\),[\s\S]{0,120}loadRunData\(\{ quiet: true \}\),[\s\S]{0,120}refreshEnvironment\(\{ quiet: true \}\),?[\s\S]{0,40}\]\);/);
 assert.match(js, /state\.runs = \[\];[\s\S]*state\.artifacts = \[\];[\s\S]*renderAgentOutputs\(\);/);
 assert.match(js, /function capturePanelViewport\(panel, keySelector = null\)/);
 assert.match(js, /function restorePanelViewport\(panel, viewport, keySelector = null\)/);
