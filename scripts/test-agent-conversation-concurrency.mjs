@@ -4,14 +4,24 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const normalizeLogicalText = (value) => value.replace(/\r\n?/g, "\n");
+
+assert.equal(
+  normalizeLogicalText("first\r\nsecond\rthird\nfourth"),
+  "first\nsecond\nthird\nfourth",
+  "source contracts must be independent of checkout line endings",
+);
+
 const js = fs.readFileSync(path.join(root, "desktop", "dist", "app.js"), "utf8");
 const html = fs.readFileSync(path.join(root, "desktop", "dist", "index.html"), "utf8");
 const rust = fs.readFileSync(path.join(root, "desktop", "src-tauri", "src", "main.rs"), "utf8");
 const server = fs.readFileSync(path.join(root, "crates", "rho-server", "src", "coordinator.rs"), "utf8");
 const store = fs.readFileSync(path.join(root, "crates", "rho-store", "src", "lib.rs"), "utf8");
-const spec = fs.readFileSync(
-  path.join(root, "docs", "plans", "active-2026-08-09-agent-conversation-concurrency-spec.md"),
-  "utf8",
+const spec = normalizeLogicalText(
+  fs.readFileSync(
+    path.join(root, "docs", "plans", "active-2026-08-09-agent-conversation-concurrency-spec.md"),
+    "utf8",
+  ),
 );
 
 assert.match(spec, /CONV-3 source\ncheckpoints accepted 2026-08-09/);

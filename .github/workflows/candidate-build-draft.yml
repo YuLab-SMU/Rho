@@ -18,11 +18,11 @@ on:
       release_tag:
         description: Single-use prerelease tag
         required: true
-        default: v0.4.0-dev.25
+        default: v0.4.0-dev.26
       release_name:
         description: Draft release title
         required: true
-        default: Rho 0.4.0-dev.25
+        default: Rho 0.4.0-dev.26
 
 permissions:
   contents: read

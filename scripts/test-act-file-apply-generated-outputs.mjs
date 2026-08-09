@@ -10,7 +10,7 @@ const js = read("desktop", "dist", "app.js");
 const rust = read("crates", "rho-server", "src", "coordinator.rs");
 
 assert.match(html, /id="actAutoApprove"[^>]*> Authorize R execution and file changes for this session/);
-assert.match(html, /app\.js\?v=0\.4\.0-dev\.25(?:&amp;|&)[^"']*afo=act-output-v1/);
+assert.match(html, /app\.js\?v=0\.4\.0-dev\.26(?:&amp;|&)[^"']*afo=act-output-v1/);
 assert.match(js, /actAuthorizedTurnIds: new Set\(\)/);
 assert.match(js, /fileEditAutoApplyAttempts: new Set\(\)/);
 assert.match(js, /if \(authorizeChanges && response\?\.turn_id\) state\.actAuthorizedTurnIds\.add\(response\.turn_id\)/);

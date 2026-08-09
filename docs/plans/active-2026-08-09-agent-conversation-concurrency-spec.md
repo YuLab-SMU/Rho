@@ -1,8 +1,9 @@
 # Agent Conversation Concurrency And Resource Scheduling
 
 Status: active; Issue #5 authorized end-to-end, CONV-1 through CONV-3 source
-checkpoints accepted 2026-08-09; integration and installed acceptance remain
-open
+checkpoints accepted 2026-08-09; upstream integration is accepted, the first
+hosted candidate attempt was rejected by the Windows portability gate, and
+replacement candidate plus installed acceptance remain open
 
 Date: 2026-08-09
 
@@ -15,12 +16,12 @@ and desktop workflow
 Risk class: R3 schema migration, execution admission, cancellation, approval,
 project switching, recovery, and project-file mutation
 
-Current work package: exact upstream integration, required CI, installed-app
-acceptance, and Issue closure
+Current work package: Windows source-contract portability repair, replacement
+required CI, installed-app acceptance, and Issue closure
 
-Mandatory stop: the CONV-3 source checkpoint has been reached; do not close
-Issue #5 until exact integration/CI and representative installed macOS
-acceptance are recorded
+Mandatory stop: the CONV-3 source checkpoint and initial upstream integration
+have been reached; do not close Issue #5 until replacement exact-commit CI and
+representative installed macOS acceptance are recorded
 
 ## Problem And Reproduction
 
@@ -440,8 +441,35 @@ The mandatory source stop was reached on 2026-08-09. Evidence is recorded in
 durable recovery, exact Apply/Undo state, project-transition ordering,
 Retry/Delete, two-project isolation, browser/mock parity, the complete affected
 matrix, and independent R3 review pass with no unresolved P0/P1 finding.
-Integration, hosted candidate, owner-installed acceptance, and Issue closure
-remain open factual gates.
+Replacement integration, hosted candidate, owner-installed acceptance, and
+Issue closure remain open factual gates.
+
+### Hosted Windows contract portability amendment
+
+Authoritative candidate attempt `31336769848`, bound to upstream commit
+`9baf1ea199dae30317a309f9873e34a269f4fd40`, reproduced a release-blocking
+validation defect on 2026-08-09. The Windows checkout converted tracked text to
+CRLF, while `test-agent-conversation-concurrency.mjs` required one cross-line
+specification phrase to contain a literal LF. The same product source and
+contract passed on macOS; Windows failed before installer construction. R
+package `curl` replacement messages in the job annotations were non-fatal and
+are not the failed assertion.
+
+The invariant for the bounded correction is that deterministic source-contract
+readers compare logical text independently of checkout line endings. The test
+must normalize CRLF and lone CR to LF before cross-line assertions and must
+include a direct CRLF/lone-CR regression assertion. It must not weaken any
+required phrase, source, metadata, identity, or behavior assertion. The repair
+changes no Conversation schema, runtime behavior, authority, UI, R package, or
+credential surface.
+
+Because the failed combined run produced and submitted a signed `dev.25` macOS
+artifact, the release checklist's single-use rule consumes that identity even
+though no tag, draft Release, or public asset was created. Replacement source
+must advance all application and candidate defaults to `0.4.0-dev.26`, retain
+schema v12 and the existing R package versions, pass the focused portability
+contract locally, and then pass a fresh exact-commit two-platform candidate
+run. Cross-run artifacts, receipts, or hashes remain non-composable.
 
 ## Verification Matrix
 
@@ -493,13 +521,19 @@ Required completion evidence includes focused store/server/desktop tests,
 complete Rust workspace tests, both R package suites, every affected frontend
 contract, JavaScript syntax, formatting, release metadata, `git diff --check`,
 deterministic browser review, independent R3 safety/contract review, and a
-representative installed macOS application workflow.
+representative installed macOS application workflow. Text-scanning contracts
+must also prove that LF, CRLF, and lone-CR input produce the same logical-text
+assertions on supported checkout platforms.
 
 ## Version, NEWS, Release, And Issue Closure
 
-The integrated behavior advances application metadata and `NEWS.md` to the
-single-use `0.4.0-dev.25` development identity. Schema v12 must never be
-shipped under the already published immutable `0.4.0-dev.24` identity.
+The integrated behavior first advanced application metadata and `NEWS.md` to
+the single-use `0.4.0-dev.25` development identity. Candidate attempt
+`31336769848` exhausted that identity after producing a rejected macOS artifact;
+the bounded validation repair advances the replacement candidate to the
+single-use `0.4.0-dev.26` identity. Schema v12 must never be shipped under the
+already published immutable `0.4.0-dev.24` identity or relabelled across the
+rejected `dev.25` and replacement `dev.26` attempts.
 
 No R package version change is expected unless implementation demonstrates a
 required exported `rho.agent` or `rho.bridge` contract change. Agent R process

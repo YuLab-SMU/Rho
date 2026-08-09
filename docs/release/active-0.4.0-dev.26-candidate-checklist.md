@@ -1,9 +1,10 @@
-# Rho 0.4.0-dev.25 Cross-Platform Candidate Checklist
+# Rho 0.4.0-dev.26 Cross-Platform Candidate Checklist
 
-Status: active source-candidate record; Issue #5 CONV-1 through CONV-3 source
-implementation, automated/browser verification, and independent R3 review
-pass; exact integration commit, hosted artifacts, installed acceptance, MAC5,
-and publication are not yet established
+Status: active replacement-candidate record; Issue #5 CONV-1 through CONV-3
+source implementation, automated/browser verification, independent R3 review,
+and initial upstream integration pass; the `dev.25` attempt was rejected by a
+Windows CRLF-only contract assertion, and exact `dev.26` integration, hosted
+artifacts, installed acceptance, MAC5, and publication are not yet established
 
 Date: 2026-08-09
 Last updated: 2026-08-09
@@ -20,7 +21,7 @@ site, or publication action
 Owning documents: the active Agent Conversation concurrency specification owns
 Issue #5 behavior and acceptance. The active macOS arm64 specification owns
 packaging and trust gates. This checklist alone owns the exact
-`0.4.0-dev.25` identity, candidate evidence, installed-acceptance ledger, and
+`0.4.0-dev.26` identity, candidate evidence, installed-acceptance ledger, and
 GO/NO-GO decision.
 
 Authorization: on 2026-08-09 the project owner explicitly authorized Issue #5
@@ -31,31 +32,36 @@ Issue evidence. It does not silently turn incomplete source evidence into
 MAC5 acceptance, nor permit an artifact, tag, draft, update-site mutation, or
 public Release to be reported as complete before its own exact facts exist.
 
-`0.4.0-dev.24` is an immutable published predecessor. Its source commit,
-artifacts, notarization receipt, hashes, owner acceptance, MAC5 record, Release,
-and update manifest remain historical and cannot satisfy this checklist.
+`0.4.0-dev.24` is an immutable published predecessor. `0.4.0-dev.25` is an
+immutable rejected candidate attempt whose macOS artifact and notarization
+receipt remain run-scoped historical evidence. Neither predecessor's source,
+artifact, receipt, hash, acceptance, Release, nor update manifest can satisfy
+this checklist.
 
 ## Exact Identity
 
 | Field | Required value | Current evidence |
 | --- | --- | --- |
-| Application version | `0.4.0-dev.25` | source metadata and `NEWS.md` synchronized at reviewed source commit |
+| Application version | `0.4.0-dev.26` | source metadata and `NEWS.md` synchronized for the replacement candidate |
 | `rho.bridge` version | `0.1.13` | unchanged; no exported package contract changed |
 | `rho.agent` version | `0.1.5` | unchanged; no exported package contract changed |
 | Store schema | `12` | Conversation migration, reopen, failure injection, and recovery matrix pass |
-| Release tag | `v0.4.0-dev.25` | workflow default only; tag not created |
-| Release name | `Rho 0.4.0-dev.25` | workflow default only; Release/draft not created |
+| Release tag | `v0.4.0-dev.26` | workflow default only; tag not created |
+| Release name | `Rho 0.4.0-dev.26` | workflow default only; Release/draft not created |
 | Release channel | development prerelease | fixed by SemVer |
 | Source repository | `YuLab-SMU/Rho` | authoritative-candidate restriction unchanged |
-| Reviewed source commit | one exact 40-character SHA | `a06d234bdd18ab46177f1d3be312ef81c99accbc` |
-| Authoritative source commit | reviewed upstream default-branch SHA | pending integration |
+| Reviewed behavior source commit | one exact 40-character SHA | `a06d234bdd18ab46177f1d3be312ef81c99accbc` |
+| Reviewed replacement repair commit | one exact 40-character SHA | pending reviewed commit |
+| Authoritative source commit | reviewed upstream default-branch SHA | pending integration of the bounded portability repair |
 | macOS platform | `macos_aarch64` | exact candidate artifact not built |
 | Minimum macOS | 14.0 | configuration unchanged |
 | Release decision | `NO-GO` | installed acceptance and release gates remain open |
 
 The version and any eventual tag are single-use. A rejected artifact or later
 user-visible source change advances to another version; no artifact, tag,
-draft, hash, receipt, or evidence file may be overwritten or relabelled.
+draft, hash, receipt, or evidence file may be overwritten or relabelled. This
+rule consumed `dev.25` when run `31336769848` produced a signed/notarized macOS
+artifact but failed Windows validation before draft assembly.
 
 ## Included Behavior
 
@@ -116,6 +122,23 @@ application source commit is
 `a06d234bdd18ab46177f1d3be312ef81c99accbc`; this following evidence-only
 commit does not change the compiled application source.
 
+The replacement work package adds no application behavior. It normalizes CRLF
+and lone-CR input to LF at the deterministic Conversation contract-test read
+boundary, includes a direct line-ending regression assertion, advances the
+single-use application/release defaults to `dev.26`, and must pass a new
+exact-commit two-platform candidate run. Evidence from failed run
+`31336769848` cannot be composed with that replacement run.
+
+Replacement source verification passes and is recorded in
+`docs/verification/agent-conversation-concurrency/dev26-windows-ci-portability.md`:
+the focused regression and release/notary contracts pass; all 48 deterministic
+scripts pass; JavaScript syntax, Rust formatting, `cargo check` and the complete
+Rust workspace tests pass with the unchanged 167/58/108 Desktop/Server/Store
+counts; both R package suites and `git diff --check` pass. Independent R4
+contract review found no unresolved P0/P1 finding. The exact replacement commit
+and authoritative upstream SHA remain pending until the reviewed changes are
+committed and integrated.
+
 ## Exact Candidate And Installed Acceptance Gate
 
 If a candidate is authorized, the combined workflow must bind Windows and
@@ -155,6 +178,8 @@ commit, checks, and installed evidence.
 
 ## Current Decision
 
-`NO-GO` for artifact promotion or publication. The source checkpoint passes,
-but no integrated upstream commit, `dev.25` tag, draft, artifact, installed
-acceptance, MAC5 record, public Release, or update-site entry exists yet.
+`NO-GO` for artifact promotion or publication. The behavior source checkpoint
+and initial integration pass, but the `dev.25` combined candidate failed and is
+historical. No integrated replacement commit, `dev.26` tag, draft, artifact,
+installed acceptance, MAC5 record, public Release, or update-site entry exists
+yet.

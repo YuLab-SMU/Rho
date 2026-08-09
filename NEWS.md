@@ -4,6 +4,16 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.0-dev.26 - 2026-08-09
+
+### Fixed
+
+- Cross-platform candidate validation now compares source contracts after
+  normalizing checkout line endings, so the same required assertion works for
+  LF, CRLF, and lone-CR text without weakening its content checks. This
+  replacement candidate carries forward the Agent Conversation behavior from
+  the rejected `0.4.0-dev.25` build attempt; application behavior is unchanged.
+
 ## 0.4.0-dev.25 - 2026-08-09
 
 ### Added
