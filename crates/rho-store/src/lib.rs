@@ -1720,6 +1720,60 @@ impl Store {
             .map_err(StoreError::from)
     }
 
+    pub fn agent_conversation_turn_ids(
+        &self,
+        project_root: &str,
+        conversation_id: &str,
+    ) -> Result<Vec<String>, StoreError> {
+        let project_root = normalize_project_root(project_root);
+        let conversation_id = conversation_id.trim();
+        if project_root.is_empty() || conversation_id.is_empty() {
+            return Err(StoreError::Validation(
+                "Agent Conversation identity and project root are required".to_string(),
+            ));
+        }
+        let mut statement = self.connection.prepare(
+            "SELECT turn.turn_id
+             FROM agent_turns AS turn
+             JOIN agent_conversation_turns AS link ON link.turn_id = turn.turn_id
+             JOIN agent_conversations AS conversation
+               ON conversation.conversation_id = link.conversation_id
+             WHERE turn.project_root = ?1
+               AND conversation.project_root = ?1
+               AND link.conversation_id = ?2
+             ORDER BY turn.started_at ASC, turn.rowid ASC",
+        )?;
+        let rows = statement.query_map(params![project_root, conversation_id], |row| row.get(0))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(StoreError::from)
+    }
+
+    pub fn agent_file_mutation_events(
+        &self,
+        project_root: &str,
+    ) -> Result<Vec<AgentTurnEvent>, StoreError> {
+        let project_root = normalize_project_root(project_root);
+        if project_root.is_empty() {
+            return Err(StoreError::Validation(
+                "Agent file mutation project root is required".to_string(),
+            ));
+        }
+        let mut statement = self.connection.prepare(
+            "SELECT
+                event.id, event.turn_id, event.timestamp, event.event_type, event.title,
+                event.body, event.status, event.tool, event.request_id, event.code,
+                event.details_json
+             FROM agent_turn_events AS event
+             JOIN agent_turns AS turn ON turn.turn_id = event.turn_id
+             WHERE turn.project_root = ?1
+               AND event.event_type LIKE 'file_edit.%'
+             ORDER BY event.id ASC",
+        )?;
+        let rows = statement.query_map([project_root], agent::decode_agent_turn_event)?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(StoreError::from)
+    }
+
     pub fn delete_agent_conversation(
         &mut self,
         project_root: &str,

@@ -16,7 +16,7 @@ assert.match(html, /id="gitWorkingFiles"[\s\S]*id="gitStagedFiles"/);
 assert.match(html, /id="gitDiffReview"[\s\S]*id="gitHunkList"/);
 assert.match(html, /id="gitCommitMessage"[\s\S]*id="gitCommitButton"/);
 assert.match(html, /id="gitRefreshButton"[^>]*aria-label="Refresh Git review"/);
-assert.match(html, /app\.js\?v=0\.4\.0-dev\.24(?:&amp;|&)rev=m(?:1-shell|2-workbench|3-scientific-review-v3)/);
+assert.match(html, /app\.js\?v=0\.4\.0-dev\.25(?:&amp;|&)rev=m(?:1-shell|2-workbench|3-scientific-review-v3)/);
 
 assert.match(css, /\.git-review-body\s*\{[^}]*overflow:\s*hidden/);
 assert.match(css, /\.git-hunk-list\s*\{[^}]*overflow:\s*auto/);

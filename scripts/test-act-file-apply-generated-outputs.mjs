@@ -10,7 +10,7 @@ const js = read("desktop", "dist", "app.js");
 const rust = read("crates", "rho-server", "src", "coordinator.rs");
 
 assert.match(html, /id="actAutoApprove"[^>]*> Authorize R execution and file changes for this session/);
-assert.match(html, /app\.js\?v=0\.4\.0-dev\.24(?:&amp;|&)[^"']*afo=act-output-v1/);
+assert.match(html, /app\.js\?v=0\.4\.0-dev\.25(?:&amp;|&)[^"']*afo=act-output-v1/);
 assert.match(js, /actAuthorizedTurnIds: new Set\(\)/);
 assert.match(js, /fileEditAutoApplyAttempts: new Set\(\)/);
 assert.match(js, /if \(authorizeChanges && response\?\.turn_id\) state\.actAuthorizedTurnIds\.add\(response\.turn_id\)/);
@@ -20,6 +20,13 @@ assert.match(js, /proposal\.editorContext\?\.project_root !== state\.project\.ro
 assert.match(js, /state\.fileEditAutoApplyAttempts\.add\(proposal\.key\)/);
 assert.match(js, /acceptFileEditProposal\(\{ automatic: true \}\)/);
 assert.match(js, /async function acceptFileEditProposal\(\{ automatic = false \} = \{\}\)/);
+assert.match(js, /invoke\("apply_agent_file_edit"/);
+assert.match(js, /expectedDiskSha256: snapshot\.expectedDiskSha256/);
+assert.match(js, /invoke\("undo_agent_file_edit"/);
+assert.doesNotMatch(
+  js.slice(js.indexOf("async function acceptFileEditProposal"), js.indexOf("function rejectFileEditProposal")),
+  /invoke\(\s*proposal\.operation === "create" \? "project_create_file" : "project_write_file"/,
+);
 assert.match(js, /generated_file: "Generated file"/);
 assert.match(js, /"outputs-generated"/);
 assert.match(js, /artifactKind: "generated_file"/);

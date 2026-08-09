@@ -1097,11 +1097,12 @@ body.resizing-vertical { cursor: col-resize; }
 .agent-panel { --agent-composer-height: 154px; display: flex; flex-direction: column; min-width: 0; }
 .agent-header { display: flex; align-items: center; justify-content: space-between; flex: 0 0 41px; padding: 0 13px; border-bottom: 1px solid var(--border); }
 .agent-header > div { display: flex; align-items: center; gap: 7px; }
-.agent-header-actions { display: flex; align-items: center; gap: 8px; }
+.agent-header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 5px; min-width: 0; }
 .agent-cancel-button { width: 24px; height: 24px; padding: 0; border: 1px solid #d08d67; border-radius: 4px; color: #8a4021; background: #fff3ec; cursor: pointer; font-size: 10px; }
 .agent-cancel-button:hover { background: #ffe9dc; }
 .agent-clear-button { min-height: 24px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 4px; color: var(--muted); background: #fff; cursor: pointer; font-size: 10px; }
 .agent-clear-button:hover { color: var(--ink); background: #eef3f3; }
+.agent-clear-button:disabled { opacity: 0.5; cursor: not-allowed; }
 .agent-state-dot, .kernel-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 .agent-state-dot.busy { background: var(--warning); box-shadow: 0 0 0 3px #f2e7d0; }
 .agent-state-dot.error { background: var(--danger); }
@@ -1236,6 +1237,10 @@ body.resizing-vertical { cursor: col-resize; }
 .approval-actions button:nth-child(2) { border-color: #d08d67; color: #8a4021; background: #fff3ec; }
 .approval-actions button:disabled { opacity: 0.6; cursor: wait; }
 .file-edit-panel { flex: 0 0 auto; max-height: 48%; margin: 0 10px 10px; overflow: hidden; border: 1px solid #9bbfbb; border-left-width: 3px; border-radius: 6px; background: #f5fbfa; }
+.file-edit-panel[data-state="not_applied"],
+.file-edit-panel[data-state="stale"],
+.file-edit-panel[data-state="uncertain"] { border-color: #d1ae68; background: #fffaf0; }
+.file-edit-panel[data-state="mutating"] { border-color: #86aebb; background: #f3f9fb; }
 .file-edit-panel[open] { overflow: auto; }
 .file-edit-header { display: flex; align-items: center; gap: 8px; padding: 10px; cursor: pointer; list-style: none; }
 .file-edit-header::-webkit-details-marker { display: none; }
@@ -1247,6 +1252,7 @@ body.resizing-vertical { cursor: col-resize; }
 .file-edit-summary { margin: 0 0 7px; color: var(--muted); font-size: 11.5px; line-height: 1.4; }
 .file-edit-note { margin: 0 0 7px; padding: 6px 8px; border-radius: 4px; color: #5a604d; background: #edf3dd; font-size: 11px; line-height: 1.4; }
 .file-edit-note.rejected { color: #8a4021; background: #fff3ec; }
+.file-edit-note.stale { color: var(--warning-text); background: #fff4ce; }
 .file-edit-diff { display: grid; gap: 6px; }
 .file-edit-diff > div { min-width: 0; }
 .file-edit-diff span { display: block; margin-bottom: 2px; color: var(--subtle); font-size: 10px; text-transform: uppercase; }

@@ -1,10 +1,11 @@
-# Rho 0.4.0-dev.24 Cross-Platform Candidate Checklist
+# Rho 0.4.0-dev.24 Historical Candidate Record
 
-Status: active published development-candidate record; Issue #6 R5 and Issue #9
+Status: historical published development-candidate record; Issue #6 R5 and Issue #9
 TASK-RAIL-SEMANTICS-1 source implementation, review-only rehearsal,
 authoritative cross-platform candidate, signed/notarized DMG, owner-installed
 acceptance, MAC5 GO, protected prerelease publication, and live development
-update-site verification pass
+update-site verification pass; superseded in source only by the separately
+versioned Issue #5 `0.4.0-dev.25` development candidate
 
 Date: 2026-08-08
 Last updated: 2026-08-09

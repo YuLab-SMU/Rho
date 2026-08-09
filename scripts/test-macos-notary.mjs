@@ -20,8 +20,8 @@ import {
 const identity = {
   repository: "YuLab-SMU/Rho_for_mac",
   buildMode: "rehearsal",
-  version: "0.4.0-dev.24",
-  releaseTag: "v0.4.0-dev.24",
+  version: "0.4.0-dev.25",
+  releaseTag: "v0.4.0-dev.25",
   commit: "a".repeat(40),
   runId: "31000000000",
   runAttempt: "1",
@@ -126,7 +126,7 @@ async function expectReject(action, pattern) {
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "rho-notary-contract-"));
 try {
-  const dmgPath = path.join(root, "Rho_0.4.0-dev.24_aarch64.dmg");
+  const dmgPath = path.join(root, "Rho_0.4.0-dev.25_aarch64.dmg");
   const receiptPath = path.join(root, "notary-submit.json");
   fs.writeFileSync(dmgPath, Buffer.from("signed candidate dmg fixture\n"));
   fs.writeFileSync(receiptPath, `${JSON.stringify({

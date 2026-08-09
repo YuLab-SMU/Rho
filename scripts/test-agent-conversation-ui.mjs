@@ -14,16 +14,20 @@ const spec = fs.readFileSync(
   "utf8",
 );
 
-assert.match(spec, /Issue #5 authorized end-to-end, CONV-1 and CONV-2 source\s+checkpoints accepted 2026-08-09, CONV-3 is not active/);
+assert.match(spec, /Issue #5 authorized end-to-end, CONV-1 through CONV-3 source\s+checkpoints accepted 2026-08-09/);
 assert.match(spec, /Conversation owns conversational context\. Turn owns one execution\./);
 assert.match(spec, /at most one nonterminal Turn may belong to a given\s+Conversation/i);
 
 assert.match(html, /id="taskRailNew"[^>]*aria-label="New conversation"/);
 assert.match(html, /id="taskRailList"[^>]*aria-label="Agent conversations"/);
+assert.match(html, /id="agentRetryTurnButton"[^>]*>Retry turn<\/button>/);
+assert.match(html, /id="agentDeleteConversationButton"[^>]*>Delete conversation<\/button>/);
 assert.match(js, /agentConversations:\s*\[\]/);
 assert.match(js, /selectedConversationId:\s*null/);
 assert.match(js, /if \(command === "list_agent_conversations"\)/);
 assert.match(js, /if \(command === "create_agent_conversation"\)/);
+assert.match(js, /if \(command === "retry_agent_turn"\)/);
+assert.match(js, /if \(command === "delete_agent_conversation"\)/);
 assert.match(js, /invoke\("list_agent_conversations", \{ limit: 50 \}\)/);
 assert.match(js, /invoke\("list_agent_turns", \{ conversationId: preferredConversationId, limit: 50 \}\)/);
 assert.match(js, /state\.agentConversations = \[\];[\s\S]{0,220}state\.selectedConversationId = null;[\s\S]{0,180}state\.agentActivityExpanded\.clear\(\)/);
@@ -64,6 +68,8 @@ assert.match(rust, /async fn run_agent\([\s\S]*conversation_id: Option<String>/)
 assert.match(rust, /create_agent_turn_in_conversation\([\s\S]*&conversation_id/);
 assert.match(rust, /async fn list_agent_conversations\(/);
 assert.match(rust, /async fn create_agent_conversation\(/);
+assert.match(rust, /async fn retry_agent_turn\(/);
+assert.match(rust, /async fn delete_agent_conversation\(/);
 assert.match(rust, /fn list_agent_turns\([\s\S]*conversation_id: Option<String>/);
 assert.match(rust, /list_agent_turns_for_conversation\(&project_root, &conversation_id, limit\)/);
 

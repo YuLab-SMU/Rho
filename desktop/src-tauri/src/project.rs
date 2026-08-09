@@ -84,6 +84,7 @@ pub struct UnavailableProject {
 pub enum ProjectSwitchBlockerKind {
     ActiveRun,
     AgentTurn,
+    AgentFileMutation,
     Approval,
     EnvironmentOperation,
 }

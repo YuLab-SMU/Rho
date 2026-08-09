@@ -439,6 +439,7 @@ let mockEnvironmentOperationSequence = 0;
 const mockAgentTurns = [];
 const mockAgentConversations = [];
 const mockApprovalRequests = [];
+const mockAgentFileMutationClaims = new Map();
 const mockEnvironmentOperationRequests = [];
 const mockEvidenceEntries = [];
 const mockEvidenceClaims = [];
@@ -1125,12 +1126,6 @@ function createMockAgentTurn({
     && ["running", "waiting"].includes(item.status))) {
     throw new Error("AGENT_CONVERSATION_BUSY: This Conversation already has an active Agent turn.");
   }
-  if (mode === "act" && activeTurns.length) {
-    throw new Error("AGENT_ACT_EXCLUSIVE: Act mode cannot run beside another Agent turn.");
-  }
-  if (activeTurns.some((item) => item.mode === "act")) {
-    throw new Error("AGENT_ACT_EXCLUSIVE: Wait for the active Act turn to finish.");
-  }
   if (activeTurns.length >= 2) {
     throw new Error("AGENT_CONCURRENCY_LIMIT: At most two Agent turns can run at once.");
   }
@@ -1335,6 +1330,132 @@ function createMockAgentTurn({
   if (conversation.title === "New conversation") conversation.title = turn.prompt_preview;
   conversation.updated_at = startedAt;
   return turn;
+}
+
+function mockAgentFileProposal(request) {
+  const turn = mockAgentTurns.find((item) => item.turn_id === request.turnId
+    && item.project_root === mockLastProject);
+  if (!turn) throw new Error("Agent file proposal turn was not found in the active project");
+  const event = (turn.events || []).find((item) => item.id === request.proposalEventId);
+  if (!event || event.event_type !== "tool.call_completed" || event.tool !== "propose_file_edit") {
+    throw new Error("Agent file proposal event was not found on the requested turn");
+  }
+  let proposal = parseJsonObject(event.body);
+  if (proposal?.kind !== "rho.file_edit_proposal") {
+    const details = parseJsonObject(event.details_json);
+    if (details?.success !== true || !details.arguments) throw new Error("Agent file proposal payload is unavailable");
+    proposal = { kind: "rho.file_edit_proposal", ...details.arguments };
+  }
+  const userEvent = (turn.events || []).find((item) => item.event_type === "agent.user_prompt");
+  return {
+    turn,
+    proposal: {
+      ...proposal,
+      editorContext: parseJsonObject(userEvent?.details_json)?.editor_context || null,
+    },
+  };
+}
+
+function appendMockAgentFileMutationEvent(turn, eventType, status, request, proposal, details = {}) {
+  const eventId = Math.max(0, ...(turn.events || []).map((item) => Number(item.id) || 0)) + 1;
+  const titles = {
+    "file_edit.mutation_started": details.action === "undo"
+      ? "Agent file Undo admitted"
+      : "Agent file mutation admitted",
+    "file_edit.applied": "Agent file proposal applied",
+    "file_edit.undone": "Agent file proposal undone",
+    "file_edit.resource_stale": details.action === "undo"
+      ? "Agent file Undo became stale"
+      : "Agent file proposal became stale",
+    "file_edit.mutation_failed": "Agent file mutation failed before changing disk",
+    "file_edit.mutation_not_applied": "Agent file mutation did not reach disk",
+    "file_edit.outcome_uncertain": "Agent file mutation outcome needs review",
+    "file_edit.recovered": "Agent file mutation recovered from disk",
+    "file_edit.cancelled": details.action === "undo"
+      ? "Agent file Undo cancelled before admission"
+      : "Agent file proposal cancelled before admission",
+  };
+  turn.events.push({
+    id: eventId,
+    turn_id: turn.turn_id,
+    timestamp: new Date().toISOString(),
+    event_type: eventType,
+    title: titles[eventType] || "Agent file activity",
+    body: request.path,
+    status,
+    tool: "propose_file_edit",
+    request_id: null,
+    code: null,
+    details_json: JSON.stringify({
+      path: request.path,
+      operation: proposal.operation,
+      proposal_event_id: request.proposalEventId,
+      details,
+    }),
+  });
+}
+
+function mockAgentFileMutationState(turn, request) {
+  const ledgers = new Map();
+  let appliedLedger = null;
+  let result = { state: "available", ledger: null };
+  const events = [...(turn.events || [])].sort((left, right) => Number(left.id || 0) - Number(right.id || 0));
+  for (const event of events) {
+    if (!String(event.event_type || "").startsWith("file_edit.")) continue;
+    const envelope = parseJsonObject(event.details_json);
+    if (Number(envelope?.proposal_event_id) !== Number(request.proposalEventId)) continue;
+    const details = envelope?.details && typeof envelope.details === "object" ? envelope.details : {};
+    const action = details.action || (event.event_type === "file_edit.undone" ? "undo" : "apply");
+    if (event.event_type === "file_edit.mutation_started") {
+      if (!details.mutation_id) throw new Error("Agent file mutation ledger is malformed");
+      ledgers.set(details.mutation_id, structuredClone(details));
+      result = { state: "mutating", ledger: null };
+    } else if (["file_edit.applied", "file_edit.recovered"].includes(event.event_type) && action === "apply") {
+      const ledger = ledgers.get(details.mutation_id);
+      if (!ledger || ledger.action !== "apply") throw new Error("Applied Agent file mutation has no matching start record");
+      appliedLedger = ledger;
+      result = { state: "applied", ledger };
+    } else if (["file_edit.undone", "file_edit.recovered"].includes(event.event_type) && action === "undo") {
+      if (!ledgers.has(details.mutation_id) || !appliedLedger) throw new Error("Agent file Undo has no durable applied predecessor");
+      result = { state: "undone", ledger: null };
+    } else if (["file_edit.mutation_not_applied", "file_edit.mutation_failed", "file_edit.cancelled"].includes(event.event_type)) {
+      result = appliedLedger ? { state: "applied", ledger: appliedLedger } : { state: "available", ledger: null };
+    } else if (event.event_type === "file_edit.resource_stale") {
+      result = { state: "stale", ledger: null };
+    } else if (event.event_type === "file_edit.outcome_uncertain") {
+      result = { state: "uncertain", ledger: null };
+    }
+  }
+  return result;
+}
+
+function mockRequireAgentFileApplyAvailable(mutation) {
+  if (mutation.state === "available") return;
+  if (mutation.state === "mutating") throw new Error("AGENT_FILE_MUTATION_BUSY: This Agent file proposal is already being changed.");
+  if (["applied", "undone"].includes(mutation.state)) throw new Error("AGENT_FILE_ALREADY_DECIDED: This Agent file proposal was already applied.");
+  if (mutation.state === "stale") throw new Error("AGENT_FILE_RESOURCE_STALE: This Agent file proposal is stale; generate a fresh proposal.");
+  throw new Error("AGENT_FILE_OUTCOME_UNCERTAIN: Inspect the current file before taking another action.");
+}
+
+function mockRequireAgentFileUndoLedger(mutation) {
+  if (mutation.state === "applied" && mutation.ledger) return mutation.ledger;
+  if (mutation.state === "available") throw new Error("AGENT_FILE_NOT_APPLIED: This Agent file proposal has not been applied.");
+  if (mutation.state === "mutating") throw new Error("AGENT_FILE_MUTATION_BUSY: This Agent file proposal is already being changed.");
+  if (mutation.state === "undone") throw new Error("AGENT_FILE_ALREADY_DECIDED: This Agent file proposal was already undone.");
+  if (mutation.state === "stale") throw new Error("AGENT_FILE_RESOURCE_STALE: This Agent file proposal no longer has a safe Undo.");
+  throw new Error("AGENT_FILE_OUTCOME_UNCERTAIN: Inspect the current file before taking another action.");
+}
+
+function mockAgentFileStale(turn, request, proposal, reason, action = "apply") {
+  appendMockAgentFileMutationEvent(
+    turn,
+    "file_edit.resource_stale",
+    "error",
+    request,
+    proposal,
+    { action, reason },
+  );
+  throw new Error(`AGENT_FILE_RESOURCE_STALE: ${request.path} changed before the Agent file operation.`);
 }
 
 function recordMockRun({
@@ -2028,7 +2149,7 @@ async function mockInvoke(command, args) {
   await new Promise((resolve) => setTimeout(resolve, command === "run_agent" ? 800 : 300));
   if (command === "app_info") {
     return {
-      version: "0.4.0-dev.24",
+      version: "0.4.0-dev.25",
       channel: "development",
       commit: "4090cf725c53ab657ba9dfc9743ec6159f27dcf9",
       platform: mockPlatformFixture.platform,
@@ -2046,8 +2167,8 @@ async function mockInvoke(command, args) {
     return {
       status: "up_to_date",
       channel: "development",
-      installed_version: "0.4.0-dev.24",
-      available_version: "0.4.0-dev.24",
+      installed_version: "0.4.0-dev.25",
+      available_version: "0.4.0-dev.25",
       published_at: "2026-07-22T14:45:23Z",
       summary: "Rho is current for the development channel.",
       release_page_url: "https://yulab-smu.top/Rho/",
@@ -2116,7 +2237,11 @@ async function mockInvoke(command, args) {
   }
   if (command === "project_read_file") {
     const project = mockProjects[mockLastProject] || mockProjects[mockPlatformFixture.projectRoot];
-    return { path: args.path, content: project.contents[args.path] || "" };
+    if (!Object.prototype.hasOwnProperty.call(project.contents, args.path)) {
+      throw new Error(`Project file not found: ${args.path}`);
+    }
+    const content = project.contents[args.path] || "";
+    return { path: args.path, content, sha256: await sha256Text(content) };
   }
   if (command === "viewer_read_file") {
     const path = String(args.path || "");
@@ -2148,6 +2273,141 @@ async function mockInvoke(command, args) {
     state.revision.project_revision += 1;
     updateIdentity(state.revision);
     return mockInvoke("project_state", {});
+  }
+  if (command === "apply_agent_file_edit") {
+    const request = args.request || {};
+    const claimId = `mock_agent_file_claim_${crypto.randomUUID()}`;
+    mockAgentFileMutationClaims.set(claimId, { turnId: request.turnId, projectRoot: mockLastProject });
+    try {
+      const { turn, proposal } = mockAgentFileProposal(request);
+      if (proposal.path !== request.path) throw new Error("Agent file proposal path does not match its durable event");
+      mockRequireAgentFileApplyAvailable(mockAgentFileMutationState(turn, request));
+      const project = mockProjects[mockLastProject] || mockProjects[mockPlatformFixture.projectRoot];
+      const exists = Object.prototype.hasOwnProperty.call(project.contents, request.path);
+      if (proposal.operation === "create") {
+        if (request.expectedDiskSha256 != null) throw new Error("Create proposals must expect an absent file");
+        if (exists) mockAgentFileStale(turn, request, proposal, "create_target_exists");
+      } else {
+        if (!exists) mockAgentFileStale(turn, request, proposal, "edit_target_missing");
+        const actualDigest = await sha256Text(project.contents[request.path] || "");
+        if (!request.expectedDiskSha256 || actualDigest !== request.expectedDiskSha256) {
+          mockAgentFileStale(turn, request, proposal, "content_digest_changed");
+        }
+      }
+      let edit;
+      try {
+        edit = calculateProposedFileEdit(proposal, String(request.beforeContent || ""));
+      } catch {
+        mockAgentFileStale(turn, request, proposal, "editor_context_changed");
+      }
+      const mutationId = `mock_agent_file_mutation_${crypto.randomUUID()}`;
+      const afterSha256 = await sha256Text(edit.content);
+      appendMockAgentFileMutationEvent(turn, "file_edit.mutation_started", "running", request, proposal, {
+        mutation_id: mutationId,
+        action: "apply",
+        path: request.path,
+        operation: proposal.operation,
+        proposal_event_id: request.proposalEventId,
+        expected_before_sha256: request.expectedDiskSha256,
+        expected_before_absent: proposal.operation === "create",
+        restore_content_sha256: await sha256Text(String(request.beforeContent || "")),
+        intended_after_sha256: afterSha256,
+        intended_after_absent: false,
+      });
+      mockUpsertProjectFile(mockLastProject, request.path, edit.content, { trackInTree: true, kind: "source" });
+      state.revision.project_revision += 1;
+      updateIdentity(state.revision);
+      appendMockAgentFileMutationEvent(turn, "file_edit.applied", "completed", request, proposal, {
+        mutation_id: mutationId,
+        action: "apply",
+        after_sha256: afterSha256,
+      });
+      return {
+        status: "applied",
+        path: request.path,
+        content: edit.content,
+        start: edit.start,
+        end: edit.end,
+        afterSha256,
+        project: mockProjectState(mockLastProject),
+        workspace: structuredClone(state.revision),
+      };
+    } finally {
+      mockAgentFileMutationClaims.delete(claimId);
+    }
+  }
+  if (command === "undo_agent_file_edit") {
+    const request = args.request || {};
+    const claimId = `mock_agent_file_claim_${crypto.randomUUID()}`;
+    mockAgentFileMutationClaims.set(claimId, { turnId: request.turnId, projectRoot: mockLastProject });
+    try {
+      const { turn, proposal } = mockAgentFileProposal(request);
+      if (proposal.path !== request.path || (proposal.operation === "create") !== Boolean(request.created)) {
+        throw new Error("Agent file Undo does not match its durable proposal");
+      }
+      const appliedLedger = mockRequireAgentFileUndoLedger(mockAgentFileMutationState(turn, request));
+      if (appliedLedger.path !== request.path
+        || appliedLedger.operation !== proposal.operation
+        || Number(appliedLedger.proposal_event_id) !== Number(request.proposalEventId)
+        || Boolean(appliedLedger.expected_before_absent) !== Boolean(request.created)
+        || appliedLedger.intended_after_absent
+        || appliedLedger.intended_after_sha256 !== request.expectedAfterSha256
+        || appliedLedger.restore_content_sha256 !== await sha256Text(String(request.beforeContent || ""))) {
+        throw new Error("AGENT_FILE_RESOURCE_STALE: Agent file Undo does not match its durable Apply ledger.");
+      }
+      if (request.created) {
+        if (String(request.beforeContent || "") || appliedLedger.expected_before_sha256 != null) {
+          throw new Error("Agent file create Undo has invalid before-content state");
+        }
+      }
+      const project = mockProjects[mockLastProject] || mockProjects[mockPlatformFixture.projectRoot];
+      if (!Object.prototype.hasOwnProperty.call(project.contents, request.path)) {
+        mockAgentFileStale(turn, request, proposal, "undo_target_missing", "undo");
+      }
+      const current = project.contents[request.path] || "";
+      if (await sha256Text(current) !== request.expectedAfterSha256) {
+        mockAgentFileStale(turn, request, proposal, "undo_content_digest_changed", "undo");
+      }
+      const content = request.created ? null : String(request.beforeContent || "");
+      const afterSha256 = request.created ? null : await sha256Text(content);
+      const mutationId = `mock_agent_file_mutation_${crypto.randomUUID()}`;
+      appendMockAgentFileMutationEvent(turn, "file_edit.mutation_started", "running", request, proposal, {
+        mutation_id: mutationId,
+        action: "undo",
+        path: request.path,
+        operation: proposal.operation,
+        proposal_event_id: request.proposalEventId,
+        expected_before_sha256: request.expectedAfterSha256,
+        expected_before_absent: false,
+        intended_after_sha256: afterSha256,
+        intended_after_absent: Boolean(request.created),
+      });
+      if (request.created) {
+        delete project.contents[request.path];
+        project.files = project.files.filter((file) => file.path !== request.path);
+      } else {
+        mockUpsertProjectFile(mockLastProject, request.path, content, { trackInTree: true, kind: "source" });
+      }
+      state.revision.project_revision += 1;
+      updateIdentity(state.revision);
+      appendMockAgentFileMutationEvent(turn, "file_edit.undone", "completed", request, proposal, {
+        mutation_id: mutationId,
+        action: "undo",
+        after_sha256: afterSha256,
+      });
+      return {
+        status: "undone",
+        path: request.path,
+        content,
+        start: 0,
+        end: 0,
+        afterSha256,
+        project: mockProjectState(mockLastProject),
+        workspace: structuredClone(state.revision),
+      };
+    } finally {
+      mockAgentFileMutationClaims.delete(claimId);
+    }
   }
   if (command === "snapshot_workspace") {
     return mockEnvironmentSnapshot();
@@ -3123,7 +3383,80 @@ async function mockInvoke(command, args) {
       .slice(0, args.limit || 50)
       .map(mockTurnSummary));
   }
+  if (command === "retry_agent_turn") {
+    const sourceTurnId = args.turnId ?? args.turn_id;
+    const source = mockAgentTurns.find((item) => item.turn_id === sourceTurnId
+      && item.project_root === mockLastProject);
+    if (!source) throw new Error(`Agent Retry source was not found in the active project: ${sourceTurnId}`);
+    if (["running", "waiting"].includes(source.status)) throw new Error("An active Agent turn cannot be retried");
+    const conversation = mockAgentConversations.find((item) => item.conversation_id === source.conversation_id
+      && item.project_root === mockLastProject);
+    if (!conversation || conversation.legacy_unthreaded || conversation.archived_at) {
+      throw new Error("Legacy or archived Agent Conversations cannot be retried; start a new Conversation.");
+    }
+    const userEvent = (source.events || []).find((item) => item.event_type === "agent.user_prompt");
+    const details = parseJsonObject(userEvent?.details_json) || {};
+    const taskKind = details.task_kind || "agent_turn";
+    const routes = mockAgentLlmSettings.persisted_capability_routes || [];
+    const route = source.mode === "act" || taskKind === "problem_repair"
+      ? routes.find((item) => item.capability === "agent.act") || routes.find((item) => item.capability === "agent.chat")
+      : routes.find((item) => item.capability === "agent.chat");
+    const model = mockAgentLlmSettings.models.find((item) => item.id === route?.model_id) || null;
+    const provider = model
+      ? mockAgentLlmSettings.providers.find((item) => item.id === model.provider_id)
+      : null;
+    const turn = createMockAgentTurn({
+      prompt: userEvent?.body || details.prompt || "",
+      mode: source.mode,
+      model: model ? mockEffectiveModelRef(provider, model) : source.model,
+      editorContext: details.editor_context || null,
+      autoApprove: false,
+      taskKind,
+      capabilityRoute: route?.capability || null,
+      conversationId: conversation.conversation_id,
+    });
+    turn.retry_of_turn_id = source.turn_id;
+    return {
+      status: "started",
+      turn_id: turn.turn_id,
+      conversation_id: turn.conversation_id,
+      retry_of_turn_id: source.turn_id,
+      auto_approve: false,
+      task_kind: taskKind,
+    };
+  }
+  if (command === "delete_agent_conversation") {
+    const conversationId = args.conversationId ?? args.conversation_id;
+    const conversationIndex = mockAgentConversations.findIndex((item) =>
+      item.conversation_id === conversationId && item.project_root === mockLastProject);
+    if (conversationIndex < 0) throw new Error("Agent Conversation was not found in the active project");
+    const turnIds = new Set(mockAgentTurns
+      .filter((item) => item.conversation_id === conversationId && item.project_root === mockLastProject)
+      .map((item) => item.turn_id));
+    if (mockAgentTurns.some((item) => turnIds.has(item.turn_id) && ["running", "waiting"].includes(item.status))) {
+      throw new Error("A running Agent Conversation cannot be deleted");
+    }
+    if ([...mockAgentFileMutationClaims.values()].some((claim) => turnIds.has(claim.turnId))) {
+      throw new Error("Wait for the selected Conversation's file operation before deleting it.");
+    }
+    for (let index = mockAgentTurns.length - 1; index >= 0; index -= 1) {
+      if (turnIds.has(mockAgentTurns[index].turn_id)) mockAgentTurns.splice(index, 1);
+    }
+    for (let index = mockApprovalRequests.length - 1; index >= 0; index -= 1) {
+      if (turnIds.has(mockApprovalRequests[index].turn_id)) mockApprovalRequests.splice(index, 1);
+    }
+    mockAgentConversations.splice(conversationIndex, 1);
+    return {
+      status: "deleted",
+      conversation_id: conversationId,
+      deleted_turns: turnIds.size,
+      deleted_turn_ids: [...turnIds],
+    };
+  }
   if (command === "clear_agent_history") {
+    if ([...mockAgentFileMutationClaims.values()].some((claim) => claim.projectRoot === mockLastProject)) {
+      throw new Error("Wait for Agent file operations before clearing history.");
+    }
     const deletedTurnIds = new Set(mockAgentTurns
       .filter((item) => item.project_root === mockLastProject)
       .map((item) => item.turn_id));
@@ -6213,6 +6546,12 @@ function truncateText(text, limit = 120) {
   return compact.length > limit ? `${compact.slice(0, limit)}…` : compact;
 }
 
+async function sha256Text(text) {
+  const bytes = new TextEncoder().encode(String(text || ""));
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 function fileEditDecisionStorageKey(root = state.project.root) {
   return `rho.fileEditDecisions:${root || "default"}`;
 }
@@ -6287,6 +6626,15 @@ function agentTimelineEventBody(event) {
   if (event.event_type === "tool.call_failed") {
     return userFacingError(event.body, "This step could not be completed. Review the task and try again.");
   }
+  if (event.event_type === "file_edit.mutation_started") return "The exact file path is locked while the mutation is committed.";
+  if (event.event_type === "file_edit.applied") return "The proposed content was committed to disk.";
+  if (event.event_type === "file_edit.undone") return "The exact applied proposal was reverted.";
+  if (event.event_type === "file_edit.recovered") return "Rho reconciled the recorded mutation against the file on disk after restart.";
+  if (event.event_type === "file_edit.mutation_not_applied") return "Recovery verified that the file still matches its recorded before state.";
+  if (event.event_type === "file_edit.mutation_failed") return "The mutation failed and the file still matches its recorded before state.";
+  if (event.event_type === "file_edit.resource_stale") return "The file changed before this operation could be safely committed.";
+  if (event.event_type === "file_edit.outcome_uncertain") return "The file matches neither a provable before nor after state. Inspect it before continuing.";
+  if (event.event_type === "file_edit.cancelled") return "The queued mutation was cancelled before it acquired the file lane.";
   return "";
 }
 
@@ -6306,6 +6654,15 @@ function agentTimelineEventTitle(event) {
     "tool.call_completed:inspect_r_object": "R object inspected",
     "tool.call_started:propose_file_edit": "Preparing file edit",
     "tool.call_completed:propose_file_edit": "File edit ready",
+    "file_edit.mutation_started:propose_file_edit": "File mutation admitted",
+    "file_edit.applied:propose_file_edit": "File edit applied",
+    "file_edit.undone:propose_file_edit": "File edit undone",
+    "file_edit.recovered:propose_file_edit": "File outcome recovered",
+    "file_edit.mutation_not_applied:propose_file_edit": "File edit not applied",
+    "file_edit.mutation_failed:propose_file_edit": "File mutation failed safely",
+    "file_edit.resource_stale:propose_file_edit": "File changed before commit",
+    "file_edit.outcome_uncertain:propose_file_edit": "File outcome needs review",
+    "file_edit.cancelled:propose_file_edit": "File mutation cancelled",
   }[key] || "Activity update";
 }
 
@@ -6805,10 +7162,6 @@ function agentTurnAdmissionState(mode = state.agentMode, taskKind = "agent_turn"
     reason = "The current Agent request is still starting.";
   } else if (selectedBusy) {
     reason = "This Conversation already has an active Agent turn.";
-  } else if (mode === "act" && active.length > 0) {
-    reason = "Act mode waits for every other Agent turn to finish.";
-  } else if (active.some((conversation) => conversation.latest_mode === "act")) {
-    reason = "Wait for the active Act turn to finish.";
   } else if (active.length >= 2) {
     reason = "Two Agent turns are already running. Cancel or finish one before starting another.";
   }
@@ -6976,6 +7329,31 @@ async function syncAgentRunsToConsole(runs) {
 
 function updateAgentHeader() {
   const selectedConversation = selectedAgentConversation();
+  const selectedTurn = state.agentTurns.find((turn) => turn.turn_id === state.selectedTurnId) || null;
+  const selectedConversationActive = Boolean(
+    selectedConversation && ["running", "waiting"].includes(selectedConversation.status),
+  );
+  const selectedFileMutationBusy = Boolean(
+    state.fileEditApplyBusy
+      && state.fileEditProposal
+      && state.agentTurns.some((turn) => turn.turn_id === state.fileEditProposal.turnId
+        && turn.conversation_id === selectedConversation?.conversation_id),
+  );
+  const retryAvailable = Boolean(
+    selectedTurn
+      && !["running", "waiting"].includes(selectedTurn.status)
+      && !selectedConversationActive
+      && !selectedConversation?.legacy_unthreaded,
+  );
+  $("#agentRetryTurnButton").classList.toggle("hidden", !retryAvailable);
+  $("#agentRetryTurnButton").disabled = selectedFileMutationBusy;
+  $("#agentDeleteConversationButton").classList.toggle("hidden", !selectedConversation);
+  $("#agentDeleteConversationButton").disabled = selectedConversationActive || selectedFileMutationBusy;
+  $("#agentDeleteConversationButton").title = selectedConversationActive
+    ? "Stop the active turn before deleting this conversation"
+    : selectedFileMutationBusy
+      ? "Wait for the selected file operation before deleting this conversation"
+      : "Delete the selected Agent conversation";
   const activeConversations = activeAgentConversations();
   const runningCount = activeConversations.filter((conversation) => conversation.status === "running").length;
   const waitingCount = activeConversations.filter((conversation) => conversation.status === "waiting").length;
@@ -6987,6 +7365,7 @@ function updateAgentHeader() {
     state.agentBusy = true;
     syncAgentComposerState();
     $("#agentCancelButton").classList.add("hidden");
+    $("#agentRetryTurnButton").classList.add("hidden");
     $("#agentState").textContent = "Unavailable";
     $("#agentStateDot").className = "agent-state-dot error";
     return;
@@ -9034,7 +9413,8 @@ function renderAgentTimeline() {
     headingRow.append(heading, createStateChip(statusLabel, turn.status));
     const paragraph = document.createElement("p");
     paragraph.className = "timeline-meta technical-meta";
-    paragraph.textContent = `${prettyAgentMode(turn.mode)} · ${agentModelDisplayName(turn.model)}`;
+    paragraph.textContent = `${prettyAgentMode(turn.mode)} · ${agentModelDisplayName(turn.model)}`
+      + (turn.retry_of_turn_id ? ` · Retry of ${turn.retry_of_turn_id}` : "");
     content.append(headingRow, paragraph);
     const detail = truncateText(
       turn.error_message
@@ -9228,6 +9608,83 @@ async function selectTaskConversation(conversationId) {
   state.selectedTurnId = null;
   state.selectedTurnDetail = null;
   await loadAgentData();
+}
+
+async function retrySelectedAgentTurn() {
+  const turnId = state.selectedTurnId;
+  if (!turnId) return;
+  const button = $("#agentRetryTurnButton");
+  button.disabled = true;
+  try {
+    const response = await invoke("retry_agent_turn", { turnId });
+    state.selectedConversationId = response?.conversation_id || state.selectedConversationId;
+    state.selectedTurnId = response?.turn_id || state.selectedTurnId;
+    state.selectedTurnDetail = null;
+    await Promise.all([loadAgentData(), loadRunData()]);
+    toast("Started a new Agent turn from the selected immutable prompt.");
+  } catch (error) {
+    toast(reportUiFailure("retry Agent turn", error, "The selected turn could not be retried. Refresh the conversation and try again."), true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function clearAgentTurnLocalState(turnIds) {
+  const ids = new Set(turnIds);
+  for (const key of [...state.fileEditDecisions.keys()]) {
+    if ([...ids].some((turnId) => key.startsWith(`${turnId}:`))) state.fileEditDecisions.delete(key);
+  }
+  for (const turnId of ids) {
+    state.agentActivityExpanded.delete(turnId);
+    state.actAuthorizedTurnIds.delete(turnId);
+  }
+  for (const key of [...state.fileEditAutoApplyAttempts]) {
+    if ([...ids].some((turnId) => key.startsWith(`${turnId}:`))) state.fileEditAutoApplyAttempts.delete(key);
+  }
+  if (state.fileEditUndo && ids.has(state.fileEditUndo.turnId)) {
+    state.fileEditUndo = null;
+    state.fileEditUndoVerifiedKey = null;
+  }
+  persistFileEditDecisions();
+}
+
+async function deleteSelectedAgentConversation() {
+  const conversation = selectedAgentConversation();
+  if (!conversation || ["running", "waiting"].includes(conversation.status)) return;
+  const turnIds = state.agentTurns
+    .filter((turn) => turn.conversation_id === conversation.conversation_id)
+    .map((turn) => turn.turn_id);
+  if (!await confirmAction({
+    title: "Delete selected conversation",
+    message: `Delete “${conversation.title || conversation.latest_prompt_preview || "this conversation"}” and its ${conversation.turn_count || turnIds.length} turn${(conversation.turn_count || turnIds.length) === 1 ? "" : "s"}? Other conversations will remain. This cannot be undone.`,
+    confirmLabel: "Delete conversation",
+    destructive: true,
+  })) return;
+  const button = $("#agentDeleteConversationButton");
+  button.disabled = true;
+  try {
+    const response = await invoke("delete_agent_conversation", {
+      conversationId: conversation.conversation_id,
+    });
+    clearAgentTurnLocalState(response?.deleted_turn_ids || turnIds);
+    state.selectedConversationId = null;
+    state.selectedTurnId = null;
+    state.selectedTurnDetail = null;
+    state.fileEditProposal = null;
+    clearAgentEditHighlight();
+    await Promise.all([loadAgentData(), loadRunData()]);
+    requestAnimationFrame(() => {
+      const selected = state.selectedConversationId
+        ? document.querySelector(`[data-conversation-id="${CSS.escape(state.selectedConversationId)}"]`)
+        : null;
+      (selected || $("#taskRailNew"))?.focus();
+    });
+    toast(`Deleted the selected conversation (${response?.deleted_turns ?? turnIds.length} turns).`);
+  } catch (error) {
+    toast(reportUiFailure("delete Agent conversation", error, "The selected conversation could not be deleted. Refresh it and try again."), true);
+  } finally {
+    button.disabled = false;
+  }
 }
 
 $("#taskRailNew").addEventListener("click", startNewAgentTask);
@@ -13523,9 +13980,26 @@ async function maybeApplyPreviewScenario() {
       secondTurn.final_message = null;
       state.selectedConversationId = secondTurn.conversation_id;
       await loadAgentData();
+    } else if (previewState === "retry-delete") {
+      createMockAgentTurn({
+        prompt: "Keep this independent completed conversation.",
+        mode: "ask",
+        model: "mock-read-only",
+      });
+      const selectedTurn = createMockAgentTurn({
+        prompt: "Retry this immutable completed turn, then delete only its conversation.",
+        mode: "plan",
+        model: "mock-read-only",
+      });
+      state.selectedConversationId = selectedTurn.conversation_id;
+      await loadAgentData();
     } else if (!["empty", "outputs-empty"].includes(previewState)) {
       const approvalPreview = previewState === "approval";
-      const fileProposalPreview = previewState === "file-proposal";
+      const fileProposalPreview = previewState === "file-proposal" || [
+        "file-proposal-recovered",
+        "file-proposal-not-applied",
+        "file-proposal-uncertain",
+      ].includes(previewState);
       state.agentMode = approvalPreview ? "act" : "ask";
       await invoke("run_agent", {
         prompt: fileProposalPreview
@@ -13534,6 +14008,40 @@ async function maybeApplyPreviewScenario() {
         mode: state.agentMode,
       });
       await loadAgentData();
+      if (fileProposalPreview && previewState !== "file-proposal") {
+        const proposal = selectedFileEditProposal();
+        const turn = mockAgentTurns.find((item) => item.turn_id === proposal?.turnId);
+        if (proposal && turn) {
+          const request = {
+            turnId: proposal.turnId,
+            proposalEventId: proposal.eventId,
+            path: proposal.path,
+          };
+          const mutationId = `mock_preview_mutation_${previewState}`;
+          appendMockAgentFileMutationEvent(turn, "file_edit.mutation_started", "running", request, proposal, {
+            mutation_id: mutationId,
+            action: "apply",
+            path: proposal.path,
+            operation: proposal.operation,
+            proposal_event_id: proposal.eventId,
+            expected_before_sha256: "0".repeat(64),
+            expected_before_absent: false,
+            intended_after_sha256: "1".repeat(64),
+            intended_after_absent: false,
+          });
+          const terminal = {
+            "file-proposal-recovered": ["file_edit.recovered", "completed", { outcome: "observed_intended_after" }],
+            "file-proposal-not-applied": ["file_edit.mutation_not_applied", "failed", { outcome: "observed_expected_before" }],
+            "file-proposal-uncertain": ["file_edit.outcome_uncertain", "error", { outcome: "outcome_uncertain", reason: "preview divergence" }],
+          }[previewState];
+          appendMockAgentFileMutationEvent(turn, terminal[0], terminal[1], request, proposal, {
+            mutation_id: mutationId,
+            action: "apply",
+            ...terminal[2],
+          });
+          await loadAgentData();
+        }
+      }
     }
     applyPostureLayout();
     $("#agentInput").value = previewState === "empty"
@@ -14634,8 +15142,18 @@ function recordPreviewLayoutEvidence() {
         turn: $("#agentTimeline .timeline-heading-row .state-chip")?.textContent || null,
         approval: $("#approvalPanel").dataset.state || null,
         file_proposal: $("#fileEditPanel").dataset.state || null,
+        file_note: $("#fileEditDecisionNote").textContent || null,
         output_count: $$("#agentOutputsList .agent-output-card").length,
         output_titles: $$("#agentOutputsList .agent-output-body strong").map((element) => element.textContent),
+      },
+      actions: {
+        retry_visible: !$("#agentRetryTurnButton").classList.contains("hidden"),
+        retry_disabled: $("#agentRetryTurnButton").disabled,
+        delete_visible: !$("#agentDeleteConversationButton").classList.contains("hidden"),
+        delete_disabled: $("#agentDeleteConversationButton").disabled,
+        file_accept_visible: !$("#fileEditAccept").classList.contains("hidden"),
+        file_reject_visible: !$("#fileEditReject").classList.contains("hidden"),
+        file_undo_visible: !$("#fileEditUndo").classList.contains("hidden"),
       },
       widths: {
         task_rail: taskRail?.width || 0,
@@ -16175,16 +16693,92 @@ function fileEditOperationLabel(operation) {
   }[operation] || operation;
 }
 
-function renderFileEditDecisionNote(decision, undoAvailable) {
+function agentFileMutationEventDetails(event, proposal) {
+  if (!String(event?.event_type || "").startsWith("file_edit.")) return null;
+  const envelope = parseJsonObject(event.details_json);
+  if (!envelope
+    || envelope.path !== proposal.path
+    || Number(envelope.proposal_event_id) !== Number(proposal.eventId)) return null;
+  const details = envelope.details && typeof envelope.details === "object"
+    ? envelope.details
+    : {};
+  return { ...details, operation: envelope.operation || proposal.operation };
+}
+
+function durableFileEditProjection(proposal) {
+  const events = [...(state.selectedTurnDetail?.events || [])]
+    .sort((left, right) => Number(left.id || 0) - Number(right.id || 0));
+  let projection = null;
+  for (const event of events) {
+    const details = agentFileMutationEventDetails(event, proposal);
+    if (!details) continue;
+    const action = details.action
+      || (event.event_type === "file_edit.undone" ? "undo" : "apply");
+    if (event.event_type === "file_edit.mutation_started") {
+      projection = {
+        decision: "mutating",
+        note: action === "undo"
+          ? "Undo has acquired the file lane and is being committed."
+          : "This proposal has acquired the file lane and is being committed.",
+      };
+    } else if (event.event_type === "file_edit.applied") {
+      projection = { decision: "accepted", note: null };
+    } else if (event.event_type === "file_edit.undone") {
+      projection = { decision: "undone", note: "This applied proposal was undone." };
+    } else if (event.event_type === "file_edit.recovered") {
+      projection = action === "undo"
+        ? { decision: "undone", note: "Rho verified after restart that Undo reached disk." }
+        : { decision: "accepted", note: "Rho verified after restart that this proposal reached disk." };
+    } else if (event.event_type === "file_edit.resource_stale") {
+      projection = action === "undo"
+        ? { decision: "accepted", note: "Undo was stopped because the file changed afterward. The later file content was preserved." }
+        : { decision: "stale", note: null };
+    } else if (event.event_type === "file_edit.outcome_uncertain") {
+      projection = {
+        decision: "uncertain",
+        note: "Rho could not prove whether this file mutation completed. Inspect the current file before taking another action.",
+      };
+    } else if (["file_edit.mutation_not_applied", "file_edit.mutation_failed", "file_edit.cancelled"].includes(event.event_type)) {
+      if (action === "undo") {
+        projection = {
+          decision: "accepted",
+          note: event.event_type === "file_edit.cancelled"
+            ? "The previous Undo was cancelled before changing disk."
+            : "The previous Undo did not change the file on disk.",
+        };
+      } else {
+        projection = {
+          decision: "not_applied",
+          note: event.event_type === "file_edit.cancelled"
+            ? "The previous apply was cancelled before changing disk. Recheck the preview before trying again."
+            : "The previous apply did not reach disk. Recheck the preview before trying again.",
+        };
+      }
+    }
+  }
+  return projection;
+}
+
+function fileEditDecisionForProposal(proposal) {
+  const durable = durableFileEditProjection(proposal);
+  return {
+    decision: durable?.decision || state.fileEditDecisions.get(proposal.key) || null,
+    durable,
+  };
+}
+
+function renderFileEditDecisionNote(decision, undoAvailable, durable) {
   const note = $("#fileEditDecisionNote");
   if (decision === "accepted" && undoAvailable) {
-    note.textContent = "Already applied. Undo is available for this latest accepted proposal.";
+    note.textContent = durable?.note
+      ? `${durable.note} Undo is still available for this latest accepted proposal.`
+      : "Already applied. Undo is available for this latest accepted proposal.";
     note.className = "file-edit-note";
     note.classList.remove("hidden");
     return;
   }
   if (decision === "accepted") {
-    note.textContent = "Already applied. Undo is no longer available.";
+    note.textContent = durable?.note || "Already applied. Undo is no longer available.";
     note.className = "file-edit-note";
     note.classList.remove("hidden");
     return;
@@ -16192,6 +16786,36 @@ function renderFileEditDecisionNote(decision, undoAvailable) {
   if (decision === "rejected") {
     note.textContent = "This proposal was rejected.";
     note.className = "file-edit-note rejected";
+    note.classList.remove("hidden");
+    return;
+  }
+  if (decision === "stale") {
+    note.textContent = durable?.note || "This proposal no longer matches the file on disk. Review the latest file and ask Rho to generate a fresh proposal.";
+    note.className = "file-edit-note stale";
+    note.classList.remove("hidden");
+    return;
+  }
+  if (decision === "undone") {
+    note.textContent = durable?.note || "This applied proposal was undone.";
+    note.className = "file-edit-note";
+    note.classList.remove("hidden");
+    return;
+  }
+  if (decision === "not_applied") {
+    note.textContent = durable?.note || "The previous apply did not reach disk. Recheck the preview before trying again.";
+    note.className = "file-edit-note stale";
+    note.classList.remove("hidden");
+    return;
+  }
+  if (decision === "mutating") {
+    note.textContent = durable?.note || "This file mutation is in progress.";
+    note.className = "file-edit-note";
+    note.classList.remove("hidden");
+    return;
+  }
+  if (decision === "uncertain") {
+    note.textContent = durable?.note || "Rho could not prove the mutation outcome. Inspect the current file before continuing.";
+    note.className = "file-edit-note stale";
     note.classList.remove("hidden");
     return;
   }
@@ -16252,7 +16876,8 @@ function contextualFileEditPreview(proposal) {
 function renderFileEditPanel() {
   const proposal = selectedFileEditProposal();
   state.fileEditProposal = proposal;
-  const decision = proposal ? state.fileEditDecisions.get(proposal.key) : null;
+  const decisionView = proposal ? fileEditDecisionForProposal(proposal) : { decision: null, durable: null };
+  const { decision, durable } = decisionView;
   const visible = Boolean(proposal);
   const panel = $("#fileEditPanel");
   panel.classList.toggle("hidden", !visible);
@@ -16271,19 +16896,29 @@ function renderFileEditPanel() {
     ? "Already applied"
     : decision === "rejected"
       ? "Rejected"
+      : decision === "stale"
+        ? "Stale · regenerate"
+        : decision === "undone"
+          ? "Undone"
+          : decision === "not_applied"
+            ? "Not applied · review again"
+            : decision === "mutating"
+              ? "Applying"
+              : decision === "uncertain"
+                ? "Outcome uncertain · inspect file"
       : "Review before applying";
   $("#fileEditSummary").textContent = `${fileEditOperationLabel(proposal.operation)} · ${summaryState}`;
   const preview = contextualFileEditPreview(proposal);
   $("#fileEditBefore").textContent = boundedFileEditPreview(preview.before, 4000);
   $("#fileEditAfter").textContent = boundedFileEditPreview(preview.after, 8000);
   const accepted = decision === "accepted";
-  const rejected = decision === "rejected";
   const undoAvailable = accepted
     && state.fileEditUndo?.key === proposal.key
     && state.fileEditUndoVerifiedKey === proposal.key;
-  renderFileEditDecisionNote(decision, undoAvailable);
-  $("#fileEditAccept").classList.toggle("hidden", accepted || rejected);
-  $("#fileEditReject").classList.toggle("hidden", accepted || rejected);
+  const reviewable = !decision || decision === "not_applied";
+  renderFileEditDecisionNote(decision, undoAvailable, durable);
+  $("#fileEditAccept").classList.toggle("hidden", !reviewable);
+  $("#fileEditReject").classList.toggle("hidden", !reviewable);
   $("#fileEditUndo").classList.toggle("hidden", !undoAvailable);
 }
 
@@ -16292,9 +16927,10 @@ async function verifyFileEditUndo() {
   if (!undo) return;
   const key = undo.key;
   try {
-    const current = await projectFileContent(undo.path);
+    const current = await invoke("project_read_file", { path: undo.path });
     if (state.fileEditUndo?.key !== key) return;
-    if (current !== undo.afterContent) {
+    const currentDigest = current?.sha256 || await sha256Text(current?.content || "");
+    if (currentDigest !== undo.afterSha256) {
       state.fileEditUndo = null;
       state.fileEditUndoVerifiedKey = null;
       renderFileEditPanel();
@@ -16313,7 +16949,7 @@ async function verifyFileEditUndo() {
 function maybeAutoApplyFileEditProposal() {
   const proposal = state.fileEditProposal;
   if (!proposal
-    || state.fileEditDecisions.has(proposal.key)
+    || fileEditDecisionForProposal(proposal).decision
     || !state.actAuthorizedTurnIds.has(proposal.turnId)
     || state.fileEditAutoApplyAttempts.has(proposal.key)
     || proposal.editorContext?.project_root !== state.project.root) return;
@@ -16329,6 +16965,32 @@ async function projectFileContent(path) {
   if (state.closedDrafts[path]) return state.closedDrafts[path].draft_content;
   const result = await invoke("project_read_file", { path });
   return result.content || "";
+}
+
+async function agentFileMutationSnapshot(proposal) {
+  if (proposal.operation === "create") {
+    return { beforeContent: "", expectedDiskSha256: null };
+  }
+  if (state.activeDocument === proposal.path) {
+    syncDocumentFromEditor({ render: false, persist: false });
+  }
+  const documentState = state.documents[proposal.path] || null;
+  if (documentState) {
+    return {
+      beforeContent: String(documentState.content || ""),
+      expectedDiskSha256: await sha256Text(documentState.savedContent || ""),
+    };
+  }
+  const disk = await invoke("project_read_file", { path: proposal.path });
+  return {
+    beforeContent: state.closedDrafts[proposal.path]?.draft_content ?? String(disk?.content || ""),
+    expectedDiskSha256: disk?.sha256 || await sha256Text(disk?.content || ""),
+  };
+}
+
+function isAgentFileResourceStale(error) {
+  const message = typeof error === "string" ? error : error?.message || String(error || "");
+  return message.includes("AGENT_FILE_RESOURCE_STALE");
 }
 
 function calculateProposedFileEdit(proposal, beforeContent) {
@@ -16424,6 +17086,7 @@ async function acceptFileEditProposal({ automatic = false } = {}) {
   const button = $("#fileEditAccept");
   state.fileEditApplyBusy = true;
   button.disabled = true;
+  updateAgentHeader();
   try {
     const exists = state.project.files.some((file) => file.path === proposal.path);
     if (proposal.operation === "create" && exists) {
@@ -16432,22 +17095,37 @@ async function acceptFileEditProposal({ automatic = false } = {}) {
     if (proposal.operation !== "create" && !exists) {
       throw new Error(`Cannot edit ${proposal.path}: the file does not exist.`);
     }
-    const beforeContent = proposal.operation === "create" ? "" : await projectFileContent(proposal.path);
-    const edit = calculateProposedFileEdit(proposal, beforeContent);
-    state.internalProjectWrites.set(proposal.path, { content: edit.content, expiresAt: Date.now() + 5000 });
-    state.project = await invoke(
-      proposal.operation === "create" ? "project_create_file" : "project_write_file",
-      { path: proposal.path, content: edit.content },
-    );
+    const snapshot = await agentFileMutationSnapshot(proposal);
+    const preview = calculateProposedFileEdit(proposal, snapshot.beforeContent);
+    state.internalProjectWrites.set(proposal.path, { content: preview.content, expiresAt: Date.now() + 5000 });
+    const response = await invoke("apply_agent_file_edit", {
+      request: {
+        turnId: proposal.turnId,
+        proposalEventId: proposal.eventId,
+        path: proposal.path,
+        expectedDiskSha256: snapshot.expectedDiskSha256,
+        beforeContent: snapshot.beforeContent,
+      },
+    });
+    const content = String(response?.content ?? preview.content);
+    const start = Number(response?.start ?? preview.start);
+    const end = Number(response?.end ?? preview.end);
+    const afterSha256 = response?.afterSha256 || await sha256Text(content);
+    state.internalProjectWrites.set(proposal.path, { content, expiresAt: Date.now() + 5000 });
+    state.project = response.project;
+    updateIdentity(response.workspace);
     delete state.closedDrafts[proposal.path];
-    await updateDocumentAfterFileEdit(proposal.path, edit.content, edit.start, edit.end);
+    await updateDocumentAfterFileEdit(proposal.path, content, start, end);
     state.fileEditUndo = {
       key: proposal.key,
+      turnId: proposal.turnId,
+      proposalEventId: proposal.eventId,
       path: proposal.path,
-      beforeContent,
-      afterContent: edit.content,
+      beforeContent: snapshot.beforeContent,
+      afterContent: content,
+      afterSha256,
       created: proposal.operation === "create",
-      start: edit.start,
+      start,
     };
     state.fileEditUndoVerifiedKey = null;
     state.fileEditDecisions.set(proposal.key, "accepted");
@@ -16456,13 +17134,23 @@ async function acceptFileEditProposal({ automatic = false } = {}) {
     $("#fileEditPanel").open = false;
     renderFileEditPanel();
     void verifyFileEditUndo();
+    void loadAgentData({ quiet: true });
     toast(`${automatic ? "Automatically applied" : "Applied"} Agent edit to ${proposal.path}.`);
   } catch (error) {
     state.internalProjectWrites.delete(proposal.path);
+    if (isAgentFileResourceStale(error)) {
+      state.fileEditDecisions.set(proposal.key, "stale");
+      if (state.fileEditUndo?.key === proposal.key) state.fileEditUndo = null;
+      state.fileEditUndoVerifiedKey = null;
+      persistFileEditDecisions();
+      renderFileEditPanel();
+    }
+    await loadAgentData({ quiet: true });
     toast(reportUiFailure("apply Agent file edit", error, "The proposed edit could not be applied. Refresh the project and review the proposal again."), true);
   } finally {
     state.fileEditApplyBusy = false;
     button.disabled = false;
+    updateAgentHeader();
   }
 }
 
@@ -16479,19 +17167,36 @@ async function undoFileEditProposal() {
   const undo = state.fileEditUndo;
   if (!undo) return;
   const button = $("#fileEditUndo");
+  state.fileEditApplyBusy = true;
   button.disabled = true;
+  updateAgentHeader();
   try {
-    const current = await projectFileContent(undo.path);
-    if (current !== undo.afterContent) {
-      throw new Error("The file changed after the Agent edit, so automatic undo was stopped.");
-    }
+    state.internalProjectWrites.set(undo.path, {
+      content: undo.created ? null : undo.beforeContent,
+      expiresAt: Date.now() + 5000,
+    });
+    const response = await invoke("undo_agent_file_edit", {
+      request: {
+        turnId: undo.turnId,
+        proposalEventId: undo.proposalEventId,
+        path: undo.path,
+        expectedAfterSha256: undo.afterSha256,
+        beforeContent: undo.beforeContent,
+        created: undo.created,
+      },
+    });
+    state.project = response.project;
+    updateIdentity(response.workspace);
     if (undo.created) {
-      state.project = await invoke("project_delete_file", { path: undo.path });
       if (state.documents[undo.path]) closeDocument(undo.path);
     } else {
       state.internalProjectWrites.set(undo.path, { content: undo.beforeContent, expiresAt: Date.now() + 5000 });
-      state.project = await invoke("project_write_file", { path: undo.path, content: undo.beforeContent });
-      await updateDocumentAfterFileEdit(undo.path, undo.beforeContent, undo.start, undo.start);
+      await updateDocumentAfterFileEdit(
+        undo.path,
+        String(response?.content ?? undo.beforeContent),
+        undo.start,
+        undo.start,
+      );
     }
     state.fileEditDecisions.set(undo.key, "undone");
     state.fileEditUndo = null;
@@ -16501,11 +17206,22 @@ async function undoFileEditProposal() {
     renderFileEditPanel();
     renderProjectFiles();
     renderDocumentTabs();
+    void loadAgentData({ quiet: true });
     toast(`Undid Agent edit in ${undo.path}.`);
   } catch (error) {
+    state.internalProjectWrites.delete(undo.path);
+    const message = typeof error === "string" ? error : error?.message || String(error || "");
+    if (isAgentFileResourceStale(error) || message.includes("AGENT_FILE_OUTCOME_UNCERTAIN")) {
+      state.fileEditUndo = null;
+      state.fileEditUndoVerifiedKey = null;
+      renderFileEditPanel();
+    }
+    await loadAgentData({ quiet: true });
     toast(reportUiFailure("undo Agent file edit", error, "The Agent edit could not be undone. The current file was left unchanged."), true);
   } finally {
+    state.fileEditApplyBusy = false;
     button.disabled = false;
+    updateAgentHeader();
   }
 }
 
@@ -18605,7 +19321,8 @@ async function listenForProjectChanges() {
           const result = await invoke("project_read_file", { path });
           selfGenerated = result.content === pending.content;
         } catch {
-          selfGenerated = false;
+          selfGenerated = pending.content === null
+            && !state.project.files.some((file) => file.path === path);
         }
         if (selfGenerated) {
           matchedInternalWrite = true;
@@ -19397,6 +20114,8 @@ $("#agentCancelButton").addEventListener("click", async () => {
     $("#agentCancelButton").disabled = false;
   }
 });
+$("#agentRetryTurnButton").addEventListener("click", retrySelectedAgentTurn);
+$("#agentDeleteConversationButton").addEventListener("click", deleteSelectedAgentConversation);
 $("#clearAgentHistoryButton").addEventListener("click", async () => {
   if (!await confirmAction({
     title: "Delete conversation history",

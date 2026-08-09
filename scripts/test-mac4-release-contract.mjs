@@ -5,7 +5,7 @@ const normalizeLineEndings = (text) => text.replace(/\r\n/g, "\n");
 const read = (file) => normalizeLineEndings(fs.readFileSync(file, "utf8"));
 const count = (text, pattern) => [...text.matchAll(pattern)].length;
 
-const expectedVersion = "0.4.0-dev.24";
+const expectedVersion = "0.4.0-dev.25";
 const cargo = read("Cargo.toml");
 const cargoVersion = cargo.match(/^version = "([^"]+)"/m)?.[1];
 assert.equal(cargoVersion, expectedVersion, "Cargo candidate version must be synchronized");
@@ -14,13 +14,13 @@ assert.equal(JSON.parse(read("desktop/package.json")).version, expectedVersion);
 const packageLock = JSON.parse(read("desktop/package-lock.json"));
 assert.equal(packageLock.version, expectedVersion);
 assert.equal(packageLock.packages[""].version, expectedVersion);
-assert.match(read("desktop/dist/index.html"), /styles\.css\?v=0\.4\.0-dev\.24/);
-assert.match(read("desktop/dist/index.html"), /app\.js\?v=0\.4\.0-dev\.24/);
-assert.ok(count(read("desktop/dist/app.js"), /0\.4\.0-dev\.24/g) >= 3, "Mock identity must be synchronized");
+assert.match(read("desktop/dist/index.html"), /styles\.css\?v=0\.4\.0-dev\.25/);
+assert.match(read("desktop/dist/index.html"), /app\.js\?v=0\.4\.0-dev\.25/);
+assert.ok(count(read("desktop/dist/app.js"), /0\.4\.0-dev\.25/g) >= 3, "Mock identity must be synchronized");
 
 const localPackagePattern = /name = "rho-[^"]+"\r?\nversion = "([^"]+)"/g;
 assert.deepEqual(
-  [...'name = "rho-fixture"\r\nversion = "0.4.0-dev.24"'.matchAll(localPackagePattern)].map((match) => match[1]),
+  [...'name = "rho-fixture"\r\nversion = "0.4.0-dev.25"'.matchAll(localPackagePattern)].map((match) => match[1]),
   [expectedVersion],
   "Cargo.lock parsing must accept Windows CRLF checkouts",
 );
@@ -45,8 +45,8 @@ assert.match(
 );
 assert.match(build, /name: Build Rho Candidate \/ Rehearsal/);
 assert.match(build, buildModePattern);
-assert.match(build, /release_tag:\n[\s\S]*?default: v0\.4\.0-dev\.24/);
-assert.match(build, /release_name:\n[\s\S]*?default: Rho 0\.4\.0-dev\.24/);
+assert.match(build, /release_tag:\n[\s\S]*?default: v0\.4\.0-dev\.25/);
+assert.match(build, /release_name:\n[\s\S]*?default: Rho 0\.4\.0-dev\.25/);
 assert.match(build, /candidate-release\.mjs --mode admission --build_mode "\$BUILD_MODE" --repository "\$GITHUB_REPOSITORY" --workflow_ref "\$GITHUB_REF" --default_branch "\$DEFAULT_BRANCH"/);
 assert.match(build, /commit="\$\(git rev-parse "\$\{INPUT_REF\}\^\{commit\}"\)"/);
 assert.match(build, /Requested commit \$commit is not the current default-branch commit \$default_commit/);
@@ -185,7 +185,7 @@ assert.match(notaryContract, /aud: "appstoreconnect-v1"/);
 assert.match(notaryContract, /MAX_NOTARY_LOG_BYTES = 1024 \* 1024/);
 assert.match(notaryContract, /dsaEncoding: "ieee-p1363"/);
 assert.match(notaryContract, /EXACT_DEVELOPER_LOG_HOSTS = new Set\(\["notary-artifacts-prod\.s3\.amazonaws\.com"\]\)/);
-assert.match(read(".github/workflows/candidate-publish.yml"), /default: v0\.4\.0-dev\.24/);
+assert.match(read(".github/workflows/candidate-publish.yml"), /default: v0\.4\.0-dev\.25/);
 assert.match(build, /draft: true/);
 assert.match(build, /prerelease: true/);
 assert.match(build, /getReleaseByTag/);

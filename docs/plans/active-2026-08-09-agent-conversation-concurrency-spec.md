@@ -1,7 +1,8 @@
 # Agent Conversation Concurrency And Resource Scheduling
 
-Status: active; Issue #5 authorized end-to-end, CONV-1 and CONV-2 source
-checkpoints accepted 2026-08-09, CONV-3 is not active
+Status: active; Issue #5 authorized end-to-end, CONV-1 through CONV-3 source
+checkpoints accepted 2026-08-09; integration and installed acceptance remain
+open
 
 Date: 2026-08-09
 
@@ -14,12 +15,12 @@ and desktop workflow
 Risk class: R3 schema migration, execution admission, cancellation, approval,
 project switching, recovery, and project-file mutation
 
-Current work package: none; stopped at the accepted CONV-2 source checkpoint
-before CONV-3 activation
+Current work package: exact upstream integration, required CI, installed-app
+acceptance, and Issue closure
 
-Mandatory stop: reached after CONV-2 admission, cancellation, approval,
-Workspace-read, recovery, Tauri/browser integration, focused and affected
-verification, and independent contract review; CONV-3 remains inactive
+Mandatory stop: the CONV-3 source checkpoint has been reached; do not close
+Issue #5 until exact integration/CI and representative installed macOS
+acceptance are recorded
 
 ## Problem And Reproduction
 
@@ -275,6 +276,15 @@ Limits:
   file never overwrite silently: the later proposal either observes the exact
   expected content and proceeds or becomes `resource_stale` with a visible
   regenerate/review action.
+- Before touching disk, Apply/Undo persists a mutation-start record containing
+  one opaque mutation identity plus expected-before and intended-after
+  digest/absence truth. A terminal event records success, failure, stale,
+  cancellation, recovered success/not-applied, or outcome uncertainty.
+- Startup and project activation reconcile every incomplete start against the
+  contained current file exactly once. Only an exact intended-after match is
+  recovered as applied/undone, only an exact expected-before match is
+  recovered as not applied, and every other observation remains uncertain
+  with mutation controls withheld.
 - Path lanes are released on success, rejection, failure, cancellation, and
   panic/unwind. They do not survive process restart; durable content/revision
   checks remain the recovery authority.
@@ -306,6 +316,12 @@ an Agent-turn action.
 - Project switching remains blocked while any Turn is running/waiting, any
   Agent approval is waiting, or an Agent-owned Workspace/file mutation is in
   flight. The blocker reports the total and one representative opaque ID.
+- Conversation creation, Agent Turn/file-claim admission and cancellation,
+  selected Conversation deletion/history clearing, and project-switch
+  preflight share one broker transition gate.
+  Whichever operation enters first establishes the project/claim state seen by
+  the next operation; project switching cannot pass preflight in the gap
+  between project lookup and resource registration.
 - Switching never migrates a running Conversation to another project.
 - Startup marks all historically nonterminal Turns interrupted with
   `desktop_restart`, interrupts their waiting approvals, and derives the
@@ -395,10 +411,11 @@ The mandatory stop was reached on 2026-08-09. Evidence is recorded in
 `docs/verification/agent-conversation-concurrency/conv2.md`. The accepted
 boundary permits two Ask/Plan Turns in distinct Conversations, retains
 exclusive Act admission, serializes Workspace R requests, and isolates exact
-Turn cancellation and approval ownership. CONV-3 remains inactive pending its
-separate activation review.
+Turn cancellation and approval ownership. A separate activation review then
+admitted CONV-3; this sentence records the historical CONV-2 boundary rather
+than constraining the active package.
 
-### CONV-3: Mutation scheduling, retry, and deletion — not active
+### CONV-3: Mutation scheduling, retry, and deletion — source checkpoint complete
 
 - revision-rechecked Workspace mutation lane;
 - per-path file apply/Undo lane and digest conflict handling;
@@ -407,6 +424,24 @@ separate activation review.
 - installed-app workflow covering two concurrent Conversations.
 
 Do not activate until CONV-2 is accepted at its mandatory stop.
+
+Activation decision: the CONV-2 evidence and Draft PR #11 source boundary were
+reviewed with no unresolved P0/P1 finding. CONV-3 may add broker-owned
+per-path mutation admission and content-digest revalidation around the existing
+file-edit commands, enable bounded Act concurrency only after those gates are
+covered, add exact immutable Retry and selected-Conversation Delete commands,
+and complete installed/integration acceptance. Existing file-edit placement,
+atomic write, project containment, Undo, exact-turn Act authorization,
+Workspace R authority, BH4 deletion truth, and direct environment-operation
+ownership remain unchanged.
+
+The mandatory source stop was reached on 2026-08-09. Evidence is recorded in
+`docs/verification/agent-conversation-concurrency/conv3.md`. Mutation admission,
+durable recovery, exact Apply/Undo state, project-transition ordering,
+Retry/Delete, two-project isolation, browser/mock parity, the complete affected
+matrix, and independent R3 review pass with no unresolved P0/P1 finding.
+Integration, hosted candidate, owner-installed acceptance, and Issue closure
+remain open factual gates.
 
 ## Verification Matrix
 
@@ -462,10 +497,9 @@ representative installed macOS application workflow.
 
 ## Version, NEWS, Release, And Issue Closure
 
-CONV-1 changes durable behavior and UI but is not independently distributable;
-application version and NEWS are deferred to the single reviewed integration
-candidate after CONV-3. Schema v12 must never be shipped under the already
-published immutable `0.4.0-dev.24` identity.
+The integrated behavior advances application metadata and `NEWS.md` to the
+single-use `0.4.0-dev.25` development identity. Schema v12 must never be
+shipped under the already published immutable `0.4.0-dev.24` identity.
 
 No R package version change is expected unless implementation demonstrates a
 required exported `rho.agent` or `rho.bridge` contract change. Agent R process

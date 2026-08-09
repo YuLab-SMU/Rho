@@ -31,6 +31,8 @@ assert.match(js, /const undoAvailable = accepted[\s\S]*state\.fileEditUndoVerifi
 assert.match(js, /async function verifyFileEditUndo\(\)/);
 assert.match(js, /\$\("#fileEditPanel"\)\.open = false;/);
 assert.match(js, /void verifyFileEditUndo\(\);/);
+assert.match(js, /decision === "stale"/);
+assert.match(js, /expectedAfterSha256: undo\.afterSha256/);
 assert.match(js, /state\.fileEditUndo = null;[\s\S]*state\.fileEditUndoVerifiedKey = null;/);
 
 console.log("File proposal collapse contract checks passed.");

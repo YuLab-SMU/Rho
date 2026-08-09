@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Rho</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="styles.css?v=0.4.0-dev.24&rev=m3-scientific-review-v3&agent=output-review-v3&issue4=provider-first-v1&issue6=repair-r5&issue9=task-rail-v1&viewer=refresh-r1" />
+    <link rel="stylesheet" href="styles.css?v=0.4.0-dev.25&rev=m3-scientific-review-v3&agent=output-review-v3&issue4=provider-first-v1&issue5=conversation-v1&issue6=repair-r5&issue9=task-rail-v1&viewer=refresh-r1" />
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true">
@@ -503,8 +503,10 @@ plot(
             <div><span id="agentStateDot" class="agent-state-dot"></span><strong id="agentState">Ready</strong></div>
             <div class="agent-header-actions">
               <button id="agentRuntimeRetryButton" class="agent-clear-button hidden" type="button" title="Retry Agent runtime check">Retry Agent</button>
+              <button id="agentRetryTurnButton" class="agent-clear-button hidden" type="button" title="Retry the selected Agent turn">Retry turn</button>
               <button id="agentCancelButton" class="agent-cancel-button hidden" type="button" title="Cancel Agent turn" aria-label="Cancel Agent turn">■</button>
-              <button id="clearAgentHistoryButton" class="agent-clear-button" type="button" title="Delete Agent history">Delete history</button>
+              <button id="agentDeleteConversationButton" class="agent-clear-button hidden" type="button" title="Delete the selected Agent conversation">Delete conversation</button>
+              <button id="clearAgentHistoryButton" class="agent-clear-button" type="button" title="Delete all Agent history for this project">Delete all</button>
             </div>
           </div>
           <div id="agentTimeline" class="agent-timeline" aria-live="polite">
@@ -533,7 +535,7 @@ plot(
             </summary>
             <div class="file-edit-detail">
               <p id="fileEditSummary" class="file-edit-summary"></p>
-              <p id="fileEditDecisionNote" class="file-edit-note hidden"></p>
+              <p id="fileEditDecisionNote" class="file-edit-note hidden" role="status" aria-live="polite"></p>
               <div class="file-edit-diff" aria-label="File edit diff">
                 <div id="fileEditBeforeBlock">
                   <span>Before</span>
@@ -1297,6 +1299,6 @@ plot(
     <script src="vendor/viewer/katex.min.js"></script>
     <script src="vendor/viewer/katex-auto-render.min.js"></script>
     <script src="vendor/viewer/papaparse.min.js"></script>
-    <script src="app.js?v=0.4.0-dev.24&rev=m3-scientific-review-v3&projection=wp4&help=console-v3&afo=act-output-v1&issue4=provider-first-v1&issue6=repair-r5&issue9=task-rail-v1&viewer=refresh-r1"></script>
+    <script src="app.js?v=0.4.0-dev.25&rev=m3-scientific-review-v3&projection=wp4&help=console-v3&afo=act-output-v1&issue4=provider-first-v1&issue5=conversation-v1&issue6=repair-r5&issue9=task-rail-v1&viewer=refresh-r1"></script>
   </body>
 </html>

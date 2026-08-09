@@ -4,6 +4,29 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.0-dev.25 - 2026-08-09
+
+### Added
+
+- Agent history is now organized into durable, project-scoped Conversations.
+  Users can start and switch to another Conversation while unrelated Agent
+  work continues, up to the bounded two-turn limit.
+- A terminal Turn can be retried without rewriting its original prompt or
+  result, and one inactive selected Conversation can be deleted without
+  clearing unrelated history.
+
+### Improved
+
+- Cancellation, approvals, model context, and status updates are isolated to
+  the exact Turn and Conversation. Workspace R requests remain serialized,
+  while independent Agent/model work and different-file changes can proceed
+  concurrently.
+- Agent file Apply and Undo are scheduled per normalized project file. Same-
+  file conflicts fail stale instead of overwriting, and interrupted mutations
+  recover after restart as verified applied, not applied, or outcome uncertain.
+- Project switching is ordered against Agent-turn and file-mutation admission,
+  closing the preflight race between a new resource claim and a project change.
+
 ## 0.4.0-dev.24 - 2026-08-08
 
 ### Fixed
