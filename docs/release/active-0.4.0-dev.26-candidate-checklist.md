@@ -197,9 +197,17 @@ exact candidate:
 7. attempt project switching during an admitted Turn/file operation and verify
    the switch is blocked without project or file ambiguity.
 
-The acceptance record must bind exact version, commit, candidate evidence
-digest, artifact digest, date, owner result, and any deviations. Only a real
-owner-reported pass may set `decision: GO` or admit publication.
+Acceptance uses two deliberately separate records. This checked-in ledger must
+record the exact version, commit, candidate-evidence digest, macOS artifact
+digest, acceptance date, owner-reported result for all seven workflows, and any
+deviations. The bounded Draft asset
+`rho-0.4.0-dev.26-acceptance.json` retains the existing public schema v1 exact
+key set: its version, tag, commit, candidate-evidence digest, and exact
+aggregate `platforms` map bind both artifact digests without publishing owner
+identity or free-form workflow notes. It may be derived and uploaded only after
+the checked-in ledger records a real owner-reported pass. Only then may that
+minimal asset carry `status: passed` and `decision: GO`; neither record alone
+may admit publication.
 
 ## Issue Closure Gate
 
