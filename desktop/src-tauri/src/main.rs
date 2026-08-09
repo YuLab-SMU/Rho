@@ -35,7 +35,7 @@ use project::{
 use rho_core::{BrokerState, ExecutionOrigin};
 use rho_kernel::{ArkLaunchConfig, ArkSession, KernelEvent};
 use rho_server::coordinator::{
-    ApprovalResponseInput, CoordinatorRuntime, EnvironmentOperationArguments,
+    AgentWorkspaceLane, ApprovalResponseInput, CoordinatorRuntime, EnvironmentOperationArguments,
     PendingApprovalRegistry, ProjectSkillDiscoverySummary, bootstrap_bridge,
     decide_environment_operation, discover_project_skill_summaries, dispatch_workspace_request,
     dispatch_workspace_request_with_execution_id, request_environment_operation, run_agent_turn,
@@ -215,12 +215,47 @@ struct AppState {
     context: Mutex<Option<Arc<Mutex<CoordinatorRuntime>>>>,
     approvals: Arc<PendingApprovalRegistry>,
     environment_approvals: Arc<PendingApprovalRegistry>,
-    agent_tasks: Arc<Mutex<HashMap<String, tauri::async_runtime::JoinHandle<()>>>>,
+    agent_tasks: Arc<Mutex<HashMap<String, AgentTaskEntry>>>,
+    agent_workspace_lane: Arc<AgentWorkspaceLane>,
     agent_llm_test_control: AgentModelTestControl,
     switch_test_control: SwitchTestControl,
     shutdown_started: AtomicBool,
     render_jobs: Arc<Mutex<HashMap<String, RenderJobState>>>,
     render_tasks: Arc<Mutex<HashMap<String, tauri::async_runtime::JoinHandle<()>>>>,
+}
+
+const MAX_CONCURRENT_AGENT_TURNS: usize = 2;
+
+struct AgentTaskEntry {
+    conversation_id: String,
+    mode: String,
+    handle: tauri::async_runtime::JoinHandle<()>,
+}
+
+fn agent_turn_admission_error(
+    tasks: &HashMap<String, AgentTaskEntry>,
+    conversation_id: Option<&str>,
+    mode: &str,
+) -> Option<&'static str> {
+    if conversation_id.is_some_and(|conversation_id| {
+        tasks
+            .values()
+            .any(|task| task.conversation_id == conversation_id)
+    }) {
+        return Some(
+            "AGENT_CONVERSATION_BUSY: This Conversation already has an active Agent turn.",
+        );
+    }
+    if mode == "act" && !tasks.is_empty() {
+        return Some("AGENT_ACT_EXCLUSIVE: Act mode cannot run beside another Agent turn.");
+    }
+    if tasks.values().any(|task| task.mode == "act") {
+        return Some("AGENT_ACT_EXCLUSIVE: Wait for the active Act turn to finish.");
+    }
+    if tasks.len() >= MAX_CONCURRENT_AGENT_TURNS {
+        return Some("AGENT_CONCURRENCY_LIMIT: At most two Agent turns can run at once.");
+    }
+    None
 }
 
 /// Tracked state of an async render job.
@@ -1967,8 +2002,9 @@ async fn respond_environment_operation(
     if pending.source == "agent" {
         let delivered = state
             .environment_approvals
-            .respond(
+            .respond_for_turn(
                 &request.request_id,
+                pending.turn_id.as_deref(),
                 ApprovalResponseInput {
                     decision: request.decision.clone(),
                     reason: request.reason.clone(),
@@ -2962,9 +2998,15 @@ async fn run_agent(
             .clone()
             .unwrap_or_else(|| "aisdk is unavailable in Agent R".to_string()));
     }
+    let requested_conversation_id = conversation_id.map(|value| value.trim().to_string());
+    if requested_conversation_id.as_deref() == Some("") {
+        return Err("Agent Conversation identity cannot be empty".to_string());
+    }
     let mut tasks = state.agent_tasks.lock().await;
-    if !tasks.is_empty() {
-        return Err("An Agent turn is already running".to_string());
+    if let Some(error) =
+        agent_turn_admission_error(&tasks, requested_conversation_id.as_deref(), &mode)
+    {
+        return Err(error.to_string());
     }
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
@@ -2985,10 +3027,6 @@ async fn run_agent(
     }
     .map_err(display_error)?;
     let auto_approve = task_kind == "agent_turn" && auto_approve.unwrap_or(false) && mode == "act";
-    let requested_conversation_id = conversation_id.map(|value| value.trim().to_string());
-    if requested_conversation_id.as_deref() == Some("") {
-        return Err("Agent Conversation identity cannot be empty".to_string());
-    }
     let conversation_id;
     {
         let mut context_guard = context.lock().await;
@@ -3078,6 +3116,7 @@ async fn run_agent(
 
     let approvals = state.approvals.clone();
     let environment_approvals = state.environment_approvals.clone();
+    let workspace_lane = state.agent_workspace_lane.clone();
     let rscript = config.rscript.clone();
     let process_path = config.process_path.clone();
     let agent_package = config.agent_package.clone();
@@ -3085,6 +3124,7 @@ async fn run_agent(
     let task_conversation_id = conversation_id.clone();
     let task_agent_tasks = state.agent_tasks.clone();
     let runtime_profile = resolved_model.runtime_profile.clone();
+    let task_mode = mode.clone();
     let (registered_tx, registered_rx) = oneshot::channel();
     let task = tauri::async_runtime::spawn(async move {
         let _ = registered_rx.await;
@@ -3099,9 +3139,10 @@ async fn run_agent(
             None,
             credential_override,
             prompt,
-            mode,
+            task_mode,
             task_turn_id.clone(),
             task_conversation_id,
+            workspace_lane,
             approvals,
             environment_approvals,
             auto_approve,
@@ -3114,7 +3155,14 @@ async fn run_agent(
             json!({ "turn_id": task_turn_id.clone() }),
         );
     });
-    tasks.insert(turn_id.clone(), task);
+    tasks.insert(
+        turn_id.clone(),
+        AgentTaskEntry {
+            conversation_id: conversation_id.clone(),
+            mode: mode.clone(),
+            handle: task,
+        },
+    );
     drop(tasks);
     let _ = registered_tx.send(());
     Ok(json!({
@@ -3438,8 +3486,9 @@ async fn respond_approval(
         .map_err(display_error)?;
     let delivered = state
         .approvals
-        .respond(
+        .respond_for_turn(
             &request.request_id,
+            Some(&pending.turn_id),
             ApprovalResponseInput {
                 decision: request.decision.clone(),
                 reason: request.reason.clone(),
@@ -3481,20 +3530,82 @@ async fn cancel_run(run_id: String, state: State<'_, AppState>) -> Result<Value,
         .map_err(display_error)
 }
 
-#[tauri::command]
-async fn restart_workspace(state: State<'_, AppState>) -> Result<WorkspaceStatus, String> {
-    state
-        .approvals
-        .cancel_all("Workspace R is restarting.")
-        .await;
+async fn interrupt_all_agent_tasks(
+    state: &AppState,
+    terminal_reason: &str,
+    message: &str,
+) -> Result<usize> {
+    state.approvals.cancel_all(message).await;
+    state.environment_approvals.cancel_all(message).await;
     let tasks = {
         let mut tasks = state.agent_tasks.lock().await;
-        tasks.drain().map(|(_, task)| task).collect::<Vec<_>>()
+        tasks.drain().collect::<Vec<_>>()
     };
-    for task in tasks {
-        task.abort();
-        let _ = task.await;
+    let count = tasks.len();
+    for (_, task) in tasks.iter() {
+        task.handle.abort();
     }
+    let mut turn_ids = Vec::with_capacity(count);
+    for (turn_id, task) in tasks {
+        let _ = task.handle.await;
+        turn_ids.push(turn_id);
+    }
+    if count == 0 {
+        return Ok(0);
+    }
+
+    let root = state.project_root.read().await.clone();
+    let project_root = normalize_project_root(root.to_string_lossy().as_ref());
+    let mut store = read_store(state)?;
+    for turn_id in turn_ids {
+        let Some(detail) = store.get_agent_turn_detail(&project_root, &turn_id)? else {
+            continue;
+        };
+        if !matches!(detail.turn.status.as_str(), "running" | "waiting") {
+            continue;
+        }
+        store.interrupt_agent_approvals_with_outcome(&turn_id, message, terminal_reason)?;
+        store.interrupt_agent_environment_operations_with_outcome(
+            &turn_id,
+            message,
+            terminal_reason,
+        )?;
+        store.append_agent_turn_event(&AgentTurnEventDraft {
+            turn_id: turn_id.clone(),
+            event_type: "agent.interrupted".to_string(),
+            title: "Agent turn interrupted".to_string(),
+            body: Some(message.to_string()),
+            status: "interrupted".to_string(),
+            tool: None,
+            request_id: None,
+            code: None,
+            details_json: serde_json::to_string(&json!({
+                "terminal_reason": terminal_reason
+            }))?,
+        })?;
+        store.finish_agent_turn(&AgentTurnFinish {
+            turn_id,
+            status: "interrupted".to_string(),
+            terminal_reason: Some(terminal_reason.to_string()),
+            workspace_id_after: None,
+            state_revision_after: None,
+            project_revision_after: None,
+            final_message: None,
+            error_message: Some(message.to_string()),
+        })?;
+    }
+    Ok(count)
+}
+
+#[tauri::command]
+async fn restart_workspace(state: State<'_, AppState>) -> Result<WorkspaceStatus, String> {
+    interrupt_all_agent_tasks(
+        &state,
+        "desktop_restart",
+        "Agent turn interrupted because Workspace R is restarting.",
+    )
+    .await
+    .map_err(display_error)?;
 
     let current_project_root = {
         let root = state.project_root.read().await.clone();
@@ -3783,7 +3894,13 @@ async fn targets_status(state: State<'_, AppState>) -> Result<Value, String> {
 #[tauri::command]
 async fn shutdown_application(state: &AppState) -> Result<(), String> {
     write_startup_log("Rho desktop shutdown started");
-    state.approvals.cancel_all("Rho is closing.").await;
+    interrupt_all_agent_tasks(
+        state,
+        "desktop_shutdown",
+        "Agent turn interrupted because Rho is closing.",
+    )
+    .await
+    .map_err(display_error)?;
 
     if let Err(error) = agent_llm::cancel_test(&state.agent_llm_test_control) {
         write_startup_log(&format!("Agent model test shutdown failed: {error:#}"));
@@ -3791,15 +3908,6 @@ async fn shutdown_application(state: &AppState) -> Result<(), String> {
 
     if let Some(watcher) = state.project_watcher.lock().await.take() {
         watcher.stop();
-    }
-
-    let tasks = {
-        let mut tasks = state.agent_tasks.lock().await;
-        tasks.drain().map(|(_, task)| task).collect::<Vec<_>>()
-    };
-    for task in tasks {
-        task.abort();
-        let _ = task.await;
     }
 
     let context = state.context.lock().await.take();
@@ -5157,50 +5265,86 @@ fn ensure_supported_r_architecture(r_arch: &str) -> Result<()> {
     Ok(())
 }
 
-#[tauri::command]
-async fn cancel_agent_turn(
-    turn_id: String,
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<Value, String> {
-    let task = state
+async fn cancel_agent_turn_state(turn_id: String, state: &AppState) -> Result<Value, String> {
+    let root = state.project_root.read().await.clone();
+    let project_root = normalize_project_root(root.to_string_lossy().as_ref());
+    let detail = read_store(&state)
+        .map_err(display_error)?
+        .get_agent_turn_detail(&project_root, &turn_id)
+        .map_err(display_error)?
+        .context(format!(
+            "Agent turn was not found in the active project: {turn_id}"
+        ))
+        .map_err(display_error)?;
+    if !matches!(detail.turn.status.as_str(), "running" | "waiting") {
+        return Err(format!("Agent turn is not active: {turn_id}"));
+    }
+    let mut task = state
         .agent_tasks
         .lock()
         .await
         .remove(&turn_id)
         .context(format!("Agent turn is not active: {turn_id}"))
         .map_err(display_error)?;
-    state
+    let cancelled_approvals = state
         .approvals
-        .cancel_all("Agent turn cancelled by the user.")
+        .cancel_turn(&turn_id, "Agent turn cancelled by the user.")
         .await;
-    task.abort();
-    let _ = task.await;
+    let cancelled_environment_approvals = state
+        .environment_approvals
+        .cancel_turn(&turn_id, "Agent turn cancelled by the user.")
+        .await;
+    let active_workspace_run = state.agent_workspace_lane.cancel_turn(&turn_id);
+    let mut joined_after_interrupt = false;
+    if let Some(run_id) = active_workspace_run.as_deref() {
+        let cancel_requested = match read_store(&state) {
+            Ok(mut store) => store.request_cancel(&project_root, run_id).unwrap_or(false),
+            Err(_) => false,
+        };
+        if let Ok(session) = active_session(&state).await {
+            let _ = session.interrupt().await;
+        }
+        if cancel_requested {
+            joined_after_interrupt = tokio::time::timeout(Duration::from_secs(5), &mut task.handle)
+                .await
+                .is_ok();
+        }
+    }
+    if !joined_after_interrupt {
+        task.handle.abort();
+        let _ = task.handle.await;
+    }
+    state.agent_workspace_lane.clear_turn_cancellation(&turn_id);
 
-    let context = active_context(&state).await.map_err(display_error)?;
-    let mut context = context.lock().await;
-    let project_root = context
-        .store
-        .active_project_root()
-        .map_err(display_error)?
-        .context("Cannot cancel Agent without an active project identity")
-        .map_err(display_error)?;
-    let detail = context
-        .store
-        .get_agent_turn_detail(&project_root, &turn_id)
-        .map_err(display_error)?;
-    let status = detail
+    let identity = match active_context(state).await {
+        Ok(context) => Some(context.lock().await.broker.identity().clone()),
+        Err(_) => None,
+    };
+    let workspace_id_after = identity
         .as_ref()
-        .map(|detail| detail.turn.status.as_str())
-        .unwrap_or("missing");
-    if matches!(status, "running" | "waiting") {
-        let identity = context.broker.identity().clone();
-        context
-            .store
+        .map(|identity| identity.workspace_id.clone())
+        .or_else(|| detail.turn.workspace_id_before.clone());
+    let state_revision_after = identity
+        .as_ref()
+        .map(|identity| identity.state_revision as i64)
+        .or(detail.turn.state_revision_before);
+    let project_revision_after = identity
+        .as_ref()
+        .map(|identity| identity.project_revision as i64)
+        .or(detail.turn.project_revision_before);
+    let mut store = read_store(state).map_err(display_error)?;
+    if store
+        .get_agent_turn_detail(&project_root, &turn_id)
+        .map_err(display_error)?
+        .is_some()
+    {
+        store
             .interrupt_agent_approvals(&turn_id, "Agent turn cancelled by the user.")
             .map_err(display_error)?;
-        context
-            .store
+        store
+            .interrupt_agent_environment_operations(&turn_id, "Agent turn cancelled by the user.")
+            .map_err(display_error)?;
+        store
             .append_agent_turn_event(&AgentTurnEventDraft {
                 turn_id: turn_id.clone(),
                 event_type: "agent.cancelled".to_string(),
@@ -5210,29 +5354,39 @@ async fn cancel_agent_turn(
                 tool: None,
                 request_id: None,
                 code: None,
-                details_json: "{}".to_string(),
+                details_json: serde_json::to_string(&json!({
+                    "cancelled_approval_waiters": cancelled_approvals,
+                    "cancelled_environment_waiters": cancelled_environment_approvals,
+                    "workspace_run_id": active_workspace_run
+                }))
+                .map_err(display_error)?,
             })
             .map_err(display_error)?;
-        context
-            .store
+        store
             .finish_agent_turn(&AgentTurnFinish {
                 turn_id: turn_id.clone(),
                 status: "interrupted".to_string(),
                 terminal_reason: Some("user_cancelled".to_string()),
-                workspace_id_after: Some(identity.workspace_id),
-                state_revision_after: Some(identity.state_revision as i64),
-                project_revision_after: Some(identity.project_revision as i64),
+                workspace_id_after,
+                state_revision_after,
+                project_revision_after,
                 final_message: None,
                 error_message: Some("Agent turn cancelled by the user.".to_string()),
             })
             .map_err(display_error)?;
     }
-    drop(context);
-    let _ = app.emit(
-        "rho://agent-turn-updated",
-        json!({ "turn_id": turn_id.clone() }),
-    );
     Ok(json!({ "status": "cancelled", "turn_id": turn_id }))
+}
+
+#[tauri::command]
+async fn cancel_agent_turn(
+    turn_id: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    let response = cancel_agent_turn_state(turn_id.clone(), &state).await?;
+    let _ = app.emit("rho://agent-turn-updated", json!({ "turn_id": turn_id }));
+    Ok(response)
 }
 
 fn write_source(path: &Path, content: &str) -> Result<()> {
@@ -5441,19 +5595,21 @@ fn classify_startup_error(detail: &str) -> StartupIssue {
 #[cfg(test)]
 mod tests {
     use super::{
-        AgentModelTestControl, AgentRuntimeStatus, AppState, ExecuteRequest, ExecuteSourceRange,
-        RUNTIME_CACHE_VERSION, RUserStartupFiles, RenderJobState, RuntimeCacheFile, RuntimeConfig,
-        StartupView, SwitchTestControl, SwitchTestStep, ark_candidate_paths,
-        attach_render_artifact, bounded_diagnostic, classify_startup_error, configure_user_startup,
-        contain_audit_panic, data_view_artifact_metadata, data_view_delimited_text,
-        decode_plot_png_base64, durable_project_root, editor_format_result,
-        ensure_artifact_export_target, ensure_supported_r_architecture, ensure_supported_r_version,
-        existing_startup_file, find_executable_on_path, finish_render_job, has_png_signature,
-        load_runtime_cache, locate_ark_from_candidates, locate_rscript,
-        lockfile_inventory_arguments, parse_r_runtime_probe, project_switch_blocker,
-        r_architecture_supported, reconcile_render_job, render_job_is_terminal,
-        retry_run_arguments, run_is_retryable, runtime_file_signature, safe_delete_project_file,
-        save_runtime_cache, source_claim_snapshot, switch_project_with_watcher_factory,
+        AgentModelTestControl, AgentRuntimeStatus, AgentTaskEntry, AppState, ExecuteRequest,
+        ExecuteSourceRange, RUNTIME_CACHE_VERSION, RUserStartupFiles, RenderJobState,
+        RuntimeCacheFile, RuntimeConfig, StartupView, SwitchTestControl, SwitchTestStep,
+        agent_turn_admission_error, ark_candidate_paths, attach_render_artifact,
+        bounded_diagnostic, cancel_agent_turn_state, classify_startup_error,
+        configure_user_startup, contain_audit_panic, data_view_artifact_metadata,
+        data_view_delimited_text, decode_plot_png_base64, durable_project_root,
+        editor_format_result, ensure_artifact_export_target, ensure_supported_r_architecture,
+        ensure_supported_r_version, existing_startup_file, find_executable_on_path,
+        finish_render_job, has_png_signature, interrupt_all_agent_tasks, load_runtime_cache,
+        locate_ark_from_candidates, locate_rscript, lockfile_inventory_arguments,
+        parse_r_runtime_probe, project_switch_blocker, r_architecture_supported,
+        reconcile_render_job, render_job_is_terminal, retry_run_arguments, run_is_retryable,
+        runtime_file_signature, safe_delete_project_file, save_runtime_cache,
+        source_claim_snapshot, switch_project_with_watcher_factory,
         validate_execute_source_range_shape, workspace_project_root_code, write_r_probe_script,
     };
     use crate::platform;
@@ -5462,9 +5618,11 @@ mod tests {
         ProjectSessionSnapshot, ProjectSessionStore, ProjectSwitchBlockerKind,
         ProjectWatcherControl,
     };
-    use rho_server::coordinator::PendingApprovalRegistry;
+    use rho_server::coordinator::{
+        AgentWorkspaceLane, ApprovalResponseInput, PendingApprovalRegistry,
+    };
     use rho_store::{
-        AgentTurnDraft, ApprovalRequestDraft, ArtifactRecordSummary,
+        AgentConversationDraft, AgentTurnDraft, ApprovalRequestDraft, ArtifactRecordSummary,
         EnvironmentOperationRequestDraft, PlotArtifactDraft, RunDraft, Store,
         normalize_project_root,
     };
@@ -5915,6 +6073,7 @@ mod tests {
             approvals: Arc::new(PendingApprovalRegistry::default()),
             environment_approvals: Arc::new(PendingApprovalRegistry::default()),
             agent_tasks: Arc::new(Mutex::new(HashMap::new())),
+            agent_workspace_lane: Arc::new(AgentWorkspaceLane::default()),
             agent_llm_test_control: AgentModelTestControl::default(),
             switch_test_control: SwitchTestControl::default(),
             shutdown_started: AtomicBool::new(false),
@@ -6045,6 +6204,369 @@ mod tests {
     }
 
     #[test]
+    fn agent_admission_allows_two_read_only_conversations_and_rejects_a_third() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let first = tauri::async_runtime::spawn(async { std::future::pending::<()>().await });
+            let second = tauri::async_runtime::spawn(async { std::future::pending::<()>().await });
+            let mut tasks = HashMap::from([(
+                "turn-a".to_string(),
+                AgentTaskEntry {
+                    conversation_id: "conversation-a".to_string(),
+                    mode: "ask".to_string(),
+                    handle: first,
+                },
+            )]);
+            assert_eq!(
+                agent_turn_admission_error(&tasks, Some("conversation-b"), "plan"),
+                None
+            );
+            tasks.insert(
+                "turn-b".to_string(),
+                AgentTaskEntry {
+                    conversation_id: "conversation-b".to_string(),
+                    mode: "plan".to_string(),
+                    handle: second,
+                },
+            );
+            assert_eq!(
+                agent_turn_admission_error(&tasks, Some("conversation-c"), "ask"),
+                Some("AGENT_CONCURRENCY_LIMIT: At most two Agent turns can run at once.")
+            );
+            for (_, task) in tasks {
+                task.handle.abort();
+            }
+        });
+    }
+
+    #[test]
+    fn agent_admission_rejects_same_conversation_and_parallel_act() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let first = tauri::async_runtime::spawn(async { std::future::pending::<()>().await });
+            let tasks = HashMap::from([(
+                "turn-a".to_string(),
+                AgentTaskEntry {
+                    conversation_id: "conversation-a".to_string(),
+                    mode: "ask".to_string(),
+                    handle: first,
+                },
+            )]);
+            assert_eq!(
+                agent_turn_admission_error(&tasks, Some("conversation-a"), "plan"),
+                Some(
+                    "AGENT_CONVERSATION_BUSY: This Conversation already has an active Agent turn."
+                )
+            );
+            assert_eq!(
+                agent_turn_admission_error(&tasks, Some("conversation-b"), "act"),
+                Some("AGENT_ACT_EXCLUSIVE: Act mode cannot run beside another Agent turn.")
+            );
+            for (_, task) in tasks {
+                task.handle.abort();
+            }
+
+            let act = tauri::async_runtime::spawn(async { std::future::pending::<()>().await });
+            let act_tasks = HashMap::from([(
+                "turn-act".to_string(),
+                AgentTaskEntry {
+                    conversation_id: "conversation-act".to_string(),
+                    mode: "act".to_string(),
+                    handle: act,
+                },
+            )]);
+            assert_eq!(
+                agent_turn_admission_error(&act_tasks, Some("conversation-b"), "ask"),
+                Some("AGENT_ACT_EXCLUSIVE: Wait for the active Act turn to finish.")
+            );
+            for (_, task) in act_tasks {
+                task.handle.abort();
+            }
+        });
+    }
+
+    #[test]
+    fn cancelling_one_agent_turn_preserves_the_other_task_and_waiter() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let tempdir = TempDir::new().unwrap();
+            let project_root = tempdir.path().join("project-a");
+            std::fs::create_dir_all(&project_root).unwrap();
+            let normalized_root = normalize_project_root(project_root.to_string_lossy().as_ref());
+            let store_path = tempdir.path().join("rho.sqlite");
+            let mut store = Store::open(&store_path).unwrap();
+            store.set_project_root(Some(&normalized_root)).unwrap();
+            for (turn_id, conversation_id, request_id) in [
+                ("turn-cancel-a", "conversation-cancel-a", "request-cancel-a"),
+                ("turn-cancel-b", "conversation-cancel-b", "request-cancel-b"),
+            ] {
+                store
+                    .create_agent_turn_with_conversation(
+                        &AgentConversationDraft {
+                            conversation_id: conversation_id.to_string(),
+                            project_root: normalized_root.clone(),
+                            title: format!("Conversation {conversation_id}"),
+                            legacy_unthreaded: false,
+                        },
+                        &AgentTurnDraft {
+                            turn_id: turn_id.to_string(),
+                            project_root: normalized_root.clone(),
+                            mode: "ask".to_string(),
+                            prompt: format!("prompt for {turn_id}"),
+                            model: "test".to_string(),
+                            workspace_id: "ws-test".to_string(),
+                            state_revision_before: 1,
+                            project_revision_before: 1,
+                        },
+                    )
+                    .unwrap();
+                store
+                    .create_approval_request(&ApprovalRequestDraft {
+                        request_id: request_id.to_string(),
+                        turn_id: turn_id.to_string(),
+                        project_root: normalized_root.clone(),
+                        tool: "run_r".to_string(),
+                        policy: "required".to_string(),
+                        arguments_json: "{}".to_string(),
+                        code: None,
+                        workspace_id: "ws-test".to_string(),
+                        state_revision: 1,
+                        project_revision: 1,
+                    })
+                    .unwrap();
+            }
+            drop(store);
+
+            let state = test_app_state(tempdir.path(), &project_root, &store_path);
+            let receiver_a = state
+                .approvals
+                .register(
+                    "request-cancel-a".to_string(),
+                    Some("turn-cancel-a".to_string()),
+                )
+                .await;
+            let mut receiver_b = state
+                .approvals
+                .register(
+                    "request-cancel-b".to_string(),
+                    Some("turn-cancel-b".to_string()),
+                )
+                .await;
+            for (turn_id, conversation_id) in [
+                ("turn-cancel-a", "conversation-cancel-a"),
+                ("turn-cancel-b", "conversation-cancel-b"),
+            ] {
+                let handle =
+                    tauri::async_runtime::spawn(async { std::future::pending::<()>().await });
+                state.agent_tasks.lock().await.insert(
+                    turn_id.to_string(),
+                    AgentTaskEntry {
+                        conversation_id: conversation_id.to_string(),
+                        mode: "ask".to_string(),
+                        handle,
+                    },
+                );
+            }
+
+            let response = cancel_agent_turn_state("turn-cancel-a".to_string(), &state)
+                .await
+                .unwrap();
+            assert_eq!(response["turn_id"], "turn-cancel-a");
+            assert_eq!(receiver_a.await.unwrap().decision, "cancel");
+            assert!(state.agent_tasks.lock().await.contains_key("turn-cancel-b"));
+            assert!(
+                tokio::time::timeout(std::time::Duration::from_millis(10), &mut receiver_b,)
+                    .await
+                    .is_err()
+            );
+            assert!(
+                state
+                    .approvals
+                    .respond(
+                        "request-cancel-b",
+                        ApprovalResponseInput {
+                            decision: "approve".to_string(),
+                            reason: None,
+                        },
+                    )
+                    .await
+            );
+            assert_eq!(receiver_b.await.unwrap().decision, "approve");
+
+            let store = Store::open(&store_path).unwrap();
+            let cancelled = store
+                .get_agent_turn_detail(&normalized_root, "turn-cancel-a")
+                .unwrap()
+                .unwrap();
+            assert_eq!(cancelled.turn.status, "interrupted");
+            assert_eq!(
+                cancelled.turn.terminal_reason.as_deref(),
+                Some("user_cancelled")
+            );
+            assert_eq!(cancelled.approvals[0].status, "interrupted");
+            let preserved = store
+                .get_agent_turn_detail(&normalized_root, "turn-cancel-b")
+                .unwrap()
+                .unwrap();
+            assert_eq!(preserved.turn.status, "running");
+            assert_eq!(preserved.approvals[0].status, "waiting");
+            drop(store);
+
+            if let Some(task) = state.agent_tasks.lock().await.remove("turn-cancel-b") {
+                task.handle.abort();
+            }
+        });
+    }
+
+    #[test]
+    fn stopping_multiple_agent_tasks_persists_each_terminal_reason_once() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let tempdir = TempDir::new().unwrap();
+            let project_root = tempdir.path().join("project-a");
+            std::fs::create_dir_all(&project_root).unwrap();
+            let normalized_root = normalize_project_root(project_root.to_string_lossy().as_ref());
+            let store_path = tempdir.path().join("rho.sqlite");
+            let mut store = Store::open(&store_path).unwrap();
+            store.set_project_root(Some(&normalized_root)).unwrap();
+            for turn_id in ["turn-shutdown-a", "turn-shutdown-b"] {
+                store
+                    .create_agent_turn(&AgentTurnDraft {
+                        turn_id: turn_id.to_string(),
+                        project_root: normalized_root.clone(),
+                        mode: "ask".to_string(),
+                        prompt: format!("prompt for {turn_id}"),
+                        model: "test".to_string(),
+                        workspace_id: "ws-test".to_string(),
+                        state_revision_before: 1,
+                        project_revision_before: 1,
+                    })
+                    .unwrap();
+            }
+            store
+                .create_approval_request(&ApprovalRequestDraft {
+                    request_id: "request-shutdown-a".to_string(),
+                    turn_id: "turn-shutdown-a".to_string(),
+                    project_root: normalized_root.clone(),
+                    tool: "run_r".to_string(),
+                    policy: "required".to_string(),
+                    arguments_json: "{}".to_string(),
+                    code: None,
+                    workspace_id: "ws-test".to_string(),
+                    state_revision: 1,
+                    project_revision: 1,
+                })
+                .unwrap();
+            store
+                .create_environment_operation_request(&EnvironmentOperationRequestDraft {
+                    request_id: "environment-shutdown-a".to_string(),
+                    turn_id: Some("turn-shutdown-a".to_string()),
+                    source: "agent".to_string(),
+                    request_name: "environment.snapshot".to_string(),
+                    project_root: normalized_root.clone(),
+                    arguments_json: "{}".to_string(),
+                    preview_json: "{}".to_string(),
+                    preview_sha256: "shutdown-preview".to_string(),
+                    workspace_id: "ws-test".to_string(),
+                    state_revision: 1,
+                    project_revision: 1,
+                    before_snapshot_id: None,
+                })
+                .unwrap();
+            drop(store);
+
+            let state = test_app_state(tempdir.path(), &project_root, &store_path);
+            for (turn_id, conversation_id) in [
+                ("turn-shutdown-a", "conversation-a"),
+                ("turn-shutdown-b", "conversation-b"),
+            ] {
+                let handle =
+                    tauri::async_runtime::spawn(async { std::future::pending::<()>().await });
+                state.agent_tasks.lock().await.insert(
+                    turn_id.to_string(),
+                    AgentTaskEntry {
+                        conversation_id: conversation_id.to_string(),
+                        mode: "ask".to_string(),
+                        handle,
+                    },
+                );
+            }
+
+            assert_eq!(
+                interrupt_all_agent_tasks(
+                    &state,
+                    "desktop_shutdown",
+                    "Rho is closing for the test.",
+                )
+                .await
+                .unwrap(),
+                2
+            );
+            assert!(state.agent_tasks.lock().await.is_empty());
+            let store = Store::open(&store_path).unwrap();
+            let first_finished_at = store
+                .get_agent_turn_detail(&normalized_root, "turn-shutdown-a")
+                .unwrap()
+                .unwrap()
+                .turn
+                .finished_at
+                .unwrap();
+            for turn_id in ["turn-shutdown-a", "turn-shutdown-b"] {
+                let detail = store
+                    .get_agent_turn_detail(&normalized_root, turn_id)
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(detail.turn.status, "interrupted");
+                assert_eq!(
+                    detail.turn.terminal_reason.as_deref(),
+                    Some("desktop_shutdown")
+                );
+            }
+            let first = store
+                .get_agent_turn_detail(&normalized_root, "turn-shutdown-a")
+                .unwrap()
+                .unwrap();
+            assert_eq!(first.approvals[0].status, "interrupted");
+            assert_eq!(
+                first.approvals[0].continuation_outcome.as_deref(),
+                Some("desktop_shutdown")
+            );
+            let environment = store
+                .get_environment_operation_request(&normalized_root, "environment-shutdown-a")
+                .unwrap()
+                .unwrap();
+            assert_eq!(environment.status, "interrupted");
+            assert_eq!(
+                environment.terminal_outcome.as_deref(),
+                Some("desktop_shutdown")
+            );
+            drop(store);
+
+            assert_eq!(
+                interrupt_all_agent_tasks(
+                    &state,
+                    "desktop_shutdown",
+                    "Rho is closing for the test.",
+                )
+                .await
+                .unwrap(),
+                0
+            );
+            let store = Store::open(&store_path).unwrap();
+            assert_eq!(
+                store
+                    .get_agent_turn_detail(&normalized_root, "turn-shutdown-a")
+                    .unwrap()
+                    .unwrap()
+                    .turn
+                    .finished_at
+                    .as_deref(),
+                Some(first_finished_at.as_str())
+            );
+        });
+    }
+
+    #[test]
     fn project_switch_preflight_blocks_active_agent_turn() {
         let runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.block_on(async {
@@ -6056,19 +6578,33 @@ mod tests {
             let normalized_root = normalize_project_root(project_root.to_string_lossy().as_ref());
             store.set_project_root(Some(&normalized_root)).unwrap();
             let state = test_app_state(tempdir.path(), &project_root, &store_path);
-            let handle = tauri::async_runtime::spawn(async { std::future::pending::<()>().await });
-            state
-                .agent_tasks
-                .lock()
-                .await
-                .insert("turn-running".to_string(), handle);
+            for (turn_id, conversation_id) in [
+                ("turn-running-a", "conversation-running-a"),
+                ("turn-running-b", "conversation-running-b"),
+            ] {
+                let handle =
+                    tauri::async_runtime::spawn(async { std::future::pending::<()>().await });
+                state.agent_tasks.lock().await.insert(
+                    turn_id.to_string(),
+                    AgentTaskEntry {
+                        conversation_id: conversation_id.to_string(),
+                        mode: "ask".to_string(),
+                        handle,
+                    },
+                );
+            }
 
             let blocker = project_switch_blocker(&state).await.unwrap().unwrap();
             assert_eq!(blocker.kind, ProjectSwitchBlockerKind::AgentTurn);
-            assert_eq!(blocker.turn_id.as_deref(), Some("turn-running"));
+            assert_eq!(blocker.pending_count, 2);
+            assert!(matches!(
+                blocker.turn_id.as_deref(),
+                Some("turn-running-a" | "turn-running-b")
+            ));
 
-            if let Some(handle) = state.agent_tasks.lock().await.remove("turn-running") {
-                handle.abort();
+            let tasks = state.agent_tasks.lock().await.drain().collect::<Vec<_>>();
+            for (_, task) in tasks {
+                task.handle.abort();
             }
         });
     }
@@ -6091,7 +6627,13 @@ mod tests {
                 "req-approval",
             );
             let state = test_app_state(tempdir.path(), &project_root, &store_path);
-            let _receiver = state.approvals.register("req-approval".to_string()).await;
+            let _receiver = state
+                .approvals
+                .register(
+                    "req-approval".to_string(),
+                    Some("turn-approval".to_string()),
+                )
+                .await;
 
             let blocker = project_switch_blocker(&state).await.unwrap().unwrap();
             assert_eq!(blocker.kind, ProjectSwitchBlockerKind::Approval);
@@ -6130,7 +6672,7 @@ mod tests {
             let state = test_app_state(tempdir.path(), &project_root, &store_path);
             let _receiver = state
                 .environment_approvals
-                .register("env-req-1".to_string())
+                .register("env-req-1".to_string(), None)
                 .await;
 
             let blocker = project_switch_blocker(&state).await.unwrap().unwrap();
@@ -7279,6 +7821,7 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
             "ask".to_string(),
             turn_id,
             conversation_id,
+            Arc::new(AgentWorkspaceLane::default()),
             Arc::new(PendingApprovalRegistry::default()),
             Arc::new(PendingApprovalRegistry::default()),
             false,
@@ -7411,6 +7954,7 @@ fn main() {
                 approvals: Arc::new(PendingApprovalRegistry::default()),
                 environment_approvals: Arc::new(PendingApprovalRegistry::default()),
                 agent_tasks: Arc::new(Mutex::new(HashMap::new())),
+                agent_workspace_lane: Arc::new(AgentWorkspaceLane::default()),
                 agent_llm_test_control: AgentModelTestControl::default(),
                 switch_test_control: SwitchTestControl::default(),
                 shutdown_started: AtomicBool::new(false),

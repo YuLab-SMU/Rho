@@ -1,7 +1,7 @@
 # Agent Conversation Concurrency And Resource Scheduling
 
-Status: active; Issue #5 authorized end-to-end, CONV-1 source checkpoint
-accepted 2026-08-09, CONV-2 and CONV-3 are not active
+Status: active; Issue #5 authorized end-to-end, CONV-1 and CONV-2 source
+checkpoints accepted 2026-08-09, CONV-3 is not active
 
 Date: 2026-08-09
 
@@ -14,13 +14,12 @@ and desktop workflow
 Risk class: R3 schema migration, execution admission, cancellation, approval,
 project switching, recovery, and project-file mutation
 
-Current work package: CONV-1 durable Conversation identity and switching while
-retaining the existing single-running-turn admission rule; source checkpoint
-complete
+Current work package: none; stopped at the accepted CONV-2 source checkpoint
+before CONV-3 activation
 
-Mandatory stop: reached after CONV-1 migration, store/Tauri/browser
-integration, focused and affected verification, migration review, and
-documentation evidence
+Mandatory stop: reached after CONV-2 admission, cancellation, approval,
+Workspace-read, recovery, Tauri/browser integration, focused and affected
+verification, and independent contract review; CONV-3 remains inactive
 
 ## Problem And Reproduction
 
@@ -372,11 +371,11 @@ Stop after migration/store/Tauri/frontend tests, two-project isolation,
 browser review, migration failure/reopen evidence, and contract review.
 
 The mandatory stop was reached on 2026-08-09. Evidence is recorded in
-`docs/verification/agent-conversation-concurrency/conv1.md`. CONV-2 remains
-inactive until a later checkpoint activation; the current source continues to
-enforce one globally running Agent Turn.
+`docs/verification/agent-conversation-concurrency/conv1.md`. That evidence and
+Draft PR #11 were reviewed as the CONV-2 entry gate; no unresolved P0/P1
+finding remains.
 
-### CONV-2: Bounded read-only parallel Turns — not active
+### CONV-2: Bounded read-only parallel Turns — source checkpoint complete
 
 - atomic two-Turn admission across distinct Conversations;
 - per-turn process/task/cancellation and approval waiter ownership;
@@ -385,6 +384,19 @@ enforce one globally running Agent Turn.
 - cancellation/restart/project-switch failure coverage.
 
 Do not activate until CONV-1 is accepted at its mandatory stop.
+
+Activation decision: the CONV-1 source checkpoint is accepted. CONV-2 may
+change admission, in-memory task/waiter ownership, read-only Workspace
+scheduling, and the matching Conversation UI/mock behavior. It must reject
+concurrent Act Turns and must not add mutation scheduling, Retry, or
+Conversation Delete behavior owned by CONV-3.
+
+The mandatory stop was reached on 2026-08-09. Evidence is recorded in
+`docs/verification/agent-conversation-concurrency/conv2.md`. The accepted
+boundary permits two Ask/Plan Turns in distinct Conversations, retains
+exclusive Act admission, serializes Workspace R requests, and isolates exact
+Turn cancellation and approval ownership. CONV-3 remains inactive pending its
+separate activation review.
 
 ### CONV-3: Mutation scheduling, retry, and deletion — not active
 

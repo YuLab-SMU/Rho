@@ -14,7 +14,7 @@ const spec = fs.readFileSync(
   "utf8",
 );
 
-assert.match(spec, /Issue #5 authorized end-to-end, CONV-1 source checkpoint\s+accepted 2026-08-09, CONV-2 and CONV-3 are not active/);
+assert.match(spec, /Issue #5 authorized end-to-end, CONV-1 and CONV-2 source\s+checkpoints accepted 2026-08-09, CONV-3 is not active/);
 assert.match(spec, /Conversation owns conversational context\. Turn owns one execution\./);
 assert.match(spec, /at most one nonterminal Turn may belong to a given\s+Conversation/i);
 

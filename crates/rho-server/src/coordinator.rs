@@ -4,7 +4,7 @@ use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 use std::time::UNIX_EPOCH;
 
 use anyhow::{Context, Result, bail, ensure};
@@ -294,7 +294,99 @@ pub struct ApprovalResponseInput {
 
 #[derive(Default)]
 pub struct PendingApprovalRegistry {
-    waiters: Mutex<std::collections::HashMap<String, oneshot::Sender<ApprovalResponseInput>>>,
+    waiters: Mutex<std::collections::HashMap<String, PendingApprovalWaiter>>,
+}
+
+#[derive(Default)]
+pub struct AgentWorkspaceLane {
+    gate: Mutex<()>,
+    state: StdMutex<AgentWorkspaceLaneState>,
+}
+
+#[derive(Default)]
+struct AgentWorkspaceLaneState {
+    active: Option<AgentWorkspaceExecution>,
+    cancelled_turns: HashSet<String>,
+}
+
+#[derive(Clone)]
+struct AgentWorkspaceExecution {
+    turn_id: String,
+    run_id: String,
+}
+
+struct AgentWorkspaceExecutionGuard<'a> {
+    lane: &'a AgentWorkspaceLane,
+    turn_id: String,
+}
+
+impl AgentWorkspaceLane {
+    pub fn cancel_turn(&self, turn_id: &str) -> Option<String> {
+        let mut state = self
+            .state
+            .lock()
+            .expect("Agent Workspace lane state poisoned");
+        state.cancelled_turns.insert(turn_id.to_string());
+        state
+            .active
+            .as_ref()
+            .filter(|active| active.turn_id == turn_id)
+            .map(|active| active.run_id.clone())
+    }
+
+    pub fn clear_turn_cancellation(&self, turn_id: &str) {
+        self.state
+            .lock()
+            .expect("Agent Workspace lane state poisoned")
+            .cancelled_turns
+            .remove(turn_id);
+    }
+
+    fn begin_execution<'a>(
+        &'a self,
+        turn_id: &str,
+        run_id: &str,
+    ) -> Result<AgentWorkspaceExecutionGuard<'a>> {
+        let mut state = self
+            .state
+            .lock()
+            .expect("Agent Workspace lane state poisoned");
+        ensure!(
+            !state.cancelled_turns.contains(turn_id),
+            "Agent turn was cancelled before Workspace R admission"
+        );
+        debug_assert!(state.active.is_none());
+        state.active = Some(AgentWorkspaceExecution {
+            turn_id: turn_id.to_string(),
+            run_id: run_id.to_string(),
+        });
+        Ok(AgentWorkspaceExecutionGuard {
+            lane: self,
+            turn_id: turn_id.to_string(),
+        })
+    }
+}
+
+impl Drop for AgentWorkspaceExecutionGuard<'_> {
+    fn drop(&mut self) {
+        let mut state = self
+            .lane
+            .state
+            .lock()
+            .expect("Agent Workspace lane state poisoned");
+        if state
+            .active
+            .as_ref()
+            .is_some_and(|active| active.turn_id == self.turn_id)
+        {
+            state.active = None;
+        }
+    }
+}
+
+struct PendingApprovalWaiter {
+    turn_id: Option<String>,
+    sender: oneshot::Sender<ApprovalResponseInput>,
 }
 
 impl PendingApprovalRegistry {
@@ -306,15 +398,42 @@ impl PendingApprovalRegistry {
         self.waiters.lock().await.len()
     }
 
-    pub async fn register(&self, request_id: String) -> oneshot::Receiver<ApprovalResponseInput> {
+    pub async fn register(
+        &self,
+        request_id: String,
+        turn_id: Option<String>,
+    ) -> oneshot::Receiver<ApprovalResponseInput> {
         let (sender, receiver) = oneshot::channel();
-        self.waiters.lock().await.insert(request_id, sender);
+        self.waiters
+            .lock()
+            .await
+            .insert(request_id, PendingApprovalWaiter { turn_id, sender });
         receiver
     }
 
     pub async fn respond(&self, request_id: &str, decision: ApprovalResponseInput) -> bool {
-        let sender = self.waiters.lock().await.remove(request_id);
-        sender.is_some_and(|sender| sender.send(decision).is_ok())
+        let waiter = self.waiters.lock().await.remove(request_id);
+        waiter.is_some_and(|waiter| waiter.sender.send(decision).is_ok())
+    }
+
+    pub async fn respond_for_turn(
+        &self,
+        request_id: &str,
+        turn_id: Option<&str>,
+        decision: ApprovalResponseInput,
+    ) -> bool {
+        let waiter = {
+            let mut waiters = self.waiters.lock().await;
+            if waiters
+                .get(request_id)
+                .is_some_and(|waiter| waiter.turn_id.as_deref() == turn_id)
+            {
+                waiters.remove(request_id)
+            } else {
+                None
+            }
+        };
+        waiter.is_some_and(|waiter| waiter.sender.send(decision).is_ok())
     }
 
     pub async fn remove(&self, request_id: &str) {
@@ -328,8 +447,32 @@ impl PendingApprovalRegistry {
             std::mem::take(&mut *waiters)
         };
         let count = waiters.len();
-        for (_, sender) in waiters {
-            let _ = sender.send(ApprovalResponseInput {
+        for (_, waiter) in waiters {
+            let _ = waiter.sender.send(ApprovalResponseInput {
+                decision: "cancel".to_string(),
+                reason: Some(reason.clone()),
+            });
+        }
+        count
+    }
+
+    pub async fn cancel_turn(&self, turn_id: &str, reason: impl Into<String>) -> usize {
+        let reason = reason.into();
+        let cancelled = {
+            let mut waiters = self.waiters.lock().await;
+            let all = std::mem::take(&mut *waiters);
+            let (cancelled, retained): (
+                std::collections::HashMap<_, _>,
+                std::collections::HashMap<_, _>,
+            ) = all
+                .into_iter()
+                .partition(|(_, waiter)| waiter.turn_id.as_deref() == Some(turn_id));
+            *waiters = retained;
+            cancelled
+        };
+        let count = cancelled.len();
+        for (_, waiter) in cancelled {
+            let _ = waiter.sender.send(ApprovalResponseInput {
                 decision: "cancel".to_string(),
                 reason: Some(reason.clone()),
             });
@@ -1762,6 +1905,7 @@ pub async fn run_agent_turn(
     mode: String,
     turn_id: String,
     conversation_id: String,
+    workspace_lane: Arc<AgentWorkspaceLane>,
     approvals: Arc<PendingApprovalRegistry>,
     environment_approvals: Arc<PendingApprovalRegistry>,
     auto_approve: bool,
@@ -1872,6 +2016,7 @@ pub async fn run_agent_turn(
             context.clone(),
             &turn_id,
             &mode,
+            workspace_lane,
             approvals.clone(),
             environment_approvals.clone(),
             auto_approve,
@@ -1949,6 +2094,7 @@ async fn serve_desktop_agent(
     context: Arc<Mutex<CoordinatorRuntime>>,
     turn_id: &str,
     mode: &str,
+    workspace_lane: Arc<AgentWorkspaceLane>,
     approvals: Arc<PendingApprovalRegistry>,
     environment_approvals: Arc<PendingApprovalRegistry>,
     auto_approve: bool,
@@ -2005,15 +2151,13 @@ async fn serve_desktop_agent(
                     );
                     match authorization {
                         Ok(()) => {
-                            let mut context = context.lock().await;
-                            let CoordinatorRuntime { broker, store } = &mut *context;
-                            dispatch_workspace_request(
+                            dispatch_agent_workspace_request(
                                 request_type,
                                 &incoming.payload,
-                                ExecutionOrigin::Agent,
                                 session,
-                                broker,
-                                store,
+                                context.clone(),
+                                turn_id,
+                                workspace_lane.clone(),
                             )
                             .await
                         }
@@ -2062,6 +2206,66 @@ async fn serve_desktop_agent(
             }
         }
     }
+}
+
+async fn dispatch_agent_workspace_request(
+    request_type: &str,
+    payload: &Value,
+    session: &ArkSession,
+    context: Arc<Mutex<CoordinatorRuntime>>,
+    turn_id: &str,
+    workspace_lane: Arc<AgentWorkspaceLane>,
+) -> Result<Value> {
+    let _lane_guard = match workspace_lane.gate.try_lock() {
+        Ok(guard) => guard,
+        Err(_) => {
+            record_agent_workspace_wait(context.clone(), turn_id, request_type).await?;
+            workspace_lane.gate.lock().await
+        }
+    };
+    let execution_id = format!("agent_workspace_{}", Uuid::new_v4().simple());
+    let mut context = context.lock().await;
+    let _execution_guard = workspace_lane.begin_execution(turn_id, &execution_id)?;
+    let CoordinatorRuntime { broker, store } = &mut *context;
+    dispatch_workspace_request_with_execution_id(
+        request_type,
+        payload,
+        ExecutionOrigin::Agent,
+        session,
+        broker,
+        store,
+        Some(&execution_id),
+    )
+    .await
+}
+
+async fn record_agent_workspace_wait(
+    context: Arc<Mutex<CoordinatorRuntime>>,
+    turn_id: &str,
+    request_type: &str,
+) -> Result<()> {
+    context
+        .lock()
+        .await
+        .store
+        .append_agent_turn_event(&AgentTurnEventDraft {
+            turn_id: turn_id.to_string(),
+            event_type: "resource.waiting".to_string(),
+            title: "Waiting for Workspace R".to_string(),
+            body: Some(
+                "Another Agent turn is using Workspace R. This read will continue in order."
+                    .to_string(),
+            ),
+            status: "running".to_string(),
+            tool: Some(request_type.to_string()),
+            request_id: None,
+            code: None,
+            details_json: serde_json::to_string(&json!({
+                "lane": "workspace",
+                "request_type": request_type
+            }))?,
+        })?;
+    Ok(())
 }
 
 const DESKTOP_AGENT_RESULT_MAX_BYTES: usize = MAX_FRAME_BYTES / 2;
@@ -2334,7 +2538,7 @@ async fn handle_tool_approval_required(
         let approved_arguments: Value = serde_json::from_str(&request.arguments_json)
             .context("decoding approved environment operation arguments")?;
         let receiver = environment_approvals
-            .register(request.request_id.clone())
+            .register(request.request_id.clone(), Some(turn_id.to_string()))
             .await;
         store.update_agent_turn_status(turn_id, "waiting")?;
         store.append_agent_turn_event(&AgentTurnEventDraft {
@@ -2559,7 +2763,9 @@ async fn handle_tool_approval_required(
             "policy": "act_session_authorized"
         }));
     }
-    let receiver = approvals.register(request_id.clone()).await;
+    let receiver = approvals
+        .register(request_id.clone(), Some(turn_id.to_string()))
+        .await;
     store.update_agent_turn_status(turn_id, "waiting")?;
     store.append_agent_turn_event(&AgentTurnEventDraft {
         turn_id: turn_id.to_string(),
@@ -4801,6 +5007,212 @@ impl Drop for ResultFile {
 mod tests {
     use super::*;
     use std::fs;
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn pending_approval_cancellation_is_scoped_to_the_owning_turn() {
+        let registry = PendingApprovalRegistry::default();
+        let turn_a = registry
+            .register("request-a".to_string(), Some("turn-a".to_string()))
+            .await;
+        let turn_b = registry
+            .register("request-b".to_string(), Some("turn-b".to_string()))
+            .await;
+        let direct = registry.register("request-direct".to_string(), None).await;
+
+        assert!(
+            !registry
+                .respond_for_turn(
+                    "request-b",
+                    Some("turn-a"),
+                    ApprovalResponseInput {
+                        decision: "approve".to_string(),
+                        reason: None,
+                    },
+                )
+                .await
+        );
+        assert_eq!(registry.count().await, 3);
+
+        assert_eq!(
+            registry.cancel_turn("turn-a", "cancel only turn A").await,
+            1
+        );
+        let cancelled = turn_a.await.unwrap();
+        assert_eq!(cancelled.decision, "cancel");
+        assert_eq!(cancelled.reason.as_deref(), Some("cancel only turn A"));
+        assert_eq!(registry.count().await, 2);
+
+        assert!(
+            registry
+                .respond(
+                    "request-b",
+                    ApprovalResponseInput {
+                        decision: "approve".to_string(),
+                        reason: None,
+                    },
+                )
+                .await
+        );
+        assert_eq!(turn_b.await.unwrap().decision, "approve");
+        assert!(
+            registry
+                .respond(
+                    "request-direct",
+                    ApprovalResponseInput {
+                        decision: "reject".to_string(),
+                        reason: None,
+                    },
+                )
+                .await
+        );
+        assert_eq!(direct.await.unwrap().decision, "reject");
+        assert!(registry.is_empty().await);
+    }
+
+    #[tokio::test]
+    async fn cancelling_a_queued_workspace_claim_releases_no_shared_capacity() {
+        let lane = Arc::new(AgentWorkspaceLane::default());
+        let held = lane.gate.lock().await;
+        let queued_lane = lane.clone();
+        let workspace_operation_started = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let queued_operation_started = workspace_operation_started.clone();
+        let queued = tokio::spawn(async move {
+            let _guard = queued_lane.gate.lock().await;
+            let _execution = queued_lane.begin_execution("turn-queued", "run-queued")?;
+            queued_operation_started.store(true, std::sync::atomic::Ordering::SeqCst);
+            Ok::<(), anyhow::Error>(())
+        });
+        tokio::task::yield_now().await;
+        assert_eq!(lane.cancel_turn("turn-queued"), None);
+        drop(held);
+        let error = queued.await.unwrap().unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("cancelled before Workspace R admission")
+        );
+        assert!(!workspace_operation_started.load(std::sync::atomic::Ordering::SeqCst));
+        lane.clear_turn_cancellation("turn-queued");
+        assert!(lane.gate.try_lock().is_ok());
+    }
+
+    #[tokio::test]
+    async fn workspace_lane_serializes_two_claims_and_completes_both() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let lane = Arc::new(AgentWorkspaceLane::default());
+        let active = Arc::new(AtomicUsize::new(0));
+        let maximum_active = Arc::new(AtomicUsize::new(0));
+        let completed = Arc::new(AtomicUsize::new(0));
+        let first_acquired = Arc::new(tokio::sync::Notify::new());
+        let release_first = Arc::new(tokio::sync::Notify::new());
+
+        let first = {
+            let lane = lane.clone();
+            let active = active.clone();
+            let maximum_active = maximum_active.clone();
+            let completed = completed.clone();
+            let first_acquired = first_acquired.clone();
+            let release_first = release_first.clone();
+            tokio::spawn(async move {
+                let _guard = lane.gate.lock().await;
+                let now = active.fetch_add(1, Ordering::SeqCst) + 1;
+                maximum_active.fetch_max(now, Ordering::SeqCst);
+                first_acquired.notify_one();
+                release_first.notified().await;
+                active.fetch_sub(1, Ordering::SeqCst);
+                completed.fetch_add(1, Ordering::SeqCst);
+            })
+        };
+        first_acquired.notified().await;
+
+        let second = {
+            let lane = lane.clone();
+            let active = active.clone();
+            let maximum_active = maximum_active.clone();
+            let completed = completed.clone();
+            tokio::spawn(async move {
+                let _guard = lane.gate.lock().await;
+                let now = active.fetch_add(1, Ordering::SeqCst) + 1;
+                maximum_active.fetch_max(now, Ordering::SeqCst);
+                active.fetch_sub(1, Ordering::SeqCst);
+                completed.fetch_add(1, Ordering::SeqCst);
+            })
+        };
+
+        tokio::task::yield_now().await;
+        assert_eq!(completed.load(Ordering::SeqCst), 0);
+        release_first.notify_one();
+        first.await.unwrap();
+        second.await.unwrap();
+        assert_eq!(completed.load(Ordering::SeqCst), 2);
+        assert_eq!(maximum_active.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn workspace_lane_cancellation_returns_only_the_owning_active_run() {
+        let lane = AgentWorkspaceLane::default();
+        let _gate = lane.gate.lock().await;
+        let execution = lane.begin_execution("turn-active", "run-active").unwrap();
+
+        assert_eq!(lane.cancel_turn("turn-other"), None);
+        assert_eq!(
+            lane.cancel_turn("turn-active").as_deref(),
+            Some("run-active")
+        );
+
+        drop(execution);
+        lane.clear_turn_cancellation("turn-active");
+        lane.clear_turn_cancellation("turn-other");
+    }
+
+    #[tokio::test]
+    async fn workspace_contention_records_a_turn_scoped_wait_event() {
+        let directory = TempDir::new().unwrap();
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let project_root = "D:/Rho/project";
+        store.set_project_root(Some(project_root)).unwrap();
+        store
+            .create_agent_turn_with_conversation(
+                &rho_store::AgentConversationDraft {
+                    conversation_id: "conversation-wait".to_string(),
+                    project_root: project_root.to_string(),
+                    title: "Workspace wait".to_string(),
+                    legacy_unthreaded: false,
+                },
+                &rho_store::AgentTurnDraft {
+                    turn_id: "turn-wait".to_string(),
+                    project_root: project_root.to_string(),
+                    mode: "ask".to_string(),
+                    prompt: "inspect workspace".to_string(),
+                    model: "test".to_string(),
+                    workspace_id: "ws-test".to_string(),
+                    state_revision_before: 1,
+                    project_revision_before: 1,
+                },
+            )
+            .unwrap();
+        let context = Arc::new(Mutex::new(CoordinatorRuntime {
+            broker: BrokerState::new("ws-test"),
+            store,
+        }));
+
+        record_agent_workspace_wait(context.clone(), "turn-wait", "workspace.snapshot")
+            .await
+            .unwrap();
+
+        let context = context.lock().await;
+        let detail = context
+            .store
+            .get_agent_turn_detail(project_root, "turn-wait")
+            .unwrap()
+            .unwrap();
+        assert_eq!(detail.events.len(), 1);
+        assert_eq!(detail.events[0].event_type, "resource.waiting");
+        assert_eq!(detail.events[0].tool.as_deref(), Some("workspace.snapshot"));
+        assert!(detail.events[0].details_json.contains("workspace"));
+    }
 
     #[test]
     fn translates_r_expression_ranges_into_editor_coordinates() {

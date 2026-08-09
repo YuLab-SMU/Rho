@@ -2009,15 +2009,53 @@ impl Store {
         turn_id: &str,
         reason: &str,
     ) -> Result<usize, StoreError> {
+        self.interrupt_agent_approvals_with_outcome(turn_id, reason, "user_cancelled")
+    }
+
+    pub fn interrupt_agent_approvals_with_outcome(
+        &mut self,
+        turn_id: &str,
+        reason: &str,
+        terminal_outcome: &str,
+    ) -> Result<usize, StoreError> {
         let changed = self.connection.execute(
             "UPDATE approval_requests
              SET status = 'interrupted',
                  decision = COALESCE(decision, 'cancel'),
                  reason = COALESCE(reason, ?2),
-                 continuation_outcome = COALESCE(continuation_outcome, 'user_cancelled'),
-                 responded_at = COALESCE(responded_at, ?3)
+                 continuation_outcome = COALESCE(continuation_outcome, ?3),
+                 responded_at = COALESCE(responded_at, ?4)
              WHERE turn_id = ?1 AND status = 'waiting'",
-            params![turn_id, reason, Utc::now().to_rfc3339()],
+            params![turn_id, reason, terminal_outcome, Utc::now().to_rfc3339()],
+        )?;
+        Ok(changed)
+    }
+
+    pub fn interrupt_agent_environment_operations(
+        &mut self,
+        turn_id: &str,
+        reason: &str,
+    ) -> Result<usize, StoreError> {
+        self.interrupt_agent_environment_operations_with_outcome(turn_id, reason, "user_cancelled")
+    }
+
+    pub fn interrupt_agent_environment_operations_with_outcome(
+        &mut self,
+        turn_id: &str,
+        reason: &str,
+        terminal_outcome: &str,
+    ) -> Result<usize, StoreError> {
+        let changed = self.connection.execute(
+            "UPDATE environment_operation_requests
+             SET status = 'interrupted',
+                 decision = COALESCE(decision, 'cancel'),
+                 reason = COALESCE(reason, ?2),
+                 completed_at = COALESCE(completed_at, ?4),
+                 terminal_outcome = COALESCE(terminal_outcome, ?3)
+             WHERE turn_id = ?1
+               AND source = 'agent'
+               AND status IN ('requested', 'approved', 'running')",
+            params![turn_id, reason, terminal_outcome, Utc::now().to_rfc3339()],
         )?;
         Ok(changed)
     }
@@ -3351,6 +3389,76 @@ mod tests {
         assert_eq!(detail.run_id.as_deref(), Some("run_env_1"));
         assert_eq!(detail.terminal_outcome.as_deref(), Some("lockfile_updated"));
         assert_eq!(detail.before_snapshot_id.as_deref(), Some("env_before"));
+    }
+
+    #[test]
+    fn interrupting_agent_environment_operation_is_exact_turn_only() {
+        let directory = TempDir::new().unwrap();
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        for turn_id in ["turn_env_a", "turn_env_b"] {
+            store
+                .create_agent_turn(&AgentTurnDraft {
+                    turn_id: turn_id.to_string(),
+                    project_root: "D:/Rho/project".to_string(),
+                    mode: "act".to_string(),
+                    prompt: format!("environment request {turn_id}"),
+                    model: "test".to_string(),
+                    workspace_id: "ws_test".to_string(),
+                    state_revision_before: 1,
+                    project_revision_before: 1,
+                })
+                .unwrap();
+        }
+        for (request_id, turn_id, source) in [
+            ("env_turn_a", Some("turn_env_a"), "agent"),
+            ("env_turn_b", Some("turn_env_b"), "agent"),
+            ("env_direct", None, "direct"),
+        ] {
+            store
+                .create_environment_operation_request(&EnvironmentOperationRequestDraft {
+                    request_id: request_id.to_string(),
+                    turn_id: turn_id.map(str::to_string),
+                    source: source.to_string(),
+                    request_name: "environment.snapshot".to_string(),
+                    project_root: "D:/Rho/project".to_string(),
+                    arguments_json: "{}".to_string(),
+                    preview_json: "{}".to_string(),
+                    preview_sha256: format!("preview_{request_id}"),
+                    workspace_id: "ws_test".to_string(),
+                    state_revision: 1,
+                    project_revision: 1,
+                    before_snapshot_id: None,
+                })
+                .unwrap();
+        }
+
+        assert_eq!(
+            store
+                .interrupt_agent_environment_operations("turn_env_a", "Cancelled by user")
+                .unwrap(),
+            1
+        );
+        let cancelled = store
+            .get_environment_operation_request("D:/Rho/project", "env_turn_a")
+            .unwrap()
+            .unwrap();
+        assert_eq!(cancelled.status, "interrupted");
+        assert_eq!(cancelled.decision.as_deref(), Some("cancel"));
+        assert_eq!(
+            cancelled.terminal_outcome.as_deref(),
+            Some("user_cancelled")
+        );
+        assert_eq!(cancelled.reason.as_deref(), Some("Cancelled by user"));
+        for request_id in ["env_turn_b", "env_direct"] {
+            assert_eq!(
+                store
+                    .get_environment_operation_request("D:/Rho/project", request_id)
+                    .unwrap()
+                    .unwrap()
+                    .status,
+                "requested"
+            );
+        }
     }
 
     #[test]

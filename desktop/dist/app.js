@@ -45,6 +45,7 @@ const state = {
   editorFunctions: null,
   editorFunctionsLoaded: false,
   agentBusy: false,
+  agentSubmissionPending: false,
   activeAgentTurnId: null,
   agentRuntime: null,
   projectSkills: { project_root: "", trust_status: "untrusted_project_content", skills: [], discovery_error: null },
@@ -1117,12 +1118,23 @@ function createMockAgentTurn({
     ? mockAgentConversations.find((item) => item.conversation_id === conversationId && item.project_root === mockLastProject)
     : null;
   if (conversationId && !conversation) throw new Error("Agent Conversation was not found");
-  if (!conversation) conversation = createMockAgentConversation();
-  if (conversation.legacy_unthreaded) throw new Error("Legacy project history is read-only; start a new conversation");
-  if (mockAgentTurns.some((item) => item.conversation_id === conversation.conversation_id
+  const activeTurns = mockAgentTurns.filter((item) => item.project_root === mockLastProject
+    && ["running", "waiting"].includes(item.status));
+  if (conversation?.legacy_unthreaded) throw new Error("Legacy project history is read-only; start a new conversation");
+  if (conversation && activeTurns.some((item) => item.conversation_id === conversation.conversation_id
     && ["running", "waiting"].includes(item.status))) {
-    throw new Error("Agent Conversation already has a running turn");
+    throw new Error("AGENT_CONVERSATION_BUSY: This Conversation already has an active Agent turn.");
   }
+  if (mode === "act" && activeTurns.length) {
+    throw new Error("AGENT_ACT_EXCLUSIVE: Act mode cannot run beside another Agent turn.");
+  }
+  if (activeTurns.some((item) => item.mode === "act")) {
+    throw new Error("AGENT_ACT_EXCLUSIVE: Wait for the active Act turn to finish.");
+  }
+  if (activeTurns.length >= 2) {
+    throw new Error("AGENT_CONCURRENCY_LIMIT: At most two Agent turns can run at once.");
+  }
+  if (!conversation) conversation = createMockAgentConversation();
   const startedAt = new Date().toISOString();
   const waitingForApproval = mode === "act" && !autoApprove;
   const turn = {
@@ -6771,31 +6783,74 @@ function agentSendDisabledReason() {
   return null;
 }
 
+function activeAgentConversations() {
+  return state.agentConversations.filter((conversation) =>
+    ["running", "waiting"].includes(conversation.status)
+  );
+}
+
+function selectedAgentConversation() {
+  return state.agentConversations.find(
+    (conversation) => conversation.conversation_id === state.selectedConversationId,
+  ) || null;
+}
+
+function agentTurnAdmissionState(mode = state.agentMode, taskKind = "agent_turn") {
+  const active = activeAgentConversations();
+  const selected = selectedAgentConversation();
+  const selectedBusy = taskKind === "agent_turn"
+    && Boolean(selected && ["running", "waiting"].includes(selected.status));
+  let reason = null;
+  if (state.agentSubmissionPending) {
+    reason = "The current Agent request is still starting.";
+  } else if (selectedBusy) {
+    reason = "This Conversation already has an active Agent turn.";
+  } else if (mode === "act" && active.length > 0) {
+    reason = "Act mode waits for every other Agent turn to finish.";
+  } else if (active.some((conversation) => conversation.latest_mode === "act")) {
+    reason = "Wait for the active Act turn to finish.";
+  } else if (active.length >= 2) {
+    reason = "Two Agent turns are already running. Cancel or finish one before starting another.";
+  }
+  return {
+    active,
+    selected,
+    selectedBusy,
+    capacityReached: active.length >= 2,
+    reason,
+  };
+}
+
 function syncAgentComposerState() {
-  const selected = selectedAgentModel();
   const reason = agentSendDisabledReason();
   const actRoute = agentCapabilityRouteView("agent.act");
   const actBlocked = actRoute?.compatibility !== "compatible"
     || ["not_detected", "unavailable"].includes(actRoute?.credential_status);
-  const selectorLocked = state.pendingApprovals.length > 0
-    || state.agentConversations.some((conversation) => ["running", "waiting"].includes(conversation.status));
   if (state.agentMode === "act" && actBlocked) {
     state.agentMode = "ask";
   }
+  const admission = agentTurnAdmissionState();
   syncAgentModeControl();
-  $("#agentSendButton").disabled = state.agentBusy || Boolean(reason);
-  $("#agentInput").disabled = state.agentBusy || Boolean(reason);
+  const composerBlocked = Boolean(reason || admission.reason);
+  $("#agentSendButton").disabled = composerBlocked;
+  $("#agentInput").disabled = composerBlocked;
   $$("[data-agent-mode]").forEach((button) => {
-    const disabled = state.agentBusy || (button.dataset.agentMode === "act" && actBlocked);
+    const disabled = button.dataset.agentMode === "act" && actBlocked;
     button.disabled = disabled;
     button.classList.toggle("active", button.dataset.agentMode === state.agentMode);
   });
-  $("#actAutoApprove").disabled = state.agentBusy || state.agentMode !== "act" || actBlocked;
-  $("#agentModelSelector").disabled = selectorLocked;
+  $("#actAutoApprove").disabled = state.agentMode !== "act" || actBlocked;
+  $("#agentModelSelector").disabled = false;
   syncConsoleRepairEntries();
   const note = $("#agentCapabilityNote");
-  if (reason && !state.agentBusy) {
+  if (reason) {
     note.textContent = reason;
+    note.className = "agent-capability-note warn";
+    note.classList.remove("hidden");
+    return;
+  }
+  if (admission.reason) {
+    note.textContent = admission.reason;
     note.className = "agent-capability-note warn";
     note.classList.remove("hidden");
     return;
@@ -6885,7 +6940,8 @@ async function retryAgentLlmSettings() {
 }
 
 function setAgentInputBusy(busy) {
-  state.agentBusy = busy;
+  state.agentSubmissionPending = busy;
+  state.agentBusy = busy || agentTurnAdmissionState().selectedBusy;
   if (busy) hideAgentFileMentions();
   if (!busy) state.agentLlm.lastTestResult = state.agentLlm.lastTestResult;
   syncAgentComposerState();
@@ -6919,9 +6975,10 @@ async function syncAgentRunsToConsole(runs) {
 }
 
 function updateAgentHeader() {
-  const selectedConversation = state.agentConversations.find(
-    (conversation) => conversation.conversation_id === state.selectedConversationId,
-  ) || null;
+  const selectedConversation = selectedAgentConversation();
+  const activeConversations = activeAgentConversations();
+  const runningCount = activeConversations.filter((conversation) => conversation.status === "running").length;
+  const waitingCount = activeConversations.filter((conversation) => conversation.status === "waiting").length;
   const runtime = state.agentRuntime;
   updateAgentModelLabel();
   renderAgentModelSelector();
@@ -6935,21 +6992,17 @@ function updateAgentHeader() {
     return;
   }
   $("#agentRuntimeRetryButton").classList.add("hidden");
-  const active = state.pendingApprovals.length > 0
-    || state.agentConversations.some((conversation) => ["running", "waiting"].includes(conversation.status));
-  state.agentBusy = active;
-  syncAgentComposerState();
   state.activeAgentTurnId = selectedConversation && ["running", "waiting"].includes(selectedConversation.status)
     ? selectedConversation.latest_turn_id
     : null;
+  state.agentBusy = state.agentSubmissionPending || Boolean(state.activeAgentTurnId);
+  syncAgentComposerState();
   $("#agentCancelButton").classList.toggle("hidden", !state.activeAgentTurnId);
-  if (state.pendingApprovals.length) {
-    $("#agentState").textContent = "Waiting approval";
-    $("#agentStateDot").className = "agent-state-dot busy";
-    return;
-  }
-  if (active) {
-    $("#agentState").textContent = "Working";
+  if (activeConversations.length) {
+    const aggregate = [];
+    if (runningCount) aggregate.push(`${runningCount} running`);
+    if (waitingCount) aggregate.push(`${waitingCount} waiting approval${waitingCount === 1 ? "" : "s"}`);
+    $("#agentState").textContent = aggregate.join(" · ");
     $("#agentStateDot").className = "agent-state-dot busy";
     return;
   }
@@ -9101,6 +9154,9 @@ function renderTaskRail() {
   list.replaceChildren();
 
   const conversations = state.agentConversations.slice(0, 50);
+  const header = document.querySelector(".task-rail-header span");
+  if (header) header.textContent = `Conversations (${state.agentConversations.length})`;
+  $("#taskRailNew").disabled = false;
   if (!conversations.length) {
     const empty = document.createElement("div");
     empty.className = "task-rail-empty";
@@ -9150,8 +9206,6 @@ function renderTaskRail() {
     list.append(item);
   }
 
-  const header = document.querySelector(".task-rail-header span");
-  if (header) header.textContent = `Conversations (${state.agentConversations.length})`;
   restorePanelViewport(list, viewport, "data-conversation-id");
   syncAgentWorkSurfaceLayout();
 }
@@ -13424,16 +13478,15 @@ async function maybeApplyPreviewScenario() {
         mode: "plan",
         model: "mock-read-only",
       });
-      planTurn.status = "running";
-      planTurn.finished_at = null;
-      planTurn.final_message = null;
-
       const actTurn = createMockAgentTurn({
         prompt: "Apply the reviewed source edit.",
         mode: "act",
         model: "mock-tool-capable",
         autoApprove: true,
       });
+      planTurn.status = "running";
+      planTurn.finished_at = null;
+      planTurn.final_message = null;
       actTurn.status = "failed";
       actTurn.finished_at = new Date().toISOString();
       actTurn.final_message = null;
@@ -13450,6 +13503,25 @@ async function maybeApplyPreviewScenario() {
       runningTurn.final_message = null;
       const emptyConversation = createMockAgentConversation();
       state.selectedConversationId = emptyConversation.conversation_id;
+      await loadAgentData();
+    } else if (previewState === "parallel-turns") {
+      const firstTurn = createMockAgentTurn({
+        prompt: "Inspect the current project structure in the first conversation.",
+        mode: "ask",
+        model: "mock-read-only",
+      });
+      firstTurn.status = "running";
+      firstTurn.finished_at = null;
+      firstTurn.final_message = null;
+      const secondTurn = createMockAgentTurn({
+        prompt: "Plan an independent reproducibility review in the second conversation.",
+        mode: "plan",
+        model: "mock-read-only",
+      });
+      secondTurn.status = "running";
+      secondTurn.finished_at = null;
+      secondTurn.final_message = null;
+      state.selectedConversationId = secondTurn.conversation_id;
       await loadAgentData();
     } else if (!["empty", "outputs-empty"].includes(previewState)) {
       const approvalPreview = previewState === "approval";
@@ -14537,10 +14609,15 @@ function recordPreviewLayoutEvidence() {
       counts: {
         tasks: state.agentConversations.length,
         conversations: state.agentConversations.length,
+        active: activeAgentConversations().length,
+        running: activeAgentConversations().filter((conversation) => conversation.status === "running").length,
+        waiting: activeAgentConversations().filter((conversation) => conversation.status === "waiting").length,
       },
       selected_conversation_id: state.selectedConversationId,
       composer_disabled: $("#agentInput").disabled,
       new_conversation_disabled: $("#taskRailNew").disabled,
+      agent_header: $("#agentState").textContent,
+      cancel_visible: !$("#agentCancelButton").classList.contains("hidden"),
       visible: {
         task_rail: Boolean(taskRail && taskRail.width > 0 && taskRail.height > 0),
         editor: Boolean(workSurface && workSurface.width > 0 && workSurface.height > 0),
@@ -16495,7 +16572,12 @@ async function sendAgentPrompt(options = {}) {
   const taskKind = options.taskKind || "agent_turn";
   const mode = options.mode || state.agentMode;
   const prompt = $("#agentInput").value.trim();
-  if (!prompt || state.agentBusy) return null;
+  if (!prompt) return null;
+  const admission = agentTurnAdmissionState(mode, taskKind);
+  if (admission.reason) {
+    toast(admission.reason, true);
+    return null;
+  }
   const selectedModelId = state.agentLlm.selectedModelId || state.agentLlm.settings?.selected_model_id || null;
   if (!selectedModelId) {
     toast(agentSendDisabledReason() || "No Agent model is selected.", true);
@@ -16533,6 +16615,7 @@ async function sendAgentPrompt(options = {}) {
     state.selectedConversationId = response?.conversation_id || state.selectedConversationId;
     state.selectedTurnId = response?.turn_id || state.selectedTurnId;
     state.selectedTurnDetail = null;
+    state.agentSubmissionPending = false;
     await Promise.all([loadAgentData(), loadRunData()]);
     return response;
   } catch (error) {
