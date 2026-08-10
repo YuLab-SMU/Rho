@@ -1,9 +1,11 @@
 # Agent Conversation Concurrency And Resource Scheduling
 
 Status: active; Issue #5 authorized end-to-end, CONV-1 through CONV-3 source
-checkpoints accepted 2026-08-09; upstream integration and the replacement
-two-platform candidate pass after the first candidate was rejected by the
-Windows portability gate; installed acceptance and Issue closure remain open
+checkpoints accepted 2026-08-09; `dev.26` upstream integration and hosted
+two-platform candidate passed, but owner-installed acceptance rejected that
+candidate because selected Conversation recovery failed; the bounded
+CONV-3-R1 source checkpoint and independent R3 review now pass, while upstream
+integration, replacement candidate acceptance, and Issue closure remain open
 
 Date: 2026-08-09
 
@@ -16,12 +18,14 @@ and desktop workflow
 Risk class: R3 schema migration, execution admission, cancellation, approval,
 project switching, recovery, and project-file mutation
 
-Current work package: exact owner-installed acceptance, final evidence, and
-Issue closure
+Current work package: CONV-3-R1 project-scoped selected Conversation recovery,
+replacement `dev.27` candidate, exact owner-installed acceptance, final
+evidence, and Issue closure
 
-Mandatory stop: the CONV-3 source checkpoint, upstream integration, and
-replacement exact-commit CI have been reached; do not close Issue #5 until
-representative installed macOS acceptance is recorded
+Mandatory stop: the bounded recovery implementation, two-project/restart
+regressions, full affected validation, and contract review passed; integrate
+without widening scope, then do not close Issue #5 until a new exact `dev.27`
+candidate passes representative installed macOS acceptance
 
 ## Problem And Reproduction
 
@@ -479,9 +483,57 @@ the signed/notarized/stapled macOS DMG chain and Workspace smoke, and immutable
 candidate aggregation. It created one unpublished `v0.4.0-dev.26` Draft
 prerelease. The exact DMG is 21120068 bytes with SHA-256
 `6fdfd492e07cfc5c0aa70e77fbc781206f43d87dd81063e3ef85170c2fdfd540`.
-The Draft and its seven existing assets remain immutable and unpublished;
-installed acceptance is still required and no acceptance asset, MAC5 GO,
-public Release, or update-site mutation exists.
+The Draft and its seven existing assets remain immutable and unpublished.
+Installed acceptance was attempted and rejected this identity; no acceptance
+asset, MAC5 GO, public Release, or update-site mutation exists.
+
+### CONV-3-R1: selected Conversation recovery amendment
+
+Owner-installed acceptance against exact `dev.26` reproduced a deterministic
+restart defect on 2026-08-10. After selecting a non-first Conversation, waiting
+for ordinary session persistence, quitting normally, and reopening the exact
+installed application, Rho selected the first Conversation instead. Durable
+turn output, retry lineage, file-mutation events, schema 12, and the normalized
+project root all recovered correctly. The failure is therefore selection
+recovery, not Conversation-store loss or migration failure.
+
+The root cause is a missing ownership bridge: frontend
+`selectedConversationId` was reset during project hydration, the project
+session snapshot did not carry it, and selecting or creating a Conversation
+did not schedule a session save. The regression invariant is:
+
+> The selected Conversation is project-scoped session state. A normal save,
+> quit, reopen, or project round trip restores the exact selection only when
+> that Conversation still belongs to the normalized active project; missing,
+> malformed, deleted, or foreign-project identifiers fall back truthfully and
+> the repaired fallback is persisted.
+
+CONV-3-R1 is an additive project-session compatibility change. The JSON session
+snapshot adds nullable `selected_agent_conversation_id`; historical snapshots
+default it to `null`. It does not change SQLite schema 12, Conversation or Turn
+ownership, approval policy, model credentials, execution authority, file
+mutation authority, Workspace R, or R package contracts. Hydration may treat a
+bounded non-empty string as a provisional selection, but the authoritative
+project-filtered Conversation list must validate membership before any detail,
+approval, output, or action is projected. Project A's saved identifier must
+never select or expose a Conversation in project B.
+
+Every explicit Conversation selection and newly created Conversation schedules
+the project session save. Load-time fallback after deletion, malformed history,
+or foreign-project input also schedules a repaired snapshot. The existing
+request-sequence and normalized-project checks remain the asynchronous response
+boundary.
+
+Required focused evidence is: Rust project-session round trip, legacy/default
+compatibility, malformed-session recovery, and two-project isolation; frontend
+contract coverage for save, restore, membership validation, and repaired
+fallback; JavaScript syntax and Rust formatting; then the complete affected
+Rust, R, and frontend matrix. Installed acceptance must repeat all seven Issue
+#5 workflows against one new immutable candidate and must specifically prove
+normal quit/reopen restores an explicitly non-first selected Conversation.
+`dev.26` remains an immutable unpublished rejected Draft with no acceptance
+asset. The replacement identity is `0.4.0-dev.27`; no `dev.26` artifact,
+receipt, hash, or hosted evidence may be relabelled or composed into it.
 
 ## Verification Matrix
 
@@ -505,6 +557,9 @@ public Release, or update-site mutation exists.
 - cancel A does not cancel B, B's approval, or direct environment operation;
 - cancel while waiting for Workspace/file lane performs no mutation;
 - shutdown/restart reconciles each nonterminal Turn exactly once;
+- normal save/quit/reopen restores the exact project-owned selected
+  Conversation, while stale, malformed, deleted, and foreign-project saved IDs
+  fall back and repair the session snapshot;
 - project switch reports all active blocker classes without cross-project data.
 
 ### Workspace and file conflicts
@@ -543,9 +598,12 @@ The integrated behavior first advanced application metadata and `NEWS.md` to
 the single-use `0.4.0-dev.25` development identity. Candidate attempt
 `31336769848` exhausted that identity after producing a rejected macOS artifact;
 the bounded validation repair advances the replacement candidate to the
-single-use `0.4.0-dev.26` identity. Schema v12 must never be shipped under the
-already published immutable `0.4.0-dev.24` identity or relabelled across the
-rejected `dev.25` and replacement `dev.26` attempts.
+single-use `0.4.0-dev.26` identity. Installed acceptance then exhausted and
+rejected `dev.26` after its selected Conversation failed normal restart
+recovery. CONV-3-R1 advances the next replacement candidate to the single-use
+`0.4.0-dev.27` identity. Schema v12 must never be shipped under the already
+published immutable `0.4.0-dev.24` identity or relabelled across the rejected
+`dev.25`, rejected `dev.26`, and replacement `dev.27` attempts.
 
 No R package version change is expected unless implementation demonstrates a
 required exported `rho.agent` or `rho.bridge` contract change. Agent R process

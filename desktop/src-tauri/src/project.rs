@@ -65,7 +65,17 @@ pub struct ProjectSessionSnapshot {
     pub open_documents: Vec<ProjectDocumentSession>,
     pub closed_documents: Vec<ProjectDocumentSession>,
     pub active_document: Option<String>,
+    pub selected_agent_conversation_id: Option<String>,
     pub panels: PanelSizes,
+}
+
+const MAX_AGENT_CONVERSATION_ID_BYTES: usize = 256;
+
+fn valid_agent_conversation_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= MAX_AGENT_CONVERSATION_ID_BYTES
+        && value.trim() == value
+        && !value.chars().any(char::is_control)
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
@@ -253,7 +263,16 @@ impl ProjectSessionStore {
             return Ok(ProjectSessionSnapshot::default());
         }
         let content = std::fs::read_to_string(&path)?;
-        serde_json::from_str(&content).with_context(|| format!("parsing {}", path.display()))
+        let mut snapshot: ProjectSessionSnapshot = serde_json::from_str(&content)
+            .with_context(|| format!("parsing {}", path.display()))?;
+        if snapshot
+            .selected_agent_conversation_id
+            .as_deref()
+            .is_some_and(|value| !valid_agent_conversation_id(value))
+        {
+            snapshot.selected_agent_conversation_id = None;
+        }
+        Ok(snapshot)
     }
 
     pub fn load_session_or_default(&self, root: &Path) -> ProjectSessionSnapshot {
@@ -261,6 +280,13 @@ impl ProjectSessionStore {
     }
 
     pub fn save_session(&self, root: &Path, snapshot: &ProjectSessionSnapshot) -> Result<()> {
+        if snapshot
+            .selected_agent_conversation_id
+            .as_deref()
+            .is_some_and(|value| !valid_agent_conversation_id(value))
+        {
+            anyhow::bail!("selected Agent Conversation ID is invalid");
+        }
         std::fs::create_dir_all(&self.sessions_dir)?;
         self.write_json(&self.session_path(root), snapshot)
     }
@@ -873,6 +899,9 @@ mod tests {
             }],
             closed_documents: Vec::new(),
             active_document: Some("analysis.R".to_string()),
+            selected_agent_conversation_id: Some(
+                "agent_conversation_project_a_selected".to_string(),
+            ),
             panels: PanelSizes {
                 left: Some(200),
                 right: Some(320),
@@ -892,6 +921,10 @@ mod tests {
             Some("x <- 1")
         );
         assert_eq!(restored.panels.dock, Some(280));
+        assert_eq!(
+            restored.selected_agent_conversation_id.as_deref(),
+            Some("agent_conversation_project_a_selected")
+        );
     }
 
     #[test]
@@ -922,6 +955,7 @@ mod tests {
             }],
             closed_documents: Vec::new(),
             active_document: Some("分析 scripts/质控.R".to_string()),
+            selected_agent_conversation_id: None,
             panels: PanelSizes::default(),
         };
         store.save_last_opened_project(&root).unwrap();
@@ -951,6 +985,76 @@ mod tests {
         let restored = store.load_session_or_default(&project_dir);
         assert!(restored.open_documents.is_empty());
         assert!(restored.active_document.is_none());
+        assert!(restored.selected_agent_conversation_id.is_none());
+    }
+
+    #[test]
+    fn selected_agent_conversation_session_is_compatible_and_project_scoped() {
+        let directory = TempDir::new().unwrap();
+        let project_a = directory.path().join("project-a");
+        let project_b = directory.path().join("project-b");
+        let legacy_project = directory.path().join("legacy-project");
+        std::fs::create_dir_all(&project_a).unwrap();
+        std::fs::create_dir_all(&project_b).unwrap();
+        std::fs::create_dir_all(&legacy_project).unwrap();
+        let store = ProjectSessionStore::new(directory.path().join("data")).unwrap();
+
+        let project_a_snapshot = ProjectSessionSnapshot {
+            selected_agent_conversation_id: Some("agent_conversation_a".to_string()),
+            ..ProjectSessionSnapshot::default()
+        };
+        let project_b_snapshot = ProjectSessionSnapshot {
+            selected_agent_conversation_id: Some("agent_conversation_b".to_string()),
+            ..ProjectSessionSnapshot::default()
+        };
+        store.save_session(&project_a, &project_a_snapshot).unwrap();
+        store.save_session(&project_b, &project_b_snapshot).unwrap();
+
+        assert_eq!(
+            store
+                .load_session(&project_a)
+                .unwrap()
+                .selected_agent_conversation_id
+                .as_deref(),
+            Some("agent_conversation_a")
+        );
+        assert_eq!(
+            store
+                .load_session(&project_b)
+                .unwrap()
+                .selected_agent_conversation_id
+                .as_deref(),
+            Some("agent_conversation_b")
+        );
+
+        let legacy_path = store.session_path(&legacy_project);
+        std::fs::write(
+            &legacy_path,
+            r#"{"open_documents":[],"closed_documents":[],"active_document":null,"panels":{}}"#,
+        )
+        .unwrap();
+        assert!(
+            store
+                .load_session(&legacy_project)
+                .unwrap()
+                .selected_agent_conversation_id
+                .is_none()
+        );
+
+        let malformed_snapshot = ProjectSessionSnapshot {
+            selected_agent_conversation_id: Some(" invalid\n".to_string()),
+            ..ProjectSessionSnapshot::default()
+        };
+        assert!(store.save_session(&project_a, &malformed_snapshot).is_err());
+
+        std::fs::write(
+            store.session_path(&legacy_project),
+            r#"{"open_documents":[],"closed_documents":[],"active_document":null,"selected_agent_conversation_id":" invalid\\n","panels":{}}"#,
+        )
+        .unwrap();
+        let sanitized = store.load_session(&legacy_project).unwrap();
+        assert!(sanitized.selected_agent_conversation_id.is_none());
+        assert!(sanitized.open_documents.is_empty());
     }
 
     #[test]

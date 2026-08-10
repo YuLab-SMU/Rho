@@ -8,8 +8,8 @@ const html = fs.readFileSync(path.join(root, "desktop", "dist", "index.html"), "
 const css = fs.readFileSync(path.join(root, "desktop", "dist", "styles.css"), "utf8");
 const js = fs.readFileSync(path.join(root, "desktop", "dist", "app.js"), "utf8");
 
-assert.match(html, /styles\.css\?v=0\.4\.0-dev\.26(?:&amp;|&)rev=m(?:2-workbench|3-scientific-review-v3)/);
-assert.match(html, /app\.js\?v=0\.4\.0-dev\.26(?:&amp;|&)rev=m(?:2-workbench|3-scientific-review-v3)/);
+assert.match(html, /styles\.css\?v=0\.4\.0-dev\.27(?:&amp;|&)rev=m(?:2-workbench|3-scientific-review-v3)/);
+assert.match(html, /app\.js\?v=0\.4\.0-dev\.27(?:&amp;|&)rev=m(?:2-workbench|3-scientific-review-v3)/);
 
 for (const icon of [
   "wand-sparkles",

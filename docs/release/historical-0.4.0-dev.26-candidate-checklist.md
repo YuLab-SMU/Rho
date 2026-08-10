@@ -1,13 +1,13 @@
 # Rho 0.4.0-dev.26 Cross-Platform Candidate Checklist
 
-Status: active replacement-candidate record; Issue #5 CONV-1 through CONV-3
+Status: historical rejected candidate record; Issue #5 CONV-1 through CONV-3
 source implementation, automated/browser verification, independent R3 review,
 upstream integration, exact `dev.26` two-platform candidate CI, and immutable
-Draft assembly pass; the `dev.25` attempt remains rejected, while installed
-acceptance, MAC5, and publication are not yet established
+Draft assembly passed, but owner-installed acceptance rejected this identity
+because selected Conversation recovery failed
 
 Date: 2026-08-09
-Last updated: 2026-08-09
+Last updated: 2026-08-10
 
 Change class: D3 project-scoped Agent Conversation persistence, bounded
 execution admission, cancellation/approval isolation, resource scheduling,
@@ -19,10 +19,10 @@ recovery; R4 for any hosted candidate, signing/notarization, Release, update
 site, or publication action
 
 Owning documents: the active Agent Conversation concurrency specification owns
-Issue #5 behavior and acceptance. The active macOS arm64 specification owns
-packaging and trust gates. This checklist alone owns the exact
-`0.4.0-dev.26` identity, candidate evidence, installed-acceptance ledger, and
-GO/NO-GO decision.
+Issue #5 behavior and replacement acceptance. The active macOS arm64
+specification owns packaging and trust gates. This historical checklist alone
+owns the immutable `0.4.0-dev.26` identity, candidate evidence, installed
+rejection ledger, and REJECTED/NO-GO decision.
 
 Authorization: on 2026-08-09 the project owner explicitly authorized Issue #5
 implementation through the point where the Issue can be closed. That admits
@@ -56,7 +56,7 @@ this checklist.
 | Windows platform | `windows_x86_64` | candidate evidence passed in run `31337666426` |
 | macOS platform | `macos_aarch64` | signed/notarized/stapled candidate evidence passed in run `31337666426` |
 | Minimum macOS | 14.0 | configuration unchanged |
-| Release decision | `NO-GO` | installed acceptance and release gates remain open |
+| Release decision | `REJECTED / NO-GO` | installed restart recovery failed; this identity cannot be repaired or published |
 
 The version and any eventual tag are single-use. A rejected artifact or later
 user-visible source change advances to another version; no artifact, tag,
@@ -194,10 +194,9 @@ roots. The live store reports schema 12 and both Conversation tables. The owner
 confirmed this recovery as working on 2026-08-10.
 
 This preflight proves exact installed identity, migration recovery, Workspace R
-startup, and ordinary idle project switching only. It does not satisfy the
-seven concurrency, cancellation, file-conflict, restart, Retry, deletion, and
-active-turn project-transition workflows below; their owner result remains
-open.
+startup, and ordinary idle project switching only. Subsequent installed
+acceptance exercised the Issue #5 workflows and rejected this candidate as
+recorded below.
 
 ## Exact Candidate And Installed Acceptance Gate
 
@@ -207,7 +206,7 @@ commit, validate all existing immutable evidence contracts, and create at most
 one draft prerelease. Run `31337666426` satisfies this automated candidate
 portion. Review-only fork artifacts cannot satisfy this gate.
 
-The owner-installed macOS application workflow must demonstrate, against that
+The owner-installed macOS application workflow was evaluated against that
 exact candidate:
 
 1. create two project-scoped Conversations and start unrelated Ask/Plan work
@@ -237,6 +236,24 @@ the checked-in ledger records a real owner-reported pass. Only then may that
 minimal asset carry `status: passed` and `decision: GO`; neither record alone
 may admit publication.
 
+### Installed acceptance ledger — rejected 2026-08-10
+
+| # | Owner-observed result | Evidence and deviation |
+| --- | --- | --- |
+| 1 | PASS | two independent project-scoped Ask Conversations were admitted concurrently and retained separate output/context |
+| 2 | PASS | a third Turn was visibly rejected at the bound; cancelling one exact Turn left the other running to completion |
+| 3 | PASS with bounded setup deviation | independent-file proposals applied independently; two exact-selection proposals for one file produced one applied result and one visible stale rejection without overwrite. Initial replace-selection attempts without a non-empty selection correctly rejected and were rerun with valid append/selection context |
+| 4 | FAIL | after explicitly selecting a non-first Conversation, waiting for session persistence, quitting normally, and reopening `/Applications/Rho.app`, Rho selected the first Conversation. The failure repeated. Output, retry lineage, mutation ledger, project root, and schema 12 otherwise recovered |
+| 5 | PARTIAL | Retry created a new immutable Turn linked by `retry_of_turn_id` and left the original cancelled Turn unchanged; provider completion was slow, so the linked attempt was cancelled exactly and remained terminal |
+| 6 | NOT RUN | destructive deletion was not exercised after the release-blocking restart failure |
+| 7 | NOT RUN | active-turn project-switch blocking was not rerun after the release-blocking restart failure |
+
+Relevant installed evidence includes the exact application identity and hashes
+above, startup schema/recovery JSONL, durable store rows, and screenshots
+captured before and after the normal restart. No
+`rho-0.4.0-dev.26-acceptance.json` was created or uploaded because the aggregate
+workflow did not pass.
+
 ## Issue Closure Gate
 
 GitHub Issue #5 may close only after the active specification's eight closure
@@ -247,8 +264,10 @@ commit, checks, and installed evidence.
 
 ## Current Decision
 
-`NO-GO` for publication. The behavior source, replacement repair, upstream
-integration, two-platform candidate, and unpublished Draft pass. Installed
-acceptance, its exact acceptance asset, MAC5 GO, public Release, and update-site
-entry do not exist yet. The Draft must remain unpublished and its existing
-assets immutable until the owner-installed gate is resolved.
+`REJECTED / NO-GO` for publication. The behavior source, Windows portability
+repair, upstream integration, two-platform candidate, and unpublished Draft
+passed, but installed workflow 4 failed exact selected-Conversation restart
+recovery. Draft Release `367596197` and its seven assets remain immutable and
+unpublished; no acceptance asset, MAC5 GO, public Release, or update-site entry
+may be added for this identity. The authorized replacement is
+`0.4.0-dev.27` under the active candidate checklist.

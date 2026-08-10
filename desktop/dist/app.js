@@ -2149,7 +2149,7 @@ async function mockInvoke(command, args) {
   await new Promise((resolve) => setTimeout(resolve, command === "run_agent" ? 800 : 300));
   if (command === "app_info") {
     return {
-      version: "0.4.0-dev.26",
+      version: "0.4.0-dev.27",
       channel: "development",
       commit: "4090cf725c53ab657ba9dfc9743ec6159f27dcf9",
       platform: mockPlatformFixture.platform,
@@ -2167,8 +2167,8 @@ async function mockInvoke(command, args) {
     return {
       status: "up_to_date",
       channel: "development",
-      installed_version: "0.4.0-dev.26",
-      available_version: "0.4.0-dev.26",
+      installed_version: "0.4.0-dev.27",
+      available_version: "0.4.0-dev.27",
       published_at: "2026-07-22T14:45:23Z",
       summary: "Rho is current for the development channel.",
       release_page_url: "https://yulab-smu.top/Rho/",
@@ -5132,6 +5132,12 @@ function currentPanelSnapshot() {
   };
 }
 
+function normalizedSessionAgentConversationId(value) {
+  if (typeof value !== "string" || !value || value.trim() !== value) return null;
+  if (new TextEncoder().encode(value).byteLength > 256) return null;
+  return /[\u0000-\u001f\u007f]/.test(value) ? null : value;
+}
+
 function buildSessionSnapshot() {
   const persistentDocuments = Object.values(state.documents).filter((document) => !document.transient);
   return {
@@ -5143,6 +5149,7 @@ function buildSessionSnapshot() {
       draft_content: draft.draft_content ?? null,
     })),
     active_document: activeDocument()?.transient ? null : state.activeDocument,
+    selected_agent_conversation_id: normalizedSessionAgentConversationId(state.selectedConversationId),
     panels: currentPanelSnapshot(),
     posture: state.posture,
     agent_surface: state.agentSurface,
@@ -7014,6 +7021,17 @@ function restorePanelViewport(panel, viewport, keySelector = null) {
   }
 }
 
+function preferredAgentConversationId(conversations, selectedConversationId) {
+  const selectedConversationStillExists = selectedConversationId
+    && conversations.some((conversation) => conversation.conversation_id === selectedConversationId);
+  return selectedConversationStillExists
+    ? selectedConversationId
+    : conversations.find((conversation) => conversation.pending_request_id)?.conversation_id
+      || conversations.find((conversation) => ["running", "waiting"].includes(conversation.status))?.conversation_id
+      || conversations[0]?.conversation_id
+      || null;
+}
+
 async function loadAgentData({ quiet = false } = {}) {
   state.agentRefreshRequestSequence += 1;
   const requestSequence = state.agentRefreshRequestSequence;
@@ -7030,14 +7048,11 @@ async function loadAgentData({ quiet = false } = {}) {
     if (!requestIsCurrent()) return false;
     const conversations = conversationResponse || [];
     const pendingApprovals = (approvalResponse || []).filter((item) => item.status === "waiting");
-    const selectedConversationStillExists = state.selectedConversationId
-      && conversations.some((conversation) => conversation.conversation_id === state.selectedConversationId);
-    const preferredConversationId = selectedConversationStillExists
-      ? state.selectedConversationId
-      : conversations.find((conversation) => conversation.pending_request_id)?.conversation_id
-        || conversations.find((conversation) => ["running", "waiting"].includes(conversation.status))?.conversation_id
-        || conversations[0]?.conversation_id
-        || null;
+    const previouslySelectedConversationId = state.selectedConversationId;
+    const preferredConversationId = preferredAgentConversationId(
+      conversations,
+      state.selectedConversationId,
+    );
     const turns = preferredConversationId
       ? await invoke("list_agent_turns", { conversationId: preferredConversationId, limit: 50 }) || []
       : [];
@@ -7076,6 +7091,7 @@ async function loadAgentData({ quiet = false } = {}) {
     renderTaskRail();
     updateAgentHeader();
     syncAgentPolling();
+    if (previouslySelectedConversationId !== preferredConversationId) scheduleSessionSave();
     return true;
   } catch (error) {
     if (requestIsCurrent() && !quiet) {
@@ -9600,6 +9616,7 @@ async function startNewAgentTask() {
     state.selectedConversationId = conversation.conversation_id;
     state.selectedTurnId = null;
     state.selectedTurnDetail = null;
+    scheduleSessionSave();
     await loadAgentData();
     $("#agentInput").focus();
   } catch (error) {
@@ -9611,7 +9628,80 @@ async function selectTaskConversation(conversationId) {
   state.selectedConversationId = conversationId;
   state.selectedTurnId = null;
   state.selectedTurnDetail = null;
+  scheduleSessionSave();
   await loadAgentData();
+}
+
+async function runAgentConversationSessionRecoveryMockProbe() {
+  const projectA = mockLastProject;
+  const projectB = Object.keys(mockProjects).find((root) => root !== projectA);
+  if (!projectB) throw new Error("The session recovery probe requires two mock projects");
+
+  const selectedTurn = createMockAgentTurn({
+    prompt: "Restore this explicitly selected non-first Conversation after restart.",
+    mode: "ask",
+    model: "mock-read-only",
+  });
+  const listFirstTurn = createMockAgentTurn({
+    prompt: "Keep this newer first Conversation available after restart.",
+    mode: "plan",
+    model: "mock-read-only",
+  });
+  const selectedConversation = mockAgentConversations.find(
+    (conversation) => conversation.conversation_id === selectedTurn.conversation_id,
+  );
+  const listFirstConversation = mockAgentConversations.find(
+    (conversation) => conversation.conversation_id === listFirstTurn.conversation_id,
+  );
+  selectedConversation.updated_at = "2026-08-10T00:00:00.000Z";
+  listFirstConversation.updated_at = "2026-08-10T00:00:01.000Z";
+  state.selectedConversationId = selectedTurn.conversation_id;
+  await loadAgentData();
+  const selectedProjectAConversationWasNonFirst = state.agentConversations[0]?.conversation_id
+    !== state.selectedConversationId;
+  await flushSessionSnapshot();
+  const savedProjectAId = mockProjectSessions[projectA]?.selected_agent_conversation_id || null;
+
+  state.selectedConversationId = null;
+  await hydrateProject(await invoke("project_restore_session"));
+  await loadAgentData();
+  const restoredProjectAId = state.selectedConversationId;
+
+  const projectBConversation = createMockAgentConversation({ projectRoot: projectB });
+  mockProjectSessions[projectB] = {
+    open_documents: [],
+    closed_documents: [],
+    active_document: null,
+    selected_agent_conversation_id: savedProjectAId,
+    panels: { left: 214, right: 362, dock: 260 },
+  };
+  mockLastProject = projectB;
+  await hydrateProject(await invoke("project_restore_session"));
+  await loadAgentData();
+  const projectBFallbackId = state.selectedConversationId;
+  await flushSessionSnapshot();
+  const repairedProjectBId = mockProjectSessions[projectB]?.selected_agent_conversation_id || null;
+
+  mockLastProject = projectA;
+  await hydrateProject(await invoke("project_restore_session"));
+  await loadAgentData();
+  return {
+    project_a_saved_id: savedProjectAId,
+    project_a_restored_id: restoredProjectAId,
+    project_a_reopened_id: state.selectedConversationId,
+    project_a_selected_was_non_first: selectedProjectAConversationWasNonFirst,
+    project_a_exact_restore: Boolean(savedProjectAId)
+      && selectedProjectAConversationWasNonFirst
+      && savedProjectAId === restoredProjectAId
+      && savedProjectAId === state.selectedConversationId,
+    project_b_fallback_id: projectBFallbackId,
+    project_b_expected_id: projectBConversation.conversation_id,
+    project_b_repaired_id: repairedProjectBId,
+    project_b_rejected_foreign_id: Boolean(savedProjectAId)
+      && projectBFallbackId === projectBConversation.conversation_id
+      && repairedProjectBId === projectBConversation.conversation_id
+      && repairedProjectBId !== savedProjectAId,
+  };
 }
 
 async function retrySelectedAgentTurn() {
@@ -9624,6 +9714,7 @@ async function retrySelectedAgentTurn() {
     state.selectedConversationId = response?.conversation_id || state.selectedConversationId;
     state.selectedTurnId = response?.turn_id || state.selectedTurnId;
     state.selectedTurnDetail = null;
+    scheduleSessionSave();
     await Promise.all([loadAgentData(), loadRunData()]);
     toast("Started a new Agent turn from the selected immutable prompt.");
   } catch (error) {
@@ -13981,6 +14072,8 @@ async function maybeApplyPreviewScenario() {
       const emptyConversation = createMockAgentConversation();
       state.selectedConversationId = emptyConversation.conversation_id;
       await loadAgentData();
+    } else if (previewState === "session-recovery") {
+      state.agentSessionRecoveryPreviewProbe = await runAgentConversationSessionRecoveryMockProbe();
     } else if (previewState === "parallel-turns") {
       const firstTurn = createMockAgentTurn({
         prompt: "Inspect the current project structure in the first conversation.",
@@ -15142,6 +15235,7 @@ function recordPreviewLayoutEvidence() {
         waiting: activeAgentConversations().filter((conversation) => conversation.status === "waiting").length,
       },
       selected_conversation_id: state.selectedConversationId,
+      session_recovery: state.agentSessionRecoveryPreviewProbe || null,
       composer_disabled: $("#agentInput").disabled,
       new_conversation_disabled: $("#taskRailNew").disabled,
       agent_header: $("#agentState").textContent,
@@ -19537,6 +19631,9 @@ async function hydrateProject(response) {
   resetGitReview(state.project.root);
   state.fileEditDecisions = loadFileEditDecisions(state.project.root);
   const session = loadEmergencySession(state.project.root) || response.session || {};
+  state.selectedConversationId = normalizedSessionAgentConversationId(
+    session.selected_agent_conversation_id,
+  );
   for (const entry of session.closed_documents || []) {
     if (!entry?.path || entry.draft_content === null || entry.draft_content === undefined) continue;
     state.closedDrafts[entry.path] = {

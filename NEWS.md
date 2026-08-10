@@ -4,6 +4,15 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.0-dev.27 - 2026-08-10
+
+### Fixed
+
+- The selected Agent Conversation is now saved in the normalized project's
+  session snapshot. Normal quit/reopen and project round trips restore the
+  exact current-project selection; missing, malformed, deleted, or
+  foreign-project identifiers fall back safely and repair the saved session.
+
 ## 0.4.0-dev.26 - 2026-08-09
 
 ### Fixed

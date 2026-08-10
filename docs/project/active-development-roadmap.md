@@ -3,7 +3,7 @@
 Status: active
 
 Date: 2026-08-09
-Current source baseline: `0.4.0-dev.26`
+Current source baseline: `0.4.0-dev.27`
 Active published identity: `0.4.0-dev.24` (authoritative candidate,
 owner-installed acceptance, MAC5 GO, protected public prerelease, and live
 development update manifest pass)
@@ -336,7 +336,7 @@ RA-RC1) have prior acceptance evidence.
 | 12 | WS4 staging/commit mutations | Quarto local-job contract design may proceed without code | Exact diff/repository revision, dirty-worktree preservation, hook policy, rejection, failure and recovery evidence. **Implemented 2026-08-01.** |
 | 13 | WS6 narrow local-job contract with Quarto as the first adapter | WS5 chunk discovery and source-linked diagnostic fixtures | Saved-input revision, environment, cancellation, restart reconciliation, bounded logs and Artifact provenance. **Implemented 2026-08-01** (async render_document_job). |
 | 14 | WS6A read-only `targets` inspection | Package-development job design only after the Quarto job gate | `_targets` ownership is preserved. **Implemented 2026-08-01** (read-only inspection only; pipeline execution not yet authorized). |
-| 15 | Issue #5 Agent Conversation concurrency, beginning with CONV-1 durable identity and switching | Immutable `0.4.0-dev.24` release evidence remains maintenance-only | Each CONV package stops for its own schema/admission/approval/resource evidence; no second Workspace R or cross-conversation authority is introduced. **CONV-1 through CONV-3 source checkpoints, replacement integration, and exact `dev.26` two-platform candidate run `31337666426` pass; the rejected `dev.25` evidence remains historical, while owner-installed acceptance and Issue closure remain open.** |
+| 15 | Issue #5 Agent Conversation concurrency, beginning with CONV-1 durable identity and switching | Immutable `0.4.0-dev.24` release evidence remains maintenance-only | Each CONV package stops for its own schema/admission/approval/resource evidence; no second Workspace R or cross-conversation authority is introduced. **CONV-1 through CONV-3 and exact `dev.26` hosted candidate passed, but installed restart acceptance rejected `dev.26`; CONV-3-R1 source/automation/R3 review pass and replacement `dev.27` integration/candidate gates remain.** |
 
 ### Wave 0: Close Current Acceptance Work
 

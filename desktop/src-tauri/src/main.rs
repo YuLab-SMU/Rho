@@ -7800,6 +7800,7 @@ mod tests {
             open_documents: vec![],
             closed_documents: vec![],
             active_document: Some(active_document.to_string()),
+            selected_agent_conversation_id: None,
             panels: crate::project::PanelSizes {
                 left: Some(left_panel),
                 right: Some(300),

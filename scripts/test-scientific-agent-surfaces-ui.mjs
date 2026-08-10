@@ -9,8 +9,8 @@ const html = read("desktop", "dist", "index.html");
 const css = read("desktop", "dist", "styles.css");
 const js = read("desktop", "dist", "app.js");
 
-assert.match(html, /styles\.css\?v=0\.4\.0-dev\.26(?:&amp;|&)rev=m3-scientific-review-v3/);
-assert.match(html, /app\.js\?v=0\.4\.0-dev\.26(?:&amp;|&)rev=m3-scientific-review-v3/);
+assert.match(html, /styles\.css\?v=0\.4\.0-dev\.27(?:&amp;|&)rev=m3-scientific-review-v3/);
+assert.match(html, /app\.js\?v=0\.4\.0-dev\.27(?:&amp;|&)rev=m3-scientific-review-v3/);
 
 for (const icon of ["check", "clock-3", "circle-x", "ban", "triangle-alert", "info", "image", "bot", "file-diff", "package-check"]) {
   assert.match(html, new RegExp(`id="icon-${icon}"`), `Missing M3 icon ${icon}`);
