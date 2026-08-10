@@ -1,11 +1,11 @@
 # Agent Conversation Concurrency And Resource Scheduling
 
 Status: active; Issue #5 authorized end-to-end, CONV-1 through CONV-3 source
-checkpoints accepted 2026-08-09; `dev.26` upstream integration and hosted
-two-platform candidate passed, but owner-installed acceptance rejected that
-candidate because selected Conversation recovery failed; the bounded
-CONV-3-R1 source checkpoint and independent R3 review now pass, while upstream
-integration, replacement candidate acceptance, and Issue closure remain open
+checkpoints accepted 2026-08-09; CONV-3-R1 implemented/reviewed, and exact
+`dev.27` upstream integration, two-platform candidate, owner-installed
+seven-workflow acceptance, acceptance asset, and MAC5 GO pass; final evidence
+integration, Issue comment/closure, and the distinct public Release gate remain
+open
 
 Date: 2026-08-09
 
@@ -18,14 +18,14 @@ and desktop workflow
 Risk class: R3 schema migration, execution admission, cancellation, approval,
 project switching, recovery, and project-file mutation
 
-Current work package: CONV-3-R1 project-scoped selected Conversation recovery,
-replacement `dev.27` candidate, exact owner-installed acceptance, final
-evidence, and Issue closure
+Current work package: final `dev.27` acceptance evidence integration and Issue
+#5 comment/closure; public publication remains a separate release decision
 
-Mandatory stop: the bounded recovery implementation, two-project/restart
-regressions, full affected validation, and contract review passed; integrate
-without widening scope, then do not close Issue #5 until a new exact `dev.27`
-candidate passes representative installed macOS acceptance
+Mandatory stop: the bounded recovery, two-project/restart regressions, full
+affected validation/review, upstream integration, exact candidate, and all
+seven installed workflows pass. Integrate the factual ledger and close Issue
+#5 only after the final comment links exact source, CI, and installed evidence;
+do not infer authority to publish the Draft or mutate the update site.
 
 ## Problem And Reproduction
 
@@ -623,3 +623,17 @@ Issue #5 may close only when:
 8. the GitHub Issue is then closed as completed.
 
 Passing only CONV-1 or CONV-2 is progress and must not close the Issue.
+
+At the 2026-08-10 acceptance checkpoint, conditions 1 through 6 pass. PR #21
+integrated the source as authoritative commit
+`aff83f01d2db8c241fe794fe5e5e4c80d2baf2a0`; protected candidate run
+`31391411316` passed both platforms and created unpublished Draft `367934137`.
+The exact installed macOS candidate passed concurrent unrelated Conversations,
+the two-Turn admission bound and exact cancellation, different-file progress
+and same-file stale rejection, non-first selected Conversation restart
+recovery, immutable Retry lineage, confirmed single-Conversation deletion, and
+active-Turn project-switch blocking. The schema-v1 acceptance asset binds the
+exact candidate and has SHA-256
+`4ae9aec04105951d7cedda004444bfd9ab5972bd8ff20905897b2a70c505b151`.
+Conditions 7 and 8 are intentionally performed only after this ledger is
+integrated. The Draft remains unpublished.
