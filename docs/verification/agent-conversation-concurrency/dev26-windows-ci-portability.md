@@ -131,6 +131,24 @@ The Draft is not public, the Git tag ref is not created, and the acceptance
 asset is intentionally absent. Release decision remains `NO-GO` pending the
 owner-installed workflows.
 
+## Installed Launch Disambiguation Evidence
+
+On 2026-08-10 the owner-installed preflight first launched an older application
+from one of two still-mounted `dev.21`/`dev.22` installer volumes with the same
+bundle name. That older process truthfully rejected the schema 11 store and
+left it unchanged. `/Applications/Rho.app` independently matched `dev.26`,
+embedded authoritative candidate commit
+`a5fc4a153bb420968155984bf8e980973c775015`, and matched the mounted `dev.26`
+main executable at SHA-256
+`614e1b8b626cba6bce7268247c37f27a6cfd4a751152c36756e80830c1c9005b`.
+
+After safely ejecting all three installer volumes, launching that Applications
+copy produced `migrated` evidence from schema 11 to 12 with a recoverable
+`schema-v11.bak`, started Workspace R in 1915 ms, and committed ordinary
+switches to both disposable acceptance projects. The owner confirmed the
+recovery. This closes the installed launch preflight only; the seven behavioral
+workflows and their bound acceptance asset remain open.
+
 ## Remaining Gates
 
 - obtain owner-installed acceptance for all seven Issue #5 workflows;

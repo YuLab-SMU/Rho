@@ -171,6 +171,34 @@ all passed; Gatekeeper reported `Notarized Developer ID` and origin
 `Developer ID Application: Yonghe Xia (GAAY6Z9874)`. These automated and local
 trust checks do not substitute for the seven owner-installed workflows below.
 
+## Installed Launch Preflight Evidence
+
+The 2026-08-10 owner-installed preflight initially displayed `R unavailable`
+and rejected a project switch while three same-name installer volumes were
+mounted. Read-only inspection established that `/Volumes/Rho` contained
+`dev.21`, `/Volumes/Rho 1` contained `dev.22`, and only `/Volumes/Rho 2` plus
+`/Applications/Rho.app` contained the exact `dev.26` candidate. The first
+startup therefore exercised an older mounted application: it rejected existing
+schema 11 without changing the store. This is launch-path ambiguity evidence,
+not a `dev.26` migration failure or an accepted Issue #5 workflow.
+
+All three read-only installer volumes were ejected without deleting their DMG
+files. The owner then launched `/Applications/Rho.app`, whose installed
+identity was `0.4.0-dev.26`, embedded commit
+`a5fc4a153bb420968155984bf8e980973c775015`, main-executable SHA-256
+`614e1b8b626cba6bce7268247c37f27a6cfd4a751152c36756e80830c1c9005b`,
+and valid notarized Developer ID signature. Startup evidence records an atomic
+schema 11-to-12 migration with a `schema-v11.bak` backup, Workspace R ready in
+1915 ms, and successful switches to the disposable `project-a` and `project-b`
+roots. The live store reports schema 12 and both Conversation tables. The owner
+confirmed this recovery as working on 2026-08-10.
+
+This preflight proves exact installed identity, migration recovery, Workspace R
+startup, and ordinary idle project switching only. It does not satisfy the
+seven concurrency, cancellation, file-conflict, restart, Retry, deletion, and
+active-turn project-transition workflows below; their owner result remains
+open.
+
 ## Exact Candidate And Installed Acceptance Gate
 
 The combined workflow binds Windows and
