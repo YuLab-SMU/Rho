@@ -101,9 +101,9 @@ function validate(value) {
   assert.match(value.docsIndex, /design\/accepted-2026-07-25-about-and-update-check-design\.md/);
   assert.doesNotMatch(value.docsIndex, /design\/active-2026-07-25-about-and-update-check-design\.md/);
   assert.match(value.activeSpec, /Status: active; SP-READY1 repository-readiness package/);
-  assert.match(value.activeSpec, /organization-owner MFA audit,[\s\S]{0,300}remain[\s\n]+open/);
+  assert.match(value.activeSpec, /organization-owner MFA\s+audit,[\s\S]{0,360}remain\s+open/);
   assert.match(value.checklist, /SP-READY1 SignPath repository readiness/);
-  assert.match(value.checklist, /owner MFA audit,[\s\S]{0,320}remain open/);
+  assert.match(value.checklist, /owner MFA audit,[\s\S]{0,420}remain\s+open/i);
   assert.match(value.news, /Update checks are now user-initiated only/i);
 
   for (const constant of ["PRIVACY_POLICY", "SECURITY_POLICY", "CODE_SIGNING_POLICY", "LICENSE_URL", "SIGNPATH_IO", "SIGNPATH_FOUNDATION"]) {

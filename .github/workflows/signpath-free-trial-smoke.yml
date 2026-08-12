@@ -1,0 +1,236 @@
+name: SignPath Free Trial Smoke
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: signpath-free-trial-smoke
+  cancel-in-progress: false
+
+jobs:
+  admission:
+    name: Verify immutable test input
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SOURCE_RUN_ID: "31644429787"
+      SOURCE_ARTIFACT_ID: "9160516935"
+      SOURCE_ARTIFACT_NAME: rho-0.4.0-dev.37-issue33-windows-installed-7ab861b01a36313150988b1e2fa8fdc2056325d9-31644429787
+      SOURCE_COMMIT: 7ab861b01a36313150988b1e2fa8fdc2056325d9
+    steps:
+      - name: Require exact upstream default-branch dispatcher
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "YuLab-SMU/Rho"
+          test "$GITHUB_REF" = "refs/heads/$DEFAULT_BRANCH"
+          default_head="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$DEFAULT_BRANCH" --jq .object.sha)"
+          test "$GITHUB_SHA" = "$default_head"
+
+      - name: Verify accepted source run and artifact metadata
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID")"
+          jq -e --arg commit "$SOURCE_COMMIT" '
+            .status == "completed" and
+            .conclusion == "success" and
+            .head_sha == $commit and
+            .repository.full_name == "YuLab-SMU/Rho"
+          ' <<<"$run_json" >/dev/null
+
+          artifact_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$SOURCE_ARTIFACT_ID")"
+          jq -e --arg name "$SOURCE_ARTIFACT_NAME" --argjson run_id "$SOURCE_RUN_ID" '
+            .name == $name and
+            .expired == false and
+            .workflow_run.id == $run_id
+          ' <<<"$artifact_json" >/dev/null
+
+  sign-free-trial:
+    name: Sign exact installer with Free Trial certificate
+    needs: admission
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+    env:
+      SOURCE_RUN_ID: "31644429787"
+      SOURCE_ARTIFACT_ID: "9160516935"
+      SOURCE_ARTIFACT_NAME: rho-0.4.0-dev.37-issue33-windows-installed-7ab861b01a36313150988b1e2fa8fdc2056325d9-31644429787
+      SOURCE_COMMIT: 7ab861b01a36313150988b1e2fa8fdc2056325d9
+      EXPECTED_INSTALLER: Rho_0.4.0-dev.37_x64-setup.exe
+      EXPECTED_UNSIGNED_SHA256: a8fa9ad2628590c9c12e176f22930d971fd8d2572dc606b52b55e38abb41bda6
+    steps:
+      - name: Validate non-secret SignPath deployment variables
+        shell: pwsh
+        env:
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          SIGNPATH_ARTIFACT_CONFIGURATION_SLUG: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          SIGNPATH_CERTIFICATE_THUMBPRINT: ${{ vars.SIGNPATH_CERTIFICATE_THUMBPRINT }}
+        run: |
+          $required = @(
+            "SIGNPATH_ORGANIZATION_ID",
+            "SIGNPATH_PROJECT_SLUG",
+            "SIGNPATH_SIGNING_POLICY_SLUG",
+            "SIGNPATH_ARTIFACT_CONFIGURATION_SLUG",
+            "SIGNPATH_CERTIFICATE_THUMBPRINT"
+          )
+          foreach ($name in $required) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+              throw "Required repository variable is missing: $name"
+            }
+          }
+          $thumbprint = ($env:SIGNPATH_CERTIFICATE_THUMBPRINT -replace '[^0-9A-Fa-f]', '').ToUpperInvariant()
+          if ($thumbprint -notmatch '^[0-9A-F]{40}$') {
+            throw "SIGNPATH_CERTIFICATE_THUMBPRINT must be a 40-digit SHA-1 certificate thumbprint."
+          }
+
+      - name: Download exact accepted unsigned artifact
+        uses: actions/download-artifact@v5
+        with:
+          repository: YuLab-SMU/Rho
+          run-id: 31644429787
+          artifact-ids: 9160516935
+          github-token: ${{ github.token }}
+          path: target/signpath-source
+          merge-multiple: true
+
+      - name: Verify and isolate exactly one unsigned installer
+        shell: pwsh
+        run: |
+          $installers = @(Get-ChildItem -LiteralPath "target\signpath-source" -Recurse -File -Filter "Rho_*_x64-setup.exe")
+          if ($installers.Count -ne 1 -or $installers[0].Name -ne $env:EXPECTED_INSTALLER) {
+            throw "Expected exactly one $env:EXPECTED_INSTALLER in the accepted source artifact."
+          }
+          $actualHash = (Get-FileHash -LiteralPath $installers[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualHash -ne $env:EXPECTED_UNSIGNED_SHA256) {
+            throw "Unsigned installer SHA-256 mismatch."
+          }
+          $signature = Get-AuthenticodeSignature -LiteralPath $installers[0].FullName
+          if ([string]$signature.Status -ne "NotSigned" -or $null -ne $signature.SignerCertificate) {
+            throw "The immutable source installer is no longer the expected unsigned input."
+          }
+          New-Item -ItemType Directory -Path "target\signpath-input" -Force | Out-Null
+          Copy-Item -LiteralPath $installers[0].FullName -Destination (Join-Path "target\signpath-input" $env:EXPECTED_INSTALLER)
+
+      - name: Upload isolated unsigned installer for SignPath
+        id: upload-unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: signpath-free-trial-unsigned-${{ github.run_id }}-${{ github.run_attempt }}
+          path: target/signpath-input/Rho_0.4.0-dev.37_x64-setup.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+      - name: Submit Free Trial signing request
+        id: signpath
+        uses: signpath/github-action-submit-signing-request@b9d91eadd323de506c0c81cf0c7fe7438f3360fd # v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+          github-token: ${{ github.token }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 900
+          output-artifact-directory: target/signpath-output
+
+      - name: Verify returned test signature and write bounded evidence
+        shell: pwsh
+        env:
+          SIGNPATH_CERTIFICATE_THUMBPRINT: ${{ vars.SIGNPATH_CERTIFICATE_THUMBPRINT }}
+          SIGNING_REQUEST_ID: ${{ steps.signpath.outputs.signing-request-id }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:SIGNING_REQUEST_ID)) {
+            throw "SignPath did not return a signing request identifier."
+          }
+          $returnedFiles = @(Get-ChildItem -LiteralPath "target\signpath-output" -Recurse -File)
+          if ($returnedFiles.Count -ne 1 -or $returnedFiles[0].Name -ne $env:EXPECTED_INSTALLER) {
+            throw "SignPath must return exactly one installer named $env:EXPECTED_INSTALLER."
+          }
+
+          $signature = Get-AuthenticodeSignature -LiteralPath $returnedFiles[0].FullName
+          $status = [string]$signature.Status
+          $forbiddenStatuses = @("NotSigned", "HashMismatch", "NotSupported", "Incompatible")
+          if ($forbiddenStatuses -contains $status) {
+            throw "SignPath returned an unacceptable Authenticode status: $status"
+          }
+          if ($null -eq $signature.SignerCertificate) {
+            throw "SignPath returned an installer without a signer certificate."
+          }
+          $actualThumbprint = ($signature.SignerCertificate.Thumbprint -replace '[^0-9A-Fa-f]', '').ToUpperInvariant()
+          $expectedThumbprint = ($env:SIGNPATH_CERTIFICATE_THUMBPRINT -replace '[^0-9A-Fa-f]', '').ToUpperInvariant()
+          if ($actualThumbprint -ne $expectedThumbprint) {
+            throw "SignPath returned an unexpected signer certificate."
+          }
+          if ($signature.SignerCertificate.Subject -ne $signature.SignerCertificate.Issuer) {
+            throw "The returned certificate is not the configured self-signed Free Trial certificate."
+          }
+
+          $signedHash = (Get-FileHash -LiteralPath $returnedFiles[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($signedHash -eq $env:EXPECTED_UNSIGNED_SHA256) {
+            throw "SignPath returned bytes identical to the unsigned input."
+          }
+
+          $finalDirectory = "target\signpath-final"
+          New-Item -ItemType Directory -Path $finalDirectory -Force | Out-Null
+          $finalInstaller = Join-Path $finalDirectory $env:EXPECTED_INSTALLER
+          Copy-Item -LiteralPath $returnedFiles[0].FullName -Destination $finalInstaller
+
+          $evidence = [ordered]@{
+            schema_version = 1
+            purpose = "signpath_free_trial_smoke_test_only"
+            repository = $env:GITHUB_REPOSITORY
+            workflow_source_sha = $env:GITHUB_SHA
+            workflow_run_id = [int64]$env:GITHUB_RUN_ID
+            workflow_run_attempt = [int]$env:GITHUB_RUN_ATTEMPT
+            source_run_id = [int64]$env:SOURCE_RUN_ID
+            source_artifact_id = [int64]$env:SOURCE_ARTIFACT_ID
+            source_artifact_name = $env:SOURCE_ARTIFACT_NAME
+            source_commit = $env:SOURCE_COMMIT
+            installer_name = $env:EXPECTED_INSTALLER
+            unsigned_sha256 = $env:EXPECTED_UNSIGNED_SHA256
+            signing_request_id = $env:SIGNING_REQUEST_ID
+            signature_status = $status
+            signer_subject = $signature.SignerCertificate.Subject
+            signer_issuer = $signature.SignerCertificate.Issuer
+            signer_thumbprint = $actualThumbprint
+            signed_sha256 = $signedHash
+            signed_size_bytes = [int64]$returnedFiles[0].Length
+            public_release_authorized = $false
+            candidate_authorized = $false
+            installed_after_signing = $false
+          }
+          $evidencePath = Join-Path $finalDirectory "signpath-free-trial-evidence.json"
+          $evidence | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $evidencePath -Encoding utf8NoBOM
+
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "## SignPath Free Trial smoke"
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ""
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "Test-only signature recorded; public release authorization remains **false**."
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ""
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "- Signature status: ``$status``"
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "- Signed SHA-256: ``$signedHash``"
+
+      - name: Upload short-lived Free Trial smoke result
+        uses: actions/upload-artifact@v4
+        with:
+          name: rho-signpath-free-trial-smoke-dev37-${{ github.run_id }}-${{ github.run_attempt }}
+          path: target/signpath-final
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7

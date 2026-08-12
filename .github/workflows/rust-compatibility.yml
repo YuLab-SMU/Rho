@@ -29,6 +29,7 @@ on:
       - ".github/workflows/rust-compatibility.yml"
       - ".github/workflows/candidate-build-draft.yml"
       - ".github/workflows/candidate-publish.yml"
+      - ".github/workflows/signpath-free-trial-smoke.yml"
       - ".github/workflows/windows-issue33-installed-acceptance.yml"
       - ".github/workflows/update-site-publish.yml"
       - "scripts/candidate-release.mjs"
@@ -36,11 +37,15 @@ on:
       - "scripts/test-rust-msrv-contract.mjs"
       - "scripts/test-installed-license-surface.mjs"
       - "scripts/test-signpath-readiness.mjs"
+      - "scripts/test-signpath-free-trial-smoke.mjs"
       - "scripts/windows-installed-focus-acceptance.mjs"
       - "scripts/test-windows-installed-focus-acceptance.mjs"
       - "docs/design/accepted-2026-07-25-about-and-update-check-design.md"
       - "docs/README.md"
       - "docs/plans/active-2026-08-11-signpath-application-readiness-spec.md"
+      - "docs/plans/active-2026-08-12-signpath-free-trial-smoke-spec.md"
+      - "docs/project/active-document-cross-review.md"
+      - "docs/release/active-0.4.0-dev.37-candidate-checklist.md"
   pull_request:
     branches: [main]
     paths:
@@ -69,6 +74,7 @@ on:
       - ".github/workflows/rust-compatibility.yml"
       - ".github/workflows/candidate-build-draft.yml"
       - ".github/workflows/candidate-publish.yml"
+      - ".github/workflows/signpath-free-trial-smoke.yml"
       - ".github/workflows/windows-issue33-installed-acceptance.yml"
       - ".github/workflows/update-site-publish.yml"
       - "scripts/candidate-release.mjs"
@@ -76,11 +82,15 @@ on:
       - "scripts/test-rust-msrv-contract.mjs"
       - "scripts/test-installed-license-surface.mjs"
       - "scripts/test-signpath-readiness.mjs"
+      - "scripts/test-signpath-free-trial-smoke.mjs"
       - "scripts/windows-installed-focus-acceptance.mjs"
       - "scripts/test-windows-installed-focus-acceptance.mjs"
       - "docs/design/accepted-2026-07-25-about-and-update-check-design.md"
       - "docs/README.md"
       - "docs/plans/active-2026-08-11-signpath-application-readiness-spec.md"
+      - "docs/plans/active-2026-08-12-signpath-free-trial-smoke-spec.md"
+      - "docs/project/active-document-cross-review.md"
+      - "docs/release/active-0.4.0-dev.37-candidate-checklist.md"
 
 permissions:
   contents: read
@@ -206,6 +216,8 @@ jobs:
           node scripts/generate-update-site.mjs --test true
           node scripts/test-signpath-readiness.mjs --self-test
           node scripts/test-signpath-readiness.mjs
+          node scripts/test-signpath-free-trial-smoke.mjs --self-test
+          node scripts/test-signpath-free-trial-smoke.mjs
 
       - name: Verify locked workspace at selected Rust version
         run: |

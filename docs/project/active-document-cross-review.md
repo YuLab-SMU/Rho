@@ -41,7 +41,8 @@ semantics.
 | --- | --- | --- | --- |
 | `project/active-development-governance.md` | active | required proposal-to-release development lifecycle, risk/test depth, review, versioning, and evidence rules | applies continuously to all non-trivial work |
 | `plans/active-2026-08-10-agpl-license-transition-spec.md` | active; LIC-1 and LIC-2 implementation, affected validation, UI/bundle review, exact-head hosted validation, and protected integration complete; exact candidate and installed distribution acceptance remain open | prospective `AGPL-3.0-only` source-license boundary, synchronized repository metadata, contribution terms, third-party exclusions, fixed installed resource copies, About legal notice, and transition gates | preserve the integrated license/resource boundary; SignPath readiness may reference but not redefine it; exact candidate and installed acceptance remain release-owned |
-| `plans/active-2026-08-11-signpath-application-readiness-spec.md` | active; SP-READY1 implementation, exact-head/main hosted matrices, PR #45/#46 integration, linked attribution, public uninstall guidance, live policy deployment, private reporting, and no-bypass default-branch ruleset complete; owner MFA audit, Foundation application/decision, approved-project GitHub App configuration, and production signing open | manual-only update admission, public privacy/security/code-signing policies, policy links and uninstall guidance, CODEOWNERS, and deterministic readiness enforcement | organization owner verifies signing-role MFA; submit and receive the Foundation decision; only after accepted project provisioning configure the GitHub App/trusted build with real identifiers; do not create guessed SignPath policy/workflow configuration, construct a candidate, or claim Windows signing before those gates pass |
+| `plans/active-2026-08-11-signpath-application-readiness-spec.md` | active; SP-READY1 implementation, exact-head/main hosted matrices, PR #45/#46 integration, linked attribution, public uninstall guidance, live policy deployment, private reporting, and no-bypass default-branch ruleset complete; a real Free Trial organization/project/test policy now exists; owner MFA audit, Foundation decision, approved-project GitHub App configuration, and production signing remain open | manual-only update admission, public privacy/security/code-signing policies, policy links and uninstall guidance, CODEOWNERS, and deterministic readiness enforcement | preserve completed readiness; FT-SIGN1 may use only its isolated test lane; organization owner separately closes MFA/Foundation/production gates; do not claim Free Trial evidence as public trust or release authority |
+| `plans/active-2026-08-12-signpath-free-trial-smoke-spec.md` | active; FT-SIGN1 explicitly authorized; source implementation, protected integration, and one hosted request open | one manual read-only-permission workflow that rewraps the exact accepted Issue #33 unsigned installer, submits it to the configured Free Trial test policy, validates returned signer/bytes, and uploads a short-lived test-only artifact | keep candidate/manual-publish workflows unchanged; exact source and variable/secret interfaces fail closed; merge through protected review, then run exactly one hosted smoke and stop for evidence reconciliation |
 | `project/active-development-roadmap.md` | active | milestone order and acceptance gates | continuously maintained from accepted evidence |
 | `plans/active-2026-08-10-rust-msrv-build-contract.md` | active integrated build contract; exact PR #29 head `f022d2c` passed all four jobs in run `31509554882`; merge `9e0b36b` passed all four exact-main jobs in run `31510716448`; Issue #28 closed | Rust 1.88 workspace MSRV metadata, Resolver 3, non-packaging stable/MSRV native CI, locked candidate Rust validation, and deterministic policy enforcement | enforce continuously; any dependency, target, runner, packaging, or MSRV change requires reviewed scope; no candidate or release authority |
 | `plans/active-2026-08-05-macos-arm64-support-spec.md` | active broader platform plan; MAC1-MAC5 complete for published Apple Silicon candidate `0.4.0-dev.24`; protected Release and live development manifest pass without asset replacement | Apple Silicon macOS 14+ platform adapters, Ark/R integration, Keychain extension, additive macOS update artifact, signed DMG handoff, repository-bound rehearsal lane, async notarization orchestration, and MAC5 publication admission | preserve immutable release evidence; macOS x64 and Linux x64 remain open milestone scope |
@@ -230,6 +231,19 @@ unsigned-Windows statement. PR #46 integration/deployment is accepted. The
 owner MFA audit, Foundation decision, approved-project GitHub App/trusted-build
 configuration, real identifiers, production signing, candidate, and release
 gates remain external or later-owned facts.
+
+The subsequent external audit found a real SignPath Free Trial organization,
+valid `rho` project, self-signed test certificate, valid `test-signing` policy,
+valid installer artifact configuration, submitter API token, and protected
+repository secret. That corrects the stale claim that no SignPath project or
+identifiers existed, but it does not establish Foundation acceptance, public
+Windows trust, or production-signing readiness. The owner explicitly
+authorized FT-SIGN1 to validate only this existing test transport. Its owning
+contract isolates one exact unsigned Issue #33 artifact from candidate and
+manual-publish workflows, uses repository variables rather than public
+identifier values, writes no Release/update state, and stops after one hosted
+request. This resolves the conflict in PR #51, whose older design coupled the
+test certificate directly to publication lanes and therefore must not merge.
 
 ### Navigation and layout state
 

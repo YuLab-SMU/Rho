@@ -17,7 +17,9 @@
 /scripts/candidate-release.mjs @GuangchuangYu @xiayh17
 /scripts/generate-update-site.mjs @GuangchuangYu @xiayh17
 /scripts/test-signpath-readiness.mjs @GuangchuangYu @xiayh17
+/scripts/test-signpath-free-trial-smoke.mjs @GuangchuangYu @xiayh17
 /scripts/windows-release-evidence.ps1 @GuangchuangYu @xiayh17
 
 /docs/plans/active-2026-08-11-signpath-application-readiness-spec.md @GuangchuangYu @xiayh17
+/docs/plans/active-2026-08-12-signpath-free-trial-smoke-spec.md @GuangchuangYu @xiayh17
 /docs/release/ @GuangchuangYu @xiayh17

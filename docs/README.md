@@ -47,6 +47,7 @@ changes.
 - `0.2.0` hardening contract: [`release/active-0.2.0-release-hardening-spec.md`](release/active-0.2.0-release-hardening-spec.md)
 - Accepted About and manual update-check V1: [`design/accepted-2026-07-25-about-and-update-check-design.md`](design/accepted-2026-07-25-about-and-update-check-design.md)
 - Active SignPath application readiness: [`plans/active-2026-08-11-signpath-application-readiness-spec.md`](plans/active-2026-08-11-signpath-application-readiness-spec.md)
+- Active SignPath Free Trial Windows smoke: [`plans/active-2026-08-12-signpath-free-trial-smoke-spec.md`](plans/active-2026-08-12-signpath-free-trial-smoke-spec.md)
 - Active AGPL transition and installed-license gate: [`plans/active-2026-08-10-agpl-license-transition-spec.md`](plans/active-2026-08-10-agpl-license-transition-spec.md)
 - Active `0.4.0-dev.37` source/Issue #33 Windows acceptance gate: [`release/active-0.4.0-dev.37-candidate-checklist.md`](release/active-0.4.0-dev.37-candidate-checklist.md)
 - Proposed implemented-baseline hardening: [`plans/proposed-2026-07-26-implemented-baseline-hardening-plan.md`](plans/proposed-2026-07-26-implemented-baseline-hardening-plan.md)

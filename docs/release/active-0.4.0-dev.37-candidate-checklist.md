@@ -4,9 +4,9 @@ Status: active accepted Issue #33 source contract; exact protected-main source
 run `31644418691` and clean-profile installed Windows run `31644429787` pass at
 `7ab861b01a36313150988b1e2fa8fdc2056325d9`; all six scenarios, exact installed
 identity/runtime, screenshot, and fail-closed cleanup are recorded; Issue #33
-closure is GO; SignPath, production Windows signing, exact cross-platform
-candidate, human installed-candidate acceptance, MAC5, publication, and updater
-mutation remain open
+closure is GO; FT-SIGN1 Free Trial smoke integration/request, production
+Windows signing, exact cross-platform candidate, human installed-candidate
+acceptance, MAC5, publication, and updater mutation remain open
 
 Date: 2026-08-12
 
@@ -29,9 +29,16 @@ integration, and Issue closure only after all six scenarios pass. It does not
 authorize SignPath configuration, public signing, release-candidate
 construction, MAC5, publication, or updater mutation.
 
-SP-READY1 SignPath repository readiness carries forward unchanged. The owner MFA audit,
-external SignPath application/GitHub App configuration, production two-stage
-Windows signing, and signed-candidate evidence remain open.
+SP-READY1 SignPath repository readiness carries forward. A real Free Trial
+organization/project/test policy now exists, and the owner's instruction
+`继续，使用Free trial subscription` authorizes only FT-SIGN1 under
+`docs/plans/active-2026-08-12-signpath-free-trial-smoke-spec.md`: one isolated
+manual request using this checklist's exact unsigned internal-review artifact.
+Its bounded evidence must keep `public_release_authorized: false`; the result
+cannot become a candidate or Release asset. Owner MFA audit,
+Foundation acceptance, production GitHub App/trusted-build configuration,
+production two-stage Windows signing, and signed-candidate evidence remain
+open.
 
 ## Exact Identity
 
@@ -155,5 +162,7 @@ candidate gate.
 ## Current Decision
 
 `GO` to close Issue #33 as an exact-source installed product defect.
-`NO-GO` for SignPath production signing, exact candidate construction, human
-installed-candidate acceptance, MAC5, publication, and updater mutation.
+`GO` only for the isolated FT-SIGN1 Free Trial smoke request after its source
+package passes protected integration. `NO-GO` for SignPath production signing,
+exact candidate construction, human installed-candidate acceptance, MAC5,
+publication, and updater mutation.

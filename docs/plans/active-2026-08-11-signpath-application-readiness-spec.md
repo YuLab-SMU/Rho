@@ -3,9 +3,10 @@
 Status: active; SP-READY1 repository-readiness package, exact-head and merged-
 main hosted validation, upstream integration, linked SignPath attribution,
 public uninstall guidance, live policy deployment, private reporting, and
-default-branch ruleset complete; organization-owner MFA audit, Foundation
-application/decision, approved-project GitHub App configuration, and production
-signing remain open
+default-branch ruleset complete; a real Free Trial project/test policy exists
+and FT-SIGN1 owns one isolated hosted smoke request; organization-owner MFA
+audit, Foundation application/decision, approved-project GitHub App
+configuration, and production signing remain open
 
 Date: 2026-08-11 EDT / 2026-08-12 UTC
 Authorization: after directing the next version to be merged and published,
@@ -18,6 +19,21 @@ Change class: D4 public policy, release supply chain, and application-readiness
 work; the update behavior correction is D3 network/privacy behavior
 Risk: R4 overall; R3 for user-initiated network admission
 Work package: SP-READY1
+
+## 2026-08-12 Free Trial Smoke Amendment
+
+The project owner authorized the bounded FT-SIGN1 work package in
+`active-2026-08-12-signpath-free-trial-smoke-spec.md` after the existing
+SignPath Free Trial organization, `rho` project, self-signed test certificate,
+test policy, artifact configuration, API token, and protected repository secret
+were verified. FT-SIGN1 may protected-integrate one isolated manual workflow
+and submit one test-only installer for signing after integration.
+
+This amendment does not satisfy or replace the Foundation application,
+organization-owner MFA, GitHub App/trusted-build, production two-stage signing,
+candidate, installed-candidate, MAC5, publication, or updater gates. The Free
+Trial workflow must remain separate from candidate and manual-publish workflows
+and must not expose its returned bytes through a Release or update site.
 
 ## Problem And Current Evidence
 
@@ -266,8 +282,13 @@ repository administrator. `GuangchuangYu` is the organization owner and a Rho
 repository administrator. GitHub rejected the authenticated member's
 organization-wide `2fa_disabled` audit because only organization owners may
 use that filter, so MFA compliance for every future signing role remains an
-explicit owner-owned gate rather than a claimed pass. No SignPath application
-or GitHub App installation/configuration has occurred.
+explicit owner-owned gate rather than a claimed pass. The later read-only
+external audit confirmed an active Free Trial organization, valid `rho`
+project, self-signed `Rho Test Signing` certificate, valid `test-signing`
+policy, valid installer artifact configuration, submitter API token, and
+protected `SIGNPATH_API_TOKEN` repository secret. No Foundation acceptance,
+production certificate/policy, GitHub App/trusted-build link, or successful
+signing request is claimed by that configuration evidence.
 
 The 2026-08-12 application-form audit found that the public attribution named
 SignPath.io and SignPath Foundation without the official links required by the
@@ -328,16 +349,14 @@ package versions and store schema remain fixed.
 
 The release decision remains `NO-GO`. SP-READY1 PR-gated integration, private
 vulnerability reporting, default-branch review enforcement, and public policy
-deployment pass. The mandatory stop is now external readiness: obtain the
-organization-owner signing-role MFA verification, submit the SignPath
-Foundation application, and receive its decision. Only after acceptance and
-provisioning of a real SignPath organization/project may the organization owner
-install/configure the SignPath GitHub App, add the predefined GitHub.com trusted
-build system, link it to the actual project, and supply the real organization,
-project, policy, and artifact-configuration identifiers. Production two-stage
-signing is a later D4/R4 package using those identifiers. Only a new exact
-signed candidate with two-platform installed acceptance and explicit MAC5 GO
-can proceed to publication.
+deployment pass. FT-SIGN1 may now validate the existing Free Trial transport
+and test certificate through one isolated, non-release request. Production
+readiness still requires the organization-owner signing-role MFA verification,
+Foundation application and decision, then any required production GitHub
+App/trusted-build and certificate/policy configuration. Production two-stage
+signing is a later D4/R4 package. Only a new exact production-signed candidate
+with two-platform installed acceptance and explicit MAC5 GO can proceed to
+publication.
 
 ## SP-READY1 Definition Of Done
 
