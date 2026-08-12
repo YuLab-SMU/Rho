@@ -6,6 +6,9 @@ param(
     [string]$EvidencePath = "target\release-evidence\rho-0.2-release.json",
     [switch]$RequireCleanWorktree,
     [switch]$BuildInstaller,
+    [string]$InstallerPath,
+    [switch]$RequireAuthenticodeSignature,
+    [switch]$SkipEvidence,
     [switch]$SmokeWorkspace,
     [switch]$SmokeAgent
 )
@@ -17,6 +20,7 @@ $startedAt = [DateTimeOffset]::UtcNow
 $checks = [System.Collections.Generic.List[object]]::new()
 $artifact = $null
 $failure = $null
+$expectedSignPathTrialThumbprint = "74C895CBF9759AE1041A61F54F3B3BC6B0446511"
 $workspaceContent = Get-Content -LiteralPath (Join-Path $repo "Cargo.toml") -Raw
 $versionMatch = [regex]::Match(
     $workspaceContent,
@@ -120,6 +124,25 @@ function Invoke-SmokeCheck {
     }
 }
 
+function Get-InstallerAuthenticodeEvidence {
+    param([string]$Path)
+
+    $signature = Get-AuthenticodeSignature -LiteralPath $Path
+    if (-not $signature.SignerCertificate -or
+        $signature.Status -eq [System.Management.Automation.SignatureStatus]::NotSigned) {
+        throw "Installer is missing an Authenticode signer certificate."
+    }
+    $thumbprint = $signature.SignerCertificate.Thumbprint.Replace(" ", "").ToUpperInvariant()
+    if ($thumbprint -ne $expectedSignPathTrialThumbprint) {
+        throw "Installer signer thumbprint does not match the configured Rho Test Signing certificate."
+    }
+    return [ordered]@{
+        status = $signature.Status.ToString()
+        signer_subject = $signature.SignerCertificate.Subject
+        signer_thumbprint = $thumbprint
+    }
+}
+
 function Write-Evidence {
     $resolvedEvidencePath = if ([System.IO.Path]::IsPathRooted($EvidencePath)) {
         $EvidencePath
@@ -163,6 +186,13 @@ function Write-Evidence {
 
 Push-Location $repo
 try {
+    if ($BuildInstaller -and $InstallerPath) {
+        throw "Use either -BuildInstaller or -InstallerPath, not both."
+    }
+    if ($RequireAuthenticodeSignature -and -not ($BuildInstaller -or $InstallerPath)) {
+        throw "-RequireAuthenticodeSignature requires -BuildInstaller or -InstallerPath."
+    }
+
     if ($BuildInstaller) {
         Invoke-RecordedCheck "Ark runtime resources" "powershell.exe" @(
             "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
@@ -180,9 +210,11 @@ try {
     Invoke-RecordedCheck "Rust formatting" "cargo.exe" @("fmt", "--all", "--", "--check")
     Invoke-RecordedCheck "Rust workspace tests" "cargo.exe" @("test", "--workspace")
     Invoke-RecordedCheck "frontend JavaScript syntax" "node.exe" @("--check", "desktop/dist/app.js")
+    Invoke-RecordedCheck "Windows SignPath workflow contract" "node.exe" @((Join-Path $PSScriptRoot "test-windows-signpath-contract.mjs"))
     Invoke-RecordedCheck "rho.bridge tests" "Rscript.exe" @("-e", "testthat::test_local('r/rho.bridge', reporter = 'summary')")
     Invoke-RecordedCheck "rho.agent tests" "Rscript.exe" @("-e", "testthat::test_local('r/rho.agent', reporter = 'summary')")
 
+    $installer = $null
     if ($BuildInstaller) {
         Invoke-RecordedCheck "Windows installer build" "powershell.exe" @(
             "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
@@ -193,6 +225,27 @@ try {
             Select-Object -First 1
         if (-not $installer) {
             throw "Installer was not found after the build completed."
+        }
+    }
+    elseif ($InstallerPath) {
+        $resolvedInstallerPath = (Resolve-Path -LiteralPath $InstallerPath -ErrorAction Stop).Path
+        $installer = Get-Item -LiteralPath $resolvedInstallerPath
+        if (-not $installer.PSIsContainer -and -not $installer.LinkType) {
+            # The staged signed installer is an ordinary file; the explicit
+            # branch keeps external directory/symlink substitution fail-closed.
+        }
+        else {
+            throw "InstallerPath must resolve to a non-link file."
+        }
+    }
+
+    if ($installer) {
+        if ($RequireAuthenticodeSignature) {
+            $expectedInstallerName = "Rho_$($applicationVersion)_x64-setup.exe"
+            if ($installer.Name -ne $expectedInstallerName) {
+                throw "Expected signed installer $expectedInstallerName, received $($installer.Name)."
+            }
+            $authenticode = Get-InstallerAuthenticodeEvidence $installer.FullName
         }
         $hash = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
         $hashPath = "$($installer.FullName).sha256"
@@ -207,6 +260,7 @@ try {
             size_bytes = $installer.Length
             sha256 = $hash
             hash_path = $hashPath
+            authenticode = $authenticode
         }
         if ($env:GITHUB_OUTPUT) {
             Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "installer_path=$($installer.FullName)"
@@ -236,5 +290,7 @@ catch {
 }
 finally {
     Pop-Location
-    Write-Evidence
+    if (-not $SkipEvidence) {
+        Write-Evidence
+    }
 }

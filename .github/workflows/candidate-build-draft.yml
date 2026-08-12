@@ -87,6 +87,7 @@ jobs:
     needs: identity
     runs-on: windows-latest
     permissions:
+      actions: read
       contents: read
     steps:
       - name: Check out immutable candidate commit
@@ -170,6 +171,61 @@ jobs:
           if ($installer.Count -ne 1 -or $installer[0].Name -ne $expected) { throw "Expected exactly $expected." }
           New-Item -ItemType Directory -Path "target\candidate" -Force | Out-Null
           Copy-Item -LiteralPath $installer[0].FullName -Destination (Join-Path "target\candidate" $expected)
+
+      - name: Upload unsigned Windows installer for SignPath
+        id: upload_unsigned_installer
+        if: needs.identity.outputs.build_mode == 'candidate' && github.repository == 'YuLab-SMU/Rho'
+        uses: actions/upload-artifact@v4
+        with:
+          name: signpath-unsigned-rho-${{ needs.identity.outputs.version }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: target/candidate/Rho_${{ needs.identity.outputs.version }}_x64-setup.exe
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Sign Windows installer with the configured SignPath trial policy
+        id: signpath
+        if: needs.identity.outputs.build_mode == 'candidate' && github.repository == 'YuLab-SMU/Rho'
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: 0b1b9db7-5b44-46d3-abff-faaae8ad587e
+          project-slug: rho
+          signing-policy-slug: test-signing
+          artifact-configuration-slug: github-actions-nsis-installer
+          github-artifact-id: ${{ steps.upload_unsigned_installer.outputs.artifact-id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 1800
+          output-artifact-directory: target/signpath-signed
+
+      - name: Stage exactly one returned self-signed installer
+        if: needs.identity.outputs.build_mode == 'candidate' && github.repository == 'YuLab-SMU/Rho'
+        shell: pwsh
+        env:
+          CANDIDATE_VERSION: ${{ needs.identity.outputs.version }}
+        run: |
+          $expected = "Rho_$($env:CANDIDATE_VERSION)_x64-setup.exe"
+          $matches = @(Get-ChildItem -LiteralPath "target\signpath-signed" -Recurse -File -Filter $expected)
+          if ($matches.Count -ne 1) { throw "Expected exactly one SignPath-returned $expected, found $($matches.Count)." }
+          $signature = Get-AuthenticodeSignature -LiteralPath $matches[0].FullName
+          if (-not $signature.SignerCertificate -or $signature.Status -eq [System.Management.Automation.SignatureStatus]::NotSigned) {
+            throw "SignPath result is missing an Authenticode signer certificate."
+          }
+          $thumbprint = $signature.SignerCertificate.Thumbprint.Replace(" ", "").ToUpperInvariant()
+          if ($thumbprint -ne "74C895CBF9759AE1041A61F54F3B3BC6B0446511") {
+            throw "SignPath result signer does not match the configured Rho Test Signing certificate."
+          }
+          Copy-Item -LiteralPath $matches[0].FullName -Destination (Join-Path "target\candidate" $expected) -Force
+          $summary = @(
+            "## Windows SignPath trial signature",
+            "",
+            "- Artifact: $expected",
+            "- Certificate subject: $($signature.SignerCertificate.Subject)",
+            "- Certificate thumbprint: $thumbprint",
+            "- Authenticode status: $($signature.Status)",
+            "- Trust note: self-signed Rho Test Signing; this status is not a public Windows or SmartScreen trust claim."
+          ) -join [Environment]::NewLine
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value $summary
 
       - name: Create Windows platform evidence
         shell: pwsh

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: Git ref to build and release
+        description: Current upstream default-branch ref to build and release
         required: true
         default: main
       release_tag:
@@ -30,6 +30,7 @@ on:
         default: false
 
 permissions:
+  actions: read
   contents: write
 
 concurrency:
@@ -40,6 +41,7 @@ jobs:
   publish-windows:
     name: Build and publish Windows installer
     runs-on: windows-latest
+    if: github.repository == 'YuLab-SMU/Rho'
 
     steps:
       - name: Check out target ref
@@ -47,13 +49,20 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Record checked-out build identity
         shell: pwsh
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           $commit = (& git rev-parse HEAD).Trim()
           if (-not $commit) {
             throw "Could not resolve the checked-out build commit."
+          }
+          $defaultCommit = (& git rev-parse "origin/$env:DEFAULT_BRANCH").Trim()
+          if ($commit -ne $defaultCommit) {
+            throw "Manual release must use current upstream default-branch head $defaultCommit, received $commit."
           }
           Add-Content -LiteralPath $env:GITHUB_ENV -Value "RHO_BUILD_COMMIT=$commit"
 
@@ -133,8 +142,8 @@ jobs:
             throw "Final releases require both Workspace and Agent smoke tests."
           }
 
-      - name: Verify source, build installer and run release smoke tests
-        id: release_checks
+      - name: Verify source, build unsigned installer and run release smoke tests
+        id: pre_sign_checks
         shell: pwsh
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
@@ -149,8 +158,78 @@ jobs:
             EvidencePath = "target\release-evidence\rho-0.2-release.json"
             RequireCleanWorktree = $true
             BuildInstaller = $true
+            SkipEvidence = $true
             SmokeWorkspace = [System.Convert]::ToBoolean("${{ inputs.run_smoke_test }}")
             SmokeAgent = $runAgentSmoke
+          }
+          ./scripts/invoke-0.2-release-checks.ps1 @parameters
+
+      - name: Upload unsigned Windows installer for SignPath
+        id: upload_unsigned_installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: signpath-unsigned-rho-manual-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.pre_sign_checks.outputs.installer_path }}
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Sign Windows installer with the configured SignPath trial policy
+        id: signpath
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: 0b1b9db7-5b44-46d3-abff-faaae8ad587e
+          project-slug: rho
+          signing-policy-slug: test-signing
+          artifact-configuration-slug: github-actions-nsis-installer
+          github-artifact-id: ${{ steps.upload_unsigned_installer.outputs.artifact-id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 1800
+          output-artifact-directory: target/signpath-signed
+
+      - name: Stage exactly one returned self-signed installer
+        id: stage_signed_installer
+        shell: pwsh
+        run: |
+          $expected = [System.IO.Path]::GetFileName("${{ steps.pre_sign_checks.outputs.installer_path }}")
+          $matches = @(Get-ChildItem -LiteralPath "target\signpath-signed" -Recurse -File -Filter $expected)
+          if ($matches.Count -ne 1) { throw "Expected exactly one SignPath-returned $expected, found $($matches.Count)." }
+          $signature = Get-AuthenticodeSignature -LiteralPath $matches[0].FullName
+          if (-not $signature.SignerCertificate -or $signature.Status -eq [System.Management.Automation.SignatureStatus]::NotSigned) {
+            throw "SignPath result is missing an Authenticode signer certificate."
+          }
+          $thumbprint = $signature.SignerCertificate.Thumbprint.Replace(" ", "").ToUpperInvariant()
+          if ($thumbprint -ne "74C895CBF9759AE1041A61F54F3B3BC6B0446511") {
+            throw "SignPath result signer does not match the configured Rho Test Signing certificate."
+          }
+          $staging = Join-Path $PWD "target\signpath-final"
+          New-Item -ItemType Directory -Path $staging -Force | Out-Null
+          $staged = Join-Path $staging $expected
+          Copy-Item -LiteralPath $matches[0].FullName -Destination $staged -Force
+          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "installer_path=$staged"
+          $summary = @(
+            "## Windows SignPath trial signature",
+            "",
+            "- Artifact: $expected",
+            "- Certificate subject: $($signature.SignerCertificate.Subject)",
+            "- Certificate thumbprint: $thumbprint",
+            "- Authenticode status: $($signature.Status)",
+            "- Trust note: self-signed Rho Test Signing; this status is not a public Windows or SmartScreen trust claim."
+          ) -join [Environment]::NewLine
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value $summary
+
+      - name: Record release evidence from the returned signed installer
+        id: release_checks
+        shell: pwsh
+        run: |
+          $parameters = @{
+            ReleaseTag = "${{ inputs.release_tag }}"
+            Prerelease = "${{ inputs.prerelease }}"
+            EvidencePath = "target\release-evidence\rho-0.2-release.json"
+            RequireCleanWorktree = $true
+            InstallerPath = "${{ steps.stage_signed_installer.outputs.installer_path }}"
+            RequireAuthenticodeSignature = $true
           }
           ./scripts/invoke-0.2-release-checks.ps1 @parameters
 
@@ -176,39 +255,31 @@ jobs:
               `- Installer: \`${process.env.INSTALLER_NAME}\``,
               `- SHA-256: \`${process.env.INSTALLER_SHA256}\``,
             ].join("\n");
-            let release;
+            let existingRelease;
             try {
-              release = await github.rest.repos.getReleaseByTag({
+              existingRelease = await github.rest.repos.getReleaseByTag({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 tag: process.env.RELEASE_TAG,
-              });
-              release = await github.rest.repos.updateRelease({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                release_id: release.data.id,
-                tag_name: process.env.RELEASE_TAG,
-                target_commitish: process.env.RELEASE_TARGET,
-                name: process.env.RELEASE_NAME,
-                body,
-                draft: false,
-                prerelease,
               });
             } catch (error) {
               if (error.status !== 404) {
                 throw error;
               }
-              release = await github.rest.repos.createRelease({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                tag_name: process.env.RELEASE_TAG,
-                target_commitish: process.env.RELEASE_TARGET,
-                name: process.env.RELEASE_NAME,
-                body,
-                draft: false,
-                prerelease,
-              });
             }
+            if (existingRelease) {
+              throw new Error(`Release tag ${process.env.RELEASE_TAG} already exists; release assets are immutable.`);
+            }
+            const release = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: process.env.RELEASE_TAG,
+              target_commitish: process.env.RELEASE_TARGET,
+              name: process.env.RELEASE_NAME,
+              body,
+              draft: false,
+              prerelease,
+            });
             core.setOutput("release_id", String(release.data.id));
 
       - name: Upload release assets
@@ -224,23 +295,9 @@ jobs:
             const fs = require("fs");
             const path = require("path");
             const releaseId = Number(process.env.RELEASE_ID);
-            const release = await github.rest.repos.getRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              release_id: releaseId,
-            });
-            const existingAssets = release.data.assets || [];
             const assets = [process.env.INSTALLER_PATH, process.env.HASH_PATH, process.env.EVIDENCE_PATH];
             for (const assetPath of assets) {
               const assetName = path.basename(assetPath);
-              const existing = existingAssets.find((asset) => asset.name === assetName);
-              if (existing) {
-                await github.rest.repos.deleteReleaseAsset({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  asset_id: existing.id,
-                });
-              }
               const stat = fs.statSync(assetPath);
               const data = fs.readFileSync(assetPath);
               await github.rest.repos.uploadReleaseAsset({

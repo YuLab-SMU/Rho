@@ -2,115 +2,100 @@
 
 Last updated: 2026-08-12
 
-Free code signing provided by [SignPath.io](https://about.signpath.io),
-certificate by [SignPath Foundation](https://signpath.org).
+Rho's current Windows signing path uses a self-signed test certificate,
+`Rho Test Signing`, managed through [SignPath.io](https://about.signpath.io).
+It is not a SignPath Foundation certificate and is not a publicly trusted
+Windows publisher identity.
 
 Rho publishes its source at <https://github.com/YuLab-SMU/Rho> under
-`AGPL-3.0-only`. This policy defines which Rho artifacts may be signed, who may
-request and approve signing, how signed bytes are verified, and how a signing
-incident is handled. It does not claim that SignPath Foundation has accepted
-the project before that external approval is recorded.
+`AGPL-3.0-only`. This policy defines the narrow trial signing scope, the
+verification required before release assets are created, and incident handling.
+It never treats a present self-signed signature as Windows or SmartScreen trust.
 
 ## Current platform status
 
 - Apple Silicon macOS candidate packages use Apple's Developer ID Application
   signing and notarization path. That Apple trust chain is independent of
   SignPath.
-- Windows downloads are currently not Authenticode-signed. Local and historical
-  unsigned Windows packages are development/review artifacts and must not be
-  represented as SignPath-signed or public-release-ready.
-- If the SignPath Foundation application and production pipeline are approved,
-  Windows will show the approved SignPath Foundation certificate identity as
-  the publisher. A valid signature protects integrity and publisher identity;
-  it does not guarantee immediate Microsoft SmartScreen reputation.
-
-The exact status of a release is established by that release's evidence and
-checksums, not by this policy alone.
+- Historical Windows packages are unsigned. A future Windows installer signed
+  by the configured trial workflow carries a self-signed certificate and may
+  still show a Windows/SmartScreen warning. Exact release evidence, not this
+  policy, establishes the status of any specific artifact.
+- A self-signed Authenticode signature can bind the returned installer to the
+  configured certificate, but Windows does not trust that certificate by
+  default. It is not a verified publisher claim and does not establish
+  Microsoft SmartScreen reputation.
 
 ## Signing scope
 
-Only binaries built and owned by the Rho project are in the planned Windows
-signing scope:
-
-1. the Rho application executable, `rho-desktop.exe`; and
-2. the final Rho NSIS installer wrapper that contains the already signed Rho
-   executable.
+Only the final Rho NSIS installer (`Rho_*_x64-setup.exe`) is in scope for the
+current trial profile. The installer contains an unsigned `rho-desktop.exe`;
+this is deliberately a single-stage installer signature, not a claim that the
+installed application executable is separately signed.
 
 Rho does not use its SignPath certificate to re-sign third-party upstream
 binaries. This exclusion includes Ark, Jet, WebView2Loader, operating-system
 components, R, R packages, and other dependency payloads. Those components
 retain their upstream licenses, publishers, signatures, and notices.
 
-## Trusted build and approval
+## Trial build and signer controls
 
-Authoritative production signing requests must originate from the upstream
-`YuLab-SMU/Rho` default branch on GitHub-hosted runners. A request binds the
-exact source commit, workflow run and attempt, unsigned artifact identity,
-SignPath policy/configuration, signed result, and final SHA-256 evidence.
+Only upstream `YuLab-SMU/Rho` candidate and manual-release workflow runs may
+request the trial signature. The secret interface is the protected GitHub
+Actions repository secret `SIGNPATH_API_TOKEN`; its value is never stored in
+the repository, evidence, artifacts, or logs. The certificate private key
+remains in SignPath's protected signing infrastructure and is not exported to
+a runner or repository.
 
-Pull request, fork, and rehearsal paths fail closed and cannot use the
-production signing policy. A workflow rerun, expired request, or artifact from
-another run cannot substitute for the current candidate. Missing token,
-organization, project, policy, or artifact-configuration data stops the
-workflow before publication. Legacy/manual publication cannot bypass the same
-signed-candidate gate.
+Candidate and manual paths bind the exact source commit, workflow run/attempt,
+unsigned GitHub Actions artifact, configured project/policy/artifact
+configuration, returned installer, signer subject/thumbprint/status, and final
+SHA-256. Pull request, fork, and rehearsal paths receive no SignPath token and
+fail closed; they cannot use the signing action. Missing configuration, an action failure,
+zero/multiple returned installers, a mismatched installer name, a missing
+signer certificate, or `NotSigned` fails before candidate evidence, a draft,
+or a Release is created.
 
-SignPath requires manual approval for every signing request. Rho's intended
-roles are:
+The current SignPath trial policy has no trusted-build/origin verification and
+does not require separate manual approval. It is a constrained test policy;
+it must not be described as the role-separated Foundation approval process.
+Sensitive workflow, policy, and ownership files remain assigned through
+`.github/CODEOWNERS` and subject to the default-branch review rules.
 
-- **Authors and Reviewers:**
-  [YuLab-SMU organization members](https://github.com/orgs/YuLab-SMU/people);
-- **Approvers:**
-  [YuLab-SMU organization owners](https://github.com/orgs/YuLab-SMU/people?query=role%3Aowner).
+## Trial signing and verification procedure
 
-Every person granted a signing-team role must use multi-factor authentication
-(MFA). Authors do not approve their own request. Signing credentials and API
-tokens belong only in protected encrypted secret storage; the certificate
-private key remains in SignPath's protected signing infrastructure and is not
-exported to the repository or runner.
+1. Build and smoke-test the exact Windows source, then require exactly one
+   versioned NSIS installer.
+2. Upload only that installer as a run-scoped Actions artifact and submit it to
+   SignPath with the explicit trial project, policy, and ZIP artifact-
+   configuration identifiers.
+3. Wait for SignPath, require exactly one returned installer with the same
+   expected basename, and stage only that returned file.
+4. Run `Get-AuthenticodeSignature` over the staged bytes. A missing signer or
+   `NotSigned` result fails closed. The returned status is recorded, but this
+   self-signed profile intentionally does **not** require a trusted `Valid`
+   chain or a timestamp claim it cannot prove.
+5. Generate the checksum and evidence from the staged returned bytes only; the
+   release asset, if separately approved, is that same file.
 
-Sensitive workflow, policy, and ownership files are assigned through
-`.github/CODEOWNERS` and must be enforced by the default-branch repository
-rules. The repository file alone is not evidence that those rules are active.
-
-## Two-stage Windows procedure
-
-NSIS cannot be treated as though signing only its outer wrapper also signs the
-installed program. The production sequence is therefore:
-
-1. build `rho-desktop.exe` without bundling an installer;
-2. submit that exact executable to SignPath, obtain manual approval, download
-   the signed result, and verify it;
-3. create the NSIS installer from that verified signed executable;
-4. submit the exact installer to SignPath, obtain manual approval, download the
-   signed result, and verify it; and
-5. install to an isolated location and verify that the installed
-   `rho-desktop.exe` is the expected signed payload before computing and
-   publishing final artifact hashes.
-
-Verification is fail-closed and includes Windows Authenticode validity, the
-approved SignPath Foundation publisher identity, an RFC 3161 timestamp, the
-installed payload signature, artifact names and sizes, and SHA-256 values over
-the final signed bytes. Signing changes bytes, so a pre-signing hash can never
-serve as the released artifact hash.
-
-The production workflow is implemented only after real SignPath organization,
-project, signing-policy, and binary/installer artifact-configuration identifiers
-exist. Placeholder or guessed identifiers are not accepted configuration.
+Signing changes bytes, so an unsigned pre-submission hash cannot serve as the
+released artifact hash. The retained manual workflow enforces the same
+post-signing stage before it creates a GitHub Release.
 
 ## Release and incident response
 
-A signed artifact is still only a candidate. Public publication requires the
-repository's exact-candidate checks, clean-install and core-workflow acceptance,
-installed-payload verification, uninstall acceptance, macOS trust evidence,
-and explicit release GO for the same immutable bytes.
+A self-signed installer is still only a candidate. Public publication requires
+the repository's exact-candidate checks, clean-install and core-workflow
+acceptance, uninstall acceptance, macOS trust evidence, and explicit release
+GO for the same immutable bytes. It does not become publicly trusted merely
+because it contains `Rho Test Signing`.
 
-If a key, token, policy, trusted build, approval, artifact, or published
-signature may be compromised or incorrect, maintainers must stop new signing
-and publication, preserve bounded audit evidence, remove affected releases and
-update entries, rotate/revoke credentials or certificates when appropriate,
-contact SignPath support, and publish corrected incident information. Existing
-release assets are never silently overwritten or relabelled.
+If a token, certificate, policy, artifact, or returned signature may be
+compromised or incorrect, maintainers must stop new signing and publication,
+preserve bounded non-secret evidence, remove affected releases and update
+entries, rotate/revoke credentials or certificates with SignPath as
+appropriate, and publish corrected incident information. Existing release
+assets are never silently overwritten or relabelled.
 
 Report signing or supply-chain vulnerabilities through
 [GitHub private vulnerability reporting](https://github.com/YuLab-SMU/Rho/security/advisories/new),
@@ -118,7 +103,6 @@ without including secrets in a public Issue.
 
 References:
 
-- [SignPath Foundation Terms](https://signpath.org/terms.html)
-- [SignPath trusted build systems for GitHub](https://docs.signpath.io/trusted-build-systems/github)
+- [SignPath GitHub Actions integration](https://docs.signpath.io/trusted-build-systems/github)
 - [Rho license and third-party notices](LICENSES.md)
 - [Rho privacy policy](PRIVACY.md)

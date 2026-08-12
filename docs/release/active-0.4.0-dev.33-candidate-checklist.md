@@ -4,9 +4,9 @@ Status: active replacement source contract; deterministic Provider-discovery
 repair, file-lane test repair, AGPL LIC-1, and LIC-2 are protected-integrated;
 SP-READY1 SignPath repository readiness, hosted validation, integration,
 public policy deployment, private reporting, and default-branch rules pass;
-owner MFA audit, external application/GitHub App configuration, exact
-candidate, installed acceptance, Windows signing, MAC5, publication, and
-candidate updater evidence remain open
+STS1 SignPath trial signing source integration, exact candidate, installed
+acceptance, Windows signing evidence, MAC5, publication, and candidate updater
+evidence remain open
 
 Date: 2026-08-11
 Last updated: 2026-08-12
@@ -49,6 +49,16 @@ automatic update-network admission, add the truthful public policy and
 ownership surfaces required before a SignPath application, validate them, and
 stop at protected integration/external readiness. It does not authorize a
 candidate or represent SignPath approval.
+
+After inspecting the configured SignPath trial organization, self-signed
+certificate, policy, artifact configuration, and protected Actions token, the
+owner selected that current setup ("改成现在我们的这个") on 2026-08-12. This
+activates the bounded STS1 implementation package in
+`docs/plans/active-2026-08-12-signpath-trial-signing-spec.md`: explicit
+SignPath artifact submission, returned-installer staging, signer-presence and
+expected-thumbprint checks, final-byte evidence, and truthful self-signed
+public wording. It does not authorize a candidate, Release, update-site
+mutation, or public Windows/SmartScreen trust claim.
 
 `0.4.0-dev.32` is immutable and rejected. Its Windows artifact, source checks,
 and failed macOS candidate result cannot be relabelled or composed into this
@@ -174,25 +184,27 @@ trigger that matrix, and stable jobs must execute the update-site self-test.
    branch review ruleset.
 3. Protected-integrate PR #46, regenerate the public site, and verify its
    linked policy and visible uninstall guidance.
-4. Obtain organization-owner MFA verification, submit and receive the SignPath
-   Foundation decision, and install/configure the GitHub App without guessing
-   organization, project, policy, or artifact-configuration identifiers.
-5. Implement and validate the production two-stage executable/NSIS signing
-   package with the real configuration and fail-closed negative/recovery paths.
-6. After Windows-signing disposition, run one protected
+4. **IN REVIEW** — implement and validate STS1 against the configured
+   self-signed SignPath trial policy: upload exactly one unsigned NSIS
+   installer, receive exactly one returned installer, bind its expected signer
+   certificate, and create final evidence/hashes only from that returned file.
+   Trial signing is not Foundation approval, public Windows trust, SmartScreen
+   reputation, trusted-build verification, manual approval, or a signature on
+   the embedded `rho-desktop.exe`.
+5. After STS1 protected integration, run one protected
    candidate workflow against the exact current upstream default-branch commit and
    independently verify Draft assets, hashes, identities, macOS trust evidence,
-   and Draft-only state.
-7. Perform exact installed `dev.33` References/Rename/editor-intelligence,
+   returned Windows signer subject/thumbprint/status, and Draft-only state.
+6. Perform exact installed `dev.33` References/Rename/editor-intelligence,
    Data Viewer, Issue #33, live-Provider repair, proposal Accept/verified Undo,
    startup, update, upgrade, uninstall, and Windows acceptance in proportion to
    the carried release risk.
-8. Resolve Issue #26's Windows signing disposition without treating an
-   unsigned installer as a public-release pass.
-9. Prove the exact root `LICENSE` and `LICENSES.md` are bundled under the fixed
+7. Resolve Issue #26's Windows signing disposition without treating a
+   self-signed installer as a public-trust or SmartScreen pass.
+8. Prove the exact root `LICENSE` and `LICENSES.md` are bundled under the fixed
    Rho resource path, the About action reveals the installed license offline,
    and the installed bytes match the candidate source on both platforms.
-10. Reconcile candidate evidence, then stop for explicit MAC5 GO. Publication
+9. Reconcile candidate evidence, then stop for explicit MAC5 GO. Publication
    and updater mutation remain separate actions.
 
 ## Current Decision
@@ -201,9 +213,10 @@ The original source repair, version synchronization, complete validation,
 hosted matrices, AGPL LIC-1/LIC-2, and their protected integration pass.
 SP-READY1 implementation, review, exact-head/main hosted validation,
 integration, initial public policy deployment, private reporting, and default-
-branch rules pass. PR #46 public-guidance integration/deployment, organization-
-owner MFA review, SignPath approval/GitHub App configuration, production two-
-stage Windows signing, and Issue #26's signing disposition remain open.
+branch rules pass. STS1 source integration, hosted returned-installer evidence,
+the exact candidate, installed acceptance, MAC5, and Issue #26's signing
+disposition remain open. The trial certificate does not establish public
+Windows trust or SmartScreen reputation.
 Current decision remains `NO-GO` for candidate construction. Exact candidate,
 installed acceptance, acceptance upload, MAC5, public publication, and
 candidate update-site mutation remain open.

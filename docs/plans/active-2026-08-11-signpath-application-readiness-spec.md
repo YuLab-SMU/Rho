@@ -2,9 +2,9 @@
 
 Status: active; SP-READY1 repository-readiness package, exact-head and merged-
 main hosted validation, upstream integration, public policy deployment, private
-reporting, and default-branch ruleset complete; organization-owner MFA audit,
-external application/GitHub App configuration, and production signing remain
-open
+reporting, and default-branch ruleset complete; the authorized STS1 trial-
+signing amendment owns current SignPath configuration and workflow integration;
+hosted signing, exact candidate, and installed acceptance remain open
 
 Date: 2026-08-11 EDT / 2026-08-12 UTC
 Authorization: after directing the next version to be merged and published,
@@ -17,6 +17,22 @@ Change class: D4 public policy, release supply chain, and application-readiness
 work; the update behavior correction is D3 network/privacy behavior
 Risk: R4 overall; R3 for user-initiated network admission
 Work package: SP-READY1
+
+## 2026-08-12 Trial-Signing Amendment
+
+The project owner subsequently selected the already-created SignPath trial
+configuration for Rho's Windows path. The active
+`active-2026-08-12-signpath-trial-signing-spec.md` owns that bounded STS1
+implementation. It supersedes this document's future-only assumptions about a
+Foundation certificate, GitHub App, per-request manual approval, and a
+two-stage executable/installer process **only for the configured trial path**.
+
+The trial profile signs only the final NSIS installer with the self-signed
+`Rho Test Signing` certificate. It is not publicly trusted by Windows or
+SmartScreen, does not make a Foundation attribution, and does not authorize a
+candidate, Release, or update-site claim before exact evidence exists. The
+manual-only update/privacy, security-reporting, policy-link, and CODEOWNERS
+work completed by SP-READY1 remains unchanged.
 
 ## Problem And Current Evidence
 

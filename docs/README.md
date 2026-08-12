@@ -87,6 +87,7 @@ changes.
 - Active WS2 deterministic diagnostics and reviewed quick fixes: [`plans/active-2026-08-03-ws2-diagnostic-grouping-quick-fix-spec.md`](plans/active-2026-08-03-ws2-diagnostic-grouping-quick-fix-spec.md)
 - Active WS2 Agent answers linked to Local Help: [`plans/active-2026-08-03-ws2-agent-local-help-link-spec.md`](plans/active-2026-08-03-ws2-agent-local-help-link-spec.md)
 - Active WS2 reviewable rename and extract edits: [`plans/active-2026-08-03-ws2-refactor-review-spec.md`](plans/active-2026-08-03-ws2-refactor-review-spec.md)
+- Active SignPath trial Windows signing: [`plans/active-2026-08-12-signpath-trial-signing-spec.md`](plans/active-2026-08-12-signpath-trial-signing-spec.md)
 - Deferred aisdk family proposals: [`architecture/proposed-aisdk-family-change-proposals.md`](architecture/proposed-aisdk-family-change-proposals.md)
 - Active `0.3.x` implementation handoff: [`plans/active-2026-07-25-0.3x-scientific-workflow-handoff.md`](plans/active-2026-07-25-0.3x-scientific-workflow-handoff.md)
 - Current `0.3.x` milestone verification: [`verification/0.3x-milestone/verification.md`](verification/0.3x-milestone/verification.md)

@@ -41,9 +41,11 @@ It requires:
   or NVIDIA.
 
 Listed Apple Silicon macOS packages use Developer ID signing and notarization.
-Current Windows downloads are not Authenticode-signed and must not be treated
-as public-release-ready merely because a checksum is available. Unsigned local
-builds are for development review only. See the
+Historical Windows downloads are unsigned. The configured future Windows
+candidate path applies the self-signed `Rho Test Signing` certificate only to
+the final installer; that signature is not trusted by Windows or Microsoft
+SmartScreen and must not be treated as public-release-ready merely because a
+checksum or signer is present. See the
 [Windows prototype guide](docs/implementation/implemented-windows-prototype.md)
 and the [macOS support specification](docs/plans/active-2026-08-05-macos-arm64-support-spec.md)
 for platform-specific status and prerequisites.
@@ -99,8 +101,8 @@ or sharing diagnostics.
 
 Report vulnerabilities through the private process in the
 [Security policy](SECURITY.md), not through a public Issue. Windows and macOS
-trust status, signing scope, manual approval, and incident handling are defined
-in the [Code signing policy](CODE_SIGNING_POLICY.md).
+trust status, the self-signed installer-only scope, and incident handling are
+defined in the [Code signing policy](CODE_SIGNING_POLICY.md).
 
 ## License
 
