@@ -57,6 +57,10 @@ function validate(value) {
     "SIGNPATH_ARTIFACT_CONFIGURATION_SLUG",
     "SIGNPATH_CERTIFICATE_THUMBPRINT",
   ]) assert.match(workflow, new RegExp(`vars\\.${variable}`), `${variable} must come from repository variables`);
+  const variableValidation = workflow.match(/- name: Validate non-secret SignPath deployment variables[\s\S]*?(?=\n      - name: Download exact accepted unsigned artifact)/)?.[0];
+  assert.ok(variableValidation, "the deployment-variable validation step is missing");
+  assert.match(variableValidation, /\$value = \[Environment\]::GetEnvironmentVariable\(\$name\)/);
+  assert.match(variableValidation, /Write-Output "::add-mask::\$value"/, "every deployment variable must be masked before the SignPath action runs");
   assert.doesNotMatch(workflow, /[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}/i, "the organization identifier must not be committed");
   assert.equal(occurrences(workflow, /secrets\.SIGNPATH_API_TOKEN/g), 1, "the protected token must be passed only to the SignPath action");
   assert.match(workflow, /api-token: \$\{\{ secrets\.SIGNPATH_API_TOKEN \}\}/);
@@ -131,6 +135,9 @@ if (process.argv.includes("--self-test")) {
   expectRejected(current, "public organization id", (value) => {
     value.workflow = value.workflow.replace("${{ vars.SIGNPATH_ORGANIZATION_ID }}", "11111111-2222-4333-8444-555555555555");
   }, /organization identifier/);
+  expectRejected(current, "unmasked deployment variables", (value) => {
+    value.workflow = value.workflow.replace('Write-Output "::add-mask::$value"', "");
+  }, /must be masked/);
   expectRejected(current, "unpinned SignPath action", (value) => {
     value.workflow = value.workflow.replace("@b9d91eadd323de506c0c81cf0c7fe7438f3360fd # v2", "@v2");
   }, /submit-signing-request/);

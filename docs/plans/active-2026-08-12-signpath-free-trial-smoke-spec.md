@@ -1,8 +1,10 @@
 # SignPath Free Trial Windows Smoke Contract
 
 Status: active; FT-SIGN1 source implementation, repository-variable setup,
-deterministic validation, and separate security review complete; protected
-integration and one hosted signing request remain open
+deterministic validation, protected integration, and separate security review
+complete; the first hosted request exposed an authorization/variable-log
+defect, its run was deleted, the token was rotated, and the privacy correction
+plus one successful hosted request remain open
 
 Date: 2026-08-12 EDT
 
@@ -58,6 +60,12 @@ certificate thumbprint may appear only in the bounded returned-signature
 evidence because it identifies the certificate already embedded in the signed
 file. The API token value must never appear in source, logs, artifacts,
 documentation, or Actions variables.
+
+All non-secret deployment-variable values must be registered with the GitHub
+Actions masking command before the pinned SignPath action is invoked. This
+includes the organization identifier, project/policy/configuration slugs, and
+certificate thumbprint. Their repository-variable storage does not by itself
+prevent an action from rendering input values in a public log.
 
 ## Scope And Immutable Input
 
@@ -118,6 +126,16 @@ Reruns create a new signing request and new run-scoped artifacts; their evidence
 must never be composed. A failed request changes no repository, Release, or
 update-site state and needs no rollback beyond retaining bounded logs and
 revoking/rotating the API token if compromise is suspected.
+
+Hosted run `31651681715` passed immutable input admission and unsigned
+artifact isolation, then failed at SignPath authorization before a signing
+request was created. The third-party action rendered repository-variable
+inputs while reporting that failure. The run and its run-scoped intermediary
+artifact were deleted, the invalid token was regenerated and written directly
+to the protected repository secret, and the local/browser clipboard was
+cleared. The regression invariant is that every deployment-variable value is
+masked in the validation step before any third-party action starts. A retry is
+forbidden until that correction is integrated on the default branch.
 
 ## Cross-Review And Non-Goals
 

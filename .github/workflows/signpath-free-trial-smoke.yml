@@ -88,9 +88,11 @@ jobs:
             "SIGNPATH_CERTIFICATE_THUMBPRINT"
           )
           foreach ($name in $required) {
-            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+            $value = [Environment]::GetEnvironmentVariable($name)
+            if ([string]::IsNullOrWhiteSpace($value)) {
               throw "Required repository variable is missing: $name"
             }
+            Write-Output "::add-mask::$value"
           }
           $thumbprint = ($env:SIGNPATH_CERTIFICATE_THUMBPRINT -replace '[^0-9A-Fa-f]', '').ToUpperInvariant()
           if ($thumbprint -notmatch '^[0-9A-F]{40}$') {
