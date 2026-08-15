@@ -6,7 +6,8 @@ const read = (file) => normalizeLineEndings(fs.readFileSync(file, "utf8"));
 const count = (text, pattern) => [...text.matchAll(pattern)].length;
 const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-const expectedVersion = "0.4.0-dev.40";
+const expectedVersion = "0.4.0-dev.41";
+const normalPublishVersion = "0.4.0-dev.40";
 const expectedVersionPattern = escapeRegExp(expectedVersion);
 const cargo = read("Cargo.toml");
 const cargoVersion = cargo.match(/^version = "([^"]+)"/m)?.[1];
@@ -25,7 +26,7 @@ assert.ok(
 
 const localPackagePattern = /name = "rho-[^"]+"\r?\nversion = "([^"]+)"/g;
 assert.deepEqual(
-  [...'name = "rho-fixture"\r\nversion = "0.4.0-dev.40"'.matchAll(localPackagePattern)].map((match) => match[1]),
+  [...'name = "rho-fixture"\r\nversion = "0.4.0-dev.41"'.matchAll(localPackagePattern)].map((match) => match[1]),
   [expectedVersion],
   "Cargo.lock parsing must accept Windows CRLF checkouts",
 );
@@ -60,7 +61,7 @@ assert.match(
 assert.match(build, /name: Build Rho Candidate \/ Rehearsal/);
 assert.match(build, buildModePattern);
 assert.match(build, new RegExp(`release_tag:\\n[\\s\\S]*?default: v${expectedVersionPattern}`));
-assert.match(build, new RegExp(`release_name:\\n[\\s\\S]*?default: Rho ${expectedVersionPattern}`));
+assert.match(build, /release_name:\n[\s\S]*?default: Rho 0\.4\.0-dev\.41 Native Updater Acceptance Target/);
 assert.match(build, /candidate-release\.mjs --mode admission --build_mode "\$BUILD_MODE" --repository "\$GITHUB_REPOSITORY" --workflow_ref "\$GITHUB_REF" --default_branch "\$DEFAULT_BRANCH"/);
 assert.match(build, /release-notes\.mjs --test true/);
 assert.match(build, /release-notes\.mjs --mode validate --version "\$version" --tag "\$INPUT_RELEASE_TAG"/);
@@ -231,7 +232,7 @@ assert.match(notaryContract, /dsaEncoding: "ieee-p1363"/);
 assert.match(notaryContract, /EXACT_DEVELOPER_LOG_HOSTS = new Set\(\["notary-artifacts-prod\.s3\.amazonaws\.com"\]\)/);
 assert.match(
   read(".github/workflows/candidate-publish.yml"),
-  new RegExp(`default: v${expectedVersionPattern}`),
+  new RegExp(`default: v${escapeRegExp(normalPublishVersion)}`),
 );
 assert.match(build, /draft: true/);
 assert.match(build, /prerelease: true/);

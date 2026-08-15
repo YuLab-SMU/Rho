@@ -30,6 +30,8 @@ on:
       - ".github/workflows/rust-compatibility.yml"
       - ".github/workflows/candidate-build-draft.yml"
       - ".github/workflows/candidate-publish.yml"
+      - ".github/workflows/native-updater-acceptance-target.yml"
+      - ".github/workflows/native-updater-acceptance-window.yml"
       - ".github/workflows/signpath-free-trial-smoke.yml"
       - ".github/workflows/windows-issue33-installed-acceptance.yml"
       - ".github/workflows/update-site-publish.yml"
@@ -37,6 +39,7 @@ on:
       - "scripts/generate-update-site.mjs"
       - "scripts/macos-notary.mjs"
       - "scripts/tauri-native-updater.mjs"
+      - "scripts/native-updater-acceptance.mjs"
       - "scripts/test-rust-msrv-contract.mjs"
       - "scripts/test-installed-license-surface.mjs"
       - "scripts/test-signpath-readiness.mjs"
@@ -44,6 +47,7 @@ on:
       - "scripts/test-signpath-candidate-workflow.mjs"
       - "scripts/test-conditional-prerelease-policy.mjs"
       - "scripts/test-tauri-native-updater-contract.mjs"
+      - "scripts/test-native-updater-acceptance-transport.mjs"
       - "scripts/windows-installed-focus-acceptance.mjs"
       - "scripts/test-windows-installed-focus-acceptance.mjs"
       - "docs/design/accepted-2026-07-25-about-and-update-check-design.md"
@@ -59,6 +63,7 @@ on:
       - "docs/release/active-0.4.0-dev.38-candidate-checklist.md"
       - "docs/release/historical-0.4.0-dev.39-candidate-checklist.md"
       - "docs/release/active-0.4.0-dev.40-candidate-checklist.md"
+      - "docs/release/active-0.4.0-dev.41-native-updater-acceptance-target-checklist.md"
   pull_request:
     branches: [main]
     paths:
@@ -88,6 +93,8 @@ on:
       - ".github/workflows/rust-compatibility.yml"
       - ".github/workflows/candidate-build-draft.yml"
       - ".github/workflows/candidate-publish.yml"
+      - ".github/workflows/native-updater-acceptance-target.yml"
+      - ".github/workflows/native-updater-acceptance-window.yml"
       - ".github/workflows/signpath-free-trial-smoke.yml"
       - ".github/workflows/windows-issue33-installed-acceptance.yml"
       - ".github/workflows/update-site-publish.yml"
@@ -95,6 +102,7 @@ on:
       - "scripts/generate-update-site.mjs"
       - "scripts/macos-notary.mjs"
       - "scripts/tauri-native-updater.mjs"
+      - "scripts/native-updater-acceptance.mjs"
       - "scripts/test-rust-msrv-contract.mjs"
       - "scripts/test-installed-license-surface.mjs"
       - "scripts/test-signpath-readiness.mjs"
@@ -102,6 +110,7 @@ on:
       - "scripts/test-signpath-candidate-workflow.mjs"
       - "scripts/test-conditional-prerelease-policy.mjs"
       - "scripts/test-tauri-native-updater-contract.mjs"
+      - "scripts/test-native-updater-acceptance-transport.mjs"
       - "scripts/windows-installed-focus-acceptance.mjs"
       - "scripts/test-windows-installed-focus-acceptance.mjs"
       - "docs/design/accepted-2026-07-25-about-and-update-check-design.md"
@@ -117,6 +126,7 @@ on:
       - "docs/release/active-0.4.0-dev.38-candidate-checklist.md"
       - "docs/release/historical-0.4.0-dev.39-candidate-checklist.md"
       - "docs/release/active-0.4.0-dev.40-candidate-checklist.md"
+      - "docs/release/active-0.4.0-dev.41-native-updater-acceptance-target-checklist.md"
 
 permissions:
   contents: read
@@ -252,6 +262,7 @@ jobs:
           node scripts/test-macos-notary.mjs
           node scripts/test-mac4-release-contract.mjs
           node scripts/test-tauri-native-updater-contract.mjs
+          node scripts/test-native-updater-acceptance-transport.mjs
 
       - name: Verify locked workspace at selected Rust version
         run: |

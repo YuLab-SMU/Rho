@@ -33,6 +33,9 @@ jobs:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
+            if (process.env.RELEASE_TAG === "v0.4.0-dev.41") {
+              throw new Error("The dev.41 native updater acceptance target may be published only by its dedicated protected workflow.");
+            }
             const matches = (await github.paginate(github.rest.repos.listReleases, {
               owner,
               repo,

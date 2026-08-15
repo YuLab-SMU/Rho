@@ -41,8 +41,8 @@ for (const value of [
   'args.mode === "conditional-acceptance"',
 ]) assert.match(candidate, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 
-assert.match(build, /default: v0\.4\.0-dev\.40/);
-assert.match(build, /default: Rho 0\.4\.0-dev\.40/);
+assert.match(build, /default: v0\.4\.0-dev\.41/);
+assert.match(build, /default: Rho 0\.4\.0-dev\.41 Native Updater Acceptance Target/);
 assert.match(publish, /default: v0\.4\.0-dev\.40/);
 assert.match(publish, /PUBLISH_ACTOR: \$\{\{ github\.actor \}\}/);
 assert.match(publish, /publisher: process\.env\.PUBLISH_ACTOR/);
