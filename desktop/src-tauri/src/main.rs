@@ -1313,9 +1313,15 @@ async fn project_restore_session(
         }
     };
     let session_snapshot = state.project_store.load_session_or_default(&root);
-    let result = switch_project(root, Some(session_snapshot), app, &state)
+    let result = switch_project(root.clone(), Some(session_snapshot), app, &state)
         .await
-        .map_err(display_error);
+        .map_err(|error| {
+            write_startup_log(&format!(
+                "project_restore_session failed for {}: {error:#}",
+                root.display()
+            ));
+            display_error(error)
+        });
     write_startup_log(&format!(
         "startup_phase=project_restore elapsed_ms={} outcome={}",
         started.elapsed().as_millis(),
@@ -6538,8 +6544,15 @@ fn ark_candidate_paths(
             manifest_dir.join("binaries/ark-aarch64-apple-darwin"),
         ],
         ("linux", "x86_64") => vec![
+            resource_dir.join("resources/runtime/ark"),
             current_exe.parent().unwrap_or(current_exe).join("ark"),
+            manifest_dir.join("../resources/runtime/ark"),
             manifest_dir.join("binaries/ark-x86_64-unknown-linux-gnu"),
+        ],
+        ("linux", "aarch64") => vec![
+            resource_dir.join("resources/runtime/ark"),
+            current_exe.parent().unwrap_or(current_exe).join("ark"),
+            manifest_dir.join("../resources/runtime/ark"),
         ],
         _ => Vec::new(),
     }
@@ -10278,9 +10291,19 @@ mod tests {
             &resource_dir,
             &current_exe,
         );
+        let bundled = resource_dir.join("resources/runtime/ark");
         let installed = current_exe.parent().unwrap().join("ark");
+        let deb_development = manifest_dir.join("../resources/runtime/ark");
         let development = manifest_dir.join("binaries/ark-x86_64-unknown-linux-gnu");
-        assert_eq!(candidates, vec![installed.clone(), development.clone()]);
+        assert_eq!(
+            candidates,
+            vec![
+                bundled.clone(),
+                installed.clone(),
+                deb_development.clone(),
+                development.clone()
+            ]
+        );
 
         std::fs::write(&development, b"development").unwrap();
         assert_eq!(
@@ -10289,6 +10312,39 @@ mod tests {
         );
         std::fs::write(&installed, b"installed").unwrap();
         assert_eq!(locate_ark_from_candidates(candidates).unwrap(), installed);
+    }
+
+    #[test]
+    fn ark_lookup_linux_aarch64_prefers_bundled_deb_runtime_then_development() {
+        let directory = TempDir::new().unwrap();
+        let manifest_dir = directory.path().join("desktop/src-tauri");
+        let resource_dir = directory.path().join("usr/share/rho");
+        let current_exe = directory.path().join("usr/bin/rho-desktop");
+        std::fs::create_dir_all(current_exe.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(manifest_dir.join("../resources/runtime")).unwrap();
+        std::fs::create_dir_all(resource_dir.join("resources/runtime")).unwrap();
+        let candidates = ark_candidate_paths(
+            "linux",
+            "aarch64",
+            &manifest_dir,
+            &resource_dir,
+            &current_exe,
+        );
+        let bundled = resource_dir.join("resources/runtime/ark");
+        let installed = current_exe.parent().unwrap().join("ark");
+        let deb_development = manifest_dir.join("../resources/runtime/ark");
+        assert_eq!(
+            candidates,
+            vec![bundled.clone(), installed.clone(), deb_development.clone()]
+        );
+
+        std::fs::write(&deb_development, b"development").unwrap();
+        assert_eq!(
+            locate_ark_from_candidates(candidates.clone()).unwrap(),
+            deb_development
+        );
+        std::fs::write(&bundled, b"bundled").unwrap();
+        assert_eq!(locate_ark_from_candidates(candidates).unwrap(), bundled);
     }
 
     #[test]
@@ -11266,6 +11322,14 @@ async fn set_smoke_project_root(
 }
 
 fn main() {
+    // On Linux, WebKitGTK's DMABUF renderer fails to allocate GBM buffers on
+    // NVIDIA proprietary graphics stacks, leaving the webview blank. Default
+    // to the software renderer unless the environment already overrides it.
+    if cfg!(target_os = "linux") && std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        // SAFETY: this runs at the top of main() before any additional
+        // threads are spawned, so no concurrent environment access exists.
+        unsafe { std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1") };
+    }
     std::panic::set_hook(Box::new(|information| {
         write_startup_log(&format!("Rho desktop panic: {information}"));
     }));

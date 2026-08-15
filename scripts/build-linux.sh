@@ -54,7 +54,10 @@ RHO_EXPECTED_NAME="${RHO_PRODUCT_NAME}_${RHO_VERSION}_x86_64.AppImage"
 
 (
   cd "$RHO_REPOSITORY_ROOT/desktop/src-tauri"
-  npx -y "@tauri-apps/cli@$RHO_TAURI_CLI_VERSION" build
+  # Pin the AppImage bundle explicitly: tauri.linux.conf.json now lists both
+  # appimage and deb as default targets, but this lane only produces and
+  # verifies the AppImage artifact.
+  npx -y "@tauri-apps/cli@$RHO_TAURI_CLI_VERSION" build --bundles appimage
 )
 
 if [[ ! -d "$RHO_BUNDLE_DIR" ]]; then
