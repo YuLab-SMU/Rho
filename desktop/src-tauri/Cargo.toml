@@ -34,3 +34,6 @@ keyring = { version = "4.1.6", default-features = false, features = ["v1", "wind
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "4.1.6", default-features = false, features = ["v1"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "4.1.6", default-features = false, features = ["v1", "dbus-secret-service-keyring-store"] }

@@ -659,9 +659,21 @@ fn collect_project_files(
     if remaining_entries == 0 {
         return Ok(true);
     }
-    let mut entries = std::fs::read_dir(directory)?
-        .take(remaining_entries + 1)
-        .collect::<std::io::Result<Vec<_>>>()?;
+    // Unreadable directories inside the project (for example root-owned cache
+    // directories under the home directory) are skipped instead of failing the
+    // whole scan; only the project root itself must be readable.
+    let entries = match std::fs::read_dir(directory) {
+        Ok(entries) => entries
+            .take(remaining_entries + 1)
+            .collect::<std::io::Result<Vec<_>>>(),
+        Err(error) => {
+            if directory == root {
+                return Err(error.into());
+            }
+            return Ok(false);
+        }
+    }?;
+    let mut entries = entries;
     let entry_limit_reached = entries.len() > remaining_entries;
     entries.truncate(remaining_entries);
     *scanned_entries += entries.len();
@@ -673,7 +685,10 @@ fn collect_project_files(
         }
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().to_string();
-        let file_type = entry.file_type()?;
+        let file_type = match entry.file_type() {
+            Ok(file_type) => file_type,
+            Err(_) => continue,
+        };
         if file_type.is_symlink() {
             continue;
         }
@@ -681,7 +696,10 @@ fn collect_project_files(
             if ignored_project_directory(&name) {
                 continue;
             }
-            let canonical = path.canonicalize()?;
+            let canonical = match path.canonicalize() {
+                Ok(canonical) => canonical,
+                Err(_) => continue,
+            };
             if canonical.starts_with(root) {
                 directories.push(path);
             }
@@ -690,12 +708,17 @@ fn collect_project_files(
         if !file_type.is_file() || ensure_editable_file(&path).is_err() {
             continue;
         }
-        let relative = relative_project_path(root, &path)?;
+        let Ok(relative) = relative_project_path(root, &path) else {
+            continue;
+        };
+        let Ok(metadata) = path.metadata() else {
+            continue;
+        };
         files.push(ProjectFile {
             path: relative,
             name,
             kind: "source",
-            size_bytes: path.metadata()?.len(),
+            size_bytes: metadata.len(),
         });
     }
     if entry_limit_reached {

@@ -67,14 +67,16 @@ impl CredentialStore for SystemCredentialStore {
 const SYSTEM_CREDENTIAL_STORE_LABEL: &str = "Windows Credential Manager";
 #[cfg(target_os = "macos")]
 const SYSTEM_CREDENTIAL_STORE_LABEL: &str = "macOS Keychain";
+#[cfg(target_os = "linux")]
+const SYSTEM_CREDENTIAL_STORE_LABEL: &str = "Secret Service keyring";
 
-#[cfg(any(windows, target_os = "macos"))]
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 fn system_credential_entry_for_service(service: &str, provider_id: &str) -> Result<keyring::Entry> {
     keyring::Entry::new(service, provider_id)
         .with_context(|| format!("opening {SYSTEM_CREDENTIAL_STORE_LABEL}"))
 }
 
-#[cfg(any(windows, target_os = "macos"))]
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 fn keyring_credential_get(service: &str, provider_id: &str) -> Result<Option<String>> {
     match system_credential_entry_for_service(service, provider_id)?.get_password() {
         Ok(value) => Ok(Some(value)),
@@ -85,14 +87,14 @@ fn keyring_credential_get(service: &str, provider_id: &str) -> Result<Option<Str
     }
 }
 
-#[cfg(any(windows, target_os = "macos"))]
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 fn keyring_credential_set(service: &str, provider_id: &str, credential: &str) -> Result<()> {
     system_credential_entry_for_service(service, provider_id)?
         .set_password(credential)
         .with_context(|| format!("saving the API key in {SYSTEM_CREDENTIAL_STORE_LABEL}"))
 }
 
-#[cfg(any(windows, target_os = "macos"))]
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 fn keyring_credential_delete(service: &str, provider_id: &str) -> Result<()> {
     match system_credential_entry_for_service(service, provider_id)?.delete_credential() {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
@@ -102,32 +104,32 @@ fn keyring_credential_delete(service: &str, provider_id: &str) -> Result<()> {
     }
 }
 
-#[cfg(any(windows, target_os = "macos"))]
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 fn system_credential_get(provider_id: &str) -> Result<Option<String>> {
     keyring_credential_get(CREDENTIAL_SERVICE, provider_id)
 }
 
-#[cfg(any(windows, target_os = "macos"))]
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 fn system_credential_set(provider_id: &str, credential: &str) -> Result<()> {
     keyring_credential_set(CREDENTIAL_SERVICE, provider_id, credential)
 }
 
-#[cfg(any(windows, target_os = "macos"))]
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 fn system_credential_delete(provider_id: &str) -> Result<()> {
     keyring_credential_delete(CREDENTIAL_SERVICE, provider_id)
 }
 
-#[cfg(not(any(windows, target_os = "macos")))]
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 fn system_credential_get(_provider_id: &str) -> Result<Option<String>> {
     bail!("System credential storage is unavailable on this platform.")
 }
 
-#[cfg(not(any(windows, target_os = "macos")))]
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 fn system_credential_set(_provider_id: &str, _credential: &str) -> Result<()> {
     bail!("System credential storage is unavailable on this platform.")
 }
 
-#[cfg(not(any(windows, target_os = "macos")))]
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 fn system_credential_delete(_provider_id: &str) -> Result<()> {
     bail!("System credential storage is unavailable on this platform.")
 }

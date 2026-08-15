@@ -1163,9 +1163,15 @@ async fn project_restore_session(
         }
     };
     let session_snapshot = state.project_store.load_session_or_default(&root);
-    let result = switch_project(root, Some(session_snapshot), app, &state)
+    let result = switch_project(root.clone(), Some(session_snapshot), app, &state)
         .await
-        .map_err(display_error);
+        .map_err(|error| {
+            write_startup_log(&format!(
+                "project_restore_session failed for {}: {error:#}",
+                root.display()
+            ));
+            display_error(error)
+        });
     write_startup_log(&format!(
         "startup_phase=project_restore elapsed_ms={} outcome={}",
         started.elapsed().as_millis(),
@@ -6387,6 +6393,11 @@ fn ark_candidate_paths(
             current_exe.parent().unwrap_or(current_exe).join("ark"),
             manifest_dir.join("binaries/ark-aarch64-apple-darwin"),
         ],
+        ("linux", _) => vec![
+            resource_dir.join("resources/runtime/ark"),
+            current_exe.parent().unwrap_or(current_exe).join("ark"),
+            manifest_dir.join("../resources/runtime/ark"),
+        ],
         _ => Vec::new(),
     }
 }
@@ -11014,6 +11025,16 @@ async fn set_smoke_project_root(
 }
 
 fn main() {
+    // On Linux, WebKitGTK's DMABUF renderer fails to allocate GBM buffers on
+    // NVIDIA proprietary graphics stacks, leaving the webview blank. Default
+    // to the software renderer unless the environment already overrides it.
+    if cfg!(target_os = "linux")
+        && std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none()
+    {
+        // SAFETY: this runs at the top of main() before any additional
+        // threads are spawned, so no concurrent environment access exists.
+        unsafe { std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1") };
+    }
     std::panic::set_hook(Box::new(|information| {
         write_startup_log(&format!("Rho desktop panic: {information}"));
     }));
