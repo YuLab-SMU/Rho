@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: rho-update-site
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   publish-update-site:
@@ -25,6 +25,18 @@ jobs:
         with:
           ref: main
 
+      - name: Refuse normal Pages deployment while an acceptance fixture is active
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: target/current-pages
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate that no acceptance fixture can be overwritten
+        shell: bash
+        run: node scripts/native-updater-acceptance.mjs --mode assert-no-active-fixture --site target/current-pages
+
       - name: Collect validated release records
         uses: actions/github-script@v7
         with:
@@ -32,6 +44,8 @@ jobs:
           script: |
             const crypto = require("crypto");
             const fs = require("fs");
+            const path = require("path");
+            const childProcess = require("child_process");
             const releases = await github.paginate(github.rest.repos.listReleases, {
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -40,6 +54,69 @@ jobs:
             const records = [];
             for (const release of releases.filter((item) => !item.draft)) {
               const version = String(release.tag_name || "").replace(/^v/, "");
+              const targetMarkerAssets = release.assets.filter((asset) => /-native-updater-acceptance-target\.json$/.test(asset.name || ""));
+              if (targetMarkerAssets.length) {
+                const markerName = "rho-0.4.0-dev.41-native-updater-acceptance-target.json";
+                if (
+                  targetMarkerAssets.length !== 1
+                  || version !== "0.4.0-dev.41"
+                  || targetMarkerAssets[0].name !== markerName
+                  || release.assets.some((asset) => asset.name === `rho-${version}-acceptance.json`)
+                ) throw new Error(`Native updater acceptance target marker is invalid for ${release.tag_name}`);
+                const targetEvidenceAsset = release.assets.find((asset) => asset.name === `rho-${version}-candidate-evidence.json`);
+                if (!targetEvidenceAsset || targetEvidenceAsset.size <= 0 || targetEvidenceAsset.size > 256 * 1024) {
+                  throw new Error(`Native updater acceptance target evidence is missing or exceeds its byte budget for ${release.tag_name}`);
+                }
+                const evidenceResponse = await github.request("GET /repos/{owner}/{repo}/releases/assets/{asset_id}", {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  asset_id: targetEvidenceAsset.id,
+                  headers: { accept: "application/octet-stream" },
+                });
+                const evidenceBytes = Buffer.from(evidenceResponse.data);
+                if (evidenceBytes.length !== targetEvidenceAsset.size || JSON.parse(evidenceBytes.toString("utf8")).type !== "rho_candidate_evidence") {
+                  throw new Error(`Native updater acceptance target evidence is malformed for ${release.tag_name}`);
+                }
+                const directory = path.join("target", "native-updater-acceptance-target", version);
+                fs.mkdirSync(directory, { recursive: true });
+                const names = new Set();
+                for (const asset of release.assets) {
+                  if (!asset?.name || path.basename(asset.name) !== asset.name || names.has(asset.name) || !Number.isSafeInteger(asset.size) || asset.size <= 0) {
+                    throw new Error(`Native updater acceptance target asset is unsafe or duplicated: ${asset?.name || "<empty>"}`);
+                  }
+                  names.add(asset.name);
+                  const response = await github.request("GET /repos/{owner}/{repo}/releases/assets/{asset_id}", {
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    asset_id: asset.id,
+                    headers: { accept: "application/octet-stream" },
+                  });
+                  const bytes = Buffer.from(response.data);
+                  if (bytes.length !== asset.size) throw new Error(`Native updater acceptance target asset size mismatch for ${asset.name}`);
+                  fs.writeFileSync(path.join(directory, asset.name), bytes, { flag: "wx" });
+                }
+                const releaseRecord = {
+                  release_id: String(release.id),
+                  tag_name: release.tag_name,
+                  target_commitish: release.target_commitish,
+                  draft: release.draft,
+                  prerelease: release.prerelease,
+                  name: release.name || "",
+                  body: release.body || "",
+                  published_at: release.published_at,
+                  html_url: release.html_url,
+                  assets: release.assets.map((asset) => ({ name: asset.name, size: asset.size })).sort((left, right) => left.name.localeCompare(right.name)),
+                };
+                const releasePath = path.join("target", "native-updater-acceptance-target", `${version}-release.json`);
+                fs.writeFileSync(releasePath, `${JSON.stringify(releaseRecord, null, 2)}\n`, { flag: "wx" });
+                childProcess.execFileSync(process.execPath, [
+                  path.join(process.cwd(), "scripts", "native-updater-acceptance.mjs"),
+                  "--mode", "validate-public-target",
+                  "--release", releasePath,
+                  "--directory", directory,
+                ], { stdio: "inherit" });
+                continue;
+              }
               const evidenceAsset = release.assets.find((asset) => asset.name === `rho-${version}-candidate-evidence.json`)
                 || release.assets.find((asset) => asset.name === "rho-0.2-release.json");
               if (!evidenceAsset) continue;
@@ -54,6 +131,9 @@ jobs:
               if (evidenceBytes.length !== evidenceAsset.size) throw new Error(`Release evidence size mismatch for ${release.tag_name}`);
               const evidenceSha256 = crypto.createHash("sha256").update(evidenceBytes).digest("hex");
               const evidence = JSON.parse(evidenceBytes.toString("utf8"));
+              if (version === "0.4.0-dev.41" && evidence.type === "rho_candidate_evidence") {
+                throw new Error("The public dev.41 native updater acceptance target is missing its required exclusion marker.");
+              }
               let platformEvidence;
               let acceptanceEvidence;
               let nativeUpdaterEvidence;

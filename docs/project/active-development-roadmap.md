@@ -3,7 +3,7 @@
 Status: active
 
 Date: 2026-08-09
-Current source baseline: `0.4.0-dev.40`
+Current source baseline: `0.4.0-dev.41`
 Active published identity: `0.4.0-dev.24` (authoritative candidate,
 owner-installed acceptance, MAC5 GO, protected public prerelease, and live
 development update manifest pass)

@@ -18,11 +18,11 @@ on:
       release_tag:
         description: Single-use prerelease tag
         required: true
-        default: v0.4.0-dev.40
+        default: v0.4.0-dev.41
       release_name:
         description: Draft release title
         required: true
-        default: Rho 0.4.0-dev.40
+        default: Rho 0.4.0-dev.41 Native Updater Acceptance Target
 
 permissions:
   contents: read
@@ -68,10 +68,15 @@ jobs:
             exit 1
           fi
           version="$(node -e 'const fs=require("fs"); const value=fs.readFileSync("Cargo.toml", "utf8").match(/^version = "([^"]+)"/m); if(!value) process.exit(1); process.stdout.write(value[1])')"
-          test "$INPUT_RELEASE_NAME" = "Rho $version"
+          expected_release_name="Rho $version"
+          if [[ "$version" == "0.4.0-dev.41" ]]; then
+            expected_release_name="Rho 0.4.0-dev.41 Native Updater Acceptance Target"
+          fi
+          test "$INPUT_RELEASE_NAME" = "$expected_release_name"
           node scripts/candidate-release.mjs --mode identity --version "$version" --tag "$INPUT_RELEASE_TAG" --commit "$commit"
           node scripts/candidate-release.mjs --test true
           node scripts/release-notes.mjs --test true
+          node scripts/native-updater-acceptance.mjs --test true
           if [[ "$BUILD_MODE" == "candidate" ]]; then
             node scripts/release-notes.mjs --mode validate --version "$version" --tag "$INPUT_RELEASE_TAG"
           fi

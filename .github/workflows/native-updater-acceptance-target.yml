@@ -1,0 +1,418 @@
+name: Publish Native Updater Acceptance Target
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rho-native-updater-acceptance-target
+  cancel-in-progress: false
+
+jobs:
+  publish-target:
+    name: Validate and publish the fixed dev.41 acceptance target
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: rho-release
+    permissions:
+      contents: write
+    steps:
+      - name: Verify trusted dispatch
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "YuLab-SMU/Rho"
+          test "$GITHUB_REF" = "refs/heads/$DEFAULT_BRANCH"
+
+      - name: Check out protected dispatcher source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve the immutable source Draft and target Draft
+        id: identity
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const sourceTag = "v0.4.0-dev.40";
+            const targetTag = "v0.4.0-dev.41";
+            const sourceCommit = "14b16ced90df02621e37913e23c6a555cf5963f0";
+            const targetName = "Rho 0.4.0-dev.41 Native Updater Acceptance Target";
+            const releases = await github.paginate(github.rest.repos.listReleases, {
+              owner,
+              repo,
+              per_page: 100,
+            });
+            const exactlyOne = (tag) => {
+              const matches = releases.filter((release) => release.tag_name === tag);
+              if (matches.length !== 1) throw new Error(`Expected exactly one Release for ${tag}.`);
+              return matches[0];
+            };
+            const source = exactlyOne(sourceTag);
+            const target = exactlyOne(targetTag);
+            if (
+              !source.draft
+              || !source.prerelease
+              || source.target_commitish !== sourceCommit
+              || source.name !== "Rho 0.4.0-dev.40"
+            ) throw new Error("The source must remain the immutable dev.40 Draft.");
+            if (
+              !target.draft
+              || !target.prerelease
+              || target.name !== targetName
+              || !/^[0-9a-f]{40}$/.test(target.target_commitish || "")
+            ) throw new Error("The target must be the exact dev.41 acceptance-target Draft.");
+            core.setOutput("source_release_id", String(source.id));
+            core.setOutput("target_release_id", String(target.id));
+            core.setOutput("target_commit", target.target_commitish);
+
+      - name: Check out the exact target contract
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.identity.outputs.target_commit }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Prove the target is protected-main ancestry
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          TARGET_COMMIT: ${{ steps.identity.outputs.target_commit }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TARGET_COMMIT"
+          git merge-base --is-ancestor "$TARGET_COMMIT" "origin/$DEFAULT_BRANCH"
+
+      - name: Capture normal Pages and native-endpoint baselines
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target/acceptance-audit/pages-before
+          root="https://yulab-smu.top/Rho"
+          for relative in index.html updates/development.json; do
+            output="target/acceptance-audit/pages-before/${relative//\//_}"
+            curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' "$root/$relative?before=$GITHUB_RUN_ID" -o "$output"
+            sha256sum "$output"
+          done
+          stable_status="$(curl --silent --show-error --location --proto '=https' --proto-redir '=https' --output /dev/null --write-out '%{http_code}' "$root/updates/stable.json?before=$GITHUB_RUN_ID")"
+          test "$stable_status" = "404"
+          echo "$stable_status" > target/acceptance-audit/pages-before/updates_stable.status
+          for channel in development stable; do
+            status="$(curl --silent --show-error --location --proto '=https' --proto-redir '=https' --output /dev/null --write-out '%{http_code}' "$root/updates/tauri/$channel.json?before=$GITHUB_RUN_ID")"
+            test "$status" = "404"
+          done
+
+      - name: Prepare exact release notes and exercise transport contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/native-updater-acceptance.mjs --test true
+          mkdir -p target/acceptance
+          node scripts/release-notes.mjs --mode prepare --version 0.4.0-dev.41 --tag v0.4.0-dev.41 --output target/acceptance/target-release-notes.json
+
+      - name: Download both Draft asset sets without mutation
+        uses: actions/github-script@v7
+        env:
+          SOURCE_RELEASE_ID: ${{ steps.identity.outputs.source_release_id }}
+          TARGET_RELEASE_ID: ${{ steps.identity.outputs.target_release_id }}
+          TARGET_COMMIT: ${{ steps.identity.outputs.target_commit }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const crypto = require("crypto");
+            const fs = require("fs");
+            const path = require("path");
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const sourceId = Number(process.env.SOURCE_RELEASE_ID);
+            const targetId = Number(process.env.TARGET_RELEASE_ID);
+            if (!Number.isSafeInteger(sourceId) || !Number.isSafeInteger(targetId)) throw new Error("Release IDs are invalid.");
+            const getRelease = async (releaseId) => (await github.rest.repos.getRelease({ owner, repo, release_id: releaseId })).data;
+            const source = await getRelease(sourceId);
+            const target = await getRelease(targetId);
+            if (source.tag_name !== "v0.4.0-dev.40" || !source.draft || !source.prerelease || source.target_commitish !== "14b16ced90df02621e37913e23c6a555cf5963f0") {
+              throw new Error("Source Draft changed before asset validation.");
+            }
+            if (target.tag_name !== "v0.4.0-dev.41" || !target.draft || !target.prerelease || target.target_commitish !== process.env.TARGET_COMMIT) {
+              throw new Error("Target Draft changed before asset validation.");
+            }
+            const releaseRecord = (release) => ({
+              release_id: String(release.id),
+              tag_name: release.tag_name,
+              target_commitish: release.target_commitish,
+              draft: release.draft,
+              prerelease: release.prerelease,
+              name: release.name || "",
+              body: release.body || "",
+              published_at: release.published_at ?? null,
+              html_url: release.html_url,
+              assets: release.assets.map((asset) => ({ name: asset.name, size: asset.size })).sort((left, right) => left.name.localeCompare(right.name)),
+            });
+            const releaseSnapshot = (release) => ({
+              release_id: String(release.id),
+              tag_name: release.tag_name,
+              target_commitish: release.target_commitish,
+              draft: release.draft,
+              prerelease: release.prerelease,
+              name: release.name || "",
+              body: release.body || "",
+              assets: release.assets.map((asset) => [asset.id, asset.name, asset.size]).sort((left, right) => left[1].localeCompare(right[1])),
+            });
+            const download = async (release, directory) => {
+              fs.mkdirSync(directory, { recursive: true });
+              const seen = new Set();
+              for (const asset of release.assets) {
+                if (!asset?.name || path.basename(asset.name) !== asset.name || seen.has(asset.name) || !Number.isSafeInteger(asset.size) || asset.size <= 0) {
+                  throw new Error(`Unsafe or duplicate Release asset: ${asset?.name || "<empty>"}`);
+                }
+                seen.add(asset.name);
+                const response = await github.request("GET /repos/{owner}/{repo}/releases/assets/{asset_id}", {
+                  owner,
+                  repo,
+                  asset_id: asset.id,
+                  headers: { accept: "application/octet-stream" },
+                });
+                const bytes = Buffer.from(response.data);
+                if (bytes.length !== asset.size) throw new Error(`Downloaded size mismatch for ${asset.name}`);
+                fs.writeFileSync(path.join(directory, asset.name), bytes, { flag: "wx" });
+              }
+            };
+            await download(source, "target/acceptance/source");
+            await download(target, "target/acceptance/target");
+            fs.writeFileSync("target/acceptance/source-release.json", `${JSON.stringify(releaseRecord(source), null, 2)}\n`, { flag: "wx" });
+            fs.writeFileSync("target/acceptance/target-release.json", `${JSON.stringify(releaseRecord(target), null, 2)}\n`, { flag: "wx" });
+            fs.writeFileSync("target/acceptance-audit/source-release-before.json", `${JSON.stringify(releaseSnapshot(source), null, 2)}\n`, { flag: "wx" });
+            fs.writeFileSync("target/acceptance-audit/target-release-before.json", `${JSON.stringify(releaseSnapshot(target), null, 2)}\n`, { flag: "wx" });
+
+      - name: Bind source and target in the only permitted marker
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/native-updater-acceptance.mjs --mode create-target-marker \
+            --source_release target/acceptance/source-release.json \
+            --source_directory target/acceptance/source \
+            --target_release target/acceptance/target-release.json \
+            --target_directory target/acceptance/target \
+            --target_release_notes target/acceptance/target-release-notes.json \
+            --output target/acceptance/rho-0.4.0-dev.41-native-updater-acceptance-target.json
+
+      - name: Independently verify both source and target updater signatures
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --locked -p rho-updater-verifier -- --config desktop/src-tauri/tauri.conf.json \
+            --artifact target/acceptance/source/Rho_0.4.0-dev.40_x64-setup.exe \
+            --signature target/acceptance/source/Rho_0.4.0-dev.40_x64-setup.exe.sig
+          cargo run --locked -p rho-updater-verifier -- --config desktop/src-tauri/tauri.conf.json \
+            --artifact target/acceptance/source/Rho_0.4.0-dev.40_aarch64.app.tar.gz \
+            --signature target/acceptance/source/Rho_0.4.0-dev.40_aarch64.app.tar.gz.sig
+          cargo run --locked -p rho-updater-verifier -- --config desktop/src-tauri/tauri.conf.json \
+            --artifact target/acceptance/target/Rho_0.4.0-dev.41_x64-setup.exe \
+            --signature target/acceptance/target/Rho_0.4.0-dev.41_x64-setup.exe.sig
+          cargo run --locked -p rho-updater-verifier -- --config desktop/src-tauri/tauri.conf.json \
+            --artifact target/acceptance/target/Rho_0.4.0-dev.41_aarch64.app.tar.gz \
+            --signature target/acceptance/target/Rho_0.4.0-dev.41_aarch64.app.tar.gz.sig
+
+      - name: Upload the marker and transition only the target Release state
+        uses: actions/github-script@v7
+        env:
+          SOURCE_RELEASE_ID: ${{ steps.identity.outputs.source_release_id }}
+          TARGET_RELEASE_ID: ${{ steps.identity.outputs.target_release_id }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const crypto = require("crypto");
+            const fs = require("fs");
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const sourceId = Number(process.env.SOURCE_RELEASE_ID);
+            const targetId = Number(process.env.TARGET_RELEASE_ID);
+            const markerName = "rho-0.4.0-dev.41-native-updater-acceptance-target.json";
+            const markerPath = `target/acceptance/${markerName}`;
+            const markerBytes = fs.readFileSync(markerPath);
+            const sourceBefore = JSON.parse(fs.readFileSync("target/acceptance-audit/source-release-before.json", "utf8"));
+            const targetBefore = JSON.parse(fs.readFileSync("target/acceptance-audit/target-release-before.json", "utf8"));
+            const assetSnapshot = (release) => release.assets.map((asset) => [asset.id, asset.name, asset.size]).sort((left, right) => left[1].localeCompare(right[1]));
+            const bodySha256 = (release) => crypto.createHash("sha256").update(Buffer.from(release.body || "", "utf8")).digest("hex");
+            const exactDraft = (release, record, releaseId, label) => {
+              if (
+                release.id !== releaseId
+                || !release.draft
+                || !release.prerelease
+                || release.tag_name !== record.tag_name
+                || release.target_commitish !== record.target_commitish
+                || release.name !== record.name
+                || (release.body || "") !== record.body
+                || JSON.stringify(assetSnapshot(release)) !== JSON.stringify(record.assets)
+              ) throw new Error(`${label} Draft changed after byte validation.`);
+            };
+            const source = (await github.rest.repos.getRelease({ owner, repo, release_id: sourceId })).data;
+            const target = (await github.rest.repos.getRelease({ owner, repo, release_id: targetId })).data;
+            exactDraft(source, sourceBefore, sourceId, "Source");
+            exactDraft(target, targetBefore, targetId, "Target");
+            if (target.assets.some((asset) => asset.name === markerName)) throw new Error("Target marker already exists.");
+            const beforeAssets = assetSnapshot(target);
+            const beforeBodySha256 = bodySha256(target);
+            await github.rest.repos.uploadReleaseAsset({
+              owner,
+              repo,
+              release_id: targetId,
+              name: markerName,
+              data: markerBytes,
+              headers: { "content-type": "application/json", "content-length": markerBytes.length },
+            });
+            const marked = (await github.rest.repos.getRelease({ owner, repo, release_id: targetId })).data;
+            if (!marked.draft || !marked.prerelease || bodySha256(marked) !== beforeBodySha256 || marked.target_commitish !== target.target_commitish || marked.name !== target.name) {
+              throw new Error("Target Release changed while its marker was uploaded.");
+            }
+            const markerAsset = marked.assets.find((asset) => asset.name === markerName);
+            const markedAssets = assetSnapshot(marked);
+            if (!markerAsset || markerAsset.size !== markerBytes.length || markedAssets.length !== beforeAssets.length + 1) {
+              throw new Error("Target marker asset set is invalid after upload.");
+            }
+            const expectedMarkedAssets = [...beforeAssets, [markerAsset.id, markerAsset.name, markerAsset.size]].sort((left, right) => left[1].localeCompare(right[1]));
+            if (JSON.stringify(markedAssets) !== JSON.stringify(expectedMarkedAssets)) {
+              throw new Error("Uploading the marker changed an existing target asset.");
+            }
+            await github.rest.repos.updateRelease({ owner, repo, release_id: targetId, draft: false, prerelease: true });
+            const published = (await github.rest.repos.getRelease({ owner, repo, release_id: targetId })).data;
+            if (
+              published.draft
+              || !published.prerelease
+              || !published.published_at
+              || published.id !== targetId
+              || published.tag_name !== target.tag_name
+              || published.target_commitish !== target.target_commitish
+              || published.name !== target.name
+              || bodySha256(published) !== beforeBodySha256
+              || JSON.stringify(assetSnapshot(published)) !== JSON.stringify(markedAssets)
+            ) throw new Error("The published target differs from its validated marker-bearing Draft.");
+            fs.writeFileSync("target/acceptance-audit/target-release-published-snapshot.json", `${JSON.stringify({
+              release_id: published.id,
+              tag_name: published.tag_name,
+              target_commitish: published.target_commitish,
+              body_sha256: beforeBodySha256,
+              assets: markedAssets,
+              marker_sha256: crypto.createHash("sha256").update(markerBytes).digest("hex"),
+            }, null, 2)}\n`, { flag: "wx" });
+
+      - name: Download and validate the public target independently
+        uses: actions/github-script@v7
+        env:
+          SOURCE_RELEASE_ID: ${{ steps.identity.outputs.source_release_id }}
+          TARGET_RELEASE_ID: ${{ steps.identity.outputs.target_release_id }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require("fs");
+            const path = require("path");
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const sourceId = Number(process.env.SOURCE_RELEASE_ID);
+            const targetId = Number(process.env.TARGET_RELEASE_ID);
+            if (!Number.isSafeInteger(sourceId) || !Number.isSafeInteger(targetId)) throw new Error("Public acceptance-pair Release IDs are invalid.");
+            const source = (await github.rest.repos.getRelease({ owner, repo, release_id: sourceId })).data;
+            const target = (await github.rest.repos.getRelease({ owner, repo, release_id: targetId })).data;
+            if (
+              !source.draft
+              || !source.prerelease
+              || source.tag_name !== "v0.4.0-dev.40"
+              || source.target_commitish !== "14b16ced90df02621e37913e23c6a555cf5963f0"
+              || source.name !== "Rho 0.4.0-dev.40"
+            ) throw new Error("The immutable dev.40 source Draft changed while the target was published.");
+            if (target.draft || !target.prerelease || target.tag_name !== "v0.4.0-dev.41" || target.name !== "Rho 0.4.0-dev.41 Native Updater Acceptance Target") {
+              throw new Error("Target did not become the expected public prerelease.");
+            }
+            const releaseRecord = (release) => ({
+              release_id: String(release.id),
+              tag_name: release.tag_name,
+              target_commitish: release.target_commitish,
+              draft: release.draft,
+              prerelease: release.prerelease,
+              name: release.name || "",
+              body: release.body || "",
+              published_at: release.published_at ?? null,
+              html_url: release.html_url,
+              assets: release.assets.map((asset) => ({ name: asset.name, size: asset.size })).sort((left, right) => left.name.localeCompare(right.name)),
+            });
+            const download = async (release, directory, label) => {
+              fs.mkdirSync(directory, { recursive: true });
+              const names = new Set();
+              for (const asset of release.assets) {
+                if (!asset?.name || path.basename(asset.name) !== asset.name || names.has(asset.name) || !Number.isSafeInteger(asset.size) || asset.size <= 0) {
+                  throw new Error(`Unsafe or duplicate ${label} asset: ${asset?.name || "<empty>"}`);
+                }
+                names.add(asset.name);
+                const response = await github.request("GET /repos/{owner}/{repo}/releases/assets/{asset_id}", {
+                  owner,
+                  repo,
+                  asset_id: asset.id,
+                  headers: { accept: "application/octet-stream" },
+                });
+                const bytes = Buffer.from(response.data);
+                if (bytes.length !== asset.size) throw new Error(`${label} downloaded size mismatch for ${asset.name}`);
+                fs.writeFileSync(path.join(directory, asset.name), bytes, { flag: "wx" });
+              }
+            };
+            await download(source, "target/acceptance/public-source", "Source Draft");
+            await download(target, "target/acceptance/public", "Public target");
+            fs.writeFileSync("target/acceptance/public-source-release.json", `${JSON.stringify(releaseRecord(source), null, 2)}\n`, { flag: "wx" });
+            fs.writeFileSync("target/acceptance/public-release.json", `${JSON.stringify(releaseRecord(target), null, 2)}\n`, { flag: "wx" });
+
+      - name: Validate public marker, evidence, final bytes and signatures
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/native-updater-acceptance.mjs --mode validate-acceptance-pair \
+            --source_release target/acceptance/public-source-release.json \
+            --source_directory target/acceptance/public-source \
+            --target_release target/acceptance/public-release.json \
+            --target_directory target/acceptance/public
+          cp target/acceptance/rho-0.4.0-dev.41-native-updater-acceptance-target.json target/acceptance-audit/
+          cp target/acceptance/public-source-release.json target/acceptance-audit/
+          cp target/acceptance/public-release.json target/acceptance-audit/
+
+      - name: Prove public artifact URLs are anonymously reachable
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://github.com/YuLab-SMU/Rho/releases/download/v0.4.0-dev.41"
+          for asset in Rho_0.4.0-dev.41_x64-setup.exe Rho_0.4.0-dev.41_aarch64.app.tar.gz; do
+            status="$(curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --range 0-0 --output /dev/null --write-out '%{http_code}' "$base/$asset")"
+            test "$status" = "206" || test "$status" = "200"
+          done
+
+      - name: Prove normal Pages state remains unchanged and native endpoints remain absent
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="https://yulab-smu.top/Rho"
+          for relative in index.html updates/development.json; do
+            before="target/acceptance-audit/pages-before/${relative//\//_}"
+            after="target/acceptance-audit/pages-after-${relative//\//_}"
+            curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' "$root/$relative?after=$GITHUB_RUN_ID" -o "$after"
+            cmp "$before" "$after"
+          done
+          stable_status="$(curl --silent --show-error --location --proto '=https' --proto-redir '=https' --output /dev/null --write-out '%{http_code}' "$root/updates/stable.json?after=$GITHUB_RUN_ID")"
+          test "$stable_status" = "$(cat target/acceptance-audit/pages-before/updates_stable.status)"
+          for channel in development stable; do
+            status="$(curl --silent --show-error --location --proto '=https' --proto-redir '=https' --output /dev/null --write-out '%{http_code}' "$root/updates/tauri/$channel.json?after=$GITHUB_RUN_ID")"
+            test "$status" = "404"
+          done
+
+      - name: Retain bounded target-publication audit records
+        uses: actions/upload-artifact@v4
+        with:
+          name: rho-native-updater-acceptance-target-${{ github.run_id }}
+          path: target/acceptance-audit
+          if-no-files-found: error
+          retention-days: 90

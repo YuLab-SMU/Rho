@@ -2,20 +2,31 @@
 
 Date: 2026-08-15
 
-Status: active; `UPDATER-1A` authorized on 2026-08-15; source, signing, and
-publication-contract implementation plus deterministic verification, author
-review, and PR CI are complete. Independent PR review and protected integration
-remain open. `UPDATER-1B` through `UPDATER-1D` remain gated by their exact candidate,
-installed-app, and release evidence conditions.
+Status: active; `UPDATER-1A` source/signing/publication-contract work is
+integrated in protected `main`; `UPDATER-1B` built immutable signed
+`0.4.0-dev.40` Draft `v0.4.0-dev.40` from
+`14b16ced90df02621e37913e23c6a555cf5963f0` and passed independent asset and
+signature audit. `UPDATER-1C-T1`, the bounded `dev.41` acceptance transport,
+is implemented and deterministically validated in a pending protected-main
+change; it is not yet integrated or exercised.
+`UPDATER-1C` manual installed-app acceptance and `UPDATER-1D` remain gated by
+their exact evidence conditions.
 
 Authorization: after Issue #27 was audited and its explicit native-updater
 exclusion was confirmed, the project owner instructed the agent to continue
-until “Tauri 原生 updater 启用” on 2026-08-15. That authorizes the bounded
+until “Tauri 原生 updater 启用” on 2026-08-15. That authorized the bounded
 `UPDATER-1A` implementation below: a fresh `dev.40` source contract, native
 updater key/configuration, supported-platform runtime/UI, signing and manifest
-pipeline, verification, documentation, and protected integration. It does not
-waive the later exact-candidate, human installed-update, macOS/Windows trust,
-or explicit release decision gates.
+pipeline, verification, documentation, and protected integration. After the
+immutable `dev.40` Draft proved that Draft assets are not anonymously
+downloadable and the compiled endpoint has no test override, the owner further
+authorized this exact `UPDATER-1C-T1` scope on 2026-08-15: “创建更高版本的
+`dev.41` 测试目标，并在受控、限时的测试 manifest 下完成双平台真实更新/恢复验证
+（不发布 `dev.40`、不启用正式 Pages 更新入口）。” The detailed D4/R4
+transport and stop conditions are the subordinate
+`release/active-0.4.0-dev.41-native-updater-acceptance-target-checklist.md`.
+Neither authorization waives exact-candidate, human installed-update,
+macOS/Windows trust, or explicit release-decision gates.
 
 Issue linkage: [Issue #27](https://github.com/YuLab-SMU/Rho/issues/27) is the
 Update Site candidate-publication prerequisite. It explicitly excludes Tauri
@@ -328,6 +339,45 @@ regenerate the same Pages tree from immutable public Release assets, but cannot
 alter a Release, re-sign an asset, or accept a Draft. A later release replaces
 only the manifest projection; older Release assets remain immutable.
 
+### 5.1 `UPDATER-1C-T1` controlled acceptance transport
+
+The immutable `dev.40` Draft cannot itself be an anonymously downloadable
+Tauri update target, while its compiled development endpoint intentionally has
+no test override. The sole authorized bridge is one fresh, higher,
+equivalently signed `0.4.0-dev.41` acceptance target and a temporary fixture at
+the already compiled development endpoint. The target is a public, clearly
+labelled acceptance-only prerelease so its GitHub Release asset URLs satisfy
+the runtime allowlist; it is not a `dev.40` publication, ordinary product
+release, V1 download-site entry, or normal native endpoint.
+
+The exact target/pair, marker schema, Pages-tree mutation, bounded test window,
+automatic cleanup, and manual evidence rows are owned by
+`release/active-0.4.0-dev.41-native-updater-acceptance-target-checklist.md`.
+That checklist must retain all of these boundaries:
+
+- no source, artifact, Release body, asset, acceptance record, tag, or Draft
+  field of `v0.4.0-dev.40` is changed;
+- the `dev.41` target is constructed from a fresh protected-main commit with
+  final Windows/macOS platform trust and Tauri-signature evidence, then only a
+  bounded test-target marker may be added before its one public prerelease
+  transition;
+- the ordinary candidate-publish workflow rejects the target, and normal Pages
+  generation validates then excludes its exact marker rather than treating it
+  as a normal accepted release;
+- a manually dispatched, environment-protected fixture job may place only a
+  valid or deliberately signature-invalid Tauri manifest at
+  `/updates/tauri/development.json`, leaves the V1 site byte-for-byte intact,
+  and removes the fixture after at most 45 minutes; and
+- cleanup is allowed without a second production mutation approval only when a
+  fresh Pages checkout contains the exact fixture marker and exact generated
+  manifest hash. Any unexpected production/native file, marker, identity,
+  expiry, or hash fails closed and is preserved for human recovery.
+
+The fixture does not add an unbounded endpoint override, proxy, key, secret,
+background check, server component, Release rebuild, or normal publication
+authority. It is acceptance infrastructure only; successful automation cannot
+substitute for the two human installed-update records.
+
 ## 6. Work Packages And Stop Points
 
 ### UPDATER-1A — source, signing, and publication contract
@@ -358,6 +408,13 @@ rejection, successful install, clean shutdown, restart, final version, and
 recovery after denied/failed install. Record exact source/artifact hashes,
 target manifest, installed paths, final version, human observations, and any
 platform limitation. Automated checks do not replace human acceptance.
+
+`UPDATER-1C-T1` is the only currently authorized sub-package of this work:
+implement and review the `dev.41` target/fixture transport described in
+Section 5.1, stop at protected integration, construct its exact Draft, and
+obtain the test-target/public-fixture evidence before asking humans to perform
+the two platform records. It does not authorize a `dev.40` acceptance asset,
+Draft publication, or permanent Pages native manifest.
 
 ### UPDATER-1D — public release and live native endpoint
 
@@ -409,6 +466,11 @@ must synchronize the desktop version to `0.4.0-dev.40` in all application
 authorities, add a concise `NEWS.md` entry only after implementation exists,
 and add reviewed `.github/release-notes/v0.4.0-dev.40.md`. R package versions
 do not change because their exported/package contracts are unaffected.
+
+`UPDATER-1C-T1` uses a fresh `0.4.0-dev.41` desktop-only version in all
+application authorities, its own reviewed release-notes file and `NEWS.md`
+entry. It does not alter R package versions. The source version and test target
+remain separate from the exact `dev.40` candidate/release decision.
 
 The active cross-review record, About/Update V1 design, Linux plan, candidate
 checklist, Privacy wording where needed, and this lifecycle status must be

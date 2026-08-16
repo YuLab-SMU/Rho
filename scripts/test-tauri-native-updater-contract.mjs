@@ -104,7 +104,8 @@ assert.match(pages, /rho-\$\{version\}-tauri-native-updater-evidence\.json/);
 assert.match(pages, /Rho_\$\{version\}_aarch64\.app\.tar\.gz\.sig/);
 assert.match(pages, /Verify deployed native updater manifest/);
 
-assert.match(spec, /Status: active; `UPDATER-1A` authorized/);
+assert.match(spec, /Status: active; `UPDATER-1A` source\/signing\/publication-contract work is/);
+assert.match(spec, /`UPDATER-1C-T1`, the bounded `dev\.41` acceptance transport/);
 assert.match(spec, /No updater signature may be reused after a byte-changing/);
 assert.match(checklist, /NO_RELEASE_DECISION/);
 assert.match(crossReview, /may not own an\n   unbounded download or destructive default install/);

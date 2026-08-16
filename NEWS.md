@@ -4,6 +4,17 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.0-dev.41 - 2026-08-15
+
+### Verification
+
+- `dev.41` is an acceptance-only native-updater target for a controlled
+  Windows/macOS `dev.40 -> dev.41` test. It is explicitly excluded from the
+  normal Update Site and does not publish or enable `dev.40` native updates.
+- The target transport binds the immutable source Draft and final target
+  signatures to one marker, permits only a time-bounded test manifest, and
+  requires exact cleanup before normal Pages publication can continue.
+
 ## 0.4.0-dev.40 - 2026-08-15
 
 ### Updates
