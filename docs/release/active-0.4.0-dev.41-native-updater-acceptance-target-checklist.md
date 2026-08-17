@@ -4,9 +4,16 @@ Date: 2026-08-15
 
 Status: active `UPDATER-1C-T1` transport contract. The project owner
 explicitly authorized this bounded work package on 2026-08-15. The source
-transport implementation and deterministic local validation are complete in a
-pending protected-main change; no `dev.41` source commit, candidate Draft,
-public target, temporary manifest, or human installed-update evidence exists
+transport integrated through PR #80 at protected-main commit
+`9ec8117bedea33d18e2ed367ec56bd9138cc40ef`. Candidate run `31986077326`
+constructed the signed `v0.4.0-dev.41` Draft with eleven assets. Independent
+pre-publication audit then reproduced a Draft-URL normalization defect before
+marker creation: GitHub returned an `untagged-*` Draft `html_url`, while the
+validated release record requires the stable URL derived from `tag_name`.
+The bounded normalization repair, focused regression, complete Node contract
+suite, YAML parsing, and repeated independent two-Draft/four-signature audit
+now pass on a pending protected-main branch. No target marker was uploaded and
+no public target, temporary manifest, or human installed-update evidence exists
 yet.
 
 Owner: Rho release owner
@@ -49,7 +56,7 @@ downloads to public GitHub Release URLs.
 | Role | Required identity | Current state |
 | --- | --- | --- |
 | Source installed build | `0.4.0-dev.40` / `v0.4.0-dev.40`, Draft from `14b16ced90df02621e37913e23c6a555cf5963f0` | signed Draft constructed and independently audited; remains Draft |
-| Test target | fresh `0.4.0-dev.41` / `v0.4.0-dev.41`, one clean protected-main commit after this contract integrates | source contract pending protected integration; not constructed |
+| Test target | fresh `0.4.0-dev.41` / `v0.4.0-dev.41`, one clean protected-main commit after this contract integrates | signed eleven-asset Draft constructed by run `31986077326` from `9ec8117bedea33d18e2ed367ec56bd9138cc40ef`; independent audit blocked before marker creation by the Draft-URL normalization defect below |
 | Supported updater platforms | Windows x86-64 NSIS and macOS Apple Silicon application archive | both required |
 | Permanent endpoint state before/after a window | `/updates/tauri/development.json` and `/updates/tauri/stable.json` absent | verify each time |
 | Normal V1 state | existing `updates/development.json` and download page unchanged; the currently absent `updates/stable.json` remains absent | verify byte preservation and exact `404` preservation |
@@ -58,6 +65,46 @@ No `dev.39` asset, conditional acceptance, public manifest, or earlier
 candidate evidence can be reused. The `dev.40` source/asset hashes and target
 hashes must be recorded verbatim in the eventual installed-app acceptance
 record.
+
+## Draft URL Normalization Defect Gate
+
+GitHub's Release API returns an internal
+`https://github.com/YuLab-SMU/Rho/releases/tag/untagged-*` `html_url` for an
+unpublished Draft. That URL is mutable implementation detail and does not equal
+the stable public identity required by `validateReleaseRecord()`. The first
+independent dev.41 audit downloaded both exact eleven-asset Drafts successfully
+but stopped at `Release identity is invalid for 0.4.0-dev.40` before creating
+or uploading a marker.
+
+Every target-publish and bounded-window release record must therefore derive
+`html_url` only from the fixed repository and the already validated
+`release.tag_name`:
+
+```text
+https://github.com/YuLab-SMU/Rho/releases/tag/<tag_name>
+```
+
+It must never copy the API's Draft `release.html_url`. This normalization is an
+audit projection only: it does not edit a Release, tag, body, asset, signature,
+target commit, or publication state. Regression automation must reject raw
+`release.html_url` projection in both acceptance workflows and require the
+canonical projection at both target-workflow record sites and the window
+record site. The full independent two-Draft asset and four-signature audit must
+pass after protected integration before the public-target workflow may run.
+
+The repaired local audit used the exact downloaded eleven-asset dev.40 and
+dev.41 Draft directories, bound source commit
+`14b16ced90df02621e37913e23c6a555cf5963f0` to target commit
+`9ec8117bedea33d18e2ed367ec56bd9138cc40ef`, verified both Windows and both
+macOS Tauri signatures, and generated but did not upload marker SHA-256
+`21812b18b43adb39163d61b76632fe21ee452d6d7db006defa0a393dd5738af0`.
+This is pre-integration engineering evidence only; the protected workflow must
+repeat the same validation after the repair lands.
+
+Version decision: no application or R-package version bump. The repair changes
+only an internal audit-record URL projection and leaves the already built
+dev.41 candidate bytes and public application behavior unchanged. NEWS decision:
+no entry for the same reason.
 
 ## Target Construction And Public-Test Marker
 

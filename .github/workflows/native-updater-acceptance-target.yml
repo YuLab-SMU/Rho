@@ -154,7 +154,7 @@ jobs:
               name: release.name || "",
               body: release.body || "",
               published_at: release.published_at ?? null,
-              html_url: release.html_url,
+              html_url: `https://github.com/${owner}/${repo}/releases/tag/${release.tag_name}`,
               assets: release.assets.map((asset) => ({ name: asset.name, size: asset.size })).sort((left, right) => left.name.localeCompare(right.name)),
             });
             const releaseSnapshot = (release) => ({
@@ -341,7 +341,7 @@ jobs:
               name: release.name || "",
               body: release.body || "",
               published_at: release.published_at ?? null,
-              html_url: release.html_url,
+              html_url: `https://github.com/${owner}/${repo}/releases/tag/${release.tag_name}`,
               assets: release.assets.map((asset) => ({ name: asset.name, size: asset.size })).sort((left, right) => left.name.localeCompare(right.name)),
             });
             const download = async (release, directory, label) => {
