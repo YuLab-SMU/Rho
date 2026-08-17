@@ -3,10 +3,12 @@
 Date: 2026-08-17
 
 Status: active source contract; `SP-FT2-DEV42` is authorized, external binary
-artifact configuration and encrypted repository secret exist, source
-implementation and local affected validation pass, and protected hosted
-validation/integration are pending. No dev.42 artifact, tag, Draft, acceptance
-record, Release, or Pages entry exists.
+artifact configuration and encrypted repository secret exist, and the initial
+source integrated. Deterministic pre-sign bundle-type repair implementation and
+local validation pass; protected integration is pending. Failed pre-Draft run
+`31999076405` is
+non-composable; no dev.42 tag, Draft, acceptance record, Release, or Pages entry
+exists.
 
 Owner: Rho release owner
 
@@ -34,6 +36,8 @@ Change class / risk: D4 / R4
   negative-tested; source contract negatives pass, hosted Windows execution is
   pending;
 - [x] candidate-only binary request precedes NSIS bundle and installer request;
+- [x] the exact single Tauri bundle-type token is changed from unknown to NSIS
+  before binary signing, with missing/duplicate/already-patched/size negatives;
 - [ ] signed executable hash/certificate survives bundling unchanged;
 - [x] final installer is signed before its Tauri updater signature;
 - [x] dev.42 platform evidence uses only the two-stage schema/check set;
@@ -87,3 +91,17 @@ Change class / risk: D4 / R4
 Current release decision: `NO_RELEASE_DECISION`. Source implementation,
 candidate construction, installed acceptance, publication, and permanent
 native endpoint remain distinct facts.
+
+## Rejected Pre-Draft Run
+
+Run `31999076405` is rejected and non-composable. It passed the exact macOS
+lane and, on Windows, `NoBundle`, binary request, binary promotion,
+`BundleOnly`, signed-source hash survival, installer request/promotion, and the
+final Tauri signature. Silent installation then proved the installed EXE hash
+did not equal the signed pre-bundle EXE hash. Tauri `2.11.4` source review
+showed its NSIS bundler patches the bundle-type token only while packaging and
+restores the disk source afterward. No Windows platform evidence, aggregate
+evidence, tag, Draft, or Release was created. A new protected-main run may use
+the still-unused dev.42 identity only after the deterministic pre-sign NSIS
+token patch and its regression tests integrate; it may reuse no run artifact,
+request, hash, or notarization result.

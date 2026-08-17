@@ -54,11 +54,15 @@ assert.match(windows, /signer generate --ci --write-keys/);
 assert.match(windows, /TAURI_SIGNING_PRIVATE_KEY: \$\{\{ needs\.identity\.outputs\.build_mode == 'candidate' && secrets\.TAURI_SIGNING_PRIVATE_KEY \|\| '' \}\}/);
 assert.match(windows, /Tauri did not create the required updater artifact signature/);
 const windowsBinaryPromotion = windows.indexOf("Verify and promote returned test-signed Windows executable");
+const windowsBundleTypePatch = windows.indexOf("Patch unsigned Windows executable for exact NSIS bundle type");
 const windowsBundle = windows.indexOf("Bundle NSIS without rebuilding signed Windows executable");
 const windowsPromotion = windows.indexOf("Verify and promote returned test-signed Windows installer");
 const windowsFinalSign = windows.indexOf("Sign final Authenticode Windows updater artifact");
 assert.ok(
-  windowsBinaryPromotion >= 0 && windowsBinaryPromotion < windowsBundle && windowsBundle < windowsPromotion,
+  windowsBundleTypePatch >= 0
+    && windowsBundleTypePatch < windowsBinaryPromotion
+    && windowsBinaryPromotion < windowsBundle
+    && windowsBundle < windowsPromotion,
   "Windows executable must be Authenticode-signed before the no-rebuild NSIS bundle and installer signing",
 );
 assert.ok(windowsPromotion >= 0 && windowsPromotion < windowsFinalSign, "Windows updater signature must follow final Authenticode promotion");
