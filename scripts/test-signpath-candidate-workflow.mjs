@@ -171,7 +171,8 @@ function validate(value) {
   assert.match(value.buildScript, /NoBundle mode must not produce an installer/);
   assert.match(value.bundleType, /__TAURI_BUNDLE_TYPE_VAR_UNK/);
   assert.match(value.bundleType, /__TAURI_BUNDLE_TYPE_VAR_NSS/);
-  assert.match(value.bundleType, /exactly one unknown bundle token and no NSIS token/);
+  assert.match(value.bundleType, /exactly one unknown bundle token/);
+  assert.match(value.bundleType, /nsisIndexes\.length \+ 1/);
   assert.match(value.bundleType, /after\.length !== before\.length/);
 
   assert.match(value.candidate, /LEGACY_WINDOWS_SIGNING_CHECKS/);

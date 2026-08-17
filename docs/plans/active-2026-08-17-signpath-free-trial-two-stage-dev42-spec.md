@@ -29,6 +29,13 @@ defect repair below keeps dev.42 because no candidate Draft/tag/Release or
 Windows platform evidence was created; the replacement run starts from a new
 exact protected-main commit and reuses no bytes or request evidence.
 
+The first repair run `32002355917` stopped in the pre-sign patch before any
+SignPath request. Windows optimization retained an unrelated NSIS enum literal
+in addition to the one authoritative unknown placeholder. Tauri itself patches
+only the unique unknown placeholder. The corrected admission therefore
+requires exactly one unknown token and proves the NSIS-token count increases
+by exactly one; it records but does not reject pre-existing NSIS literals.
+
 Owner: Rho release owner
 
 Candidate identity: `0.4.0-dev.42` / `v0.4.0-dev.42` /
@@ -177,8 +184,8 @@ Automation must reject:
 - binary config accidentally equal to the installer config;
 - API token/config exposure outside the bounded signing steps;
 - wrong ZIP cardinality, nesting, filename, or output path for either request;
-- missing, duplicated, already-NSIS, oversized, or shape-changing Tauri
-  bundle-type patch input;
+- missing/duplicated unknown placeholder, oversized input, or a patch whose
+  NSIS-token count does not increase by exactly one;
 - already-signed binary input, unchanged returned bytes, missing signer,
   unexpected status, thumbprint, subject/issuer relation, or request ID;
 - Tauri bundle recompiling or changing the signed executable;
