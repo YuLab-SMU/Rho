@@ -170,10 +170,10 @@ jobs:
           windows_artifact="target/fixture/release/Rho_0.4.0-dev.41_x64-setup.exe"
           macos_artifact="target/fixture/release/Rho_0.4.0-dev.41_aarch64.app.tar.gz"
           if [[ "$FIXTURE_MODE" == "valid" ]]; then
-            verify "$windows_artifact" target/fixture/signatures/windows-x86-64.sig
+            verify "$windows_artifact" target/fixture/signatures/windows-x86_64.sig
             verify "$macos_artifact" target/fixture/signatures/darwin-aarch64.sig
           else
-            if verify "$windows_artifact" target/fixture/signatures/windows-x86-64.sig >target/fixture/windows-rejection.out 2>target/fixture/windows-rejection.err; then
+            if verify "$windows_artifact" target/fixture/signatures/windows-x86_64.sig >target/fixture/windows-rejection.out 2>target/fixture/windows-rejection.err; then
               echo "The intentionally mutated Windows signature unexpectedly verified." >&2
               exit 1
             fi

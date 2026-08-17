@@ -68,6 +68,8 @@ assert.match(window, /--mode recover-expired-fixture/);
 assert.match(window, /--mode validate-acceptance-pair/);
 assert.match(window, /id: fixture_armed/);
 assert.match(window, /does not verify against the configured public key/);
+assert.match(window, /target\/fixture\/signatures\/windows-x86_64\.sig/);
+assert.doesNotMatch(window, /target\/fixture\/signatures\/windows-x86-64\.sig/);
 assert.match(window, /\[\[ "\$status" == "404" \]\]/);
 assert.doesNotMatch(window, /TAURI_SIGNING_PRIVATE_KEY|TAURI_SIGNING_PRIVATE_KEY_PASSWORD|APPLE_API_|SIGNPATH_/);
 assert.doesNotMatch(window, /html_url: release\.html_url/);

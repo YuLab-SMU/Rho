@@ -491,11 +491,13 @@ function signatureText(value, label) {
   const bytes = Buffer.from(encoded, "base64");
   if (!bytes.length || bytes.toString("base64") !== encoded) fail(`${label} is not canonical base64`);
   const text = bytes.toString("utf8");
-  const lines = text.split("\n");
-  if (lines.length !== 4 || lines.some((line) => !line) || !text.startsWith("untrusted comment:")) {
+  const trailingNewline = text.endsWith("\n");
+  const body = trailingNewline ? text.slice(0, -1) : text;
+  const lines = body.split("\n");
+  if (lines.length !== 4 || lines.some((line) => !line || line.includes("\r")) || !body.startsWith("untrusted comment:")) {
     fail(`${label} is not a four-line Tauri/minisign signature`);
   }
-  return { encoded, text, lines };
+  return { encoded, text, lines, trailingNewline };
 }
 
 export function mutatedNativeUpdaterSignature(value) {
@@ -505,9 +507,16 @@ export function mutatedNativeUpdaterSignature(value) {
   signatureBytes[signatureBytes.length - 1] ^= 0x01;
   const mutatedLines = [...parsed.lines];
   mutatedLines[1] = signatureBytes.toString("base64");
-  const mutated = Buffer.from(mutatedLines.join("\n"), "utf8").toString("base64");
+  const mutatedText = `${mutatedLines.join("\n")}${parsed.trailingNewline ? "\n" : ""}`;
+  const mutated = Buffer.from(mutatedText, "utf8").toString("base64");
   const reparsed = signatureText(mutated, "Mutated native updater signature");
-  if (reparsed.encoded === parsed.encoded || reparsed.lines[0] !== parsed.lines[0] || reparsed.lines[2] !== parsed.lines[2] || reparsed.lines[3] !== parsed.lines[3]) {
+  if (
+    reparsed.encoded === parsed.encoded
+    || reparsed.trailingNewline !== parsed.trailingNewline
+    || reparsed.lines[0] !== parsed.lines[0]
+    || reparsed.lines[2] !== parsed.lines[2]
+    || reparsed.lines[3] !== parsed.lines[3]
+  ) {
     fail("Native updater signature mutation is not isolated to the signature payload");
   }
   return mutated;
@@ -1046,6 +1055,17 @@ export function selfTest() {
       validFixture.manifest.platforms["windows-x86_64"].signature,
     );
     assert.equal(signatureText(rejectedFixture.manifest.platforms["windows-x86_64"].signature, "fixture rejection signature").lines.length, 4);
+
+    const signatureWithoutTerminalLf = Buffer.from(fakeSignature(), "base64").toString("utf8");
+    const signatureWithTerminalLf = Buffer.from(`${signatureWithoutTerminalLf}\n`, "utf8").toString("base64");
+    const mutatedTerminalLfSignature = mutatedNativeUpdaterSignature(signatureWithTerminalLf);
+    const parsedTerminalLfSignature = signatureText(mutatedTerminalLfSignature, "terminal-LF fixture rejection signature");
+    assert.equal(parsedTerminalLfSignature.trailingNewline, true);
+    assert.equal(Buffer.from(mutatedTerminalLfSignature, "base64").toString("utf8").endsWith("\n"), true);
+    expectFailure(
+      () => mutatedNativeUpdaterSignature(Buffer.from(`${signatureWithoutTerminalLf}\n\n`, "utf8").toString("base64")),
+      /four-line Tauri\/minisign signature/,
+    );
 
     const site = path.join(root, "site");
     fs.mkdirSync(path.join(site, "updates"), { recursive: true });
