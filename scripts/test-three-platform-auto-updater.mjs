@@ -11,6 +11,7 @@ const build = read(".github/workflows/candidate-build-draft.yml");
 const publish = read(".github/workflows/candidate-publish.yml");
 const pages = read(".github/workflows/update-site-publish.yml");
 const linuxBuild = read("scripts/build-linux.sh");
+const dataViewerTest = read("scripts/test-data-viewer-query-ui.mjs");
 const linuxConfig = JSON.parse(read("desktop/src-tauri/tauri.linux.conf.json"));
 
 assert.deepEqual(candidatePlatformsForVersion("0.4.0-dev.42"), ["windows_x86_64", "macos_aarch64"]);
@@ -46,5 +47,14 @@ assert.match(publish, /linux_x86_64/);
 assert.match(publish, /linuxUpdaterSignatureName/);
 assert.match(pages, /linux_x86_64/);
 assert.match(pages, /linux-x86_64/);
+assert.match(dataViewerTest, /read\("r", "rho\.bridge", "R", "workspace\.R"\)/);
+assert.doesNotMatch(dataViewerTest, /read\("R", "rho\.bridge"/);
+for (const testFile of fs.readdirSync("scripts").filter((name) => /^test-.*\.mjs$/.test(name))) {
+  assert.doesNotMatch(
+    read(`scripts/${testFile}`),
+    /const bridge = read\("R", "rho\.(?:bridge|agent)"/,
+    `${testFile} must preserve the lowercase repository package root on case-sensitive platforms`,
+  );
+}
 
 console.log("Three-platform automatic updater contract tests passed.");

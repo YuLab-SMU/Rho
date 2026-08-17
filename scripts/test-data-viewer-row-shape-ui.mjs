@@ -8,7 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
 const js = read("desktop", "dist", "app.js");
 const rust = read("desktop", "src-tauri", "src", "main.rs");
-const bridge = read("R", "rho.bridge", "R", "workspace.R");
+const bridge = read("r", "rho.bridge", "R", "workspace.R");
 
 const helperStart = js.indexOf("function dataViewerProtocolError(");
 const helperEnd = js.indexOf("\nfunction renderDataViewer()", helperStart);
