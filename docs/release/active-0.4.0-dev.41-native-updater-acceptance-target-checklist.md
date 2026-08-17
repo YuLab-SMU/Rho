@@ -10,11 +10,14 @@ constructed the signed `v0.4.0-dev.41` Draft with eleven assets. Independent
 pre-publication audit then reproduced a Draft-URL normalization defect before
 marker creation: GitHub returned an `untagged-*` Draft `html_url`, while the
 validated release record requires the stable URL derived from `tag_name`.
-The bounded normalization repair, focused regression, complete Node contract
-suite, YAML parsing, and repeated independent two-Draft/four-signature audit
-now pass on a pending protected-main branch. No target marker was uploaded and
-no public target, temporary manifest, or human installed-update evidence exists
-yet.
+The bounded normalization repair merged through PR #81 at
+`f4bcf9e1cd6e1a46b3f517d3587a7ff15983009f`. Protected run `31989055536`
+repeated the two-Draft/four-signature audit, uploaded the one bound marker, and
+published the exact twelve-asset dev.41 acceptance-only prerelease while normal
+Pages/native endpoints remained unchanged. The first signature-rejection
+window run `31989333325` then stopped before any Pages mutation because the
+fixture parser rejected the real Tauri/minisign terminal newline. No temporary
+manifest or human installed-update evidence exists yet.
 
 Owner: Rho release owner
 
@@ -105,6 +108,47 @@ Version decision: no application or R-package version bump. The repair changes
 only an internal audit-record URL projection and leaves the already built
 dev.41 candidate bytes and public application behavior unchanged. NEWS decision:
 no entry for the same reason.
+
+## Signature Fixture Terminal-Newline Defect Gate
+
+The public `.sig` files are canonical outer base64. Their decoded minisign text
+contains four non-empty lines followed by exactly one terminal LF. The first
+signature-rejection run validated the exact source/target pair, then failed in
+`mutatedNativeUpdaterSignature()` because `text.split("\n")` treated that
+terminal LF as a fifth empty line. The fixture was not armed or deployed, the
+cleanup job correctly had nothing to remove, and independent HTTPS checks kept
+both native endpoints at `404`.
+
+The bounded repair may accept zero or one terminal LF after the four required
+minisign lines, must preserve the original terminal-LF framing, and must still
+mutate only one byte in the untrusted signature payload. Empty interior lines,
+CRLF drift, multiple terminal newlines, malformed/canonical-base64 failures,
+or changed comment/trusted-signature lines remain rejected. Regression evidence
+must cover both no-terminal-LF test fixtures and the real one-terminal-LF
+shape, plus rejection of multiple terminal newlines. Before redispatch, the
+real public dev.41 signatures must generate a syntactically valid fixture whose
+mutated Windows and macOS signatures both fail the configured public-key
+verifier for the expected reason.
+
+The same real-byte regression exposed a second pre-deployment mismatch before
+redispatch: fixture generation writes the manifest platform key verbatim as
+`windows-x86_64.sig`, while the workflow referenced
+`windows-x86-64.sig`. The workflow must consume the generated underscore name,
+contract automation must reject the stale hyphen spelling, and the real
+Windows verifier must reach signature verification and fail for the same
+configured-public-key reason as macOS. A missing-file failure is not acceptable
+signature-rejection evidence.
+
+On 2026-08-16 the project owner instructed the administrator to “一次性解决所有
+问题”. That authorizes this exact release-blocking repair, complete validation,
+one PR, a temporary exact-user PR-only ruleset bypass after checks pass,
+immediate verified ruleset restoration, and redispatch of the same bounded
+signature-rejection window. It does not waive the two-platform human
+observation, valid-window recovery/install rows, or the final dev.40 GO/NO-GO.
+
+Version and NEWS decision: no application/R-package bump and no NEWS entry.
+This repair changes only acceptance-fixture parsing for already signed public
+bytes; candidate artifacts and product runtime behavior remain unchanged.
 
 ## Target Construction And Public-Test Marker
 

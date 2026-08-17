@@ -11,10 +11,14 @@ integrated through PR #80 at `9ec8117bedea33d18e2ed367ec56bd9138cc40ef`;
 candidate run `31986077326` constructed its signed eleven-asset Draft.
 Independent audit stopped before marker creation or publication because the
 workflow copied GitHub's internal Draft `untagged-*` URL instead of deriving
-the stable tag URL required by the release-record validator. The bounded
-normalization repair, regression suite, and repeated two-Draft/four-signature
-audit now pass on a pending protected-main branch; protected integration and a
-workflow-owned repeat remain the next gate.
+the stable tag URL required by the release-record validator. The bounded repair
+merged through PR #81, and protected run `31989055536` published the exact
+twelve-asset acceptance-only target after repeating the audit. Window run
+`31989333325` stopped before Pages mutation because the fixture parser did not
+accept the real four-line minisign text's terminal LF. Pre-redispatch real-byte
+testing also found that the workflow used `windows-x86-64.sig` while the fixed
+platform key generates `windows-x86_64.sig`. A bounded framing/path repair and
+redispatch are now the next gate.
 `UPDATER-1C` manual installed-app acceptance and `UPDATER-1D` remain gated by
 their exact evidence conditions.
 
