@@ -47,6 +47,12 @@ assert.doesNotMatch(target, /candidate-publish\.yml|Publish Rho Candidate|update
 assert.match(target, /updates\/tauri\/\$channel\.json/);
 assert.match(target, /--range 0-0/);
 assert.match(target, /test \"\$status\" = "404"/);
+assert.doesNotMatch(target, /html_url: release\.html_url/);
+assert.equal(
+  count(target, /html_url: `https:\/\/github\.com\/\$\{owner\}\/\$\{repo\}\/releases\/tag\/\$\{release\.tag_name\}`/g),
+  2,
+  "Both target-workflow release snapshots must normalize Draft URLs from the validated tag",
+);
 
 assert.match(window, /^name: Run Native Updater Acceptance Window/m);
 assert.match(window, /operation:[\s\S]*?- window[\s\S]*?- recover_cleanup/);
@@ -64,6 +70,12 @@ assert.match(window, /id: fixture_armed/);
 assert.match(window, /does not verify against the configured public key/);
 assert.match(window, /\[\[ "\$status" == "404" \]\]/);
 assert.doesNotMatch(window, /TAURI_SIGNING_PRIVATE_KEY|TAURI_SIGNING_PRIVATE_KEY_PASSWORD|APPLE_API_|SIGNPATH_/);
+assert.doesNotMatch(window, /html_url: release\.html_url/);
+assert.equal(
+  count(window, /html_url: `https:\/\/github\.com\/\$\{owner\}\/\$\{repo\}\/releases\/tag\/\$\{release\.tag_name\}`/g),
+  1,
+  "The bounded-window release snapshot must normalize the source Draft URL from its validated tag",
+);
 
 assert.match(pages, /group: rho-update-site\n\s+cancel-in-progress: false/);
 assert.match(pages, /assert-no-active-fixture/);

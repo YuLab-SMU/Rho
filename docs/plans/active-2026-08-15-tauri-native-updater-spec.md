@@ -7,8 +7,14 @@ integrated in protected `main`; `UPDATER-1B` built immutable signed
 `0.4.0-dev.40` Draft `v0.4.0-dev.40` from
 `14b16ced90df02621e37913e23c6a555cf5963f0` and passed independent asset and
 signature audit. `UPDATER-1C-T1`, the bounded `dev.41` acceptance transport,
-is implemented and deterministically validated in a pending protected-main
-change; it is not yet integrated or exercised.
+integrated through PR #80 at `9ec8117bedea33d18e2ed367ec56bd9138cc40ef`;
+candidate run `31986077326` constructed its signed eleven-asset Draft.
+Independent audit stopped before marker creation or publication because the
+workflow copied GitHub's internal Draft `untagged-*` URL instead of deriving
+the stable tag URL required by the release-record validator. The bounded
+normalization repair, regression suite, and repeated two-Draft/four-signature
+audit now pass on a pending protected-main branch; protected integration and a
+workflow-owned repeat remain the next gate.
 `UPDATER-1C` manual installed-app acceptance and `UPDATER-1D` remain gated by
 their exact evidence conditions.
 
