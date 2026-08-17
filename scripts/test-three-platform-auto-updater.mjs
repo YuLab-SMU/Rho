@@ -37,6 +37,7 @@ assert.match(frontend, /platform: "linux-x86_64"/);
 assert.match(linuxBuild, /patch-appimage-apprun\.sh[\s\S]*signer sign "\$RHO_APPIMAGE"/);
 assert.match(build, /linux-candidate:/);
 assert.match(build, /rustup component add rustfmt --toolchain 1\.97\.0-x86_64-unknown-linux-gnu/);
+assert.match(build, /Bootstrap pinned Linux Ark runtime[\s\S]*scripts\/bootstrap-ark-linux\.sh[\s\S]*Prepare Linux runtime resources[\s\S]*scripts\/prepare-runtime-resources\.sh[\s\S]*Run complete Linux candidate validation/);
 assert.match(build, /--platform linux_x86_64/);
 assert.match(build, /--linux_evidence/);
 assert.match(build, /Rho_\$\{version\}_x86_64\.AppImage\.sig/);
