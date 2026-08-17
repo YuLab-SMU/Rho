@@ -2,7 +2,7 @@
 
 Date: 2026-08-15
 
-Status: active `UPDATER-1C-T1` transport contract. The project owner
+Status: accepted bounded `UPDATER-1C-T1` transport evidence. The project owner
 explicitly authorized this bounded work package on 2026-08-15. The source
 transport integrated through PR #80 at protected-main commit
 `9ec8117bedea33d18e2ed367ec56bd9138cc40ef`. Candidate run `31986077326`
@@ -16,8 +16,14 @@ repeated the two-Draft/four-signature audit, uploaded the one bound marker, and
 published the exact twelve-asset dev.41 acceptance-only prerelease while normal
 Pages/native endpoints remained unchanged. The first signature-rejection
 window run `31989333325` then stopped before any Pages mutation because the
-fixture parser rejected the real Tauri/minisign terminal newline. No temporary
-manifest or human installed-update evidence exists yet.
+fixture parser rejected the real Tauri/minisign terminal newline. PR #82
+integrated the bounded terminal-newline and generated-Windows-filename repair.
+Signature-rejection window `31990624696` passed on both platforms and cleaned
+to verified `404`. Valid window `31991536953` then passed both post-shutdown
+failure/recovery rows and both explicit install/restart rows, with final About
+version `0.4.0-dev.41` on Windows x86-64 and macOS arm64; cleanup again proved
+both native endpoints `404`. The public target remains acceptance-only and
+excluded from normal Update Site projection.
 
 Owner: Rho release owner
 
@@ -59,7 +65,7 @@ downloads to public GitHub Release URLs.
 | Role | Required identity | Current state |
 | --- | --- | --- |
 | Source installed build | `0.4.0-dev.40` / `v0.4.0-dev.40`, Draft from `14b16ced90df02621e37913e23c6a555cf5963f0` | signed Draft constructed and independently audited; remains Draft |
-| Test target | fresh `0.4.0-dev.41` / `v0.4.0-dev.41`, one clean protected-main commit after this contract integrates | signed eleven-asset Draft constructed by run `31986077326` from `9ec8117bedea33d18e2ed367ec56bd9138cc40ef`; independent audit blocked before marker creation by the Draft-URL normalization defect below |
+| Test target | fresh `0.4.0-dev.41` / `v0.4.0-dev.41`, one clean protected-main commit after this contract integrates | exact twelve-asset acceptance-only prerelease published by protected run `31989055536`; normal Update Site excludes it |
 | Supported updater platforms | Windows x86-64 NSIS and macOS Apple Silicon application archive | both required |
 | Permanent endpoint state before/after a window | `/updates/tauri/development.json` and `/updates/tauri/stable.json` absent | verify each time |
 | Normal V1 state | existing `updates/development.json` and download page unchanged; the currently absent `updates/stable.json` remains absent | verify byte preservation and exact `404` preservation |
@@ -286,6 +292,26 @@ limitation is an explicit `NO-GO` for `UPDATER-1D`. It never converts the test
 target into a normal release and never allows a conditional `dev.40` native
 updater publication.
 
+## Completed Acceptance Record
+
+- signature rejection: run `31990624696`, Windows x86-64 and macOS arm64
+  rejected the intentionally invalid signatures before shutdown, retained
+  running dev.40, and repeated the same refusal on retry;
+- valid recovery/install: run `31991536953`, both deterministic
+  post-shutdown failure paths restored dev.40, then both explicit
+  Install-and-Restart paths completed at `0.4.0-dev.41`;
+- macOS final identity: About `0.4.0-dev.41`, platform `macos-aarch64`, copied
+  bundle codesign valid, Gatekeeper accepted, notarized Developer ID;
+- Windows final identity: About `0.4.0-dev.41`, platform Windows x86-64 on
+  64-bit build `26200`; installed executable resolved at
+  `C:\Users\xiayh17\AppData\Local\Rho\rho-desktop.exe`;
+- cleanup: both runs completed the exact fixture cleanup and independent
+  native development/stable HTTPS checks returned `404`; and
+- release blocker: `Get-AuthenticodeSignature` reported the installed Windows
+  executable as `NotSigned`. This does not invalidate the updater behavior
+  matrix, but it makes dev.40 publication and a permanent endpoint `NO-GO`.
+  Fresh dev.42 owns the two-stage signing correction.
+
 ## Cross-Review And Version Impact
 
 - The parent updater specification owns runtime endpoints, compiled public key,
@@ -305,8 +331,8 @@ updater publication.
   release notes, NEWS, tests, and active-doc source baseline. R package
   versions remain unchanged.
 
-Definition of done for this work package is protected integration plus complete
-deterministic source/workflow tests. It is deliberately not the definition of
-done for an enabled native updater; the target construction, human evidence,
-`dev.40` release decision, and live normal Pages verification remain later
-facts.
+Definition of done for this bounded transport package is now met: protected
+integration, target construction, both human behavior windows, and exact
+cleanup passed. It is deliberately not the definition of done for an enabled
+native updater: installed Windows signing, a fresh candidate decision,
+publication, and live normal Pages verification remain owned by dev.42.

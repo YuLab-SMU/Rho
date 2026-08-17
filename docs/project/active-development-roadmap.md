@@ -2,8 +2,8 @@
 
 Status: active
 
-Date: 2026-08-09
-Current source baseline: `0.4.0-dev.41`
+Date: 2026-08-17
+Current source baseline: `0.4.0-dev.42`
 Active published identity: `0.4.0-dev.24` (authoritative candidate,
 owner-installed acceptance, MAC5 GO, protected public prerelease, and live
 development update manifest pass)
@@ -152,6 +152,31 @@ update run `31734975029` passed. Release `370143482` is public with eight exact
 assets and a visible conditional warning. The two human observations remain
 `NOT RUN`; this is not ordinary MAC5, stable, production-ready, or public
 Windows-trust acceptance.
+
+UPDATER-1 then advanced the source through native-updater candidate
+`0.4.0-dev.40` and the bounded public acceptance-only target
+`0.4.0-dev.41`. PR #80 integrated the transport, run `31989055536` published
+the exact marker-bound twelve-asset dev.41 target without normal Update Site
+projection, signature-rejection window `31990624696` passed on Windows x86-64
+and macOS arm64, and valid window `31991536953` passed both deterministic
+post-shutdown recovery paths and both explicit install/restart paths. Each
+window cleaned the temporary native endpoint back to verified `404`, and About
+reported dev.41 on both platforms. Installed Windows inspection then found
+`rho-desktop.exe` was `NotSigned`: the Free Trial signature covered only the
+outer NSIS installer. Dev.40 is therefore an immutable unpublished NO-GO and
+dev.41 remains only the acceptance target.
+
+SP-FT2-DEV42 is the active D4/R4 successor. The owner chose continued SignPath
+Free Trial use and created the strict `github-actions-rho-desktop-binary`
+configuration. Fresh `0.4.0-dev.42` must build without bundling, sign the
+binary, bundle without changing it, sign the installer, prove the installed
+payload carries the same self-signed certificate, and only then repeat
+candidate/native-update acceptance. Free Trial `UnknownError`/untrusted and
+SmartScreen limitations remain explicit; Foundation/public trust is not
+claimed. Source implementation and local affected validation pass, and the
+binary-configuration secret is registered; protected hosted validation and
+integration are the current checkpoint. No dev.42 artifact or permanent
+native endpoint exists.
 
 Issue #28's Rust 1.88/Resolver 3 build contract integrated through PR #29 at
 `9e0b36b`. Exact PR-head run `31509554882` and exact-merge main run

@@ -42,10 +42,12 @@ It requires:
 
 Listed Apple Silicon macOS packages use Developer ID signing and notarization.
 Windows trust status is recorded per release. The published `0.4.0-dev.24`
-Windows package is unsigned; a `0.4.0-dev.39` prerelease may carry a SignPath
-Free Trial self-signed test signature only after its exact evidence passes.
-That test signature is not publicly trusted or a SignPath Foundation production
-publisher, and Windows or SmartScreen may still warn. Its Release page also
+Windows package is unsigned; selected development prereleases may carry a
+SignPath Free Trial self-signed test signature only after their exact evidence
+passes. Starting with the fresh dev.42 candidate contract, both the Rho
+executable and outer NSIS installer must be signed and the installed executable
+must be verified. That test certificate is not publicly trusted or a SignPath Foundation production
+publisher, and Windows or SmartScreen may still warn. A Release page also
 identifies any conditional human-acceptance limitations; conditional builds are
 for evaluation, not stable or production-ready use. Unsigned local builds are
 for development review only. Verify the release SHA-256 and see the

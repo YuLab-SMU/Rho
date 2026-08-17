@@ -20,13 +20,22 @@ const MAX_CHECKSUM_BYTES = 1024;
 const MAX_SIGNING_EVIDENCE_BYTES = 16 * 1024;
 const PRERELEASE_IDENTIFIER = "(?:0|[1-9]\\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)";
 const CANDIDATE_VERSION_PATTERN = new RegExp(`^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)-(${PRERELEASE_IDENTIFIER})(?:\\.${PRERELEASE_IDENTIFIER})*$`);
-const WINDOWS_SIGNING_CHECKS = ["authenticode", "signpath_request_binding", "free_trial_self_signed"];
+const LEGACY_WINDOWS_SIGNING_CHECKS = ["authenticode", "signpath_request_binding", "free_trial_self_signed"];
+const TWO_STAGE_WINDOWS_SIGNING_CHECKS = [
+  "authenticode_binary",
+  "authenticode_installer",
+  "installed_payload_signature",
+  "signpath_binary_request_binding",
+  "signpath_installer_request_binding",
+  "free_trial_self_signed",
+];
+const TWO_STAGE_SIGNING_VERSIONS = new Set(["0.4.0-dev.42"]);
 const SIGNPATH_FREE_TRIAL_MODULE_VERSION = "4.4.6";
 const SIGNPATH_FREE_TRIAL_MODULE_SHA256 = "4a732624a7214dc8290dbf81ed2714d6b509be319427c2d55fd0c679d13ab5ae";
 const UNSIGNED_CANDIDATE_COMPATIBILITY = new Set(["0.4.0-dev.27"]);
 const UNSIGNED_PUBLISHED_COMPATIBILITY = new Set(["0.4.0-dev.24"]);
 const CONDITIONAL_ACCEPTANCE_VERSIONS = new Set(["0.4.0-dev.39"]);
-const NATIVE_UPDATER_REQUIRED_VERSIONS = new Set(["0.4.0-dev.40"]);
+const NATIVE_UPDATER_REQUIRED_VERSIONS = new Set(["0.4.0-dev.40", "0.4.0-dev.42"]);
 const CONDITIONAL_ACCEPTANCE_RISKS = [
   "macos_gatekeeper_human_launch_not_run",
   "windows_human_install_not_run",
@@ -76,6 +85,12 @@ const PUBLISHED_EVIDENCE_CHECK_EXCEPTIONS = {
     "0.4.0-dev.24": new Set(["license_boundary"]),
   },
 };
+
+function windowsSigningChecksForVersion(version) {
+  return TWO_STAGE_SIGNING_VERSIONS.has(version)
+    ? TWO_STAGE_WINDOWS_SIGNING_CHECKS
+    : LEGACY_WINDOWS_SIGNING_CHECKS;
+}
 
 function fail(message) {
   throw new Error(message);
@@ -167,14 +182,23 @@ function validateChecks(platform, checks, version, publishedCompatibility = fals
     if (!allowedHistoricalOmission) fail(`${platform} evidence is missing required check ${required}`);
   }
   if (platform === "windows_x86_64") {
-    for (const required of WINDOWS_SIGNING_CHECKS) {
+    for (const required of windowsSigningChecksForVersion(version)) {
       if (hasSigning && !names.has(required)) fail(`${platform} evidence is missing required check ${required}`);
       if (!hasSigning && names.has(required)) fail(`${platform} evidence has signing check ${required} without signing evidence`);
+    }
+    const requiredChecks = windowsSigningChecksForVersion(version);
+    const foreignChecks = TWO_STAGE_SIGNING_VERSIONS.has(version)
+      ? LEGACY_WINDOWS_SIGNING_CHECKS
+      : TWO_STAGE_WINDOWS_SIGNING_CHECKS;
+    for (const foreign of foreignChecks) {
+      if (!requiredChecks.includes(foreign) && names.has(foreign)) {
+        fail(`${platform} evidence has signing check ${foreign} from the wrong schema generation`);
+      }
     }
   }
 }
 
-function validateWindowsSigning(signing, artifact) {
+function validateLegacyWindowsSigning(signing, artifact) {
   assertExactKeys(
     signing,
     [
@@ -214,6 +238,98 @@ function validateWindowsSigning(signing, artifact) {
   return signing;
 }
 
+function validateTwoStageWindowsSigning(signing, artifact) {
+  assertExactKeys(
+    signing,
+    [
+      "schema_version",
+      "provider",
+      "profile",
+      "module_version",
+      "module_sha256",
+      "signer_thumbprint",
+      "self_signed",
+      "binary_request_id",
+      "binary_signature_status",
+      "binary_unsigned_sha256",
+      "binary_signed_sha256",
+      "binary_bundled_sha256",
+      "installer_request_id",
+      "installer_signature_status",
+      "installer_unsigned_sha256",
+      "installer_signed_sha256",
+      "installed_binary_sha256",
+      "installed_signature_status",
+      "installed_signer_thumbprint",
+      "installed_outside_workspace",
+      "cleanup_verified",
+    ],
+    "Windows two-stage signing evidence",
+  );
+  if (
+    signing.schema_version !== 2
+    || signing.provider !== "signpath"
+    || signing.profile !== "free_trial_self_signed_two_stage"
+  ) fail("Windows two-stage signing evidence profile is invalid");
+  if (
+    signing.module_version !== SIGNPATH_FREE_TRIAL_MODULE_VERSION
+    || signing.module_sha256 !== SIGNPATH_FREE_TRIAL_MODULE_SHA256
+  ) fail("Windows signing module identity is invalid");
+  if (!/^[0-9a-f]{40}$/.test(signing.signer_thumbprint)) fail("Windows signer thumbprint is invalid");
+  if (signing.self_signed !== true) fail("Windows Free Trial signer must be self-signed");
+  for (const field of ["binary_request_id", "installer_request_id"]) {
+    if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(signing[field])) {
+      fail(`Windows ${field.replaceAll("_", " ")} is invalid`);
+    }
+  }
+  if (signing.binary_request_id === signing.installer_request_id) {
+    fail("Windows SignPath request IDs must be distinct");
+  }
+  for (const field of ["binary_signature_status", "installer_signature_status", "installed_signature_status"]) {
+    if (signing[field] !== "UnknownError") fail(`Windows ${field.replaceAll("_", " ")} is invalid`);
+  }
+  for (const field of [
+    "binary_unsigned_sha256",
+    "binary_signed_sha256",
+    "binary_bundled_sha256",
+    "installer_unsigned_sha256",
+    "installer_signed_sha256",
+    "installed_binary_sha256",
+  ]) {
+    if (!/^[0-9a-f]{64}$/.test(signing[field])) fail(`Windows ${field.replaceAll("_", " ")} is invalid`);
+  }
+  if (signing.binary_unsigned_sha256 === signing.binary_signed_sha256) {
+    fail("Windows binary signing hashes are invalid or unchanged");
+  }
+  if (signing.binary_bundled_sha256 !== signing.binary_signed_sha256) {
+    fail("Windows binary hash changed during bundling");
+  }
+  if (signing.installer_unsigned_sha256 === signing.installer_signed_sha256) {
+    fail("Windows installer signing hashes are invalid or unchanged");
+  }
+  if (signing.installer_signed_sha256 !== artifact.sha256) {
+    fail("Windows signed installer hash does not match the candidate artifact");
+  }
+  if (signing.installed_binary_sha256 !== signing.binary_signed_sha256) {
+    fail("Windows installed binary hash does not match the signed binary");
+  }
+  if (signing.installed_signer_thumbprint !== signing.signer_thumbprint) {
+    fail("Windows installed signer thumbprint does not match the signed binary");
+  }
+  if (signing.installed_outside_workspace !== true) {
+    fail("Windows installed binary was not proven outside the workspace");
+  }
+  if (signing.cleanup_verified !== true) fail("Windows installed-candidate cleanup was not verified");
+  return signing;
+}
+
+function validateWindowsSigning(signing, artifact, version) {
+  if (TWO_STAGE_SIGNING_VERSIONS.has(version)) {
+    return validateTwoStageWindowsSigning(signing, artifact);
+  }
+  return validateLegacyWindowsSigning(signing, artifact);
+}
+
 function validatePlatformEvidenceWithPolicy(value, expected, publishedCompatibility) {
   const baseKeys = ["schema_version", "type", "status", "version", "release_tag", "commit", "platform", "artifact", "checks"];
   const hasSigning = value?.signing != null;
@@ -241,7 +357,7 @@ function validatePlatformEvidenceWithPolicy(value, expected, publishedCompatibil
   if (!/^[0-9a-f]{64}$/.test(value.artifact.sha256)) fail(`${value.platform} artifact SHA-256 is invalid`);
   if (hasSigning) {
     if (value.platform !== "windows_x86_64") fail("Only Windows platform evidence may contain a signing record");
-    validateWindowsSigning(value.signing, value.artifact);
+    validateWindowsSigning(value.signing, value.artifact, value.version);
   }
   const requireWindowsSigning = expected.require_windows_signing === true
     || (publishedCompatibility && value.platform === "windows_x86_64" && !UNSIGNED_PUBLISHED_COMPATIBILITY.has(value.version));
@@ -794,7 +910,7 @@ export function selfTest() {
         artifactPath,
         outputPath: evidencePaths[platform],
         checks: platform === "windows_x86_64"
-          ? [...REQUIRED_CHECKS[platform], ...WINDOWS_SIGNING_CHECKS]
+          ? [...REQUIRED_CHECKS[platform], ...LEGACY_WINDOWS_SIGNING_CHECKS]
           : REQUIRED_CHECKS[platform],
         signingEvidence: platformSigning,
       });
@@ -803,7 +919,7 @@ export function selfTest() {
     const windowsEvidence = JSON.parse(fs.readFileSync(evidencePaths.windows_x86_64, "utf8"));
     const unsignedWindowsEvidence = {
       ...windowsEvidence,
-      checks: windowsEvidence.checks.filter((check) => !WINDOWS_SIGNING_CHECKS.includes(check.name)),
+      checks: windowsEvidence.checks.filter((check) => !LEGACY_WINDOWS_SIGNING_CHECKS.includes(check.name)),
     };
     delete unsignedWindowsEvidence.signing;
     validatePlatformEvidence(unsignedWindowsEvidence);
@@ -854,6 +970,77 @@ export function selfTest() {
         checks: windowsEvidence.checks.filter((check) => check.name !== "signpath_request_binding"),
       }),
       /missing required check signpath_request_binding/,
+    );
+    const twoStageVersion = "0.4.0-dev.42";
+    const twoStageInstallerHash = "8".repeat(64);
+    const twoStageBinaryHash = "7".repeat(64);
+    const twoStageSigning = {
+      schema_version: 2,
+      provider: "signpath",
+      profile: "free_trial_self_signed_two_stage",
+      module_version: SIGNPATH_FREE_TRIAL_MODULE_VERSION,
+      module_sha256: SIGNPATH_FREE_TRIAL_MODULE_SHA256,
+      signer_thumbprint: "1".repeat(40),
+      self_signed: true,
+      binary_request_id: "12345678-1234-1234-1234-123456789abc",
+      binary_signature_status: "UnknownError",
+      binary_unsigned_sha256: "6".repeat(64),
+      binary_signed_sha256: twoStageBinaryHash,
+      binary_bundled_sha256: twoStageBinaryHash,
+      installer_request_id: "abcdef12-abcd-abcd-abcd-abcdef123456",
+      installer_signature_status: "UnknownError",
+      installer_unsigned_sha256: "9".repeat(64),
+      installer_signed_sha256: twoStageInstallerHash,
+      installed_binary_sha256: twoStageBinaryHash,
+      installed_signature_status: "UnknownError",
+      installed_signer_thumbprint: "1".repeat(40),
+      installed_outside_workspace: true,
+      cleanup_verified: true,
+    };
+    const twoStageEvidence = {
+      schema_version: 1,
+      type: "rho_platform_candidate_evidence",
+      status: "passed",
+      version: twoStageVersion,
+      release_tag: `v${twoStageVersion}`,
+      commit,
+      platform: "windows_x86_64",
+      artifact: {
+        name: `Rho_${twoStageVersion}_x64-setup.exe`,
+        hash_name: `Rho_${twoStageVersion}_x64-setup.exe.sha256`,
+        size_bytes: 42,
+        sha256: twoStageInstallerHash,
+      },
+      checks: [...REQUIRED_CHECKS.windows_x86_64, ...TWO_STAGE_WINDOWS_SIGNING_CHECKS]
+        .map((name) => ({ name, status: "passed" })),
+      signing: twoStageSigning,
+    };
+    validatePlatformEvidence(twoStageEvidence, { require_windows_signing: true });
+    for (const [field, value, pattern] of [
+      ["binary_bundled_sha256", "5".repeat(64), /changed during bundling/],
+      ["installed_binary_sha256", "5".repeat(64), /installed binary hash/],
+      ["installer_request_id", twoStageSigning.binary_request_id, /request IDs must be distinct/],
+      ["installed_signature_status", "NotSigned", /installed signature status/],
+      ["installed_signer_thumbprint", "2".repeat(40), /installed signer thumbprint/],
+      ["installed_outside_workspace", false, /outside the workspace/],
+      ["cleanup_verified", false, /cleanup/],
+    ]) {
+      expectFailure(
+        () => validatePlatformEvidence({
+          ...twoStageEvidence,
+          signing: { ...twoStageSigning, [field]: value },
+        }),
+        pattern,
+      );
+    }
+    expectFailure(
+      () => validatePlatformEvidence({
+        ...twoStageEvidence,
+        checks: twoStageEvidence.checks.map((check) => (
+          check.name === "authenticode_binary" ? { ...check, name: "authenticode" } : check
+        )),
+      }),
+      /missing required check authenticode_binary|wrong schema generation/,
     );
     expectFailure(
       () => validatePlatformEvidence({ ...macosEvidence, signing: windowsEvidence.signing }),
@@ -956,7 +1143,7 @@ export function selfTest() {
         artifactPath,
         outputPath: updaterEvidencePaths[platform],
         checks: platform === "windows_x86_64"
-          ? [...REQUIRED_CHECKS[platform], ...WINDOWS_SIGNING_CHECKS]
+          ? [...REQUIRED_CHECKS[platform], ...LEGACY_WINDOWS_SIGNING_CHECKS]
           : [...REQUIRED_CHECKS[platform], "native_updater_archive"],
         signingEvidence: platformSigning,
       });

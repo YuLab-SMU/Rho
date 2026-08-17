@@ -18,9 +18,9 @@ const config = JSON.parse(read("desktop/src-tauri/tauri.conf.json"));
 const windowsConfig = JSON.parse(read("desktop/src-tauri/tauri.windows.conf.json"));
 const macosConfig = JSON.parse(read("desktop/src-tauri/tauri.macos.conf.json"));
 const spec = read("docs/plans/active-2026-08-15-tauri-native-updater-spec.md");
-const checklist = read("docs/release/active-0.4.0-dev.40-candidate-checklist.md");
+const checklist = read("docs/release/active-0.4.0-dev.42-two-stage-signing-checklist.md");
 const crossReview = read("docs/project/active-document-cross-review.md");
-const notes = read(".github/release-notes/v0.4.0-dev.40.md");
+const notes = read(".github/release-notes/v0.4.0-dev.42.md");
 
 const windows = build.match(/\n  windows-candidate:[\s\S]*?(?=\n  macos-submit:)/)?.[0];
 const macSubmit = build.match(/\n  macos-submit:[\s\S]*?(?=\n  macos-notary-wait:)/)?.[0];
@@ -53,9 +53,17 @@ assert.doesNotMatch(frontend, /plugin:updater/);
 assert.match(windows, /signer generate --ci --write-keys/);
 assert.match(windows, /TAURI_SIGNING_PRIVATE_KEY: \$\{\{ needs\.identity\.outputs\.build_mode == 'candidate' && secrets\.TAURI_SIGNING_PRIVATE_KEY \|\| '' \}\}/);
 assert.match(windows, /Tauri did not create the required updater artifact signature/);
-const windowsPromotion = windows.indexOf("Verify and promote returned test-signed installer");
+const windowsBinaryPromotion = windows.indexOf("Verify and promote returned test-signed Windows executable");
+const windowsBundle = windows.indexOf("Bundle NSIS without rebuilding signed Windows executable");
+const windowsPromotion = windows.indexOf("Verify and promote returned test-signed Windows installer");
 const windowsFinalSign = windows.indexOf("Sign final Authenticode Windows updater artifact");
+assert.ok(
+  windowsBinaryPromotion >= 0 && windowsBinaryPromotion < windowsBundle && windowsBundle < windowsPromotion,
+  "Windows executable must be Authenticode-signed before the no-rebuild NSIS bundle and installer signing",
+);
 assert.ok(windowsPromotion >= 0 && windowsPromotion < windowsFinalSign, "Windows updater signature must follow final Authenticode promotion");
+assert.match(windows, /Install and verify signed Windows payload/);
+assert.match(windows, /installed_binary_sha256/);
 assert.match(windows, /signer sign "\$artifact"/);
 assert.match(windows, /cargo run --locked -p rho-updater-verifier/);
 assert.match(windows, /Upload final Windows native updater signature/);
@@ -93,7 +101,7 @@ for (const name of [
   "native_updater_evidence_asset",
   "native_updater_signatures",
 ]) assert.ok(publish.includes(name), `Publish admission omits ${name}`);
-assert.match(candidate, /NATIVE_UPDATER_REQUIRED_VERSIONS = new Set\(\["0\.4\.0-dev\.40"\]\)/);
+assert.match(candidate, /NATIVE_UPDATER_REQUIRED_VERSIONS = new Set\(\["0\.4\.0-dev\.40", "0\.4\.0-dev\.42"\]\)/);
 assert.match(candidate, /validateNativeUpdaterReleaseAssets/);
 assert.match(updater, /TAURI_PUBLIC_KEY_ID = "173c902c085bfe5f"/);
 assert.match(updater, /validateNativeUpdaterReleaseAssets/);
@@ -107,8 +115,8 @@ assert.match(pages, /Verify deployed native updater manifest/);
 assert.match(spec, /Status: active; `UPDATER-1A` source\/signing\/publication-contract work is/);
 assert.match(spec, /`UPDATER-1C-T1`, the bounded `dev\.41` acceptance transport/);
 assert.match(spec, /No updater signature may be reused after a byte-changing/);
-assert.match(checklist, /NO_RELEASE_DECISION/);
+assert.match(checklist, /Current release decision: `NO_RELEASE_DECISION`/);
 assert.match(crossReview, /may not own an\n   unbounded download or destructive default install/);
-assert.match(notes, /^Rho prepares a manually initiated signed native updater/m);
+assert.match(notes, /^Rho signs both the Windows application executable and NSIS installer/m);
 
 console.log("Tauri native updater contract tests passed.");
