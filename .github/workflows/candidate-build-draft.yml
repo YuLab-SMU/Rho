@@ -208,6 +208,20 @@ jobs:
             Copy-Item -LiteralPath $installer[0].FullName -Destination (Join-Path "target\candidate" $expected)
           }
 
+      - name: Patch unsigned Windows executable for exact NSIS bundle type
+        if: ${{ needs.identity.outputs.build_mode == 'candidate' }}
+        shell: pwsh
+        run: |
+          $binary = Join-Path $PWD "target\release\rho-desktop.exe"
+          & node scripts/tauri-bundle-type.mjs --mode patch --file $binary
+          if ($LASTEXITCODE -ne 0) { throw "Exact Tauri NSIS bundle-type patch failed." }
+          & $binary --smoke-test
+          if ($LASTEXITCODE -ne 0) { throw "NSIS-patched Windows Workspace smoke failed." }
+          $signature = Get-AuthenticodeSignature -LiteralPath $binary
+          if ([string]$signature.Status -ne "NotSigned" -or $null -ne $signature.SignerCertificate) {
+            throw "NSIS-patched Windows executable must remain unsigned before SignPath."
+          }
+
       - name: Load protected SignPath deployment configuration
         if: ${{ needs.identity.outputs.build_mode == 'candidate' }}
         shell: pwsh

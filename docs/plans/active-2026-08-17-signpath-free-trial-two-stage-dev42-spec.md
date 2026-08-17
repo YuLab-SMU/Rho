@@ -2,14 +2,32 @@
 
 Date: 2026-08-17
 
-Status: active `SP-FT2-DEV42` D4/R4 work package. Source implementation,
-version/NEWS/release-note synchronization, local affected validation, and
-encrypted binary-configuration registration completed on 2026-08-17;
-protected hosted validation and integration remain pending. The project owner
+Status: active `SP-FT2-DEV42` D4/R4 work package. Initial source implementation,
+version/NEWS/release-note synchronization, validation, protected integration,
+and encrypted binary-configuration registration completed on 2026-08-17. The
+deterministic pre-sign bundle-type repair and local affected validation pass;
+protected repair integration is pending. The project owner
 stated in Issue #26 that Windows will use the SignPath Free Trial certificate
 for an extended period and instructed the administrator to solve the updater
 work as one bounded stream. The exact external binary artifact configuration
 was created and visually verified in the SignPath `rho` project on 2026-08-17.
+
+Candidate run `31999076405` later passed macOS notarization/stapling and the
+Windows no-bundle build, both distinct SignPath requests, signed-executable
+survival check, NSIS construction, installer signing, and final Tauri
+signature. Installed Windows bytes then differed from the pre-bundle signed
+executable, so the run failed before Windows evidence, Draft assembly, tag, or
+Release. Every run artifact and request result is non-composable.
+
+Inspection of the exact pinned Tauri CLI `2.11.4` source at tag
+`tauri-cli-v2.11.4` found the cause: the bundler replaces
+`__TAURI_BUNDLE_TYPE_VAR_UNK` with `__TAURI_BUNDLE_TYPE_VAR_NSS` before NSIS
+packaging, then restores the original source file after packaging. A simple
+before/after source hash therefore cannot observe the embedded mutation, and
+patching after Authenticode invalidates the signature. The owner-authorized
+defect repair below keeps dev.42 because no candidate Draft/tag/Release or
+Windows platform evidence was created; the replacement run starts from a new
+exact protected-main commit and reuses no bytes or request evidence.
 
 Owner: Rho release owner
 
@@ -78,8 +96,10 @@ Candidate mode must use this fail-closed order:
 1. check out the exact current protected-main commit and run the complete
    Windows source/test matrix;
 2. bootstrap runtime resources and run Tauri `build --no-bundle` exactly once;
-3. smoke-test the exact unsigned `target/release/rho-desktop.exe`, require
-   `NotSigned`, hash it, and wrap only that root filename in one ZIP;
+3. require exactly one Tauri unknown bundle-type token and no existing NSIS
+   token, replace only those equal-length bytes with the exact NSIS token,
+   smoke-test the patched executable, require `NotSigned`, hash it, and wrap
+   only that root filename in one ZIP;
 4. load the existing protected installer deployment config plus the separate
    encrypted binary-config slug, validate/mask all values, and install the
    pinned official SignPath PowerShell module once;
@@ -157,6 +177,8 @@ Automation must reject:
 - binary config accidentally equal to the installer config;
 - API token/config exposure outside the bounded signing steps;
 - wrong ZIP cardinality, nesting, filename, or output path for either request;
+- missing, duplicated, already-NSIS, oversized, or shape-changing Tauri
+  bundle-type patch input;
 - already-signed binary input, unchanged returned bytes, missing signer,
   unexpected status, thumbprint, subject/issuer relation, or request ID;
 - Tauri bundle recompiling or changing the signed executable;

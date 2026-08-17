@@ -146,12 +146,15 @@ installed program. The common development and production sequence is
 therefore:
 
 1. build `rho-desktop.exe` without bundling an installer;
-2. submit that exact executable to SignPath, obtain manual approval, download
+2. deterministically change the one Tauri bundle-type placeholder to the exact
+   NSIS value while the executable is still unsigned, then smoke-test it;
+3. submit that exact executable to SignPath, obtain manual approval, download
    the signed result, and verify it;
-3. create the NSIS installer from that verified signed executable;
-4. submit the exact installer to SignPath, obtain manual approval, download the
+4. create the NSIS installer from that verified signed executable without
+   further patching or changing it;
+5. submit the exact installer to SignPath, obtain manual approval, download the
    signed result, and verify it; and
-5. install to an isolated location and verify that the installed
+6. install to an isolated location and verify that the installed
    `rho-desktop.exe` is the expected signed payload before computing and
    publishing final artifact hashes.
 

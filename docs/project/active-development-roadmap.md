@@ -178,6 +178,17 @@ binary-configuration secret is registered; protected hosted validation and
 integration are the current checkpoint. No dev.42 artifact or permanent
 native endpoint exists.
 
+Initial dev.42 candidate run `31999076405` passed macOS and both Windows
+SignPath requests but rejected the installed executable hash. Exact pinned
+Tauri source review showed NSIS bundling temporarily patches the binary's
+bundle-type token after the pre-bundle Authenticode signature and restores the
+source file afterward, hiding the embedded mutation from the source hash
+check. No tag, Draft, Release, or Windows platform evidence was created, so all
+run evidence is non-composable and dev.42 remains unused. The current repair
+checkpoint deterministically patches the one unknown token to NSIS before
+binary signing; its local matrix passes, and protected integration plus a new
+exact-main run remain pending.
+
 Issue #28's Rust 1.88/Resolver 3 build contract integrated through PR #29 at
 `9e0b36b`. Exact PR-head run `31509554882` and exact-merge main run
 `31510716448` each passed macOS/Windows stable/MSRV validation, so Issue #28 is

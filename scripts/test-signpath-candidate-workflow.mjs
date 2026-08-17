@@ -10,6 +10,7 @@ function snapshot() {
   return {
     workflow: read(".github/workflows/candidate-build-draft.yml"),
     buildScript: read("scripts/build-windows-installer.ps1"),
+    bundleType: read("scripts/tauri-bundle-type.mjs"),
     candidate: read("scripts/candidate-release.mjs"),
     generator: read("scripts/generate-update-site.mjs"),
     policy: read("CODE_SIGNING_POLICY.md"),
@@ -35,6 +36,7 @@ function validate(value) {
   const orderedSteps = [
     "Run complete Windows candidate validation",
     "Build and smoke-test unsigned Windows executable",
+    "Patch unsigned Windows executable for exact NSIS bundle type",
     "Load protected SignPath deployment configuration",
     "Verify and isolate exact unsigned Windows executable",
     "Prepare fixed official SignPath module",
@@ -57,7 +59,7 @@ function validate(value) {
     previous = index;
   }
 
-  for (const label of orderedSteps.slice(2, 14)) {
+  for (const label of orderedSteps.slice(2, 15)) {
     const currentStep = step(windows, label);
     assert.ok(currentStep, `Missing candidate-only step ${label}`);
     assert.match(currentStep, /if: \$\{\{ (?:always\(\) && )?needs\.identity\.outputs\.build_mode == 'candidate' \}\}/);
@@ -70,7 +72,13 @@ function validate(value) {
   assert.match(build, /rho-desktop\.exe/);
   assert.doesNotMatch(build, /target\\candidate\\Rho_/);
 
-  const config = step(windows, orderedSteps[2], orderedSteps[3]);
+  const patchStep = step(windows, orderedSteps[2], orderedSteps[3]);
+  assert.ok(patchStep);
+  assert.match(patchStep, /tauri-bundle-type\.mjs --mode patch --file \$binary/);
+  assert.match(patchStep, /NSIS-patched Windows Workspace smoke failed/);
+  assert.match(patchStep, /Status -ne "NotSigned"/);
+
+  const config = step(windows, orderedSteps[3], orderedSteps[4]);
   assert.ok(config);
   for (const key of [
     "SIGNPATH_ORGANIZATION_ID",
@@ -96,8 +104,8 @@ function validate(value) {
   assert.equal(occurrences(windows, /Install-Module -Name SignPath/g), 1, "Pinned SignPath module must be installed once");
   assert.equal(occurrences(windows, /Submit-SigningRequest/g), 2, "Candidate must submit binary and installer independently");
 
-  const binarySubmit = step(windows, orderedSteps[5], orderedSteps[6]);
-  const installerSubmit = step(windows, orderedSteps[9], orderedSteps[10]);
+  const binarySubmit = step(windows, orderedSteps[6], orderedSteps[7]);
+  const installerSubmit = step(windows, orderedSteps[10], orderedSteps[11]);
   assert.ok(binarySubmit && installerSubmit);
   for (const submission of [binarySubmit, installerSubmit]) {
     for (const argument of [
@@ -136,17 +144,17 @@ function validate(value) {
   assert.match(windows, /installed executable is inside the workspace/);
   assert.match(windows, /Get-AuthenticodeSignature -LiteralPath \$installedExecutable/);
 
-  const finalSign = step(windows, orderedSteps[11], orderedSteps[12]);
+  const finalSign = step(windows, orderedSteps[12], orderedSteps[13]);
   assert.ok(finalSign);
   assert.match(finalSign, /signer sign "\$artifact"/);
   assert.match(finalSign, /cargo run --locked -p rho-updater-verifier/);
-  const install = step(windows, orderedSteps[12], orderedSteps[13]);
+  const install = step(windows, orderedSteps[13], orderedSteps[14]);
   assert.ok(install);
   assert.match(install, /Start-Process[\s\S]*\/S/);
   assert.match(install, /UninstallString/);
   assert.match(install, /cleanup/);
 
-  const platform = step(windows, orderedSteps[14], orderedSteps[15]);
+  const platform = step(windows, orderedSteps[15], orderedSteps[16]);
   assert.ok(platform);
   assert.match(platform, /CANDIDATE_MODE/);
   assert.match(platform, /authenticode_binary,authenticode_installer,installed_payload_signature,signpath_binary_request_binding,signpath_installer_request_binding,free_trial_self_signed/);
@@ -161,6 +169,10 @@ function validate(value) {
   assert.match(value.buildScript, /"BundleOnly"[\s\S]*"bundle"[\s\S]*"--bundles", "nsis"/);
   assert.match(value.buildScript, /Release executable changed during BundleOnly/);
   assert.match(value.buildScript, /NoBundle mode must not produce an installer/);
+  assert.match(value.bundleType, /__TAURI_BUNDLE_TYPE_VAR_UNK/);
+  assert.match(value.bundleType, /__TAURI_BUNDLE_TYPE_VAR_NSS/);
+  assert.match(value.bundleType, /exactly one unknown bundle token and no NSIS token/);
+  assert.match(value.bundleType, /after\.length !== before\.length/);
 
   assert.match(value.candidate, /LEGACY_WINDOWS_SIGNING_CHECKS/);
   assert.match(value.candidate, /TWO_STAGE_WINDOWS_SIGNING_CHECKS/);
@@ -200,6 +212,8 @@ function validate(value) {
   assert.equal(occurrences(value.compatibility, /node scripts\/test-signpath-candidate-workflow\.mjs(?:\s|$)/g), 2);
   for (const trigger of [
     "scripts/build-windows-installer.ps1",
+    "scripts/tauri-bundle-type.mjs",
+    "scripts/test-tauri-bundle-type.mjs",
     "scripts/test-signpath-candidate-workflow.mjs",
     "docs/plans/active-2026-08-17-signpath-free-trial-two-stage-dev42-spec.md",
     "docs/release/active-0.4.0-dev.42-two-stage-signing-checklist.md",
