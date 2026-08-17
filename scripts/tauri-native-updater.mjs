@@ -4,7 +4,9 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const NATIVE_UPDATER_PLATFORMS = ["windows_x86_64", "macos_aarch64"];
+export const NATIVE_UPDATER_PLATFORMS = ["windows_x86_64", "macos_aarch64", "linux_x86_64"];
+const LEGACY_NATIVE_UPDATER_PLATFORMS = ["windows_x86_64", "macos_aarch64"];
+const THREE_PLATFORM_NATIVE_VERSIONS = new Set(["0.4.0-dev.43"]);
 export const TAURI_PUBLIC_KEY_ID = "173c902c085bfe5f";
 
 const REPOSITORY = "https://github.com/YuLab-SMU/Rho";
@@ -16,6 +18,12 @@ const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.
 
 function fail(message) {
   throw new Error(message);
+}
+
+export function nativeUpdaterPlatformsForVersion(version) {
+  return THREE_PLATFORM_NATIVE_VERSIONS.has(version)
+    ? NATIVE_UPDATER_PLATFORMS
+    : LEGACY_NATIVE_UPDATER_PLATFORMS;
 }
 
 function parseArgs(argv) {
@@ -60,12 +68,18 @@ function expectedFiles(version, platform) {
   if (!NATIVE_UPDATER_PLATFORMS.includes(platform)) fail(`Unsupported native updater platform: ${platform}`);
   const artifactName = platform === "windows_x86_64"
     ? `Rho_${version}_x64-setup.exe`
-    : `Rho_${version}_aarch64.app.tar.gz`;
+    : platform === "macos_aarch64"
+      ? `Rho_${version}_aarch64.app.tar.gz`
+      : `Rho_${version}_x86_64.AppImage`;
   const evidenceName = platform === "windows_x86_64"
     ? `rho-${version}-windows-x86_64-evidence.json`
-    : `rho-${version}-macos-aarch64-evidence.json`;
+    : platform === "macos_aarch64"
+      ? `rho-${version}-macos-aarch64-evidence.json`
+      : `rho-${version}-linux-x86_64-evidence.json`;
   return {
-    target: platform === "windows_x86_64" ? "windows-x86_64" : "darwin-aarch64",
+    target: platform === "windows_x86_64"
+      ? "windows-x86_64"
+      : platform === "macos_aarch64" ? "darwin-aarch64" : "linux-x86_64",
     artifactName,
     signatureName: `${artifactName}.sig`,
     evidenceName,
@@ -104,6 +118,12 @@ function sourcePlatformEvidence(filePath, { version, releaseTag, commit, platfor
       !Array.isArray(checks)
       || !checks.some((check) => check?.name === "native_updater_archive" && check.status === "passed")
     ) fail("macOS source platform evidence is missing the final native updater archive check");
+  }
+  if (platform === "linux_x86_64") {
+    const names = new Set((value.checks || []).filter((check) => check?.status === "passed").map((check) => check.name));
+    for (const required of ["appimage", "apprun", "native_updater_signature"]) {
+      if (!names.has(required)) fail(`Linux source platform evidence is missing ${required}`);
+    }
   }
   return record;
 }
@@ -149,8 +169,9 @@ export function validateNativeUpdaterEvidence(value, expected = {}) {
   if (expected.version && value.version !== expected.version) fail("Native updater evidence version mismatch");
   if (expected.release_tag && value.release_tag !== expected.release_tag) fail("Native updater evidence tag mismatch");
   if (expected.commit && value.commit !== expected.commit) fail("Native updater evidence commit mismatch");
-  assertExactKeys(value.platforms, NATIVE_UPDATER_PLATFORMS, "native updater platforms");
-  for (const platform of NATIVE_UPDATER_PLATFORMS) {
+  const nativePlatforms = nativeUpdaterPlatformsForVersion(value.version);
+  assertExactKeys(value.platforms, nativePlatforms, "native updater platforms");
+  for (const platform of nativePlatforms) {
     validatePlatform(value.platforms[platform], value.version, platform);
     const aggregateEvidence = expected.candidate_evidence?.platforms?.[platform]?.evidence;
     if (
@@ -173,7 +194,7 @@ export function createNativeUpdaterEvidence({ version, releaseTag, commit, direc
   const expectedName = `rho-${version}-tauri-native-updater-evidence.json`;
   if (path.basename(outputPath) !== expectedName) fail(`Expected native updater evidence ${expectedName}`);
   const platforms = {};
-  for (const platform of NATIVE_UPDATER_PLATFORMS) {
+  for (const platform of nativeUpdaterPlatformsForVersion(version)) {
     const names = expectedFiles(version, platform);
     const artifactPath = path.join(resolvedDirectory, names.artifactName);
     const signaturePath = path.join(resolvedDirectory, names.signatureName);
@@ -236,7 +257,8 @@ export function validateNativeUpdaterReleaseAssets({
   if (assetByName.size !== assets.length) fail("Native updater release assets are duplicated");
   const releasedEvidence = assetByName.get(evidenceAsset.name);
   validateReleaseAssetRecord(releasedEvidence, evidenceAsset, "published native updater evidence");
-  for (const platform of NATIVE_UPDATER_PLATFORMS) {
+  const nativePlatforms = nativeUpdaterPlatformsForVersion(validated.version);
+  for (const platform of nativePlatforms) {
     const platformEvidence = validated.platforms[platform];
     const candidatePlatform = candidateEvidence.platforms?.[platform];
     if (
@@ -274,7 +296,8 @@ export function validateNativeUpdaterReleaseAssets({
 
 export function tauriManifestFromEvidence({ release, evidence, signatureContents, channel }) {
   if (!release || typeof release !== "object") fail("Native updater release record is missing");
-  if (!NATIVE_UPDATER_PLATFORMS.every((platform) => typeof signatureContents?.[platform] === "string")) {
+  const nativePlatforms = nativeUpdaterPlatformsForVersion(release.version);
+  if (!nativePlatforms.every((platform) => typeof signatureContents?.[platform] === "string")) {
     fail("Native updater signature contents are incomplete");
   }
   const parsed = requireSemver(release.version);
@@ -297,7 +320,7 @@ export function tauriManifestFromEvidence({ release, evidence, signatureContents
     fail("Native updater notes are not bounded plain text");
   }
   const platforms = {};
-  for (const platform of NATIVE_UPDATER_PLATFORMS) {
+  for (const platform of nativeUpdaterPlatformsForVersion(evidence.version)) {
     const platformEvidence = evidence.platforms[platform];
     const signature = signatureText(Buffer.from(signatureContents[platform], "utf8"), `${platform} published updater signature`);
     if (sha256(Buffer.from(signatureContents[platform], "utf8")) !== platformEvidence.signature.sha256) {
@@ -325,8 +348,9 @@ export function selfTest() {
     const version = "0.4.0-dev.40";
     const releaseTag = `v${version}`;
     const commit = "a".repeat(40);
+    const testPlatforms = nativeUpdaterPlatformsForVersion(version);
     const signature = Buffer.from("untrusted comment: Rho test signature\nRURvby10ZXN0LXNpZ25hdHVyZQ==\n", "utf8").toString("base64");
-    for (const platform of NATIVE_UPDATER_PLATFORMS) {
+    for (const platform of testPlatforms) {
       const names = expectedFiles(version, platform);
       fs.writeFileSync(path.join(root, names.artifactName), `${platform} artifact`);
       fs.writeFileSync(path.join(root, names.signatureName), signature);
@@ -343,7 +367,7 @@ export function selfTest() {
     const evidencePath = path.join(root, `rho-${version}-tauri-native-updater-evidence.json`);
     const evidence = createNativeUpdaterEvidence({ version, releaseTag, commit, directory: root, outputPath: evidencePath });
     const candidateEvidence = {
-      platforms: Object.fromEntries(NATIVE_UPDATER_PLATFORMS.map((platform) => [platform, {
+      platforms: Object.fromEntries(testPlatforms.map((platform) => [platform, {
         artifact: evidence.platforms[platform].artifact,
         evidence: evidence.platforms[platform].platform_evidence,
       }])),
@@ -360,7 +384,7 @@ export function selfTest() {
         fileRecord(path.join(root, expectedFiles(version, "macos_aarch64").signatureName), "macOS updater signature", MAX_SIGNATURE_BYTES),
         fileRecord(evidencePath, "native updater evidence", MAX_EVIDENCE_BYTES),
       ].map((record) => ({ name: record.name, size: record.size_bytes, sha256: record.sha256 })),
-      signatureContents: Object.fromEntries(NATIVE_UPDATER_PLATFORMS.map((platform) => [platform, signature])),
+      signatureContents: Object.fromEntries(testPlatforms.map((platform) => [platform, signature])),
       expected: { version, release_tag: releaseTag, commit },
     });
     const manifest = tauriManifestFromEvidence({
@@ -372,7 +396,7 @@ export function selfTest() {
         summary: "Signed native updater test release.",
       },
       evidence,
-      signatureContents: Object.fromEntries(NATIVE_UPDATER_PLATFORMS.map((platform) => [platform, signature])),
+      signatureContents: Object.fromEntries(testPlatforms.map((platform) => [platform, signature])),
       channel: "development",
     });
     if (Object.keys(manifest.platforms).sort().join(",") !== "darwin-aarch64,windows-x86_64") {

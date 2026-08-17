@@ -6,12 +6,14 @@ import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 
 import {
-  NATIVE_UPDATER_PLATFORMS,
   createNativeUpdaterEvidence,
+  nativeUpdaterPlatformsForVersion,
   validateNativeUpdaterReleaseAssets,
 } from "./tauri-native-updater.mjs";
 
-export const CANDIDATE_PLATFORMS = ["windows_x86_64", "macos_aarch64"];
+export const CANDIDATE_PLATFORMS = ["windows_x86_64", "macos_aarch64", "linux_x86_64"];
+const LEGACY_CANDIDATE_PLATFORMS = ["windows_x86_64", "macos_aarch64"];
+const THREE_PLATFORM_CANDIDATE_VERSIONS = new Set(["0.4.0-dev.43"]);
 export const MAX_EVIDENCE_BYTES = 256 * 1024;
 export const REHEARSAL_REPOSITORY = "YuLab-SMU/Rho_for_mac";
 export const CANDIDATE_REPOSITORY = "YuLab-SMU/Rho";
@@ -29,13 +31,13 @@ const TWO_STAGE_WINDOWS_SIGNING_CHECKS = [
   "signpath_installer_request_binding",
   "free_trial_self_signed",
 ];
-const TWO_STAGE_SIGNING_VERSIONS = new Set(["0.4.0-dev.42"]);
+const TWO_STAGE_SIGNING_VERSIONS = new Set(["0.4.0-dev.42", "0.4.0-dev.43"]);
 const SIGNPATH_FREE_TRIAL_MODULE_VERSION = "4.4.6";
 const SIGNPATH_FREE_TRIAL_MODULE_SHA256 = "4a732624a7214dc8290dbf81ed2714d6b509be319427c2d55fd0c679d13ab5ae";
 const UNSIGNED_CANDIDATE_COMPATIBILITY = new Set(["0.4.0-dev.27"]);
 const UNSIGNED_PUBLISHED_COMPATIBILITY = new Set(["0.4.0-dev.24"]);
 const CONDITIONAL_ACCEPTANCE_VERSIONS = new Set(["0.4.0-dev.39"]);
-const NATIVE_UPDATER_REQUIRED_VERSIONS = new Set(["0.4.0-dev.40", "0.4.0-dev.42"]);
+const NATIVE_UPDATER_REQUIRED_VERSIONS = new Set(["0.4.0-dev.40", "0.4.0-dev.42", "0.4.0-dev.43"]);
 const CONDITIONAL_ACCEPTANCE_RISKS = [
   "macos_gatekeeper_human_launch_not_run",
   "windows_human_install_not_run",
@@ -78,6 +80,19 @@ const REQUIRED_CHECKS = {
     "gatekeeper",
     "license_boundary",
   ],
+  linux_x86_64: [
+    "release_metadata",
+    "rust_workspace",
+    "rho_bridge",
+    "rho_agent",
+    "frontend",
+    "workspace_smoke",
+    "x86_64",
+    "appimage",
+    "apprun",
+    "license_boundary",
+    "native_updater_signature",
+  ],
 };
 
 const PUBLISHED_EVIDENCE_CHECK_EXCEPTIONS = {
@@ -90,6 +105,12 @@ function windowsSigningChecksForVersion(version) {
   return TWO_STAGE_SIGNING_VERSIONS.has(version)
     ? TWO_STAGE_WINDOWS_SIGNING_CHECKS
     : LEGACY_WINDOWS_SIGNING_CHECKS;
+}
+
+export function candidatePlatformsForVersion(version) {
+  return THREE_PLATFORM_CANDIDATE_VERSIONS.has(version)
+    ? CANDIDATE_PLATFORMS
+    : LEGACY_CANDIDATE_PLATFORMS;
 }
 
 function fail(message) {
@@ -141,10 +162,14 @@ export function expectedPlatformNames(version, platform) {
   if (!CANDIDATE_PLATFORMS.includes(platform)) fail(`Unsupported candidate platform: ${platform}`);
   const artifactName = platform === "windows_x86_64"
     ? `Rho_${version}_x64-setup.exe`
-    : `Rho_${version}_aarch64.dmg`;
+    : platform === "macos_aarch64"
+      ? `Rho_${version}_aarch64.dmg`
+      : `Rho_${version}_x86_64.AppImage`;
   const evidenceName = platform === "windows_x86_64"
     ? `rho-${version}-windows-x86_64-evidence.json`
-    : `rho-${version}-macos-aarch64-evidence.json`;
+    : platform === "macos_aarch64"
+      ? `rho-${version}-macos-aarch64-evidence.json`
+      : `rho-${version}-linux-x86_64-evidence.json`;
   return { artifactName, hashName: `${artifactName}.sha256`, evidenceName };
 }
 
@@ -433,8 +458,9 @@ export function validateAggregateEvidence(value) {
     fail("Candidate evidence header is invalid");
   }
   validateCandidateIdentity(value.version, value.release_tag, value.commit);
-  assertExactKeys(value.platforms, CANDIDATE_PLATFORMS, "candidate platforms");
-  for (const platform of CANDIDATE_PLATFORMS) {
+  const candidatePlatforms = candidatePlatformsForVersion(value.version);
+  assertExactKeys(value.platforms, candidatePlatforms, "candidate platforms");
+  for (const platform of candidatePlatforms) {
     assertExactKeys(value.platforms[platform], ["artifact", "checksum", "evidence"], `${platform} aggregate record`);
     const names = expectedPlatformNames(value.version, platform);
     for (const [kind, record] of Object.entries(value.platforms[platform])) {
@@ -458,15 +484,16 @@ export function validateAggregateEvidence(value) {
   return value;
 }
 
-export function createAggregateEvidence({ version, releaseTag, commit, directory, windowsEvidencePath, macosEvidencePath, outputPath, requireWindowsSigning = false }) {
+export function createAggregateEvidence({ version, releaseTag, commit, directory, windowsEvidencePath, macosEvidencePath, linuxEvidencePath, outputPath, requireWindowsSigning = false }) {
   validateCandidateIdentity(version, releaseTag, commit);
   const resolvedDirectory = fs.realpathSync(directory);
   const inputs = {
     windows_x86_64: windowsEvidencePath,
     macos_aarch64: macosEvidencePath,
+    linux_x86_64: linuxEvidencePath,
   };
   const platforms = {};
-  for (const platform of CANDIDATE_PLATFORMS) {
+  for (const platform of candidatePlatformsForVersion(version)) {
     const resolvedEvidencePath = fs.realpathSync(inputs[platform]);
     if (path.dirname(resolvedEvidencePath) !== resolvedDirectory) {
       fail(`${platform} evidence is outside the candidate directory`);
@@ -730,6 +757,30 @@ export function createConditionalAcceptanceEvidence({
   return acceptance;
 }
 
+export function createAutomatedAcceptanceEvidence({ candidateEvidencePath, outputPath }) {
+  const candidate = validateAggregateEvidence(JSON.parse(fs.readFileSync(candidateEvidencePath, "utf8")));
+  if (candidate.version !== "0.4.0-dev.43") fail("Automated acceptance is not authorized for this version");
+  const candidateRecord = fileRecord(candidateEvidencePath);
+  const expectedName = `rho-${candidate.version}-acceptance.json`;
+  if (path.basename(outputPath) !== expectedName || path.resolve(path.dirname(outputPath)) !== path.resolve(path.dirname(candidateEvidencePath))) {
+    fail(`Expected acceptance evidence ${expectedName} beside candidate evidence`);
+  }
+  const acceptance = {
+    schema_version: 1,
+    type: "rho_candidate_acceptance",
+    status: "passed",
+    decision: "GO",
+    version: candidate.version,
+    release_tag: candidate.release_tag,
+    commit: candidate.commit,
+    candidate_evidence_sha256: candidateRecord.sha256,
+    platforms: candidate.platforms,
+  };
+  validateAcceptanceEvidence(acceptance, { candidate, candidateEvidenceSha256: candidateRecord.sha256 });
+  writeJson(outputPath, acceptance);
+  return acceptance;
+}
+
 export function validatePublishRecord(record) {
   const baseRecordKeys = [
     "tag_name",
@@ -762,8 +813,9 @@ export function validatePublishRecord(record) {
   if (record.tag_name !== candidate.release_tag || record.target_commitish !== candidate.commit) {
     fail("Draft release identity does not match candidate evidence");
   }
-  assertExactKeys(record.platform_evidence, CANDIDATE_PLATFORMS, "publish platform evidence");
-  for (const platform of CANDIDATE_PLATFORMS) {
+  const publishPlatforms = candidatePlatformsForVersion(candidate.version);
+  assertExactKeys(record.platform_evidence, publishPlatforms, "publish platform evidence");
+  for (const platform of publishPlatforms) {
     validatePlatformEvidence(record.platform_evidence[platform], {
       version: candidate.version,
       release_tag: candidate.release_tag,
@@ -793,7 +845,8 @@ export function validatePublishRecord(record) {
     `rho-${candidate.version}-acceptance.json`,
   ]);
   if (hasNativeUpdater) {
-    assertExactKeys(record.native_updater_signatures, NATIVE_UPDATER_PLATFORMS, "native updater signatures");
+    const nativePlatforms = nativeUpdaterPlatformsForVersion(candidate.version);
+    assertExactKeys(record.native_updater_signatures, nativePlatforms, "native updater signatures");
     if (record.native_updater_evidence_asset?.name !== nativeUpdaterEvidenceName(candidate.version)) {
       fail("Native updater evidence asset name is invalid");
     }
@@ -810,7 +863,7 @@ export function validatePublishRecord(record) {
       },
     });
     expectedNames.add(record.native_updater_evidence_asset.name);
-    for (const platform of NATIVE_UPDATER_PLATFORMS) {
+    for (const platform of nativePlatforms) {
       expectedNames.add(nativeEvidence.platforms[platform].artifact.name);
       expectedNames.add(nativeEvidence.platforms[platform].signature.name);
     }
@@ -894,7 +947,7 @@ export function selfTest() {
       unsigned_sha256: "2".repeat(64),
       signed_sha256: null,
     };
-    for (const platform of CANDIDATE_PLATFORMS) {
+    for (const platform of candidatePlatformsForVersion(version)) {
       const names = expectedPlatformNames(version, platform);
       const artifactPath = path.join(root, names.artifactName);
       fs.writeFileSync(artifactPath, `${platform} candidate bytes`);
@@ -1068,6 +1121,7 @@ export function selfTest() {
       directory: root,
       windowsEvidencePath: evidencePaths.windows_x86_64,
       macosEvidencePath: evidencePaths.macos_aarch64,
+      linuxEvidencePath: evidencePaths.linux_x86_64,
       outputPath: aggregatePath,
       requireWindowsSigning: true,
     });
@@ -1111,7 +1165,7 @@ export function selfTest() {
       target_commitish: commit,
       publisher: "xiayh17",
       assets,
-      platform_evidence: Object.fromEntries(CANDIDATE_PLATFORMS.map((platform) => [
+      platform_evidence: Object.fromEntries(candidatePlatformsForVersion(version).map((platform) => [
         platform,
         JSON.parse(fs.readFileSync(evidencePaths[platform], "utf8")),
       ])),
@@ -1127,7 +1181,7 @@ export function selfTest() {
     fs.mkdirSync(updaterRoot);
     const updaterEvidencePaths = {};
     const updaterPlatformEvidence = {};
-    for (const platform of CANDIDATE_PLATFORMS) {
+    for (const platform of candidatePlatformsForVersion(updaterVersion)) {
       const names = expectedPlatformNames(updaterVersion, platform);
       const artifactPath = path.join(updaterRoot, names.artifactName);
       fs.writeFileSync(artifactPath, `${platform} native updater candidate bytes`);
@@ -1157,6 +1211,7 @@ export function selfTest() {
       directory: updaterRoot,
       windowsEvidencePath: updaterEvidencePaths.windows_x86_64,
       macosEvidencePath: updaterEvidencePaths.macos_aarch64,
+      linuxEvidencePath: updaterEvidencePaths.linux_x86_64,
       outputPath: updaterAggregatePath,
       requireWindowsSigning: true,
     });
@@ -1193,7 +1248,7 @@ export function selfTest() {
       { name: updaterCandidateAsset.name, size: updaterCandidateAsset.size_bytes, sha256: updaterCandidateAsset.sha256 },
       { name: updaterEvidenceAsset.name, size: updaterEvidenceAsset.size_bytes, sha256: updaterEvidenceAsset.sha256 },
       { name: `rho-${updaterVersion}-acceptance.json`, size: 100, sha256: "e".repeat(64) },
-      ...NATIVE_UPDATER_PLATFORMS.flatMap((platform) => {
+      ...nativeUpdaterPlatformsForVersion(updaterVersion).flatMap((platform) => {
         const native = updaterEvidence.platforms[platform];
         return [native.artifact, native.signature].map((entry) => ({
           name: entry.name,
@@ -1215,7 +1270,7 @@ export function selfTest() {
       acceptance_evidence: updaterAcceptance,
       native_updater_evidence: updaterEvidence,
       native_updater_evidence_asset: updaterEvidenceAsset,
-      native_updater_signatures: Object.fromEntries(NATIVE_UPDATER_PLATFORMS.map((platform) => [platform, updaterSignature])),
+      native_updater_signatures: Object.fromEntries(nativeUpdaterPlatformsForVersion(updaterVersion).map((platform) => [platform, updaterSignature])),
     };
     validatePublishRecord(updaterRecord);
     const updaterRecordWithoutEvidence = structuredClone(updaterRecord);
@@ -1519,6 +1574,7 @@ export function selfTest() {
         directory: root,
         windowsEvidencePath: foreignEvidence,
         macosEvidencePath: evidencePaths.macos_aarch64,
+        linuxEvidencePath: evidencePaths.linux_x86_64,
         outputPath: aggregatePath,
       }),
       /outside the candidate directory/,
@@ -1532,6 +1588,7 @@ export function selfTest() {
         directory: root,
         windowsEvidencePath: evidencePaths.windows_x86_64,
         macosEvidencePath: evidencePaths.macos_aarch64,
+        linuxEvidencePath: evidencePaths.linux_x86_64,
         outputPath: aggregatePath,
       }),
       /does not match evidence/,
@@ -1590,6 +1647,7 @@ function runCli() {
       directory: args.directory,
       windowsEvidencePath: args.windows_evidence,
       macosEvidencePath: args.macos_evidence,
+      linuxEvidencePath: args.linux_evidence,
       outputPath: args.output,
       requireWindowsSigning: args.require_windows_signing === "true",
     });
@@ -1614,12 +1672,19 @@ function runCli() {
     });
     return;
   }
+  if (args.mode === "automated-acceptance") {
+    createAutomatedAcceptanceEvidence({
+      candidateEvidencePath: args.input,
+      outputPath: args.output,
+    });
+    return;
+  }
   if (args.mode === "publish") {
     const result = validatePublishRecord(JSON.parse(fs.readFileSync(args.input, "utf8")));
     process.stdout.write(`${JSON.stringify(result)}\n`);
     return;
   }
-  fail("Use --test true or --mode admission|identity|platform|aggregate|rehearsal|conditional-acceptance|publish with the required arguments");
+  fail("Use --test true or --mode admission|identity|platform|aggregate|rehearsal|conditional-acceptance|automated-acceptance|publish with the required arguments");
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) runCli();

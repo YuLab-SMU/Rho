@@ -10,7 +10,15 @@ const mockPlatformFixture = previewParams.get("platform") === "macos-aarch64"
       projectRoot: "/Users/researcher/Documents/Rho Mac 研究",
       alternateProjectRoot: "/Users/researcher/Documents/Rho Demo",
     }
-  : {
+  : previewParams.get("platform") === "linux-x86_64"
+    ? {
+        platform: "linux-x86_64",
+        rscript: "/usr/bin/Rscript",
+        logPath: "/home/researcher/.local/share/org.yulab.rho/logs/startup.jsonl",
+        projectRoot: "/home/researcher/Documents/Rho",
+        alternateProjectRoot: "/home/researcher/Documents/Rho-demo",
+      }
+    : {
       platform: "windows-x86_64",
       rscript: "C:/Program Files/R/R-4.6.0/bin/Rscript.exe",
       logPath: "C:/Users/example/AppData/Local/Rho/logs/startup.log",
@@ -26,6 +34,7 @@ const state = {
   startupBusy: false,
   startupView: null,
   startupPrepared: false,
+  automaticUpdateStarted: false,
   product: { appInfo: null, updateResult: null, updateBusy: false, dialog: null, returnFocus: null },
   busy: false,
   consoleHistory: [],
@@ -2173,7 +2182,7 @@ async function mockInvoke(command, args) {
   await new Promise((resolve) => setTimeout(resolve, command === "run_agent" ? 800 : 300));
   if (command === "app_info") {
     return {
-      version: "0.4.0-dev.42",
+      version: "0.4.0-dev.43",
       channel: "development",
       commit: "4090cf725c53ab657ba9dfc9743ec6159f27dcf9",
       platform: mockPlatformFixture.platform,
@@ -2191,7 +2200,7 @@ async function mockInvoke(command, args) {
     return {
       status: "up_to_date",
       channel: "development",
-      installed_version: "0.4.0-dev.42",
+      installed_version: "0.4.0-dev.43",
       available_version: null,
       published_at: null,
       summary: null,
@@ -20193,7 +20202,7 @@ async function openAboutDialog() {
 
 function updateFailureMessage(error) {
   const message = String(error);
-  if (message.includes("UPDATE_PLATFORM_UNAVAILABLE")) return "Native updates are available only for Windows x64 and Apple Silicon Macs.";
+  if (message.includes("UPDATE_PLATFORM_UNAVAILABLE")) return "Native updates are unavailable for this operating-system architecture.";
   if (message.includes("UPDATE_STALE")) return "The selected update changed. Check for updates again before installing.";
   if (message.includes("UPDATE_DOWNLOAD")) return "Rho could not download and verify the signed update. Your current version is still running.";
   if (message.includes("UPDATE_SHUTDOWN")) return "Rho could not prepare for the update. Your current version is still running.";
@@ -20288,6 +20297,20 @@ async function installNativeUpdate() {
     renderUpdateFailure(error, { duringInstall: true });
   } finally {
     state.product.updateBusy = false;
+  }
+}
+
+async function runAutomaticUpdateAfterStartup() {
+  if (!isDesktop || state.automaticUpdateStarted) return;
+  state.automaticUpdateStarted = true;
+  try {
+    const result = await invoke("check_for_updates");
+    if (result?.status !== "update_available" || !result.available_version) return;
+    state.product.updateResult = result;
+    addLog("SYSTEM", `Installing signed update ${result.available_version} automatically`);
+    await invoke("install_native_update", { expectedVersion: String(result.available_version) });
+  } catch (error) {
+    addLog("SYSTEM", `Automatic update did not complete: ${updateFailureMessage(error)}`, "warning");
   }
 }
 
@@ -20884,6 +20907,7 @@ async function finishWorkbenchStartup(startupView) {
         await Promise.all([loadAgentData(), loadRunData(), loadEnvironmentOperationData(), refreshEnvironment()]);
       }).catch(() => {});
     }
+    void runAutomaticUpdateAfterStartup();
   } catch (error) {
     if ($("#startupGate").classList.contains("hidden")) {
       setKernelStatus("error", "R unavailable");

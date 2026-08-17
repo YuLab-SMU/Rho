@@ -4,6 +4,17 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.0-dev.43 - 2026-08-17
+
+### Updates
+
+- Signed automatic updates now cover Windows x64, macOS Apple Silicon, and
+  Linux x86-64 AppImage builds.
+- Update discovery begins only after local startup is ready; verified updates
+  install and restart automatically, while failure preserves the current app.
+- Development Releases and the download page now carry all three platform
+  packages, checksums, evidence, and updater signatures.
+
 ## 0.4.0-dev.42 - 2026-08-17
 
 ### Distribution

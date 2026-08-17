@@ -15,7 +15,7 @@ members = [
 exclude = ["vendor/jet"]
 
 [workspace.package]
-version = "0.4.0-dev.42"
+version = "0.4.0-dev.43"
 edition = "2024"
 rust-version = "1.88"
 license = "AGPL-3.0-only"

@@ -21,9 +21,11 @@ function snapshot() {
     tauriConfig: read("desktop/src-tauri/tauri.conf.json"),
     windowsTauriConfig: read("desktop/src-tauri/tauri.windows.conf.json"),
     macosTauriConfig: read("desktop/src-tauri/tauri.macos.conf.json"),
+    linuxTauriConfig: read("desktop/src-tauri/tauri.linux.conf.json"),
     updateDesign: read("docs/design/accepted-2026-07-25-about-and-update-check-design.md"),
     docsIndex: read("docs/README.md"),
     activeSpec: read("docs/plans/active-2026-08-11-signpath-application-readiness-spec.md"),
+    autoSpec: read("docs/plans/active-2026-08-17-three-platform-automatic-updater-dev43-spec.md"),
     checklist: read("docs/release/historical-0.4.0-dev.39-candidate-checklist.md"),
     news: read("NEWS.md"),
     generator: read("scripts/generate-update-site.mjs"),
@@ -38,7 +40,7 @@ function occurrences(value, pattern) {
 function validate(value) {
   assert.match(value.privacy, /^# Rho Privacy Policy$/m, "PRIVACY.md must be the canonical privacy policy");
   assert.match(value.privacy, /does not include first-party\s+analytics, advertising, background telemetry, or automatic crash-report upload/i);
-  assert.match(value.privacy, /only after you choose\s+\*\*Help > Check for Updates\.\.\.\*\*/);
+  assert.match(value.privacy, /After local startup becomes ready, Rho automatically contacts the fixed Rho\s+update service once/);
   assert.match(value.privacy, /operating system\s+credential store/i);
   assert.match(value.privacy, /custom Base URL/i);
   assert.match(value.privacy, /Crossref/i);
@@ -89,7 +91,7 @@ function validate(value) {
   assert.match(value.readme, /Windows trust status is recorded per release/);
   assert.match(value.readme, /Free Trial self-signed test signature/);
   assert.match(value.readme, /not publicly trusted or a SignPath Foundation production/);
-  assert.match(value.readme, /does not perform automatic update checks/i);
+  assert.match(value.readme, /checks its fixed signed-update endpoint once after local startup/i);
   assert.match(value.readme, /^## Uninstallation$/m);
   assert.match(value.readme, /Settings > Apps > Installed apps/);
   assert.match(value.readme, /move \*\*Rho\.app\*\* from \*\*Applications\*\* to the\s+Trash/i);
@@ -105,8 +107,9 @@ function validate(value) {
   assert.match(value.frontend, /Browser preview cannot install updates/);
   assert.match(value.frontend, /UPDATE_STALE/);
   assert.doesNotMatch(value.frontend, /updateView/);
-  assert.equal(occurrences(value.frontend, /invoke\("check_for_updates"\)/g), 1, "one manual frontend path must own update invocation");
-  assert.doesNotMatch(value.frontend, /maybeCheckForUpdates/);
+  assert.equal(occurrences(value.frontend, /invoke\("check_for_updates"\)/g), 2, "manual retry and readiness-bound automatic update paths are required");
+  assert.match(value.frontend, /runAutomaticUpdateAfterStartup/);
+  assert.doesNotMatch(value.frontend, /setInterval[\s\S]{0,120}checkForUpdates/);
   assert.doesNotMatch(value.frontend, /checkForUpdates\(\{\s*background\s*:/);
   assert.doesNotMatch(value.frontend, /rho\.update\.(?:lastCheck|dismissed)/);
   assert.doesNotMatch(value.frontend, /async function checkForUpdates\([^)]*background/);
@@ -124,9 +127,12 @@ function validate(value) {
   assert.match(tauriConfig.plugins.updater.pubkey, /^[A-Za-z0-9+/=]+$/);
   assert.equal(JSON.parse(value.windowsTauriConfig).bundle.createUpdaterArtifacts, true);
   assert.equal(JSON.parse(value.macosTauriConfig).bundle.createUpdaterArtifacts, true);
+  assert.equal(JSON.parse(value.linuxTauriConfig).bundle.createUpdaterArtifacts, true);
 
   assert.match(value.updateDesign, /Update discovery is manual-only/i);
   assert.match(value.updateDesign, /Startup does not schedule or perform an update request/i);
+  assert.match(value.autoSpec, /checks the selected channel automatically/i);
+  assert.match(value.autoSpec, /Linux x86-64/);
   assert.doesNotMatch(value.updateDesign, /once-per-24-hours background check/i);
   assert.match(value.docsIndex, /plans\/active-2026-08-11-signpath-application-readiness-spec\.md/);
   assert.match(value.docsIndex, /design\/accepted-2026-07-25-about-and-update-check-design\.md/);
@@ -190,9 +196,9 @@ if (process.argv.includes("--self-test")) {
   expectRejected(current, "missing attribution", (value) => {
     value.signing = value.signing.replace("Free code signing provided by [SignPath.io](https://about.signpath.io)", "Signing provider attribution unavailable");
   }, /Free code signing/);
-  expectRejected(current, "background update scheduler", (value) => {
-    value.frontend += "\nfunction maybeCheckForUpdates() { checkForUpdates({ background: true }); }\n";
-  }, /maybeCheckForUpdates/);
+  expectRejected(current, "periodic update scheduler", (value) => {
+    value.frontend += "\nsetInterval(() => checkForUpdates(), 1000);\n";
+  }, /setInterval/);
   expectRejected(current, "missing manual update entry", (value) => {
     value.frontend = value.frontend.replace('"check-updates": () => openUpdateDialog()', '"check-updates": () => {}');
   }, /check-updates/);

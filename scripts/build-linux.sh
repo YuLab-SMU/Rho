@@ -43,6 +43,14 @@ RHO_CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
 RHO_SOURCE_REMAP="--remap-path-prefix=$RHO_CARGO_HOME=/cargo --remap-path-prefix=$RHO_REPOSITORY_ROOT=/rho"
 export RUSTFLAGS="${RHO_SOURCE_REMAP}${RUSTFLAGS:+ $RUSTFLAGS}"
 
+if [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
+  RHO_EPHEMERAL_DIR="$(mktemp -d "${TMPDIR:-/tmp}/rho-linux-updater-key.XXXXXX")"
+  RHO_EPHEMERAL_KEY="$RHO_EPHEMERAL_DIR/private.key"
+  npx -y "@tauri-apps/cli@$RHO_TAURI_CLI_VERSION" signer generate --ci --write-keys "$RHO_EPHEMERAL_KEY"
+  export TAURI_SIGNING_PRIVATE_KEY="$(cat "$RHO_EPHEMERAL_KEY")"
+  export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
+fi
+
 # Verify the Ark sidecar and runtime resources are in place before building.
 "$RHO_SCRIPT_ROOT/prepare-runtime-resources.sh"
 
@@ -74,6 +82,18 @@ chmod +x "$RHO_APPIMAGE"
 
 # LIN3: replace the default AppRun with the dependency-check wrapper.
 "$RHO_SCRIPT_ROOT/patch-appimage-apprun.sh" "$RHO_APPIMAGE"
+
+# AppRun replacement changes AppImage bytes, so discard Tauri's pre-patch
+# signature and sign only the final image.
+find "$RHO_BUNDLE_DIR" -maxdepth 1 -type f -name '*.AppImage.sig' -delete
+(
+  cd "$RHO_REPOSITORY_ROOT/desktop/src-tauri"
+  npx -y "@tauri-apps/cli@$RHO_TAURI_CLI_VERSION" signer sign "$RHO_APPIMAGE"
+)
+if [[ ! -s "$RHO_APPIMAGE.sig" ]]; then
+  echo "Final Linux updater signature is missing." >&2
+  exit 1
+fi
 
 # The produced AppImage must be executable and its AppRun must contain the
 # WebKitGTK 4.1 dependency check (also enforced in the hosted lane).
@@ -107,4 +127,5 @@ if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
   echo "product_name=$RHO_PRODUCT_NAME" >> "$GITHUB_OUTPUT"
   echo "app_version=$RHO_VERSION" >> "$GITHUB_OUTPUT"
   echo "appimage_sha256=$RHO_APPIMAGE_SHA256" >> "$GITHUB_OUTPUT"
+  echo "appimage_signature=$RHO_APPIMAGE.sig" >> "$GITHUB_OUTPUT"
 fi

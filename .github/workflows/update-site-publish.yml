@@ -154,7 +154,7 @@ jobs:
                 if (acceptanceBytes.length !== acceptanceAsset.size) throw new Error(`Candidate acceptance size mismatch for ${release.tag_name}`);
                 acceptanceEvidence = JSON.parse(acceptanceBytes.toString("utf8"));
                 platformEvidence = {};
-                for (const platform of ["windows_x86_64", "macos_aarch64"]) {
+                for (const platform of Object.keys(evidence.platforms || {})) {
                   const expected = evidence.platforms?.[platform]?.evidence;
                   const asset = release.assets.find((item) => item.name === expected?.name);
                   if (!expected || !asset || asset.size !== expected.size_bytes || asset.size <= 0 || asset.size > 256 * 1024) {
@@ -177,6 +177,7 @@ jobs:
                 const nativeSignatureNames = {
                   windows_x86_64: `Rho_${version}_x64-setup.exe.sig`,
                   macos_aarch64: `Rho_${version}_aarch64.app.tar.gz.sig`,
+                  ...(evidence.platforms?.linux_x86_64 ? { linux_x86_64: `Rho_${version}_x86_64.AppImage.sig` } : {}),
                 };
                 const nativeEvidenceAssetCandidate = release.assets.find((asset) => asset.name === nativeEvidenceName);
                 const anyNativeAsset = release.assets.some((asset) => asset.name === nativeEvidenceName || Object.values(nativeSignatureNames).includes(asset.name));
@@ -281,7 +282,7 @@ jobs:
           development_url="https://yulab-smu.top/Rho/updates/development.json"
           for attempt in {1..12}; do
             if curl --fail --silent --show-error "$development_url?attempt=$attempt" -o development.json; then
-              if node -e 'const fs=require("fs"); const value=JSON.parse(fs.readFileSync("development.json","utf8")); const artifacts=value.artifacts||{}; const keys=Object.keys(artifacts); const validKeys=keys.every((key)=>["windows_x86_64","macos_aarch64"].includes(key)); const validArtifacts=keys.length>0 && keys.every((key)=>/^[0-9a-f]{64}$/.test(artifacts[key].sha256) && Number.isSafeInteger(artifacts[key].size) && artifacts[key].size>0); const macosExpected=process.env.EXPECTED_MACOS==="true"; if(value.schema_version!==1 || value.channel!=="development" || value.version!==process.env.EXPECTED_DEVELOPMENT_VERSION || !artifacts.windows_x86_64 || Boolean(artifacts.macos_aarch64)!==macosExpected || !validKeys || !validArtifacts) process.exit(1)'; then
+              if node -e 'const fs=require("fs"); const value=JSON.parse(fs.readFileSync("development.json","utf8")); const artifacts=value.artifacts||{}; const keys=Object.keys(artifacts).sort(); const expected=value.version==="0.4.0-dev.43"?["linux_x86_64","macos_aarch64","windows_x86_64"]:["macos_aarch64","windows_x86_64"]; const validArtifacts=keys.length>0 && keys.every((key)=>/^[0-9a-f]{64}$/.test(artifacts[key].sha256) && Number.isSafeInteger(artifacts[key].size) && artifacts[key].size>0); if(value.schema_version!==1 || value.channel!=="development" || value.version!==process.env.EXPECTED_DEVELOPMENT_VERSION || JSON.stringify(keys)!==JSON.stringify(expected) || !validArtifacts) process.exit(1)'; then
                 exit 0
               fi
             fi
@@ -300,7 +301,7 @@ jobs:
           native_url="https://yulab-smu.top/Rho/updates/tauri/development.json"
           for attempt in {1..12}; do
             if curl --fail --silent --show-error "$native_url?attempt=$attempt" -o native-development.json; then
-              if node -e 'const fs=require("fs"); const value=JSON.parse(fs.readFileSync("native-development.json","utf8")); const keys=Object.keys(value.platforms||{}).sort(); const valid=JSON.stringify(keys)===JSON.stringify(["darwin-aarch64","windows-x86_64"]) && keys.every((key)=>typeof value.platforms[key].url==="string" && typeof value.platforms[key].signature==="string" && value.platforms[key].signature.length>0); if(value.version!==process.env.EXPECTED_NATIVE_DEVELOPMENT_VERSION || !valid) process.exit(1)'; then
+              if node -e 'const fs=require("fs"); const value=JSON.parse(fs.readFileSync("native-development.json","utf8")); const keys=Object.keys(value.platforms||{}).sort(); const expected=value.version==="0.4.0-dev.43"?["darwin-aarch64","linux-x86_64","windows-x86_64"]:["darwin-aarch64","windows-x86_64"]; const valid=JSON.stringify(keys)===JSON.stringify(expected) && keys.every((key)=>typeof value.platforms[key].url==="string" && typeof value.platforms[key].signature==="string" && value.platforms[key].signature.length>0); if(value.version!==process.env.EXPECTED_NATIVE_DEVELOPMENT_VERSION || !valid) process.exit(1)'; then
                 exit 0
               fi
             fi

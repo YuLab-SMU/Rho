@@ -101,12 +101,20 @@ Rho's user-invoked updater command must reject Linux with
 There is no Linux updater manifest, Linux signing secret exposure, or Linux
 automatic installation in `UPDATER-1`.
 
+`AUTO3-DEV43`, explicitly authorized on 2026-08-17, supersedes this platform
+exclusion and the manual-only discovery rule for fresh dev.43 and later
+candidates. Historical dev.40-dev.42 behavior and evidence remain unchanged.
+
 ### 2.2 User authority and interaction
 
 Network activity remains manual-only. Rho contacts an updater endpoint only
 after the user selects **Help > Check for Updates** or retries that dialog.
 There is no startup check, background poll, silent download, throttle,
 dismissed-version persistence, or channel selector.
+
+For dev.43 and later, the successor contract performs one readiness-bound
+startup check and installs a newer verified update automatically. Failure keeps
+the current version and the manual dialog remains a retry surface.
 
 When a newer release has valid bounded manifest metadata, the dialog states the
 available version, publication date, bounded notes, and that choosing **Install
