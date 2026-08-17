@@ -18,11 +18,11 @@ on:
       release_tag:
         description: Single-use prerelease tag
         required: true
-        default: v0.4.0-dev.42
+        default: v0.4.0-dev.43
       release_name:
         description: Draft release title
         required: true
-        default: Rho 0.4.0-dev.42
+        default: Rho 0.4.0-dev.43
 
 permissions:
   contents: read
@@ -1441,10 +1441,123 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  linux-candidate:
+    name: Build Linux x86-64 AppImage candidate
+    needs: identity
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    steps:
+      - name: Check out immutable candidate commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.identity.outputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Linux build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y build-essential curl wget file unzip zip libwebkit2gtk-4.1-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev squashfs-tools pkg-config
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up R and test dependencies
+        uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: "4.6.1"
+          use-public-rspm: true
+
+      - name: Install R test dependencies
+        shell: bash
+        env:
+          GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          Rscript -e "if (!requireNamespace('remotes', quietly = TRUE)) install.packages('remotes')"
+          Rscript -e "remotes::install_deps('r/rho.bridge', dependencies = TRUE, upgrade = 'never')"
+          Rscript -e "remotes::install_deps('r/rho.agent', dependencies = TRUE, upgrade = 'never')"
+
+      - name: Install pinned Linux Rust toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup set profile minimal
+          rustup toolchain install 1.97.0-x86_64-unknown-linux-gnu --no-self-update
+          rustup default 1.97.0
+          rustc -vV | grep -Fx 'host: x86_64-unknown-linux-gnu'
+
+      - name: Bootstrap pinned Linux Ark runtime
+        shell: bash
+        run: scripts/bootstrap-ark-linux.sh
+
+      - name: Run complete Linux candidate validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo test --workspace --locked --no-fail-fast
+          Rscript -e "testthat::test_local('r/rho.bridge', reporter = 'summary')"
+          Rscript -e "testthat::test_local('r/rho.agent', reporter = 'summary')"
+          node --check desktop/dist/app.js
+          for test_script in scripts/test-*.mjs; do node "$test_script"; done
+
+      - name: Build AppRun-patched and final-signed Linux AppImage
+        id: build
+        shell: bash
+        env:
+          CANDIDATE_MODE: ${{ needs.identity.outputs.build_mode }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ needs.identity.outputs.build_mode == 'candidate' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ needs.identity.outputs.build_mode == 'candidate' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
+        run: |
+          set -euo pipefail
+          if [[ "$CANDIDATE_MODE" == "candidate" ]]; then
+            test -n "$TAURI_SIGNING_PRIVATE_KEY"
+            test -n "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD"
+          fi
+          scripts/build-linux.sh
+
+      - name: Verify and stage exact Linux candidate
+        shell: bash
+        env:
+          CANDIDATE_MODE: ${{ needs.identity.outputs.build_mode }}
+          CANDIDATE_VERSION: ${{ needs.identity.outputs.version }}
+          CANDIDATE_TAG: ${{ needs.identity.outputs.release_tag }}
+          CANDIDATE_COMMIT: ${{ needs.identity.outputs.commit }}
+        run: |
+          set -euo pipefail
+          artifact="target/release/bundle/appimage/Rho_${CANDIDATE_VERSION}_x86_64.AppImage"
+          signature="$artifact.sig"
+          test -x "$artifact"
+          test -s "$signature"
+          if [[ "$CANDIDATE_MODE" == "candidate" ]]; then
+            cargo run --locked -p rho-updater-verifier -- --config desktop/src-tauri/tauri.conf.json --artifact "$artifact" --signature "$signature"
+          fi
+          mkdir -p target/candidate
+          cp "$artifact" "target/candidate/$(basename "$artifact")"
+          cp "$signature" "target/candidate/$(basename "$signature")"
+          node scripts/candidate-release.mjs --mode platform --version "$CANDIDATE_VERSION" --tag "$CANDIDATE_TAG" --commit "$CANDIDATE_COMMIT" --platform linux_x86_64 --artifact "target/candidate/$(basename "$artifact")" --output "target/candidate/rho-${CANDIDATE_VERSION}-linux-x86_64-evidence.json" --checks release_metadata,rust_workspace,rho_bridge,rho_agent,frontend,workspace_smoke,x86_64,appimage,apprun,license_boundary,native_updater_signature
+
+      - name: Upload immutable Linux candidate and updater inputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: rho-${{ needs.identity.outputs.version }}-linux-x86-64-${{ github.run_id }}
+          path: |
+            target/candidate/Rho_${{ needs.identity.outputs.version }}_x86_64.AppImage
+            target/candidate/Rho_${{ needs.identity.outputs.version }}_x86_64.AppImage.sha256
+            target/candidate/Rho_${{ needs.identity.outputs.version }}_x86_64.AppImage.sig
+            target/candidate/rho-${{ needs.identity.outputs.version }}-linux-x86_64-evidence.json
+          if-no-files-found: error
+          retention-days: 14
+
   rehearsal-evidence:
     name: Assemble review-only rehearsal artifact
     if: ${{ needs.identity.outputs.build_mode == 'rehearsal' && github.repository == 'YuLab-SMU/Rho_for_mac' }}
-    needs: [identity, windows-candidate, macos-finalize]
+    needs: [identity, windows-candidate, macos-finalize, linux-candidate]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -1472,7 +1585,7 @@ jobs:
           set -euo pipefail
           candidate_evidence="target/candidate/rho-${CANDIDATE_VERSION}-candidate-evidence.json"
           rehearsal_evidence="target/candidate/rho-${CANDIDATE_VERSION}-rehearsal-evidence.json"
-          node scripts/candidate-release.mjs --mode aggregate --version "$CANDIDATE_VERSION" --tag "$CANDIDATE_TAG" --commit "$CANDIDATE_COMMIT" --directory target/candidate --windows_evidence "target/candidate/rho-${CANDIDATE_VERSION}-windows-x86_64-evidence.json" --macos_evidence "target/candidate/rho-${CANDIDATE_VERSION}-macos-aarch64-evidence.json" --output "$candidate_evidence"
+          node scripts/candidate-release.mjs --mode aggregate --version "$CANDIDATE_VERSION" --tag "$CANDIDATE_TAG" --commit "$CANDIDATE_COMMIT" --directory target/candidate --windows_evidence "target/candidate/rho-${CANDIDATE_VERSION}-windows-x86_64-evidence.json" --macos_evidence "target/candidate/rho-${CANDIDATE_VERSION}-macos-aarch64-evidence.json" --linux_evidence "target/candidate/rho-${CANDIDATE_VERSION}-linux-x86_64-evidence.json" --output "$candidate_evidence"
           node scripts/candidate-release.mjs --mode rehearsal --input "$candidate_evidence" --repository "$GITHUB_REPOSITORY" --run_id "$GITHUB_RUN_ID" --run_attempt "$GITHUB_RUN_ATTEMPT" --output "$rehearsal_evidence"
           node -e 'require("node:fs").unlinkSync(process.argv[1])' "$candidate_evidence"
 
@@ -1487,6 +1600,9 @@ jobs:
             target/candidate/Rho_${{ needs.identity.outputs.version }}_aarch64.dmg
             target/candidate/Rho_${{ needs.identity.outputs.version }}_aarch64.dmg.sha256
             target/candidate/rho-${{ needs.identity.outputs.version }}-macos-aarch64-evidence.json
+            target/candidate/Rho_${{ needs.identity.outputs.version }}_x86_64.AppImage
+            target/candidate/Rho_${{ needs.identity.outputs.version }}_x86_64.AppImage.sha256
+            target/candidate/rho-${{ needs.identity.outputs.version }}-linux-x86_64-evidence.json
             target/candidate/rho-${{ needs.identity.outputs.version }}-rehearsal-evidence.json
           if-no-files-found: error
           retention-days: 14
@@ -1494,7 +1610,7 @@ jobs:
   draft-candidate:
     name: Assemble immutable draft prerelease
     if: ${{ needs.identity.outputs.build_mode == 'candidate' && github.repository == 'YuLab-SMU/Rho' }}
-    needs: [identity, windows-candidate, macos-finalize]
+    needs: [identity, windows-candidate, macos-finalize, linux-candidate]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -1520,8 +1636,9 @@ jobs:
           CANDIDATE_COMMIT: ${{ needs.identity.outputs.commit }}
         run: |
           set -euo pipefail
-          node scripts/candidate-release.mjs --mode aggregate --version "$CANDIDATE_VERSION" --tag "$CANDIDATE_TAG" --commit "$CANDIDATE_COMMIT" --directory target/candidate --windows_evidence "target/candidate/rho-${CANDIDATE_VERSION}-windows-x86_64-evidence.json" --macos_evidence "target/candidate/rho-${CANDIDATE_VERSION}-macos-aarch64-evidence.json" --output "target/candidate/rho-${CANDIDATE_VERSION}-candidate-evidence.json" --require_windows_signing true
+          node scripts/candidate-release.mjs --mode aggregate --version "$CANDIDATE_VERSION" --tag "$CANDIDATE_TAG" --commit "$CANDIDATE_COMMIT" --directory target/candidate --windows_evidence "target/candidate/rho-${CANDIDATE_VERSION}-windows-x86_64-evidence.json" --macos_evidence "target/candidate/rho-${CANDIDATE_VERSION}-macos-aarch64-evidence.json" --linux_evidence "target/candidate/rho-${CANDIDATE_VERSION}-linux-x86_64-evidence.json" --output "target/candidate/rho-${CANDIDATE_VERSION}-candidate-evidence.json" --require_windows_signing true
           node scripts/tauri-native-updater.mjs --mode evidence --version "$CANDIDATE_VERSION" --tag "$CANDIDATE_TAG" --commit "$CANDIDATE_COMMIT" --directory target/candidate --output "target/candidate/rho-${CANDIDATE_VERSION}-tauri-native-updater-evidence.json"
+          node scripts/candidate-release.mjs --mode automated-acceptance --input "target/candidate/rho-${CANDIDATE_VERSION}-candidate-evidence.json" --output "target/candidate/rho-${CANDIDATE_VERSION}-acceptance.json"
 
       - name: Prepare reviewed release notes from the exact candidate commit
         shell: bash
@@ -1573,10 +1690,15 @@ jobs:
               `Rho_${version}_aarch64.dmg`,
               `Rho_${version}_aarch64.dmg.sha256`,
               `rho-${version}-macos-aarch64-evidence.json`,
+              `Rho_${version}_x86_64.AppImage`,
+              `Rho_${version}_x86_64.AppImage.sha256`,
+              `rho-${version}-linux-x86_64-evidence.json`,
               `rho-${version}-candidate-evidence.json`,
+              `rho-${version}-acceptance.json`,
               `Rho_${version}_x64-setup.exe.sig`,
               `Rho_${version}_aarch64.app.tar.gz`,
               `Rho_${version}_aarch64.app.tar.gz.sig`,
+              `Rho_${version}_x86_64.AppImage.sig`,
               `rho-${version}-tauri-native-updater-evidence.json`,
             ];
             const files = requiredNames.map((name) => {

@@ -6,7 +6,7 @@ on:
       release_tag:
         description: Exact accepted draft tag
         required: true
-        default: v0.4.0-dev.42
+        default: v0.4.0-dev.43
 
 permissions:
   contents: read
@@ -122,6 +122,8 @@ jobs:
             const windowsUpdaterSignatureName = `Rho_${version}_x64-setup.exe.sig`;
             const macosUpdaterArchiveName = `Rho_${version}_aarch64.app.tar.gz`;
             const macosUpdaterSignatureName = `${macosUpdaterArchiveName}.sig`;
+            const linuxAppImageName = `Rho_${version}_x86_64.AppImage`;
+            const linuxUpdaterSignatureName = `${linuxAppImageName}.sig`;
             const required = new Set([
               `Rho_${version}_x64-setup.exe`,
               `Rho_${version}_x64-setup.exe.sha256`,
@@ -129,11 +131,15 @@ jobs:
               `Rho_${version}_aarch64.dmg`,
               `Rho_${version}_aarch64.dmg.sha256`,
               `rho-${version}-macos-aarch64-evidence.json`,
+              linuxAppImageName,
+              `${linuxAppImageName}.sha256`,
+              `rho-${version}-linux-x86_64-evidence.json`,
               candidateName,
               acceptanceName,
               windowsUpdaterSignatureName,
               macosUpdaterArchiveName,
               macosUpdaterSignatureName,
+              linuxUpdaterSignatureName,
               nativeUpdaterEvidenceName,
             ]);
             if (release.data.assets.length !== required.size || release.data.assets.some((asset) => !required.has(asset.name))) {
@@ -143,7 +149,7 @@ jobs:
               const asset = release.data.assets.find((item) => item.name === boundedName);
               if (!asset || asset.size <= 0 || asset.size > 256 * 1024) throw new Error(`${boundedName} exceeds the evidence byte budget.`);
             }
-            for (const signatureName of [windowsUpdaterSignatureName, macosUpdaterSignatureName]) {
+            for (const signatureName of [windowsUpdaterSignatureName, macosUpdaterSignatureName, linuxUpdaterSignatureName]) {
               const asset = release.data.assets.find((item) => item.name === signatureName);
               if (!asset || asset.size <= 0 || asset.size > 16 * 1024) throw new Error(`${signatureName} exceeds the updater signature byte budget.`);
             }
@@ -179,6 +185,7 @@ jobs:
               platform_evidence: {
                 windows_x86_64: JSON.parse(fs.readFileSync(path.join("target", "publish", `rho-${version}-windows-x86_64-evidence.json`), "utf8")),
                 macos_aarch64: JSON.parse(fs.readFileSync(path.join("target", "publish", `rho-${version}-macos-aarch64-evidence.json`), "utf8")),
+                linux_x86_64: JSON.parse(fs.readFileSync(path.join("target", "publish", `rho-${version}-linux-x86_64-evidence.json`), "utf8")),
               },
               candidate_evidence: JSON.parse(candidateBytes.toString("utf8")),
               candidate_evidence_asset: {
@@ -196,6 +203,7 @@ jobs:
               native_updater_signatures: {
                 windows_x86_64: fs.readFileSync(path.join("target", "publish", windowsUpdaterSignatureName), "utf8"),
                 macos_aarch64: fs.readFileSync(path.join("target", "publish", macosUpdaterSignatureName), "utf8"),
+                linux_x86_64: fs.readFileSync(path.join("target", "publish", linuxUpdaterSignatureName), "utf8"),
               },
             };
             fs.writeFileSync("target/publish-record.json", `${JSON.stringify(record, null, 2)}\n`);

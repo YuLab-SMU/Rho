@@ -11,6 +11,8 @@ const REQUIRED_MATRIX = new Set([
   "macos-26|1.88.0|1.88.0-aarch64-apple-darwin|aarch64-apple-darwin",
   "windows-latest|stable|stable-x86_64-pc-windows-gnu|x86_64-pc-windows-gnu",
   "windows-latest|1.88.0|1.88.0-x86_64-pc-windows-gnu|x86_64-pc-windows-gnu",
+  "ubuntu-22.04|stable|stable-x86_64-unknown-linux-gnu|x86_64-unknown-linux-gnu",
+  "ubuntu-22.04|1.88.0|1.88.0-x86_64-unknown-linux-gnu|x86_64-unknown-linux-gnu",
 ]);
 
 const normalizeLineEndings = (text) => text.replace(/\r\n/g, "\n");
@@ -132,8 +134,8 @@ function workflowJob(workflow, jobName) {
 export function validateCandidateWorkflow(text) {
   const workflow = normalizeLineEndings(text);
   const lockedTests = workflow.match(/cargo test --workspace --locked --no-fail-fast/g) ?? [];
-  if (lockedTests.length !== 2) {
-    fail(`Windows and macOS candidate validation must each use locked workspace tests; found ${lockedTests.length}`);
+  if (lockedTests.length !== 3) {
+    fail(`Windows, macOS, and Linux candidate validation must each use locked workspace tests; found ${lockedTests.length}`);
   }
   if (/cargo test --workspace --no-fail-fast/.test(workflow)) {
     fail("Candidate validation contains an unlocked workspace test command");

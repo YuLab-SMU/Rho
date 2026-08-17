@@ -60,7 +60,10 @@ pub fn native_updater_supported() -> bool {
 }
 
 fn native_updater_supported_for(os: &str, arch: &str) -> bool {
-    matches!((os, arch), ("windows", "x86_64") | ("macos", "aarch64"))
+    matches!(
+        (os, arch),
+        ("windows", "x86_64") | ("macos", "aarch64") | ("linux", "x86_64")
+    )
 }
 
 fn native_update_asset_url_is_allowed(url: &Url) -> bool {
@@ -474,6 +477,119 @@ fn install_macos_native_update(bytes: &[u8]) -> Result<()> {
     std::process::exit(0);
 }
 
+#[cfg(target_os = "linux")]
+fn linux_appimage_path() -> Result<std::path::PathBuf> {
+    let value = std::env::var_os("APPIMAGE")
+        .context("UPDATE_INSTALL: APPIMAGE does not identify the running Linux package")?;
+    let path = std::path::PathBuf::from(value);
+    ensure!(
+        path.is_absolute(),
+        "UPDATE_INSTALL: APPIMAGE must be an absolute path"
+    );
+    let metadata = std::fs::symlink_metadata(&path)
+        .context("UPDATE_INSTALL: current AppImage is unavailable")?;
+    ensure!(
+        metadata.is_file() && !metadata.file_type().is_symlink(),
+        "UPDATE_INSTALL: current AppImage must be a regular non-symlink file"
+    );
+    Ok(path)
+}
+
+#[cfg(target_os = "linux")]
+fn replace_linux_appimage_with<F>(
+    target: &std::path::Path,
+    staged: &std::path::Path,
+    mut rename: F,
+) -> Result<std::path::PathBuf>
+where
+    F: FnMut(&std::path::Path, &std::path::Path) -> std::io::Result<()>,
+{
+    let parent = target
+        .parent()
+        .context("UPDATE_INSTALL: current AppImage has no parent directory")?;
+    let backup = parent.join(format!(
+        ".rho-updater-backup-{}.AppImage",
+        uuid::Uuid::new_v4()
+    ));
+    ensure!(
+        !backup.exists(),
+        "UPDATE_INSTALL: Linux updater backup path already exists"
+    );
+    rename(target, &backup).context("UPDATE_INSTALL: could not preserve the current AppImage")?;
+    match rename(staged, target) {
+        Ok(()) => Ok(backup),
+        Err(error) => {
+            rename(&backup, target).context(
+                "UPDATE_INSTALL: could not restore the current AppImage after replacement failure",
+            )?;
+            Err(anyhow::Error::new(error).context(
+                "UPDATE_INSTALL: staged AppImage replacement failed; current image was restored",
+            ))
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn install_linux_native_update(bytes: &[u8]) -> Result<()> {
+    use std::io::Write;
+    use std::os::unix::fs::PermissionsExt;
+
+    ensure!(
+        bytes.starts_with(b"\x7fELF"),
+        "UPDATE_INSTALL: verified Linux updater artifact is not an ELF AppImage"
+    );
+    let target = linux_appimage_path()?;
+    let parent = target
+        .parent()
+        .context("UPDATE_INSTALL: current AppImage has no parent directory")?;
+    let mut staged = tempfile::Builder::new()
+        .prefix(".rho-updater-stage-")
+        .suffix(".AppImage")
+        .tempfile_in(parent)
+        .context("UPDATE_INSTALL: could not stage the Linux AppImage")?;
+    staged
+        .write_all(bytes)
+        .context("UPDATE_INSTALL: could not write the Linux AppImage")?;
+    staged
+        .as_file()
+        .sync_all()
+        .context("UPDATE_INSTALL: could not synchronize the Linux AppImage")?;
+    std::fs::set_permissions(staged.path(), std::fs::Permissions::from_mode(0o755))
+        .context("UPDATE_INSTALL: could not make the Linux AppImage executable")?;
+    let smoke = std::process::Command::new(staged.path())
+        .args(["--appimage-extract-and-run", "--smoke-test"])
+        .env("APPIMAGE", staged.path())
+        .status()
+        .context("UPDATE_INSTALL: could not smoke-test the staged Linux AppImage")?;
+    ensure!(
+        smoke.success(),
+        "UPDATE_INSTALL: staged Linux AppImage smoke test failed"
+    );
+    let (_, staged_path) = staged
+        .keep()
+        .context("UPDATE_INSTALL: could not preserve the staged Linux AppImage")?;
+    let backup = replace_linux_appimage_with(&target, &staged_path, |source, destination| {
+        std::fs::rename(source, destination)
+    })?;
+    match std::process::Command::new(&target)
+        .env("APPIMAGE", &target)
+        .spawn()
+    {
+        Ok(_) => {
+            let _ = std::fs::remove_file(backup);
+            std::process::exit(0);
+        }
+        Err(error) => {
+            let _ = std::fs::remove_file(&target);
+            std::fs::rename(&backup, &target)
+                .context("UPDATE_INSTALL: updated AppImage did not launch and rollback failed")?;
+            Err(anyhow::Error::new(error).context(
+                "UPDATE_INSTALL: updated AppImage did not launch; current image was restored",
+            ))
+        }
+    }
+}
+
 pub fn install_verified_native_update(
     _update: &tauri_plugin_updater::Update,
     bytes: &[u8],
@@ -482,7 +598,9 @@ pub fn install_verified_native_update(
     return install_windows_native_update(bytes);
     #[cfg(target_os = "macos")]
     return install_macos_native_update(bytes);
-    #[cfg(not(any(windows, target_os = "macos")))]
+    #[cfg(target_os = "linux")]
+    return install_linux_native_update(bytes);
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
     {
         let _ = bytes;
         Err(anyhow::anyhow!(
@@ -565,7 +683,7 @@ mod tests {
     fn native_updater_platform_scope_is_explicit() {
         assert!(native_updater_supported_for("windows", "x86_64"));
         assert!(native_updater_supported_for("macos", "aarch64"));
-        assert!(!native_updater_supported_for("linux", "x86_64"));
+        assert!(native_updater_supported_for("linux", "x86_64"));
         assert!(!native_updater_supported_for("macos", "x86_64"));
     }
 
@@ -683,5 +801,39 @@ mod tests {
             b"old app"
         );
         assert!(staged_app.is_dir());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_appimage_replacement_is_transactional() {
+        let root = tempfile::tempdir().unwrap();
+        let target = root.path().join("Rho.AppImage");
+        let staged = root.path().join("staged.AppImage");
+        std::fs::write(&target, b"old image").unwrap();
+        std::fs::write(&staged, b"new image").unwrap();
+        let backup = replace_linux_appimage_with(&target, &staged, |source, destination| {
+            std::fs::rename(source, destination)
+        })
+        .unwrap();
+        assert_eq!(std::fs::read(&target).unwrap(), b"new image");
+        assert_eq!(std::fs::read(&backup).unwrap(), b"old image");
+
+        let failed_target = root.path().join("failed.AppImage");
+        let failed_staged = root.path().join("failed-staged.AppImage");
+        std::fs::write(&failed_target, b"original").unwrap();
+        std::fs::write(&failed_staged, b"replacement").unwrap();
+        let mut moves = 0;
+        let error =
+            replace_linux_appimage_with(&failed_target, &failed_staged, |source, destination| {
+                moves += 1;
+                if moves == 2 {
+                    return Err(std::io::Error::other("injected replacement failure"));
+                }
+                std::fs::rename(source, destination)
+            })
+            .unwrap_err();
+        assert!(error.to_string().contains("current image was restored"));
+        assert_eq!(std::fs::read(&failed_target).unwrap(), b"original");
+        assert_eq!(std::fs::read(&failed_staged).unwrap(), b"replacement");
     }
 }

@@ -7,7 +7,7 @@ import { isDeepStrictEqual } from "node:util";
 import { fileURLToPath } from "node:url";
 
 import {
-  CANDIDATE_PLATFORMS,
+  candidatePlatformsForVersion,
   createAggregateEvidence,
   createPlatformEvidence,
   sha256File,
@@ -20,8 +20,8 @@ import {
   validateReleaseNotesRecord,
 } from "./release-notes.mjs";
 import {
-  NATIVE_UPDATER_PLATFORMS,
   createNativeUpdaterEvidence,
+  nativeUpdaterPlatformsForVersion,
   tauriManifestFromEvidence,
   validateNativeUpdaterReleaseAssets,
   validateNativeUpdaterEvidence,
@@ -33,6 +33,8 @@ export const ACCEPTANCE_SOURCE_COMMIT = "14b16ced90df02621e37913e23c6a555cf5963f
 export const ACCEPTANCE_SOURCE_TAG = `v${ACCEPTANCE_SOURCE_VERSION}`;
 export const ACCEPTANCE_TARGET_TAG = `v${ACCEPTANCE_TARGET_VERSION}`;
 export const ACCEPTANCE_TARGET_RELEASE_NAME = "Rho 0.4.0-dev.41 Native Updater Acceptance Target";
+const ACCEPTANCE_NATIVE_PLATFORMS = nativeUpdaterPlatformsForVersion(ACCEPTANCE_TARGET_VERSION);
+const ACCEPTANCE_CANDIDATE_PLATFORMS = candidatePlatformsForVersion(ACCEPTANCE_TARGET_VERSION);
 export const ACCEPTANCE_TARGET_MARKER_NAME = `rho-${ACCEPTANCE_TARGET_VERSION}-native-updater-acceptance-target.json`;
 export const PAGES_FIXTURE_MARKER_NAME = ".rho-native-updater-acceptance.json";
 export const MAX_ACCEPTANCE_MARKER_BYTES = 16 * 1024;
@@ -267,7 +269,7 @@ function validateCandidateBundle({ release, directory, version, state, expectedN
   if (candidate.version !== version || candidate.release_tag !== `v${version}` || candidate.commit !== release.target_commitish) {
     fail(`${version} candidate evidence identity is stale`);
   }
-  for (const platform of CANDIDATE_PLATFORMS) {
+  for (const platform of ACCEPTANCE_CANDIDATE_PLATFORMS) {
     const names = expectedPlatformEvidenceNames(version, platform);
     const platformEvidence = validatePublishedPlatformEvidence(
       readJson(path.join(directory, names.evidence), `${version} ${platform} platform evidence`),
@@ -301,7 +303,7 @@ function validateCandidateBundle({ release, directory, version, state, expectedN
     commit: release.target_commitish,
     candidate_evidence: candidate,
   });
-  const signatureContents = Object.fromEntries(NATIVE_UPDATER_PLATFORMS.map((platform) => {
+  const signatureContents = Object.fromEntries(ACCEPTANCE_NATIVE_PLATFORMS.map((platform) => {
     const signature = nativeEvidence.platforms[platform].signature.name;
     return [platform, readRegularFile(path.join(directory, signature), `${version} ${platform} updater signature`, MAX_SIGNATURE_BYTES).toString("utf8")];
   }));
@@ -356,7 +358,7 @@ export function validateAcceptanceTargetMarker(value) {
     || value.type !== RELEASE_MARKER_TYPE
     || value.status !== "prepared"
     || value.purpose !== FIXTURE_PURPOSE
-    || !isDeepStrictEqual(value.platforms, NATIVE_UPDATER_PLATFORMS)
+    || !isDeepStrictEqual(value.platforms, ACCEPTANCE_NATIVE_PLATFORMS)
   ) fail("Native updater acceptance target marker header is invalid");
   validateMarkerSide(value.source, {
     version: ACCEPTANCE_SOURCE_VERSION,
@@ -378,7 +380,7 @@ function markerFromBundles(source, target) {
     type: RELEASE_MARKER_TYPE,
     status: "prepared",
     purpose: FIXTURE_PURPOSE,
-    platforms: [...NATIVE_UPDATER_PLATFORMS],
+    platforms: [...ACCEPTANCE_NATIVE_PLATFORMS],
     source: {
       version: source.candidate.version,
       release_tag: source.candidate.release_tag,
@@ -921,7 +923,7 @@ function createTestBundle(root, version, commit, { releaseName, releaseBody, dra
   fs.mkdirSync(root, { recursive: true });
   const signature = fakeSignature();
   const evidencePaths = {};
-  for (const platform of CANDIDATE_PLATFORMS) {
+  for (const platform of ACCEPTANCE_CANDIDATE_PLATFORMS) {
     const names = expectedPlatformEvidenceNames(version, platform);
     const artifact = path.join(root, names.artifact);
     fs.writeFileSync(artifact, `${platform} ${version} artifact`);

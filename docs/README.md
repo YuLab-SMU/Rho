@@ -49,6 +49,8 @@ changes.
 - Active Tauri native updater enablement: [`plans/active-2026-08-15-tauri-native-updater-spec.md`](plans/active-2026-08-15-tauri-native-updater-spec.md)
 - Active dev.42 two-stage Free Trial signing: [`plans/active-2026-08-17-signpath-free-trial-two-stage-dev42-spec.md`](plans/active-2026-08-17-signpath-free-trial-two-stage-dev42-spec.md)
 - Active dev.42 candidate checklist: [`release/active-0.4.0-dev.42-two-stage-signing-checklist.md`](release/active-0.4.0-dev.42-two-stage-signing-checklist.md)
+- Active dev.43 three-platform automatic updater: [`plans/active-2026-08-17-three-platform-automatic-updater-dev43-spec.md`](plans/active-2026-08-17-three-platform-automatic-updater-dev43-spec.md)
+- Active dev.43 release checklist: [`release/active-0.4.0-dev.43-three-platform-updater-checklist.md`](release/active-0.4.0-dev.43-three-platform-updater-checklist.md)
 - Bounded `dev.41` native-updater acceptance transport: [`release/active-0.4.0-dev.41-native-updater-acceptance-target-checklist.md`](release/active-0.4.0-dev.41-native-updater-acceptance-target-checklist.md)
 - Active SignPath application readiness: [`plans/active-2026-08-11-signpath-application-readiness-spec.md`](plans/active-2026-08-11-signpath-application-readiness-spec.md)
 - Active SignPath Free Trial Windows smoke: [`plans/active-2026-08-12-signpath-free-trial-smoke-spec.md`](plans/active-2026-08-12-signpath-free-trial-smoke-spec.md)

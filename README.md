@@ -90,17 +90,16 @@ implementation, project, bug-fix, and release documents.
 
 ## Project Status
 
-Rho is under active development. Windows packaging, Apple Silicon macOS
-packaging, and the core project workflow are implemented; installed-candidate
-acceptance, release signing/publication, macOS x64, and Linux packaging remain
-in progress.
+Rho is under active development. Windows x64, Apple Silicon macOS, and Linux
+x86-64 packaging are implemented; macOS x64 remains in progress.
 
 ## Security, Privacy, And Signing
 
-Rho does not perform automatic update checks or first-party background
-telemetry. Network-capable operations follow an explicit user action, such as
-checking for updates, connecting a model Provider, resolving a DOI, operating
-on a package environment, or running user/approved code. Review the complete
+Rho checks its fixed signed-update endpoint once after local startup becomes
+ready. It performs no first-party background telemetry. Other network-capable
+operations follow an explicit user action, such as connecting a model Provider,
+resolving a DOI, operating on a package environment, or running user/approved
+code. Review the complete
 [Privacy policy](PRIVACY.md), especially before configuring a custom Base URL
 or sharing diagnostics.
 

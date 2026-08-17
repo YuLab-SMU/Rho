@@ -3,7 +3,7 @@
 Status: active
 
 Date: 2026-08-17
-Current source baseline: `0.4.0-dev.42`
+Current source baseline: `0.4.0-dev.43`
 Active published identity: `0.4.0-dev.24` (authoritative candidate,
 owner-installed acceptance, MAC5 GO, protected public prerelease, and live
 development update manifest pass)
@@ -194,6 +194,13 @@ retained an unrelated NSIS enum literal. The patch contract now mirrors
 Tauri's actual invariant: exactly one unknown placeholder is replaced and the
 NSIS-token count must increase by one. All repair-run artifacts are
 non-composable and dev.42 remains unused.
+
+AUTO3-DEV43 now advances the source to fresh `0.4.0-dev.43`. The owner removed
+manual observation as a release prerequisite and authorized readiness-bound
+automatic updates plus Release-page downloads for Windows x64, macOS arm64,
+and Linux x86-64. Source implementation and the local affected matrix pass;
+six-leg protected integration, exact three-platform candidate construction,
+publication, and live three-target development manifest remain pending.
 
 Issue #28's Rust 1.88/Resolver 3 build contract integrated through PR #29 at
 `9e0b36b`. Exact PR-head run `31509554882` and exact-merge main run

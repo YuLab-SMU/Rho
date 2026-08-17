@@ -49,6 +49,7 @@ on:
       - "scripts/test-conditional-prerelease-policy.mjs"
       - "scripts/test-tauri-native-updater-contract.mjs"
       - "scripts/test-tauri-bundle-type.mjs"
+      - "scripts/test-three-platform-auto-updater.mjs"
       - "scripts/test-native-updater-acceptance-transport.mjs"
       - "scripts/windows-installed-focus-acceptance.mjs"
       - "scripts/test-windows-installed-focus-acceptance.mjs"
@@ -60,6 +61,7 @@ on:
       - "docs/plans/implemented-2026-08-13-conditional-prerelease-policy-spec.md"
       - "docs/plans/active-2026-08-15-tauri-native-updater-spec.md"
       - "docs/plans/active-2026-08-17-signpath-free-trial-two-stage-dev42-spec.md"
+      - "docs/plans/active-2026-08-17-three-platform-automatic-updater-dev43-spec.md"
       - "docs/project/active-document-cross-review.md"
       - "docs/project/active-development-roadmap.md"
       - "docs/release/active-0.4.0-dev.37-candidate-checklist.md"
@@ -68,6 +70,7 @@ on:
       - "docs/release/active-0.4.0-dev.40-candidate-checklist.md"
       - "docs/release/active-0.4.0-dev.41-native-updater-acceptance-target-checklist.md"
       - "docs/release/active-0.4.0-dev.42-two-stage-signing-checklist.md"
+      - "docs/release/active-0.4.0-dev.43-three-platform-updater-checklist.md"
   pull_request:
     branches: [main]
     paths:
@@ -116,6 +119,7 @@ on:
       - "scripts/test-conditional-prerelease-policy.mjs"
       - "scripts/test-tauri-native-updater-contract.mjs"
       - "scripts/test-tauri-bundle-type.mjs"
+      - "scripts/test-three-platform-auto-updater.mjs"
       - "scripts/test-native-updater-acceptance-transport.mjs"
       - "scripts/windows-installed-focus-acceptance.mjs"
       - "scripts/test-windows-installed-focus-acceptance.mjs"
@@ -127,6 +131,7 @@ on:
       - "docs/plans/implemented-2026-08-13-conditional-prerelease-policy-spec.md"
       - "docs/plans/active-2026-08-15-tauri-native-updater-spec.md"
       - "docs/plans/active-2026-08-17-signpath-free-trial-two-stage-dev42-spec.md"
+      - "docs/plans/active-2026-08-17-three-platform-automatic-updater-dev43-spec.md"
       - "docs/project/active-document-cross-review.md"
       - "docs/project/active-development-roadmap.md"
       - "docs/release/active-0.4.0-dev.37-candidate-checklist.md"
@@ -135,6 +140,7 @@ on:
       - "docs/release/active-0.4.0-dev.40-candidate-checklist.md"
       - "docs/release/active-0.4.0-dev.41-native-updater-acceptance-target-checklist.md"
       - "docs/release/active-0.4.0-dev.42-two-stage-signing-checklist.md"
+      - "docs/release/active-0.4.0-dev.43-three-platform-updater-checklist.md"
 
 permissions:
   contents: read
@@ -168,6 +174,14 @@ jobs:
             toolchain: "1.88.0"
             rustup_toolchain: 1.88.0-x86_64-pc-windows-gnu
             host: x86_64-pc-windows-gnu
+          - os: ubuntu-22.04
+            toolchain: "stable"
+            rustup_toolchain: stable-x86_64-unknown-linux-gnu
+            host: x86_64-unknown-linux-gnu
+          - os: ubuntu-22.04
+            toolchain: "1.88.0"
+            rustup_toolchain: 1.88.0-x86_64-unknown-linux-gnu
+            host: x86_64-unknown-linux-gnu
     env:
       RUSTUP_TOOLCHAIN: ${{ matrix.rustup_toolchain }}
 
@@ -200,6 +214,24 @@ jobs:
           }
           Add-Content -LiteralPath $env:GITHUB_ENV -Value "RHO_RTOOLS_BIN=C:\rtools45\x86_64-w64-mingw32.static.posix\bin"
           Add-Content -LiteralPath $env:GITHUB_PATH -Value $rtools
+
+      - name: Install Linux desktop build dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev squashfs-tools pkg-config unzip zip
+
+      - name: Install and verify Linux Rust toolchain
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup set profile minimal
+          rustup toolchain install "$RUSTUP_TOOLCHAIN" --no-self-update
+          if [[ "${{ matrix.toolchain }}" == "stable" ]]; then rustup component add rustfmt --toolchain "$RUSTUP_TOOLCHAIN"; fi
+          rustc -vV | grep -Fx "host: ${{ matrix.host }}"
+          if [[ "${{ matrix.toolchain }}" == "1.88.0" ]]; then test "$(rustc -V | awk '{print $2}')" = "1.88.0"; fi
 
       - name: Install and verify macOS Rust toolchain
         if: runner.os == 'macOS'
@@ -249,6 +281,11 @@ jobs:
         shell: bash
         run: ./scripts/bootstrap-ark-macos.sh
 
+      - name: Stage pinned Linux Ark sidecar for Tauri compilation
+        if: runner.os == 'Linux'
+        shell: bash
+        run: ./scripts/bootstrap-ark-linux.sh
+
       - name: Enforce current stable formatting
         if: matrix.toolchain == 'stable'
         run: cargo fmt --all -- --check
@@ -271,6 +308,7 @@ jobs:
           node scripts/test-mac4-release-contract.mjs
           node scripts/test-tauri-native-updater-contract.mjs
           node scripts/test-native-updater-acceptance-transport.mjs
+          node scripts/test-three-platform-auto-updater.mjs
 
       - name: Verify locked workspace at selected Rust version
         run: |
