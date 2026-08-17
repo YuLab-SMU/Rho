@@ -43,7 +43,12 @@ try {
 
   const mixed = path.join(root, "mixed-token.exe");
   fs.writeFileSync(mixed, Buffer.concat([UNKNOWN_BUNDLE_TYPE, NSIS_BUNDLE_TYPE]));
-  expectFailure(() => patchWindowsBundleType(mixed), /exactly one unknown bundle token/);
+  const mixedEvidence = patchWindowsBundleType(mixed);
+  assert.equal(mixedEvidence.preexisting_nsis_tokens, 1);
+  const mixedAfter = fs.readFileSync(mixed);
+  assert.equal(mixedAfter.indexOf(UNKNOWN_BUNDLE_TYPE), -1);
+  assert.equal(mixedAfter.indexOf(NSIS_BUNDLE_TYPE), 0);
+  assert.notEqual(mixedAfter.indexOf(NSIS_BUNDLE_TYPE, NSIS_BUNDLE_TYPE.length), -1);
 
   const empty = path.join(root, "empty.exe");
   fs.writeFileSync(empty, "");

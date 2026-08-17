@@ -42,8 +42,8 @@ export function patchWindowsBundleType(filePath) {
   const before = fs.readFileSync(filePath);
   const unknownIndexes = occurrences(before, UNKNOWN_BUNDLE_TYPE);
   const nsisIndexes = occurrences(before, NSIS_BUNDLE_TYPE);
-  if (unknownIndexes.length !== 1 || nsisIndexes.length !== 0) {
-    fail("Tauri executable must contain exactly one unknown bundle token and no NSIS token");
+  if (unknownIndexes.length !== 1) {
+    fail("Tauri executable must contain exactly one unknown bundle token");
   }
 
   const beforeSha256 = sha256(before);
@@ -60,7 +60,7 @@ export function patchWindowsBundleType(filePath) {
   if (
     after.length !== before.length
     || occurrences(after, UNKNOWN_BUNDLE_TYPE).length !== 0
-    || occurrences(after, NSIS_BUNDLE_TYPE).length !== 1
+    || occurrences(after, NSIS_BUNDLE_TYPE).length !== nsisIndexes.length + 1
   ) fail("Tauri bundle-type patch did not produce the exact NSIS token shape");
   const afterSha256 = sha256(after);
   if (afterSha256 === beforeSha256) fail("Tauri bundle-type patch did not change executable bytes");
@@ -69,6 +69,7 @@ export function patchWindowsBundleType(filePath) {
     schema_version: 1,
     type: "rho_tauri_bundle_type_patch",
     bundle_type: "nsis",
+    preexisting_nsis_tokens: nsisIndexes.length,
     offset: unknownIndexes[0],
     size_bytes: after.length,
     before_sha256: beforeSha256,

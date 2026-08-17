@@ -189,6 +189,12 @@ checkpoint deterministically patches the one unknown token to NSIS before
 binary signing; its local matrix passes, and protected integration plus a new
 exact-main run remain pending.
 
+Repair run `32002355917` stopped before SignPath because Windows optimization
+retained an unrelated NSIS enum literal. The patch contract now mirrors
+Tauri's actual invariant: exactly one unknown placeholder is replaced and the
+NSIS-token count must increase by one. All repair-run artifacts are
+non-composable and dev.42 remains unused.
+
 Issue #28's Rust 1.88/Resolver 3 build contract integrated through PR #29 at
 `9e0b36b`. Exact PR-head run `31509554882` and exact-merge main run
 `31510716448` each passed macOS/Windows stable/MSRV validation, so Issue #28 is

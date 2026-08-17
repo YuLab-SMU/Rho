@@ -37,7 +37,7 @@ Change class / risk: D4 / R4
   pending;
 - [x] candidate-only binary request precedes NSIS bundle and installer request;
 - [x] the exact single Tauri bundle-type token is changed from unknown to NSIS
-  before binary signing, with missing/duplicate/already-patched/size negatives;
+  before binary signing, with missing/duplicate/size/count-shape negatives;
 - [ ] signed executable hash/certificate survives bundling unchanged;
 - [x] final installer is signed before its Tauri updater signature;
 - [x] dev.42 platform evidence uses only the two-stage schema/check set;
@@ -105,3 +105,10 @@ evidence, tag, Draft, or Release was created. A new protected-main run may use
 the still-unused dev.42 identity only after the deterministic pre-sign NSIS
 token patch and its regression tests integrate; it may reuse no run artifact,
 request, hash, or notarization result.
+
+Repair run `32002355917` is also non-composable. It stopped at the pre-sign
+patch because a Windows-optimized binary retained an unrelated NSIS enum
+literal alongside the unique unknown placeholder. It made no SignPath request
+and created no Windows evidence, tag, Draft, or Release. The corrected patch
+admits such pre-existing literals only when there is exactly one unknown token
+and the NSIS count increases by exactly one.
