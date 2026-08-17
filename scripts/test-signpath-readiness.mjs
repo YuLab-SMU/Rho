@@ -109,7 +109,7 @@ function validate(value) {
   assert.doesNotMatch(value.frontend, /updateView/);
   assert.equal(occurrences(value.frontend, /invoke\("check_for_updates"\)/g), 2, "manual retry and readiness-bound automatic update paths are required");
   assert.match(value.frontend, /runAutomaticUpdateAfterStartup/);
-  assert.doesNotMatch(value.frontend, /setInterval\([^)]*checkForUpdates/);
+  assert.doesNotMatch(value.frontend, /setInterval[\s\S]{0,120}checkForUpdates/);
   assert.doesNotMatch(value.frontend, /checkForUpdates\(\{\s*background\s*:/);
   assert.doesNotMatch(value.frontend, /rho\.update\.(?:lastCheck|dismissed)/);
   assert.doesNotMatch(value.frontend, /async function checkForUpdates\([^)]*background/);
