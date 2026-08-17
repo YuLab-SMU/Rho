@@ -1,6 +1,6 @@
 # Rho Code Signing Policy
 
-Last updated: 2026-08-15
+Last updated: 2026-08-17
 
 Free code signing provided by [SignPath.io](https://about.signpath.io),
 certificate by [SignPath Foundation](https://signpath.org).
@@ -18,6 +18,10 @@ the project before that external approval is recorded.
   SignPath.
 - The published `0.4.0-dev.24` Windows download and historical review packages
   are not Authenticode-signed. Their exact evidence must not be relabelled.
+- The public conditional `0.4.0-dev.39` and acceptance-only `0.4.0-dev.41`
+  packages use the historical outer-installer-only Free Trial lane. Installed
+  dev.41 evidence found `rho-desktop.exe` remained unsigned, so neither result
+  is two-stage or production-signing evidence.
 - A development prerelease may carry an Authenticode signature created with a
   SignPath Free Trial self-signed test certificate only when its exact platform
   evidence records that request and final hash. This test signature is not
@@ -66,17 +70,28 @@ and hash the returned bytes before candidate evidence is created.
 
 The request identifier, module identity, normalized public thumbprint,
 self-signed flag, trust status, and before/after hashes may be published as
-bounded evidence. Organization identifiers, project/policy/configuration
-slugs, protected JSON, API tokens, and credentials may not be logged or
-published. The test certificate is never installed into a trust store to make
-the result appear publicly valid.
+bounded evidence. Organization identifiers, protected JSON, API tokens, and
+credentials may not be logged or published. Operational project, policy, and
+artifact-configuration values are masked in CI and omitted from release
+evidence even where a reviewed configuration name is documented in an active
+source contract. The test certificate is never installed into a trust store
+to make the result appear publicly valid.
 
-This lane signs only the outer test candidate installer. It is not the future
-production two-stage procedure below and creates no exception to Foundation,
-MFA, trusted-build, per-request approval, or installed-payload gates. The
-`0.4.0-dev.39` release contract separately permits one public conditional
-prerelease that truthfully records Windows human installation and enabled-
-Gatekeeper macOS human launch as not run; it does not make either check pass.
+That historical lane signs only the outer test candidate installer. It is not
+two-stage evidence and creates no exception to Foundation, MFA, trusted-build,
+per-request approval, or installed-payload gates. The `0.4.0-dev.39` release
+contract separately permits one public conditional prerelease that truthfully
+records Windows human installation and enabled-Gatekeeper macOS human launch
+as not run; it does not make either check pass.
+
+Fresh `0.4.0-dev.42` uses the same Free Trial self-signed certificate through
+the common two-stage sequence below. The binary and installer are separate
+requests; bundling must preserve the signed binary hash and certificate; and a
+silent install must prove the installed executable is byte-identical, carries
+the same `UnknownError` self-signed certificate, passes smoke testing, and is
+cleanly removable. This closes the unsigned-inner-payload defect without
+claiming public trust, Foundation acceptance, a production publisher, or
+SmartScreen reputation.
 
 ## Signing scope
 
@@ -127,7 +142,8 @@ rules. The repository file alone is not evidence that those rules are active.
 ## Two-stage Windows procedure
 
 NSIS cannot be treated as though signing only its outer wrapper also signs the
-installed program. The production sequence is therefore:
+installed program. The common development and production sequence is
+therefore:
 
 1. build `rho-desktop.exe` without bundling an installer;
 2. submit that exact executable to SignPath, obtain manual approval, download
@@ -139,15 +155,20 @@ installed program. The production sequence is therefore:
    `rho-desktop.exe` is the expected signed payload before computing and
    publishing final artifact hashes.
 
-Verification is fail-closed and includes Windows Authenticode validity, the
-approved SignPath Foundation publisher identity, an RFC 3161 timestamp, the
-installed payload signature, artifact names and sizes, and SHA-256 values over
-the final signed bytes. Signing changes bytes, so a pre-signing hash can never
-serve as the released artifact hash.
+Verification is fail-closed and includes the configured publisher and trust
+profile, installed payload signature, artifact names and sizes, and SHA-256
+values over the final signed bytes. Signing changes bytes, so a pre-signing
+hash can never serve as the released artifact hash. The Free Trial profile
+requires the exact configured self-signed certificate and `UnknownError`; it
+must never be presented as Authenticode `Valid`. A future production profile
+additionally requires the approved SignPath Foundation publisher identity,
+publicly valid Authenticode status, and an RFC 3161 timestamp.
 
-The production workflow is implemented only after real SignPath organization,
-project, signing-policy, and binary/installer artifact-configuration identifiers
-exist. Placeholder or guessed identifiers are not accepted configuration.
+The development two-stage workflow uses only the reviewed existing Free Trial
+organization, project, policy, certificate, and separate binary/installer
+configurations. Production remains gated on its own approved identifiers,
+trusted-build and approval controls, certificate, timestamp, and public trust.
+Placeholder or guessed identifiers are never accepted configuration.
 
 ## Release and incident response
 

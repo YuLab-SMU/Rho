@@ -4,6 +4,20 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.0-dev.42 - 2026-08-17
+
+### Distribution
+
+- Windows candidate packaging now Authenticode-signs the application
+  executable before NSIS bundling, verifies that bundling preserves those
+  exact bytes, then signs the outer installer in a separate SignPath request.
+- Candidate evidence now binds both requests and verifies that a silent test
+  installation contains the exact signed executable, passes smoke testing,
+  and can be uninstalled without leftover executable or registry state.
+- Development prereleases continue to use the SignPath Free Trial self-signed
+  certificate. It is not publicly trusted and Windows or SmartScreen may warn;
+  this does not claim SignPath Foundation acceptance.
+
 ## 0.4.0-dev.41 - 2026-08-15
 
 ### Verification

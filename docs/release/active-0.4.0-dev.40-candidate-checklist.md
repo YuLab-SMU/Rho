@@ -1,8 +1,10 @@
 # Rho 0.4.0-dev.40 Native Updater Candidate Checklist
 
-Status: active source contract; source implementation, deterministic
-verification, and author review completed on 2026-08-15. No candidate Draft,
-release, native manifest, or installed-app update acceptance exists yet.
+Status: active immutable NO-GO ledger. Source/candidate construction and the
+dual-platform dev.40→dev.41 updater behavior matrix passed, but installed
+Windows evidence found `rho-desktop.exe` was `NotSigned`. The dev.40 Draft
+remains unpublished and cannot be repaired or relabelled; the authorized
+two-stage replacement is fresh dev.42.
 
 Owner: Rho release owner
 
@@ -53,6 +55,7 @@ Specification: `docs/plans/active-2026-08-15-tauri-native-updater-spec.md`
 
 ## Release Decision
 
-The only current decision is `NO_RELEASE_DECISION`. This source contract does
-not authorize a Draft publication, public Release, or native update endpoint.
-The prior `dev.39` conditional decision is historical and cannot be reused.
+Current decision: `NO-GO` for dev.40 publication and permanent native endpoint.
+The prior dev.39 conditional decision is historical and cannot be reused.
+Updater behavior evidence composes only as a regression baseline for the fresh
+dev.42 two-stage candidate; no dev.40 artifact/hash/acceptance may be replaced.

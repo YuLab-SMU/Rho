@@ -57,6 +57,7 @@ on:
       - "docs/plans/active-2026-08-13-dev38-test-signed-prerelease-spec.md"
       - "docs/plans/implemented-2026-08-13-conditional-prerelease-policy-spec.md"
       - "docs/plans/active-2026-08-15-tauri-native-updater-spec.md"
+      - "docs/plans/active-2026-08-17-signpath-free-trial-two-stage-dev42-spec.md"
       - "docs/project/active-document-cross-review.md"
       - "docs/project/active-development-roadmap.md"
       - "docs/release/active-0.4.0-dev.37-candidate-checklist.md"
@@ -64,6 +65,7 @@ on:
       - "docs/release/historical-0.4.0-dev.39-candidate-checklist.md"
       - "docs/release/active-0.4.0-dev.40-candidate-checklist.md"
       - "docs/release/active-0.4.0-dev.41-native-updater-acceptance-target-checklist.md"
+      - "docs/release/active-0.4.0-dev.42-two-stage-signing-checklist.md"
   pull_request:
     branches: [main]
     paths:
@@ -120,6 +122,7 @@ on:
       - "docs/plans/active-2026-08-13-dev38-test-signed-prerelease-spec.md"
       - "docs/plans/implemented-2026-08-13-conditional-prerelease-policy-spec.md"
       - "docs/plans/active-2026-08-15-tauri-native-updater-spec.md"
+      - "docs/plans/active-2026-08-17-signpath-free-trial-two-stage-dev42-spec.md"
       - "docs/project/active-document-cross-review.md"
       - "docs/project/active-development-roadmap.md"
       - "docs/release/active-0.4.0-dev.37-candidate-checklist.md"
@@ -127,6 +130,7 @@ on:
       - "docs/release/historical-0.4.0-dev.39-candidate-checklist.md"
       - "docs/release/active-0.4.0-dev.40-candidate-checklist.md"
       - "docs/release/active-0.4.0-dev.41-native-updater-acceptance-target-checklist.md"
+      - "docs/release/active-0.4.0-dev.42-two-stage-signing-checklist.md"
 
 permissions:
   contents: read

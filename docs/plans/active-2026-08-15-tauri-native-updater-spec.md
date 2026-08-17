@@ -17,10 +17,21 @@ twelve-asset acceptance-only target after repeating the audit. Window run
 `31989333325` stopped before Pages mutation because the fixture parser did not
 accept the real four-line minisign text's terminal LF. Pre-redispatch real-byte
 testing also found that the workflow used `windows-x86-64.sig` while the fixed
-platform key generates `windows-x86_64.sig`. A bounded framing/path repair and
-redispatch are now the next gate.
-`UPDATER-1C` manual installed-app acceptance and `UPDATER-1D` remain gated by
-their exact evidence conditions.
+platform key generates `windows-x86_64.sig`. PR #82 integrated the bounded
+framing/path repair. Signature-rejection window `31990624696` then passed on
+Windows x86-64 and macOS arm64 without shutdown or mutation and cleaned the
+fixture back to verified `404`. Valid window `31991536953` passed both
+post-shutdown failure/recovery rows and both explicit install/restart rows;
+About reported `0.4.0-dev.41` on both platforms, and cleanup again restored
+both native endpoints to `404`.
+
+That completes the bounded dual-platform dev.40→dev.41 behavior matrix, but
+installed Windows evidence found `rho-desktop.exe` remained `NotSigned`
+because only the outer NSIS installer used the Free Trial signing lane.
+`UPDATER-1D` therefore remains `NO-GO` for dev.40. The active successor
+`active-2026-08-17-signpath-free-trial-two-stage-dev42-spec.md` owns the fresh
+dev.42 two-stage binary/installer repair and the remaining path to a permanent
+development endpoint. No dev.40/dev.41 byte or historical result is relabelled.
 
 Authorization: after Issue #27 was audited and its explicit native-updater
 exclusion was confirmed, the project owner instructed the agent to continue
