@@ -284,7 +284,9 @@ jobs:
       - name: Stage pinned Linux Ark sidecar for Tauri compilation
         if: runner.os == 'Linux'
         shell: bash
-        run: ./scripts/bootstrap-ark-linux.sh
+        run: |
+          ./scripts/bootstrap-ark-linux.sh
+          ./scripts/prepare-runtime-resources.sh
 
       - name: Enforce current stable formatting
         if: matrix.toolchain == 'stable'
