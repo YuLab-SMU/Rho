@@ -1,7 +1,8 @@
 # P1-3 Workspace Snapshot Tool And Project File Viewer Specification
 
-Status: active; local implementation, review, and affected verification passed;
-exact-head Rust Fast evidence pending
+Status: active predecessor; runtime `d67c294`, product migration `f16283c`, CI
+portability repair `efefa76`, local affected verification, exact-head Rust
+Fast, and Draft matrix skip passed
 
 Date: 2026-08-18
 Owning architecture:
@@ -428,9 +429,24 @@ Interactive browser review, a real candidate-mode Ark installed-app run, and
 the macOS/Windows/Linux stable/Rust 1.88 matrix were not run in P1-3. The
 automated real broker/R-expression tests and R package suites passed; installed
 app and full six-leg evidence remain the explicitly deferred P1-4/Ready gate.
-Exact-head Rust Fast and its expected Draft compatibility skip remain pending
-until the reviewed implementation commit is pushed.
+The first hosted run `32123954790` failed before Rust compilation because the
+PR checkout does not contain the aggregate worktree's external
+`R/rho.agent/R/aisdk_adapter.R` path. Commit `efefa76` made that extra Agent R
+source assertion conditional while retaining the tracked server/desktop
+contract and the locally executed 120-test Agent suite. This was a CI checkout
+portability repair, not a product behavior change.
+
+Exact-head Rust Fast run `32124219647` then passed on
+`efefa76efc30e2f01d0d1c548f17196a3a738033` in 2 minutes 15 seconds. It
+restored the exact 1305 MiB cache key
+`rho-rust-v1-Linux-stable-x86_64-unknown-linux-gnu-bc9fb070b16d52abd62c229a905e272f25158b85490bb3951775c4d64c2af6f1`.
+Rust Compatibility run `32124219634` skipped as required for Draft PR #75.
 
 Implementation review found no blocking Trusted Kernel, raw-expression,
 Agent-admission, filesystem containment, project isolation, generation,
 cleanup, duplicate-registration, credential, or public-protocol deviation.
+
+P1-3 therefore passed its Draft stop gate. The continuing whole-P1 objective
+authorizes preparing a separate P1-4 acceptance/default-switch contract; this
+P1-3 contract does not itself authorize version allocation, NEWS, Ready state,
+installed-app acceptance, or legacy deletion.
