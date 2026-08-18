@@ -24,8 +24,9 @@ use tokio::{
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 use crate::{
-    ActivationGeneration, ActivationPlan, BrokerFacade, CapabilityId, DiagnosticCode,
-    DiagnosticSeverity, ExtensionDiagnostic, ExtensionError, PluginDescriptor, PluginId,
+    ActivationGeneration, ActivationPlan, BoundedJson, BrokerError, BrokerFacade,
+    BrokerPayloadError, CapabilityDeclaration, CapabilityId, DiagnosticCode, DiagnosticSeverity,
+    ExtensionDiagnostic, ExtensionError, PluginDescriptor, PluginId, PluginVersion,
     RejectingBrokerFacade, ScopeId, ScopeIdentity, ScopeKindId, ScopePolicy,
     resolve_activation_plan,
 };
@@ -254,6 +255,13 @@ pub trait InternalPlugin: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = Result<(), ActivationError>> + Send + 'a>>;
 }
 
+pub trait SourceHandler: Send + Sync {
+    fn call<'a>(
+        &'a self,
+        request: BoundedJson,
+    ) -> Pin<Box<dyn Future<Output = Result<BoundedJson, BrokerError>> + Send + 'a>>;
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LifecycleDeadlines {
     pub quiesce: Duration,
@@ -326,6 +334,17 @@ impl EffectSink {
         capability_id: CapabilityId,
     ) -> Result<u64, RegistryError> {
         let registration = registry.register_marker(self.instance.clone(), capability_id)?;
+        Ok(self.push(Box::new(registration)))
+    }
+
+    pub fn register_source(
+        &mut self,
+        registry: &RegistryHub,
+        capability_id: CapabilityId,
+        handler: Arc<dyn SourceHandler>,
+    ) -> Result<u64, RegistryError> {
+        let registration =
+            registry.register_source(self.instance.clone(), capability_id, handler)?;
         Ok(self.push(Box::new(registration)))
     }
 
@@ -462,6 +481,8 @@ impl EffectStack {
 pub enum RegistryError {
     #[error("registry marker already exists: {capability_id}")]
     DuplicateMarker { capability_id: CapabilityId },
+    #[error("source contribution already exists: {capability_id}")]
+    DuplicateSource { capability_id: CapabilityId },
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -476,6 +497,13 @@ struct RegistryInner {
     leases: AtomicUsize,
     idle: Notify,
     markers: StdMutex<BTreeMap<CapabilityId, PluginInstanceIdentity>>,
+    sources: StdMutex<BTreeMap<CapabilityId, SourceEntry>>,
+}
+
+#[derive(Clone)]
+struct SourceEntry {
+    owner: PluginInstanceIdentity,
+    handler: Arc<dyn SourceHandler>,
 }
 
 #[derive(Clone)]
@@ -492,6 +520,7 @@ impl RegistryHub {
                 leases: AtomicUsize::new(0),
                 idle: Notify::new(),
                 markers: StdMutex::new(BTreeMap::new()),
+                sources: StdMutex::new(BTreeMap::new()),
             }),
         }
     }
@@ -542,6 +571,42 @@ impl RegistryHub {
         self.inner.leases.load(Ordering::Acquire)
     }
 
+    pub fn source_owner(&self, capability_id: &CapabilityId) -> Option<PluginInstanceIdentity> {
+        self.inner
+            .sources
+            .lock()
+            .unwrap()
+            .get(capability_id)
+            .map(|entry| entry.owner.clone())
+    }
+
+    pub async fn call_source(
+        &self,
+        capability_id: &CapabilityId,
+        request: BoundedJson,
+    ) -> Result<SourceCallResult, SourceCallError> {
+        let _lease = self.lease()?;
+        // A caller can construct BoundedJson for another response class. Rebind both sides at
+        // the generic source boundary so a contribution cannot widen Run History's 1 MiB lane.
+        let request = BoundedJson::generic(request.into_value())?;
+        let handler = self
+            .inner
+            .sources
+            .lock()
+            .unwrap()
+            .get(capability_id)
+            .map(|entry| Arc::clone(&entry.handler))
+            .ok_or_else(|| SourceCallError::MissingContribution {
+                capability_id: capability_id.clone(),
+            })?;
+        let payload = handler.call(request).await?;
+        let payload = BoundedJson::generic(payload.into_value())?;
+        Ok(SourceCallResult {
+            scope: self.inner.scope.clone(),
+            payload,
+        })
+    }
+
     fn register_marker(
         &self,
         instance: PluginInstanceIdentity,
@@ -553,6 +618,31 @@ impl RegistryHub {
         }
         markers.insert(capability_id.clone(), instance.clone());
         Ok(RegistryRegistration {
+            registry: Arc::downgrade(&self.inner),
+            capability_id,
+            instance,
+            disposed: false,
+        })
+    }
+
+    fn register_source(
+        &self,
+        instance: PluginInstanceIdentity,
+        capability_id: CapabilityId,
+        handler: Arc<dyn SourceHandler>,
+    ) -> Result<SourceRegistration, RegistryError> {
+        let mut sources = self.inner.sources.lock().unwrap();
+        if sources.contains_key(&capability_id) {
+            return Err(RegistryError::DuplicateSource { capability_id });
+        }
+        sources.insert(
+            capability_id.clone(),
+            SourceEntry {
+                owner: instance.clone(),
+                handler,
+            },
+        );
+        Ok(SourceRegistration {
             registry: Arc::downgrade(&self.inner),
             capability_id,
             instance,
@@ -572,6 +662,24 @@ impl RegistryHub {
             notified.await;
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SourceCallResult {
+    pub scope: ScopeIdentity,
+    pub payload: BoundedJson,
+}
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum SourceCallError {
+    #[error(transparent)]
+    Routing(#[from] RoutingError),
+    #[error("source contribution is missing: {capability_id}")]
+    MissingContribution { capability_id: CapabilityId },
+    #[error(transparent)]
+    Payload(#[from] BrokerPayloadError),
+    #[error(transparent)]
+    Handler(#[from] BrokerError),
 }
 
 pub struct RegistryLease {
@@ -611,6 +719,36 @@ impl Disposable for RegistryRegistration {
                 let mut markers = registry.markers.lock().unwrap();
                 if markers.get(&self.capability_id) == Some(&self.instance) {
                     markers.remove(&self.capability_id);
+                }
+            }
+            self.disposed = true;
+            Ok(())
+        })
+    }
+}
+
+struct SourceRegistration {
+    registry: Weak<RegistryInner>,
+    capability_id: CapabilityId,
+    instance: PluginInstanceIdentity,
+    disposed: bool,
+}
+
+impl Disposable for SourceRegistration {
+    fn dispose<'a>(
+        &'a mut self,
+    ) -> Pin<Box<dyn Future<Output = Result<(), DisposeError>> + Send + 'a>> {
+        Box::pin(async move {
+            if self.disposed {
+                return Ok(());
+            }
+            if let Some(registry) = self.registry.upgrade() {
+                let mut sources = registry.sources.lock().unwrap();
+                if sources
+                    .get(&self.capability_id)
+                    .is_some_and(|entry| entry.owner == self.instance)
+                {
+                    sources.remove(&self.capability_id);
                 }
             }
             self.disposed = true;
@@ -680,7 +818,7 @@ impl ScopedTaskTracker {
 
 pub struct PluginContext<'a> {
     pub registry: &'a RegistryHub,
-    pub broker: &'a dyn BrokerFacade,
+    pub broker: Arc<dyn BrokerFacade>,
     pub effects: &'a mut EffectSink,
     pub diagnostics: &'a dyn DiagnosticSink,
     pub cancellation: CancellationToken,
@@ -846,6 +984,13 @@ impl ScopeSnapshot {
             children.remove(index);
         }
         children.push(candidate);
+    }
+
+    fn remove_child(&self, expected: &Arc<ScopeSnapshot>) {
+        self.children
+            .lock()
+            .unwrap()
+            .retain(|item| !Arc::ptr_eq(item, expected));
     }
 
     fn begin_quiesce(&self) {
@@ -1092,7 +1237,7 @@ pub async fn build_scope_candidate(
         };
         let result = CatchUnwindFuture::new(plugin.activate(PluginContext {
             registry: &registry,
-            broker: broker.as_ref(),
+            broker: Arc::clone(&broker),
             effects: &mut effects,
             diagnostics: &plugin_diagnostics,
             cancellation: cancellation.child_token(),
@@ -1445,6 +1590,31 @@ impl ScopeManager {
             .await
     }
 
+    pub async fn clear_project(
+        &self,
+        expected: Option<Arc<ScopeSnapshot>>,
+    ) -> Result<Option<ScopeDisposeReport>, StaleGenerationError> {
+        let Some(expected) = expected else {
+            return Ok(None);
+        };
+        let previous = self.project.current.compare_and_swap(&expected, None);
+        let previous_value = (*previous).clone();
+        if !previous_value
+            .as_ref()
+            .is_some_and(|actual| Arc::ptr_eq(actual, &expected))
+        {
+            return Err(StaleGenerationError {
+                context: Box::new(StaleGenerationContext {
+                    completed: expected.identity.clone(),
+                    actual: previous_value.map(|snapshot| snapshot.identity.clone()),
+                }),
+            });
+        }
+        expected.begin_quiesce();
+        self.application().remove_child(&expected);
+        Ok(Some(expected.quiesce_and_dispose(self.deadlines).await))
+    }
+
     pub async fn shutdown(&self) -> ScopeDisposeReport {
         let application = self.application();
         application.quiesce_and_dispose(self.deadlines).await
@@ -1476,26 +1646,60 @@ impl ExtensionHost {
         diagnostics: Arc<dyn DiagnosticSink>,
         deadlines: LifecycleDeadlines,
     ) -> Result<Self, ExtensionHostError> {
+        Self::new_with_host_capabilities(mode, Vec::new(), diagnostics, deadlines)
+    }
+
+    pub fn new_with_host_capabilities(
+        mode: InternalExtensionRuntimeMode,
+        host_capabilities: Vec<CapabilityDeclaration>,
+        diagnostics: Arc<dyn DiagnosticSink>,
+        deadlines: LifecycleDeadlines,
+    ) -> Result<Self, ExtensionHostError> {
         let identity = ScopeIdentity::new(
             ScopePolicy::application_kind(),
             ScopeId::new("application").expect("built-in scope ID must be valid"),
             None,
             ActivationGeneration::new(1).expect("built-in generation must be non-zero"),
         );
+        let mut descriptors = Vec::new();
+        let host_plugin_id =
+            PluginId::new("org.yulab.rho.host").expect("built-in host plugin ID must be valid");
+        if !host_capabilities.is_empty() {
+            let mut descriptor = PluginDescriptor::new(
+                host_plugin_id.clone(),
+                PluginVersion::parse("1.0.0").expect("built-in host version must be valid"),
+                vec![ScopePolicy::application_kind()],
+            );
+            descriptor.provides = host_capabilities;
+            descriptors.push(descriptor);
+        }
         let plan = resolve_activation_plan(
             &ScopePolicy::phase_one(),
             identity.clone(),
             None,
-            Vec::new(),
+            descriptors,
         )
         .map_err(|error| ExtensionHostError::ApplicationGraph(Box::new(error)))?;
+        let registry = RegistryHub::candidate(identity.clone());
+        let plugins = if plan.activation_order().is_empty() {
+            Vec::new()
+        } else {
+            let instance = PluginInstanceIdentity {
+                plugin_id: host_plugin_id,
+                scope: identity.clone(),
+            };
+            vec![ActivatedPlugin {
+                instance: instance.clone(),
+                effects: EffectSink::new(instance).into_stack(Arc::clone(&diagnostics)),
+            }]
+        };
         let application = Arc::new(ScopeSnapshot::new_ready(
             identity.clone(),
             plan,
-            RegistryHub::candidate(identity),
+            registry,
             CancellationToken::new(),
             ScopedTaskTracker::new(),
-            Vec::new(),
+            plugins,
             Arc::clone(&diagnostics),
         ));
         let scopes = ScopeManager::new(application, Arc::clone(&diagnostics), deadlines)?;
@@ -1559,6 +1763,13 @@ impl ExtensionHost {
         candidate: Arc<ScopeSnapshot>,
     ) -> Result<PublishReport, CandidatePublishError> {
         self.scopes.publish_project(expected, candidate).await
+    }
+
+    pub async fn clear_project_scope(
+        &self,
+        expected: Option<Arc<ScopeSnapshot>>,
+    ) -> Result<Option<ScopeDisposeReport>, StaleGenerationError> {
+        self.scopes.clear_project(expected).await
     }
 
     pub async fn shutdown(&self) -> ScopeDisposeReport {

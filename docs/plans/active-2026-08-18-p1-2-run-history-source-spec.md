@@ -1,7 +1,7 @@
 # P1-2 Project Run History Source Specification
 
-Status: active; P1-2 authorized by the continuing whole-P1 objective;
-implementation pending
+Status: active; local implementation and affected verification passed;
+exact-head Rust Fast evidence pending
 
 Date: 2026-08-18
 Owning architecture:
@@ -257,3 +257,75 @@ decision is authorized.
 - evidence, dependencies, deviations, version/NEWS, unrun checks, commit, and
   worktree state are recorded; and
 - work proceeds only through a separately active P1-3 contract.
+
+## Local Implementation Evidence
+
+Verified on 2026-08-18 against P1-2 branch baseline
+`89ca6c5957b5520d3cdf506c587885fa3a1e8979`:
+
+- `RegistryHub` now owns effect-bound generic source registrations, routing
+  leases, exact-owner disposal, and completion scope identity. It rebinds both
+  request and response at the generic 1 MiB boundary so an internal handler
+  cannot widen this source lane by constructing `BoundedJson` for another
+  response class.
+- `org.yulab.rho.host` provides the graph-only
+  `service.broker.runs@1` identity. The project-scoped
+  `org.yulab.rho.run-history` plugin provides
+  `source.project.run-history@1` and registers exactly one source effect.
+- The project-bound broker owns the normalized project root and store path,
+  allowlists only `service.broker.runs.list`, validates the request before
+  Store dispatch, and delegates ordering/filtering to
+  `Store::list_runs(project_root, limit)`.
+- `list_runs` preserves its Tauri signature and schema. Only missing candidate
+  scope/contribution and candidate activation failure use the temporary legacy
+  fallback. Handler, payload, closed-routing, and stale-generation failures do
+  not retry silently.
+- Candidate activation failure clears/disposes the prior project extension
+  slot only after BH2 commits. A deterministic delayed-call test proves an A
+  result is rejected after B publishes and that the following B-to-A switch
+  returns A data under a fresh generation.
+- Browser mock parity retained the single command handler and corrected the
+  explicit-zero case from `limit || 50` to `limit ?? 50`.
+
+Commands and results:
+
+```text
+cargo fmt --all -- --check
+  passed
+cargo test -p rho-extension-runtime --locked
+  passed: 26 graph-contract + 30 lifecycle tests
+cargo +1.88.0 test -p rho-extension-runtime --locked
+  passed: the same 56 tests
+cargo clippy -p rho-extension-runtime --all-targets --locked -- -D warnings
+  passed
+cargo test -p rho-desktop --bin rho-desktop --locked
+  passed: 192; ignored: 1 existing opt-in macOS Keychain smoke
+cargo check --workspace --all-targets --locked
+  passed
+cargo test --workspace --locked --no-fail-fast
+  passed: 441; ignored: the same 1 existing opt-in smoke
+node --check desktop/dist/app.js
+  passed
+node scripts/test-extension-run-history-contract.mjs --test
+node scripts/test-extension-run-history-contract.mjs
+node scripts/test-rust-msrv-contract.mjs --test
+node scripts/test-rust-msrv-contract.mjs
+node scripts/test-license-contract.mjs --test
+node scripts/test-license-contract.mjs
+  all passed
+git diff --check
+  passed
+```
+
+No dependency or lockfile change was required. No schema, public protocol,
+runtime-mode default, application/R package version, or `NEWS.md` change was
+made. The installed-app checks and macOS/Windows/Linux stable/Rust 1.88 matrix
+were not run here; under the authorized fast-development policy they remain a
+P1-4/Ready gate. Exact-head Rust Fast and its expected compatibility-workflow
+skip remain pending until the reviewed implementation commit is pushed.
+
+Implementation review found no blocking data-authority, permission,
+serialization-bound, project-isolation, fallback, cleanup, or command/mock
+compatibility deviation. The only contract clarification made during review
+was to reject closed routing truthfully rather than treating it as a missing
+contribution fallback.

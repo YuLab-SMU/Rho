@@ -279,6 +279,8 @@ pub enum DiagnosticCode {
     EffectDisposeFailed,
     ScopeDisposed,
     ScopeDisposeFailed,
+    ContributionFallback,
+    SourceCallFailed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

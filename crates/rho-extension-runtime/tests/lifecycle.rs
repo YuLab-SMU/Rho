@@ -9,15 +9,15 @@ use std::{
 };
 
 use rho_extension_runtime::{
-    ActivationError, ActivationGeneration, BoundedJson, BrokerRequest, BrokerResponse,
+    ActivationError, ActivationGeneration, BoundedJson, BrokerError, BrokerRequest, BrokerResponse,
     BrokerResponseClass, CandidateBuildError, CapabilityDeclaration, CapabilityId,
-    CapabilityRequirement, CollectingDiagnosticSink, DiagnosticCode, DiagnosticSeverity,
-    DiagnosticSink, Disposable, DisposeError, DisposeOutcome, EffectStatus, ExtensionDiagnostic,
-    ExtensionHost, InternalExtensionRuntimeMode, InternalPlugin, LifecycleDeadlines,
-    NoopDiagnosticSink, PROJECT_FILE_VIEWER_HTML_BYTES, PluginContext, PluginDescriptor, PluginId,
-    PluginVersion, RegistryError, RejectingBrokerFacade, RoutingError, ScopeId, ScopeIdentity,
-    ScopeLifecycleState, ScopePolicy, ScopeSlot, TaskAdmissionError,
-    WORKSPACE_SNAPSHOT_RESPONSE_BYTES, build_scope_candidate,
+    CapabilityRequirement, CollectingDiagnosticSink, DEFAULT_BROKER_PAYLOAD_BYTES, DiagnosticCode,
+    DiagnosticSeverity, DiagnosticSink, Disposable, DisposeError, DisposeOutcome, EffectStatus,
+    ExtensionDiagnostic, ExtensionHost, InternalExtensionRuntimeMode, InternalPlugin,
+    LifecycleDeadlines, NoopDiagnosticSink, PROJECT_FILE_VIEWER_HTML_BYTES, PluginContext,
+    PluginDescriptor, PluginId, PluginVersion, RegistryError, RejectingBrokerFacade, RoutingError,
+    ScopeId, ScopeIdentity, ScopeLifecycleState, ScopePolicy, ScopeSlot, SourceCallError,
+    SourceHandler, TaskAdmissionError, WORKSPACE_SNAPSHOT_RESPONSE_BYTES, build_scope_candidate,
 };
 use serde_json::{Value, json};
 use tokio_util::task::TaskTracker;
@@ -139,6 +139,99 @@ struct PanickingActivationPlugin {
     descriptor: PluginDescriptor,
     log: Arc<Mutex<Vec<String>>>,
     calls: Arc<AtomicUsize>,
+}
+
+struct EchoSourceHandler {
+    fail: bool,
+}
+
+impl SourceHandler for EchoSourceHandler {
+    fn call<'a>(
+        &'a self,
+        request: BoundedJson,
+    ) -> Pin<Box<dyn Future<Output = Result<BoundedJson, BrokerError>> + Send + 'a>> {
+        Box::pin(async move {
+            if self.fail {
+                Err(BrokerError::rejected("injected_source_failure", "failed"))
+            } else {
+                Ok(request)
+            }
+        })
+    }
+}
+
+struct SourcePlugin {
+    descriptor: PluginDescriptor,
+    capability_id: CapabilityId,
+    fail: bool,
+}
+
+struct OversizedSourceHandler;
+
+impl SourceHandler for OversizedSourceHandler {
+    fn call<'a>(
+        &'a self,
+        _request: BoundedJson,
+    ) -> Pin<Box<dyn Future<Output = Result<BoundedJson, BrokerError>> + Send + 'a>> {
+        Box::pin(async move {
+            Ok(BoundedJson::new(
+                Value::String("x".repeat(DEFAULT_BROKER_PAYLOAD_BYTES)),
+                DEFAULT_BROKER_PAYLOAD_BYTES + 2,
+            )
+            .unwrap())
+        })
+    }
+}
+
+struct OversizedSourcePlugin {
+    descriptor: PluginDescriptor,
+    capability_id: CapabilityId,
+}
+
+impl InternalPlugin for OversizedSourcePlugin {
+    fn descriptor(&self) -> &PluginDescriptor {
+        &self.descriptor
+    }
+
+    fn activate<'a>(
+        &'a self,
+        context: PluginContext<'a>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), ActivationError>> + Send + 'a>> {
+        Box::pin(async move {
+            context
+                .effects
+                .register_source(
+                    context.registry,
+                    self.capability_id.clone(),
+                    Arc::new(OversizedSourceHandler),
+                )
+                .map_err(|error| ActivationError::new("source_registration", error.to_string()))?;
+            Ok(())
+        })
+    }
+}
+
+impl InternalPlugin for SourcePlugin {
+    fn descriptor(&self) -> &PluginDescriptor {
+        &self.descriptor
+    }
+
+    fn activate<'a>(
+        &'a self,
+        context: PluginContext<'a>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), ActivationError>> + Send + 'a>> {
+        Box::pin(async move {
+            context
+                .effects
+                .register_source(
+                    context.registry,
+                    self.capability_id.clone(),
+                    Arc::new(EchoSourceHandler { fail: self.fail }),
+                )
+                .map_err(|error| ActivationError::new("source_registration", error.to_string()))?;
+            Ok(())
+        })
+    }
 }
 
 impl InternalPlugin for PanickingActivationPlugin {
@@ -390,6 +483,231 @@ fn broker_payload_classes_enforce_exact_byte_boundaries() {
     assert_eq!(
         BrokerResponseClass::ProjectFileViewerHtml.maximum_bytes(),
         PROJECT_FILE_VIEWER_HTML_BYTES
+    );
+}
+
+#[tokio::test]
+async fn source_registration_is_candidate_hidden_routable_and_reversibly_disposed() {
+    let capability = capability_id("source.project.test");
+    let plugin: Arc<dyn InternalPlugin> = Arc::new(SourcePlugin {
+        descriptor: descriptor("plugin.source", ScopePolicy::project_kind()),
+        capability_id: capability.clone(),
+        fail: false,
+    });
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let candidate = build_project(
+        &host,
+        "project.a",
+        vec![plugin],
+        Arc::clone(&sink),
+        deadlines(),
+    )
+    .await
+    .unwrap();
+    assert!(matches!(
+        candidate
+            .registry()
+            .call_source(
+                &capability,
+                BoundedJson::generic(json!({ "limit": 1 })).unwrap()
+            )
+            .await,
+        Err(SourceCallError::Routing(RoutingError::Closed))
+    ));
+    let slot = ScopeSlot::empty(Arc::clone(&sink));
+    slot.publish(None, candidate.clone(), deadlines())
+        .await
+        .unwrap();
+    let result = candidate
+        .registry()
+        .call_source(
+            &capability,
+            BoundedJson::generic(json!({ "limit": 1 })).unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(result.scope, *candidate.identity());
+    assert_eq!(result.payload.value(), &json!({ "limit": 1 }));
+
+    let replacement = host
+        .build_empty_project_candidate(ScopeId::new("project.b").unwrap())
+        .await
+        .unwrap();
+    slot.publish(Some(candidate.clone()), replacement, deadlines())
+        .await
+        .unwrap();
+    assert!(candidate.registry().source_owner(&capability).is_none());
+    assert!(matches!(
+        candidate
+            .registry()
+            .call_source(&capability, BoundedJson::generic(json!({})).unwrap())
+            .await,
+        Err(SourceCallError::Routing(RoutingError::Closed))
+    ));
+}
+
+#[tokio::test]
+async fn source_duplicate_and_handler_failure_remain_truthful() {
+    let capability = capability_id("source.project.test");
+    let plugin = |id: &str, fail: bool| -> Arc<dyn InternalPlugin> {
+        Arc::new(SourcePlugin {
+            descriptor: descriptor(id, ScopePolicy::project_kind()),
+            capability_id: capability.clone(),
+            fail,
+        })
+    };
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let duplicate = build_project(
+        &host,
+        "project.a",
+        vec![plugin("plugin.a", false), plugin("plugin.b", false)],
+        Arc::clone(&sink),
+        deadlines(),
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(duplicate, CandidateBuildError::Activation { .. }));
+
+    let failing = build_project(
+        &host,
+        "project.b",
+        vec![plugin("plugin.fail", true)],
+        Arc::clone(&sink),
+        deadlines(),
+    )
+    .await
+    .unwrap();
+    ScopeSlot::from_active(failing.clone(), sink).unwrap();
+    assert!(matches!(
+        failing
+            .registry()
+            .call_source(&capability, BoundedJson::generic(json!({})).unwrap())
+            .await,
+        Err(SourceCallError::Handler(BrokerError::Rejected { .. }))
+    ));
+}
+
+#[tokio::test]
+async fn source_boundary_rebinds_request_and_response_to_generic_limit() {
+    let capability = capability_id("source.project.test");
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let echo = build_project(
+        &host,
+        "project.request",
+        vec![Arc::new(SourcePlugin {
+            descriptor: descriptor("plugin.source.request", ScopePolicy::project_kind()),
+            capability_id: capability.clone(),
+            fail: false,
+        })],
+        Arc::clone(&sink),
+        deadlines(),
+    )
+    .await
+    .unwrap();
+    ScopeSlot::from_active(echo.clone(), Arc::clone(&sink)).unwrap();
+    let widened_request = BoundedJson::new(
+        Value::String("x".repeat(DEFAULT_BROKER_PAYLOAD_BYTES)),
+        DEFAULT_BROKER_PAYLOAD_BYTES + 2,
+    )
+    .unwrap();
+    assert!(matches!(
+        echo.registry()
+            .call_source(&capability, widened_request)
+            .await,
+        Err(SourceCallError::Payload(
+            rho_extension_runtime::BrokerPayloadError::TooLarge { .. }
+        ))
+    ));
+
+    let oversized = build_project(
+        &host,
+        "project.response",
+        vec![Arc::new(OversizedSourcePlugin {
+            descriptor: descriptor("plugin.source.response", ScopePolicy::project_kind()),
+            capability_id: capability.clone(),
+        })],
+        Arc::clone(&sink),
+        deadlines(),
+    )
+    .await
+    .unwrap();
+    ScopeSlot::from_active(oversized.clone(), sink).unwrap();
+    assert!(matches!(
+        oversized
+            .registry()
+            .call_source(&capability, BoundedJson::generic(json!({})).unwrap())
+            .await,
+        Err(SourceCallError::Payload(
+            rho_extension_runtime::BrokerPayloadError::TooLarge { .. }
+        ))
+    ));
+}
+
+#[tokio::test]
+async fn identical_source_capabilities_are_isolated_between_project_scopes() {
+    let capability = capability_id("source.project.test");
+    let plugin = |id: &str| -> Arc<dyn InternalPlugin> {
+        Arc::new(SourcePlugin {
+            descriptor: descriptor(id, ScopePolicy::project_kind()),
+            capability_id: capability.clone(),
+            fail: false,
+        })
+    };
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let project_a = build_project(
+        &host,
+        "project.a",
+        vec![plugin("plugin.source")],
+        Arc::clone(&sink),
+        deadlines(),
+    )
+    .await
+    .unwrap();
+    let project_b = build_project(
+        &host,
+        "project.b",
+        vec![plugin("plugin.source")],
+        Arc::clone(&sink),
+        deadlines(),
+    )
+    .await
+    .unwrap();
+    let slot_a = ScopeSlot::from_active(project_a.clone(), Arc::clone(&sink)).unwrap();
+    ScopeSlot::from_active(project_b.clone(), Arc::clone(&sink)).unwrap();
+
+    let request = BoundedJson::generic(json!({ "project": "same-shape" })).unwrap();
+    let result_a = project_a
+        .registry()
+        .call_source(&capability, request.clone())
+        .await
+        .unwrap();
+    let result_b = project_b
+        .registry()
+        .call_source(&capability, request)
+        .await
+        .unwrap();
+    assert_ne!(result_a.scope, result_b.scope);
+    assert_eq!(result_a.payload, result_b.payload);
+
+    let replacement = host
+        .build_empty_project_candidate(ScopeId::new("project.a.replacement").unwrap())
+        .await
+        .unwrap();
+    slot_a
+        .publish(Some(project_a), replacement, deadlines())
+        .await
+        .unwrap();
+    assert!(project_b.registry().source_owner(&capability).is_some());
+    assert!(
+        project_b
+            .registry()
+            .call_source(&capability, BoundedJson::generic(json!({})).unwrap())
+            .await
+            .is_ok()
     );
 }
 

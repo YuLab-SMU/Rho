@@ -129,6 +129,29 @@ pub enum BrokerError {
     Rejected { code: String, message: String },
 }
 
+impl BrokerError {
+    pub fn rejected(code: impl Into<String>, message: impl Into<String>) -> Self {
+        Self::Rejected {
+            code: bounded_broker_text(code),
+            message: bounded_broker_text(message),
+        }
+    }
+}
+
+fn bounded_broker_text(value: impl Into<String>) -> String {
+    const MAX_BYTES: usize = 512;
+    let value = value.into();
+    if value.len() <= MAX_BYTES {
+        return value;
+    }
+    let suffix = "…";
+    let mut end = MAX_BYTES - suffix.len();
+    while !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}{}", &value[..end], suffix)
+}
+
 pub trait BrokerFacade: Send + Sync {
     fn call<'a>(
         &'a self,

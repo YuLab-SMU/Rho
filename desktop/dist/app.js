@@ -2521,7 +2521,7 @@ async function mockInvoke(command, args) {
     };
   }
   if (command === "list_runs") {
-    return structuredClone(mockRuns.slice(0, args.limit || 50));
+    return structuredClone(mockRuns.slice(0, args.limit ?? 50));
   }
   if (command === "list_plot_artifacts") {
     const plots = mockPlots.filter((plot) =>

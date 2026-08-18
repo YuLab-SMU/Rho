@@ -121,6 +121,7 @@ export function validateCompatibilityWorkflow(text) {
     '".github/workflows/rust-fast.yml"',
     '".github/workflows/candidate-build-draft.yml"',
     '"scripts/test-rust-msrv-contract.mjs"',
+    '"scripts/test-extension-run-history-contract.mjs"',
   ]) {
     const occurrences = workflow.split(requiredPath).length - 1;
     if (occurrences !== 2) fail(`Both Rust compatibility triggers must include ${requiredPath}`);
@@ -203,6 +204,7 @@ export function validateFastWorkflow(text) {
     '".github/workflows/rust-fast.yml"',
     '".github/workflows/rust-compatibility.yml"',
     '"scripts/test-rust-msrv-contract.mjs"',
+    '"scripts/test-extension-run-history-contract.mjs"',
   ]) {
     if (!workflow.includes(requiredPath)) fail(`Rust Fast path filter is missing ${requiredPath}`);
   }
@@ -211,6 +213,8 @@ export function validateFastWorkflow(text) {
     "node scripts/test-rust-msrv-contract.mjs",
     "node scripts/test-license-contract.mjs --test",
     "node scripts/test-license-contract.mjs",
+    "node scripts/test-extension-run-history-contract.mjs --test",
+    "node scripts/test-extension-run-history-contract.mjs",
     "cargo fmt --all -- --check",
     "cargo check --workspace --all-targets --locked",
     "cargo test --workspace --locked --no-fail-fast",
@@ -290,6 +294,7 @@ on:
       - ".github/workflows/rust-fast.yml"
       - ".github/workflows/candidate-build-draft.yml"
       - "scripts/test-rust-msrv-contract.mjs"
+      - "scripts/test-extension-run-history-contract.mjs"
   pull_request:
     branches: [main]
     types: [opened, reopened, synchronize, ready_for_review]
@@ -307,6 +312,7 @@ on:
       - ".github/workflows/rust-fast.yml"
       - ".github/workflows/candidate-build-draft.yml"
       - "scripts/test-rust-msrv-contract.mjs"
+      - "scripts/test-extension-run-history-contract.mjs"
 permissions:
   contents: read
 concurrency:
@@ -366,6 +372,7 @@ on:
       - ".github/workflows/rust-fast.yml"
       - ".github/workflows/rust-compatibility.yml"
       - "scripts/test-rust-msrv-contract.mjs"
+      - "scripts/test-extension-run-history-contract.mjs"
 permissions:
   contents: read
 concurrency:
@@ -398,6 +405,8 @@ jobs:
           node scripts/test-rust-msrv-contract.mjs
           node scripts/test-license-contract.mjs --test
           node scripts/test-license-contract.mjs
+          node scripts/test-extension-run-history-contract.mjs --test
+          node scripts/test-extension-run-history-contract.mjs
           cargo fmt --all -- --check
           cargo check --workspace --all-targets --locked
           cargo test --workspace --locked --no-fail-fast

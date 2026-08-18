@@ -30,8 +30,8 @@ pub use lifecycle::{
     InternalPlugin, LifecycleDeadlines, NoopDiagnosticSink, PluginContext, PluginInstanceIdentity,
     PublishReport, RegistryError, RegistryHub, RegistryLease, RoutingError, ScopeDisposeReport,
     ScopeLifecycleState, ScopeManager, ScopeSlot, ScopeSnapshot, ScopeStateError,
-    ScopedTaskTracker, StaleGenerationContext, StaleGenerationError, TaskAdmissionError,
-    build_scope_candidate,
+    ScopedTaskTracker, SourceCallError, SourceCallResult, SourceHandler, StaleGenerationContext,
+    StaleGenerationError, TaskAdmissionError, build_scope_candidate,
 };
 pub use model::{
     ActivationPlan, ActivationPolicy, BindingResolution, CapabilityContractMajor,

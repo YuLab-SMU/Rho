@@ -19,6 +19,7 @@ on:
       - ".github/workflows/rust-compatibility.yml"
       - "scripts/test-rust-msrv-contract.mjs"
       - "scripts/test-license-contract.mjs"
+      - "scripts/test-extension-run-history-contract.mjs"
       - "LICENSE"
       - "LICENSES.md"
 
@@ -93,6 +94,8 @@ jobs:
           node scripts/test-rust-msrv-contract.mjs
           node scripts/test-license-contract.mjs --test
           node scripts/test-license-contract.mjs
+          node scripts/test-extension-run-history-contract.mjs --test
+          node scripts/test-extension-run-history-contract.mjs
 
       - name: Check formatting
         run: cargo fmt --all -- --check

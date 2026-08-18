@@ -10,8 +10,10 @@ mod update;
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs::OpenOptions;
+use std::future::Future;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::process::{Command, Stdio};
 #[cfg(test)]
 use std::sync::atomic::AtomicUsize;
@@ -36,9 +38,12 @@ use project::{
 };
 use rho_core::{BrokerState, ExecutionOrigin};
 use rho_extension_runtime::{
-    DiagnosticSink, DisposeOutcome, ExtensionDiagnostic, ExtensionHost,
-    InternalExtensionRuntimeMode, InternalPlugin, LifecycleDeadlines, RejectingBrokerFacade,
-    ScopeId, ScopeSnapshot,
+    ActivationError, BoundedJson, BrokerError, BrokerFacade, BrokerRequest, BrokerResponse,
+    BrokerResponseClass, CapabilityDeclaration, CapabilityId, CapabilityRequirement,
+    DiagnosticCode, DiagnosticSeverity, DiagnosticSink, DisposeOutcome, ExtensionDiagnostic,
+    ExtensionHost, InternalExtensionRuntimeMode, InternalPlugin, LifecycleDeadlines, OperationId,
+    PluginContext, PluginDescriptor, PluginVersion, ScopeId, ScopeSnapshot, SourceCallError,
+    SourceHandler,
 };
 use rho_kernel::{ArkLaunchConfig, ArkSession, KernelEvent};
 use rho_server::coordinator::{
@@ -517,6 +522,7 @@ static STARTUP_LOG_PATH: OnceLock<PathBuf> = OnceLock::new();
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 enum SwitchTestStep {
     BuildExtensionCandidate,
+    ActivateExtensionCandidate,
     SyncWorkspace,
     SetActiveProjectRoot,
     SaveLastOpenedProject,
@@ -3614,12 +3620,110 @@ async fn list_runs(
     limit: Option<usize>,
     state: State<'_, AppState>,
 ) -> Result<Vec<RunSummary>, String> {
+    list_runs_with_state(limit, &state).await
+}
+
+async fn list_runs_legacy(
+    limit: Option<usize>,
+    state: &AppState,
+) -> Result<Vec<RunSummary>, String> {
     let root = state.project_root.read().await.clone();
     let project_root = root.to_string_lossy().replace('\\', "/");
-    read_store(&state)
+    read_store(state)
         .map_err(display_error)?
         .list_runs(&project_root, limit)
         .map_err(display_error)
+}
+
+fn emit_run_history_fallback(state: &AppState, scope: Option<&ScopeSnapshot>, reason_code: &str) {
+    state
+        .extension_host
+        .scopes()
+        .diagnostics()
+        .emit(ExtensionDiagnostic {
+            code: DiagnosticCode::ContributionFallback,
+            severity: DiagnosticSeverity::Warning,
+            plugin_id: None,
+            capability_id: Some(run_history_source_capability_id()),
+            scope_kind: scope.map(|value| value.identity().kind.clone()),
+            scope_id: scope.map(|value| value.identity().id.clone()),
+            activation_generation: scope.map(|value| value.identity().generation),
+            effect_order: None,
+            related_plugins: Vec::new(),
+            cycle_path: Vec::new(),
+            message: format!("Run History candidate unavailable; using legacy ({reason_code})"),
+        });
+}
+
+async fn list_runs_with_state(
+    limit: Option<usize>,
+    state: &AppState,
+) -> Result<Vec<RunSummary>, String> {
+    if state.extension_host.mode() == InternalExtensionRuntimeMode::Legacy {
+        return list_runs_legacy(limit, state).await;
+    }
+
+    let root = state.project_root.read().await.clone();
+    let project_root = root.to_string_lossy().replace('\\', "/");
+    let Some(scope) = state.extension_host.scopes().project() else {
+        emit_run_history_fallback(state, None, "project_scope_missing");
+        return list_runs_legacy(limit, state).await;
+    };
+    let expected_scope_id = extension_project_scope_id(&project_root).map_err(display_error)?;
+    if scope.identity().id != expected_scope_id {
+        emit_run_history_fallback(state, Some(&scope), "project_scope_mismatch");
+        return list_runs_legacy(limit, state).await;
+    }
+
+    let request = BoundedJson::generic(json!({ "limit": limit })).map_err(display_error)?;
+    let result = match scope
+        .registry()
+        .call_source(&run_history_source_capability_id(), request)
+        .await
+    {
+        Ok(result) => result,
+        Err(SourceCallError::MissingContribution { .. }) => {
+            emit_run_history_fallback(state, Some(&scope), "contribution_missing");
+            return list_runs_legacy(limit, state).await;
+        }
+        Err(SourceCallError::Routing(error)) => {
+            return Err(display_error(error));
+        }
+        Err(SourceCallError::Payload(error)) => {
+            return Err(display_error(error));
+        }
+        Err(SourceCallError::Handler(error)) => {
+            state
+                .extension_host
+                .scopes()
+                .diagnostics()
+                .emit(ExtensionDiagnostic {
+                    code: DiagnosticCode::SourceCallFailed,
+                    severity: DiagnosticSeverity::Error,
+                    plugin_id: None,
+                    capability_id: Some(run_history_source_capability_id()),
+                    scope_kind: Some(scope.identity().kind.clone()),
+                    scope_id: Some(scope.identity().id.clone()),
+                    activation_generation: Some(scope.identity().generation),
+                    effect_order: None,
+                    related_plugins: Vec::new(),
+                    cycle_path: Vec::new(),
+                    message: error.to_string(),
+                });
+            return Err(display_error(error));
+        }
+    };
+
+    state
+        .extension_host
+        .scopes()
+        .validate_project_current(&result.scope)
+        .map_err(display_error)?;
+    let current_root = state.project_root.read().await.clone();
+    if current_root != root {
+        return Err("Run History result is stale after a project switch".to_string());
+    }
+    serde_json::from_value(result.payload.into_value()).map_err(display_error)
 }
 
 #[tauri::command]
@@ -5855,34 +5959,231 @@ fn parse_execution_origin(origin: &str) -> ExecutionOrigin {
     }
 }
 
+fn run_history_source_capability_id() -> CapabilityId {
+    CapabilityId::new("source.project.run-history")
+        .expect("built-in Run History source capability must be valid")
+}
+
+fn runs_broker_capability_id() -> CapabilityId {
+    CapabilityId::new("service.broker.runs").expect("built-in Runs broker capability must be valid")
+}
+
+fn runs_broker_operation_id() -> OperationId {
+    OperationId::new("service.broker.runs.list")
+        .expect("built-in Runs broker operation must be valid")
+}
+
+struct RunHistoryPlugin {
+    descriptor: PluginDescriptor,
+}
+
+impl RunHistoryPlugin {
+    fn new() -> Self {
+        let mut descriptor = PluginDescriptor::new(
+            rho_extension_runtime::PluginId::new("org.yulab.rho.run-history")
+                .expect("built-in Run History plugin ID must be valid"),
+            PluginVersion::parse("1.0.0").expect("built-in Run History version must be valid"),
+            vec![rho_extension_runtime::ScopePolicy::project_kind()],
+        );
+        descriptor.provides = vec![CapabilityDeclaration::new(
+            run_history_source_capability_id(),
+            1,
+        )];
+        descriptor.requires = vec![CapabilityRequirement::new(runs_broker_capability_id(), 1)];
+        Self { descriptor }
+    }
+}
+
+impl InternalPlugin for RunHistoryPlugin {
+    fn descriptor(&self) -> &PluginDescriptor {
+        &self.descriptor
+    }
+
+    fn activate<'a>(
+        &'a self,
+        context: PluginContext<'a>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), ActivationError>> + Send + 'a>> {
+        Box::pin(async move {
+            context
+                .effects
+                .register_source(
+                    context.registry,
+                    run_history_source_capability_id(),
+                    Arc::new(RunHistorySourceHandler {
+                        broker: Arc::clone(&context.broker),
+                    }),
+                )
+                .map_err(|error| {
+                    ActivationError::new("run_history_registration", error.to_string())
+                })?;
+            Ok(())
+        })
+    }
+}
+
+struct RunHistorySourceHandler {
+    broker: Arc<dyn BrokerFacade>,
+}
+
+impl SourceHandler for RunHistorySourceHandler {
+    fn call<'a>(
+        &'a self,
+        request: BoundedJson,
+    ) -> Pin<Box<dyn Future<Output = Result<BoundedJson, BrokerError>> + Send + 'a>> {
+        let broker = Arc::clone(&self.broker);
+        Box::pin(async move {
+            let request = BrokerRequest {
+                operation_id: runs_broker_operation_id(),
+                payload: request,
+                response_class: BrokerResponseClass::Generic,
+            };
+            Ok(broker.call(request).await?.payload)
+        })
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RunHistoryListRequest {
+    limit: Option<usize>,
+}
+
+struct RunHistoryBrokerFacade {
+    store_path: PathBuf,
+    project_root: String,
+}
+
+impl RunHistoryBrokerFacade {
+    fn call_sync(&self, request: BrokerRequest) -> Result<BrokerResponse, BrokerError> {
+        if request.operation_id != runs_broker_operation_id() {
+            return Err(BrokerError::Unavailable {
+                operation_id: request.operation_id,
+            });
+        }
+        let arguments: RunHistoryListRequest =
+            serde_json::from_value(request.payload.value().clone()).map_err(|error| {
+                BrokerError::rejected("runs_request_invalid", error.to_string())
+            })?;
+        let store = Store::open(&self.store_path)
+            .map_err(|error| BrokerError::rejected("runs_store_open", error.to_string()))?;
+        let runs = store
+            .list_runs(&self.project_root, arguments.limit)
+            .map_err(|error| BrokerError::rejected("runs_list_failed", error.to_string()))?;
+        let value = serde_json::to_value(runs)
+            .map_err(|error| BrokerError::rejected("runs_response_encode", error.to_string()))?;
+        BrokerResponse::new(value, &request).map_err(BrokerError::from)
+    }
+}
+
+impl BrokerFacade for RunHistoryBrokerFacade {
+    fn call<'a>(
+        &'a self,
+        request: BrokerRequest,
+    ) -> Pin<Box<dyn Future<Output = Result<BrokerResponse, BrokerError>> + Send + 'a>> {
+        let result = self.call_sync(request);
+        Box::pin(async move { result })
+    }
+}
+
 fn extension_project_scope_id(normalized_project_root: &str) -> Result<ScopeId> {
     ScopeId::new(format!("project.{}", text_sha256(normalized_project_root)))
         .map_err(|error| anyhow!("creating extension project scope identity failed: {error}"))
 }
 
 fn internal_plugin_inventory() -> Vec<Arc<dyn InternalPlugin>> {
-    Vec::new()
+    vec![Arc::new(RunHistoryPlugin::new())]
+}
+
+struct PreparedExtensionProjectCandidate {
+    expected: Option<Arc<ScopeSnapshot>>,
+    candidate: Option<Arc<ScopeSnapshot>>,
+    fallback_legacy: bool,
 }
 
 async fn prepare_extension_project_candidate(
     state: &AppState,
     normalized_project_root: &str,
-) -> Result<(Option<Arc<ScopeSnapshot>>, Option<Arc<ScopeSnapshot>>)> {
+) -> Result<PreparedExtensionProjectCandidate> {
     if state.extension_host.mode() == InternalExtensionRuntimeMode::Legacy {
-        return Ok((None, None));
+        return Ok(PreparedExtensionProjectCandidate {
+            expected: None,
+            candidate: None,
+            fallback_legacy: false,
+        });
     }
     let _ = maybe_handle_switch_test_directive(state, SwitchTestStep::BuildExtensionCandidate)?;
     let expected = state.extension_host.scopes().project();
+    if let Err(error) =
+        maybe_handle_switch_test_directive(state, SwitchTestStep::ActivateExtensionCandidate)
+    {
+        state
+            .extension_host
+            .scopes()
+            .diagnostics()
+            .emit(ExtensionDiagnostic {
+                code: DiagnosticCode::ContributionFallback,
+                severity: DiagnosticSeverity::Warning,
+                plugin_id: None,
+                capability_id: Some(run_history_source_capability_id()),
+                scope_kind: None,
+                scope_id: None,
+                activation_generation: None,
+                effect_order: None,
+                related_plugins: Vec::new(),
+                cycle_path: Vec::new(),
+                message: format!("Run History candidate activation failed; using legacy ({error})"),
+            });
+        return Ok(PreparedExtensionProjectCandidate {
+            expected,
+            candidate: None,
+            fallback_legacy: true,
+        });
+    }
+    let config = runtime_config(state)?;
     let candidate = state
         .extension_host
         .build_project_candidate(
             extension_project_scope_id(normalized_project_root)?,
             internal_plugin_inventory(),
-            Arc::new(RejectingBrokerFacade),
+            Arc::new(RunHistoryBrokerFacade {
+                store_path: config.store_path,
+                project_root: normalized_project_root.to_string(),
+            }),
         )
-        .await
-        .context("building target extension project candidate")?;
-    Ok((expected, Some(candidate)))
+        .await;
+    match candidate {
+        Ok(candidate) => Ok(PreparedExtensionProjectCandidate {
+            expected,
+            candidate: Some(candidate),
+            fallback_legacy: false,
+        }),
+        Err(error) => {
+            state
+                .extension_host
+                .scopes()
+                .diagnostics()
+                .emit(ExtensionDiagnostic {
+                    code: DiagnosticCode::ContributionFallback,
+                    severity: DiagnosticSeverity::Warning,
+                    plugin_id: None,
+                    capability_id: Some(run_history_source_capability_id()),
+                    scope_kind: None,
+                    scope_id: None,
+                    activation_generation: None,
+                    effect_order: None,
+                    related_plugins: Vec::new(),
+                    cycle_path: Vec::new(),
+                    message: format!(
+                        "Run History candidate activation failed; using legacy ({error})"
+                    ),
+                });
+            Ok(PreparedExtensionProjectCandidate {
+                expected,
+                candidate: None,
+                fallback_legacy: true,
+            })
+        }
+    }
 }
 
 async fn rollback_extension_project_candidate(
@@ -5949,15 +6250,14 @@ where
         .project_store
         .load_session_or_default(&previous_ui_root);
     let previous_store_root = read_store(state)?.active_project_root()?;
-    let (expected_extension_scope, extension_candidate) =
-        prepare_extension_project_candidate(state, &normalized_root).await?;
+    let prepared_extension = prepare_extension_project_candidate(state, &normalized_root).await?;
 
     if let Err(error) =
         sync_workspace_project_root(state, &root, SwitchTestStep::SyncWorkspace).await
     {
         rollback_extension_project_candidate(
             state,
-            extension_candidate.as_ref(),
+            prepared_extension.candidate.as_ref(),
             "project_switch_workspace_failed",
         )
         .await;
@@ -5975,7 +6275,7 @@ where
                 &previous_ui_root,
                 previous_store_root.as_deref(),
                 previous_session,
-                extension_candidate.as_ref(),
+                prepared_extension.candidate.as_ref(),
                 "project_switch_watcher_failed",
                 format!("Target project watcher failed after workspace sync: {error:#}"),
             )
@@ -5993,7 +6293,7 @@ where
             &previous_ui_root,
             previous_store_root.as_deref(),
             previous_session,
-            extension_candidate.as_ref(),
+            prepared_extension.candidate.as_ref(),
             "project_switch_store_root_failed",
             format!("Project identity could not be committed: {error:#}"),
         )
@@ -6008,7 +6308,7 @@ where
             &previous_ui_root,
             previous_store_root.as_deref(),
             previous_session,
-            extension_candidate.as_ref(),
+            prepared_extension.candidate.as_ref(),
             "project_switch_last_opened_failed",
             format!("Last opened project could not be committed: {error:#}"),
         )
@@ -6023,20 +6323,36 @@ where
         previous.stop();
     }
 
-    if let Some(candidate) = extension_candidate
-        && let Err(error) = state
-            .extension_host
-            .publish_project_candidate(expected_extension_scope, candidate)
-            .await
-    {
-        write_startup_event(json!({
-            "kind": "internal_extension_candidate_publish_rejected",
-            "reason_code": error.reason,
-            "rejected_scope_id": error.rejected.id,
-            "rejected_generation": error.rejected.generation,
-            "actual_scope_id": error.actual.as_ref().map(|identity| &identity.id),
-            "actual_generation": error.actual.as_ref().map(|identity| identity.generation),
-        }));
+    match prepared_extension.candidate {
+        Some(candidate) => {
+            if let Err(error) = state
+                .extension_host
+                .publish_project_candidate(prepared_extension.expected, candidate)
+                .await
+            {
+                write_startup_event(json!({
+                    "kind": "internal_extension_candidate_publish_rejected",
+                    "reason_code": error.reason,
+                    "rejected_scope_id": error.rejected.id,
+                    "rejected_generation": error.rejected.generation,
+                    "actual_scope_id": error.actual.as_ref().map(|identity| &identity.id),
+                    "actual_generation": error.actual.as_ref().map(|identity| identity.generation),
+                }));
+            }
+        }
+        None if prepared_extension.fallback_legacy => {
+            if let Err(error) = state
+                .extension_host
+                .clear_project_scope(prepared_extension.expected)
+                .await
+            {
+                write_startup_event(json!({
+                    "kind": "internal_extension_fallback_clear_rejected",
+                    "reason_code": error.to_string(),
+                }));
+            }
+        }
+        None => {}
     }
 
     write_project_switch_event(
@@ -7349,8 +7665,13 @@ fn build_extension_host(
 ) -> Result<Arc<ExtensionHost>> {
     let mode = InternalExtensionRuntimeMode::parse(mode_value, diagnostics.as_ref());
     Ok(Arc::new(
-        ExtensionHost::new_empty(mode, diagnostics, LifecycleDeadlines::default())
-            .context("creating internal extension host")?,
+        ExtensionHost::new_with_host_capabilities(
+            mode,
+            vec![CapabilityDeclaration::new(runs_broker_capability_id(), 1)],
+            diagnostics,
+            LifecycleDeadlines::default(),
+        )
+        .context("creating internal extension host")?,
     ))
 }
 
@@ -7546,7 +7867,7 @@ mod tests {
         editor_format_result, ensure_artifact_export_target, ensure_bundled_license_file,
         ensure_supported_r_architecture, ensure_supported_r_version, existing_startup_file,
         find_executable_on_path, finish_render_job, has_png_signature, interrupt_all_agent_tasks,
-        load_runtime_cache, locate_ark_from_candidates, locate_rscript,
+        list_runs_with_state, load_runtime_cache, locate_ark_from_candidates, locate_rscript,
         lockfile_inventory_arguments, parse_r_runtime_probe, pending_native_update_matches,
         project_switch_blocker, r_architecture_supported, reconcile_render_job,
         recover_incomplete_agent_file_mutations, render_job_is_terminal, retry_run_arguments,
@@ -7563,8 +7884,9 @@ mod tests {
     };
     use rho_core::BrokerState;
     use rho_extension_runtime::{
-        DiagnosticSink, ExtensionDiagnostic, ExtensionHost, InternalExtensionRuntimeMode,
-        LifecycleDeadlines, ScopeLifecycleState,
+        ActivationError, BoundedJson, BrokerError, BrokerFacade, DiagnosticSink,
+        ExtensionDiagnostic, ExtensionHost, InternalExtensionRuntimeMode, InternalPlugin,
+        LifecycleDeadlines, PluginContext, ScopeLifecycleState, SourceHandler,
     };
     use rho_server::coordinator::{
         AgentWorkspaceLane, ApprovalResponseInput, CoordinatorRuntime, PendingApprovalRegistry,
@@ -7572,17 +7894,107 @@ mod tests {
     use rho_store::{
         AgentConversationDraft, AgentTurnDraft, AgentTurnEventDraft, AgentTurnFinish,
         ApprovalRequestDraft, ArtifactRecordSummary, EnvironmentOperationRequestDraft,
-        PlotArtifactDraft, RunDraft, Store, normalize_project_root,
+        PlotArtifactDraft, RunDraft, RunFinish, Store, normalize_project_root,
     };
     use serde_json::json;
     use std::collections::HashMap;
+    use std::future::Future;
     use std::path::{Path, PathBuf};
+    use std::pin::Pin;
     use std::process::Command;
     use std::sync::Arc;
     use std::sync::atomic::AtomicBool;
     use std::time::Duration;
     use tempfile::TempDir;
-    use tokio::sync::{Mutex, RwLock, oneshot};
+    use tokio::sync::{Mutex, RwLock, Semaphore, oneshot};
+
+    struct DelayedRunHistoryHandler {
+        started: Arc<Semaphore>,
+        release: Arc<Semaphore>,
+        response: serde_json::Value,
+    }
+
+    impl SourceHandler for DelayedRunHistoryHandler {
+        fn call<'a>(
+            &'a self,
+            _request: BoundedJson,
+        ) -> Pin<Box<dyn Future<Output = Result<BoundedJson, BrokerError>> + Send + 'a>> {
+            Box::pin(async move {
+                self.started.add_permits(1);
+                self.release
+                    .acquire()
+                    .await
+                    .expect("test release semaphore must remain open")
+                    .forget();
+                BoundedJson::generic(self.response.clone()).map_err(BrokerError::from)
+            })
+        }
+    }
+
+    struct DelayedRunHistoryPlugin {
+        descriptor: rho_extension_runtime::PluginDescriptor,
+        started: Arc<Semaphore>,
+        release: Arc<Semaphore>,
+        response: serde_json::Value,
+    }
+
+    impl DelayedRunHistoryPlugin {
+        fn new(
+            started: Arc<Semaphore>,
+            release: Arc<Semaphore>,
+            response: serde_json::Value,
+        ) -> Self {
+            let mut descriptor = rho_extension_runtime::PluginDescriptor::new(
+                rho_extension_runtime::PluginId::new("org.yulab.rho.run-history-delayed-test")
+                    .unwrap(),
+                rho_extension_runtime::PluginVersion::parse("1.0.0").unwrap(),
+                vec![rho_extension_runtime::ScopePolicy::project_kind()],
+            );
+            descriptor.provides = vec![rho_extension_runtime::CapabilityDeclaration::new(
+                super::run_history_source_capability_id(),
+                1,
+            )];
+            descriptor.requires = vec![rho_extension_runtime::CapabilityRequirement::new(
+                super::runs_broker_capability_id(),
+                1,
+            )];
+            Self {
+                descriptor,
+                started,
+                release,
+                response,
+            }
+        }
+    }
+
+    impl InternalPlugin for DelayedRunHistoryPlugin {
+        fn descriptor(&self) -> &rho_extension_runtime::PluginDescriptor {
+            &self.descriptor
+        }
+
+        fn activate<'a>(
+            &'a self,
+            context: PluginContext<'a>,
+        ) -> Pin<Box<dyn Future<Output = Result<(), ActivationError>> + Send + 'a>> {
+            Box::pin(async move {
+                context
+                    .effects
+                    .register_source(
+                        context.registry,
+                        super::run_history_source_capability_id(),
+                        Arc::new(DelayedRunHistoryHandler {
+                            started: Arc::clone(&self.started),
+                            release: Arc::clone(&self.release),
+                            response: self.response.clone(),
+                        }),
+                    )
+                    .map_err(|error| {
+                        ActivationError::new("delayed_run_history_registration", error.to_string())
+                    })?;
+                Ok(())
+            })
+        }
+    }
 
     fn execute_request(code: &str, source_range: Option<ExecuteSourceRange>) -> ExecuteRequest {
         ExecuteRequest {
@@ -8137,7 +8549,16 @@ mod tests {
     ) -> AppState {
         let diagnostics: Arc<dyn DiagnosticSink> = Arc::new(|_: ExtensionDiagnostic| {});
         let extension_host = Arc::new(
-            ExtensionHost::new_empty(mode, diagnostics, LifecycleDeadlines::default()).unwrap(),
+            ExtensionHost::new_with_host_capabilities(
+                mode,
+                vec![rho_extension_runtime::CapabilityDeclaration::new(
+                    super::runs_broker_capability_id(),
+                    1,
+                )],
+                diagnostics,
+                LifecycleDeadlines::default(),
+            )
+            .unwrap(),
         );
         AppState {
             data_dir: data_dir.to_path_buf(),
@@ -8169,6 +8590,29 @@ mod tests {
             render_jobs: Arc::new(Mutex::new(HashMap::new())),
             render_tasks: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    fn create_run_fixture(store: &mut Store, project_root: &str, run_id: &str, code: &str) {
+        store
+            .create_run(&RunDraft {
+                run_id: run_id.to_string(),
+                parent_run_id: None,
+                project_root: project_root.to_string(),
+                origin: "user".to_string(),
+                request_type: "workspace.execute".to_string(),
+                operation_class: "state_capable".to_string(),
+                code: code.to_string(),
+                arguments_json: "{}".to_string(),
+                source_path: Some("analysis.R".to_string()),
+                execution_mode: Some("console".to_string()),
+                document_version: Some(1),
+                workspace_id: format!("ws-{run_id}"),
+                state_revision_before: 1,
+                project_revision_before: 1,
+                environment_snapshot_id: None,
+            })
+            .unwrap();
+        store.update_run_status(run_id, "completed", None).unwrap();
     }
 
     fn add_agent_file_proposal(
@@ -8326,6 +8770,16 @@ mod tests {
                 project_revision: 1,
             })
             .unwrap();
+    }
+
+    fn assert_run_summaries_equal(
+        actual: Vec<rho_store::RunSummary>,
+        expected: &[rho_store::RunSummary],
+    ) {
+        assert_eq!(
+            serde_json::to_value(actual).unwrap(),
+            serde_json::to_value(expected).unwrap()
+        );
     }
 
     fn save_session_fixture(
@@ -10239,6 +10693,428 @@ mod tests {
             let expected_id = format!("project.{}", text_sha256(&root_a));
             assert_eq!(final_scope.identity().id.as_str(), expected_id);
             assert_eq!(final_scope.identity().generation.get(), 4);
+        });
+    }
+
+    #[test]
+    fn run_history_plugin_descriptor_is_fixed_and_permission_free() {
+        let plugin = super::RunHistoryPlugin::new();
+        let descriptor = plugin.descriptor();
+        assert_eq!(descriptor.id.as_str(), "org.yulab.rho.run-history");
+        assert_eq!(
+            descriptor.allowed_scopes,
+            vec![rho_extension_runtime::ScopePolicy::project_kind()]
+        );
+        assert_eq!(descriptor.provides.len(), 1);
+        assert_eq!(
+            descriptor.provides[0].capability_id.as_str(),
+            "source.project.run-history"
+        );
+        assert_eq!(descriptor.provides[0].contract_major.get(), 1);
+        assert_eq!(descriptor.requires.len(), 1);
+        assert_eq!(
+            descriptor.requires[0].capability_id.as_str(),
+            "service.broker.runs"
+        );
+        assert_eq!(descriptor.requires[0].contract_major.get(), 1);
+        let json = serde_json::to_value(descriptor).unwrap();
+        assert!(json.get("permissions").is_none());
+    }
+
+    #[test]
+    fn run_history_candidate_matches_store_across_limits_projects_and_restart() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let tempdir = TempDir::new().unwrap();
+            let project_a = tempdir.path().join("project-a");
+            let project_b = tempdir.path().join("project-b");
+            let project_empty = tempdir.path().join("project-empty");
+            for root in [&project_a, &project_b, &project_empty] {
+                std::fs::create_dir_all(root).unwrap();
+            }
+            let store_path = tempdir.path().join("rho.sqlite");
+            let root_a = normalize_project_root(project_a.to_string_lossy().as_ref());
+            let root_b = normalize_project_root(project_b.to_string_lossy().as_ref());
+            let mut store = Store::open(&store_path).unwrap();
+            store.set_project_root(Some(&root_a)).unwrap();
+            create_run_fixture(&mut store, &root_a, "run-a-1", "a <- 1");
+            create_run_fixture(&mut store, &root_a, "run-a-2", "a <- 2");
+            create_run_fixture(&mut store, &root_b, "run-b-1", "b <- 1");
+            let expected_a = store.list_runs(&root_a, None).unwrap();
+            let expected_a_one = store.list_runs(&root_a, Some(1)).unwrap();
+            let expected_b = store.list_runs(&root_b, None).unwrap();
+            drop(store);
+
+            let legacy = test_app_state(tempdir.path(), &project_a, &store_path);
+            assert_run_summaries_equal(
+                list_runs_with_state(None, &legacy).await.unwrap(),
+                &expected_a,
+            );
+
+            let candidate = test_app_state_with_extension_mode(
+                tempdir.path(),
+                &project_a,
+                &store_path,
+                InternalExtensionRuntimeMode::Candidate,
+            );
+            candidate
+                .switch_test_control
+                .succeed_without_running(SwitchTestStep::SyncWorkspace);
+            switch_project_with_watcher_factory(project_a.clone(), None, &candidate, |_| {
+                Ok(ProjectWatcherControl::noop())
+            })
+            .await
+            .unwrap();
+            assert_run_summaries_equal(
+                list_runs_with_state(None, &candidate).await.unwrap(),
+                &expected_a,
+            );
+            assert_run_summaries_equal(
+                list_runs_with_state(Some(1), &candidate).await.unwrap(),
+                &expected_a_one,
+            );
+            assert!(
+                list_runs_with_state(Some(0), &candidate)
+                    .await
+                    .unwrap()
+                    .is_empty()
+            );
+
+            candidate
+                .switch_test_control
+                .succeed_without_running(SwitchTestStep::SyncWorkspace);
+            switch_project_with_watcher_factory(project_b.clone(), None, &candidate, |_| {
+                Ok(ProjectWatcherControl::noop())
+            })
+            .await
+            .unwrap();
+            assert_run_summaries_equal(
+                list_runs_with_state(None, &candidate).await.unwrap(),
+                &expected_b,
+            );
+
+            candidate
+                .switch_test_control
+                .succeed_without_running(SwitchTestStep::SyncWorkspace);
+            switch_project_with_watcher_factory(project_empty, None, &candidate, |_| {
+                Ok(ProjectWatcherControl::noop())
+            })
+            .await
+            .unwrap();
+            assert!(
+                list_runs_with_state(None, &candidate)
+                    .await
+                    .unwrap()
+                    .is_empty()
+            );
+
+            let restarted = test_app_state_with_extension_mode(
+                tempdir.path(),
+                &project_a,
+                &store_path,
+                InternalExtensionRuntimeMode::Candidate,
+            );
+            restarted
+                .switch_test_control
+                .succeed_without_running(SwitchTestStep::SyncWorkspace);
+            switch_project_with_watcher_factory(project_a, None, &restarted, |_| {
+                Ok(ProjectWatcherControl::noop())
+            })
+            .await
+            .unwrap();
+            assert_run_summaries_equal(
+                list_runs_with_state(None, &restarted).await.unwrap(),
+                &expected_a,
+            );
+        });
+    }
+
+    #[test]
+    fn late_run_history_result_is_rejected_across_project_a_b_a() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let tempdir = TempDir::new().unwrap();
+            let project_a = tempdir.path().join("project-a");
+            let project_b = tempdir.path().join("project-b");
+            std::fs::create_dir_all(&project_a).unwrap();
+            std::fs::create_dir_all(&project_b).unwrap();
+            let store_path = tempdir.path().join("rho.sqlite");
+            let root_a = normalize_project_root(project_a.to_string_lossy().as_ref());
+            let root_b = normalize_project_root(project_b.to_string_lossy().as_ref());
+            let mut store = Store::open(&store_path).unwrap();
+            store.set_project_root(Some(&root_a)).unwrap();
+            create_run_fixture(&mut store, &root_a, "run-a", "a <- 1");
+            create_run_fixture(&mut store, &root_b, "run-b", "b <- 1");
+            let expected_a = store.list_runs(&root_a, None).unwrap();
+            let expected_b = store.list_runs(&root_b, None).unwrap();
+            drop(store);
+
+            let state = Arc::new(test_app_state_with_extension_mode(
+                tempdir.path(),
+                &project_a,
+                &store_path,
+                InternalExtensionRuntimeMode::Candidate,
+            ));
+            let started = Arc::new(Semaphore::new(0));
+            let release = Arc::new(Semaphore::new(0));
+            let delayed = state
+                .extension_host
+                .build_project_candidate(
+                    super::extension_project_scope_id(&root_a).unwrap(),
+                    vec![Arc::new(DelayedRunHistoryPlugin::new(
+                        Arc::clone(&started),
+                        Arc::clone(&release),
+                        serde_json::to_value(&expected_a).unwrap(),
+                    ))],
+                    Arc::new(rho_extension_runtime::RejectingBrokerFacade),
+                )
+                .await
+                .unwrap();
+            state
+                .extension_host
+                .publish_project_candidate(None, delayed)
+                .await
+                .unwrap();
+
+            let call_state = Arc::clone(&state);
+            let old_call =
+                tokio::spawn(async move { list_runs_with_state(None, call_state.as_ref()).await });
+            started.acquire().await.unwrap().forget();
+
+            state
+                .switch_test_control
+                .succeed_without_running(SwitchTestStep::SyncWorkspace);
+            let switch_state = Arc::clone(&state);
+            let switch_project_b = project_b.clone();
+            let switch = tokio::spawn(async move {
+                switch_project_with_watcher_factory(
+                    switch_project_b,
+                    None,
+                    switch_state.as_ref(),
+                    |_| Ok(ProjectWatcherControl::noop()),
+                )
+                .await
+            });
+            tokio::time::timeout(Duration::from_secs(1), async {
+                loop {
+                    if *state.project_root.read().await == project_b {
+                        break;
+                    }
+                    tokio::task::yield_now().await;
+                }
+            })
+            .await
+            .expect("project B must become authoritative before old call is released");
+            release.add_permits(1);
+
+            let error = old_call.await.unwrap().unwrap_err();
+            assert!(error.contains("stale activation generation"));
+            assert_eq!(switch.await.unwrap().unwrap().status, "ready");
+            assert_run_summaries_equal(
+                list_runs_with_state(None, state.as_ref()).await.unwrap(),
+                &expected_b,
+            );
+
+            state
+                .switch_test_control
+                .succeed_without_running(SwitchTestStep::SyncWorkspace);
+            assert_eq!(
+                switch_project_with_watcher_factory(project_a, None, state.as_ref(), |_| Ok(
+                    ProjectWatcherControl::noop()
+                ),)
+                .await
+                .unwrap()
+                .status,
+                "ready"
+            );
+            assert_run_summaries_equal(
+                list_runs_with_state(None, state.as_ref()).await.unwrap(),
+                &expected_a,
+            );
+        });
+    }
+
+    #[test]
+    fn run_history_missing_contribution_and_activation_failure_fall_back_safely() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let tempdir = TempDir::new().unwrap();
+            let project_a = tempdir.path().join("project-a");
+            let project_b = tempdir.path().join("project-b");
+            std::fs::create_dir_all(&project_a).unwrap();
+            std::fs::create_dir_all(&project_b).unwrap();
+            let store_path = tempdir.path().join("rho.sqlite");
+            let root_a = normalize_project_root(project_a.to_string_lossy().as_ref());
+            let root_b = normalize_project_root(project_b.to_string_lossy().as_ref());
+            let mut store = Store::open(&store_path).unwrap();
+            store.set_project_root(Some(&root_a)).unwrap();
+            create_run_fixture(&mut store, &root_a, "run-a", "a <- 1");
+            create_run_fixture(&mut store, &root_b, "run-b", "b <- 1");
+            let expected_a = store.list_runs(&root_a, None).unwrap();
+            let expected_b = store.list_runs(&root_b, None).unwrap();
+            drop(store);
+
+            let state = test_app_state_with_extension_mode(
+                tempdir.path(),
+                &project_a,
+                &store_path,
+                InternalExtensionRuntimeMode::Candidate,
+            );
+            let missing = state
+                .extension_host
+                .build_empty_project_candidate(super::extension_project_scope_id(&root_a).unwrap())
+                .await
+                .unwrap();
+            state
+                .extension_host
+                .publish_project_candidate(None, missing)
+                .await
+                .unwrap();
+            assert_run_summaries_equal(
+                list_runs_with_state(None, &state).await.unwrap(),
+                &expected_a,
+            );
+
+            state.switch_test_control.fail(
+                SwitchTestStep::ActivateExtensionCandidate,
+                "inject activation failure",
+            );
+            state
+                .switch_test_control
+                .succeed_without_running(SwitchTestStep::SyncWorkspace);
+            let response = switch_project_with_watcher_factory(project_b, None, &state, |_| {
+                Ok(ProjectWatcherControl::noop())
+            })
+            .await
+            .unwrap();
+            assert_eq!(response.status, "ready");
+            assert!(state.extension_host.scopes().project().is_none());
+            assert_run_summaries_equal(
+                list_runs_with_state(None, &state).await.unwrap(),
+                &expected_b,
+            );
+        });
+    }
+
+    #[test]
+    fn run_history_handler_error_does_not_silently_fallback() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let tempdir = TempDir::new().unwrap();
+            let project_root = tempdir.path().join("project-a");
+            std::fs::create_dir_all(&project_root).unwrap();
+            let store_path = tempdir.path().join("rho.sqlite");
+            let root = normalize_project_root(project_root.to_string_lossy().as_ref());
+            let mut store = Store::open(&store_path).unwrap();
+            store.set_project_root(Some(&root)).unwrap();
+            create_run_fixture(&mut store, &root, "run-a", "a <- 1");
+            drop(store);
+            let state = test_app_state_with_extension_mode(
+                tempdir.path(),
+                &project_root,
+                &store_path,
+                InternalExtensionRuntimeMode::Candidate,
+            );
+            let candidate = state
+                .extension_host
+                .build_project_candidate(
+                    super::extension_project_scope_id(&root).unwrap(),
+                    super::internal_plugin_inventory(),
+                    Arc::new(super::RunHistoryBrokerFacade {
+                        store_path: tempdir.path().join("missing").join("rho.sqlite"),
+                        project_root: root,
+                    }),
+                )
+                .await
+                .unwrap();
+            state
+                .extension_host
+                .publish_project_candidate(None, candidate)
+                .await
+                .unwrap();
+            let error = list_runs_with_state(None, &state).await.unwrap_err();
+            assert!(error.contains("runs_store_open"));
+        });
+    }
+
+    #[test]
+    fn run_history_candidate_rejects_oversized_store_response_without_fallback() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let tempdir = TempDir::new().unwrap();
+            let project_root = tempdir.path().join("project-a");
+            std::fs::create_dir_all(&project_root).unwrap();
+            let store_path = tempdir.path().join("rho.sqlite");
+            let root = normalize_project_root(project_root.to_string_lossy().as_ref());
+            let mut store = Store::open(&store_path).unwrap();
+            store.set_project_root(Some(&root)).unwrap();
+            create_run_fixture(&mut store, &root, "run-large", "x <- 1");
+            store
+                .finish_run(&RunFinish {
+                    run_id: "run-large".to_string(),
+                    status: "failed".to_string(),
+                    terminal_reason: Some("r_error".to_string()),
+                    workspace_id: Some("ws-run-large".to_string()),
+                    state_revision_after: Some(2),
+                    project_revision_after: Some(1),
+                    stdout: None,
+                    value_text: None,
+                    messages: Vec::new(),
+                    warnings: Vec::new(),
+                    error_message: Some("x".repeat(1024 * 1024)),
+                    error_call: None,
+                    traceback: Vec::new(),
+                    environment_snapshot_id_after: None,
+                })
+                .unwrap();
+            drop(store);
+            let state = test_app_state_with_extension_mode(
+                tempdir.path(),
+                &project_root,
+                &store_path,
+                InternalExtensionRuntimeMode::Candidate,
+            );
+            state
+                .switch_test_control
+                .succeed_without_running(SwitchTestStep::SyncWorkspace);
+            switch_project_with_watcher_factory(project_root, None, &state, |_| {
+                Ok(ProjectWatcherControl::noop())
+            })
+            .await
+            .unwrap();
+            let error = list_runs_with_state(None, &state).await.unwrap_err();
+            assert!(error.contains("broker payload is too large"));
+        });
+    }
+
+    #[test]
+    fn runs_broker_rejects_unknown_request_fields_before_store_dispatch() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let tempdir = TempDir::new().unwrap();
+            let store_path = tempdir.path().join("rho.sqlite");
+            Store::open(&store_path).unwrap();
+            let facade = super::RunHistoryBrokerFacade {
+                store_path,
+                project_root: "project.a".to_string(),
+            };
+            for payload in [
+                json!({ "limit": 1, "unknown": true }),
+                json!({ "limit": -1 }),
+                json!({ "limit": "one" }),
+            ] {
+                let request = rho_extension_runtime::BrokerRequest::new(
+                    super::runs_broker_operation_id(),
+                    payload,
+                    rho_extension_runtime::BrokerResponseClass::Generic,
+                )
+                .unwrap();
+                assert!(matches!(
+                    facade.call(request).await,
+                    Err(rho_extension_runtime::BrokerError::Rejected { ref code, .. })
+                        if code == "runs_request_invalid"
+                ));
+            }
         });
     }
 
