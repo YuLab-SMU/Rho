@@ -62,7 +62,7 @@ on:
       - "docs/plans/active-2026-08-15-tauri-native-updater-spec.md"
       - "docs/plans/active-2026-08-17-signpath-free-trial-two-stage-dev42-spec.md"
       - "docs/plans/implemented-2026-08-17-three-platform-automatic-updater-dev43-spec.md"
-      - "docs/plans/active-2026-08-17-stable-0.4.0-release-spec.md"
+      - "docs/plans/implemented-2026-08-17-stable-0.4.0-release-spec.md"
       - "docs/project/active-document-cross-review.md"
       - "docs/project/active-development-roadmap.md"
       - "docs/release/active-0.4.0-dev.37-candidate-checklist.md"
@@ -72,7 +72,7 @@ on:
       - "docs/release/active-0.4.0-dev.41-native-updater-acceptance-target-checklist.md"
       - "docs/release/active-0.4.0-dev.42-two-stage-signing-checklist.md"
       - "docs/release/historical-0.4.0-dev.43-three-platform-updater-checklist.md"
-      - "docs/release/active-0.4.0-stable-release-checklist.md"
+      - "docs/release/historical-0.4.0-stable-release-checklist.md"
   pull_request:
     branches: [main]
     paths:
@@ -134,7 +134,7 @@ on:
       - "docs/plans/active-2026-08-15-tauri-native-updater-spec.md"
       - "docs/plans/active-2026-08-17-signpath-free-trial-two-stage-dev42-spec.md"
       - "docs/plans/implemented-2026-08-17-three-platform-automatic-updater-dev43-spec.md"
-      - "docs/plans/active-2026-08-17-stable-0.4.0-release-spec.md"
+      - "docs/plans/implemented-2026-08-17-stable-0.4.0-release-spec.md"
       - "docs/project/active-document-cross-review.md"
       - "docs/project/active-development-roadmap.md"
       - "docs/release/active-0.4.0-dev.37-candidate-checklist.md"
@@ -144,7 +144,7 @@ on:
       - "docs/release/active-0.4.0-dev.41-native-updater-acceptance-target-checklist.md"
       - "docs/release/active-0.4.0-dev.42-two-stage-signing-checklist.md"
       - "docs/release/historical-0.4.0-dev.43-three-platform-updater-checklist.md"
-      - "docs/release/active-0.4.0-stable-release-checklist.md"
+      - "docs/release/historical-0.4.0-stable-release-checklist.md"
 
 permissions:
   contents: read
