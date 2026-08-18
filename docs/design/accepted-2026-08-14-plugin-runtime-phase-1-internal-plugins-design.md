@@ -1,6 +1,7 @@
 # Phase 1 Internal Plugin Runtime Design
 
-Status: accepted architecture design; only P1-0 implementation authorized
+Status: accepted architecture design; P1-0 through P1-2 completed their Draft
+stop gates; P1-3 implementation authorized
 
 Date: 2026-08-14
 Issue: [#17](https://github.com/YuLab-SMU/Rho/issues/17)
@@ -8,11 +9,11 @@ Scope: compiled-in, first-party plugins only; capability composition,
 dependency resolution, scoped lifetime, reversible registration, and migration
 of a small set of existing built-in capabilities
 
-Change class: D3 shared architecture. The architecture was accepted and the
-bounded P1-0 pure-contract package was authorized on 2026-08-18. P1-1 through
-P1-4 remain unauthorized and subject to their own activation, cross-review,
-testing, and stop-point rules in
-`docs/project/active-development-governance.md`.
+Change class: D3 shared architecture. The architecture was accepted and P1-0,
+P1-1, and P1-2 passed their separately activated Draft stop gates on
+2026-08-18. P1-3 is now separately active under its implementation contract.
+P1-4 remains unauthorized and subject to its own activation, cross-review,
+testing, and stop-point rules in `docs/project/active-development-governance.md`.
 
 Source review:
 
@@ -46,16 +47,15 @@ Cross-reviewed against:
 - [Issue #96](https://github.com/YuLab-SMU/Rho/issues/96), especially the
   Primary Workspace / Compute Environment / Job / Attempt ownership model.
 
-Repository integration note: acceptance and P1-0 activation are recorded in
-`docs/plans/active-2026-08-18-p1-0-extension-runtime-contracts-spec.md`, the
-shared documentation index, and the central cross-review matrix. The separate
-Phase 2 design in PR #76 remains proposed and Git-independent.
+Repository integration note: P1-0 through P1-2 completion and P1-3 activation
+are recorded in their separate active contracts, the shared documentation
+index, and the central cross-review matrix. The separate Phase 2 design in PR
+#76 remains proposed and Git-independent.
 
-Implementation entry rule: only P1-0 may modify product code from this design.
-It stops after the pure crate, dependency review, deterministic tests, and
-locked compatibility evidence. P1-1 requires a new active contract and explicit
-authorization. Phase 1 does not authorize loading third-party or
-project-authored executable code.
+Implementation entry rule: only the currently active P1-3 contract may modify
+product code from this design. P1-4 requires a new active contract and remains
+unauthorized. Phase 1 does not authorize loading third-party or project-authored
+executable code.
 
 ## Summary
 
@@ -1036,9 +1036,9 @@ P1-0 completed its Draft stop gate on 2026-08-18. P1-1 was separately
 authorized and completed its Draft stop gate later that day through
 `docs/plans/active-2026-08-18-p1-1-extension-runtime-lifecycle-spec.md`. P1-2
 then completed its Draft stop gate through
-`docs/plans/active-2026-08-18-p1-2-run-history-source-spec.md`. P1-3 is the next
-separately activated package under the continuing whole-P1 objective; P1-4
-remains separately gated.
+`docs/plans/active-2026-08-18-p1-2-run-history-source-spec.md`. P1-3 is active
+under `docs/plans/active-2026-08-18-p1-3-workspace-snapshot-viewer-spec.md` and
+the continuing whole-P1 objective; P1-4 remains separately gated.
 
 ## Version, NEWS, And Release Impact
 
