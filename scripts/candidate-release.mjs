@@ -13,7 +13,7 @@ import {
 
 export const CANDIDATE_PLATFORMS = ["windows_x86_64", "macos_aarch64", "linux_x86_64"];
 const LEGACY_CANDIDATE_PLATFORMS = ["windows_x86_64", "macos_aarch64"];
-const THREE_PLATFORM_CANDIDATE_VERSIONS = new Set(["0.4.0-dev.43"]);
+const THREE_PLATFORM_CANDIDATE_VERSIONS = new Set(["0.4.0-dev.43", "0.4.0"]);
 export const MAX_EVIDENCE_BYTES = 256 * 1024;
 export const REHEARSAL_REPOSITORY = "YuLab-SMU/Rho_for_mac";
 export const CANDIDATE_REPOSITORY = "YuLab-SMU/Rho";
@@ -21,7 +21,7 @@ export const CANDIDATE_REPOSITORY = "YuLab-SMU/Rho";
 const MAX_CHECKSUM_BYTES = 1024;
 const MAX_SIGNING_EVIDENCE_BYTES = 16 * 1024;
 const PRERELEASE_IDENTIFIER = "(?:0|[1-9]\\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)";
-const CANDIDATE_VERSION_PATTERN = new RegExp(`^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)-(${PRERELEASE_IDENTIFIER})(?:\\.${PRERELEASE_IDENTIFIER})*$`);
+const RELEASE_VERSION_PATTERN = new RegExp(`^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-(${PRERELEASE_IDENTIFIER})(?:\\.${PRERELEASE_IDENTIFIER})*)?$`);
 const LEGACY_WINDOWS_SIGNING_CHECKS = ["authenticode", "signpath_request_binding", "free_trial_self_signed"];
 const TWO_STAGE_WINDOWS_SIGNING_CHECKS = [
   "authenticode_binary",
@@ -31,13 +31,14 @@ const TWO_STAGE_WINDOWS_SIGNING_CHECKS = [
   "signpath_installer_request_binding",
   "free_trial_self_signed",
 ];
-const TWO_STAGE_SIGNING_VERSIONS = new Set(["0.4.0-dev.42", "0.4.0-dev.43"]);
+const TWO_STAGE_SIGNING_VERSIONS = new Set(["0.4.0-dev.42", "0.4.0-dev.43", "0.4.0"]);
 const SIGNPATH_FREE_TRIAL_MODULE_VERSION = "4.4.6";
 const SIGNPATH_FREE_TRIAL_MODULE_SHA256 = "4a732624a7214dc8290dbf81ed2714d6b509be319427c2d55fd0c679d13ab5ae";
 const UNSIGNED_CANDIDATE_COMPATIBILITY = new Set(["0.4.0-dev.27"]);
 const UNSIGNED_PUBLISHED_COMPATIBILITY = new Set(["0.4.0-dev.24"]);
 const CONDITIONAL_ACCEPTANCE_VERSIONS = new Set(["0.4.0-dev.39"]);
-const NATIVE_UPDATER_REQUIRED_VERSIONS = new Set(["0.4.0-dev.40", "0.4.0-dev.42", "0.4.0-dev.43"]);
+const NATIVE_UPDATER_REQUIRED_VERSIONS = new Set(["0.4.0-dev.40", "0.4.0-dev.42", "0.4.0-dev.43", "0.4.0"]);
+const AUTOMATED_ACCEPTANCE_VERSIONS = new Set(["0.4.0-dev.43", "0.4.0"]);
 const CONDITIONAL_ACCEPTANCE_RISKS = [
   "macos_gatekeeper_human_launch_not_run",
   "windows_human_install_not_run",
@@ -137,8 +138,8 @@ function assertExactKeys(value, expected, label) {
 }
 
 export function validateCandidateIdentity(version, releaseTag, commit) {
-  if (!CANDIDATE_VERSION_PATTERN.test(version)) {
-    fail(`Candidate version is not prerelease SemVer: ${version}`);
+  if (!RELEASE_VERSION_PATTERN.test(version)) {
+    fail(`Candidate version is not release SemVer: ${version}`);
   }
   if (releaseTag !== `v${version}`) fail(`Release tag ${releaseTag} does not match version ${version}`);
   if (!/^[0-9a-f]{40}$/.test(commit)) fail("Candidate commit must be a full lowercase Git SHA");
@@ -759,7 +760,7 @@ export function createConditionalAcceptanceEvidence({
 
 export function createAutomatedAcceptanceEvidence({ candidateEvidencePath, outputPath }) {
   const candidate = validateAggregateEvidence(JSON.parse(fs.readFileSync(candidateEvidencePath, "utf8")));
-  if (candidate.version !== "0.4.0-dev.43") fail("Automated acceptance is not authorized for this version");
+  if (!AUTOMATED_ACCEPTANCE_VERSIONS.has(candidate.version)) fail("Automated acceptance is not authorized for this version");
   const candidateRecord = fileRecord(candidateEvidencePath);
   const expectedName = `rho-${candidate.version}-acceptance.json`;
   if (path.basename(outputPath) !== expectedName || path.resolve(path.dirname(outputPath)) !== path.resolve(path.dirname(candidateEvidencePath))) {
@@ -809,7 +810,10 @@ export function validatePublishRecord(record) {
   if (nativeUpdaterRequired(candidate.version) !== hasNativeUpdater) {
     fail(`Native updater evidence is ${nativeUpdaterRequired(candidate.version) ? "required" : "not authorized"} for ${candidate.version}`);
   }
-  if (!record.draft || !record.prerelease) fail("Only a draft prerelease may be published");
+  const expectedPrerelease = candidate.version.includes("-");
+  if (!record.draft || record.prerelease !== expectedPrerelease) {
+    fail(`Only a draft with SemVer-matched prerelease state may be published for ${candidate.version}`);
+  }
   if (record.tag_name !== candidate.release_tag || record.target_commitish !== candidate.commit) {
     fail("Draft release identity does not match candidate evidence");
   }
@@ -1175,7 +1179,7 @@ export function selfTest() {
     };
     validatePublishRecord(record);
 
-    const updaterVersion = "0.4.0-dev.40";
+    const updaterVersion = "0.4.0";
     const updaterTag = `v${updaterVersion}`;
     const updaterRoot = path.join(root, "native-updater");
     fs.mkdirSync(updaterRoot);
@@ -1186,7 +1190,10 @@ export function selfTest() {
       const artifactPath = path.join(updaterRoot, names.artifactName);
       fs.writeFileSync(artifactPath, `${platform} native updater candidate bytes`);
       const platformSigning = platform === "windows_x86_64"
-        ? { ...signingEvidence, signed_sha256: sha256File(artifactPath) }
+        ? {
+          ...twoStageSigning,
+          installer_signed_sha256: sha256File(artifactPath),
+        }
         : undefined;
       updaterEvidencePaths[platform] = path.join(updaterRoot, names.evidenceName);
       createPlatformEvidence({
@@ -1197,7 +1204,7 @@ export function selfTest() {
         artifactPath,
         outputPath: updaterEvidencePaths[platform],
         checks: platform === "windows_x86_64"
-          ? [...REQUIRED_CHECKS[platform], ...LEGACY_WINDOWS_SIGNING_CHECKS]
+          ? [...REQUIRED_CHECKS[platform], ...TWO_STAGE_WINDOWS_SIGNING_CHECKS]
           : [...REQUIRED_CHECKS[platform], "native_updater_archive"],
         signingEvidence: platformSigning,
       });
@@ -1221,6 +1228,7 @@ export function selfTest() {
     for (const artifactPath of [
       path.join(updaterRoot, `Rho_${updaterVersion}_x64-setup.exe`),
       macosUpdaterArtifact,
+      path.join(updaterRoot, `Rho_${updaterVersion}_x86_64.AppImage`),
     ]) fs.writeFileSync(`${artifactPath}.sig`, updaterSignature);
     const updaterEvidencePath = path.join(updaterRoot, nativeUpdaterEvidenceName(updaterVersion));
     const updaterEvidence = createNativeUpdaterEvidence({
@@ -1260,7 +1268,7 @@ export function selfTest() {
     const updaterRecord = {
       tag_name: updaterTag,
       draft: true,
-      prerelease: true,
+      prerelease: false,
       target_commitish: commit,
       publisher: "xiayh17",
       assets: updaterAssets,
@@ -1393,9 +1401,12 @@ export function selfTest() {
       () => validatePublishRecord({ ...record, candidate_evidence: rehearsal }),
       /candidate evidence keys are invalid/,
     );
-    expectFailure(() => validateCandidateIdentity("0.4.0-dev..1", "v0.4.0-dev..1", commit), /not prerelease SemVer/);
-    expectFailure(() => validateCandidateIdentity("0.4.0-dev.01", "v0.4.0-dev.01", commit), /not prerelease SemVer/);
-    expectFailure(() => validatePublishRecord({ ...record, draft: false }), /draft prerelease/);
+    validateCandidateIdentity("0.4.0", "v0.4.0", commit);
+    expectFailure(() => validateCandidateIdentity("0.4.0-dev..1", "v0.4.0-dev..1", commit), /not release SemVer/);
+    expectFailure(() => validateCandidateIdentity("0.4.0-dev.01", "v0.4.0-dev.01", commit), /not release SemVer/);
+    expectFailure(() => validatePublishRecord({ ...record, draft: false }), /SemVer-matched prerelease state/);
+    expectFailure(() => validatePublishRecord({ ...record, prerelease: false }), /SemVer-matched prerelease state/);
+    expectFailure(() => validatePublishRecord({ ...updaterRecord, prerelease: true }), /SemVer-matched prerelease state/);
     expectFailure(
       () => validatePublishRecord({ ...record, acceptance_evidence: { ...acceptance, decision: "NO-GO" } }),
       /passed GO/,

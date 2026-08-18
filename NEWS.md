@@ -4,6 +4,19 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.0 - 2026-08-17
+
+### Stable release
+
+- Rho 0.4.0 is the first stable three-platform release for Windows x64, macOS
+  Apple Silicon, and Linux x86-64.
+- Signed automatic updates start after the local workbench is ready and use
+  distinct stable/development manifests with transactional recovery.
+- Stable download and updater manifests bind all platform URLs, hashes,
+  signatures, and candidate evidence to one protected source commit.
+- Windows packages retain the SignPath Free Trial self-signed test certificate;
+  it is not publicly trusted and Windows or SmartScreen may still warn.
+
 ## 0.4.0-dev.43 - 2026-08-17
 
 ### Updates

@@ -271,7 +271,7 @@ function releaseBlock(title, release) {
 }
 
 function page(stable, development) {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rho Downloads</title><style>body{margin:0;color:#203033;background:#f5f7f7;font:15px/1.55 system-ui,sans-serif}header,main,footer{max-width:760px;margin:auto;padding:28px 22px}header{padding-top:64px}h1{margin:0;font:700 42px Georgia,serif}header p{color:#526568}section{padding:24px 0;border-top:1px solid #cbd4d5}h2{font-size:18px}.version{font-size:24px;font-weight:700}.warning{padding:12px;border:1px solid #b7791f;border-radius:5px;background:#fff8e6;color:#6b4300}.artifact{margin:16px 0}.download{display:inline-block;padding:9px 13px;border-radius:5px;color:white;background:#167568;text-decoration:none}details{margin-top:8px;color:#526568}code{display:block;margin-top:8px;overflow-wrap:anywhere}footer{color:#657679;font-size:13px}a{color:#126b61}</style></head><body><header><h1>Rho</h1><p>An agent-native scientific workbench for R.</p></header><main>${releaseBlock("Stable", stable)}${releaseBlock("Development", development)}<p>Installers are hosted by GitHub Releases. In some networks a download may be unavailable even when this page is reachable.</p><section><h2>Windows code-signing status</h2><p>Rho is applying to SignPath Foundation for publicly trusted Windows code signing. Some development releases may instead carry a SignPath Free Trial self-signed test signature; that does not establish Foundation acceptance, a production publisher, public trust, or SmartScreen reputation. The exact status is shown with each release. If accepted, future production releases will use the attribution: “Free code signing provided by <a href="${SIGNPATH_IO}">SignPath.io</a>, certificate by <a href="${SIGNPATH_FOUNDATION}">SignPath Foundation</a>.” See the <a href="${CODE_SIGNING_POLICY}">Code signing policy</a>.</p></section><section><h2>Uninstall Rho</h2><p>On Windows, open <strong>Settings &gt; Apps &gt; Installed apps</strong>, choose <strong>Rho</strong>, then choose <strong>Uninstall</strong>. On macOS, quit Rho and move <strong>Rho.app</strong> from <strong>Applications</strong> to the Trash. On Linux, quit Rho and delete the downloaded <strong>Rho AppImage</strong>.</p><p>Uninstalling does not automatically delete project files, local application data, logs, or operating-system credential-store entries. Review the <a href="${PRIVACY_POLICY}">Privacy policy</a> before removing retained data.</p></section></main><footer><p>Listed macOS builds are Developer ID signed and notarized. Windows trust status is shown per release. Verify every download with its SHA-256 checksum.</p><p><a href="${REPOSITORY}">Source repository</a> · <a href="${LICENSE_URL}">License</a> · <a href="${PRIVACY_POLICY}">Privacy policy</a> · <a href="${SECURITY_POLICY}">Security</a> · <a href="${CODE_SIGNING_POLICY}">Code signing policy</a></p></footer></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rho Downloads</title><style>body{margin:0;color:#203033;background:#f5f7f7;font:15px/1.55 system-ui,sans-serif}header,main,footer{max-width:760px;margin:auto;padding:28px 22px}header{padding-top:64px}h1{margin:0;font:700 42px Georgia,serif}header p{color:#526568}section{padding:24px 0;border-top:1px solid #cbd4d5}h2{font-size:18px}.version{font-size:24px;font-weight:700}.warning{padding:12px;border:1px solid #b7791f;border-radius:5px;background:#fff8e6;color:#6b4300}.artifact{margin:16px 0}.download{display:inline-block;padding:9px 13px;border-radius:5px;color:white;background:#167568;text-decoration:none}details{margin-top:8px;color:#526568}code{display:block;margin-top:8px;overflow-wrap:anywhere}footer{color:#657679;font-size:13px}a{color:#126b61}</style></head><body><header><h1>Rho</h1><p>An agent-native scientific workbench for R.</p></header><main>${releaseBlock("Stable", stable)}${releaseBlock("Development", development)}<p>Installers are hosted by GitHub Releases. In some networks a download may be unavailable even when this page is reachable.</p><section><h2>Windows code-signing status</h2><p>Rho is applying to SignPath Foundation for publicly trusted Windows code signing. Some releases may carry a SignPath Free Trial self-signed test signature; that does not establish Foundation acceptance, a production publisher, public trust, or SmartScreen reputation. The exact status is shown with each release. If accepted, future production releases will use the attribution: “Free code signing provided by <a href="${SIGNPATH_IO}">SignPath.io</a>, certificate by <a href="${SIGNPATH_FOUNDATION}">SignPath Foundation</a>.” See the <a href="${CODE_SIGNING_POLICY}">Code signing policy</a>.</p></section><section><h2>Uninstall Rho</h2><p>On Windows, open <strong>Settings &gt; Apps &gt; Installed apps</strong>, choose <strong>Rho</strong>, then choose <strong>Uninstall</strong>. On macOS, quit Rho and move <strong>Rho.app</strong> from <strong>Applications</strong> to the Trash. On Linux, quit Rho and delete the downloaded <strong>Rho AppImage</strong>.</p><p>Uninstalling does not automatically delete project files, local application data, logs, or operating-system credential-store entries. Review the <a href="${PRIVACY_POLICY}">Privacy policy</a> before removing retained data.</p></section></main><footer><p>Listed macOS builds are Developer ID signed and notarized. Windows trust status is shown per release. Verify every download with its SHA-256 checksum.</p><p><a href="${REPOSITORY}">Source repository</a> · <a href="${LICENSE_URL}">License</a> · <a href="${PRIVACY_POLICY}">Privacy policy</a> · <a href="${SECURITY_POLICY}">Security</a> · <a href="${CODE_SIGNING_POLICY}">Code signing policy</a></p></footer></body></html>`;
 }
 
 export function generate(records, outputDirectory) {
@@ -344,8 +344,8 @@ function fakeRecord(version, prerelease = true) {
 }
 
 function fakeCandidateRecord(version) {
-  const record = fakeRecord(version);
-  const twoStageWindows = version === "0.4.0-dev.43";
+  const record = fakeRecord(version, version.includes("-"));
+  const twoStageWindows = version === "0.4.0-dev.43" || version === "0.4.0";
   const platforms = {};
   const details = {
     windows_x86_64: [`Rho_${version}_x64-setup.exe`, `rho-${version}-windows-x86_64-evidence.json`],
@@ -569,6 +569,26 @@ function selfTest() {
     }
     const auto3Page = fs.readFileSync(path.join(temp, "index.html"), "utf8");
     if (!auto3Page.includes("Download for Linux x86-64")) throw new Error("Release page omitted Linux");
+    const stable040 = withNativeUpdater(fakeCandidateRecord("0.4.0"));
+    const stableResult = generate([auto3, stable040], temp);
+    if (
+      stableResult.stable !== "0.4.0"
+      || stableResult.development !== "0.4.0"
+      || stableResult.native_stable !== "0.4.0"
+      || stableResult.native_development !== "0.4.0"
+    ) throw new Error("Stable 0.4.0 promotion did not own both update channels");
+    const stableManifest = JSON.parse(fs.readFileSync(path.join(temp, "updates", "stable.json"), "utf8"));
+    const nativeStableManifest = JSON.parse(fs.readFileSync(path.join(temp, "updates", "tauri", "stable.json"), "utf8"));
+    if (JSON.stringify(Object.keys(stableManifest.artifacts).sort()) !== JSON.stringify(["linux_x86_64", "macos_aarch64", "windows_x86_64"])) {
+      throw new Error("Stable download manifest is missing a platform");
+    }
+    if (JSON.stringify(Object.keys(nativeStableManifest.platforms).sort()) !== JSON.stringify(["darwin-aarch64", "linux-x86_64", "windows-x86_64"])) {
+      throw new Error("Stable native updater manifest is missing a platform");
+    }
+    const stablePage = fs.readFileSync(path.join(temp, "index.html"), "utf8");
+    if (!stablePage.includes("<h2>Stable</h2><p class=\"version\">Rho 0.4.0</p>")) {
+      throw new Error("Stable download block is missing 0.4.0");
+    }
     const brokenNativeSignature = withNativeUpdater(fakeCandidateRecord("0.4.0-dev.40"));
     brokenNativeSignature.native_updater_signatures.windows_x86_64 = "not a signature";
     expectFailure(() => generate([brokenNativeSignature], temp), /base64/);

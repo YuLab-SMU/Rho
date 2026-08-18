@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 export const NATIVE_UPDATER_PLATFORMS = ["windows_x86_64", "macos_aarch64", "linux_x86_64"];
 const LEGACY_NATIVE_UPDATER_PLATFORMS = ["windows_x86_64", "macos_aarch64"];
-const THREE_PLATFORM_NATIVE_VERSIONS = new Set(["0.4.0-dev.43"]);
+const THREE_PLATFORM_NATIVE_VERSIONS = new Set(["0.4.0-dev.43", "0.4.0"]);
 export const TAURI_PUBLIC_KEY_ID = "173c902c085bfe5f";
 
 const REPOSITORY = "https://github.com/YuLab-SMU/Rho";

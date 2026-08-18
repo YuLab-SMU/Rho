@@ -87,8 +87,8 @@ assert.match(pages, /Native updater acceptance target marker is invalid/);
 assert.match(pages, /The public dev\.41 native updater acceptance target is missing its required exclusion marker/);
 assert.match(pages, /continue;/);
 
-assert.match(build, /default: v0\.4\.0-dev\.43/);
-assert.match(build, /default: Rho 0\.4\.0-dev\.43/);
+assert.match(build, /default: v0\.4\.0/);
+assert.match(build, /default: Rho 0\.4\.0/);
 assert.match(build, /expected_release_name="Rho 0\.4\.0-dev\.41 Native Updater Acceptance Target"/);
 assert.match(build, /native-updater-acceptance\.mjs --test true/);
 assert.match(publish, /dev\.41 native updater acceptance target may be published only by its dedicated protected workflow/);

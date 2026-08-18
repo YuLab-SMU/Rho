@@ -2,8 +2,9 @@
 
 Date: 2026-08-17
 
-Status: active `AUTO3-DEV43` D4/R4 work package; source implementation and local
-affected validation pass, while protected six-leg integration is pending.
+Status: implemented and published `AUTO3-DEV43` D4/R4 record. Protected source,
+three-platform candidate construction, automated acceptance, publication, and
+live development-channel verification passed on 2026-08-17.
 Explicitly authorized by the
 project owner: remove formal human-intervention gates, enable automatic updates
 for the existing Windows x64, macOS arm64, and Linux x86-64 builds, and publish
@@ -86,3 +87,12 @@ Done means protected integration; exact three-platform candidate and automated
 installed/recovery evidence; published prerelease; live release page; valid
 three-target `/updates/tauri/development.json`; absent stable endpoint; and a
 fresh automatic-update startup verification on each supported runner class.
+
+Result: PRs #86-#89 integrated the source and Linux CI repairs. Exact protected
+main commit `f1750c4b6cc81b464fb8f49a7376a60d6ba8a9a1` passed six-leg source run
+`32016789844`; candidate run `32016818404` passed Windows two-stage installed
+verification, macOS notarization/staple/Gatekeeper, Linux final AppImage and
+signature, and created the exact 16-asset Draft. Publish run `32018692323`
+released `v0.4.0-dev.43`, and Pages run `32018756430` deployed the exact
+three-target development manifests. Independent HTTPS verification passed;
+the stable endpoint remained absent at that release boundary.
