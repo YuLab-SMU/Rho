@@ -772,6 +772,15 @@ export function assertNoActiveFixture({ siteDirectory }) {
   regularDirectory(paths.directory, "Native updater fixture directory");
   const entries = fs.readdirSync(paths.directory).sort();
   if (!entries.length) return;
+  if (!pathEntryExists(paths.marker)) {
+    const permanentDevelopment = ["development.json"];
+    const permanentStableAndDevelopment = ["development.json", "stable.json"];
+    if (
+      isDeepStrictEqual(entries, permanentDevelopment)
+      || isDeepStrictEqual(entries, permanentStableAndDevelopment)
+    ) return;
+    fail("Unexpected native updater fixture files remain; normal Pages publication is blocked");
+  }
   const expectedEntries = ["development.json", PAGES_FIXTURE_MARKER_NAME].sort();
   if (!isDeepStrictEqual(entries, expectedEntries)) {
     fail("Unexpected native updater fixture files remain; normal Pages publication is blocked");
@@ -1107,7 +1116,11 @@ export function selfTest() {
     assertNoActiveFixture({ siteDirectory: site });
     assert.deepEqual(removeFixtureOrAssertAbsent({ siteDirectory: site, expectedFixture: second }), { removed: false });
     fs.mkdirSync(path.join(site, "updates", "tauri"));
-    fs.writeFileSync(path.join(site, "updates", "tauri", "development.json"), "unexpected\n");
+    fs.writeFileSync(path.join(site, "updates", "tauri", "development.json"), "permanent development manifest\n");
+    assertNoActiveFixture({ siteDirectory: site });
+    fs.writeFileSync(path.join(site, "updates", "tauri", "stable.json"), "permanent stable manifest\n");
+    assertNoActiveFixture({ siteDirectory: site });
+    fs.writeFileSync(path.join(site, "updates", "tauri", "unexpected.json"), "unexpected\n");
     expectFailure(
       () => assertNoActiveFixture({ siteDirectory: site }),
       /Unexpected native updater fixture files remain/,
