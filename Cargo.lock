@@ -129,6 +129,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "arc-swap"
+version = "1.9.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c049c0be4daef0b145cb3555416b3b8ef5b7888a38aea1a3a155801fe7b0810b"
+dependencies = [
+ "rustversion",
+]
+
+[[package]]
 name = "ashpd"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3773,6 +3782,7 @@ dependencies = [
  "reqwest 0.12.28",
  "rfd",
  "rho-core",
+ "rho-extension-runtime",
  "rho-kernel",
  "rho-protocol",
  "rho-server",
@@ -3794,11 +3804,14 @@ dependencies = [
 name = "rho-extension-runtime"
 version = "0.4.0"
 dependencies = [
+ "arc-swap",
  "petgraph",
  "semver",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
 ]
 
 [[package]]
@@ -5103,6 +5116,7 @@ dependencies = [
  "futures-core",
  "futures-io",
  "futures-sink",
+ "futures-util",
  "pin-project-lite",
  "tokio",
 ]

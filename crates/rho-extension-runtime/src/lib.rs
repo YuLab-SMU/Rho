@@ -5,17 +5,34 @@
 
 #![forbid(unsafe_code)]
 
+mod broker;
 mod error;
 mod id;
+mod lifecycle;
 mod model;
 mod resolver;
 
+pub use broker::{
+    BoundedJson, BrokerError, BrokerFacade, BrokerPayloadError, BrokerRequest, BrokerResponse,
+    BrokerResponseClass, DEFAULT_BROKER_PAYLOAD_BYTES, PROJECT_FILE_VIEWER_HTML_BYTES,
+    RejectingBrokerFacade, WORKSPACE_SNAPSHOT_RESPONSE_BYTES,
+};
 pub use error::{
     DescriptorErrorReason, DiagnosticCode, DiagnosticSeverity, ExtensionDiagnostic, ExtensionError,
     IdentifierCharacterClass, IdentifierErrorReason, IdentifierKind, InvalidParentContext,
     InvalidParentReason, InvalidScopePolicyReason, InvalidScopeReason, LimitKind,
 };
 pub use id::{ActivationGeneration, CapabilityId, OperationId, PluginId, ScopeId, ScopeKindId};
+pub use lifecycle::{
+    ActivationError, CandidateBuildError, CandidatePublishError, CollectingDiagnosticSink,
+    DiagnosticSink, Disposable, DisposeError, DisposeOutcome, EffectDisposeReport, EffectRecord,
+    EffectSink, EffectStatus, ExtensionHost, ExtensionHostError, InternalExtensionRuntimeMode,
+    InternalPlugin, LifecycleDeadlines, NoopDiagnosticSink, PluginContext, PluginInstanceIdentity,
+    PublishReport, RegistryError, RegistryHub, RegistryLease, RoutingError, ScopeDisposeReport,
+    ScopeLifecycleState, ScopeManager, ScopeSlot, ScopeSnapshot, ScopeStateError,
+    ScopedTaskTracker, StaleGenerationContext, StaleGenerationError, TaskAdmissionError,
+    build_scope_candidate,
+};
 pub use model::{
     ActivationPlan, ActivationPolicy, BindingResolution, CapabilityContractMajor,
     CapabilityDeclaration, CapabilityRequirement, PluginDescriptor, PluginVersion,

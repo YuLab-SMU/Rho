@@ -1,6 +1,7 @@
 # P1-1 Internal Extension Runtime Lifecycle Specification
 
-Status: active; P1-1 authorized 2026-08-18; implementation pending
+Status: active; P1-1 implementation, local automated verification, and
+independent contract review complete 2026-08-18; exact-head Rust Fast pending
 
 Date: 2026-08-18
 Authorization: after accepting the P1-0 and CI-FAST1 stop gates, the user
@@ -410,6 +411,135 @@ No candidate, installer, installed-app, signing, publication, or release
 decision is authorized.
 
 ## Definition Of Done
+
+### Implementation and local evidence — 2026-08-18
+
+Implementation is present on the pre-commit P1-1 tree. The evidence
+reconciliation records the exact implementation commit after push.
+
+Implemented:
+
+- object-safe `InternalPlugin`, `Disposable`, and `BrokerFacade` contracts;
+- validated 1 MiB generic, 2 MiB Workspace Snapshot, and 32 MiB Project File
+  Viewer payload classes with constructor-only bounded JSON;
+- host-only immediate `EffectSink`, reverse idempotent cleanup, per-effect and
+  total-scope deadlines, exact failed/leaked records, and panic containment;
+- scope-bound registry markers, race-safe routing leases, task admission over
+  `TaskTracker`, child cancellation tokens, and typed bounded diagnostics;
+- application/project/workspace/Agent identity policy, monotonic generations,
+  child-first/dependent-first disposal, and late-generation validation;
+- `ArcSwapOption` expected-old CAS using pointer identity, synchronous closing
+  of old routing after publication, rejected-candidate rollback, and newer
+  winner preservation;
+- private legacy/candidate mode parsing with invalid-value fallback;
+- desktop application scope setup and shutdown cascade;
+- explicit empty `Vec<Arc<dyn InternalPlugin>>` inventory;
+- candidate-mode empty project scope preparation inside the existing transition
+  gate, rollback on Workspace/watcher/store/last-opened failure, post-BH2 CAS
+  publication, old-scope disposal, and hashed path-free project scope IDs; and
+- shutdown serialization with the project transition gate plus rejection of a
+  new project switch after shutdown starts.
+
+Dependency evidence:
+
+- new lock package: `arc-swap 1.9.2`, MIT OR Apache-2.0, no optional feature,
+  maintained upstream;
+- its `rustversion 1.0.23` dependency was already locked;
+- direct `tokio-util 0.7.18` uses `default-features = false` and only `rt`, is
+  MIT, declares Rust 1.71, and was already locked transitively;
+- enabling `rt` adds `futures-util` only to the existing tokio-util lock edge;
+  it is not a direct Rho dependency; and
+- exact Rust 1.88 focused compilation/tests pass, covering arc-swap despite its
+  absent upstream `rust-version` metadata.
+
+Local automated evidence:
+
+```text
+cargo fmt --all -- --check
+  PASS
+cargo test -p rho-extension-runtime --locked
+  PASS; 52 passed, 0 failed
+cargo +1.88.0-aarch64-apple-darwin test -p rho-extension-runtime --locked
+  PASS; 52 passed, 0 failed
+cargo clippy -p rho-extension-runtime --all-targets --locked -- -D warnings
+  PASS
+cargo test -p rho-desktop --bin rho-desktop --locked
+  PASS; 185 passed, 0 failed, 1 existing opt-in macOS Keychain test ignored
+cargo check --workspace --all-targets --locked
+  PASS
+cargo test --workspace --locked --no-fail-fast
+  PASS; 430 passed, 0 failed, 1 existing opt-in macOS Keychain test ignored
+node --check desktop/dist/app.js
+  PASS
+node scripts/test-rust-msrv-contract.mjs --test
+node scripts/test-rust-msrv-contract.mjs
+node scripts/test-license-contract.mjs --test
+node scripts/test-license-contract.mjs
+  PASS
+git diff --check
+  PASS
+```
+
+An optional `cargo clippy -p rho-desktop --bin rho-desktop --locked --no-deps
+-- -D warnings` probe is not an acceptance check and did not pass: it reported
+19 pre-existing warnings across untouched desktop/store code. The one new
+collapsible-if warning in the P1-1 switch block was fixed before final tests.
+No unrelated clippy cleanup was included.
+
+Independent review findings resolved:
+
+- Tokio `TaskTracker::close()` does not reject spawn; Rho now closes a separate
+  admission mutex before `close()` and tests raw-versus-Rho behavior;
+- a plugin receives a child cancellation token, so it cannot cancel siblings or
+  the scope root;
+- plugin diagnostics are forcibly rebound to the real plugin/scope/generation,
+  truncated, and vector-bounded before forwarding;
+- `EffectSink::new` is host-private, preventing a plugin from creating an
+  uncommitted side stack and leaking registration;
+- activation and disposer panics are caught at a safe poll boundary without
+  unsafe code or a new dependency, then follow ordinary rollback/failure truth;
+- CAS compares `Arc` pointers, including a test where distinct snapshots have
+  value-equal identities;
+- old routing/task admission closes synchronously immediately after CAS and
+  before waiting for existing leases;
+- application child-tree replacement occurs before old async disposal, and
+  desktop shutdown serializes with project transition to avoid losing a newly
+  published child; and
+- bounded JSON cannot be deserialized into a forged size record because request
+  and response wrappers are one-way serializable and constructor-built.
+
+Contract refinements, not authority deviations:
+
+- `PluginContext` exposes `ScopedTaskTracker` rather than raw `TaskTracker` so
+  the accepted reject-new-task rule is enforceable;
+- plugin cancellation is a child of scope cancellation;
+- the legacy project path executes one internal mode branch but creates no
+  project extension candidate and retains existing response/state behavior;
+- shutdown acquires the existing transition gate before extension teardown; and
+- panic containment was implemented within the no-new-dependency/no-unsafe
+  contract rather than left as a residual risk.
+
+Intentionally unrun: R package suites, browser/manual UI, installed application,
+installer, signing, candidate, and release checks. P1-1 changes no R package,
+frontend command/mock state, visible workflow, schema, or distributable public
+contract. `desktop/dist/app.js` required no edit.
+
+Hosted evidence: exact-head Rust Fast pending. The six-leg native/MSRV matrix is
+still deliberately deferred to P1-4/Ready.
+
+Version/NEWS: no application or R package version bump and no `NEWS.md` entry.
+Candidate/release decision remains unchanged.
+
+Residual risks:
+
+- candidate mode is opt-in and has automated empty-scope parity, but no
+  installed-app manual acceptance because no user-visible capability exists;
+- native Windows/Linux and full hosted MSRV accumulation remain P1-4 work; and
+- ergonomic Rust API names remain internal experimental.
+
+P1-2 remains unauthorized.
+
+### Required final reconciliation
 
 - lifecycle, rollback, generation, bounds, diagnostics, and cleanup match this
   contract;

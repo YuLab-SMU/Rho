@@ -3,7 +3,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{CapabilityId, PluginId, ProviderIdentity, ScopeId, ScopeKindId};
+use crate::{ActivationGeneration, CapabilityId, PluginId, ProviderIdentity, ScopeId, ScopeKindId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -182,6 +182,8 @@ pub enum ExtensionError {
     },
     #[error("activation generation must be non-zero")]
     ZeroActivationGeneration,
+    #[error("activation generation space is exhausted")]
+    ActivationGenerationExhausted,
     #[error("invalid semantic plugin version")]
     InvalidPluginVersion,
     #[error("invalid descriptor for plugin {plugin_id}: {reason}")]
@@ -242,6 +244,7 @@ pub enum ExtensionError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DiagnosticSeverity {
+    Info,
     Error,
     Warning,
 }
@@ -251,6 +254,7 @@ pub enum DiagnosticSeverity {
 pub enum DiagnosticCode {
     InvalidIdentifier,
     ZeroActivationGeneration,
+    ActivationGenerationExhausted,
     InvalidPluginVersion,
     InvalidDescriptor,
     LimitExceeded,
@@ -263,6 +267,18 @@ pub enum DiagnosticCode {
     InvalidScopePolicy,
     DependencyCycle,
     OptionalCapabilityAbsent,
+    InvalidRuntimeMode,
+    ActivationStarted,
+    ActivationSucceeded,
+    ActivationFailed,
+    ActivationRollbackFailed,
+    CandidatePublished,
+    CandidateCasRejected,
+    QuiesceStarted,
+    QuiesceTimeout,
+    EffectDisposeFailed,
+    ScopeDisposed,
+    ScopeDisposeFailed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -271,7 +287,10 @@ pub struct ExtensionDiagnostic {
     pub severity: DiagnosticSeverity,
     pub plugin_id: Option<PluginId>,
     pub capability_id: Option<CapabilityId>,
+    pub scope_kind: Option<ScopeKindId>,
     pub scope_id: Option<ScopeId>,
+    pub activation_generation: Option<ActivationGeneration>,
+    pub effect_order: Option<u64>,
     pub related_plugins: Vec<PluginId>,
     pub cycle_path: Vec<PluginId>,
     pub message: String,
@@ -284,7 +303,10 @@ impl ExtensionDiagnostic {
             severity: DiagnosticSeverity::Error,
             plugin_id: None,
             capability_id: None,
+            scope_kind: None,
             scope_id: None,
+            activation_generation: None,
+            effect_order: None,
             related_plugins: Vec::new(),
             cycle_path: Vec::new(),
             message: error.to_string(),
@@ -321,10 +343,16 @@ impl ExtensionDiagnostic {
                 diagnostic.plugin_id = Some(plugin_id.clone());
                 diagnostic.capability_id = Some(capability_id.clone());
             }
-            ExtensionError::InvalidScope { scope_id, .. } => {
+            ExtensionError::InvalidScope {
+                scope_id,
+                scope_kind,
+                ..
+            } => {
+                diagnostic.scope_kind = Some(scope_kind.clone());
                 diagnostic.scope_id = Some(scope_id.clone());
             }
             ExtensionError::InvalidParent { context, .. } => {
+                diagnostic.scope_kind = Some(context.scope_kind.clone());
                 diagnostic.scope_id = Some(context.scope_id.clone());
             }
             ExtensionError::DependencyCycle { path } => {
@@ -334,10 +362,13 @@ impl ExtensionDiagnostic {
                 diagnostic.related_plugins.dedup();
                 diagnostic.cycle_path = path.clone();
             }
+            ExtensionError::InvalidScopePolicy { scope_kind, .. } => {
+                diagnostic.scope_kind = Some(scope_kind.clone());
+            }
             ExtensionError::InvalidIdentifier { .. }
             | ExtensionError::ZeroActivationGeneration
-            | ExtensionError::InvalidPluginVersion
-            | ExtensionError::InvalidScopePolicy { .. } => {}
+            | ExtensionError::ActivationGenerationExhausted
+            | ExtensionError::InvalidPluginVersion => {}
         }
 
         diagnostic.related_plugins.sort();
@@ -358,7 +389,10 @@ impl ExtensionDiagnostic {
             ),
             plugin_id: Some(plugin_id),
             capability_id: Some(capability_id),
+            scope_kind: None,
             scope_id: Some(scope_id),
+            activation_generation: None,
+            effect_order: None,
             related_plugins: Vec::new(),
             cycle_path: Vec::new(),
         }
@@ -370,6 +404,7 @@ impl ExtensionError {
         match self {
             Self::InvalidIdentifier { .. } => DiagnosticCode::InvalidIdentifier,
             Self::ZeroActivationGeneration => DiagnosticCode::ZeroActivationGeneration,
+            Self::ActivationGenerationExhausted => DiagnosticCode::ActivationGenerationExhausted,
             Self::InvalidPluginVersion => DiagnosticCode::InvalidPluginVersion,
             Self::InvalidDescriptor { .. } => DiagnosticCode::InvalidDescriptor,
             Self::LimitExceeded { .. } => DiagnosticCode::LimitExceeded,

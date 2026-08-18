@@ -24,6 +24,7 @@ repository = "https://github.com/YuLab-SMU/Rho"
 
 [workspace.dependencies]
 anyhow = "1.0"
+arc-swap = { version = "1.9", default-features = false }
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
 jet_core = { path = "vendor/jet/crates/core" }
@@ -37,4 +38,5 @@ serde_json = "1.0"
 tempfile = "3.20"
 thiserror = "2.0"
 tokio = { version = "1.0", features = ["full"] }
+tokio-util = { version = "0.7", default-features = false, features = ["rt"] }
 uuid = { version = "1.18", features = ["v4", "serde"] }

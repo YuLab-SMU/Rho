@@ -35,6 +35,11 @@ use project::{
     start_project_watcher, validate_project_root,
 };
 use rho_core::{BrokerState, ExecutionOrigin};
+use rho_extension_runtime::{
+    DiagnosticSink, DisposeOutcome, ExtensionDiagnostic, ExtensionHost,
+    InternalExtensionRuntimeMode, InternalPlugin, LifecycleDeadlines, RejectingBrokerFacade,
+    ScopeId, ScopeSnapshot,
+};
 use rho_kernel::{ArkLaunchConfig, ArkSession, KernelEvent};
 use rho_server::coordinator::{
     AgentWorkspaceLane, ApprovalResponseInput, CoordinatorRuntime, EnvironmentOperationArguments,
@@ -250,6 +255,7 @@ struct AppState {
     approvals: Arc<PendingApprovalRegistry>,
     environment_approvals: Arc<PendingApprovalRegistry>,
     project_transition_gate: Arc<Mutex<()>>,
+    extension_host: Arc<ExtensionHost>,
     agent_tasks: Arc<Mutex<HashMap<String, AgentTaskEntry>>>,
     agent_workspace_lane: Arc<AgentWorkspaceLane>,
     agent_file_mutations: Arc<AgentFileMutationRegistry>,
@@ -510,6 +516,7 @@ static STARTUP_LOG_PATH: OnceLock<PathBuf> = OnceLock::new();
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 enum SwitchTestStep {
+    BuildExtensionCandidate,
     SyncWorkspace,
     SetActiveProjectRoot,
     SaveLastOpenedProject,
@@ -5612,6 +5619,8 @@ async fn targets_status(state: State<'_, AppState>) -> Result<Value, String> {
 #[tauri::command]
 async fn shutdown_application(state: &AppState) -> Result<(), String> {
     write_startup_log("Rho desktop shutdown started");
+    state.shutdown_started.store(true, Ordering::SeqCst);
+    let _project_transition = state.project_transition_gate.lock().await;
     interrupt_all_agent_tasks(
         state,
         "desktop_shutdown",
@@ -5626,6 +5635,11 @@ async fn shutdown_application(state: &AppState) -> Result<(), String> {
 
     if let Some(watcher) = state.project_watcher.lock().await.take() {
         watcher.stop();
+    }
+
+    let extension_report = state.extension_host.shutdown().await;
+    if extension_report.outcome == DisposeOutcome::Failed {
+        write_startup_log("Internal extension shutdown completed with leaked resources");
     }
 
     let context = state.context.lock().await.take();
@@ -5841,6 +5855,54 @@ fn parse_execution_origin(origin: &str) -> ExecutionOrigin {
     }
 }
 
+fn extension_project_scope_id(normalized_project_root: &str) -> Result<ScopeId> {
+    ScopeId::new(format!("project.{}", text_sha256(normalized_project_root)))
+        .map_err(|error| anyhow!("creating extension project scope identity failed: {error}"))
+}
+
+fn internal_plugin_inventory() -> Vec<Arc<dyn InternalPlugin>> {
+    Vec::new()
+}
+
+async fn prepare_extension_project_candidate(
+    state: &AppState,
+    normalized_project_root: &str,
+) -> Result<(Option<Arc<ScopeSnapshot>>, Option<Arc<ScopeSnapshot>>)> {
+    if state.extension_host.mode() == InternalExtensionRuntimeMode::Legacy {
+        return Ok((None, None));
+    }
+    let _ = maybe_handle_switch_test_directive(state, SwitchTestStep::BuildExtensionCandidate)?;
+    let expected = state.extension_host.scopes().project();
+    let candidate = state
+        .extension_host
+        .build_project_candidate(
+            extension_project_scope_id(normalized_project_root)?,
+            internal_plugin_inventory(),
+            Arc::new(RejectingBrokerFacade),
+        )
+        .await
+        .context("building target extension project candidate")?;
+    Ok((expected, Some(candidate)))
+}
+
+async fn rollback_extension_project_candidate(
+    state: &AppState,
+    candidate: Option<&Arc<ScopeSnapshot>>,
+    reason_code: &str,
+) {
+    let Some(candidate) = candidate else {
+        return;
+    };
+    let report = state.extension_host.rollback_candidate(candidate).await;
+    write_startup_event(json!({
+        "kind": "internal_extension_candidate_rollback",
+        "reason_code": reason_code,
+        "scope_id": candidate.identity().id,
+        "generation": candidate.identity().generation,
+        "outcome": report.outcome,
+    }));
+}
+
 async fn switch_project(
     root: PathBuf,
     session_snapshot: Option<ProjectSessionSnapshot>,
@@ -5863,6 +5925,10 @@ where
     F: FnOnce(&Path) -> Result<ProjectWatcherControl>,
 {
     let _project_transition = state.project_transition_gate.lock().await;
+    ensure!(
+        !state.shutdown_started.load(Ordering::SeqCst),
+        "Rho is closing; project switching is unavailable"
+    );
     let target_session =
         session_snapshot.unwrap_or_else(|| state.project_store.load_session_or_default(&root));
     if let Some(blocker) = project_switch_blocker(state).await? {
@@ -5883,8 +5949,20 @@ where
         .project_store
         .load_session_or_default(&previous_ui_root);
     let previous_store_root = read_store(state)?.active_project_root()?;
+    let (expected_extension_scope, extension_candidate) =
+        prepare_extension_project_candidate(state, &normalized_root).await?;
 
-    sync_workspace_project_root(state, &root, SwitchTestStep::SyncWorkspace).await?;
+    if let Err(error) =
+        sync_workspace_project_root(state, &root, SwitchTestStep::SyncWorkspace).await
+    {
+        rollback_extension_project_candidate(
+            state,
+            extension_candidate.as_ref(),
+            "project_switch_workspace_failed",
+        )
+        .await;
+        return Err(error);
+    }
 
     let next_watcher = start_watcher(&root)
         .map_err(|error| anyhow!("starting target project watcher failed: {error:#}"));
@@ -5897,6 +5975,7 @@ where
                 &previous_ui_root,
                 previous_store_root.as_deref(),
                 previous_session,
+                extension_candidate.as_ref(),
                 "project_switch_watcher_failed",
                 format!("Target project watcher failed after workspace sync: {error:#}"),
             )
@@ -5914,6 +5993,7 @@ where
             &previous_ui_root,
             previous_store_root.as_deref(),
             previous_session,
+            extension_candidate.as_ref(),
             "project_switch_store_root_failed",
             format!("Project identity could not be committed: {error:#}"),
         )
@@ -5928,6 +6008,7 @@ where
             &previous_ui_root,
             previous_store_root.as_deref(),
             previous_session,
+            extension_candidate.as_ref(),
             "project_switch_last_opened_failed",
             format!("Last opened project could not be committed: {error:#}"),
         )
@@ -5940,6 +6021,22 @@ where
     drop(watcher);
     if let Some(previous) = previous_watcher {
         previous.stop();
+    }
+
+    if let Some(candidate) = extension_candidate
+        && let Err(error) = state
+            .extension_host
+            .publish_project_candidate(expected_extension_scope, candidate)
+            .await
+    {
+        write_startup_event(json!({
+            "kind": "internal_extension_candidate_publish_rejected",
+            "reason_code": error.reason,
+            "rejected_scope_id": error.rejected.id,
+            "rejected_generation": error.rejected.generation,
+            "actual_scope_id": error.actual.as_ref().map(|identity| &identity.id),
+            "actual_generation": error.actual.as_ref().map(|identity| identity.generation),
+        }));
     }
 
     write_project_switch_event(
@@ -5958,9 +6055,11 @@ async fn recover_failed_project_switch(
     previous_ui_root: &Path,
     previous_store_root: Option<&str>,
     previous_session: ProjectSessionSnapshot,
+    extension_candidate: Option<&Arc<ScopeSnapshot>>,
     reason_code: &str,
     message: String,
 ) -> Result<ProjectRestoreResponse> {
+    rollback_extension_project_candidate(state, extension_candidate, reason_code).await;
     let restore_result = async {
         sync_workspace_project_root(state, previous_ui_root, SwitchTestStep::RestoreWorkspace)
             .await?;
@@ -7244,6 +7343,32 @@ fn write_startup_event(event: Value) {
     }
 }
 
+fn build_extension_host(
+    mode_value: Option<&str>,
+    diagnostics: Arc<dyn DiagnosticSink>,
+) -> Result<Arc<ExtensionHost>> {
+    let mode = InternalExtensionRuntimeMode::parse(mode_value, diagnostics.as_ref());
+    Ok(Arc::new(
+        ExtensionHost::new_empty(mode, diagnostics, LifecycleDeadlines::default())
+            .context("creating internal extension host")?,
+    ))
+}
+
+fn desktop_extension_host() -> Result<Arc<ExtensionHost>> {
+    let diagnostics: Arc<dyn DiagnosticSink> = Arc::new(|diagnostic: ExtensionDiagnostic| {
+        write_startup_event(json!({
+            "kind": "internal_extension_runtime",
+            "diagnostic": diagnostic,
+        }));
+    });
+    let mode = match std::env::var("RHO_INTERNAL_EXTENSION_RUNTIME") {
+        Ok(value) => Some(value),
+        Err(std::env::VarError::NotPresent) => None,
+        Err(std::env::VarError::NotUnicode(_)) => Some("invalid_non_unicode".to_string()),
+    };
+    build_extension_host(mode.as_deref(), diagnostics)
+}
+
 fn selected_rscript_path(data_dir: &Path) -> PathBuf {
     data_dir.join("runtime").join("selected-rscript.txt")
 }
@@ -7426,8 +7551,8 @@ mod tests {
         project_switch_blocker, r_architecture_supported, reconcile_render_job,
         recover_incomplete_agent_file_mutations, render_job_is_terminal, retry_run_arguments,
         run_is_retryable, runtime_file_signature, safe_delete_project_file, save_runtime_cache,
-        source_claim_snapshot, switch_project_with_watcher_factory, text_sha256,
-        undo_agent_file_edit_state, validate_execute_source_range_shape,
+        shutdown_application, source_claim_snapshot, switch_project_with_watcher_factory,
+        text_sha256, undo_agent_file_edit_state, validate_execute_source_range_shape,
         workspace_project_root_code, write_r_probe_script,
     };
     use crate::platform;
@@ -7437,6 +7562,10 @@ mod tests {
         ProjectWatcherControl,
     };
     use rho_core::BrokerState;
+    use rho_extension_runtime::{
+        DiagnosticSink, ExtensionDiagnostic, ExtensionHost, InternalExtensionRuntimeMode,
+        LifecycleDeadlines, ScopeLifecycleState,
+    };
     use rho_server::coordinator::{
         AgentWorkspaceLane, ApprovalResponseInput, CoordinatorRuntime, PendingApprovalRegistry,
     };
@@ -7992,6 +8121,24 @@ mod tests {
     }
 
     fn test_app_state(data_dir: &Path, project_root: &Path, store_path: &Path) -> AppState {
+        test_app_state_with_extension_mode(
+            data_dir,
+            project_root,
+            store_path,
+            InternalExtensionRuntimeMode::Legacy,
+        )
+    }
+
+    fn test_app_state_with_extension_mode(
+        data_dir: &Path,
+        project_root: &Path,
+        store_path: &Path,
+        mode: InternalExtensionRuntimeMode,
+    ) -> AppState {
+        let diagnostics: Arc<dyn DiagnosticSink> = Arc::new(|_: ExtensionDiagnostic| {});
+        let extension_host = Arc::new(
+            ExtensionHost::new_empty(mode, diagnostics, LifecycleDeadlines::default()).unwrap(),
+        );
         AppState {
             data_dir: data_dir.to_path_buf(),
             ark: data_dir.join("ark.exe"),
@@ -8011,6 +8158,7 @@ mod tests {
             approvals: Arc::new(PendingApprovalRegistry::default()),
             environment_approvals: Arc::new(PendingApprovalRegistry::default()),
             project_transition_gate: Arc::new(Mutex::new(())),
+            extension_host,
             agent_tasks: Arc::new(Mutex::new(HashMap::new())),
             agent_workspace_lane: Arc::new(AgentWorkspaceLane::default()),
             agent_file_mutations: Arc::new(AgentFileMutationRegistry::default()),
@@ -10043,6 +10191,335 @@ mod tests {
                 .to_string_lossy()
                 .replace('\\', "/");
             assert_eq!(last_opened, project_b.to_string_lossy().replace('\\', "/"));
+            assert!(state.extension_host.scopes().project().is_none());
+            assert_eq!(
+                state.extension_host.scopes().application().state(),
+                ScopeLifecycleState::Active
+            );
+        });
+    }
+
+    #[test]
+    fn candidate_project_scope_tracks_a_b_a_with_fresh_generations() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let tempdir = TempDir::new().unwrap();
+            let project_a = tempdir.path().join("project-a");
+            let project_b = tempdir.path().join("project-b");
+            std::fs::create_dir_all(&project_a).unwrap();
+            std::fs::create_dir_all(&project_b).unwrap();
+            let store_path = tempdir.path().join("rho.sqlite");
+            let root_a = normalize_project_root(project_a.to_string_lossy().as_ref());
+            Store::open(&store_path)
+                .unwrap()
+                .set_project_root(Some(&root_a))
+                .unwrap();
+            let state = test_app_state_with_extension_mode(
+                tempdir.path(),
+                &project_a,
+                &store_path,
+                InternalExtensionRuntimeMode::Candidate,
+            );
+
+            for target in [&project_a, &project_b, &project_a] {
+                state
+                    .switch_test_control
+                    .succeed_without_running(SwitchTestStep::SyncWorkspace);
+                let response =
+                    switch_project_with_watcher_factory(target.to_path_buf(), None, &state, |_| {
+                        Ok(ProjectWatcherControl::noop())
+                    })
+                    .await
+                    .unwrap();
+                assert_eq!(response.status, "ready");
+            }
+
+            let final_scope = state.extension_host.scopes().project().unwrap();
+            assert_eq!(final_scope.state(), ScopeLifecycleState::Active);
+            let expected_id = format!("project.{}", text_sha256(&root_a));
+            assert_eq!(final_scope.identity().id.as_str(), expected_id);
+            assert_eq!(final_scope.identity().generation.get(), 4);
+        });
+    }
+
+    #[test]
+    fn candidate_scope_rolls_back_for_each_bh2_post_workspace_failure() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            for (case, failed_step, watcher_fails) in [
+                ("watcher", None, true),
+                ("store", Some(SwitchTestStep::SetActiveProjectRoot), false),
+                (
+                    "last-opened",
+                    Some(SwitchTestStep::SaveLastOpenedProject),
+                    false,
+                ),
+            ] {
+                let tempdir = TempDir::new().unwrap();
+                let project_a = tempdir.path().join(format!("project-a-{case}"));
+                let project_b = tempdir.path().join(format!("project-b-{case}"));
+                std::fs::create_dir_all(&project_a).unwrap();
+                std::fs::create_dir_all(&project_b).unwrap();
+                let store_path = tempdir.path().join("rho.sqlite");
+                let root_a = normalize_project_root(project_a.to_string_lossy().as_ref());
+                Store::open(&store_path)
+                    .unwrap()
+                    .set_project_root(Some(&root_a))
+                    .unwrap();
+                let state = test_app_state_with_extension_mode(
+                    tempdir.path(),
+                    &project_a,
+                    &store_path,
+                    InternalExtensionRuntimeMode::Candidate,
+                );
+                state
+                    .switch_test_control
+                    .succeed_without_running(SwitchTestStep::SyncWorkspace);
+                switch_project_with_watcher_factory(project_a.clone(), None, &state, |_| {
+                    Ok(ProjectWatcherControl::noop())
+                })
+                .await
+                .unwrap();
+                let previous_scope = state.extension_host.scopes().project().unwrap();
+
+                state
+                    .switch_test_control
+                    .succeed_without_running(SwitchTestStep::SyncWorkspace);
+                state
+                    .switch_test_control
+                    .succeed_without_running(SwitchTestStep::RestoreWorkspace);
+                if let Some(step) = failed_step {
+                    state
+                        .switch_test_control
+                        .fail(step, format!("inject {case} failure"));
+                }
+                let response = switch_project_with_watcher_factory(project_b, None, &state, |_| {
+                    if watcher_fails {
+                        Err(anyhow::anyhow!("inject watcher failure"))
+                    } else {
+                        Ok(ProjectWatcherControl::noop())
+                    }
+                })
+                .await
+                .unwrap();
+
+                assert_eq!(response.status, "failed_restored", "case {case}");
+                let current_scope = state.extension_host.scopes().project().unwrap();
+                assert!(Arc::ptr_eq(&current_scope, &previous_scope), "case {case}");
+                assert_eq!(current_scope.state(), ScopeLifecycleState::Active);
+                assert_eq!(
+                    state
+                        .project_root
+                        .read()
+                        .await
+                        .to_string_lossy()
+                        .replace('\\', "/"),
+                    project_a.to_string_lossy().replace('\\', "/")
+                );
+                assert_eq!(
+                    Store::open(&store_path)
+                        .unwrap()
+                        .active_project_root()
+                        .unwrap()
+                        .as_deref(),
+                    Some(root_a.as_str())
+                );
+            }
+        });
+    }
+
+    #[test]
+    fn candidate_build_failure_precedes_every_bh2_side_effect() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let tempdir = TempDir::new().unwrap();
+            let project_a = tempdir.path().join("project-a");
+            let project_b = tempdir.path().join("project-b");
+            std::fs::create_dir_all(&project_a).unwrap();
+            std::fs::create_dir_all(&project_b).unwrap();
+            let store_path = tempdir.path().join("rho.sqlite");
+            let root_a = normalize_project_root(project_a.to_string_lossy().as_ref());
+            Store::open(&store_path)
+                .unwrap()
+                .set_project_root(Some(&root_a))
+                .unwrap();
+            let state = test_app_state_with_extension_mode(
+                tempdir.path(),
+                &project_a,
+                &store_path,
+                InternalExtensionRuntimeMode::Candidate,
+            );
+            state
+                .switch_test_control
+                .succeed_without_running(SwitchTestStep::SyncWorkspace);
+            switch_project_with_watcher_factory(project_a.clone(), None, &state, |_| {
+                Ok(ProjectWatcherControl::noop())
+            })
+            .await
+            .unwrap();
+            let previous_scope = state.extension_host.scopes().project().unwrap();
+
+            state.switch_test_control.fail(
+                SwitchTestStep::BuildExtensionCandidate,
+                "inject extension candidate failure",
+            );
+            state.switch_test_control.fail(
+                SwitchTestStep::SyncWorkspace,
+                "workspace step must remain untouched",
+            );
+            let error = switch_project_with_watcher_factory(project_b, None, &state, |_| {
+                Ok(ProjectWatcherControl::noop())
+            })
+            .await
+            .unwrap_err();
+            assert!(error.to_string().contains("extension candidate failure"));
+            assert!(matches!(
+                state
+                    .switch_test_control
+                    .take(SwitchTestStep::SyncWorkspace),
+                Some(super::SwitchTestDirective::Fail(_))
+            ));
+            assert!(Arc::ptr_eq(
+                &state.extension_host.scopes().project().unwrap(),
+                &previous_scope
+            ));
+            assert_eq!(
+                state
+                    .project_root
+                    .read()
+                    .await
+                    .to_string_lossy()
+                    .replace('\\', "/"),
+                project_a.to_string_lossy().replace('\\', "/")
+            );
+            assert_eq!(
+                Store::open(&store_path)
+                    .unwrap()
+                    .active_project_root()
+                    .unwrap()
+                    .as_deref(),
+                Some(root_a.as_str())
+            );
+        });
+    }
+
+    #[test]
+    fn workspace_sync_failure_rolls_back_unpublished_candidate_generation() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let tempdir = TempDir::new().unwrap();
+            let project_a = tempdir.path().join("project-a");
+            let project_b = tempdir.path().join("project-b");
+            std::fs::create_dir_all(&project_a).unwrap();
+            std::fs::create_dir_all(&project_b).unwrap();
+            let store_path = tempdir.path().join("rho.sqlite");
+            let root_a = normalize_project_root(project_a.to_string_lossy().as_ref());
+            Store::open(&store_path)
+                .unwrap()
+                .set_project_root(Some(&root_a))
+                .unwrap();
+            let state = test_app_state_with_extension_mode(
+                tempdir.path(),
+                &project_a,
+                &store_path,
+                InternalExtensionRuntimeMode::Candidate,
+            );
+            state
+                .switch_test_control
+                .succeed_without_running(SwitchTestStep::SyncWorkspace);
+            switch_project_with_watcher_factory(project_a.clone(), None, &state, |_| {
+                Ok(ProjectWatcherControl::noop())
+            })
+            .await
+            .unwrap();
+            let previous_scope = state.extension_host.scopes().project().unwrap();
+
+            state
+                .switch_test_control
+                .fail(SwitchTestStep::SyncWorkspace, "inject workspace failure");
+            assert!(
+                switch_project_with_watcher_factory(project_b.clone(), None, &state, |_| Ok(
+                    ProjectWatcherControl::noop()
+                ),)
+                .await
+                .is_err()
+            );
+            assert!(Arc::ptr_eq(
+                &state.extension_host.scopes().project().unwrap(),
+                &previous_scope
+            ));
+
+            state
+                .switch_test_control
+                .succeed_without_running(SwitchTestStep::SyncWorkspace);
+            switch_project_with_watcher_factory(project_b, None, &state, |_| {
+                Ok(ProjectWatcherControl::noop())
+            })
+            .await
+            .unwrap();
+            let current = state.extension_host.scopes().project().unwrap();
+            assert_eq!(current.identity().generation.get(), 4);
+            assert_eq!(previous_scope.state(), ScopeLifecycleState::Disposed);
+        });
+    }
+
+    #[test]
+    fn desktop_shutdown_disposes_extension_project_before_application() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let tempdir = TempDir::new().unwrap();
+            let project_root = tempdir.path().join("project-a");
+            std::fs::create_dir_all(&project_root).unwrap();
+            let store_path = tempdir.path().join("rho.sqlite");
+            let normalized_root = normalize_project_root(project_root.to_string_lossy().as_ref());
+            Store::open(&store_path)
+                .unwrap()
+                .set_project_root(Some(&normalized_root))
+                .unwrap();
+            let state = test_app_state_with_extension_mode(
+                tempdir.path(),
+                &project_root,
+                &store_path,
+                InternalExtensionRuntimeMode::Candidate,
+            );
+            state
+                .switch_test_control
+                .succeed_without_running(SwitchTestStep::SyncWorkspace);
+            switch_project_with_watcher_factory(project_root, None, &state, |_| {
+                Ok(ProjectWatcherControl::noop())
+            })
+            .await
+            .unwrap();
+            let project = state.extension_host.scopes().project().unwrap();
+            let application = state.extension_host.scopes().application();
+
+            shutdown_application(&state).await.unwrap();
+            assert_eq!(project.state(), ScopeLifecycleState::Disposed);
+            assert_eq!(application.state(), ScopeLifecycleState::Disposed);
+        });
+    }
+
+    #[test]
+    fn desktop_shutdown_waits_for_project_transition_gate() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let tempdir = TempDir::new().unwrap();
+            let project_root = tempdir.path().join("project-a");
+            std::fs::create_dir_all(&project_root).unwrap();
+            let store_path = tempdir.path().join("rho.sqlite");
+            let normalized_root = normalize_project_root(project_root.to_string_lossy().as_ref());
+            Store::open(&store_path)
+                .unwrap()
+                .set_project_root(Some(&normalized_root))
+                .unwrap();
+            let state = Arc::new(test_app_state(tempdir.path(), &project_root, &store_path));
+            let transition = state.project_transition_gate.lock().await;
+            let closing_state = Arc::clone(&state);
+            let closing = tokio::spawn(async move { shutdown_application(&closing_state).await });
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            assert!(!closing.is_finished());
+            drop(transition);
+            closing.await.unwrap().unwrap();
         });
     }
 
@@ -11299,6 +11776,10 @@ fn main() {
                 error
             })?;
             let selected_rscript = load_selected_rscript(&data_dir);
+            let extension_host = desktop_extension_host().map_err(|error| {
+                write_startup_log(&format!("Internal extension host setup failed: {error:#}"));
+                error
+            })?;
             app.manage(AppState {
                 data_dir,
                 ark,
@@ -11318,6 +11799,7 @@ fn main() {
                 approvals: Arc::new(PendingApprovalRegistry::default()),
                 environment_approvals: Arc::new(PendingApprovalRegistry::default()),
                 project_transition_gate: Arc::new(Mutex::new(())),
+                extension_host,
                 agent_tasks: Arc::new(Mutex::new(HashMap::new())),
                 agent_workspace_lane: Arc::new(AgentWorkspaceLane::default()),
                 agent_file_mutations: Arc::new(AgentFileMutationRegistry::default()),
