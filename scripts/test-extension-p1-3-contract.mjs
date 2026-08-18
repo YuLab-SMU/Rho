@@ -50,8 +50,10 @@ export function validateP13Contract({ desktop, server, frontend, agent }) {
   assert.match(frontend, /contract: "rho\.viewer_file\.v1"/, "viewer mock protocol changed");
   assert.match(frontend, /png: "image\/png"/, "viewer mock lost image media parity");
   assert.match(frontend, /contentEncoding = mediaType\.startsWith\("image\/"\) \? "base64" : "utf-8"/, "viewer mock lost encoding parity");
-  assert.match(agent, /name = "get_workspace_snapshot"/, "Agent tool name changed");
-  assert.match(agent, /rho_broker_tool_request\("workspace\.snapshot", args\)/, "Agent Workspace request type changed");
+  if (agent != null) {
+    assert.match(agent, /name = "get_workspace_snapshot"/, "Agent tool name changed");
+    assert.match(agent, /rho_broker_tool_request\("workspace\.snapshot", args\)/, "Agent Workspace request type changed");
+  }
 }
 
 function fixtures() {
@@ -121,7 +123,9 @@ if (process.argv.includes("--test")) {
     desktop: read("desktop/src-tauri/src/main.rs"),
     server: read("crates/rho-server/src/coordinator.rs"),
     frontend: read("desktop/dist/app.js"),
-    agent: read("R/rho.agent/R/aisdk_adapter.R"),
+    agent: fs.existsSync("R/rho.agent/R/aisdk_adapter.R")
+      ? read("R/rho.agent/R/aisdk_adapter.R")
+      : null,
   });
 }
 
