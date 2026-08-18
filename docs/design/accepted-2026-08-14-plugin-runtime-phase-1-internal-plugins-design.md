@@ -1033,10 +1033,10 @@ The 2026-08-18 authorization review closed the Phase 1 construction choices:
     scheduling, transport, and UI remain separately owned.
 
 P1-0 completed its Draft stop gate on 2026-08-18. P1-1 was separately
-authorized later that day through
-`docs/plans/active-2026-08-18-p1-1-extension-runtime-lifecycle-spec.md`. P1-2
-through P1-4 still require their own active implementation contract and
-explicit authorization.
+authorized and completed its Draft stop gate later that day through
+`docs/plans/active-2026-08-18-p1-1-extension-runtime-lifecycle-spec.md`. P1-2 is
+active under `docs/plans/active-2026-08-18-p1-2-run-history-source-spec.md` and
+the continuing whole-P1 objective. P1-3 and P1-4 remain separately gated.
 
 ## Version, NEWS, And Release Impact
 

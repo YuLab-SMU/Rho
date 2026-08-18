@@ -2,7 +2,7 @@
 
 Status: active; P1-1 implementation, local automated verification, and
 independent contract review complete 2026-08-18; implementation-head Rust Fast
-passed; evidence-reconciliation head pending
+passed; evidence-reconciliation Rust Fast run `32114870127` passed; P1-2 active
 
 Date: 2026-08-18
 Authorization: after accepting the P1-0 and CI-FAST1 stop gates, the user
@@ -535,8 +535,10 @@ Hosted implementation-head evidence:
 - the run saved exact new-lock key
   `rho-rust-v1-Linux-stable-x86_64-unknown-linux-gnu-bc9fb070b16d52abd62c229a905e272f25158b85490bb3951775c4d64c2af6f1`.
 
-The evidence-reconciliation head must pass Rust Fast once more. The six-leg
-native/MSRV matrix is still deliberately deferred to P1-4/Ready.
+The evidence-reconciliation head `89ca6c5957b5520d3cdf506c587885fa3a1e8979`
+passed Rust Fast run `32114870127` in 2m10s with the exact 1305 MiB cache hit;
+Rust Compatibility run `32114870129` skipped before matrix expansion. The
+six-leg native/MSRV matrix remains deliberately deferred to P1-4/Ready.
 
 Version/NEWS: no application or R package version bump and no `NEWS.md` entry.
 Candidate/release decision remains unchanged.
@@ -548,7 +550,9 @@ Residual risks:
 - native Windows/Linux and full hosted MSRV accumulation remain P1-4 work; and
 - ergonomic Rust API names remain internal experimental.
 
-P1-2 remains unauthorized.
+P1-2 is active under
+`active-2026-08-18-p1-2-run-history-source-spec.md` and the continuing
+whole-P1 objective.
 
 ### Required final reconciliation
 

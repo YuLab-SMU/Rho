@@ -2,7 +2,7 @@
 
 Status: active documentation coordination record
 
-Review date: 2026-08-18 (P1-1 internal extension lifecycle authorized)
+Review date: 2026-08-18 (P1-2 Run History source activated)
 Scope: unfinished or acceptance-active specifications, plans, and release gates
 
 Manual acceptance ownership: the runnable example workflow and candidate-level
@@ -50,7 +50,8 @@ semantics.
 | `plans/active-2026-08-18-rust-fast-development-ci-spec.md` | active; CI-FAST1 implementation, deterministic negative tests, YAML parse, license/MSRV contracts, 398-test local workspace validation, implementation-head Rust Fast run `32109328681`, and matrix-skip run `32109328630` pass 2026-08-18; evidence-reconciliation head pending | read-only Ubuntu-stable Draft feedback, Cargo cache isolation, mutually exclusive Draft/Ready admission, and deterministic workflow enforcement | require the evidence-reconciliation head to pass Rust Fast and keep six-leg matrix skipped on Draft PR #75; full matrix remains mandatory on affected `main` pushes and non-Draft PRs; PR #75 remains Draft through P1-4 |
 | `design/accepted-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md` | accepted internal architecture; P1-0 only authorized 2026-08-18 | compiled-in first-party capability/scope/generation/effect/candidate lifecycle semantics above the Trusted Kernel; Phase 1 package boundaries and mandatory stops | only the separately active P1-0 contract may proceed; P1-1 through P1-4 require independent authorization; no third-party runtime, public SDK, target, compute, schema, permission, or release authority |
 | `plans/active-2026-08-18-p1-0-extension-runtime-contracts-spec.md` | active Phase 1 predecessor; P1-0 implementation `bb9f1e1`, 26 focused tests, Rust 1.88/1.97 local matrices, dependency review, exact-head Rust Fast runs `32109328681`/`32109891797`, cache hit, and matrix skips pass 2026-08-18 | pure validated vocabulary, host-owned scope policy, deterministic capability graph/activation plan, structured errors/diagnostics, dependency review, and P1-0 evidence | preserve P1-0 contracts; P1-1 is separately active; full native/MSRV matrix remains mandatory only after whole-P1 completion |
-| `plans/active-2026-08-18-p1-1-extension-runtime-lifecycle-spec.md` | active; P1-1 implementation `f7d3da2`, 52 runtime tests on Rust 1.88/current, 185 desktop passes, 430 workspace passes, dependency review, independent lifecycle/authority review, implementation-head Rust Fast run `32114431764`, cache restore/save, and matrix skip pass 2026-08-18; evidence-reconciliation head pending | object-safe internal plugin/disposable API, bounded broker façade, effect/task/lease ownership, scope tree/generation, ArcSwap candidate publication, quiesce/dispose, private legacy/candidate mode, empty application/project scope integration, and P1-1 evidence | require evidence-reconciliation Rust Fast; BH2 retains project switch truth and Agent concurrency retains blockers; stop before Run History/Workspace Snapshot/Viewer migration and await P1-2 authorization |
+| `plans/active-2026-08-18-p1-1-extension-runtime-lifecycle-spec.md` | active predecessor; P1-1 implementation `f7d3da2`, 52 runtime tests on Rust 1.88/current, 185 desktop passes, 430 workspace passes, dependency review, independent lifecycle/authority review, Rust Fast runs `32114431764`/`32114870127`, exact cache hit, and matrix skips pass 2026-08-18 | object-safe internal plugin/disposable API, bounded broker façade, effect/task/lease ownership, scope tree/generation, ArcSwap candidate publication, quiesce/dispose, private legacy/candidate mode, empty application/project scope integration, and P1-1 evidence | preserve lifecycle/BH2/Agent boundaries; P1-2 is active; full matrix remains P1-4 work |
+| `plans/active-2026-08-18-p1-2-run-history-source-spec.md` | active; P1-2 authorized by the continuing whole-P1 objective; implementation pending | fixed Run History plugin/source descriptor, host runs service binding, generic bounded source registry, Store-backed broker façade, legacy/candidate command parity/fallback, project/generation isolation, and P1-2 evidence | may migrate only `list_runs` through the candidate source; Store remains authoritative; no Workspace tool, Viewer, schema, public protocol, or P1-3 behavior yet |
 | `plans/active-2026-08-05-macos-arm64-support-spec.md` | active broader platform plan; MAC1-MAC5 complete for published Apple Silicon candidate `0.4.0-dev.24`; protected Release and live development manifest pass without asset replacement | Apple Silicon macOS 14+ platform adapters, Ark/R integration, Keychain extension, additive macOS update artifact, signed DMG handoff, repository-bound rehearsal lane, async notarization orchestration, and MAC5 publication admission | preserve immutable release evidence; macOS x64 and Linux x64 remain open milestone scope |
 | `plans/active-2026-08-11-linux-appimage-support.md` | active authorized direction; LIN1-LIN4 source implementation present 2026-08-13; partial verification 2026-08-14 (LIN1/LIN3 fixture suites and `cargo fmt` pass; workspace suite runs with three pre-existing Linux update-manifest gaps in untouched `update.rs`; LIN2 build lanes and LIN5 remain unrun); LIN6 (Linux Secret Service credential storage) authorized 2026-08-14; LIN5 and the M3 release decision remain open | Linux x64 AppImage distribution, WebKitGTK 4.1 `AppRun` dependency check, Linux Ark bootstrap/sidecar, Linux R discovery, local/hosted Linux build lanes, and Linux Secret Service credential storage (LIN6) | follow the macOS adapter template for configuration ownership, runtime manifest, R discovery, evidence, and Keychain/Secret-Service credential integration; keep Windows x64 and macOS arm64 behavior unchanged; no Linux distribution before the M3 gate; no `.deb`/`.rpm`, Linux arm64, or automatic Linux updates in this round |
 | `release/historical-0.4.0-dev.16-candidate-checklist.md` | historical; review-only rehearsals passed and the decision remained NO-GO before the baseline advanced | immutable `0.4.0-dev.16` rehearsal evidence and NO-GO snapshot only | cannot authorize or satisfy any later candidate, MAC5, or publication row |
@@ -994,12 +995,13 @@ serde support, and inherited existing `serde`/`thiserror`. P1-1 may add reviewed
 Tokio. `inventory`, dynamic loading, Wasm, `tracing`, another runtime, or later
 built-in migrations remain forbidden.
 
-P1-1 is now the only authorized extension package. BH2 retains the entire
-project switch commit/recovery sequence and Agent Conversation retains blocker
-admission. P1-1 may prepare an empty candidate before BH2 side effects, publish
-it only after BH2 success, roll it back on existing failures, and dispose old
-extension state without changing project response or authority. P1-2 through
-P1-4 remain unauthorized.
+P1-1 completed its Draft stop gate. P1-2 is now the active extension package.
+BH2 retains the entire project switch commit/recovery sequence and Agent
+Conversation retains blocker admission. P1-2 may add only the fixed project Run
+History source, one generic bounded source registry lane, and a Store-backed
+allowlisted broker façade. Store/list ordering, project identity, command/mock
+shape, and truthful non-availability errors remain authoritative. P1-3 and
+P1-4 are not yet active.
 
 ### aisdk family work
 
