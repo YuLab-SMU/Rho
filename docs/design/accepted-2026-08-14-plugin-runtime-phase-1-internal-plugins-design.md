@@ -1,6 +1,6 @@
 # Phase 1 Internal Plugin Runtime Design
 
-Status: proposed architecture design; implementation not authorized
+Status: accepted architecture design; only P1-0 implementation authorized
 
 Date: 2026-08-14
 Issue: [#17](https://github.com/YuLab-SMU/Rho/issues/17)
@@ -8,15 +8,16 @@ Scope: compiled-in, first-party plugins only; capability composition,
 dependency resolution, scoped lifetime, reversible registration, and migration
 of a small set of existing built-in capabilities
 
-Change class: D3 shared architecture. This pull request is documentation-only.
-Any product-code slice remains subject to the authorization, activation,
-cross-review, testing, and stop-point rules in
+Change class: D3 shared architecture. The architecture was accepted and the
+bounded P1-0 pure-contract package was authorized on 2026-08-18. P1-1 through
+P1-4 remain unauthorized and subject to their own activation, cross-review,
+testing, and stop-point rules in
 `docs/project/active-development-governance.md`.
 
 Source review:
 
-- `YuLab-SMU/Rho` `main` at
-  `533ac12f324b2d9b15653a8cf33351d593050853`;
+- `YuLab-SMU/Rho` `main` at the rebased P1-0 baseline
+  `95d7d2c7774519ef956637aeff678ed4f2752ab5`;
 - [DeepSeek Harness architecture](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/architecture.md),
   especially shared contexts, service dependencies, and reversible effects;
 - [JupyterLab application plugins](https://jupyterlab.readthedocs.io/en/4.4.x/extension/extension_dev.html),
@@ -45,18 +46,16 @@ Cross-reviewed against:
 - [Issue #96](https://github.com/YuLab-SMU/Rho/issues/96), especially the
   Primary Workspace / Compute Environment / Job / Attempt ownership model.
 
-Repository integration note: this proposal is intentionally a single-file,
-independently reviewable change. It does not edit the shared documentation index
-or central cross-review matrix. Those shared records are updated only after a
-proposal is accepted or a bounded implementation package is explicitly
-activated, so this design and the separate Phase 2 design can merge or close
-independently without a synthetic conflict.
+Repository integration note: acceptance and P1-0 activation are recorded in
+`docs/plans/active-2026-08-18-p1-0-extension-runtime-contracts-spec.md`, the
+shared documentation index, and the central cross-review matrix. The separate
+Phase 2 design in PR #76 remains proposed and Git-independent.
 
-Implementation entry rule: no product code begins from this proposal alone.
-Authorization must name one work package, record its entry conditions, create
-or activate its implementation contract, update the central cross-review
-matrix, and stop at the package checkpoint. Phase 1 does not authorize loading
-third-party or project-authored executable code.
+Implementation entry rule: only P1-0 may modify product code from this design.
+It stops after the pure crate, dependency review, deterministic tests, and
+locked compatibility evidence. P1-1 requires a new active contract and explicit
+authorization. Phase 1 does not authorize loading third-party or
+project-authored executable code.
 
 ## Summary
 
@@ -352,10 +351,12 @@ The design freezes logical ownership, not a final file layout:
 - the extension runtime passes typed identifiers and bounded payloads across
   boundaries, not native object references.
 
-A dedicated `rho-extension-runtime` crate is the preferred implementation if it
-keeps the graph and lifecycle logic pure and independently testable. Reusing an
-existing crate is acceptable only if the same ownership and dependency
-invariants remain explicit.
+A dedicated `rho-extension-runtime` crate owns these contracts. It inherits the
+workspace version, Edition 2024, Rust 1.88 MSRV, and AGPL metadata. P1-0 uses
+workspace `serde`, `thiserror`, and `semver`, plus `petgraph 0.8` with default
+features disabled and only `std` enabled. It does not depend on Tokio or
+ArcSwap. Phase 1 uses an explicit static `Vec<Arc<dyn InternalPlugin>>`; it does
+not introduce `inventory`.
 
 ## Internal Plugin Contract
 
@@ -400,12 +401,17 @@ The concrete language may differ. The required semantics do not:
 
 Initial identifier rules:
 
-- lowercase reverse-domain or Rho-owned prefix;
-- maximum 128 UTF-8 bytes;
-- no path separators or whitespace normalization ambiguity;
+- 1 through 128 bytes of lowercase ASCII;
+- only `a-z`, `0-9`, `.`, `_`, and `-` are accepted;
+- path separators, whitespace, control characters, uppercase ASCII, non-ASCII,
+  and Unicode-normalization ambiguity are rejected;
 - one descriptor per ID in an inventory;
 - plugin instance identity additionally includes scope ID and activation
   generation.
+
+Each scope admits at most 256 plugins. A descriptor admits at most 64 provided,
+64 required, and 64 optional capability declarations. The resolved effective
+graph admits at most 8192 requirement-provider edges.
 
 ### Capability Contracts
 
@@ -418,10 +424,11 @@ provider plugin ID
 provider scope
 ```
 
-Phase 1 supports one provider for a capability within the effective scope.
-Duplicate providers fail graph validation. Provider override, ranking, or
-configuration patching is deferred until a real Rho use case proves it is
-needed.
+Phase 1 supports one provider for a capability within the effective visible
+scope. A provider in the current scope may not shadow the same capability from
+a visible parent scope. Duplicate providers fail graph validation. Provider
+override, ranking, or configuration patching is deferred until a real Rho use
+case proves it is needed.
 
 A requirement contains:
 
@@ -739,11 +746,11 @@ behavioral parity and lifecycle acceptance.
 
 ### Feature Flag And Fallback
 
-Initial implementation uses a host-owned flag such as
-`internalExtensionRuntime`:
+Initial implementation uses the private host-owned
+`RHO_INTERNAL_EXTENSION_RUNTIME=legacy|candidate` mode:
 
-- default remains the current wiring until the first migration package is
-  explicitly authorized;
+- P1-1 through P1-3 default to `legacy`; an invalid value falls back to
+  `legacy` with a typed diagnostic and is not persisted or exposed in the UI;
 - a test matrix exercises both paths while migration is incomplete;
 - candidate scope failure falls back to the legacy path without retaining
   candidate effects;
@@ -919,11 +926,13 @@ Stop gate:
 - active project survives candidate-scope activation failure;
 - review confirms the broker remains sole project/lifecycle authority.
 
-### P1-2: First Bounded Source/Provider Migration
+### P1-2: Project-Scoped Run History Source
 
 Deliver:
 
-- one read-only, bounded built-in source/provider through the registry;
+- compiled-in plugin `org.yulab.rho.run-history` provides
+  `source.project.run-history@1` and consumes broker-owned
+  `service.broker.runs@1` in project scope;
 - legacy and plugin paths behind the feature flag;
 - parity and isolation evidence.
 
@@ -933,12 +942,16 @@ Stop gate:
 - old and new paths agree on ownership, revisions, bounds, and errors;
 - rollback leaves no registration or subscription.
 
-### P1-3: Tool And UI Contribution Migrations
+### P1-3: Workspace Snapshot Tool And Project File Viewer
 
 Deliver:
 
-- one Agent tool/tool adapter;
-- one controlled command/viewer/panel contribution;
+- compiled-in `org.yulab.rho.workspace-snapshot-tool` provides
+  `tool.workspace.snapshot@1` and consumes
+  `service.broker.workspace-probe@1` in workspace scope;
+- compiled-in `org.yulab.rho.project-file-viewer` provides
+  `ui.viewer.project-file@1` in application scope without retaining a project
+  path;
 - no arbitrary DOM or direct privileged invocation.
 
 Stop gate:
@@ -985,26 +998,35 @@ Phase 1 may be accepted only when:
 - the central cross-review record is reconciled before implementation status is
   advanced.
 
-## Open Decisions For Authorization
+## Authorization Decisions
 
-The implementation-authorization review must close or explicitly defer:
+The 2026-08-18 authorization review closed the Phase 1 construction choices:
 
-1. whether the pure graph/lifecycle module lives in a new crate or an existing
-   core crate;
-2. the exact first source, tool, and UI migration targets;
-3. the minimum initial scope set implemented in P1-1;
-4. activation and disposal deadlines;
-5. whether diagnostics remain ephemeral or later receive a durable broker
-   projection;
-6. the exact feature-flag owner and default during migration;
-7. which lifecycle invariants are accepted as stable before Phase 2 and which
-   API names remain experimental;
-8. whether scope kind remains a host-owned enum or uses a validated extensible
-   identifier without permitting plugin-defined scope creation;
-9. the minimum effect metadata and lease contract required to prove external
-   resource cleanup and late-generation rejection;
-10. which generic lifecycle contracts are stable enough for Issues #95 and #96
-    to consume without coupling them to plugin-specific APIs.
+1. the host-neutral implementation lives in `rho-extension-runtime`;
+2. P1-2 migrates Run History, while P1-3 migrates Workspace Snapshot and the
+   Project File Viewer;
+3. P1-1 implements application, project, workspace, and Agent scopes;
+4. default deadlines are 5 seconds to quiesce, 2 seconds per effect, and 10
+   seconds for total scope disposal, with injectable test deadlines;
+5. diagnostics remain typed and ephemeral; the host may forward them to the
+   existing log, but no durable schema is added;
+6. `RHO_INTERNAL_EXTENSION_RUNTIME` is private and host-owned; P1-1 through
+   P1-3 default to `legacy`, and P1-4 may make `candidate` the default while
+   retaining the legacy override for one later release cycle;
+7. lifecycle and authority semantics are the acceptance target, while Rust
+   module layout, trait method names, and ergonomic API remain internal and
+   experimental;
+8. scope kinds use validated IDs and a host-owned parent policy; plugins cannot
+   register scope kinds or create scopes;
+9. effect records bind plugin instance, scope, generation, creation order,
+   state, and cleanup error; P1-1 defines the concrete lease implementation;
+10. Issues #95 and #96 may consume only the generic typed capability,
+    scope/generation, candidate, effect, quiesce/dispose, diagnostic, and
+    broker-façade semantics. Their targets, runtimes, jobs, persistence,
+    scheduling, transport, and UI remain separately owned.
+
+Only P1-0 is authorized by this review. Each later package requires a new
+active implementation contract and explicit authorization.
 
 ## Version, NEWS, And Release Impact
 

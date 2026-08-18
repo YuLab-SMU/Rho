@@ -53,6 +53,8 @@ changes.
 - Historical dev.43 release record: [`release/historical-0.4.0-dev.43-three-platform-updater-checklist.md`](release/historical-0.4.0-dev.43-three-platform-updater-checklist.md)
 - Implemented stable 0.4.0 release contract: [`plans/implemented-2026-08-17-stable-0.4.0-release-spec.md`](plans/implemented-2026-08-17-stable-0.4.0-release-spec.md)
 - Historical stable 0.4.0 release record: [`release/historical-0.4.0-stable-release-checklist.md`](release/historical-0.4.0-stable-release-checklist.md)
+- Accepted Phase 1 internal extension runtime architecture: [`design/accepted-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md`](design/accepted-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md)
+- Active P1-0 internal extension contracts: [`plans/active-2026-08-18-p1-0-extension-runtime-contracts-spec.md`](plans/active-2026-08-18-p1-0-extension-runtime-contracts-spec.md)
 - Bounded `dev.41` native-updater acceptance transport: [`release/active-0.4.0-dev.41-native-updater-acceptance-target-checklist.md`](release/active-0.4.0-dev.41-native-updater-acceptance-target-checklist.md)
 - Active SignPath application readiness: [`plans/active-2026-08-11-signpath-application-readiness-spec.md`](plans/active-2026-08-11-signpath-application-readiness-spec.md)
 - Active SignPath Free Trial Windows smoke: [`plans/active-2026-08-12-signpath-free-trial-smoke-spec.md`](plans/active-2026-08-12-signpath-free-trial-smoke-spec.md)

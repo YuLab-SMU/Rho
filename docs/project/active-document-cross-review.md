@@ -2,7 +2,7 @@
 
 Status: active documentation coordination record
 
-Review date: 2026-08-14 (LIN6 authorization recorded for the Linux plan)
+Review date: 2026-08-18 (P1-0 internal extension contracts authorized)
 Scope: unfinished or acceptance-active specifications, plans, and release gates
 
 Manual acceptance ownership: the runnable example workflow and candidate-level
@@ -47,6 +47,8 @@ semantics.
 | `plans/implemented-2026-08-13-conditional-prerelease-policy-spec.md` | implemented CPREL1 contract; source policy, protected integration, exact candidate/audit, conditional publication, and live update verification complete | durable schema-v2 actor-bound `CONDITIONAL_GO` validation, exact dev39 two-limit waiver, public disclosure, and acceptance-aware update projection | preserve ordinary GO compatibility and every artifact/security gate; dev39 remains conditional/public-prerelease-only and neither human observation is passed |
 | `project/active-development-roadmap.md` | active | milestone order and acceptance gates | continuously maintained from accepted evidence |
 | `plans/active-2026-08-10-rust-msrv-build-contract.md` | active integrated build contract; exact PR #29 head `f022d2c` passed all four jobs in run `31509554882`; merge `9e0b36b` passed all four exact-main jobs in run `31510716448`; Issue #28 closed | Rust 1.88 workspace MSRV metadata, Resolver 3, non-packaging stable/MSRV native CI, locked candidate Rust validation, and deterministic policy enforcement | enforce continuously; any dependency, target, runner, packaging, or MSRV change requires reviewed scope; no candidate or release authority |
+| `design/accepted-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md` | accepted internal architecture; P1-0 only authorized 2026-08-18 | compiled-in first-party capability/scope/generation/effect/candidate lifecycle semantics above the Trusted Kernel; Phase 1 package boundaries and mandatory stops | only the separately active P1-0 contract may proceed; P1-1 through P1-4 require independent authorization; no third-party runtime, public SDK, target, compute, schema, permission, or release authority |
+| `plans/active-2026-08-18-p1-0-extension-runtime-contracts-spec.md` | active; P1-0 authorized, implementation pending | pure validated vocabulary, host-owned scope policy, deterministic capability graph/activation plan, structured errors/diagnostics, new-crate dependency review and P1-0 evidence | may add only `rho-extension-runtime`, workspace dependency metadata/lockfile, tests, and truthful evidence; stop before activation/effects/server/desktop/project-switch integration and await P1-1 authorization |
 | `plans/active-2026-08-05-macos-arm64-support-spec.md` | active broader platform plan; MAC1-MAC5 complete for published Apple Silicon candidate `0.4.0-dev.24`; protected Release and live development manifest pass without asset replacement | Apple Silicon macOS 14+ platform adapters, Ark/R integration, Keychain extension, additive macOS update artifact, signed DMG handoff, repository-bound rehearsal lane, async notarization orchestration, and MAC5 publication admission | preserve immutable release evidence; macOS x64 and Linux x64 remain open milestone scope |
 | `plans/active-2026-08-11-linux-appimage-support.md` | active authorized direction; LIN1-LIN4 source implementation present 2026-08-13; partial verification 2026-08-14 (LIN1/LIN3 fixture suites and `cargo fmt` pass; workspace suite runs with three pre-existing Linux update-manifest gaps in untouched `update.rs`; LIN2 build lanes and LIN5 remain unrun); LIN6 (Linux Secret Service credential storage) authorized 2026-08-14; LIN5 and the M3 release decision remain open | Linux x64 AppImage distribution, WebKitGTK 4.1 `AppRun` dependency check, Linux Ark bootstrap/sidecar, Linux R discovery, local/hosted Linux build lanes, and Linux Secret Service credential storage (LIN6) | follow the macOS adapter template for configuration ownership, runtime manifest, R discovery, evidence, and Keychain/Secret-Service credential integration; keep Windows x64 and macOS arm64 behavior unchanged; no Linux distribution before the M3 gate; no `.deb`/`.rpm`, Linux arm64, or automatic Linux updates in this round |
 | `release/historical-0.4.0-dev.16-candidate-checklist.md` | historical; review-only rehearsals passed and the decision remained NO-GO before the baseline advanced | immutable `0.4.0-dev.16` rehearsal evidence and NO-GO snapshot only | cannot authorize or satisfy any later candidate, MAC5, or publication row |
@@ -960,6 +962,36 @@ authority. MAC1 may select a platform-appropriate default directory only before
 the existing normalization and validation boundary. Jet and the current Ark
 session retain process-launch and watchdog authority; the macOS stream may add
 only the bounded fallback cleanup named in its active contract.
+
+### Internal extension runtime P1-0
+
+The accepted Phase 1 architecture owns compiled-in first-party composition
+semantics above the Trusted Kernel. Its active P1-0 contract owns only pure
+vocabulary, host-owned scope ancestry validation, deterministic dependency
+resolution, immutable plans, and structured diagnostics. Capability provision
+does not imply permission: broker policy, approvals, credentials, processes,
+filesystem/network access, persistence, project identity, and audit remain
+outside the graph.
+
+BH1/BH2 retain authoritative project identity, transition sequencing, and
+recovery. ADR-002/ADR-003 retain transport authority. The public Workbench
+Protocol proposal cannot infer a new external contract from this internal
+crate. PR #76 remains proposed and supplies no third-party discovery or loading
+authority. Issues #95/#96 remain downstream design inputs only: Execution
+Targets, runtime hosts, environments, jobs, attempts, scheduling, transport,
+schema, and UI remain theirs, and P1-0 defines none of those objects.
+
+The Rust MSRV contract owns Rust 1.88, Resolver 3, the committed lockfile, and
+all six macOS/Windows/Linux stable/MSRV legs. The AGPL transition contract owns
+source and third-party licensing. P1-0 may add reviewed `petgraph 0.8` with only
+`std`, move existing `semver 1.x` into workspace dependency ownership with
+serde support, and inherit existing `serde`/`thiserror`; it may not add Tokio,
+ArcSwap, `inventory`, dynamic loading, Wasm, or another runtime.
+
+Only P1-0 is authorized. P1-1 must create a new active contract, repeat
+cross-review against project switching and Trusted Kernel ownership, and
+receive explicit authorization before any activation, effect, candidate,
+feature-flag, server, or desktop code is edited.
 
 ### aisdk family work
 
