@@ -124,6 +124,7 @@ export function validateCompatibilityWorkflow(text) {
     '"scripts/test-extension-run-history-contract.mjs"',
     '"scripts/test-extension-p1-3-contract.mjs"',
     '"desktop/dist/app.js"',
+    '"r/rho.agent/R/aisdk_adapter.R"',
   ]) {
     const occurrences = workflow.split(requiredPath).length - 1;
     if (occurrences !== 2) fail(`Both Rust compatibility triggers must include ${requiredPath}`);
@@ -209,6 +210,7 @@ export function validateFastWorkflow(text) {
     '"scripts/test-extension-run-history-contract.mjs"',
     '"scripts/test-extension-p1-3-contract.mjs"',
     '"desktop/dist/app.js"',
+    '"r/rho.agent/R/aisdk_adapter.R"',
   ]) {
     if (!workflow.includes(requiredPath)) fail(`Rust Fast path filter is missing ${requiredPath}`);
   }
@@ -294,6 +296,7 @@ on:
       - "crates/**/*.rs"
       - "desktop/src-tauri/**"
       - "desktop/dist/app.js"
+      - "r/rho.agent/R/aisdk_adapter.R"
       - "vendor/jet/**/*.rs"
       - "runtime/ark.json"
       - "scripts/bootstrap-ark-macos.sh"
@@ -314,6 +317,7 @@ on:
       - "crates/**/*.rs"
       - "desktop/src-tauri/**"
       - "desktop/dist/app.js"
+      - "r/rho.agent/R/aisdk_adapter.R"
       - "vendor/jet/**/*.rs"
       - "runtime/ark.json"
       - "scripts/bootstrap-ark-macos.sh"
@@ -377,6 +381,7 @@ on:
       - "crates/**/*.rs"
       - "desktop/src-tauri/**"
       - "desktop/dist/app.js"
+      - "r/rho.agent/R/aisdk_adapter.R"
       - "vendor/jet/**/*.rs"
       - "runtime/ark.json"
       - "scripts/bootstrap-ark-linux.sh"

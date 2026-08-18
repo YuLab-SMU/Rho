@@ -12,6 +12,7 @@ on:
       - "crates/**/*.rs"
       - "desktop/src-tauri/**"
       - "desktop/dist/app.js"
+      - "r/rho.agent/R/aisdk_adapter.R"
       - "vendor/jet/**/*.rs"
       - "runtime/ark.json"
       - "scripts/bootstrap-ark-linux.sh"
