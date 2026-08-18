@@ -83,8 +83,8 @@ pub enum InternalExtensionRuntimeMode {
 impl InternalExtensionRuntimeMode {
     pub fn parse(value: Option<&str>, diagnostics: &dyn DiagnosticSink) -> Self {
         match value {
-            None | Some("legacy") => Self::Legacy,
-            Some("candidate") => Self::Candidate,
+            None | Some("candidate") => Self::Candidate,
+            Some("legacy") => Self::Legacy,
             Some(value) => {
                 diagnostics.emit(ExtensionDiagnostic {
                     code: DiagnosticCode::InvalidRuntimeMode,

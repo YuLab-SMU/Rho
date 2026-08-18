@@ -11473,6 +11473,21 @@ mod tests {
                     .resolve_project_file_viewer(&super::project_file_viewer_capability_id())
                     .is_ok()
             );
+            let default = super::build_extension_host(None, diagnostics())
+                .await
+                .unwrap();
+            assert_eq!(
+                default.mode(),
+                rho_extension_runtime::InternalExtensionRuntimeMode::Candidate
+            );
+            assert!(
+                default
+                    .scopes()
+                    .application()
+                    .registry()
+                    .resolve_project_file_viewer(&super::project_file_viewer_capability_id())
+                    .is_ok()
+            );
         });
     }
 
@@ -13241,7 +13256,11 @@ mod tests {
 }
 
 async fn smoke_test(include_agent: bool) -> Result<Value> {
-    let smoke_root = std::env::temp_dir().join(format!("rho-desktop-smoke-{}", Uuid::new_v4()));
+    let smoke_directory = tempfile::Builder::new()
+        .prefix("rho-desktop-smoke-")
+        .tempdir()
+        .context("creating isolated desktop smoke directory")?;
+    let smoke_root = smoke_directory.path().to_path_buf();
     let data_dir = smoke_root.join("data");
     let project_a_root = smoke_root.join("project-a");
     let project_b_root = smoke_root.join("project-b");
@@ -13459,8 +13478,7 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
     );
 
     session.shutdown().await?;
-    #[allow(unused_mut)]
-    let mut session = ArkSession::launch(&ArkLaunchConfig::new(&config.kernelspec)).await?;
+    let session = Arc::new(ArkSession::launch(&ArkLaunchConfig::new(&config.kernelspec)).await?);
     let mut broker = BrokerState::new("desktop_smoke_restart");
     store.save_identity(broker.identity())?;
     bootstrap_bridge(&session, &mut broker, &mut store, &config.bridge_package).await?;
@@ -13498,6 +13516,13 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
     );
 
     let context = Arc::new(Mutex::new(CoordinatorRuntime { broker, store }));
+    let extension_runtime = smoke_extension_runtime(
+        Arc::clone(&session),
+        Arc::clone(&context),
+        &config.store_path,
+        &project_a_root,
+    )
+    .await?;
     let agent = if include_agent {
         let turn_id = format!("smoke_turn_{}", Uuid::new_v4());
         let conversation_id = format!("conversation_{turn_id}");
@@ -13538,7 +13563,7 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
                 })?;
         }
         let result = run_agent_turn(
-            &session,
+            session.as_ref(),
             context.clone(),
             config.rscript.clone(),
             Some(config.process_path.clone()),
@@ -13582,6 +13607,8 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
     };
     #[cfg(not(unix))]
     let crash_recovered = {
+        let mut session = Arc::try_unwrap(session)
+            .map_err(|_| anyhow!("extension smoke retained the restarted Ark session"))?;
         session.shutdown().await?;
         false
     };
@@ -13596,6 +13623,7 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
             "stale_view_rejected": true,
             "project_switch_isolated": true,
             "workspace_restart_project_isolated": true,
+            "extension_runtime": extension_runtime,
             "interrupt_recovered": interrupt_requested,
             "crash_recovered": crash_recovered,
             "project_a_run_count": initial_a_runs.len(),
@@ -13606,6 +13634,194 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
         })
     };
     Ok(report)
+}
+
+async fn smoke_extension_runtime(
+    session: Arc<ArkSession>,
+    context: Arc<Mutex<CoordinatorRuntime>>,
+    store_path: &Path,
+    project_root: &Path,
+) -> Result<Value> {
+    let diagnostics: Arc<dyn DiagnosticSink> = Arc::new(|_: ExtensionDiagnostic| {});
+    let mode_value = match std::env::var("RHO_INTERNAL_EXTENSION_RUNTIME") {
+        Ok(value) => Some(value),
+        Err(std::env::VarError::NotPresent) => None,
+        Err(std::env::VarError::NotUnicode(_)) => Some("invalid_non_unicode".to_string()),
+    };
+    let mode = InternalExtensionRuntimeMode::parse(mode_value.as_deref(), diagnostics.as_ref());
+    let host_capabilities = vec![
+        CapabilityDeclaration::new(runs_broker_capability_id(), 1),
+        CapabilityDeclaration::new(workspace_probe_broker_capability_id(), 1),
+    ];
+    let canonical_project_root = project_root.canonicalize()?;
+    std::fs::write(
+        canonical_project_root.join("rho-extension-smoke.html"),
+        "<!doctype html><title>Rho extension smoke</title>",
+    )?;
+    let direct_viewer = read_viewer_file(&canonical_project_root, "rho-extension-smoke.html")?;
+    ensure!(
+        direct_viewer.contract == "rho.viewer_file.v1" && direct_viewer.media_type == "text/html",
+        "direct project file viewer smoke failed"
+    );
+
+    if mode == InternalExtensionRuntimeMode::Legacy {
+        let host = ExtensionHost::new_with_host_capabilities(
+            mode,
+            host_capabilities,
+            diagnostics,
+            LifecycleDeadlines::default(),
+        )?;
+        ensure!(
+            host.scopes()
+                .application()
+                .registry()
+                .resolve_project_file_viewer(&project_file_viewer_capability_id())
+                .is_err(),
+            "legacy smoke unexpectedly activated the project file viewer plugin"
+        );
+        let shutdown = host.shutdown().await;
+        ensure!(
+            shutdown.outcome == DisposeOutcome::Disposed,
+            "legacy extension host did not shut down cleanly"
+        );
+        return Ok(json!({
+            "mode": "legacy",
+            "candidate_exercised": false,
+            "legacy_override_exercised": true,
+            "direct_viewer": true,
+            "clean_shutdown": true,
+        }));
+    }
+
+    let host = Arc::new(
+        ExtensionHost::new_with_application_plugins(
+            mode,
+            host_capabilities,
+            internal_plugins_for_scope(&rho_extension_runtime::ScopePolicy::application_kind()),
+            Arc::new(rho_extension_runtime::RejectingBrokerFacade),
+            diagnostics,
+            LifecycleDeadlines::default(),
+        )
+        .await?,
+    );
+    let application = host.scopes().application();
+    let viewer = application
+        .registry()
+        .resolve_project_file_viewer(&project_file_viewer_capability_id())?;
+    ensure!(
+        viewer
+            .contribution()
+            .supported_media_types()
+            .iter()
+            .any(|value| value == direct_viewer.media_type),
+        "candidate viewer contribution omitted HTML"
+    );
+    drop(viewer);
+
+    let normalized_project_root =
+        normalize_project_root(canonical_project_root.to_string_lossy().as_ref());
+    let project = host
+        .build_project_candidate(
+            extension_project_scope_id(&normalized_project_root)?,
+            internal_plugins_for_scope(&rho_extension_runtime::ScopePolicy::project_kind()),
+            Arc::new(RunHistoryBrokerFacade {
+                store_path: store_path.to_path_buf(),
+                project_root: normalized_project_root.clone(),
+            }),
+        )
+        .await?;
+    host.publish_project_candidate(None, project.clone())
+        .await?;
+    let workspace_identity = context.lock().await.broker.identity().clone();
+    let workspace = host
+        .build_workspace_candidate(
+            &project,
+            extension_workspace_scope_id(&project, &workspace_identity)?,
+            internal_plugins_for_scope(&rho_extension_runtime::ScopePolicy::workspace_kind()),
+            Arc::new(WorkspaceSnapshotBrokerFacade {
+                session: Arc::clone(&session),
+                context: Arc::clone(&context),
+            }),
+        )
+        .await?;
+    host.publish_workspace_candidate(None, workspace.clone())
+        .await?;
+
+    let snapshot_request =
+        BoundedJson::generic(serde_json::to_value(WorkspaceOperation::Snapshot {
+            expected_workspace: expected_workspace(&workspace_identity),
+            origin: ExecutionOrigin::System,
+            execution_id: None,
+        })?)?;
+    let snapshot = workspace
+        .registry()
+        .call_workspace_tool(&workspace_snapshot_tool_capability_id(), snapshot_request)
+        .await?;
+    host.scopes().validate_workspace_current(&snapshot.scope)?;
+    let snapshot_value = snapshot.payload.into_value();
+    ensure!(
+        snapshot_value["workspace"]["kernel_instance_id"] == workspace_identity.kernel_instance_id,
+        "candidate Workspace Snapshot returned a different kernel identity"
+    );
+
+    let run_request = BoundedJson::generic(json!({ "limit": null }))?;
+    let candidate_runs = project
+        .registry()
+        .call_source(&run_history_source_capability_id(), run_request)
+        .await?;
+    host.scopes()
+        .validate_project_current(&candidate_runs.scope)?;
+    let candidate_runs: Vec<RunSummary> =
+        serde_json::from_value(candidate_runs.payload.into_value())?;
+    let direct_runs = context
+        .lock()
+        .await
+        .store
+        .list_runs(&normalized_project_root, None)?;
+    ensure!(
+        serde_json::to_value(&candidate_runs)? == serde_json::to_value(&direct_runs)?,
+        "candidate Run History diverged from Store authority"
+    );
+
+    let replacement = host
+        .build_workspace_candidate(
+            &project,
+            extension_workspace_scope_id(&project, &workspace_identity)?,
+            internal_plugins_for_scope(&rho_extension_runtime::ScopePolicy::workspace_kind()),
+            Arc::new(WorkspaceSnapshotBrokerFacade {
+                session,
+                context: Arc::clone(&context),
+            }),
+        )
+        .await?;
+    host.publish_workspace_candidate(Some(workspace.clone()), replacement)
+        .await?;
+    ensure!(
+        workspace
+            .registry()
+            .call_workspace_tool(
+                &workspace_snapshot_tool_capability_id(),
+                BoundedJson::generic(json!({}))?,
+            )
+            .await
+            .is_err(),
+        "old Workspace extension generation remained routable"
+    );
+    let shutdown = host.shutdown().await;
+    ensure!(
+        shutdown.outcome == DisposeOutcome::Disposed,
+        "candidate extension host did not shut down cleanly"
+    );
+    Ok(json!({
+        "mode": "candidate",
+        "candidate_exercised": true,
+        "legacy_override_exercised": false,
+        "run_history_parity": true,
+        "workspace_snapshot_typed": true,
+        "viewer_host_injected": true,
+        "old_workspace_rejected": true,
+        "clean_shutdown": true,
+    }))
 }
 
 async fn set_smoke_project_root(

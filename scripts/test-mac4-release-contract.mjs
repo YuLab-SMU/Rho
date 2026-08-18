@@ -6,9 +6,10 @@ const read = (file) => normalizeLineEndings(fs.readFileSync(file, "utf8"));
 const count = (text, pattern) => [...text.matchAll(pattern)].length;
 const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-const expectedVersion = "0.4.0";
+const expectedVersion = "0.4.1-dev.0";
 const normalPublishVersion = "0.4.0";
 const expectedVersionPattern = escapeRegExp(expectedVersion);
+const normalPublishVersionPattern = escapeRegExp(normalPublishVersion);
 const cargo = read("Cargo.toml");
 const cargoVersion = cargo.match(/^version = "([^"]+)"/m)?.[1];
 assert.equal(cargoVersion, expectedVersion, "Cargo candidate version must be synchronized");
@@ -26,7 +27,7 @@ assert.ok(
 
 const localPackagePattern = /name = "rho-[^"]+"\r?\nversion = "([^"]+)"/g;
 assert.deepEqual(
-  [...'name = "rho-fixture"\r\nversion = "0.4.0"'.matchAll(localPackagePattern)].map((match) => match[1]),
+  [...`name = "rho-fixture"\r\nversion = "${expectedVersion}"`.matchAll(localPackagePattern)].map((match) => match[1]),
   [expectedVersion],
   "Cargo.lock parsing must accept Windows CRLF checkouts",
 );
@@ -60,7 +61,7 @@ assert.match(
 );
 assert.match(build, /name: Build Rho Candidate \/ Rehearsal/);
 assert.match(build, buildModePattern);
-assert.match(build, new RegExp(`release_tag:\\n[\\s\\S]*?default: v${expectedVersionPattern}`));
+assert.match(build, new RegExp(`release_tag:\\n[\\s\\S]*?default: v${normalPublishVersionPattern}`));
 assert.match(build, /release_name:\n[\s\S]*?default: Rho 0\.4\.0/);
 assert.match(build, /candidate-release\.mjs --mode admission --build_mode "\$BUILD_MODE" --repository "\$GITHUB_REPOSITORY" --workflow_ref "\$GITHUB_REF" --default_branch "\$DEFAULT_BRANCH"/);
 assert.match(build, /release-notes\.mjs --test true/);

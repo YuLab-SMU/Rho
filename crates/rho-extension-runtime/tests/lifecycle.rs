@@ -500,11 +500,15 @@ fn invalid_runtime_mode_falls_back_to_legacy_with_one_typed_diagnostic() {
 
     assert_eq!(
         InternalExtensionRuntimeMode::parse(None, sink.as_ref()),
-        InternalExtensionRuntimeMode::Legacy
+        InternalExtensionRuntimeMode::Candidate
     );
     assert_eq!(
         InternalExtensionRuntimeMode::parse(Some("candidate"), sink.as_ref()),
         InternalExtensionRuntimeMode::Candidate
+    );
+    assert_eq!(
+        InternalExtensionRuntimeMode::parse(Some("legacy"), sink.as_ref()),
+        InternalExtensionRuntimeMode::Legacy
     );
     assert_eq!(collecting.diagnostics().len(), 1);
 }

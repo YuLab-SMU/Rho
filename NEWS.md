@@ -4,6 +4,18 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.1-dev.0 - 2026-08-18
+
+### Internal extension runtime
+
+- Rho now uses its compiled-in Phase 1 extension runtime by default for Run
+  History, Workspace Snapshot, and Project File Viewer composition while
+  preserving the existing commands, Agent tool, data authorities, and viewer
+  protocol.
+- A private `RHO_INTERNAL_EXTENSION_RUNTIME=legacy` override remains available
+  for one development release cycle. This is an internal first-party runtime,
+  not a public plugin SDK or third-party loading interface.
+
 ## 0.4.0 - 2026-08-17
 
 ### Stable release
