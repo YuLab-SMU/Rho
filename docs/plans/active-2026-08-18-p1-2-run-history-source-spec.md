@@ -1,7 +1,7 @@
 # P1-2 Project Run History Source Specification
 
-Status: active; local implementation and affected verification passed;
-exact-head Rust Fast evidence pending
+Status: active predecessor; P1-2 implementation `78c0493`, affected local
+verification, exact-head Rust Fast, and Draft matrix skip passed
 
 Date: 2026-08-18
 Owning architecture:
@@ -321,11 +321,18 @@ No dependency or lockfile change was required. No schema, public protocol,
 runtime-mode default, application/R package version, or `NEWS.md` change was
 made. The installed-app checks and macOS/Windows/Linux stable/Rust 1.88 matrix
 were not run here; under the authorized fast-development policy they remain a
-P1-4/Ready gate. Exact-head Rust Fast and its expected compatibility-workflow
-skip remain pending until the reviewed implementation commit is pushed.
+P1-4/Ready gate. Exact-head Rust Fast run `32119423098` passed on implementation
+`78c04934aea36ac4c76d53afe0eea770d9b3ee07` in 2 minutes 15 seconds. It
+restored the exact 1305 MiB Cargo cache key
+`rho-rust-v1-Linux-stable-x86_64-unknown-linux-gnu-bc9fb070b16d52abd62c229a905e272f25158b85490bb3951775c4d64c2af6f1`.
+Rust Compatibility run `32119423123` skipped as required for Draft PR #75.
 
 Implementation review found no blocking data-authority, permission,
 serialization-bound, project-isolation, fallback, cleanup, or command/mock
 compatibility deviation. The only contract clarification made during review
 was to reject closed routing truthfully rather than treating it as a missing
 contribution fallback.
+
+P1-2 therefore passed its Draft stop gate. The continuing whole-P1 objective
+authorizes preparing a separate active P1-3 contract; this P1-2 contract does
+not itself authorize Workspace Snapshot or Project File Viewer implementation.
