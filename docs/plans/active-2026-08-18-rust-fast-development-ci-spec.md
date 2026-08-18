@@ -1,7 +1,7 @@
 # Rust Fast Development CI Specification
 
-Status: active; CI-FAST1 implementation and local verification complete
-2026-08-18; exact-head Draft workflow evidence pending
+Status: active; CI-FAST1 implementation, local verification, and implementation-head
+Draft workflow evidence complete 2026-08-18; evidence-reconciliation head pending
 
 Date: 2026-08-18
 Authorization: the user explicitly authorized development-CI optimization and
@@ -295,6 +295,23 @@ Hosted evidence remains pending for the exact pushed implementation head:
 - Rust Compatibility must be skipped without six runner jobs while PR #75 is
   Draft; and
 - the cache step may miss on its first run without weakening acceptance.
+
+Implementation-head hosted evidence is now available:
+
+- commit `68050678e47c65f93eac815313c897fd8169a86e`;
+- Rust Compatibility run `32109328630` completed `skipped` with one skipped
+  pre-matrix job and no six runner expansion;
+- Rust Fast run `32109328681`, job `95625195904`, passed in 5m21s;
+- deterministic contracts, formatting, locked workspace check, and locked
+  workspace tests all passed;
+- the first cache restore truthfully reported a miss; and
+- post-job save created key
+  `rho-rust-v1-Linux-stable-x86_64-unknown-linux-gnu-eeb6d67f00256a4a737e5a57abd57a2d1e8d30c20fe84822ea866008f0f028b7`.
+
+The first run is the expected cold-cache baseline. The evidence-reconciliation
+commit must pass Rust Fast again and should restore this cache; its exact result
+is recorded in the PR/handoff without creating an infinite evidence-commit
+loop.
 
 Version/NEWS: no application or R package version change and no `NEWS.md`
 entry. Manual UI, installed-app, packaging, signing, and release checks are not

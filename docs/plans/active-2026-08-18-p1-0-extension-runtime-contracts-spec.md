@@ -344,9 +344,8 @@ visible behavior, work stops and this contract is amended before versioning.
 
 ### Implementation and local evidence — 2026-08-18
 
-Implementation is present on the pre-commit P1-0 tree. The evidence
-reconciliation commit records the exact implementation SHA after this bounded
-slice is committed and pushed.
+Implementation commit:
+`bb9f1e16b742db287666de98287c4cb2ebf473dd`.
 
 Implemented:
 
@@ -428,10 +427,12 @@ scope-policy deserialization surface was narrowed to preserve the already
 accepted construction invariants. The pre-existing MSRV self-test fixture
 repair was explicitly amended and cross-reviewed before its script changed.
 
-Hosted evidence: pending exact-head Rust Fast after CI-FAST1 lands. The
-superseded six-leg run `32107811887` was cancelled after the user explicitly
-deferred the full matrix to P1-4; its partial results are not P1-0 acceptance.
-P1-0 is not yet at its stop-gate acceptance state.
+Hosted implementation-head evidence: Rust Fast run `32109328681` passed commit
+`68050678e47c65f93eac815313c897fd8169a86e` in 5m21s, while Rust Compatibility
+run `32109328630` skipped without expanding six runners. The superseded
+six-leg run `32107811887` was cancelled after the user explicitly deferred the
+full matrix to P1-4; its partial results are not P1-0 acceptance. The
+evidence-reconciliation head must pass Rust Fast once more before handoff.
 
 Intentionally unrun: R package suites, frontend/browser/mock checks, manual UI,
 installed-app, installer, signing, and release checks. P1-0 changes no R,
