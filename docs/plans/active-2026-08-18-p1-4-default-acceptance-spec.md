@@ -1,7 +1,8 @@
 # P1-4 Default Switch And Phase 1 Acceptance Specification
 
-Status: active; P1-4 authorized by the continuing whole-P1 objective;
-implementation pending
+Status: active; default/version/smoke implementation and local source/macOS
+installed-app verification passed; exact-head Draft Fast and Ready hosted gates
+pending
 
 Date: 2026-08-18
 Owning architecture:
@@ -232,3 +233,80 @@ completion requires six Rust legs plus all three unsigned installed-app legs.
 - version, NEWS, unrun checks, residual risks, commits, CI runs, artifact facts,
   worktree, and non-release decision are recorded; and
 - Phase 1 is complete without deleting legacy or claiming Phase 2/public SDK.
+
+## Local Implementation Evidence
+
+Verified on 2026-08-18 against P1-4 branch baseline
+`3de973d440728e99793aaad82340bca3db5c6ec5`:
+
+- commit `4b92bc4` makes missing runtime mode select candidate, preserves explicit
+  legacy/invalid fallback, synchronizes `0.4.1-dev.0` across Cargo/Tauri/npm/
+  mock/cache-bust surfaces, updates NEWS, and makes `--smoke-test` exercise the
+  three compiled-in migrations, generation replacement, and clean shutdown;
+- commit `66120a8` adds the self-testing Phase 1 acceptance contract and
+  stable-only, read-only, unsigned Windows/macOS/Linux installed-app acceptance
+  to the existing six-leg Ready workflow;
+- no dependency was added or removed; `Cargo.lock` changed only the eleven
+  workspace-owned Rho package versions;
+- R package versions remain unchanged;
+- all repository `scripts/test-*.mjs` passed after the version allocation; and
+- workflow YAML parsing and negative MSRV/Phase-1 contract fixtures passed.
+
+Commands and results:
+
+```text
+cargo fmt --all -- --check
+  passed
+cargo +1.88.0 test -p rho-extension-runtime --locked
+  passed: 26 graph-contract + 34 lifecycle tests
+cargo clippy -p rho-extension-runtime --all-targets --locked -- -D warnings
+  passed
+cargo check --workspace --all-targets --locked
+  passed
+cargo test --workspace --locked --no-fail-fast
+  passed: 453; ignored: 1 existing opt-in macOS Keychain smoke
+Rscript -e 'testthat::test_local("r/rho.bridge")'
+  passed: 575
+Rscript -e 'testthat::test_local("r/rho.agent")'
+  passed: 120
+for test_script in scripts/test-*.mjs; do node "$test_script"; done
+  passed: every tracked Node contract
+node scripts/test-extension-phase-1-acceptance.mjs --test
+node scripts/test-rust-msrv-contract.mjs --test
+node scripts/test-license-contract.mjs --test
+node --check desktop/dist/app.js
+git diff --check
+  all passed
+```
+
+Unbundled default-candidate and explicit-legacy `cargo run ... --smoke-test`
+both passed. Their JSON proved project isolation, Workspace restart recovery,
+candidate Run History parity, typed Workspace Snapshot, viewer host injection,
+old Workspace rejection, and clean shutdown.
+
+Local unsigned macOS arm64 acceptance:
+
+```text
+Built app:
+  target/aarch64-apple-darwin/release/bundle/macos/Rho.app
+Built DMG:
+  target/aarch64-apple-darwin/release/bundle/dmg/Rho_0.4.1-dev.0_aarch64.dmg
+Executable:
+  36,090,864 bytes
+  SHA-256 7379879b952ee7beb1ba8c72b62b53bd38782b0dda7522aac09ecac591542bc9
+DMG:
+  22,689,295 bytes
+  SHA-256 ee09db111ddfc54012d7c6d760e6f8eb57abb968ee746bba7324f47fb73d3c3d
+```
+
+The app/Ark were exactly arm64; Info.plist reported `0.4.1-dev.0`; bundled Rho
+license matched source; `hdiutil verify` passed. Default-candidate and legacy
+smoke passed from both the built app and read-only mounted DMG. The mount was
+detached and the ephemeral updater private/public key files were zeroed and
+deleted. No app was installed, signed, notarized, uploaded, tagged, released,
+or published.
+
+Interactive browser review was not rerun because P1-4 changes no UI state or
+protocol and the complete browser/mock contract set passed. Windows/Linux
+installed-app and the six stable/MSRV legs remain pending until the exact head
+is pushed and PR #75 becomes Ready.
