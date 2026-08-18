@@ -1,8 +1,8 @@
 # P1-4 Default Switch And Phase 1 Acceptance Specification
 
-Status: active; default/version/smoke implementation and local source/macOS
-installed-app verification passed; exact-head Draft Fast and Ready hosted gates
-pending
+Status: active; default/version/smoke implementation, local source/macOS
+installed-app verification, and exact-head Draft Fast passed; Ready six-leg and
+hosted installed-app gates pending
 
 Date: 2026-08-18
 Owning architecture:
@@ -246,6 +246,9 @@ Verified on 2026-08-18 against P1-4 branch baseline
 - commit `66120a8` adds the self-testing Phase 1 acceptance contract and
   stable-only, read-only, unsigned Windows/macOS/Linux installed-app acceptance
   to the existing six-leg Ready workflow;
+- commit `bd66e59` makes the existing runtime-cache mutation fixture
+  deterministic across Linux filesystems by changing payload size instead of
+  relying on two writes receiving different millisecond mtimes;
 - no dependency was added or removed; `Cargo.lock` changed only the eleven
   workspace-owned Rho package versions;
 - R package versions remain unchanged;
@@ -310,3 +313,13 @@ Interactive browser review was not rerun because P1-4 changes no UI state or
 protocol and the complete browser/mock contract set passed. Windows/Linux
 installed-app and the six stable/MSRV legs remain pending until the exact head
 is pushed and PR #75 becomes Ready.
+
+The first P1-4 Draft Fast run `32127215983` reached all workspace tests but
+exposed the pre-existing equal-size runtime-cache fixture race on Linux. The
+size-based `bd66e59` regression ran five consecutive local passes. Exact-head
+Rust Fast run `32127514055` then passed on
+`bd66e59bcc1594396d6062921cf4f19d466b8231` in 2 minutes 25 seconds. It restored
+the previous 1305 MiB lock-compatible cache as a fallback and saved the new
+exact `0.4.1-dev.0` lock key
+`rho-rust-v1-Linux-stable-x86_64-unknown-linux-gnu-950bf8c54d23a3bc241b05454b313d6a9f63af516abe7f407e54976fe40eaa71`.
+Rust Compatibility run `32127514056` skipped while PR #75 remained Draft.
