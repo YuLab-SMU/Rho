@@ -177,7 +177,7 @@ export function validateCompatibilityWorkflow(text) {
     "Build, install, smoke and remove unsigned Windows app",
     "Build, mount and smoke unsigned macOS app",
     "Build, extract and smoke unsigned Linux AppImage",
-    "scripts\\build-windows-installer.ps1",
+    "./scripts/build-windows-installer.ps1",
     "scripts/build-linux.sh",
     "RHO_INTERNAL_EXTENSION_RUNTIME=legacy",
     "env -u RHO_INTERNAL_EXTENSION_RUNTIME",
@@ -416,7 +416,7 @@ ${entries}
       - name: Build, install, smoke and remove unsigned Windows app
         if: matrix.toolchain == 'stable' && runner.os == 'Windows'
         run: |
-          powershell scripts\\build-windows-installer.ps1
+          ./scripts/build-windows-installer.ps1
           echo "Rho uninstall registry cleanup failed"
       - name: Build, mount and smoke unsigned macOS app
         if: matrix.toolchain == 'stable' && runner.os == 'macOS'

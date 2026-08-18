@@ -384,8 +384,10 @@ jobs:
           $env:TAURI_SIGNING_PRIVATE_KEY = Get-Content -LiteralPath $keyPath -Raw
           $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""
           try {
-            powershell -ExecutionPolicy Bypass -File scripts\bootstrap-ark-windows.ps1
-            powershell -ExecutionPolicy Bypass -File scripts\build-windows-installer.ps1
+            ./scripts/bootstrap-ark-windows.ps1
+            if ($LASTEXITCODE -ne 0) { throw "Windows Ark bootstrap failed." }
+            ./scripts/build-windows-installer.ps1
+            if ($LASTEXITCODE -ne 0) { throw "Windows installer build failed." }
             $version = (Get-Content desktop\src-tauri\tauri.conf.json -Raw | ConvertFrom-Json).version
             $binary = (Resolve-Path target\release\rho-desktop.exe).Path
             $installer = @(Get-ChildItem target\release\bundle\nsis\Rho_*-setup.exe -File)
