@@ -1,13 +1,13 @@
 # P1-2 Project Run History Source Specification
 
-Status: active predecessor; P1-2 implementation `78c0493`, affected local
-verification, exact-head Rust Fast, and Draft matrix skip passed
+Status: implemented; P1-2 implementation `78c0493`, focused parity/isolation,
+exact-head Draft Fast, and whole-Phase-1 Ready acceptance passed 2026-08-18
 
 Date: 2026-08-18
 Owning architecture:
-[`accepted-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md`](../design/accepted-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md)
+[`implemented-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md`](../design/implemented-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md)
 Predecessor:
-[`active-2026-08-18-p1-1-extension-runtime-lifecycle-spec.md`](active-2026-08-18-p1-1-extension-runtime-lifecycle-spec.md)
+[`implemented-2026-08-18-p1-1-extension-runtime-lifecycle-spec.md`](implemented-2026-08-18-p1-1-extension-runtime-lifecycle-spec.md)
 PR: [#75](https://github.com/YuLab-SMU/Rho/pull/75)
 Upstream baseline: `95d7d2c7774519ef956637aeff678ed4f2752ab5`
 P1-2 branch baseline: `89ca6c5957b5520d3cdf506c587885fa3a1e8979`
@@ -336,3 +336,10 @@ contribution fallback.
 P1-2 therefore passed its Draft stop gate. The continuing whole-P1 objective
 authorizes preparing a separate active P1-3 contract; this P1-2 contract does
 not itself authorize Workspace Snapshot or Project File Viewer implementation.
+
+Final Phase 1 reconciliation: P1-4 removed the temporary per-command fallback,
+made candidate the default while retaining the explicit process-local legacy
+override, and re-proved Run History Store parity in source and packaged smoke.
+Ready run `32129767978` passed all six stable/MSRV legs and Windows/macOS/Linux
+unsigned installed-app gates at exact head `3e710ac`; no Store authority,
+schema, command shape, project isolation, or response-bound deviation remains.

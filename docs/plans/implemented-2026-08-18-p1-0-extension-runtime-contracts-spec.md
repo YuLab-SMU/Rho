@@ -1,12 +1,11 @@
 # P1-0 Internal Extension Runtime Contracts Specification
 
-Status: active Phase 1 predecessor; P1-0 implementation and automated Draft
-verification complete 2026-08-18; P1-1 separately authorized; six-leg matrix
-deferred to P1-4
+Status: implemented; P1-0 focused evidence and the deferred whole-Phase-1
+six-leg integration acceptance completed 2026-08-18
 
 Date: 2026-08-18
 Owning architecture:
-[`accepted-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md`](../design/accepted-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md)
+[`implemented-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md`](../design/implemented-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md)
 Issue: [#17](https://github.com/YuLab-SMU/Rho/issues/17)
 PR: [#75](https://github.com/YuLab-SMU/Rho/pull/75)
 Rebased source baseline: `95d7d2c7774519ef956637aeff678ed4f2752ab5`
@@ -451,23 +450,16 @@ remain intentionally deferred until P1-4. Rust Fast proves one fresh Linux
 stable host only. The Rust API remains internal experimental and is not a
 public SDK.
 
-P1-1 is separately authorized and governed only by
-`active-2026-08-18-p1-1-extension-runtime-lifecycle-spec.md`.
+P1-1 was separately authorized and is recorded by
+`implemented-2026-08-18-p1-1-extension-runtime-lifecycle-spec.md`.
 
-### Required final reconciliation
+### Final Phase 1 Reconciliation
 
-At completion, update this active contract with:
-
-- exact implementation commit and locked dependency versions;
-- exact local commands, counts, and results;
-- exact Rust Fast workflow result and the explicit P1-4 six-leg deferral;
-- independent contract/security review findings and resolutions;
-- actual deviations;
-- version/NEWS decision;
-- manual/installed checks not run;
-- residual risks and worktree state; and
-- the separately authorized next-package state.
-
-This document remains `active-` after P1-0 because Phase 1 integration and
-acceptance are incomplete. Passing P1-0 is not Phase 1 implementation or
-release readiness.
+P1-0's focused dependency, determinism, scope-policy, and permission-separation
+evidence remains unchanged. The explicitly deferred native/MSRV gate completed
+in Ready run `32129767978`: macOS arm64, Windows GNU x64, and Linux x64 all
+passed on stable and Rust 1.88.0 at exact head
+`3e710acab51ea6400ba2e0ef8ff6e41429da4b0c`. P1-4 also completed the three
+unsigned packaged-app smoke legs and the whole-runtime safety review. The API
+remains internal experimental; this reconciliation creates no public SDK or
+release decision.

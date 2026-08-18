@@ -1,7 +1,8 @@
 # Phase 1 Internal Plugin Runtime Design
 
-Status: accepted architecture design; P1-0 through P1-3 completed their Draft
-stop gates; P1-4 implementation and acceptance authorized
+Status: implemented; P1-0 through P1-4, final safety review, six-leg
+stable/MSRV matrix, and three-platform unsigned installed-app acceptance
+completed 2026-08-18
 
 Date: 2026-08-14
 Issue: [#17](https://github.com/YuLab-SMU/Rho/issues/17)
@@ -9,10 +10,10 @@ Scope: compiled-in, first-party plugins only; capability composition,
 dependency resolution, scoped lifetime, reversible registration, and migration
 of a small set of existing built-in capabilities
 
-Change class: D3 shared architecture. The architecture was accepted and P1-0
-through P1-3 passed their separately activated Draft stop gates on 2026-08-18.
-P1-4 is now separately active under its implementation/acceptance contract and
-the stop-point rules in `docs/project/active-development-governance.md`.
+Change class: D3 shared architecture. Every P1 package was separately activated
+and stopped at its reviewed gate. P1-4 completed the whole-Phase-1 acceptance
+under the stop-point rules in
+`docs/project/active-development-governance.md` on 2026-08-18.
 
 Source review:
 
@@ -46,15 +47,14 @@ Cross-reviewed against:
 - [Issue #96](https://github.com/YuLab-SMU/Rho/issues/96), especially the
   Primary Workspace / Compute Environment / Job / Attempt ownership model.
 
-Repository integration note: P1-0 through P1-2 completion and P1-3 activation
-are recorded in their separate active contracts, the shared documentation
-index, and the central cross-review matrix. The separate Phase 2 design in PR
-#76 remains proposed and Git-independent.
+Repository integration note: P1-0 through P1-4 completion is recorded in their
+separate implemented contracts, the shared documentation index, and the
+central cross-review matrix. The separate Phase 2 design in PR #76 remains
+proposed and Git-independent.
 
-Implementation entry rule: only the currently active P1-4 contract may modify
-product/release-validation code from this design. Phase 1 does not authorize
-loading third-party or project-authored executable code, and legacy deletion
-remains separately gated.
+Implementation entry rule: Phase 1 is closed. Any follow-up behavior change or
+legacy deletion requires a new active contract. This design does not authorize
+third-party or project-authored executable code.
 
 ## Summary
 
@@ -1033,23 +1033,22 @@ The 2026-08-18 authorization review closed the Phase 1 construction choices:
 
 P1-0 completed its Draft stop gate on 2026-08-18. P1-1 was separately
 authorized and completed its Draft stop gate later that day through
-`docs/plans/active-2026-08-18-p1-1-extension-runtime-lifecycle-spec.md`. P1-2
+`docs/plans/implemented-2026-08-18-p1-1-extension-runtime-lifecycle-spec.md`. P1-2
 then completed its Draft stop gate through
-`docs/plans/active-2026-08-18-p1-2-run-history-source-spec.md`. P1-3 then
+`docs/plans/implemented-2026-08-18-p1-2-run-history-source-spec.md`. P1-3 then
 completed its Draft stop gate through
-`docs/plans/active-2026-08-18-p1-3-workspace-snapshot-viewer-spec.md`. P1-4 is
-active under `docs/plans/active-2026-08-18-p1-4-default-acceptance-spec.md` and
-the continuing whole-P1 objective.
+`docs/plans/implemented-2026-08-18-p1-3-workspace-snapshot-viewer-spec.md`.
+P1-4 and the whole-P1 acceptance completed through
+`docs/plans/implemented-2026-08-18-p1-4-default-acceptance-spec.md`.
 
 ## Version, NEWS, And Release Impact
 
-This design PR changes no runtime behavior, public contract, package contents,
-application version, R package version, `NEWS.md`, installer, or release gate.
-
-Each future work package records its own version impact. Internal refactoring
-without user-visible or distributed contract changes should not be advertised
-as a shipped plugin system. A public plugin SDK or workspace executable plugin
-support requires the separate Phase 2 contract and later release acceptance.
+P1-4 allocates application development identity `0.4.1-dev.0` and updates
+`NEWS.md` for the internal default switch plus explicit legacy escape hatch.
+R package versions remain unchanged. No tag, GitHub Release, updater manifest,
+signature, publication, or release GO is created. The internal runtime must not
+be advertised as a public plugin SDK; third-party or workspace executable
+plugin support requires a separate Phase 2 contract and release acceptance.
 
 ## Downstream Host-Owned Runtime Consumers
 

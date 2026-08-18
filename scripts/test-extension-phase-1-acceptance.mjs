@@ -104,7 +104,7 @@ if (process.argv.includes("--test")) {
     runtimeTests: read("crates/rho-extension-runtime/tests/lifecycle.rs"),
     desktop: read("desktop/src-tauri/src/main.rs"),
     compatibility: read(".github/workflows/rust-compatibility.yml"),
-    p14: read("docs/plans/active-2026-08-18-p1-4-default-acceptance-spec.md"),
+    p14: read("docs/plans/implemented-2026-08-18-p1-4-default-acceptance-spec.md"),
   });
 }
 

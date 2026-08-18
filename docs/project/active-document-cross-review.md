@@ -2,7 +2,7 @@
 
 Status: active documentation coordination record
 
-Review date: 2026-08-18 (P1-4 default and acceptance activated)
+Review date: 2026-08-18 (Phase 1 internal extension runtime accepted)
 Scope: unfinished or acceptance-active specifications, plans, and release gates
 
 Manual acceptance ownership: the runnable example workflow and candidate-level
@@ -47,13 +47,13 @@ semantics.
 | `plans/implemented-2026-08-13-conditional-prerelease-policy-spec.md` | implemented CPREL1 contract; source policy, protected integration, exact candidate/audit, conditional publication, and live update verification complete | durable schema-v2 actor-bound `CONDITIONAL_GO` validation, exact dev39 two-limit waiver, public disclosure, and acceptance-aware update projection | preserve ordinary GO compatibility and every artifact/security gate; dev39 remains conditional/public-prerelease-only and neither human observation is passed |
 | `project/active-development-roadmap.md` | active | milestone order and acceptance gates | continuously maintained from accepted evidence |
 | `plans/active-2026-08-10-rust-msrv-build-contract.md` | active integrated build contract; exact PR #29 head `f022d2c` and merge `9e0b36b` historical four-leg evidence passed; Issue #28 closed; CI-FAST1 Draft-feedback amendment authorized 2026-08-18 | Rust 1.88 workspace MSRV metadata, Resolver 3, fast Draft feedback, non-Draft/main stable/MSRV native CI, locked candidate Rust validation, and deterministic policy enforcement | CI-FAST1 may change trigger timing and add cache without changing the six identities, commands, permissions, candidate validation, or final integration requirement; no candidate or release authority |
-| `plans/active-2026-08-18-rust-fast-development-ci-spec.md` | active; CI-FAST1 implementation, deterministic negative tests, YAML parse, license/MSRV contracts, 398-test local workspace validation, implementation-head Rust Fast run `32109328681`, and matrix-skip run `32109328630` pass 2026-08-18; evidence-reconciliation head pending | read-only Ubuntu-stable Draft feedback, Cargo cache isolation, mutually exclusive Draft/Ready admission, and deterministic workflow enforcement | require the evidence-reconciliation head to pass Rust Fast and keep six-leg matrix skipped on Draft PR #75; full matrix remains mandatory on affected `main` pushes and non-Draft PRs; PR #75 remains Draft through P1-4 |
-| `design/accepted-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md` | accepted internal architecture; P1-0 through P1-3 Draft stop gates completed; P1-4 separately active 2026-08-18 | compiled-in first-party capability/scope/generation/effect/candidate lifecycle semantics above the Trusted Kernel; Phase 1 package boundaries and mandatory stops | only the separately active P1-4 contract may proceed; no legacy deletion, third-party runtime, public SDK, target, compute, schema, permission, signing, publication, or release authority |
-| `plans/active-2026-08-18-p1-0-extension-runtime-contracts-spec.md` | active Phase 1 predecessor; P1-0 implementation `bb9f1e1`, 26 focused tests, Rust 1.88/1.97 local matrices, dependency review, exact-head Rust Fast runs `32109328681`/`32109891797`, cache hit, and matrix skips pass 2026-08-18 | pure validated vocabulary, host-owned scope policy, deterministic capability graph/activation plan, structured errors/diagnostics, dependency review, and P1-0 evidence | preserve P1-0 contracts; P1-3 is separately active; full native/MSRV matrix remains mandatory only after whole-P1 completion |
-| `plans/active-2026-08-18-p1-1-extension-runtime-lifecycle-spec.md` | active predecessor; P1-1 implementation `f7d3da2`, 52 runtime tests on Rust 1.88/current, 185 desktop passes, 430 workspace passes, dependency review, independent lifecycle/authority review, Rust Fast runs `32114431764`/`32114870127`, exact cache hit, and matrix skips pass 2026-08-18 | object-safe internal plugin/disposable API, bounded broker façade, effect/task/lease ownership, scope tree/generation, ArcSwap candidate publication, quiesce/dispose, private legacy/candidate mode, empty application/project scope integration, and P1-1 evidence | preserve lifecycle/BH2/Agent boundaries; P1-3 is active; full matrix remains P1-4 work |
-| `plans/active-2026-08-18-p1-2-run-history-source-spec.md` | active predecessor; implementation `78c0493`, 56 runtime tests on Rust 1.88/current, 192 desktop passes, 441 workspace passes, review, exact-head Rust Fast `32119423098`, exact cache hit, and Draft matrix skip `32119423123` pass 2026-08-18 | fixed Run History plugin/source descriptor, host runs service binding, generic 1 MiB source registry, Store-backed broker façade, legacy/candidate command parity/fallback, project/generation isolation, and P1-2 evidence | preserve Store authority, bounded source calls, truthful fallback, generation, and command/mock parity; P1-3 is active; full matrix remains P1-4 work |
-| `plans/active-2026-08-18-p1-3-workspace-snapshot-viewer-spec.md` | active predecessor; runtime `d67c294`, product `f16283c`, CI repairs `efefa76`/`4c89c71`, 60 runtime tests on Rust 1.88/current, 62 server passes, 199 desktop passes, 453 workspace passes, R suites, review, exact-head Rust Fast `32124848409`, exact cache hit, and Draft matrix skip `32124848538` pass 2026-08-18 | Workspace scope/tree publication, fixed Workspace Snapshot tool and application Viewer plugins, typed Workspace broker operation, Agent/Tauri parity, trusted viewer host injection, browser media parity, and P1-3 evidence | preserve broker/Ark, Agent lane, `read_viewer_file`, generation, bounds, and public protocols; installed app, six-leg matrix, default switch, version/NEWS, and Ready decision remain P1-4 work |
-| `plans/active-2026-08-18-p1-4-default-acceptance-spec.md` | active; default/version/smoke `4b92bc4`, installed-app CI `66120a8`, deterministic fixture `bd66e59`; local source/R/macOS built+mounted acceptance and exact-head Draft Fast `32127514055` passed 2026-08-18; Ready hosted gates pending | candidate default, legacy override, `0.4.1-dev.0` metadata/NEWS, candidate-aware smoke, six-leg Ready matrix, three-platform unsigned installed-app acceptance, final internal API/safety review, document/PR lifecycle, and P1-4 evidence | no legacy deletion, public SDK, third-party runtime, schema, signing, publication, updater manifest, release, Execution Target, Compute Job, Conda, SSH, or Slurm authority |
+| `plans/implemented-2026-08-18-rust-fast-development-ci-spec.md` | implemented; deterministic negative tests, exact Draft Fast/cache evidence, Ready skip, and deferred six-leg run `32129767978` passed 2026-08-18 | read-only Ubuntu-stable Draft feedback, Cargo cache isolation, mutually exclusive Draft/Ready admission, and deterministic workflow enforcement | preserve the split: Draft uses Rust Fast; affected Ready/`main` integration uses all six stable/MSRV legs |
+| `design/implemented-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md` | implemented; P1-0 through P1-4, final review, exact Ready matrix, and three-platform unsigned packaged acceptance passed 2026-08-18 | compiled-in first-party capability/scope/generation/effect/candidate lifecycle semantics above the Trusted Kernel | legacy deletion, third-party runtime, public SDK, target, compute, schema, permission, signing, publication, and release remain separately gated |
+| `plans/implemented-2026-08-18-p1-0-extension-runtime-contracts-spec.md` | implemented; `bb9f1e1`, focused determinism/dependency review, Draft Fast, and P1-4 six-leg acceptance passed | validated vocabulary, host-owned scope policy, deterministic capability graph/plan, structured errors/diagnostics, and dependency evidence | preserve capability/permission separation and internal-only API |
+| `plans/implemented-2026-08-18-p1-1-extension-runtime-lifecycle-spec.md` | implemented; lifecycle, local/fast evidence, final safety review, and six-leg acceptance passed | object-safe plugin/disposable API, bounded broker façade, effects/tasks/leases, scope generations, pointer CAS, and quiesce/dispose | preserve BH2/Agent authority, expected-old publication, non-routable failure, and legacy override |
+| `plans/implemented-2026-08-18-p1-2-run-history-source-spec.md` | implemented; `78c0493`, parity/isolation/restart/bounds, Draft Fast, and packaged Ready acceptance passed | fixed Run History source, host runs service, Store-backed broker façade, and project/generation isolation | Store remains sole authority; candidate errors do not retry legacy; command/mock protocol remains unchanged |
+| `plans/implemented-2026-08-18-p1-3-workspace-snapshot-viewer-spec.md` | implemented; runtime `d67c294`, product `f16283c`, focused Rust/R/browser evidence, and packaged Ready acceptance passed | Workspace scope, typed Snapshot tool, application Viewer, Agent adapter, trusted host injection, and browser parity | broker/Ark, Agent lane, `read_viewer_file`, generations, bounds, and public protocols remain authoritative |
+| `plans/implemented-2026-08-18-p1-4-default-acceptance-spec.md` | implemented; `0.4.1-dev.0`, default/legacy smoke, local macOS, exact six-leg run `32129767978`, three packaged stable legs, final review, and Ready state passed | candidate default, legacy override, version/NEWS, installed-app evidence, internal API/safety decision, and final handoff | no legacy deletion, public SDK, third-party runtime, schema, signing, publication, updater manifest, release, Execution Target, Compute Job, Conda, SSH, or Slurm authority |
 | `plans/active-2026-08-05-macos-arm64-support-spec.md` | active broader platform plan; MAC1-MAC5 complete for published Apple Silicon candidate `0.4.0-dev.24`; protected Release and live development manifest pass without asset replacement | Apple Silicon macOS 14+ platform adapters, Ark/R integration, Keychain extension, additive macOS update artifact, signed DMG handoff, repository-bound rehearsal lane, async notarization orchestration, and MAC5 publication admission | preserve immutable release evidence; macOS x64 and Linux x64 remain open milestone scope |
 | `plans/active-2026-08-11-linux-appimage-support.md` | active authorized direction; LIN1-LIN4 source implementation present 2026-08-13; partial verification 2026-08-14 (LIN1/LIN3 fixture suites and `cargo fmt` pass; workspace suite runs with three pre-existing Linux update-manifest gaps in untouched `update.rs`; LIN2 build lanes and LIN5 remain unrun); LIN6 (Linux Secret Service credential storage) authorized 2026-08-14; LIN5 and the M3 release decision remain open | Linux x64 AppImage distribution, WebKitGTK 4.1 `AppRun` dependency check, Linux Ark bootstrap/sidecar, Linux R discovery, local/hosted Linux build lanes, and Linux Secret Service credential storage (LIN6) | follow the macOS adapter template for configuration ownership, runtime manifest, R discovery, evidence, and Keychain/Secret-Service credential integration; keep Windows x64 and macOS arm64 behavior unchanged; no Linux distribution before the M3 gate; no `.deb`/`.rpm`, Linux arm64, or automatic Linux updates in this round |
 | `release/historical-0.4.0-dev.16-candidate-checklist.md` | historical; review-only rehearsals passed and the decision remained NO-GO before the baseline advanced | immutable `0.4.0-dev.16` rehearsal evidence and NO-GO snapshot only | cannot authorize or satisfy any later candidate, MAC5, or publication row |
@@ -968,46 +968,42 @@ the existing normalization and validation boundary. Jet and the current Ark
 session retain process-launch and watchdog authority; the macOS stream may add
 only the bounded fallback cleanup named in its active contract.
 
-### Internal extension runtime P1-0
+### Internal extension runtime Phase 1
 
-The accepted Phase 1 architecture owns compiled-in first-party composition
-semantics above the Trusted Kernel. Its active P1-0 contract owns only pure
-vocabulary, host-owned scope ancestry validation, deterministic dependency
-resolution, immutable plans, and structured diagnostics. Capability provision
-does not imply permission: broker policy, approvals, credentials, processes,
-filesystem/network access, persistence, project identity, and audit remain
-outside the graph.
+The implemented Phase 1 architecture owns compiled-in first-party composition
+semantics above the Trusted Kernel: validated vocabulary, deterministic graph,
+host-owned scope/generation, expected-old publication, reversible effects,
+bounded brokers/diagnostics, and the fixed Run History, Workspace Snapshot, and
+Project File Viewer migrations. Capability provision does not imply permission:
+broker policy, approvals, credentials, processes, filesystem/network access,
+persistence, project identity, and audit remain outside the graph.
 
 BH1/BH2 retain authoritative project identity, transition sequencing, and
-recovery. ADR-002/ADR-003 retain transport authority. The public Workbench
-Protocol proposal cannot infer a new external contract from this internal
-crate. PR #76 remains proposed and supplies no third-party discovery or loading
-authority. Issues #95/#96 remain downstream design inputs only: Execution
-Targets, runtime hosts, environments, jobs, attempts, scheduling, transport,
-schema, and UI remain theirs, and P1-0 defines none of those objects.
+recovery. ADR-002/ADR-003 retain transport authority. Store remains Run History
+authority; the Workspace broker/Ark and Agent lane remain Snapshot authorities;
+`read_viewer_file()` and the trusted shell retain viewer containment/rendering.
+The public Workbench Protocol proposal cannot infer a new external contract
+from this internal crate.
 
 The Rust MSRV contract owns Rust 1.88, Resolver 3, the committed lockfile, and
-all six macOS/Windows/Linux stable/MSRV legs. CI-FAST1 owns only their timing:
-Rust Fast is the Draft signal, while the six legs remain mandatory when the
-whole P1 stream reaches P1-4/Ready. The AGPL transition contract owns source
-and third-party licensing. P1-0 added reviewed `petgraph 0.8` with only
-`std`, moved existing `semver 1.x` into workspace dependency ownership with
-serde support, and inherited existing `serde`/`thiserror`. P1-1 may add reviewed
-`arc-swap 1.x`, direct `tokio-util 0.7` with only `rt`, and existing workspace
-Tokio. `inventory`, dynamic loading, Wasm, `tracing`, another runtime, or later
-built-in migrations remain forbidden.
+all six macOS/Windows/Linux stable/MSRV legs. Implemented CI-FAST1 owns only
+their timing: Rust Fast is the Draft signal and all six legs are the affected
+Ready/`main` integration signal. Exact Ready run `32129767978` passed all six
+legs plus unsigned packaged candidate/legacy smoke on each stable platform.
+The AGPL transition contract retains source and third-party licensing.
 
-P1-1 through P1-3 completed their Draft stop gates. P1-3 exact-head Rust Fast
-and the expected compatibility-workflow skip passed. P1-4 is now active.
-BH2 retains the entire project switch commit/recovery sequence and Agent
-Conversation retains blocker admission. P1-2 added only the fixed project Run
-History source, one generic bounded source registry lane, and a Store-backed
-allowlisted broker façade. Store/list ordering, project identity, command/mock
-shape, and truthful non-availability errors remain authoritative. P1-3 may add
-only the fixed Workspace Snapshot tool, application Project File Viewer
-descriptor, and required Workspace scope/runtime lanes. Existing broker/Ark,
-Agent admission, project file containment, trusted shell, and public command
-protocols remain authoritative. P1-4 remains inactive.
+The reviewed dependency set is `petgraph 0.8` with only `std`, workspace
+`semver 1.x` with serde, `arc-swap 1.x`, direct `tokio-util 0.7` with only
+`rt`, and existing workspace serde/serde_json/thiserror/Tokio. `inventory`,
+dynamic loading, Wasm, direct `tracing`, and another runtime remain absent.
+
+PR #76 remains proposed and supplies no discovery/loading authority. Issues
+#95/#96 may reuse only typed capability, scope/generation, candidate, effect,
+quiesce/dispose, diagnostic, and bounded broker semantics. Execution Targets,
+runtime hosts, environments, jobs, attempts, scheduling, transport, schema,
+and UI remain separately owned. Candidate is the internal default;
+`RHO_INTERNAL_EXTENSION_RUNTIME=legacy` remains process-local for one later
+release cycle, and its deletion requires a new active contract.
 
 ### aisdk family work
 

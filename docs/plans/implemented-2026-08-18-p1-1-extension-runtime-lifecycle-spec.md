@@ -1,8 +1,7 @@
 # P1-1 Internal Extension Runtime Lifecycle Specification
 
-Status: active; P1-1 implementation, local automated verification, and
-independent contract review complete 2026-08-18; implementation-head Rust Fast
-passed; evidence-reconciliation Rust Fast run `32114870127` passed; P1-2 active
+Status: implemented; P1-1 focused lifecycle evidence and the deferred
+whole-Phase-1 native/MSRV and installed-app acceptance completed 2026-08-18
 
 Date: 2026-08-18
 Authorization: after accepting the P1-0 and CI-FAST1 stop gates, the user
@@ -10,9 +9,9 @@ explicitly authorized continued P1 development; under the accepted package
 discipline this activates P1-1 only
 
 Owning architecture:
-[`accepted-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md`](../design/accepted-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md)
+[`implemented-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md`](../design/implemented-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md)
 Predecessor:
-[`active-2026-08-18-p1-0-extension-runtime-contracts-spec.md`](active-2026-08-18-p1-0-extension-runtime-contracts-spec.md)
+[`implemented-2026-08-18-p1-0-extension-runtime-contracts-spec.md`](implemented-2026-08-18-p1-0-extension-runtime-contracts-spec.md)
 PR: [#75](https://github.com/YuLab-SMU/Rho/pull/75)
 Upstream baseline: `95d7d2c7774519ef956637aeff678ed4f2752ab5`
 P1-1 branch baseline: `f5b85519d63d6bd9e4778cff1659764ecdb7e692`
@@ -550,9 +549,8 @@ Residual risks:
 - native Windows/Linux and full hosted MSRV accumulation remain P1-4 work; and
 - ergonomic Rust API names remain internal experimental.
 
-P1-2 is active under
-`active-2026-08-18-p1-2-run-history-source-spec.md` and the continuing
-whole-P1 objective.
+P1-2 was separately authorized and is recorded by
+`implemented-2026-08-18-p1-2-run-history-source-spec.md`.
 
 ### Required final reconciliation
 
@@ -565,5 +563,7 @@ whole-P1 objective.
   credential, or authority finding;
 - actual deviations, unrun checks, dependency versions, worktree, commit, and
   version/NEWS decision are recorded;
-- this document remains active because P1-2 through P1-4 are incomplete; and
-- work stops for explicit P1-2 authorization.
+- the deferred Ready matrix passed all six stable/MSRV legs in run
+  `32129767978` at exact head `3e710ac`; and
+- P1-4's final review found no blocking lifecycle, project-isolation, cleanup,
+  credential, panic-containment, or authority deviation.

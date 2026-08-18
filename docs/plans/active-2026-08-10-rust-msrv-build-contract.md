@@ -41,8 +41,8 @@ explicitly selecting rustc 1.88.0 on macOS arm64 passed both:
 - `cargo test --workspace --locked --no-fail-fast` with 361 passed, zero
   failed, and one opt-in Keychain test ignored.
 
-Windows GNU Rust 1.88 remains unaccepted until the hosted native matrix leg
-passes.
+Windows GNU Rust 1.88 was accepted by the hosted native matrix and was
+reconfirmed with Linux added at the P1-4 six-leg integration boundary.
 
 ## Goals
 
@@ -162,7 +162,7 @@ or the workflow itself. It must run when any workspace manifest, `Cargo.lock`,
 
 The user authorized CI-FAST1 on 2026-08-18 after PR #75 demonstrated that six
 cold native jobs on every long-lived Draft push delayed early construction.
-`docs/plans/active-2026-08-18-rust-fast-development-ci-spec.md` owns the bounded
+`docs/plans/implemented-2026-08-18-rust-fast-development-ci-spec.md` owns the bounded
 implementation and acceptance details.
 
 The durable policy is:
@@ -182,9 +182,10 @@ P1-4 completes the whole Phase 1 implementation before the PR becomes Ready
 and the exact-head six-leg matrix becomes mandatory. This is a timing change,
 not removal of native/MSRV acceptance.
 
-CI-FAST1 implementation and local deterministic verification are present on
-2026-08-18. Exact-head Draft workflow evidence remains owned by its active
-specification and is not inferred from local YAML or contract checks.
+CI-FAST1 implementation, deterministic local verification, exact-head Draft
+feedback, Ready skip, and deferred six-leg evidence completed on 2026-08-18.
+The exact results remain owned by its implemented specification and are not
+inferred from local YAML or contract checks.
 
 ## Candidate Validation Contract
 

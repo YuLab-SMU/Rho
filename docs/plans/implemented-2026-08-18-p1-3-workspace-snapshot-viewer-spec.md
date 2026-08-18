@@ -1,14 +1,13 @@
 # P1-3 Workspace Snapshot Tool And Project File Viewer Specification
 
-Status: active predecessor; runtime `d67c294`, product migration `f16283c`, CI
-portability repairs `efefa76`/`4c89c71`, local affected verification,
-exact-head Rust Fast, and Draft matrix skip passed
+Status: implemented; runtime `d67c294`, product migration `f16283c`, CI repairs,
+focused parity, and whole-Phase-1 Ready acceptance passed 2026-08-18
 
 Date: 2026-08-18
 Owning architecture:
-[`accepted-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md`](../design/accepted-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md)
+[`implemented-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md`](../design/implemented-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md)
 Predecessor:
-[`active-2026-08-18-p1-2-run-history-source-spec.md`](active-2026-08-18-p1-2-run-history-source-spec.md)
+[`implemented-2026-08-18-p1-2-run-history-source-spec.md`](implemented-2026-08-18-p1-2-run-history-source-spec.md)
 PR: [#75](https://github.com/YuLab-SMU/Rho/pull/75)
 Upstream baseline: `95d7d2c7774519ef956637aeff678ed4f2752ab5`
 P1-3 branch baseline: `b984230b3819b61508998b71b8ad09b9c787cad8`
@@ -451,3 +450,11 @@ P1-3 therefore passed its Draft stop gate. The continuing whole-P1 objective
 authorizes preparing a separate P1-4 acceptance/default-switch contract; this
 P1-3 contract does not itself authorize version allocation, NEWS, Ready state,
 installed-app acceptance, or legacy deletion.
+
+Final Phase 1 reconciliation: P1-4 completed the allocated `0.4.1-dev.0`
+metadata/NEWS change and re-proved typed Workspace Snapshot plus trusted-host
+Viewer behavior in default and legacy packaged smoke. Ready run `32129767978`
+passed all six stable/MSRV legs and Windows/macOS/Linux unsigned installed-app
+gates at exact head `3e710ac`. Final review found no raw-expression,
+Agent-admission, filesystem/symlink, generation, credential, duplicate
+registration, or public-protocol deviation. Legacy deletion remains deferred.

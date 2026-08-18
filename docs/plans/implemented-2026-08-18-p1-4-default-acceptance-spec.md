@@ -1,14 +1,14 @@
 # P1-4 Default Switch And Phase 1 Acceptance Specification
 
-Status: active; default/version/smoke implementation, local source/macOS
-installed-app verification, and exact-head Draft Fast passed; Ready six-leg and
-hosted installed-app gates pending
+Status: implemented; default/version/smoke, local and hosted installed-app,
+six-leg stable/MSRV, final safety review, and Ready acceptance completed
+2026-08-18
 
 Date: 2026-08-18
 Owning architecture:
-[`accepted-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md`](../design/accepted-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md)
+[`implemented-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md`](../design/implemented-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md)
 Predecessor:
-[`active-2026-08-18-p1-3-workspace-snapshot-viewer-spec.md`](active-2026-08-18-p1-3-workspace-snapshot-viewer-spec.md)
+[`implemented-2026-08-18-p1-3-workspace-snapshot-viewer-spec.md`](implemented-2026-08-18-p1-3-workspace-snapshot-viewer-spec.md)
 PR: [#75](https://github.com/YuLab-SMU/Rho/pull/75)
 Upstream baseline: `95d7d2c7774519ef956637aeff678ed4f2752ab5`
 P1-4 branch baseline: `3de973d440728e99793aaad82340bca3db5c6ec5`
@@ -18,8 +18,8 @@ cross-platform installed application acceptance, and Phase 1 decision
 Risk: R4 default routing, Workspace/Agent/filesystem authority, release
 metadata, native packaging, and multi-platform acceptance
 Authorized work package: `P1-4`
-Mandatory stop: complete local, six-leg, installed-app, contract review, and
-documentation evidence before PR #75 becomes Ready
+Mandatory stop: completed after local, six-leg, installed-app, contract review,
+and documentation evidence; PR #75 remains Ready
 
 ## Default And Legacy Override
 
@@ -310,9 +310,9 @@ deleted. No app was installed, signed, notarized, uploaded, tagged, released,
 or published.
 
 Interactive browser review was not rerun because P1-4 changes no UI state or
-protocol and the complete browser/mock contract set passed. Windows/Linux
-installed-app and the six stable/MSRV legs remain pending until the exact head
-is pushed and PR #75 becomes Ready.
+protocol and the complete browser/mock contract set passed. Hosted
+Windows/Linux installed-app and all six stable/MSRV legs subsequently passed
+at the Ready integration boundary recorded below.
 
 The first P1-4 Draft Fast run `32127215983` reached all workspace tests but
 exposed the pre-existing equal-size runtime-cache fixture race on Linux. The
@@ -323,3 +323,111 @@ the previous 1305 MiB lock-compatible cache as a fallback and saved the new
 exact `0.4.1-dev.0` lock key
 `rho-rust-v1-Linux-stable-x86_64-unknown-linux-gnu-950bf8c54d23a3bc241b05454b313d6a9f63af516abe7f407e54976fe40eaa71`.
 Rust Compatibility run `32127514056` skipped while PR #75 remained Draft.
+
+## Ready Hosted Acceptance Evidence
+
+PR #75 was changed from Draft to Ready only after the local gates above. The
+first Ready run `32127904500` proved five legs and the macOS/Linux packaged
+smokes but exposed one Windows workflow-shell defect: the `pwsh` step nested
+Windows PowerShell, which promoted normal Tauri stderr to `NativeCommandError`
+and did not preserve the child exit truthfully. Commit `3e710ac` invokes the
+reviewed PowerShell scripts directly in `pwsh` and checks `$LASTEXITCODE`; it
+does not change product runtime behavior.
+
+Exact-head Rust Compatibility run `32129767978` then passed on
+`3e710acab51ea6400ba2e0ef8ff6e41429da4b0c`:
+
+| Matrix identity | Result | Duration | Packaged acceptance |
+| --- | --- | ---: | --- |
+| `macos-26 / Rust stable` | pass | 4m54s | app + read-only DMG, candidate + legacy |
+| `macos-26 / Rust 1.88.0` | pass | 1m56s | not applicable to MSRV leg |
+| `windows-latest / Rust stable` | pass | 21m22s | NSIS install, candidate + legacy, uninstall cleanup |
+| `windows-latest / Rust 1.88.0` | pass | 14m06s | not applicable to MSRV leg |
+| `ubuntu-22.04 / Rust stable` | pass | 11m57s | final AppImage extract, candidate + legacy |
+| `ubuntu-22.04 / Rust 1.88.0` | pass | 4m30s | not applicable to MSRV leg |
+
+Rust Fast run `32129768023` skipped as required once the PR was Ready. Stable
+packaged evidence recorded:
+
+- Windows x64 binary SHA-256
+  `a6ebad03942f1f636abe7ed50c1953d715663d3be4c67ec603132893bfd1dcd6`
+  and NSIS SHA-256
+  `63ff2728a4240e73d0bb0ffeb6c3993fa329fba960a2dafc0546bb1ca65da1a9`;
+  install identity/version, installed executable outside the workspace,
+  default/legacy smoke, and registry/executable removal all passed.
+- macOS arm64 executable SHA-256
+  `d762876a9b7aeb84936d34c5f50dfa1f37ce8cbb05bbef7f61278f5214ad142b`
+  and DMG SHA-256
+  `c244c2db783cb23a4f2623e92071de487706f4a269555146e5c009f52e864d6c`;
+  exact arm64 app/Ark, version/license, DMG integrity, built/mounted
+  default/legacy smoke, detach, and temporary-key cleanup passed.
+- Linux x64 AppImage size `101726712` bytes, executable SHA-256
+  `453ebe5e7e7721f669785b91a55615d5d06c97e65a124b7336b69eea243feb5f`,
+  and AppImage SHA-256
+  `91e90699c6a724d24b1c5e63c1db61885730622b40601055c1f6d3d5c1c2ceeb`;
+  version/license/AppRun, extracted default/legacy smoke, and temporary-state
+  cleanup passed.
+
+The candidate smoke JSON on macOS and Linux explicitly reported Run History
+parity, typed Workspace Snapshot, viewer host injection, old-Workspace
+rejection, project isolation, and clean shutdown. Legacy smoke explicitly
+reported the direct viewer and clean shutdown. Windows GUI-subsystem smoke
+produced successful exit truth for unbundled and installed candidate/legacy
+runs; the job then proved uninstall cleanup.
+
+## Final Internal API And Safety Review Result
+
+The 2026-08-18 implementation review found no blocking deviation:
+
+- IDs, descriptor/graph limits, major compatibility, stable Kahn order,
+  optional absence, SCC cycle canonicalization, and input-order determinism are
+  enforced by the P1-0 contracts and permutation/boundary tests.
+- `PluginContext` exposes only registries, bounded broker JSON, effect and
+  diagnostic sinks, cancellation, and tracked tasks. It exposes no Tauri/DOM,
+  database, process, filesystem, socket, R environment, or credential object.
+- Workspace Snapshot accepts only the closed typed `WorkspaceOperation::Snapshot`;
+  the host broker constructs the fixed `workspace.snapshot` request and keeps
+  expected identity, Ark execution, stale revision, provenance, and result
+  checks. No plugin supplies a raw R expression.
+- The existing Agent workspace lane admits and serializes the request before
+  the exact Snapshot adapter; Agent origin and execution ID remain attached,
+  and existing approval/mutation policy is unchanged.
+- ArcSwap expected-old pointer CAS, non-routable candidates, losing-candidate
+  rollback, fresh generations, late-result validation, project/Workspace
+  parent checks, and A/B/A/race tests prevent stale routing from becoming
+  current.
+- Registrations enter `EffectSink` immediately. Routing/task admission closes
+  before cancellation and drain; child/plugin/effect teardown is reverse,
+  idempotent, deadline-bounded, panic-contained, and continues after failures.
+  Failed cleanup remains non-routable and reports leak detail.
+- Run History stays bound to a normalized project identity and Store authority;
+  request/response bounds, foreign-project, restart, delayed-result, and
+  two-project tests pass without fallback or duplicate registration.
+- Project File Viewer stores no project path. The host injects and rechecks the
+  current root, while `read_viewer_file()` retains relative-path,
+  canonical-containment, symlink, media, UTF-8, and 4/32 MiB enforcement.
+- Broker payloads are rebound at contribution boundaries to 1 MiB generic and
+  2 MiB Workspace limits; lifecycle/plugin diagnostics and broker rejection
+  text are typed and bounded. Capability registration grants no permission.
+- Credentials remain outside the runtime; no new persistence, schema, public
+  protocol, event, command, permission, or secret/logging surface was added.
+- Issues #95/#96 can reuse typed/versioned capability, scope/generation,
+  candidate, effect, quiesce/dispose, diagnostic, and bounded broker semantics
+  without receiving native host objects. Their targets, runtimes, jobs,
+  scheduling, transport, persistence, and UI remain separately gated.
+
+The only review-time source correction was the crate-level comment, which now
+describes the complete internal Phase 1 runtime instead of its former P1-0-only
+state. Rust module layout, constructors, and ergonomic names remain internal
+experimental. Explicit `legacy` remains for one later release cycle; deletion
+requires a new reviewed package.
+
+## Final Decision And Residual Boundary
+
+Phase 1 is accepted as implemented and PR #75 remains Ready. Application
+version/NEWS are synchronized at `0.4.1-dev.0`; R package versions remain
+unchanged. No tag, GitHub Release, updater manifest, signing, notarization,
+publication, download mutation, installation on a user machine, or release GO
+is authorized or claimed. Installed artifacts were unsigned CI/local evidence
+only. Phase 2, third-party loading, public SDK, Execution Target, Compute Job,
+Conda, SSH, Slurm, and legacy removal remain outside this workstream.

@@ -1,7 +1,8 @@
-//! Pure contracts for Rho's compiled-in, first-party extension runtime.
+//! Rho's compiled-in, first-party internal extension runtime.
 //!
-//! P1-0 intentionally contains no activation, effects, broker integration,
-//! persistence, dynamic discovery, or user-visible runtime behavior.
+//! Phase 1 includes deterministic contracts, scoped activation, reversible
+//! effects, and bounded host broker integration. It intentionally excludes
+//! persistence, dynamic discovery, third-party loading, and a public SDK.
 
 #![forbid(unsafe_code)]
 
