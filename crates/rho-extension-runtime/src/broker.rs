@@ -125,7 +125,7 @@ pub enum BrokerError {
     Payload(#[from] BrokerPayloadError),
     #[error("broker operation is unavailable: {operation_id}")]
     Unavailable { operation_id: OperationId },
-    #[error("broker operation failed: {code}")]
+    #[error("broker operation failed: {code}: {message}")]
     Rejected { code: String, message: String },
 }
 

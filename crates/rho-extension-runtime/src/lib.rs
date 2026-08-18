@@ -28,10 +28,12 @@ pub use lifecycle::{
     DiagnosticSink, Disposable, DisposeError, DisposeOutcome, EffectDisposeReport, EffectRecord,
     EffectSink, EffectStatus, ExtensionHost, ExtensionHostError, InternalExtensionRuntimeMode,
     InternalPlugin, LifecycleDeadlines, NoopDiagnosticSink, PluginContext, PluginInstanceIdentity,
-    PublishReport, RegistryError, RegistryHub, RegistryLease, RoutingError, ScopeDisposeReport,
-    ScopeLifecycleState, ScopeManager, ScopeSlot, ScopeSnapshot, ScopeStateError,
-    ScopedTaskTracker, SourceCallError, SourceCallResult, SourceHandler, StaleGenerationContext,
-    StaleGenerationError, TaskAdmissionError, build_scope_candidate,
+    ProjectFileViewerContribution, ProjectFileViewerResolution, ProjectFileViewerResolveError,
+    ProjectTreePublishError, ProjectTreePublishReport, PublishReport, RegistryError, RegistryHub,
+    RegistryLease, RoutingError, ScopeDisposeReport, ScopeLifecycleState, ScopeManager, ScopeSlot,
+    ScopeSnapshot, ScopeStateError, ScopedTaskTracker, SourceCallError, SourceCallResult,
+    SourceHandler, StaleGenerationContext, StaleGenerationError, TaskAdmissionError,
+    WorkspaceToolCallError, WorkspaceToolCallResult, WorkspaceToolHandler, build_scope_candidate,
 };
 pub use model::{
     ActivationPlan, ActivationPolicy, BindingResolution, CapabilityContractMajor,

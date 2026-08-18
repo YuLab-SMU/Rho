@@ -1,6 +1,6 @@
 use std::{
     any::Any,
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fmt,
     future::Future,
     panic::AssertUnwindSafe,
@@ -262,6 +262,48 @@ pub trait SourceHandler: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = Result<BoundedJson, BrokerError>> + Send + 'a>>;
 }
 
+pub trait WorkspaceToolHandler: Send + Sync {
+    fn call<'a>(
+        &'a self,
+        request: BoundedJson,
+    ) -> Pin<Box<dyn Future<Output = Result<BoundedJson, BrokerError>> + Send + 'a>>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectFileViewerContribution {
+    supported_media_types: Vec<String>,
+    general_maximum_bytes: usize,
+    html_maximum_bytes: usize,
+}
+
+impl ProjectFileViewerContribution {
+    pub fn new(
+        mut supported_media_types: Vec<String>,
+        general_maximum_bytes: usize,
+        html_maximum_bytes: usize,
+    ) -> Self {
+        supported_media_types.sort();
+        supported_media_types.dedup();
+        Self {
+            supported_media_types,
+            general_maximum_bytes,
+            html_maximum_bytes,
+        }
+    }
+
+    pub fn supported_media_types(&self) -> &[String] {
+        &self.supported_media_types
+    }
+
+    pub fn general_maximum_bytes(&self) -> usize {
+        self.general_maximum_bytes
+    }
+
+    pub fn html_maximum_bytes(&self) -> usize {
+        self.html_maximum_bytes
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LifecycleDeadlines {
     pub quiesce: Duration,
@@ -345,6 +387,31 @@ impl EffectSink {
     ) -> Result<u64, RegistryError> {
         let registration =
             registry.register_source(self.instance.clone(), capability_id, handler)?;
+        Ok(self.push(Box::new(registration)))
+    }
+
+    pub fn register_workspace_tool(
+        &mut self,
+        registry: &RegistryHub,
+        capability_id: CapabilityId,
+        handler: Arc<dyn WorkspaceToolHandler>,
+    ) -> Result<u64, RegistryError> {
+        let registration =
+            registry.register_workspace_tool(self.instance.clone(), capability_id, handler)?;
+        Ok(self.push(Box::new(registration)))
+    }
+
+    pub fn register_project_file_viewer(
+        &mut self,
+        registry: &RegistryHub,
+        capability_id: CapabilityId,
+        contribution: ProjectFileViewerContribution,
+    ) -> Result<u64, RegistryError> {
+        let registration = registry.register_project_file_viewer(
+            self.instance.clone(),
+            capability_id,
+            contribution,
+        )?;
         Ok(self.push(Box::new(registration)))
     }
 
@@ -483,6 +550,10 @@ pub enum RegistryError {
     DuplicateMarker { capability_id: CapabilityId },
     #[error("source contribution already exists: {capability_id}")]
     DuplicateSource { capability_id: CapabilityId },
+    #[error("Workspace tool contribution already exists: {capability_id}")]
+    DuplicateWorkspaceTool { capability_id: CapabilityId },
+    #[error("project file viewer contribution already exists: {capability_id}")]
+    DuplicateProjectFileViewer { capability_id: CapabilityId },
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -498,12 +569,26 @@ struct RegistryInner {
     idle: Notify,
     markers: StdMutex<BTreeMap<CapabilityId, PluginInstanceIdentity>>,
     sources: StdMutex<BTreeMap<CapabilityId, SourceEntry>>,
+    workspace_tools: StdMutex<BTreeMap<CapabilityId, WorkspaceToolEntry>>,
+    project_file_viewers: StdMutex<BTreeMap<CapabilityId, ProjectFileViewerEntry>>,
 }
 
 #[derive(Clone)]
 struct SourceEntry {
     owner: PluginInstanceIdentity,
     handler: Arc<dyn SourceHandler>,
+}
+
+#[derive(Clone)]
+struct WorkspaceToolEntry {
+    owner: PluginInstanceIdentity,
+    handler: Arc<dyn WorkspaceToolHandler>,
+}
+
+#[derive(Clone)]
+struct ProjectFileViewerEntry {
+    owner: PluginInstanceIdentity,
+    contribution: ProjectFileViewerContribution,
 }
 
 #[derive(Clone)]
@@ -521,6 +606,8 @@ impl RegistryHub {
                 idle: Notify::new(),
                 markers: StdMutex::new(BTreeMap::new()),
                 sources: StdMutex::new(BTreeMap::new()),
+                workspace_tools: StdMutex::new(BTreeMap::new()),
+                project_file_viewers: StdMutex::new(BTreeMap::new()),
             }),
         }
     }
@@ -607,6 +694,68 @@ impl RegistryHub {
         })
     }
 
+    pub fn workspace_tool_owner(
+        &self,
+        capability_id: &CapabilityId,
+    ) -> Option<PluginInstanceIdentity> {
+        self.inner
+            .workspace_tools
+            .lock()
+            .unwrap()
+            .get(capability_id)
+            .map(|entry| entry.owner.clone())
+    }
+
+    pub async fn call_workspace_tool(
+        &self,
+        capability_id: &CapabilityId,
+        request: BoundedJson,
+    ) -> Result<WorkspaceToolCallResult, WorkspaceToolCallError> {
+        let _lease = self.lease()?;
+        let request = BoundedJson::generic(request.into_value())?;
+        let handler = self
+            .inner
+            .workspace_tools
+            .lock()
+            .unwrap()
+            .get(capability_id)
+            .map(|entry| Arc::clone(&entry.handler))
+            .ok_or_else(|| WorkspaceToolCallError::MissingContribution {
+                capability_id: capability_id.clone(),
+            })?;
+        let payload = handler.call(request).await?;
+        let payload = BoundedJson::new(
+            payload.into_value(),
+            crate::WORKSPACE_SNAPSHOT_RESPONSE_BYTES,
+        )?;
+        Ok(WorkspaceToolCallResult {
+            scope: self.inner.scope.clone(),
+            payload,
+        })
+    }
+
+    pub fn resolve_project_file_viewer(
+        &self,
+        capability_id: &CapabilityId,
+    ) -> Result<ProjectFileViewerResolution, ProjectFileViewerResolveError> {
+        let lease = self.lease()?;
+        let contribution = self
+            .inner
+            .project_file_viewers
+            .lock()
+            .unwrap()
+            .get(capability_id)
+            .map(|entry| entry.contribution.clone())
+            .ok_or_else(|| ProjectFileViewerResolveError::MissingContribution {
+                capability_id: capability_id.clone(),
+            })?;
+        Ok(ProjectFileViewerResolution {
+            scope: self.inner.scope.clone(),
+            contribution,
+            _lease: lease,
+        })
+    }
+
     fn register_marker(
         &self,
         instance: PluginInstanceIdentity,
@@ -650,6 +799,56 @@ impl RegistryHub {
         })
     }
 
+    fn register_workspace_tool(
+        &self,
+        instance: PluginInstanceIdentity,
+        capability_id: CapabilityId,
+        handler: Arc<dyn WorkspaceToolHandler>,
+    ) -> Result<WorkspaceToolRegistration, RegistryError> {
+        let mut tools = self.inner.workspace_tools.lock().unwrap();
+        if tools.contains_key(&capability_id) {
+            return Err(RegistryError::DuplicateWorkspaceTool { capability_id });
+        }
+        tools.insert(
+            capability_id.clone(),
+            WorkspaceToolEntry {
+                owner: instance.clone(),
+                handler,
+            },
+        );
+        Ok(WorkspaceToolRegistration {
+            registry: Arc::downgrade(&self.inner),
+            capability_id,
+            instance,
+            disposed: false,
+        })
+    }
+
+    fn register_project_file_viewer(
+        &self,
+        instance: PluginInstanceIdentity,
+        capability_id: CapabilityId,
+        contribution: ProjectFileViewerContribution,
+    ) -> Result<ProjectFileViewerRegistration, RegistryError> {
+        let mut viewers = self.inner.project_file_viewers.lock().unwrap();
+        if viewers.contains_key(&capability_id) {
+            return Err(RegistryError::DuplicateProjectFileViewer { capability_id });
+        }
+        viewers.insert(
+            capability_id.clone(),
+            ProjectFileViewerEntry {
+                owner: instance.clone(),
+                contribution,
+            },
+        );
+        Ok(ProjectFileViewerRegistration {
+            registry: Arc::downgrade(&self.inner),
+            capability_id,
+            instance,
+            disposed: false,
+        })
+    }
+
     async fn wait_for_idle(&self) {
         loop {
             if self.inner.leases.load(Ordering::Acquire) == 0 {
@@ -680,6 +879,48 @@ pub enum SourceCallError {
     Payload(#[from] BrokerPayloadError),
     #[error(transparent)]
     Handler(#[from] BrokerError),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorkspaceToolCallResult {
+    pub scope: ScopeIdentity,
+    pub payload: BoundedJson,
+}
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum WorkspaceToolCallError {
+    #[error(transparent)]
+    Routing(#[from] RoutingError),
+    #[error("Workspace tool contribution is missing: {capability_id}")]
+    MissingContribution { capability_id: CapabilityId },
+    #[error(transparent)]
+    Payload(#[from] BrokerPayloadError),
+    #[error(transparent)]
+    Handler(#[from] BrokerError),
+}
+
+pub struct ProjectFileViewerResolution {
+    scope: ScopeIdentity,
+    contribution: ProjectFileViewerContribution,
+    _lease: RegistryLease,
+}
+
+impl ProjectFileViewerResolution {
+    pub fn scope(&self) -> &ScopeIdentity {
+        &self.scope
+    }
+
+    pub fn contribution(&self) -> &ProjectFileViewerContribution {
+        &self.contribution
+    }
+}
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum ProjectFileViewerResolveError {
+    #[error(transparent)]
+    Routing(#[from] RoutingError),
+    #[error("project file viewer contribution is missing: {capability_id}")]
+    MissingContribution { capability_id: CapabilityId },
 }
 
 pub struct RegistryLease {
@@ -749,6 +990,66 @@ impl Disposable for SourceRegistration {
                     .is_some_and(|entry| entry.owner == self.instance)
                 {
                     sources.remove(&self.capability_id);
+                }
+            }
+            self.disposed = true;
+            Ok(())
+        })
+    }
+}
+
+struct WorkspaceToolRegistration {
+    registry: Weak<RegistryInner>,
+    capability_id: CapabilityId,
+    instance: PluginInstanceIdentity,
+    disposed: bool,
+}
+
+impl Disposable for WorkspaceToolRegistration {
+    fn dispose<'a>(
+        &'a mut self,
+    ) -> Pin<Box<dyn Future<Output = Result<(), DisposeError>> + Send + 'a>> {
+        Box::pin(async move {
+            if self.disposed {
+                return Ok(());
+            }
+            if let Some(registry) = self.registry.upgrade() {
+                let mut tools = registry.workspace_tools.lock().unwrap();
+                if tools
+                    .get(&self.capability_id)
+                    .is_some_and(|entry| entry.owner == self.instance)
+                {
+                    tools.remove(&self.capability_id);
+                }
+            }
+            self.disposed = true;
+            Ok(())
+        })
+    }
+}
+
+struct ProjectFileViewerRegistration {
+    registry: Weak<RegistryInner>,
+    capability_id: CapabilityId,
+    instance: PluginInstanceIdentity,
+    disposed: bool,
+}
+
+impl Disposable for ProjectFileViewerRegistration {
+    fn dispose<'a>(
+        &'a mut self,
+    ) -> Pin<Box<dyn Future<Output = Result<(), DisposeError>> + Send + 'a>> {
+        Box::pin(async move {
+            if self.disposed {
+                return Ok(());
+            }
+            if let Some(registry) = self.registry.upgrade() {
+                let mut viewers = registry.project_file_viewers.lock().unwrap();
+                if viewers
+                    .get(&self.capability_id)
+                    .is_some_and(|entry| entry.owner == self.instance)
+                {
+                    viewers.remove(&self.capability_id);
                 }
             }
             self.disposed = true;
@@ -1193,10 +1494,36 @@ pub async fn build_scope_candidate(
     diagnostics: Arc<dyn DiagnosticSink>,
     deadlines: LifecycleDeadlines,
 ) -> Result<Arc<ScopeSnapshot>, CandidateBuildError> {
-    let descriptors: Vec<_> = plugins
+    build_scope_candidate_with_passive_descriptors(
+        identity,
+        parent_plan,
+        plugins,
+        Vec::new(),
+        broker,
+        diagnostics,
+        deadlines,
+    )
+    .await
+}
+
+async fn build_scope_candidate_with_passive_descriptors(
+    identity: ScopeIdentity,
+    parent_plan: Option<&ActivationPlan>,
+    plugins: Vec<Arc<dyn InternalPlugin>>,
+    passive_descriptors: Vec<PluginDescriptor>,
+    broker: Arc<dyn BrokerFacade>,
+    diagnostics: Arc<dyn DiagnosticSink>,
+    deadlines: LifecycleDeadlines,
+) -> Result<Arc<ScopeSnapshot>, CandidateBuildError> {
+    let mut descriptors: Vec<_> = plugins
         .iter()
         .map(|plugin| plugin.descriptor().clone())
         .collect();
+    let passive_ids: BTreeSet<_> = passive_descriptors
+        .iter()
+        .map(|descriptor| descriptor.id.clone())
+        .collect();
+    descriptors.extend(passive_descriptors);
     let plan = resolve_activation_plan(
         &ScopePolicy::phase_one(),
         identity.clone(),
@@ -1215,12 +1542,20 @@ pub async fn build_scope_candidate(
     let activation_order = plan.activation_order().to_vec();
 
     for plugin_id in &activation_order {
-        let plugin = plugins_by_id
-            .get(plugin_id)
-            .expect("resolved plugin must remain in the static inventory");
         let instance = PluginInstanceIdentity {
             plugin_id: plugin_id.clone(),
             scope: identity.clone(),
+        };
+        let Some(plugin) = plugins_by_id.get(plugin_id) else {
+            assert!(
+                passive_ids.contains(plugin_id),
+                "resolved plugin must remain in the static or passive inventory"
+            );
+            activated.push(ActivatedPlugin {
+                instance: instance.clone(),
+                effects: EffectSink::new(instance).into_stack(Arc::clone(&diagnostics)),
+            });
+            continue;
         };
         diagnostics.emit(lifecycle_diagnostic(
             DiagnosticCode::ActivationStarted,
@@ -1400,18 +1735,6 @@ impl ScopeSlot {
             });
         }
 
-        if let Err(error) = candidate.mark_active() {
-            drop(publication_gate);
-            let rejected_dispose = candidate.quiesce_and_dispose(deadlines).await;
-            return Err(CandidatePublishError {
-                expected: expected.map(|value| value.identity.clone()),
-                actual: self.current().map(|value| value.identity.clone()),
-                rejected: candidate.identity.clone(),
-                rejected_dispose,
-                reason: error.to_string(),
-            });
-        }
-
         let previous = match expected.as_ref() {
             Some(expected) => self
                 .current
@@ -1439,6 +1762,26 @@ impl ScopeSlot {
                 rejected: candidate.identity.clone(),
                 rejected_dispose,
                 reason: "expected_old_mismatch".to_string(),
+            });
+        }
+        if let Err(error) = candidate.mark_active() {
+            let restored = self
+                .current
+                .compare_and_swap(&candidate, previous_value.clone());
+            debug_assert!(
+                (*restored)
+                    .as_ref()
+                    .is_some_and(|actual| Arc::ptr_eq(actual, &candidate)),
+                "publication gate must prevent candidate replacement before activation"
+            );
+            drop(publication_gate);
+            let rejected_dispose = candidate.quiesce_and_dispose(deadlines).await;
+            return Err(CandidatePublishError {
+                expected: expected.map(|value| value.identity.clone()),
+                actual: previous_value.map(|value| value.identity.clone()),
+                rejected: candidate.identity.clone(),
+                rejected_dispose,
+                reason: error.to_string(),
             });
         }
         self.diagnostics.emit(lifecycle_diagnostic(
@@ -1481,6 +1824,39 @@ pub struct PublishReport {
     pub previous_dispose: Option<ScopeDisposeReport>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectTreePublishReport {
+    pub project: ScopeIdentity,
+    pub workspace: ScopeIdentity,
+    pub previous_project: Option<ScopeIdentity>,
+    pub previous_workspace: Option<ScopeIdentity>,
+    pub previous_dispose: Option<ScopeDisposeReport>,
+}
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+#[error("project/Workspace candidate publication failed: {reason}")]
+pub struct ProjectTreePublishError {
+    pub expected_project: Option<ScopeIdentity>,
+    pub actual_project: Option<ScopeIdentity>,
+    pub expected_workspace: Option<ScopeIdentity>,
+    pub actual_workspace: Option<ScopeIdentity>,
+    pub rejected_project: ScopeIdentity,
+    pub rejected_workspace: ScopeIdentity,
+    pub rejected_dispose: ScopeDisposeReport,
+    pub rejected_workspace_dispose: ScopeDisposeReport,
+    pub reason: String,
+}
+
+async fn dispose_project_tree_candidates(
+    project: &Arc<ScopeSnapshot>,
+    workspace: &Arc<ScopeSnapshot>,
+    deadlines: LifecycleDeadlines,
+) -> (ScopeDisposeReport, ScopeDisposeReport) {
+    let workspace_report = workspace.quiesce_and_dispose(deadlines).await;
+    let project_report = project.quiesce_and_dispose(deadlines).await;
+    (project_report, workspace_report)
+}
+
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 #[error("candidate publication failed: {reason}")]
 pub struct CandidatePublishError {
@@ -1508,6 +1884,8 @@ pub struct ScopeManager {
     next_generation: AtomicU64,
     application: Arc<ScopeSlot>,
     project: Arc<ScopeSlot>,
+    workspace: Arc<ScopeSlot>,
+    publication_gate: Mutex<()>,
     diagnostics: Arc<dyn DiagnosticSink>,
     deadlines: LifecycleDeadlines,
 }
@@ -1526,6 +1904,8 @@ impl ScopeManager {
                 Arc::clone(&diagnostics),
             )?),
             project: Arc::new(ScopeSlot::empty(Arc::clone(&diagnostics))),
+            workspace: Arc::new(ScopeSlot::empty(Arc::clone(&diagnostics))),
+            publication_gate: Mutex::new(()),
             diagnostics,
             deadlines,
         })
@@ -1541,11 +1921,22 @@ impl ScopeManager {
         self.project.current()
     }
 
+    pub fn workspace(&self) -> Option<Arc<ScopeSnapshot>> {
+        self.workspace.current()
+    }
+
     pub fn validate_project_current(
         &self,
         completed_scope: &ScopeIdentity,
     ) -> Result<(), StaleGenerationError> {
         self.project.validate_current(completed_scope)
+    }
+
+    pub fn validate_workspace_current(
+        &self,
+        completed_scope: &ScopeIdentity,
+    ) -> Result<(), StaleGenerationError> {
+        self.workspace.validate_current(completed_scope)
     }
 
     pub fn next_identity(
@@ -1577,6 +1968,17 @@ impl ScopeManager {
         expected: Option<Arc<ScopeSnapshot>>,
         candidate: Arc<ScopeSnapshot>,
     ) -> Result<PublishReport, CandidatePublishError> {
+        let _publication = self.publication_gate.lock().await;
+        if self.workspace().is_some() {
+            let rejected_dispose = candidate.quiesce_and_dispose(self.deadlines).await;
+            return Err(CandidatePublishError {
+                expected: expected.map(|value| value.identity.clone()),
+                actual: self.project().map(|value| value.identity.clone()),
+                rejected: candidate.identity.clone(),
+                rejected_dispose,
+                reason: "workspace_tree_publication_required".to_string(),
+            });
+        }
         let application = self.application();
         self.project
             .publish_with(
@@ -1590,13 +1992,247 @@ impl ScopeManager {
             .await
     }
 
+    pub async fn publish_workspace(
+        &self,
+        expected: Option<Arc<ScopeSnapshot>>,
+        candidate: Arc<ScopeSnapshot>,
+    ) -> Result<PublishReport, CandidatePublishError> {
+        let _publication = self.publication_gate.lock().await;
+        let Some(project) = self.project() else {
+            let rejected_dispose = candidate.quiesce_and_dispose(self.deadlines).await;
+            return Err(CandidatePublishError {
+                expected: expected.map(|value| value.identity.clone()),
+                actual: self.workspace().map(|value| value.identity.clone()),
+                rejected: candidate.identity.clone(),
+                rejected_dispose,
+                reason: "workspace_parent_project_missing".to_string(),
+            });
+        };
+        if candidate.identity.parent_id.as_ref() != Some(&project.identity.id) {
+            let rejected_dispose = candidate.quiesce_and_dispose(self.deadlines).await;
+            return Err(CandidatePublishError {
+                expected: expected.map(|value| value.identity.clone()),
+                actual: self.workspace().map(|value| value.identity.clone()),
+                rejected: candidate.identity.clone(),
+                rejected_dispose,
+                reason: ScopeStateError::InvalidChildParent.to_string(),
+            });
+        }
+        self.workspace
+            .publish_with(
+                expected,
+                candidate,
+                self.deadlines,
+                move |previous, candidate| {
+                    project.replace_child(previous, Arc::clone(candidate));
+                },
+            )
+            .await
+    }
+
+    pub async fn publish_project_tree(
+        &self,
+        expected_project: Option<Arc<ScopeSnapshot>>,
+        project_candidate: Arc<ScopeSnapshot>,
+        expected_workspace: Option<Arc<ScopeSnapshot>>,
+        workspace_candidate: Arc<ScopeSnapshot>,
+    ) -> Result<ProjectTreePublishReport, ProjectTreePublishError> {
+        let _publication = self.publication_gate.lock().await;
+        let project_candidate_gate = project_candidate.dispose_gate.lock().await;
+        let workspace_candidate_gate = workspace_candidate.dispose_gate.lock().await;
+        let invalid_state = [project_candidate.as_ref(), workspace_candidate.as_ref()]
+            .into_iter()
+            .find(|candidate| candidate.state() != ScopeLifecycleState::Ready)
+            .map(|candidate| candidate.state());
+        if let Some(actual) = invalid_state {
+            drop(workspace_candidate_gate);
+            drop(project_candidate_gate);
+            let (rejected_dispose, rejected_workspace_dispose) = dispose_project_tree_candidates(
+                &project_candidate,
+                &workspace_candidate,
+                self.deadlines,
+            )
+            .await;
+            return Err(ProjectTreePublishError {
+                expected_project: expected_project.map(|value| value.identity.clone()),
+                actual_project: self.project().map(|value| value.identity.clone()),
+                expected_workspace: expected_workspace.map(|value| value.identity.clone()),
+                actual_workspace: self.workspace().map(|value| value.identity.clone()),
+                rejected_project: project_candidate.identity.clone(),
+                rejected_workspace: workspace_candidate.identity.clone(),
+                rejected_dispose,
+                rejected_workspace_dispose,
+                reason: ScopeStateError::InvalidTransition {
+                    expected: ScopeLifecycleState::Ready,
+                    actual,
+                }
+                .to_string(),
+            });
+        }
+        if workspace_candidate.identity.parent_id.as_ref() != Some(&project_candidate.identity.id) {
+            drop(workspace_candidate_gate);
+            drop(project_candidate_gate);
+            let (rejected_dispose, rejected_workspace_dispose) = dispose_project_tree_candidates(
+                &project_candidate,
+                &workspace_candidate,
+                self.deadlines,
+            )
+            .await;
+            return Err(ProjectTreePublishError {
+                expected_project: expected_project.map(|value| value.identity.clone()),
+                actual_project: self.project().map(|value| value.identity.clone()),
+                expected_workspace: expected_workspace.map(|value| value.identity.clone()),
+                actual_workspace: self.workspace().map(|value| value.identity.clone()),
+                rejected_project: project_candidate.identity.clone(),
+                rejected_workspace: workspace_candidate.identity.clone(),
+                rejected_dispose,
+                rejected_workspace_dispose,
+                reason: ScopeStateError::InvalidChildParent.to_string(),
+            });
+        }
+        if let Err(error) = project_candidate.attach_child(Arc::clone(&workspace_candidate)) {
+            drop(workspace_candidate_gate);
+            drop(project_candidate_gate);
+            let (rejected_dispose, rejected_workspace_dispose) = dispose_project_tree_candidates(
+                &project_candidate,
+                &workspace_candidate,
+                self.deadlines,
+            )
+            .await;
+            return Err(ProjectTreePublishError {
+                expected_project: expected_project.map(|value| value.identity.clone()),
+                actual_project: self.project().map(|value| value.identity.clone()),
+                expected_workspace: expected_workspace.map(|value| value.identity.clone()),
+                actual_workspace: self.workspace().map(|value| value.identity.clone()),
+                rejected_project: project_candidate.identity.clone(),
+                rejected_workspace: workspace_candidate.identity.clone(),
+                rejected_dispose,
+                rejected_workspace_dispose,
+                reason: error.to_string(),
+            });
+        }
+
+        let previous_project = match expected_project.as_ref() {
+            Some(expected) => self
+                .project
+                .current
+                .compare_and_swap(expected, Some(Arc::clone(&project_candidate))),
+            None => self.project.current.compare_and_swap(
+                &None::<Arc<ScopeSnapshot>>,
+                Some(Arc::clone(&project_candidate)),
+            ),
+        };
+        let previous_project_value = (*previous_project).clone();
+        if !option_arc_ptr_eq(&previous_project_value, &expected_project) {
+            drop(workspace_candidate_gate);
+            drop(project_candidate_gate);
+            let (rejected_dispose, rejected_workspace_dispose) = dispose_project_tree_candidates(
+                &project_candidate,
+                &workspace_candidate,
+                self.deadlines,
+            )
+            .await;
+            return Err(ProjectTreePublishError {
+                expected_project: expected_project.map(|value| value.identity.clone()),
+                actual_project: previous_project_value.map(|value| value.identity.clone()),
+                expected_workspace: expected_workspace.map(|value| value.identity.clone()),
+                actual_workspace: self.workspace().map(|value| value.identity.clone()),
+                rejected_project: project_candidate.identity.clone(),
+                rejected_workspace: workspace_candidate.identity.clone(),
+                rejected_dispose,
+                rejected_workspace_dispose,
+                reason: "project_expected_old_mismatch".to_string(),
+            });
+        }
+
+        let previous_workspace = match expected_workspace.as_ref() {
+            Some(expected) => self
+                .workspace
+                .current
+                .compare_and_swap(expected, Some(Arc::clone(&workspace_candidate))),
+            None => self.workspace.current.compare_and_swap(
+                &None::<Arc<ScopeSnapshot>>,
+                Some(Arc::clone(&workspace_candidate)),
+            ),
+        };
+        let previous_workspace_value = (*previous_workspace).clone();
+        if !option_arc_ptr_eq(&previous_workspace_value, &expected_workspace) {
+            let restored = self
+                .project
+                .current
+                .compare_and_swap(&project_candidate, previous_project_value.clone());
+            debug_assert!(
+                (*restored)
+                    .as_ref()
+                    .is_some_and(|actual| Arc::ptr_eq(actual, &project_candidate)),
+                "scope publication gate must preserve project rollback ownership"
+            );
+            drop(workspace_candidate_gate);
+            drop(project_candidate_gate);
+            let (rejected_dispose, rejected_workspace_dispose) = dispose_project_tree_candidates(
+                &project_candidate,
+                &workspace_candidate,
+                self.deadlines,
+            )
+            .await;
+            return Err(ProjectTreePublishError {
+                expected_project: expected_project.map(|value| value.identity.clone()),
+                actual_project: previous_project_value.map(|value| value.identity.clone()),
+                expected_workspace: expected_workspace.map(|value| value.identity.clone()),
+                actual_workspace: previous_workspace_value.map(|value| value.identity.clone()),
+                rejected_project: project_candidate.identity.clone(),
+                rejected_workspace: workspace_candidate.identity.clone(),
+                rejected_dispose,
+                rejected_workspace_dispose,
+                reason: "workspace_expected_old_mismatch".to_string(),
+            });
+        }
+
+        project_candidate
+            .mark_active()
+            .expect("ready project candidate under its disposal gate must activate");
+        workspace_candidate
+            .mark_active()
+            .expect("ready Workspace candidate under its disposal gate must activate");
+        let application = self.application();
+        application.replace_child(
+            previous_project_value.as_ref(),
+            Arc::clone(&project_candidate),
+        );
+        if let Some(previous) = previous_project_value.as_ref() {
+            previous.begin_quiesce();
+        }
+        drop(workspace_candidate_gate);
+        drop(project_candidate_gate);
+        let previous_dispose = match previous_project_value.as_ref() {
+            Some(previous) => Some(previous.quiesce_and_dispose(self.deadlines).await),
+            None => None,
+        };
+        Ok(ProjectTreePublishReport {
+            project: project_candidate.identity.clone(),
+            workspace: workspace_candidate.identity.clone(),
+            previous_project: previous_project_value.map(|value| value.identity.clone()),
+            previous_workspace: previous_workspace_value.map(|value| value.identity.clone()),
+            previous_dispose,
+        })
+    }
+
     pub async fn clear_project(
         &self,
         expected: Option<Arc<ScopeSnapshot>>,
     ) -> Result<Option<ScopeDisposeReport>, StaleGenerationError> {
+        let _publication = self.publication_gate.lock().await;
         let Some(expected) = expected else {
             return Ok(None);
         };
+        if let Some(workspace) = self.workspace() {
+            return Err(StaleGenerationError {
+                context: Box::new(StaleGenerationContext {
+                    completed: expected.identity.clone(),
+                    actual: Some(workspace.identity.clone()),
+                }),
+            });
+        }
         let previous = self.project.current.compare_and_swap(&expected, None);
         let previous_value = (*previous).clone();
         if !previous_value
@@ -1615,7 +2251,36 @@ impl ScopeManager {
         Ok(Some(expected.quiesce_and_dispose(self.deadlines).await))
     }
 
+    pub async fn clear_workspace(
+        &self,
+        expected: Option<Arc<ScopeSnapshot>>,
+    ) -> Result<Option<ScopeDisposeReport>, StaleGenerationError> {
+        let _publication = self.publication_gate.lock().await;
+        let Some(expected) = expected else {
+            return Ok(None);
+        };
+        let previous = self.workspace.current.compare_and_swap(&expected, None);
+        let previous_value = (*previous).clone();
+        if !previous_value
+            .as_ref()
+            .is_some_and(|actual| Arc::ptr_eq(actual, &expected))
+        {
+            return Err(StaleGenerationError {
+                context: Box::new(StaleGenerationContext {
+                    completed: expected.identity.clone(),
+                    actual: previous_value.map(|snapshot| snapshot.identity.clone()),
+                }),
+            });
+        }
+        expected.begin_quiesce();
+        if let Some(project) = self.project() {
+            project.remove_child(&expected);
+        }
+        Ok(Some(expected.quiesce_and_dispose(self.deadlines).await))
+    }
+
     pub async fn shutdown(&self) -> ScopeDisposeReport {
+        let _publication = self.publication_gate.lock().await;
         let application = self.application();
         application.quiesce_and_dispose(self.deadlines).await
     }
@@ -1629,6 +2294,8 @@ impl ScopeManager {
 pub enum ExtensionHostError {
     #[error("application graph could not be constructed: {0}")]
     ApplicationGraph(Box<ExtensionError>),
+    #[error("application plugins could not be activated: {0}")]
+    ApplicationBuild(Box<CandidateBuildError>),
     #[error(transparent)]
     ApplicationState(#[from] ScopeStateError),
 }
@@ -1641,6 +2308,43 @@ pub struct ExtensionHost {
 }
 
 impl ExtensionHost {
+    pub async fn new_with_application_plugins(
+        mode: InternalExtensionRuntimeMode,
+        host_capabilities: Vec<CapabilityDeclaration>,
+        plugins: Vec<Arc<dyn InternalPlugin>>,
+        broker: Arc<dyn BrokerFacade>,
+        diagnostics: Arc<dyn DiagnosticSink>,
+        deadlines: LifecycleDeadlines,
+    ) -> Result<Self, ExtensionHostError> {
+        let identity = ScopeIdentity::new(
+            ScopePolicy::application_kind(),
+            ScopeId::new("application").expect("built-in scope ID must be valid"),
+            None,
+            ActivationGeneration::new(1).expect("built-in generation must be non-zero"),
+        );
+        let passive_descriptors = host_capability_descriptor(host_capabilities)
+            .into_iter()
+            .collect();
+        let application = build_scope_candidate_with_passive_descriptors(
+            identity,
+            None,
+            plugins,
+            passive_descriptors,
+            broker,
+            Arc::clone(&diagnostics),
+            deadlines,
+        )
+        .await
+        .map_err(|error| ExtensionHostError::ApplicationBuild(Box::new(error)))?;
+        let scopes = ScopeManager::new(application, Arc::clone(&diagnostics), deadlines)?;
+        Ok(Self {
+            mode,
+            scopes,
+            diagnostics,
+            deadlines,
+        })
+    }
+
     pub fn new_empty(
         mode: InternalExtensionRuntimeMode,
         diagnostics: Arc<dyn DiagnosticSink>,
@@ -1661,18 +2365,11 @@ impl ExtensionHost {
             None,
             ActivationGeneration::new(1).expect("built-in generation must be non-zero"),
         );
-        let mut descriptors = Vec::new();
         let host_plugin_id =
             PluginId::new("org.yulab.rho.host").expect("built-in host plugin ID must be valid");
-        if !host_capabilities.is_empty() {
-            let mut descriptor = PluginDescriptor::new(
-                host_plugin_id.clone(),
-                PluginVersion::parse("1.0.0").expect("built-in host version must be valid"),
-                vec![ScopePolicy::application_kind()],
-            );
-            descriptor.provides = host_capabilities;
-            descriptors.push(descriptor);
-        }
+        let descriptors: Vec<_> = host_capability_descriptor(host_capabilities)
+            .into_iter()
+            .collect();
         let plan = resolve_activation_plan(
             &ScopePolicy::phase_one(),
             identity.clone(),
@@ -1753,6 +2450,32 @@ impl ExtensionHost {
         .await
     }
 
+    pub async fn build_workspace_candidate(
+        &self,
+        parent: &Arc<ScopeSnapshot>,
+        scope_id: ScopeId,
+        plugins: Vec<Arc<dyn InternalPlugin>>,
+        broker: Arc<dyn BrokerFacade>,
+    ) -> Result<Arc<ScopeSnapshot>, CandidateBuildError> {
+        let identity = self
+            .scopes
+            .next_identity(
+                ScopePolicy::workspace_kind(),
+                scope_id,
+                Some(parent.as_ref()),
+            )
+            .map_err(|error| CandidateBuildError::Resolution(Box::new(error)))?;
+        build_scope_candidate(
+            identity,
+            Some(parent.plan()),
+            plugins,
+            broker,
+            Arc::clone(&self.diagnostics),
+            self.deadlines,
+        )
+        .await
+    }
+
     pub async fn rollback_candidate(&self, candidate: &Arc<ScopeSnapshot>) -> ScopeDisposeReport {
         candidate.quiesce_and_dispose(self.deadlines).await
     }
@@ -1765,6 +2488,31 @@ impl ExtensionHost {
         self.scopes.publish_project(expected, candidate).await
     }
 
+    pub async fn publish_workspace_candidate(
+        &self,
+        expected: Option<Arc<ScopeSnapshot>>,
+        candidate: Arc<ScopeSnapshot>,
+    ) -> Result<PublishReport, CandidatePublishError> {
+        self.scopes.publish_workspace(expected, candidate).await
+    }
+
+    pub async fn publish_project_tree_candidates(
+        &self,
+        expected_project: Option<Arc<ScopeSnapshot>>,
+        project_candidate: Arc<ScopeSnapshot>,
+        expected_workspace: Option<Arc<ScopeSnapshot>>,
+        workspace_candidate: Arc<ScopeSnapshot>,
+    ) -> Result<ProjectTreePublishReport, ProjectTreePublishError> {
+        self.scopes
+            .publish_project_tree(
+                expected_project,
+                project_candidate,
+                expected_workspace,
+                workspace_candidate,
+            )
+            .await
+    }
+
     pub async fn clear_project_scope(
         &self,
         expected: Option<Arc<ScopeSnapshot>>,
@@ -1772,7 +2520,29 @@ impl ExtensionHost {
         self.scopes.clear_project(expected).await
     }
 
+    pub async fn clear_workspace_scope(
+        &self,
+        expected: Option<Arc<ScopeSnapshot>>,
+    ) -> Result<Option<ScopeDisposeReport>, StaleGenerationError> {
+        self.scopes.clear_workspace(expected).await
+    }
+
     pub async fn shutdown(&self) -> ScopeDisposeReport {
         self.scopes.shutdown().await
     }
+}
+
+fn host_capability_descriptor(
+    host_capabilities: Vec<CapabilityDeclaration>,
+) -> Option<PluginDescriptor> {
+    if host_capabilities.is_empty() {
+        return None;
+    }
+    let mut descriptor = PluginDescriptor::new(
+        PluginId::new("org.yulab.rho.host").expect("built-in host plugin ID must be valid"),
+        PluginVersion::parse("1.0.0").expect("built-in host version must be valid"),
+        vec![ScopePolicy::application_kind()],
+    );
+    descriptor.provides = host_capabilities;
+    Some(descriptor)
 }

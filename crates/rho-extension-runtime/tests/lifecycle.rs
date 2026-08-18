@@ -15,9 +15,11 @@ use rho_extension_runtime::{
     DiagnosticSeverity, DiagnosticSink, Disposable, DisposeError, DisposeOutcome, EffectStatus,
     ExtensionDiagnostic, ExtensionHost, InternalExtensionRuntimeMode, InternalPlugin,
     LifecycleDeadlines, NoopDiagnosticSink, PROJECT_FILE_VIEWER_HTML_BYTES, PluginContext,
-    PluginDescriptor, PluginId, PluginVersion, RegistryError, RejectingBrokerFacade, RoutingError,
-    ScopeId, ScopeIdentity, ScopeLifecycleState, ScopePolicy, ScopeSlot, SourceCallError,
-    SourceHandler, TaskAdmissionError, WORKSPACE_SNAPSHOT_RESPONSE_BYTES, build_scope_candidate,
+    PluginDescriptor, PluginId, PluginVersion, ProjectFileViewerContribution,
+    ProjectFileViewerResolveError, RegistryError, RejectingBrokerFacade, RoutingError, ScopeId,
+    ScopeIdentity, ScopeLifecycleState, ScopePolicy, ScopeSlot, SourceCallError, SourceHandler,
+    TaskAdmissionError, WORKSPACE_SNAPSHOT_RESPONSE_BYTES, WorkspaceToolCallError,
+    WorkspaceToolHandler, build_scope_candidate,
 };
 use serde_json::{Value, json};
 use tokio_util::task::TaskTracker;
@@ -206,6 +208,103 @@ impl InternalPlugin for OversizedSourcePlugin {
                     Arc::new(OversizedSourceHandler),
                 )
                 .map_err(|error| ActivationError::new("source_registration", error.to_string()))?;
+            Ok(())
+        })
+    }
+}
+
+#[derive(Clone)]
+enum WorkspaceToolBehavior {
+    Echo,
+    Fail,
+    Hang,
+    Fixed(Value, usize),
+}
+
+struct TestWorkspaceToolHandler {
+    behavior: WorkspaceToolBehavior,
+}
+
+impl WorkspaceToolHandler for TestWorkspaceToolHandler {
+    fn call<'a>(
+        &'a self,
+        request: BoundedJson,
+    ) -> Pin<Box<dyn Future<Output = Result<BoundedJson, BrokerError>> + Send + 'a>> {
+        Box::pin(async move {
+            match &self.behavior {
+                WorkspaceToolBehavior::Echo => Ok(request),
+                WorkspaceToolBehavior::Fail => {
+                    Err(BrokerError::rejected("workspace_tool_failed", "failed"))
+                }
+                WorkspaceToolBehavior::Hang => pending().await,
+                WorkspaceToolBehavior::Fixed(value, maximum_bytes) => {
+                    Ok(BoundedJson::new(value.clone(), *maximum_bytes).unwrap())
+                }
+            }
+        })
+    }
+}
+
+struct WorkspaceToolPlugin {
+    descriptor: PluginDescriptor,
+    capability_id: CapabilityId,
+    behavior: WorkspaceToolBehavior,
+}
+
+impl InternalPlugin for WorkspaceToolPlugin {
+    fn descriptor(&self) -> &PluginDescriptor {
+        &self.descriptor
+    }
+
+    fn activate<'a>(
+        &'a self,
+        context: PluginContext<'a>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), ActivationError>> + Send + 'a>> {
+        Box::pin(async move {
+            context
+                .effects
+                .register_workspace_tool(
+                    context.registry,
+                    self.capability_id.clone(),
+                    Arc::new(TestWorkspaceToolHandler {
+                        behavior: self.behavior.clone(),
+                    }),
+                )
+                .map_err(|error| {
+                    ActivationError::new("workspace_tool_registration", error.to_string())
+                })?;
+            Ok(())
+        })
+    }
+}
+
+struct ViewerPlugin {
+    descriptor: PluginDescriptor,
+    capability_id: CapabilityId,
+}
+
+impl InternalPlugin for ViewerPlugin {
+    fn descriptor(&self) -> &PluginDescriptor {
+        &self.descriptor
+    }
+
+    fn activate<'a>(
+        &'a self,
+        context: PluginContext<'a>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), ActivationError>> + Send + 'a>> {
+        Box::pin(async move {
+            context
+                .effects
+                .register_project_file_viewer(
+                    context.registry,
+                    self.capability_id.clone(),
+                    ProjectFileViewerContribution::new(
+                        vec!["text/html".to_string(), "text/plain".to_string()],
+                        4 * 1024 * 1024,
+                        PROJECT_FILE_VIEWER_HTML_BYTES,
+                    ),
+                )
+                .map_err(|error| ActivationError::new("viewer_registration", error.to_string()))?;
             Ok(())
         })
     }
@@ -709,6 +808,417 @@ async fn identical_source_capabilities_are_isolated_between_project_scopes() {
             .await
             .is_ok()
     );
+}
+
+#[tokio::test]
+async fn workspace_tool_is_scoped_effect_bound_and_fixed_to_two_mib() {
+    let capability = capability_id("tool.workspace.snapshot");
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let project = host
+        .build_empty_project_candidate(ScopeId::new("project.a").unwrap())
+        .await
+        .unwrap();
+    host.publish_project_candidate(None, project.clone())
+        .await
+        .unwrap();
+    let plugin = |id: &str, behavior: WorkspaceToolBehavior| -> Arc<dyn InternalPlugin> {
+        Arc::new(WorkspaceToolPlugin {
+            descriptor: descriptor(id, ScopePolicy::workspace_kind()),
+            capability_id: capability.clone(),
+            behavior,
+        })
+    };
+    let candidate = host
+        .build_workspace_candidate(
+            &project,
+            ScopeId::new("workspace.a").unwrap(),
+            vec![plugin("plugin.workspace.echo", WorkspaceToolBehavior::Echo)],
+            Arc::new(RejectingBrokerFacade),
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        candidate
+            .registry()
+            .call_workspace_tool(&capability, BoundedJson::generic(json!({})).unwrap())
+            .await,
+        Err(WorkspaceToolCallError::Routing(RoutingError::Closed))
+    ));
+    host.publish_workspace_candidate(None, candidate.clone())
+        .await
+        .unwrap();
+    let result = candidate
+        .registry()
+        .call_workspace_tool(
+            &capability,
+            BoundedJson::generic(json!({ "operation": "snapshot" })).unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(result.scope, *candidate.identity());
+    assert_eq!(result.payload.value(), &json!({ "operation": "snapshot" }));
+
+    let exact_value = Value::String("x".repeat(WORKSPACE_SNAPSHOT_RESPONSE_BYTES - 2));
+    let exact = host
+        .build_workspace_candidate(
+            &project,
+            ScopeId::new("workspace.exact").unwrap(),
+            vec![plugin(
+                "plugin.workspace.exact",
+                WorkspaceToolBehavior::Fixed(exact_value, WORKSPACE_SNAPSHOT_RESPONSE_BYTES),
+            )],
+            Arc::new(RejectingBrokerFacade),
+        )
+        .await
+        .unwrap();
+    host.publish_workspace_candidate(Some(candidate.clone()), exact.clone())
+        .await
+        .unwrap();
+    assert_eq!(
+        exact
+            .registry()
+            .call_workspace_tool(&capability, BoundedJson::generic(json!({})).unwrap())
+            .await
+            .unwrap()
+            .payload
+            .encoded_bytes(),
+        WORKSPACE_SNAPSHOT_RESPONSE_BYTES
+    );
+    assert!(
+        candidate
+            .registry()
+            .workspace_tool_owner(&capability)
+            .is_none()
+    );
+
+    let over = host
+        .build_workspace_candidate(
+            &project,
+            ScopeId::new("workspace.over").unwrap(),
+            vec![plugin(
+                "plugin.workspace.over",
+                WorkspaceToolBehavior::Fixed(
+                    Value::String("x".repeat(WORKSPACE_SNAPSHOT_RESPONSE_BYTES - 1)),
+                    WORKSPACE_SNAPSHOT_RESPONSE_BYTES + 1,
+                ),
+            )],
+            Arc::new(RejectingBrokerFacade),
+        )
+        .await
+        .unwrap();
+    host.publish_workspace_candidate(Some(exact), over.clone())
+        .await
+        .unwrap();
+    assert!(matches!(
+        over.registry()
+            .call_workspace_tool(&capability, BoundedJson::generic(json!({})).unwrap())
+            .await,
+        Err(WorkspaceToolCallError::Payload(
+            rho_extension_runtime::BrokerPayloadError::TooLarge { .. }
+        ))
+    ));
+
+    let widened_request = BoundedJson::new(
+        Value::String("x".repeat(DEFAULT_BROKER_PAYLOAD_BYTES)),
+        DEFAULT_BROKER_PAYLOAD_BYTES + 2,
+    )
+    .unwrap();
+    assert!(matches!(
+        over.registry()
+            .call_workspace_tool(&capability, widened_request)
+            .await,
+        Err(WorkspaceToolCallError::Payload(
+            rho_extension_runtime::BrokerPayloadError::TooLarge { .. }
+        ))
+    ));
+
+    let hanging = host
+        .build_workspace_candidate(
+            &project,
+            ScopeId::new("workspace.hanging").unwrap(),
+            vec![plugin(
+                "plugin.workspace.hanging",
+                WorkspaceToolBehavior::Hang,
+            )],
+            Arc::new(RejectingBrokerFacade),
+        )
+        .await
+        .unwrap();
+    host.publish_workspace_candidate(Some(over), hanging.clone())
+        .await
+        .unwrap();
+    let registry = hanging.registry().clone();
+    let call_capability = capability.clone();
+    let call = tokio::spawn(async move {
+        registry
+            .call_workspace_tool(&call_capability, BoundedJson::generic(json!({})).unwrap())
+            .await
+    });
+    tokio::time::timeout(Duration::from_millis(100), async {
+        while hanging.registry().active_leases() == 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    call.abort();
+    assert!(call.await.unwrap_err().is_cancelled());
+    assert_eq!(hanging.registry().active_leases(), 0);
+    let report = host
+        .clear_workspace_scope(Some(hanging))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(report.outcome, DisposeOutcome::Disposed);
+}
+
+#[tokio::test]
+async fn project_workspace_tree_second_cas_failure_restores_old_tree_then_success_replaces_it() {
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let project_a = host
+        .build_empty_project_candidate(ScopeId::new("project.a").unwrap())
+        .await
+        .unwrap();
+    host.publish_project_candidate(None, project_a.clone())
+        .await
+        .unwrap();
+    let workspace_a = host
+        .build_workspace_candidate(
+            &project_a,
+            ScopeId::new("workspace.a").unwrap(),
+            Vec::new(),
+            Arc::new(RejectingBrokerFacade),
+        )
+        .await
+        .unwrap();
+    host.publish_workspace_candidate(None, workspace_a.clone())
+        .await
+        .unwrap();
+
+    let project_parent_mismatch = host
+        .build_empty_project_candidate(ScopeId::new("project.parent-mismatch").unwrap())
+        .await
+        .unwrap();
+    let workspace_parent_mismatch = host
+        .build_workspace_candidate(
+            &project_a,
+            ScopeId::new("workspace.parent-mismatch").unwrap(),
+            Vec::new(),
+            Arc::new(RejectingBrokerFacade),
+        )
+        .await
+        .unwrap();
+    let parent_error = host
+        .publish_project_tree_candidates(
+            Some(project_a.clone()),
+            project_parent_mismatch.clone(),
+            Some(workspace_a.clone()),
+            workspace_parent_mismatch.clone(),
+        )
+        .await
+        .unwrap_err();
+    assert!(parent_error.reason.contains("child scope parent"));
+    assert!(matches!(
+        project_parent_mismatch.state(),
+        ScopeLifecycleState::Disposed | ScopeLifecycleState::Failed
+    ));
+    assert!(matches!(
+        workspace_parent_mismatch.state(),
+        ScopeLifecycleState::Disposed | ScopeLifecycleState::Failed
+    ));
+    assert!(Arc::ptr_eq(&host.scopes().project().unwrap(), &project_a));
+    assert!(Arc::ptr_eq(
+        &host.scopes().workspace().unwrap(),
+        &workspace_a
+    ));
+
+    let project_b_loser = host
+        .build_empty_project_candidate(ScopeId::new("project.b.loser").unwrap())
+        .await
+        .unwrap();
+    let workspace_b_loser = host
+        .build_workspace_candidate(
+            &project_b_loser,
+            ScopeId::new("workspace.b.loser").unwrap(),
+            Vec::new(),
+            Arc::new(RejectingBrokerFacade),
+        )
+        .await
+        .unwrap();
+    let stale_workspace = host
+        .build_workspace_candidate(
+            &project_a,
+            ScopeId::new("workspace.stale").unwrap(),
+            Vec::new(),
+            Arc::new(RejectingBrokerFacade),
+        )
+        .await
+        .unwrap();
+    let error = host
+        .publish_project_tree_candidates(
+            Some(project_a.clone()),
+            project_b_loser.clone(),
+            Some(stale_workspace.clone()),
+            workspace_b_loser.clone(),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(error.reason, "workspace_expected_old_mismatch");
+    assert!(Arc::ptr_eq(&host.scopes().project().unwrap(), &project_a));
+    assert!(Arc::ptr_eq(
+        &host.scopes().workspace().unwrap(),
+        &workspace_a
+    ));
+    assert_eq!(project_a.state(), ScopeLifecycleState::Active);
+    assert_eq!(workspace_a.state(), ScopeLifecycleState::Active);
+    assert!(matches!(
+        project_b_loser.state(),
+        ScopeLifecycleState::Disposed | ScopeLifecycleState::Failed
+    ));
+    assert!(matches!(
+        workspace_b_loser.state(),
+        ScopeLifecycleState::Disposed | ScopeLifecycleState::Failed
+    ));
+    host.rollback_candidate(&stale_workspace).await;
+
+    let project_b = host
+        .build_empty_project_candidate(ScopeId::new("project.b").unwrap())
+        .await
+        .unwrap();
+    let workspace_b = host
+        .build_workspace_candidate(
+            &project_b,
+            ScopeId::new("workspace.b").unwrap(),
+            Vec::new(),
+            Arc::new(RejectingBrokerFacade),
+        )
+        .await
+        .unwrap();
+    let report = host
+        .publish_project_tree_candidates(
+            Some(project_a.clone()),
+            project_b.clone(),
+            Some(workspace_a.clone()),
+            workspace_b.clone(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(report.project, *project_b.identity());
+    assert_eq!(report.workspace, *workspace_b.identity());
+    assert!(Arc::ptr_eq(&host.scopes().project().unwrap(), &project_b));
+    assert!(Arc::ptr_eq(
+        &host.scopes().workspace().unwrap(),
+        &workspace_b
+    ));
+    assert!(matches!(
+        project_a.state(),
+        ScopeLifecycleState::Disposed | ScopeLifecycleState::Failed
+    ));
+    assert!(matches!(
+        workspace_a.state(),
+        ScopeLifecycleState::Disposed | ScopeLifecycleState::Failed
+    ));
+}
+
+#[tokio::test]
+async fn application_viewer_contribution_is_path_free_routable_and_disposed() {
+    let capability = capability_id("ui.viewer.project-file");
+    let mut viewer_descriptor = descriptor("plugin.viewer", ScopePolicy::application_kind());
+    viewer_descriptor.provides = vec![CapabilityDeclaration::new(capability.clone(), 1)];
+    let plugin: Arc<dyn InternalPlugin> = Arc::new(ViewerPlugin {
+        descriptor: viewer_descriptor,
+        capability_id: capability.clone(),
+    });
+    let (_, sink) = diagnostics();
+    let host = ExtensionHost::new_with_application_plugins(
+        InternalExtensionRuntimeMode::Candidate,
+        vec![CapabilityDeclaration::new(capability_id("service.host"), 1)],
+        vec![plugin],
+        Arc::new(RejectingBrokerFacade),
+        sink,
+        deadlines(),
+    )
+    .await
+    .unwrap();
+    let application = host.scopes().application();
+    let resolution = application
+        .registry()
+        .resolve_project_file_viewer(&capability)
+        .unwrap();
+    assert_eq!(resolution.scope(), application.identity());
+    assert_eq!(
+        resolution.contribution().supported_media_types(),
+        &["text/html".to_string(), "text/plain".to_string()]
+    );
+    assert_eq!(
+        resolution.contribution().html_maximum_bytes(),
+        PROJECT_FILE_VIEWER_HTML_BYTES
+    );
+    let encoded = serde_json::to_value(resolution.contribution()).unwrap();
+    assert!(encoded.get("project_root").is_none());
+    assert!(encoded.get("path").is_none());
+    drop(resolution);
+
+    let report = host.shutdown().await;
+    assert_eq!(report.outcome, DisposeOutcome::Disposed);
+    assert!(matches!(
+        application
+            .registry()
+            .resolve_project_file_viewer(&capability),
+        Err(ProjectFileViewerResolveError::Routing(RoutingError::Closed))
+    ));
+}
+
+#[tokio::test]
+async fn duplicate_workspace_tool_and_viewer_registration_roll_back() {
+    let tool_capability = capability_id("tool.workspace.snapshot");
+    let viewer_capability = capability_id("ui.viewer.project-file");
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let project = host
+        .build_empty_project_candidate(ScopeId::new("project.duplicate").unwrap())
+        .await
+        .unwrap();
+    let tool = |id: &str| -> Arc<dyn InternalPlugin> {
+        Arc::new(WorkspaceToolPlugin {
+            descriptor: descriptor(id, ScopePolicy::workspace_kind()),
+            capability_id: tool_capability.clone(),
+            behavior: WorkspaceToolBehavior::Fail,
+        })
+    };
+    assert!(matches!(
+        host.build_workspace_candidate(
+            &project,
+            ScopeId::new("workspace.duplicate").unwrap(),
+            vec![tool("plugin.tool.a"), tool("plugin.tool.b")],
+            Arc::new(RejectingBrokerFacade),
+        )
+        .await,
+        Err(CandidateBuildError::Activation { .. })
+    ));
+
+    let viewer = |id: &str| -> Arc<dyn InternalPlugin> {
+        Arc::new(ViewerPlugin {
+            descriptor: descriptor(id, ScopePolicy::application_kind()),
+            capability_id: viewer_capability.clone(),
+        })
+    };
+    assert!(matches!(
+        ExtensionHost::new_with_application_plugins(
+            InternalExtensionRuntimeMode::Candidate,
+            Vec::new(),
+            vec![viewer("plugin.viewer.a"), viewer("plugin.viewer.b")],
+            Arc::new(RejectingBrokerFacade),
+            sink,
+            deadlines(),
+        )
+        .await,
+        Err(rho_extension_runtime::ExtensionHostError::ApplicationBuild(
+            _
+        ))
+    ));
 }
 
 #[tokio::test]
