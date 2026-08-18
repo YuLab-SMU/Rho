@@ -58,6 +58,7 @@ changes.
 - Active P1-1 internal extension lifecycle runtime: [`plans/active-2026-08-18-p1-1-extension-runtime-lifecycle-spec.md`](plans/active-2026-08-18-p1-1-extension-runtime-lifecycle-spec.md)
 - Active P1-2 project Run History source: [`plans/active-2026-08-18-p1-2-run-history-source-spec.md`](plans/active-2026-08-18-p1-2-run-history-source-spec.md)
 - Active P1-3 Workspace Snapshot and Project File Viewer migration: [`plans/active-2026-08-18-p1-3-workspace-snapshot-viewer-spec.md`](plans/active-2026-08-18-p1-3-workspace-snapshot-viewer-spec.md)
+- Active P1-4 default switch and Phase 1 acceptance: [`plans/active-2026-08-18-p1-4-default-acceptance-spec.md`](plans/active-2026-08-18-p1-4-default-acceptance-spec.md)
 - Active Rust fast-development CI: [`plans/active-2026-08-18-rust-fast-development-ci-spec.md`](plans/active-2026-08-18-rust-fast-development-ci-spec.md)
 - Bounded `dev.41` native-updater acceptance transport: [`release/active-0.4.0-dev.41-native-updater-acceptance-target-checklist.md`](release/active-0.4.0-dev.41-native-updater-acceptance-target-checklist.md)
 - Active SignPath application readiness: [`plans/active-2026-08-11-signpath-application-readiness-spec.md`](plans/active-2026-08-11-signpath-application-readiness-spec.md)

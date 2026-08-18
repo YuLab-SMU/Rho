@@ -1,7 +1,7 @@
 # Phase 1 Internal Plugin Runtime Design
 
-Status: accepted architecture design; P1-0 through P1-2 completed their Draft
-stop gates; P1-3 implementation authorized
+Status: accepted architecture design; P1-0 through P1-3 completed their Draft
+stop gates; P1-4 implementation and acceptance authorized
 
 Date: 2026-08-14
 Issue: [#17](https://github.com/YuLab-SMU/Rho/issues/17)
@@ -9,11 +9,10 @@ Scope: compiled-in, first-party plugins only; capability composition,
 dependency resolution, scoped lifetime, reversible registration, and migration
 of a small set of existing built-in capabilities
 
-Change class: D3 shared architecture. The architecture was accepted and P1-0,
-P1-1, and P1-2 passed their separately activated Draft stop gates on
-2026-08-18. P1-3 is now separately active under its implementation contract.
-P1-4 remains unauthorized and subject to its own activation, cross-review,
-testing, and stop-point rules in `docs/project/active-development-governance.md`.
+Change class: D3 shared architecture. The architecture was accepted and P1-0
+through P1-3 passed their separately activated Draft stop gates on 2026-08-18.
+P1-4 is now separately active under its implementation/acceptance contract and
+the stop-point rules in `docs/project/active-development-governance.md`.
 
 Source review:
 
@@ -52,10 +51,10 @@ are recorded in their separate active contracts, the shared documentation
 index, and the central cross-review matrix. The separate Phase 2 design in PR
 #76 remains proposed and Git-independent.
 
-Implementation entry rule: only the currently active P1-3 contract may modify
-product code from this design. P1-4 requires a new active contract and remains
-unauthorized. Phase 1 does not authorize loading third-party or project-authored
-executable code.
+Implementation entry rule: only the currently active P1-4 contract may modify
+product/release-validation code from this design. Phase 1 does not authorize
+loading third-party or project-authored executable code, and legacy deletion
+remains separately gated.
 
 ## Summary
 
@@ -1039,7 +1038,8 @@ then completed its Draft stop gate through
 `docs/plans/active-2026-08-18-p1-2-run-history-source-spec.md`. P1-3 then
 completed its Draft stop gate through
 `docs/plans/active-2026-08-18-p1-3-workspace-snapshot-viewer-spec.md`. P1-4 is
-the next separately activated package under the continuing whole-P1 objective.
+active under `docs/plans/active-2026-08-18-p1-4-default-acceptance-spec.md` and
+the continuing whole-P1 objective.
 
 ## Version, NEWS, And Release Impact
 
