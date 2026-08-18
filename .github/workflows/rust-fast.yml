@@ -12,6 +12,10 @@ on:
       - "crates/**/*.rs"
       - "desktop/src-tauri/**"
       - "desktop/dist/app.js"
+      - "desktop/dist/index.html"
+      - "desktop/package.json"
+      - "desktop/package-lock.json"
+      - "NEWS.md"
       - "r/rho.agent/R/aisdk_adapter.R"
       - "vendor/jet/**/*.rs"
       - "runtime/ark.json"
@@ -23,6 +27,7 @@ on:
       - "scripts/test-license-contract.mjs"
       - "scripts/test-extension-run-history-contract.mjs"
       - "scripts/test-extension-p1-3-contract.mjs"
+      - "scripts/test-extension-phase-1-acceptance.mjs"
       - "LICENSE"
       - "LICENSES.md"
 
@@ -101,6 +106,8 @@ jobs:
           node scripts/test-extension-run-history-contract.mjs
           node scripts/test-extension-p1-3-contract.mjs --test
           node scripts/test-extension-p1-3-contract.mjs
+          node scripts/test-extension-phase-1-acceptance.mjs --test
+          node scripts/test-extension-phase-1-acceptance.mjs
 
       - name: Check formatting
         run: cargo fmt --all -- --check

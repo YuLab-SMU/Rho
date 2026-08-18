@@ -123,14 +123,19 @@ export function validateCompatibilityWorkflow(text) {
     '"scripts/test-rust-msrv-contract.mjs"',
     '"scripts/test-extension-run-history-contract.mjs"',
     '"scripts/test-extension-p1-3-contract.mjs"',
+    '"scripts/test-extension-phase-1-acceptance.mjs"',
     '"desktop/dist/app.js"',
+    '"desktop/dist/index.html"',
+    '"desktop/package.json"',
+    '"desktop/package-lock.json"',
+    '"NEWS.md"',
     '"r/rho.agent/R/aisdk_adapter.R"',
   ]) {
     const occurrences = workflow.split(requiredPath).length - 1;
     if (occurrences !== 2) fail(`Both Rust compatibility triggers must include ${requiredPath}`);
   }
-  if (/contents:\s*write|secrets\.|upload-artifact|createRelease|tauri\s+build|notarytool|codesign/.test(workflow)) {
-    fail("Rust compatibility workflow must not receive release, credential, packaging, or write authority");
+  if (/contents:\s*write|secrets\.|upload-artifact|createRelease|notarytool|codesign/.test(workflow)) {
+    fail("Rust compatibility workflow must not receive release, credential, signing, upload, or write authority");
   }
   if (!/fail-fast: false/.test(workflow) || /continue-on-error:/.test(workflow)) {
     fail("All Rust compatibility legs must remain required and independently visible");
@@ -149,6 +154,8 @@ export function validateCompatibilityWorkflow(text) {
   }
   for (const command of [
     "node scripts/test-rust-msrv-contract.mjs",
+    "node scripts/test-extension-phase-1-acceptance.mjs --test",
+    "node scripts/test-extension-phase-1-acceptance.mjs",
     "cargo check --workspace --all-targets --locked",
     "cargo test --workspace --locked --no-fail-fast",
   ]) {
@@ -162,6 +169,28 @@ export function validateCompatibilityWorkflow(text) {
   }
   if (!/if: runner\.os == 'macOS'[\s\S]*run: \.\/scripts\/bootstrap-ark-macos\.sh/.test(workflow)) {
     fail("macOS compatibility legs must stage the checksum-pinned Ark sidecar required by Tauri");
+  }
+  if (!/timeout-minutes: 90/.test(workflow)) {
+    fail("Rust compatibility must reserve enough time for stable-leg installed-app acceptance");
+  }
+  for (const marker of [
+    "Build, install, smoke and remove unsigned Windows app",
+    "Build, mount and smoke unsigned macOS app",
+    "Build, extract and smoke unsigned Linux AppImage",
+    "scripts\\build-windows-installer.ps1",
+    "scripts/build-linux.sh",
+    "RHO_INTERNAL_EXTENSION_RUNTIME=legacy",
+    "env -u RHO_INTERNAL_EXTENSION_RUNTIME",
+  ]) {
+    if (!workflow.includes(marker)) fail(`Rust compatibility installed-app gate is missing: ${marker}`);
+  }
+  if ((workflow.match(/if: matrix\.toolchain == 'stable' && runner\.os ==/g) ?? []).length < 3) {
+    fail("Each installed-app acceptance leg must run only on stable Rust");
+  }
+  if (!/Rho uninstall registry cleanup failed/.test(workflow)
+      || !/hdiutil detach/.test(workflow)
+      || !/rm -rf -- "\$key_dir" "\$extract_dir"/.test(workflow)) {
+    fail("Installed-app acceptance must prove Windows, macOS, and Linux cleanup");
   }
   validateCargoCache(workflow);
 }
@@ -209,7 +238,12 @@ export function validateFastWorkflow(text) {
     '"scripts/test-rust-msrv-contract.mjs"',
     '"scripts/test-extension-run-history-contract.mjs"',
     '"scripts/test-extension-p1-3-contract.mjs"',
+    '"scripts/test-extension-phase-1-acceptance.mjs"',
     '"desktop/dist/app.js"',
+    '"desktop/dist/index.html"',
+    '"desktop/package.json"',
+    '"desktop/package-lock.json"',
+    '"NEWS.md"',
     '"r/rho.agent/R/aisdk_adapter.R"',
   ]) {
     if (!workflow.includes(requiredPath)) fail(`Rust Fast path filter is missing ${requiredPath}`);
@@ -223,6 +257,8 @@ export function validateFastWorkflow(text) {
     "node scripts/test-extension-run-history-contract.mjs",
     "node scripts/test-extension-p1-3-contract.mjs --test",
     "node scripts/test-extension-p1-3-contract.mjs",
+    "node scripts/test-extension-phase-1-acceptance.mjs --test",
+    "node scripts/test-extension-phase-1-acceptance.mjs",
     "cargo fmt --all -- --check",
     "cargo check --workspace --all-targets --locked",
     "cargo test --workspace --locked --no-fail-fast",
@@ -296,6 +332,10 @@ on:
       - "crates/**/*.rs"
       - "desktop/src-tauri/**"
       - "desktop/dist/app.js"
+      - "desktop/dist/index.html"
+      - "desktop/package.json"
+      - "desktop/package-lock.json"
+      - "NEWS.md"
       - "r/rho.agent/R/aisdk_adapter.R"
       - "vendor/jet/**/*.rs"
       - "runtime/ark.json"
@@ -306,6 +346,7 @@ on:
       - "scripts/test-rust-msrv-contract.mjs"
       - "scripts/test-extension-run-history-contract.mjs"
       - "scripts/test-extension-p1-3-contract.mjs"
+      - "scripts/test-extension-phase-1-acceptance.mjs"
   pull_request:
     branches: [main]
     types: [opened, reopened, synchronize, ready_for_review]
@@ -317,6 +358,10 @@ on:
       - "crates/**/*.rs"
       - "desktop/src-tauri/**"
       - "desktop/dist/app.js"
+      - "desktop/dist/index.html"
+      - "desktop/package.json"
+      - "desktop/package-lock.json"
+      - "NEWS.md"
       - "r/rho.agent/R/aisdk_adapter.R"
       - "vendor/jet/**/*.rs"
       - "runtime/ark.json"
@@ -327,6 +372,7 @@ on:
       - "scripts/test-rust-msrv-contract.mjs"
       - "scripts/test-extension-run-history-contract.mjs"
       - "scripts/test-extension-p1-3-contract.mjs"
+      - "scripts/test-extension-phase-1-acceptance.mjs"
 permissions:
   contents: read
 concurrency:
@@ -335,6 +381,7 @@ concurrency:
 jobs:
   rust-compatibility:
     if: github.event_name == 'push' || github.event.pull_request.draft == false
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -362,8 +409,28 @@ ${entries}
         run: cargo fmt --all -- --check
       - run: |
           node scripts/test-rust-msrv-contract.mjs
+          node scripts/test-extension-phase-1-acceptance.mjs --test
+          node scripts/test-extension-phase-1-acceptance.mjs
           cargo check --workspace --all-targets --locked
           cargo test --workspace --locked --no-fail-fast
+      - name: Build, install, smoke and remove unsigned Windows app
+        if: matrix.toolchain == 'stable' && runner.os == 'Windows'
+        run: |
+          powershell scripts\\build-windows-installer.ps1
+          echo "Rho uninstall registry cleanup failed"
+      - name: Build, mount and smoke unsigned macOS app
+        if: matrix.toolchain == 'stable' && runner.os == 'macOS'
+        run: |
+          env -u RHO_INTERNAL_EXTENSION_RUNTIME rho-desktop --smoke-test
+          RHO_INTERNAL_EXTENSION_RUNTIME=legacy rho-desktop --smoke-test
+          hdiutil detach mount
+      - name: Build, extract and smoke unsigned Linux AppImage
+        if: matrix.toolchain == 'stable' && runner.os == 'Linux'
+        run: |
+          scripts/build-linux.sh
+          env -u RHO_INTERNAL_EXTENSION_RUNTIME rho-desktop --smoke-test
+          RHO_INTERNAL_EXTENSION_RUNTIME=legacy rho-desktop --smoke-test
+          rm -rf -- "$key_dir" "$extract_dir"
 `;
 }
 
@@ -381,6 +448,10 @@ on:
       - "crates/**/*.rs"
       - "desktop/src-tauri/**"
       - "desktop/dist/app.js"
+      - "desktop/dist/index.html"
+      - "desktop/package.json"
+      - "desktop/package-lock.json"
+      - "NEWS.md"
       - "r/rho.agent/R/aisdk_adapter.R"
       - "vendor/jet/**/*.rs"
       - "runtime/ark.json"
@@ -390,6 +461,7 @@ on:
       - "scripts/test-rust-msrv-contract.mjs"
       - "scripts/test-extension-run-history-contract.mjs"
       - "scripts/test-extension-p1-3-contract.mjs"
+      - "scripts/test-extension-phase-1-acceptance.mjs"
 permissions:
   contents: read
 concurrency:
@@ -426,6 +498,8 @@ jobs:
           node scripts/test-extension-run-history-contract.mjs
           node scripts/test-extension-p1-3-contract.mjs --test
           node scripts/test-extension-p1-3-contract.mjs
+          node scripts/test-extension-phase-1-acceptance.mjs --test
+          node scripts/test-extension-phase-1-acceptance.mjs
           cargo fmt --all -- --check
           cargo check --workspace --all-targets --locked
           cargo test --workspace --locked --no-fail-fast
