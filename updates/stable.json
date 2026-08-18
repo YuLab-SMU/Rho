@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "channel": "stable",
+  "version": "0.4.0",
+  "published_at": "2026-08-18T01:46:40Z",
+  "summary": "Rho 0.4.0 brings the three-platform scientific workbench to the stable channel.",
+  "release_page_url": "https://yulab-smu.top/Rho/",
+  "github_release_url": "https://github.com/YuLab-SMU/Rho/releases/tag/v0.4.0",
+  "artifacts": {
+    "windows_x86_64": {
+      "url": "https://github.com/YuLab-SMU/Rho/releases/download/v0.4.0/Rho_0.4.0_x64-setup.exe",
+      "sha256": "9d839c60a2e6fdebde71a1c2246fdb123dd91068b8e69e07a3f297d6e9ff13ce",
+      "size": 18708232
+    },
+    "macos_aarch64": {
+      "url": "https://github.com/YuLab-SMU/Rho/releases/download/v0.4.0/Rho_0.4.0_aarch64.dmg",
+      "sha256": "b6820eb321d24d9644a6a7c7a994b9833e5a90dcf46281ce001736e9b918b4bb",
+      "size": 21805393
+    },
+    "linux_x86_64": {
+      "url": "https://github.com/YuLab-SMU/Rho/releases/download/v0.4.0/Rho_0.4.0_x86_64.AppImage",
+      "sha256": "a3e1f5bd3fdcc6c1234300a299081ca38f01a66ec4efdb243ec394eaf73c4c3c",
+      "size": 101165560
+    }
+  }
+}

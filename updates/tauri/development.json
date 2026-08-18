@@ -1,0 +1,19 @@
+{
+  "version": "0.4.0",
+  "notes": "Rho 0.4.0 brings the three-platform scientific workbench to the stable channel.",
+  "pub_date": "2026-08-18T01:46:40Z",
+  "platforms": {
+    "windows-x86_64": {
+      "url": "https://github.com/YuLab-SMU/Rho/releases/download/v0.4.0/Rho_0.4.0_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSZi9sc0lMSkE4RjJ0a0locnoxbXNsOVFtTElDZ3M0L0NKKytVRkVicnhuY0hoNnZtaUQ2dmplMmVuVTg3WnR3R3o3YldBYytIOVZVaTJqZVBuMUlOcW5WSXRtK0NpOFFjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3MDE3NDUzCWZpbGU6UmhvXzAuNC4wX3g2NC1zZXR1cC5leGUKZTAwd3QydmV0RWt3MWwzRkw0ZFkya09DUnEwOWlqdVFKTnJDaFRZUURSakFuS1E5RzRkWW9ISWwzUTltRE1wUGw2dVB4VDY2VGJWcFpXOEh1L2taQXc9PQo="
+    },
+    "darwin-aarch64": {
+      "url": "https://github.com/YuLab-SMU/Rho/releases/download/v0.4.0/Rho_0.4.0_aarch64.app.tar.gz",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSZi9sc0lMSkE4RjRCNU54c1JYRUp2L3loSS82STFRbis3Z3FIVGM0K3FLQVhxOHgzSHZhdCsrOXlLbkFIUHpJd2pDSi9XelZBTlkxR3FjTE83M1JsUzh4S3FGbUxGMlEwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3MDE3MDM2CWZpbGU6UmhvXzAuNC4wX2FhcmNoNjQuYXBwLnRhci5negppZW9lbSswZk5TdmVlQ3F2aGFJWEY1citqL3MyeEVBWnhEUHlFL000QUgrRzErZTUwZmljTTJvRDV3bXFzeTVHTHBSYW1aYlJYbWJvVCtibnJZb3FBQT09Cg=="
+    },
+    "linux-x86_64": {
+      "url": "https://github.com/YuLab-SMU/Rho/releases/download/v0.4.0/Rho_0.4.0_x86_64.AppImage",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSZi9sc0lMSkE4RndwcTVMdkZXSzFqZGVnZlgvTzlWV2M5Y2VuTVltbnZaMFlDMlpDclB6cG04VEUwZFJRbENsWDVMTmQ3dmN1cVZUSkNteGNGMzBaRnQxYUF3RXh6a3c4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3MDE3MjYyCWZpbGU6UmhvXzAuNC4wX3g4Nl82NC5BcHBJbWFnZQpyY1RJcUdROWZBbmxxaUFTZG5maE42YVVGajRsZnJYY2NhRS9KdncxVjJQU3NQcVFjdVlPNVpIVk5zcGJHa25UbVhOd21Vd2swb3JSMFJxTWJ3OW1EUT09Cg=="
+    }
+  }
+}
