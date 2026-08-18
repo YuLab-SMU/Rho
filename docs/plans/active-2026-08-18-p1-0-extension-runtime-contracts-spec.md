@@ -1,7 +1,7 @@
 # P1-0 Internal Extension Runtime Contracts Specification
 
 Status: active; P1-0 implementation and local automated verification complete
-2026-08-18; exact-head hosted matrix pending
+2026-08-18; exact-head Rust Fast pending; six-leg matrix deferred to P1-4
 
 Date: 2026-08-18
 Owning architecture:
@@ -36,15 +36,16 @@ P1-0 is accepted only when:
   plans, errors, and diagnostics regardless of input order;
 - capability registration is demonstrably separate from broker permission;
 - the focused and complete locked Rust checks pass locally;
-- the exact pushed head passes macOS, Windows, and Linux on stable and Rust
-  1.88 through the existing Rust Compatibility workflow;
+- the exact pushed head passes the read-only Ubuntu-stable Rust Fast workflow;
+- local Rust 1.88 focused and current-toolchain workspace evidence passes;
 - dependency license/MSRV/maintenance review is recorded; and
 - the implementation is reviewed against this contract before the checkpoint
   is marked complete.
 
-Hosted evidence cannot be claimed before the exact pushed commit finishes all
-six workflow legs. P1-1 remains blocked even after P1-0 passes until separately
-authorized.
+Hosted Draft evidence cannot be claimed before the exact pushed commit finishes
+Rust Fast. The full macOS/Windows/Linux stable/Rust-1.88 matrix is deliberately
+deferred to P1-4 after the whole P1 stream is complete. P1-1 remains blocked
+even after P1-0 passes until separately authorized.
 
 Verification amendment (2026-08-18): the first Rust 1.88 focused run passed,
 then `node scripts/test-rust-msrv-contract.mjs --test` reproduced a baseline
@@ -320,8 +321,9 @@ git diff --check
 ```
 
 Run the focused crate on local Rust 1.88 when that toolchain is available. The
-existing GitHub Rust Compatibility workflow is the authoritative six-leg
-macOS/Windows/Linux stable/1.88 locked matrix.
+exact-head Rust Fast is the Draft hosted gate. The existing GitHub Rust
+Compatibility workflow remains the authoritative six-leg
+macOS/Windows/Linux stable/1.88 locked matrix at P1-4/Ready and `main`.
 
 No R, frontend, browser/mock, installed-app, packaging, or manual UI check is
 affected by this pure package. These are recorded as intentionally unrun, not
@@ -426,9 +428,10 @@ scope-policy deserialization surface was narrowed to preserve the already
 accepted construction invariants. The pre-existing MSRV self-test fixture
 repair was explicitly amended and cross-reviewed before its script changed.
 
-Hosted evidence: pending the exact pushed P1-0 commit and all six
-macOS/Windows/Linux stable/Rust-1.88 jobs. P1-0 is not yet at its stop-gate
-acceptance state.
+Hosted evidence: pending exact-head Rust Fast after CI-FAST1 lands. The
+superseded six-leg run `32107811887` was cancelled after the user explicitly
+deferred the full matrix to P1-4; its partial results are not P1-0 acceptance.
+P1-0 is not yet at its stop-gate acceptance state.
 
 Intentionally unrun: R package suites, frontend/browser/mock checks, manual UI,
 installed-app, installer, signing, and release checks. P1-0 changes no R,
@@ -437,9 +440,10 @@ frontend, command, mock, schema, runtime, or distributable behavior.
 Version/NEWS: no application or R package version change and no `NEWS.md`
 entry. Release decision remains unchanged; this is not a candidate or release.
 
-Residual risks: native Windows/Linux and a freshly installed current stable
-toolchain remain unproved until hosted checks finish. The Rust API remains
-internal experimental and is not a public SDK.
+Residual risks: accumulated native Windows/Linux and exact MSRV compatibility
+remain intentionally deferred until P1-4. Rust Fast proves one fresh Linux
+stable host only. The Rust API remains internal experimental and is not a
+public SDK.
 
 P1-1 remains unauthorized.
 
@@ -449,7 +453,7 @@ At completion, update this active contract with:
 
 - exact implementation commit and locked dependency versions;
 - exact local commands, counts, and results;
-- exact hosted workflow run and all six job results, or an explicit open gate;
+- exact Rust Fast workflow result and the explicit P1-4 six-leg deferral;
 - independent contract/security review findings and resolutions;
 - actual deviations;
 - version/NEWS decision;

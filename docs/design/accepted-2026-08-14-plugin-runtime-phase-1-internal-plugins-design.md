@@ -884,6 +884,13 @@ The final authorized migration package runs the complete affected Rust, R, and
 frontend matrix required by governance, plus `git diff --check`. Exact commands
 and unrun manual checks are recorded in the implementation handoff.
 
+During the long-lived Draft construction stream, P1-0 through P1-3 use focused
+local checks, one current-toolchain affected workspace checkpoint where
+required, available local MSRV evidence, and exact-head Ubuntu-stable Rust Fast
+CI. The complete macOS/Windows/Linux stable/Rust-1.88 hosted matrix is deferred
+to P1-4 after all intended Phase 1 code is present and the PR moves from Draft
+to Ready. Fast CI never substitutes for that final native compatibility gate.
+
 ## Work Packages And Mandatory Stop Points
 
 Each package requires separate authorization. Later packages do not activate
