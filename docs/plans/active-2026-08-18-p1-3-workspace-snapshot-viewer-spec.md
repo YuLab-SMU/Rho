@@ -1,8 +1,8 @@
 # P1-3 Workspace Snapshot Tool And Project File Viewer Specification
 
 Status: active predecessor; runtime `d67c294`, product migration `f16283c`, CI
-portability repair `efefa76`, local affected verification, exact-head Rust
-Fast, and Draft matrix skip passed
+portability repairs `efefa76`/`4c89c71`, local affected verification,
+exact-head Rust Fast, and Draft matrix skip passed
 
 Date: 2026-08-18
 Owning architecture:
@@ -430,17 +430,18 @@ the macOS/Windows/Linux stable/Rust 1.88 matrix were not run in P1-3. The
 automated real broker/R-expression tests and R package suites passed; installed
 app and full six-leg evidence remain the explicitly deferred P1-4/Ready gate.
 The first hosted run `32123954790` failed before Rust compilation because the
-PR checkout does not contain the aggregate worktree's external
-`R/rho.agent/R/aisdk_adapter.R` path. Commit `efefa76` made that extra Agent R
-source assertion conditional while retaining the tracked server/desktop
-contract and the locally executed 120-test Agent suite. This was a CI checkout
-portability repair, not a product behavior change.
+contract used uppercase `R/rho.agent/...`; macOS's case-insensitive filesystem
+masked that the tracked repository path is lowercase `r/rho.agent/...`.
+Commit `efefa76` first isolated the checkout portability issue, and commit
+`4c89c71` restored mandatory Agent-source validation against the exact tracked
+lowercase path. These were CI enforcement repairs, not product behavior
+changes.
 
-Exact-head Rust Fast run `32124219647` then passed on
-`efefa76efc30e2f01d0d1c548f17196a3a738033` in 2 minutes 15 seconds. It
+Exact-head Rust Fast run `32124848409` passed on
+`4c89c71efd3f3547cf29d7d3ec9b5327fcf55e83` in 2 minutes 55 seconds. It
 restored the exact 1305 MiB cache key
 `rho-rust-v1-Linux-stable-x86_64-unknown-linux-gnu-bc9fb070b16d52abd62c229a905e272f25158b85490bb3951775c4d64c2af6f1`.
-Rust Compatibility run `32124219634` skipped as required for Draft PR #75.
+Rust Compatibility run `32124848538` skipped as required for Draft PR #75.
 
 Implementation review found no blocking Trusted Kernel, raw-expression,
 Agent-admission, filesystem containment, project isolation, generation,
