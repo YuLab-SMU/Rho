@@ -255,6 +255,8 @@ function runSelfTests() {
       export RUSTUP_TOOLCHAIN=stable-aarch64-apple-darwin
       echo "RUSTUP_TOOLCHAIN=$RUSTUP_TOOLCHAIN" >> "$GITHUB_ENV"
       cargo test --workspace --locked --no-fail-fast
+  linux-candidate:
+    run: cargo test --workspace --locked --no-fail-fast
   macos-notary-wait:
     run: true
 `;

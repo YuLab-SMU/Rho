@@ -1,6 +1,7 @@
 # P1-0 Internal Extension Runtime Contracts Specification
 
-Status: active; P1-0 authorized 2026-08-18; implementation pending
+Status: active; P1-0 implementation and local automated verification complete
+2026-08-18; exact-head hosted matrix pending
 
 Date: 2026-08-18
 Owning architecture:
@@ -45,6 +46,15 @@ Hosted evidence cannot be claimed before the exact pushed commit finishes all
 six workflow legs. P1-1 remains blocked even after P1-0 passes until separately
 authorized.
 
+Verification amendment (2026-08-18): the first Rust 1.88 focused run passed,
+then `node scripts/test-rust-msrv-contract.mjs --test` reproduced a baseline
+self-test defect. The real candidate workflow contains all three required
+macOS/Windows/Linux locked workspace-test commands and the repository-mode
+contract passes, but the synthetic candidate fixture contained only Windows
+and macOS jobs while asserting a count of three. P1-0 may add only the missing
+synthetic Linux job to that fixture. This repair must not change the real
+workflow, matrix, MSRV, command contract, packaging, or release authority.
+
 ## Ownership And Cross-Review
 
 This specification owns only:
@@ -52,8 +62,9 @@ This specification owns only:
 - `rho-extension-runtime` P1-0 public-within-the-workspace Rust contracts;
 - validation of descriptors and the host-owned Phase 1 scope policy;
 - pure capability resolution and immutable activation-plan construction;
-- deterministic structured errors and diagnostics; and
-- P1-0 dependency and compatibility evidence.
+- deterministic structured errors and diagnostics;
+- P1-0 dependency and compatibility evidence; and
+- the bounded existing Rust MSRV synthetic-fixture correction recorded above.
 
 It does not own:
 
@@ -102,13 +113,17 @@ P1-0 dependencies are limited to:
 | --- | --- | --- | --- |
 | `serde` | existing workspace dependency with `derive` | deterministic typed contract serialization | already workspace-owned |
 | `thiserror` | existing workspace dependency | structured internal error display/source integration | already workspace-owned |
-| `semver` | workspace `1.x` with `serde` | standards-compliant `PluginVersion`; capability compatibility still compares only declared contract major | MIT OR Apache-2.0; Rust 1.31 for locked 1.0.26; mature maintained upstream |
+| `semver` | workspace `1.x` with `serde` | standards-compliant `PluginVersion`; capability compatibility still compares only declared contract major | locked 1.0.28; MIT OR Apache-2.0; Rust 1.68; mature maintained upstream |
 | `petgraph` | `0.8`, default features off, `std` only | explicit graph representation and SCC detection | 0.8.3 reviewed; MIT OR Apache-2.0; Rust 1.64; maintained upstream; below workspace MSRV |
 
 Rho implements stable Kahn ordering and canonical cycle-path selection itself;
 petgraph iteration order is never treated as output order. `inventory`, Tokio,
 ArcSwap, Wasm/Extism/Wasmtime/WASI, and dynamic loading dependencies are not
 permitted in P1-0.
+
+The only new transitive lock entry is `fixedbitset 0.5.7`, maintained under the
+petgraph organization, licensed MIT OR Apache-2.0, and declaring Rust 1.56.
+The other petgraph dependencies were already locked in this workspace.
 
 The lockfile may change only for this dependency addition. The final review
 records the selected locked versions and verifies that no unrelated package was
@@ -285,7 +300,10 @@ Focused unit/contract coverage includes:
 - provider implementation versus multiple configured product instances;
 - 256/257 plugin, 64/65 declaration, and 8192/8193 edge boundaries using
   bounded payload shapes; and
-- serialization round trips for core contracts and plans.
+- validated serialization round trips for core input/error/diagnostic contracts
+  and deterministic one-way serialization for host-built scope policies and
+  resolver-built plans. `ScopePolicy` and `ActivationPlan` do not expose a
+  deserialization path that bypasses their constructors.
 
 Required local stop-gate commands:
 
@@ -321,6 +339,111 @@ runtime becomes user-reachable. If an earlier package unexpectedly changes
 visible behavior, work stops and this contract is amended before versioning.
 
 ## P1-0 Stop Gate And Handoff
+
+### Implementation and local evidence — 2026-08-18
+
+Implementation is present on the pre-commit P1-0 tree. The evidence
+reconciliation commit records the exact implementation SHA after this bounded
+slice is committed and pushed.
+
+Implemented:
+
+- new pure `rho-extension-runtime` workspace crate with `#![forbid(unsafe_code)]`;
+- validated string ID newtypes, non-zero activation generation, semver-backed
+  plugin version, contract-major declarations, descriptors, scope identity,
+  and host-owned scope rules;
+- immutable one-way-serializable activation plans, explicit parent provider
+  bindings, explicit absent optional bindings, and typed diagnostics;
+- deterministic descriptor normalization, provider validation, current/parent
+  shadow rejection, petgraph SCC detection, canonical cycle selection, and
+  Rho-owned `BTreeSet` Kahn ordering;
+- all declared plugin/declaration/edge bounds; and
+- the authorized synthetic Linux candidate job in the MSRV self-test fixture.
+
+Dependency evidence:
+
+- locked `petgraph 0.8.3` uses `default-features = false` and only `std`;
+- the only new transitive lock entry is `fixedbitset 0.5.7`;
+- `semver 1.0.28` was already locked and now has workspace ownership with its
+  `serde` feature;
+- petgraph/fixedbitset/semver are MIT OR Apache-2.0 and declare Rust
+  1.64/1.56/1.68 respectively; and
+- `cargo metadata --locked --offline --no-deps` reports version `0.4.0`, Edition
+  2024, Rust 1.88, `AGPL-3.0-only`, the workspace repository, and exactly the
+  reviewed dependencies for the new crate.
+
+Local automated evidence:
+
+```text
+cargo fmt --all -- --check
+  PASS
+cargo test -p rho-extension-runtime --locked
+  PASS; 26 passed, 0 failed
+cargo +1.88.0-aarch64-apple-darwin test -p rho-extension-runtime --locked
+  PASS; 26 passed, 0 failed
+cargo clippy -p rho-extension-runtime --all-targets --locked -- -D warnings
+  PASS
+cargo check --workspace --all-targets --locked
+  PASS on rustc 1.97.0
+cargo test --workspace --locked --no-fail-fast
+  PASS on rustc 1.97.0; 398 passed, 0 failed, 1 existing opt-in
+  macOS Keychain test ignored
+cargo +1.88.0-aarch64-apple-darwin check --workspace --all-targets --locked
+  PASS on rustc 1.88.0
+cargo +1.88.0-aarch64-apple-darwin test --workspace --locked --no-fail-fast
+  PASS on rustc 1.88.0; 398 passed, 0 failed, 1 existing opt-in
+  macOS Keychain test ignored
+node scripts/test-rust-msrv-contract.mjs --test
+node scripts/test-rust-msrv-contract.mjs
+  PASS after the authorized synthetic-fixture correction
+node scripts/test-license-contract.mjs --test
+node scripts/test-license-contract.mjs
+  PASS
+git diff --check
+  PASS
+```
+
+The local `stable-aarch64-apple-darwin` alias was stale at Rust 1.88. It was not
+reported as current-stable evidence. The repository-pinned Rust 1.97 and exact
+MSRV both passed locally; the workflow's fresh `stable` install remains the
+authoritative current-stable evidence.
+
+Review findings resolved:
+
+- `PluginId` and sibling serde decoding originally would have bypassed
+  constructor validation; custom deserialization now revalidates every ID;
+- `ScopePolicy` and `ActivationPlan` originally derived deserialization, which
+  could bypass host-rule construction or resolver output; both are now
+  one-way-serializable only;
+- the largest structured parent-error variant triggered clippy's
+  `result_large_err`; its typed context is boxed without changing error truth;
+- permutation coverage now exercises all six input orders for a three-plugin
+  cycle and deterministic selection among multiple simultaneous errors; and
+- capability descriptors contain no permission, broker, or operation grant.
+
+Contract deviations: no product or authority deviation. The plan-output and
+scope-policy deserialization surface was narrowed to preserve the already
+accepted construction invariants. The pre-existing MSRV self-test fixture
+repair was explicitly amended and cross-reviewed before its script changed.
+
+Hosted evidence: pending the exact pushed P1-0 commit and all six
+macOS/Windows/Linux stable/Rust-1.88 jobs. P1-0 is not yet at its stop-gate
+acceptance state.
+
+Intentionally unrun: R package suites, frontend/browser/mock checks, manual UI,
+installed-app, installer, signing, and release checks. P1-0 changes no R,
+frontend, command, mock, schema, runtime, or distributable behavior.
+
+Version/NEWS: no application or R package version change and no `NEWS.md`
+entry. Release decision remains unchanged; this is not a candidate or release.
+
+Residual risks: native Windows/Linux and a freshly installed current stable
+toolchain remain unproved until hosted checks finish. The Rust API remains
+internal experimental and is not a public SDK.
+
+P1-1 remains unauthorized.
+
+### Required final reconciliation
 
 At completion, update this active contract with:
 
