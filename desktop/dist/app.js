@@ -2285,13 +2285,22 @@ async function mockInvoke(command, args) {
       r: "counts <- read.csv('counts.csv')\nsummary(counts)\n",
       rmd: "---\ntitle: 'Analysis'\n---\n\n```{r}\nsummary(counts)\n```\n",
       txt: "Generated text output\n",
+      log: "Generated log output\n",
       json: "{\"status\":\"complete\"}\n",
       html: "<!doctype html><html><head><title>Interactive output</title><style>body{font:16px sans-serif;padding:24px}button{padding:8px 12px}</style></head><body><h1>Interactive HTML output</h1><button id='update'>Update</button><p id='value'>Ready</p><script>document.querySelector('#update').onclick=()=>document.querySelector('#value').textContent='Updated inside sandbox';</script></body></html>",
       csv: "sample,reads,detected\nA,1200,3100\nB,1400,3300\n",
       tsv: "sample\treads\tdetected\nA\t1200\t3100\nB\t1400\t3300\n",
+      png: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      jpg: "/9j/4AAQSkZJRgABAQAAAQABAAD/2Q==",
+      jpeg: "/9j/4AAQSkZJRgABAQAAAQABAAD/2Q==",
+      gif: "R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==",
+      webp: "UklGRhYAAABXRUJQVlA4TAoAAAAvAAAAAAfQ//73v/+BiOh/AAA=",
     };
     if (!samples[extension]) throw new Error(`Preview is not available for this file: ${path}`);
-    return { contract: "rho.viewer_file.v1", project_root: mockLastProject, path, media_type: { md: "text/markdown", html: "text/html", r: "text/x-r", rmd: "text/x-r-markdown", txt: "text/plain", json: "application/json", csv: "text/csv", tsv: "text/tab-separated-values" }[extension], content_encoding: "utf-8", content: samples[extension], size_bytes: samples[extension].length };
+    const mediaType = { md: "text/markdown", html: "text/html", r: "text/x-r", rmd: "text/x-r-markdown", txt: "text/plain", log: "text/plain", json: "application/json", csv: "text/csv", tsv: "text/tab-separated-values", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" }[extension];
+    const contentEncoding = mediaType.startsWith("image/") ? "base64" : "utf-8";
+    const sizeBytes = contentEncoding === "base64" ? atob(samples[extension]).length : new TextEncoder().encode(samples[extension]).length;
+    return { contract: "rho.viewer_file.v1", project_root: mockLastProject, path, media_type: mediaType, content_encoding: contentEncoding, content: samples[extension], size_bytes: sizeBytes };
   }
   if (command === "project_write_file" || command === "project_create_file") {
     const project = mockProjects[mockLastProject] || mockProjects[mockPlatformFixture.projectRoot];

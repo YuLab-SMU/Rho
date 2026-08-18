@@ -122,6 +122,9 @@ export function validateCompatibilityWorkflow(text) {
     '".github/workflows/candidate-build-draft.yml"',
     '"scripts/test-rust-msrv-contract.mjs"',
     '"scripts/test-extension-run-history-contract.mjs"',
+    '"scripts/test-extension-p1-3-contract.mjs"',
+    '"desktop/dist/app.js"',
+    '"R/rho.agent/R/aisdk_adapter.R"',
   ]) {
     const occurrences = workflow.split(requiredPath).length - 1;
     if (occurrences !== 2) fail(`Both Rust compatibility triggers must include ${requiredPath}`);
@@ -205,6 +208,9 @@ export function validateFastWorkflow(text) {
     '".github/workflows/rust-compatibility.yml"',
     '"scripts/test-rust-msrv-contract.mjs"',
     '"scripts/test-extension-run-history-contract.mjs"',
+    '"scripts/test-extension-p1-3-contract.mjs"',
+    '"desktop/dist/app.js"',
+    '"R/rho.agent/R/aisdk_adapter.R"',
   ]) {
     if (!workflow.includes(requiredPath)) fail(`Rust Fast path filter is missing ${requiredPath}`);
   }
@@ -215,6 +221,8 @@ export function validateFastWorkflow(text) {
     "node scripts/test-license-contract.mjs",
     "node scripts/test-extension-run-history-contract.mjs --test",
     "node scripts/test-extension-run-history-contract.mjs",
+    "node scripts/test-extension-p1-3-contract.mjs --test",
+    "node scripts/test-extension-p1-3-contract.mjs",
     "cargo fmt --all -- --check",
     "cargo check --workspace --all-targets --locked",
     "cargo test --workspace --locked --no-fail-fast",
@@ -287,6 +295,8 @@ on:
       - ".cargo/**"
       - "crates/**/*.rs"
       - "desktop/src-tauri/**"
+      - "desktop/dist/app.js"
+      - "R/rho.agent/R/aisdk_adapter.R"
       - "vendor/jet/**/*.rs"
       - "runtime/ark.json"
       - "scripts/bootstrap-ark-macos.sh"
@@ -295,6 +305,7 @@ on:
       - ".github/workflows/candidate-build-draft.yml"
       - "scripts/test-rust-msrv-contract.mjs"
       - "scripts/test-extension-run-history-contract.mjs"
+      - "scripts/test-extension-p1-3-contract.mjs"
   pull_request:
     branches: [main]
     types: [opened, reopened, synchronize, ready_for_review]
@@ -305,6 +316,8 @@ on:
       - ".cargo/**"
       - "crates/**/*.rs"
       - "desktop/src-tauri/**"
+      - "desktop/dist/app.js"
+      - "R/rho.agent/R/aisdk_adapter.R"
       - "vendor/jet/**/*.rs"
       - "runtime/ark.json"
       - "scripts/bootstrap-ark-macos.sh"
@@ -313,6 +326,7 @@ on:
       - ".github/workflows/candidate-build-draft.yml"
       - "scripts/test-rust-msrv-contract.mjs"
       - "scripts/test-extension-run-history-contract.mjs"
+      - "scripts/test-extension-p1-3-contract.mjs"
 permissions:
   contents: read
 concurrency:
@@ -366,6 +380,8 @@ on:
       - ".cargo/**"
       - "crates/**/*.rs"
       - "desktop/src-tauri/**"
+      - "desktop/dist/app.js"
+      - "R/rho.agent/R/aisdk_adapter.R"
       - "vendor/jet/**/*.rs"
       - "runtime/ark.json"
       - "scripts/bootstrap-ark-linux.sh"
@@ -373,6 +389,7 @@ on:
       - ".github/workflows/rust-compatibility.yml"
       - "scripts/test-rust-msrv-contract.mjs"
       - "scripts/test-extension-run-history-contract.mjs"
+      - "scripts/test-extension-p1-3-contract.mjs"
 permissions:
   contents: read
 concurrency:
@@ -407,6 +424,8 @@ jobs:
           node scripts/test-license-contract.mjs
           node scripts/test-extension-run-history-contract.mjs --test
           node scripts/test-extension-run-history-contract.mjs
+          node scripts/test-extension-p1-3-contract.mjs --test
+          node scripts/test-extension-p1-3-contract.mjs
           cargo fmt --all -- --check
           cargo check --workspace --all-targets --locked
           cargo test --workspace --locked --no-fail-fast

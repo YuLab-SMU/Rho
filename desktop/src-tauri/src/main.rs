@@ -29,12 +29,12 @@ use agent_llm::{
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use project::{
-    ProjectRestoreResponse, ProjectSessionSnapshot, ProjectSessionStore, ProjectState,
-    ProjectSwitchBlocker, ProjectSwitchBlockerKind, ProjectWatcherControl, atomic_write,
-    atomic_write_new, default_project_root, display_path, ensure_editable_content_size,
-    ensure_editable_file, ensure_editable_file_size, list_project_files,
-    normalize_existing_project_root, project_path, read_viewer_file, relative_project_path,
-    start_project_watcher, validate_project_root,
+    MAX_VIEWER_FILE_BYTES, MAX_VIEWER_HTML_BYTES, ProjectRestoreResponse, ProjectSessionSnapshot,
+    ProjectSessionStore, ProjectState, ProjectSwitchBlocker, ProjectSwitchBlockerKind,
+    ProjectWatcherControl, atomic_write, atomic_write_new, default_project_root, display_path,
+    ensure_editable_content_size, ensure_editable_file, ensure_editable_file_size,
+    list_project_files, normalize_existing_project_root, project_path, read_viewer_file,
+    relative_project_path, start_project_watcher, validate_project_root,
 };
 use rho_core::{BrokerState, ExecutionOrigin};
 use rho_extension_runtime::{
@@ -42,15 +42,16 @@ use rho_extension_runtime::{
     BrokerResponseClass, CapabilityDeclaration, CapabilityId, CapabilityRequirement,
     DiagnosticCode, DiagnosticSeverity, DiagnosticSink, DisposeOutcome, ExtensionDiagnostic,
     ExtensionHost, InternalExtensionRuntimeMode, InternalPlugin, LifecycleDeadlines, OperationId,
-    PluginContext, PluginDescriptor, PluginVersion, ScopeId, ScopeSnapshot, SourceCallError,
-    SourceHandler,
+    PluginContext, PluginDescriptor, PluginVersion, ProjectFileViewerContribution, ScopeId,
+    ScopeKindId, ScopeSnapshot, SourceCallError, SourceHandler, WorkspaceToolHandler,
 };
 use rho_kernel::{ArkLaunchConfig, ArkSession, KernelEvent};
 use rho_server::coordinator::{
     AgentWorkspaceLane, ApprovalResponseInput, CoordinatorRuntime, EnvironmentOperationArguments,
-    PendingApprovalRegistry, ProjectSkillDiscoverySummary, bootstrap_bridge,
-    decide_environment_operation, discover_project_skill_summaries, dispatch_workspace_request,
-    dispatch_workspace_request_with_execution_id, request_environment_operation, run_agent_turn,
+    PendingApprovalRegistry, ProjectSkillDiscoverySummary, WorkspaceSnapshotAdapter,
+    bootstrap_bridge, decide_environment_operation, discover_project_skill_summaries,
+    dispatch_workspace_request, dispatch_workspace_request_with_execution_id,
+    request_environment_operation, run_agent_turn,
 };
 use rho_store::{
     AgentConversationDraft, AgentConversationSummary, AgentTurnDetail, AgentTurnDraft,
@@ -1221,9 +1222,24 @@ async fn agent_runtime_retry(state: State<'_, AppState>) -> Result<AgentRuntimeS
 
 #[tauri::command]
 async fn workspace_start(state: State<'_, AppState>) -> Result<WorkspaceStatus, String> {
+    let _project_transition = state.project_transition_gate.lock().await;
+    if state.shutdown_started.load(Ordering::SeqCst) {
+        return Err("Rho is closing; Workspace R cannot start".to_string());
+    }
     let started = Instant::now();
+    let already_running = state.session.read().await.is_some();
+    let needs_extension_finalize = state.extension_host.mode()
+        == InternalExtensionRuntimeMode::Candidate
+        && state.extension_host.scopes().workspace().is_none();
     match start_workspace(&state).await {
         Ok(status) => {
+            let status = if already_running && !needs_extension_finalize {
+                status
+            } else {
+                finalize_workspace_start(&state, false)
+                    .await
+                    .map_err(display_error)?
+            };
             write_startup_log(&format!(
                 "startup_phase=workspace_start elapsed_ms={}",
                 started.elapsed().as_millis()
@@ -1365,8 +1381,45 @@ async fn viewer_read_file(
     path: String,
     state: State<'_, AppState>,
 ) -> Result<project::ViewerFile, String> {
+    viewer_read_file_with_state(path, &state).await
+}
+
+async fn viewer_read_file_with_state(
+    path: String,
+    state: &AppState,
+) -> Result<project::ViewerFile, String> {
+    if state.extension_host.mode() == InternalExtensionRuntimeMode::Legacy {
+        let root = state.project_root.read().await.clone();
+        return read_viewer_file(&root, &path).map_err(display_error);
+    }
+    let application = state.extension_host.scopes().application();
+    let resolution = application
+        .registry()
+        .resolve_project_file_viewer(&project_file_viewer_capability_id())
+        .map_err(display_error)?;
+    if resolution.contribution().general_maximum_bytes() != MAX_VIEWER_FILE_BYTES as usize
+        || resolution.contribution().html_maximum_bytes() != MAX_VIEWER_HTML_BYTES as usize
+    {
+        return Err("Project file viewer contribution has incompatible size limits".to_string());
+    }
     let root = state.project_root.read().await.clone();
-    read_viewer_file(&root, &path).map_err(display_error)
+    let viewed = read_viewer_file(&root, &path).map_err(display_error)?;
+    let current_root = state.project_root.read().await.clone();
+    if current_root != root {
+        return Err("Project file viewer result is stale after a project switch".to_string());
+    }
+    if !resolution
+        .contribution()
+        .supported_media_types()
+        .iter()
+        .any(|media_type| media_type == viewed.media_type)
+    {
+        return Err(format!(
+            "Project file viewer contribution does not declare media type {}",
+            viewed.media_type
+        ));
+    }
+    Ok(viewed)
 }
 
 #[tauri::command]
@@ -2950,6 +3003,128 @@ async fn editor_discover_chunks(path: String, state: State<'_, AppState>) -> Res
 
 #[tauri::command]
 async fn snapshot_workspace(state: State<'_, AppState>) -> Result<Value, String> {
+    snapshot_workspace_with_state(&state).await
+}
+
+fn expected_workspace(
+    identity: &rho_protocol::WorkspaceIdentity,
+) -> rho_protocol::ExpectedWorkspace {
+    rho_protocol::ExpectedWorkspace {
+        kernel_instance_id: Some(identity.kernel_instance_id.clone()),
+        state_revision: Some(identity.state_revision),
+        project_revision: Some(identity.project_revision),
+    }
+}
+
+async fn call_extension_workspace_snapshot(
+    extension_host: &ExtensionHost,
+    context: Arc<Mutex<CoordinatorRuntime>>,
+    expected_workspace: rho_protocol::ExpectedWorkspace,
+    origin: ExecutionOrigin,
+    execution_id: Option<String>,
+) -> Result<Value, String> {
+    let scope = extension_host
+        .scopes()
+        .workspace()
+        .context("Workspace Snapshot extension scope is unavailable")
+        .map_err(display_error)?;
+    let operation = WorkspaceOperation::Snapshot {
+        expected_workspace,
+        origin,
+        execution_id,
+    };
+    let request = BoundedJson::generic(serde_json::to_value(operation).map_err(display_error)?)
+        .map_err(display_error)?;
+    let result = scope
+        .registry()
+        .call_workspace_tool(&workspace_snapshot_tool_capability_id(), request)
+        .await
+        .map_err(display_error)?;
+    extension_host
+        .scopes()
+        .validate_workspace_current(&result.scope)
+        .map_err(display_error)?;
+    let project = extension_host
+        .scopes()
+        .project()
+        .context("Workspace Snapshot project extension scope is unavailable")
+        .map_err(display_error)?;
+    if result.scope.parent_id.as_ref() != Some(&project.identity().id) {
+        return Err("Workspace Snapshot extension scope belongs to a stale project".to_string());
+    }
+    let identity = context.lock().await.broker.identity().clone();
+    let expected_scope_id =
+        extension_workspace_scope_id(&project, &identity).map_err(display_error)?;
+    if result.scope.id != expected_scope_id {
+        return Err(
+            "Workspace Snapshot extension scope belongs to a stale kernel lineage".to_string(),
+        );
+    }
+    let completed_workspace: rho_protocol::WorkspaceIdentity = serde_json::from_value(
+        result
+            .payload
+            .value()
+            .get("workspace")
+            .cloned()
+            .context("Workspace Snapshot result omitted workspace identity")
+            .map_err(display_error)?,
+    )
+    .map_err(display_error)?;
+    if completed_workspace.workspace_id != identity.workspace_id
+        || completed_workspace.kernel_instance_id != identity.kernel_instance_id
+        || completed_workspace.state_revision != identity.state_revision
+        || completed_workspace.project_revision != identity.project_revision
+    {
+        return Err("Workspace Snapshot result is stale after Workspace state changed".to_string());
+    }
+    Ok(result.payload.into_value())
+}
+
+struct ExtensionWorkspaceSnapshotAdapter {
+    extension_host: Arc<ExtensionHost>,
+    context: Arc<Mutex<CoordinatorRuntime>>,
+}
+
+impl WorkspaceSnapshotAdapter for ExtensionWorkspaceSnapshotAdapter {
+    fn snapshot<'a>(
+        &'a self,
+        payload: Value,
+        execution_id: String,
+    ) -> Pin<Box<dyn Future<Output = Result<Value>> + Send + 'a>> {
+        Box::pin(async move {
+            let expected_workspace = serde_json::from_value(
+                payload
+                    .get("expected_workspace")
+                    .cloned()
+                    .context("Agent Workspace Snapshot omitted expected_workspace")?,
+            )
+            .context("decoding Agent Workspace Snapshot expected_workspace")?;
+            call_extension_workspace_snapshot(
+                self.extension_host.as_ref(),
+                Arc::clone(&self.context),
+                expected_workspace,
+                ExecutionOrigin::Agent,
+                Some(execution_id),
+            )
+            .await
+            .map_err(anyhow::Error::msg)
+        })
+    }
+}
+
+async fn snapshot_workspace_with_state(state: &AppState) -> Result<Value, String> {
+    if state.extension_host.mode() == InternalExtensionRuntimeMode::Candidate {
+        let context = active_context(state).await.map_err(display_error)?;
+        let identity = context.lock().await.broker.identity().clone();
+        return call_extension_workspace_snapshot(
+            state.extension_host.as_ref(),
+            context,
+            expected_workspace(&identity),
+            ExecutionOrigin::System,
+            None,
+        )
+        .await;
+    }
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
@@ -3635,26 +3810,6 @@ async fn list_runs_legacy(
         .map_err(display_error)
 }
 
-fn emit_run_history_fallback(state: &AppState, scope: Option<&ScopeSnapshot>, reason_code: &str) {
-    state
-        .extension_host
-        .scopes()
-        .diagnostics()
-        .emit(ExtensionDiagnostic {
-            code: DiagnosticCode::ContributionFallback,
-            severity: DiagnosticSeverity::Warning,
-            plugin_id: None,
-            capability_id: Some(run_history_source_capability_id()),
-            scope_kind: scope.map(|value| value.identity().kind.clone()),
-            scope_id: scope.map(|value| value.identity().id.clone()),
-            activation_generation: scope.map(|value| value.identity().generation),
-            effect_order: None,
-            related_plugins: Vec::new(),
-            cycle_path: Vec::new(),
-            message: format!("Run History candidate unavailable; using legacy ({reason_code})"),
-        });
-}
-
 async fn list_runs_with_state(
     limit: Option<usize>,
     state: &AppState,
@@ -3666,13 +3821,11 @@ async fn list_runs_with_state(
     let root = state.project_root.read().await.clone();
     let project_root = root.to_string_lossy().replace('\\', "/");
     let Some(scope) = state.extension_host.scopes().project() else {
-        emit_run_history_fallback(state, None, "project_scope_missing");
-        return list_runs_legacy(limit, state).await;
+        return Err("Run History extension project scope is unavailable".to_string());
     };
     let expected_scope_id = extension_project_scope_id(&project_root).map_err(display_error)?;
     if scope.identity().id != expected_scope_id {
-        emit_run_history_fallback(state, Some(&scope), "project_scope_mismatch");
-        return list_runs_legacy(limit, state).await;
+        return Err("Run History extension project scope is stale".to_string());
     }
 
     let request = BoundedJson::generic(json!({ "limit": limit })).map_err(display_error)?;
@@ -3682,9 +3835,8 @@ async fn list_runs_with_state(
         .await
     {
         Ok(result) => result,
-        Err(SourceCallError::MissingContribution { .. }) => {
-            emit_run_history_fallback(state, Some(&scope), "contribution_missing");
-            return list_runs_legacy(limit, state).await;
+        Err(error @ SourceCallError::MissingContribution { .. }) => {
+            return Err(display_error(error));
         }
         Err(SourceCallError::Routing(error)) => {
             return Err(display_error(error));
@@ -4823,6 +4975,13 @@ async fn start_agent_turn(
     let task_turn_id = turn_id.clone();
     let task_conversation_id = conversation_id.clone();
     let task_agent_tasks = state.agent_tasks.clone();
+    let workspace_snapshot_adapter: Option<Arc<dyn WorkspaceSnapshotAdapter>> =
+        (state.extension_host.mode() == InternalExtensionRuntimeMode::Candidate).then(|| {
+            Arc::new(ExtensionWorkspaceSnapshotAdapter {
+                extension_host: Arc::clone(&state.extension_host),
+                context: Arc::clone(&context),
+            }) as Arc<dyn WorkspaceSnapshotAdapter>
+        });
     let runtime_profile = resolved_model.runtime_profile.clone();
     let task_mode = mode.clone();
     let (registered_tx, registered_rx) = oneshot::channel();
@@ -4847,6 +5006,7 @@ async fn start_agent_turn(
             environment_approvals,
             auto_approve,
             editor_context,
+            workspace_snapshot_adapter,
         )
         .await;
         task_agent_tasks.lock().await.remove(&task_turn_id);
@@ -5428,6 +5588,10 @@ async fn interrupt_all_agent_tasks(
 
 #[tauri::command]
 async fn restart_workspace(state: State<'_, AppState>) -> Result<WorkspaceStatus, String> {
+    let _project_transition = state.project_transition_gate.lock().await;
+    if state.shutdown_started.load(Ordering::SeqCst) {
+        return Err("Rho is closing; Workspace R cannot restart".to_string());
+    }
     interrupt_all_agent_tasks(
         &state,
         "desktop_restart",
@@ -5473,6 +5637,23 @@ async fn restart_workspace(state: State<'_, AppState>) -> Result<WorkspaceStatus
         run_id
     };
 
+    if state.extension_host.mode() == InternalExtensionRuntimeMode::Candidate {
+        let expected_workspace = state.extension_host.scopes().workspace();
+        if let Some(report) = state
+            .extension_host
+            .clear_workspace_scope(expected_workspace)
+            .await
+            .map_err(display_error)?
+        {
+            write_startup_event(json!({
+                "kind": "internal_extension_workspace_restart_dispose",
+                "outcome": report.outcome,
+                "scope_id": report.scope.id,
+                "generation": report.scope.generation,
+            }));
+        }
+    }
+
     let old_context = state.context.lock().await.take();
     let old_session = state.session.write().await.take();
     if active_run_id.is_some() || !render_job_ids.is_empty() {
@@ -5498,9 +5679,8 @@ async fn restart_workspace(state: State<'_, AppState>) -> Result<WorkspaceStatus
     }
     drop(old_session);
     drop(old_context);
-    let status = start_workspace(&state).await.map_err(display_error)?;
-    let root = state.project_root.read().await.clone();
-    sync_workspace_project_root(&state, &root, SwitchTestStep::SyncWorkspace)
+    start_workspace(&state).await.map_err(display_error)?;
+    let status = finalize_workspace_start(&state, true)
         .await
         .map_err(display_error)?;
     if !render_job_ids.is_empty() {
@@ -5917,9 +6097,40 @@ async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus> {
     )
     .await?;
     let status = status_from(&config, &session, Some(broker.identity()))?;
-    *state.context.lock().await = Some(Arc::new(Mutex::new(CoordinatorRuntime { broker, store })));
+    let context = Arc::new(Mutex::new(CoordinatorRuntime { broker, store }));
+    if state.extension_host.mode() == InternalExtensionRuntimeMode::Candidate {
+        ensure_extension_project_scope(state, &normalized_project_root)
+            .await?
+            .context("candidate extension project scope is unavailable")?;
+    }
+    *state.context.lock().await = Some(context);
     *state.session.write().await = Some(session);
     Ok(status)
+}
+
+async fn finalize_workspace_start(
+    state: &AppState,
+    synchronize_project_root: bool,
+) -> Result<WorkspaceStatus> {
+    let candidate = state.extension_host.mode() == InternalExtensionRuntimeMode::Candidate;
+    if synchronize_project_root {
+        let root = state.project_root.read().await.clone();
+        sync_workspace_project_root(state, &root, SwitchTestStep::SyncWorkspace).await?;
+    }
+    if candidate {
+        let project =
+            state.extension_host.scopes().project().context(
+                "candidate extension project scope is unavailable after Workspace start",
+            )?;
+        let session = active_session(state).await?;
+        let context = active_context(state).await?;
+        publish_extension_workspace_scope(state, &project, session, context).await?;
+    }
+    let config = runtime_config(state)?;
+    let session = active_session(state).await?;
+    let context = active_context(state).await?;
+    let identity = context.lock().await.broker.identity().clone();
+    status_from(&config, session.as_ref(), Some(&identity))
 }
 
 async fn request_run_interrupt(run_id: Option<String>, state: &AppState) -> Result<Value> {
@@ -5971,6 +6182,179 @@ fn runs_broker_capability_id() -> CapabilityId {
 fn runs_broker_operation_id() -> OperationId {
     OperationId::new("service.broker.runs.list")
         .expect("built-in Runs broker operation must be valid")
+}
+
+fn workspace_snapshot_tool_capability_id() -> CapabilityId {
+    CapabilityId::new("tool.workspace.snapshot")
+        .expect("built-in Workspace Snapshot tool capability must be valid")
+}
+
+fn workspace_probe_broker_capability_id() -> CapabilityId {
+    CapabilityId::new("service.broker.workspace-probe")
+        .expect("built-in Workspace probe broker capability must be valid")
+}
+
+fn workspace_probe_broker_operation_id() -> OperationId {
+    OperationId::new("service.broker.workspace-probe.snapshot")
+        .expect("built-in Workspace probe operation must be valid")
+}
+
+fn project_file_viewer_capability_id() -> CapabilityId {
+    CapabilityId::new("ui.viewer.project-file")
+        .expect("built-in project file viewer capability must be valid")
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
+enum WorkspaceOperation {
+    Snapshot {
+        expected_workspace: rho_protocol::ExpectedWorkspace,
+        origin: ExecutionOrigin,
+        execution_id: Option<String>,
+    },
+}
+
+struct WorkspaceSnapshotPlugin {
+    descriptor: PluginDescriptor,
+}
+
+impl WorkspaceSnapshotPlugin {
+    fn new() -> Self {
+        let mut descriptor = PluginDescriptor::new(
+            rho_extension_runtime::PluginId::new("org.yulab.rho.workspace-snapshot-tool")
+                .expect("built-in Workspace Snapshot plugin ID must be valid"),
+            PluginVersion::parse("1.0.0")
+                .expect("built-in Workspace Snapshot version must be valid"),
+            vec![rho_extension_runtime::ScopePolicy::workspace_kind()],
+        );
+        descriptor.provides = vec![CapabilityDeclaration::new(
+            workspace_snapshot_tool_capability_id(),
+            1,
+        )];
+        descriptor.requires = vec![CapabilityRequirement::new(
+            workspace_probe_broker_capability_id(),
+            1,
+        )];
+        Self { descriptor }
+    }
+}
+
+impl InternalPlugin for WorkspaceSnapshotPlugin {
+    fn descriptor(&self) -> &PluginDescriptor {
+        &self.descriptor
+    }
+
+    fn activate<'a>(
+        &'a self,
+        context: PluginContext<'a>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), ActivationError>> + Send + 'a>> {
+        Box::pin(async move {
+            context
+                .effects
+                .register_workspace_tool(
+                    context.registry,
+                    workspace_snapshot_tool_capability_id(),
+                    Arc::new(WorkspaceSnapshotToolHandler {
+                        broker: Arc::clone(&context.broker),
+                    }),
+                )
+                .map_err(|error| {
+                    ActivationError::new("workspace_snapshot_registration", error.to_string())
+                })?;
+            Ok(())
+        })
+    }
+}
+
+struct WorkspaceSnapshotToolHandler {
+    broker: Arc<dyn BrokerFacade>,
+}
+
+impl WorkspaceToolHandler for WorkspaceSnapshotToolHandler {
+    fn call<'a>(
+        &'a self,
+        request: BoundedJson,
+    ) -> Pin<Box<dyn Future<Output = Result<BoundedJson, BrokerError>> + Send + 'a>> {
+        let broker = Arc::clone(&self.broker);
+        Box::pin(async move {
+            let operation: WorkspaceOperation = serde_json::from_value(request.into_value())
+                .map_err(|error| {
+                    BrokerError::rejected("workspace_snapshot_request_invalid", error.to_string())
+                })?;
+            let request = BrokerRequest::new(
+                workspace_probe_broker_operation_id(),
+                serde_json::to_value(operation).map_err(|error| {
+                    BrokerError::rejected("workspace_snapshot_request_encode", error.to_string())
+                })?,
+                BrokerResponseClass::WorkspaceSnapshot,
+            )
+            .map_err(BrokerError::from)?;
+            Ok(broker.call(request).await?.payload)
+        })
+    }
+}
+
+struct ProjectFileViewerPlugin {
+    descriptor: PluginDescriptor,
+}
+
+impl ProjectFileViewerPlugin {
+    fn new() -> Self {
+        let mut descriptor = PluginDescriptor::new(
+            rho_extension_runtime::PluginId::new("org.yulab.rho.project-file-viewer")
+                .expect("built-in project file viewer plugin ID must be valid"),
+            PluginVersion::parse("1.0.0")
+                .expect("built-in project file viewer version must be valid"),
+            vec![rho_extension_runtime::ScopePolicy::application_kind()],
+        );
+        descriptor.provides = vec![CapabilityDeclaration::new(
+            project_file_viewer_capability_id(),
+            1,
+        )];
+        Self { descriptor }
+    }
+}
+
+impl InternalPlugin for ProjectFileViewerPlugin {
+    fn descriptor(&self) -> &PluginDescriptor {
+        &self.descriptor
+    }
+
+    fn activate<'a>(
+        &'a self,
+        context: PluginContext<'a>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), ActivationError>> + Send + 'a>> {
+        Box::pin(async move {
+            context
+                .effects
+                .register_project_file_viewer(
+                    context.registry,
+                    project_file_viewer_capability_id(),
+                    ProjectFileViewerContribution::new(
+                        vec![
+                            "application/json".to_string(),
+                            "image/gif".to_string(),
+                            "image/jpeg".to_string(),
+                            "image/png".to_string(),
+                            "image/webp".to_string(),
+                            "text/csv".to_string(),
+                            "text/html".to_string(),
+                            "text/markdown".to_string(),
+                            "text/plain".to_string(),
+                            "text/tab-separated-values".to_string(),
+                            "text/x-r".to_string(),
+                            "text/x-r-markdown".to_string(),
+                        ],
+                        MAX_VIEWER_FILE_BYTES as usize,
+                        MAX_VIEWER_HTML_BYTES as usize,
+                    ),
+                )
+                .map_err(|error| {
+                    ActivationError::new("project_file_viewer_registration", error.to_string())
+                })?;
+            Ok(())
+        })
+    }
 }
 
 struct RunHistoryPlugin {
@@ -6085,19 +6469,177 @@ impl BrokerFacade for RunHistoryBrokerFacade {
     }
 }
 
+struct WorkspaceSnapshotBrokerFacade {
+    session: Arc<ArkSession>,
+    context: Arc<Mutex<CoordinatorRuntime>>,
+}
+
+impl BrokerFacade for WorkspaceSnapshotBrokerFacade {
+    fn call<'a>(
+        &'a self,
+        request: BrokerRequest,
+    ) -> Pin<Box<dyn Future<Output = Result<BrokerResponse, BrokerError>> + Send + 'a>> {
+        Box::pin(async move {
+            if request.operation_id != workspace_probe_broker_operation_id() {
+                return Err(BrokerError::Unavailable {
+                    operation_id: request.operation_id,
+                });
+            }
+            let operation: WorkspaceOperation =
+                serde_json::from_value(request.payload.value().clone()).map_err(|error| {
+                    BrokerError::rejected("workspace_probe_request_invalid", error.to_string())
+                })?;
+            let WorkspaceOperation::Snapshot {
+                expected_workspace,
+                origin,
+                execution_id,
+            } = operation;
+            let payload = json!({
+                "arguments": {},
+                "expected_workspace": expected_workspace,
+            });
+            let mut context = self.context.lock().await;
+            let CoordinatorRuntime { broker, store } = &mut *context;
+            let value = dispatch_workspace_request_with_execution_id(
+                "workspace.snapshot",
+                &payload,
+                origin,
+                self.session.as_ref(),
+                broker,
+                store,
+                execution_id.as_deref(),
+            )
+            .await
+            .map_err(|error| {
+                BrokerError::rejected("workspace_snapshot_dispatch_failed", error.to_string())
+            })?;
+            BrokerResponse::new(value, &request).map_err(BrokerError::from)
+        })
+    }
+}
+
 fn extension_project_scope_id(normalized_project_root: &str) -> Result<ScopeId> {
     ScopeId::new(format!("project.{}", text_sha256(normalized_project_root)))
         .map_err(|error| anyhow!("creating extension project scope identity failed: {error}"))
 }
 
+fn extension_workspace_scope_id(
+    project: &ScopeSnapshot,
+    workspace: &rho_protocol::WorkspaceIdentity,
+) -> Result<ScopeId> {
+    ScopeId::new(format!(
+        "workspace.{}",
+        text_sha256(&format!(
+            "{}\0{}\0{}",
+            project.identity().id,
+            workspace.workspace_id,
+            workspace.kernel_instance_id
+        ))
+    ))
+    .map_err(|error| anyhow!("creating extension Workspace scope identity failed: {error}"))
+}
+
 fn internal_plugin_inventory() -> Vec<Arc<dyn InternalPlugin>> {
-    vec![Arc::new(RunHistoryPlugin::new())]
+    vec![
+        Arc::new(ProjectFileViewerPlugin::new()),
+        Arc::new(RunHistoryPlugin::new()),
+        Arc::new(WorkspaceSnapshotPlugin::new()),
+    ]
+}
+
+fn internal_plugins_for_scope(scope_kind: &ScopeKindId) -> Vec<Arc<dyn InternalPlugin>> {
+    internal_plugin_inventory()
+        .into_iter()
+        .filter(|plugin| plugin.descriptor().allowed_scopes == [scope_kind.clone()])
+        .collect()
+}
+
+async fn ensure_extension_project_scope(
+    state: &AppState,
+    normalized_project_root: &str,
+) -> Result<Option<Arc<ScopeSnapshot>>> {
+    if state.extension_host.mode() == InternalExtensionRuntimeMode::Legacy {
+        return Ok(None);
+    }
+    let expected = state.extension_host.scopes().project();
+    let scope_id = extension_project_scope_id(normalized_project_root)?;
+    if let Some(current) = expected.as_ref()
+        && current.identity().id == scope_id
+    {
+        return Ok(expected);
+    }
+    ensure!(
+        state.extension_host.scopes().workspace().is_none(),
+        "Cannot replace an extension project scope while its Workspace child is active"
+    );
+    let config = runtime_config(state)?;
+    let candidate = state
+        .extension_host
+        .build_project_candidate(
+            scope_id,
+            internal_plugins_for_scope(&rho_extension_runtime::ScopePolicy::project_kind()),
+            Arc::new(RunHistoryBrokerFacade {
+                store_path: config.store_path,
+                project_root: normalized_project_root.to_string(),
+            }),
+        )
+        .await
+        .context("building extension project scope for Workspace startup")?;
+    state
+        .extension_host
+        .publish_project_candidate(expected, candidate.clone())
+        .await
+        .context("publishing extension project scope for Workspace startup")?;
+    Ok(Some(candidate))
+}
+
+async fn build_extension_workspace_candidate(
+    state: &AppState,
+    parent: &Arc<ScopeSnapshot>,
+    session: Arc<ArkSession>,
+    context: Arc<Mutex<CoordinatorRuntime>>,
+) -> Result<Option<Arc<ScopeSnapshot>>> {
+    if state.extension_host.mode() == InternalExtensionRuntimeMode::Legacy {
+        return Ok(None);
+    }
+    let identity = context.lock().await.broker.identity().clone();
+    let candidate = state
+        .extension_host
+        .build_workspace_candidate(
+            parent,
+            extension_workspace_scope_id(parent, &identity)?,
+            internal_plugins_for_scope(&rho_extension_runtime::ScopePolicy::workspace_kind()),
+            Arc::new(WorkspaceSnapshotBrokerFacade { session, context }),
+        )
+        .await
+        .context("building extension Workspace candidate")?;
+    Ok(Some(candidate))
+}
+
+async fn publish_extension_workspace_scope(
+    state: &AppState,
+    parent: &Arc<ScopeSnapshot>,
+    session: Arc<ArkSession>,
+    context: Arc<Mutex<CoordinatorRuntime>>,
+) -> Result<Option<Arc<ScopeSnapshot>>> {
+    let expected = state.extension_host.scopes().workspace();
+    let candidate = build_extension_workspace_candidate(state, parent, session, context).await?;
+    let Some(candidate) = candidate else {
+        return Ok(None);
+    };
+    state
+        .extension_host
+        .publish_workspace_candidate(expected, candidate.clone())
+        .await
+        .context("publishing extension Workspace scope")?;
+    Ok(Some(candidate))
 }
 
 struct PreparedExtensionProjectCandidate {
-    expected: Option<Arc<ScopeSnapshot>>,
-    candidate: Option<Arc<ScopeSnapshot>>,
-    fallback_legacy: bool,
+    expected_project: Option<Arc<ScopeSnapshot>>,
+    project_candidate: Option<Arc<ScopeSnapshot>>,
+    expected_workspace: Option<Arc<ScopeSnapshot>>,
+    workspace_candidate: Option<Arc<ScopeSnapshot>>,
 }
 
 async fn prepare_extension_project_candidate(
@@ -6106,102 +6648,56 @@ async fn prepare_extension_project_candidate(
 ) -> Result<PreparedExtensionProjectCandidate> {
     if state.extension_host.mode() == InternalExtensionRuntimeMode::Legacy {
         return Ok(PreparedExtensionProjectCandidate {
-            expected: None,
-            candidate: None,
-            fallback_legacy: false,
+            expected_project: None,
+            project_candidate: None,
+            expected_workspace: None,
+            workspace_candidate: None,
         });
     }
     let _ = maybe_handle_switch_test_directive(state, SwitchTestStep::BuildExtensionCandidate)?;
-    let expected = state.extension_host.scopes().project();
-    if let Err(error) =
-        maybe_handle_switch_test_directive(state, SwitchTestStep::ActivateExtensionCandidate)
-    {
-        state
-            .extension_host
-            .scopes()
-            .diagnostics()
-            .emit(ExtensionDiagnostic {
-                code: DiagnosticCode::ContributionFallback,
-                severity: DiagnosticSeverity::Warning,
-                plugin_id: None,
-                capability_id: Some(run_history_source_capability_id()),
-                scope_kind: None,
-                scope_id: None,
-                activation_generation: None,
-                effect_order: None,
-                related_plugins: Vec::new(),
-                cycle_path: Vec::new(),
-                message: format!("Run History candidate activation failed; using legacy ({error})"),
-            });
-        return Ok(PreparedExtensionProjectCandidate {
-            expected,
-            candidate: None,
-            fallback_legacy: true,
-        });
-    }
+    let expected_project = state.extension_host.scopes().project();
+    maybe_handle_switch_test_directive(state, SwitchTestStep::ActivateExtensionCandidate)
+        .context("activating required extension project candidate")?;
     let config = runtime_config(state)?;
-    let candidate = state
+    let project_candidate = state
         .extension_host
         .build_project_candidate(
             extension_project_scope_id(normalized_project_root)?,
-            internal_plugin_inventory(),
+            internal_plugins_for_scope(&rho_extension_runtime::ScopePolicy::project_kind()),
             Arc::new(RunHistoryBrokerFacade {
                 store_path: config.store_path,
                 project_root: normalized_project_root.to_string(),
             }),
         )
-        .await;
-    match candidate {
-        Ok(candidate) => Ok(PreparedExtensionProjectCandidate {
-            expected,
-            candidate: Some(candidate),
-            fallback_legacy: false,
-        }),
-        Err(error) => {
-            state
-                .extension_host
-                .scopes()
-                .diagnostics()
-                .emit(ExtensionDiagnostic {
-                    code: DiagnosticCode::ContributionFallback,
-                    severity: DiagnosticSeverity::Warning,
-                    plugin_id: None,
-                    capability_id: Some(run_history_source_capability_id()),
-                    scope_kind: None,
-                    scope_id: None,
-                    activation_generation: None,
-                    effect_order: None,
-                    related_plugins: Vec::new(),
-                    cycle_path: Vec::new(),
-                    message: format!(
-                        "Run History candidate activation failed; using legacy ({error})"
-                    ),
-                });
-            Ok(PreparedExtensionProjectCandidate {
-                expected,
-                candidate: None,
-                fallback_legacy: true,
-            })
-        }
-    }
+        .await
+        .context("building required extension project candidate")?;
+    Ok(PreparedExtensionProjectCandidate {
+        expected_project,
+        project_candidate: Some(project_candidate),
+        expected_workspace: state.extension_host.scopes().workspace(),
+        workspace_candidate: None,
+    })
 }
 
-async fn rollback_extension_project_candidate(
+async fn rollback_extension_project_candidates(
     state: &AppState,
-    candidate: Option<&Arc<ScopeSnapshot>>,
+    project_candidate: Option<&Arc<ScopeSnapshot>>,
+    workspace_candidate: Option<&Arc<ScopeSnapshot>>,
     reason_code: &str,
 ) {
-    let Some(candidate) = candidate else {
-        return;
-    };
-    let report = state.extension_host.rollback_candidate(candidate).await;
-    write_startup_event(json!({
-        "kind": "internal_extension_candidate_rollback",
-        "reason_code": reason_code,
-        "scope_id": candidate.identity().id,
-        "generation": candidate.identity().generation,
-        "outcome": report.outcome,
-    }));
+    for candidate in [workspace_candidate, project_candidate]
+        .into_iter()
+        .flatten()
+    {
+        let report = state.extension_host.rollback_candidate(candidate).await;
+        write_startup_event(json!({
+            "kind": "internal_extension_candidate_rollback",
+            "reason_code": reason_code,
+            "scope_id": candidate.identity().id,
+            "generation": candidate.identity().generation,
+            "outcome": report.outcome,
+        }));
+    }
 }
 
 async fn switch_project(
@@ -6250,18 +6746,53 @@ where
         .project_store
         .load_session_or_default(&previous_ui_root);
     let previous_store_root = read_store(state)?.active_project_root()?;
-    let prepared_extension = prepare_extension_project_candidate(state, &normalized_root).await?;
+    let mut prepared_extension =
+        prepare_extension_project_candidate(state, &normalized_root).await?;
 
     if let Err(error) =
         sync_workspace_project_root(state, &root, SwitchTestStep::SyncWorkspace).await
     {
-        rollback_extension_project_candidate(
+        rollback_extension_project_candidates(
             state,
-            prepared_extension.candidate.as_ref(),
+            prepared_extension.project_candidate.as_ref(),
+            prepared_extension.workspace_candidate.as_ref(),
             "project_switch_workspace_failed",
         )
         .await;
         return Err(error);
+    }
+
+    if let Some(project_candidate) = prepared_extension.project_candidate.as_ref() {
+        let session = state.session.read().await.clone();
+        let context = state.context.lock().await.clone();
+        let workspace_candidate = match (session, context) {
+            (Some(session), Some(context)) => {
+                build_extension_workspace_candidate(state, project_candidate, session, context)
+                    .await
+            }
+            (None, None) => Ok(None),
+            _ => Err(anyhow!(
+                "Workspace session/context ownership is inconsistent during project switch"
+            )),
+        };
+        match workspace_candidate {
+            Ok(candidate) => prepared_extension.workspace_candidate = candidate,
+            Err(error) => {
+                return recover_failed_project_switch(
+                    state,
+                    &previous_ui_root,
+                    previous_store_root.as_deref(),
+                    previous_session,
+                    prepared_extension.project_candidate.as_ref(),
+                    prepared_extension.workspace_candidate.as_ref(),
+                    "project_switch_extension_workspace_failed",
+                    format!(
+                        "Target extension Workspace activation failed after workspace sync: {error:#}"
+                    ),
+                )
+                .await;
+            }
+        }
     }
 
     let next_watcher = start_watcher(&root)
@@ -6275,7 +6806,8 @@ where
                 &previous_ui_root,
                 previous_store_root.as_deref(),
                 previous_session,
-                prepared_extension.candidate.as_ref(),
+                prepared_extension.project_candidate.as_ref(),
+                prepared_extension.workspace_candidate.as_ref(),
                 "project_switch_watcher_failed",
                 format!("Target project watcher failed after workspace sync: {error:#}"),
             )
@@ -6293,7 +6825,8 @@ where
             &previous_ui_root,
             previous_store_root.as_deref(),
             previous_session,
-            prepared_extension.candidate.as_ref(),
+            prepared_extension.project_candidate.as_ref(),
+            prepared_extension.workspace_candidate.as_ref(),
             "project_switch_store_root_failed",
             format!("Project identity could not be committed: {error:#}"),
         )
@@ -6308,7 +6841,8 @@ where
             &previous_ui_root,
             previous_store_root.as_deref(),
             previous_session,
-            prepared_extension.candidate.as_ref(),
+            prepared_extension.project_candidate.as_ref(),
+            prepared_extension.workspace_candidate.as_ref(),
             "project_switch_last_opened_failed",
             format!("Last opened project could not be committed: {error:#}"),
         )
@@ -6323,11 +6857,35 @@ where
         previous.stop();
     }
 
-    match prepared_extension.candidate {
-        Some(candidate) => {
+    match (
+        prepared_extension.project_candidate,
+        prepared_extension.workspace_candidate,
+    ) {
+        (Some(project_candidate), Some(workspace_candidate)) => {
             if let Err(error) = state
                 .extension_host
-                .publish_project_candidate(prepared_extension.expected, candidate)
+                .publish_project_tree_candidates(
+                    prepared_extension.expected_project,
+                    project_candidate,
+                    prepared_extension.expected_workspace,
+                    workspace_candidate,
+                )
+                .await
+            {
+                write_startup_event(json!({
+                    "kind": "internal_extension_tree_publish_rejected",
+                    "reason_code": error.reason,
+                    "rejected_project_scope_id": error.rejected_project.id,
+                    "rejected_workspace_scope_id": error.rejected_workspace.id,
+                    "actual_project_scope_id": error.actual_project.as_ref().map(|identity| &identity.id),
+                    "actual_workspace_scope_id": error.actual_workspace.as_ref().map(|identity| &identity.id),
+                }));
+            }
+        }
+        (Some(project_candidate), None) => {
+            if let Err(error) = state
+                .extension_host
+                .publish_project_candidate(prepared_extension.expected_project, project_candidate)
                 .await
             {
                 write_startup_event(json!({
@@ -6340,19 +6898,17 @@ where
                 }));
             }
         }
-        None if prepared_extension.fallback_legacy => {
-            if let Err(error) = state
+        (None, None) => {}
+        (None, Some(workspace_candidate)) => {
+            let report = state
                 .extension_host
-                .clear_project_scope(prepared_extension.expected)
-                .await
-            {
-                write_startup_event(json!({
-                    "kind": "internal_extension_fallback_clear_rejected",
-                    "reason_code": error.to_string(),
-                }));
-            }
+                .rollback_candidate(&workspace_candidate)
+                .await;
+            write_startup_event(json!({
+                "kind": "internal_extension_orphan_workspace_rollback",
+                "outcome": report.outcome,
+            }));
         }
-        None => {}
     }
 
     write_project_switch_event(
@@ -6371,11 +6927,18 @@ async fn recover_failed_project_switch(
     previous_ui_root: &Path,
     previous_store_root: Option<&str>,
     previous_session: ProjectSessionSnapshot,
-    extension_candidate: Option<&Arc<ScopeSnapshot>>,
+    extension_project_candidate: Option<&Arc<ScopeSnapshot>>,
+    extension_workspace_candidate: Option<&Arc<ScopeSnapshot>>,
     reason_code: &str,
     message: String,
 ) -> Result<ProjectRestoreResponse> {
-    rollback_extension_project_candidate(state, extension_candidate, reason_code).await;
+    rollback_extension_project_candidates(
+        state,
+        extension_project_candidate,
+        extension_workspace_candidate,
+        reason_code,
+    )
+    .await;
     let restore_result = async {
         sync_workspace_project_root(state, previous_ui_root, SwitchTestStep::RestoreWorkspace)
             .await?;
@@ -7659,23 +8222,39 @@ fn write_startup_event(event: Value) {
     }
 }
 
-fn build_extension_host(
+async fn build_extension_host(
     mode_value: Option<&str>,
     diagnostics: Arc<dyn DiagnosticSink>,
 ) -> Result<Arc<ExtensionHost>> {
     let mode = InternalExtensionRuntimeMode::parse(mode_value, diagnostics.as_ref());
-    Ok(Arc::new(
+    let host_capabilities = vec![
+        CapabilityDeclaration::new(runs_broker_capability_id(), 1),
+        CapabilityDeclaration::new(workspace_probe_broker_capability_id(), 1),
+    ];
+    let host = if mode == InternalExtensionRuntimeMode::Legacy {
         ExtensionHost::new_with_host_capabilities(
             mode,
-            vec![CapabilityDeclaration::new(runs_broker_capability_id(), 1)],
+            host_capabilities,
             diagnostics,
             LifecycleDeadlines::default(),
         )
-        .context("creating internal extension host")?,
-    ))
+        .context("creating legacy internal extension host")?
+    } else {
+        ExtensionHost::new_with_application_plugins(
+            mode,
+            host_capabilities,
+            internal_plugins_for_scope(&rho_extension_runtime::ScopePolicy::application_kind()),
+            Arc::new(rho_extension_runtime::RejectingBrokerFacade),
+            diagnostics,
+            LifecycleDeadlines::default(),
+        )
+        .await
+        .context("creating candidate internal extension host")?
+    };
+    Ok(Arc::new(host))
 }
 
-fn desktop_extension_host() -> Result<Arc<ExtensionHost>> {
+async fn desktop_extension_host() -> Result<Arc<ExtensionHost>> {
     let diagnostics: Arc<dyn DiagnosticSink> = Arc::new(|diagnostic: ExtensionDiagnostic| {
         write_startup_event(json!({
             "kind": "internal_extension_runtime",
@@ -7687,7 +8266,7 @@ fn desktop_extension_host() -> Result<Arc<ExtensionHost>> {
         Err(std::env::VarError::NotPresent) => None,
         Err(std::env::VarError::NotUnicode(_)) => Some("invalid_non_unicode".to_string()),
     };
-    build_extension_host(mode.as_deref(), diagnostics)
+    build_extension_host(mode.as_deref(), diagnostics).await
 }
 
 fn selected_rscript_path(data_dir: &Path) -> PathBuf {
@@ -7902,8 +8481,8 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::pin::Pin;
     use std::process::Command;
-    use std::sync::Arc;
     use std::sync::atomic::AtomicBool;
+    use std::sync::{Arc, Mutex as StdMutex};
     use std::time::Duration;
     use tempfile::TempDir;
     use tokio::sync::{Mutex, RwLock, Semaphore, oneshot};
@@ -7993,6 +8572,42 @@ mod tests {
                     })?;
                 Ok(())
             })
+        }
+    }
+
+    struct RecordingWorkspaceBroker {
+        response: serde_json::Value,
+        failure: Option<(&'static str, &'static str)>,
+        requests: Arc<StdMutex<Vec<serde_json::Value>>>,
+    }
+
+    impl BrokerFacade for RecordingWorkspaceBroker {
+        fn call<'a>(
+            &'a self,
+            request: rho_extension_runtime::BrokerRequest,
+        ) -> Pin<
+            Box<
+                dyn Future<
+                        Output = Result<
+                            rho_extension_runtime::BrokerResponse,
+                            rho_extension_runtime::BrokerError,
+                        >,
+                    > + Send
+                    + 'a,
+            >,
+        > {
+            self.requests
+                .lock()
+                .unwrap()
+                .push(request.payload.value().clone());
+            let result = match self.failure {
+                Some((code, message)) => {
+                    Err(rho_extension_runtime::BrokerError::rejected(code, message))
+                }
+                None => rho_extension_runtime::BrokerResponse::new(self.response.clone(), &request)
+                    .map_err(rho_extension_runtime::BrokerError::from),
+            };
+            Box::pin(async move { result })
         }
     }
 
@@ -8551,15 +9166,57 @@ mod tests {
         let extension_host = Arc::new(
             ExtensionHost::new_with_host_capabilities(
                 mode,
-                vec![rho_extension_runtime::CapabilityDeclaration::new(
-                    super::runs_broker_capability_id(),
-                    1,
-                )],
+                vec![
+                    rho_extension_runtime::CapabilityDeclaration::new(
+                        super::runs_broker_capability_id(),
+                        1,
+                    ),
+                    rho_extension_runtime::CapabilityDeclaration::new(
+                        super::workspace_probe_broker_capability_id(),
+                        1,
+                    ),
+                ],
                 diagnostics,
                 LifecycleDeadlines::default(),
             )
             .unwrap(),
         );
+        test_app_state_with_extension_host(data_dir, project_root, store_path, extension_host)
+    }
+
+    async fn test_candidate_extension_host_with_application_plugins() -> Arc<ExtensionHost> {
+        let diagnostics: Arc<dyn DiagnosticSink> = Arc::new(|_: ExtensionDiagnostic| {});
+        Arc::new(
+            ExtensionHost::new_with_application_plugins(
+                InternalExtensionRuntimeMode::Candidate,
+                vec![
+                    rho_extension_runtime::CapabilityDeclaration::new(
+                        super::runs_broker_capability_id(),
+                        1,
+                    ),
+                    rho_extension_runtime::CapabilityDeclaration::new(
+                        super::workspace_probe_broker_capability_id(),
+                        1,
+                    ),
+                ],
+                super::internal_plugins_for_scope(
+                    &rho_extension_runtime::ScopePolicy::application_kind(),
+                ),
+                Arc::new(rho_extension_runtime::RejectingBrokerFacade),
+                diagnostics,
+                LifecycleDeadlines::default(),
+            )
+            .await
+            .unwrap(),
+        )
+    }
+
+    fn test_app_state_with_extension_host(
+        data_dir: &Path,
+        project_root: &Path,
+        store_path: &Path,
+        extension_host: Arc<ExtensionHost>,
+    ) -> AppState {
         AppState {
             data_dir: data_dir.to_path_buf(),
             ark: data_dir.join("ark.exe"),
@@ -10722,6 +11379,334 @@ mod tests {
     }
 
     #[test]
+    fn workspace_snapshot_plugin_descriptor_is_fixed_typed_and_permission_free() {
+        let plugin = super::WorkspaceSnapshotPlugin::new();
+        let descriptor = plugin.descriptor();
+        assert_eq!(
+            descriptor.id.as_str(),
+            "org.yulab.rho.workspace-snapshot-tool"
+        );
+        assert_eq!(
+            descriptor.allowed_scopes,
+            vec![rho_extension_runtime::ScopePolicy::workspace_kind()]
+        );
+        assert_eq!(
+            descriptor.provides[0].capability_id.as_str(),
+            "tool.workspace.snapshot"
+        );
+        assert_eq!(descriptor.provides[0].contract_major.get(), 1);
+        assert_eq!(
+            descriptor.requires[0].capability_id.as_str(),
+            "service.broker.workspace-probe"
+        );
+        assert_eq!(descriptor.requires[0].contract_major.get(), 1);
+        assert!(
+            serde_json::to_value(descriptor)
+                .unwrap()
+                .get("permissions")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn project_file_viewer_plugin_is_application_scoped_and_path_free() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let plugin = super::ProjectFileViewerPlugin::new();
+            let descriptor = plugin.descriptor();
+            assert_eq!(descriptor.id.as_str(), "org.yulab.rho.project-file-viewer");
+            assert_eq!(
+                descriptor.allowed_scopes,
+                vec![rho_extension_runtime::ScopePolicy::application_kind()]
+            );
+            assert_eq!(
+                descriptor.provides[0].capability_id.as_str(),
+                "ui.viewer.project-file"
+            );
+
+            let host = test_candidate_extension_host_with_application_plugins().await;
+            let application = host.scopes().application();
+            let resolution = application
+                .registry()
+                .resolve_project_file_viewer(&super::project_file_viewer_capability_id())
+                .unwrap();
+            let value = serde_json::to_value(resolution.contribution()).unwrap();
+            assert!(value.get("project_root").is_none());
+            assert!(value.get("path").is_none());
+            assert!(value.get("handler").is_none());
+            assert_eq!(
+                resolution.contribution().general_maximum_bytes(),
+                super::MAX_VIEWER_FILE_BYTES as usize
+            );
+            assert_eq!(
+                resolution.contribution().html_maximum_bytes(),
+                super::MAX_VIEWER_HTML_BYTES as usize
+            );
+        });
+    }
+
+    #[test]
+    fn extension_host_activates_application_plugins_only_in_candidate_mode() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let diagnostics =
+                || -> Arc<dyn DiagnosticSink> { Arc::new(|_: ExtensionDiagnostic| {}) };
+            let legacy = super::build_extension_host(Some("legacy"), diagnostics())
+                .await
+                .unwrap();
+            assert!(
+                legacy
+                    .scopes()
+                    .application()
+                    .registry()
+                    .resolve_project_file_viewer(&super::project_file_viewer_capability_id())
+                    .is_err()
+            );
+            let candidate = super::build_extension_host(Some("candidate"), diagnostics())
+                .await
+                .unwrap();
+            assert!(
+                candidate
+                    .scopes()
+                    .application()
+                    .registry()
+                    .resolve_project_file_viewer(&super::project_file_viewer_capability_id())
+                    .is_ok()
+            );
+        });
+    }
+
+    #[test]
+    fn candidate_workspace_snapshot_preserves_typed_system_and_agent_requests() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let tempdir = TempDir::new().unwrap();
+            let project_root = tempdir.path().join("project-a");
+            std::fs::create_dir_all(&project_root).unwrap();
+            let normalized_root = normalize_project_root(project_root.to_string_lossy().as_ref());
+            let store_path = tempdir.path().join("rho.sqlite");
+            let mut store = Store::open(&store_path).unwrap();
+            store.set_project_root(Some(&normalized_root)).unwrap();
+            let broker = BrokerState::new("workspace-test");
+            let identity = broker.identity().clone();
+            let context = Arc::new(Mutex::new(CoordinatorRuntime { broker, store }));
+
+            let host = test_candidate_extension_host_with_application_plugins().await;
+            let project = host
+                .build_project_candidate(
+                    super::extension_project_scope_id(&normalized_root).unwrap(),
+                    super::internal_plugins_for_scope(
+                        &rho_extension_runtime::ScopePolicy::project_kind(),
+                    ),
+                    Arc::new(super::RunHistoryBrokerFacade {
+                        store_path: store_path.clone(),
+                        project_root: normalized_root.clone(),
+                    }),
+                )
+                .await
+                .unwrap();
+            host.publish_project_candidate(None, project.clone())
+                .await
+                .unwrap();
+            let response = json!({
+                "execution_id": "snapshot-fixture",
+                "execution": {"ok": true, "objects": []},
+                "workspace": identity,
+            });
+            let requests = Arc::new(StdMutex::new(Vec::new()));
+            let workspace = host
+                .build_workspace_candidate(
+                    &project,
+                    super::extension_workspace_scope_id(&project, &identity).unwrap(),
+                    super::internal_plugins_for_scope(
+                        &rho_extension_runtime::ScopePolicy::workspace_kind(),
+                    ),
+                    Arc::new(RecordingWorkspaceBroker {
+                        response: response.clone(),
+                        failure: None,
+                        requests: Arc::clone(&requests),
+                    }),
+                )
+                .await
+                .unwrap();
+            host.publish_workspace_candidate(None, workspace)
+                .await
+                .unwrap();
+            let state = test_app_state_with_extension_host(
+                tempdir.path(),
+                &project_root,
+                &store_path,
+                Arc::clone(&host),
+            );
+            *state.context.lock().await = Some(Arc::clone(&context));
+
+            assert_eq!(
+                super::snapshot_workspace_with_state(&state).await.unwrap(),
+                response
+            );
+            let adapter = super::ExtensionWorkspaceSnapshotAdapter {
+                extension_host: Arc::clone(&host),
+                context: Arc::clone(&context),
+            };
+            let agent_result = rho_server::coordinator::WorkspaceSnapshotAdapter::snapshot(
+                &adapter,
+                json!({
+                    "arguments": {},
+                    "expected_workspace": super::expected_workspace(&identity),
+                }),
+                "agent_workspace_fixture".to_string(),
+            )
+            .await
+            .unwrap();
+            assert_eq!(agent_result, response);
+
+            context.lock().await.broker.project_changed();
+            let stale_error = super::snapshot_workspace_with_state(&state)
+                .await
+                .unwrap_err();
+            assert!(stale_error.contains("stale after Workspace state changed"));
+
+            let requests = requests.lock().unwrap();
+            assert_eq!(requests.len(), 3);
+            for request in requests.iter() {
+                assert_eq!(request["operation"], "snapshot");
+                assert!(request.get("code").is_none());
+                assert!(request.get("expression").is_none());
+            }
+            assert_eq!(requests[0]["origin"], "system");
+            assert!(requests[0]["execution_id"].is_null());
+            assert_eq!(requests[1]["origin"], "agent");
+            assert_eq!(requests[1]["execution_id"], "agent_workspace_fixture");
+            assert_eq!(requests[2]["origin"], "system");
+        });
+    }
+
+    #[test]
+    fn candidate_workspace_snapshot_handler_failure_does_not_retry_legacy() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let tempdir = TempDir::new().unwrap();
+            let project_root = tempdir.path().join("project-a");
+            std::fs::create_dir_all(&project_root).unwrap();
+            let normalized_root = normalize_project_root(project_root.to_string_lossy().as_ref());
+            let store_path = tempdir.path().join("rho.sqlite");
+            let mut store = Store::open(&store_path).unwrap();
+            store.set_project_root(Some(&normalized_root)).unwrap();
+            let broker = BrokerState::new("workspace-failure");
+            let identity = broker.identity().clone();
+            let context = Arc::new(Mutex::new(CoordinatorRuntime { broker, store }));
+            let host = test_candidate_extension_host_with_application_plugins().await;
+            let project = host
+                .build_project_candidate(
+                    super::extension_project_scope_id(&normalized_root).unwrap(),
+                    super::internal_plugins_for_scope(
+                        &rho_extension_runtime::ScopePolicy::project_kind(),
+                    ),
+                    Arc::new(super::RunHistoryBrokerFacade {
+                        store_path: store_path.clone(),
+                        project_root: normalized_root,
+                    }),
+                )
+                .await
+                .unwrap();
+            host.publish_project_candidate(None, project.clone())
+                .await
+                .unwrap();
+            let workspace = host
+                .build_workspace_candidate(
+                    &project,
+                    super::extension_workspace_scope_id(&project, &identity).unwrap(),
+                    super::internal_plugins_for_scope(
+                        &rho_extension_runtime::ScopePolicy::workspace_kind(),
+                    ),
+                    Arc::new(RecordingWorkspaceBroker {
+                        response: json!({}),
+                        failure: Some(("ark_unavailable", "injected Ark failure")),
+                        requests: Arc::new(StdMutex::new(Vec::new())),
+                    }),
+                )
+                .await
+                .unwrap();
+            host.publish_workspace_candidate(None, workspace)
+                .await
+                .unwrap();
+            let state = test_app_state_with_extension_host(
+                tempdir.path(),
+                &project_root,
+                &store_path,
+                host,
+            );
+            *state.context.lock().await = Some(context);
+            let error = super::snapshot_workspace_with_state(&state)
+                .await
+                .unwrap_err();
+            assert!(error.contains("ark_unavailable"));
+        });
+    }
+
+    #[test]
+    fn project_file_viewer_legacy_candidate_and_two_project_results_match() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let tempdir = TempDir::new().unwrap();
+            let project_a_path = tempdir.path().join("project-a");
+            let project_b_path = tempdir.path().join("project-b");
+            std::fs::create_dir_all(&project_a_path).unwrap();
+            std::fs::create_dir_all(&project_b_path).unwrap();
+            let project_a = project_a_path.canonicalize().unwrap();
+            let project_b = project_b_path.canonicalize().unwrap();
+            std::fs::write(project_a.join("report.html"), "<h1>project A</h1>").unwrap();
+            std::fs::write(project_b.join("report.html"), "<h1>project B</h1>").unwrap();
+            let store_path = tempdir.path().join("rho.sqlite");
+            Store::open(&store_path).unwrap();
+
+            let legacy = test_app_state(tempdir.path(), &project_a, &store_path);
+            let candidate = test_app_state_with_extension_host(
+                tempdir.path(),
+                &project_a,
+                &store_path,
+                test_candidate_extension_host_with_application_plugins().await,
+            );
+            let legacy_a = super::viewer_read_file_with_state("report.html".to_string(), &legacy)
+                .await
+                .unwrap();
+            let candidate_a =
+                super::viewer_read_file_with_state("report.html".to_string(), &candidate)
+                    .await
+                    .unwrap();
+            assert_eq!(legacy_a, candidate_a);
+            assert_eq!(candidate_a.content, "<h1>project A</h1>");
+
+            *candidate.project_root.write().await = project_b.clone();
+            let candidate_b =
+                super::viewer_read_file_with_state("report.html".to_string(), &candidate)
+                    .await
+                    .unwrap();
+            assert_eq!(candidate_b.content, "<h1>project B</h1>");
+            assert_ne!(candidate_a.project_root, candidate_b.project_root);
+            assert!(
+                super::viewer_read_file_with_state(
+                    "../project-a/report.html".to_string(),
+                    &candidate
+                )
+                .await
+                .is_err()
+            );
+
+            let missing = test_app_state_with_extension_mode(
+                tempdir.path(),
+                &project_a,
+                &store_path,
+                InternalExtensionRuntimeMode::Candidate,
+            );
+            let error = super::viewer_read_file_with_state("report.html".to_string(), &missing)
+                .await
+                .unwrap_err();
+            assert!(error.contains("viewer contribution is missing"));
+        });
+    }
+
+    #[test]
     fn run_history_candidate_matches_store_across_limits_projects_and_restart() {
         let runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.block_on(async {
@@ -10935,7 +11920,7 @@ mod tests {
     }
 
     #[test]
-    fn run_history_missing_contribution_and_activation_failure_fall_back_safely() {
+    fn run_history_missing_contribution_and_activation_failure_fail_closed_after_p1_2() {
         let runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.block_on(async {
             let tempdir = TempDir::new().unwrap();
@@ -10951,7 +11936,6 @@ mod tests {
             create_run_fixture(&mut store, &root_a, "run-a", "a <- 1");
             create_run_fixture(&mut store, &root_b, "run-b", "b <- 1");
             let expected_a = store.list_runs(&root_a, None).unwrap();
-            let expected_b = store.list_runs(&root_b, None).unwrap();
             drop(store);
 
             let state = test_app_state_with_extension_mode(
@@ -10960,16 +11944,15 @@ mod tests {
                 &store_path,
                 InternalExtensionRuntimeMode::Candidate,
             );
-            let missing = state
-                .extension_host
-                .build_empty_project_candidate(super::extension_project_scope_id(&root_a).unwrap())
-                .await
-                .unwrap();
             state
-                .extension_host
-                .publish_project_candidate(None, missing)
-                .await
-                .unwrap();
+                .switch_test_control
+                .succeed_without_running(SwitchTestStep::SyncWorkspace);
+            switch_project_with_watcher_factory(project_a.clone(), None, &state, |_| {
+                Ok(ProjectWatcherControl::noop())
+            })
+            .await
+            .unwrap();
+            let old_scope = state.extension_host.scopes().project().unwrap();
             assert_run_summaries_equal(
                 list_runs_with_state(None, &state).await.unwrap(),
                 &expected_a,
@@ -10982,17 +11965,46 @@ mod tests {
             state
                 .switch_test_control
                 .succeed_without_running(SwitchTestStep::SyncWorkspace);
-            let response = switch_project_with_watcher_factory(project_b, None, &state, |_| {
+            let error = switch_project_with_watcher_factory(project_b, None, &state, |_| {
                 Ok(ProjectWatcherControl::noop())
             })
             .await
-            .unwrap();
-            assert_eq!(response.status, "ready");
-            assert!(state.extension_host.scopes().project().is_none());
+            .unwrap_err();
+            assert!(
+                error
+                    .to_string()
+                    .contains("required extension project candidate")
+            );
+            assert_eq!(*state.project_root.read().await, project_a);
+            assert!(Arc::ptr_eq(
+                &state.extension_host.scopes().project().unwrap(),
+                &old_scope
+            ));
             assert_run_summaries_equal(
                 list_runs_with_state(None, &state).await.unwrap(),
-                &expected_b,
+                &expected_a,
             );
+
+            let missing_state = test_app_state_with_extension_mode(
+                tempdir.path(),
+                &project_a,
+                &store_path,
+                InternalExtensionRuntimeMode::Candidate,
+            );
+            let missing = missing_state
+                .extension_host
+                .build_empty_project_candidate(super::extension_project_scope_id(&root_a).unwrap())
+                .await
+                .unwrap();
+            missing_state
+                .extension_host
+                .publish_project_candidate(None, missing)
+                .await
+                .unwrap();
+            let error = list_runs_with_state(None, &missing_state)
+                .await
+                .unwrap_err();
+            assert!(error.contains("source contribution is missing"));
         });
     }
 
@@ -11019,7 +12031,9 @@ mod tests {
                 .extension_host
                 .build_project_candidate(
                     super::extension_project_scope_id(&root).unwrap(),
-                    super::internal_plugin_inventory(),
+                    super::internal_plugins_for_scope(
+                        &rho_extension_runtime::ScopePolicy::project_kind(),
+                    ),
                     Arc::new(super::RunHistoryBrokerFacade {
                         store_path: tempdir.path().join("missing").join("rho.sqlite"),
                         project_root: root,
@@ -12542,6 +13556,7 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
             Arc::new(PendingApprovalRegistry::default()),
             false,
             None,
+            None,
         )
         .await?;
         let completed = result["events"]
@@ -12652,10 +13667,11 @@ fn main() {
                 error
             })?;
             let selected_rscript = load_selected_rscript(&data_dir);
-            let extension_host = desktop_extension_host().map_err(|error| {
-                write_startup_log(&format!("Internal extension host setup failed: {error:#}"));
-                error
-            })?;
+            let extension_host =
+                tauri::async_runtime::block_on(desktop_extension_host()).map_err(|error| {
+                    write_startup_log(&format!("Internal extension host setup failed: {error:#}"));
+                    error
+                })?;
             app.manage(AppState {
                 data_dir,
                 ark,

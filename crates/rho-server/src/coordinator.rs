@@ -1,8 +1,10 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ffi::OsString;
 use std::fs;
+use std::future::Future;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::process::Stdio;
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::UNIX_EPOCH;
@@ -1940,6 +1942,14 @@ fn desktop_agent_turn_stdin(
 const DESKTOP_AGENT_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(900);
 const DESKTOP_AGENT_TURN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(86_400);
 
+pub trait WorkspaceSnapshotAdapter: Send + Sync {
+    fn snapshot<'a>(
+        &'a self,
+        payload: Value,
+        execution_id: String,
+    ) -> Pin<Box<dyn Future<Output = Result<Value>> + Send + 'a>>;
+}
+
 fn configure_agent_process_environment(
     command: &mut tokio::process::Command,
     process_path: Option<&std::ffi::OsStr>,
@@ -1974,6 +1984,7 @@ pub async fn run_agent_turn(
     environment_approvals: Arc<PendingApprovalRegistry>,
     auto_approve: bool,
     editor_context: Option<Value>,
+    workspace_snapshot_adapter: Option<Arc<dyn WorkspaceSnapshotAdapter>>,
 ) -> Result<Value> {
     ensure!(
         matches!(mode.as_str(), "ask" | "plan" | "act"),
@@ -2090,6 +2101,7 @@ pub async fn run_agent_turn(
             approvals.clone(),
             environment_approvals.clone(),
             auto_approve,
+            workspace_snapshot_adapter,
         )
         .await;
         let output = tokio::time::timeout(
@@ -2168,6 +2180,7 @@ async fn serve_desktop_agent(
     approvals: Arc<PendingApprovalRegistry>,
     environment_approvals: Arc<PendingApprovalRegistry>,
     auto_approve: bool,
+    workspace_snapshot_adapter: Option<Arc<dyn WorkspaceSnapshotAdapter>>,
 ) -> Result<DesktopAgentCompletion> {
     let mut events = Vec::new();
     let mut final_message = None;
@@ -2228,6 +2241,7 @@ async fn serve_desktop_agent(
                                 context.clone(),
                                 turn_id,
                                 workspace_lane.clone(),
+                                workspace_snapshot_adapter.clone(),
                             )
                             .await
                         }
@@ -2285,6 +2299,7 @@ async fn dispatch_agent_workspace_request(
     context: Arc<Mutex<CoordinatorRuntime>>,
     turn_id: &str,
     workspace_lane: Arc<AgentWorkspaceLane>,
+    workspace_snapshot_adapter: Option<Arc<dyn WorkspaceSnapshotAdapter>>,
 ) -> Result<Value> {
     let _lane_guard = match workspace_lane.gate.try_lock() {
         Ok(guard) => guard,
@@ -2294,8 +2309,18 @@ async fn dispatch_agent_workspace_request(
         }
     };
     let execution_id = format!("agent_workspace_{}", Uuid::new_v4().simple());
-    let mut context = context.lock().await;
     let _execution_guard = workspace_lane.begin_execution(turn_id, &execution_id)?;
+    if let Some(result) = dispatch_workspace_snapshot_adapter(
+        request_type,
+        payload,
+        &execution_id,
+        workspace_snapshot_adapter.as_ref(),
+    )
+    .await
+    {
+        return result;
+    }
+    let mut context = context.lock().await;
     let CoordinatorRuntime { broker, store } = &mut *context;
     dispatch_workspace_request_with_execution_id(
         request_type,
@@ -2307,6 +2332,23 @@ async fn dispatch_agent_workspace_request(
         Some(&execution_id),
     )
     .await
+}
+
+async fn dispatch_workspace_snapshot_adapter(
+    request_type: &str,
+    payload: &Value,
+    execution_id: &str,
+    adapter: Option<&Arc<dyn WorkspaceSnapshotAdapter>>,
+) -> Option<Result<Value>> {
+    if request_type != "workspace.snapshot" {
+        return None;
+    }
+    let adapter = adapter?;
+    Some(
+        adapter
+            .snapshot(payload.clone(), execution_id.to_string())
+            .await,
+    )
 }
 
 async fn record_agent_workspace_wait(
@@ -5077,7 +5119,26 @@ impl Drop for ResultFile {
 mod tests {
     use super::*;
     use std::fs;
+    use std::sync::Mutex as StdMutex;
     use tempfile::TempDir;
+
+    struct RecordingSnapshotAdapter {
+        calls: Arc<StdMutex<Vec<(Value, String)>>>,
+    }
+
+    impl WorkspaceSnapshotAdapter for RecordingSnapshotAdapter {
+        fn snapshot<'a>(
+            &'a self,
+            payload: Value,
+            execution_id: String,
+        ) -> Pin<Box<dyn Future<Output = Result<Value>> + Send + 'a>> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push((payload.clone(), execution_id));
+            Box::pin(async move { Ok(json!({"adapted": payload})) })
+        }
+    }
 
     #[tokio::test]
     async fn pending_approval_cancellation_is_scoped_to_the_owning_turn() {
@@ -5235,6 +5296,52 @@ mod tests {
         drop(execution);
         lane.clear_turn_cancellation("turn-active");
         lane.clear_turn_cancellation("turn-other");
+    }
+
+    #[tokio::test]
+    async fn workspace_snapshot_adapter_is_exact_and_preserves_payload_and_execution_id() {
+        let calls = Arc::new(StdMutex::new(Vec::new()));
+        let adapter: Arc<dyn WorkspaceSnapshotAdapter> = Arc::new(RecordingSnapshotAdapter {
+            calls: Arc::clone(&calls),
+        });
+        let payload = json!({
+            "arguments": {},
+            "expected_workspace": {"state_revision": 7}
+        });
+        let result = dispatch_workspace_snapshot_adapter(
+            "workspace.snapshot",
+            &payload,
+            "agent_workspace_exact",
+            Some(&adapter),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(result["adapted"], payload);
+        assert_eq!(
+            calls.lock().unwrap().as_slice(),
+            &[(payload, "agent_workspace_exact".to_string())]
+        );
+        assert!(
+            dispatch_workspace_snapshot_adapter(
+                "workspace.inspect_object",
+                &json!({}),
+                "agent_workspace_other",
+                Some(&adapter),
+            )
+            .await
+            .is_none()
+        );
+        assert!(
+            dispatch_workspace_snapshot_adapter(
+                "workspace.snapshot",
+                &json!({}),
+                "agent_workspace_legacy",
+                None,
+            )
+            .await
+            .is_none()
+        );
     }
 
     #[tokio::test]
