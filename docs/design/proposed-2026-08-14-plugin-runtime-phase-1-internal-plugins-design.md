@@ -38,7 +38,12 @@ Cross-reviewed against:
 - `docs/implementation/implemented-wp4-project-skills-interface.md`;
 - `docs/design/proposed-2026-07-26-public-workbench-protocol-cli-mcp-design.md`;
 - `docs/design/implemented-agent-file-editing-design.md`;
-- `docs/plans/proposed-2026-08-10-ai-capability-gap-closure-plan.md`.
+- `docs/plans/proposed-2026-08-10-ai-capability-gap-closure-plan.md`;
+- [Issue #95](https://github.com/YuLab-SMU/Rho/issues/95), especially the
+  first-party Execution Target composition, target-session lifecycle, and
+  Trusted Kernel boundary;
+- [Issue #96](https://github.com/YuLab-SMU/Rho/issues/96), especially the
+  Primary Workspace / Compute Environment / Job / Attempt ownership model.
 
 Repository integration note: this proposal is intentionally a single-file,
 independently reviewable change. It does not edit the shared documentation index
@@ -66,7 +71,10 @@ need one coherent contract before any external plugin ecosystem is safe:
 2. a dependency graph based on capability identifiers rather than concrete
    plugin imports;
 3. reversible effects, so every registration has a deterministic teardown;
-4. explicit application, project, Workspace R, and Agent scope lifetimes.
+4. explicit application, project, Workspace R, and Agent scope lifetimes;
+5. a host-owned scope/generation and candidate-replacement contract that can
+   support later internal runtime consumers without granting them policy or
+   process authority.
 
 The governing trust decision is:
 
@@ -120,6 +128,12 @@ Phase 1 will define and, after separate authorization, allow Rho to implement:
 - quiesce-before-dispose teardown;
 - two-phase project scope replacement, preserving the old active project scope
   when candidate activation fails;
+- a generic candidate-scope replacement protocol whose first required use is
+  project switching;
+- host-owned extensible child-scope identity without allowing plugins to create
+  arbitrary scope kinds or parent relationships;
+- a distinction between one capability-provider implementation and multiple
+  product-configured instances of that implementation;
 - controlled registries for tools, sources, services, Skills, commands,
   viewers, and panels;
 - migration of a deliberately varied set of two or three built-in capabilities;
@@ -147,6 +161,11 @@ Phase 1 does not authorize or freeze:
 - a generic persistent plugin key-value store;
 - replacing the current `.rho/skills` trust and discovery model;
 - changing the public Workbench Protocol;
+- implementing Execution Targets, R discovery, Conda, containers, SSH, Slurm,
+  remote runtime transport, Compute Environments, Jobs, Attempts, scheduling,
+  or Artifact import/promotion from Issues #95 and #96;
+- exposing runtime, transport, allocator, process, arbitrary R/shell, or raw
+  credential authority as a third-party plugin capability;
 - removing legacy wiring before migrated behavior has passed parity and
   rollback acceptance.
 
@@ -216,12 +235,34 @@ A scope owns plugin instances, resolved dependencies, effects, and resources.
 Closing a scope revokes access to everything owned by that scope and disposes
 children before the parent.
 
+A scope identity includes a host-defined kind, stable scope ID, optional parent
+scope ID, and activation generation. The host owns the allowed parent/child
+graph and creates all scopes. Plugins cannot invent scope kinds, reparent
+instances, or turn a configured product object into an authorization scope.
+
+Phase 1 implements only the minimum application/project/Workspace/Agent scope
+set selected by its authorized work packages. The contract must not assume that
+this is the final scope depth: later host-owned child kinds can be added only
+through their own reviewed product contracts.
+
 ### Effect
 
 An effect is any reversible registration or resource created during plugin
 activation. Examples include a registry entry, event subscription, timer,
-background task, channel, temporary file lease, viewer registration, or host
-handle. Every effect must have idempotent disposal.
+background task, channel, temporary file lease, viewer registration, host
+handle, supervised process lease, watcher, mount/bind lease, allocation,
+container, or transfer lease. Every effect must have idempotent disposal.
+
+External-resource examples are lifecycle classes, not ambient authority. A
+plugin may acquire such an effect only through a narrow broker façade that
+already owns and authorizes the operation. The effect record owns cleanup; it
+does not expose the raw process, credential, socket, scheduler, or filesystem
+handle to the plugin.
+
+Each effect is attributable to one plugin instance, scope generation, and
+creation order. Disposal records success, timeout, or cleanup failure
+truthfully. A failed cleanup does not make the effect routable again and cannot
+be reported as fully disposed.
 
 ## Relationship To Skills, Tools, Providers, And MCP
 
@@ -392,6 +433,32 @@ required | optional
 
 The runtime does not use application-version equality as a capability contract.
 
+### Provider Implementation Versus Configured Instance
+
+The one-provider rule applies to a capability contract implementation within an
+effective scope. It does not prohibit the product from creating multiple
+configured instances backed by that implementation.
+
+For example, a future first-party implementation of an internal
+`target.runtime.batch-rscript` contract could support multiple configured R
+runtime instances. Those instances are product state selected by a
+broker-owned routing contract; they are not additional capability providers and
+do not participate as duplicate nodes in the plugin dependency graph.
+
+Rules:
+
+- the capability graph resolves implementations and their dependencies;
+- product-owned routing selects among configured instances;
+- plugin activation cannot create a second provider for the same contract
+  slot;
+- configured-instance identity, persistence, availability, scheduling, and
+  authorization remain with the owning product contract;
+- provider registration never grants permission to connect, launch, allocate,
+  transfer, install, execute, or read credentials.
+
+The example reserves no public namespace or API. Any concrete target/runtime
+capability IDs and instance schemas remain owned by Issue #95.
+
 ## PluginContext
 
 Illustrative API:
@@ -438,10 +505,12 @@ flowchart TB
     PROJECT["Project scope\nproject_id"]
     WORKSPACE["Workspace scope\nworkspace_id + kernel_instance_id"]
     AGENT["Agent scope\nconversation/runtime identity"]
+    FUTURE["Future host-owned child scope\nseparately authorized"]
 
     APP --> PROJECT
     PROJECT --> WORKSPACE
     PROJECT --> AGENT
+    PROJECT -. reviewed extension point .-> FUTURE
 ```
 
 ### Application Scope
@@ -471,6 +540,31 @@ Owns Agent conversation/session contributions. It may consume project-level
 services, but it cannot directly resolve Workspace-scope implementations across
 its sibling boundary. Workspace operations continue through broker-mediated
 capabilities so stale kernel and revision checks remain authoritative.
+
+### Host-Owned Child Scope Extension Contract
+
+The current four scope kinds are not a public closed enum promise. A future
+product design may add host-owned child scopes, but only when all of the
+following are defined and reviewed:
+
+- canonical scope identity and allowed parent kind;
+- activation generation and stale-message behavior;
+- which parent capabilities may be resolved;
+- which children must quiesce/dispose first;
+- effect, lease, deadline, and cleanup ownership;
+- project/Workspace/runtime revision binding where relevant;
+- persistence ownership, if any, outside the ephemeral extension runtime;
+- failure, replacement, restart, and application-shutdown semantics.
+
+Potential downstream consumers include target sessions and runtime instances
+from Issue #95 and Compute Environments, Jobs, and Attempts from Issue #96.
+They are examples of why the scope contract must be extensible; Phase 1 does not
+create those scope kinds or implement their product behavior.
+
+Plugins cannot register a scope kind. Scope creation remains a host/broker
+lifecycle operation. A future scope may use the extension runtime to compose
+first-party capabilities while keeping its project identity, process,
+persistence, permission, and scheduling authority elsewhere.
 
 ### Resolution Rules
 
@@ -556,16 +650,18 @@ A disposal failure must not resurrect registry entries or make a stale scope
 active again. Resources that cannot be proved closed become an explicit
 recovery/diagnostic condition.
 
-## Project Switch And Replacement Protocol
+## Candidate Scope Replacement Protocol
 
-Project switching is a high-risk lifecycle boundary. The extension runtime must
-not tear down the active project before it knows the replacement can activate.
+Any host-owned live-scope replacement is a high-risk lifecycle boundary. The
+extension runtime must not tear down the active generation before it knows the
+candidate can activate. Project switching is the first required product use and
+remains the only replacement integrated by Phase 1.
 
 ```mermaid
 sequenceDiagram
     participant B as Broker/coordinator
-    participant OLD as Active project scope
-    participant NEW as Candidate project scope
+    participant OLD as Active scope generation
+    participant NEW as Candidate scope generation
     participant UI as Desktop shell
 
     B->>NEW: construct + resolve graph
@@ -575,13 +671,29 @@ sequenceDiagram
         B->>OLD: quiesce and dispose
     else candidate activation fails
         B->>NEW: rollback and dispose
-        B->>UI: report failure; keep old scope active
+        B->>UI: report failure; keep old generation active
     end
 ```
 
-The active `project_id`, project revision, Workspace R identity, and UI
-projection continue to follow existing authoritative switch contracts. The
-extension runtime does not invent a second project-selection state.
+Generic rules:
+
+- build and validate the complete candidate graph before side effects;
+- register candidate effects immediately during transactional activation;
+- publish exactly one candidate generation only after readiness succeeds;
+- after publication, reject new calls/leases on the old generation;
+- boundedly drain or cancel existing calls/leases according to the owning
+  product contract;
+- dispose old dependents and effects in reverse order;
+- on candidate failure, roll back candidate effects and preserve the old
+  generation when it remains safe;
+- generation checks reject late candidate or old-generation completion.
+
+For project switching, the active `project_id`, project revision, Workspace R
+identity, and UI projection continue to follow existing authoritative switch
+contracts. The extension runtime does not invent a second project-selection
+state. Later target/environment replacement may reuse these generic mechanics
+only after its own contract defines readiness, leases, rollback, and durable
+truth.
 
 ## Controlled Registries
 
@@ -692,6 +804,8 @@ evidence proves it is needed.
 | plugin panics/throws | catch at runtime boundary where possible; candidate scope fails truthfully |
 | dispose hangs | deadline, cancellation, leaked-resource diagnostic, no stale routing |
 | project candidate fails | old project scope remains active |
+| non-project candidate fails | old generation remains active only when the owning product contract proves it safe |
+| late old/candidate generation result | reject; never publish or rebind stale state |
 | Workspace R restarts | old workspace scope is invalidated; no implicit stale-handle reuse |
 | rapid A/B project switching | generations prevent late activation from becoming current |
 | application shutdown | child scopes dispose before application scope |
@@ -714,6 +828,8 @@ implementation must add deterministic coverage at least for the following.
 - direct and multi-node cycles;
 - deterministic order independent of map iteration;
 - application/project/workspace/Agent scope compatibility;
+- provider-implementation versus configured-instance fixtures;
+- host-owned child-scope ancestry and invalid parent-kind fixtures;
 - bounded plugin and dependency counts.
 
 ### Effect And Lifecycle Tests
@@ -726,6 +842,9 @@ implementation must add deterministic coverage at least for the following.
 - quiescing rejects new registrations and calls;
 - in-flight cancellation and deadline;
 - activation/disposal race;
+- candidate replacement success/failure and late-generation rejection;
+- synthetic external effect/lease cleanup without exposing a raw host handle;
+- cleanup timeout/failure remains non-routable and diagnostically visible;
 - application shutdown cascade.
 
 ### Project And Runtime Isolation Tests
@@ -736,7 +855,9 @@ implementation must add deterministic coverage at least for the following.
 - rapid A/B/A switch rejects stale completion;
 - Workspace R restart invalidates old workspace services;
 - Agent scope cannot resolve sibling Workspace native objects;
-- project close removes all project, workspace, and Agent effects.
+- project close removes all project, workspace, and Agent effects;
+- a synthetic future child scope cannot leak a service/lease into its sibling
+  or survive parent teardown.
 
 ### Migration Parity Tests
 
@@ -766,6 +887,9 @@ implicitly.
 Deliver:
 
 - plugin/capability/scope/effect types;
+- host-owned extensible scope identity and allowed-parent validation;
+- provider-implementation versus configured-instance semantics;
+- generic candidate-replacement and generation fixtures;
 - descriptor validation;
 - capability graph fixtures;
 - no application integration.
@@ -782,6 +906,9 @@ Deliver:
 
 - application and project scope manager;
 - activation transaction and rollback;
+- generic candidate-generation replacement mechanics, exercised first through
+  project switching;
+- bounded call/effect lease and late-generation rejection;
 - quiesce/dispose cascade;
 - structured diagnostics;
 - no migrated user-facing capability yet.
@@ -828,7 +955,9 @@ Deliver:
 - independent architecture/safety review;
 - actual deviations recorded;
 - decision to accept, revise, or remove the abstraction;
-- explicit decision on legacy wiring removal.
+- explicit decision on legacy wiring removal;
+- downstream suitability review against Issues #95 and #96 without
+  implementing their product scopes or backends.
 
 Stop gate:
 
@@ -844,6 +973,8 @@ Phase 1 may be accepted only when:
 - two or three varied built-in capabilities run through the extension runtime;
 - no selected behavior regresses relative to legacy wiring;
 - activation failure fully rolls back candidate effects;
+- candidate replacement never publishes a partial generation and preserves the
+  old generation only when the owning product contract says it is safe;
 - project A/B isolation and failed-switch recovery pass;
 - Workspace R and Agent scope teardown leave no routable stale handles;
 - disposal is deterministic, idempotent, bounded, and independently reviewed;
@@ -867,7 +998,13 @@ The implementation-authorization review must close or explicitly defer:
    projection;
 6. the exact feature-flag owner and default during migration;
 7. which lifecycle invariants are accepted as stable before Phase 2 and which
-   API names remain experimental.
+   API names remain experimental;
+8. whether scope kind remains a host-owned enum or uses a validated extensible
+   identifier without permitting plugin-defined scope creation;
+9. the minimum effect metadata and lease contract required to prove external
+   resource cleanup and late-generation rejection;
+10. which generic lifecycle contracts are stable enough for Issues #95 and #96
+    to consume without coupling them to plugin-specific APIs.
 
 ## Version, NEWS, And Release Impact
 
@@ -878,6 +1015,64 @@ Each future work package records its own version impact. Internal refactoring
 without user-visible or distributed contract changes should not be advertised
 as a shipped plugin system. A public plugin SDK or workspace executable plugin
 support requires the separate Phase 2 contract and later release acceptance.
+
+## Downstream Host-Owned Runtime Consumers
+
+The internal extension runtime is intended to be a construction foundation for
+future first-party, host-owned capabilities above the Trusted Kernel. Issues
+#95 and #96 are concrete downstream architecture consumers:
+
+- Issue #95 composes first-party Execution Target adapters for transport,
+  allocation, isolation, runtime, and project location;
+- Issue #96 defines one Primary Workspace plus Compute Environment, Job, and
+  Attempt lifecycles.
+
+They may reuse only the generic Phase 1 contracts:
+
+```text
+typed/versioned capability dependency
+host-owned scope identity and activation generation
+provider implementation versus configured instance
+transactional candidate activation
+reversible effect ownership
+quiesce, bounded drain/cancel, and reverse disposal
+late-generation rejection
+structured bounded diagnostics
+transport-safe broker façade
+```
+
+The authority boundary is fixed:
+
+- Execution Target, scheduler, runtime, and worker adapters are compiled-in
+  first-party capabilities unless a later independent security contract says
+  otherwise;
+- the extension runtime may resolve and coordinate adapters, but the Rust
+  broker remains the sole process, policy, approval, credential, project
+  identity, revision, persistence, and audit authority;
+- a target-side runtime host is a release-matched trusted broker peer, not an
+  ordinary workspace plugin;
+- capability registration does not grant process, remote-connect, scheduler,
+  container, filesystem, network, transfer, installation, execution, or
+  credential permission;
+- project or Agent content cannot supply executable provider code, raw commands,
+  shell fragments, launch hooks, or credential values as authority.
+
+Phase 1 does not define or implement:
+
+- `RInstallationRegistry`, `rig`, `Rscript`, Ark target selection, Conda,
+  Docker/Podman/Apptainer, SSH, Slurm, or remote transport;
+- target-host wire messages, target configuration, project-location identity,
+  environment manifests, or constrained remote handles;
+- Compute Environment, Job, Attempt, queue, scheduler, retry, staging, Artifact,
+  import/promotion, persistence, routing, or UI schemas;
+- third-party `provider.runtime.*` or process/R/shell authority.
+
+Those remain in Issues #95/#96 and their future active specifications. Phase 1
+acceptance should include a downstream suitability review proving that these
+consumers can use the generic lifecycle contracts without exposing raw Rust,
+Tauri, Node, R environment, socket, database, process, credential, or DOM
+objects. If they cannot, Phase 1 must revise the transport-safe façade rather
+than allowing downstream code to bypass the Trusted Kernel.
 
 ## Phase 2 Handoff Constraints
 
