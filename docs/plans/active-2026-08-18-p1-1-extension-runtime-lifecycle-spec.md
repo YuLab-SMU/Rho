@@ -1,7 +1,8 @@
 # P1-1 Internal Extension Runtime Lifecycle Specification
 
 Status: active; P1-1 implementation, local automated verification, and
-independent contract review complete 2026-08-18; exact-head Rust Fast pending
+independent contract review complete 2026-08-18; implementation-head Rust Fast
+passed; evidence-reconciliation head pending
 
 Date: 2026-08-18
 Authorization: after accepting the P1-0 and CI-FAST1 stop gates, the user
@@ -414,8 +415,8 @@ decision is authorized.
 
 ### Implementation and local evidence — 2026-08-18
 
-Implementation is present on the pre-commit P1-1 tree. The evidence
-reconciliation records the exact implementation commit after push.
+Implementation commit:
+`f7d3da2ff6ee9f776eb1c32be17b2d32099ef448`.
 
 Implemented:
 
@@ -524,8 +525,18 @@ installer, signing, candidate, and release checks. P1-1 changes no R package,
 frontend command/mock state, visible workflow, schema, or distributable public
 contract. `desktop/dist/app.js` required no edit.
 
-Hosted evidence: exact-head Rust Fast pending. The six-leg native/MSRV matrix is
-still deliberately deferred to P1-4/Ready.
+Hosted implementation-head evidence:
+
+- Rust Fast run `32114431764`, job `95640658543`, passed in 2m39s;
+- Rust Compatibility run `32114431721` skipped before matrix expansion because
+  PR #75 remains Draft;
+- the 1128 MiB prior Linux/toolchain cache restored through the reviewed
+  restore prefix after the lockfile changed; and
+- the run saved exact new-lock key
+  `rho-rust-v1-Linux-stable-x86_64-unknown-linux-gnu-bc9fb070b16d52abd62c229a905e272f25158b85490bb3951775c4d64c2af6f1`.
+
+The evidence-reconciliation head must pass Rust Fast once more. The six-leg
+native/MSRV matrix is still deliberately deferred to P1-4/Ready.
 
 Version/NEWS: no application or R package version bump and no `NEWS.md` entry.
 Candidate/release decision remains unchanged.
