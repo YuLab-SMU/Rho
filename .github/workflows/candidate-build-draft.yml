@@ -16,13 +16,13 @@ on:
         required: true
         default: main
       release_tag:
-        description: Single-use prerelease tag
+        description: Single-use release tag
         required: true
-        default: v0.4.0-dev.43
+        default: v0.4.0
       release_name:
         description: Draft release title
         required: true
-        default: Rho 0.4.0-dev.43
+        default: Rho 0.4.0
 
 permissions:
   contents: read
@@ -1613,7 +1613,7 @@ jobs:
           retention-days: 14
 
   draft-candidate:
-    name: Assemble immutable draft prerelease
+    name: Assemble immutable draft release
     if: ${{ needs.identity.outputs.build_mode == 'candidate' && github.repository == 'YuLab-SMU/Rho' }}
     needs: [identity, windows-candidate, macos-finalize, linux-candidate]
     runs-on: ubuntu-latest
@@ -1683,6 +1683,7 @@ jobs:
               if (error.status !== 404) throw error;
             }
             const version = process.env.CANDIDATE_VERSION;
+            const prerelease = version.includes("-");
             const releaseNotesModule = await import(pathToFileURL(path.join(process.cwd(), "scripts", "release-notes.mjs")).href);
             const releaseNotes = releaseNotesModule.validateReleaseNotesRecord(
               JSON.parse(fs.readFileSync(path.join("target", "candidate", "release-notes.json"), "utf8")),
@@ -1720,7 +1721,7 @@ jobs:
               name: process.env.CANDIDATE_NAME,
               body: releaseNotes.body,
               draft: true,
-              prerelease: true,
+              prerelease,
             });
             for (const file of files) {
               await github.rest.repos.uploadReleaseAsset({
@@ -1735,7 +1736,7 @@ jobs:
             const checked = await github.rest.repos.getRelease({ owner, repo, release_id: release.data.id });
             if (
               !checked.data.draft
-              || !checked.data.prerelease
+              || checked.data.prerelease !== prerelease
               || checked.data.tag_name !== process.env.CANDIDATE_TAG
               || checked.data.target_commitish !== process.env.CANDIDATE_COMMIT
               || checked.data.name !== process.env.CANDIDATE_NAME
@@ -1753,4 +1754,4 @@ jobs:
         shell: bash
         env:
           DRAFT_URL: ${{ steps.draft.outputs.release_url }}
-        run: echo "Candidate remains an unpublished draft at $DRAFT_URL"
+        run: echo "Candidate remains an unpublished draft Release at $DRAFT_URL"

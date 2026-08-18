@@ -16,8 +16,10 @@ const linuxConfig = JSON.parse(read("desktop/src-tauri/tauri.linux.conf.json"));
 
 assert.deepEqual(candidatePlatformsForVersion("0.4.0-dev.42"), ["windows_x86_64", "macos_aarch64"]);
 assert.deepEqual(candidatePlatformsForVersion("0.4.0-dev.43"), ["windows_x86_64", "macos_aarch64", "linux_x86_64"]);
+assert.deepEqual(candidatePlatformsForVersion("0.4.0"), ["windows_x86_64", "macos_aarch64", "linux_x86_64"]);
 assert.deepEqual(nativeUpdaterPlatformsForVersion("0.4.0-dev.42"), ["windows_x86_64", "macos_aarch64"]);
 assert.deepEqual(nativeUpdaterPlatformsForVersion("0.4.0-dev.43"), ["windows_x86_64", "macos_aarch64", "linux_x86_64"]);
+assert.deepEqual(nativeUpdaterPlatformsForVersion("0.4.0"), ["windows_x86_64", "macos_aarch64", "linux_x86_64"]);
 
 assert.equal(linuxConfig.bundle.createUpdaterArtifacts, true);
 assert.match(update, /\("linux", "x86_64"\)/);
@@ -47,6 +49,8 @@ assert.match(publish, /linux_x86_64/);
 assert.match(publish, /linuxUpdaterSignatureName/);
 assert.match(pages, /linux_x86_64/);
 assert.match(pages, /linux-x86_64/);
+assert.match(pages, /Verify deployed stable manifests/);
+assert.match(pages, /updates\/tauri\/stable\.json/);
 assert.match(dataViewerTest, /read\("r", "rho\.bridge", "R", "workspace\.R"\)/);
 assert.doesNotMatch(dataViewerTest, /read\("R", "rho\.bridge"/);
 for (const testFile of fs.readdirSync("scripts").filter((name) => /^test-.*\.mjs$/.test(name))) {

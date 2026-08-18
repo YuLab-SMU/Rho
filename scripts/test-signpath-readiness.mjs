@@ -25,7 +25,7 @@ function snapshot() {
     updateDesign: read("docs/design/accepted-2026-07-25-about-and-update-check-design.md"),
     docsIndex: read("docs/README.md"),
     activeSpec: read("docs/plans/active-2026-08-11-signpath-application-readiness-spec.md"),
-    autoSpec: read("docs/plans/active-2026-08-17-three-platform-automatic-updater-dev43-spec.md"),
+    autoSpec: read("docs/plans/implemented-2026-08-17-three-platform-automatic-updater-dev43-spec.md"),
     checklist: read("docs/release/historical-0.4.0-dev.39-candidate-checklist.md"),
     news: read("NEWS.md"),
     generator: read("scripts/generate-update-site.mjs"),

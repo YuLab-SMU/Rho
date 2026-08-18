@@ -2182,8 +2182,8 @@ async function mockInvoke(command, args) {
   await new Promise((resolve) => setTimeout(resolve, command === "run_agent" ? 800 : 300));
   if (command === "app_info") {
     return {
-      version: "0.4.0-dev.43",
-      channel: "development",
+      version: "0.4.0",
+      channel: "stable",
       commit: "4090cf725c53ab657ba9dfc9743ec6159f27dcf9",
       platform: mockPlatformFixture.platform,
       website_url: "https://yulab-smu.top/Rho/",
@@ -2199,8 +2199,8 @@ async function mockInvoke(command, args) {
   if (command === "check_for_updates") {
     return {
       status: "up_to_date",
-      channel: "development",
-      installed_version: "0.4.0-dev.43",
+      channel: "stable",
+      installed_version: "0.4.0",
       available_version: null,
       published_at: null,
       summary: null,

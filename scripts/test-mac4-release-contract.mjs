@@ -6,8 +6,8 @@ const read = (file) => normalizeLineEndings(fs.readFileSync(file, "utf8"));
 const count = (text, pattern) => [...text.matchAll(pattern)].length;
 const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-const expectedVersion = "0.4.0-dev.43";
-const normalPublishVersion = "0.4.0-dev.43";
+const expectedVersion = "0.4.0";
+const normalPublishVersion = "0.4.0";
 const expectedVersionPattern = escapeRegExp(expectedVersion);
 const cargo = read("Cargo.toml");
 const cargoVersion = cargo.match(/^version = "([^"]+)"/m)?.[1];
@@ -26,7 +26,7 @@ assert.ok(
 
 const localPackagePattern = /name = "rho-[^"]+"\r?\nversion = "([^"]+)"/g;
 assert.deepEqual(
-  [...'name = "rho-fixture"\r\nversion = "0.4.0-dev.43"'.matchAll(localPackagePattern)].map((match) => match[1]),
+  [...'name = "rho-fixture"\r\nversion = "0.4.0"'.matchAll(localPackagePattern)].map((match) => match[1]),
   [expectedVersion],
   "Cargo.lock parsing must accept Windows CRLF checkouts",
 );
@@ -61,7 +61,7 @@ assert.match(
 assert.match(build, /name: Build Rho Candidate \/ Rehearsal/);
 assert.match(build, buildModePattern);
 assert.match(build, new RegExp(`release_tag:\\n[\\s\\S]*?default: v${expectedVersionPattern}`));
-assert.match(build, /release_name:\n[\s\S]*?default: Rho 0\.4\.0-dev\.43/);
+assert.match(build, /release_name:\n[\s\S]*?default: Rho 0\.4\.0/);
 assert.match(build, /candidate-release\.mjs --mode admission --build_mode "\$BUILD_MODE" --repository "\$GITHUB_REPOSITORY" --workflow_ref "\$GITHUB_REF" --default_branch "\$DEFAULT_BRANCH"/);
 assert.match(build, /release-notes\.mjs --test true/);
 assert.match(build, /release-notes\.mjs --mode validate --version "\$version" --tag "\$INPUT_RELEASE_TAG"/);
@@ -235,7 +235,9 @@ assert.match(
   new RegExp(`default: v${escapeRegExp(normalPublishVersion)}`),
 );
 assert.match(build, /draft: true/);
-assert.match(build, /prerelease: true/);
+assert.match(build, /const prerelease = version\.includes\("-"\)/);
+assert.match(build, /prerelease,/);
+assert.match(build, /checked\.data\.prerelease !== prerelease/);
 assert.match(build, /getReleaseByTag/);
 assert.match(build, /git\.getRef/);
 assert.doesNotMatch(build, /deleteReleaseAsset/);
@@ -306,7 +308,9 @@ assert.match(publish, /Draft identity, reviewed body, or assets changed after co
 assert.match(publish, /afterBodySha256 !== snapshot\.body_sha256/);
 assert.match(publish, /rho-\$\{version\}-acceptance\.json/);
 assert.match(publish, /draft: false/);
-assert.match(publish, /prerelease: true/);
+assert.match(publish, /const expectedPrerelease = version\.includes\("-"\)/);
+assert.match(publish, /prerelease: snapshot\.prerelease/);
+assert.match(publish, /after\.data\.prerelease !== snapshot\.prerelease/);
 assert.doesNotMatch(publish, /uploadReleaseAsset|deleteReleaseAsset|createRelease/);
 assert.equal(count(publish, /updateRelease/g), 1, "Publish workflow may perform one release state transition");
 assert.match(candidateTool, /CONDITIONAL_ACCEPTANCE_VERSIONS = new Set\(\["0\.4\.0-dev\.39"\]\)/);
@@ -323,7 +327,12 @@ assert.match(pages, /rho-\$\{version\}-candidate-evidence\.json/);
 assert.match(pages, /rho-\$\{version\}-acceptance\.json/);
 assert.match(pages, /evidence_sha256: evidenceSha256/);
 assert.match(pages, /target_commitish: release\.target_commitish/);
-assert.match(pages, /artifacts\.macos_aarch64/);
+assert.match(pages, /stable_version=/);
+assert.match(pages, /native_stable_version=/);
+assert.match(pages, /Verify deployed stable manifests/);
+assert.match(pages, /EXPECTED_STABLE_SHA256/);
+assert.match(pages, /EXPECTED_NATIVE_STABLE_SHA256/);
+assert.match(pages, /Verify deployed download page/);
 assert.match(pages, /Platform evidence content mismatch/);
 
 const update = read("desktop/src-tauri/src/update.rs");

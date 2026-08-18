@@ -177,7 +177,7 @@ function validate(value) {
 
   assert.match(value.candidate, /LEGACY_WINDOWS_SIGNING_CHECKS/);
   assert.match(value.candidate, /TWO_STAGE_WINDOWS_SIGNING_CHECKS/);
-  assert.match(value.candidate, /TWO_STAGE_SIGNING_VERSIONS = new Set\(\["0\.4\.0-dev\.42", "0\.4\.0-dev\.43"\]\)/);
+  assert.match(value.candidate, /TWO_STAGE_SIGNING_VERSIONS = new Set\(\["0\.4\.0-dev\.42", "0\.4\.0-dev\.43", "0\.4\.0"\]\)/);
   assert.match(value.candidate, /schema_version/);
   for (const field of [
     "binary_request_id",

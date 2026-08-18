@@ -3,10 +3,10 @@
 Status: active
 
 Date: 2026-08-17
-Current source baseline: `0.4.0-dev.43`
-Active published identity: `0.4.0-dev.24` (authoritative candidate,
-owner-installed acceptance, MAC5 GO, protected public prerelease, and live
-development update manifest pass)
+Current source baseline: stable `0.4.0`
+Active published identity: `0.4.0-dev.43` (protected exact three-platform
+candidate, passed acceptance, public prerelease, and live signed automatic
+development update manifests)
 Implemented successor correction: Issue #9 `TASK-RAIL-SEMANTICS-1` separates
 mode shape, status color, and risk ownership. It advances the user-visible
 source identity rather than relabelling the historical `dev.23` source.
@@ -195,12 +195,19 @@ Tauri's actual invariant: exactly one unknown placeholder is replaced and the
 NSIS-token count must increase by one. All repair-run artifacts are
 non-composable and dev.42 remains unused.
 
-AUTO3-DEV43 now advances the source to fresh `0.4.0-dev.43`. The owner removed
+AUTO3-DEV43 advanced the source to fresh `0.4.0-dev.43`. The owner removed
 manual observation as a release prerequisite and authorized readiness-bound
 automatic updates plus Release-page downloads for Windows x64, macOS arm64,
-and Linux x86-64. Source implementation and the local affected matrix pass;
-six-leg protected integration, exact three-platform candidate construction,
-publication, and live three-target development manifest remain pending.
+and Linux x86-64. PRs #86-#89, exact-main run `32016789844`, candidate run
+`32016818404`, publish run `32018692323`, and Pages run `32018756430` passed;
+the immutable three-platform prerelease is public.
+
+STABLE-040 is the authorized bounded promotion to `0.4.0`. It changes release
+identity/channel metadata only, rebuilds rather than reuses dev.43 artifacts,
+requires exact protected source and three-platform candidate evidence, and
+publishes both stable and development updater manifests only after the
+owner-authorized exact gates pass. Windows Free Trial self-signed trust remains
+explicitly untrusted and is not relabelled as Foundation acceptance.
 
 Issue #28's Rust 1.88/Resolver 3 build contract integrated through PR #29 at
 `9e0b36b`. Exact PR-head run `31509554882` and exact-merge main run

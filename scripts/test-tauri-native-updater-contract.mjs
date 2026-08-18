@@ -18,9 +18,9 @@ const config = JSON.parse(read("desktop/src-tauri/tauri.conf.json"));
 const windowsConfig = JSON.parse(read("desktop/src-tauri/tauri.windows.conf.json"));
 const macosConfig = JSON.parse(read("desktop/src-tauri/tauri.macos.conf.json"));
 const spec = read("docs/plans/active-2026-08-15-tauri-native-updater-spec.md");
-const checklist = read("docs/release/active-0.4.0-dev.43-three-platform-updater-checklist.md");
+const checklist = read("docs/release/active-0.4.0-stable-release-checklist.md");
 const crossReview = read("docs/project/active-document-cross-review.md");
-const notes = read(".github/release-notes/v0.4.0-dev.43.md");
+const notes = read(".github/release-notes/v0.4.0.md");
 
 const windows = build.match(/\n  windows-candidate:[\s\S]*?(?=\n  macos-submit:)/)?.[0];
 const macSubmit = build.match(/\n  macos-submit:[\s\S]*?(?=\n  macos-notary-wait:)/)?.[0];
@@ -105,7 +105,7 @@ for (const name of [
   "native_updater_evidence_asset",
   "native_updater_signatures",
 ]) assert.ok(publish.includes(name), `Publish admission omits ${name}`);
-assert.match(candidate, /NATIVE_UPDATER_REQUIRED_VERSIONS = new Set\(\["0\.4\.0-dev\.40", "0\.4\.0-dev\.42", "0\.4\.0-dev\.43"\]\)/);
+assert.match(candidate, /NATIVE_UPDATER_REQUIRED_VERSIONS = new Set\(\["0\.4\.0-dev\.40", "0\.4\.0-dev\.42", "0\.4\.0-dev\.43", "0\.4\.0"\]\)/);
 assert.match(candidate, /validateNativeUpdaterReleaseAssets/);
 assert.match(updater, /TAURI_PUBLIC_KEY_ID = "173c902c085bfe5f"/);
 assert.match(updater, /validateNativeUpdaterReleaseAssets/);
@@ -119,8 +119,8 @@ assert.match(pages, /Verify deployed native updater manifest/);
 assert.match(spec, /Status: active; `UPDATER-1A` source\/signing\/publication-contract work is/);
 assert.match(spec, /`UPDATER-1C-T1`, the bounded `dev\.41` acceptance transport/);
 assert.match(spec, /No updater signature may be reused after a byte-changing/);
-assert.match(checklist, /Current decision: `NO_RELEASE_DECISION`/);
+assert.match(checklist, /Current exact-candidate decision: `NO_RELEASE_DECISION`/);
 assert.match(crossReview, /may not own an\n   unbounded download or destructive default install/);
-assert.match(notes, /^Rho enables signed automatic updates for Windows, macOS, and Linux/m);
+assert.match(notes, /^Rho 0\.4\.0 brings the three-platform scientific workbench to the stable channel\./m);
 
 console.log("Tauri native updater contract tests passed.");
