@@ -182,10 +182,14 @@ P1-4 completes the whole Phase 1 implementation before the PR becomes Ready
 and the exact-head six-leg matrix becomes mandatory. This is a timing change,
 not removal of native/MSRV acceptance.
 
+CI-FAST1 implementation and local deterministic verification are present on
+2026-08-18. Exact-head Draft workflow evidence remains owned by its active
+specification and is not inferred from local YAML or contract checks.
+
 ## Candidate Validation Contract
 
-The existing Windows, macOS, and Linux candidate source-validation steps must execute
-workspace Rust tests with `--locked`. The macOS setup step must also export its
+The existing Windows, macOS, and Linux candidate source-validation steps must
+execute workspace Rust tests with `--locked`. The macOS setup step must also export its
 installed stable toolchain through `RUSTUP_TOOLCHAIN`; changing the rustup
 default is insufficient because the repository file has higher priority. These
 changes tighten dependency and toolchain determinism but do not duplicate the

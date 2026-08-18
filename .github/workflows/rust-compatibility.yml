@@ -29,6 +29,7 @@ on:
       - "scripts/build-windows-installer.ps1"
       - "scripts/tauri-bundle-type.mjs"
       - ".github/workflows/rust-compatibility.yml"
+      - ".github/workflows/rust-fast.yml"
       - ".github/workflows/candidate-build-draft.yml"
       - ".github/workflows/candidate-publish.yml"
       - ".github/workflows/native-updater-acceptance-target.yml"
@@ -75,6 +76,7 @@ on:
       - "docs/release/historical-0.4.0-stable-release-checklist.md"
   pull_request:
     branches: [main]
+    types: [opened, reopened, synchronize, ready_for_review]
     paths:
       - "**/Cargo.toml"
       - "Cargo.lock"
@@ -101,6 +103,7 @@ on:
       - "scripts/build-windows-installer.ps1"
       - "scripts/tauri-bundle-type.mjs"
       - ".github/workflows/rust-compatibility.yml"
+      - ".github/workflows/rust-fast.yml"
       - ".github/workflows/candidate-build-draft.yml"
       - ".github/workflows/candidate-publish.yml"
       - ".github/workflows/native-updater-acceptance-target.yml"
@@ -155,6 +158,7 @@ concurrency:
 
 jobs:
   rust-compatibility:
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
     name: ${{ matrix.os }} / Rust ${{ matrix.toolchain }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
@@ -188,6 +192,7 @@ jobs:
             host: x86_64-unknown-linux-gnu
     env:
       RUSTUP_TOOLCHAIN: ${{ matrix.rustup_toolchain }}
+      CARGO_INCREMENTAL: "0"
 
     steps:
       - name: Check out exact source
@@ -279,6 +284,18 @@ jobs:
             throw "Expected host ${{ matrix.host }}, received $hostLine"
           }
           cargo -vV
+
+      - name: Restore Cargo dependency and build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-
 
       - name: Stage pinned macOS Ark sidecar for Tauri compilation
         if: runner.os == 'macOS'

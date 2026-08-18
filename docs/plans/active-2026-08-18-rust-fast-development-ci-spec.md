@@ -1,6 +1,7 @@
 # Rust Fast Development CI Specification
 
-Status: active; CI-FAST1 authorized 2026-08-18; implementation pending
+Status: active; CI-FAST1 implementation and local verification complete
+2026-08-18; exact-head Draft workflow evidence pending
 
 Date: 2026-08-18
 Authorization: the user explicitly authorized development-CI optimization and
@@ -146,6 +147,8 @@ after all P1 code and evidence changes intended for review are present.
 `rust-fast.yml`:
 
 - event: affected `pull_request` `opened`, `reopened`, or `synchronize`;
+- job admission: `pull_request.draft == true`, preventing duplicate fast and
+  full jobs on a non-Draft PR;
 - permissions: `contents: read` only;
 - one Ubuntu stable job;
 - workflow concurrency cancels obsolete same-PR runs;
@@ -228,6 +231,74 @@ After push, the exact head must show:
 CI-FAST1 changes development feedback timing only. It changes no application
 or R package version, `NEWS.md`, runtime behavior, schema, protocol, installer,
 candidate, or release decision.
+
+## Implementation And Local Evidence
+
+Implementation present:
+
+- `.github/workflows/rust-fast.yml` adds one Draft-only Ubuntu stable job with
+  read-only permissions, same-PR cancellation, explicit toolchain selection,
+  pinned Linux Ark staging, deterministic contracts, formatting, locked check,
+  and locked workspace tests;
+- `.github/workflows/rust-compatibility.yml` retains all six identities and
+  commands but admits them only for `main` pushes or non-Draft PRs, including
+  `ready_for_review`;
+- both workflows use the reviewed official `actions/cache@v4` paths and an
+  epoch/OS/toolchain/lockfile key with same-OS/toolchain restore scope;
+- Ready PRs do not also run the fast job because Rust Fast admits Draft PRs
+  only; and
+- `scripts/test-rust-msrv-contract.mjs` now validates and failure-injects both
+  workflows, cache dimensions, event types, Draft guards, concurrency,
+  permissions, commands, and the unchanged six identities.
+
+Local evidence on the implementation tree:
+
+```text
+node --check scripts/test-rust-msrv-contract.mjs
+node scripts/test-rust-msrv-contract.mjs --test
+node scripts/test-rust-msrv-contract.mjs
+  PASS
+Ruby Psych parse of rust-fast.yml and rust-compatibility.yml
+  PASS
+node scripts/test-license-contract.mjs --test
+node scripts/test-license-contract.mjs
+  PASS
+cargo fmt --all -- --check
+cargo check --workspace --all-targets --locked
+cargo test --workspace --locked --no-fail-fast
+  PASS; 398 passed, 0 failed, 1 existing opt-in macOS Keychain test ignored
+git diff --check
+  PASS
+```
+
+`actionlint` was unavailable locally and is not reported as passing. Ruby YAML
+parsing plus the project-owned positive/negative workflow contract ran instead.
+
+The superseded PR #75 six-leg run `32107811887` was explicitly cancelled after
+the user deferred full native compatibility to P1-4. Any legs that completed
+before cancellation are partial historical observations, not CI-FAST1 or P1-0
+acceptance.
+
+Review findings resolved:
+
+- the first trigger split would have run Rust Fast alongside the full matrix on
+  a non-Draft PR; a Draft-only fast job guard now makes the two lanes mutually
+  exclusive;
+- full workflow path filters now include `rust-fast.yml` on both PR and `main`
+  events, and Rust Fast includes both workflow files plus its contract script;
+- cache restore cannot cross OS or explicit toolchain; and
+- cache failure cannot skip any verification command or create release truth.
+
+Hosted evidence remains pending for the exact pushed implementation head:
+
+- Rust Fast must pass;
+- Rust Compatibility must be skipped without six runner jobs while PR #75 is
+  Draft; and
+- the cache step may miss on its first run without weakening acceptance.
+
+Version/NEWS: no application or R package version change and no `NEWS.md`
+entry. Manual UI, installed-app, packaging, signing, and release checks are not
+applicable to this CI-only package.
 
 ## Definition Of Done
 
