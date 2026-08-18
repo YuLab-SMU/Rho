@@ -8781,7 +8781,9 @@ mod tests {
         let ark = directory.path().join("ark.exe");
         assert!(load_runtime_cache(directory.path(), &rscript, &ark).is_some());
 
-        std::fs::write(&rscript, b"changed").unwrap();
+        // Use a different payload size so this is deterministic even when the filesystem
+        // reports both writes in the same millisecond.
+        std::fs::write(&rscript, b"changed-size").unwrap();
         assert!(load_runtime_cache(directory.path(), &rscript, &ark).is_none());
     }
 
