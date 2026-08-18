@@ -1,7 +1,7 @@
 # P1-3 Workspace Snapshot Tool And Project File Viewer Specification
 
-Status: active; P1-3 authorized by the continuing whole-P1 objective;
-implementation pending
+Status: active; local implementation, review, and affected verification passed;
+exact-head Rust Fast evidence pending
 
 Date: 2026-08-18
 Owning architecture:
@@ -332,3 +332,105 @@ Slurm, or release decision is authorized.
 - dependencies, deviations, version/NEWS, unrun checks, commit, and worktree
   state are recorded; and
 - P1-4 begins only through its own active acceptance contract.
+
+## Local Implementation Evidence
+
+Verified on 2026-08-18 against P1-3 branch baseline
+`b984230b3819b61508998b71b8ad09b9c787cad8`. Runtime infrastructure is commit
+`d67c294`; product migration, tests, mock, and CI enforcement are commit
+`f16283c`:
+
+- `RegistryHub` now has effect-owned Workspace tool and project-file viewer
+  lanes. Workspace requests are re-bound to 1 MiB and responses to the fixed
+  2 MiB Snapshot limit. Viewer resolution holds a routing lease and exposes
+  only sorted media declarations plus the existing 4 MiB/32 MiB limits.
+- `ScopeManager` now owns the Workspace slot and a serialized project-tree
+  publication gate. Project and Workspace expected-old CAS both complete before
+  routing opens; a failed second CAS restores the project pointer while old
+  routing remains active. Every early rejection releases both candidates.
+- Single-slot publication was tightened so candidate routing opens only after a
+  successful CAS. Shutdown, Workspace restart, Workspace start, and project
+  switching serialize their scope transitions; child-first disposal remains
+  authoritative.
+- Candidate mode activates the application Viewer plugin; legacy mode activates
+  no product plugin and remains unchanged. The static inventory contains exactly
+  the Viewer, Run History, and Workspace Snapshot first-party plugins filtered
+  by their one allowed scope.
+- Direct Tauri and Agent Snapshot paths now converge on
+  `WorkspaceOperation::Snapshot`. Agent admission/lane and execution ID remain
+  ahead of the adapter. The plugin supplies no R expression; the existing
+  `rho-server` `bridge_expression()` and
+  `dispatch_workspace_request_with_execution_id()` remain the only Ark/run/
+  provenance path.
+- Completion validates extension generation, project parent, kernel lineage,
+  and returned Workspace state/project revisions. Handler/Ark, malformed,
+  oversize, missing contribution, closed routing, and stale completion errors
+  do not retry legacy wiring. Cancelling a pending tool future releases its
+  routing lease before scope disposal.
+- `viewer_read_file` resolves the application descriptor, injects the current
+  project root per call, then delegates containment/media/encoding/size truth to
+  unchanged `project::read_viewer_file()`. Candidate tests cover A/B isolation,
+  escape/missing contribution, and an explicit symlink-escape regression.
+- Browser mock parity was extended to the existing text/log and image media
+  types while retaining the single `snapshot_workspace`, single
+  `viewer_read_file`, and `rho.viewer_file.v1` contracts.
+
+Commands and results:
+
+```text
+cargo fmt --all -- --check
+  passed
+cargo test -p rho-extension-runtime --locked
+  passed: 26 graph-contract + 34 lifecycle tests
+cargo +1.88.0 test -p rho-extension-runtime --locked
+  passed on aarch64-apple-darwin: the same 60 tests
+cargo clippy -p rho-extension-runtime --all-targets --locked -- -D warnings
+  passed
+cargo test -p rho-server --locked
+  passed: 61 library + 1 binary test
+cargo test -p rho-desktop --bin rho-desktop --locked
+  passed: 199; ignored: 1 existing opt-in macOS Keychain smoke
+cargo check --workspace --all-targets --locked
+  passed
+cargo test --workspace --locked --no-fail-fast
+  passed: 453; ignored: the same 1 existing opt-in smoke
+Rscript -e 'testthat::test_local("R/rho.bridge")'
+  passed: 575
+Rscript -e 'testthat::test_local("R/rho.agent")'
+  passed: 120
+node --check desktop/dist/app.js
+node scripts/test-extension-run-history-contract.mjs --test
+node scripts/test-extension-run-history-contract.mjs
+node scripts/test-extension-p1-3-contract.mjs --test
+node scripts/test-extension-p1-3-contract.mjs
+node scripts/test-outputs-viewer-ui.mjs
+node scripts/test-rust-msrv-contract.mjs --test
+node scripts/test-rust-msrv-contract.mjs
+node scripts/test-license-contract.mjs --test
+node scripts/test-license-contract.mjs
+  all passed
+git diff --check
+  passed
+```
+
+No dependency or lockfile change was required. The Tauri 2 application-scope
+activation bridge uses documented `tauri::async_runtime::block_on()` from the
+synchronous setup hook; Context7 was consulted before choosing that supported
+API.
+
+No schema, public command/Agent/viewer protocol, runtime-mode default,
+application/R package version, or `NEWS.md` change was made. The P1-2 temporary
+per-command Run History fallback was intentionally removed now that its parity
+gate passed; explicit `RHO_INTERNAL_EXTENSION_RUNTIME=legacy` remains the whole
+legacy escape path.
+
+Interactive browser review, a real candidate-mode Ark installed-app run, and
+the macOS/Windows/Linux stable/Rust 1.88 matrix were not run in P1-3. The
+automated real broker/R-expression tests and R package suites passed; installed
+app and full six-leg evidence remain the explicitly deferred P1-4/Ready gate.
+Exact-head Rust Fast and its expected Draft compatibility skip remain pending
+until the reviewed implementation commit is pushed.
+
+Implementation review found no blocking Trusted Kernel, raw-expression,
+Agent-admission, filesystem containment, project isolation, generation,
+cleanup, duplicate-registration, credential, or public-protocol deviation.
