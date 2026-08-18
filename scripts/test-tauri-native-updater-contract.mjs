@@ -119,7 +119,7 @@ assert.match(pages, /Verify deployed native updater manifest/);
 assert.match(spec, /Status: active; `UPDATER-1A` source\/signing\/publication-contract work is/);
 assert.match(spec, /`UPDATER-1C-T1`, the bounded `dev\.41` acceptance transport/);
 assert.match(spec, /No updater signature may be reused after a byte-changing/);
-assert.match(checklist, /Current exact-candidate decision: `NO_RELEASE_DECISION`/);
+assert.match(checklist, /Current exact-candidate decision: `GO \/ RELEASED`/);
 assert.match(crossReview, /may not own an\n   unbounded download or destructive default install/);
 assert.match(notes, /^Rho 0\.4\.0 brings the three-platform scientific workbench to the stable channel\./m);
 
