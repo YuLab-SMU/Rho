@@ -4,9 +4,9 @@ Status: active
 
 Date: 2026-08-17
 Current source baseline: stable `0.4.0`
-Active published identity: `0.4.0-dev.43` (protected exact three-platform
-candidate, passed acceptance, public prerelease, and live signed automatic
-development update manifests)
+Active published identity: stable `0.4.0` (protected exact three-platform
+candidate, passed acceptance, public non-prerelease Release, and live signed
+stable/development update manifests)
 Implemented successor correction: Issue #9 `TASK-RAIL-SEMANTICS-1` separates
 mode shape, status color, and risk ownership. It advances the user-visible
 source identity rather than relabelling the historical `dev.23` source.
@@ -208,6 +208,11 @@ requires exact protected source and three-platform candidate evidence, and
 publishes both stable and development updater manifests only after the
 owner-authorized exact gates pass. Windows Free Trial self-signed trust remains
 explicitly untrusted and is not relabelled as Foundation acceptance.
+
+STABLE-040 completed on 2026-08-18. Release `372041662` targets exact source
+`fca8e307`; candidate/publish passed, PR #91 repaired the legacy Pages fixture
+guard, and run `32090281523` deployed exact stable/development download and
+Tauri manifests for all three platforms. Independent live verification passed.
 
 Issue #28's Rust 1.88/Resolver 3 build contract integrated through PR #29 at
 `9e0b36b`. Exact PR-head run `31509554882` and exact-merge main run
