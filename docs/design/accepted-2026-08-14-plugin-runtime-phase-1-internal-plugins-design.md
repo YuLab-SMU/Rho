@@ -1032,8 +1032,11 @@ The 2026-08-18 authorization review closed the Phase 1 construction choices:
     broker-façade semantics. Their targets, runtimes, jobs, persistence,
     scheduling, transport, and UI remain separately owned.
 
-Only P1-0 is authorized by this review. Each later package requires a new
-active implementation contract and explicit authorization.
+P1-0 completed its Draft stop gate on 2026-08-18. P1-1 was separately
+authorized later that day through
+`docs/plans/active-2026-08-18-p1-1-extension-runtime-lifecycle-spec.md`. P1-2
+through P1-4 still require their own active implementation contract and
+explicit authorization.
 
 ## Version, NEWS, And Release Impact
 

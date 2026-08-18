@@ -55,6 +55,7 @@ changes.
 - Historical stable 0.4.0 release record: [`release/historical-0.4.0-stable-release-checklist.md`](release/historical-0.4.0-stable-release-checklist.md)
 - Accepted Phase 1 internal extension runtime architecture: [`design/accepted-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md`](design/accepted-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md)
 - Active P1-0 internal extension contracts: [`plans/active-2026-08-18-p1-0-extension-runtime-contracts-spec.md`](plans/active-2026-08-18-p1-0-extension-runtime-contracts-spec.md)
+- Active P1-1 internal extension lifecycle runtime: [`plans/active-2026-08-18-p1-1-extension-runtime-lifecycle-spec.md`](plans/active-2026-08-18-p1-1-extension-runtime-lifecycle-spec.md)
 - Active Rust fast-development CI: [`plans/active-2026-08-18-rust-fast-development-ci-spec.md`](plans/active-2026-08-18-rust-fast-development-ci-spec.md)
 - Bounded `dev.41` native-updater acceptance transport: [`release/active-0.4.0-dev.41-native-updater-acceptance-target-checklist.md`](release/active-0.4.0-dev.41-native-updater-acceptance-target-checklist.md)
 - Active SignPath application readiness: [`plans/active-2026-08-11-signpath-application-readiness-spec.md`](plans/active-2026-08-11-signpath-application-readiness-spec.md)

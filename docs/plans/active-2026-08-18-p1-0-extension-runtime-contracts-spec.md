@@ -1,7 +1,8 @@
 # P1-0 Internal Extension Runtime Contracts Specification
 
-Status: active; P1-0 implementation and local automated verification complete
-2026-08-18; exact-head Rust Fast pending; six-leg matrix deferred to P1-4
+Status: active Phase 1 predecessor; P1-0 implementation and automated Draft
+verification complete 2026-08-18; P1-1 separately authorized; six-leg matrix
+deferred to P1-4
 
 Date: 2026-08-18
 Owning architecture:
@@ -15,8 +16,9 @@ Risk: R3 safety-critical lifecycle foundation, bounded in this package to pure,
 side-effect-free contracts
 
 Authorization: the user authorized P1-0 on 2026-08-18 through the reviewed
-Phase 1 implementation plan. P1-1, P1-2, P1-3, and P1-4 are not authorized.
-The mandatory stop point is the P1-0 evidence and review checkpoint.
+Phase 1 implementation plan. P1-0 reached its Draft stop gate; P1-1 was
+separately authorized later on 2026-08-18. P1-2, P1-3, and P1-4 are not
+authorized.
 
 ## Purpose And Acceptance Boundary
 
@@ -432,7 +434,10 @@ Hosted implementation-head evidence: Rust Fast run `32109328681` passed commit
 run `32109328630` skipped without expanding six runners. The superseded
 six-leg run `32107811887` was cancelled after the user explicitly deferred the
 full matrix to P1-4; its partial results are not P1-0 acceptance. The
-evidence-reconciliation head must pass Rust Fast once more before handoff.
+evidence-reconciliation head `f5b85519d63d6bd9e4778cff1659764ecdb7e692`
+passed Rust Fast run `32109891797` in 1m58s with an exact 1128 MiB cache hit;
+Rust Compatibility run `32109891648` skipped before matrix expansion. P1-0 is
+at its accepted Draft stop gate.
 
 Intentionally unrun: R package suites, frontend/browser/mock checks, manual UI,
 installed-app, installer, signing, and release checks. P1-0 changes no R,
@@ -446,7 +451,8 @@ remain intentionally deferred until P1-4. Rust Fast proves one fresh Linux
 stable host only. The Rust API remains internal experimental and is not a
 public SDK.
 
-P1-1 remains unauthorized.
+P1-1 is separately authorized and governed only by
+`active-2026-08-18-p1-1-extension-runtime-lifecycle-spec.md`.
 
 ### Required final reconciliation
 
@@ -460,7 +466,7 @@ At completion, update this active contract with:
 - version/NEWS decision;
 - manual/installed checks not run;
 - residual risks and worktree state; and
-- the statement that P1-1 is still unauthorized.
+- the separately authorized next-package state.
 
 This document remains `active-` after P1-0 because Phase 1 integration and
 acceptance are incomplete. Passing P1-0 is not Phase 1 implementation or

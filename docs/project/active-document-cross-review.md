@@ -2,7 +2,7 @@
 
 Status: active documentation coordination record
 
-Review date: 2026-08-18 (P1-0 internal extension contracts authorized)
+Review date: 2026-08-18 (P1-1 internal extension lifecycle authorized)
 Scope: unfinished or acceptance-active specifications, plans, and release gates
 
 Manual acceptance ownership: the runnable example workflow and candidate-level
@@ -49,7 +49,8 @@ semantics.
 | `plans/active-2026-08-10-rust-msrv-build-contract.md` | active integrated build contract; exact PR #29 head `f022d2c` and merge `9e0b36b` historical four-leg evidence passed; Issue #28 closed; CI-FAST1 Draft-feedback amendment authorized 2026-08-18 | Rust 1.88 workspace MSRV metadata, Resolver 3, fast Draft feedback, non-Draft/main stable/MSRV native CI, locked candidate Rust validation, and deterministic policy enforcement | CI-FAST1 may change trigger timing and add cache without changing the six identities, commands, permissions, candidate validation, or final integration requirement; no candidate or release authority |
 | `plans/active-2026-08-18-rust-fast-development-ci-spec.md` | active; CI-FAST1 implementation, deterministic negative tests, YAML parse, license/MSRV contracts, 398-test local workspace validation, implementation-head Rust Fast run `32109328681`, and matrix-skip run `32109328630` pass 2026-08-18; evidence-reconciliation head pending | read-only Ubuntu-stable Draft feedback, Cargo cache isolation, mutually exclusive Draft/Ready admission, and deterministic workflow enforcement | require the evidence-reconciliation head to pass Rust Fast and keep six-leg matrix skipped on Draft PR #75; full matrix remains mandatory on affected `main` pushes and non-Draft PRs; PR #75 remains Draft through P1-4 |
 | `design/accepted-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md` | accepted internal architecture; P1-0 only authorized 2026-08-18 | compiled-in first-party capability/scope/generation/effect/candidate lifecycle semantics above the Trusted Kernel; Phase 1 package boundaries and mandatory stops | only the separately active P1-0 contract may proceed; P1-1 through P1-4 require independent authorization; no third-party runtime, public SDK, target, compute, schema, permission, or release authority |
-| `plans/active-2026-08-18-p1-0-extension-runtime-contracts-spec.md` | active; P1-0 implementation `bb9f1e1`, 26 focused tests, Rust 1.88/1.97 full local matrices, dependency review, bounded MSRV self-test repair, implementation-head Rust Fast run `32109328681`, and matrix skip pass 2026-08-18; evidence-reconciliation head pending; six-leg matrix deferred to P1-4 | pure validated vocabulary, host-owned scope policy, deterministic capability graph/activation plan, structured errors/diagnostics, new-crate dependency review, P1-0 evidence, and the missing synthetic Linux candidate job in the existing MSRV self-test fixture | require the evidence-reconciliation head to pass Rust Fast; stop before activation/effects/server/desktop/project-switch integration and await P1-1 authorization; full native/MSRV matrix remains mandatory only after whole-P1 completion |
+| `plans/active-2026-08-18-p1-0-extension-runtime-contracts-spec.md` | active Phase 1 predecessor; P1-0 implementation `bb9f1e1`, 26 focused tests, Rust 1.88/1.97 local matrices, dependency review, exact-head Rust Fast runs `32109328681`/`32109891797`, cache hit, and matrix skips pass 2026-08-18 | pure validated vocabulary, host-owned scope policy, deterministic capability graph/activation plan, structured errors/diagnostics, dependency review, and P1-0 evidence | preserve P1-0 contracts; P1-1 is separately active; full native/MSRV matrix remains mandatory only after whole-P1 completion |
+| `plans/active-2026-08-18-p1-1-extension-runtime-lifecycle-spec.md` | active; P1-1 authorized 2026-08-18; implementation pending | object-safe internal plugin/disposable API, bounded broker façade, effect/task/lease ownership, scope tree/generation, ArcSwap candidate publication, quiesce/dispose, private legacy/candidate mode, empty application/project scope integration, and P1-1 evidence | may add lifecycle code and empty candidate integration only; BH2 retains project switch truth and Agent concurrency retains blockers; stop before Run History/Workspace Snapshot/Viewer migration and await P1-2 authorization |
 | `plans/active-2026-08-05-macos-arm64-support-spec.md` | active broader platform plan; MAC1-MAC5 complete for published Apple Silicon candidate `0.4.0-dev.24`; protected Release and live development manifest pass without asset replacement | Apple Silicon macOS 14+ platform adapters, Ark/R integration, Keychain extension, additive macOS update artifact, signed DMG handoff, repository-bound rehearsal lane, async notarization orchestration, and MAC5 publication admission | preserve immutable release evidence; macOS x64 and Linux x64 remain open milestone scope |
 | `plans/active-2026-08-11-linux-appimage-support.md` | active authorized direction; LIN1-LIN4 source implementation present 2026-08-13; partial verification 2026-08-14 (LIN1/LIN3 fixture suites and `cargo fmt` pass; workspace suite runs with three pre-existing Linux update-manifest gaps in untouched `update.rs`; LIN2 build lanes and LIN5 remain unrun); LIN6 (Linux Secret Service credential storage) authorized 2026-08-14; LIN5 and the M3 release decision remain open | Linux x64 AppImage distribution, WebKitGTK 4.1 `AppRun` dependency check, Linux Ark bootstrap/sidecar, Linux R discovery, local/hosted Linux build lanes, and Linux Secret Service credential storage (LIN6) | follow the macOS adapter template for configuration ownership, runtime manifest, R discovery, evidence, and Keychain/Secret-Service credential integration; keep Windows x64 and macOS arm64 behavior unchanged; no Linux distribution before the M3 gate; no `.deb`/`.rpm`, Linux arm64, or automatic Linux updates in this round |
 | `release/historical-0.4.0-dev.16-candidate-checklist.md` | historical; review-only rehearsals passed and the decision remained NO-GO before the baseline advanced | immutable `0.4.0-dev.16` rehearsal evidence and NO-GO snapshot only | cannot authorize or satisfy any later candidate, MAC5, or publication row |
@@ -986,15 +987,19 @@ The Rust MSRV contract owns Rust 1.88, Resolver 3, the committed lockfile, and
 all six macOS/Windows/Linux stable/MSRV legs. CI-FAST1 owns only their timing:
 Rust Fast is the Draft signal, while the six legs remain mandatory when the
 whole P1 stream reaches P1-4/Ready. The AGPL transition contract owns source
-and third-party licensing. P1-0 may add reviewed `petgraph 0.8` with only
-`std`, move existing `semver 1.x` into workspace dependency ownership with
-serde support, and inherit existing `serde`/`thiserror`; it may not add Tokio,
-ArcSwap, `inventory`, dynamic loading, Wasm, or another runtime.
+and third-party licensing. P1-0 added reviewed `petgraph 0.8` with only
+`std`, moved existing `semver 1.x` into workspace dependency ownership with
+serde support, and inherited existing `serde`/`thiserror`. P1-1 may add reviewed
+`arc-swap 1.x`, direct `tokio-util 0.7` with only `rt`, and existing workspace
+Tokio. `inventory`, dynamic loading, Wasm, `tracing`, another runtime, or later
+built-in migrations remain forbidden.
 
-Only P1-0 is authorized. P1-1 must create a new active contract, repeat
-cross-review against project switching and Trusted Kernel ownership, and
-receive explicit authorization before any activation, effect, candidate,
-feature-flag, server, or desktop code is edited.
+P1-1 is now the only authorized extension package. BH2 retains the entire
+project switch commit/recovery sequence and Agent Conversation retains blocker
+admission. P1-1 may prepare an empty candidate before BH2 side effects, publish
+it only after BH2 success, roll it back on existing failures, and dispose old
+extension state without changing project response or authority. P1-2 through
+P1-4 remain unauthorized.
 
 ### aisdk family work
 
