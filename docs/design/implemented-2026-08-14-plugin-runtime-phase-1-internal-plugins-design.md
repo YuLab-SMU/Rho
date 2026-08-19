@@ -49,8 +49,8 @@ Cross-reviewed against:
 
 Repository integration note: P1-0 through P1-4 completion is recorded in their
 separate implemented contracts, the shared documentation index, and the
-central cross-review matrix. The separate Phase 2 design in PR #76 remains
-proposed and Git-independent.
+central cross-review matrix. The separate Phase 2 and Phase 2.5 designs in
+PR #76 remain proposed and Git-independent.
 
 Implementation entry rule: Phase 1 is closed. Any follow-up behavior change or
 legacy deletion requires a new active contract. This design does not authorize
@@ -164,6 +164,11 @@ Phase 1 does not authorize or freeze:
   or Artifact import/promotion from Issues #95 and #96;
 - exposing runtime, transport, allocator, process, arbitrary R/shell, or raw
   credential authority as a third-party plugin capability;
+- mining task history into reusable recipes or Skills;
+- generating, repairing, evaluating, enabling, merging, or pruning
+  Agent-authored executable plugins;
+- a durable plugin-lineage, standing evolution policy, protected replay suite,
+  or capability-gardening model;
 - removing legacy wiring before migrated behavior has passed parity and
   rollback acceptance.
 
@@ -1107,6 +1112,82 @@ consumers can use the generic lifecycle contracts without exposing raw Rust,
 Tauri, Node, R environment, socket, database, process, credential, or DOM
 objects. If they cannot, Phase 1 must revise the transport-safe façade rather
 than allowing downstream code to bypass the Trusted Kernel.
+
+## Future Capability-Growth Substrate
+
+Phase 1 also supplies part of the safety substrate for a later, separately
+governed capability-growth system. The long-term product direction is not only
+that developers can install extensions, but that an Agent may eventually turn
+repeated, successful project work into a durable capability:
+
+```text
+task-local method
+    -> experience trace
+    -> reusable recipe
+    -> declarative Skill
+    -> executable candidate plugin
+    -> accepted lineage version
+    -> repair / generalize / merge / prune
+```
+
+This is **not** implemented behavior and is not a Phase 1 acceptance claim.
+Experience capture, authorship, evaluation, policy, persistence, activation,
+and gardening require a distinct Phase 2.5 contract after the Phase 2
+third-party isolation and permission foundation is accepted.
+
+The Phase 1 mechanisms that are intentionally reusable are:
+
+- typed capability and dependency identities;
+- host-owned scope and activation generations;
+- transactional candidate activation before publication;
+- reversible effect ownership and bounded cleanup;
+- atomic publication of a ready candidate while the old generation remains a
+  valid rollback target;
+- quiesce-before-dispose and late-generation rejection;
+- bounded diagnostics through a transport-safe broker façade.
+
+Those mechanisms allow an Agent to create a new candidate instead of mutating
+live code. They do **not** answer whether the Agent may author the candidate,
+which observations may be retained, how improvement is measured, whether a
+new digest may execute without a prompt, or when overlapping capabilities may
+be merged or retired.
+
+The durable boundary for that future design is:
+
+> An Agent may propose and improve capability code, but it may not grant
+> itself authority, enlarge its permission envelope, weaken its protected
+> evaluation gate, rewrite its audit history, or promote itself into the
+> Trusted Kernel.
+
+A future `PluginLineage` may provide long-lived provenance across package
+digests, but it cannot become an authorization identity. Every executable
+package digest remains a new plugin identity. If a broker-owned standing
+policy later permits autonomous evolution within a pre-authorized envelope,
+the broker must still make and persist a fresh grant decision for the new
+digest, issue fresh handles, and bind that decision to the exact policy
+revision and evaluation evidence. It must never copy an old digest's grant or
+handles forward implicitly.
+
+Similarly, future replay and shadow evaluation cannot reuse arbitrary private
+task history as an unbounded training corpus. The owning contract must define
+project scope, consent, redaction, retention, fixture sealing, side-effect
+suppression, and a separation between candidate authoring and protected
+acceptance tests. Promotion into a first-party capability remains ordinary Rho
+source governance and release work, never an automatic lineage transition.
+
+The complementary maintenance loop is capability gardening:
+
+```text
+observe -> distill -> create -> evaluate -> use -> repair
+   ^                                                |
+   +--------- merge / generalize / prune -----------+
+```
+
+Overlap detection, low usage, latency, cost, failure rate, and human
+corrections may support a merge or retirement proposal. They are not deletion
+authority. A future gardener must preserve provenance and rollback, distinguish
+deprecated from deleted, and require the policy/user decision owned by the
+Phase 2.5 contract.
 
 ## Phase 2 Handoff Constraints
 
