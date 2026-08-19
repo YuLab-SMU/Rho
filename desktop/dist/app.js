@@ -109,6 +109,8 @@ const state = {
   selectedPlotId: null,
   selectedArtifactId: null,
   selectedArtifactDetail: null,
+  selectedArtifactPreview: null,
+  artifactPreviewRequestSequence: 0,
   viewer: {
     open: false,
     busy: false,
@@ -4822,14 +4824,19 @@ async function openViewerForActiveDocument() {
 }
 
 async function openSelectedOutputInViewer() {
-  if (state.selectedPlotId) {
+  const selectedArtifact = selectedArtifactRecord();
+  const artifactPreviewActive = Boolean(
+    state.selectedArtifactPreview
+      && state.selectedArtifactPreview.artifactId === selectedArtifact?.artifact_id
+      && state.selectedArtifactPreview.projectRoot === state.project.root,
+  );
+  if (!artifactPreviewActive && state.selectedPlotId) {
     const plot = state.plots.find((item) => item.plot_id === state.selectedPlotId);
     const payload = plotImageSource(parseJsonObject(plot?.payload_json));
     if (plot && payload) return openViewer({ kind: "plot", title: "Plot", sourcePath: plot.source_path || null, content: payload });
   }
-  const artifact = state.selectedArtifactDetail?.artifact || state.artifacts.find((item) => item.artifact_id === state.selectedArtifactId);
-  if (!artifact?.output_path) return toast("Select an output to preview.", true);
-  return openViewer({ kind: "artifact", path: artifact.output_path, title: pathFileName(artifact.output_path), sourcePath: artifact.source_path || null, artifactId: artifact.artifact_id });
+  if (!selectedArtifact?.output_path) return toast("Select an output to preview.", true);
+  return openViewer({ kind: "artifact", path: selectedArtifact.output_path, title: pathFileName(selectedArtifact.output_path), sourcePath: selectedArtifact.source_path || null, artifactId: selectedArtifact.artifact_id });
 }
 
 function currentEditorOffsets() {
@@ -6250,6 +6257,7 @@ async function loadRunData({ quiet = false } = {}) {
   const projectRoot = state.project.root;
   const previousSelectedArtifactId = state.selectedArtifactId;
   const previousSelectedArtifactDetail = state.selectedArtifactDetail;
+  const previousSelectedArtifactPreview = state.selectedArtifactPreview;
   try {
     const [runs, problems, plots, artifacts] = await Promise.all([
       invoke("list_runs", { limit: 50 }),
@@ -6275,6 +6283,12 @@ async function loadRunData({ quiet = false } = {}) {
     state.selectedArtifactDetail = state.selectedArtifactId && state.selectedArtifactId === previousSelectedArtifactId
       ? previousSelectedArtifactDetail
       : null;
+    if (state.selectedArtifactId && state.selectedArtifactId === previousSelectedArtifactId
+      && previousSelectedArtifactPreview?.projectRoot === projectRoot) {
+      state.selectedArtifactPreview = previousSelectedArtifactPreview;
+    } else {
+      clearSelectedArtifactPreview();
+    }
     state.activeRunId = activeRunRecord()?.run_id || null;
     renderRuns();
     renderProblems();
@@ -6295,6 +6309,11 @@ async function loadRunData({ quiet = false } = {}) {
           && projectRoot === state.project.root
           && state.selectedArtifactId === selectedArtifactId) {
         state.selectedArtifactDetail = selectedArtifactDetail;
+      }
+      if (!state.selectedPlotId
+        && state.selectedArtifactId === selectedArtifactId
+        && ARTIFACT_IMAGE_MEDIA_TYPES.has(selectedArtifactDetail?.artifact?.media_type)) {
+        await loadSelectedArtifactPreview({ quiet });
       }
     }
     renderPlots();
@@ -12600,10 +12619,148 @@ function plotHasRenderablePayload(plot) {
   return Boolean(payload?.["image/png"] || payload?.["image/svg+xml"] || payload?.["rho/mock-image"]);
 }
 
+const ARTIFACT_IMAGE_MEDIA_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+
+function selectedArtifactRecord() {
+  return state.selectedArtifactDetail?.artifact
+    || state.artifacts.find((item) => item.artifact_id === state.selectedArtifactId)
+    || null;
+}
+
+function clearSelectedArtifactPreview() {
+  state.artifactPreviewRequestSequence += 1;
+  state.selectedArtifactPreview = null;
+}
+
+function artifactPreviewImageSource(preview) {
+  if (!preview
+    || preview.status !== "ready"
+    || preview.contentEncoding !== "base64"
+    || !ARTIFACT_IMAGE_MEDIA_TYPES.has(preview.mediaType)
+    || !preview.content) return null;
+  return `data:${preview.mediaType};base64,${preview.content}`;
+}
+
+async function loadSelectedArtifactPreview({ quiet = false } = {}) {
+  const artifact = selectedArtifactRecord();
+  const artifactId = artifact?.artifact_id || null;
+  const projectRoot = state.project.root;
+  const requestSequence = ++state.artifactPreviewRequestSequence;
+  if (!artifactId || !artifact?.output_path || !ARTIFACT_IMAGE_MEDIA_TYPES.has(artifact.media_type)) {
+    state.selectedArtifactPreview = null;
+    renderPlots();
+    return false;
+  }
+  state.selectedArtifactPreview = {
+    status: "loading",
+    artifactId,
+    projectRoot,
+    path: artifact.output_path,
+    mediaType: artifact.media_type,
+    contentEncoding: null,
+    content: "",
+    message: null,
+  };
+  renderPlots();
+  try {
+    const result = await invoke("viewer_read_file", { path: artifact.output_path });
+    if (requestSequence !== state.artifactPreviewRequestSequence
+      || projectRoot !== state.project.root
+      || artifactId !== state.selectedArtifactId) return false;
+    if (result.project_root !== projectRoot || result.path !== artifact.output_path) {
+      throw new Error("The project or output changed while loading this image.");
+    }
+    if (!ARTIFACT_IMAGE_MEDIA_TYPES.has(result.media_type)
+      || result.media_type !== artifact.media_type
+      || result.content_encoding !== "base64"
+      || !result.content) {
+      throw new Error("The selected saved output is not a supported image preview.");
+    }
+    state.selectedArtifactPreview = {
+      status: "ready",
+      artifactId,
+      projectRoot,
+      path: result.path,
+      mediaType: result.media_type,
+      contentEncoding: result.content_encoding,
+      content: result.content,
+      message: null,
+    };
+  } catch (error) {
+    if (requestSequence !== state.artifactPreviewRequestSequence
+      || projectRoot !== state.project.root
+      || artifactId !== state.selectedArtifactId) return false;
+    state.selectedArtifactPreview = {
+      status: "error",
+      artifactId,
+      projectRoot,
+      path: artifact.output_path,
+      mediaType: artifact.media_type,
+      contentEncoding: null,
+      content: "",
+      message: userFacingError(error, "The saved image could not be previewed. Review its file status and try again."),
+    };
+    if (!quiet) console.error("[load saved image preview]", error);
+  }
+  renderPlots();
+  return state.selectedArtifactPreview?.status === "ready";
+}
+
+function renderSelectedArtifactPreview() {
+  const preview = state.selectedArtifactPreview;
+  if (!preview || preview.artifactId !== state.selectedArtifactId || preview.projectRoot !== state.project.root) return false;
+  if (preview.status === "loading") {
+    showPlotSurfaceState("loading", "Loading saved image", "Reading the selected project output through the bounded Viewer.");
+    return true;
+  }
+  if (preview.status === "error") {
+    showPlotSurfaceState("failed", "Saved image unavailable", preview.message || "The selected image could not be previewed.");
+    return true;
+  }
+  const source = artifactPreviewImageSource(preview);
+  if (!source) return false;
+  $("#plotEmpty").classList.add("hidden");
+  const image = $("#plotImage");
+  image.onerror = () => {
+    if (state.selectedArtifactPreview?.artifactId !== preview.artifactId) return;
+    state.selectedArtifactPreview = {
+      ...preview,
+      status: "error",
+      content: "",
+      message: "The saved image exists, but its content could not be decoded.",
+    };
+    renderPlots();
+  };
+  image.src = source;
+  image.alt = `Saved output ${displayPath(preview.path)}`;
+  image.classList.remove("hidden");
+  return true;
+}
+
+async function selectArtifactForOutputs(artifact, { switchToOutputs = false } = {}) {
+  if (!artifact?.artifact_id) return;
+  if (switchToOutputs) switchDockTab("plots");
+  state.selectedPlotId = null;
+  state.selectedArtifactId = artifact.artifact_id;
+  clearSelectedArtifactPreview();
+  try {
+    state.selectedArtifactDetail = await invoke("get_artifact_record", { artifactId: artifact.artifact_id })
+      || { artifact, file_available: null };
+  } catch (error) {
+    state.selectedArtifactDetail = { artifact, file_available: null, detail_error: String(error) };
+    console.error("[open saved output]", error);
+  }
+  renderPlots();
+  await loadSelectedArtifactPreview({ quiet: true });
+  $("#artifactPanel").open = true;
+  if (state.posture === "agent") openAgentWorkSurface("artifact");
+}
+
 function renderArtifactDetail() {
   const detail = state.selectedArtifactDetail;
   const card = $("#artifactDetailCard");
   const action = $("#artifactOpenSourceButton");
+  const viewerAction = $("#artifactOpenViewerButton");
   card.className = "render-result-card";
   if (!detail?.artifact) {
     card.classList.add("hidden");
@@ -12612,6 +12769,7 @@ function renderArtifactDetail() {
     $("#artifactDetailSummary").textContent = "Select a saved file to review where it came from and whether it is still available.";
     $("#artifactDetailPath").textContent = "";
     action.disabled = true;
+    viewerAction.disabled = true;
     return;
   }
   const artifact = detail.artifact;
@@ -12631,6 +12789,7 @@ function renderArtifactDetail() {
     formatTimestamp(artifact.created_at),
   ].join(" · ");
   action.disabled = !artifact.source_path;
+  viewerAction.disabled = detail.file_available === false;
 }
 
 function renderArtifactRecords() {
@@ -12658,18 +12817,7 @@ function renderArtifactRecords() {
       ? "Source details captured"
       : "Some source details are unavailable";
     row.append(title, line1, line2);
-    row.addEventListener("click", async () => {
-      state.selectedArtifactId = artifact.artifact_id;
-      try {
-        state.selectedArtifactDetail = await invoke("get_artifact_record", { artifactId: artifact.artifact_id });
-      } catch (error) {
-        state.selectedArtifactDetail = null;
-        toast(reportUiFailure("open saved output", error, "Saved output details are unavailable. Refresh Outputs and try again."), true);
-      }
-      renderPlots();
-      $("#artifactPanel").open = true;
-      if (state.posture === "agent") openAgentWorkSurface("artifact");
-    });
+    row.addEventListener("click", () => selectArtifactForOutputs(artifact));
     list.append(row);
 
     const output = document.createElement("button");
@@ -12682,19 +12830,7 @@ function renderArtifactRecords() {
     const outputIndex = document.createElement("small");
     outputIndex.textContent = artifactKindLabel(artifact.artifact_kind);
     output.append(outputLabel, outputIndex);
-    output.addEventListener("click", async () => {
-      switchDockTab("plots");
-      state.selectedArtifactId = artifact.artifact_id;
-      try {
-        state.selectedArtifactDetail = await invoke("get_artifact_record", { artifactId: artifact.artifact_id });
-      } catch (error) {
-        state.selectedArtifactDetail = null;
-        toast(reportUiFailure("open saved output", error, "Saved output details are unavailable. Refresh Outputs and try again."), true);
-      }
-      renderPlots();
-      $("#artifactPanel").open = true;
-      if (state.posture === "agent") openAgentWorkSurface("artifact");
-    });
+    output.addEventListener("click", () => selectArtifactForOutputs(artifact, { switchToOutputs: true }));
     outputList.append(output);
   }
   renderArtifactDetail();
@@ -12727,6 +12863,15 @@ function renderPlots() {
     selectedPlotId: state.selectedPlotId,
     selectedArtifactId: state.selectedArtifactId,
     selectedArtifactDetail: state.selectedArtifactDetail,
+    selectedArtifactPreview: state.selectedArtifactPreview ? {
+      status: state.selectedArtifactPreview.status,
+      artifactId: state.selectedArtifactPreview.artifactId,
+      projectRoot: state.selectedArtifactPreview.projectRoot,
+      path: state.selectedArtifactPreview.path,
+      mediaType: state.selectedArtifactPreview.mediaType,
+      contentLength: state.selectedArtifactPreview.content?.length || 0,
+      message: state.selectedArtifactPreview.message,
+    } : null,
     agentSelectedOutput: state.agentSelectedOutput,
   });
   return renderVolatileLane("plots", surfaces, signature, renderPlotsContent);
@@ -12739,43 +12884,55 @@ function renderPlotsContent() {
   outputList.replaceChildren();
   const plots = state.plots || [];
   const selectedPlot = activePlotRecord();
+  const artifactPreviewActive = Boolean(
+    state.selectedArtifactPreview
+      && state.selectedArtifactPreview.artifactId === state.selectedArtifactId
+      && state.selectedArtifactPreview.projectRoot === state.project.root,
+  );
   $$('[data-plot-scope]').forEach((button) => button.classList.toggle("active", button.dataset.plotScope === state.plotScope));
   $("#plotCount").textContent = String(plots.length);
   $("#plotOutputCount").textContent = String(plots.length);
   $("#plotNavigatorCount").textContent = String(plots.length);
-  $("#plotExportButton").disabled = !(selectedPlot && plotHasRenderablePayload(selectedPlot));
+  $("#plotExportButton").disabled = artifactPreviewActive || !(selectedPlot && plotHasRenderablePayload(selectedPlot));
+  const selectedArtifact = selectedArtifactRecord();
+  $("#plotOpenViewerButton").disabled = !(selectedPlot || selectedArtifact?.output_path);
+  const artifactPreviewRendered = renderSelectedArtifactPreview();
   if (!plots.length) {
-    showPlotSurfaceState("empty", "No plots yet", "Run plotting code in Workspace R to create a preview.");
+    if (!artifactPreviewRendered) {
+      showPlotSurfaceState("empty", "No plots yet", "Run plotting code in Workspace R to create a preview, or select a saved image below.");
+    }
     renderArtifactRecords();
     renderAgentOutputs();
     return;
   }
-  $("#plotEmpty").classList.add("hidden");
-  try {
-    const payload = JSON.parse((selectedPlot || plots[0]).payload_json || "null");
-    if (!payload || typeof payload !== "object") throw new Error("Invalid plot payload");
-    if (payload?.["rho/pruned"]) {
+  if (!artifactPreviewRendered) {
+    $("#plotEmpty").classList.add("hidden");
+    try {
+      const payload = JSON.parse((selectedPlot || plots[0]).payload_json || "null");
+      if (!payload || typeof payload !== "object") throw new Error("Invalid plot payload");
+      if (payload?.["rho/pruned"]) {
+        showPlotSurfaceState(
+          "warning",
+          "Preview no longer stored",
+          "Rho freed this preview to save space. The plot remains in history and saved files are unchanged.",
+        );
+      } else if (payload?.["image/png"] || payload?.["image/svg+xml"] || payload?.["rho/mock-image"]) {
+        renderDisplay(payload);
+        const selectedIndex = plots.findIndex((plot) => plot.plot_id === selectedPlot?.plot_id);
+        $("#plotImage").alt = `Plot ${Math.max(0, selectedIndex) + 1}, ${plotSourceLabel(selectedPlot || plots[0])}`;
+      } else {
+        throw new Error("Unsupported plot payload");
+      }
+    } catch {
       showPlotSurfaceState(
-        "warning",
-        "Preview no longer stored",
-        "Rho freed this preview to save space. The plot remains in history and saved files are unchanged.",
+        "failed",
+        "Plot preview unavailable",
+        "The plot remains in history, but its preview data could not be displayed.",
       );
-    } else if (payload?.["image/png"] || payload?.["image/svg+xml"] || payload?.["rho/mock-image"]) {
-      renderDisplay(payload);
-      const selectedIndex = plots.findIndex((plot) => plot.plot_id === selectedPlot?.plot_id);
-      $("#plotImage").alt = `Plot ${Math.max(0, selectedIndex) + 1}, ${plotSourceLabel(selectedPlot || plots[0])}`;
-    } else {
-      throw new Error("Unsupported plot payload");
     }
-  } catch {
-    showPlotSurfaceState(
-      "failed",
-      "Plot preview unavailable",
-      "The plot remains in history, but its preview data could not be displayed.",
-    );
   }
   for (const [index, plot] of plots.entries()) {
-    const selected = plot.plot_id === selectedPlot?.plot_id;
+    const selected = !artifactPreviewActive && plot.plot_id === selectedPlot?.plot_id;
     const row = document.createElement("button");
     row.type = "button";
     row.className = `plot-history-row ${selected ? "active" : ""}`;
@@ -12807,6 +12964,7 @@ function renderPlotsContent() {
     content.append(title, line1, line2);
     row.append(thumbnail, content);
     row.addEventListener("click", () => {
+      clearSelectedArtifactPreview();
       state.selectedPlotId = plot.plot_id;
       try {
         renderDisplay(parseJsonObject(plot.payload_json));
@@ -12832,6 +12990,7 @@ function renderPlotsContent() {
     output.append(outputLabel, outputIndex);
     output.addEventListener("click", () => {
       switchDockTab("plots");
+      clearSelectedArtifactPreview();
       state.selectedPlotId = plot.plot_id;
       try {
         renderDisplay(parseJsonObject(plot.payload_json));
@@ -17132,6 +17291,7 @@ async function clearArtifacts(sessionOnly) {
     await invoke("clear_artifact_records", { session_only: sessionOnly });
     state.selectedArtifactId = null;
     state.selectedArtifactDetail = null;
+    clearSelectedArtifactPreview();
     await loadRunData();
     toast(`Deleted output records from ${scope}. Output files were left in place.`);
   } catch (error) {
@@ -20894,6 +21054,7 @@ async function hydrateProject(response) {
   state.agentReviewRunError = null;
   state.selectedArtifactId = null;
   state.selectedArtifactDetail = null;
+  clearSelectedArtifactPreview();
   state.selectedPlotId = null;
   state.viewer = { ...state.viewer, open: false, busy: false, path: null, content: "", sourceContent: "", error: null, notice: null };
   $("#artifactPanel").open = false;
@@ -20908,6 +21069,7 @@ async function hydrateProject(response) {
   state.artifacts = [];
   state.selectedPlotId = null;
   state.selectedArtifactId = null;
+  clearSelectedArtifactPreview();
   renderRuns();
   renderProblems();
   renderPlots();
