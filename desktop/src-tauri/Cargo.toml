@@ -33,6 +33,7 @@ tempfile.workspace = true
 tar = "0.4"
 tokio.workspace = true
 uuid.workspace = true
+zeroize.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 keyring = { version = "4.1.6", default-features = false, features = ["v1", "windows-native-keyring-store"] }

@@ -15,6 +15,11 @@ assert.match(js, /actAuthorizedTurnIds: new Set\(\)/);
 assert.match(js, /fileEditAutoApplyAttempts: new Set\(\)/);
 assert.match(js, /if \(authorizeChanges && response\?\.turn_id\) state\.actAuthorizedTurnIds\.add\(response\.turn_id\)/);
 assert.match(js, /function maybeAutoApplyFileEditProposal\(\)/);
+assert.ok(
+  js.indexOf("fileEditProposalPreflight(proposal).state !== \"ready\"")
+    < js.indexOf("state.fileEditAutoApplyAttempts.add(proposal.key)"),
+  "Automatic apply must wait for a valid terminal proposal before consuming its attempt",
+);
 assert.match(js, /state\.actAuthorizedTurnIds\.has\(proposal\.turnId\)/);
 assert.match(js, /proposal\.editorContext\?\.project_root !== state\.project\.root/);
 assert.match(js, /state\.fileEditAutoApplyAttempts\.add\(proposal\.key\)/);

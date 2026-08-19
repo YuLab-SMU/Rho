@@ -9,6 +9,7 @@ use anyhow::{Context, Result, bail, ensure};
 use chrono::Utc;
 use rho_server::coordinator::{AgentRuntimeCapabilityRoute, AgentRuntimeModelProfile};
 use serde::{Deserialize, Serialize};
+use zeroize::Zeroizing;
 
 use crate::project::atomic_write;
 
@@ -35,6 +36,7 @@ const MAX_CREDENTIAL_BYTES: usize = 16 * 1024;
 static SETTINGS_MUTATION_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 static SYSTEM_CREDENTIAL_OBSERVATIONS: OnceLock<Mutex<HashMap<String, CredentialObservation>>> =
     OnceLock::new();
+static SYSTEM_CREDENTIAL_SESSION: OnceLock<SessionCredentialCache> = OnceLock::new();
 
 fn settings_mutation_guard() -> MutexGuard<'static, ()> {
     SETTINGS_MUTATION_LOCK
@@ -59,6 +61,72 @@ enum CredentialObservation {
     Unavailable,
 }
 
+#[derive(Default)]
+struct SessionCredentialCache {
+    entries: Mutex<HashMap<String, Option<Zeroizing<String>>>>,
+}
+
+impl SessionCredentialCache {
+    fn get_or_load<F>(&self, provider_id: &str, load: F) -> Result<Option<String>>
+    where
+        F: FnOnce() -> Result<Option<String>>,
+    {
+        let mut entries = self
+            .entries
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(cached) = entries.get(provider_id) {
+            return Ok(cached
+                .as_ref()
+                .map(|credential| credential.as_str().to_string()));
+        }
+        let loaded = load()?;
+        entries.insert(
+            provider_id.to_string(),
+            loaded
+                .as_ref()
+                .map(|credential| Zeroizing::new(credential.clone())),
+        );
+        Ok(loaded)
+    }
+
+    fn set(&self, provider_id: &str, credential: &str) {
+        self.entries
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(
+                provider_id.to_string(),
+                Some(Zeroizing::new(credential.to_string())),
+            );
+    }
+
+    fn mark_missing(&self, provider_id: &str) {
+        self.entries
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(provider_id.to_string(), None);
+    }
+
+    fn clear(&self) {
+        self.entries
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clear();
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.entries
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .len()
+    }
+}
+
+fn system_credential_session() -> &'static SessionCredentialCache {
+    SYSTEM_CREDENTIAL_SESSION.get_or_init(SessionCredentialCache::default)
+}
+
 fn system_credential_observations() -> &'static Mutex<HashMap<String, CredentialObservation>> {
     SYSTEM_CREDENTIAL_OBSERVATIONS.get_or_init(|| Mutex::new(HashMap::new()))
 }
@@ -77,9 +145,18 @@ fn current_system_credential_observations() -> HashMap<String, CredentialObserva
         .clone()
 }
 
+fn clear_system_credential_session() {
+    system_credential_session().clear();
+    system_credential_observations()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clear();
+}
+
 impl CredentialStore for SystemCredentialStore {
     fn get(&self, provider_id: &str) -> Result<Option<String>> {
-        let result = system_credential_get(provider_id);
+        let result = system_credential_session()
+            .get_or_load(provider_id, || system_credential_get(provider_id));
         record_system_credential_observation(
             provider_id,
             match &result {
@@ -94,6 +171,7 @@ impl CredentialStore for SystemCredentialStore {
     fn set(&self, provider_id: &str, credential: &str) -> Result<()> {
         let result = system_credential_set(provider_id, credential);
         if result.is_ok() {
+            system_credential_session().set(provider_id, credential);
             record_system_credential_observation(provider_id, CredentialObservation::Detected);
         }
         result
@@ -102,6 +180,7 @@ impl CredentialStore for SystemCredentialStore {
     fn delete(&self, provider_id: &str) -> Result<()> {
         let result = system_credential_delete(provider_id);
         if result.is_ok() {
+            system_credential_session().mark_missing(provider_id);
             record_system_credential_observation(provider_id, CredentialObservation::NotDetected);
         }
         result
@@ -1068,7 +1147,12 @@ fn settings_view_from_settings_with_observations(
 }
 
 pub fn refresh_credentials_view(data_dir: &Path, rscript: &Path) -> Result<AgentLlmSettingsView> {
+    clear_system_credential_session();
     settings_view(data_dir, rscript)
+}
+
+pub fn clear_session_credentials() {
+    clear_system_credential_session();
 }
 
 pub fn catalog(rscript: &Path) -> Result<Vec<AgentCatalogEntry>> {
@@ -2942,7 +3026,10 @@ mod tests {
     use super::*;
     use std::io::Write as _;
     use std::net::TcpListener;
-    use std::sync::Barrier;
+    use std::sync::{
+        Barrier,
+        atomic::{AtomicUsize, Ordering},
+    };
     use std::thread;
     use tempfile::TempDir;
 
@@ -3852,6 +3939,92 @@ mod tests {
         assert_eq!(provider.credential_status, "unchecked");
         assert_eq!(provider.credential_source, "unchecked");
         assert!(store.get_calls.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn session_cache_reads_each_provider_once_and_caches_missing_values() {
+        let cache = SessionCredentialCache::default();
+        let loads = AtomicUsize::new(0);
+        let first = cache
+            .get_or_load("provider-first", || {
+                loads.fetch_add(1, Ordering::SeqCst);
+                Ok(Some("first-secret".to_string()))
+            })
+            .unwrap();
+        let repeated = cache
+            .get_or_load("provider-first", || {
+                panic!("cached Provider must not call Keychain again")
+            })
+            .unwrap();
+        let missing = cache
+            .get_or_load("provider-missing", || {
+                loads.fetch_add(1, Ordering::SeqCst);
+                Ok(None)
+            })
+            .unwrap();
+        let repeated_missing = cache
+            .get_or_load("provider-missing", || {
+                panic!("known-missing Provider must not call Keychain again")
+            })
+            .unwrap();
+
+        assert_eq!(first.as_deref(), Some("first-secret"));
+        assert_eq!(repeated.as_deref(), Some("first-secret"));
+        assert_eq!(missing, None);
+        assert_eq!(repeated_missing, None);
+        assert_eq!(loads.load(Ordering::SeqCst), 2);
+        assert_eq!(cache.len(), 2);
+    }
+
+    #[test]
+    fn session_cache_replaces_deletes_clears_and_retries_failures() {
+        let cache = SessionCredentialCache::default();
+        cache.set("provider", "first-secret");
+        assert_eq!(
+            cache
+                .get_or_load("provider", || panic!("set value must be cached"))
+                .unwrap()
+                .as_deref(),
+            Some("first-secret")
+        );
+        cache.set("provider", "replacement-secret");
+        assert_eq!(
+            cache
+                .get_or_load("provider", || panic!("replacement must be cached"))
+                .unwrap()
+                .as_deref(),
+            Some("replacement-secret")
+        );
+        cache.mark_missing("provider");
+        assert_eq!(
+            cache
+                .get_or_load("provider", || panic!("delete state must be cached"))
+                .unwrap(),
+            None
+        );
+
+        let attempts = AtomicUsize::new(0);
+        assert!(
+            cache
+                .get_or_load("provider-retry", || {
+                    attempts.fetch_add(1, Ordering::SeqCst);
+                    bail!("injected Keychain denial")
+                })
+                .is_err()
+        );
+        assert_eq!(
+            cache
+                .get_or_load("provider-retry", || {
+                    attempts.fetch_add(1, Ordering::SeqCst);
+                    Ok(Some("retry-secret".to_string()))
+                })
+                .unwrap()
+                .as_deref(),
+            Some("retry-secret")
+        );
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
+        cache.clear();
+        assert_eq!(cache.len(), 0);
     }
 
     #[test]

@@ -699,6 +699,7 @@ struct AgentFileMutationResponse {
     workspace: rho_protocol::WorkspaceIdentity,
 }
 
+#[derive(Clone)]
 struct PersistedAgentFileProposal {
     path: String,
     operation: String,
@@ -1616,6 +1617,71 @@ fn persisted_agent_file_proposal(
     })
 }
 
+fn ensure_agent_file_proposal_turn_terminal(
+    store: &Store,
+    project_root: &str,
+    turn_id: &str,
+) -> Result<()> {
+    let detail = store
+        .get_agent_turn_detail(project_root, turn_id)?
+        .context("Agent file proposal turn was not found in the active project")?;
+    ensure!(
+        !matches!(
+            detail.turn.status.as_str(),
+            "queued" | "running" | "waiting"
+        ),
+        "AGENT_FILE_TURN_ACTIVE: Wait for this Agent turn to finish before accepting its file proposal."
+    );
+    Ok(())
+}
+
+fn validate_persisted_agent_file_proposal_structure(
+    proposal: &PersistedAgentFileProposal,
+) -> Result<()> {
+    if !matches!(
+        proposal.operation.as_str(),
+        "replace_selection" | "insert_at_cursor"
+    ) {
+        return Ok(());
+    }
+    let context = proposal
+        .editor_context
+        .as_ref()
+        .context("AGENT_FILE_PROPOSAL_INVALID: The proposal omitted its editor context.")?;
+    ensure!(
+        context.get("active_path").and_then(Value::as_str) == Some(proposal.path.as_str()),
+        "AGENT_FILE_PROPOSAL_INVALID: The proposal target does not match the captured active file."
+    );
+    let start = context
+        .get("selection_start")
+        .and_then(Value::as_u64)
+        .context("AGENT_FILE_PROPOSAL_INVALID: The proposal start offset is missing.")?;
+    let end = context
+        .get("selection_end")
+        .and_then(Value::as_u64)
+        .context("AGENT_FILE_PROPOSAL_INVALID: The proposal end offset is missing.")?;
+    ensure!(
+        end >= start,
+        "AGENT_FILE_PROPOSAL_INVALID: The proposal range is inverted."
+    );
+    if proposal.operation == "replace_selection" {
+        let selection = context
+            .get("selection_text")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        ensure!(
+            end > start && !selection.is_empty(),
+            "AGENT_FILE_PROPOSAL_INVALID: Replace selection requires non-empty text selected when the turn starts."
+        );
+    } else {
+        ensure!(
+            end == start,
+            "AGENT_FILE_PROPOSAL_INVALID: Insert at cursor requires an empty captured range."
+        );
+    }
+    Ok(())
+}
+
 fn calculate_persisted_agent_file_edit(
     proposal: &PersistedAgentFileProposal,
     before_content: &str,
@@ -2142,6 +2208,10 @@ async fn apply_agent_file_edit_state(
         normalized_path == request.path,
         "Agent file proposal path is not normalized"
     );
+    {
+        let store = read_store(state)?;
+        ensure_agent_file_proposal_turn_terminal(&store, &project_root, &request.turn_id)?;
+    }
     let lane_key = format!("{project_root}\0{normalized_path}");
     let task_registry = state.agent_tasks.lock().await;
     let claim =
@@ -2183,6 +2253,7 @@ async fn apply_agent_file_edit_state(
         proposal.path == normalized_path,
         "Agent file proposal path does not match its durable event"
     );
+    validate_persisted_agent_file_proposal_structure(&proposal)?;
     ensure_agent_file_apply_available(persisted_agent_file_mutation_state(
         &store,
         &project_root,
@@ -5916,6 +5987,7 @@ async fn shutdown_application(state: &AppState) -> Result<(), String> {
     if let Err(error) = agent_llm::cancel_test(&state.agent_llm_test_control) {
         write_startup_log(&format!("Agent model test shutdown failed: {error:#}"));
     }
+    agent_llm::clear_session_credentials();
 
     if let Some(watcher) = state.project_watcher.lock().await.take() {
         watcher.stop();
@@ -8433,17 +8505,18 @@ mod tests {
     use super::{
         AgentFileApplyRequest, AgentFileApplyTestControl, AgentFileMutationRegistry,
         AgentFileUndoRequest, AgentModelTestControl, AgentRuntimeStatus, AgentTaskEntry, AppState,
-        ExecuteRequest, ExecuteSourceRange, MINIMUM_AGENT_AISDK_VERSION, ProbeProcessOutput,
-        RUNTIME_CACHE_VERSION, RUserStartupFiles, RenderJobState, RuntimeCacheFile, RuntimeConfig,
-        StartupView, SwitchTestControl, SwitchTestStep, active_context,
-        agent_file_postwrite_failure, agent_file_write_failure, agent_retry_source,
-        agent_runtime_probe_expression, agent_runtime_status_from_probe,
+        ExecuteRequest, ExecuteSourceRange, MINIMUM_AGENT_AISDK_VERSION,
+        PersistedAgentFileProposal, ProbeProcessOutput, RUNTIME_CACHE_VERSION, RUserStartupFiles,
+        RenderJobState, RuntimeCacheFile, RuntimeConfig, StartupView, SwitchTestControl,
+        SwitchTestStep, active_context, agent_file_postwrite_failure, agent_file_write_failure,
+        agent_retry_source, agent_runtime_probe_expression, agent_runtime_status_from_probe,
         agent_turn_admission_error, append_agent_file_mutation_event, apply_agent_file_edit_state,
         ark_candidate_paths, attach_render_artifact, bounded_diagnostic, cancel_agent_turn_state,
         classify_startup_error, configure_user_startup, contain_audit_panic,
         data_view_artifact_metadata, data_view_delimited_text, decode_plot_png_base64,
         deferred_agent_runtime_status, delete_agent_conversation_state, durable_project_root,
-        editor_format_result, ensure_artifact_export_target, ensure_bundled_license_file,
+        editor_format_result, ensure_agent_file_proposal_turn_terminal,
+        ensure_artifact_export_target, ensure_bundled_license_file,
         ensure_supported_r_architecture, ensure_supported_r_version, existing_startup_file,
         find_executable_on_path, finish_render_job, has_png_signature, interrupt_all_agent_tasks,
         list_runs_with_state, load_runtime_cache, locate_ark_from_candidates, locate_rscript,
@@ -8453,7 +8526,8 @@ mod tests {
         run_is_retryable, runtime_file_signature, safe_delete_project_file, save_runtime_cache,
         shutdown_application, source_claim_snapshot, switch_project_with_watcher_factory,
         text_sha256, undo_agent_file_edit_state, validate_execute_source_range_shape,
-        workspace_project_root_code, write_r_probe_script,
+        validate_persisted_agent_file_proposal_structure, workspace_project_root_code,
+        write_r_probe_script,
     };
     use crate::platform;
 
@@ -9395,6 +9469,99 @@ mod tests {
         store.save_identity(broker.identity()).unwrap();
         *state.context.lock().await =
             Some(Arc::new(Mutex::new(CoordinatorRuntime { broker, store })));
+    }
+
+    #[test]
+    fn file_proposal_structure_rejects_empty_selection_and_invalid_cursor_range() {
+        let empty_selection = PersistedAgentFileProposal {
+            path: "scatter_plot_example.R".to_string(),
+            operation: "replace_selection".to_string(),
+            content: "replacement".to_string(),
+            editor_context: Some(json!({
+                "active_path": "scatter_plot_example.R",
+                "selection_start": 527,
+                "selection_end": 527,
+                "selection_text": ""
+            })),
+        };
+        let error = validate_persisted_agent_file_proposal_structure(&empty_selection).unwrap_err();
+        assert!(error.to_string().contains("AGENT_FILE_PROPOSAL_INVALID"));
+        assert!(error.to_string().contains("non-empty text"));
+
+        let invalid_cursor = PersistedAgentFileProposal {
+            operation: "insert_at_cursor".to_string(),
+            editor_context: Some(json!({
+                "active_path": "scatter_plot_example.R",
+                "selection_start": 10,
+                "selection_end": 12,
+                "selection_text": "ab"
+            })),
+            ..empty_selection.clone()
+        };
+        assert!(
+            validate_persisted_agent_file_proposal_structure(&invalid_cursor)
+                .unwrap_err()
+                .to_string()
+                .contains("empty captured range")
+        );
+
+        let valid = PersistedAgentFileProposal {
+            editor_context: Some(json!({
+                "active_path": "scatter_plot_example.R",
+                "selection_start": 10,
+                "selection_end": 12,
+                "selection_text": "ab"
+            })),
+            ..empty_selection
+        };
+        validate_persisted_agent_file_proposal_structure(&valid).unwrap();
+    }
+
+    #[test]
+    fn file_proposal_turn_must_be_terminal_before_mutation_admission() {
+        let directory = TempDir::new().unwrap();
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let project_root = "D:/Rho/project";
+        store
+            .create_agent_turn_with_conversation(
+                &AgentConversationDraft {
+                    conversation_id: "conversation-running-proposal".to_string(),
+                    project_root: project_root.to_string(),
+                    title: "Running proposal".to_string(),
+                    legacy_unthreaded: false,
+                },
+                &AgentTurnDraft {
+                    turn_id: "turn-running-proposal".to_string(),
+                    project_root: project_root.to_string(),
+                    mode: "act".to_string(),
+                    prompt: "Edit the file".to_string(),
+                    model: "test-model".to_string(),
+                    workspace_id: "ws-file-test".to_string(),
+                    state_revision_before: 0,
+                    project_revision_before: 0,
+                },
+            )
+            .unwrap();
+
+        let error =
+            ensure_agent_file_proposal_turn_terminal(&store, project_root, "turn-running-proposal")
+                .unwrap_err();
+        assert!(error.to_string().contains("AGENT_FILE_TURN_ACTIVE"));
+
+        store
+            .finish_agent_turn(&AgentTurnFinish {
+                turn_id: "turn-running-proposal".to_string(),
+                status: "completed".to_string(),
+                terminal_reason: Some("completed".to_string()),
+                workspace_id_after: Some("ws-file-test".to_string()),
+                state_revision_after: Some(0),
+                project_revision_after: Some(0),
+                final_message: Some("Proposal ready".to_string()),
+                error_message: None,
+            })
+            .unwrap();
+        ensure_agent_file_proposal_turn_terminal(&store, project_root, "turn-running-proposal")
+            .unwrap();
     }
 
     fn create_waiting_approval(

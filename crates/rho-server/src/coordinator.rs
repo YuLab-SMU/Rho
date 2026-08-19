@@ -486,6 +486,7 @@ impl PendingApprovalRegistry {
 struct DesktopAgentCompletion {
     events: Vec<Value>,
     final_message: Option<String>,
+    error_message: Option<String>,
     failed: bool,
 }
 
@@ -1469,6 +1470,25 @@ fn bounded_agent_context_text(value: &str, max_chars: usize) -> String {
     output
 }
 
+const MAX_PROVIDER_FAILURE_BYTES: usize = 2 * 1024;
+
+fn bounded_provider_failure(payload: &Value) -> String {
+    let value = payload
+        .get("error")
+        .and_then(Value::as_str)
+        .unwrap_or("Provider request failed without details.");
+    let value = redact_sensitive_text(value);
+    if value.len() <= MAX_PROVIDER_FAILURE_BYTES {
+        return value;
+    }
+    let suffix = "... [truncated]";
+    let mut end = MAX_PROVIDER_FAILURE_BYTES - suffix.len();
+    while !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}{}", &value[..end], suffix)
+}
+
 fn is_valid_project_skill_id(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 48
@@ -2138,7 +2158,7 @@ pub async fn run_agent_turn(
             state_revision_after: Some(after.state_revision as i64),
             project_revision_after: Some(after.project_revision as i64),
             final_message: completion.final_message.clone(),
-            error_message: None,
+            error_message: completion.error_message.clone(),
         })?;
         Ok(json!({
             "turn_id": turn_id,
@@ -2273,11 +2293,14 @@ async fn serve_desktop_agent(
                     &incoming.payload,
                 )?;
                 let agent_failed = incoming.payload["type"] == "desktop.agent_failed";
+                let error_message =
+                    agent_failed.then(|| bounded_provider_failure(&incoming.payload));
                 events.push(incoming.payload);
                 if completed || agent_failed {
                     return Ok(DesktopAgentCompletion {
                         events,
                         final_message,
+                        error_message,
                         failed: agent_failed,
                     });
                 }
@@ -3118,10 +3141,25 @@ fn project_agent_turn_event(turn_id: &str, payload: &Value) -> Result<Option<Age
             None,
             None,
         )),
+        "desktop.agent_failed" => Some((
+            "desktop.agent_failed",
+            "Provider request failed".to_string(),
+            Some(bounded_provider_failure(payload)),
+            "error".to_string(),
+            None,
+            None,
+            None,
+        )),
         _ => None,
     };
 
-    let details_json = serde_json::to_string(payload)?;
+    let details_json = if event_type == "desktop.agent_failed" {
+        let mut bounded = payload.clone();
+        bounded["error"] = Value::String(bounded_provider_failure(payload));
+        serde_json::to_string(&bounded)?
+    } else {
+        serde_json::to_string(payload)?
+    };
     Ok(mapped.map(
         |(event_type, title, body, status, tool, request_id, code)| AgentTurnEventDraft {
             turn_id: turn_id.to_string(),
@@ -5859,6 +5897,54 @@ mod tests {
         assert!(!redacted.contains("json-secret"));
         assert!(!redacted.contains("spaced-secret"));
         assert!(redacted.contains("&KEY=[REDACTED]&mode=1"));
+    }
+
+    #[test]
+    fn provider_failure_is_redacted_bounded_and_projected_to_the_timeline() {
+        let payload = json!({
+            "type": "desktop.agent_failed",
+            "model": "private:model",
+            "error": format!(
+                "API request failed with status 429\nURL: [REDACTED]/messages?key=secret-value\nAuthorization: Bearer another-secret\n{}",
+                "测".repeat(3_000)
+            )
+        });
+
+        let failure = bounded_provider_failure(&payload);
+        assert!(failure.len() <= MAX_PROVIDER_FAILURE_BYTES);
+        assert!(failure.ends_with("... [truncated]"));
+        assert!(!failure.contains("secret-value"));
+        assert!(!failure.contains("another-secret"));
+        assert!(failure.contains("status 429"));
+
+        let event = project_agent_turn_event("turn-provider-failed", &payload)
+            .unwrap()
+            .unwrap();
+        assert_eq!(event.event_type, "desktop.agent_failed");
+        assert_eq!(event.title, "Provider request failed");
+        assert_eq!(event.status, "error");
+        assert_eq!(event.body.as_deref(), Some(failure.as_str()));
+        let details: Value = serde_json::from_str(&event.details_json).unwrap();
+        assert_eq!(details["error"], failure);
+        assert!(!event.details_json.contains("secret-value"));
+        assert!(!event.details_json.contains("another-secret"));
+    }
+
+    #[test]
+    fn provider_failure_without_error_remains_truthful_and_success_stays_clean() {
+        assert_eq!(
+            bounded_provider_failure(&json!({"type": "desktop.agent_failed"})),
+            "Provider request failed without details."
+        );
+        let completed = project_agent_turn_event(
+            "turn-provider-completed",
+            &json!({"type": "desktop.agent_completed"}),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(completed.event_type, "desktop.agent_completed");
+        assert_eq!(completed.status, "completed");
+        assert!(completed.body.is_some());
     }
 
     #[test]

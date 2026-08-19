@@ -8,6 +8,7 @@ const html = fs.readFileSync(path.join(root, "desktop", "dist", "index.html"), "
 const js = fs.readFileSync(path.join(root, "desktop", "dist", "app.js"), "utf8");
 const rust = fs.readFileSync(path.join(root, "desktop", "src-tauri", "src", "main.rs"), "utf8");
 const backend = fs.readFileSync(path.join(root, "desktop", "src-tauri", "src", "agent_llm.rs"), "utf8");
+const cargo = fs.readFileSync(path.join(root, "desktop", "src-tauri", "Cargo.toml"), "utf8");
 
 assert.match(
   html,
@@ -78,6 +79,14 @@ assert.doesNotMatch(settingsProjection, /credential_store\.get|\.get_password\(|
 assert.match(settingsProjection, /current_system_credential_observations\(\)/);
 assert.match(backend, /enum CredentialObservation[\s\S]*Detected[\s\S]*NotDetected[\s\S]*Unavailable/);
 assert.match(backend, /"unchecked"\.to_string\(\)/);
+assert.match(cargo, /zeroize\.workspace = true/);
+assert.match(backend, /struct SessionCredentialCache[\s\S]*Zeroizing<String>/);
+assert.match(backend, /fn get_or_load<[\s\S]*if let Some\(cached\) = entries\.get\(provider_id\)/);
+assert.match(backend, /fn clear_session_credentials\(\)[\s\S]*clear_system_credential_session\(\)/);
+assert.match(rust, /agent_llm::clear_session_credentials\(\)/,
+  "Graceful desktop shutdown must zeroize the Provider session cache");
+assert.doesNotMatch(backend, /derive\([^)]*Serialize[^)]*\)[\s\S]{0,120}SessionCredentialCache/,
+  "The secret session cache must not be serializable");
 assert.match(js, /\["detected", "not_required", "unchecked"\]\.includes\(route\.credential_status\)/,
   "An unchecked Keychain item must be admitted to the selected-Provider backend check");
 assert.match(js, /provider\.api_key_required && provider\.credential_status === "not_detected"/,

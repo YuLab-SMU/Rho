@@ -12,9 +12,20 @@ this file records behavior included in a versioned build candidate.
   Provider API key. Keychain access is deferred to the exact Provider used by
   an Agent turn, model test, model discovery, or explicit credential action,
   preventing one authorization dialog per configured Provider.
-- Credential presence observations remain process-local and contain no secret;
-  Provider secrets remain isolated system-credential items and are never added
-  to settings, browser storage, logs, or the new status cache.
+- The first successful use of a Provider keeps its key only in a zeroizing
+  process-session cache, so later conversations do not ask Keychain again.
+  Replacement, deletion, refresh, and graceful shutdown clear the entry;
+  secrets remain absent from settings, browser storage, logs, and diagnostics.
+
+### Agent reliability
+
+- Provider failures now retain and display a bounded redacted cause, including
+  actionable HTTP 401/403, 404, 429, and 5xx guidance instead of a bare
+  `Failed` state.
+- Invalid file proposals such as `replace_selection` without a captured
+  selection are labelled before review and cannot be accepted. Valid proposals
+  wait until their parent Agent turn is terminal, while true file changes keep
+  their separate stale-file recovery message.
 
 ## 0.4.1-dev.0 - 2026-08-18
 

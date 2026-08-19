@@ -40,3 +40,4 @@ thiserror = "2.0"
 tokio = { version = "1.0", features = ["full"] }
 tokio-util = { version = "0.7", default-features = false, features = ["rt"] }
 uuid = { version = "1.18", features = ["v4", "serde"] }
+zeroize = "1.9"

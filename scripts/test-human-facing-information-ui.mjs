@@ -6,10 +6,12 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const html = fs.readFileSync(path.join(root, "desktop", "dist", "index.html"), "utf8");
 const js = fs.readFileSync(path.join(root, "desktop", "dist", "app.js"), "utf8");
+const server = fs.readFileSync(path.join(root, "crates", "rho-server", "src", "coordinator.rs"), "utf8");
 
 assert.match(js, /function userFacingError\(error, fallback/);
 assert.match(js, /function reportUiFailure\(context, error, fallback\)/);
 assert.match(js, /function userFacingStatus\(status, labels, fallback/);
+assert.match(js, /function agentProviderFailureMessage\(error\)/);
 for (const message of [
   "The underlying information changed. Refresh it and try again.",
   "The requested information is no longer available.",
@@ -50,8 +52,28 @@ const timelineStart = js.indexOf("function renderAgentTimeline()");
 const timelineEnd = js.indexOf("\nfunction renderTaskRail", timelineStart);
 const timeline = js.slice(timelineStart, timelineEnd);
 assert.match(timeline, /agentModelDisplayName\(turn\.model\)/);
+assert.match(timeline, /agentTurnFailureMessage\(turn\.error_message\)/);
+assert.match(timeline, /detail && \(!selected \|\| turn\.error_message\)/);
 assert.doesNotMatch(timeline, /event\.request_id|meta\.push\(event\.request_id\)/);
 assert.doesNotMatch(timeline, /aisdk|Ark session|broker policy/);
+
+const providerFailureStart = js.indexOf("function agentProviderFailureMessage(error)");
+const providerFailureEnd = js.indexOf("\nfunction agentTurnFailureMessage", providerFailureStart);
+const providerFailureSource = js.slice(providerFailureStart, providerFailureEnd);
+const providerFailureMessage = new Function(
+  "truncateText",
+  `return (${providerFailureSource});`,
+)((value, maximum) => String(value).slice(0, maximum));
+assert.match(providerFailureMessage("API request failed with status 429\nURL: https://private.example/messages"), /HTTP 429[\s\S]*rate limit or quota/);
+assert.match(providerFailureMessage("HTTP 401 from https://private.example"), /authentication[\s\S]*HTTP 401/);
+assert.match(providerFailureMessage("Provider service HTTP 503 at https://private.example"), /HTTP 503[\s\S]*temporarily unavailable/);
+assert.doesNotMatch(providerFailureMessage("custom provider failure at https://private.example/private"), /private\.example/);
+assert.match(js, /event\.event_type === "desktop\.agent_failed"[\s\S]*agentProviderFailureMessage\(event\.body\)/);
+assert.match(js, /"desktop\.agent_failed:": "Provider request failed"/);
+assert.match(server, /"desktop\.agent_failed" => Some\(\([\s\S]*"Provider request failed"/);
+assert.match(server, /error_message: completion\.error_message\.clone\(\)/,
+  "Terminal Provider failure must be persisted on the Agent turn");
+assert.match(server, /MAX_PROVIDER_FAILURE_BYTES: usize = 2 \* 1024/);
 assert.match(js, /const code = approval\.code \|\| argumentsObject\.code \|\| ""/);
 assert.doesNotMatch(js, /approval\.code \|\| argumentsObject\.code \|\| approval\.arguments_json/);
 assert.doesNotMatch(js, /Ark PID/);

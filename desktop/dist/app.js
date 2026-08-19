@@ -2319,10 +2319,17 @@ async function mockInvoke(command, args) {
   }
   if (command === "apply_agent_file_edit") {
     const request = args.request || {};
+    const { turn, proposal } = mockAgentFileProposal(request);
+    if (["queued", "running", "waiting"].includes(turn.status)) {
+      throw new Error("AGENT_FILE_TURN_ACTIVE: Wait for this Agent turn to finish before accepting its file proposal.");
+    }
+    const structuralIssue = fileEditProposalStructuralIssue(proposal);
+    if (structuralIssue) {
+      throw new Error(`AGENT_FILE_PROPOSAL_INVALID: ${structuralIssue.message}`);
+    }
     const claimId = `mock_agent_file_claim_${crypto.randomUUID()}`;
     mockAgentFileMutationClaims.set(claimId, { turnId: request.turnId, projectRoot: mockLastProject });
     try {
-      const { turn, proposal } = mockAgentFileProposal(request);
       if (proposal.path !== request.path) throw new Error("Agent file proposal path does not match its durable event");
       mockRequireAgentFileApplyAvailable(mockAgentFileMutationState(turn, request));
       const project = mockProjects[mockLastProject] || mockProjects[mockPlatformFixture.projectRoot];
@@ -6077,6 +6084,30 @@ function userFacingError(error, fallback = "Rho could not complete this action. 
   return USER_ERROR_PRESENTATIONS.find((entry) => entry.matches.test(raw))?.message || fallback;
 }
 
+function agentProviderFailureMessage(error) {
+  const raw = typeof error === "string" ? error : error?.message || String(error || "");
+  const status = raw.match(/(?:status|http(?:\s+status)?)\D{0,12}(\d{3})/i)?.[1] || null;
+  if (status === "400") return "Provider rejected the request with HTTP 400. Check its API format, model ID, and Base URL.";
+  if (["401", "403"].includes(status)) return `Provider rejected authentication with HTTP ${status}. Check the API key and Provider access.`;
+  if (status === "404") return "Provider returned HTTP 404. Check the model ID, Base URL, and compatible endpoint.";
+  if (status === "429") return "Provider returned HTTP 429. Its rate limit or quota may be exhausted; check the Provider and retry later.";
+  if (status && Number(status) >= 500) return `Provider service returned HTTP ${status}. It may be temporarily unavailable; retry later.`;
+  if (status) return `Provider request failed with HTTP ${status}. Review the Provider settings and try again.`;
+  if (/timeout|timed out/i.test(raw)) return "Provider request timed out. Check the Provider connection and retry.";
+  if (/network|connection|could not connect|dns/i.test(raw)) return "Rho could not reach the Provider. Check its Base URL and network connection.";
+  const firstLine = raw.split(/\r?\n/).map((line) => line.trim()).find((line) => line && !/^url\s*:/i.test(line));
+  return firstLine
+    ? `Provider request failed: ${truncateText(firstLine.replace(/https?:\/\/\S+/gi, "[redacted endpoint]"), 180)}`
+    : "Provider request failed without additional details.";
+}
+
+function agentTurnFailureMessage(error) {
+  const raw = typeof error === "string" ? error : error?.message || String(error || "");
+  return /provider|api request|http\D{0,12}\d{3}/i.test(raw)
+    ? agentProviderFailureMessage(raw)
+    : userFacingError(raw, "The Agent could not complete this task. Open it to review what happened.");
+}
+
 function reportUiFailure(context, error, fallback) {
   console.error(`[${context}]`, error);
   return userFacingError(error, fallback);
@@ -6798,6 +6829,7 @@ function parseAgentMentionInput(value, cursor) {
 function agentTimelineEventBody(event) {
   if (event.event_type === "agent.user_prompt" || event.event_type === "chat.message_completed") return event.body;
   if (event.event_type === "agent.run_started") return "Rho is working on this task.";
+  if (event.event_type === "desktop.agent_failed") return agentProviderFailureMessage(event.body);
   if (event.event_type === "approval.requested") return "Review the requested action before work continues.";
   if (event.event_type === "tool.call_completed" && event.tool === "propose_file_edit") {
     return "Review the proposed file edit below. No file has been changed yet.";
@@ -6826,6 +6858,7 @@ function agentTimelineEventTitle(event) {
     "agent.user_prompt:": "You",
     "agent.run_started:": "Rho started",
     "chat.message_completed:": "Rho",
+    "desktop.agent_failed:": "Provider request failed",
     "approval.requested:run_r": "Review R code",
     "tool.call_started:run_r": "Running R",
     "tool.call_completed:run_r": "R completed",
@@ -10191,11 +10224,11 @@ function renderAgentTimelineContent() {
     content.append(headingRow, paragraph);
     const detail = truncateText(
       turn.error_message
-        ? userFacingError(turn.error_message, "The Agent could not complete this task. Open it to review what happened.")
+        ? agentTurnFailureMessage(turn.error_message)
         : turn.final_message || "",
       140,
     );
-    if (detail && !selected) {
+    if (detail && (!selected || turn.error_message)) {
       const detailLine = document.createElement("p");
       detailLine.textContent = detail;
       content.append(detailLine);
@@ -17890,6 +17923,61 @@ function selectedFileEditProposal() {
   };
 }
 
+function fileEditProposalStructuralIssue(proposal) {
+  if (!proposal) return { state: "invalid", code: "missing", message: "This file proposal is unavailable." };
+  const context = proposal.editorContext || {};
+  if (["replace_selection", "insert_at_cursor"].includes(proposal.operation)) {
+    if (context.active_path !== proposal.path) {
+      return {
+        state: "invalid",
+        code: "target_mismatch",
+        message: "The Agent proposed an editor-position change for a different active file. Select the target source and ask Rho again.",
+      };
+    }
+    const start = Number(context.selection_start);
+    const end = Number(context.selection_end);
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start) {
+      return {
+        state: "invalid",
+        code: "range_invalid",
+        message: "The Agent proposal has no valid editor range. Select the exact source and ask Rho again.",
+      };
+    }
+    if (proposal.operation === "replace_selection"
+      && (start === end || !String(context.selection_text || ""))) {
+      return {
+        state: "invalid",
+        code: "empty_selection",
+        message: "The Agent proposed Replace selection, but no text was selected when the turn started. Select the exact code to replace and ask Rho again.",
+      };
+    }
+    if (proposal.operation === "insert_at_cursor" && start !== end) {
+      return {
+        state: "invalid",
+        code: "cursor_range_not_empty",
+        message: "The Agent proposed Insert at cursor with a non-empty range. Place the cursor and ask Rho again.",
+      };
+    }
+  }
+  return null;
+}
+
+function fileEditProposalPreflight(proposal) {
+  const structuralIssue = fileEditProposalStructuralIssue(proposal);
+  if (structuralIssue) return structuralIssue;
+  const detailTurn = state.selectedTurnDetail?.turn;
+  const turn = state.agentTurns.find((item) => item.turn_id === proposal.turnId)
+    || (detailTurn?.turn_id === proposal.turnId ? detailTurn : null);
+  if (turn && ["queued", "running", "waiting"].includes(turn.status)) {
+    return {
+      state: "waiting",
+      code: "turn_active",
+      message: "Wait for this Agent turn to finish before accepting its file proposal.",
+    };
+  }
+  return { state: "ready", code: null, message: null };
+}
+
 function fileEditOperationLabel(operation) {
   return {
     replace_selection: "Replace selection",
@@ -17973,8 +18061,20 @@ function fileEditDecisionForProposal(proposal) {
   };
 }
 
-function renderFileEditDecisionNote(decision, undoAvailable, durable) {
+function renderFileEditDecisionNote(decision, undoAvailable, durable, preflight) {
   const note = $("#fileEditDecisionNote");
+  if (!decision && preflight?.state === "invalid") {
+    note.textContent = preflight.message;
+    note.className = "file-edit-note stale";
+    note.classList.remove("hidden");
+    return;
+  }
+  if (!decision && preflight?.state === "waiting") {
+    note.textContent = preflight.message;
+    note.className = "file-edit-note";
+    note.classList.remove("hidden");
+    return;
+  }
   if (decision === "accepted" && undoAvailable) {
     note.textContent = durable?.note
       ? `${durable.note} Undo is still available for this latest accepted proposal.`
@@ -18104,6 +18204,7 @@ function renderFileEditPanel() {
   state.fileEditProposal = proposal;
   const decisionView = proposal ? fileEditDecisionForProposal(proposal) : { decision: null, durable: null };
   const { decision, durable } = decisionView;
+  const preflight = proposal ? fileEditProposalPreflight(proposal) : null;
   const visible = Boolean(proposal);
   const panel = $("#fileEditPanel");
   panel.classList.toggle("hidden", !visible);
@@ -18135,7 +18236,11 @@ function renderFileEditPanel() {
               ? "Applying"
               : decision === "uncertain"
                 ? "Outcome uncertain · inspect file"
-      : "Review before applying";
+                : preflight?.state === "invalid"
+                  ? "Invalid · select source"
+                  : preflight?.state === "waiting"
+                    ? "Waiting for Agent"
+                    : "Review before applying";
   $("#fileEditSummary").textContent = `${fileEditOperationLabel(proposal.operation)} · ${summaryState}`;
   const preview = contextualFileEditPreview(proposal);
   setScrollableTextContent(
@@ -18152,10 +18257,11 @@ function renderFileEditPanel() {
   const undoAvailable = accepted
     && state.fileEditUndo?.key === proposal.key
     && state.fileEditUndoVerifiedKey === proposal.key;
-  const reviewable = !decision || decision === "not_applied";
-  renderFileEditDecisionNote(decision, undoAvailable, durable);
+  const unresolved = !decision || decision === "not_applied";
+  const reviewable = unresolved && preflight?.state === "ready";
+  renderFileEditDecisionNote(decision, undoAvailable, durable, preflight);
   $("#fileEditAccept").classList.toggle("hidden", !reviewable);
-  $("#fileEditReject").classList.toggle("hidden", !reviewable);
+  $("#fileEditReject").classList.toggle("hidden", !unresolved);
   $("#fileEditUndo").classList.toggle("hidden", !undoAvailable);
   if (panelViewport) {
     panel.scrollTop = panelViewport.top;
@@ -18194,6 +18300,7 @@ function maybeAutoApplyFileEditProposal() {
   const proposal = state.fileEditProposal;
   if (!proposal
     || fileEditDecisionForProposal(proposal).decision
+    || fileEditProposalPreflight(proposal).state !== "ready"
     || !state.actAuthorizedTurnIds.has(proposal.turnId)
     || state.fileEditAutoApplyAttempts.has(proposal.key)
     || proposal.editorContext?.project_root !== state.project.root) return;
@@ -18252,18 +18359,18 @@ function calculateProposedFileEdit(proposal, beforeContent) {
   const start = Number(context.selection_start);
   const end = Number(context.selection_end);
   if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start || end > beforeContent.length) {
-    throw new Error("The saved editor range is no longer valid. Ask the Agent to create a fresh proposal.");
+    throw new Error("AGENT_FILE_RESOURCE_STALE: The saved editor range is no longer valid. Ask the Agent to create a fresh proposal.");
   }
   if (proposal.operation === "replace_selection") {
     if (start === end || beforeContent.slice(start, end) !== String(context.selection_text || "")) {
-      throw new Error("The selected text changed after this proposal was created. Ask the Agent to regenerate it.");
+      throw new Error("AGENT_FILE_RESOURCE_STALE: The selected text changed after this proposal was created. Ask the Agent to regenerate it.");
     }
   } else if (proposal.operation === "insert_at_cursor") {
     const beforeAnchor = String(context.anchor_before || "");
     const afterAnchor = String(context.anchor_after || "");
     if (!beforeContent.slice(Math.max(0, start - beforeAnchor.length), start).endsWith(beforeAnchor)
       || !beforeContent.slice(end, end + afterAnchor.length).startsWith(afterAnchor)) {
-      throw new Error("The cursor context changed after this proposal was created. Ask the Agent to regenerate it.");
+      throw new Error("AGENT_FILE_RESOURCE_STALE: The cursor context changed after this proposal was created. Ask the Agent to regenerate it.");
     }
   } else {
     throw new Error(`Unsupported file edit operation: ${proposal.operation}`);
@@ -18354,6 +18461,13 @@ async function acceptFileEditProposal({ automatic = false } = {}) {
   button.disabled = true;
   updateAgentHeader();
   try {
+    const preflight = fileEditProposalPreflight(proposal);
+    if (preflight.state === "invalid") {
+      throw new Error(`AGENT_FILE_PROPOSAL_INVALID: ${preflight.message}`);
+    }
+    if (preflight.state === "waiting") {
+      throw new Error(`AGENT_FILE_TURN_ACTIVE: ${preflight.message}`);
+    }
     const exists = state.project.files.some((file) => file.path === proposal.path);
     if (proposal.operation === "create" && exists) {
       throw new Error(`Cannot create ${proposal.path}: the file already exists.`);
@@ -18407,6 +18521,7 @@ async function acceptFileEditProposal({ automatic = false } = {}) {
     toast(`${automatic ? "Automatically applied" : "Applied"} Agent edit to ${proposal.path}.`);
   } catch (error) {
     state.internalProjectWrites.delete(proposal.path);
+    const errorMessage = typeof error === "string" ? error : error?.message || String(error || "");
     if (isAgentFileResourceStale(error)) {
       state.fileEditDecisions.set(proposal.key, "stale");
       if (state.fileEditUndo?.key === proposal.key) state.fileEditUndo = null;
@@ -18415,7 +18530,14 @@ async function acceptFileEditProposal({ automatic = false } = {}) {
       renderFileEditPanel();
     }
     await loadAgentData({ quiet: true });
-    toast(reportUiFailure("apply Agent file edit", error, "The proposed edit could not be applied. Refresh the project and review the proposal again."), true);
+    const message = errorMessage.includes("AGENT_FILE_PROPOSAL_INVALID")
+      ? errorMessage.replace(/^.*AGENT_FILE_PROPOSAL_INVALID:\s*/, "")
+      : errorMessage.includes("AGENT_FILE_TURN_ACTIVE")
+        ? "Wait for this Agent turn to finish before accepting its file proposal."
+        : isAgentFileResourceStale(error)
+          ? "The target file changed after this proposal was created. Review the latest file and ask Rho for a fresh proposal."
+          : reportUiFailure("apply Agent file edit", error, "The proposed edit could not be applied. Review the proposal and try again.");
+    toast(message, true);
   } finally {
     state.fileEditApplyBusy = false;
     button.disabled = false;
