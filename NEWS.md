@@ -4,6 +4,18 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.1-dev.1 - 2026-08-18
+
+### Credentials
+
+- macOS startup and ordinary Model settings projection no longer read every
+  Provider API key. Keychain access is deferred to the exact Provider used by
+  an Agent turn, model test, model discovery, or explicit credential action,
+  preventing one authorization dialog per configured Provider.
+- Credential presence observations remain process-local and contain no secret;
+  Provider secrets remain isolated system-credential items and are never added
+  to settings, browser storage, logs, or the new status cache.
+
 ## 0.4.1-dev.0 - 2026-08-18
 
 ### Internal extension runtime

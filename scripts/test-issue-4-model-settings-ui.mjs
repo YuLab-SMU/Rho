@@ -177,7 +177,7 @@ for (const failure of ["save-provider", "set-credential", "save-model", "test-mo
 }
 assert.match(js, /scenario === "model-settings"/);
 assert.match(js, /previewParams\.get\("state"\) === "wizard"/);
-for (const previewState of ["empty", "key-missing", "storage-unavailable", "disabled-models", "no-models", "ready-to-test", "connection-error", "long-name"]) {
+for (const previewState of ["empty", "key-missing", "credential-unchecked", "storage-unavailable", "disabled-models", "no-models", "ready-to-test", "connection-error", "long-name"]) {
   assert.ok(js.includes(`"${previewState}"`), `Deterministic preview state ${previewState} must exist`);
 }
 assert.match(js, /root\.classList\.toggle\("agent-llm-parent-suspended", inert\)/);

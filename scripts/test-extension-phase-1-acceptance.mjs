@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-const EXPECTED_VERSION = "0.4.1-dev.0";
+const EXPECTED_VERSION = "0.4.1-dev.1";
 const read = (path) => fs.readFileSync(path, "utf8");
 
 export function validatePhase1Acceptance(value) {
@@ -14,10 +14,13 @@ export function validatePhase1Acceptance(value) {
   const localVersions = [...value.cargoLock.matchAll(/name = "rho-[^"]+"\nversion = "([^"]+)"/g)].map((match) => match[1]);
   assert.ok(localVersions.length >= 11, "Cargo.lock omitted local Rho packages");
   assert.ok(localVersions.every((version) => version === EXPECTED_VERSION), "Cargo.lock local versions diverged");
-  assert.match(value.index, /styles\.css\?v=0\.4\.1-dev\.0/);
-  assert.match(value.index, /app\.js\?v=0\.4\.1-dev\.0/);
-  assert.ok((value.frontend.match(/0\.4\.1-dev\.0/g) ?? []).length >= 2, "browser version fixtures diverged");
-  assert.match(value.news, /^## 0\.4\.1-dev\.0 - 2026-08-18$/m, "NEWS candidate section is missing");
+  const expectedVersionPattern = EXPECTED_VERSION.replaceAll(".", "\\.");
+  assert.match(value.index, new RegExp(`styles\\.css\\?v=${expectedVersionPattern}`));
+  assert.match(value.index, new RegExp(`app\\.js\\?v=${expectedVersionPattern}`));
+  assert.ok((value.frontend.match(new RegExp(expectedVersionPattern, "g")) ?? []).length >= 2, "browser version fixtures diverged");
+  assert.match(value.news, /^## 0\.4\.1-dev\.1 - 2026-08-18$/m, "NEWS candidate section is missing");
+  assert.match(value.news, /Keychain access is deferred to the exact Provider/,
+    "NEWS must record lazy selected-Provider credential access");
   assert.match(value.news, /internal first-party runtime,\n  not a public plugin SDK/, "NEWS must not claim a public SDK");
 
   assert.match(value.runtime, /None \| Some\("candidate"\) => Self::Candidate/, "candidate is not the missing-variable default");
@@ -64,7 +67,7 @@ function fixture() {
     packageLock: JSON.stringify({ version: EXPECTED_VERSION, packages: { "": { version: EXPECTED_VERSION } } }),
     index: `styles.css?v=${EXPECTED_VERSION}\napp.js?v=${EXPECTED_VERSION}`,
     frontend: `${EXPECTED_VERSION}\n${EXPECTED_VERSION}`,
-    news: `## ${EXPECTED_VERSION} - 2026-08-18\ninternal first-party runtime,\n  not a public plugin SDK`,
+    news: `## ${EXPECTED_VERSION} - 2026-08-18\nKeychain access is deferred to the exact Provider\ninternal first-party runtime,\n  not a public plugin SDK`,
     runtime: `None | Some("candidate") => Self::Candidate\nSome("legacy") => Self::Legacy`,
     runtimeTests: `parse(None, sink.as_ref()), InternalExtensionRuntimeMode::Candidate`,
     desktop: `build_extension_host(None, diagnostics())\nasync fn smoke_extension_runtime() {}\n"candidate_exercised": true\n"run_history_parity": true\n"workspace_snapshot_typed": true\n"viewer_host_injected": true\n"old_workspace_rejected": true\n"legacy_override_exercised": true\norg.yulab.rho.run-history\norg.yulab.rho.workspace-snapshot-tool\norg.yulab.rho.project-file-viewer`,

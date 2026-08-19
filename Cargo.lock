@@ -3735,7 +3735,7 @@ dependencies = [
 
 [[package]]
 name = "rho-agent-transport"
-version = "0.4.1-dev.0"
+version = "0.4.1-dev.1"
 dependencies = [
  "rand 0.9.5",
  "rho-protocol",
@@ -3746,7 +3746,7 @@ dependencies = [
 
 [[package]]
 name = "rho-cli"
-version = "0.4.1-dev.0"
+version = "0.4.1-dev.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -3761,7 +3761,7 @@ dependencies = [
 
 [[package]]
 name = "rho-core"
-version = "0.4.1-dev.0"
+version = "0.4.1-dev.1"
 dependencies = [
  "rho-protocol",
  "serde",
@@ -3770,7 +3770,7 @@ dependencies = [
 
 [[package]]
 name = "rho-desktop"
-version = "0.4.1-dev.0"
+version = "0.4.1-dev.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -3802,7 +3802,7 @@ dependencies = [
 
 [[package]]
 name = "rho-extension-runtime"
-version = "0.4.1-dev.0"
+version = "0.4.1-dev.1"
 dependencies = [
  "arc-swap",
  "petgraph",
@@ -3816,7 +3816,7 @@ dependencies = [
 
 [[package]]
 name = "rho-kernel"
-version = "0.4.1-dev.0"
+version = "0.4.1-dev.1"
 dependencies = [
  "anyhow",
  "jet_core",
@@ -3828,7 +3828,7 @@ dependencies = [
 
 [[package]]
 name = "rho-mcp"
-version = "0.4.1-dev.0"
+version = "0.4.1-dev.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -3841,7 +3841,7 @@ dependencies = [
 
 [[package]]
 name = "rho-protocol"
-version = "0.4.1-dev.0"
+version = "0.4.1-dev.1"
 dependencies = [
  "chrono",
  "serde",
@@ -3852,7 +3852,7 @@ dependencies = [
 
 [[package]]
 name = "rho-server"
-version = "0.4.1-dev.0"
+version = "0.4.1-dev.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -3871,7 +3871,7 @@ dependencies = [
 
 [[package]]
 name = "rho-store"
-version = "0.4.1-dev.0"
+version = "0.4.1-dev.1"
 dependencies = [
  "chrono",
  "rho-protocol",
@@ -3885,7 +3885,7 @@ dependencies = [
 
 [[package]]
 name = "rho-updater-verifier"
-version = "0.4.1-dev.0"
+version = "0.4.1-dev.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",

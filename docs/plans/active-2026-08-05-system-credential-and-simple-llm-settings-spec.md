@@ -31,6 +31,11 @@ owner authorized push, upstream merge, and Issue reply on 2026-08-10; PR #31
 merged the reviewed source into upstream `main` at `e89ed70`, and the
 application identity is synchronized to `0.4.0-dev.28`, while owner
 installed-app acceptance remains open;
+CRED-KEYCHAIN-R1 lazy Provider credential access was explicitly authorized by
+the project owner on 2026-08-18 after the unsigned `0.4.1-dev.0` macOS test app
+prompted once per configured Keychain item during ordinary startup; the
+bounded repair, complete affected automated matrix, security review, and local
+`0.4.1-dev.1` UI acceptance completed 2026-08-18;
 CRED-UX4B isolated workers and CRED-UX4C media interaction remain unauthorized
 
 Change class: D3 credential boundary and cross-process execution configuration
@@ -112,6 +117,121 @@ Windows system credential the only Agent LLM API-key source. Legacy
 `.Renviron` credential detection, editing, and fallback are intentionally
 removed; this does not change Workspace R's separate project-environment
 workflow.
+
+Authorized defect repair: `CRED-KEYCHAIN-R1` removes secret reads from settings
+projection and ordinary application startup. It may add one process-local,
+non-secret observation per Provider (`unchecked`, `detected`, `not_detected`,
+or `unavailable`), update that observation after an explicit credential
+read/write/delete, and defer Keychain access until the user actually invokes,
+tests, discovers models for, or destructively changes that exact Provider. It
+may not combine Provider secrets, cache secret values, add a second credential
+store, persist an observation, infer a credential from the environment, or
+weaken backend missing/denied/no-fallback enforcement.
+
+### CRED-KEYCHAIN-R1 reproduction and invariant
+
+The unsigned `0.4.1-dev.0` app reproduced the defect on 2026-08-18. Local
+metadata contained eleven API-key-required Providers. Ordinary startup called
+`loadAgentLlmSettings()` -> `agent_llm_settings` -> `settings_view()` ->
+`credential_status_map()`, which invoked Keyring `get_password()` for every
+Provider-specific item under service `Rho Agent LLM`. macOS authorization is
+item-scoped, while the test app is ad-hoc/linker-signed with no Team ID and a
+cdhash-based designated requirement that changes after rebuild. The result was
+a queue of password dialogs before the user chose any Provider.
+
+The repaired invariant is:
+
+- `agent_llm_settings`, application startup, metadata-only settings reload,
+  route/model/provider save, and rendering perform zero credential-store reads;
+- an API-key-required Provider with no process observation is projected as
+  `credential_status=unchecked`, never as missing or detected;
+- `unchecked` does not block a route or model in the frontend, but the backend
+  still reads only the effective Provider before a turn/task and rejects a
+  missing or denied credential truthfully;
+- model discovery and connection test read only their selected Provider;
+- successful set/delete and explicit reads update only non-secret process
+  observation state; no credential value is retained by that cache;
+- concurrent or repeated metadata rendering cannot create Keychain prompts;
+- Provider deletion retains its existing selected-Provider read/delete/restore
+  transaction and may prompt because it is an explicit destructive action; and
+- stable signing may improve operating-system ACL reuse later, but correctness
+  does not depend on signing or `Always Allow`.
+
+Regression evidence must cover zero-read startup/settings projection, unknown,
+detected, missing, unavailable, set/delete transitions, exact selected-Provider
+turn/task/discovery/test access, no fallback, frontend `unchecked` projection,
+mock parity, secret non-persistence/redaction, and existing Provider deletion
+recovery. This is D1/R3 because it narrows credential access without changing
+schema, provider IDs, Keychain service/account layout, network authority, or
+public protocol. Version/NEWS and a rebuilt local macOS test app are decided at
+the repair stop gate.
+
+### CRED-KEYCHAIN-R1 implementation evidence
+
+Implemented on 2026-08-18 for application candidate `0.4.1-dev.1`:
+
+- settings projection now consumes only a process-local
+  `CredentialObservation` map and cannot receive a `CredentialStore`;
+- absent observations project as `unchecked/unchecked`; successful exact
+  Provider reads, writes, and deletes update only `Detected`, `NotDetected`, or
+  `Unavailable` and never retain the secret value;
+- connection tests no longer scan every Provider before and after the selected
+  probe; they read the resolved Provider once and then project observations;
+- frontend routing, Agent repair, wizard, test, and deletion states distinguish
+  `unchecked` from known missing, disclose "Checked when used", and preserve
+  backend selected-Provider enforcement;
+- browser/mock explicit use resolves `unchecked` against only the selected
+  mock Provider, and an explicit `credential-unchecked` fixture protects the
+  initial projection; and
+- Provider deletion continues to read/delete/restore only its selected
+  Provider, with an unknown item disclosed as "Check and remove key if
+  present" before confirmation.
+
+Automated evidence:
+
+```text
+cargo fmt --all -- --check
+  passed
+cargo test -p rho-desktop --bin rho-desktop --locked
+  passed: 200; ignored: 1 existing opt-in native Keychain smoke
+cargo check --workspace --all-targets --locked
+  passed
+cargo test --workspace --locked --no-fail-fast
+  passed: 454; ignored: the same opt-in native Keychain smoke
+Rscript -e 'testthat::test_local("r/rho.agent")'
+  passed: 120
+for test_script in scripts/test-*.mjs; do node "$test_script"; done
+  passed: every tracked Node contract
+node --check desktop/dist/app.js
+git diff --check
+  passed
+```
+
+An exploratory `cargo clippy -p rho-desktop --all-targets --locked --no-deps
+-- -D warnings` is not a passing gate: current Rust 1.97 reports existing
+warnings across untouched `agent_llm.rs`, `git.rs`, `git_review.rs`, and
+`main.rs`. The repair introduced no reported lint at its changed lines; the
+standard format/check/test gates above pass. The broader warning baseline is
+not changed in this credential repair.
+
+Local unsigned macOS arm64 acceptance rebuilt
+`target/aarch64-apple-darwin/release/bundle/macos/Rho.app` as `0.4.1-dev.1`.
+Its arm64 executable SHA-256 is
+`e576503f0e625fd8a9c6090d03d4120246ce443c19a8b9c7d2a4252654fbb14a`.
+The final app launched to a ready Workspace with eleven API-key-required
+Provider metadata records and no Keychain/password dialog. Opening Agent and
+Model settings also produced no dialog; the selected Provider displayed
+"Checked when used" and "Check and remove key". No credential was entered,
+read, changed, transmitted, or deleted during this manual review. The app is
+left running for owner testing.
+
+Security/contract review found no blocking issue: the observation cache has no
+secret-bearing variant, no persisted or browser credential state was added,
+exact Provider reads and no-fallback behavior remain backend-owned, and the
+Keychain service/account layout is unchanged. R package versions remain
+unchanged. `NEWS.md` and all application version surfaces advance to
+`0.4.1-dev.1`. No tag, Release, signing identity, publication, updater manifest,
+or release GO is created.
 
 ## Goal
 

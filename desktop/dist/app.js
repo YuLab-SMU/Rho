@@ -2182,7 +2182,7 @@ async function mockInvoke(command, args) {
   await new Promise((resolve) => setTimeout(resolve, command === "run_agent" ? 800 : 300));
   if (command === "app_info") {
     return {
-      version: "0.4.1-dev.0",
+      version: "0.4.1-dev.1",
       channel: "stable",
       commit: "4090cf725c53ab657ba9dfc9743ec6159f27dcf9",
       platform: mockPlatformFixture.platform,
@@ -2200,7 +2200,7 @@ async function mockInvoke(command, args) {
     return {
       status: "up_to_date",
       channel: "stable",
-      installed_version: "0.4.1-dev.0",
+      installed_version: "0.4.1-dev.1",
       available_version: null,
       published_at: null,
       summary: null,
@@ -3334,6 +3334,11 @@ async function mockInvoke(command, args) {
     if (agentModelType(model) !== "language") throw new Error("Connection probes are available only for language models.");
     const provider = mockAgentLlmSettings.providers.find((item) => item.id === model.provider_id);
     if (!provider) throw new Error(`Missing provider for Agent model ${model.display_name}`);
+    if (provider.api_key_required && provider.credential_status === "unchecked") {
+      const detected = mockAgentLlmSystemCredentials.has(provider.id);
+      provider.credential_status = detected ? "detected" : "not_detected";
+      provider.credential_source = detected ? "system" : "none";
+    }
     if (provider.api_key_required && provider.credential_status !== "detected") {
       model.last_test = {
         status: "error",
@@ -3392,6 +3397,11 @@ async function mockInvoke(command, args) {
     const providerProfile = modelProfile
       ? mockAgentLlmSettings.providers.find((item) => item.id === modelProfile.provider_id)
       : null;
+    if (providerProfile?.api_key_required && providerProfile.credential_status === "unchecked") {
+      const detected = mockAgentLlmSystemCredentials.has(providerProfile.id);
+      providerProfile.credential_status = detected ? "detected" : "not_detected";
+      providerProfile.credential_source = detected ? "system" : "none";
+    }
     if (taskKind === "problem_repair" && providerProfile?.api_key_required
       && providerProfile.credential_status !== "detected") {
       throw new Error("Problem repair is unavailable because the effective agent.act Provider credential is missing.");
@@ -8001,6 +8011,7 @@ function credentialStatusLabel(provider) {
   if (!provider?.api_key_required || provider?.credential_status === "not_required") return "Not required";
   if (provider.credential_status === "unavailable") return "Credential storage unavailable";
   if (provider.credential_status === "detected" && provider.credential_source === "system") return "Stored securely";
+  if (provider.credential_status === "unchecked") return "Checked when used";
   return "Not set";
 }
 
@@ -8009,7 +8020,7 @@ function providerReadiness(provider, settings = state.agentLlm.settings) {
   if (provider.credential_status === "unavailable") {
     return { state: "error", label: "Storage unavailable", detail: "Credential storage unavailable" };
   }
-  if (provider.api_key_required && provider.credential_status !== "detected") {
+  if (provider.api_key_required && provider.credential_status === "not_detected") {
     return { state: "warning", label: "Needs API key", detail: "API key not set" };
   }
   const models = (settings?.models || []).filter((model) => model.provider_id === provider.id);
@@ -8037,7 +8048,8 @@ function syncAgentLlmOperationSubmissionState(scope, working) {
   if (scope === "main") {
     const provider = currentProviderRecord();
     const model = currentModelRecord();
-    const missingCredential = provider?.api_key_required && provider.credential_status !== "detected";
+    const missingCredential = provider?.api_key_required
+      && ["not_detected", "unavailable"].includes(provider.credential_status);
     const baseDisabled = new Map([
       ["#agentLlmAddProvider", false],
       ["#agentLlmAddModel", !provider],
@@ -8047,7 +8059,7 @@ function syncAgentLlmOperationSubmissionState(scope, working) {
       ["#agentLlmSelectDefault", !model || !model.enabled],
       ["#agentLlmSaveProvider", !provider],
       ["#agentLlmDeleteProvider", !provider],
-      ["#agentLlmDeleteCredential", provider?.credential_source !== "system"],
+      ["#agentLlmDeleteCredential", !["system", "unchecked"].includes(provider?.credential_source)],
     ]);
     for (const [selector, disabled] of baseDisabled) {
       const button = $(selector);
@@ -8101,9 +8113,13 @@ function renderAgentCredentialFields() {
       : "Optional for reviewed registered Providers; otherwise leave blank.";
   $("#agentLlmCredentialField").classList.toggle("hidden", !keyRequired);
   $("#agentLlmCredentialStatus").textContent = keyRequired ? credentialStatusLabel(provider) : "Not required";
-  $("#agentLlmDeleteCredential").classList.toggle(
+  const deleteCredential = $("#agentLlmDeleteCredential");
+  deleteCredential.textContent = provider?.credential_status === "unchecked"
+    ? "Check and remove key"
+    : "Remove stored key";
+  deleteCredential.classList.toggle(
     "hidden",
-    !keyRequired || provider?.credential_source !== "system"
+    !keyRequired || !["system", "unchecked"].includes(provider?.credential_source)
   );
 }
 
@@ -8582,6 +8598,7 @@ function routeStatusCopy(route, model) {
   details.push(route.compatibility === "compatible" ? "Compatible" : route.compatibility === "needs_review" ? "Needs review" : route.compatibility === "incompatible" ? "Incompatible" : "Not assigned");
   if (model) details.push(agentModelType(model));
   if (route.credential_status === "detected" || route.credential_status === "not_required") details.push("Connection ready");
+  else if (route.credential_status === "unchecked") details.push("Keychain checked when used");
   else if (model) details.push("Key missing");
   if (route.consumer_status !== "available") details.push("Consumer not installed");
   return details.join(" · ");
@@ -9350,7 +9367,7 @@ async function advanceAgentLlmProviderWizard() {
   const provider = readAgentLlmWizardProvider();
   const credential = $("#agentLlmWizardCredential").value;
   const savedProvider = state.agentLlm.settings?.providers?.find((item) => item.id === state.agentLlm.wizardProviderId) || null;
-  const hasStoredCredential = savedProvider?.credential_status === "detected" && savedProvider?.credential_source === "system";
+  const hasStoredCredential = ["detected", "unchecked"].includes(savedProvider?.credential_status);
   if (!provider.display_name) {
     clearAgentLlmCredentialInput();
     setAgentLlmOperationState("warning", "Enter a provider name before continuing.", "wizard");
@@ -9571,6 +9588,7 @@ function agentProviderDeleteImpact(providerId = state.agentLlm.selectedProviderI
     chatRoute: routes.find((route) => route.capability === "agent.chat") || null,
     optionalRoutes: routes.filter((route) => route.capability !== "agent.chat"),
     credentialStored: provider.credential_source === "system" && provider.credential_status === "detected",
+    credentialUnchecked: provider.credential_status === "unchecked",
     credentialUnavailable: provider.credential_source === "unavailable" || provider.credential_status === "unavailable",
   };
 }
@@ -9638,7 +9656,7 @@ function renderAgentProviderDeleteDialog() {
     close.disabled = false;
     return;
   }
-  const { provider, models, optionalRoutes, chatRoute, credentialStored, credentialUnavailable } = impact;
+  const { provider, models, optionalRoutes, chatRoute, credentialStored, credentialUnchecked, credentialUnavailable } = impact;
   const modelCount = models.length;
   const routeCount = optionalRoutes.length;
   $("#agentLlmProviderDeleteTitle").textContent = `Delete ${provider.display_name}?`;
@@ -9649,7 +9667,9 @@ function renderAgentProviderDeleteDialog() {
     ? "Credential store unavailable"
     : credentialStored
       ? "Remove stored key"
-      : "No stored key";
+      : credentialUnchecked
+        ? "Check and remove key if present"
+        : "No stored key";
   $("#agentLlmProviderDeleteSummary").textContent = `One confirmed action removes ${modelCount} imported ${modelCount === 1 ? "model" : "models"}, clears ${routeCount} optional route ${routeCount === 1 ? "assignment" : "assignments"}, and removes only this Provider's stored key when present.`;
   renderAgentProviderDeleteItems(
     $("#agentLlmProviderDeleteModels"),
@@ -9889,10 +9909,13 @@ async function saveAgentLlmCredential() {
 async function deleteAgentLlmCredential() {
   clearAgentLlmCredentialInput();
   const provider = currentProviderRecord();
-  if (!provider || provider.credential_source !== "system") return;
+  if (!provider || !["system", "unchecked"].includes(provider.credential_source)) return;
+  const unchecked = provider.credential_status === "unchecked";
   if (!await confirmAction({
-    title: "Remove stored API key",
-    message: `Remove the API key stored for ${provider.display_name}?`,
+    title: unchecked ? "Check and remove API key" : "Remove stored API key",
+    message: unchecked
+      ? `Check Keychain and remove the API key for ${provider.display_name} if one is stored?`
+      : `Remove the API key stored for ${provider.display_name}?`,
     confirmLabel: "Remove key",
     destructive: true,
   })) return;
@@ -11210,7 +11233,7 @@ function problemRepairRouteReason() {
   if (!route?.model_id) return "Assign a function-calling model to the Act route before starting Agent repair.";
   if (route.compatibility === "needs_review") return "Review the Act model's function-call capability before starting Agent repair.";
   if (route.compatibility !== "compatible") return "Agent repair needs a compatible function-calling model on the Act route.";
-  if (!["detected", "not_required"].includes(route.credential_status)) {
+  if (!["detected", "not_required", "unchecked"].includes(route.credential_status)) {
     return "The Act route Provider connection needs a valid API key before Agent repair can start.";
   }
   return null;
@@ -14784,6 +14807,10 @@ async function maybeApplyPreviewScenario() {
       mockAgentLlmSystemCredentials.delete(mockAgentLlmSettings.providers[0].id);
       mockAgentLlmSettings.providers[0].credential_status = "not_detected";
       mockAgentLlmSettings.providers[0].credential_source = "none";
+      rebuildMockAgentLlmSettings();
+    } else if (modelSettingsPreviewState === "credential-unchecked") {
+      mockAgentLlmSettings.providers[0].credential_status = "unchecked";
+      mockAgentLlmSettings.providers[0].credential_source = "unchecked";
       rebuildMockAgentLlmSettings();
     } else if (modelSettingsPreviewState === "storage-unavailable") {
       mockAgentLlmSettings.providers[0].credential_status = "unavailable";
