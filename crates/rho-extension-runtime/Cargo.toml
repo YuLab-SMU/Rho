@@ -17,6 +17,8 @@ thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 uuid.workspace = true
+wasmtime.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+wat.workspace = true

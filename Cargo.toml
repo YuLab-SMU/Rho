@@ -16,7 +16,7 @@ members = [
 exclude = ["vendor/jet"]
 
 [workspace.package]
-version = "0.4.1-dev.1"
+version = "0.4.1-dev.2"
 edition = "2024"
 rust-version = "1.88"
 license = "AGPL-3.0-only"
@@ -41,4 +41,6 @@ thiserror = "2.0"
 tokio = { version = "1.0", features = ["full"] }
 tokio-util = { version = "0.7", default-features = false, features = ["rt"] }
 uuid = { version = "1.18", features = ["v4", "serde"] }
+wasmtime = { version = "=38.0.4", default-features = false, features = ["cranelift", "runtime", "std"] }
+wat = { version = "=1.257.1", default-features = false }
 zeroize = "1.9"

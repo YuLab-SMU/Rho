@@ -121,9 +121,11 @@ export function validateCompatibilityWorkflow(text) {
     '".github/workflows/rust-fast.yml"',
     '".github/workflows/candidate-build-draft.yml"',
     '"scripts/test-rust-msrv-contract.mjs"',
+    '"scripts/test-tauri-command-inventory.mjs"',
     '"scripts/test-extension-run-history-contract.mjs"',
     '"scripts/test-extension-p1-3-contract.mjs"',
     '"scripts/test-extension-phase-1-acceptance.mjs"',
+    '"scripts/test-extension-phase-2-host-contract.mjs"',
     '"desktop/dist/app.js"',
     '"desktop/dist/index.html"',
     '"desktop/package.json"',
@@ -154,8 +156,12 @@ export function validateCompatibilityWorkflow(text) {
   }
   for (const command of [
     "node scripts/test-rust-msrv-contract.mjs",
+    "node scripts/test-tauri-command-inventory.mjs --test",
+    "node scripts/test-tauri-command-inventory.mjs",
     "node scripts/test-extension-phase-1-acceptance.mjs --test",
     "node scripts/test-extension-phase-1-acceptance.mjs",
+    "node scripts/test-extension-phase-2-host-contract.mjs --test",
+    "node scripts/test-extension-phase-2-host-contract.mjs",
     "cargo check --workspace --all-targets --locked",
     "cargo test --workspace --locked --no-fail-fast",
   ]) {
@@ -236,9 +242,11 @@ export function validateFastWorkflow(text) {
     '".github/workflows/rust-fast.yml"',
     '".github/workflows/rust-compatibility.yml"',
     '"scripts/test-rust-msrv-contract.mjs"',
+    '"scripts/test-tauri-command-inventory.mjs"',
     '"scripts/test-extension-run-history-contract.mjs"',
     '"scripts/test-extension-p1-3-contract.mjs"',
     '"scripts/test-extension-phase-1-acceptance.mjs"',
+    '"scripts/test-extension-phase-2-host-contract.mjs"',
     '"desktop/dist/app.js"',
     '"desktop/dist/index.html"',
     '"desktop/package.json"',
@@ -251,6 +259,8 @@ export function validateFastWorkflow(text) {
   for (const command of [
     "node scripts/test-rust-msrv-contract.mjs --test",
     "node scripts/test-rust-msrv-contract.mjs",
+    "node scripts/test-tauri-command-inventory.mjs --test",
+    "node scripts/test-tauri-command-inventory.mjs",
     "node scripts/test-license-contract.mjs --test",
     "node scripts/test-license-contract.mjs",
     "node scripts/test-extension-run-history-contract.mjs --test",
@@ -259,6 +269,8 @@ export function validateFastWorkflow(text) {
     "node scripts/test-extension-p1-3-contract.mjs",
     "node scripts/test-extension-phase-1-acceptance.mjs --test",
     "node scripts/test-extension-phase-1-acceptance.mjs",
+    "node scripts/test-extension-phase-2-host-contract.mjs --test",
+    "node scripts/test-extension-phase-2-host-contract.mjs",
     "cargo fmt --all -- --check",
     "cargo check --workspace --all-targets --locked",
     "cargo test --workspace --locked --no-fail-fast",
@@ -344,9 +356,11 @@ on:
       - ".github/workflows/rust-fast.yml"
       - ".github/workflows/candidate-build-draft.yml"
       - "scripts/test-rust-msrv-contract.mjs"
+      - "scripts/test-tauri-command-inventory.mjs"
       - "scripts/test-extension-run-history-contract.mjs"
       - "scripts/test-extension-p1-3-contract.mjs"
       - "scripts/test-extension-phase-1-acceptance.mjs"
+      - "scripts/test-extension-phase-2-host-contract.mjs"
   pull_request:
     branches: [main]
     types: [opened, reopened, synchronize, ready_for_review]
@@ -370,9 +384,11 @@ on:
       - ".github/workflows/rust-fast.yml"
       - ".github/workflows/candidate-build-draft.yml"
       - "scripts/test-rust-msrv-contract.mjs"
+      - "scripts/test-tauri-command-inventory.mjs"
       - "scripts/test-extension-run-history-contract.mjs"
       - "scripts/test-extension-p1-3-contract.mjs"
       - "scripts/test-extension-phase-1-acceptance.mjs"
+      - "scripts/test-extension-phase-2-host-contract.mjs"
 permissions:
   contents: read
 concurrency:
@@ -409,8 +425,12 @@ ${entries}
         run: cargo fmt --all -- --check
       - run: |
           node scripts/test-rust-msrv-contract.mjs
+          node scripts/test-tauri-command-inventory.mjs --test
+          node scripts/test-tauri-command-inventory.mjs
           node scripts/test-extension-phase-1-acceptance.mjs --test
           node scripts/test-extension-phase-1-acceptance.mjs
+          node scripts/test-extension-phase-2-host-contract.mjs --test
+          node scripts/test-extension-phase-2-host-contract.mjs
           cargo check --workspace --all-targets --locked
           cargo test --workspace --locked --no-fail-fast
       - name: Build, install, smoke and remove unsigned Windows app
@@ -459,9 +479,11 @@ on:
       - ".github/workflows/rust-fast.yml"
       - ".github/workflows/rust-compatibility.yml"
       - "scripts/test-rust-msrv-contract.mjs"
+      - "scripts/test-tauri-command-inventory.mjs"
       - "scripts/test-extension-run-history-contract.mjs"
       - "scripts/test-extension-p1-3-contract.mjs"
       - "scripts/test-extension-phase-1-acceptance.mjs"
+      - "scripts/test-extension-phase-2-host-contract.mjs"
 permissions:
   contents: read
 concurrency:
@@ -492,6 +514,8 @@ jobs:
       - run: |
           node scripts/test-rust-msrv-contract.mjs --test
           node scripts/test-rust-msrv-contract.mjs
+          node scripts/test-tauri-command-inventory.mjs --test
+          node scripts/test-tauri-command-inventory.mjs
           node scripts/test-license-contract.mjs --test
           node scripts/test-license-contract.mjs
           node scripts/test-extension-run-history-contract.mjs --test
@@ -500,6 +524,8 @@ jobs:
           node scripts/test-extension-p1-3-contract.mjs
           node scripts/test-extension-phase-1-acceptance.mjs --test
           node scripts/test-extension-phase-1-acceptance.mjs
+          node scripts/test-extension-phase-2-host-contract.mjs --test
+          node scripts/test-extension-phase-2-host-contract.mjs
           cargo fmt --all -- --check
           cargo check --workspace --all-targets --locked
           cargo test --workspace --locked --no-fail-fast

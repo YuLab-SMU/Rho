@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod agent_llm;
+mod commands;
 mod git;
 mod git_review;
 mod platform;
@@ -40,10 +41,10 @@ use rho_core::{BrokerState, ExecutionOrigin};
 use rho_extension_runtime::{
     ActivationError, BoundedJson, BrokerError, BrokerFacade, BrokerRequest, BrokerResponse,
     BrokerResponseClass, CapabilityDeclaration, CapabilityId, CapabilityRequirement,
-    DiagnosticCode, DiagnosticSeverity, DiagnosticSink, DisposeOutcome, ExtensionDiagnostic,
-    ExtensionHost, InternalExtensionRuntimeMode, InternalPlugin, LifecycleDeadlines, OperationId,
-    PluginContext, PluginDescriptor, PluginVersion, ProjectFileViewerContribution, ScopeId,
-    ScopeKindId, ScopeSnapshot, SourceCallError, SourceHandler, WorkspaceToolHandler,
+    DiagnosticSink, DisposeOutcome, ExtensionDiagnostic, ExtensionHost,
+    InternalExtensionRuntimeMode, InternalPlugin, LifecycleDeadlines, OperationId, PluginContext,
+    PluginDescriptor, PluginVersion, ProjectFileViewerContribution, ScopeId, ScopeKindId,
+    ScopeSnapshot, SourceHandler, WorkspaceToolHandler,
 };
 use rho_kernel::{ArkLaunchConfig, ArkSession, KernelEvent};
 use rho_server::coordinator::{
@@ -56,10 +57,9 @@ use rho_server::coordinator::{
 use rho_store::{
     AgentConversationDraft, AgentConversationSummary, AgentTurnDetail, AgentTurnDraft,
     AgentTurnEventDraft, AgentTurnFinish, AgentTurnSummary, ApprovalRequestSummary,
-    ArtifactRecordDraft, ArtifactRecordSummary, AuditLimits, AuditResponse, AuditScope,
-    CompareRunsResponse, EnvironmentOperationRequestSummary, EvidenceClaim, EvidenceClaimDraft,
-    EvidenceClaimReview, EvidenceEntry, EvidenceEntryDraft, PlotArtifactSummary,
-    PlotPayloadPruneResult, ProblemSummary, ProjectMutationService, ProjectQueryService,
+    ArtifactRecordDraft, ArtifactRecordSummary, EnvironmentOperationRequestSummary, EvidenceClaim,
+    EvidenceClaimDraft, EvidenceClaimReview, EvidenceEntry, EvidenceEntryDraft,
+    PlotArtifactSummary, PlotPayloadPruneResult, ProjectMutationService, ProjectQueryService,
     ProjectRetentionSummary, RetentionPolicy, RunDetail, RunSummary, Store, normalize_project_root,
 };
 use serde::{Deserialize, Serialize};
@@ -3868,172 +3868,6 @@ async fn respond_environment_operation(
 }
 
 #[tauri::command]
-async fn list_runs(
-    limit: Option<usize>,
-    state: State<'_, AppState>,
-) -> Result<Vec<RunSummary>, String> {
-    list_runs_with_state(limit, &state).await
-}
-
-async fn list_runs_legacy(
-    limit: Option<usize>,
-    state: &AppState,
-) -> Result<Vec<RunSummary>, String> {
-    let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy();
-    let store = read_store(state).map_err(display_error)?;
-    ProjectQueryService::new(&store)
-        .list_runs(project_root.as_ref(), limit)
-        .map_err(display_error)
-}
-
-async fn list_runs_with_state(
-    limit: Option<usize>,
-    state: &AppState,
-) -> Result<Vec<RunSummary>, String> {
-    if state.extension_host.mode() == InternalExtensionRuntimeMode::Legacy {
-        return list_runs_legacy(limit, state).await;
-    }
-
-    let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy().replace('\\', "/");
-    let Some(scope) = state.extension_host.scopes().project() else {
-        return Err("Run History extension project scope is unavailable".to_string());
-    };
-    let expected_scope_id = extension_project_scope_id(&project_root).map_err(display_error)?;
-    if scope.identity().id != expected_scope_id {
-        return Err("Run History extension project scope is stale".to_string());
-    }
-
-    let request = BoundedJson::generic(json!({ "limit": limit })).map_err(display_error)?;
-    let result = match scope
-        .registry()
-        .call_source(&run_history_source_capability_id(), request)
-        .await
-    {
-        Ok(result) => result,
-        Err(error @ SourceCallError::MissingContribution { .. }) => {
-            return Err(display_error(error));
-        }
-        Err(SourceCallError::Routing(error)) => {
-            return Err(display_error(error));
-        }
-        Err(SourceCallError::Payload(error)) => {
-            return Err(display_error(error));
-        }
-        Err(SourceCallError::Handler(error)) => {
-            state
-                .extension_host
-                .scopes()
-                .diagnostics()
-                .emit(ExtensionDiagnostic {
-                    code: DiagnosticCode::SourceCallFailed,
-                    severity: DiagnosticSeverity::Error,
-                    plugin_id: None,
-                    capability_id: Some(run_history_source_capability_id()),
-                    scope_kind: Some(scope.identity().kind.clone()),
-                    scope_id: Some(scope.identity().id.clone()),
-                    activation_generation: Some(scope.identity().generation),
-                    effect_order: None,
-                    related_plugins: Vec::new(),
-                    cycle_path: Vec::new(),
-                    message: error.to_string(),
-                });
-            return Err(display_error(error));
-        }
-    };
-
-    state
-        .extension_host
-        .scopes()
-        .validate_project_current(&result.scope)
-        .map_err(display_error)?;
-    let current_root = state.project_root.read().await.clone();
-    if current_root != root {
-        return Err("Run History result is stale after a project switch".to_string());
-    }
-    serde_json::from_value(result.payload.into_value()).map_err(display_error)
-}
-
-#[tauri::command]
-async fn list_problems(
-    limit: Option<usize>,
-    state: State<'_, AppState>,
-) -> Result<Vec<ProblemSummary>, String> {
-    let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy();
-    let store = read_store(&state).map_err(display_error)?;
-    ProjectQueryService::new(&store)
-        .list_problems(project_root.as_ref(), limit)
-        .map_err(display_error)
-}
-
-#[tauri::command]
-async fn get_run_detail(
-    run_id: String,
-    state: State<'_, AppState>,
-) -> Result<Option<RunDetail>, String> {
-    let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy();
-    let store = read_store(&state).map_err(display_error)?;
-    ProjectQueryService::new(&store)
-        .get_run_detail(project_root.as_ref(), &run_id)
-        .map_err(display_error)
-}
-
-#[tauri::command]
-async fn compare_runs(
-    left_run_id: String,
-    right_run_id: String,
-    state: State<'_, AppState>,
-) -> Result<CompareRunsResponse, String> {
-    let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy();
-    let store = read_store(&state).map_err(display_error)?;
-    ProjectQueryService::new(&store)
-        .compare_runs(project_root.as_ref(), &left_run_id, &right_run_id)
-        .map_err(display_error)
-}
-
-#[tauri::command]
-async fn audit_reproducibility(
-    scope: String,
-    reference_snapshot_id: Option<String>,
-    state: State<'_, AppState>,
-) -> Result<AuditResponse, String> {
-    let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy().replace('\\', "/");
-    let audit_scope = if scope == "project" {
-        AuditScope::Project
-    } else if scope == "project_current" {
-        AuditScope::CurrentProject
-    } else if let Some(rest) = scope.strip_prefix("run:") {
-        AuditScope::Run(rest.to_string())
-    } else if let Some(rest) = scope.strip_prefix("artifact:") {
-        AuditScope::Artifact(rest.to_string())
-    } else {
-        return Err(format!(
-            "invalid audit scope: {scope} (expected 'project', 'project_current', 'run:<id>', or 'artifact:<id>')"
-        ));
-    };
-    let store = read_store(&state).map_err(display_error)?;
-    contain_audit_panic(|| {
-        store.audit_reproducibility(
-            audit_scope,
-            &project_root,
-            reference_snapshot_id.as_deref(),
-            &AuditLimits::default(),
-        )
-    })
-}
-
-fn contain_audit_panic<T>(operation: impl FnOnce() -> T) -> Result<T, String> {
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(operation)).map_err(|_| {
-        "The project reproducibility check failed unexpectedly. Try the check again.".to_string()
-    })
-}
-
-#[tauri::command]
 async fn editor_package_functions(
     packages: Option<Vec<String>>,
     limit: Option<usize>,
@@ -5974,7 +5808,6 @@ async fn targets_status(state: State<'_, AppState>) -> Result<Value, String> {
     .map_err(display_error)
 }
 
-#[tauri::command]
 async fn shutdown_application(state: &AppState) -> Result<(), String> {
     write_startup_log("Rho desktop shutdown started");
     state.shutdown_started.store(true, Ordering::SeqCst);
@@ -8523,14 +8356,13 @@ mod tests {
         agent_retry_source, agent_runtime_probe_expression, agent_runtime_status_from_probe,
         agent_turn_admission_error, append_agent_file_mutation_event, apply_agent_file_edit_state,
         ark_candidate_paths, attach_render_artifact, bounded_diagnostic, cancel_agent_turn_state,
-        classify_startup_error, configure_user_startup, contain_audit_panic,
-        data_view_artifact_metadata, data_view_delimited_text, decode_plot_png_base64,
-        deferred_agent_runtime_status, delete_agent_conversation_state, durable_project_root,
-        editor_format_result, ensure_agent_file_proposal_turn_terminal,
-        ensure_artifact_export_target, ensure_bundled_license_file,
-        ensure_supported_r_architecture, ensure_supported_r_version, existing_startup_file,
-        find_executable_on_path, finish_render_job, has_png_signature, interrupt_all_agent_tasks,
-        list_runs_with_state, load_runtime_cache, locate_ark_from_candidates, locate_rscript,
+        classify_startup_error, configure_user_startup, data_view_artifact_metadata,
+        data_view_delimited_text, decode_plot_png_base64, deferred_agent_runtime_status,
+        delete_agent_conversation_state, durable_project_root, editor_format_result,
+        ensure_agent_file_proposal_turn_terminal, ensure_artifact_export_target,
+        ensure_bundled_license_file, ensure_supported_r_architecture, ensure_supported_r_version,
+        existing_startup_file, find_executable_on_path, finish_render_job, has_png_signature,
+        interrupt_all_agent_tasks, load_runtime_cache, locate_ark_from_candidates, locate_rscript,
         lockfile_inventory_arguments, parse_r_runtime_probe, pending_native_update_matches,
         project_switch_blocker, r_architecture_supported, reconcile_render_job,
         recover_incomplete_agent_file_mutations, render_job_is_terminal, retry_run_arguments,
@@ -8540,6 +8372,7 @@ mod tests {
         validate_persisted_agent_file_proposal_structure, workspace_project_root_code,
         write_r_probe_script,
     };
+    use crate::commands::runs::{contain_audit_panic, list_runs_with_state};
     use crate::platform;
 
     use crate::project::{
@@ -13753,6 +13586,7 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
         &project_a_root,
     )
     .await?;
+    let phase2_wasm_host = smoke_wasm_plugin_host()?;
     let agent = if include_agent {
         let turn_id = format!("smoke_turn_{}", Uuid::new_v4());
         let conversation_id = format!("conversation_{turn_id}");
@@ -13854,6 +13688,7 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
             "project_switch_isolated": true,
             "workspace_restart_project_isolated": true,
             "extension_runtime": extension_runtime,
+            "phase2_wasm_host": phase2_wasm_host,
             "interrupt_recovered": interrupt_requested,
             "crash_recovered": crash_recovered,
             "project_a_run_count": initial_a_runs.len(),
@@ -13864,6 +13699,107 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
         })
     };
     Ok(report)
+}
+
+fn smoke_wasm_plugin_host() -> Result<Value> {
+    use rho_extension_runtime::{
+        ActivationGeneration, HostFrame, HostInstanceId, HostInstanceState, HostMessage,
+        HostProtocolErrorCode, HostRequestId, HostResponse, P2_1_SMOKE_WASM,
+        P2_1_WASI_IMPORT_SMOKE_WASM, PackageDigest, PluginId, ScopeId, WasmHostIdentity,
+        WasmPluginHost,
+    };
+
+    let identity = WasmHostIdentity::new(
+        ScopeId::new("project.installed-smoke")?,
+        PluginId::new("org.yulab.rho.phase2-smoke")?,
+        PackageDigest::from_inventory(&[(b"dist/plugin.wasm", P2_1_SMOKE_WASM)]),
+        ActivationGeneration::new(1)?,
+        HostInstanceId::generate(),
+    );
+    let mut host = WasmPluginHost::from_bytes(identity, P2_1_SMOKE_WASM)
+        .map_err(|error| anyhow!("creating installed P2-1 Wasm host: {error:?}"))?;
+    let make_frame = |host: &WasmPluginHost, message| HostFrame {
+        instance_id: host.identity().host_instance_id().clone(),
+        message,
+    };
+    ensure!(
+        host.handle_frame(make_frame(
+            &host,
+            HostMessage::Hello {
+                api_version: rho_extension_runtime::HOST_PROTOCOL_VERSION,
+            },
+        ))
+        .map_err(|error| anyhow!("negotiating installed P2-1 Wasm host: {error:?}"))?
+            == Some(HostResponse::Ready {
+                api_version: rho_extension_runtime::HOST_PROTOCOL_VERSION,
+            }),
+        "installed P2-1 Wasm host did not negotiate V1"
+    );
+    ensure!(
+        host.handle_frame(make_frame(&host, HostMessage::Activate))
+            .map_err(|error| anyhow!("activating installed P2-1 Wasm host: {error:?}"))?
+            == Some(HostResponse::Activated),
+        "installed P2-1 Wasm host did not activate"
+    );
+    let request_id = HostRequestId::new("request.installed-smoke")?;
+    ensure!(
+        host.handle_frame(make_frame(
+            &host,
+            HostMessage::Echo {
+                request_id: request_id.clone(),
+                payload: "Rho P2 Wasm".to_string(),
+            },
+        ))
+        .map_err(|error| anyhow!("calling installed P2-1 Wasm host: {error:?}"))?
+            == Some(HostResponse::EchoResult {
+                request_id,
+                payload: "Rho P2 Wasm".to_string(),
+            }),
+        "installed P2-1 Wasm host echo diverged"
+    );
+    ensure!(
+        host.handle_frame(make_frame(&host, HostMessage::Heartbeat))
+            .map_err(|error| anyhow!("heartbeating installed P2-1 Wasm host: {error:?}"))?
+            == Some(HostResponse::HeartbeatAck),
+        "installed P2-1 Wasm host heartbeat failed"
+    );
+    ensure!(
+        host.handle_frame(make_frame(&host, HostMessage::Quiesce))
+            .map_err(|error| anyhow!("quiescing installed P2-1 Wasm host: {error:?}"))?
+            == Some(HostResponse::Quiesced),
+        "installed P2-1 Wasm host did not quiesce"
+    );
+    ensure!(
+        host.handle_frame(make_frame(&host, HostMessage::Dispose))
+            .map_err(|error| anyhow!("disposing installed P2-1 Wasm host: {error:?}"))?
+            == Some(HostResponse::Disposed)
+            && host.state() == HostInstanceState::Disposed,
+        "installed P2-1 Wasm host did not dispose"
+    );
+
+    let forbidden_identity = WasmHostIdentity::new(
+        ScopeId::new("project.installed-smoke")?,
+        PluginId::new("org.yulab.rho.phase2-wasi-probe")?,
+        PackageDigest::from_inventory(&[(b"dist/plugin.wasm", P2_1_WASI_IMPORT_SMOKE_WASM)]),
+        ActivationGeneration::new(1)?,
+        HostInstanceId::generate(),
+    );
+    let wasi_error = WasmPluginHost::from_bytes(forbidden_identity, P2_1_WASI_IMPORT_SMOKE_WASM)
+        .expect_err("installed P2-1 Wasm host accepted a WASI import");
+    ensure!(
+        wasi_error.code == HostProtocolErrorCode::ForbiddenImport,
+        "installed P2-1 Wasm host rejected WASI with the wrong error"
+    );
+
+    Ok(json!({
+        "runtime": "wasmtime-38.0.4",
+        "guest_abi": 1,
+        "guest_echo": true,
+        "heartbeat": true,
+        "disposed": true,
+        "wasi_rejected": true,
+        "imports_exposed": 0,
+    }))
 }
 
 async fn smoke_extension_runtime(
@@ -14205,7 +14141,7 @@ fn main() {
             respond_environment_operation,
             list_installed_packages,
             list_lockfile_packages,
-            list_runs,
+            commands::runs::list_runs,
             list_plot_artifacts,
             export_plot_artifact,
             export_data_view_artifact,
@@ -14216,10 +14152,10 @@ fn main() {
             list_project_skills,
             clear_artifact_records,
             clear_plot_artifacts,
-            list_problems,
-            get_run_detail,
-            compare_runs,
-            audit_reproducibility,
+            commands::runs::list_problems,
+            commands::runs::get_run_detail,
+            commands::runs::compare_runs,
+            commands::runs::audit_reproducibility,
             editor_package_functions,
             editor_function_help,
             editor_function_documentation,

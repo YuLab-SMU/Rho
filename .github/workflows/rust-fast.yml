@@ -24,10 +24,12 @@ on:
       - ".github/workflows/rust-fast.yml"
       - ".github/workflows/rust-compatibility.yml"
       - "scripts/test-rust-msrv-contract.mjs"
+      - "scripts/test-tauri-command-inventory.mjs"
       - "scripts/test-license-contract.mjs"
       - "scripts/test-extension-run-history-contract.mjs"
       - "scripts/test-extension-p1-3-contract.mjs"
       - "scripts/test-extension-phase-1-acceptance.mjs"
+      - "scripts/test-extension-phase-2-host-contract.mjs"
       - "LICENSE"
       - "LICENSES.md"
 
@@ -100,6 +102,8 @@ jobs:
           node --check scripts/test-rust-msrv-contract.mjs
           node scripts/test-rust-msrv-contract.mjs --test
           node scripts/test-rust-msrv-contract.mjs
+          node scripts/test-tauri-command-inventory.mjs --test
+          node scripts/test-tauri-command-inventory.mjs
           node scripts/test-license-contract.mjs --test
           node scripts/test-license-contract.mjs
           node scripts/test-extension-run-history-contract.mjs --test
@@ -108,6 +112,8 @@ jobs:
           node scripts/test-extension-p1-3-contract.mjs
           node scripts/test-extension-phase-1-acceptance.mjs --test
           node scripts/test-extension-phase-1-acceptance.mjs
+          node scripts/test-extension-phase-2-host-contract.mjs --test
+          node scripts/test-extension-phase-2-host-contract.mjs
 
       - name: Check formatting
         run: cargo fmt --all -- --check

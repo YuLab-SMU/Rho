@@ -1,7 +1,7 @@
 # Project Application Service Seam
 
-Status: active; APP-SVC1 authorized 2026-08-20; implementation and local
-verification complete; hosted CI pending
+Status: implemented; APP-SVC1 implementation, local verification, PR #99
+integration, and exact-main hosted verification complete 2026-08-20
 
 Authorization: project owner requested completion of the preserved concurrent
 ProjectQueryService/ProjectMutationService work on 2026-08-20.
@@ -136,5 +136,17 @@ Verification:
   stale direct-Store UI contract assertion. No blocking finding remains.
 
 No application/R version, `NEWS.md`, mock, frontend, schema, migration, or
-release change is required. The document remains active until exact hosted CI
-is recorded.
+release change is required. Exact hosted CI is recorded below, so this bounded
+package closes as implemented.
+
+## Hosted Integration Evidence — 2026-08-20
+
+- PR #99 merged as `9c5b8b47c50ca0a4c409a2dfd97c89e3594eee00`.
+- PR validation passed Draft Fast plus all six macOS, Windows, and Linux
+  stable/MSRV legs.
+- exact-main Rust Compatibility run `32364857002` passed all six legs; the
+  stable legs also passed the unsigned packaged application smoke for their
+  respective platform.
+- APP-SVC1 therefore has no remaining implementation, automated integration,
+  version, NEWS, manual, installed-app, or release gate. The package remains an
+  internal service-boundary refactor and creates no release authority.

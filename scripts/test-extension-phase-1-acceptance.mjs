@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-const EXPECTED_VERSION = "0.4.1-dev.1";
+const EXPECTED_VERSION = "0.4.1-dev.2";
 const read = (path) => fs.readFileSync(path, "utf8");
 
 export function validatePhase1Acceptance(value) {
@@ -67,7 +67,7 @@ function fixture() {
     packageLock: JSON.stringify({ version: EXPECTED_VERSION, packages: { "": { version: EXPECTED_VERSION } } }),
     index: `styles.css?v=${EXPECTED_VERSION}\napp.js?v=${EXPECTED_VERSION}`,
     frontend: `${EXPECTED_VERSION}\n${EXPECTED_VERSION}`,
-    news: `## ${EXPECTED_VERSION} - 2026-08-18\nKeychain access is deferred to the exact Provider\ninternal first-party runtime,\n  not a public plugin SDK`,
+    news: `## 0.4.1-dev.1 - 2026-08-18\nKeychain access is deferred to the exact Provider\ninternal first-party runtime,\n  not a public plugin SDK`,
     runtime: `None | Some("candidate") => Self::Candidate\nSome("legacy") => Self::Legacy`,
     runtimeTests: `parse(None, sink.as_ref()), InternalExtensionRuntimeMode::Candidate`,
     desktop: `build_extension_host(None, diagnostics())\nasync fn smoke_extension_runtime() {}\n"candidate_exercised": true\n"run_history_parity": true\n"workspace_snapshot_typed": true\n"viewer_host_injected": true\n"old_workspace_rejected": true\n"legacy_override_exercised": true\norg.yulab.rho.run-history\norg.yulab.rho.workspace-snapshot-tool\norg.yulab.rho.project-file-viewer`,

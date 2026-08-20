@@ -176,6 +176,28 @@ pub enum HostProtocolErrorCode {
     Timeout,
     /// The request id was unknown or already completed.
     UnknownRequest,
+    /// The binary module exceeded the pre-compilation byte bound.
+    ModuleTooLarge,
+    /// The module was not valid core WebAssembly.
+    InvalidModule,
+    /// The module requested an import; P2-1 exposes none.
+    ForbiddenImport,
+    /// A required Guest ABI V1 export was absent.
+    MissingExport,
+    /// A Guest ABI V1 export had the wrong type.
+    InvalidExport,
+    /// A Wasm store resource limit rejected the operation.
+    ResourceLimit,
+    /// The deterministic Wasm fuel budget was exhausted.
+    FuelExhausted,
+    /// Guest execution trapped or the runtime contained a panic.
+    GuestTrap,
+    /// Guest memory or a returned pointer/length was invalid.
+    InvalidGuestOutput,
+    /// The guest returned a non-zero ABI status.
+    GuestRejected,
+    /// The exact request was cancelled by the broker.
+    Cancelled,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

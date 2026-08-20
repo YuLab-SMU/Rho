@@ -20,7 +20,7 @@ assert.match(html, /vendor\/viewer\/katex\.min\.js/);
 assert.match(html, /vendor\/viewer\/katex-auto-render\.min\.js/);
 assert.match(html, /vendor\/viewer\/katex\.min\.css/);
 assert.match(html, /vendor\/viewer\/papaparse\.min\.js/);
-assert.match(html, /app\.js\?v=0\.4\.1-dev\.1/);
+assert.match(html, /app\.js\?v=0\.4\.1-dev\.2/);
 assert.match(html, /outputs=image-artifact-r1/);
 
 assert.match(project, /MAX_VIEWER_FILE_BYTES: u64 = 4 \* 1024 \* 1024/);

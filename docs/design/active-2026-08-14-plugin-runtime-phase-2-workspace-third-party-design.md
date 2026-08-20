@@ -1,9 +1,10 @@
 # Phase 2 Workspace Third-Party Plugin Runtime Design
 
-Status: active; P2-0 authorized 2026-08-19; owner explicitly authorized a
-bounded P2-0/P2-1/P2-2/P2-3/P2-4 pure-contract review-remediation slice on
-2026-08-19; executable-host selection, product wiring, installed-platform
-acceptance, and Phase 2 acceptance remain open
+Status: active; P2-0 and pure-contract remediation complete; owner explicitly
+authorized rapid implementation of the complete Phase 2 end state on
+2026-08-20; P2-1 Wasm host source/local macOS evidence is complete under its
+focused contract while Windows/Linux hosted acceptance remains open; P2-2
+through P2-4 remain sequentially gated
 
 Date: 2026-08-14
 Issue: [#17](https://github.com/YuLab-SMU/Rho/issues/17)
@@ -967,6 +968,47 @@ filesystem, process, credential, or OS sandbox behavior is safe.
 Each package requires separate authorization. No later package activates
 implicitly.
 
+### 2026-08-20 Local-first Development Exception
+
+The project owner explicitly authorized completing the full Phase 2 engineering
+implementation and local package gates before pushing once for remote CI. This
+temporarily defers the P2-1 Windows/Linux hosted stop gate as an entry condition
+for local P2-2/P2-3/P2-4 development; it does not waive or pass that gate.
+
+- bypassed rule: normally each later package waits for the preceding hosted/
+  installed-platform checkpoint;
+- reason: reduce remote round trips during rapid development while keeping
+  local integration boundaries buildable and reviewable;
+- approving owner/date: project owner, 2026-08-20;
+- scope: local `agent/phase2-complete` implementation only;
+- compensating evidence: focused and full stable/MSRV tests, local candidate/
+  legacy desktop smoke, arm64 App smoke, independent review, explicit commits,
+  no distribution and no implemented/accepted lifecycle claim;
+- expiry: before Phase 2 acceptance, candidate publication, distribution or
+  release; the final combined head must pass all six hosted stable/MSRV legs and
+  packaged Windows/macOS/Linux acceptance, with failures repaired before any
+  acceptance state advances.
+
+P2 packages still activate and stop sequentially for local contract review. The
+exception changes validation timing only; it grants no new runtime, permission,
+filesystem, network, Workspace, credential, UI or release authority.
+
+### 2026-08-20 Complete Phase 2 Authorization And P2-1 Activation
+
+The owner explicitly authorized rapid iteration through the complete Phase 2
+end state on 2026-08-20. This is product authorization for P2-1 through P2-4,
+not permission to collapse their mandatory safety checkpoints or edit shared
+contracts concurrently. P2-1 is the only active executable package until its
+focused stop gate passes; P2-2, P2-3, and P2-4 activate sequentially after the
+preceding review.
+
+P2-1 is governed by
+`docs/plans/active-2026-08-20-p2-1-wasm-isolated-host-spec.md`. It selects exact
+`wasmtime 38.0.4` with Rust 1.88, one no-WASI/no-import Engine/Store/Instance
+per plugin, fuel/memory/epoch bounds, Host Protocol V1, and only a synthetic
+echo/diagnostic ABI. It does not yet create a desktop route, grant, permission
+operation, contribution, or installed acceptance claim.
+
 ### 2026-08-19 Independent-Review Remediation Authorization
 
 Following the independent review of the initial local implementation, the
@@ -1117,6 +1159,16 @@ Phase 2 may be accepted only when:
 - marketplace/distribution claims remain deferred to Phase 3.
 
 ## Open Decisions For Authorization
+
+The 2026-08-20 authorization closes these decisions with the fixed defaults in
+the P2-1 implementation contract: Wasm-only executable profile, per-instance
+engine/store isolation, existing canonical digest/bounds, Host Protocol V1,
+normalized project-relative/HTTPS/metadata-preview read semantics, SQLite-owned
+digest-bound grants in P2-2, no plugin storage, trusted-shell typed UI
+descriptors, all-platform negative/installed probes, manually placed local
+packages only, and no write/process/arbitrary-R/Provider/credential expansion.
+The numbered list below remains as the historical review checklist; later
+packages must implement the recorded answers rather than reopen them silently.
 
 The first implementation-authorization review must close or explicitly defer:
 

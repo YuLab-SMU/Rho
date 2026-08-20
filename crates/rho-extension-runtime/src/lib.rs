@@ -28,6 +28,7 @@ mod manifest;
 mod model;
 mod observation;
 mod resolver;
+mod wasm_host;
 
 pub use broker::{
     BoundedJson, BrokerError, BrokerFacade, BrokerPayloadError, BrokerRequest, BrokerResponse,
@@ -113,6 +114,11 @@ pub use observation::{
     self_grant_attempt_rejected,
 };
 pub use resolver::resolve_activation_plan;
+pub use wasm_host::{
+    DEFAULT_WASM_FUEL, MAX_PENDING_WASM_CANCELLATIONS, MAX_WASM_MEMORY_BYTES,
+    MAX_WASM_MODULE_BYTES, MAX_WASM_TABLE_ELEMENTS, P2_1_SMOKE_WASM, P2_1_WASI_IMPORT_SMOKE_WASM,
+    WasmCancellationHandle, WasmHostIdentity, WasmPluginHost,
+};
 
 pub const MAX_IDENTIFIER_BYTES: usize = 128;
 pub const MAX_PLUGINS_PER_SCOPE: usize = 256;
