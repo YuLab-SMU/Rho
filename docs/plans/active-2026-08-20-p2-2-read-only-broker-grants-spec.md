@@ -2,15 +2,16 @@
 
 Status: active; complete Phase 2 direction and local-first exception authorized
 2026-08-20; P2-2A schema/persistence, P2-2B trusted permission UI/fresh
-handles, and P2-2C `project.fs.read` checkpoints complete locally; P2-2D
-`workspace.r.inspect` activated; P2-1
+handles, P2-2C `project.fs.read`, and P2-2D `workspace.r.inspect` checkpoints
+complete locally; P2-2E `network.fetch` activated; P2-1
 Windows/Linux hosted acceptance remains open and mandatory before final Phase 2
 acceptance
 
-Active work package: P2-2D only. P2-2E through P2-2F remain inactive until the
-Workspace identity/revision/crash stop gate passes. P2-2D may call only fixed
-metadata/preview inspection requests through the existing Workspace broker;
-network, arbitrary R evaluation, mutation, writes, and raw R-object authority
+Active work package: P2-2E only. P2-2F remains inactive until the HTTPS,
+redirect, DNS, timeout, streaming, credential/proxy, and revoke-during-fetch
+gate passes. P2-2E may add only bounded credential-free GET/HEAD requests to
+approved public HTTPS origins; arbitrary network, private/link-local targets,
+cookies, proxy credentials, custom headers, uploads, and non-HTTP protocols
 remain absent.
 
 Change class: D3 security, schema, approval, network, filesystem, Workspace R,
@@ -530,6 +531,60 @@ without the separately gated P2-3 contribution surface. Hosted Windows/Linux,
 installed-app, independent cross-platform filesystem review, and release
 acceptance remain open. This closes only the local P2-2C stop gate and
 activates P2-2D.
+
+### P2-2D checkpoint evidence
+
+P2-2D adds a broker-owned `WorkspaceObjectReferenceRegistry`. References are
+issued transactionally only from the existing bounded Workspace snapshot and
+bind the normalized project, Workspace ID, kernel instance, state/project
+revisions, object name/classes/type/preview identity, and issue time. The guest
+receives only bounded reference views; it cannot provide a project root,
+Workspace identity, R environment, method name, or R code.
+
+Preparation produces only fixed `workspace.inspect_object` arguments containing
+the reference-bound object name and exact expected Workspace revisions. Result
+validation rejects another project, kernel restart, state/project revision
+change, same-name type/class/preview identity change, malformed response,
+oversized/deep/row/column-heavy preview, and late completion. Metadata is capped
+at 64 KiB; preview at 256 KiB, 100 rows, 50 columns, and depth four. Function
+source is never projected to a workspace plugin.
+
+The desktop adapter dispatches through the existing Ark/Coordinator request
+lane and performs no direct R call. Guest execution yields before dispatch and
+resumes only after reference validation, final live-grant revalidation, bounded
+audit persistence, and allow-once consumption. Workspace crash, stale late
+result, project switch, restart, revoke, completion persistence failure, and
+guest-resume failure return typed failures without false live completion.
+Project switch, Workspace restart, and shutdown invalidate references, hosts,
+and live handles while bounded project decisions may later mint fresh handles.
+
+The R bridge also closes the pre-existing active-binding evaluation gap:
+snapshots now describe active bindings as opaque without calling them, and
+fixed inspection rejects them before `get()`. This exported package-contract
+change advances `rho.bridge` from `0.1.14` to `0.1.15` with synchronized package
+NEWS; `rho.agent` remains unchanged.
+
+Local verification on 2026-08-20:
+
+- stable and exact Rust `1.88.0`: `rho-server` 75 and desktop 218 tests passed
+  with one existing opt-in Keychain smoke ignored on each toolchain;
+- `rho.bridge` passed 581 tests with no failure, warning, or skip, including an
+  active binding whose invocation counter remains zero through snapshot and
+  rejected inspection;
+- server clippy completed on stable and Rust `1.88.0` with no
+  `plugin_workspace` warning; rustfmt, locked builds, the P2-2 broker contract,
+  negative self-tests, and MSRV workflow/path enforcement passed;
+- focused tests cover metadata/preview projection, dataframe/list/S4-shaped
+  generic bounds, transactional reference issue, scalar active-binding class,
+  same object name in two projects, kernel/state change, object identity
+  change, malformed/oversized result, fixed request arguments with no R code,
+  allow-once consumption, late completion, Workspace crash, and absence of
+  source or raw handles from durable audit.
+
+P2-2D adds no Tauri command, public protocol, application version, or
+user-facing contribution route. Hosted/installed Workspace crash and platform
+review remain open. This closes only the local P2-2D stop gate and activates
+P2-2E.
 
 ## Verification Matrix
 

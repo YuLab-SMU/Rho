@@ -1,3 +1,9 @@
+# rho.bridge 0.1.15
+
+- Workspace snapshots now identify active bindings without evaluating them,
+  and fixed object inspection rejects active bindings instead of executing
+  project-defined binding code.
+
 # rho.bridge 0.1.14
 
 - Data Viewer row cells and cell-state metadata now serialize as unnamed,

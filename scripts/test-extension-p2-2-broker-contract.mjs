@@ -42,6 +42,25 @@ export function validateP22BrokerContract(value) {
   assert.doesNotMatch(fileProduction, /read_dir|OpenOptions|File::create|Command::new|reqwest/);
 
   for (const marker of [
+    "pub struct WorkspaceObjectReferenceRegistry",
+    'request_type: "workspace.inspect_object"',
+    "MAX_WORKSPACE_METADATA_BYTES: usize = 64 * 1024",
+    "MAX_WORKSPACE_PREVIEW_BYTES: usize = 256 * 1024",
+    "MAX_WORKSPACE_PREVIEW_ROWS: usize = 100",
+    "MAX_WORKSPACE_PREVIEW_COLUMNS: usize = 50",
+    "MAX_WORKSPACE_PREVIEW_DEPTH: usize = 4",
+    "ObjectChanged",
+    "same_workspace_lineage",
+  ]) assert.ok(value.workspaceBroker.includes(marker), `workspace.r.inspect lost ${marker}`);
+  assert.doesNotMatch(
+    value.workspaceBroker.split("#[cfg(test)]")[0],
+    /workspace\.execute|rho_execute|function_source/,
+    "workspace plugin inspection gained executable or source authority",
+  );
+  assert.match(value.rBridge, /bindingIsActive\(name, envir\)/);
+  assert.match(value.rBridge, /Active bindings cannot be inspected without evaluating project code/);
+
+  for (const marker of [
     "'call_admitted'",
     "'call_completed'",
     "'completion_uncertain'",
@@ -60,13 +79,18 @@ export function validateP22BrokerContract(value) {
     "call_completed",
     "stale_after_dispatch",
     "resume_broker_call",
+    "invoke_workspace_plugin",
+    "CoordinatorWorkspacePluginDispatcher",
+    "issue_workspace_object_references",
   ]) assert.ok(value.desktop.includes(marker), `desktop broker loop lost ${marker}`);
+  const fileLoopStart = value.desktop.indexOf("invoke_plugin_with_hook");
+  const fileLoop = fileLoopStart >= 0 ? value.desktop.slice(fileLoopStart) : value.desktop;
   assert.ok(
-    value.desktop.indexOf("begin_broker_call") < value.desktop.indexOf("read_project_file("),
+    fileLoop.indexOf("begin_broker_call") < fileLoop.indexOf("read_project_file("),
     "guest must yield before project file I/O",
   );
   assert.ok(
-    value.desktop.indexOf("read_project_file(") < value.desktop.indexOf("resume_broker_call"),
+    fileLoop.indexOf("read_project_file(") < fileLoop.indexOf("resume_broker_call"),
     "project file I/O must finish before guest resume",
   );
 }
@@ -76,9 +100,11 @@ function fixture() {
     host: "pub enum GuestStep\npub fn begin_broker_call\npub fn resume_broker_call\npub fn cancel_broker_call\nMAX_GUEST_BROKER_STEPS: usize = 8\nMAX_GUEST_STEP_BYTES: usize = 64 * 1024\nMAX_GUEST_BROKER_RESULT_BYTES: usize = 1024 * 1024\nmodule.imports().next().is_some()",
     grant: "rand::random()\npub trait GrantClock\npub trait GrantTokenSource\npub fn revalidate_admitted\npub fn durable_grant_id_for_handle\ncomplete_failure_before_dispatch\nWrongHostSession\nWrongPackageDigest\nWrongWorkspace",
     fileBroker: "pub fn read_project_file\nMAX_PLUGIN_FILE_READ_BYTES: u64 = 1024 * 1024\nsymlink_metadata\nis_link_or_reparse\nNestedRepository\ncanonical_file.starts_with(&canonical_root)\n.take(request.max_bytes + 1)\nafter_canonical_file != canonical_file\n#[cfg(test)]",
+    workspaceBroker: 'pub struct WorkspaceObjectReferenceRegistry\nrequest_type: "workspace.inspect_object"\nMAX_WORKSPACE_METADATA_BYTES: usize = 64 * 1024\nMAX_WORKSPACE_PREVIEW_BYTES: usize = 256 * 1024\nMAX_WORKSPACE_PREVIEW_ROWS: usize = 100\nMAX_WORKSPACE_PREVIEW_COLUMNS: usize = 50\nMAX_WORKSPACE_PREVIEW_DEPTH: usize = 4\nObjectChanged\nsame_workspace_lineage\n#[cfg(test)]',
+    rBridge: "bindingIsActive(name, envir)\nActive bindings cannot be inspected without evaluating project code",
     migration: "'call_admitted'\n'call_completed'\n'completion_uncertain'",
     store: "record_plugin_permission_call_event\nconsume_allow_once\nplugin permission call details contain a forbidden field",
-    desktop: "begin_broker_call\ninvoke_plugin_with_hook\ncall_admitted\nread_project_file(\nrevalidate_admitted\ncall_completed\nstale_after_dispatch\nresume_broker_call",
+    desktop: "invoke_plugin_with_hook\nbegin_broker_call\ncall_admitted\nread_project_file(\nrevalidate_admitted\ncall_completed\nstale_after_dispatch\nresume_broker_call\ninvoke_workspace_plugin\nCoordinatorWorkspacePluginDispatcher\nissue_workspace_object_references",
   };
 }
 
@@ -88,6 +114,8 @@ if (process.argv.includes("--test")) {
     ["WASI", (value) => { value.host += "\nwasmtime_wasi"; }],
     ["unbounded read", (value) => { value.fileBroker = value.fileBroker.replace(".take(request.max_bytes + 1)", ""); }],
     ["no post-revoke check", (value) => { value.desktop = value.desktop.replace("revalidate_admitted", ""); }],
+    ["active binding evaluation", (value) => { value.rBridge = value.rBridge.replace("bindingIsActive(name, envir)", ""); }],
+    ["arbitrary R", (value) => { value.workspaceBroker = `workspace.execute\n${value.workspaceBroker}`; }],
   ]) {
     const value = fixture();
     mutate(value);
@@ -98,6 +126,8 @@ if (process.argv.includes("--test")) {
     host: read("crates/rho-extension-runtime/src/wasm_host.rs"),
     grant: read("crates/rho-extension-runtime/src/grant.rs"),
     fileBroker: read("crates/rho-server/src/plugin_fs.rs"),
+    workspaceBroker: read("crates/rho-server/src/plugin_workspace.rs"),
+    rBridge: read("r/rho.bridge/R/workspace.R"),
     migration: read("crates/rho-store/src/migration.rs"),
     store: read("crates/rho-store/src/plugin_permission.rs"),
     desktop: read("desktop/src-tauri/src/workspace_plugins.rs"),

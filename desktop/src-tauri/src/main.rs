@@ -5514,6 +5514,24 @@ async fn restart_workspace(state: State<'_, AppState>) -> Result<WorkspaceStatus
         let root = state.project_root.read().await.clone();
         normalize_project_root(root.to_string_lossy().as_ref())
     };
+    {
+        let mut store = read_store(&state).map_err(display_error)?;
+        store
+            .recover_pending_plugin_permission_requests(
+                &current_project_root,
+                "workspace_restarted",
+            )
+            .map_err(display_error)?;
+        store
+            .recover_transient_plugin_permission_grants(
+                &current_project_root,
+                "workspace_restarted",
+            )
+            .map_err(display_error)?;
+    }
+    state
+        .plugin_permissions
+        .invalidate_project(&current_project_root);
     let render_job_ids = {
         let mut jobs = state.render_jobs.lock().await;
         jobs.values_mut()

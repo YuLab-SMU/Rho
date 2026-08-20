@@ -6,12 +6,15 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::future::Future;
 use std::path::Path;
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use rho_core::ExecutionOrigin;
 use rho_extension_runtime::{
     ActivationGeneration, BrokerCallIdSource, CapabilityHandle, DiscoveredPlugin, GrantErrorKind,
     GrantRequest, GrantSource, GrantStore, GuestStep, HOST_PROTOCOL_VERSION, HostFrame,
@@ -20,7 +23,14 @@ use rho_extension_runtime::{
     Revalidation, RevalidationRequest, RuntimeKind, ScopeId, WasmHostIdentity, WasmPluginHost,
     WorkspaceGrantIdentity, discover_workspace_plugins,
 };
+use rho_kernel::ArkSession;
+use rho_server::coordinator::{CoordinatorRuntime, dispatch_workspace_request};
 use rho_server::plugin_fs::{ProjectFsReadErrorCode, ProjectFsReadRequest, read_project_file};
+use rho_server::plugin_workspace::{
+    PreparedWorkspaceInspection, WorkspaceInspectErrorCode, WorkspaceInspectOperation,
+    WorkspaceInspectRequest, WorkspaceInspectionContext, WorkspaceObjectReferenceRegistry,
+    WorkspaceObjectReferenceView,
+};
 use rho_store::{
     PluginPermissionCallEventDraft, PluginPermissionDecision, PluginPermissionDecisionDraft,
     PluginPermissionGrant, PluginPermissionMutationOutcome, PluginPermissionMutationService,
@@ -28,6 +38,7 @@ use rho_store::{
     normalize_project_root,
 };
 use serde::{Deserialize, Serialize};
+use tokio::sync::Mutex as AsyncMutex;
 
 const POLICY_REVISION: i64 = 1;
 
@@ -133,6 +144,53 @@ pub(crate) struct PluginRuntimeContext {
     pub workspace: Option<WorkspaceGrantIdentity>,
 }
 
+pub(crate) struct WorkspaceDispatchResult {
+    pub response: serde_json::Value,
+    pub current_workspace: rho_protocol::WorkspaceIdentity,
+}
+
+pub(crate) trait WorkspacePluginDispatcher: Send + Sync {
+    fn dispatch<'a>(
+        &'a self,
+        prepared: PreparedWorkspaceInspection,
+    ) -> Pin<Box<dyn Future<Output = Result<WorkspaceDispatchResult>> + Send + 'a>>;
+}
+
+#[allow(dead_code)]
+pub(crate) struct CoordinatorWorkspacePluginDispatcher {
+    pub session: Arc<ArkSession>,
+    pub context: Arc<AsyncMutex<CoordinatorRuntime>>,
+}
+
+impl WorkspacePluginDispatcher for CoordinatorWorkspacePluginDispatcher {
+    fn dispatch<'a>(
+        &'a self,
+        prepared: PreparedWorkspaceInspection,
+    ) -> Pin<Box<dyn Future<Output = Result<WorkspaceDispatchResult>> + Send + 'a>> {
+        Box::pin(async move {
+            let payload = serde_json::json!({
+                "arguments": prepared.arguments,
+                "expected_workspace": prepared.expected_workspace,
+            });
+            let mut context = self.context.lock().await;
+            let CoordinatorRuntime { broker, store } = &mut *context;
+            let response = dispatch_workspace_request(
+                prepared.request_type,
+                &payload,
+                ExecutionOrigin::System,
+                self.session.as_ref(),
+                broker,
+                store,
+            )
+            .await?;
+            Ok(WorkspaceDispatchResult {
+                response,
+                current_workspace: broker.identity().clone(),
+            })
+        })
+    }
+}
+
 #[derive(Clone)]
 struct PendingEnable {
     plugin_id: String,
@@ -157,6 +215,7 @@ struct RegistryState {
     active: BTreeMap<String, ActivePlugin>,
     grants: GrantStore,
     broker_call_id_source: Arc<dyn BrokerCallIdSource>,
+    workspace_objects: WorkspaceObjectReferenceRegistry,
 }
 
 impl Default for RegistryState {
@@ -167,6 +226,7 @@ impl Default for RegistryState {
             active: BTreeMap::new(),
             grants: GrantStore::new(),
             broker_call_id_source: Arc::new(OsBrokerCallIdSource),
+            workspace_objects: WorkspaceObjectReferenceRegistry::new(),
         }
     }
 }
@@ -511,6 +571,384 @@ impl PendingPluginPermissionRegistry {
             grant_id: grant_id.to_string(),
             live_handle_revoked,
         })
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn issue_workspace_object_references(
+        &self,
+        context: &PluginRuntimeContext,
+        snapshot_response: &serde_json::Value,
+    ) -> Result<Vec<WorkspaceObjectReferenceView>> {
+        let workspace_context = workspace_inspection_context(context)?;
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .workspace_objects
+            .issue_from_snapshot(&workspace_context, snapshot_response)
+            .map_err(Into::into)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) async fn invoke_workspace_plugin(
+        &self,
+        context: &PluginRuntimeContext,
+        plugin_id: &str,
+        request: serde_json::Value,
+        store_path: &Path,
+        dispatcher: &dyn WorkspacePluginDispatcher,
+    ) -> Result<WorkspacePluginCallResult> {
+        let key = registry_key(&context.project_root, plugin_id);
+        let request_id = HostRequestId::generate();
+        let workspace_context = workspace_inspection_context(context)?;
+        let mut step = {
+            let mut state = self
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let references = state.workspace_objects.list_for_context(&workspace_context);
+            let active = state
+                .active
+                .get_mut(&key)
+                .context("workspace plugin is not enabled for this project")?;
+            let handles = active
+                .handles
+                .values()
+                .map(|handle| (handle.permission.as_static_str(), handle.id.clone()))
+                .collect::<BTreeMap<_, _>>();
+            active
+                .host
+                .begin_broker_call(
+                    request_id.clone(),
+                    serde_json::json!({
+                        "request": request,
+                        "capability_handles": handles,
+                        "workspace_object_references": references,
+                    }),
+                )
+                .map_err(|error| anyhow!("workspace plugin broker begin failed: {error:?}"))?
+        };
+        let mut broker_steps = 0;
+        loop {
+            match step {
+                GuestStep::Complete { result, .. } => {
+                    return Ok(WorkspacePluginCallResult {
+                        plugin_id: plugin_id.to_string(),
+                        status: "completed".to_string(),
+                        result: Some(result),
+                        error_code: None,
+                        broker_steps,
+                    });
+                }
+                GuestStep::Error { code, .. } => {
+                    return Ok(WorkspacePluginCallResult {
+                        plugin_id: plugin_id.to_string(),
+                        status: "failed".to_string(),
+                        result: None,
+                        error_code: Some(code),
+                        broker_steps,
+                    });
+                }
+                GuestStep::BrokerRequest {
+                    handle_id,
+                    permission,
+                    operation,
+                    args,
+                    ..
+                } => {
+                    broker_steps += 1;
+                    if permission != "workspace.r.inspect" || operation != "workspace.r.inspect" {
+                        step =
+                            self.resume_plugin_error(&key, &request_id, "operation_not_available")?;
+                        continue;
+                    }
+                    let inspect_request: WorkspaceInspectRequest =
+                        match serde_json::from_value(args) {
+                            Ok(request) => request,
+                            Err(_) => {
+                                step = self.resume_plugin_error(
+                                    &key,
+                                    &request_id,
+                                    "invalid_arguments",
+                                )?;
+                                continue;
+                            }
+                        };
+                    let requested_bytes = match inspect_request.operation {
+                        WorkspaceInspectOperation::Metadata => 64 * 1024,
+                        WorkspaceInspectOperation::Preview => 256 * 1024,
+                    };
+                    let (prepared, revalidation, grant_id, plugin_identity_id, package_digest) = {
+                        let mut state = self
+                            .state
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        let prepared = state
+                            .workspace_objects
+                            .prepare(&workspace_context, &inspect_request)?;
+                        let active = state
+                            .active
+                            .get(&key)
+                            .context("workspace plugin was disabled before call admission")?;
+                        let identity = active.host.identity().clone();
+                        let revalidation = RevalidationRequest {
+                            handle_id: handle_id.clone(),
+                            plugin_id: identity.plugin_id().clone(),
+                            host_instance_id: identity.host_instance_id().clone(),
+                            package_digest: identity.package_digest().clone(),
+                            project_id: identity.project_id().clone(),
+                            scope_id: identity.project_id().clone(),
+                            generation: identity.activation_generation(),
+                            permission: PermissionKind::WorkspaceRInspect,
+                            permission_use: PermissionUse::WorkspaceRInspect {
+                                operation: match inspect_request.operation {
+                                    WorkspaceInspectOperation::Metadata => "metadata",
+                                    WorkspaceInspectOperation::Preview => "preview",
+                                }
+                                .to_string(),
+                                requested_bytes,
+                            },
+                            workspace: context.workspace.clone(),
+                        };
+                        let admitted = state.grants.revalidate(revalidation.clone());
+                        if let Revalidation::Denied(error) = admitted {
+                            drop(state);
+                            let mut store = Store::open(store_path)?;
+                            if let Err(persistence_error) = record_call_event(
+                                &mut store,
+                                context,
+                                identity.plugin_id().as_str(),
+                                identity.package_digest().as_str(),
+                                None,
+                                "call_denied",
+                                "failed",
+                                Some(grant_error_code(error)),
+                                serde_json::json!({"operation": "workspace.r.inspect"}),
+                                false,
+                            ) {
+                                self.cancel_plugin_call(&key, &request_id);
+                                return Err(persistence_error);
+                            }
+                            step = self.resume_plugin_error(
+                                &key,
+                                &request_id,
+                                grant_error_code(error),
+                            )?;
+                            continue;
+                        }
+                        let grant_id = state
+                            .grants
+                            .durable_grant_id_for_handle(&handle_id)
+                            .context("admitted Workspace handle has no durable grant identity")?
+                            .to_string();
+                        (
+                            prepared,
+                            revalidation,
+                            grant_id,
+                            identity.plugin_id().to_string(),
+                            identity.package_digest().to_string(),
+                        )
+                    };
+                    {
+                        let mut store = Store::open(store_path)?;
+                        if let Err(error) = record_call_event(
+                            &mut store,
+                            context,
+                            &plugin_identity_id,
+                            &package_digest,
+                            Some(&grant_id),
+                            "call_admitted",
+                            "completed",
+                            None,
+                            serde_json::json!({"operation": "workspace.r.inspect"}),
+                            false,
+                        ) {
+                            self.release_plugin_admission(&handle_id);
+                            self.cancel_plugin_call(&key, &request_id);
+                            return Err(error);
+                        }
+                    }
+                    let started = Instant::now();
+                    let dispatched = match dispatcher.dispatch(prepared.clone()).await {
+                        Ok(result) => result,
+                        Err(_) => {
+                            let mut store = Store::open(store_path)?;
+                            if let Err(persistence_error) = record_call_event(
+                                &mut store,
+                                context,
+                                &plugin_identity_id,
+                                &package_digest,
+                                Some(&grant_id),
+                                "call_failed",
+                                "failed",
+                                Some("workspace_dispatch_failed"),
+                                serde_json::json!({"operation": "workspace.r.inspect"}),
+                                false,
+                            ) {
+                                self.release_plugin_admission(&handle_id);
+                                self.cancel_plugin_call(&key, &request_id);
+                                return Err(persistence_error);
+                            }
+                            self.release_plugin_admission(&handle_id);
+                            step = self.resume_plugin_error(
+                                &key,
+                                &request_id,
+                                "workspace_dispatch_failed",
+                            )?;
+                            continue;
+                        }
+                    };
+                    let completed_context = WorkspaceInspectionContext {
+                        project_root: context.project_root.clone(),
+                        workspace: dispatched.current_workspace.clone(),
+                    };
+                    let projected = {
+                        let state = self
+                            .state
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        state.workspace_objects.finish(
+                            &completed_context,
+                            &prepared,
+                            &dispatched.response,
+                        )
+                    };
+                    let projected = match projected {
+                        Ok(projected) => projected,
+                        Err(error) => {
+                            let code = workspace_error_code(error.code);
+                            let mut store = Store::open(store_path)?;
+                            if let Err(persistence_error) = record_call_event(
+                                &mut store,
+                                context,
+                                &plugin_identity_id,
+                                &package_digest,
+                                None,
+                                "call_denied",
+                                "stale",
+                                Some(code),
+                                serde_json::json!({"operation": "workspace.r.inspect"}),
+                                false,
+                            ) {
+                                self.release_plugin_admission(&handle_id);
+                                self.cancel_plugin_call(&key, &request_id);
+                                return Err(persistence_error);
+                            }
+                            self.release_plugin_admission(&handle_id);
+                            step = self.resume_plugin_error(&key, &request_id, code)?;
+                            continue;
+                        }
+                    };
+                    let still_admitted = {
+                        let state = self
+                            .state
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        same_workspace_grant_identity(
+                            context.workspace.as_ref(),
+                            &dispatched.current_workspace,
+                        ) && state.grants.revalidate_admitted(&revalidation)
+                            == Revalidation::Allowed
+                    };
+                    if !still_admitted {
+                        let mut store = Store::open(store_path)?;
+                        if let Err(persistence_error) = record_call_event(
+                            &mut store,
+                            context,
+                            &plugin_identity_id,
+                            &package_digest,
+                            None,
+                            "call_denied",
+                            "stale",
+                            Some("stale_after_dispatch"),
+                            serde_json::json!({"operation": "workspace.r.inspect"}),
+                            false,
+                        ) {
+                            self.release_plugin_admission(&handle_id);
+                            self.cancel_plugin_call(&key, &request_id);
+                            return Err(persistence_error);
+                        }
+                        self.release_plugin_admission(&handle_id);
+                        step =
+                            self.resume_plugin_error(&key, &request_id, "stale_after_dispatch")?;
+                        continue;
+                    }
+                    let projected_bytes = serde_json::to_vec(&projected)?.len();
+                    {
+                        let mut store = Store::open(store_path)?;
+                        if let Err(error) = record_call_event(
+                            &mut store,
+                            context,
+                            &plugin_identity_id,
+                            &package_digest,
+                            Some(&grant_id),
+                            "call_completed",
+                            "completed",
+                            None,
+                            serde_json::json!({
+                                "durationMs": started.elapsed().as_millis().min(u64::MAX as u128) as u64,
+                                "operation": "workspace.r.inspect",
+                                "sizeBytes": projected_bytes
+                            }),
+                            true,
+                        ) {
+                            self.release_plugin_admission(&handle_id);
+                            self.cancel_plugin_call(&key, &request_id);
+                            return Err(error);
+                        }
+                    }
+                    let resume_result = (|| -> Result<GuestStep> {
+                        let mut state = self
+                            .state
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        ensure!(
+                            state.grants.revalidate_admitted(&revalidation)
+                                == Revalidation::Allowed,
+                            "Workspace grant became stale after durable completion"
+                        );
+                        state.grants.complete_success(&handle_id);
+                        state
+                            .active
+                            .get_mut(&key)
+                            .context("workspace plugin was disabled before result delivery")?
+                            .host
+                            .resume_broker_call(
+                                &request_id,
+                                &serde_json::json!({"ok": true, "value": projected}),
+                                projected_bytes,
+                            )
+                            .map_err(|error| anyhow!("Workspace plugin resume failed: {error:?}"))
+                    })();
+                    step = match resume_result {
+                        Ok(step) => step,
+                        Err(error) => {
+                            let mut state = self
+                                .state
+                                .lock()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner);
+                            if let Some(active) = state.active.remove(&key) {
+                                state.grants.invalidate_host(&active.host_instance_id);
+                            }
+                            drop(state);
+                            let mut store = Store::open(store_path)?;
+                            record_call_event(
+                                &mut store,
+                                context,
+                                &plugin_identity_id,
+                                &package_digest,
+                                None,
+                                "call_failed",
+                                "failed",
+                                Some("completion_delivery_failed"),
+                                serde_json::json!({"operation": "workspace.r.inspect"}),
+                                false,
+                            )?;
+                            return Err(error);
+                        }
+                    };
+                }
+            }
+        }
     }
 
     /// Execute a future contribution call through the no-import Guest ABI V2
@@ -908,6 +1346,7 @@ impl PendingPluginPermissionRegistry {
         let prefix = format!("{project_root}\0");
         state.active.retain(|key, _| !key.starts_with(&prefix));
         state.pending.retain(|key, _| !key.starts_with(&prefix));
+        state.workspace_objects.invalidate_project(&project_root);
         invalidated
     }
 }
@@ -976,6 +1415,50 @@ fn project_file_error_code(error: ProjectFsReadErrorCode) -> &'static str {
         ProjectFsReadErrorCode::FileChanged => "file_changed",
         ProjectFsReadErrorCode::IoFailed => "io_failed",
     }
+}
+
+fn workspace_error_code(error: WorkspaceInspectErrorCode) -> &'static str {
+    match error {
+        WorkspaceInspectErrorCode::InvalidProject => "invalid_project",
+        WorkspaceInspectErrorCode::InvalidSnapshot => "invalid_snapshot",
+        WorkspaceInspectErrorCode::ReferenceLimit => "reference_limit",
+        WorkspaceInspectErrorCode::UnknownReference => "unknown_object_reference",
+        WorkspaceInspectErrorCode::StaleWorkspace => "stale_workspace",
+        WorkspaceInspectErrorCode::ObjectChanged => "object_changed",
+        WorkspaceInspectErrorCode::MalformedResult => "malformed_workspace_result",
+        WorkspaceInspectErrorCode::ResultTooLarge => "workspace_result_too_large",
+    }
+}
+
+fn workspace_inspection_context(
+    context: &PluginRuntimeContext,
+) -> Result<WorkspaceInspectionContext> {
+    let workspace = context
+        .workspace
+        .as_ref()
+        .context("Workspace R identity is unavailable for plugin inspection")?;
+    Ok(WorkspaceInspectionContext {
+        project_root: context.project_root.clone(),
+        workspace: rho_protocol::WorkspaceIdentity {
+            workspace_id: workspace.workspace_id.clone(),
+            kernel_instance_id: workspace.kernel_instance_id.clone(),
+            execution_seq: 0,
+            state_revision: workspace.state_revision,
+            project_revision: workspace.project_revision,
+        },
+    })
+}
+
+fn same_workspace_grant_identity(
+    expected: Option<&WorkspaceGrantIdentity>,
+    actual: &rho_protocol::WorkspaceIdentity,
+) -> bool {
+    expected.is_some_and(|expected| {
+        expected.workspace_id == actual.workspace_id
+            && expected.kernel_instance_id == actual.kernel_instance_id
+            && expected.state_revision == actual.state_revision
+            && expected.project_revision == actual.project_revision
+    })
 }
 
 fn plugin_view(
@@ -1376,6 +1859,8 @@ fn grant_view(grant: PluginPermissionGrant, grants: &GrantStore) -> Result<Plugi
 mod tests {
     use super::*;
     use rho_extension_runtime::{GrantTokenSource, P2_1_SMOKE_WASM, SystemGrantClock};
+    use rho_server::plugin_workspace::{WorkspaceReferenceClock, WorkspaceReferenceIdSource};
+    use std::sync::atomic::{AtomicU64, Ordering};
     use tempfile::tempdir;
 
     #[derive(Debug)]
@@ -1396,6 +1881,24 @@ mod tests {
         }
     }
 
+    #[derive(Debug)]
+    struct FixedWorkspaceClock(AtomicU64);
+
+    impl WorkspaceReferenceClock for FixedWorkspaceClock {
+        fn now_millis(&self) -> u64 {
+            self.0.load(Ordering::SeqCst)
+        }
+    }
+
+    #[derive(Debug)]
+    struct FixedWorkspaceReferenceId;
+
+    impl WorkspaceReferenceIdSource for FixedWorkspaceReferenceId {
+        fn next_id(&self) -> [u8; 16] {
+            [7; 16]
+        }
+    }
+
     fn deterministic_registry() -> PendingPluginPermissionRegistry {
         PendingPluginPermissionRegistry {
             state: Mutex::new(RegistryState {
@@ -1404,6 +1907,10 @@ mod tests {
                 active: BTreeMap::new(),
                 grants: GrantStore::with_sources(Arc::new(SystemGrantClock), Arc::new(FixedToken)),
                 broker_call_id_source: Arc::new(FixedCallId),
+                workspace_objects: WorkspaceObjectReferenceRegistry::with_sources(
+                    Arc::new(FixedWorkspaceClock(AtomicU64::new(123))),
+                    Arc::new(FixedWorkspaceReferenceId),
+                ),
             }),
         }
     }
@@ -1476,6 +1983,54 @@ mod tests {
         .unwrap();
     }
 
+    fn install_workspace_broker_module(project: &Path) {
+        let call_id = "call.000000000000002a";
+        let begin = serde_json::json!({
+            "type": "broker_request",
+            "call_id": call_id,
+            "handle_id": format!("handle.{}", "07".repeat(32)),
+            "permission": "workspace.r.inspect",
+            "operation": "workspace.r.inspect",
+            "args": {
+                "object_reference": format!("object.{}", "07".repeat(16)),
+                "operation": "preview"
+            }
+        })
+        .to_string();
+        let complete = serde_json::json!({
+            "type": "complete",
+            "call_id": call_id,
+            "result": {"received": true}
+        })
+        .to_string();
+        let begin_pointer = 1024_u64;
+        let complete_pointer = 4096_u64;
+        let begin_packed = (begin_pointer << 32) | begin.len() as u64;
+        let complete_packed = (complete_pointer << 32) | complete.len() as u64;
+        let module = wat::parse_str(format!(
+            r#"(module
+                (memory (export "memory") 1 32)
+                (data (i32.const {begin_pointer}) "{}")
+                (data (i32.const {complete_pointer}) "{}")
+                (func (export "rho_activate") (param i32) (result i32) i32.const 0)
+                (func (export "rho_echo") (param i32 i32) (result i64) i64.const 0)
+                (func (export "rho_heartbeat") (result i32) i32.const 0)
+                (func (export "rho_quiesce") (result i32) i32.const 0)
+                (func (export "rho_dispose") (result i32) i32.const 0)
+                (func (export "rho_begin") (param i32 i32) (result i64) i64.const {begin_packed})
+                (func (export "rho_resume") (param i32 i32) (result i64) i64.const {complete_packed})
+                (func (export "rho_cancel") (param i32 i32) (result i32) i32.const 0))"#,
+            wat_data(&begin),
+            wat_data(&complete),
+        ))
+        .unwrap();
+        fs::write(
+            project.join(".rho/plugins/example/dist/plugin.wasm"),
+            module,
+        )
+        .unwrap();
+    }
+
     fn write_plugin(project: &Path, permissions: serde_json::Value) {
         let directory = project.join(".rho/plugins/example/dist");
         fs::create_dir_all(&directory).unwrap();
@@ -1535,6 +2090,72 @@ mod tests {
                 state_revision: 2,
                 project_revision: 3,
             }),
+        }
+    }
+
+    fn protocol_workspace(context: &PluginRuntimeContext) -> rho_protocol::WorkspaceIdentity {
+        let workspace = context.workspace.as_ref().unwrap();
+        rho_protocol::WorkspaceIdentity {
+            workspace_id: workspace.workspace_id.clone(),
+            kernel_instance_id: workspace.kernel_instance_id.clone(),
+            execution_seq: 1,
+            state_revision: workspace.state_revision,
+            project_revision: workspace.project_revision,
+        }
+    }
+
+    fn workspace_snapshot(context: &PluginRuntimeContext) -> serde_json::Value {
+        serde_json::json!({
+            "execution": {"ok": true, "objects": [{
+                "name": "qc", "classes": ["data.frame"], "dimensions": [2, 2],
+                "size_bytes": 128, "typeof": "list", "preview_kind": "tabular"
+            }]},
+            "workspace": protocol_workspace(context)
+        })
+    }
+
+    fn workspace_inspection_response(context: &PluginRuntimeContext) -> serde_json::Value {
+        serde_json::json!({
+            "execution": {
+                "ok": true, "name": "qc", "classes": ["data.frame"],
+                "dimensions": [2, 2], "size_bytes": 128, "typeof": "list",
+                "preview_kind": "tabular",
+                "preview": {"kind": "tabular", "rows": [{"x": 1}, {"x": 2}]},
+                "structure": "data.frame: 2 obs.",
+                "function_source": {"definition": "must not escape"}
+            },
+            "workspace": protocol_workspace(context)
+        })
+    }
+
+    struct MockWorkspaceDispatcher {
+        response: serde_json::Value,
+        current_workspace: rho_protocol::WorkspaceIdentity,
+        fail: bool,
+    }
+
+    impl WorkspacePluginDispatcher for MockWorkspaceDispatcher {
+        fn dispatch<'a>(
+            &'a self,
+            prepared: PreparedWorkspaceInspection,
+        ) -> Pin<Box<dyn Future<Output = Result<WorkspaceDispatchResult>> + Send + 'a>> {
+            Box::pin(async move {
+                ensure!(
+                    prepared.request_type == "workspace.inspect_object",
+                    "only the fixed inspection request is allowed"
+                );
+                ensure!(
+                    prepared.arguments == serde_json::json!({"name": "qc"}),
+                    "guest input must not become R code"
+                );
+                if self.fail {
+                    bail!("injected Workspace crash");
+                }
+                Ok(WorkspaceDispatchResult {
+                    response: self.response.clone(),
+                    current_workspace: self.current_workspace.clone(),
+                })
+            })
         }
     }
 
@@ -2068,6 +2689,179 @@ mod tests {
             event.event_type == "call_failed"
                 && event.reason_code.as_deref() == Some("guest_resume_failed")
         }));
+    }
+
+    #[tokio::test]
+    async fn workspace_inspection_uses_fixed_request_consumes_once_and_strips_untrusted_source() {
+        let directory = tempdir().unwrap();
+        write_plugin(
+            directory.path(),
+            serde_json::json!([{
+                "name": "workspace.r.inspect",
+                "operations": ["preview"],
+                "maxBytes": 262144
+            }]),
+        );
+        install_workspace_broker_module(directory.path());
+        let database = directory.path().join("rho.sqlite");
+        let mut store = Store::open(&database).unwrap();
+        let registry = deterministic_registry();
+        let context = context(directory.path());
+        let references = registry
+            .issue_workspace_object_references(&context, &workspace_snapshot(&context))
+            .unwrap();
+        assert_eq!(references.len(), 1);
+        let requested = registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        registry
+            .respond(
+                &context,
+                PluginPermissionDecisionInput {
+                    request_id: requested.request_ids[0].clone(),
+                    decision: "allow_once".to_string(),
+                    expected_project_revision: 3,
+                },
+                &mut store,
+            )
+            .unwrap();
+        drop(store);
+        let dispatcher = MockWorkspaceDispatcher {
+            response: workspace_inspection_response(&context),
+            current_workspace: protocol_workspace(&context),
+            fail: false,
+        };
+        let result = registry
+            .invoke_workspace_plugin(
+                &context,
+                "org.example.plugin",
+                serde_json::json!({"contribution": "test"}),
+                &database,
+                &dispatcher,
+            )
+            .await
+            .unwrap();
+        assert_eq!(result.status, "completed");
+        assert_eq!(result.result, Some(serde_json::json!({"received": true})));
+        let store = Store::open(&database).unwrap();
+        assert_eq!(
+            PluginPermissionQueryService::new(&store)
+                .list_grants(&context.project_root, None, Some("consumed"))
+                .unwrap()
+                .len(),
+            1
+        );
+        let events = PluginPermissionQueryService::new(&store)
+            .list_events(&context.project_root, Some(100))
+            .unwrap();
+        assert!(
+            events
+                .iter()
+                .any(|event| event.event_type == "call_completed")
+        );
+        assert!(
+            !serde_json::to_string(&events)
+                .unwrap()
+                .contains("function_source")
+        );
+    }
+
+    #[tokio::test]
+    async fn workspace_late_completion_and_crash_return_typed_errors_without_false_completion() {
+        let directory = tempdir().unwrap();
+        write_plugin(
+            directory.path(),
+            serde_json::json!([{
+                "name": "workspace.r.inspect",
+                "operations": ["preview"],
+                "maxBytes": 262144
+            }]),
+        );
+        install_workspace_broker_module(directory.path());
+        let database = directory.path().join("rho.sqlite");
+        let mut store = Store::open(&database).unwrap();
+        let registry = deterministic_registry();
+        let context = context(directory.path());
+        registry
+            .issue_workspace_object_references(&context, &workspace_snapshot(&context))
+            .unwrap();
+        let requested = registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        registry
+            .respond(
+                &context,
+                PluginPermissionDecisionInput {
+                    request_id: requested.request_ids[0].clone(),
+                    decision: "allow_project".to_string(),
+                    expected_project_revision: 3,
+                },
+                &mut store,
+            )
+            .unwrap();
+        drop(store);
+
+        let mut late_workspace = protocol_workspace(&context);
+        late_workspace.state_revision += 1;
+        let mut late_response = workspace_inspection_response(&context);
+        late_response["workspace"] = serde_json::to_value(&late_workspace).unwrap();
+        let late = MockWorkspaceDispatcher {
+            response: late_response,
+            current_workspace: late_workspace,
+            fail: false,
+        };
+        let result = registry
+            .invoke_workspace_plugin(
+                &context,
+                "org.example.plugin",
+                serde_json::json!({}),
+                &database,
+                &late,
+            )
+            .await
+            .unwrap();
+        assert_eq!(result.status, "completed");
+
+        let crashing = MockWorkspaceDispatcher {
+            response: serde_json::Value::Null,
+            current_workspace: protocol_workspace(&context),
+            fail: true,
+        };
+        let result = registry
+            .invoke_workspace_plugin(
+                &context,
+                "org.example.plugin",
+                serde_json::json!({}),
+                &database,
+                &crashing,
+            )
+            .await
+            .unwrap();
+        assert_eq!(result.status, "completed");
+        let store = Store::open(&database).unwrap();
+        let events = PluginPermissionQueryService::new(&store)
+            .list_events(&context.project_root, Some(100))
+            .unwrap();
+        assert!(events.iter().any(|event| {
+            event.event_type == "call_denied"
+                && event.reason_code.as_deref() == Some("stale_workspace")
+        }));
+        assert!(events.iter().any(|event| {
+            event.event_type == "call_failed"
+                && event.reason_code.as_deref() == Some("workspace_dispatch_failed")
+        }));
+        assert!(
+            !events
+                .iter()
+                .any(|event| event.event_type == "call_completed")
+        );
+        assert_eq!(
+            PluginPermissionQueryService::new(&store)
+                .list_grants(&context.project_root, None, Some("active"))
+                .unwrap()
+                .len(),
+            1
+        );
     }
 
     #[test]

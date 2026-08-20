@@ -4,6 +4,17 @@ rho_list_objects <- function(envir = .GlobalEnv, limit = 200L) {
   names <- ls(envir = envir, all.names = TRUE)
   names <- head(names, as.integer(limit))
   lapply(names, function(name) {
+    if (bindingIsActive(name, envir)) {
+      return(list(
+        name = name,
+        classes = "active_binding",
+        dimensions = NULL,
+        size_bytes = NA_real_,
+        typeof = "active_binding",
+        preview_kind = "opaque",
+        active_binding = TRUE
+      ))
+    }
     value <- get(name, envir = envir, inherits = FALSE)
     dimensions <- tryCatch(dim(value), error = function(e) NULL)
     list(
@@ -2260,6 +2271,9 @@ rho_inspect_object <- function(name,
   stopifnot(is.character(name), length(name) == 1L, nzchar(name))
   if (!exists(name, envir = envir, inherits = FALSE)) {
     stop(sprintf("Object `%s` does not exist in the workspace.", name), call. = FALSE)
+  }
+  if (bindingIsActive(name, envir)) {
+    stop("Active bindings cannot be inspected without evaluating project code.", call. = FALSE)
   }
   value <- get(name, envir = envir, inherits = FALSE)
   structure_text <- capture.output(

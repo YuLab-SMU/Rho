@@ -961,6 +961,28 @@ test_that("vector previews stay bounded", {
   expect_true(result$preview$truncated)
 })
 
+test_that("workspace snapshots and inspection never evaluate active bindings", {
+  workspace <- new.env(parent = baseenv())
+  calls <- 0L
+  makeActiveBinding("dynamic", function(value) {
+    calls <<- calls + 1L
+    42L
+  }, env = workspace)
+
+  objects <- rho_list_objects(envir = workspace, limit = 10L)
+  dynamic <- objects[[which(vapply(objects, function(item) identical(item$name, "dynamic"), logical(1)))]]
+  expect_identical(calls, 0L)
+  expect_identical(dynamic$typeof, "active_binding")
+  expect_identical(dynamic$preview_kind, "opaque")
+  expect_true(dynamic$active_binding)
+
+  expect_error(
+    rho_inspect_object("dynamic", envir = workspace),
+    "Active bindings cannot be inspected"
+  )
+  expect_identical(calls, 0L)
+})
+
 test_that("function inspection includes bounded source without executing it", {
   workspace <- new.env(parent = baseenv())
   workspace$set_proxy <- function(url = "http://localhost:7890") {

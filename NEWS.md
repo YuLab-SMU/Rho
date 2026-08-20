@@ -19,9 +19,10 @@ this file records behavior included in a versioned build candidate.
   this project. One-shot grants are revoked during restart recovery, upgrades
   require review, and project switching invalidates in-memory authority.
 - The bounded `project.fs.read` broker lane is implemented behind the no-import
-  Guest ABI V2 loop, but no user-facing contribution routes it yet. Workspace R
-  inspection and network access remain unavailable pending their separately
-  tested Phase 2 slices.
+  Guest ABI V2 loop. Workspace R metadata/preview inspection is also
+  implemented through fixed object references and strips function source, but
+  no user-facing contribution routes either operation yet. Network access
+  remains unavailable pending its separately tested Phase 2 slice.
 
 ## 0.4.1-dev.1 - 2026-08-18
 

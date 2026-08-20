@@ -17,6 +17,7 @@ on:
       - "desktop/package-lock.json"
       - "NEWS.md"
       - "r/rho.agent/R/aisdk_adapter.R"
+      - "r/rho.bridge/**"
       - "vendor/jet/**/*.rs"
       - "runtime/ark.json"
       - "scripts/bootstrap-ark-linux.sh"

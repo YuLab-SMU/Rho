@@ -134,6 +134,7 @@ export function validateCompatibilityWorkflow(text) {
     '"desktop/package-lock.json"',
     '"NEWS.md"',
     '"r/rho.agent/R/aisdk_adapter.R"',
+    '"r/rho.bridge/**"',
   ]) {
     const occurrences = workflow.split(requiredPath).length - 1;
     if (occurrences !== 2) fail(`Both Rust compatibility triggers must include ${requiredPath}`);
@@ -260,6 +261,7 @@ export function validateFastWorkflow(text) {
     '"desktop/package-lock.json"',
     '"NEWS.md"',
     '"r/rho.agent/R/aisdk_adapter.R"',
+    '"r/rho.bridge/**"',
   ]) {
     if (!workflow.includes(requiredPath)) fail(`Rust Fast path filter is missing ${requiredPath}`);
   }
@@ -359,6 +361,7 @@ on:
       - "desktop/package-lock.json"
       - "NEWS.md"
       - "r/rho.agent/R/aisdk_adapter.R"
+      - "r/rho.bridge/**"
       - "vendor/jet/**/*.rs"
       - "runtime/ark.json"
       - "scripts/bootstrap-ark-macos.sh"
@@ -389,6 +392,7 @@ on:
       - "desktop/package-lock.json"
       - "NEWS.md"
       - "r/rho.agent/R/aisdk_adapter.R"
+      - "r/rho.bridge/**"
       - "vendor/jet/**/*.rs"
       - "runtime/ark.json"
       - "scripts/bootstrap-ark-macos.sh"
@@ -490,6 +494,7 @@ on:
       - "desktop/package-lock.json"
       - "NEWS.md"
       - "r/rho.agent/R/aisdk_adapter.R"
+      - "r/rho.bridge/**"
       - "vendor/jet/**/*.rs"
       - "runtime/ark.json"
       - "scripts/bootstrap-ark-linux.sh"
