@@ -43,7 +43,6 @@ export function validateP24BoundaryTeardownContract(value) {
     '"boundary_enabled_intent_preserved": true',
     '"boundary_reactivated": true',
   ]) assert.ok(value.installed.includes(marker), `installed C2 smoke lost ${marker}`);
-  assert.match(value.spec, /Active work package: none at the P2-4C2 checkpoint/);
   assert.match(value.spec, /P2-4C2 local checkpoint — 2026-08-20/);
   assert.doesNotMatch(
     value.commands,
@@ -58,7 +57,7 @@ function fixture() {
     main: "teardown_workspace_plugins_for_boundary\nreconcile_workspace_plugins_for_boundary\n\"workspace_restarted\"\n\"broker_shutdown\"\n\"project_switched\"\n\"project_switch_restored\"\n\"workspace_plugin_boundary_teardown\"",
     store: "\"project_teardown\" | \"shutdown\"\n\"enabled\" | \"disabled\"\n\"enabled_or_disabled\"",
     installed: '"boundary_teardown_reused": true\n"boundary_enabled_intent_preserved": true\n"boundary_reactivated": true',
-    spec: "Active work package: none at the P2-4C2 checkpoint\nP2-4C2 local checkpoint — 2026-08-20",
+    spec: "P2-4C2 local checkpoint — 2026-08-20",
     commands: "disable_workspace_plugin",
   };
 }

@@ -5,9 +5,9 @@ state/transition/event/tombstone persistence completed its local stop gate
 2026-08-20; P2-1/P2-2/P2-3/P2-4A hosted and cross-platform installed gates
 remain open and mandatory before final Phase 2 acceptance
 
-Active work package: none at the P2-4C2 checkpoint. P2-4C3 and P2-4D through
-P2-4G remain inactive pending explicit amendment/cross-review. C2 added no new
-command/UI action; Retry, uninstall, update and rollback remain unavailable.
+Active work package: P2-4C3 only — crash/hang classification, durable loop
+blocking and explicit Retry. P2-4D through P2-4G remain inactive. C3 may add one
+trusted Retry command but no uninstall/update/rollback authority.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -309,7 +309,7 @@ P2-4C is divided into three local stops:
    Replace abrupt `invalidate_project` at trusted lifecycle boundaries with the
    same bounded teardown for every active/pending project plugin; BH2 continues
    after forced quarantine and records uncertainty without waiting forever.
-3. **P2-4C3 — crash/hang classification and explicit Retry (inactive).** Route,
+3. **P2-4C3 — crash/hang classification and explicit Retry (active).** Route,
    handle and contribution removal precedes durable crashed/blocked state;
    three crashes in ten minutes block automatic eligibility; only trusted Retry
    creates a fresh exact transition/generation/host/handles.
@@ -707,6 +707,27 @@ Boundary teardown reuse is locally complete at `0.4.1-dev.6`:
 
 The updater signature is rehearsal-only. C3 crash/Retry, hosted CI and
 Windows/Linux installed acceptance remain open.
+
+For C3, every host trap, invalid ABI/guest output, fuel/epoch violation,
+heartbeat timeout or unexpected loss first removes the exact contribution route
+and invalidates live handles, then atomically records `host_quarantined` plus
+observed `crashed`. Crash count is derived from durable events for the exact
+project/plugin in the preceding ten minutes; the third event records
+`crash_loop_blocked` and observed `blocked`. A stale host/digest cannot record a
+crash for the current generation. Failure to persist crash truth never restores
+the removed route.
+
+Trusted Retry is accepted only for desired-enabled observed-crashed state with
+the unchanged accepted source/cache digest. Blocked, disabled, update-pending,
+missing or foreign state rejects. Retry uses kind `retry`, a new transition,
+strictly higher generation, fresh host/handles and current grants; missing grants
+return to permission review. Successful Retry returns active and clears the
+current error but does not erase crash audit history. C3 allocates the next
+synchronized application development version after `0.4.1-dev.6`, updates NEWS
+and mock/UI/installed evidence. Tests cover each crash class, stale identity,
+three-in-window block, two projects, persistence failure, Retry success/failure,
+permission review, concurrent crash/Disable/Retry and restart never auto-retrying
+crashed or blocked state.
 
 ## Verification Matrix
 
