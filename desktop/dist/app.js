@@ -6460,6 +6460,7 @@ function prettyStatus(status) {
     cancelled: "Cancelled",
     interrupted: "Interrupted",
     crashed: "Crashed",
+    uninstalled: "Uninstalled",
   }[status] || status || "Unknown";
 }
 
@@ -20988,7 +20989,7 @@ function renderWorkspacePlugins() {
     meta.textContent = `Wasm · digest ${plugin.short_digest} · ${plugin.permission_count} requested permission${plugin.permission_count === 1 ? "" : "s"} · desired ${plugin.desired_state || "disabled"} · observed ${plugin.observed_state || "discovered"}`;
     const actions = document.createElement("div");
     actions.className = "plugin-card-actions";
-    if (!["enabled", "enabling", "update_pending", "blocked", "crashed"].includes(plugin.status)) {
+    if (!["enabled", "enabling", "update_pending", "blocked", "crashed", "uninstalled"].includes(plugin.status)) {
       const enable = document.createElement("button");
       enable.type = "button";
       enable.className = "primary";

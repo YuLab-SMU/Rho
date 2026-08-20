@@ -5,11 +5,10 @@ state/transition/event/tombstone persistence completed its local stop gate
 2026-08-20; P2-1/P2-2/P2-3/P2-4A hosted and cross-platform installed gates
 remain open and mandatory before final Phase 2 acceptance
 
-Active work package: P2-4B3 only — restart/project-open reconstruction and
-nonterminal enable reconciliation. P2-4C through P2-4G remain inactive. B3 may
-create fresh hosts/generations/handles only for durable desired `enabled` and
-exact package/grant evidence; it may not add Retry/Disable/Uninstall/Update/
-Rollback commands or let plugin failure block Workspace R/project switching.
+Active work package: none at the P2-4B3/P2-4B checkpoint. P2-4C through P2-4G
+remain inactive pending explicit amendment/cross-review. B3 added no Retry/
+Disable/Uninstall/Update/Rollback command and no path by which plugin recovery
+can block Workspace R or project switching.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -190,7 +189,7 @@ P2-4B is divided into three local integration stops:
    persistence failure closes the route/revokes handles and records or leaves
    recoverable nonterminal truth; it never reports success. Permission-required
    continuation retains the same transition ID/digest/revision.
-3. **P2-4B3 — restart reconstruction (active).** Workspace/project startup
+3. **P2-4B3 — restart reconstruction (locally complete).** Workspace/project startup
    will discover packages disabled first, reconcile nonterminal transitions,
    and reconstruct only durable desired `enabled` + exact accepted digest using
    fresh host/generation/handles. Missing/changed source, invalid cache,
@@ -545,6 +544,50 @@ The local updater signature used an ephemeral rehearsal key and intentionally
 does not match the production updater public key. It is build evidence, not a
 publishable update. Hosted CI, Windows/Linux installed acceptance and final
 Phase 2 acceptance remain open.
+
+### P2-4B3 / P2-4B local checkpoint — 2026-08-20
+
+Restart and project-open reconstruction are locally complete at
+`0.4.1-dev.5`:
+
+- application/Workspace start performs permission recovery before exact plugin
+  reconciliation; successful project switch uses the same entry point after
+  the target project becomes authoritative;
+- a completed exact desired-enabled package with valid project grants gets a
+  fresh transition, strictly higher generation, new host and new handles;
+  repeated reconciliation of the live exact route is idempotent;
+- a prior nonterminal enable is closed as failed/reconciled because process
+  authority cannot survive restart, then rebuilt from exact pending/accepted
+  digest evidence. Recovery audit uses `recovery`, not a forged user-request
+  event;
+- allow-once authority is revoked and returns to a fresh bounded permission
+  request; valid project grants may be reused only to mint new live handles;
+- missing packages, invalid discovery roots and corrupt cache become visibly
+  Blocked; changed digests become Update pending; terminal denial/crash/blocked
+  state never auto-retries. Durable missing identities remain visible in the
+  trusted list even when no package can be discovered;
+- reconciliation reports are stable-code-only and capped at 256 entries. One
+  invalid plugin does not stop an exact sibling; two-project and A-B-A tests
+  preserve independent hosts, caches, states and monotonic generations;
+- all 243 desktop tests ran: 242 passed and the opt-in disposable-Keychain test
+  remained ignored. The full locked Rust workspace, stable all-target and Rust
+  1.88 all-target matrices passed, as did all P2-4 contracts and UI syntax/mock
+  checks. The run-history A-B-A concurrency test keeps its exact stale-result
+  assertion with a five-second scheduler-only bound after the prior one-second
+  bound proved flaky under the full parallel matrix;
+- debug and packaged macOS arm64 candidate/legacy smoke both proved restart
+  reactivation, generation 2, fresh authority and changed-package
+  update-pending behavior;
+- final local B3 executable: 47,644,640 bytes, SHA-256
+  `ad68abc39f44c4aef8047ea8b2d882a1712d68fe4241100a179e100adf9c5a27`;
+  DMG: 26,263,682 bytes, SHA-256
+  `63fdad62861fcefefa9028052919aa882d3ad5d988cfa6090898b466ecd97b4a`;
+  updater archive: 27,002,967 bytes, SHA-256
+  `599b73491d31daa5cb36de2677e8c47550cc3d2c6a46699547c11c099631ee49`.
+
+The updater archive again uses an ephemeral rehearsal signature and is not
+publishable. Hosted CI, Windows/Linux installed evidence and all P2-4C+ gates
+remain open; P2-4B local completion is not Phase 2 acceptance.
 
 ## Verification Matrix
 

@@ -6115,6 +6115,29 @@ async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus> {
         &config.bridge_package,
     )
     .await?;
+    let plugin_identity = broker.identity().clone();
+    match workspace_plugin_runtime_context(
+        config.data_dir.clone(),
+        normalized_project_root.clone(),
+        &plugin_identity,
+    ) {
+        Ok(plugin_context) => {
+            let plugin_reconciliation = state
+                .plugin_permissions
+                .reconcile_project(&plugin_context, &mut store);
+            write_startup_event(json!({
+                "kind": "workspace_plugin_reconciliation",
+                "trigger": "workspace_start",
+                "report": plugin_reconciliation,
+            }));
+        }
+        Err(error) => write_startup_event(json!({
+            "kind": "workspace_plugin_reconciliation_unavailable",
+            "trigger": "workspace_start",
+            "reason_code": "runtime_context_unavailable",
+            "message": bounded_diagnostic(&error.to_string()),
+        })),
+    }
     let status = status_from(&config, &session, Some(broker.identity()))?;
     let context = Arc::new(Mutex::new(CoordinatorRuntime { broker, store }));
     if state.extension_host.mode() == InternalExtensionRuntimeMode::Candidate {
@@ -6542,6 +6565,26 @@ fn extension_project_scope_id(normalized_project_root: &str) -> Result<ScopeId> 
         .map_err(|error| anyhow!("creating extension project scope identity failed: {error}"))
 }
 
+fn workspace_plugin_runtime_context(
+    data_dir: PathBuf,
+    project_root: String,
+    identity: &rho_protocol::WorkspaceIdentity,
+) -> Result<workspace_plugins::PluginRuntimeContext> {
+    Ok(workspace_plugins::PluginRuntimeContext {
+        app_data_dir: data_dir,
+        project_revision: i64::try_from(identity.project_revision)
+            .context("project revision exceeds plugin recovery range")?,
+        project_scope_id: extension_project_scope_id(&project_root)?,
+        project_root,
+        workspace: Some(WorkspaceGrantIdentity {
+            workspace_id: identity.workspace_id.clone(),
+            kernel_instance_id: identity.kernel_instance_id.clone(),
+            state_revision: identity.state_revision,
+            project_revision: identity.project_revision,
+        }),
+    })
+}
+
 fn extension_workspace_scope_id(
     project: &ScopeSnapshot,
     workspace: &rho_protocol::WorkspaceIdentity,
@@ -6955,6 +6998,41 @@ where
                 "message": bounded_diagnostic(&error.to_string()),
             })),
         }
+    }
+
+    let plugin_data_dir = runtime_config(state).map(|config| config.data_dir);
+    match (active_context(state).await, plugin_data_dir) {
+        (Ok(context), Ok(data_dir)) => {
+            let mut context = context.lock().await;
+            let identity = context.broker.identity().clone();
+            let plugin_context =
+                workspace_plugin_runtime_context(data_dir, normalized_root.clone(), &identity);
+            let plugin_reconciliation = plugin_context.map(|plugin_context| {
+                state
+                    .plugin_permissions
+                    .reconcile_project(&plugin_context, &mut context.store)
+            });
+            drop(context);
+            match plugin_reconciliation {
+                Ok(report) => write_startup_event(json!({
+                    "kind": "workspace_plugin_reconciliation",
+                    "trigger": "project_switch",
+                    "report": report,
+                })),
+                Err(error) => write_startup_event(json!({
+                    "kind": "workspace_plugin_reconciliation_unavailable",
+                    "trigger": "project_switch",
+                    "reason_code": "runtime_context_unavailable",
+                    "message": bounded_diagnostic(&error.to_string()),
+                })),
+            }
+        }
+        (Err(error), _) | (_, Err(error)) => write_startup_event(json!({
+            "kind": "workspace_plugin_reconciliation_unavailable",
+            "trigger": "project_switch",
+            "reason_code": "workspace_context_unavailable",
+            "message": bounded_diagnostic(&error.to_string()),
+        })),
     }
 
     write_project_switch_event(
@@ -12047,7 +12125,10 @@ mod tests {
                 )
                 .await
             });
-            tokio::time::timeout(Duration::from_secs(1), async {
+            // Full-workspace parallel tests can briefly starve this task while
+            // the switch remains bounded; five seconds avoids a scheduler-only
+            // failure without relaxing the stale-generation assertion.
+            tokio::time::timeout(Duration::from_secs(5), async {
                 loop {
                     if *state.project_root.read().await == project_b {
                         break;
@@ -14360,7 +14441,46 @@ fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Valu
         p24_cached.file_bytes("dist/plugin.wasm") == Some(P2_1_SMOKE_WASM),
         "installed P2-4 immutable cache read-back diverged"
     );
-    p24_registry.invalidate_project(&p24_project_root);
+    drop(p24_registry);
+    let p24_restarted = crate::workspace_plugins::PendingPluginPermissionRegistry::default();
+    let p24_restart_report = p24_restarted.reconcile_project(&p24_context, &mut p24_store);
+    ensure!(
+        p24_restart_report.reactivated == 1,
+        "installed P2-4 restart did not reconstruct the exact enabled package"
+    );
+    let p24_restarted_state = PluginLifecycleQueryService::new(&p24_store)
+        .get_state(
+            &p24_project_root,
+            "org.yulab.rho.phase2-durable-enable-smoke",
+        )?
+        .context("installed P2-4 restarted lifecycle state is missing")?;
+    ensure!(
+        p24_restarted_state.observed_state == "active"
+            && p24_restarted_state.last_activation_generation == 2,
+        "installed P2-4 restart reused or lost activation generation"
+    );
+    p24_restarted.invalidate_project(&p24_project_root);
+    let p24_manifest_path = p24_plugin.join("rho-plugin.json");
+    let mut p24_changed_manifest: Value =
+        serde_json::from_slice(&std::fs::read(&p24_manifest_path)?)?;
+    p24_changed_manifest["version"] = json!("2.0.0");
+    std::fs::write(
+        &p24_manifest_path,
+        serde_json::to_vec(&p24_changed_manifest)?,
+    )?;
+    let p24_changed_report = p24_restarted.reconcile_project(&p24_context, &mut p24_store);
+    ensure!(
+        p24_changed_report.update_pending == 1,
+        "installed P2-4 changed package did not remain update-pending"
+    );
+    let p24_changed_list = p24_restarted.list(&p24_context, &mut p24_store)?;
+    ensure!(
+        p24_changed_list
+            .plugins
+            .iter()
+            .any(|plugin| plugin.status == "update_pending"),
+        "installed P2-4 trusted projection hid update-pending state"
+    );
 
     Ok(json!({
         "runtime": "wasmtime-38.0.4",
@@ -14388,6 +14508,10 @@ fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Valu
         "durable_first_enable": true,
         "durable_activation_generation": 1,
         "durable_completion_after_routing": true,
+        "restart_reactivated": true,
+        "restart_generation": 2,
+        "restart_authority_fresh": true,
+        "changed_package_update_pending": true,
     }))
 }
 

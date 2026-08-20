@@ -60,6 +60,7 @@ const MAX_PLUGIN_SKILL_BYTES: usize = 64 * 1024;
 const MAX_PLUGIN_SKILL_PACK_BYTES: usize = 256 * 1024;
 const MAX_AGENT_PLUGIN_TOOL_PROFILE_BYTES: usize = 2 * 1024 * 1024;
 const MAX_AGENT_PLUGIN_CONTEXT_PROFILE_BYTES: usize = 512 * 1024;
+const MAX_PLUGIN_RECONCILIATION_ENTRIES: usize = 256;
 
 pub(crate) struct WorkspacePluginAgentProjection {
     pub tools: Vec<AgentPluginToolDefinition>,
@@ -148,6 +149,26 @@ pub(crate) struct WorkspacePluginEnableResult {
     pub active_grant_count: usize,
     pub transition_id: Option<String>,
     pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct WorkspacePluginReconciliationReport {
+    pub project_root: String,
+    pub reactivated: usize,
+    pub already_active: usize,
+    pub permission_required: usize,
+    pub update_pending: usize,
+    pub blocked: usize,
+    pub skipped: usize,
+    pub entries: Vec<WorkspacePluginReconciliationEntry>,
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct WorkspacePluginReconciliationEntry {
+    pub plugin_id: Option<String>,
+    pub status: String,
+    pub reason_code: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -385,7 +406,7 @@ impl PendingPluginPermissionRegistry {
             });
         };
 
-        let plugins = report
+        let mut plugins = report
             .plugins
             .iter()
             .map(|plugin| {
@@ -398,7 +419,25 @@ impl PendingPluginPermissionRegistry {
                     &state,
                 )
             })
-            .collect();
+            .collect::<Vec<_>>();
+        let discovered_ids = plugins
+            .iter()
+            .map(|plugin| plugin.plugin_id.clone())
+            .collect::<BTreeSet<_>>();
+        plugins.extend(
+            lifecycle_states
+                .values()
+                .filter(|lifecycle| !discovered_ids.contains(&lifecycle.plugin_id))
+                .filter(|lifecycle| {
+                    lifecycle.desired_state == "enabled"
+                        || matches!(
+                            lifecycle.observed_state.as_str(),
+                            "blocked" | "crashed" | "update_pending" | "uninstalled"
+                        )
+                })
+                .map(|lifecycle| missing_workspace_plugin_view(lifecycle, &requests, &grants)),
+        );
+        plugins.sort_by(|left, right| left.plugin_id.cmp(&right.plugin_id));
         Ok(WorkspacePluginList {
             project_root: context.project_root.clone(),
             project_revision: context.project_revision,
@@ -418,6 +457,168 @@ impl PendingPluginPermissionRegistry {
                 })
                 .collect(),
         })
+    }
+
+    pub(crate) fn reconcile_project(
+        &self,
+        context: &PluginRuntimeContext,
+        store: &mut Store,
+    ) -> WorkspacePluginReconciliationReport {
+        let mut report = WorkspacePluginReconciliationReport {
+            project_root: context.project_root.clone(),
+            reactivated: 0,
+            already_active: 0,
+            permission_required: 0,
+            update_pending: 0,
+            blocked: 0,
+            skipped: 0,
+            entries: Vec::new(),
+            truncated: false,
+        };
+        let durable_states = match PluginLifecycleQueryService::new(store)
+            .list_states(&context.project_root, Some(256))
+        {
+            Ok(states) => states,
+            Err(error) => {
+                push_reconciliation_entry(
+                    &mut report,
+                    WorkspacePluginReconciliationEntry {
+                        plugin_id: None,
+                        status: "failed".to_string(),
+                        reason_code: bounded_reconciliation_reason(&error.to_string()),
+                    },
+                );
+                return report;
+            }
+        };
+        let discovery = match discover_workspace_plugins(Path::new(&context.project_root)) {
+            Ok(Some(discovery)) => discovery,
+            Ok(None) => rho_extension_runtime::DiscoveryReport {
+                plugins: Vec::new(),
+                failures: Vec::new(),
+            },
+            Err(error) => {
+                self.invalidate_project(&context.project_root);
+                for durable in durable_states
+                    .iter()
+                    .filter(|durable| durable.desired_state == "enabled")
+                {
+                    match persist_recovery_block(store, context, durable, "discovery_root_invalid")
+                    {
+                        Ok(()) => {
+                            report.blocked += 1;
+                            push_reconciliation_entry(
+                                &mut report,
+                                WorkspacePluginReconciliationEntry {
+                                    plugin_id: Some(durable.plugin_id.clone()),
+                                    status: "blocked".to_string(),
+                                    reason_code: "discovery_root_invalid".to_string(),
+                                },
+                            );
+                        }
+                        Err(persistence_error) => push_reconciliation_entry(
+                            &mut report,
+                            WorkspacePluginReconciliationEntry {
+                                plugin_id: Some(durable.plugin_id.clone()),
+                                status: "failed".to_string(),
+                                reason_code: bounded_reconciliation_reason(
+                                    &persistence_error.to_string(),
+                                ),
+                            },
+                        ),
+                    }
+                }
+                if report.blocked == 0 {
+                    push_reconciliation_entry(
+                        &mut report,
+                        WorkspacePluginReconciliationEntry {
+                            plugin_id: None,
+                            status: "failed".to_string(),
+                            reason_code: bounded_reconciliation_reason(&error.to_string()),
+                        },
+                    );
+                }
+                return report;
+            }
+        };
+        for failure in discovery.failures {
+            push_reconciliation_entry(
+                &mut report,
+                WorkspacePluginReconciliationEntry {
+                    plugin_id: None,
+                    status: "discovery_failed".to_string(),
+                    reason_code: bounded_reconciliation_reason(&failure.reason),
+                },
+            );
+        }
+        let discovered_ids = discovery
+            .plugins
+            .iter()
+            .map(|plugin| plugin.manifest.id.to_string())
+            .collect::<BTreeSet<_>>();
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        for plugin in discovery.plugins {
+            let plugin_id = plugin.manifest.id.to_string();
+            match reconcile_discovered_plugin(&mut state, context, &plugin, store) {
+                Ok(status) => {
+                    increment_reconciliation_status(&mut report, status);
+                    push_reconciliation_entry(
+                        &mut report,
+                        WorkspacePluginReconciliationEntry {
+                            plugin_id: Some(plugin_id),
+                            status: status.as_str().to_string(),
+                            reason_code: status.reason_code().to_string(),
+                        },
+                    );
+                }
+                Err(error) => push_reconciliation_entry(
+                    &mut report,
+                    WorkspacePluginReconciliationEntry {
+                        plugin_id: Some(plugin_id),
+                        status: "failed".to_string(),
+                        reason_code: bounded_reconciliation_reason(&error.to_string()),
+                    },
+                ),
+            }
+        }
+        for durable in durable_states
+            .iter()
+            .filter(|durable| !discovered_ids.contains(&durable.plugin_id))
+        {
+            if durable.desired_state != "enabled" {
+                report.skipped += 1;
+                continue;
+            }
+            remove_active_plugin(
+                &mut state,
+                &registry_key(&context.project_root, &durable.plugin_id),
+            );
+            match persist_missing_plugin_block(store, context, durable) {
+                Ok(()) => {
+                    report.blocked += 1;
+                    push_reconciliation_entry(
+                        &mut report,
+                        WorkspacePluginReconciliationEntry {
+                            plugin_id: Some(durable.plugin_id.clone()),
+                            status: "blocked".to_string(),
+                            reason_code: "package_missing".to_string(),
+                        },
+                    );
+                }
+                Err(error) => push_reconciliation_entry(
+                    &mut report,
+                    WorkspacePluginReconciliationEntry {
+                        plugin_id: Some(durable.plugin_id.clone()),
+                        status: "failed".to_string(),
+                        reason_code: bounded_reconciliation_reason(&error.to_string()),
+                    },
+                ),
+            }
+        }
+        report
     }
 
     pub(crate) fn agent_projection(
@@ -814,6 +1015,7 @@ impl PendingPluginPermissionRegistry {
                 project_root: context.project_root.clone(),
                 plugin_id: plugin.manifest.id.to_string(),
                 kind: "enable".to_string(),
+                request_event_type: "user_requested".to_string(),
                 desired_state: "enabled".to_string(),
                 expected_old_digest: None,
                 candidate_digest: Some(plugin.digest.to_string()),
@@ -886,31 +1088,19 @@ impl PendingPluginPermissionRegistry {
             return Err(error);
         }
 
-        let durable_grants = matching_project_grants(store, context, &plugin)?;
-        let mut requests = Vec::new();
-        let mut reusable_grants = BTreeMap::new();
-        for permission in &plugin.manifest.permissions {
-            let constraints = PermissionConstraints::from_manifest(permission)?;
-            let constraints_digest = constraints.digest()?;
-            if let Some(grant) = durable_grants.get(&(permission.name.clone(), constraints_digest))
-            {
-                reusable_grants.insert(permission.name.clone(), grant.clone());
-                continue;
+        let (reusable_grants, requests) = match plan_plugin_permissions(store, context, &plugin) {
+            Ok(plan) => plan,
+            Err(error) => {
+                let _ = fail_enable_transition(
+                    store,
+                    context,
+                    &transition_id,
+                    "permission_plan_failed",
+                    "disabled",
+                );
+                return Err(error);
             }
-            requests.push(PluginPermissionRequestDraft {
-                request_id: format!("request.{}", uuid::Uuid::new_v4().simple()),
-                project_root: context.project_root.clone(),
-                plugin_id: plugin.manifest.id.to_string(),
-                plugin_version: plugin.manifest.version.to_string(),
-                package_digest: plugin.digest.to_string(),
-                runtime_kind: plugin.manifest.runtime.kind.to_string(),
-                permission: permission.name.clone(),
-                constraints_json: constraints.canonical_json()?,
-                constraints_digest: constraints.digest()?,
-                purpose_text: permission.purpose.clone(),
-                expected_project_revision: context.project_revision,
-            });
-        }
+        };
 
         if !requests.is_empty() {
             let created = match PluginPermissionMutationService::new(store)
@@ -2801,6 +2991,388 @@ impl PendingPluginPermissionRegistry {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReconciliationStatus {
+    Reactivated,
+    AlreadyActive,
+    PermissionRequired,
+    UpdatePending,
+    Blocked,
+    Skipped,
+}
+
+impl ReconciliationStatus {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Reactivated => "reactivated",
+            Self::AlreadyActive => "already_active",
+            Self::PermissionRequired => "permission_required",
+            Self::UpdatePending => "update_pending",
+            Self::Blocked => "blocked",
+            Self::Skipped => "skipped",
+        }
+    }
+
+    fn reason_code(self) -> &'static str {
+        match self {
+            Self::Reactivated => "exact_restart_reactivation",
+            Self::AlreadyActive => "exact_route_already_active",
+            Self::PermissionRequired => "fresh_permission_review_required",
+            Self::UpdatePending => "package_digest_changed",
+            Self::Blocked => "recovery_blocked",
+            Self::Skipped => "durable_enable_not_eligible",
+        }
+    }
+}
+
+fn increment_reconciliation_status(
+    report: &mut WorkspacePluginReconciliationReport,
+    status: ReconciliationStatus,
+) {
+    match status {
+        ReconciliationStatus::Reactivated => report.reactivated += 1,
+        ReconciliationStatus::AlreadyActive => report.already_active += 1,
+        ReconciliationStatus::PermissionRequired => report.permission_required += 1,
+        ReconciliationStatus::UpdatePending => report.update_pending += 1,
+        ReconciliationStatus::Blocked => report.blocked += 1,
+        ReconciliationStatus::Skipped => report.skipped += 1,
+    }
+}
+
+fn push_reconciliation_entry(
+    report: &mut WorkspacePluginReconciliationReport,
+    entry: WorkspacePluginReconciliationEntry,
+) {
+    if report.entries.len() < MAX_PLUGIN_RECONCILIATION_ENTRIES {
+        report.entries.push(entry);
+    } else {
+        report.truncated = true;
+    }
+}
+
+fn bounded_reconciliation_reason(message: &str) -> String {
+    let lower = message.to_ascii_lowercase();
+    if lower.contains("permission") || lower.contains("grant") {
+        "permission_recovery_failed"
+    } else if lower.contains("cache") || lower.contains("package") || lower.contains("digest") {
+        "package_recovery_failed"
+    } else if lower.contains("sqlite")
+        || lower.contains("store")
+        || lower.contains("persist")
+        || lower.contains("transition")
+    {
+        "persistence_recovery_failed"
+    } else if lower.contains("host") || lower.contains("wasm") || lower.contains("activation") {
+        "host_recovery_failed"
+    } else {
+        "plugin_recovery_failed"
+    }
+    .to_string()
+}
+
+fn reconcile_discovered_plugin(
+    registry: &mut RegistryState,
+    context: &PluginRuntimeContext,
+    plugin: &DiscoveredPlugin,
+    store: &mut Store,
+) -> Result<ReconciliationStatus> {
+    let (_, lifecycle) = PluginLifecycleMutationService::new(store).discover(
+        &context.project_root,
+        &WorkspacePluginDiscoveredDraft {
+            project_root: context.project_root.clone(),
+            plugin_id: plugin.manifest.id.to_string(),
+            directory_name: plugin.directory.clone(),
+            plugin_version: plugin.manifest.version.to_string(),
+            runtime_kind: plugin.manifest.runtime.kind.to_string(),
+            discovered_digest: plugin.digest.to_string(),
+        },
+    )?;
+    let key = registry_key(&context.project_root, plugin.manifest.id.as_str());
+    if lifecycle.desired_state != "enabled" {
+        remove_active_plugin(registry, &key);
+        return Ok(ReconciliationStatus::Skipped);
+    }
+    if matches!(lifecycle.observed_state.as_str(), "crashed" | "blocked") {
+        remove_active_plugin(registry, &key);
+        return Ok(ReconciliationStatus::Blocked);
+    }
+    if registry.active.get(&key).is_some_and(|active| {
+        active.package_digest == plugin.digest.as_str()
+            && active.plugin_version == plugin.manifest.version.to_string()
+    }) && lifecycle.observed_state == "active"
+        && lifecycle.accepted_digest.as_deref() == Some(plugin.digest.as_str())
+    {
+        return Ok(ReconciliationStatus::AlreadyActive);
+    }
+
+    let prior_observed = lifecycle.observed_state.clone();
+    let nonterminal = lifecycle
+        .transition_id
+        .as_deref()
+        .map(|transition_id| {
+            PluginLifecycleQueryService::new(store)
+                .get_transition(&context.project_root, transition_id)
+        })
+        .transpose()?
+        .flatten()
+        .filter(|transition| {
+            matches!(
+                transition.status.as_str(),
+                "pending" | "running" | "completion_uncertain"
+            )
+        });
+    let had_nonterminal = nonterminal.is_some();
+    if let Some(transition) = nonterminal {
+        fail_enable_transition(
+            store,
+            context,
+            &transition.transition_id,
+            "broker_restart_reconciled",
+            "disabled",
+        )?;
+    }
+    let lifecycle = PluginLifecycleQueryService::new(store)
+        .get_state(&context.project_root, plugin.manifest.id.as_str())?
+        .context("plugin lifecycle state disappeared during restart reconciliation")?;
+    let target_digest = if let Some(accepted) = lifecycle.accepted_digest.as_deref() {
+        if accepted != plugin.digest.as_str() {
+            remove_active_plugin(registry, &key);
+            return Ok(ReconciliationStatus::UpdatePending);
+        }
+        if prior_observed != "active" && !had_nonterminal {
+            remove_active_plugin(registry, &key);
+            persist_recovery_block(store, context, &lifecycle, "unprovable_restart_state")?;
+            return Ok(ReconciliationStatus::Blocked);
+        }
+        accepted.to_string()
+    } else if had_nonterminal && lifecycle.pending_digest.as_deref() == Some(plugin.digest.as_str())
+    {
+        plugin.digest.to_string()
+    } else {
+        remove_active_plugin(registry, &key);
+        return Ok(ReconciliationStatus::Skipped);
+    };
+    remove_active_plugin(registry, &key);
+    let (transition_id, cached) =
+        match prepare_recovery_enable_transition(store, context, plugin, &target_digest) {
+            Ok(prepared) => prepared,
+            Err(error) => {
+                if PluginLifecycleQueryService::new(store)
+                    .get_state(&context.project_root, plugin.manifest.id.as_str())?
+                    .is_some_and(|state| state.observed_state == "blocked")
+                {
+                    return Ok(ReconciliationStatus::Blocked);
+                }
+                return Err(error);
+            }
+        };
+    let (reusable_grants, requests) = match plan_plugin_permissions(store, context, plugin) {
+        Ok(plan) => plan,
+        Err(error) => {
+            if fail_enable_transition(
+                store,
+                context,
+                &transition_id,
+                "permission_plan_failed",
+                "blocked",
+            )
+            .is_ok()
+            {
+                return Ok(ReconciliationStatus::Blocked);
+            }
+            return Err(error);
+        }
+    };
+    if !requests.is_empty() {
+        let created = match PluginPermissionMutationService::new(store)
+            .create_requests(&context.project_root, &requests)
+        {
+            Ok(created) => created,
+            Err(error) => {
+                if fail_enable_transition(
+                    store,
+                    context,
+                    &transition_id,
+                    "permission_request_failed",
+                    "blocked",
+                )
+                .is_ok()
+                {
+                    return Ok(ReconciliationStatus::Blocked);
+                }
+                return Err(error.into());
+            }
+        };
+        let request_ids = created
+            .into_iter()
+            .map(|request| request.request_id)
+            .collect::<Vec<_>>();
+        registry.pending.insert(
+            key,
+            PendingEnable {
+                plugin_id: plugin.manifest.id.to_string(),
+                plugin_version: plugin.manifest.version.to_string(),
+                package_digest: plugin.digest.to_string(),
+                transition_id,
+                request_ids,
+                expected_project_revision: context.project_revision,
+            },
+        );
+        return Ok(ReconciliationStatus::PermissionRequired);
+    }
+    activate_plugin_durable(
+        registry,
+        context,
+        plugin,
+        &cached,
+        &transition_id,
+        reusable_grants.values(),
+        store,
+    )?;
+    Ok(ReconciliationStatus::Reactivated)
+}
+
+fn prepare_recovery_enable_transition(
+    store: &mut Store,
+    context: &PluginRuntimeContext,
+    plugin: &DiscoveredPlugin,
+    target_digest: &str,
+) -> Result<(String, CachedPluginPackage)> {
+    ensure!(
+        plugin.digest.as_str() == target_digest,
+        "restart package digest changed before transition preparation"
+    );
+    let transition_id = format!("transition.recovery.{}", uuid::Uuid::new_v4().simple());
+    let requested = PluginLifecycleMutationService::new(store).request_transition(
+        &context.project_root,
+        &WorkspacePluginTransitionDraft {
+            transition_id: transition_id.clone(),
+            project_root: context.project_root.clone(),
+            plugin_id: plugin.manifest.id.to_string(),
+            kind: "enable".to_string(),
+            request_event_type: "recovery".to_string(),
+            desired_state: "enabled".to_string(),
+            expected_old_digest: None,
+            candidate_digest: Some(target_digest.to_string()),
+            rollback_digest: None,
+            backup_path_key: None,
+        },
+    )?;
+    ensure!(
+        matches!(
+            requested.outcome,
+            PluginLifecycleMutationOutcome::Applied | PluginLifecycleMutationOutcome::Unchanged
+        ),
+        "restart enable conflicts with another lifecycle transition"
+    );
+    advance_enable_transition(
+        store,
+        context,
+        &transition_id,
+        "requested",
+        "preflight",
+        "running",
+        "resolving",
+        None,
+        false,
+        None,
+        "recovery",
+        "completed",
+        None,
+    )?;
+    let cached = match PluginPackageCache::new(&context.app_data_dir).prepare_exact(
+        Path::new(&context.project_root),
+        plugin.manifest.id.as_str(),
+        target_digest,
+    ) {
+        Ok(cached) => cached,
+        Err(error) => {
+            let _ = fail_enable_transition(
+                store,
+                context,
+                &transition_id,
+                "package_cache_failed",
+                "blocked",
+            );
+            return Err(error.into());
+        }
+    };
+    advance_enable_transition(
+        store,
+        context,
+        &transition_id,
+        "preflight",
+        "backup_prepared",
+        "running",
+        "resolving",
+        None,
+        false,
+        None,
+        "package_backed_up",
+        "completed",
+        None,
+    )?;
+    Ok((transition_id, cached))
+}
+
+fn persist_missing_plugin_block(
+    store: &mut Store,
+    context: &PluginRuntimeContext,
+    lifecycle: &WorkspacePluginState,
+) -> Result<()> {
+    persist_recovery_block(store, context, lifecycle, "package_missing")
+}
+
+fn persist_recovery_block(
+    store: &mut Store,
+    context: &PluginRuntimeContext,
+    lifecycle: &WorkspacePluginState,
+    reason_code: &str,
+) -> Result<()> {
+    if lifecycle.observed_state == "blocked" {
+        return Ok(());
+    }
+    if let Some(transition_id) = lifecycle.transition_id.as_deref()
+        && let Some(transition) = PluginLifecycleQueryService::new(store)
+            .get_transition(&context.project_root, transition_id)?
+        && matches!(
+            transition.status.as_str(),
+            "pending" | "running" | "completion_uncertain"
+        )
+    {
+        return fail_enable_transition(store, context, transition_id, reason_code, "blocked");
+    }
+    let candidate_digest = lifecycle
+        .accepted_digest
+        .as_ref()
+        .or(lifecycle.pending_digest.as_ref())
+        .context("blocked plugin recovery has no exact durable package digest")?;
+    let transition_id = format!("transition.recovery.{}", uuid::Uuid::new_v4().simple());
+    let requested = PluginLifecycleMutationService::new(store).request_transition(
+        &context.project_root,
+        &WorkspacePluginTransitionDraft {
+            transition_id: transition_id.clone(),
+            project_root: context.project_root.clone(),
+            plugin_id: lifecycle.plugin_id.clone(),
+            kind: "enable".to_string(),
+            request_event_type: "recovery".to_string(),
+            desired_state: "enabled".to_string(),
+            expected_old_digest: None,
+            candidate_digest: Some(candidate_digest.clone()),
+            rollback_digest: None,
+            backup_path_key: None,
+        },
+    )?;
+    ensure!(
+        matches!(
+            requested.outcome,
+            PluginLifecycleMutationOutcome::Applied | PluginLifecycleMutationOutcome::Unchanged
+        ),
+        "blocked plugin recovery transition conflicted"
+    );
+    fail_enable_transition(store, context, &transition_id, reason_code, "blocked")
+}
+
 fn record_call_event(
     store: &mut Store,
     context: &PluginRuntimeContext,
@@ -3036,6 +3608,53 @@ fn plugin_view(
                 _ => None,
             }
         },
+    }
+}
+
+fn missing_workspace_plugin_view(
+    lifecycle: &WorkspacePluginState,
+    requests: &[PluginPermissionRequest],
+    grants: &[PluginPermissionGrant],
+) -> WorkspacePluginView {
+    let package_digest = lifecycle
+        .pending_digest
+        .as_ref()
+        .or(lifecycle.accepted_digest.as_ref())
+        .cloned()
+        .unwrap_or_default();
+    let pending_request_count = requests
+        .iter()
+        .filter(|request| request.plugin_id == lifecycle.plugin_id && request.status == "pending")
+        .count();
+    let active_grant_count = grants
+        .iter()
+        .filter(|grant| grant.plugin_id == lifecycle.plugin_id && grant.status == "active")
+        .count();
+    WorkspacePluginView {
+        plugin_id: lifecycle.plugin_id.clone(),
+        name: lifecycle.plugin_id.clone(),
+        version: lifecycle.plugin_version.clone(),
+        short_digest: package_digest.chars().take(12).collect(),
+        package_digest,
+        runtime_kind: lifecycle.runtime_kind.clone(),
+        permission_count: 0,
+        pending_request_count,
+        active_grant_count,
+        status: match lifecycle.observed_state.as_str() {
+            "crashed" => "crashed",
+            "update_pending" => "update_pending",
+            "uninstalled" => "uninstalled",
+            _ => "blocked",
+        }
+        .to_string(),
+        desired_state: lifecycle.desired_state.clone(),
+        observed_state: lifecycle.observed_state.clone(),
+        accepted_digest: lifecycle.accepted_digest.clone(),
+        transition_id: lifecycle.transition_id.clone(),
+        message: Some(
+            "The durable plugin identity is unavailable from the current discovery root and remains non-routable."
+                .to_string(),
+        ),
     }
 }
 
@@ -3293,6 +3912,43 @@ fn matching_project_grants(
         }
     }
     Ok(matching)
+}
+
+fn plan_plugin_permissions(
+    store: &Store,
+    context: &PluginRuntimeContext,
+    plugin: &DiscoveredPlugin,
+) -> Result<(
+    BTreeMap<String, PluginPermissionGrant>,
+    Vec<PluginPermissionRequestDraft>,
+)> {
+    let durable_grants = matching_project_grants(store, context, plugin)?;
+    let mut reusable_grants = BTreeMap::new();
+    let mut requests = Vec::new();
+    for permission in &plugin.manifest.permissions {
+        let constraints = PermissionConstraints::from_manifest(permission)?;
+        let constraints_digest = constraints.digest()?;
+        if let Some(grant) =
+            durable_grants.get(&(permission.name.clone(), constraints_digest.clone()))
+        {
+            reusable_grants.insert(permission.name.clone(), grant.clone());
+            continue;
+        }
+        requests.push(PluginPermissionRequestDraft {
+            request_id: format!("request.{}", uuid::Uuid::new_v4().simple()),
+            project_root: context.project_root.clone(),
+            plugin_id: plugin.manifest.id.to_string(),
+            plugin_version: plugin.manifest.version.to_string(),
+            package_digest: plugin.digest.to_string(),
+            runtime_kind: plugin.manifest.runtime.kind.to_string(),
+            permission: permission.name.clone(),
+            constraints_json: constraints.canonical_json()?,
+            constraints_digest,
+            purpose_text: permission.purpose.clone(),
+            expected_project_revision: context.project_revision,
+        });
+    }
+    Ok((reusable_grants, requests))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -3900,11 +4556,11 @@ mod tests {
     use tempfile::tempdir;
 
     #[derive(Debug)]
-    struct FixedToken;
+    struct FixedToken(u8);
 
     impl GrantTokenSource for FixedToken {
         fn next_token(&self) -> [u8; 32] {
-            [7; 32]
+            [self.0; 32]
         }
     }
 
@@ -3942,12 +4598,22 @@ mod tests {
     fn deterministic_registry_with_network(
         network_engine: NetworkFetchEngine,
     ) -> PendingPluginPermissionRegistry {
+        deterministic_registry_with_network_and_token(network_engine, 7)
+    }
+
+    fn deterministic_registry_with_network_and_token(
+        network_engine: NetworkFetchEngine,
+        token_byte: u8,
+    ) -> PendingPluginPermissionRegistry {
         PendingPluginPermissionRegistry {
             state: Mutex::new(RegistryState {
                 pending: BTreeMap::new(),
                 active: BTreeMap::new(),
                 contributions: ContributionStore::new(),
-                grants: GrantStore::with_sources(Arc::new(SystemGrantClock), Arc::new(FixedToken)),
+                grants: GrantStore::with_sources(
+                    Arc::new(SystemGrantClock),
+                    Arc::new(FixedToken(token_byte)),
+                ),
                 broker_call_id_source: Arc::new(FixedCallId),
                 workspace_objects: WorkspaceObjectReferenceRegistry::with_sources(
                     Arc::new(FixedWorkspaceClock(AtomicU64::new(123))),
@@ -4245,6 +4911,26 @@ mod tests {
                 "requires": [],
                 "optional": [],
                 "permissions": permissions
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+    }
+
+    fn write_zero_permission_plugin_named(project: &Path, directory_name: &str, plugin_id: &str) {
+        let directory = project.join(".rho/plugins").join(directory_name);
+        fs::create_dir_all(directory.join("dist")).unwrap();
+        fs::write(directory.join("dist/plugin.wasm"), P2_1_SMOKE_WASM).unwrap();
+        fs::write(
+            directory.join("rho-plugin.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "schemaVersion": 1,
+                "id": plugin_id,
+                "name": plugin_id,
+                "version": "1.0.0",
+                "apiVersion": "^1.0",
+                "runtime": { "kind": "wasm", "entry": "dist/plugin.wasm", "scope": "project" },
+                "permissions": []
             }))
             .unwrap(),
         )
@@ -6579,6 +7265,594 @@ mod tests {
                 )
                 .unwrap(),
             Some(b1)
+        );
+    }
+
+    #[test]
+    fn restart_reconstructs_exact_durable_enable_with_fresh_generation_and_host() {
+        let directory = tempdir().unwrap();
+        write_ui_fixture_plugin(directory.path(), ContributionKind::Panel);
+        let database = directory.path().join("rho.sqlite");
+        let context = context(directory.path());
+        let mut store = Store::open(&database).unwrap();
+        let first_registry = deterministic_registry();
+        first_registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        let (first_host, first_identity) = {
+            let state = first_registry
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let active = state
+                .active
+                .get(&registry_key(&context.project_root, "org.example.plugin"))
+                .unwrap();
+            (
+                active.host_instance_id.clone(),
+                state
+                    .contributions
+                    .current_identity(
+                        &context.project_scope_id,
+                        &PluginId::new("org.example.plugin").unwrap(),
+                    )
+                    .unwrap()
+                    .unwrap(),
+            )
+        };
+        drop(first_registry);
+        drop(store);
+
+        let mut restarted_context = context.clone();
+        restarted_context
+            .workspace
+            .as_mut()
+            .unwrap()
+            .kernel_instance_id = "kernel.restart".into();
+        let mut reopened = Store::open(&database).unwrap();
+        let restarted_registry = deterministic_registry();
+        let report = restarted_registry.reconcile_project(&restarted_context, &mut reopened);
+        assert_eq!(report.reactivated, 1);
+        assert!(report.entries.iter().any(|entry| {
+            entry.plugin_id.as_deref() == Some("org.example.plugin")
+                && entry.status == "reactivated"
+        }));
+        let (second_host, second_identity) = {
+            let state = restarted_registry
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let active = state
+                .active
+                .get(&registry_key(
+                    &restarted_context.project_root,
+                    "org.example.plugin",
+                ))
+                .unwrap();
+            (
+                active.host_instance_id.clone(),
+                state
+                    .contributions
+                    .current_identity(
+                        &restarted_context.project_scope_id,
+                        &PluginId::new("org.example.plugin").unwrap(),
+                    )
+                    .unwrap()
+                    .unwrap(),
+            )
+        };
+        assert_ne!(first_host, second_host);
+        assert_eq!(first_identity.activation_generation.get(), 1);
+        assert_eq!(second_identity.activation_generation.get(), 2);
+        assert_ne!(
+            first_identity.host_instance_id,
+            second_identity.host_instance_id
+        );
+        let lifecycle = PluginLifecycleQueryService::new(&reopened)
+            .get_state(&context.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        assert_eq!(lifecycle.observed_state, "active");
+        assert_eq!(lifecycle.last_activation_generation, 2);
+        assert!(lifecycle.pending_digest.is_none());
+        assert!(
+            PluginLifecycleQueryService::new(&reopened)
+                .list_events(&context.project_root, Some(100))
+                .unwrap()
+                .iter()
+                .any(|event| event.event_type == "recovery")
+        );
+        let second_report = restarted_registry.reconcile_project(&restarted_context, &mut reopened);
+        assert_eq!(second_report.already_active, 1);
+        assert_eq!(
+            PluginLifecycleQueryService::new(&reopened)
+                .get_state(&context.project_root, "org.example.plugin")
+                .unwrap()
+                .unwrap()
+                .last_activation_generation,
+            2
+        );
+    }
+
+    #[test]
+    fn restart_recovers_nonterminal_post_publication_enable_without_reusing_generation() {
+        let directory = tempdir().unwrap();
+        write_ui_fixture_plugin(directory.path(), ContributionKind::Panel);
+        let database = directory.path().join("rho.sqlite");
+        let context = context(directory.path());
+        let mut store = Store::open(&database).unwrap();
+        let trigger = rusqlite::Connection::open(&database).unwrap();
+        trigger
+            .execute_batch(
+                "CREATE TRIGGER fail_lifecycle_event
+                 BEFORE INSERT ON workspace_plugin_lifecycle_events
+                 WHEN NEW.event_type = 'transition_completed'
+                 BEGIN SELECT RAISE(FAIL, 'injected terminal persistence failure'); END;",
+            )
+            .unwrap();
+        drop(trigger);
+        let registry = deterministic_registry();
+        assert!(
+            registry
+                .request_enable(&context, "org.example.plugin", &mut store)
+                .is_err()
+        );
+        let interrupted = PluginLifecycleQueryService::new(&store)
+            .list_nonterminal_transitions(&context.project_root, Some(10))
+            .unwrap();
+        assert_eq!(interrupted.len(), 1);
+        assert_eq!(interrupted[0].phase, "pointer_swapped");
+        let interrupted_id = interrupted[0].transition_id.clone();
+        drop(registry);
+        drop(store);
+        let connection = rusqlite::Connection::open(&database).unwrap();
+        connection
+            .execute_batch("DROP TRIGGER fail_lifecycle_event;")
+            .unwrap();
+        drop(connection);
+
+        let mut reopened = Store::open(&database).unwrap();
+        let recovered_registry = deterministic_registry();
+        let report = recovered_registry.reconcile_project(&context, &mut reopened);
+        assert_eq!(report.reactivated, 1);
+        let old = PluginLifecycleQueryService::new(&reopened)
+            .get_transition(&context.project_root, &interrupted_id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(old.status, "failed");
+        assert_eq!(
+            old.reason_code.as_deref(),
+            Some("broker_restart_reconciled")
+        );
+        let lifecycle = PluginLifecycleQueryService::new(&reopened)
+            .get_state(&context.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        assert_eq!(lifecycle.observed_state, "active");
+        assert_eq!(lifecycle.last_activation_generation, 2);
+        assert!(lifecycle.accepted_digest.is_some());
+        assert!(lifecycle.pending_digest.is_none());
+    }
+
+    #[test]
+    fn restart_changed_and_missing_packages_remain_non_routable() {
+        for missing in [false, true] {
+            let directory = tempdir().unwrap();
+            write_ui_fixture_plugin(directory.path(), ContributionKind::Panel);
+            let database = directory.path().join("rho.sqlite");
+            let context = context(directory.path());
+            let mut store = Store::open(&database).unwrap();
+            let registry = deterministic_registry();
+            registry
+                .request_enable(&context, "org.example.plugin", &mut store)
+                .unwrap();
+            drop(registry);
+            drop(store);
+            let plugin_directory = directory.path().join(".rho/plugins/example");
+            if missing {
+                fs::remove_dir_all(&plugin_directory).unwrap();
+            } else {
+                let manifest_path = plugin_directory.join("rho-plugin.json");
+                let mut manifest: serde_json::Value =
+                    serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+                manifest["version"] = serde_json::json!("2.0.0");
+                fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+            }
+            let mut reopened = Store::open(&database).unwrap();
+            let restarted = deterministic_registry();
+            let report = restarted.reconcile_project(&context, &mut reopened);
+            let lifecycle = PluginLifecycleQueryService::new(&reopened)
+                .get_state(&context.project_root, "org.example.plugin")
+                .unwrap()
+                .unwrap();
+            assert!(
+                restarted
+                    .state
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .active
+                    .is_empty()
+            );
+            if missing {
+                assert_eq!(report.blocked, 1);
+                assert_eq!(lifecycle.observed_state, "blocked");
+                assert_eq!(
+                    lifecycle.last_error_code.as_deref(),
+                    Some("package_missing")
+                );
+                let listed = restarted.list(&context, &mut reopened).unwrap();
+                let missing_view = listed
+                    .plugins
+                    .iter()
+                    .find(|plugin| plugin.plugin_id == "org.example.plugin")
+                    .unwrap();
+                assert_eq!(missing_view.status, "blocked");
+                assert_eq!(missing_view.observed_state, "blocked");
+                assert!(
+                    missing_view
+                        .message
+                        .as_deref()
+                        .unwrap()
+                        .contains("non-routable")
+                );
+            } else {
+                assert_eq!(report.update_pending, 1);
+                assert_eq!(lifecycle.observed_state, "update_pending");
+                assert_ne!(lifecycle.accepted_digest, lifecycle.pending_digest);
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn restart_invalid_discovery_root_blocks_all_durable_enablement() {
+        let directory = tempdir().unwrap();
+        write_ui_fixture_plugin(directory.path(), ContributionKind::Panel);
+        let database = directory.path().join("rho.sqlite");
+        let context = context(directory.path());
+        let mut store = Store::open(&database).unwrap();
+        let registry = deterministic_registry();
+        registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        drop(registry);
+        drop(store);
+        let rho_directory = directory.path().join(".rho");
+        fs::rename(
+            rho_directory.join("plugins"),
+            rho_directory.join("real-plugins"),
+        )
+        .unwrap();
+        std::os::unix::fs::symlink("real-plugins", rho_directory.join("plugins")).unwrap();
+
+        let mut reopened = Store::open(&database).unwrap();
+        let restarted = deterministic_registry();
+        let report = restarted.reconcile_project(&context, &mut reopened);
+        assert_eq!(report.blocked, 1);
+        assert!(
+            restarted
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .active
+                .is_empty()
+        );
+        let lifecycle = PluginLifecycleQueryService::new(&reopened)
+            .get_state(&context.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        assert_eq!(lifecycle.observed_state, "blocked");
+        assert_eq!(
+            lifecycle.last_error_code.as_deref(),
+            Some("discovery_root_invalid")
+        );
+    }
+
+    #[test]
+    fn restart_corrupt_cache_blocks_without_loading_mutable_source() {
+        let directory = tempdir().unwrap();
+        write_ui_fixture_plugin(directory.path(), ContributionKind::Panel);
+        let database = directory.path().join("rho.sqlite");
+        let context = context(directory.path());
+        let mut store = Store::open(&database).unwrap();
+        let registry = deterministic_registry();
+        registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        drop(registry);
+        drop(store);
+        let project_cache = fs::read_dir(
+            context
+                .app_data_dir
+                .join(rho_server::plugin_package_cache::PLUGIN_PACKAGE_CACHE_DIRECTORY),
+        )
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+        let digest_cache = fs::read_dir(project_cache.join("org.example.plugin"))
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        let cached_entry = digest_cache.join("dist/plugin.wasm");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&cached_entry, fs::Permissions::from_mode(0o600)).unwrap();
+        }
+        #[cfg(not(unix))]
+        {
+            let mut permissions = fs::metadata(&cached_entry).unwrap().permissions();
+            permissions.set_readonly(false);
+            fs::set_permissions(&cached_entry, permissions).unwrap();
+        }
+        fs::write(&cached_entry, b"corrupt cache").unwrap();
+
+        let mut reopened = Store::open(&database).unwrap();
+        let restarted = deterministic_registry();
+        let report = restarted.reconcile_project(&context, &mut reopened);
+        assert_eq!(report.blocked, 1);
+        assert!(
+            restarted
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .active
+                .is_empty()
+        );
+        let lifecycle = PluginLifecycleQueryService::new(&reopened)
+            .get_state(&context.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        assert_eq!(lifecycle.observed_state, "blocked");
+        assert_eq!(
+            lifecycle.last_error_code.as_deref(),
+            Some("package_cache_failed")
+        );
+    }
+
+    #[test]
+    fn restart_reuses_only_valid_project_grants_and_never_reuses_live_handles() {
+        for (decision, should_reactivate) in [("allow_project", true), ("allow_once", false)] {
+            let directory = tempdir().unwrap();
+            write_plugin(
+                directory.path(),
+                serde_json::json!([{
+                    "name": "project.fs.read",
+                    "purpose": "Read bounded CSV inputs",
+                    "paths": ["data/**/*.csv"],
+                    "maxBytes": 1024
+                }]),
+            );
+            let database = directory.path().join("rho.sqlite");
+            let context = context(directory.path());
+            let mut store = Store::open(&database).unwrap();
+            let registry = deterministic_registry();
+            let requested = registry
+                .request_enable(&context, "org.example.plugin", &mut store)
+                .unwrap();
+            registry
+                .respond(
+                    &context,
+                    PluginPermissionDecisionInput {
+                        request_id: requested.request_ids[0].clone(),
+                        decision: decision.to_string(),
+                        expected_project_revision: context.project_revision,
+                    },
+                    &mut store,
+                )
+                .unwrap();
+            let first_handle_id = {
+                let state = registry
+                    .state
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                state
+                    .active
+                    .get(&registry_key(&context.project_root, "org.example.plugin"))
+                    .unwrap()
+                    .handles
+                    .values()
+                    .next()
+                    .unwrap()
+                    .id
+                    .clone()
+            };
+            drop(registry);
+            drop(store);
+
+            let mut reopened = Store::open(&database).unwrap();
+            reopened
+                .recover_transient_plugin_permission_grants(&context.project_root, "broker_restart")
+                .unwrap();
+            let restarted =
+                deterministic_registry_with_network_and_token(NetworkFetchEngine::new(), 8);
+            let report = restarted.reconcile_project(&context, &mut reopened);
+            let state = restarted
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if should_reactivate {
+                assert_eq!(report.reactivated, 1);
+                let active = state
+                    .active
+                    .get(&registry_key(&context.project_root, "org.example.plugin"))
+                    .unwrap();
+                let second_handle_id = &active.handles.values().next().unwrap().id;
+                assert_ne!(&first_handle_id, second_handle_id);
+                assert_eq!(active.handles.len(), 1);
+                assert_eq!(
+                    PluginLifecycleQueryService::new(&reopened)
+                        .get_state(&context.project_root, "org.example.plugin")
+                        .unwrap()
+                        .unwrap()
+                        .last_activation_generation,
+                    2
+                );
+            } else {
+                assert_eq!(report.permission_required, 1);
+                assert!(state.active.is_empty());
+                assert_eq!(state.pending.len(), 1);
+                drop(state);
+                assert_eq!(
+                    PluginPermissionQueryService::new(&reopened)
+                        .list_requests(&context.project_root, Some(20), Some("pending"))
+                        .unwrap()
+                        .len(),
+                    1
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn restart_reconciliation_isolates_two_projects_across_a_b_a() {
+        let directory = tempdir().unwrap();
+        let project_a = directory.path().join("project-a");
+        let project_b = directory.path().join("project-b");
+        fs::create_dir_all(&project_a).unwrap();
+        fs::create_dir_all(&project_b).unwrap();
+        write_ui_fixture_plugin(&project_a, ContributionKind::Panel);
+        write_ui_fixture_plugin(&project_b, ContributionKind::Panel);
+        let database = directory.path().join("rho.sqlite");
+        let app_data = directory.path().join("app-data");
+        fs::create_dir_all(&app_data).unwrap();
+        let mut context_a = context(&project_a);
+        context_a.app_data_dir = app_data.clone();
+        context_a.project_scope_id = ScopeId::new("project.recovery.a").unwrap();
+        let mut context_b = context(&project_b);
+        context_b.app_data_dir = app_data;
+        context_b.project_scope_id = ScopeId::new("project.recovery.b").unwrap();
+        let mut store = Store::open(&database).unwrap();
+        let first = deterministic_registry();
+        first
+            .request_enable(&context_a, "org.example.plugin", &mut store)
+            .unwrap();
+        first
+            .request_enable(&context_b, "org.example.plugin", &mut store)
+            .unwrap();
+        drop(first);
+        drop(store);
+
+        let mut reopened = Store::open(&database).unwrap();
+        let restarted = deterministic_registry();
+        assert_eq!(
+            restarted
+                .reconcile_project(&context_a, &mut reopened)
+                .reactivated,
+            1
+        );
+        assert_eq!(
+            restarted
+                .reconcile_project(&context_b, &mut reopened)
+                .reactivated,
+            1
+        );
+        let b_host = {
+            let state = restarted
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            assert_eq!(state.active.len(), 2);
+            state
+                .active
+                .get(&registry_key(&context_b.project_root, "org.example.plugin"))
+                .unwrap()
+                .host_instance_id
+                .clone()
+        };
+        restarted.invalidate_project(&context_a.project_root);
+        assert_eq!(
+            restarted
+                .reconcile_project(&context_a, &mut reopened)
+                .reactivated,
+            1
+        );
+        let state = restarted
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(state.active.len(), 2);
+        assert_eq!(
+            state
+                .active
+                .get(&registry_key(&context_b.project_root, "org.example.plugin"))
+                .unwrap()
+                .host_instance_id,
+            b_host
+        );
+        drop(state);
+        assert_eq!(
+            PluginLifecycleQueryService::new(&reopened)
+                .get_state(&context_a.project_root, "org.example.plugin")
+                .unwrap()
+                .unwrap()
+                .last_activation_generation,
+            3
+        );
+        assert_eq!(
+            PluginLifecycleQueryService::new(&reopened)
+                .get_state(&context_b.project_root, "org.example.plugin")
+                .unwrap()
+                .unwrap()
+                .last_activation_generation,
+            2
+        );
+    }
+
+    #[test]
+    fn one_invalid_plugin_does_not_block_exact_sibling_reactivation() {
+        let directory = tempdir().unwrap();
+        write_zero_permission_plugin_named(directory.path(), "good", "org.example.good");
+        write_zero_permission_plugin_named(directory.path(), "broken", "org.example.broken");
+        let database = directory.path().join("rho.sqlite");
+        let context = context(directory.path());
+        let mut store = Store::open(&database).unwrap();
+        let registry = deterministic_registry();
+        registry
+            .request_enable(&context, "org.example.good", &mut store)
+            .unwrap();
+        registry
+            .request_enable(&context, "org.example.broken", &mut store)
+            .unwrap();
+        drop(registry);
+        drop(store);
+        fs::write(
+            directory.path().join(".rho/plugins/broken/rho-plugin.json"),
+            b"not valid JSON",
+        )
+        .unwrap();
+
+        let mut reopened = Store::open(&database).unwrap();
+        let restarted = deterministic_registry();
+        let report = restarted.reconcile_project(&context, &mut reopened);
+        assert_eq!(report.reactivated, 1);
+        assert_eq!(report.blocked, 1);
+        let state = restarted
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert!(
+            state
+                .active
+                .contains_key(&registry_key(&context.project_root, "org.example.good"))
+        );
+        assert!(
+            !state
+                .active
+                .contains_key(&registry_key(&context.project_root, "org.example.broken"))
+        );
+        drop(state);
+        assert_eq!(
+            PluginLifecycleQueryService::new(&reopened)
+                .get_state(&context.project_root, "org.example.broken")
+                .unwrap()
+                .unwrap()
+                .observed_state,
+            "blocked"
         );
     }
 

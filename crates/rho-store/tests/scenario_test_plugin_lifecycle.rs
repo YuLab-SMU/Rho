@@ -33,6 +33,7 @@ fn lifecycle_service_isolates_two_projects_and_reopens_generation_truth() {
         project_root: "/project/a".to_string(),
         plugin_id: "org.example.plugin".to_string(),
         kind: "enable".to_string(),
+        request_event_type: "user_requested".to_string(),
         desired_state: "enabled".to_string(),
         expected_old_digest: None,
         candidate_digest: Some(digest('a')),

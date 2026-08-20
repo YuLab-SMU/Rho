@@ -69,6 +69,7 @@ pub struct WorkspacePluginTransitionDraft {
     pub project_root: String,
     pub plugin_id: String,
     pub kind: String,
+    pub request_event_type: String,
     pub desired_state: String,
     pub expected_old_digest: Option<String>,
     pub candidate_digest: Option<String>,
@@ -194,14 +195,18 @@ impl Store {
             if existing.directory_name == draft.directory_name
                 && existing.plugin_version == draft.plugin_version
                 && existing.runtime_kind == draft.runtime_kind
-                && existing.pending_digest.as_deref() == Some(&draft.discovered_digest)
+                && (existing.pending_digest.as_deref() == Some(&draft.discovered_digest)
+                    || (existing.accepted_digest.as_deref() == Some(&draft.discovered_digest)
+                        && existing.pending_digest.is_none()))
             {
                 PluginLifecycleMutationOutcome::Unchanged
             } else {
                 transaction.execute(
                     "UPDATE workspace_plugin_states
                      SET directory_name = ?3, plugin_version = ?4, runtime_kind = ?5,
-                         pending_digest = ?6,
+                         pending_digest = CASE
+                           WHEN accepted_digest = ?6 THEN NULL ELSE ?6
+                         END,
                          observed_state = CASE
                            WHEN accepted_digest IS NULL THEN 'discovered'
                            WHEN accepted_digest <> ?6 THEN 'update_pending'
@@ -374,7 +379,7 @@ impl Store {
                 plugin_id: &draft.plugin_id,
                 transition_id: Some(&draft.transition_id),
                 package_digest: draft.candidate_digest.as_deref(),
-                event_type: "user_requested",
+                event_type: &draft.request_event_type,
                 status: "pending",
                 phase: "requested",
                 reason_code: None,
@@ -902,6 +907,12 @@ fn validate_transition_draft(
     draft: &WorkspacePluginTransitionDraft,
 ) -> Result<WorkspacePluginTransitionDraft, StoreError> {
     let kind = validate_transition_kind(&draft.kind)?;
+    let request_event_type = draft.request_event_type.trim().to_string();
+    if !matches!(request_event_type.as_str(), "user_requested" | "recovery") {
+        return Err(StoreError::Validation(
+            "plugin transition request event must be user_requested or recovery".to_string(),
+        ));
+    }
     let desired_state = validate_desired_state(&draft.desired_state)?;
     let expected_desired = desired_state_for_kind(&kind);
     if desired_state != expected_desired {
@@ -946,6 +957,7 @@ fn validate_transition_draft(
         project_root: required_project_root(&draft.project_root)?,
         plugin_id: validate_identifier(&draft.plugin_id, "plugin id")?,
         kind,
+        request_event_type,
         desired_state,
         expected_old_digest,
         candidate_digest,
@@ -1385,6 +1397,7 @@ mod tests {
             project_root: project_root.to_string(),
             plugin_id: "org.example.plugin".to_string(),
             kind: kind.to_string(),
+            request_event_type: "user_requested".to_string(),
             desired_state: desired_state.to_string(),
             expected_old_digest,
             candidate_digest,
@@ -1663,6 +1676,16 @@ mod tests {
         store
             .advance_workspace_plugin_transition(&completed)
             .unwrap();
+        let (rediscovery_outcome, rediscovered_state) = store
+            .upsert_discovered_workspace_plugin(&discovered(project))
+            .unwrap();
+        assert_eq!(
+            rediscovery_outcome,
+            PluginLifecycleMutationOutcome::Unchanged
+        );
+        assert_eq!(rediscovered_state.observed_state, "active");
+        assert_eq!(rediscovered_state.accepted_digest, Some(digest('a')));
+        assert!(rediscovered_state.pending_digest.is_none());
 
         let stale = transition(
             project,

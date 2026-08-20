@@ -21,6 +21,13 @@ this file records behavior included in a versioned build candidate.
   revokes live handles, reports failure, and leaves nonterminal recovery truth;
   it does not claim durable completion. Changed packages remain update-pending
   and cannot use the first-enable path as an unreviewed upgrade.
+- Application start, Workspace R restart, and successful project switching now
+  reconcile durable enabled plugins without blocking the scientific workspace.
+  Exact accepted packages with valid project grants receive fresh hosts,
+  generations, and handles; one-shot grants return to permission review.
+  Interrupted enable transitions are closed and rebuilt from exact evidence,
+  while missing, changed, corrupt, denied, crashed, or otherwise unprovable
+  packages stay visibly non-routable as Blocked or Update pending.
 
 ## 0.4.1-dev.4 - 2026-08-20
 
