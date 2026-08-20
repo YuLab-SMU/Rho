@@ -310,6 +310,13 @@ impl WorkspacePluginManifest {
                 keys.push(path.clone());
             }
         }
+        for contribution in &self.contributions {
+            if let Some(path) = &contribution.skill_path {
+                keys.push(path.clone());
+            }
+        }
+        keys.sort();
+        keys.dedup();
         keys
     }
 }
@@ -373,10 +380,34 @@ fn validate_manifest_paths(
                 "declared package path must not be a symlink: {path}"
             ));
         }
+        if manifest.schema_version >= 2 && !metadata.is_file() {
+            return Err(format!(
+                "Manifest V2 declared package path must be a regular file: {path}"
+            ));
+        }
         let canonical = fs::canonicalize(&asset_path)
             .map_err(|error| format!("cannot canonicalize declared path {path}: {error}"))?;
         if !canonical.starts_with(directory) {
             return Err(format!("declared package path escapes plugin root: {path}"));
+        }
+    }
+    for path in manifest
+        .contributions
+        .iter()
+        .filter_map(|contribution| contribution.skill_path.as_deref())
+    {
+        let asset_path = directory.join(normalize_manifest_relative(path));
+        let metadata = fs::symlink_metadata(&asset_path)
+            .map_err(|error| format!("declared Skill path is missing: {path}: {error}"))?;
+        if is_link_or_reparse(&metadata) || !metadata.is_file() {
+            return Err(format!(
+                "declared Skill path must be a regular non-symlink file: {path}"
+            ));
+        }
+        let canonical = fs::canonicalize(&asset_path)
+            .map_err(|error| format!("cannot canonicalize Skill path {path}: {error}"))?;
+        if !canonical.starts_with(directory) {
+            return Err(format!("declared Skill path escapes plugin root: {path}"));
         }
     }
     Ok(())

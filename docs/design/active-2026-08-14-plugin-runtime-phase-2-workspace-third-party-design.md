@@ -8,8 +8,9 @@ P2-2A schema/persistence, P2-2B trusted permission UI/fresh handles, P2-2C
 `project.fs.read`, P2-2D `workspace.r.inspect`, P2-2E `network.fetch`, and
 P2-2F combined acceptance are locally complete; `0.4.1-dev.3` and
 `rho.bridge 0.1.15` allocated; P2-2 hosted/cross-platform acceptance remains
-open; P2-3A is active under the local-first exception and later slices/P2-4
-remain sequentially gated
+open; P2-3A Manifest V2/bounded-schema/Source/Panel pure contracts are locally
+complete; P2-3B is active under the local-first exception and later slices/
+P2-4 remain sequentially gated
 
 Date: 2026-08-14
 Issue: [#17](https://github.com/YuLab-SMU/Rho/issues/17)

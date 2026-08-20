@@ -23,6 +23,7 @@ mod grant;
 mod host;
 mod id;
 mod instance;
+mod json_schema;
 mod lifecycle;
 mod manifest;
 mod model;
@@ -40,8 +41,10 @@ pub use builder::{
     StaticValidation, candidate_within_envelope,
 };
 pub use contribution::{
-    Contribution, ContributionError, ContributionKind, ContributionRecord, ContributionStore,
-    MAX_CONTRIBUTION_LABEL_BYTES, MAX_CONTRIBUTION_PURPOSE_BYTES, MAX_CONTRIBUTIONS_PER_PROJECT,
+    Contribution, ContributionDeclaration, ContributionError, ContributionKind, ContributionRecord,
+    ContributionStore, MAX_CONTRIBUTION_LABEL_BYTES, MAX_CONTRIBUTION_MEDIA_TYPE_BYTES,
+    MAX_CONTRIBUTION_MEDIA_TYPES, MAX_CONTRIBUTION_PURPOSE_BYTES, MAX_CONTRIBUTIONS_PER_PACKAGE,
+    MAX_CONTRIBUTIONS_PER_PROJECT, PLUGIN_DETAILS_PANEL_SLOT,
 };
 pub use digest::PackageDigest;
 pub use discovery::{
@@ -84,6 +87,11 @@ pub use instance::{
     AuditEvent, AuditLog, DiscoveryOutcome, MAX_AUDIT_EVENTS, MAX_AUDIT_REASON_BYTES,
     PluginInstance, PluginLifecycleState, PluginManager, PluginManagerError, allowed_transition,
 };
+pub use json_schema::{
+    BoundedJsonSchema, JsonSchemaError, MAX_CONTRIBUTION_SCHEMA_BYTES,
+    MAX_CONTRIBUTION_SCHEMA_DEPTH, MAX_CONTRIBUTION_SCHEMA_ENUM_VALUES,
+    MAX_CONTRIBUTION_SCHEMA_PROPERTIES,
+};
 pub use lifecycle::{
     ActivationError, CandidateBuildError, CandidatePublishError, CollectingDiagnosticSink,
     DiagnosticSink, Disposable, DisposeError, DisposeOutcome, EffectDisposeReport, EffectRecord,
@@ -101,8 +109,8 @@ pub use manifest::{
     MAX_MANIFEST_PROVIDES, MAX_MANIFEST_REQUIRES, MAX_PACKAGE_AGGREGATE_BYTES, MAX_PACKAGE_DEPTH,
     MAX_PACKAGE_FILE_BYTES, MAX_PACKAGE_FILES, MAX_PERMISSION_BYTES,
     MAX_PERMISSION_CONSTRAINT_ITEMS, MAX_PERMISSION_PURPOSE_BYTES, MAX_RELATIVE_PATH_BYTES,
-    ManifestProvide, ManifestRequire, PermissionRequest, RuntimeDeclaration, RuntimeKind,
-    UiDeclaration, WorkspacePluginManifest,
+    MIN_MANIFEST_SCHEMA_VERSION, ManifestProvide, ManifestRequire, PermissionRequest,
+    RuntimeDeclaration, RuntimeKind, UiDeclaration, WorkspacePluginManifest,
 };
 pub use model::{
     ActivationPlan, ActivationPolicy, BindingResolution, CapabilityContractMajor,

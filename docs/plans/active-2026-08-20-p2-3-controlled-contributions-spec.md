@@ -1,14 +1,15 @@
 # P2-3 Controlled Third-party Contributions
 
 Status: active under the owner-approved local-first exception; P2-3A Manifest
-V2 + pure Source/Panel contract slice activated 2026-08-20 after local P2-2
-closeout; P2-1/P2-2 hosted and cross-platform installed acceptance remain open
-and mandatory before final Phase 2 acceptance
+V2 + pure Source/Panel contracts completed locally 2026-08-20; P2-3B Guest ABI
+V2 contribution proxy + transactional registry activated; P2-1/P2-2 hosted and
+cross-platform installed acceptance remain open and mandatory before final
+Phase 2 acceptance
 
-Active work package: P2-3A only. P2-3B through P2-3E remain inactive until the
-Manifest V2/schema/pure-contract stop gate passes. P2-3A creates no product
-contribution route, Agent projection, trusted command/viewer UI, persistence,
-or new privileged operation.
+Active work package: P2-3B only. P2-3C through P2-3E remain inactive until the
+contribution-call/transactional-publication stop gate passes. P2-3A created no
+product contribution route, Agent projection, trusted command/viewer UI,
+persistence, or new privileged operation.
 
 Change class: D3 capability graph, Agent tool, trusted UI, Wasm protocol, and
 cross-project lifecycle behavior. Risk: R3.
@@ -52,18 +53,19 @@ P2-3 introduces no SQLite schema. It consumes the P2-2 v13 grant/audit lane and
 keeps live contribution routing in broker-owned memory. P2-4 later reconstructs
 that state only from durably enabled exact packages.
 
-## Current-contract Corrections
+## P2-3A Entry Corrections
 
-The existing pure `ContributionStore` is not product-complete:
+Before P2-3A the pure `ContributionStore` was not product-complete:
 
-- it lacks `source.*` and `ui.panel.*` kinds named by the Phase 2 design;
-- it stores label/purpose only, without call schemas or viewer descriptors;
-- it is not connected to the Wasm host, Phase 1 registries, trusted shell, Agent
+- it lacked `source.*` and `ui.panel.*` kinds named by the Phase 2 design;
+- it stored label/purpose only, without call schemas or viewer descriptors;
+- it was not connected to the Wasm host, Phase 1 registries, trusted shell, Agent
   tools, or teardown sequence;
 - Manifest V1 `ui.commands`/`ui.viewers` are untyped string lists and cannot own
   security-relevant schemas or presentation.
 
-P2-3 must amend these gaps explicitly. It may not treat the current pure map as
+P2-3A resolved only the first two pure-contract gaps. P2-3B and later packages
+must close routing/integration/teardown gaps and may not treat the pure map as
 evidence that contributions already work.
 
 ## Manifest V2
@@ -105,6 +107,10 @@ Rules:
   bounds only; no `$ref`, remote schema, regex, executable default, or unknown
   keyword;
 - schema depth 8, properties 128, enum values 128, encoded schema 64 KiB;
+- object schemas are closed: call values with undeclared properties fail;
+- Tool, Source, Command and Viewer declarations require paired input/output
+  schemas; Skill declares only `skillPath`; Panel requires paired schemas and
+  the exact `plugin_details` slot; only Viewer may declare bounded media types;
 - declared Skill/viewer assets are regular non-symlink files included in the
   canonical package digest;
 - a V1 `ui` string declaration is discovery metadata only and creates no live
@@ -112,6 +118,42 @@ Rules:
 
 Changing any declaration creates a new package digest and requires P2-2 grant
 review when its permission envelope is affected.
+
+### P2-3A local closeout evidence
+
+P2-3A accepts Manifest V1 unchanged for disabled discovery and P2-2
+permission-only packages while making all live contribution declarations V2
+only. `ContributionKind` now includes Source and Panel, exact declaration
+records carry contract major, paired bounded schemas, viewer media types,
+Skill path and named panel slot, and the project registry enforces the 256-item
+resolved budget. Labels/purposes reject controls, bidi overrides, markup, URLs
+and reserved trusted-surface terminology.
+
+The closed JSON-schema subset accepts only object/array/string/number/integer/
+boolean/null with required/properties/items/enum and type-owned numeric,
+string or array bounds. It rejects unknown keywords, remote references,
+patterns/defaults, union types, schema depth/property/enum/byte bombs,
+undeclared object fields and type/bound mismatches. Manifest V2 requires each
+declaration to match exactly one `provides` entry and contract major, rejects
+duplicates and 33rd package contributions, and binds regular non-symlink Skill
+assets into canonical discovery/digest inventory.
+
+Local verification on 2026-08-20:
+
+- stable and exact Rust `1.88.0` strict all-target clippy passed for
+  `rho-extension-runtime`;
+- stable and Rust `1.88.0` workspace all-target checks passed;
+- the runtime matrix passed 116 unit, 26 contract, 11 discovery and 34
+  lifecycle tests on both toolchains (187 total per toolchain);
+- `scripts/test-extension-p2-3-contribution-contract.mjs` and its negative
+  self-test passed; rustfmt and `git diff --check` passed;
+- discovery tests prove Manifest V2 Skill assets must be regular files and
+  changing the asset changes the package digest.
+
+No Tauri command, Agent entry, guest call route, SQLite schema, UI, public
+protocol, privileged operation, application/R-package version or NEWS change
+was introduced. This closes only the local P2-3A stop gate and activates
+P2-3B under the recorded local-first exception.
 
 ## Guest ABI V2 Contribution Calls
 
