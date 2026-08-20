@@ -6,7 +6,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub(crate) const SCHEMA_VERSION: i64 = 13;
+pub(crate) const SCHEMA_VERSION: i64 = 14;
 const DEFAULT_LIMIT: usize = 50;
 const MAX_AGENT_LIST_LIMIT: usize = 100;
 const MAX_DIAGNOSTIC_LINE: u32 = 10_000_000;
@@ -22,6 +22,8 @@ mod environment;
 mod evidence;
 mod migration;
 mod mutation;
+mod plugin_lifecycle;
+mod plugin_lifecycle_service;
 mod plugin_permission;
 mod plugin_permission_service;
 mod project;
@@ -51,6 +53,14 @@ pub use evidence::{
     EvidenceEntryDraft,
 };
 pub use mutation::ProjectMutationService;
+pub use plugin_lifecycle::{
+    PluginLifecycleMutationOutcome, WorkspacePluginDiscoveredDraft,
+    WorkspacePluginGenerationAllocation, WorkspacePluginLifecycleEvent,
+    WorkspacePluginPackageTombstone, WorkspacePluginState, WorkspacePluginTombstoneDraft,
+    WorkspacePluginTransition, WorkspacePluginTransitionAdvance, WorkspacePluginTransitionDraft,
+    WorkspacePluginTransitionRequestResult,
+};
+pub use plugin_lifecycle_service::{PluginLifecycleMutationService, PluginLifecycleQueryService};
 pub use plugin_permission::{
     PluginPermissionCallEventDraft, PluginPermissionDecision, PluginPermissionDecisionDraft,
     PluginPermissionEvent, PluginPermissionGrant, PluginPermissionMutationOutcome,
@@ -254,6 +264,8 @@ struct StoreOpenOptions {
     inject_v11_failure_before_commit: bool,
     #[cfg(test)]
     inject_v12_failure_before_commit: bool,
+    #[cfg(test)]
+    inject_v13_failure_before_commit: bool,
 }
 
 #[derive(Debug)]
@@ -284,6 +296,7 @@ impl Store {
         if migration::database_is_empty(&self.connection)? {
             self.connection.execute_batch(migration::v8_schema_sql())?;
             migration::create_plugin_permission_schema(&self.connection)?;
+            migration::create_plugin_lifecycle_schema(&self.connection)?;
             self.set_schema_version(SCHEMA_VERSION)?;
             self.assert_current_schema()?;
             self.migration_outcome = MigrationOutcome::bootstrapped_current();
@@ -329,7 +342,13 @@ impl Store {
             Some(12) => {
                 let backup_path =
                     migration::create_pre_migration_backup(&self.connection, path, 12)?;
-                let outcome = self.migrate_v12_to_v13(backup_path, options)?;
+                let outcome = self.migrate_v12_to_v14(backup_path, options)?;
+                self.migration_outcome = outcome;
+            }
+            Some(13) => {
+                let backup_path =
+                    migration::create_pre_migration_backup(&self.connection, path, 13)?;
+                let outcome = self.migrate_v13_to_v14(backup_path, options)?;
                 self.migration_outcome = outcome;
             }
             Some(other) => {
@@ -367,7 +386,7 @@ impl Store {
         backup_path: Option<PathBuf>,
         _options: &StoreOpenOptions,
     ) -> Result<MigrationOutcome, StoreError> {
-        let backup_path_string = backup_path
+        let _backup_path_string = backup_path
             .as_ref()
             .map(|path| path.to_string_lossy().replace('\\', "/"));
         let transaction = self.connection.transaction()?;
@@ -377,7 +396,7 @@ impl Store {
                 message: "malformed project identity metadata".to_string(),
                 outcome: MigrationOutcome::rejected(
                     Some(7),
-                    backup_path_string,
+                    _backup_path_string,
                     counts,
                     "malformed_project_identity",
                 ),
@@ -391,6 +410,7 @@ impl Store {
         migration::create_claim_review_schema(&transaction)?;
         migration::create_agent_conversation_schema(&transaction)?;
         migration::create_plugin_permission_schema(&transaction)?;
+        migration::create_plugin_lifecycle_schema(&transaction)?;
         transaction.execute_batch(
             "
             CREATE INDEX IF NOT EXISTS idx_runs_project_started
@@ -415,7 +435,7 @@ impl Store {
                 message: "injected migration failure".to_string(),
                 outcome: MigrationOutcome::rejected(
                     Some(7),
-                    backup_path_string,
+                    _backup_path_string,
                     counts,
                     "injected_failure",
                 ),
@@ -446,6 +466,7 @@ impl Store {
         migration::add_run_error_range_columns(&transaction)?;
         migration::create_agent_conversation_schema(&transaction)?;
         migration::create_plugin_permission_schema(&transaction)?;
+        migration::create_plugin_lifecycle_schema(&transaction)?;
         transaction.execute(
             "INSERT INTO metadata(key, value) VALUES('schema_version', ?1)
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -486,6 +507,7 @@ impl Store {
         migration::add_run_error_range_columns(&transaction)?;
         migration::create_agent_conversation_schema(&transaction)?;
         migration::create_plugin_permission_schema(&transaction)?;
+        migration::create_plugin_lifecycle_schema(&transaction)?;
         transaction.execute(
             "INSERT INTO metadata(key, value) VALUES('schema_version', ?1)
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -549,6 +571,7 @@ impl Store {
         migration::rebuild_runs_error_range_kind_v11(&transaction)?;
         migration::create_agent_conversation_schema(&transaction)?;
         migration::create_plugin_permission_schema(&transaction)?;
+        migration::create_plugin_lifecycle_schema(&transaction)?;
         let after_count: i64 =
             transaction.query_row("SELECT COUNT(*) FROM runs", [], |row| row.get(0))?;
         if before_count != after_count {
@@ -639,6 +662,7 @@ impl Store {
         }
         migration::create_agent_conversation_schema(&transaction)?;
         migration::create_plugin_permission_schema(&transaction)?;
+        migration::create_plugin_lifecycle_schema(&transaction)?;
         let mapping_count: i64 =
             transaction.query_row("SELECT COUNT(*) FROM agent_conversation_turns", [], |row| {
                 row.get(0)
@@ -690,7 +714,7 @@ impl Store {
         Ok(())
     }
 
-    fn migrate_v12_to_v13(
+    fn migrate_v12_to_v14(
         &mut self,
         backup_path: Option<PathBuf>,
         _options: &StoreOpenOptions,
@@ -700,6 +724,7 @@ impl Store {
             .map(|path| path.to_string_lossy().replace('\\', "/"));
         let transaction = self.connection.transaction()?;
         migration::create_plugin_permission_schema(&transaction)?;
+        migration::create_plugin_lifecycle_schema(&transaction)?;
         transaction.execute(
             "INSERT INTO metadata(key, value) VALUES('schema_version', ?1)
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -721,6 +746,44 @@ impl Store {
         self.assert_current_schema()?;
         Ok(MigrationOutcome::migrated(
             12,
+            backup_path
+                .as_ref()
+                .map(|path| path.to_string_lossy().replace('\\', "/")),
+            MigrationRecordCounts::default(),
+        ))
+    }
+
+    fn migrate_v13_to_v14(
+        &mut self,
+        backup_path: Option<PathBuf>,
+        _options: &StoreOpenOptions,
+    ) -> Result<MigrationOutcome, StoreError> {
+        let _backup_path_string = backup_path
+            .as_ref()
+            .map(|path| path.to_string_lossy().replace('\\', "/"));
+        let transaction = self.connection.transaction()?;
+        migration::create_plugin_lifecycle_schema(&transaction)?;
+        transaction.execute(
+            "INSERT INTO metadata(key, value) VALUES('schema_version', ?1)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            [SCHEMA_VERSION.to_string()],
+        )?;
+        #[cfg(test)]
+        if _options.inject_v13_failure_before_commit {
+            return Err(StoreError::MigrationRejected {
+                message: "injected v13 migration failure".to_string(),
+                outcome: MigrationOutcome::rejected(
+                    Some(13),
+                    _backup_path_string,
+                    MigrationRecordCounts::default(),
+                    "injected_failure",
+                ),
+            });
+        }
+        transaction.commit()?;
+        self.assert_current_schema()?;
+        Ok(MigrationOutcome::migrated(
+            13,
             backup_path
                 .as_ref()
                 .map(|path| path.to_string_lossy().replace('\\', "/")),
@@ -753,6 +816,7 @@ impl Store {
         migration::assert_runs_error_range_kind_constraint(&self.connection)?;
         migration::assert_agent_conversation_schema(&self.connection)?;
         migration::assert_plugin_permission_schema(&self.connection)?;
+        migration::assert_plugin_lifecycle_schema(&self.connection)?;
         Ok(())
     }
 
@@ -2965,8 +3029,9 @@ fn text_preview(text: &str, limit: usize) -> String {
 mod tests {
     use super::*;
     use crate::migration::{
-        assert_index_exists, assert_not_null_project_identity, assert_plugin_permission_schema,
-        assert_runs_error_range_kind_constraint, read_schema_version, set_schema_version,
+        assert_index_exists, assert_not_null_project_identity, assert_plugin_lifecycle_schema,
+        assert_plugin_permission_schema, assert_runs_error_range_kind_constraint,
+        read_schema_version, set_schema_version,
     };
     use rho_protocol::{MessageKind, WorkspaceIdentity};
     use serde_json::json;
@@ -4870,7 +4935,7 @@ mod tests {
     }
 
     #[test]
-    fn bootstraps_empty_store_to_v13_and_reopens_idempotently() {
+    fn bootstraps_empty_store_to_v14_and_reopens_idempotently() {
         let directory = TempDir::new().unwrap();
         let database = directory.path().join("rho.sqlite");
 
@@ -4889,7 +4954,7 @@ mod tests {
     }
 
     #[test]
-    fn migrates_v7_to_v13_and_marks_legacy_unscoped_records() {
+    fn migrates_v7_to_v14_and_marks_legacy_unscoped_records() {
         let directory = TempDir::new().unwrap();
         let database = directory.path().join("rho.sqlite");
         create_v7_fixture(&database);
@@ -5054,7 +5119,7 @@ mod tests {
     }
 
     #[test]
-    fn migrates_v8_to_v13_with_backup_and_reopens() {
+    fn migrates_v8_to_v14_with_backup_and_reopens() {
         let directory = TempDir::new().unwrap();
         let database = directory.path().join("rho.sqlite");
         create_v8_fixture(&database);
@@ -5132,7 +5197,7 @@ mod tests {
     }
 
     #[test]
-    fn migrates_v9_to_v13_without_guessing_historical_ranges_and_reopens() {
+    fn migrates_v9_to_v14_without_guessing_historical_ranges_and_reopens() {
         let directory = TempDir::new().unwrap();
         let database = directory.path().join("rho.sqlite");
         create_v9_fixture(&database);
@@ -5235,7 +5300,7 @@ mod tests {
     }
 
     #[test]
-    fn migrates_v10_to_v13_preserving_expression_ranges_without_parse_backfill() {
+    fn migrates_v10_to_v14_preserving_expression_ranges_without_parse_backfill() {
         let directory = TempDir::new().unwrap();
         let database = directory.path().join("rho.sqlite");
         create_v10_fixture(&database);
@@ -5659,14 +5724,18 @@ mod tests {
             .execute_batch(
                 "DROP TABLE plugin_permission_events;
                  DROP TABLE plugin_permission_grants;
-                 DROP TABLE plugin_permission_requests;",
+                 DROP TABLE plugin_permission_requests;
+                 DROP TABLE workspace_plugin_lifecycle_events;
+                 DROP TABLE workspace_plugin_transitions;
+                 DROP TABLE workspace_plugin_package_tombstones;
+                 DROP TABLE workspace_plugin_states;",
             )
             .unwrap();
         set_schema_version(&connection, 12).unwrap();
     }
 
     #[test]
-    fn migrates_v12_to_v13_without_guessing_plugin_permissions() {
+    fn migrates_v12_to_v14_without_guessing_plugin_permissions_or_lifecycle() {
         let directory = TempDir::new().unwrap();
         let database = directory.path().join("rho.sqlite");
         create_v12_fixture(&database);
@@ -5687,6 +5756,7 @@ mod tests {
                 .ends_with("rho.sqlite.schema-v12.bak")
         );
         assert_plugin_permission_schema(&store.connection).unwrap();
+        assert_plugin_lifecycle_schema(&store.connection).unwrap();
         for table in [
             "plugin_permission_requests",
             "plugin_permission_grants",
@@ -5699,6 +5769,23 @@ mod tests {
                 })
                 .unwrap();
             assert_eq!(count, 0, "{table} must not backfill historical authority");
+        }
+        for table in [
+            "workspace_plugin_states",
+            "workspace_plugin_transitions",
+            "workspace_plugin_lifecycle_events",
+            "workspace_plugin_package_tombstones",
+        ] {
+            let count: i64 = store
+                .connection
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                    row.get(0)
+                })
+                .unwrap();
+            assert_eq!(
+                count, 0,
+                "{table} must not infer historical lifecycle truth"
+            );
         }
         drop(store);
 
@@ -5744,6 +5831,119 @@ mod tests {
             Some(SCHEMA_VERSION)
         );
         assert_plugin_permission_schema(&recovered.connection).unwrap();
+    }
+
+    fn create_v13_fixture(path: &Path) {
+        let mut store = Store::open(path).unwrap();
+        store
+            .create_plugin_permission_request(&PluginPermissionRequestDraft {
+                request_id: "request.v13".to_string(),
+                project_root: "D:/projects/A".to_string(),
+                plugin_id: "org.example.plugin".to_string(),
+                plugin_version: "1.0.0".to_string(),
+                package_digest: "a".repeat(64),
+                runtime_kind: "wasm".to_string(),
+                permission: "project.fs.read".to_string(),
+                constraints_json: r#"{"maxBytes":1024,"paths":["data/**/*.csv"]}"#.to_string(),
+                constraints_digest:
+                    "ab86c4e35fe429e9ffa6f7d21e5398744922cb5d1d8128f261cc5dbe8e3aed88".to_string(),
+                purpose_text: None,
+                expected_project_revision: 1,
+            })
+            .unwrap();
+        store
+            .connection
+            .execute_batch(
+                "DROP TABLE workspace_plugin_lifecycle_events;
+                 DROP TABLE workspace_plugin_transitions;
+                 DROP TABLE workspace_plugin_package_tombstones;
+                 DROP TABLE workspace_plugin_states;",
+            )
+            .unwrap();
+        set_schema_version(&store.connection, 13).unwrap();
+    }
+
+    #[test]
+    fn migrates_v13_to_v14_without_inferring_lifecycle_from_permissions() {
+        let directory = TempDir::new().unwrap();
+        let database = directory.path().join("rho.sqlite");
+        create_v13_fixture(&database);
+
+        let store = Store::open(&database).unwrap();
+        assert_eq!(store.migration_outcome().status, MigrationStatus::Migrated);
+        assert_eq!(store.migration_outcome().from_schema_version, Some(13));
+        assert_eq!(store.migration_outcome().to_schema_version, Some(14));
+        assert!(
+            store
+                .migration_outcome()
+                .backup_path
+                .as_deref()
+                .unwrap()
+                .ends_with("rho.sqlite.schema-v13.bak")
+        );
+        assert_plugin_lifecycle_schema(&store.connection).unwrap();
+        assert_eq!(
+            store
+                .list_plugin_permission_requests("D:/projects/A", None, None)
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(
+            store
+                .list_workspace_plugin_states("D:/projects/A", None)
+                .unwrap()
+                .is_empty()
+        );
+        drop(store);
+        assert_eq!(
+            Store::open(&database).unwrap().migration_outcome(),
+            &MigrationOutcome::opened_current()
+        );
+    }
+
+    #[test]
+    fn rolls_back_v13_lifecycle_migration_and_recovers() {
+        let directory = TempDir::new().unwrap();
+        let database = directory.path().join("rho.sqlite");
+        create_v13_fixture(&database);
+
+        let error = Store::open_with_options(
+            &database,
+            StoreOpenOptions {
+                inject_v13_failure_before_commit: true,
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+        let outcome = error.migration_outcome().unwrap();
+        assert_eq!(outcome.status, MigrationStatus::Rejected);
+        assert_eq!(outcome.from_schema_version, Some(13));
+        assert_eq!(outcome.reason_code.as_deref(), Some("injected_failure"));
+        assert!(Path::new(outcome.backup_path.as_deref().unwrap()).exists());
+
+        let verification = Connection::open(&database).unwrap();
+        assert_eq!(read_schema_version(&verification).unwrap(), Some(13));
+        assert!(
+            verification
+                .prepare("SELECT * FROM workspace_plugin_states")
+                .is_err()
+        );
+        assert_eq!(
+            verification
+                .query_row(
+                    "SELECT COUNT(*) FROM plugin_permission_requests",
+                    [],
+                    |row| { row.get::<_, i64>(0) }
+                )
+                .unwrap(),
+            1
+        );
+        drop(verification);
+
+        let recovered = Store::open(&database).unwrap();
+        assert_eq!(recovered.migration_outcome().to_schema_version, Some(14));
+        assert_plugin_lifecycle_schema(&recovered.connection).unwrap();
     }
 
     #[test]
@@ -5830,6 +6030,108 @@ mod tests {
             outcome.reason_code.as_deref(),
             Some("invalid_plugin_permission_authority")
         );
+    }
+
+    #[test]
+    fn rejects_current_plugin_lifecycle_secret_authority_column() {
+        let directory = TempDir::new().unwrap();
+        let database = directory.path().join("rho.sqlite");
+        let store = Store::open(&database).unwrap();
+        store
+            .connection
+            .execute(
+                "ALTER TABLE workspace_plugin_lifecycle_events ADD COLUMN handle_id TEXT",
+                [],
+            )
+            .unwrap();
+        drop(store);
+
+        let error = Store::open(&database).unwrap_err();
+        let outcome = error.migration_outcome().unwrap();
+        assert_eq!(outcome.from_schema_version, Some(SCHEMA_VERSION));
+        assert_eq!(
+            outcome.reason_code.as_deref(),
+            Some("invalid_plugin_lifecycle_authority")
+        );
+    }
+
+    #[test]
+    fn rejects_current_malformed_plugin_lifecycle_state() {
+        let directory = TempDir::new().unwrap();
+        let database = directory.path().join("rho.sqlite");
+        let store = Store::open(&database).unwrap();
+        store
+            .connection
+            .execute_batch(&format!(
+                "PRAGMA ignore_check_constraints = ON;
+                 INSERT INTO workspace_plugin_states(
+                    project_root, plugin_id, directory_name, plugin_version,
+                    accepted_digest, pending_digest, rollback_digest, runtime_kind,
+                    desired_state, observed_state, last_activation_generation,
+                    updated_at
+                 ) VALUES(
+                    '/project/a', 'org.example.plugin', 'example', '1.0.0',
+                    NULL, '{}', NULL, 'wasm', 'enabled', 'forged_active', -1, '{}'
+                 );
+                 PRAGMA ignore_check_constraints = OFF;",
+                "a".repeat(64),
+                Utc::now().to_rfc3339()
+            ))
+            .unwrap();
+        drop(store);
+
+        let error = Store::open(&database).unwrap_err();
+        let outcome = error.migration_outcome().unwrap();
+        assert_eq!(outcome.from_schema_version, Some(SCHEMA_VERSION));
+        assert_eq!(
+            outcome.reason_code.as_deref(),
+            Some("invalid_plugin_lifecycle_state")
+        );
+        assert_eq!(outcome.rejected_count, 1);
+    }
+
+    #[test]
+    fn rejects_current_malformed_plugin_lifecycle_event() {
+        let directory = TempDir::new().unwrap();
+        let database = directory.path().join("rho.sqlite");
+        let store = Store::open(&database).unwrap();
+        store
+            .connection
+            .execute_batch(&format!(
+                "INSERT INTO workspace_plugin_states(
+                    project_root, plugin_id, directory_name, plugin_version,
+                    accepted_digest, pending_digest, rollback_digest, runtime_kind,
+                    desired_state, observed_state, last_activation_generation,
+                    updated_at
+                 ) VALUES(
+                    '/project/a', 'org.example.plugin', 'example', '1.0.0',
+                    NULL, '{}', NULL, 'wasm', 'disabled', 'discovered', 0, '{}'
+                 );
+                 PRAGMA ignore_check_constraints = ON;
+                 INSERT INTO workspace_plugin_lifecycle_events(
+                    event_id, project_root, plugin_id, transition_id, package_digest,
+                    event_type, status, phase, details_json, created_at
+                 ) VALUES(
+                    'event.forged', '/project/a', 'org.example.plugin', NULL, '{}',
+                    'forged_authority', 'completed', 'requested', '[]', '{}'
+                 );
+                 PRAGMA ignore_check_constraints = OFF;",
+                "a".repeat(64),
+                Utc::now().to_rfc3339(),
+                "a".repeat(64),
+                Utc::now().to_rfc3339()
+            ))
+            .unwrap();
+        drop(store);
+
+        let error = Store::open(&database).unwrap_err();
+        let outcome = error.migration_outcome().unwrap();
+        assert_eq!(outcome.from_schema_version, Some(SCHEMA_VERSION));
+        assert_eq!(
+            outcome.reason_code.as_deref(),
+            Some("invalid_plugin_lifecycle_state")
+        );
+        assert_eq!(outcome.rejected_count, 1);
     }
 
     #[test]

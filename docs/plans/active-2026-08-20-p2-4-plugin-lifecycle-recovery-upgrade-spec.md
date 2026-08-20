@@ -1,14 +1,14 @@
 # P2-4 Plugin Lifecycle, Recovery, Uninstall And Upgrade
 
 Status: active under the owner-approved local-first exception; P2-4A schema v14
-state/transition/event/tombstone persistence activated 2026-08-20 after local
-P2-3E closeout; P2-1/P2-2/P2-3 hosted and cross-platform installed gates remain
-open and mandatory before final Phase 2 acceptance
+state/transition/event/tombstone persistence completed its local stop gate
+2026-08-20; P2-1/P2-2/P2-3/P2-4A hosted and cross-platform installed gates
+remain open and mandatory before final Phase 2 acceptance
 
-Active work package: P2-4A only. P2-4B through P2-4G remain inactive until the
-v14 migration/persistence/recovery stop gate passes. P2-4A creates no package
-cache, live restart activation, disable/uninstall/upgrade route, UI or new
-privileged operation.
+Active work package: none at this checkpoint. P2-4B through P2-4G remain
+inactive until the next package is explicitly amended/cross-reviewed. P2-4A
+created no package cache, live restart activation, disable/uninstall/upgrade
+route, UI or new privileged operation.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -364,6 +364,34 @@ mandatory before final acceptance:
 
 Each is a separate integration boundary with complete vertical tests. No later
 slice repairs a half-authoritative earlier commit.
+
+### P2-4A local checkpoint — 2026-08-20
+
+The schema-v14 persistence boundary is locally complete:
+
+- empty stores and every supported v7-v13 historical schema migrate to v14;
+  v12/v13 migrations create no inferred plugin lifecycle facts;
+- state, monotonic transitions, bounded lifecycle events, opaque tombstones and
+  per-project activation generations are implemented behind explicit-project
+  query/mutation services;
+- discovery/state/audit and transition/state/audit commits are atomic;
+  injected event failures leave no partial durable truth;
+- duplicate concurrent request IDs converge to `Applied`/`Unchanged`, competing
+  transition IDs converge to `Applied`/`Conflict`, and stale digests fail
+  closed;
+- current-schema checks reject malformed lifecycle state/event rows, missing
+  constraints/indexes/FKs and forbidden live-authority columns;
+- complete `rho-store` validation passed: 151 unit, 5 base scenarios, 11
+  extended scenarios, 15 mutation scenarios, 2 lifecycle scenarios and 3
+  permission scenarios; the P2-4 contract passed in positive and negative
+  modes;
+- stable Rust 1.97 and MSRV Rust 1.88 all-target workspace checks passed.
+  Capped Clippy completed with only the crate-wide pre-existing
+  `result_large_err` family; a strict zero-warning Clippy result is not claimed.
+
+Application metadata remains `0.4.1-dev.4`: P2-4A is persistence-only and has
+no installed user-visible lifecycle control. Hosted CI and installed-platform
+acceptance remain deliberately open.
 
 ## Verification Matrix
 
