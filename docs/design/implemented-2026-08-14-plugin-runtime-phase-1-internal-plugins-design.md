@@ -1050,10 +1050,24 @@ P1-4 and the whole-P1 acceptance completed through
 
 P1-4 allocates application development identity `0.4.1-dev.0` and updates
 `NEWS.md` for the internal default switch plus explicit legacy escape hatch.
+The version was later bumped to `0.4.1-dev.1` by `41c0220` (deferred Provider
+credential access) without changing the acceptance targets above.
 R package versions remain unchanged. No tag, GitHub Release, updater manifest,
 signature, publication, or release GO is created. The internal runtime must not
 be advertised as a public plugin SDK; third-party or workspace executable
 plugin support requires a separate Phase 2 contract and release acceptance.
+
+## Hosted CI Repair After Acceptance
+
+The 2026-08-19 Ready run `32231716500` exposed one Windows-stable packaging
+regression after all compile/test steps passed: the restored Cargo `target/`
+cache contained an older NSIS installer, while the Full build correctly created
+the current installer. Exact-artifact validation then saw more than one
+`*-setup.exe` and failed. The authorized repair makes Full mode own and clear
+only `target/release/bundle/nsis` before bundling; NoBundle and BundleOnly keep
+their stricter pre-existing clean-directory contracts. The SignPath workflow
+contract test now protects this cache-contamination regression. No application,
+runtime, installer-content, version, or release authority changes.
 
 ## Downstream Host-Owned Runtime Consumers
 

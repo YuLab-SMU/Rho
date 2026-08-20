@@ -127,6 +127,13 @@ if ($MaximumTauriBuildAttempts -gt 1) {
     }
 }
 
+if ($BuildMode -eq "Full" -and (Test-Path -LiteralPath $installerDirectory)) {
+    # `target/` is restored by CI caches. A Full build owns the complete NSIS
+    # output directory, so remove stale installers/signatures before bundling;
+    # otherwise exact-artifact validation can count a prior cached version.
+    Remove-Item -LiteralPath $installerDirectory -Recurse -Force
+}
+
 if ($BuildMode -eq "NoBundle" -and (Test-Path -LiteralPath $installerDirectory)) {
     $staleNoBundleInstallers = @(Get-ChildItem -LiteralPath $installerDirectory -Filter "*-setup.exe" -File -ErrorAction SilentlyContinue)
     if ($staleNoBundleInstallers.Count -gt 0) {
