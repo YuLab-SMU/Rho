@@ -239,6 +239,23 @@ pub enum ExtensionError {
     },
     #[error("dependency cycle: {path:?}")]
     DependencyCycle { path: Vec<PluginId> },
+    #[error("manifest exceeds {maximum_bytes} bytes: {actual_bytes}")]
+    ManifestTooLarge {
+        actual_bytes: usize,
+        maximum_bytes: usize,
+    },
+    #[error("manifest parse failed: {message}")]
+    ManifestParse { message: String },
+    #[error("manifest validation failed: {reason}")]
+    ManifestValidation { reason: String },
+    #[error("unsupported manifest schema {actual}; supported {supported}")]
+    UnsupportedManifestSchema { actual: u64, supported: u64 },
+    #[error("unsupported runtime kind {runtime_kind}")]
+    UnsupportedRuntimeKind { runtime_kind: String },
+    #[error("workspace plugin discovery failed: {reason}")]
+    DiscoveryFailure { reason: String },
+    #[error("package file tree is invalid: {reason}")]
+    InvalidPackageTree { reason: String },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -267,6 +284,11 @@ pub enum DiagnosticCode {
     InvalidScopePolicy,
     DependencyCycle,
     OptionalCapabilityAbsent,
+    ManifestInvalid,
+    ManifestUnsupportedSchema,
+    UnsupportedRuntimeKind,
+    WorkspaceDiscoveryFailed,
+    InvalidPackageTree,
     InvalidRuntimeMode,
     ActivationStarted,
     ActivationSucceeded,
@@ -370,7 +392,14 @@ impl ExtensionDiagnostic {
             ExtensionError::InvalidIdentifier { .. }
             | ExtensionError::ZeroActivationGeneration
             | ExtensionError::ActivationGenerationExhausted
-            | ExtensionError::InvalidPluginVersion => {}
+            | ExtensionError::InvalidPluginVersion
+            | ExtensionError::ManifestTooLarge { .. }
+            | ExtensionError::ManifestParse { .. }
+            | ExtensionError::ManifestValidation { .. }
+            | ExtensionError::UnsupportedManifestSchema { .. }
+            | ExtensionError::UnsupportedRuntimeKind { .. }
+            | ExtensionError::DiscoveryFailure { .. }
+            | ExtensionError::InvalidPackageTree { .. } => {}
         }
 
         diagnostic.related_plugins.sort();
@@ -416,8 +445,17 @@ impl ExtensionError {
             Self::IncompatibleCapabilityMajor { .. } => DiagnosticCode::IncompatibleCapabilityMajor,
             Self::InvalidScope { .. } => DiagnosticCode::InvalidScope,
             Self::InvalidParent { .. } => DiagnosticCode::InvalidParent,
-            Self::InvalidScopePolicy { .. } => DiagnosticCode::InvalidScopePolicy,
-            Self::DependencyCycle { .. } => DiagnosticCode::DependencyCycle,
+            ExtensionError::InvalidScopePolicy { .. } => DiagnosticCode::InvalidScopePolicy,
+            ExtensionError::DependencyCycle { .. } => DiagnosticCode::DependencyCycle,
+            ExtensionError::ManifestTooLarge { .. }
+            | ExtensionError::ManifestParse { .. }
+            | ExtensionError::ManifestValidation { .. } => DiagnosticCode::ManifestInvalid,
+            ExtensionError::UnsupportedManifestSchema { .. } => {
+                DiagnosticCode::ManifestUnsupportedSchema
+            }
+            ExtensionError::UnsupportedRuntimeKind { .. } => DiagnosticCode::UnsupportedRuntimeKind,
+            ExtensionError::DiscoveryFailure { .. } => DiagnosticCode::WorkspaceDiscoveryFailed,
+            ExtensionError::InvalidPackageTree { .. } => DiagnosticCode::InvalidPackageTree,
         }
     }
 
