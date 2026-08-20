@@ -2,16 +2,17 @@
 
 Status: active; complete Phase 2 direction and local-first exception authorized
 2026-08-20; P2-2A schema/persistence, P2-2B trusted permission UI/fresh
-handles, P2-2C `project.fs.read`, P2-2D `workspace.r.inspect`, and P2-2E
-`network.fetch` checkpoints complete locally; P2-2F combined acceptance
-activated; P2-1
+handles, P2-2C `project.fs.read`, P2-2D `workspace.r.inspect`, P2-2E
+`network.fetch`, and P2-2F combined acceptance are complete locally; hosted
+and cross-platform installed acceptance remain open; P2-3A activated under the
+local-first exception; P2-1
 Windows/Linux hosted acceptance remains open and mandatory before final Phase 2
 acceptance
 
-Active work package: P2-2F only. It may add no new permission or privileged
-operation. Its scope is combined restart/revoke/concurrency/browser/installed
-review, recovery truth, contract evidence, and the P2-2 closeout decision.
-P2-3 remains inactive until this stop gate passes.
+Active P2-2 work package: none. The local implementation is frozen for P2-3
+consumption. P2-2 remains active—not implemented/accepted—until hosted six-leg,
+Windows/Linux packaged smoke, three-platform installed review, and independent
+filesystem/Workspace/network security acceptance pass.
 
 Change class: D3 security, schema, approval, network, filesystem, Workspace R,
 and cross-module behavior. Risk: R3.
@@ -639,6 +640,58 @@ P2-2E adds no Tauri command, public protocol, version change, credential use,
 or user-facing contribution route. Hosted network-stack behavior, installed
 smoke, and independent SSRF review remain open. This closes only the local
 P2-2E stop gate and activates P2-2F.
+
+### P2-2F local closeout evidence
+
+P2-2F adds no new authority. It combines exact project/digest/generation/host/
+Workspace invalidation, pending and one-shot restart recovery, durable revoke,
+concurrent top-level call admission, browser accessibility, and packaged smoke.
+A second top-level call is rejected as busy before guest dispatch and does not
+quarantine the in-flight host. Project switch, Workspace restart, shutdown,
+digest change, expiry, revoke, and host failure remove live routes/handles and
+references; durable project decisions can only mint new random session tokens.
+
+The production desktop smoke now includes the compiled Guest ABI V2 fixture,
+yield/resume, forbidden-import retention, 256-bit handle/redacted debug,
+in-memory revoke, schema-v13 permission request/grant/event persistence,
+durable revoke, and proof that audit JSON contains no `handle.*`. Candidate and
+legacy modes exercise the same P2-2 Trusted Kernel without claiming legacy
+internal-extension routing supplies third-party capability.
+
+Final local integration evidence on 2026-08-20:
+
+- stable and exact Rust `1.88.0` complete workspace all-target check and
+  `cargo test --workspace --locked --no-fail-fast` passed; desktop 222 passed
+  with one existing opt-in Keychain smoke ignored, extension runtime 173,
+  server 82, and store 176 within that matrix;
+- `rho.bridge 0.1.15` passed 581 and `rho.agent 0.1.5` passed 120 tests with no
+  failure, warning, or skip;
+- rustfmt, JS syntax, command inventory, AGPL license, Run History, P1-3,
+  Phase 1 acceptance, P2 host, P2-2 broker, trusted plugin UI, MAC4 release,
+  version, lockfile, and Rust MSRV contracts and negative self-tests passed;
+- extension-runtime strict clippy passed on stable and Rust `1.88.0`; server
+  clippy completed on both with no P2 filesystem/Workspace/network warning;
+- the earlier real browser review remains current because P2-2C through P2-2F
+  changed no plugin UI or command: 1440x900, 1024x768, and 390x844 passed one
+  modal/no overflow/plain-text malicious purpose/focus trap and restore/
+  approve/revoke/no raw handle checks;
+- current-source debug candidate and legacy smoke passed all P2-2 probes;
+- Tauri release built the arm64 `Rho.app` and DMG, then updater-archive signing
+  failed closed because no private key was configured. This is not a complete
+  signed candidate build;
+- the generated `0.4.1-dev.3` arm64 App passed candidate and legacy installed
+  smoke with Guest ABI V2, yield/resume, 256-bit handle, redaction, live revoke,
+  durable permission lane, and no raw durable handle. Executable: 46,570,944
+  bytes, SHA-256
+  `d1e7d8ac613e670ca593fae339f79d3be6f7b7e6fbcc03c989803e488c138339`;
+  DMG: 25,897,277 bytes, SHA-256
+  `5a27b6d923446c387673e6ab1830e3fedba69b67142dd0cd857a5a8c2ec73d80`.
+
+No Windows/Linux installed evidence, hosted six-leg run, independent final
+security review, signing, publication, or release decision exists yet. Under
+the owner-approved local-first exception this closes the local P2-2 source and
+macOS stop gate only and activates P2-3A; it does not mark P2-2 implemented or
+accepted for distribution.
 
 ## Verification Matrix
 

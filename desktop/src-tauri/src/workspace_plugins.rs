@@ -647,6 +647,10 @@ impl PendingPluginPermissionRegistry {
                 .active
                 .get_mut(&key)
                 .context("workspace plugin is not enabled for this project")?;
+            ensure!(
+                !active.host.broker_call_active(),
+                "workspace plugin already has an active broker call"
+            );
             let handles = active
                 .handles
                 .values()
@@ -1047,6 +1051,10 @@ impl PendingPluginPermissionRegistry {
                 .active
                 .get_mut(&key)
                 .context("workspace plugin is not enabled for this project")?;
+            ensure!(
+                !active.host.broker_call_active(),
+                "workspace plugin already has an active broker call"
+            );
             let handles = active
                 .handles
                 .values()
@@ -1427,6 +1435,10 @@ impl PendingPluginPermissionRegistry {
                 .active
                 .get_mut(&key)
                 .context("workspace plugin is not enabled for this project")?;
+            ensure!(
+                !active.host.broker_call_active(),
+                "workspace plugin already has an active broker call"
+            );
             ensure!(
                 active.package_digest == active.host.identity().package_digest().as_str(),
                 "workspace plugin host package identity is stale"
@@ -3686,6 +3698,76 @@ mod tests {
             authorizer.authorize(&hop).unwrap_err().code,
             NetworkFetchErrorCode::AuthorizationDenied
         );
+    }
+
+    #[test]
+    fn concurrent_top_level_call_is_rejected_without_quarantining_inflight_guest() {
+        let directory = tempdir().unwrap();
+        write_plugin(
+            directory.path(),
+            serde_json::json!([{
+                "name": "project.fs.read",
+                "paths": ["data/**/*.csv"],
+                "maxBytes": 1024
+            }]),
+        );
+        install_file_broker_module(directory.path());
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let registry = deterministic_registry();
+        let context = context(directory.path());
+        let requested = registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        registry
+            .respond(
+                &context,
+                PluginPermissionDecisionInput {
+                    request_id: requested.request_ids[0].clone(),
+                    decision: "allow_project".to_string(),
+                    expected_project_revision: 3,
+                },
+                &mut store,
+            )
+            .unwrap();
+        let key = registry_key(&context.project_root, "org.example.plugin");
+        let inflight = HostRequestId::new("request.inflight").unwrap();
+        {
+            let mut state = registry
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            state
+                .active
+                .get_mut(&key)
+                .unwrap()
+                .host
+                .begin_broker_call(inflight.clone(), serde_json::json!({}))
+                .unwrap();
+        }
+        let error = registry
+            .invoke_plugin(
+                &context,
+                "org.example.plugin",
+                serde_json::json!({}),
+                &mut store,
+            )
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("already has an active broker call")
+        );
+        let mut state = registry
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let host = &mut state.active.get_mut(&key).unwrap().host;
+        assert_eq!(
+            host.state(),
+            rho_extension_runtime::HostInstanceState::Active
+        );
+        assert!(host.broker_call_active());
+        assert!(host.cancel_broker_call(&inflight).unwrap());
     }
 
     #[test]

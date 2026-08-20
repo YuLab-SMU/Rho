@@ -13,6 +13,7 @@ export function validateP22BrokerContract(value) {
     "MAX_GUEST_STEP_BYTES: usize = 64 * 1024",
     "MAX_GUEST_BROKER_RESULT_BYTES: usize = 1024 * 1024",
     "module.imports().next().is_some()",
+    "P2_2_SMOKE_WASM",
   ]) assert.ok(value.host.includes(marker), `Guest ABI V2 lost ${marker}`);
   assert.doesNotMatch(value.host, /func_wrap|wasmtime_wasi|WasiCtx|reqwest|std::fs/);
 
@@ -105,6 +106,15 @@ export function validateP22BrokerContract(value) {
     "LiveNetworkAuthorizer",
     "completion_uncertain",
   ]) assert.ok(value.desktop.includes(marker), `desktop broker loop lost ${marker}`);
+  for (const marker of [
+    '"guest_abi_v2": 2',
+    '"broker_yield_resume": true',
+    '"grant_handle_bits": 256',
+    '"raw_handle_redacted": true',
+    '"revoke_enforced": true',
+    '"durable_permission_lane": true',
+    '"durable_raw_handle_absent": true',
+  ]) assert.ok(value.desktop.includes(marker), `installed P2-2 smoke lost ${marker}`);
   const fileLoopStart = value.desktop.indexOf("invoke_plugin_with_hook");
   const fileLoop = fileLoopStart >= 0 ? value.desktop.slice(fileLoopStart) : value.desktop;
   assert.ok(
@@ -119,7 +129,7 @@ export function validateP22BrokerContract(value) {
 
 function fixture() {
   return {
-    host: "pub enum GuestStep\npub fn begin_broker_call\npub fn resume_broker_call\npub fn cancel_broker_call\nMAX_GUEST_BROKER_STEPS: usize = 8\nMAX_GUEST_STEP_BYTES: usize = 64 * 1024\nMAX_GUEST_BROKER_RESULT_BYTES: usize = 1024 * 1024\nmodule.imports().next().is_some()",
+    host: "pub enum GuestStep\npub fn begin_broker_call\npub fn resume_broker_call\npub fn cancel_broker_call\nMAX_GUEST_BROKER_STEPS: usize = 8\nMAX_GUEST_STEP_BYTES: usize = 64 * 1024\nMAX_GUEST_BROKER_RESULT_BYTES: usize = 1024 * 1024\nmodule.imports().next().is_some()\nP2_2_SMOKE_WASM",
     grant: "rand::random()\npub trait GrantClock\npub trait GrantTokenSource\npub fn revalidate_admitted\npub fn durable_grant_id_for_handle\ncomplete_failure_before_dispatch\nWrongHostSession\nWrongPackageDigest\nWrongWorkspace",
     fileBroker: "pub fn read_project_file\nMAX_PLUGIN_FILE_READ_BYTES: u64 = 1024 * 1024\nsymlink_metadata\nis_link_or_reparse\nNestedRepository\ncanonical_file.starts_with(&canonical_root)\n.take(request.max_bytes + 1)\nafter_canonical_file != canonical_file\n#[cfg(test)]",
     workspaceBroker: 'pub struct WorkspaceObjectReferenceRegistry\nrequest_type: "workspace.inspect_object"\nMAX_WORKSPACE_METADATA_BYTES: usize = 64 * 1024\nMAX_WORKSPACE_PREVIEW_BYTES: usize = 256 * 1024\nMAX_WORKSPACE_PREVIEW_ROWS: usize = 100\nMAX_WORKSPACE_PREVIEW_COLUMNS: usize = 50\nMAX_WORKSPACE_PREVIEW_DEPTH: usize = 4\nObjectChanged\nsame_workspace_lineage\n#[cfg(test)]',
@@ -127,7 +137,7 @@ function fixture() {
     networkBroker: ".https_only(true)\n.no_proxy()\n.redirect(reqwest::redirect::Policy::none())\n.referer(false)\n.resolve_to_addrs(&hop.host, &socket_addresses)\nMAX_PLUGIN_NETWORK_REDIRECTS: usize = 3\nPLUGIN_NETWORK_TIMEOUT: Duration = Duration::from_secs(15)\naddresses.iter().any(|address| !is_public_ip(*address))\nauthorize(&authorization)\nfilter_safe_header_map\ncompletion_uncertain\n#[cfg(test)]",
     migration: "'call_admitted'\n'call_completed'\n'completion_uncertain'",
     store: "record_plugin_permission_call_event\nconsume_allow_once\nplugin permission call details contain a forbidden field",
-    desktop: "invoke_plugin_with_hook\nbegin_broker_call\ncall_admitted\nread_project_file(\nrevalidate_admitted\ncall_completed\nstale_after_dispatch\nresume_broker_call\ninvoke_workspace_plugin\nCoordinatorWorkspacePluginDispatcher\nissue_workspace_object_references\ninvoke_network_plugin\nLiveNetworkAuthorizer\ncompletion_uncertain",
+    desktop: "invoke_plugin_with_hook\nbegin_broker_call\ncall_admitted\nread_project_file(\nrevalidate_admitted\ncall_completed\nstale_after_dispatch\nresume_broker_call\ninvoke_workspace_plugin\nCoordinatorWorkspacePluginDispatcher\nissue_workspace_object_references\ninvoke_network_plugin\nLiveNetworkAuthorizer\ncompletion_uncertain\n\"guest_abi_v2\": 2\n\"broker_yield_resume\": true\n\"grant_handle_bits\": 256\n\"raw_handle_redacted\": true\n\"revoke_enforced\": true\n\"durable_permission_lane\": true\n\"durable_raw_handle_absent\": true",
   };
 }
 
@@ -156,7 +166,7 @@ if (process.argv.includes("--test")) {
     networkBroker: read("crates/rho-server/src/plugin_network.rs"),
     migration: read("crates/rho-store/src/migration.rs"),
     store: read("crates/rho-store/src/plugin_permission.rs"),
-    desktop: read("desktop/src-tauri/src/workspace_plugins.rs"),
+    desktop: `${read("desktop/src-tauri/src/workspace_plugins.rs")}\n${read("desktop/src-tauri/src/main.rs")}`,
   });
 }
 

@@ -13662,7 +13662,7 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
         &project_a_root,
     )
     .await?;
-    let phase2_wasm_host = smoke_wasm_plugin_host()?;
+    let phase2_wasm_host = smoke_wasm_plugin_host(&config.store_path, &project_a_root)?;
     let agent = if include_agent {
         let turn_id = format!("smoke_turn_{}", Uuid::new_v4());
         let conversation_id = format!("conversation_{turn_id}");
@@ -13777,13 +13777,27 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
     Ok(report)
 }
 
-fn smoke_wasm_plugin_host() -> Result<Value> {
+fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Value> {
     use rho_extension_runtime::{
-        ActivationGeneration, HostFrame, HostInstanceId, HostInstanceState, HostMessage,
-        HostProtocolErrorCode, HostRequestId, HostResponse, P2_1_SMOKE_WASM,
-        P2_1_WASI_IMPORT_SMOKE_WASM, PackageDigest, PluginId, ScopeId, WasmHostIdentity,
-        WasmPluginHost,
+        ActivationGeneration, BrokerCallIdSource, GrantRequest, GrantSource, GrantStore, GuestStep,
+        HostFrame, HostInstanceId, HostInstanceState, HostMessage, HostProtocolErrorCode,
+        HostRequestId, HostResponse, P2_1_SMOKE_WASM, P2_1_WASI_IMPORT_SMOKE_WASM, P2_2_SMOKE_WASM,
+        PackageDigest, PermissionConstraints, PermissionKind, PluginId, PluginVersion, RuntimeKind,
+        ScopeId, WasmHostIdentity, WasmPluginHost,
     };
+    use rho_store::{
+        PluginPermissionDecision, PluginPermissionDecisionDraft, PluginPermissionMutationOutcome,
+        PluginPermissionMutationService, PluginPermissionQueryService,
+        PluginPermissionRequestDraft,
+    };
+
+    #[derive(Debug)]
+    struct SmokeCallId;
+    impl BrokerCallIdSource for SmokeCallId {
+        fn next_call_id(&self) -> u64 {
+            42
+        }
+    }
 
     let identity = WasmHostIdentity::new(
         ScopeId::new("project.installed-smoke")?,
@@ -13867,6 +13881,174 @@ fn smoke_wasm_plugin_host() -> Result<Value> {
         "installed P2-1 Wasm host rejected WASI with the wrong error"
     );
 
+    let v2_host_instance = HostInstanceId::generate();
+    let v2_identity = WasmHostIdentity::new(
+        ScopeId::new("project.installed-smoke")?,
+        PluginId::new("org.yulab.rho.phase2-v2-smoke")?,
+        PackageDigest::from_inventory(&[(b"dist/plugin.wasm", P2_2_SMOKE_WASM)]),
+        ActivationGeneration::new(2)?,
+        v2_host_instance.clone(),
+    );
+    let mut v2_host = WasmPluginHost::from_bytes_with_call_id_source(
+        v2_identity,
+        P2_2_SMOKE_WASM,
+        Arc::new(SmokeCallId),
+    )
+    .map_err(|error| anyhow!("creating installed P2-2 Wasm host: {error:?}"))?;
+    ensure!(
+        v2_host.guest_abi_version() == 2,
+        "installed P2-2 ABI is not V2"
+    );
+    ensure!(
+        v2_host
+            .handle_frame(HostFrame {
+                instance_id: v2_host_instance.clone(),
+                message: HostMessage::Hello {
+                    api_version: rho_extension_runtime::HOST_PROTOCOL_VERSION,
+                },
+            })
+            .map_err(|error| anyhow!("negotiating installed P2-2 Wasm host: {error:?}"))?
+            == Some(HostResponse::Ready {
+                api_version: rho_extension_runtime::HOST_PROTOCOL_VERSION,
+            }),
+        "installed P2-2 Wasm host negotiation failed"
+    );
+    ensure!(
+        v2_host
+            .handle_frame(HostFrame {
+                instance_id: v2_host_instance.clone(),
+                message: HostMessage::Activate,
+            })
+            .map_err(|error| anyhow!("activating installed P2-2 Wasm host: {error:?}"))?
+            == Some(HostResponse::Activated),
+        "installed P2-2 Wasm host activation failed"
+    );
+    let v2_request = HostRequestId::new("request.installed-v2-smoke")?;
+    let yielded = v2_host
+        .begin_broker_call(v2_request.clone(), json!({"smoke": true}))
+        .map_err(|error| anyhow!("yielding installed P2-2 broker call: {error:?}"))?;
+    ensure!(
+        matches!(yielded, GuestStep::BrokerRequest { .. })
+            && !format!("{yielded:?}").contains("handle."),
+        "installed P2-2 broker yield was not typed and redacted"
+    );
+    ensure!(
+        matches!(
+            v2_host
+                .resume_broker_call(&v2_request, &json!({"ok": false}), 0)
+                .map_err(|error| anyhow!("resuming installed P2-2 broker call: {error:?}"))?,
+            GuestStep::Complete { .. }
+        ),
+        "installed P2-2 broker resume did not complete"
+    );
+
+    let now_millis = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0);
+    let constraints = PermissionConstraints {
+        paths: vec!["data/**/*.csv".to_string()],
+        max_bytes: Some(1024),
+        ..Default::default()
+    };
+    let mut grants = GrantStore::new();
+    let handle = grants.grant(GrantRequest {
+        durable_grant_id: "grant.installed-smoke".to_string(),
+        normalized_project_root: "/tmp/rho-installed-smoke".to_string(),
+        plugin_id: PluginId::new("org.yulab.rho.phase2-v2-smoke")?,
+        plugin_version: PluginVersion::parse("1.0.0")?,
+        runtime_kind: RuntimeKind::Wasm,
+        host_instance_id: v2_host_instance,
+        package_digest: PackageDigest::from_inventory(&[(b"dist/plugin.wasm", P2_2_SMOKE_WASM)]),
+        project_id: ScopeId::new("project.installed-smoke")?,
+        scope_id: ScopeId::new("project.installed-smoke")?,
+        activation_generation: ActivationGeneration::new(2)?,
+        permission: PermissionKind::ProjectFsRead,
+        constraints_digest: constraints.digest()?,
+        constraints,
+        grant_source: GrantSource::Project,
+        policy_revision: 1,
+        workspace: None,
+        expires_at_millis: now_millis + 60_000,
+    })?;
+    ensure!(
+        handle.id.len() == "handle.".len() + 64 && !format!("{handle:?}").contains(&handle.id),
+        "installed P2-2 handle is not 256-bit and redacted"
+    );
+    ensure!(
+        grants.revoke_durable_grant("grant.installed-smoke")
+            && !grants.has_live_durable_grant("grant.installed-smoke"),
+        "installed P2-2 revoke did not remove live authority"
+    );
+
+    let normalized_project_root = normalize_project_root(project_root.to_string_lossy().as_ref());
+    let package_digest = PackageDigest::from_inventory(&[(b"dist/plugin.wasm", P2_2_SMOKE_WASM)]);
+    let persisted_constraints = PermissionConstraints {
+        paths: vec!["data/**/*.csv".to_string()],
+        max_bytes: Some(1024),
+        ..Default::default()
+    };
+    let constraints_json = persisted_constraints.canonical_json()?;
+    let constraints_digest = persisted_constraints.digest()?;
+    let mut persisted = Store::open(store_path)?;
+    PluginPermissionMutationService::new(&mut persisted).create_request(
+        &normalized_project_root,
+        &PluginPermissionRequestDraft {
+            request_id: "request.installed-smoke".to_string(),
+            project_root: normalized_project_root.clone(),
+            plugin_id: "org.yulab.rho.phase2-v2-smoke".to_string(),
+            plugin_version: "1.0.0".to_string(),
+            package_digest: package_digest.to_string(),
+            runtime_kind: "wasm".to_string(),
+            permission: "project.fs.read".to_string(),
+            constraints_json,
+            constraints_digest,
+            purpose_text: Some("Installed P2-2 smoke".to_string()),
+            expected_project_revision: 1,
+        },
+    )?;
+    let durable_grant_id = "grant.persisted-installed-smoke";
+    let decision = PluginPermissionMutationService::new(&mut persisted).resolve_request(
+        &normalized_project_root,
+        &PluginPermissionDecisionDraft {
+            request_id: "request.installed-smoke".to_string(),
+            project_root: normalized_project_root.clone(),
+            expected_project_revision: 1,
+            decision: PluginPermissionDecision::AllowOnce,
+            reason_code: None,
+            grant_id: Some(durable_grant_id.to_string()),
+            policy_revision: Some(1),
+            expires_at: Some((chrono::Utc::now() + chrono::Duration::minutes(4)).to_rfc3339()),
+        },
+    )?;
+    ensure!(
+        decision == PluginPermissionMutationOutcome::Applied,
+        "installed P2-2 durable grant decision was not applied"
+    );
+    ensure!(
+        PluginPermissionMutationService::new(&mut persisted).revoke_grant(
+            &normalized_project_root,
+            durable_grant_id,
+            "installed_smoke_revoke",
+        )? == PluginPermissionMutationOutcome::Applied,
+        "installed P2-2 durable revoke was not applied"
+    );
+    let persisted_events = PluginPermissionQueryService::new(&persisted)
+        .list_events(&normalized_project_root, Some(20))?;
+    ensure!(
+        persisted_events
+            .iter()
+            .any(|event| event.event_type == "request_granted")
+            && persisted_events
+                .iter()
+                .any(|event| event.event_type == "grant_revoked"),
+        "installed P2-2 durable audit events are incomplete"
+    );
+    ensure!(
+        !serde_json::to_string(&persisted_events)?.contains("handle."),
+        "installed P2-2 durable audit exposed a raw handle"
+    );
+
     Ok(json!({
         "runtime": "wasmtime-38.0.4",
         "guest_abi": 1,
@@ -13875,6 +14057,13 @@ fn smoke_wasm_plugin_host() -> Result<Value> {
         "disposed": true,
         "wasi_rejected": true,
         "imports_exposed": 0,
+        "guest_abi_v2": 2,
+        "broker_yield_resume": true,
+        "grant_handle_bits": 256,
+        "raw_handle_redacted": true,
+        "revoke_enforced": true,
+        "durable_permission_lane": true,
+        "durable_raw_handle_absent": true,
     }))
 }
 

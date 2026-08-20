@@ -1,8 +1,14 @@
 # P2-3 Controlled Third-party Contributions
 
-Status: proposed implementation contract; product intent authorized as part of
-the complete Phase 2 direction on 2026-08-20; activation blocked until P2-1 and
-P2-2 acceptance gates close
+Status: active under the owner-approved local-first exception; P2-3A Manifest
+V2 + pure Source/Panel contract slice activated 2026-08-20 after local P2-2
+closeout; P2-1/P2-2 hosted and cross-platform installed acceptance remain open
+and mandatory before final Phase 2 acceptance
+
+Active work package: P2-3A only. P2-3B through P2-3E remain inactive until the
+Manifest V2/schema/pure-contract stop gate passes. P2-3A creates no product
+contribution route, Agent projection, trusted command/viewer UI, persistence,
+or new privileged operation.
 
 Change class: D3 capability graph, Agent tool, trusted UI, Wasm protocol, and
 cross-project lifecycle behavior. Risk: R3.
@@ -285,7 +291,10 @@ disposed states without pretending to execute untrusted code.
 
 ## Work Packages And Stop Points
 
-P2-3 activates only after P2-2 acceptance:
+Ordinarily P2-3 activates only after P2-2 acceptance. The owner-approved
+local-first exception permits sequential local engineering after the recorded
+P2-2F local stop gate, while hosted/cross-platform evidence remains mandatory
+before final acceptance:
 
 1. **P2-3A — Manifest V2 + schema bounds + Source/Panel pure contracts**;
 2. **P2-3B — Guest ABI V2 contribution-call proxy + transactional registry**;
@@ -315,10 +324,10 @@ review, version/NEWS agreement, and no public protocol/release authority drift.
 
 ## Version, NEWS, And Release
 
-This proposed document changes no code/version. The first routable P2-3 slice
-requires a fresh application development version after P2-2 and NEWS copy that
-names only the exact accepted contributions. R packages change only if their
-exported contracts change.
+P2-3A pure contracts do not change a version. The first routable P2-3 slice
+requires a fresh application development version after `0.4.1-dev.3` and NEWS
+copy that names only the exact accepted contributions. R packages change only
+if their exported contracts change.
 
 No SDK, marketplace, publisher trust, signing, global install, remote code,
 automatic update, P2-4 recovery claim, or release decision is created by P2-3.
