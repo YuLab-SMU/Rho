@@ -40,6 +40,11 @@ pub const GUEST_ABI_V1: u64 = 1;
 pub const GUEST_ABI_V2: u64 = 2;
 /// Maximum encoded bytes for a Guest ABI V2 step or resume result.
 pub const MAX_GUEST_STEP_BYTES: usize = 64 * 1024;
+/// Maximum encoded contribution call envelope written to `rho_begin`.
+pub const MAX_GUEST_CONTRIBUTION_ENVELOPE_BYTES: usize = 384 * 1024;
+/// Maximum encoded terminal contribution step. ViewerDocument validation
+/// applies the tighter one-MiB result limit after decoding.
+pub const MAX_GUEST_CONTRIBUTION_RETURN_BYTES: usize = 1088 * 1024;
 /// Maximum guest transitions in one top-level broker call.
 pub const MAX_GUEST_BROKER_STEPS: usize = 8;
 /// Maximum cumulative encoded broker-result bytes in one top-level call.
@@ -426,6 +431,34 @@ impl WasmPluginHost {
         request_id: HostRequestId,
         request: Value,
     ) -> Result<GuestStep, HostProtocolError> {
+        self.begin_broker_call_bounded(
+            request_id,
+            request,
+            MAX_GUEST_STEP_BYTES,
+            MAX_GUEST_STEP_BYTES,
+        )
+    }
+
+    pub fn begin_contribution_call(
+        &mut self,
+        request_id: HostRequestId,
+        request: Value,
+    ) -> Result<GuestStep, HostProtocolError> {
+        self.begin_broker_call_bounded(
+            request_id,
+            request,
+            MAX_GUEST_CONTRIBUTION_ENVELOPE_BYTES,
+            MAX_GUEST_CONTRIBUTION_RETURN_BYTES,
+        )
+    }
+
+    fn begin_broker_call_bounded(
+        &mut self,
+        request_id: HostRequestId,
+        request: Value,
+        maximum_input_bytes: usize,
+        maximum_return_bytes: usize,
+    ) -> Result<GuestStep, HostProtocolError> {
         if self.state != HostInstanceState::Active || self.guest_abi_version != GUEST_ABI_V2 {
             return Err(invalid_state(self.state));
         }
@@ -442,11 +475,11 @@ impl WasmPluginHost {
             "request": request,
         }))
         .map_err(|_| protocol_error(HostProtocolErrorCode::InvalidBrokerStep))?;
-        if input.len() > MAX_GUEST_STEP_BYTES {
+        if input.len() > maximum_input_bytes {
             self.finish_request(&request_id);
             return Err(protocol_error(HostProtocolErrorCode::PayloadTooLarge));
         }
-        if let Err(code) = self.write_guest_input(&input, MAX_GUEST_STEP_BYTES) {
+        if let Err(code) = self.write_guest_input(&input, maximum_input_bytes) {
             self.finish_request(&request_id);
             return self.fail(code);
         }
@@ -459,11 +492,11 @@ impl WasmPluginHost {
                 .clone();
             begin.call(&mut runtime.store, (0, input.len() as i32))
         })?;
-        let encoded = match self.read_guest_utf8(packed, MAX_GUEST_STEP_BYTES) {
+        let encoded = match self.read_guest_utf8(packed, maximum_return_bytes) {
             Ok(encoded) => encoded,
             Err(code) => return self.fail(code),
         };
-        let step = match decode_guest_step(&encoded, &call_id) {
+        let step = match decode_guest_step(&encoded, &call_id, maximum_return_bytes) {
             Ok(step) => step,
             Err(code) => return self.fail(code),
         };
@@ -490,6 +523,30 @@ impl WasmPluginHost {
         request_id: &HostRequestId,
         result: &Value,
         raw_result_bytes: usize,
+    ) -> Result<GuestStep, HostProtocolError> {
+        self.resume_broker_call_bounded(request_id, result, raw_result_bytes, MAX_GUEST_STEP_BYTES)
+    }
+
+    pub fn resume_contribution_call(
+        &mut self,
+        request_id: &HostRequestId,
+        result: &Value,
+        raw_result_bytes: usize,
+    ) -> Result<GuestStep, HostProtocolError> {
+        self.resume_broker_call_bounded(
+            request_id,
+            result,
+            raw_result_bytes,
+            MAX_GUEST_CONTRIBUTION_RETURN_BYTES,
+        )
+    }
+
+    fn resume_broker_call_bounded(
+        &mut self,
+        request_id: &HostRequestId,
+        result: &Value,
+        raw_result_bytes: usize,
+        maximum_return_bytes: usize,
     ) -> Result<GuestStep, HostProtocolError> {
         let Some(active) = self.broker_call.as_ref() else {
             return self.fail(HostProtocolErrorCode::BrokerSequenceViolation);
@@ -530,11 +587,11 @@ impl WasmPluginHost {
                 .clone();
             resume.call(&mut runtime.store, (0, encoded_result.len() as i32))
         })?;
-        let encoded = match self.read_guest_utf8(packed, MAX_GUEST_STEP_BYTES) {
+        let encoded = match self.read_guest_utf8(packed, maximum_return_bytes) {
             Ok(encoded) => encoded,
             Err(code) => return self.fail(code),
         };
-        let step = match decode_guest_step(&encoded, &call_id) {
+        let step = match decode_guest_step(&encoded, &call_id, maximum_return_bytes) {
             Ok(step) => step,
             Err(code) => return self.fail(code),
         };
@@ -909,8 +966,9 @@ impl WasmPluginHost {
 fn decode_guest_step(
     encoded: &str,
     expected_call_id: &str,
+    maximum_terminal_bytes: usize,
 ) -> Result<GuestStep, HostProtocolErrorCode> {
-    if encoded.len() > MAX_GUEST_STEP_BYTES {
+    if encoded.len() > maximum_terminal_bytes {
         return Err(HostProtocolErrorCode::PayloadTooLarge);
     }
     let step: GuestStep =
@@ -931,6 +989,9 @@ fn decode_guest_step(
             args,
             ..
         } => {
+            if encoded.len() > MAX_GUEST_STEP_BYTES {
+                return Err(HostProtocolErrorCode::PayloadTooLarge);
+            }
             let handle = handle_id.strip_prefix("handle.").unwrap_or_default();
             if handle.len() != 64
                 || !handle
@@ -954,6 +1015,9 @@ fn decode_guest_step(
         }
         GuestStep::Complete { .. } => {}
         GuestStep::Error { code, .. } => {
+            if encoded.len() > MAX_GUEST_STEP_BYTES {
+                return Err(HostProtocolErrorCode::PayloadTooLarge);
+            }
             if code.is_empty()
                 || code.len() > 128
                 || !code.bytes().all(|byte| {
@@ -1381,6 +1445,44 @@ mod tests {
         assert!(cancelled.cancel_broker_call(&request_id).unwrap());
         assert!(!cancelled.cancel_broker_call(&request_id).unwrap());
         assert_eq!(cancelled.state(), HostInstanceState::Active);
+    }
+
+    #[test]
+    fn contribution_terminal_budget_does_not_widen_broker_request_steps() {
+        let call_id = "call.000000000000002a";
+        let terminal = serde_json::json!({
+            "type": "complete",
+            "call_id": call_id,
+            "result": {"payload": "x".repeat(MAX_GUEST_STEP_BYTES)}
+        })
+        .to_string();
+        assert!(terminal.len() > MAX_GUEST_STEP_BYTES);
+        assert!(terminal.len() < MAX_GUEST_CONTRIBUTION_RETURN_BYTES);
+        assert!(
+            decode_guest_step(&terminal, call_id, MAX_GUEST_CONTRIBUTION_RETURN_BYTES,).is_ok()
+        );
+        assert_eq!(
+            decode_guest_step(&terminal, call_id, MAX_GUEST_STEP_BYTES),
+            Err(HostProtocolErrorCode::PayloadTooLarge)
+        );
+
+        let broker_request = serde_json::json!({
+            "type": "broker_request",
+            "call_id": call_id,
+            "handle_id": format!("handle.{}", "a".repeat(64)),
+            "permission": "project.fs.read",
+            "operation": "project.fs.read",
+            "args": {"padding": "x".repeat(MAX_GUEST_STEP_BYTES)}
+        })
+        .to_string();
+        assert_eq!(
+            decode_guest_step(
+                &broker_request,
+                call_id,
+                MAX_GUEST_CONTRIBUTION_RETURN_BYTES,
+            ),
+            Err(HostProtocolErrorCode::PayloadTooLarge)
+        );
     }
 
     #[test]

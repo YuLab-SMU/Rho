@@ -2208,7 +2208,7 @@ async function mockInvoke(command, args) {
   await new Promise((resolve) => setTimeout(resolve, command === "run_agent" ? 800 : 300));
   if (command === "app_info") {
     return {
-      version: "0.4.1-dev.3",
+      version: "0.4.1-dev.4",
       channel: "stable",
       commit: "4090cf725c53ab657ba9dfc9743ec6159f27dcf9",
       platform: mockPlatformFixture.platform,
@@ -2226,7 +2226,7 @@ async function mockInvoke(command, args) {
     return {
       status: "up_to_date",
       channel: "stable",
-      installed_version: "0.4.1-dev.3",
+      installed_version: "0.4.1-dev.4",
       available_version: null,
       published_at: null,
       summary: null,

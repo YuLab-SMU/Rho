@@ -483,6 +483,14 @@ impl GrantStore {
             .count()
     }
 
+    pub fn has_live_handle(&self, handle_id: &str) -> bool {
+        let handle_digest = sha256_hex(handle_id.as_bytes());
+        let now = self.clock.now_millis();
+        self.grants
+            .get(&handle_digest)
+            .is_some_and(|grant| grant.is_active(now))
+    }
+
     /// Invalidate all live authority for an exact normalized project.
     pub fn invalidate_project(&mut self, normalized_project_root: &str) -> usize {
         let now = self.clock.now_millis();

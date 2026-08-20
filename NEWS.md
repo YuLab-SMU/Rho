@@ -4,6 +4,23 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.1-dev.4 - 2026-08-20
+
+### Controlled workspace-plugin contributions
+
+- Manifest V2 packages can declare bounded Tool, Source, Skill, Command,
+  Viewer, and named Panel contracts. Labels, schemas, assets, media types, and
+  project/package limits are validated before any declaration can become live.
+- Contribution proxies are published transactionally against the exact prior
+  project/plugin/digest/generation/host identity. A failed or stale candidate
+  leaves the previously accepted generation routable and project switching
+  removes the exact live routes.
+- Calls use the no-import Guest ABI V2 loop with a 30-second deadline, exact
+  call-bound handles, closed input/output schemas, bounded results, and
+  provenance. This candidate does not yet expose third-party contributions to
+  Agent tools, the command palette, Viewers, or Panels; those surfaces remain
+  later P2-3 acceptance gates.
+
 ## 0.4.1-dev.3 - 2026-08-20
 
 ### Workspace plugins

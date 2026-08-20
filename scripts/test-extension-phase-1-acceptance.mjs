@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-const EXPECTED_VERSION = "0.4.1-dev.3";
+const EXPECTED_VERSION = "0.4.1-dev.4";
 const read = (path) => fs.readFileSync(path, "utf8");
 
 export function validatePhase1Acceptance(value) {

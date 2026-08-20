@@ -1,15 +1,15 @@
 # P2-3 Controlled Third-party Contributions
 
 Status: active under the owner-approved local-first exception; P2-3A Manifest
-V2 + pure Source/Panel contracts completed locally 2026-08-20; P2-3B Guest ABI
-V2 contribution proxy + transactional registry activated; P2-1/P2-2 hosted and
-cross-platform installed acceptance remain open and mandatory before final
-Phase 2 acceptance
+V2 + pure Source/Panel contracts and P2-3B Guest ABI V2 contribution proxy +
+transactional registry completed locally 2026-08-20; P2-3C fixture Tool/
+Source/Skill + Agent integration activated; P2-1/P2-2 hosted and cross-platform
+installed acceptance remain open and mandatory before final Phase 2 acceptance
 
-Active work package: P2-3B only. P2-3C through P2-3E remain inactive until the
-contribution-call/transactional-publication stop gate passes. P2-3A created no
-product contribution route, Agent projection, trusted command/viewer UI,
-persistence, or new privileged operation.
+Active work package: P2-3C only. P2-3D and P2-3E remain inactive until the
+fixture Tool/Source/Skill and Agent-isolation stop gate passes. P2-3B created an
+internal trusted contribution route but no Tauri command, Agent projection,
+trusted command/viewer UI, persistence, or new privileged operation.
 
 Change class: D3 capability graph, Agent tool, trusted UI, Wasm protocol, and
 cross-project lifecycle behavior. Risk: R3.
@@ -186,6 +186,48 @@ Limits:
 No guest can register a new contribution at runtime, change schemas/labels,
 select a project, add a handle, or mutate the capability graph. All live
 registrations derive from the exact validated manifest.
+
+### P2-3B local closeout evidence
+
+P2-3B adds a memory-only `ContributionCallSession` around Guest ABI V2. The
+trusted host supplies project/contribution/origin/input and the exact live
+handle set; custom Debug output redacts handles. Admission resolves only a
+published project route and matches project/plugin/digest/generation/host,
+validates closed input schema and 256 KiB input, then binds a host-generated
+call ID and 30-second monotonic deadline. Every broker yield must use one exact
+permission/handle pair supplied for the call. Completion rechecks route, host,
+deadline and live grants before validating output schema and the 256 KiB or
+1 MiB ViewerDocument budget. Late, duplicate, stale, revoked, expired,
+mismatched or oversized results remain unpublished.
+
+The Guest ABI host retains the 64 KiB broker-request step bound while allowing
+a separately bounded contribution envelope and terminal ViewerDocument. Exact
+boundary tests prove the larger terminal budget cannot widen broker requests.
+Transactional staging is hidden; publication clones the current project map,
+validates duplicates/project budget, and applies only through expected-old CAS.
+Desktop activation previews the transaction before minting handles, publishes
+under the same registry lock, retains the previously accepted host/routes on a
+failed replacement, and removes exact routes on host failure or project switch.
+
+Local verification on 2026-08-20:
+
+- stable and exact Rust `1.88.0` strict all-target clippy passed for
+  `rho-extension-runtime`; both workspace all-target checks passed;
+- runtime tests passed 122 unit, 26 contract, 11 discovery and 34 lifecycle
+  tests on both toolchains (193 total per toolchain);
+- 18 desktop workspace-plugin tests passed, including hidden candidate,
+  expected-old replacement, failed-replacement retention, real V2 proxy
+  yield/resume, handle redaction, post-terminal revoke withholding and exact
+  project teardown;
+- P2-3, P2-2, P2 host, Phase 1 acceptance, MAC4 release, version, command
+  inventory, JS syntax, rustfmt and diff contracts passed, including negative
+  self-tests and exact/over byte-budget cases.
+
+The first routable P2-3 slice allocated synchronized application version
+`0.4.1-dev.4` and truthful NEWS copy. It added no SQLite/R-package version,
+Tauri command, browser/mock UI, Agent tool/source, public protocol, broker
+operation or release authority. This closes only the local P2-3B stop gate and
+activates P2-3C under the recorded local-first exception.
 
 ## Transactional Registration
 
@@ -366,10 +408,10 @@ review, version/NEWS agreement, and no public protocol/release authority drift.
 
 ## Version, NEWS, And Release
 
-P2-3A pure contracts do not change a version. The first routable P2-3 slice
-requires a fresh application development version after `0.4.1-dev.3` and NEWS
-copy that names only the exact accepted contributions. R packages change only
-if their exported contracts change.
+P2-3A pure contracts did not change a version. P2-3B was the first routable
+slice and allocated synchronized application version `0.4.1-dev.4` with NEWS
+copy naming only the internal transactional contribution route. R packages did
+not change because no exported R contract changed.
 
 No SDK, marketplace, publisher trust, signing, global install, remote code,
 automatic update, P2-4 recovery claim, or release decision is created by P2-3.

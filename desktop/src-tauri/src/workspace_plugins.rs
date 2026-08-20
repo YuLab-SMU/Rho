@@ -16,12 +16,14 @@ use anyhow::{Context, Result, anyhow, bail, ensure};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use rho_core::ExecutionOrigin;
 use rho_extension_runtime::{
-    ActivationGeneration, BrokerCallIdSource, CapabilityHandle, DiscoveredPlugin, GrantErrorKind,
+    ActivationGeneration, BrokerCallIdSource, CapabilityHandle, ContributionCallOutcome,
+    ContributionCallRequest, ContributionCallSession, ContributionInstanceIdentity,
+    ContributionInvocationOrigin, ContributionStore, DiscoveredPlugin, GrantErrorKind,
     GrantRequest, GrantSource, GrantStore, GuestStep, HOST_PROTOCOL_VERSION, HostFrame,
     HostInstanceId, HostMessage, HostRequestId, HostResponse, MAX_WASM_MODULE_BYTES,
     OsBrokerCallIdSource, PermissionConstraints, PermissionKind, PermissionUse, PluginId,
-    Revalidation, RevalidationRequest, RuntimeKind, ScopeId, WasmHostIdentity, WasmPluginHost,
-    WorkspaceGrantIdentity, discover_workspace_plugins,
+    Revalidation, RevalidationRequest, RuntimeKind, ScopeId, SystemContributionClock,
+    WasmHostIdentity, WasmPluginHost, WorkspaceGrantIdentity, discover_workspace_plugins,
 };
 use rho_kernel::ArkSession;
 use rho_server::coordinator::{CoordinatorRuntime, dispatch_workspace_request};
@@ -212,12 +214,14 @@ struct ActivePlugin {
     host_instance_id: HostInstanceId,
     host: WasmPluginHost,
     handles: BTreeMap<String, CapabilityHandle>,
+    contribution_identity: Option<ContributionInstanceIdentity>,
 }
 
 struct RegistryState {
     next_generation: u64,
     pending: BTreeMap<String, PendingEnable>,
     active: BTreeMap<String, ActivePlugin>,
+    contributions: ContributionStore,
     grants: GrantStore,
     broker_call_id_source: Arc<dyn BrokerCallIdSource>,
     workspace_objects: WorkspaceObjectReferenceRegistry,
@@ -230,6 +234,7 @@ impl Default for RegistryState {
             next_generation: 1,
             pending: BTreeMap::new(),
             active: BTreeMap::new(),
+            contributions: ContributionStore::new(),
             grants: GrantStore::new(),
             broker_call_id_source: Arc::new(OsBrokerCallIdSource),
             workspace_objects: WorkspaceObjectReferenceRegistry::new(),
@@ -385,9 +390,6 @@ impl PendingPluginPermissionRegistry {
             });
         }
 
-        if let Some(previous) = state.active.remove(&key) {
-            state.grants.invalidate_host(&previous.host_instance_id);
-        }
         state.pending.remove(&key);
 
         let durable_grants = matching_project_grants(store, context, &plugin)?;
@@ -1004,9 +1006,7 @@ impl PendingPluginPermissionRegistry {
                                 .state
                                 .lock()
                                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-                            if let Some(active) = state.active.remove(&key) {
-                                state.grants.invalidate_host(&active.host_instance_id);
-                            }
+                            remove_active_plugin(&mut state, &key);
                             drop(state);
                             let mut store = Store::open(store_path)?;
                             record_call_event(
@@ -1371,9 +1371,7 @@ impl PendingPluginPermissionRegistry {
                                 .state
                                 .lock()
                                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-                            if let Some(active) = state.active.remove(&key) {
-                                state.grants.invalidate_host(&active.host_instance_id);
-                            }
+                            remove_active_plugin(&mut state, &key);
                             drop(state);
                             let mut store = Store::open(store_path)?;
                             record_call_event(
@@ -1710,9 +1708,7 @@ impl PendingPluginPermissionRegistry {
                                 .state
                                 .lock()
                                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-                            if let Some(active) = state.active.remove(&key) {
-                                state.grants.invalidate_host(&active.host_instance_id);
-                            }
+                            remove_active_plugin(&mut state, &key);
                             drop(state);
                             record_call_event(
                                 store,
@@ -1760,7 +1756,7 @@ impl PendingPluginPermissionRegistry {
         match result {
             Ok(step) => Ok(step),
             Err(error) => {
-                state.active.remove(key);
+                remove_active_plugin(&mut state, key);
                 state.grants.invalidate_host(&failed_host);
                 Err(anyhow!("workspace plugin error resume failed: {error:?}"))
             }
@@ -1793,6 +1789,135 @@ impl PendingPluginPermissionRegistry {
         }
     }
 
+    #[allow(dead_code)]
+    pub(crate) fn begin_contribution_call(
+        &self,
+        context: &PluginRuntimeContext,
+        contribution_id: &str,
+        origin: ContributionInvocationOrigin,
+        input: serde_json::Value,
+    ) -> Result<(ContributionCallSession, GuestStep)> {
+        let contribution_id = rho_extension_runtime::CapabilityId::new(contribution_id.to_string())
+            .context("validating contribution id")?;
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let plugin_id = state
+            .contributions
+            .get(&context.project_scope_id, &contribution_id)
+            .context("contribution is not published for the current project")?
+            .plugin_id
+            .to_string();
+        let key = registry_key(&context.project_root, &plugin_id);
+        let RegistryState {
+            active,
+            contributions,
+            ..
+        } = &mut *state;
+        let active = active
+            .get_mut(&key)
+            .context("contribution host is not active for the current project")?;
+        let handles = active
+            .handles
+            .values()
+            .map(|handle| {
+                (
+                    handle.permission.as_static_str().to_string(),
+                    handle.id.clone(),
+                )
+            })
+            .collect();
+        ContributionCallSession::begin(
+            contributions,
+            ContributionCallRequest {
+                project_id: context.project_scope_id.clone(),
+                contribution_id,
+                origin,
+                input,
+                supplied_handles: handles,
+            },
+            &SystemContributionClock,
+            &mut active.host,
+        )
+        .map_err(Into::into)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn resume_contribution_call(
+        &self,
+        context: &PluginRuntimeContext,
+        session: &mut ContributionCallSession,
+        broker_result: &serde_json::Value,
+        raw_result_bytes: usize,
+    ) -> Result<GuestStep> {
+        ensure!(
+            session.identity().project_id == context.project_scope_id,
+            "contribution call belongs to another project"
+        );
+        let key = registry_key(&context.project_root, session.identity().plugin_id.as_str());
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let RegistryState {
+            active,
+            contributions,
+            ..
+        } = &mut *state;
+        let active = active
+            .get_mut(&key)
+            .context("contribution host became inactive before resume")?;
+        session
+            .resume(
+                contributions,
+                broker_result,
+                raw_result_bytes,
+                &SystemContributionClock,
+                &mut active.host,
+            )
+            .map_err(Into::into)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn finish_contribution_call(
+        &self,
+        context: &PluginRuntimeContext,
+        session: &mut ContributionCallSession,
+        step: &GuestStep,
+    ) -> Result<ContributionCallOutcome> {
+        ensure!(
+            session.identity().project_id == context.project_scope_id,
+            "contribution call belongs to another project"
+        );
+        let key = registry_key(&context.project_root, session.identity().plugin_id.as_str());
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let RegistryState {
+            active,
+            contributions,
+            grants,
+            ..
+        } = &mut *state;
+        let active = active
+            .get_mut(&key)
+            .context("contribution host became inactive before completion")?;
+        if !session.supplied_handles_are_live(|handle_id| grants.has_live_handle(handle_id)) {
+            session.invalidate_before_publish();
+            bail!("contribution handle was revoked or expired before completion");
+        }
+        session
+            .finish(
+                contributions,
+                step,
+                &SystemContributionClock,
+                &mut active.host,
+            )
+            .map_err(Into::into)
+    }
+
     pub(crate) fn invalidate_project(&self, project_root: &str) -> usize {
         let project_root = normalize_project_root(project_root);
         let mut state = self
@@ -1801,7 +1926,15 @@ impl PendingPluginPermissionRegistry {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let invalidated = state.grants.invalidate_project(&project_root);
         let prefix = format!("{project_root}\0");
-        state.active.retain(|key, _| !key.starts_with(&prefix));
+        let active_keys = state
+            .active
+            .keys()
+            .filter(|key| key.starts_with(&prefix))
+            .cloned()
+            .collect::<Vec<_>>();
+        for key in active_keys {
+            remove_active_plugin(&mut state, &key);
+        }
         state.pending.retain(|key, _| !key.starts_with(&prefix));
         state.workspace_objects.invalidate_project(&project_root);
         invalidated
@@ -2008,6 +2141,21 @@ fn registry_key(project_root: &str, plugin_id: &str) -> String {
     format!("{}\0{plugin_id}", normalize_project_root(project_root))
 }
 
+fn remove_active_plugin(state: &mut RegistryState, key: &str) -> Option<ActivePlugin> {
+    let active = state.active.remove(key)?;
+    if let Some(identity) = &active.contribution_identity {
+        state.contributions.clear_instance(
+            &identity.project_id,
+            &identity.plugin_id,
+            &identity.package_digest,
+            identity.activation_generation,
+            &identity.host_instance_id,
+        );
+    }
+    state.grants.invalidate_host(&active.host_instance_id);
+    Some(active)
+}
+
 fn matching_project_grants(
     store: &Store,
     context: &PluginRuntimeContext,
@@ -2163,6 +2311,33 @@ fn activate_plugin<'a>(
         "workspace plugin host did not activate"
     );
 
+    let contribution_identity = ContributionInstanceIdentity::new(
+        context.project_scope_id.clone(),
+        plugin.manifest.id.clone(),
+        plugin.digest.clone(),
+        generation,
+        host_instance_id.clone(),
+    );
+    if !plugin.manifest.contributions.is_empty() {
+        ensure!(
+            host.guest_abi_version() == rho_extension_runtime::GUEST_ABI_V2,
+            "contributing workspace plugins require no-import Guest ABI V2"
+        );
+    }
+    let contribution_candidate = ContributionStore::stage(
+        contribution_identity.clone(),
+        plugin.manifest.contributions.clone(),
+    )
+    .map_err(|error| anyhow!("workspace plugin contribution candidate is invalid: {error:?}"))?;
+    let expected_old = state
+        .contributions
+        .current_identity(&context.project_scope_id, &plugin.manifest.id)
+        .map_err(|error| anyhow!("reading current contribution identity: {error:?}"))?;
+    let mut preview = state.contributions.clone();
+    preview
+        .publish(contribution_candidate.clone(), expected_old.as_ref())
+        .map_err(|error| anyhow!("workspace plugin contribution candidate conflicts: {error:?}"))?;
+
     let grants = durable_grants.into_iter().collect::<Vec<_>>();
     let mut handles = BTreeMap::new();
     for permission in &plugin.manifest.permissions {
@@ -2249,7 +2424,18 @@ fn activate_plugin<'a>(
         .context("workspace plugin activation generation is exhausted")?;
     let active_grant_count = handles.len();
     let key = registry_key(&context.project_root, plugin.manifest.id.as_str());
-    state.active.insert(
+    if let Err(error) = state
+        .contributions
+        .publish(contribution_candidate, expected_old.as_ref())
+    {
+        state.grants.invalidate_host(&host_instance_id);
+        return Err(anyhow!(
+            "workspace plugin contribution publication failed: {error:?}"
+        ));
+    }
+    let contribution_identity =
+        (!plugin.manifest.contributions.is_empty()).then_some(contribution_identity);
+    let previous = state.active.insert(
         key,
         ActivePlugin {
             project_root: context.project_root.clone(),
@@ -2258,8 +2444,12 @@ fn activate_plugin<'a>(
             host_instance_id,
             host,
             handles,
+            contribution_identity,
         },
     );
+    if let Some(previous) = previous {
+        state.grants.invalidate_host(&previous.host_instance_id);
+    }
     Ok(WorkspacePluginEnableResult {
         status: "enabled".to_string(),
         plugin_id: plugin.manifest.id.to_string(),
@@ -2387,6 +2577,7 @@ mod tests {
                 next_generation: 1,
                 pending: BTreeMap::new(),
                 active: BTreeMap::new(),
+                contributions: ContributionStore::new(),
                 grants: GrantStore::with_sources(Arc::new(SystemGrantClock), Arc::new(FixedToken)),
                 broker_call_id_source: Arc::new(FixedCallId),
                 workspace_objects: WorkspaceObjectReferenceRegistry::with_sources(
@@ -2608,6 +2799,87 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
+    }
+
+    fn write_contributing_plugin(
+        project: &Path,
+        version: &str,
+        capability: &str,
+        activation_fails: bool,
+    ) {
+        let directory = project.join(".rho/plugins/example/dist");
+        fs::create_dir_all(&directory).unwrap();
+        let activation_status = usize::from(activation_fails);
+        let module = wat::parse_str(format!(
+            r#"(module
+                (memory (export "memory") 1 32)
+                (func (export "rho_activate") (param i32) (result i32) i32.const {activation_status})
+                (func (export "rho_echo") (param i32 i32) (result i64) i64.const 0)
+                (func (export "rho_heartbeat") (result i32) i32.const 0)
+                (func (export "rho_quiesce") (result i32) i32.const 0)
+                (func (export "rho_dispose") (result i32) i32.const 0)
+                (func (export "rho_begin") (param i32 i32) (result i64) i64.const 0)
+                (func (export "rho_resume") (param i32 i32) (result i64) i64.const 0)
+                (func (export "rho_cancel") (param i32 i32) (result i32) i32.const 0))"#,
+        ))
+        .unwrap();
+        fs::write(directory.join("plugin.wasm"), module).unwrap();
+        let schema = serde_json::json!({"type": "object", "properties": {}});
+        fs::write(
+            project.join(".rho/plugins/example/rho-plugin.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "schemaVersion": 2,
+                "id": "org.example.plugin",
+                "name": "Example contribution",
+                "version": version,
+                "apiVersion": "^1.0",
+                "runtime": { "kind": "wasm", "entry": "dist/plugin.wasm", "scope": "project" },
+                "provides": [{"capability": capability, "contract_major": 1}],
+                "contributions": [{
+                    "id": capability,
+                    "kind": "tool",
+                    "contractMajor": 1,
+                    "label": "Fixture contribution",
+                    "purpose": "Exercise transactional publication",
+                    "inputSchema": schema,
+                    "outputSchema": schema
+                }]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+    }
+
+    fn write_file_contributing_plugin(project: &Path) {
+        write_plugin(
+            project,
+            serde_json::json!([{
+                "name": "project.fs.read",
+                "paths": ["data/**/*.csv"],
+                "maxBytes": 1024
+            }]),
+        );
+        install_file_broker_module(project);
+        let manifest_path = project.join(".rho/plugins/example/rho-plugin.json");
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+        manifest["schemaVersion"] = serde_json::json!(2);
+        manifest["provides"] =
+            serde_json::json!([{"capability": "tool.fixture.read", "contract_major": 1}]);
+        manifest["contributions"] = serde_json::json!([{
+            "id": "tool.fixture.read",
+            "kind": "tool",
+            "contractMajor": 1,
+            "label": "Read fixture",
+            "purpose": "Read bounded fixture metadata",
+            "inputSchema": {"type": "object", "properties": {}},
+            "outputSchema": {
+                "type": "object",
+                "properties": {"received": {"type": "boolean"}},
+                "required": ["received"]
+            }
+        }]);
+        fs::write(manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
     }
 
     fn context(project: &Path) -> PluginRuntimeContext {
@@ -3768,6 +4040,197 @@ mod tests {
         );
         assert!(host.broker_call_active());
         assert!(host.cancel_broker_call(&inflight).unwrap());
+    }
+
+    #[test]
+    fn manifest_v2_contributions_publish_atomically_and_failed_replacement_keeps_old() {
+        let directory = tempdir().unwrap();
+        write_contributing_plugin(directory.path(), "1.0.0", "tool.fixture.old", false);
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let registry = deterministic_registry();
+        let context = context(directory.path());
+        let enabled = registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        assert_eq!(enabled.status, "enabled");
+        {
+            let state = registry
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            assert!(
+                state
+                    .contributions
+                    .get(
+                        &context.project_scope_id,
+                        &rho_extension_runtime::CapabilityId::new("tool.fixture.old").unwrap(),
+                    )
+                    .is_some()
+            );
+        }
+
+        write_contributing_plugin(directory.path(), "2.0.0", "tool.fixture.next", true);
+        assert!(
+            registry
+                .request_enable(&context, "org.example.plugin", &mut store)
+                .is_err()
+        );
+        {
+            let state = registry
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let active = state
+                .active
+                .get(&registry_key(&context.project_root, "org.example.plugin"))
+                .unwrap();
+            assert_eq!(active.plugin_version, "1.0.0");
+            assert!(
+                state
+                    .contributions
+                    .get(
+                        &context.project_scope_id,
+                        &rho_extension_runtime::CapabilityId::new("tool.fixture.old").unwrap(),
+                    )
+                    .is_some()
+            );
+            assert!(
+                state
+                    .contributions
+                    .get(
+                        &context.project_scope_id,
+                        &rho_extension_runtime::CapabilityId::new("tool.fixture.next").unwrap(),
+                    )
+                    .is_none()
+            );
+        }
+
+        write_contributing_plugin(directory.path(), "2.0.0", "tool.fixture.next", false);
+        assert_eq!(
+            registry
+                .request_enable(&context, "org.example.plugin", &mut store)
+                .unwrap()
+                .status,
+            "enabled"
+        );
+        {
+            let state = registry
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            assert!(
+                state
+                    .contributions
+                    .get(
+                        &context.project_scope_id,
+                        &rho_extension_runtime::CapabilityId::new("tool.fixture.old").unwrap(),
+                    )
+                    .is_none()
+            );
+            assert!(
+                state
+                    .contributions
+                    .get(
+                        &context.project_scope_id,
+                        &rho_extension_runtime::CapabilityId::new("tool.fixture.next").unwrap(),
+                    )
+                    .is_some()
+            );
+        }
+        registry.invalidate_project(&context.project_root);
+        let state = registry
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert!(
+            state
+                .contributions
+                .list(&context.project_scope_id)
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn published_contribution_proxy_binds_handles_and_validates_terminal_output() {
+        let directory = tempdir().unwrap();
+        write_file_contributing_plugin(directory.path());
+        fs::create_dir_all(directory.path().join("data")).unwrap();
+        fs::write(directory.path().join("data/input.csv"), b"a,b\n").unwrap();
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let registry = deterministic_registry();
+        let context = context(directory.path());
+        let requested = registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        registry
+            .respond(
+                &context,
+                PluginPermissionDecisionInput {
+                    request_id: requested.request_ids[0].clone(),
+                    decision: "allow_project".to_string(),
+                    expected_project_revision: context.project_revision,
+                },
+                &mut store,
+            )
+            .unwrap();
+
+        let (mut session, first) = registry
+            .begin_contribution_call(
+                &context,
+                "tool.fixture.read",
+                ContributionInvocationOrigin::AgentTool,
+                serde_json::json!({}),
+            )
+            .unwrap();
+        assert!(matches!(first, GuestStep::BrokerRequest { .. }));
+        assert!(!format!("{session:?}").contains("handle.0707"));
+        let terminal = registry
+            .resume_contribution_call(&context, &mut session, &serde_json::json!({"ok": true}), 2)
+            .unwrap();
+        let outcome = registry
+            .finish_contribution_call(&context, &mut session, &terminal)
+            .unwrap();
+        match outcome {
+            ContributionCallOutcome::Completed { result, provenance } => {
+                assert_eq!(result, serde_json::json!({"received": true}));
+                assert_eq!(provenance.contribution_id.as_str(), "tool.fixture.read");
+                assert_eq!(provenance.plugin_id.as_str(), "org.example.plugin");
+                assert_eq!(provenance.broker_steps, 1);
+            }
+            ContributionCallOutcome::Failed { code, .. } => {
+                panic!("contribution unexpectedly failed: {code}")
+            }
+        }
+
+        let (mut revoked_session, _) = registry
+            .begin_contribution_call(
+                &context,
+                "tool.fixture.read",
+                ContributionInvocationOrigin::AgentTool,
+                serde_json::json!({}),
+            )
+            .unwrap();
+        let revoked_terminal = registry
+            .resume_contribution_call(
+                &context,
+                &mut revoked_session,
+                &serde_json::json!({"ok": true}),
+                2,
+            )
+            .unwrap();
+        let grant_id = PluginPermissionQueryService::new(&store)
+            .list_grants(&context.project_root, Some(10), Some("active"))
+            .unwrap()[0]
+            .grant_id
+            .clone();
+        registry.revoke(&context, &grant_id, &mut store).unwrap();
+        assert!(
+            registry
+                .finish_contribution_call(&context, &mut revoked_session, &revoked_terminal,)
+                .unwrap_err()
+                .to_string()
+                .contains("revoked or expired")
+        );
     }
 
     #[test]

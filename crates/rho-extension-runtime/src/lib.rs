@@ -13,6 +13,7 @@
 mod broker;
 mod builder;
 mod contribution;
+mod contribution_call;
 mod digest;
 mod discovery;
 mod error;
@@ -41,10 +42,18 @@ pub use builder::{
     StaticValidation, candidate_within_envelope,
 };
 pub use contribution::{
-    Contribution, ContributionDeclaration, ContributionError, ContributionKind, ContributionRecord,
-    ContributionStore, MAX_CONTRIBUTION_LABEL_BYTES, MAX_CONTRIBUTION_MEDIA_TYPE_BYTES,
-    MAX_CONTRIBUTION_MEDIA_TYPES, MAX_CONTRIBUTION_PURPOSE_BYTES, MAX_CONTRIBUTIONS_PER_PACKAGE,
-    MAX_CONTRIBUTIONS_PER_PROJECT, PLUGIN_DETAILS_PANEL_SLOT,
+    Contribution, ContributionCandidate, ContributionDeclaration, ContributionError,
+    ContributionInstanceIdentity, ContributionKind, ContributionRecord, ContributionStore,
+    MAX_CONTRIBUTION_LABEL_BYTES, MAX_CONTRIBUTION_MEDIA_TYPE_BYTES, MAX_CONTRIBUTION_MEDIA_TYPES,
+    MAX_CONTRIBUTION_PURPOSE_BYTES, MAX_CONTRIBUTIONS_PER_PACKAGE, MAX_CONTRIBUTIONS_PER_PROJECT,
+    PLUGIN_DETAILS_PANEL_SLOT,
+};
+pub use contribution_call::{
+    CONTRIBUTION_CALL_DEADLINE_MILLIS, ContributionCallError, ContributionCallErrorCode,
+    ContributionCallOutcome, ContributionCallProvenance, ContributionCallRequest,
+    ContributionCallSession, ContributionClock, ContributionInvocationOrigin,
+    MAX_CONTRIBUTION_CALL_BYTES, MAX_CONTRIBUTION_CALL_HANDLES, MAX_VIEWER_DOCUMENT_BYTES,
+    SystemContributionClock,
 };
 pub use digest::PackageDigest;
 pub use discovery::{
@@ -128,6 +137,7 @@ pub use resolver::resolve_activation_plan;
 pub use wasm_host::{
     BrokerCallIdSource, DEFAULT_WASM_FUEL, GUEST_ABI_V1, GUEST_ABI_V2, GuestStep,
     MAX_GUEST_BROKER_RESULT_BYTES, MAX_GUEST_BROKER_RESUME_BYTES, MAX_GUEST_BROKER_STEPS,
+    MAX_GUEST_CONTRIBUTION_ENVELOPE_BYTES, MAX_GUEST_CONTRIBUTION_RETURN_BYTES,
     MAX_GUEST_STEP_BYTES, MAX_PENDING_WASM_CANCELLATIONS, MAX_WASM_MEMORY_BYTES,
     MAX_WASM_MODULE_BYTES, MAX_WASM_TABLE_ELEMENTS, OsBrokerCallIdSource, P2_1_SMOKE_WASM,
     P2_1_WASI_IMPORT_SMOKE_WASM, P2_2_SMOKE_WASM, WasmCancellationHandle, WasmHostIdentity,

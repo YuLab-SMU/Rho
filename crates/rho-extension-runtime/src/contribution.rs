@@ -337,8 +337,57 @@ pub struct ContributionRecord {
     pub host_instance_id: HostInstanceId,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ContributionInstanceIdentity {
+    pub project_id: ScopeId,
+    pub plugin_id: PluginId,
+    pub package_digest: PackageDigest,
+    pub activation_generation: ActivationGeneration,
+    pub host_instance_id: HostInstanceId,
+}
+
+impl ContributionInstanceIdentity {
+    pub fn new(
+        project_id: ScopeId,
+        plugin_id: PluginId,
+        package_digest: PackageDigest,
+        activation_generation: ActivationGeneration,
+        host_instance_id: HostInstanceId,
+    ) -> Self {
+        Self {
+            project_id,
+            plugin_id,
+            package_digest,
+            activation_generation,
+            host_instance_id,
+        }
+    }
+}
+
+/// Hidden, fully validated candidate. Constructing it never mutates live
+/// routing; only an expected-old publication can expose its declarations.
+#[derive(Debug, Clone)]
+pub struct ContributionCandidate {
+    identity: ContributionInstanceIdentity,
+    contributions: Vec<Contribution>,
+}
+
+impl ContributionCandidate {
+    pub fn identity(&self) -> &ContributionInstanceIdentity {
+        &self.identity
+    }
+
+    pub fn len(&self) -> usize {
+        self.contributions.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.contributions.is_empty()
+    }
+}
+
 /// Reversible, project-scoped contribution store.
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ContributionStore {
     /// Keyed by `(project_id, capability)` so projects A and B are isolated.
     records: std::collections::BTreeMap<(ScopeId, CapabilityId), ContributionRecord>,
@@ -364,6 +413,9 @@ pub enum ContributionError {
     Invalid,
     /// Project contribution budget is exhausted.
     LimitExceeded,
+    /// Candidate publication did not match the exact currently published
+    /// plugin identity supplied by the caller.
+    ExpectedOldMismatch,
 }
 
 impl ContributionStore {
@@ -371,6 +423,120 @@ impl ContributionStore {
         Self {
             records: std::collections::BTreeMap::new(),
         }
+    }
+
+    pub fn stage(
+        identity: ContributionInstanceIdentity,
+        declarations: Vec<ContributionDeclaration>,
+    ) -> Result<ContributionCandidate, ContributionError> {
+        if declarations.len() > MAX_CONTRIBUTIONS_PER_PACKAGE {
+            return Err(ContributionError::LimitExceeded);
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        let mut contributions = Vec::with_capacity(declarations.len());
+        for declaration in declarations {
+            if !seen.insert(declaration.id.clone()) {
+                return Err(ContributionError::Duplicate);
+            }
+            contributions.push(Contribution::from_declaration(declaration)?);
+        }
+        Ok(ContributionCandidate {
+            identity,
+            contributions,
+        })
+    }
+
+    /// Publish a complete plugin contribution set atomically. A failed CAS,
+    /// duplicate, invalid declaration, or project-budget check leaves the
+    /// previous generation byte-for-byte unchanged.
+    pub fn publish(
+        &mut self,
+        candidate: ContributionCandidate,
+        expected_old: Option<&ContributionInstanceIdentity>,
+    ) -> Result<Option<ContributionInstanceIdentity>, ContributionError> {
+        let current = self.current_identity(
+            &candidate.identity.project_id,
+            &candidate.identity.plugin_id,
+        )?;
+        if current.as_ref() != expected_old {
+            return Err(ContributionError::ExpectedOldMismatch);
+        }
+
+        let mut next = self.clone();
+        next.records.retain(|(project, _), record| {
+            project != &candidate.identity.project_id
+                || record.plugin_id != candidate.identity.plugin_id
+        });
+        for contribution in candidate.contributions {
+            next.register(
+                candidate.identity.project_id.clone(),
+                candidate.identity.plugin_id.clone(),
+                candidate.identity.package_digest.clone(),
+                candidate.identity.activation_generation,
+                candidate.identity.host_instance_id.clone(),
+                contribution,
+            )?;
+        }
+        self.records = next.records;
+        Ok(current)
+    }
+
+    pub fn unpublish(
+        &mut self,
+        identity: &ContributionInstanceIdentity,
+    ) -> Result<(), ContributionError> {
+        if self
+            .current_identity(&identity.project_id, &identity.plugin_id)?
+            .as_ref()
+            != Some(identity)
+        {
+            return Err(ContributionError::ExpectedOldMismatch);
+        }
+        self.clear_instance(
+            &identity.project_id,
+            &identity.plugin_id,
+            &identity.package_digest,
+            identity.activation_generation,
+            &identity.host_instance_id,
+        );
+        Ok(())
+    }
+
+    pub fn get(
+        &self,
+        project_id: &ScopeId,
+        capability: &CapabilityId,
+    ) -> Option<&ContributionRecord> {
+        self.records.get(&(project_id.clone(), capability.clone()))
+    }
+
+    pub fn current_identity(
+        &self,
+        project_id: &ScopeId,
+        plugin_id: &PluginId,
+    ) -> Result<Option<ContributionInstanceIdentity>, ContributionError> {
+        let mut identity = None;
+        for record in self
+            .records
+            .values()
+            .filter(|record| &record.project_id == project_id && &record.plugin_id == plugin_id)
+        {
+            let record_identity = ContributionInstanceIdentity::new(
+                record.project_id.clone(),
+                record.plugin_id.clone(),
+                record.package_digest.clone(),
+                record.activation_generation,
+                record.host_instance_id.clone(),
+            );
+            if identity
+                .as_ref()
+                .is_some_and(|identity| identity != &record_identity)
+            {
+                return Err(ContributionError::Invalid);
+            }
+            identity = Some(record_identity);
+        }
+        Ok(identity)
     }
 
     /// Register a contribution for `project_id`. Fails on duplicate key.
@@ -516,6 +682,39 @@ mod tests {
 
     fn host() -> HostInstanceId {
         HostInstanceId::new("instance.a").unwrap()
+    }
+
+    fn declaration(id: &str, kind: ContributionKind) -> ContributionDeclaration {
+        let schema = BoundedJsonSchema::new(json!({"type": "object", "properties": {}})).unwrap();
+        ContributionDeclaration {
+            id: capability(id),
+            kind,
+            contract_major: 1,
+            label: id.to_string(),
+            purpose: "Exercise transactional contribution routing".to_string(),
+            input_schema: Some(schema.clone()),
+            output_schema: Some(schema),
+            media_types: Vec::new(),
+            skill_path: None,
+            panel_slot: (kind == ContributionKind::Panel)
+                .then(|| PLUGIN_DETAILS_PANEL_SLOT.to_string()),
+        }
+    }
+
+    fn identity(
+        project_id: &ScopeId,
+        plugin_id: &str,
+        digest_seed: &str,
+        generation_value: u64,
+        host_id: &str,
+    ) -> ContributionInstanceIdentity {
+        ContributionInstanceIdentity::new(
+            project_id.clone(),
+            plugin(plugin_id),
+            digest(digest_seed),
+            ActivationGeneration::new(generation_value).unwrap(),
+            HostInstanceId::new(host_id).unwrap(),
+        )
     }
 
     fn register(
@@ -814,5 +1013,107 @@ mod tests {
             ),
             Err(ContributionError::LimitExceeded)
         );
+    }
+
+    #[test]
+    fn staged_candidate_is_hidden_and_expected_old_publish_is_atomic() {
+        let mut store = ContributionStore::new();
+        let project = scope("scope.project");
+        let old_identity = identity(&project, "org.example.a", "old", 1, "instance.old");
+        let old = ContributionStore::stage(
+            old_identity.clone(),
+            vec![declaration("tool.fixture.old", ContributionKind::Tool)],
+        )
+        .unwrap();
+        assert!(store.list(&project).is_empty());
+        assert_eq!(store.publish(old, None).unwrap(), None);
+        assert_eq!(store.list(&project).len(), 1);
+
+        let next_identity = identity(&project, "org.example.a", "next", 2, "instance.next");
+        let stale = ContributionStore::stage(
+            next_identity.clone(),
+            vec![declaration("source.fixture.next", ContributionKind::Source)],
+        )
+        .unwrap();
+        let wrong_old = identity(&project, "org.example.a", "wrong", 1, "instance.old");
+        assert_eq!(
+            store.publish(stale, Some(&wrong_old)),
+            Err(ContributionError::ExpectedOldMismatch)
+        );
+        assert!(
+            store
+                .get(&project, &capability("tool.fixture.old"))
+                .is_some()
+        );
+        assert!(
+            store
+                .get(&project, &capability("source.fixture.next"))
+                .is_none()
+        );
+
+        let next = ContributionStore::stage(
+            next_identity.clone(),
+            vec![declaration("source.fixture.next", ContributionKind::Source)],
+        )
+        .unwrap();
+        assert_eq!(
+            store.publish(next, Some(&old_identity)).unwrap(),
+            Some(old_identity)
+        );
+        assert!(
+            store
+                .get(&project, &capability("tool.fixture.old"))
+                .is_none()
+        );
+        assert!(
+            store
+                .get(&project, &capability("source.fixture.next"))
+                .is_some()
+        );
+        assert_eq!(
+            store.current_identity(&project, &plugin("org.example.a")),
+            Ok(Some(next_identity.clone()))
+        );
+        store.unpublish(&next_identity).unwrap();
+        assert!(store.list(&project).is_empty());
+    }
+
+    #[test]
+    fn duplicate_candidate_rolls_back_and_same_capability_is_project_isolated() {
+        let mut store = ContributionStore::new();
+        let a = scope("scope.project.a");
+        let b = scope("scope.project.b");
+        let capability_id = "tool.fixture.shared";
+        for (project, plugin_id, seed, host_id) in [
+            (&a, "org.example.a", "a", "instance.a"),
+            (&b, "org.example.b", "b", "instance.b"),
+        ] {
+            let candidate = ContributionStore::stage(
+                identity(project, plugin_id, seed, 1, host_id),
+                vec![declaration(capability_id, ContributionKind::Tool)],
+            )
+            .unwrap();
+            store.publish(candidate, None).unwrap();
+        }
+        assert_eq!(store.list(&a).len(), 1);
+        assert_eq!(store.list(&b).len(), 1);
+
+        let conflicting = ContributionStore::stage(
+            identity(
+                &a,
+                "org.example.conflict",
+                "conflict",
+                2,
+                "instance.conflict",
+            ),
+            vec![declaration(capability_id, ContributionKind::Tool)],
+        )
+        .unwrap();
+        assert_eq!(
+            store.publish(conflicting, None),
+            Err(ContributionError::Duplicate)
+        );
+        assert_eq!(store.list(&a).len(), 1);
+        assert_eq!(store.list(&b).len(), 1);
     }
 }
