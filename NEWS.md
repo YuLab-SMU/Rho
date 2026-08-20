@@ -18,6 +18,12 @@ this file records behavior included in a versioned build candidate.
   persistence fails during cleanup, the result is `completion_uncertain`, the
   plugin remains non-routable, and recovery retains the monotonic transition
   rather than manufacturing durable completion.
+- Workspace R restart, project switching, failed-switch restoration, and
+  application shutdown now reuse the same bounded teardown per plugin. These
+  system boundaries preserve durable enabled intent while recording stopped
+  runtime truth, so returning to an exact project reconstructs fresh authority;
+  a failed plugin teardown is forcibly made non-routable and cannot block the
+  project or application lifecycle.
 
 ## 0.4.1-dev.5 - 2026-08-20
 

@@ -915,7 +915,12 @@ fn validate_transition_draft(
     }
     let desired_state = validate_desired_state(&draft.desired_state)?;
     let expected_desired = desired_state_for_kind(&kind);
-    if desired_state != expected_desired {
+    let desired_matches = if matches!(kind.as_str(), "project_teardown" | "shutdown") {
+        matches!(desired_state.as_str(), "enabled" | "disabled")
+    } else {
+        desired_state == expected_desired
+    };
+    if !desired_matches {
         return Err(StoreError::Validation(format!(
             "transition kind {kind} requires desired state {expected_desired}"
         )));
@@ -1117,7 +1122,8 @@ fn desired_state_for_kind(kind: &str) -> &'static str {
     match kind {
         "enable" | "retry" | "upgrade" | "rollback" => "enabled",
         "uninstall" => "uninstalled",
-        "disable" | "project_teardown" | "shutdown" => "disabled",
+        "disable" => "disabled",
+        "project_teardown" | "shutdown" => "enabled_or_disabled",
         _ => unreachable!(),
     }
 }
@@ -1686,6 +1692,41 @@ mod tests {
         assert_eq!(rediscovered_state.observed_state, "active");
         assert_eq!(rediscovered_state.accepted_digest, Some(digest('a')));
         assert!(rediscovered_state.pending_digest.is_none());
+
+        let teardown = transition(
+            project,
+            "transition.project-teardown",
+            "project_teardown",
+            "enabled",
+            Some(digest('a')),
+            None,
+        );
+        assert_eq!(
+            store
+                .request_workspace_plugin_transition(&teardown)
+                .unwrap()
+                .outcome,
+            PluginLifecycleMutationOutcome::Applied
+        );
+        let mut teardown_completed = advance(
+            project,
+            "transition.project-teardown",
+            "requested",
+            "completed",
+            "completed",
+            "stopped",
+        );
+        teardown_completed.event_type = "transition_completed".to_string();
+        store
+            .advance_workspace_plugin_transition(&teardown_completed)
+            .unwrap();
+        let stopped = store
+            .get_workspace_plugin_state(project, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        assert_eq!(stopped.desired_state, "enabled");
+        assert_eq!(stopped.observed_state, "stopped");
+        assert_eq!(stopped.accepted_digest, Some(digest('a')));
 
         let stale = transition(
             project,

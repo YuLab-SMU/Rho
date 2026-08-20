@@ -5,10 +5,9 @@ state/transition/event/tombstone persistence completed its local stop gate
 2026-08-20; P2-1/P2-2/P2-3/P2-4A hosted and cross-platform installed gates
 remain open and mandatory before final Phase 2 acceptance
 
-Active work package: P2-4C2 only — bounded project switch, Workspace restart
-and application shutdown teardown reuse. P2-4C3 and P2-4D through P2-4G remain
-inactive. C2 adds no new command/UI action and may not activate Retry,
-uninstall, update or rollback.
+Active work package: none at the P2-4C2 checkpoint. P2-4C3 and P2-4D through
+P2-4G remain inactive pending explicit amendment/cross-review. C2 added no new
+command/UI action; Retry, uninstall, update and rollback remain unavailable.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -306,7 +305,7 @@ P2-4C is divided into three local stops:
    errors are stable-code-only and remaining cleanup continues. A persistence
    failure after route closure returns truthful `completion_uncertain` and never
    restores routing.
-2. **P2-4C2 — project switch, Workspace restart and shutdown reuse (active).**
+2. **P2-4C2 — project switch, Workspace restart and shutdown reuse (locally complete).**
    Replace abrupt `invalidate_project` at trusted lifecycle boundaries with the
    same bounded teardown for every active/pending project plugin; BH2 continues
    after forced quarantine and records uncertainty without waiting forever.
@@ -676,6 +675,38 @@ Explicit Disable is locally complete at application `0.4.1-dev.6`:
 The updater signature is rehearsal-only and not publishable. C2 project/
 shutdown reuse, C3 crash/Retry, hosted CI and Windows/Linux installed evidence
 remain open.
+
+### P2-4C2 local checkpoint — 2026-08-20
+
+Boundary teardown reuse is locally complete at `0.4.1-dev.6`:
+
+- `project_teardown` and `shutdown` now preserve desired enabled/disabled while
+  moving runtime truth to stopped; B3 reactivation requires that exact completed
+  system transition and accepted digest before creating fresh authority;
+- Workspace restart and shutdown call the same per-plugin C1 teardown before
+  process/session disposal. Project switch tears down the previous project only
+  after target preparation succeeds, reconciles the target after commit, and
+  reconciles the old project again after a failed switch is restored;
+- boundary reports are capped, stable-code-only and include completed,
+  uncertain and forced counts. Transition insertion or one guest cleanup
+  failure forcibly removes routes/handles and does not stop other plugins or
+  BH2;
+- tests cover stopped-intent reconstruction, three plugins with one dispose
+  trap plus one pending permission, transition persistence failure, project
+  switch and shutdown regressions. The full locked workspace passed with 252
+  desktop tests (251 passed, one opt-in Keychain test ignored), stable and Rust
+  1.88 all-target checks, Store lifecycle tests and the C2 contract;
+- debug and packaged candidate/legacy smoke prove boundary teardown reuse,
+  enabled-intent preservation and fresh reactivation;
+- local C2 executable: 47,755,296 bytes, SHA-256
+  `59b5090f7b299e2b03dc9515921322a9a9be622ffc3e099e4930bf9ea77e9105`;
+  DMG: 26,298,155 bytes, SHA-256
+  `4e9a163bbe6d15e14457ed33b7f5268454892390a53aa458f0e03a7f00b7d6ca`;
+  updater archive: 27,047,570 bytes, SHA-256
+  `fd96ae1fa6363d130fa33b1dd03b67ac65d40471d9721e8fa0ddc854a1052912`.
+
+The updater signature is rehearsal-only. C3 crash/Retry, hosted CI and
+Windows/Linux installed acceptance remain open.
 
 ## Verification Matrix
 

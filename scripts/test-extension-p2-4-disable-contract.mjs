@@ -7,8 +7,7 @@ export function validateP24DisableContract(value) {
   for (const marker of [
     "WorkspacePluginDisableResult",
     "pub(crate) fn disable(",
-    "transition.disable.",
-    'kind: "disable"',
+    "transition_kind.replace('_', \"-\")",
     '"routing_closed"',
     '"calls_drained"',
     '"handles_revoked"',
@@ -69,7 +68,7 @@ export function validateP24DisableContract(value) {
 
 function fixture() {
   return {
-    desktop: "pub(crate) struct WorkspacePluginDisableResult\nroute_closed\npub(crate) struct WorkspacePluginReconciliationReport\npub(crate) fn disable(\ntransition.disable.\nkind: \"disable\"\n\"routing_closed\"\n\"calls_drained\"\n\"handles_revoked\"\n\"contributions_disposed\"\n\"host_disposed\"\n\"completion_uncertain\"\nactive_broker_request_id\ncancel_broker_call\ninvalidate_host\nquarantine_for_timeout\nrecord_disable_phase\nexplicit_disable_closes_routes_revokes_handles_and_persists_terminal_truth\ndisable_cancels_permission_pending_enable_before_starting_a_new_transition\ndisable_cancels_exact_yielded_guest_call_and_withholds_late_route\ndisable_forces_guest_dispose_failure_but_still_completes_non_routable\ndisable_persistence_failure_after_route_close_is_completion_uncertain\ndisable_is_project_scoped_and_concurrent_duplicates_converge",
+    desktop: "pub(crate) struct WorkspacePluginDisableResult\nroute_closed\npub(crate) struct WorkspacePluginReconciliationReport\npub(crate) fn disable(\ntransition_kind.replace('_', \"-\")\n\"routing_closed\"\n\"calls_drained\"\n\"handles_revoked\"\n\"contributions_disposed\"\n\"host_disposed\"\n\"completion_uncertain\"\nactive_broker_request_id\ncancel_broker_call\ninvalidate_host\nquarantine_for_timeout\nrecord_disable_phase\nexplicit_disable_closes_routes_revokes_handles_and_persists_terminal_truth\ndisable_cancels_permission_pending_enable_before_starting_a_new_transition\ndisable_cancels_exact_yielded_guest_call_and_withholds_late_route\ndisable_forces_guest_dispose_failure_but_still_completes_non_routable\ndisable_persistence_failure_after_route_close_is_completion_uncertain\ndisable_is_project_scoped_and_concurrent_duplicates_converge",
     commands: "pub(crate) async fn disable_workspace_plugin\nexpected_project_revision\nWorkspace plugin disable request is stale after a project change",
     main: "commands::plugins::disable_workspace_plugin",
     frontend: "command === \"disable_workspace_plugin\"\nasync function disableWorkspacePlugin(pluginId)\ndata-plugin-disable\ndisable.textContent = \"Disable\"\nroute_closed: true\nstatus: \"disabled\"",

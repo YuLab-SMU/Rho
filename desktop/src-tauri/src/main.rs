@@ -5577,24 +5577,13 @@ async fn restart_workspace(state: State<'_, AppState>) -> Result<WorkspaceStatus
         let root = state.project_root.read().await.clone();
         normalize_project_root(root.to_string_lossy().as_ref())
     };
-    {
-        let mut store = read_store(&state).map_err(display_error)?;
-        store
-            .recover_pending_plugin_permission_requests(
-                &current_project_root,
-                "workspace_restarted",
-            )
-            .map_err(display_error)?;
-        store
-            .recover_transient_plugin_permission_grants(
-                &current_project_root,
-                "workspace_restarted",
-            )
-            .map_err(display_error)?;
-    }
-    state
-        .plugin_permissions
-        .invalidate_project(&current_project_root);
+    teardown_workspace_plugins_for_boundary(
+        &state,
+        &current_project_root,
+        "project_teardown",
+        "workspace_restarted",
+    )
+    .await;
     let render_job_ids = {
         let mut jobs = state.render_jobs.lock().await;
         jobs.values_mut()
@@ -5912,23 +5901,13 @@ async fn shutdown_application(state: &AppState) -> Result<(), String> {
         let root = state.project_root.read().await.clone();
         normalize_project_root(root.to_string_lossy().as_ref())
     };
-    state
-        .plugin_permissions
-        .invalidate_project(&plugin_project_root);
-    match read_store(state) {
-        Ok(mut store) => {
-            if let Err(error) = store
-                .recover_pending_plugin_permission_requests(&plugin_project_root, "broker_shutdown")
-            {
-                write_startup_log(&format!(
-                    "Workspace plugin permission shutdown recovery failed: {error:#}"
-                ));
-            }
-        }
-        Err(error) => write_startup_log(&format!(
-            "Workspace plugin permission store was unavailable during shutdown: {error:#}"
-        )),
-    }
+    teardown_workspace_plugins_for_boundary(
+        state,
+        &plugin_project_root,
+        "shutdown",
+        "broker_shutdown",
+    )
+    .await;
 
     if let Some(watcher) = state.project_watcher.lock().await.take() {
         watcher.stop();
@@ -6026,6 +6005,142 @@ async fn active_context(state: &AppState) -> Result<Arc<Mutex<CoordinatorRuntime
 fn read_store(state: &AppState) -> Result<Store> {
     let config = runtime_config(state)?;
     Store::open(&config.store_path).context("opening Rho event store")
+}
+
+async fn teardown_workspace_plugins_for_boundary(
+    state: &AppState,
+    project_root: &str,
+    kind: &str,
+    trigger: &str,
+) {
+    let data_dir = match runtime_config(state) {
+        Ok(config) => config.data_dir,
+        Err(error) => {
+            write_startup_event(json!({
+                "kind": "workspace_plugin_boundary_teardown_unavailable",
+                "trigger": trigger,
+                "reason_code": "runtime_config_unavailable",
+                "message": bounded_diagnostic(&error.to_string()),
+            }));
+            state.plugin_permissions.invalidate_project(project_root);
+            return;
+        }
+    };
+    let context = match active_context(state).await {
+        Ok(context) => context,
+        Err(error) => {
+            write_startup_event(json!({
+                "kind": "workspace_plugin_boundary_teardown_unavailable",
+                "trigger": trigger,
+                "reason_code": "workspace_context_unavailable",
+                "message": bounded_diagnostic(&error.to_string()),
+            }));
+            state.plugin_permissions.invalidate_project(project_root);
+            return;
+        }
+    };
+    let mut context = context.lock().await;
+    let identity = context.broker.identity().clone();
+    let plugin_context =
+        match workspace_plugin_runtime_context(data_dir, project_root.to_string(), &identity) {
+            Ok(context) => context,
+            Err(error) => {
+                drop(context);
+                write_startup_event(json!({
+                    "kind": "workspace_plugin_boundary_teardown_unavailable",
+                    "trigger": trigger,
+                    "reason_code": "plugin_context_unavailable",
+                    "message": bounded_diagnostic(&error.to_string()),
+                }));
+                state.plugin_permissions.invalidate_project(project_root);
+                return;
+            }
+        };
+    let report =
+        state
+            .plugin_permissions
+            .teardown_project(&plugin_context, kind, &mut context.store);
+    if let Err(error) = context
+        .store
+        .recover_pending_plugin_permission_requests(project_root, trigger)
+    {
+        write_startup_event(json!({
+            "kind": "workspace_plugin_boundary_permission_recovery_failed",
+            "trigger": trigger,
+            "message": bounded_diagnostic(&error.to_string()),
+        }));
+    }
+    if let Err(error) = context
+        .store
+        .recover_transient_plugin_permission_grants(project_root, trigger)
+    {
+        write_startup_event(json!({
+            "kind": "workspace_plugin_boundary_grant_recovery_failed",
+            "trigger": trigger,
+            "message": bounded_diagnostic(&error.to_string()),
+        }));
+    }
+    drop(context);
+    write_startup_event(json!({
+        "kind": "workspace_plugin_boundary_teardown",
+        "trigger": trigger,
+        "report": report,
+    }));
+}
+
+async fn reconcile_workspace_plugins_for_boundary(
+    state: &AppState,
+    project_root: &str,
+    trigger: &str,
+) {
+    let data_dir = match runtime_config(state) {
+        Ok(config) => config.data_dir,
+        Err(error) => {
+            write_startup_event(json!({
+                "kind": "workspace_plugin_reconciliation_unavailable",
+                "trigger": trigger,
+                "reason_code": "runtime_config_unavailable",
+                "message": bounded_diagnostic(&error.to_string()),
+            }));
+            return;
+        }
+    };
+    let context = match active_context(state).await {
+        Ok(context) => context,
+        Err(error) => {
+            write_startup_event(json!({
+                "kind": "workspace_plugin_reconciliation_unavailable",
+                "trigger": trigger,
+                "reason_code": "workspace_context_unavailable",
+                "message": bounded_diagnostic(&error.to_string()),
+            }));
+            return;
+        }
+    };
+    let mut context = context.lock().await;
+    let identity = context.broker.identity().clone();
+    match workspace_plugin_runtime_context(data_dir, project_root.to_string(), &identity) {
+        Ok(plugin_context) => {
+            let report = state
+                .plugin_permissions
+                .reconcile_project(&plugin_context, &mut context.store);
+            drop(context);
+            write_startup_event(json!({
+                "kind": "workspace_plugin_reconciliation",
+                "trigger": trigger,
+                "report": report,
+            }));
+        }
+        Err(error) => {
+            drop(context);
+            write_startup_event(json!({
+                "kind": "workspace_plugin_reconciliation_unavailable",
+                "trigger": trigger,
+                "reason_code": "runtime_context_unavailable",
+                "message": bounded_diagnostic(&error.to_string()),
+            }));
+        }
+    }
 }
 
 fn durable_project_root(root: &Path) -> String {
@@ -6804,6 +6919,8 @@ where
     let project = list_project_files(&root)?;
     let normalized_root = normalize_project_root(root.to_string_lossy().as_ref());
     let previous_ui_root = state.project_root.read().await.clone();
+    let previous_normalized_root =
+        normalize_project_root(previous_ui_root.to_string_lossy().as_ref());
     let previous_session = state
         .project_store
         .load_session_or_default(&previous_ui_root);
@@ -6876,6 +6993,16 @@ where
             .await;
         }
     };
+
+    if previous_normalized_root != normalized_root {
+        teardown_workspace_plugins_for_boundary(
+            state,
+            &previous_normalized_root,
+            "project_teardown",
+            "project_switched",
+        )
+        .await;
+    }
 
     if let Err(error) = set_store_active_project_root(
         state,
@@ -6973,67 +7100,7 @@ where
         }
     }
 
-    let previous_normalized_root =
-        normalize_project_root(previous_ui_root.to_string_lossy().as_ref());
-    if previous_normalized_root != normalized_root {
-        state
-            .plugin_permissions
-            .invalidate_project(&previous_normalized_root);
-        match read_store(state) {
-            Ok(mut store) => {
-                if let Err(error) = store.recover_pending_plugin_permission_requests(
-                    &previous_normalized_root,
-                    "project_switched",
-                ) {
-                    write_startup_event(json!({
-                        "kind": "plugin_permission_project_switch_recovery_failed",
-                        "project_root": previous_normalized_root,
-                        "message": bounded_diagnostic(&error.to_string()),
-                    }));
-                }
-            }
-            Err(error) => write_startup_event(json!({
-                "kind": "plugin_permission_project_switch_store_unavailable",
-                "project_root": previous_normalized_root,
-                "message": bounded_diagnostic(&error.to_string()),
-            })),
-        }
-    }
-
-    let plugin_data_dir = runtime_config(state).map(|config| config.data_dir);
-    match (active_context(state).await, plugin_data_dir) {
-        (Ok(context), Ok(data_dir)) => {
-            let mut context = context.lock().await;
-            let identity = context.broker.identity().clone();
-            let plugin_context =
-                workspace_plugin_runtime_context(data_dir, normalized_root.clone(), &identity);
-            let plugin_reconciliation = plugin_context.map(|plugin_context| {
-                state
-                    .plugin_permissions
-                    .reconcile_project(&plugin_context, &mut context.store)
-            });
-            drop(context);
-            match plugin_reconciliation {
-                Ok(report) => write_startup_event(json!({
-                    "kind": "workspace_plugin_reconciliation",
-                    "trigger": "project_switch",
-                    "report": report,
-                })),
-                Err(error) => write_startup_event(json!({
-                    "kind": "workspace_plugin_reconciliation_unavailable",
-                    "trigger": "project_switch",
-                    "reason_code": "runtime_context_unavailable",
-                    "message": bounded_diagnostic(&error.to_string()),
-                })),
-            }
-        }
-        (Err(error), _) | (_, Err(error)) => write_startup_event(json!({
-            "kind": "workspace_plugin_reconciliation_unavailable",
-            "trigger": "project_switch",
-            "reason_code": "workspace_context_unavailable",
-            "message": bounded_diagnostic(&error.to_string()),
-        })),
-    }
+    reconcile_workspace_plugins_for_boundary(state, &normalized_root, "project_switch").await;
 
     write_project_switch_event(
         "project_switch_succeeded",
@@ -7078,6 +7145,14 @@ async fn recover_failed_project_switch(
     match restore_result {
         Ok(()) => {
             let restored_root = previous_ui_root.to_string_lossy().replace('\\', "/");
+            let normalized_restored_root =
+                normalize_project_root(previous_ui_root.to_string_lossy().as_ref());
+            reconcile_workspace_plugins_for_boundary(
+                state,
+                &normalized_restored_root,
+                "project_switch_restored",
+            )
+            .await;
             write_project_switch_event(
                 "project_switch_failed_restored",
                 previous_ui_root,
@@ -14491,6 +14566,27 @@ fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Valu
         p24_reenabled.status == "enabled",
         "installed P2-4 exact package could not re-enable after Disable"
     );
+    let p24_boundary = p24_restarted.teardown_project(&p24_context, "shutdown", &mut p24_store);
+    ensure!(
+        p24_boundary.attempted == 1 && p24_boundary.completed == 1 && p24_boundary.forced == 0,
+        "installed P2-4 shutdown boundary did not reuse exact teardown"
+    );
+    let p24_stopped_state = PluginLifecycleQueryService::new(&p24_store)
+        .get_state(
+            &p24_project_root,
+            "org.yulab.rho.phase2-durable-enable-smoke",
+        )?
+        .context("installed P2-4 stopped lifecycle state is missing")?;
+    ensure!(
+        p24_stopped_state.desired_state == "enabled"
+            && p24_stopped_state.observed_state == "stopped",
+        "installed P2-4 boundary teardown lost enabled intent or stopped truth"
+    );
+    let p24_boundary_reactivation = p24_restarted.reconcile_project(&p24_context, &mut p24_store);
+    ensure!(
+        p24_boundary_reactivation.reactivated == 1,
+        "installed P2-4 stopped boundary did not reconstruct exactly"
+    );
     p24_restarted.invalidate_project(&p24_project_root);
     let p24_manifest_path = p24_plugin.join("rho-plugin.json");
     let mut p24_changed_manifest: Value =
@@ -14548,6 +14644,9 @@ fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Valu
         "disable_route_closed": true,
         "disable_host_disposed": true,
         "disable_terminal_durable": true,
+        "boundary_teardown_reused": true,
+        "boundary_enabled_intent_preserved": true,
+        "boundary_reactivated": true,
     }))
 }
 

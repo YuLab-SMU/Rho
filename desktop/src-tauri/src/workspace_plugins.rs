@@ -167,6 +167,26 @@ pub(crate) struct WorkspacePluginDisableResult {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub(crate) struct WorkspacePluginBoundaryTeardownReport {
+    pub project_root: String,
+    pub kind: String,
+    pub attempted: usize,
+    pub completed: usize,
+    pub completion_uncertain: usize,
+    pub forced: usize,
+    pub entries: Vec<WorkspacePluginBoundaryTeardownEntry>,
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct WorkspacePluginBoundaryTeardownEntry {
+    pub plugin_id: String,
+    pub status: String,
+    pub route_closed: bool,
+    pub error_codes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub(crate) struct WorkspacePluginReconciliationReport {
     pub project_root: String,
     pub reactivated: usize,
@@ -1176,9 +1196,28 @@ impl PendingPluginPermissionRegistry {
         plugin_id: &str,
         store: &mut Store,
     ) -> Result<WorkspacePluginDisableResult> {
+        self.teardown_plugin(
+            context,
+            plugin_id,
+            "disable",
+            "user_requested",
+            false,
+            store,
+        )
+    }
+
+    fn teardown_plugin(
+        &self,
+        context: &PluginRuntimeContext,
+        plugin_id: &str,
+        transition_kind: &str,
+        request_event_type: &str,
+        preserve_desired_state: bool,
+        store: &mut Store,
+    ) -> Result<WorkspacePluginDisableResult> {
         ensure!(
             context.project_revision >= 0,
-            "plugin disable requires a current project revision"
+            "plugin teardown requires a current project revision"
         );
         PluginId::new(plugin_id.to_string()).context("validating workspace plugin id")?;
         let key = registry_key(&context.project_root, plugin_id);
@@ -1189,9 +1228,13 @@ impl PendingPluginPermissionRegistry {
         let mut lifecycle = PluginLifecycleQueryService::new(store)
             .get_state(&context.project_root, plugin_id)?
             .context("workspace plugin has no durable lifecycle state")?;
-        if lifecycle.desired_state == "disabled"
-            && !state.active.contains_key(&key)
-            && !state.pending.contains_key(&key)
+        let already_terminal = if preserve_desired_state {
+            lifecycle.observed_state == "stopped"
+        } else {
+            lifecycle.desired_state == "disabled"
+                && matches!(lifecycle.observed_state.as_str(), "disabled" | "stopped")
+        };
+        if already_terminal && !state.active.contains_key(&key) && !state.pending.contains_key(&key)
         {
             let transition_nonterminal = lifecycle
                 .transition_id
@@ -1225,7 +1268,12 @@ impl PendingPluginPermissionRegistry {
                 });
             }
             return Ok(WorkspacePluginDisableResult {
-                status: "disabled".to_string(),
+                status: if preserve_desired_state {
+                    "stopped"
+                } else {
+                    "disabled"
+                }
+                .to_string(),
                 plugin_id: plugin_id.to_string(),
                 transition_id: lifecycle.transition_id,
                 route_closed: true,
@@ -1235,7 +1283,12 @@ impl PendingPluginPermissionRegistry {
                 contributions_disposed: 0,
                 host_disposed: true,
                 errors: Vec::new(),
-                message: "The plugin is already durably disabled.".to_string(),
+                message: if preserve_desired_state {
+                    "The plugin runtime is already durably stopped."
+                } else {
+                    "The plugin is already durably disabled."
+                }
+                .to_string(),
             });
         }
         if let Some(current_transition_id) = lifecycle.transition_id.as_deref()
@@ -1250,23 +1303,35 @@ impl PendingPluginPermissionRegistry {
                 store,
                 context,
                 current_transition_id,
-                "user_disabled",
+                if preserve_desired_state {
+                    "boundary_teardown"
+                } else {
+                    "user_disabled"
+                },
                 "disabled",
             )?;
             lifecycle = PluginLifecycleQueryService::new(store)
                 .get_state(&context.project_root, plugin_id)?
                 .context("workspace plugin lifecycle state disappeared during disable")?;
         }
-        let transition_id = format!("transition.disable.{}", uuid::Uuid::new_v4().simple());
+        let transition_id = format!(
+            "transition.{}.{}",
+            transition_kind.replace('_', "-"),
+            uuid::Uuid::new_v4().simple()
+        );
         let requested = PluginLifecycleMutationService::new(store).request_transition(
             &context.project_root,
             &WorkspacePluginTransitionDraft {
                 transition_id: transition_id.clone(),
                 project_root: context.project_root.clone(),
                 plugin_id: plugin_id.to_string(),
-                kind: "disable".to_string(),
-                request_event_type: "user_requested".to_string(),
-                desired_state: "disabled".to_string(),
+                kind: transition_kind.to_string(),
+                request_event_type: request_event_type.to_string(),
+                desired_state: if preserve_desired_state {
+                    lifecycle.desired_state.clone()
+                } else {
+                    "disabled".to_string()
+                },
                 expected_old_digest: lifecycle.accepted_digest.clone(),
                 candidate_digest: None,
                 rollback_digest: None,
@@ -1493,7 +1558,11 @@ impl PendingPluginPermissionRegistry {
                 "host_disposed",
                 "completed",
                 "completed",
-                "disabled",
+                if preserve_desired_state {
+                    "stopped"
+                } else {
+                    "disabled"
+                },
                 "transition_completed",
                 "completed",
                 terminal_reason,
@@ -1530,9 +1599,17 @@ impl PendingPluginPermissionRegistry {
         let status = if persistence_failed {
             "completion_uncertain"
         } else if errors.is_empty() {
-            "disabled"
+            if preserve_desired_state {
+                "stopped"
+            } else {
+                "disabled"
+            }
         } else {
-            "disabled_with_errors"
+            if preserve_desired_state {
+                "stopped_with_errors"
+            } else {
+                "disabled_with_errors"
+            }
         };
         Ok(WorkspacePluginDisableResult {
             status: status.to_string(),
@@ -1548,10 +1625,99 @@ impl PendingPluginPermissionRegistry {
             message: match status {
                 "disabled" => "The plugin is durably disabled and no route or live handle remains.",
                 "disabled_with_errors" => "The plugin is disabled and non-routable; cleanup diagnostics were recorded.",
+                "stopped" => "The plugin runtime is durably stopped; enabled intent is preserved for exact reconstruction.",
+                "stopped_with_errors" => "The plugin runtime is stopped and non-routable; cleanup diagnostics were recorded.",
                 _ => "The plugin is non-routable, but durable teardown completion is uncertain and will be reconciled.",
             }
             .to_string(),
         })
+    }
+
+    pub(crate) fn teardown_project(
+        &self,
+        context: &PluginRuntimeContext,
+        kind: &str,
+        store: &mut Store,
+    ) -> WorkspacePluginBoundaryTeardownReport {
+        let kind = if matches!(kind, "project_teardown" | "shutdown") {
+            kind
+        } else {
+            "project_teardown"
+        };
+        let mut plugin_ids = PluginLifecycleQueryService::new(store)
+            .list_states(
+                &context.project_root,
+                Some(MAX_PLUGIN_RECONCILIATION_ENTRIES),
+            )
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|plugin| plugin.desired_state != "uninstalled")
+            .map(|plugin| plugin.plugin_id)
+            .collect::<BTreeSet<_>>();
+        {
+            let state = self
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let prefix = format!("{}\0", normalize_project_root(&context.project_root));
+            for key in state.active.keys().chain(state.pending.keys()) {
+                if let Some(plugin_id) = key.strip_prefix(&prefix) {
+                    plugin_ids.insert(plugin_id.to_string());
+                }
+            }
+        }
+        let mut report = WorkspacePluginBoundaryTeardownReport {
+            project_root: context.project_root.clone(),
+            kind: kind.to_string(),
+            attempted: 0,
+            completed: 0,
+            completion_uncertain: 0,
+            forced: 0,
+            entries: Vec::new(),
+            truncated: false,
+        };
+        for plugin_id in plugin_ids {
+            report.attempted += 1;
+            match self.teardown_plugin(context, &plugin_id, kind, "recovery", true, store) {
+                Ok(result) => {
+                    if result.status == "completion_uncertain" {
+                        report.completion_uncertain += 1;
+                    } else {
+                        report.completed += 1;
+                    }
+                    push_boundary_teardown_entry(
+                        &mut report,
+                        WorkspacePluginBoundaryTeardownEntry {
+                            plugin_id,
+                            status: result.status,
+                            route_closed: result.route_closed,
+                            error_codes: result.errors,
+                        },
+                    );
+                }
+                Err(_) => {
+                    let key = registry_key(&context.project_root, &plugin_id);
+                    let mut state = self
+                        .state
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    remove_active_plugin(&mut state, &key);
+                    state.pending.remove(&key);
+                    drop(state);
+                    report.forced += 1;
+                    push_boundary_teardown_entry(
+                        &mut report,
+                        WorkspacePluginBoundaryTeardownEntry {
+                            plugin_id,
+                            status: "forced_non_routable".to_string(),
+                            route_closed: true,
+                            error_codes: vec!["boundary_teardown_failed".to_string()],
+                        },
+                    );
+                }
+            }
+        }
+        report
     }
 
     pub(crate) fn respond(
@@ -3449,6 +3615,17 @@ fn push_reconciliation_entry(
     }
 }
 
+fn push_boundary_teardown_entry(
+    report: &mut WorkspacePluginBoundaryTeardownReport,
+    entry: WorkspacePluginBoundaryTeardownEntry,
+) {
+    if report.entries.len() < MAX_PLUGIN_RECONCILIATION_ENTRIES {
+        report.entries.push(entry);
+    } else {
+        report.truncated = true;
+    }
+}
+
 fn bounded_reconciliation_reason(message: &str) -> String {
     let lower = message.to_ascii_lowercase();
     if lower.contains("permission") || lower.contains("grant") {
@@ -3505,7 +3682,7 @@ fn reconcile_discovered_plugin(
     }
 
     let prior_observed = lifecycle.observed_state.clone();
-    let nonterminal = lifecycle
+    let last_transition = lifecycle
         .transition_id
         .as_deref()
         .map(|transition_id| {
@@ -3513,13 +3690,18 @@ fn reconcile_discovered_plugin(
                 .get_transition(&context.project_root, transition_id)
         })
         .transpose()?
-        .flatten()
-        .filter(|transition| {
-            matches!(
-                transition.status.as_str(),
-                "pending" | "running" | "completion_uncertain"
-            )
+        .flatten();
+    let stopped_by_boundary = prior_observed == "stopped"
+        && last_transition.as_ref().is_some_and(|transition| {
+            matches!(transition.kind.as_str(), "project_teardown" | "shutdown")
+                && transition.status == "completed"
         });
+    let nonterminal = last_transition.clone().filter(|transition| {
+        matches!(
+            transition.status.as_str(),
+            "pending" | "running" | "completion_uncertain"
+        )
+    });
     let had_nonterminal = nonterminal.is_some();
     if let Some(transition) = nonterminal {
         fail_enable_transition(
@@ -3538,7 +3720,7 @@ fn reconcile_discovered_plugin(
             remove_active_plugin(registry, &key);
             return Ok(ReconciliationStatus::UpdatePending);
         }
-        if prior_observed != "active" && !had_nonterminal {
+        if prior_observed != "active" && !had_nonterminal && !stopped_by_boundary {
             remove_active_plugin(registry, &key);
             persist_recovery_block(store, context, &lifecycle, "unprovable_restart_state")?;
             return Ok(ReconciliationStatus::Blocked);
@@ -6302,6 +6484,229 @@ mod tests {
                 .desired_state,
             "enabled"
         );
+    }
+
+    #[test]
+    fn boundary_teardown_preserves_enabled_intent_and_reconstructs_fresh() {
+        let directory = tempdir().unwrap();
+        write_ui_fixture_plugin(directory.path(), ContributionKind::Panel);
+        let context = context(directory.path());
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let registry = deterministic_registry();
+        registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        let first_host = registry
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .active
+            .get(&registry_key(&context.project_root, "org.example.plugin"))
+            .unwrap()
+            .host_instance_id
+            .clone();
+        let report = registry.teardown_project(&context, "project_teardown", &mut store);
+        assert_eq!(report.attempted, 1);
+        assert_eq!(report.completed, 1);
+        assert_eq!(report.completion_uncertain, 0);
+        assert_eq!(report.forced, 0);
+        assert!(
+            registry
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .active
+                .is_empty()
+        );
+        let stopped = PluginLifecycleQueryService::new(&store)
+            .get_state(&context.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        assert_eq!(stopped.desired_state, "enabled");
+        assert_eq!(stopped.observed_state, "stopped");
+        let boundary_transition = PluginLifecycleQueryService::new(&store)
+            .get_transition(
+                &context.project_root,
+                stopped.transition_id.as_deref().unwrap(),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(boundary_transition.kind, "project_teardown");
+        assert_eq!(boundary_transition.status, "completed");
+
+        let reconstructed = registry.reconcile_project(&context, &mut store);
+        assert_eq!(reconstructed.reactivated, 1);
+        let state = registry
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let second_host = &state
+            .active
+            .get(&registry_key(&context.project_root, "org.example.plugin"))
+            .unwrap()
+            .host_instance_id;
+        assert_ne!(&first_host, second_host);
+        drop(state);
+        assert_eq!(
+            PluginLifecycleQueryService::new(&store)
+                .get_state(&context.project_root, "org.example.plugin")
+                .unwrap()
+                .unwrap()
+                .last_activation_generation,
+            2
+        );
+    }
+
+    #[test]
+    fn boundary_teardown_continues_after_one_guest_failure_and_cancels_pending() {
+        let directory = tempdir().unwrap();
+        write_zero_permission_plugin_named(directory.path(), "good", "org.example.good");
+        write_zero_permission_plugin_named(directory.path(), "trap", "org.example.trap");
+        write_zero_permission_plugin_named(directory.path(), "pending", "org.example.pending");
+        let trap_module = wat::parse_str(
+            r#"(module
+                (memory (export "memory") 1 1)
+                (func (export "rho_activate") (param i32) (result i32) i32.const 0)
+                (func (export "rho_echo") (param i32 i32) (result i64) i64.const 0)
+                (func (export "rho_heartbeat") (result i32) i32.const 0)
+                (func (export "rho_quiesce") (result i32) i32.const 0)
+                (func (export "rho_dispose") (result i32) unreachable))"#,
+        )
+        .unwrap();
+        fs::write(
+            directory.path().join(".rho/plugins/trap/dist/plugin.wasm"),
+            trap_module,
+        )
+        .unwrap();
+        let pending_manifest = directory
+            .path()
+            .join(".rho/plugins/pending/rho-plugin.json");
+        let mut pending_json: serde_json::Value =
+            serde_json::from_slice(&fs::read(&pending_manifest).unwrap()).unwrap();
+        pending_json["permissions"] = serde_json::json!([{
+            "name": "project.fs.read",
+            "purpose": "Read bounded data",
+            "paths": ["data/*.csv"],
+            "maxBytes": 1024
+        }]);
+        fs::write(
+            &pending_manifest,
+            serde_json::to_vec(&pending_json).unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            directory
+                .path()
+                .join(".rho/plugins/pending/dist/plugin.wasm"),
+            wat::parse_str(
+                r#"(module
+                    (memory (export "memory") 1 1)
+                    (func (export "rho_activate") (param i32) (result i32) i32.const 0)
+                    (func (export "rho_echo") (param i32 i32) (result i64) i64.const 0)
+                    (func (export "rho_heartbeat") (result i32) i32.const 0)
+                    (func (export "rho_quiesce") (result i32) i32.const 0)
+                    (func (export "rho_dispose") (result i32) i32.const 0)
+                    (func (export "rho_begin") (param i32 i32) (result i64) i64.const 0)
+                    (func (export "rho_resume") (param i32 i32) (result i64) i64.const 0)
+                    (func (export "rho_cancel") (param i32 i32) (result i32) i32.const 0))"#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let context = context(directory.path());
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let registry = deterministic_registry();
+        registry
+            .request_enable(&context, "org.example.good", &mut store)
+            .unwrap();
+        registry
+            .request_enable(&context, "org.example.trap", &mut store)
+            .unwrap();
+        let pending = registry
+            .request_enable(&context, "org.example.pending", &mut store)
+            .unwrap();
+        assert_eq!(pending.status, "permission_required");
+        let report = registry.teardown_project(&context, "shutdown", &mut store);
+        assert_eq!(report.attempted, 3);
+        assert_eq!(report.completed, 3);
+        assert_eq!(report.forced, 0);
+        assert!(report.entries.iter().any(|entry| {
+            entry.plugin_id == "org.example.trap" && entry.status == "stopped_with_errors"
+        }));
+        assert!(
+            registry
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .active
+                .is_empty()
+        );
+        assert_eq!(
+            PluginPermissionQueryService::new(&store)
+                .get_request(&context.project_root, &pending.request_ids[0])
+                .unwrap()
+                .unwrap()
+                .status,
+            "cancelled"
+        );
+        for plugin_id in ["org.example.good", "org.example.trap"] {
+            let lifecycle = PluginLifecycleQueryService::new(&store)
+                .get_state(&context.project_root, plugin_id)
+                .unwrap()
+                .unwrap();
+            assert_eq!(lifecycle.desired_state, "enabled");
+            assert_eq!(lifecycle.observed_state, "stopped");
+            assert_eq!(
+                PluginLifecycleQueryService::new(&store)
+                    .get_transition(
+                        &context.project_root,
+                        lifecycle.transition_id.as_deref().unwrap()
+                    )
+                    .unwrap()
+                    .unwrap()
+                    .kind,
+                "shutdown"
+            );
+        }
+    }
+
+    #[test]
+    fn boundary_teardown_persistence_failure_forces_non_routable_and_continues() {
+        let directory = tempdir().unwrap();
+        write_ui_fixture_plugin(directory.path(), ContributionKind::Panel);
+        let database = directory.path().join("rho.sqlite");
+        let context = context(directory.path());
+        let mut store = Store::open(&database).unwrap();
+        let registry = deterministic_registry();
+        registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        let connection = rusqlite::Connection::open(&database).unwrap();
+        connection
+            .execute_batch(
+                "CREATE TRIGGER fail_boundary_transition
+                 BEFORE INSERT ON workspace_plugin_transitions
+                 WHEN NEW.kind = 'project_teardown'
+                 BEGIN SELECT RAISE(FAIL, 'injected boundary transition failure'); END;",
+            )
+            .unwrap();
+        drop(connection);
+        let report = registry.teardown_project(&context, "project_teardown", &mut store);
+        assert_eq!(report.attempted, 1);
+        assert_eq!(report.forced, 1);
+        assert_eq!(report.entries[0].status, "forced_non_routable");
+        let state = registry
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert!(state.active.is_empty());
+        assert!(
+            state
+                .contributions
+                .list(&context.project_scope_id)
+                .is_empty()
+        );
+        assert_eq!(state.grants.active_handle_count(), 0);
     }
 
     #[test]
