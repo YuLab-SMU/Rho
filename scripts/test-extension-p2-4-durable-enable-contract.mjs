@@ -62,7 +62,6 @@ export function validateP24DurableEnableContract(value) {
     '"durable_activation_generation": 1',
     '"durable_completion_after_routing": true',
   ]) assert.ok(value.installed.includes(marker), `installed B2 smoke lost ${marker}`);
-  assert.match(value.spec, /Active work package: none at the P2-4B3\/P2-4B checkpoint/);
   assert.match(value.spec, /P2-4B2 local checkpoint — 2026-08-20/);
   assert.match(value.spec, /P2-4B3 — restart reconstruction \(locally complete\)/);
 }
@@ -76,7 +75,7 @@ function fixture() {
     news: "## 0.4.1-dev.5\n### Durable workspace-plugin enablement",
     frontend: "desired_state\nobserved_state\naccepted_digest\ntransition_id\nenabling: \"Enabling\"\nupdate_pending: \"Update pending\"\nexact cached plugin package is durably enabled",
     installed: '"schema_v14_lifecycle": true\n"exact_package_cache": true\n"durable_first_enable": true\n"durable_activation_generation": 1\n"durable_completion_after_routing": true',
-    spec: "Active work package: none at the P2-4B3/P2-4B checkpoint\nP2-4B2 local checkpoint — 2026-08-20\nP2-4B3 — restart reconstruction (locally complete)",
+    spec: "P2-4B2 local checkpoint — 2026-08-20\nP2-4B3 — restart reconstruction (locally complete)",
   };
 }
 

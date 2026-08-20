@@ -15,8 +15,8 @@ complete together with P2-3E named Panel/final local macOS acceptance;
 `0.4.1-dev.4` and `rho.agent 0.1.6` allocated; P2-3 hosted/cross-platform gates
 remain open; P2-4A schema-v14 persistence and P2-4B1 exact snapshot/cache
 foundation plus P2-4B2/B3 durable first enable and restart reconstruction at
-`0.4.1-dev.5` passed their local stops under the local-first exception; no
-later P2-4 slice is active at this checkpoint
+`0.4.1-dev.5` passed their local stops under the local-first exception;
+P2-4C1 explicit Disable is active and later P2-4 slices remain gated
 
 Date: 2026-08-14
 Issue: [#17](https://github.com/YuLab-SMU/Rho/issues/17)

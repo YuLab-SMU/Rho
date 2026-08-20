@@ -5,10 +5,10 @@ state/transition/event/tombstone persistence completed its local stop gate
 2026-08-20; P2-1/P2-2/P2-3/P2-4A hosted and cross-platform installed gates
 remain open and mandatory before final Phase 2 acceptance
 
-Active work package: none at the P2-4B3/P2-4B checkpoint. P2-4C through P2-4G
-remain inactive pending explicit amendment/cross-review. B3 added no Retry/
-Disable/Uninstall/Update/Rollback command and no path by which plugin recovery
-can block Workspace R or project switching.
+Active work package: P2-4C1 only — explicit Disable and exact-host teardown.
+P2-4C2/C3 and P2-4D through P2-4G remain inactive. C1 may add one trusted
+Disable command and its mock/UI state, but may not yet change project-switch or
+shutdown sequencing, add Retry, or authorize uninstall/update/rollback.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -290,6 +290,38 @@ A trap, hang, cancellation refusal, effect failure or audit failure cannot leave
 a route or handle live. Cleanup errors are reported individually; remaining
 cleanup continues. If terminal persistence fails, routing stays closed and the
 state is `completion_uncertain` for recovery.
+
+### Activated P2-4C contract
+
+P2-4C is divided into three local stops:
+
+1. **P2-4C1 — explicit Disable and exact-host teardown (active).** The trusted
+   shell sends plugin ID plus current project revision. Rust persists desired
+   disabled before closing routes, then cancels the exact yielded guest call
+   where present, cancels that plugin's pending permission requests, revokes
+   live handles, disposes contributions, invokes bounded guest quiesce/dispose
+   and drops/quarantines the host regardless of guest outcome. Journal phases
+   are monotonic through `routing_closed`, `calls_drained`, `handles_revoked`,
+   `contributions_disposed`, `host_disposed`, and terminal disabled. Cleanup
+   errors are stable-code-only and remaining cleanup continues. A persistence
+   failure after route closure returns truthful `completion_uncertain` and never
+   restores routing.
+2. **P2-4C2 — project switch, Workspace restart and shutdown reuse (inactive).**
+   Replace abrupt `invalidate_project` at trusted lifecycle boundaries with the
+   same bounded teardown for every active/pending project plugin; BH2 continues
+   after forced quarantine and records uncertainty without waiting forever.
+3. **P2-4C3 — crash/hang classification and explicit Retry (inactive).** Route,
+   handle and contribution removal precedes durable crashed/blocked state;
+   three crashes in ten minutes block automatic eligibility; only trusted Retry
+   creates a fresh exact transition/generation/host/handles.
+
+C1 is user-visible and must allocate the next synchronized development version
+after `0.4.1-dev.5`, update NEWS, preserve the dedicated plugin command/mock
+inventory, and receive Browser plus packaged installed-smoke evidence. C1 tests
+cover already-disabled idempotency, active and permission-pending disable,
+in-flight cancellation, guest quiesce/dispose rejection/trap, persistence
+failure after route closure, two projects, concurrent disable/call/enable, and
+no stale route/handle/contribution or false durable completion.
 
 Project switching and application shutdown use the same sequence but are not
 held indefinitely: after deadlines the host is forcibly quarantined/dropped,

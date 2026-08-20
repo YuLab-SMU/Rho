@@ -64,9 +64,7 @@ export function validateP24RestartContract(value) {
     '"restart_authority_fresh": true',
     '"changed_package_update_pending": true',
   ]) assert.ok(value.installed.includes(marker), `installed B3 smoke lost ${marker}`);
-  assert.match(value.spec, /Active work package: none at the P2-4B3\/P2-4B checkpoint/);
   assert.match(value.spec, /P2-4B3 \/ P2-4B local checkpoint — 2026-08-20/);
-  assert.match(value.spec, /P2-4C through P2-4G\s+remain inactive/);
 }
 
 function fixture() {
@@ -76,7 +74,7 @@ function fixture() {
     commands: "request_workspace_plugin_enable",
     store: "pub request_event_type: String\n\"user_requested\" | \"recovery\"\nevent_type: &draft.request_event_type",
     installed: '"restart_reactivated": true\n"restart_generation": 2\n"restart_authority_fresh": true\n"changed_package_update_pending": true',
-    spec: "Active work package: none at the P2-4B3/P2-4B checkpoint\nP2-4B3 / P2-4B local checkpoint — 2026-08-20\nP2-4C through P2-4G remain inactive",
+    spec: "P2-4B3 / P2-4B local checkpoint — 2026-08-20",
   };
 }
 
