@@ -7,6 +7,7 @@ license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+base64 = "0.22"
 clap.workspace = true
 rho-kernel = { path = "../rho-kernel" }
 rho-agent-transport = { path = "../rho-agent-transport" }
@@ -17,5 +18,6 @@ serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.10"
 tempfile.workspace = true
+thiserror.workspace = true
 tokio.workspace = true
 uuid.workspace = true

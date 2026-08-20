@@ -126,6 +126,8 @@ export function validateCompatibilityWorkflow(text) {
     '"scripts/test-extension-p1-3-contract.mjs"',
     '"scripts/test-extension-phase-1-acceptance.mjs"',
     '"scripts/test-extension-phase-2-host-contract.mjs"',
+    '"scripts/test-extension-p2-2-broker-contract.mjs"',
+    '"scripts/test-workspace-plugin-ui.mjs"',
     '"desktop/dist/app.js"',
     '"desktop/dist/index.html"',
     '"desktop/package.json"',
@@ -162,6 +164,9 @@ export function validateCompatibilityWorkflow(text) {
     "node scripts/test-extension-phase-1-acceptance.mjs",
     "node scripts/test-extension-phase-2-host-contract.mjs --test",
     "node scripts/test-extension-phase-2-host-contract.mjs",
+    "node scripts/test-extension-p2-2-broker-contract.mjs --test",
+    "node scripts/test-extension-p2-2-broker-contract.mjs",
+    "node scripts/test-workspace-plugin-ui.mjs",
     "cargo check --workspace --all-targets --locked",
     "cargo test --workspace --locked --no-fail-fast",
   ]) {
@@ -247,6 +252,8 @@ export function validateFastWorkflow(text) {
     '"scripts/test-extension-p1-3-contract.mjs"',
     '"scripts/test-extension-phase-1-acceptance.mjs"',
     '"scripts/test-extension-phase-2-host-contract.mjs"',
+    '"scripts/test-extension-p2-2-broker-contract.mjs"',
+    '"scripts/test-workspace-plugin-ui.mjs"',
     '"desktop/dist/app.js"',
     '"desktop/dist/index.html"',
     '"desktop/package.json"',
@@ -271,6 +278,9 @@ export function validateFastWorkflow(text) {
     "node scripts/test-extension-phase-1-acceptance.mjs",
     "node scripts/test-extension-phase-2-host-contract.mjs --test",
     "node scripts/test-extension-phase-2-host-contract.mjs",
+    "node scripts/test-extension-p2-2-broker-contract.mjs --test",
+    "node scripts/test-extension-p2-2-broker-contract.mjs",
+    "node scripts/test-workspace-plugin-ui.mjs",
     "cargo fmt --all -- --check",
     "cargo check --workspace --all-targets --locked",
     "cargo test --workspace --locked --no-fail-fast",
@@ -361,6 +371,8 @@ on:
       - "scripts/test-extension-p1-3-contract.mjs"
       - "scripts/test-extension-phase-1-acceptance.mjs"
       - "scripts/test-extension-phase-2-host-contract.mjs"
+      - "scripts/test-extension-p2-2-broker-contract.mjs"
+      - "scripts/test-workspace-plugin-ui.mjs"
   pull_request:
     branches: [main]
     types: [opened, reopened, synchronize, ready_for_review]
@@ -389,6 +401,8 @@ on:
       - "scripts/test-extension-p1-3-contract.mjs"
       - "scripts/test-extension-phase-1-acceptance.mjs"
       - "scripts/test-extension-phase-2-host-contract.mjs"
+      - "scripts/test-extension-p2-2-broker-contract.mjs"
+      - "scripts/test-workspace-plugin-ui.mjs"
 permissions:
   contents: read
 concurrency:
@@ -431,6 +445,9 @@ ${entries}
           node scripts/test-extension-phase-1-acceptance.mjs
           node scripts/test-extension-phase-2-host-contract.mjs --test
           node scripts/test-extension-phase-2-host-contract.mjs
+          node scripts/test-extension-p2-2-broker-contract.mjs --test
+          node scripts/test-extension-p2-2-broker-contract.mjs
+          node scripts/test-workspace-plugin-ui.mjs
           cargo check --workspace --all-targets --locked
           cargo test --workspace --locked --no-fail-fast
       - name: Build, install, smoke and remove unsigned Windows app
@@ -484,6 +501,8 @@ on:
       - "scripts/test-extension-p1-3-contract.mjs"
       - "scripts/test-extension-phase-1-acceptance.mjs"
       - "scripts/test-extension-phase-2-host-contract.mjs"
+      - "scripts/test-extension-p2-2-broker-contract.mjs"
+      - "scripts/test-workspace-plugin-ui.mjs"
 permissions:
   contents: read
 concurrency:
@@ -526,6 +545,9 @@ jobs:
           node scripts/test-extension-phase-1-acceptance.mjs
           node scripts/test-extension-phase-2-host-contract.mjs --test
           node scripts/test-extension-phase-2-host-contract.mjs
+          node scripts/test-extension-p2-2-broker-contract.mjs --test
+          node scripts/test-extension-p2-2-broker-contract.mjs
+          node scripts/test-workspace-plugin-ui.mjs
           cargo fmt --all -- --check
           cargo check --workspace --all-targets --locked
           cargo test --workspace --locked --no-fail-fast

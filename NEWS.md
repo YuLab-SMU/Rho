@@ -18,9 +18,10 @@ this file records behavior included in a versioned build candidate.
 - The initial permission choices are Deny, Allow once, and bounded access for
   this project. One-shot grants are revoked during restart recovery, upgrades
   require review, and project switching invalidates in-memory authority.
-- This checkpoint establishes trusted enablement and fresh handles; actual
-  filesystem, Workspace R, and network operations remain unavailable until
-  their separately tested Phase 2 slices land in this development candidate.
+- The bounded `project.fs.read` broker lane is implemented behind the no-import
+  Guest ABI V2 loop, but no user-facing contribution routes it yet. Workspace R
+  inspection and network access remain unavailable pending their separately
+  tested Phase 2 slices.
 
 ## 0.4.1-dev.1 - 2026-08-18
 

@@ -440,7 +440,10 @@ pub(crate) fn create_plugin_permission_schema(connection: &Connection) -> Result
                 event_type IN (
                     'request_created', 'request_granted', 'request_denied',
                     'request_cancelled', 'request_stale', 'grant_consumed',
-                    'grant_revoked', 'grant_expired', 'recovery_cancelled'
+                    'grant_revoked', 'grant_expired', 'recovery_cancelled',
+                    'handle_minted', 'call_admitted', 'call_denied',
+                    'call_completed', 'call_failed', 'call_cancelled',
+                    'completion_uncertain'
                 )
             ),
             status TEXT NOT NULL CHECK (
@@ -531,6 +534,8 @@ pub(crate) fn assert_plugin_permission_schema(connection: &Connection) -> Result
         &[
             "'request_created'",
             "'grant_revoked'",
+            "'call_admitted'",
+            "'completion_uncertain'",
             "foreignkey(grant_id,project_root)referencesplugin_permission_grants",
         ],
     )?;

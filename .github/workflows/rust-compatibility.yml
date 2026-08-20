@@ -51,6 +51,8 @@ on:
       - "scripts/test-extension-p1-3-contract.mjs"
       - "scripts/test-extension-phase-1-acceptance.mjs"
       - "scripts/test-extension-phase-2-host-contract.mjs"
+      - "scripts/test-extension-p2-2-broker-contract.mjs"
+      - "scripts/test-workspace-plugin-ui.mjs"
       - "scripts/test-installed-license-surface.mjs"
       - "scripts/test-signpath-readiness.mjs"
       - "scripts/test-signpath-free-trial-smoke.mjs"
@@ -133,6 +135,8 @@ on:
       - "scripts/test-extension-p1-3-contract.mjs"
       - "scripts/test-extension-phase-1-acceptance.mjs"
       - "scripts/test-extension-phase-2-host-contract.mjs"
+      - "scripts/test-extension-p2-2-broker-contract.mjs"
+      - "scripts/test-workspace-plugin-ui.mjs"
       - "scripts/test-installed-license-surface.mjs"
       - "scripts/test-signpath-readiness.mjs"
       - "scripts/test-signpath-free-trial-smoke.mjs"
@@ -375,6 +379,9 @@ jobs:
           node scripts/test-extension-phase-1-acceptance.mjs
           node scripts/test-extension-phase-2-host-contract.mjs --test
           node scripts/test-extension-phase-2-host-contract.mjs
+          node scripts/test-extension-p2-2-broker-contract.mjs --test
+          node scripts/test-extension-p2-2-broker-contract.mjs
+          node scripts/test-workspace-plugin-ui.mjs
           cargo check --workspace --all-targets --locked
           cargo test --workspace --locked --no-fail-fast
 

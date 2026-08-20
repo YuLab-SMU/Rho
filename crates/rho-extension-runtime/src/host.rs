@@ -194,6 +194,14 @@ pub enum HostProtocolErrorCode {
     GuestTrap,
     /// Guest memory or a returned pointer/length was invalid.
     InvalidGuestOutput,
+    /// Guest ABI V2 returned a malformed, mismatched, or unsupported step.
+    InvalidBrokerStep,
+    /// Guest ABI V2 repeated or reordered a call transition.
+    BrokerSequenceViolation,
+    /// A Guest ABI V2 call exceeded its bounded step count.
+    BrokerStepLimit,
+    /// Broker results exceeded the cumulative per-call byte budget.
+    BrokerResultLimit,
     /// The guest returned a non-zero ABI status.
     GuestRejected,
     /// The exact request was cancelled by the broker.

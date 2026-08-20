@@ -10,6 +10,9 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use sha2::{Digest, Sha256};
 use wasmtime::{
     Config, Engine, Instance, Linker, Memory, Module, Store, StoreLimits, StoreLimitsBuilder, Trap,
     TypedFunc,
@@ -35,6 +38,15 @@ pub const MAX_PENDING_WASM_CANCELLATIONS: usize = 256;
 pub const GUEST_ABI_V1: u64 = 1;
 /// No-import yield/resume ABI required by every permission-bearing plugin.
 pub const GUEST_ABI_V2: u64 = 2;
+/// Maximum encoded bytes for a Guest ABI V2 step or resume result.
+pub const MAX_GUEST_STEP_BYTES: usize = 64 * 1024;
+/// Maximum guest transitions in one top-level broker call.
+pub const MAX_GUEST_BROKER_STEPS: usize = 8;
+/// Maximum cumulative encoded broker-result bytes in one top-level call.
+pub const MAX_GUEST_BROKER_RESULT_BYTES: usize = 1024 * 1024;
+/// Base64 and JSON framing overhead admitted while the separately counted raw
+/// broker result remains capped at one MiB.
+pub const MAX_GUEST_BROKER_RESUME_BYTES: usize = 1536 * 1024;
 
 /// Binary Guest ABI V1 fixture compiled into packaged smoke tests. It exports
 /// only the six P2-1 ABI items and imports nothing.
@@ -128,13 +140,86 @@ struct WasmRuntime {
     heartbeat: TypedFunc<(), i32>,
     quiesce: TypedFunc<(), i32>,
     dispose: TypedFunc<(), i32>,
-    _broker: Option<GuestBrokerAbi>,
+    broker: Option<GuestBrokerAbi>,
 }
 
 struct GuestBrokerAbi {
-    _begin: TypedFunc<(i32, i32), i64>,
-    _resume: TypedFunc<(i32, i32), i64>,
-    _cancel: TypedFunc<(i32, i32), i32>,
+    begin: TypedFunc<(i32, i32), i64>,
+    resume: TypedFunc<(i32, i32), i64>,
+    cancel: TypedFunc<(i32, i32), i32>,
+}
+
+/// One bounded yield from a no-import Guest ABI V2 module. Custom debug output
+/// redacts the raw capability handle.
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum GuestStep {
+    BrokerRequest {
+        call_id: String,
+        handle_id: String,
+        permission: String,
+        operation: String,
+        args: Value,
+    },
+    Complete {
+        call_id: String,
+        result: Value,
+    },
+    Error {
+        call_id: String,
+        code: String,
+    },
+}
+
+impl std::fmt::Debug for GuestStep {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::BrokerRequest {
+                call_id,
+                permission,
+                operation,
+                ..
+            } => formatter
+                .debug_struct("BrokerRequest")
+                .field("call_id", call_id)
+                .field("handle_id", &"<redacted>")
+                .field("permission", permission)
+                .field("operation", operation)
+                .finish(),
+            Self::Complete { call_id, result } => formatter
+                .debug_struct("Complete")
+                .field("call_id", call_id)
+                .field("result", result)
+                .finish(),
+            Self::Error { call_id, code } => formatter
+                .debug_struct("Error")
+                .field("call_id", call_id)
+                .field("code", code)
+                .finish(),
+        }
+    }
+}
+
+struct GuestBrokerCallState {
+    request_id: HostRequestId,
+    call_id: String,
+    call_id_numeric: u64,
+    steps: usize,
+    cumulative_result_bytes: usize,
+    last_step_digest: String,
+}
+
+pub trait BrokerCallIdSource: Send + Sync {
+    fn next_call_id(&self) -> u64;
+}
+
+#[derive(Debug, Default)]
+pub struct OsBrokerCallIdSource;
+
+impl BrokerCallIdSource for OsBrokerCallIdSource {
+    fn next_call_id(&self) -> u64 {
+        rand::random()
+    }
 }
 
 #[derive(Default)]
@@ -197,6 +282,8 @@ pub struct WasmPluginHost {
     state: HostInstanceState,
     negotiated_version: Option<u64>,
     guest_abi_version: u64,
+    broker_call: Option<GuestBrokerCallState>,
+    broker_call_id_source: Arc<dyn BrokerCallIdSource>,
     cancellation: Arc<CancellationState>,
 }
 
@@ -209,6 +296,7 @@ impl std::fmt::Debug for WasmPluginHost {
             .field("state", &self.state)
             .field("negotiated_version", &self.negotiated_version)
             .field("guest_abi_version", &self.guest_abi_version)
+            .field("broker_call_active", &self.broker_call.is_some())
             .field("runtime_present", &self.runtime.is_some())
             .finish_non_exhaustive()
     }
@@ -223,6 +311,14 @@ impl WasmPluginHost {
     pub fn from_bytes(
         identity: WasmHostIdentity,
         module_bytes: &[u8],
+    ) -> Result<Self, HostProtocolError> {
+        Self::from_bytes_with_call_id_source(identity, module_bytes, Arc::new(OsBrokerCallIdSource))
+    }
+
+    pub fn from_bytes_with_call_id_source(
+        identity: WasmHostIdentity,
+        module_bytes: &[u8],
+        broker_call_id_source: Arc<dyn BrokerCallIdSource>,
     ) -> Result<Self, HostProtocolError> {
         if module_bytes.len() > MAX_WASM_MODULE_BYTES {
             return Err(protocol_error(HostProtocolErrorCode::ModuleTooLarge));
@@ -255,7 +351,7 @@ impl WasmPluginHost {
             .map_err(|_| protocol_error(HostProtocolErrorCode::GuestTrap))?
             .map_err(|error| protocol_error(classify_wasmtime_error(&error, false)))?;
         let runtime = bind_guest_abi(store, instance)?;
-        let guest_abi_version = if runtime._broker.is_some() {
+        let guest_abi_version = if runtime.broker.is_some() {
             GUEST_ABI_V2
         } else {
             GUEST_ABI_V1
@@ -269,6 +365,8 @@ impl WasmPluginHost {
             state: HostInstanceState::Created,
             negotiated_version: None,
             guest_abi_version,
+            broker_call: None,
+            broker_call_id_source,
             cancellation: Arc::new(CancellationState::new()),
         })
     }
@@ -289,6 +387,169 @@ impl WasmPluginHost {
         self.guest_abi_version
     }
 
+    /// Begin one no-import Guest ABI V2 call. The guest fully yields a typed
+    /// step before any broker I/O is allowed to run.
+    pub fn begin_broker_call(
+        &mut self,
+        request_id: HostRequestId,
+        request: Value,
+    ) -> Result<GuestStep, HostProtocolError> {
+        if self.state != HostInstanceState::Active || self.guest_abi_version != GUEST_ABI_V2 {
+            return Err(invalid_state(self.state));
+        }
+        if self.broker_call.is_some() {
+            return self.fail(HostProtocolErrorCode::BrokerSequenceViolation);
+        }
+        if !self.begin_request(&request_id) {
+            return Err(protocol_error(HostProtocolErrorCode::Cancelled));
+        }
+        let call_id_numeric = self.broker_call_id_source.next_call_id();
+        let call_id = format!("call.{call_id_numeric:016x}");
+        let input = serde_json::to_vec(&serde_json::json!({
+            "call_id": call_id,
+            "request": request,
+        }))
+        .map_err(|_| protocol_error(HostProtocolErrorCode::InvalidBrokerStep))?;
+        if input.len() > MAX_GUEST_STEP_BYTES {
+            self.finish_request(&request_id);
+            return Err(protocol_error(HostProtocolErrorCode::PayloadTooLarge));
+        }
+        if let Err(code) = self.write_guest_input(&input, MAX_GUEST_STEP_BYTES) {
+            self.finish_request(&request_id);
+            return self.fail(code);
+        }
+        let packed = self.call_guest(|runtime| {
+            let begin = runtime
+                .broker
+                .as_ref()
+                .expect("Guest ABI V2 runtime must bind broker exports")
+                .begin
+                .clone();
+            begin.call(&mut runtime.store, (0, input.len() as i32))
+        })?;
+        let encoded = match self.read_guest_utf8(packed, MAX_GUEST_STEP_BYTES) {
+            Ok(encoded) => encoded,
+            Err(code) => return self.fail(code),
+        };
+        let step = match decode_guest_step(&encoded, &call_id) {
+            Ok(step) => step,
+            Err(code) => return self.fail(code),
+        };
+        if step_is_terminal(&step) {
+            self.finish_request(&request_id);
+        } else {
+            self.broker_call = Some(GuestBrokerCallState {
+                request_id,
+                call_id,
+                call_id_numeric,
+                steps: 1,
+                cumulative_result_bytes: 0,
+                last_step_digest: step_digest(&encoded),
+            });
+        }
+        Ok(step)
+    }
+
+    /// Resume only the exact active call after broker work completed outside
+    /// the Wasmtime store. `raw_result_bytes` counts authoritative raw payload
+    /// bytes separately from JSON/base64 framing overhead.
+    pub fn resume_broker_call(
+        &mut self,
+        request_id: &HostRequestId,
+        result: &Value,
+        raw_result_bytes: usize,
+    ) -> Result<GuestStep, HostProtocolError> {
+        let Some(active) = self.broker_call.as_ref() else {
+            return self.fail(HostProtocolErrorCode::BrokerSequenceViolation);
+        };
+        let active_request_id = active.request_id.clone();
+        let active_steps = active.steps;
+        let active_cumulative = active.cumulative_result_bytes;
+        let call_id = active.call_id.clone();
+        let previous_digest = active.last_step_digest.clone();
+        if &active_request_id != request_id {
+            return self.fail(HostProtocolErrorCode::BrokerSequenceViolation);
+        }
+        if active_steps >= MAX_GUEST_BROKER_STEPS {
+            return self.fail(HostProtocolErrorCode::BrokerStepLimit);
+        }
+        let cumulative = active_cumulative
+            .checked_add(raw_result_bytes)
+            .filter(|total| *total <= MAX_GUEST_BROKER_RESULT_BYTES)
+            .ok_or_else(|| protocol_error(HostProtocolErrorCode::BrokerResultLimit));
+        let cumulative = match cumulative {
+            Ok(cumulative) => cumulative,
+            Err(error) => return self.fail(error.code),
+        };
+        let encoded_result = serde_json::to_vec(result)
+            .map_err(|_| protocol_error(HostProtocolErrorCode::InvalidBrokerStep))?;
+        if encoded_result.len() > MAX_GUEST_BROKER_RESUME_BYTES {
+            return self.fail(HostProtocolErrorCode::BrokerResultLimit);
+        }
+        if let Err(code) = self.write_guest_input(&encoded_result, MAX_GUEST_BROKER_RESUME_BYTES) {
+            return self.fail(code);
+        }
+        let packed = self.call_guest(|runtime| {
+            let resume = runtime
+                .broker
+                .as_ref()
+                .expect("Guest ABI V2 runtime must bind broker exports")
+                .resume
+                .clone();
+            resume.call(&mut runtime.store, (0, encoded_result.len() as i32))
+        })?;
+        let encoded = match self.read_guest_utf8(packed, MAX_GUEST_STEP_BYTES) {
+            Ok(encoded) => encoded,
+            Err(code) => return self.fail(code),
+        };
+        let step = match decode_guest_step(&encoded, &call_id) {
+            Ok(step) => step,
+            Err(code) => return self.fail(code),
+        };
+        let digest = step_digest(&encoded);
+        if matches!(step, GuestStep::BrokerRequest { .. }) && digest == previous_digest {
+            return self.fail(HostProtocolErrorCode::BrokerSequenceViolation);
+        }
+        if step_is_terminal(&step) {
+            self.broker_call = None;
+            self.finish_request(request_id);
+        } else if let Some(active) = self.broker_call.as_mut() {
+            active.steps += 1;
+            active.cumulative_result_bytes = cumulative;
+            active.last_step_digest = digest;
+        }
+        Ok(step)
+    }
+
+    pub fn cancel_broker_call(
+        &mut self,
+        request_id: &HostRequestId,
+    ) -> Result<bool, HostProtocolError> {
+        let Some(active) = self.broker_call.as_ref() else {
+            return Ok(false);
+        };
+        if &active.request_id != request_id {
+            return self.fail(HostProtocolErrorCode::BrokerSequenceViolation);
+        }
+        let numeric = active.call_id_numeric;
+        let status = self.call_guest(|runtime| {
+            let cancel = runtime
+                .broker
+                .as_ref()
+                .expect("Guest ABI V2 runtime must bind broker exports")
+                .cancel
+                .clone();
+            cancel.call(
+                &mut runtime.store,
+                ((numeric >> 32) as u32 as i32, numeric as u32 as i32),
+            )
+        })?;
+        self.require_success(status)?;
+        self.broker_call = None;
+        self.finish_request(request_id);
+        Ok(true)
+    }
+
     pub fn cancellation_handle(&self) -> WasmCancellationHandle {
         WasmCancellationHandle {
             engine: self.engine.clone(),
@@ -306,6 +567,7 @@ impl WasmPluginHost {
             return false;
         }
         self.runtime.take();
+        self.broker_call = None;
         self.clear_cancellation();
         self.state = HostInstanceState::Quarantined;
         true
@@ -475,6 +737,7 @@ impl WasmPluginHost {
             return result.map(|_| None);
         }
         self.runtime.take();
+        self.broker_call = None;
         self.clear_cancellation();
         self.state = HostInstanceState::Disposed;
         Ok(Some(HostResponse::Disposed))
@@ -523,10 +786,18 @@ impl WasmPluginHost {
     }
 
     fn read_guest_response(&mut self, packed: i64) -> Result<String, HostProtocolErrorCode> {
+        self.read_guest_utf8(packed, MAX_ECHO_PAYLOAD_BYTES)
+    }
+
+    fn read_guest_utf8(
+        &mut self,
+        packed: i64,
+        maximum_bytes: usize,
+    ) -> Result<String, HostProtocolErrorCode> {
         let packed = packed as u64;
         let pointer = (packed >> 32) as u32 as usize;
         let length = (packed & u32::MAX as u64) as u32 as usize;
-        if length > MAX_ECHO_PAYLOAD_BYTES {
+        if length > maximum_bytes {
             return Err(HostProtocolErrorCode::PayloadTooLarge);
         }
         let Some(runtime) = self.runtime.as_mut() else {
@@ -544,6 +815,26 @@ impl WasmPluginHost {
             .read(&runtime.store, pointer, &mut bytes)
             .map_err(|_| HostProtocolErrorCode::InvalidGuestOutput)?;
         String::from_utf8(bytes).map_err(|_| HostProtocolErrorCode::InvalidGuestOutput)
+    }
+
+    fn write_guest_input(
+        &mut self,
+        bytes: &[u8],
+        maximum_bytes: usize,
+    ) -> Result<(), HostProtocolErrorCode> {
+        if bytes.len() > maximum_bytes || bytes.len() > i32::MAX as usize {
+            return Err(HostProtocolErrorCode::PayloadTooLarge);
+        }
+        let Some(runtime) = self.runtime.as_mut() else {
+            return Err(HostProtocolErrorCode::InvalidStateTransition);
+        };
+        if bytes.len() > runtime.memory.data_size(&runtime.store) {
+            return Err(HostProtocolErrorCode::InvalidGuestOutput);
+        }
+        runtime
+            .memory
+            .write(&mut runtime.store, 0, bytes)
+            .map_err(|_| HostProtocolErrorCode::InvalidGuestOutput)
     }
 
     fn begin_request(&mut self, request_id: &HostRequestId) -> bool {
@@ -576,10 +867,88 @@ impl WasmPluginHost {
 
     fn fail<T>(&mut self, code: HostProtocolErrorCode) -> Result<T, HostProtocolError> {
         self.runtime.take();
+        self.broker_call = None;
         self.clear_cancellation();
         self.state = HostInstanceState::Quarantined;
         Err(protocol_error(code))
     }
+}
+
+fn decode_guest_step(
+    encoded: &str,
+    expected_call_id: &str,
+) -> Result<GuestStep, HostProtocolErrorCode> {
+    if encoded.len() > MAX_GUEST_STEP_BYTES {
+        return Err(HostProtocolErrorCode::PayloadTooLarge);
+    }
+    let step: GuestStep =
+        serde_json::from_str(encoded).map_err(|_| HostProtocolErrorCode::InvalidBrokerStep)?;
+    let call_id = match &step {
+        GuestStep::BrokerRequest { call_id, .. }
+        | GuestStep::Complete { call_id, .. }
+        | GuestStep::Error { call_id, .. } => call_id,
+    };
+    if call_id != expected_call_id {
+        return Err(HostProtocolErrorCode::BrokerSequenceViolation);
+    }
+    match &step {
+        GuestStep::BrokerRequest {
+            handle_id,
+            permission,
+            operation,
+            args,
+            ..
+        } => {
+            let handle = handle_id.strip_prefix("handle.").unwrap_or_default();
+            if handle.len() != 64
+                || !handle
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+                || !matches!(
+                    permission.as_str(),
+                    "project.fs.read" | "workspace.r.inspect" | "network.fetch"
+                )
+                || operation.is_empty()
+                || operation.len() > 128
+                || !operation.bytes().all(|byte| {
+                    byte.is_ascii_lowercase()
+                        || byte.is_ascii_digit()
+                        || matches!(byte, b'.' | b'_' | b'-')
+                })
+                || !args.is_object()
+            {
+                return Err(HostProtocolErrorCode::InvalidBrokerStep);
+            }
+        }
+        GuestStep::Complete { .. } => {}
+        GuestStep::Error { code, .. } => {
+            if code.is_empty()
+                || code.len() > 128
+                || !code.bytes().all(|byte| {
+                    byte.is_ascii_lowercase()
+                        || byte.is_ascii_digit()
+                        || matches!(byte, b'.' | b'_' | b'-')
+                })
+            {
+                return Err(HostProtocolErrorCode::InvalidBrokerStep);
+            }
+        }
+    }
+    Ok(step)
+}
+
+fn step_is_terminal(step: &GuestStep) -> bool {
+    matches!(step, GuestStep::Complete { .. } | GuestStep::Error { .. })
+}
+
+fn step_digest(encoded: &str) -> String {
+    use std::fmt::Write;
+    let digest = Sha256::digest(encoded.as_bytes());
+    let mut output = String::with_capacity(64);
+    for byte in digest {
+        write!(&mut output, "{byte:02x}").expect("writing to String cannot fail");
+    }
+    output
 }
 
 fn build_engine() -> Result<Engine, HostProtocolError> {
@@ -624,9 +993,9 @@ fn bind_guest_abi(
     let broker = match broker_export_count {
         0 => None,
         3 => Some(GuestBrokerAbi {
-            _begin: typed_export::<(i32, i32), i64>(&instance, &mut store, GUEST_BEGIN_EXPORT)?,
-            _resume: typed_export::<(i32, i32), i64>(&instance, &mut store, GUEST_RESUME_EXPORT)?,
-            _cancel: typed_export::<(i32, i32), i32>(&instance, &mut store, GUEST_CANCEL_EXPORT)?,
+            begin: typed_export::<(i32, i32), i64>(&instance, &mut store, GUEST_BEGIN_EXPORT)?,
+            resume: typed_export::<(i32, i32), i64>(&instance, &mut store, GUEST_RESUME_EXPORT)?,
+            cancel: typed_export::<(i32, i32), i32>(&instance, &mut store, GUEST_CANCEL_EXPORT)?,
         }),
         _ => return Err(protocol_error(HostProtocolErrorCode::InvalidExport)),
     };
@@ -639,7 +1008,7 @@ fn bind_guest_abi(
         heartbeat,
         quiesce,
         dispose,
-        _broker: broker,
+        broker,
     })
 }
 
@@ -698,6 +1067,15 @@ fn invalid_state(state: HostInstanceState) -> HostProtocolError {
 mod tests {
     use super::*;
 
+    #[derive(Debug)]
+    struct FixedCallId(u64);
+
+    impl BrokerCallIdSource for FixedCallId {
+        fn next_call_id(&self) -> u64 {
+            self.0
+        }
+    }
+
     fn wasm(wat: &str) -> Vec<u8> {
         wat::parse_str(wat).unwrap()
     }
@@ -722,6 +1100,49 @@ mod tests {
                 (func (export "rho_resume") (param i32 i32) (result i64) i64.const 0)
                 (func (export "rho_cancel") (param i32 i32) (result i32) i32.const 0))"#,
         )
+    }
+
+    fn wat_data(value: &str) -> String {
+        value
+            .as_bytes()
+            .iter()
+            .map(|byte| format!("\\{byte:02x}"))
+            .collect()
+    }
+
+    fn broker_wasm(begin_step: &str, resume_step: &str, cancel_status: i32) -> Vec<u8> {
+        let begin_pointer = 1024_u64;
+        let resume_pointer = 4096_u64;
+        let begin_packed = (begin_pointer << 32) | begin_step.len() as u64;
+        let resume_packed = (resume_pointer << 32) | resume_step.len() as u64;
+        wasm(&format!(
+            r#"(module
+                (memory (export "memory") 1 1)
+                (data (i32.const {begin_pointer}) "{}")
+                (data (i32.const {resume_pointer}) "{}")
+                (func (export "rho_activate") (param $abi i32) (result i32)
+                  local.get $abi i32.const 2 i32.ne)
+                (func (export "rho_echo") (param i32 i32) (result i64) i64.const 0)
+                (func (export "rho_heartbeat") (result i32) i32.const 0)
+                (func (export "rho_quiesce") (result i32) i32.const 0)
+                (func (export "rho_dispose") (result i32) i32.const 0)
+                (func (export "rho_begin") (param i32 i32) (result i64) i64.const {begin_packed})
+                (func (export "rho_resume") (param i32 i32) (result i64) i64.const {resume_packed})
+                (func (export "rho_cancel") (param i32 i32) (result i32) i32.const {cancel_status}))"#,
+            wat_data(begin_step),
+            wat_data(resume_step),
+        ))
+    }
+
+    fn broker_host(module: &[u8]) -> WasmPluginHost {
+        let mut host = WasmPluginHost::from_bytes_with_call_id_source(
+            identity("project.a", 'a'),
+            module,
+            Arc::new(FixedCallId(42)),
+        )
+        .unwrap();
+        activate(&mut host);
+        host
     }
 
     fn identity(project: &str, digest: char) -> WasmHostIdentity {
@@ -834,6 +1255,184 @@ mod tests {
                 .unwrap_err()
                 .code,
             HostProtocolErrorCode::InvalidExport
+        );
+    }
+
+    #[test]
+    fn guest_abi_v2_yields_resumes_and_redacts_the_raw_handle() {
+        let call_id = "call.000000000000002a";
+        let handle = format!("handle.{}", "a".repeat(64));
+        let begin = serde_json::json!({
+            "type": "broker_request",
+            "call_id": call_id,
+            "handle_id": handle,
+            "permission": "project.fs.read",
+            "operation": "project.fs.read",
+            "args": {"project_relative_path": "data/input.csv", "max_bytes": 5, "expected_project_revision": 7}
+        })
+        .to_string();
+        let complete = serde_json::json!({
+            "type": "complete",
+            "call_id": call_id,
+            "result": {"accepted": true}
+        })
+        .to_string();
+        let mut host = broker_host(&broker_wasm(&begin, &complete, 0));
+        let request_id = HostRequestId::new("request.broker").unwrap();
+        let step = host
+            .begin_broker_call(request_id.clone(), serde_json::json!({"command": "read"}))
+            .unwrap();
+        assert!(matches!(step, GuestStep::BrokerRequest { .. }));
+        assert!(!format!("{step:?}").contains("handle."));
+        let terminal = host
+            .resume_broker_call(&request_id, &serde_json::json!({"ok": true}), 5)
+            .unwrap();
+        assert!(matches!(terminal, GuestStep::Complete { .. }));
+        assert_eq!(host.state(), HostInstanceState::Active);
+
+        assert_eq!(
+            host.resume_broker_call(&request_id, &serde_json::json!({}), 0)
+                .unwrap_err()
+                .code,
+            HostProtocolErrorCode::BrokerSequenceViolation
+        );
+        assert_eq!(host.state(), HostInstanceState::Quarantined);
+    }
+
+    #[test]
+    fn guest_abi_v2_rejects_wrong_call_budget_and_supports_exact_cancel() {
+        let wrong_call = serde_json::json!({
+            "type": "broker_request",
+            "call_id": "call.0000000000000099",
+            "handle_id": format!("handle.{}", "a".repeat(64)),
+            "permission": "project.fs.read",
+            "operation": "project.fs.read",
+            "args": {}
+        })
+        .to_string();
+        let terminal = serde_json::json!({
+            "type": "complete",
+            "call_id": "call.000000000000002a",
+            "result": {}
+        })
+        .to_string();
+        let mut wrong = broker_host(&broker_wasm(&wrong_call, &terminal, 0));
+        assert_eq!(
+            wrong
+                .begin_broker_call(
+                    HostRequestId::new("request.wrong").unwrap(),
+                    serde_json::json!({})
+                )
+                .unwrap_err()
+                .code,
+            HostProtocolErrorCode::BrokerSequenceViolation
+        );
+
+        let valid = serde_json::json!({
+            "type": "broker_request",
+            "call_id": "call.000000000000002a",
+            "handle_id": format!("handle.{}", "a".repeat(64)),
+            "permission": "project.fs.read",
+            "operation": "project.fs.read",
+            "args": {}
+        })
+        .to_string();
+        let module = broker_wasm(&valid, &terminal, 0);
+        let mut budget = broker_host(&module);
+        let request_id = HostRequestId::new("request.budget").unwrap();
+        budget
+            .begin_broker_call(request_id.clone(), serde_json::json!({}))
+            .unwrap();
+        assert_eq!(
+            budget
+                .resume_broker_call(
+                    &request_id,
+                    &serde_json::json!({}),
+                    MAX_GUEST_BROKER_RESULT_BYTES + 1,
+                )
+                .unwrap_err()
+                .code,
+            HostProtocolErrorCode::BrokerResultLimit
+        );
+
+        let mut cancelled = broker_host(&module);
+        let request_id = HostRequestId::new("request.cancel").unwrap();
+        cancelled
+            .begin_broker_call(request_id.clone(), serde_json::json!({}))
+            .unwrap();
+        assert!(cancelled.cancel_broker_call(&request_id).unwrap());
+        assert!(!cancelled.cancel_broker_call(&request_id).unwrap());
+        assert_eq!(cancelled.state(), HostInstanceState::Active);
+    }
+
+    #[test]
+    fn guest_abi_v2_enforces_the_step_limit() {
+        let call_id = "call.000000000000002a";
+        let handle = format!("handle.{}", "a".repeat(64));
+        let steps = (0..MAX_GUEST_BROKER_STEPS)
+            .map(|index| {
+                serde_json::json!({
+                    "type": "broker_request",
+                    "call_id": call_id,
+                    "handle_id": handle,
+                    "permission": "project.fs.read",
+                    "operation": format!("project.fs.read{index}"),
+                    "args": {}
+                })
+                .to_string()
+            })
+            .collect::<Vec<_>>();
+        let base = 2048_u64;
+        let stride = 256_u64;
+        let length = steps[0].len();
+        assert!(steps.iter().all(|step| step.len() == length));
+        let data = steps
+            .iter()
+            .enumerate()
+            .map(|(index, step)| {
+                format!(
+                    "(data (i32.const {}) \"{}\")",
+                    base + index as u64 * stride,
+                    wat_data(step)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let begin_packed = (base << 32) | length as u64;
+        let module = wasm(&format!(
+            r#"(module
+                (memory (export "memory") 1 1)
+                {data}
+                (global $step (mut i32) (i32.const 0))
+                (func (export "rho_activate") (param i32) (result i32) i32.const 0)
+                (func (export "rho_echo") (param i32 i32) (result i64) i64.const 0)
+                (func (export "rho_heartbeat") (result i32) i32.const 0)
+                (func (export "rho_quiesce") (result i32) i32.const 0)
+                (func (export "rho_dispose") (result i32) i32.const 0)
+                (func (export "rho_begin") (param i32 i32) (result i64) i64.const {begin_packed})
+                (func (export "rho_resume") (param i32 i32) (result i64)
+                  global.get $step i32.const 1 i32.add global.set $step
+                  i32.const {base} global.get $step i32.const {stride} i32.mul i32.add
+                  i64.extend_i32_u i64.const 32 i64.shl
+                  i64.const {length} i64.or)
+                (func (export "rho_cancel") (param i32 i32) (result i32) i32.const 0))"#,
+        ));
+        let mut host = broker_host(&module);
+        let request_id = HostRequestId::new("request.steps").unwrap();
+        host.begin_broker_call(request_id.clone(), serde_json::json!({}))
+            .unwrap();
+        for _ in 1..MAX_GUEST_BROKER_STEPS {
+            assert!(matches!(
+                host.resume_broker_call(&request_id, &serde_json::json!({}), 0)
+                    .unwrap(),
+                GuestStep::BrokerRequest { .. }
+            ));
+        }
+        assert_eq!(
+            host.resume_broker_call(&request_id, &serde_json::json!({}), 0)
+                .unwrap_err()
+                .code,
+            HostProtocolErrorCode::BrokerStepLimit
         );
     }
 

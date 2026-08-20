@@ -48,4 +48,5 @@ keyring = { version = "4.1.6", default-features = false, features = ["v1"] }
 keyring = { version = "4.1.6", default-features = false, features = ["v1"] }
 
 [dev-dependencies]
+rusqlite.workspace = true
 wat.workspace = true

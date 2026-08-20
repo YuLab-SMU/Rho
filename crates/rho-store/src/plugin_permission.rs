@@ -134,6 +134,18 @@ pub struct PluginPermissionEvent {
     pub created_at: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PluginPermissionCallEventDraft {
+    pub project_root: String,
+    pub plugin_id: String,
+    pub package_digest: String,
+    pub grant_id: Option<String>,
+    pub event_type: String,
+    pub status: String,
+    pub reason_code: Option<String>,
+    pub details_json: String,
+}
+
 struct ValidatedRequest {
     request_id: String,
     project_root: String,
@@ -890,6 +902,109 @@ impl Store {
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(StoreError::from)
     }
+
+    pub fn record_plugin_permission_call_event(
+        &mut self,
+        draft: &PluginPermissionCallEventDraft,
+        consume_allow_once: bool,
+    ) -> Result<(), StoreError> {
+        let project_root = required_project_root(&draft.project_root)?;
+        let plugin_id = validate_identifier(&draft.plugin_id, "plugin id")?;
+        let package_digest = validate_digest(&draft.package_digest, "package digest")?;
+        let event_type = validate_call_event_type(&draft.event_type)?;
+        let status = validate_call_event_status(&draft.status)?;
+        let reason_code = validate_reason_code(draft.reason_code.as_deref())?;
+        let details_json = validate_call_details(&draft.details_json)?;
+        if consume_allow_once
+            && !matches!(
+                event_type.as_str(),
+                "call_completed" | "completion_uncertain"
+            )
+        {
+            return Err(StoreError::Validation(
+                "only completed or uncertain calls may consume an allow-once grant".to_string(),
+            ));
+        }
+        let grant_id = draft
+            .grant_id
+            .as_deref()
+            .map(|grant_id| validate_identifier(grant_id, "plugin permission grant id"))
+            .transpose()?;
+        let now = Utc::now().to_rfc3339();
+        let transaction = self
+            .connection
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        let grant_source = if let Some(grant_id) = grant_id.as_deref() {
+            transaction
+                .query_row(
+                    "SELECT grant_source
+                     FROM plugin_permission_grants
+                     WHERE project_root = ?1 AND grant_id = ?2
+                       AND plugin_id = ?3 AND package_digest = ?4
+                       AND status = 'active'",
+                    params![project_root, grant_id, plugin_id, package_digest],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()?
+                .ok_or_else(|| {
+                    StoreError::Validation(
+                        "plugin permission call grant is missing, stale, or inactive".to_string(),
+                    )
+                })
+                .map(Some)?
+        } else {
+            None
+        };
+        insert_call_event(
+            &transaction,
+            &PluginPermissionCallEventDraft {
+                project_root: project_root.clone(),
+                plugin_id: plugin_id.clone(),
+                package_digest: package_digest.clone(),
+                grant_id: grant_id.clone(),
+                event_type: event_type.clone(),
+                status,
+                reason_code: reason_code.clone(),
+                details_json,
+            },
+            &now,
+        )?;
+        if consume_allow_once && grant_source.as_deref() == Some("allow_once") {
+            let grant_id = grant_id.as_deref().ok_or_else(|| {
+                StoreError::Validation(
+                    "consuming a plugin permission call requires a grant".to_string(),
+                )
+            })?;
+            let changed = transaction.execute(
+                "UPDATE plugin_permission_grants
+                 SET status = 'consumed', consumed_at = ?3
+                 WHERE project_root = ?1 AND grant_id = ?2
+                   AND status = 'active' AND grant_source = 'allow_once'",
+                params![project_root, grant_id, now],
+            )?;
+            if changed != 1 {
+                return Err(StoreError::Validation(
+                    "allow-once plugin grant changed before completion persisted".to_string(),
+                ));
+            }
+            insert_event(
+                &transaction,
+                PermissionEventDraft {
+                    project_root: &project_root,
+                    plugin_id: &plugin_id,
+                    package_digest: &package_digest,
+                    request_id: None,
+                    grant_id: Some(grant_id),
+                    event_type: "grant_consumed",
+                    status: "completed",
+                    reason_code: None,
+                    created_at: &now,
+                },
+            )?;
+        }
+        transaction.commit()?;
+        Ok(())
+    }
 }
 
 fn validate_request(draft: &PluginPermissionRequestDraft) -> Result<ValidatedRequest, StoreError> {
@@ -1185,6 +1300,98 @@ fn validate_reason_code(reason_code: Option<&str>) -> Result<Option<String>, Sto
     Ok(Some(reason_code.to_string()))
 }
 
+fn validate_call_event_type(value: &str) -> Result<String, StoreError> {
+    if matches!(
+        value,
+        "handle_minted"
+            | "call_admitted"
+            | "call_denied"
+            | "call_completed"
+            | "call_failed"
+            | "call_cancelled"
+            | "completion_uncertain"
+    ) {
+        Ok(value.to_string())
+    } else {
+        Err(StoreError::Validation(
+            "unsupported plugin permission call event type".to_string(),
+        ))
+    }
+}
+
+fn validate_call_event_status(value: &str) -> Result<String, StoreError> {
+    if matches!(value, "completed" | "failed" | "cancelled" | "stale") {
+        Ok(value.to_string())
+    } else {
+        Err(StoreError::Validation(
+            "unsupported plugin permission call event status".to_string(),
+        ))
+    }
+}
+
+fn validate_call_details(value: &str) -> Result<String, StoreError> {
+    if value.len() > 8192 {
+        return Err(StoreError::Validation(
+            "plugin permission call details are too large".to_string(),
+        ));
+    }
+    let parsed: serde_json::Value = serde_json::from_str(value)?;
+    let object = parsed.as_object().ok_or_else(|| {
+        StoreError::Validation("plugin permission call details must be an object".to_string())
+    })?;
+    if object.len() > 16 {
+        return Err(StoreError::Validation(
+            "plugin permission call details contain too many fields".to_string(),
+        ));
+    }
+    for (key, value) in object {
+        let lower = key.to_ascii_lowercase();
+        if key.is_empty()
+            || key.len() > 64
+            || key.chars().any(char::is_control)
+            || [
+                "handle",
+                "credential",
+                "header",
+                "url",
+                "content",
+                "path",
+                "token",
+                "secret",
+                "workspace_id",
+            ]
+            .iter()
+            .any(|forbidden| lower.contains(forbidden))
+        {
+            return Err(StoreError::Validation(
+                "plugin permission call details contain a forbidden field".to_string(),
+            ));
+        }
+        let valid_value = value.is_null()
+            || value.is_boolean()
+            || value.is_number()
+            || value.as_str().is_some_and(|value| {
+                value.len() <= 128
+                    && !value.chars().any(char::is_control)
+                    && !value.chars().any(is_bidi_override)
+                    && !value.contains("handle.")
+                    && !value.contains("://")
+            });
+        if !valid_value {
+            return Err(StoreError::Validation(
+                "plugin permission call details contain an unsafe value".to_string(),
+            ));
+        }
+    }
+    let canonical = serde_json::to_string(&parsed)?;
+    if canonical != value {
+        return Err(StoreError::Validation(
+            "plugin permission call details must use canonical JSON encoding".to_string(),
+        ));
+    }
+    Ok(canonical)
+}
+
 fn validate_constraint_shape(
     permission: &str,
     constraints: &serde_json::Value,
@@ -1322,6 +1529,33 @@ struct PermissionEventDraft<'a> {
     status: &'a str,
     reason_code: Option<&'a str>,
     created_at: &'a str,
+}
+
+fn insert_call_event(
+    connection: &rusqlite::Connection,
+    event: &PluginPermissionCallEventDraft,
+    created_at: &str,
+) -> Result<(), StoreError> {
+    let event_id = format!("event.{}", uuid::Uuid::new_v4().simple());
+    connection.execute(
+        "INSERT INTO plugin_permission_events(
+            event_id, project_root, plugin_id, package_digest, request_id, grant_id,
+            event_type, status, reason_code, details_json, created_at
+         ) VALUES(?1, ?2, ?3, ?4, NULL, ?5, ?6, ?7, ?8, ?9, ?10)",
+        params![
+            event_id,
+            event.project_root,
+            event.plugin_id,
+            event.package_digest,
+            event.grant_id,
+            event.event_type,
+            event.status,
+            event.reason_code,
+            event.details_json,
+            created_at,
+        ],
+    )?;
+    Ok(())
 }
 
 fn insert_event(
@@ -1763,6 +1997,123 @@ mod tests {
                 .unwrap()
                 .len(),
             1
+        );
+    }
+
+    #[test]
+    fn call_audit_and_allow_once_consumption_commit_atomically() {
+        let (_directory, mut store) = store();
+        store
+            .create_plugin_permission_request(&request("request.a", "D:/project/a"))
+            .unwrap();
+        store
+            .resolve_plugin_permission_request(&allow_once("request.a", "D:/project/a"))
+            .unwrap();
+        let event =
+            |event_type: &str, status: &str, details_json: &str| PluginPermissionCallEventDraft {
+                project_root: "D:/project/a".to_string(),
+                plugin_id: "org.example.plugin".to_string(),
+                package_digest: "a".repeat(64),
+                grant_id: Some("grant.request.a".to_string()),
+                event_type: event_type.to_string(),
+                status: status.to_string(),
+                reason_code: None,
+                details_json: details_json.to_string(),
+            };
+        store
+            .record_plugin_permission_call_event(
+                &event(
+                    "call_admitted",
+                    "completed",
+                    r#"{"operation":"project.fs.read"}"#,
+                ),
+                false,
+            )
+            .unwrap();
+        store
+            .record_plugin_permission_call_event(
+                &event(
+                    "call_completed",
+                    "completed",
+                    r#"{"durationMs":2,"operation":"project.fs.read","sizeBytes":5}"#,
+                ),
+                true,
+            )
+            .unwrap();
+        assert_eq!(
+            store
+                .list_plugin_permission_grants("D:/project/a", None, Some("consumed"))
+                .unwrap()
+                .len(),
+            1
+        );
+        let events = store
+            .list_plugin_permission_events("D:/project/a", Some(20))
+            .unwrap();
+        assert!(
+            events
+                .iter()
+                .any(|event| event.event_type == "call_admitted")
+        );
+        assert!(
+            events
+                .iter()
+                .any(|event| event.event_type == "call_completed")
+        );
+        assert!(
+            events
+                .iter()
+                .any(|event| event.event_type == "grant_consumed")
+        );
+        let encoded = serde_json::to_string(&events).unwrap();
+        assert!(!encoded.contains("handle."));
+    }
+
+    #[test]
+    fn call_completion_failure_rolls_back_consumption_and_rejects_sensitive_details() {
+        let (_directory, mut store) = store();
+        store
+            .create_plugin_permission_request(&request("request.a", "D:/project/a"))
+            .unwrap();
+        store
+            .resolve_plugin_permission_request(&allow_once("request.a", "D:/project/a"))
+            .unwrap();
+        let mut event = PluginPermissionCallEventDraft {
+            project_root: "D:/project/a".to_string(),
+            plugin_id: "org.example.plugin".to_string(),
+            package_digest: "a".repeat(64),
+            grant_id: Some("grant.request.a".to_string()),
+            event_type: "call_completed".to_string(),
+            status: "completed".to_string(),
+            reason_code: None,
+            details_json: r#"{"operation":"project.fs.read","sizeBytes":5}"#.to_string(),
+        };
+        store
+            .connection
+            .execute_batch(
+                "CREATE TRIGGER fail_plugin_call_completion
+                 BEFORE INSERT ON plugin_permission_events
+                 WHEN NEW.event_type = 'call_completed'
+                 BEGIN SELECT RAISE(FAIL, 'injected completion failure'); END;",
+            )
+            .unwrap();
+        assert!(
+            store
+                .record_plugin_permission_call_event(&event, true)
+                .is_err()
+        );
+        assert_eq!(
+            store
+                .list_plugin_permission_grants("D:/project/a", None, Some("active"))
+                .unwrap()
+                .len(),
+            1
+        );
+        event.details_json = r#"{"handleId":"handle.secret"}"#.to_string();
+        assert!(
+            store
+                .record_plugin_permission_call_event(&event, false)
+                .is_err()
         );
     }
 

@@ -8,19 +8,24 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use rho_extension_runtime::{
-    ActivationGeneration, CapabilityHandle, DiscoveredPlugin, GrantRequest, GrantSource,
-    GrantStore, HOST_PROTOCOL_VERSION, HostFrame, HostInstanceId, HostMessage, HostResponse,
-    MAX_WASM_MODULE_BYTES, PermissionConstraints, PermissionKind, PluginId, RuntimeKind, ScopeId,
-    WasmHostIdentity, WasmPluginHost, WorkspaceGrantIdentity, discover_workspace_plugins,
+    ActivationGeneration, BrokerCallIdSource, CapabilityHandle, DiscoveredPlugin, GrantErrorKind,
+    GrantRequest, GrantSource, GrantStore, GuestStep, HOST_PROTOCOL_VERSION, HostFrame,
+    HostInstanceId, HostMessage, HostRequestId, HostResponse, MAX_WASM_MODULE_BYTES,
+    OsBrokerCallIdSource, PermissionConstraints, PermissionKind, PermissionUse, PluginId,
+    Revalidation, RevalidationRequest, RuntimeKind, ScopeId, WasmHostIdentity, WasmPluginHost,
+    WorkspaceGrantIdentity, discover_workspace_plugins,
 };
+use rho_server::plugin_fs::{ProjectFsReadErrorCode, ProjectFsReadRequest, read_project_file};
 use rho_store::{
-    PluginPermissionDecision, PluginPermissionDecisionDraft, PluginPermissionGrant,
-    PluginPermissionMutationOutcome, PluginPermissionMutationService, PluginPermissionQueryService,
-    PluginPermissionRequest, PluginPermissionRequestDraft, Store, normalize_project_root,
+    PluginPermissionCallEventDraft, PluginPermissionDecision, PluginPermissionDecisionDraft,
+    PluginPermissionGrant, PluginPermissionMutationOutcome, PluginPermissionMutationService,
+    PluginPermissionQueryService, PluginPermissionRequest, PluginPermissionRequestDraft, Store,
+    normalize_project_root,
 };
 use serde::{Deserialize, Serialize};
 
@@ -111,6 +116,15 @@ pub(crate) struct PluginGrantRevokeResult {
     pub live_handle_revoked: bool,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct WorkspacePluginCallResult {
+    pub plugin_id: String,
+    pub status: String,
+    pub result: Option<serde_json::Value>,
+    pub error_code: Option<String>,
+    pub broker_steps: usize,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct PluginRuntimeContext {
     pub project_root: String,
@@ -133,7 +147,7 @@ struct ActivePlugin {
     plugin_version: String,
     package_digest: String,
     host_instance_id: HostInstanceId,
-    _host: WasmPluginHost,
+    host: WasmPluginHost,
     handles: BTreeMap<String, CapabilityHandle>,
 }
 
@@ -142,6 +156,7 @@ struct RegistryState {
     pending: BTreeMap<String, PendingEnable>,
     active: BTreeMap<String, ActivePlugin>,
     grants: GrantStore,
+    broker_call_id_source: Arc<dyn BrokerCallIdSource>,
 }
 
 impl Default for RegistryState {
@@ -151,6 +166,7 @@ impl Default for RegistryState {
             pending: BTreeMap::new(),
             active: BTreeMap::new(),
             grants: GrantStore::new(),
+            broker_call_id_source: Arc::new(OsBrokerCallIdSource),
         }
     }
 }
@@ -327,7 +343,13 @@ impl PendingPluginPermissionRegistry {
             });
         }
 
-        activate_plugin(&mut state, context, &plugin, reusable_grants.values())
+        activate_plugin(
+            &mut state,
+            context,
+            &plugin,
+            reusable_grants.values(),
+            store,
+        )
     }
 
     pub(crate) fn respond(
@@ -491,6 +513,391 @@ impl PendingPluginPermissionRegistry {
         })
     }
 
+    /// Execute a future contribution call through the no-import Guest ABI V2
+    /// loop. P2-2C admits only `project.fs.read`; P2-3 will supply the first
+    /// product contribution router that calls this method.
+    #[allow(dead_code)]
+    pub(crate) fn invoke_plugin(
+        &self,
+        context: &PluginRuntimeContext,
+        plugin_id: &str,
+        request: serde_json::Value,
+        store: &mut Store,
+    ) -> Result<WorkspacePluginCallResult> {
+        self.invoke_plugin_with_hook(
+            context,
+            plugin_id,
+            request,
+            store,
+            &mut |_registry, _store, _grant_id| Ok(()),
+        )
+    }
+
+    fn invoke_plugin_with_hook(
+        &self,
+        context: &PluginRuntimeContext,
+        plugin_id: &str,
+        request: serde_json::Value,
+        store: &mut Store,
+        after_read: &mut impl FnMut(&Self, &mut Store, &str) -> Result<()>,
+    ) -> Result<WorkspacePluginCallResult> {
+        let key = registry_key(&context.project_root, plugin_id);
+        let request_id = HostRequestId::generate();
+        let mut step = {
+            let mut state = self
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let active = state
+                .active
+                .get_mut(&key)
+                .context("workspace plugin is not enabled for this project")?;
+            ensure!(
+                active.package_digest == active.host.identity().package_digest().as_str(),
+                "workspace plugin host package identity is stale"
+            );
+            let handles = active
+                .handles
+                .values()
+                .map(|handle| (handle.permission.as_static_str(), handle.id.clone()))
+                .collect::<BTreeMap<_, _>>();
+            active
+                .host
+                .begin_broker_call(
+                    request_id.clone(),
+                    serde_json::json!({
+                        "request": request,
+                        "capability_handles": handles,
+                    }),
+                )
+                .map_err(|error| anyhow!("workspace plugin broker begin failed: {error:?}"))?
+        };
+        let mut broker_steps = 0;
+        loop {
+            match step {
+                GuestStep::Complete { result, .. } => {
+                    return Ok(WorkspacePluginCallResult {
+                        plugin_id: plugin_id.to_string(),
+                        status: "completed".to_string(),
+                        result: Some(result),
+                        error_code: None,
+                        broker_steps,
+                    });
+                }
+                GuestStep::Error { code, .. } => {
+                    return Ok(WorkspacePluginCallResult {
+                        plugin_id: plugin_id.to_string(),
+                        status: "failed".to_string(),
+                        result: None,
+                        error_code: Some(code),
+                        broker_steps,
+                    });
+                }
+                GuestStep::BrokerRequest {
+                    handle_id,
+                    permission,
+                    operation,
+                    args,
+                    ..
+                } => {
+                    broker_steps += 1;
+                    if permission != "project.fs.read" || operation != "project.fs.read" {
+                        step =
+                            self.resume_plugin_error(&key, &request_id, "operation_not_available")?;
+                        continue;
+                    }
+                    let file_request: ProjectFsReadRequest = match serde_json::from_value(args) {
+                        Ok(request) => request,
+                        Err(_) => {
+                            step =
+                                self.resume_plugin_error(&key, &request_id, "invalid_arguments")?;
+                            continue;
+                        }
+                    };
+                    let (revalidation, grant_id, plugin_identity) = {
+                        let mut state = self
+                            .state
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        let active = state
+                            .active
+                            .get(&key)
+                            .context("workspace plugin was disabled before call admission")?;
+                        let identity = active.host.identity().clone();
+                        let revalidation = RevalidationRequest {
+                            handle_id: handle_id.clone(),
+                            plugin_id: identity.plugin_id().clone(),
+                            host_instance_id: identity.host_instance_id().clone(),
+                            package_digest: identity.package_digest().clone(),
+                            project_id: identity.project_id().clone(),
+                            scope_id: identity.project_id().clone(),
+                            generation: identity.activation_generation(),
+                            permission: PermissionKind::ProjectFsRead,
+                            permission_use: PermissionUse::ProjectFsRead {
+                                relative_path: file_request.project_relative_path.clone(),
+                                requested_bytes: file_request.max_bytes,
+                            },
+                            workspace: None,
+                        };
+                        let outcome = state.grants.revalidate(revalidation.clone());
+                        let grant_id = state
+                            .grants
+                            .durable_grant_id_for_handle(&handle_id)
+                            .map(str::to_string);
+                        (
+                            revalidation,
+                            grant_id,
+                            (
+                                identity.plugin_id().to_string(),
+                                identity.package_digest().to_string(),
+                                outcome,
+                            ),
+                        )
+                    };
+                    let (plugin_identity_id, package_digest, admitted) = plugin_identity;
+                    if let Revalidation::Denied(error) = admitted {
+                        if let Err(persistence_error) = record_call_event(
+                            store,
+                            context,
+                            &plugin_identity_id,
+                            &package_digest,
+                            None,
+                            "call_denied",
+                            "failed",
+                            Some(grant_error_code(error)),
+                            serde_json::json!({"operation": "project.fs.read"}),
+                            false,
+                        ) {
+                            self.cancel_plugin_call(&key, &request_id);
+                            return Err(persistence_error);
+                        }
+                        step =
+                            self.resume_plugin_error(&key, &request_id, grant_error_code(error))?;
+                        continue;
+                    }
+                    let Some(grant_id) = grant_id else {
+                        self.cancel_plugin_call(&key, &request_id);
+                        bail!("admitted plugin handle has no durable grant identity");
+                    };
+                    if let Err(error) = record_call_event(
+                        store,
+                        context,
+                        &plugin_identity_id,
+                        &package_digest,
+                        Some(&grant_id),
+                        "call_admitted",
+                        "completed",
+                        None,
+                        serde_json::json!({"operation": "project.fs.read"}),
+                        false,
+                    ) {
+                        self.release_plugin_admission(&handle_id);
+                        self.cancel_plugin_call(&key, &request_id);
+                        return Err(error);
+                    }
+                    let started = Instant::now();
+                    let operation = read_project_file(
+                        Path::new(&context.project_root),
+                        u64::try_from(context.project_revision)
+                            .context("current project revision is negative")?,
+                        &file_request,
+                    );
+                    let file_result = match operation {
+                        Ok(result) => result,
+                        Err(error) => {
+                            let code = project_file_error_code(error.code);
+                            if let Err(persistence_error) = record_call_event(
+                                store,
+                                context,
+                                &plugin_identity_id,
+                                &package_digest,
+                                Some(&grant_id),
+                                "call_failed",
+                                "failed",
+                                Some(code),
+                                serde_json::json!({
+                                    "durationMs": started.elapsed().as_millis().min(u64::MAX as u128) as u64,
+                                    "operation": "project.fs.read"
+                                }),
+                                false,
+                            ) {
+                                self.release_plugin_admission(&handle_id);
+                                self.cancel_plugin_call(&key, &request_id);
+                                return Err(persistence_error);
+                            }
+                            self.release_plugin_admission(&handle_id);
+                            step = self.resume_plugin_error(&key, &request_id, code)?;
+                            continue;
+                        }
+                    };
+                    after_read(self, store, &grant_id)?;
+                    let still_admitted = {
+                        let state = self
+                            .state
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        let session_current = state.active.get(&key).is_some_and(|active| {
+                            active.host.identity().host_instance_id()
+                                == &revalidation.host_instance_id
+                        });
+                        session_current
+                            && state.grants.revalidate_admitted(&revalidation)
+                                == Revalidation::Allowed
+                    };
+                    if !still_admitted {
+                        if let Err(persistence_error) = record_call_event(
+                            store,
+                            context,
+                            &plugin_identity_id,
+                            &package_digest,
+                            None,
+                            "call_denied",
+                            "stale",
+                            Some("stale_after_dispatch"),
+                            serde_json::json!({"operation": "project.fs.read"}),
+                            false,
+                        ) {
+                            self.release_plugin_admission(&handle_id);
+                            self.cancel_plugin_call(&key, &request_id);
+                            return Err(persistence_error);
+                        }
+                        self.release_plugin_admission(&handle_id);
+                        step =
+                            self.resume_plugin_error(&key, &request_id, "stale_after_dispatch")?;
+                        continue;
+                    }
+                    if let Err(persistence_error) = record_call_event(
+                        store,
+                        context,
+                        &plugin_identity_id,
+                        &package_digest,
+                        Some(&grant_id),
+                        "call_completed",
+                        "completed",
+                        None,
+                        serde_json::json!({
+                            "durationMs": started.elapsed().as_millis().min(u64::MAX as u128) as u64,
+                            "operation": "project.fs.read",
+                            "sizeBytes": file_result.size_bytes
+                        }),
+                        true,
+                    ) {
+                        self.release_plugin_admission(&handle_id);
+                        self.cancel_plugin_call(&key, &request_id);
+                        return Err(persistence_error);
+                    }
+                    let result_value = serde_json::to_value(&file_result)?;
+                    let resume_result = (|| -> Result<GuestStep> {
+                        let mut state = self
+                            .state
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        let final_admission = state.grants.revalidate_admitted(&revalidation);
+                        if final_admission != Revalidation::Allowed {
+                            state.grants.complete_uncertain(&handle_id);
+                            if let Some(active) = state.active.get_mut(&key) {
+                                let _ = active.host.cancel_broker_call(&request_id);
+                            }
+                            bail!("plugin grant became stale after durable completion");
+                        }
+                        state.grants.complete_success(&handle_id);
+                        let active = state
+                            .active
+                            .get_mut(&key)
+                            .context("workspace plugin was disabled before result delivery")?;
+                        active
+                            .host
+                            .resume_broker_call(
+                                &request_id,
+                                &serde_json::json!({"ok": true, "value": result_value}),
+                                file_result.size_bytes as usize,
+                            )
+                            .map_err(|error| {
+                                anyhow!("workspace plugin broker resume failed: {error:?}")
+                            })
+                    })();
+                    step = match resume_result {
+                        Ok(step) => step,
+                        Err(error) => {
+                            let mut state = self
+                                .state
+                                .lock()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner);
+                            if let Some(active) = state.active.remove(&key) {
+                                state.grants.invalidate_host(&active.host_instance_id);
+                            }
+                            drop(state);
+                            record_call_event(
+                                store,
+                                context,
+                                &plugin_identity_id,
+                                &package_digest,
+                                None,
+                                "call_failed",
+                                "failed",
+                                Some("guest_resume_failed"),
+                                serde_json::json!({"operation": "project.fs.read"}),
+                                false,
+                            )?;
+                            return Err(error);
+                        }
+                    };
+                }
+            }
+        }
+    }
+
+    fn resume_plugin_error(
+        &self,
+        key: &str,
+        request_id: &HostRequestId,
+        code: &str,
+    ) -> Result<GuestStep> {
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let (result, failed_host) = {
+            let active = state
+                .active
+                .get_mut(key)
+                .context("workspace plugin was disabled before error delivery")?;
+            let host_id = active.host_instance_id.clone();
+            let result = active.host.resume_broker_call(
+                request_id,
+                &serde_json::json!({"ok": false, "error": {"code": code}}),
+                0,
+            );
+            (result, host_id)
+        };
+        match result {
+            Ok(step) => Ok(step),
+            Err(error) => {
+                state.active.remove(key);
+                state.grants.invalidate_host(&failed_host);
+                Err(anyhow!("workspace plugin error resume failed: {error:?}"))
+            }
+        }
+    }
+
+    fn release_plugin_admission(&self, handle_id: &str) {
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.grants.complete_failure_before_dispatch(handle_id);
+    }
+
+    fn cancel_plugin_call(&self, key: &str, request_id: &HostRequestId) {
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(active) = state.active.get_mut(key) {
+            let _ = active.host.cancel_broker_call(request_id);
+        }
+    }
+
     pub(crate) fn invalidate_project(&self, project_root: &str) -> usize {
         let project_root = normalize_project_root(project_root);
         let mut state = self
@@ -502,6 +909,72 @@ impl PendingPluginPermissionRegistry {
         state.active.retain(|key, _| !key.starts_with(&prefix));
         state.pending.retain(|key, _| !key.starts_with(&prefix));
         invalidated
+    }
+}
+
+fn record_call_event(
+    store: &mut Store,
+    context: &PluginRuntimeContext,
+    plugin_id: &str,
+    package_digest: &str,
+    grant_id: Option<&str>,
+    event_type: &str,
+    status: &str,
+    reason_code: Option<&str>,
+    details: serde_json::Value,
+    consume_allow_once: bool,
+) -> Result<()> {
+    PluginPermissionMutationService::new(store)
+        .record_call_event(
+            &context.project_root,
+            &PluginPermissionCallEventDraft {
+                project_root: context.project_root.clone(),
+                plugin_id: plugin_id.to_string(),
+                package_digest: package_digest.to_string(),
+                grant_id: grant_id.map(str::to_string),
+                event_type: event_type.to_string(),
+                status: status.to_string(),
+                reason_code: reason_code.map(str::to_string),
+                details_json: details.to_string(),
+            },
+            consume_allow_once,
+        )
+        .map_err(Into::into)
+}
+
+fn grant_error_code(error: GrantErrorKind) -> &'static str {
+    match error {
+        GrantErrorKind::UnknownHandle => "unknown_handle",
+        GrantErrorKind::Revoked => "grant_revoked",
+        GrantErrorKind::Expired => "grant_expired",
+        GrantErrorKind::Consumed => "grant_consumed",
+        GrantErrorKind::InFlight => "grant_in_flight",
+        GrantErrorKind::NotAdmitted => "grant_not_admitted",
+        GrantErrorKind::WrongPlugin => "wrong_plugin",
+        GrantErrorKind::WrongHostSession => "wrong_host_session",
+        GrantErrorKind::WrongProject => "wrong_project",
+        GrantErrorKind::WrongScope => "wrong_scope",
+        GrantErrorKind::WrongGeneration => "wrong_generation",
+        GrantErrorKind::WrongPackageDigest => "wrong_package_digest",
+        GrantErrorKind::WrongPermission => "wrong_permission",
+        GrantErrorKind::WrongWorkspace => "wrong_workspace",
+        GrantErrorKind::ConstraintViolation => "constraint_violation",
+    }
+}
+
+fn project_file_error_code(error: ProjectFsReadErrorCode) -> &'static str {
+    match error {
+        ProjectFsReadErrorCode::InvalidProject => "invalid_project",
+        ProjectFsReadErrorCode::InvalidPath => "invalid_path",
+        ProjectFsReadErrorCode::ReservedPath => "reserved_path",
+        ProjectFsReadErrorCode::StaleProject => "stale_project",
+        ProjectFsReadErrorCode::SymlinkOrReparse => "symlink_or_reparse",
+        ProjectFsReadErrorCode::NestedRepository => "nested_repository",
+        ProjectFsReadErrorCode::NotRegularFile => "not_regular_file",
+        ProjectFsReadErrorCode::OutsideProject => "outside_project",
+        ProjectFsReadErrorCode::TooLarge => "too_large",
+        ProjectFsReadErrorCode::FileChanged => "file_changed",
+        ProjectFsReadErrorCode::IoFailed => "io_failed",
     }
 }
 
@@ -625,7 +1098,7 @@ fn try_activate_pending(
     state: &mut RegistryState,
     context: &PluginRuntimeContext,
     plugin_id: &str,
-    store: &Store,
+    store: &mut Store,
 ) -> Result<(String, usize)> {
     let key = registry_key(&context.project_root, plugin_id);
     let pending = state
@@ -674,6 +1147,7 @@ fn try_activate_pending(
                 && grant.plugin_version == pending.plugin_version
                 && grant.package_digest == pending.package_digest
         }),
+        store,
     )?;
     state.pending.remove(&key);
     Ok((result.status, result.active_grant_count))
@@ -684,6 +1158,7 @@ fn activate_plugin<'a>(
     context: &PluginRuntimeContext,
     plugin: &DiscoveredPlugin,
     durable_grants: impl IntoIterator<Item = &'a PluginPermissionGrant>,
+    store: &mut Store,
 ) -> Result<WorkspacePluginEnableResult> {
     let module_bytes = read_exact_entry(Path::new(&context.project_root), plugin)?;
     let generation = ActivationGeneration::new(state.next_generation)
@@ -696,8 +1171,12 @@ fn activate_plugin<'a>(
         generation,
         host_instance_id.clone(),
     );
-    let mut host = WasmPluginHost::from_bytes(identity, &module_bytes)
-        .map_err(|error| anyhow!("workspace plugin host rejected the module: {error:?}"))?;
+    let mut host = WasmPluginHost::from_bytes_with_call_id_source(
+        identity,
+        &module_bytes,
+        Arc::clone(&state.broker_call_id_source),
+    )
+    .map_err(|error| anyhow!("workspace plugin host rejected the module: {error:?}"))?;
     if !plugin.manifest.permissions.is_empty() {
         ensure!(
             host.guest_abi_version() == rho_extension_runtime::GUEST_ABI_V2,
@@ -787,6 +1266,23 @@ fn activate_plugin<'a>(
                 return Err(error.into());
             }
         };
+        if let Err(error) = PluginPermissionMutationService::new(store).record_call_event(
+            &context.project_root,
+            &PluginPermissionCallEventDraft {
+                project_root: context.project_root.clone(),
+                plugin_id: plugin.manifest.id.to_string(),
+                package_digest: plugin.digest.to_string(),
+                grant_id: Some(grant.grant_id.clone()),
+                event_type: "handle_minted".to_string(),
+                status: "completed".to_string(),
+                reason_code: None,
+                details_json: serde_json::json!({"operation": permission.name}).to_string(),
+            },
+            false,
+        ) {
+            state.grants.invalidate_host(&host_instance_id);
+            return Err(error.into());
+        }
         handles.insert(grant.grant_id.clone(), handle);
     }
 
@@ -803,7 +1299,7 @@ fn activate_plugin<'a>(
             plugin_version: plugin.manifest.version.to_string(),
             package_digest: plugin.digest.to_string(),
             host_instance_id,
-            _host: host,
+            host,
             handles,
         },
     );
@@ -879,8 +1375,106 @@ fn grant_view(grant: PluginPermissionGrant, grants: &GrantStore) -> Result<Plugi
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rho_extension_runtime::P2_1_SMOKE_WASM;
+    use rho_extension_runtime::{GrantTokenSource, P2_1_SMOKE_WASM, SystemGrantClock};
     use tempfile::tempdir;
+
+    #[derive(Debug)]
+    struct FixedToken;
+
+    impl GrantTokenSource for FixedToken {
+        fn next_token(&self) -> [u8; 32] {
+            [7; 32]
+        }
+    }
+
+    #[derive(Debug)]
+    struct FixedCallId;
+
+    impl BrokerCallIdSource for FixedCallId {
+        fn next_call_id(&self) -> u64 {
+            42
+        }
+    }
+
+    fn deterministic_registry() -> PendingPluginPermissionRegistry {
+        PendingPluginPermissionRegistry {
+            state: Mutex::new(RegistryState {
+                next_generation: 1,
+                pending: BTreeMap::new(),
+                active: BTreeMap::new(),
+                grants: GrantStore::with_sources(Arc::new(SystemGrantClock), Arc::new(FixedToken)),
+                broker_call_id_source: Arc::new(FixedCallId),
+            }),
+        }
+    }
+
+    fn wat_data(value: &str) -> String {
+        value
+            .as_bytes()
+            .iter()
+            .map(|byte| format!("\\{byte:02x}"))
+            .collect()
+    }
+
+    fn install_file_broker_module(project: &Path) {
+        install_file_broker_module_with_resume(project, false);
+    }
+
+    fn install_file_broker_module_with_resume(project: &Path, resume_traps: bool) {
+        let call_id = "call.000000000000002a";
+        let begin = serde_json::json!({
+            "type": "broker_request",
+            "call_id": call_id,
+            "handle_id": format!("handle.{}", "07".repeat(32)),
+            "permission": "project.fs.read",
+            "operation": "project.fs.read",
+            "args": {
+                "project_relative_path": "data/input.csv",
+                "max_bytes": 5,
+                "expected_project_revision": 3
+            }
+        })
+        .to_string();
+        let complete = serde_json::json!({
+            "type": "complete",
+            "call_id": call_id,
+            "result": {"received": true}
+        })
+        .to_string();
+        let begin_pointer = 1024_u64;
+        let complete_pointer = 4096_u64;
+        let begin_packed = (begin_pointer << 32) | begin.len() as u64;
+        let complete_packed = (complete_pointer << 32) | complete.len() as u64;
+        let resume_export = if resume_traps {
+            r#"(func (export "rho_resume") (param i32 i32) (result i64) unreachable)"#.to_string()
+        } else {
+            format!(
+                r#"(func (export "rho_resume") (param i32 i32) (result i64) i64.const {complete_packed})"#
+            )
+        };
+        let module = wat::parse_str(format!(
+            r#"(module
+                (memory (export "memory") 1 32)
+                (data (i32.const {begin_pointer}) "{}")
+                (data (i32.const {complete_pointer}) "{}")
+                (func (export "rho_activate") (param i32) (result i32) i32.const 0)
+                (func (export "rho_echo") (param i32 i32) (result i64) i64.const 0)
+                (func (export "rho_heartbeat") (result i32) i32.const 0)
+                (func (export "rho_quiesce") (result i32) i32.const 0)
+                (func (export "rho_dispose") (result i32) i32.const 0)
+                (func (export "rho_begin") (param i32 i32) (result i64) i64.const {begin_packed})
+                {resume_export}
+                (func (export "rho_cancel") (param i32 i32) (result i32) i32.const 0))"#,
+            wat_data(&begin),
+            wat_data(&complete),
+        ))
+        .unwrap();
+        fs::write(
+            project.join(".rho/plugins/example/dist/plugin.wasm"),
+            module,
+        )
+        .unwrap();
+    }
 
     fn write_plugin(project: &Path, permissions: serde_json::Value) {
         let directory = project.join(".rho/plugins/example/dist");
@@ -929,7 +1523,8 @@ mod tests {
     }
 
     fn context(project: &Path) -> PluginRuntimeContext {
-        let root = normalize_project_root(project.to_string_lossy().as_ref());
+        let canonical = project.canonicalize().unwrap();
+        let root = normalize_project_root(canonical.to_string_lossy().as_ref());
         PluginRuntimeContext {
             project_root: root,
             project_revision: 3,
@@ -947,7 +1542,8 @@ mod tests {
     fn zero_permission_plugin_enables_without_live_authority() {
         let directory = tempdir().unwrap();
         write_plugin(directory.path(), serde_json::json!([]));
-        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let database = directory.path().join("rho.sqlite");
+        let mut store = Store::open(&database).unwrap();
         let registry = PendingPluginPermissionRegistry::default();
         let result = registry
             .request_enable(&context(directory.path()), "org.example.plugin", &mut store)
@@ -1189,6 +1785,289 @@ mod tests {
                 .active
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn file_broker_call_yields_outside_wasm_consumes_once_and_persists_bounded_audit() {
+        let directory = tempdir().unwrap();
+        write_plugin(
+            directory.path(),
+            serde_json::json!([{
+                "name": "project.fs.read",
+                "paths": ["data/**/*.csv"],
+                "maxBytes": 1024
+            }]),
+        );
+        install_file_broker_module(directory.path());
+        fs::create_dir_all(directory.path().join("data")).unwrap();
+        fs::write(directory.path().join("data/input.csv"), b"abcde").unwrap();
+        let database = directory.path().join("rho.sqlite");
+        let mut store = Store::open(&database).unwrap();
+        let registry = deterministic_registry();
+        let context = context(directory.path());
+        let requested = registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        let decision = registry
+            .respond(
+                &context,
+                PluginPermissionDecisionInput {
+                    request_id: requested.request_ids[0].clone(),
+                    decision: "allow_once".to_string(),
+                    expected_project_revision: 3,
+                },
+                &mut store,
+            )
+            .unwrap();
+        assert_eq!(decision.plugin_status, "enabled");
+        let result = registry
+            .invoke_plugin(
+                &context,
+                "org.example.plugin",
+                serde_json::json!({"contribution": "test"}),
+                &mut store,
+            )
+            .unwrap();
+        assert_eq!(result.status, "completed");
+        assert_eq!(result.result, Some(serde_json::json!({"received": true})));
+        assert_eq!(result.broker_steps, 1);
+        assert_eq!(
+            PluginPermissionQueryService::new(&store)
+                .list_grants(&context.project_root, None, Some("consumed"))
+                .unwrap()
+                .len(),
+            1
+        );
+        let events = PluginPermissionQueryService::new(&store)
+            .list_events(&context.project_root, Some(100))
+            .unwrap();
+        for event_type in [
+            "handle_minted",
+            "call_admitted",
+            "call_completed",
+            "grant_consumed",
+        ] {
+            assert!(events.iter().any(|event| event.event_type == event_type));
+        }
+        assert!(!serde_json::to_string(&events).unwrap().contains("handle."));
+    }
+
+    #[test]
+    fn revoke_during_file_read_withholds_bytes_and_records_stale_completion() {
+        let directory = tempdir().unwrap();
+        write_plugin(
+            directory.path(),
+            serde_json::json!([{
+                "name": "project.fs.read",
+                "paths": ["data/**/*.csv"],
+                "maxBytes": 1024
+            }]),
+        );
+        install_file_broker_module(directory.path());
+        fs::create_dir_all(directory.path().join("data")).unwrap();
+        fs::write(directory.path().join("data/input.csv"), b"abcde").unwrap();
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let registry = deterministic_registry();
+        let context = context(directory.path());
+        let requested = registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        registry
+            .respond(
+                &context,
+                PluginPermissionDecisionInput {
+                    request_id: requested.request_ids[0].clone(),
+                    decision: "allow_project".to_string(),
+                    expected_project_revision: 3,
+                },
+                &mut store,
+            )
+            .unwrap();
+        let result = registry
+            .invoke_plugin_with_hook(
+                &context,
+                "org.example.plugin",
+                serde_json::json!({}),
+                &mut store,
+                &mut |registry, store, grant_id| {
+                    let revoked = registry.revoke(&context, grant_id, store)?;
+                    ensure!(
+                        revoked.outcome == PluginPermissionMutationOutcome::Applied,
+                        "test revoke must apply"
+                    );
+                    Ok(())
+                },
+            )
+            .unwrap();
+        assert_eq!(result.status, "completed");
+        let events = PluginPermissionQueryService::new(&store)
+            .list_events(&context.project_root, Some(100))
+            .unwrap();
+        assert!(events.iter().any(|event| {
+            event.event_type == "call_denied"
+                && event.reason_code.as_deref() == Some("stale_after_dispatch")
+        }));
+        assert!(
+            !events
+                .iter()
+                .any(|event| event.event_type == "call_completed")
+        );
+        assert_eq!(
+            PluginPermissionQueryService::new(&store)
+                .list_grants(&context.project_root, None, Some("revoked"))
+                .unwrap()
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn completion_persistence_failure_releases_once_reservation_and_retry_recovers() {
+        let directory = tempdir().unwrap();
+        write_plugin(
+            directory.path(),
+            serde_json::json!([{
+                "name": "project.fs.read",
+                "paths": ["data/**/*.csv"],
+                "maxBytes": 1024
+            }]),
+        );
+        install_file_broker_module(directory.path());
+        fs::create_dir_all(directory.path().join("data")).unwrap();
+        fs::write(directory.path().join("data/input.csv"), b"abcde").unwrap();
+        let database = directory.path().join("rho.sqlite");
+        let mut store = Store::open(&database).unwrap();
+        let registry = deterministic_registry();
+        let context = context(directory.path());
+        let requested = registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        registry
+            .respond(
+                &context,
+                PluginPermissionDecisionInput {
+                    request_id: requested.request_ids[0].clone(),
+                    decision: "allow_once".to_string(),
+                    expected_project_revision: 3,
+                },
+                &mut store,
+            )
+            .unwrap();
+        let injection = rusqlite::Connection::open(&database).unwrap();
+        injection
+            .execute_batch(
+                "CREATE TRIGGER fail_desktop_plugin_completion
+                 BEFORE INSERT ON plugin_permission_events
+                 WHEN NEW.event_type = 'call_completed'
+                 BEGIN SELECT RAISE(FAIL, 'injected desktop completion failure'); END;",
+            )
+            .unwrap();
+        assert!(
+            registry
+                .invoke_plugin(
+                    &context,
+                    "org.example.plugin",
+                    serde_json::json!({}),
+                    &mut store,
+                )
+                .is_err()
+        );
+        assert_eq!(
+            PluginPermissionQueryService::new(&store)
+                .list_grants(&context.project_root, None, Some("active"))
+                .unwrap()
+                .len(),
+            1
+        );
+        injection
+            .execute_batch("DROP TRIGGER fail_desktop_plugin_completion;")
+            .unwrap();
+        let retry = registry
+            .invoke_plugin(
+                &context,
+                "org.example.plugin",
+                serde_json::json!({}),
+                &mut store,
+            )
+            .unwrap();
+        assert_eq!(retry.status, "completed");
+        assert_eq!(
+            PluginPermissionQueryService::new(&store)
+                .list_grants(&context.project_root, None, Some("consumed"))
+                .unwrap()
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn guest_resume_trap_records_failed_delivery_and_quarantines_session() {
+        let directory = tempdir().unwrap();
+        write_plugin(
+            directory.path(),
+            serde_json::json!([{
+                "name": "project.fs.read",
+                "paths": ["data/**/*.csv"],
+                "maxBytes": 1024
+            }]),
+        );
+        install_file_broker_module_with_resume(directory.path(), true);
+        fs::create_dir_all(directory.path().join("data")).unwrap();
+        fs::write(directory.path().join("data/input.csv"), b"abcde").unwrap();
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let registry = deterministic_registry();
+        let context = context(directory.path());
+        let requested = registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        registry
+            .respond(
+                &context,
+                PluginPermissionDecisionInput {
+                    request_id: requested.request_ids[0].clone(),
+                    decision: "allow_once".to_string(),
+                    expected_project_revision: 3,
+                },
+                &mut store,
+            )
+            .unwrap();
+        assert!(
+            registry
+                .invoke_plugin(
+                    &context,
+                    "org.example.plugin",
+                    serde_json::json!({}),
+                    &mut store,
+                )
+                .is_err()
+        );
+        assert!(
+            registry
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .active
+                .is_empty()
+        );
+        assert_eq!(
+            PluginPermissionQueryService::new(&store)
+                .list_grants(&context.project_root, None, Some("consumed"))
+                .unwrap()
+                .len(),
+            1
+        );
+        let events = PluginPermissionQueryService::new(&store)
+            .list_events(&context.project_root, Some(100))
+            .unwrap();
+        assert!(
+            events
+                .iter()
+                .any(|event| event.event_type == "call_completed")
+        );
+        assert!(events.iter().any(|event| {
+            event.event_type == "call_failed"
+                && event.reason_code.as_deref() == Some("guest_resume_failed")
+        }));
     }
 
     #[test]

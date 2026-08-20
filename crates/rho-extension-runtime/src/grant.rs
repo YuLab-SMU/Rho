@@ -225,6 +225,7 @@ pub enum GrantErrorKind {
     Expired,
     Consumed,
     InFlight,
+    NotAdmitted,
     WrongPlugin,
     WrongHostSession,
     WrongProject,
@@ -528,49 +529,8 @@ impl GrantStore {
             return Revalidation::Denied(GrantErrorKind::UnknownHandle);
         };
         let now_millis = self.clock.now_millis();
-
-        if grant.revoked_at_millis.is_some() {
-            return Revalidation::Denied(GrantErrorKind::Revoked);
-        }
-        if now_millis >= grant.expires_at_millis {
-            return Revalidation::Denied(GrantErrorKind::Expired);
-        }
-        if grant.used {
-            return Revalidation::Denied(GrantErrorKind::Consumed);
-        }
-        if grant.in_flight {
-            return Revalidation::Denied(GrantErrorKind::InFlight);
-        }
-        if grant.plugin_id != request.plugin_id {
-            return Revalidation::Denied(GrantErrorKind::WrongPlugin);
-        }
-        if grant.host_instance_id != request.host_instance_id {
-            return Revalidation::Denied(GrantErrorKind::WrongHostSession);
-        }
-        if grant.project_id != request.project_id {
-            return Revalidation::Denied(GrantErrorKind::WrongProject);
-        }
-        if grant.scope_id != request.scope_id {
-            return Revalidation::Denied(GrantErrorKind::WrongScope);
-        }
-        if grant.activation_generation != request.generation {
-            return Revalidation::Denied(GrantErrorKind::WrongGeneration);
-        }
-        if grant.package_digest != request.package_digest {
-            return Revalidation::Denied(GrantErrorKind::WrongPackageDigest);
-        }
-        if grant.permission != request.permission {
-            return Revalidation::Denied(GrantErrorKind::WrongPermission);
-        }
-        if grant.workspace != request.workspace {
-            return Revalidation::Denied(GrantErrorKind::WrongWorkspace);
-        }
-        if !permission_use_allowed(
-            grant.permission,
-            &grant.constraints,
-            &request.permission_use,
-        ) {
-            return Revalidation::Denied(GrantErrorKind::ConstraintViolation);
+        if let Some(error) = revalidation_error(grant, &request, now_millis, false) {
+            return Revalidation::Denied(error);
         }
 
         // Reserve `allow once` on admission. The operation owner must report
@@ -579,6 +539,26 @@ impl GrantStore {
             grant.in_flight = true;
         }
         Revalidation::Allowed
+    }
+
+    /// Recheck the exact call after broker work and before any result becomes
+    /// visible. An allow-once grant must still hold its original reservation.
+    pub fn revalidate_admitted(&self, request: &RevalidationRequest) -> Revalidation {
+        let handle_digest = sha256_hex(request.handle_id.as_bytes());
+        let Some(grant) = self.grants.get(&handle_digest) else {
+            return Revalidation::Denied(GrantErrorKind::UnknownHandle);
+        };
+        match revalidation_error(grant, request, self.clock.now_millis(), true) {
+            Some(error) => Revalidation::Denied(error),
+            None => Revalidation::Allowed,
+        }
+    }
+
+    pub fn durable_grant_id_for_handle(&self, handle_id: &str) -> Option<&str> {
+        let handle_digest = sha256_hex(handle_id.as_bytes());
+        self.grants
+            .get(&handle_digest)
+            .map(|grant| grant.durable_grant_id.as_str())
     }
 
     pub fn complete_success(&mut self, handle_id: &str) -> bool {
@@ -615,6 +595,61 @@ enum CompletionClass {
     Success,
     FailureBeforeDispatch,
     Uncertain,
+}
+
+fn revalidation_error(
+    grant: &PluginGrant,
+    request: &RevalidationRequest,
+    now_millis: u64,
+    admitted: bool,
+) -> Option<GrantErrorKind> {
+    if grant.revoked_at_millis.is_some() {
+        return Some(GrantErrorKind::Revoked);
+    }
+    if now_millis >= grant.expires_at_millis {
+        return Some(GrantErrorKind::Expired);
+    }
+    if grant.used {
+        return Some(GrantErrorKind::Consumed);
+    }
+    if admitted && grant.grant_source == GrantSource::AllowOnce && !grant.in_flight {
+        return Some(GrantErrorKind::NotAdmitted);
+    }
+    if !admitted && grant.in_flight {
+        return Some(GrantErrorKind::InFlight);
+    }
+    if grant.plugin_id != request.plugin_id {
+        return Some(GrantErrorKind::WrongPlugin);
+    }
+    if grant.host_instance_id != request.host_instance_id {
+        return Some(GrantErrorKind::WrongHostSession);
+    }
+    if grant.project_id != request.project_id {
+        return Some(GrantErrorKind::WrongProject);
+    }
+    if grant.scope_id != request.scope_id {
+        return Some(GrantErrorKind::WrongScope);
+    }
+    if grant.activation_generation != request.generation {
+        return Some(GrantErrorKind::WrongGeneration);
+    }
+    if grant.package_digest != request.package_digest {
+        return Some(GrantErrorKind::WrongPackageDigest);
+    }
+    if grant.permission != request.permission {
+        return Some(GrantErrorKind::WrongPermission);
+    }
+    if grant.workspace != request.workspace {
+        return Some(GrantErrorKind::WrongWorkspace);
+    }
+    if !permission_use_allowed(
+        grant.permission,
+        &grant.constraints,
+        &request.permission_use,
+    ) {
+        return Some(GrantErrorKind::ConstraintViolation);
+    }
+    None
 }
 
 fn validate_grant_request(request: &GrantRequest) -> Result<(), ExtensionError> {
@@ -1176,6 +1211,7 @@ mod tests {
 
         let first = store.revalidate(request.clone());
         assert_eq!(first, Revalidation::Allowed);
+        assert_eq!(store.revalidate_admitted(&request), Revalidation::Allowed);
         assert_eq!(
             store.revalidate(request.clone()),
             Revalidation::Denied(GrantErrorKind::InFlight)
@@ -1373,5 +1409,33 @@ mod tests {
                 .is_err()
         );
         assert_eq!(store.active_handle_count(), 1);
+    }
+
+    #[test]
+    fn admitted_call_observes_revoke_and_glob_grammar_distinguishes_star_from_double_star() {
+        let (mut store, _) = test_store(1_000);
+        let handle = store
+            .grant(grant_request(
+                "grant.once",
+                PermissionKind::ProjectFsRead,
+                file_constraints(),
+                GrantSource::AllowOnce,
+                2_000,
+            ))
+            .unwrap();
+        let request = revalidation(&handle);
+        assert_eq!(store.revalidate(request.clone()), Revalidation::Allowed);
+        assert!(store.revoke_durable_grant("grant.once"));
+        assert_eq!(
+            store.revalidate_admitted(&request),
+            Revalidation::Denied(GrantErrorKind::Revoked)
+        );
+
+        assert!(glob_matches("data/*.csv", "data/input.csv"));
+        assert!(!glob_matches("data/*.csv", "data/nested/input.csv"));
+        assert!(glob_matches("data/**/*.csv", "data/nested/input.csv"));
+        assert!(glob_matches("data/**/*.csv", "data/input.csv"));
+        assert!(glob_matches("data/input?.csv", "data/input1.csv"));
+        assert!(!glob_matches("data/input?.csv", "data/input/1.csv"));
     }
 }

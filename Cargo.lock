@@ -4082,6 +4082,7 @@ dependencies = [
  "rho-protocol",
  "rho-server",
  "rho-store",
+ "rusqlite",
  "semver",
  "serde",
  "serde_json",
@@ -4158,6 +4159,7 @@ name = "rho-server"
 version = "0.4.1-dev.3"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "clap",
  "rho-agent-transport",
  "rho-core",
@@ -4168,6 +4170,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "tempfile",
+ "thiserror 2.0.18",
  "tokio",
  "uuid",
 ]

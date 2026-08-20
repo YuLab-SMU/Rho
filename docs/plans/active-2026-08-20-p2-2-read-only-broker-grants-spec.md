@@ -1,16 +1,17 @@
 # P2-2 Read-only Broker Grants And Trusted Permission UI
 
 Status: active; complete Phase 2 direction and local-first exception authorized
-2026-08-20; P2-2A schema/persistence and P2-2B trusted permission UI/fresh
-handle checkpoints complete locally; P2-2C `project.fs.read` activated; P2-1
+2026-08-20; P2-2A schema/persistence, P2-2B trusted permission UI/fresh
+handles, and P2-2C `project.fs.read` checkpoints complete locally; P2-2D
+`workspace.r.inspect` activated; P2-1
 Windows/Linux hosted acceptance remains open and mandatory before final Phase 2
 acceptance
 
-Active work package: P2-2C only. P2-2D through P2-2F remain inactive until the
-`project.fs.read` containment/isolation/recovery stop gate passes. P2-2C may
-add only the bounded read operation; network, Workspace R inspection, writes,
-directory listing, watch, mmap, and arbitrary file-handle authority remain
-absent.
+Active work package: P2-2D only. P2-2E through P2-2F remain inactive until the
+Workspace identity/revision/crash stop gate passes. P2-2D may call only fixed
+metadata/preview inspection requests through the existing Workspace broker;
+network, arbitrary R evaluation, mutation, writes, and raw R-object authority
+remain absent.
 
 Change class: D3 security, schema, approval, network, filesystem, Workspace R,
 and cross-module behavior. Risk: R3.
@@ -473,6 +474,62 @@ Application metadata and browser fixtures advance together to
 package versions remain unchanged. Packaged-app, hosted six-leg, independent
 privileged-operation review, and release acceptance remain open. This closes
 only the local P2-2B stop gate and activates P2-2C.
+
+### P2-2C checkpoint evidence
+
+P2-2C implements a no-import Guest ABI V2 state machine with host-generated
+call IDs, exact begin/resume/cancel sequencing, one active call per plugin,
+eight-step, 64-KiB step, one-MiB raw broker-result, and bounded JSON/base64
+framing limits. Each guest transition runs under the existing fuel/memory/
+epoch limits and returns completely before Rust performs broker work. Raw
+handles are redacted from debug output and exist only in the live reference
+monitor, exact host memory, and current call envelope.
+
+The broker-owned `rho-server::plugin_fs` lane accepts an explicit trusted
+project root and fixed `ProjectFsReadRequest`. It rejects non-normalized,
+absolute, drive/UNC, alternate-separator, empty, dot/parent, control, reserved,
+symlink/reparse, nested-repository, non-regular, and canonical-escape paths.
+It verifies every component, root/file identities and canonical paths before
+and after a streaming `max + 1` read; no prefix is returned on overflow or
+change. The effective maximum is bounded by call, live/durable constraints,
+and the one-MiB hard limit. Only base64 bytes, media/encoding metadata, size,
+and digest return—never a file handle, listing, watch, mmap, write, parse, or
+execution surface.
+
+Every call revalidates the exact handle before admission and again after I/O.
+`call_admitted`, bounded completion/failure/denial, handle-minted, and
+allow-once consumption facts commit through the dedicated Store service. A
+result is resumed into the guest only after durable completion and a final
+in-memory recheck. Revoke/project replacement during read withholds bytes;
+completion persistence failure releases the one-shot reservation, cancels the
+guest call, and permits a deterministic retry; a guest resume trap records
+failed delivery, consumes fail-closed where completion was already durable,
+quarantines the host, and exposes no success.
+
+Local verification on 2026-08-20:
+
+- stable and exact Rust `1.88.0`: extension runtime 173 tests, `rho-server` 71,
+  `rho-store` 176, and desktop 216 passed with one existing opt-in Keychain
+  smoke ignored on each toolchain;
+- extension-runtime strict clippy passed on stable and Rust `1.88.0`; server
+  clippy completed on both with no `plugin_fs` warning; rustfmt and locked
+  builds passed;
+- focused tests cover Unicode/spaces, exact and just-over byte limits,
+  deterministic `*`/`?`/`**`, reserved secrets, symlink/reparse defense,
+  nested repositories, root/file replacement, stale revision, identical A/B
+  paths, wrong call/order, duplicate step, result/step budgets, exact cancel,
+  revoke during read, allow-once consume, bounded audit with no handle, audit
+  failure rollback/retry, and guest-resume quarantine;
+- the new P2-2 broker contract and its negative self-tests pass and now run in
+  Draft Fast and all stable/MSRV compatibility legs; the MSRV workflow contract
+  verifies those commands and path filters.
+
+P2-2C adds no Tauri command, contribution route, public protocol, new version,
+or R package change. The implementation is real but not yet user-invokable
+without the separately gated P2-3 contribution surface. Hosted Windows/Linux,
+installed-app, independent cross-platform filesystem review, and release
+acceptance remain open. This closes only the local P2-2C stop gate and
+activates P2-2D.
 
 ## Verification Matrix
 

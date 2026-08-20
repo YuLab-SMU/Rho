@@ -6,9 +6,9 @@
 //! privileged filesystem, network, Workspace R, Wasm, UI, or handle action.
 
 use crate::{
-    PluginPermissionDecisionDraft, PluginPermissionEvent, PluginPermissionGrant,
-    PluginPermissionMutationOutcome, PluginPermissionRequest, PluginPermissionRequestDraft, Store,
-    StoreError, query::required_project_root,
+    PluginPermissionCallEventDraft, PluginPermissionDecisionDraft, PluginPermissionEvent,
+    PluginPermissionGrant, PluginPermissionMutationOutcome, PluginPermissionRequest,
+    PluginPermissionRequestDraft, Store, StoreError, query::required_project_root,
 };
 
 pub struct PluginPermissionQueryService<'a> {
@@ -188,5 +188,25 @@ impl<'a> PluginPermissionMutationService<'a> {
     pub fn expire_grants(&mut self, project_root: &str) -> Result<usize, StoreError> {
         let project_root = required_project_root(project_root)?;
         self.store.expire_plugin_permission_grants(&project_root)
+    }
+
+    pub fn record_call_event(
+        &mut self,
+        project_root: &str,
+        draft: &PluginPermissionCallEventDraft,
+        consume_allow_once: bool,
+    ) -> Result<(), StoreError> {
+        let project_root = required_project_root(project_root)?;
+        let draft_root = required_project_root(&draft.project_root)?;
+        if project_root != draft_root {
+            return Err(StoreError::Validation(
+                "plugin permission call event project does not match the service project"
+                    .to_string(),
+            ));
+        }
+        let mut draft = draft.clone();
+        draft.project_root = project_root;
+        self.store
+            .record_plugin_permission_call_event(&draft, consume_allow_once)
     }
 }

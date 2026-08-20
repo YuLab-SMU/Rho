@@ -52,9 +52,9 @@ pub use evidence::{
 };
 pub use mutation::ProjectMutationService;
 pub use plugin_permission::{
-    PluginPermissionDecision, PluginPermissionDecisionDraft, PluginPermissionEvent,
-    PluginPermissionGrant, PluginPermissionMutationOutcome, PluginPermissionRequest,
-    PluginPermissionRequestDraft,
+    PluginPermissionCallEventDraft, PluginPermissionDecision, PluginPermissionDecisionDraft,
+    PluginPermissionEvent, PluginPermissionGrant, PluginPermissionMutationOutcome,
+    PluginPermissionRequest, PluginPermissionRequestDraft,
 };
 pub use plugin_permission_service::{
     PluginPermissionMutationService, PluginPermissionQueryService,

@@ -4,9 +4,10 @@ Status: active; P2-0 and pure-contract remediation complete; owner explicitly
 authorized rapid implementation of the complete Phase 2 end state on
 2026-08-20; P2-1 Wasm host source/local macOS evidence is complete while
 Windows/Linux hosted acceptance remains open; local-first exception active;
-P2-2A schema/persistence and P2-2B trusted permission UI/fresh-handle
-checkpoints are locally complete; `0.4.1-dev.3` allocated; P2-2C
-`project.fs.read` is active and P2-2D through P2-4 remain sequentially gated
+P2-2A schema/persistence, P2-2B trusted permission UI/fresh handles, and P2-2C
+`project.fs.read` checkpoints are locally complete; `0.4.1-dev.3` allocated;
+P2-2D `workspace.r.inspect` is active and P2-2E through P2-4 remain
+sequentially gated
 
 Date: 2026-08-14
 Issue: [#17](https://github.com/YuLab-SMU/Rho/issues/17)
