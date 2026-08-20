@@ -176,3 +176,26 @@ pub(crate) async fn open_plugin_viewer(
         )
         .map_err(display_error)
 }
+
+#[tauri::command]
+pub(crate) async fn get_plugin_panel_document(
+    contribution_id: String,
+    input: Option<Value>,
+    expected_project_revision: i64,
+    state: State<'_, AppState>,
+) -> Result<PluginViewerDocumentView, String> {
+    let context = runtime_context(&state).await.map_err(display_error)?;
+    if expected_project_revision != context.project_revision {
+        return Err("Plugin Panel is stale after the project changed.".to_string());
+    }
+    let mut store = read_store(&state).map_err(display_error)?;
+    state
+        .plugin_permissions
+        .get_panel_contribution(
+            &context,
+            &contribution_id,
+            input.unwrap_or_else(|| serde_json::json!({})),
+            &mut store,
+        )
+        .map_err(display_error)
+}

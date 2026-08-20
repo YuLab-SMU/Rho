@@ -47,6 +47,8 @@ const state = {
     returnFocus: null,
     commandPaletteOpen: false,
     commandPaletteQuery: "",
+    panelDocument: null,
+    panelOrigin: "",
   },
   busy: false,
   consoleHistory: [],
@@ -525,6 +527,17 @@ const mockPluginContributions = [
     kind: "viewer",
     label: "CSV metadata viewer",
     purpose: "Render bounded metadata blocks",
+    contract_major: 1,
+    plugin_id: "org.example.research-summary",
+    package_digest: "a".repeat(64),
+    short_digest: "aaaaaaaaaaaa",
+    accepts_empty_input: true,
+  },
+  {
+    contribution_id: "ui.panel.csv_details",
+    kind: "panel",
+    label: "CSV project details",
+    purpose: "Render the named plugin details slot",
     contract_major: 1,
     plugin_id: "org.example.research-summary",
     package_digest: "a".repeat(64),
@@ -2451,6 +2464,28 @@ async function mockInvoke(command, args) {
         plugin_id: contribution.plugin_id,
         package_digest: contribution.package_digest,
         call_id: "call.mock-viewer",
+        permission_event_ids: ["event.mock-admitted", "event.mock-completed"],
+      },
+    };
+  }
+  if (command === "get_plugin_panel_document") {
+    if (Number(args.expectedProjectRevision) !== Number(state.revision.project_revision)) throw new Error("Plugin Panel is stale after the project changed.");
+    const contribution = (await mockInvoke("list_plugin_contributions")).contributions.find((item) => item.contribution_id === args.contributionId && item.kind === "panel");
+    if (!contribution?.available) throw new Error("Plugin Panel is unavailable without its exact live grant.");
+    return {
+      project_root: mockLastProject,
+      project_revision: state.revision.project_revision,
+      contribution_id: contribution.contribution_id,
+      document: {
+        contract: "rho.plugin_viewer_document.v1",
+        title: "CSV plugin details",
+        blocks: [{ kind: "notice", tone: "info", text: "Named Panel content is untrusted project data. <script>text only</script>" }],
+      },
+      provenance: {
+        contribution_id: contribution.contribution_id,
+        plugin_id: contribution.plugin_id,
+        package_digest: contribution.package_digest,
+        call_id: "call.mock-panel",
         permission_event_ids: ["event.mock-admitted", "event.mock-completed"],
       },
     };
@@ -15324,14 +15359,17 @@ async function maybeApplyPreviewScenario() {
     await openWorkspacePluginDialog();
     if (["permission", "malicious-text"].includes(pluginState) && mockWorkspacePlugins[0]) {
       await requestWorkspacePluginEnable(mockWorkspacePlugins[0].plugin_id);
-    } else if (["active", "contributions", "palette", "viewer"].includes(pluginState) && mockWorkspacePlugins[0]) {
+    } else if (["active", "contributions", "palette", "panel", "viewer"].includes(pluginState) && mockWorkspacePlugins[0]) {
       await requestWorkspacePluginEnable(mockWorkspacePlugins[0].plugin_id);
       await respondWorkspacePluginPermission("allow_project");
+      state.plugins.busy = false;
       $("#pluginGrantSection").open = true;
       if (pluginState === "viewer") {
         await invokeTrustedPluginContribution("ui.viewer.csv_summary", "viewer");
       } else if (pluginState === "palette") {
         openPluginCommandPalette();
+      } else if (pluginState === "panel") {
+        await invokeTrustedPluginContribution("ui.panel.csv_details", "panel");
       }
     }
     requestAnimationFrame(() => recordPreviewLayoutEvidence());
@@ -16341,6 +16379,9 @@ function recordPreviewLayoutEvidence() {
       active_modal_count: $$('[role="dialog"][aria-modal="true"]:not(.hidden)').length,
       plugin_viewer_open: state.viewer.open && state.viewer.kind === "plugin",
       plugin_palette_open: state.plugins.commandPaletteOpen,
+      plugin_panel_open: !$("#pluginPanelSlot").classList.contains("hidden"),
+      plugin_panel_script_elements: $$("#pluginPanelContent script, #pluginPanelContent iframe").length,
+      plugin_panel_text_preserved: $("#pluginPanelContent").textContent.includes("<script>text only</script>"),
       plugin_viewer_script_elements: $$("#viewerPreviewContent script, #viewerPreviewContent iframe").length,
       plugin_viewer_text_preserved: $("#viewerPreviewContent").textContent.includes("<script>text only</script>"),
     };
@@ -20955,7 +20996,7 @@ function renderWorkspacePlugins() {
 function renderPluginContributions() {
   const section = $("#pluginContributionSection");
   const list = $("#pluginContributionList");
-  const contributions = (state.plugins.contributions || []).filter((item) => ["command", "viewer"].includes(item.kind));
+  const contributions = (state.plugins.contributions || []).filter((item) => ["command", "viewer", "panel"].includes(item.kind));
   section.classList.toggle("hidden", !contributions.length);
   $("#pluginContributionCount").textContent = String(contributions.length);
   list.replaceChildren();
@@ -20976,7 +21017,7 @@ function renderPluginContributions() {
     description.append(label, purpose, status);
     const action = document.createElement("button");
     action.type = "button";
-    action.textContent = contribution.kind === "command" ? "Run" : "Open";
+    action.textContent = contribution.kind === "command" ? "Run" : contribution.kind === "panel" ? "Load" : "Open";
     action.dataset.pluginContribution = contribution.contribution_id;
     action.dataset.pluginContributionKind = contribution.kind;
     action.disabled = state.plugins.busy || !contribution.available || !contribution.accepts_empty_input;
@@ -21113,6 +21154,7 @@ async function loadWorkspacePluginSurface() {
   setPluginDialogError("");
   state.plugins.busy = true;
   state.plugins.contributions = [];
+  clearTrustedPluginPanel();
   renderWorkspacePlugins();
   renderPluginContributions();
   try {
@@ -21276,6 +21318,30 @@ function openTrustedPluginViewer(response) {
   renderViewer();
 }
 
+function clearTrustedPluginPanel() {
+  state.plugins.panelDocument = null;
+  state.plugins.panelOrigin = "";
+  $("#pluginPanelSlot")?.classList.add("hidden");
+  $("#pluginPanelContent")?.replaceChildren();
+  if ($("#pluginPanelOrigin")) $("#pluginPanelOrigin").textContent = "Untrusted project content";
+}
+
+function renderTrustedPluginPanel(response) {
+  if (response?.project_root !== state.project.root || Number(response?.project_revision) !== Number(state.revision.project_revision)) {
+    throw new Error("The project changed before the Plugin Panel could render.");
+  }
+  const provenance = response.provenance || {};
+  state.plugins.panelDocument = response.document;
+  state.plugins.panelOrigin = [provenance.plugin_id, String(provenance.package_digest || "").slice(0, 12)]
+    .filter(Boolean)
+    .join(" · ");
+  const content = $("#pluginPanelContent");
+  content.replaceChildren();
+  renderPluginViewerDocument(response.document, content);
+  $("#pluginPanelOrigin").textContent = `${state.plugins.panelOrigin} · untrusted project content`;
+  $("#pluginPanelSlot").classList.remove("hidden");
+}
+
 async function invokeTrustedPluginContribution(contributionId, kind) {
   if (state.plugins.busy) return;
   const contribution = (state.plugins.contributions || []).find((item) => item.contribution_id === contributionId && item.kind === kind);
@@ -21286,6 +21352,16 @@ async function invokeTrustedPluginContribution(contributionId, kind) {
   renderPluginContributions();
   setPluginDialogError("");
   try {
+    if (kind === "panel") {
+      const response = await invoke("get_plugin_panel_document", {
+        contributionId,
+        input: {},
+        expectedProjectRevision: requestRevision,
+      });
+      if (state.project.root !== requestRoot || state.revision.project_revision !== requestRevision) throw new Error("The project changed while loading the Plugin Panel.");
+      renderTrustedPluginPanel(response);
+      return;
+    }
     if (kind === "viewer") {
       const response = await invoke("open_plugin_viewer", {
         contributionId,
@@ -21330,6 +21406,7 @@ function closeWorkspacePluginDialog() {
   $("#pluginDialog").classList.add("hidden");
   state.plugins.open = false;
   state.plugins.currentRequestId = null;
+  clearTrustedPluginPanel();
   state.plugins.returnFocus?.focus?.();
 }
 
@@ -22394,6 +22471,7 @@ $("#pluginCommandPaletteList").addEventListener("click", (event) => {
   void invokeTrustedPluginContribution(button.dataset.pluginPaletteCommand, "command");
 });
 $("#pluginCommandPalette").addEventListener("keydown", trapPluginCommandPaletteFocus);
+$("#pluginPanelClear").addEventListener("click", clearTrustedPluginPanel);
 $("#pluginList").addEventListener("click", (event) => {
   const button = event.target.closest("[data-plugin-enable]");
   if (button) requestWorkspacePluginEnable(button.dataset.pluginEnable);

@@ -9,7 +9,7 @@ mod project;
 mod update;
 mod workspace_plugins;
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
 use std::fs::OpenOptions;
 use std::future::Future;
@@ -13842,11 +13842,14 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
 
 fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Value> {
     use rho_extension_runtime::{
-        ActivationGeneration, BrokerCallIdSource, GrantRequest, GrantSource, GrantStore, GuestStep,
-        HostFrame, HostInstanceId, HostInstanceState, HostMessage, HostProtocolErrorCode,
-        HostRequestId, HostResponse, P2_1_SMOKE_WASM, P2_1_WASI_IMPORT_SMOKE_WASM, P2_2_SMOKE_WASM,
-        PackageDigest, PermissionConstraints, PermissionKind, PluginId, PluginVersion, RuntimeKind,
-        ScopeId, WasmHostIdentity, WasmPluginHost,
+        ActivationGeneration, BrokerCallIdSource, CapabilityId, ContributionCallOutcome,
+        ContributionCallRequest, ContributionCallSession, ContributionClock, ContributionError,
+        ContributionInstanceIdentity, ContributionInvocationOrigin, ContributionStore,
+        GrantRequest, GrantSource, GrantStore, GuestStep, HostFrame, HostInstanceId,
+        HostInstanceState, HostMessage, HostProtocolErrorCode, HostRequestId, HostResponse,
+        P2_1_SMOKE_WASM, P2_1_WASI_IMPORT_SMOKE_WASM, P2_2_SMOKE_WASM, PackageDigest,
+        PermissionConstraints, PermissionKind, PluginId, PluginVersion, RuntimeKind, ScopeId,
+        ViewerDocumentV1, WasmHostIdentity, WasmPluginHost, WorkspacePluginManifest,
     };
     use rho_store::{
         PluginPermissionDecision, PluginPermissionDecisionDraft, PluginPermissionMutationOutcome,
@@ -13859,6 +13862,14 @@ fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Valu
     impl BrokerCallIdSource for SmokeCallId {
         fn next_call_id(&self) -> u64 {
             42
+        }
+    }
+
+    #[derive(Debug)]
+    struct SmokeClock;
+    impl ContributionClock for SmokeClock {
+        fn now_millis(&self) -> u64 {
+            100
         }
     }
 
@@ -14112,6 +14123,170 @@ fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Valu
         "installed P2-2 durable audit exposed a raw handle"
     );
 
+    let empty_schema = json!({"type": "object", "properties": {}});
+    let manifest = WorkspacePluginManifest::parse(&serde_json::to_vec(&json!({
+        "schemaVersion": 2,
+        "id": "org.yulab.rho.phase2-contribution-smoke",
+        "name": "Installed contribution smoke",
+        "version": "1.0.0",
+        "apiVersion": "^1.0",
+        "runtime": {"kind": "wasm", "entry": "dist/plugin.wasm", "scope": "project"},
+        "provides": [
+            {"capability": "tool.installed.smoke", "contract_major": 1},
+            {"capability": "ui.panel.installed_smoke", "contract_major": 1}
+        ],
+        "contributions": [
+            {
+                "id": "tool.installed.smoke", "kind": "tool", "contractMajor": 1,
+                "label": "Installed smoke", "purpose": "Exercise the packaged contribution proxy",
+                "inputSchema": empty_schema,
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {"smoke": {"type": "boolean"}},
+                    "required": ["smoke"]
+                }
+            },
+            {
+                "id": "ui.panel.installed_smoke", "kind": "panel", "contractMajor": 1,
+                "label": "Installed details", "purpose": "Exercise the named project Panel",
+                "inputSchema": empty_schema, "outputSchema": empty_schema,
+                "panelSlot": "plugin_details"
+            }
+        ]
+    }))?)?;
+    let p23_project = ScopeId::new("project.installed-contribution-smoke")?;
+    let p23_plugin = manifest.id.clone();
+    let p23_digest = PackageDigest::from_inventory(&[(b"dist/plugin.wasm", P2_2_SMOKE_WASM)]);
+    let p23_host_id = HostInstanceId::new("instance.installed-contribution-smoke")?;
+    let p23_generation = ActivationGeneration::new(3)?;
+    let p23_identity = ContributionInstanceIdentity::new(
+        p23_project.clone(),
+        p23_plugin.clone(),
+        p23_digest.clone(),
+        p23_generation,
+        p23_host_id.clone(),
+    );
+    let candidate = ContributionStore::stage(p23_identity.clone(), manifest.contributions.clone())
+        .map_err(|error| anyhow!("staging installed P2-3 contributions: {error:?}"))?;
+    let mut contribution_store = ContributionStore::new();
+    contribution_store
+        .publish(candidate, None)
+        .map_err(|error| anyhow!("publishing installed P2-3 contributions: {error:?}"))?;
+    ensure!(
+        contribution_store.list(&p23_project).len() == 2,
+        "installed P2-3 contribution publication is incomplete"
+    );
+    let stale_candidate = ContributionStore::stage(
+        ContributionInstanceIdentity::new(
+            p23_project.clone(),
+            p23_plugin.clone(),
+            p23_digest.clone(),
+            ActivationGeneration::new(4)?,
+            HostInstanceId::new("instance.installed-stale-candidate")?,
+        ),
+        manifest.contributions.clone(),
+    )
+    .map_err(|error| anyhow!("staging installed stale P2-3 candidate: {error:?}"))?;
+    ensure!(
+        contribution_store.publish(stale_candidate, None)
+            == Err(ContributionError::ExpectedOldMismatch),
+        "installed P2-3 expected-old CAS accepted a stale candidate"
+    );
+    let mut p23_host = WasmPluginHost::from_bytes_with_call_id_source(
+        WasmHostIdentity::new(
+            p23_project.clone(),
+            p23_plugin,
+            p23_digest,
+            p23_generation,
+            p23_host_id.clone(),
+        ),
+        P2_2_SMOKE_WASM,
+        Arc::new(SmokeCallId),
+    )
+    .map_err(|error| anyhow!("creating installed P2-3 Wasm host: {error:?}"))?;
+    ensure!(
+        matches!(
+            p23_host.handle_frame(HostFrame {
+                instance_id: p23_host_id.clone(),
+                message: HostMessage::Hello {
+                    api_version: rho_extension_runtime::HOST_PROTOCOL_VERSION
+                }
+            }),
+            Ok(Some(HostResponse::Ready { .. }))
+        ) && matches!(
+            p23_host.handle_frame(HostFrame {
+                instance_id: p23_host_id,
+                message: HostMessage::Activate
+            }),
+            Ok(Some(HostResponse::Activated))
+        ),
+        "installed P2-3 contribution host did not activate"
+    );
+    let (mut p23_call, p23_first) = ContributionCallSession::begin(
+        &contribution_store,
+        ContributionCallRequest {
+            project_id: p23_project.clone(),
+            contribution_id: CapabilityId::new("tool.installed.smoke")?,
+            origin: ContributionInvocationOrigin::AgentTool,
+            input: json!({}),
+            supplied_handles: BTreeMap::from([(
+                "project.fs.read".to_string(),
+                format!("handle.{}", "a".repeat(64)),
+            )]),
+        },
+        &SmokeClock,
+        &mut p23_host,
+    )
+    .map_err(|error| anyhow!("beginning installed P2-3 contribution call: {error:?}"))?;
+    ensure!(
+        matches!(p23_first, GuestStep::BrokerRequest { .. }),
+        "installed P2-3 contribution did not yield to the broker"
+    );
+    let p23_terminal = p23_call
+        .resume(
+            &contribution_store,
+            &json!({"ok": true}),
+            2,
+            &SmokeClock,
+            &mut p23_host,
+        )
+        .map_err(|error| anyhow!("resuming installed P2-3 contribution call: {error:?}"))?;
+    let p23_outcome = p23_call
+        .finish(
+            &contribution_store,
+            &p23_terminal,
+            &SmokeClock,
+            &mut p23_host,
+        )
+        .map_err(|error| anyhow!("finishing installed P2-3 contribution call: {error:?}"))?;
+    ensure!(
+        matches!(
+            p23_outcome,
+            ContributionCallOutcome::Completed { ref result, .. }
+                if result == &json!({"smoke": true})
+        ),
+        "installed P2-3 contribution result failed schema validation"
+    );
+    let viewer_document = ViewerDocumentV1::parse(json!({
+        "contract": rho_extension_runtime::PLUGIN_VIEWER_DOCUMENT_CONTRACT,
+        "title": "Installed plugin details",
+        "blocks": [{
+            "kind": "text",
+            "text": "<script>packaged text only</script>"
+        }]
+    }))?;
+    ensure!(
+        viewer_document.blocks.len() == 1,
+        "installed P2-3 ViewerDocument did not validate"
+    );
+    contribution_store
+        .unpublish(&p23_identity)
+        .map_err(|error| anyhow!("tearing down installed P2-3 contributions: {error:?}"))?;
+    ensure!(
+        contribution_store.list(&p23_project).is_empty(),
+        "installed P2-3 contribution teardown left a live route"
+    );
+
     Ok(json!({
         "runtime": "wasmtime-38.0.4",
         "guest_abi": 1,
@@ -14127,6 +14302,12 @@ fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Valu
         "revoke_enforced": true,
         "durable_permission_lane": true,
         "durable_raw_handle_absent": true,
+        "manifest_v2": 2,
+        "contribution_publish_cas": true,
+        "contribution_call_proxy": true,
+        "viewer_document_v1": true,
+        "panel_slot": "plugin_details",
+        "contribution_teardown": true,
     }))
 }
 
@@ -14481,6 +14662,7 @@ fn main() {
             commands::plugins::list_plugin_contributions,
             commands::plugins::invoke_plugin_command,
             commands::plugins::open_plugin_viewer,
+            commands::plugins::get_plugin_panel_document,
             commands::runs::list_runs,
             list_plot_artifacts,
             export_plot_artifact,

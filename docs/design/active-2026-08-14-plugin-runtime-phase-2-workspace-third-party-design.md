@@ -11,8 +11,10 @@ P2-2F combined acceptance are locally complete; `0.4.1-dev.3` and
 open; P2-3A Manifest V2/bounded-schema/Source/Panel pure contracts and P2-3B
 Guest ABI contribution proxy/transactional registry plus P2-3C Agent Tool/
 Source/Skill integration and P2-3D trusted Command/Viewer renderer are locally
-complete; `0.4.1-dev.4` and `rho.agent 0.1.6` allocated; P2-3E is active under
-the local-first exception and P2-4 remains sequentially gated
+complete together with P2-3E named Panel/final local macOS acceptance;
+`0.4.1-dev.4` and `rho.agent 0.1.6` allocated; P2-3 hosted/cross-platform gates
+remain open; P2-4A is active under the local-first exception and later P2-4
+slices remain sequentially gated
 
 Date: 2026-08-14
 Issue: [#17](https://github.com/YuLab-SMU/Rho/issues/17)

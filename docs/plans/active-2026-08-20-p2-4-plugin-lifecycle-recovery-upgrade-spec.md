@@ -1,8 +1,14 @@
 # P2-4 Plugin Lifecycle, Recovery, Uninstall And Upgrade
 
-Status: proposed implementation contract; product intent authorized as part of
-the complete Phase 2 direction on 2026-08-20; activation blocked until P2-1,
-P2-2 and P2-3 acceptance gates close
+Status: active under the owner-approved local-first exception; P2-4A schema v14
+state/transition/event/tombstone persistence activated 2026-08-20 after local
+P2-3E closeout; P2-1/P2-2/P2-3 hosted and cross-platform installed gates remain
+open and mandatory before final Phase 2 acceptance
+
+Active work package: P2-4A only. P2-4B through P2-4G remain inactive until the
+v14 migration/persistence/recovery stop gate passes. P2-4A creates no package
+cache, live restart activation, disable/uninstall/upgrade route, UI or new
+privileged operation.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -343,7 +349,10 @@ authority beyond opaque transition/user-intent fields.
 
 ## Work Packages And Stop Points
 
-P2-4 activates only after P2-3 acceptance:
+Ordinarily P2-4 activates only after P2-3 acceptance. The owner-approved
+local-first exception permits sequential local engineering after the recorded
+P2-3E local stop gate while all hosted/cross-platform evidence remains
+mandatory before final acceptance:
 
 1. **P2-4A — schema v14 + state/transition/event/tombstone persistence**;
 2. **P2-4B — exact package cache + first enable/restart reconstruction**;
@@ -392,9 +401,10 @@ Agent-authored evolution.
 
 ## Version, NEWS, And Release
 
-This proposed contract changes no code/version. Each user-visible P2-4 candidate
-uses a fresh application development version and truthful NEWS. R packages bump
-only for exported bridge changes.
+P2-4A persistence contracts alone do not change a version. The first
+user-visible P2-4 candidate uses a fresh application development version after
+`0.4.1-dev.4` and truthful NEWS. R packages bump only for exported bridge
+changes.
 
 Final Phase 2 acceptance is not public release authority. A separate release
 contract selects an exact clean commit, builds immutable artifacts, completes

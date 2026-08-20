@@ -16,6 +16,9 @@ for (const id of [
   "pluginCommandPalette",
   "pluginCommandPaletteSearch",
   "pluginCommandPaletteList",
+  "pluginPanelSlot",
+  "pluginPanelContent",
+  "pluginPanelOrigin",
   "pluginGrantSection",
   "pluginGrantList",
   "pluginPermissionView",
@@ -47,6 +50,7 @@ for (const command of [
   "list_plugin_contributions",
   "invoke_plugin_command",
   "open_plugin_viewer",
+  "get_plugin_panel_document",
 ]) {
   assert.equal(
     js.match(new RegExp(`command === ["']${command}["']`, "g"))?.length ?? 0,
@@ -58,6 +62,7 @@ for (const command of [
 assert.match(js, /function renderWorkspacePlugins\(\)/);
 assert.match(js, /function renderPluginContributions\(\)/);
 assert.match(js, /function renderPluginCommandPalette\(\)/);
+assert.match(js, /function renderTrustedPluginPanel\(response\)/);
 assert.match(js, /function renderPluginViewerDocument\(documentValue, target\)/);
 assert.match(js, /strong\.textContent = plugin\.name/);
 assert.match(js, /\$\("#pluginPermissionPurpose"\)\.textContent = purpose/);
@@ -98,6 +103,7 @@ assert.match(css, /\.plugin-permission-actions\s*\{/);
 assert.match(css, /\.plugin-contribution-section\s*\{/);
 assert.match(css, /\.plugin-viewer-document\s*\{/);
 assert.match(css, /\.plugin-command-palette-surface\s*\{/);
+assert.match(css, /\.plugin-panel-slot\s*\{/);
 assert.match(css, /@media \(max-width: 640px\)[\s\S]*\.plugin-permission-identity/);
 assert.match(css, /@media \(max-width: 640px\)[\s\S]*\.plugin-contribution-row, \.plugin-command-palette-item/);
 assert.match(css, /overflow-wrap:\s*anywhere/);

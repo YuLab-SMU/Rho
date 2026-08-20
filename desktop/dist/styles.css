@@ -1594,6 +1594,15 @@ body.resizing-vertical { cursor: col-resize; }
 .plugin-command-palette-item strong, .plugin-command-palette-item span { display: block; overflow-wrap: anywhere; }
 .plugin-command-palette-item span { color: var(--muted); font-size: 10.5px; line-height: 1.4; }
 .plugin-command-palette-item button { min-height: 28px; padding: 0 10px; border: 1px solid var(--accent); border-radius: 4px; color: var(--accent-strong); background: var(--accent-pale); cursor: pointer; }
+.plugin-panel-slot { display: grid; gap: 8px; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border); }
+.plugin-panel-slot.hidden { display: none; }
+.plugin-panel-slot-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.plugin-panel-slot-header > div { min-width: 0; }
+.plugin-panel-slot-header strong, .plugin-panel-slot-header span { display: block; overflow-wrap: anywhere; }
+.plugin-panel-slot-header span { color: var(--muted); font-size: 10.5px; }
+.plugin-panel-slot-header button { min-height: 28px; padding: 0 9px; border: 1px solid var(--border-strong); border-radius: 4px; background: #fff; cursor: pointer; }
+.plugin-panel-content { max-height: 360px; overflow: auto; border: 1px solid var(--border); border-radius: 5px; background: #fff; }
+.plugin-panel-content .plugin-viewer-document { padding: 10px; }
 .update-surface { justify-items: center; text-align: center; }
 .update-surface .product-dialog-header, .update-surface .product-dialog-actions { width: 100%; }
 .update-status-icon { display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid var(--border-strong); border-radius: 50%; color: var(--accent-strong); background: #edf7f5; font-weight: 700; }

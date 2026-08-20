@@ -682,6 +682,35 @@ impl PendingPluginPermissionRegistry {
         })
     }
 
+    pub(crate) fn get_panel_contribution(
+        &self,
+        context: &PluginRuntimeContext,
+        contribution_id: &str,
+        input: serde_json::Value,
+        store: &mut Store,
+    ) -> Result<PluginViewerDocumentView> {
+        let outcome = self.invoke_file_contribution(
+            context,
+            contribution_id,
+            ContributionInvocationOrigin::TrustedPanel,
+            input,
+            store,
+        )?;
+        ensure!(
+            outcome["status"] == "completed",
+            "plugin Panel returned a failed terminal result"
+        );
+        let document = ViewerDocumentV1::parse(outcome["result"].clone())?;
+        validate_viewer_artifacts(store, context, &document)?;
+        Ok(PluginViewerDocumentView {
+            project_root: context.project_root.clone(),
+            project_revision: context.project_revision,
+            contribution_id: contribution_id.to_string(),
+            document,
+            provenance: outcome["provenance"].clone(),
+        })
+    }
+
     pub(crate) fn request_enable(
         &self,
         context: &PluginRuntimeContext,
@@ -2309,6 +2338,9 @@ impl PendingPluginPermissionRegistry {
                     ) | (
                         ContributionInvocationOrigin::TrustedViewer,
                         ContributionKind::Viewer
+                    ) | (
+                        ContributionInvocationOrigin::TrustedPanel,
+                        ContributionKind::Panel
                     )
                 ),
                 "contribution kind does not match its trusted invocation origin"
@@ -3947,10 +3979,11 @@ mod tests {
     fn write_ui_fixture_plugin(project: &Path, kind: ContributionKind) {
         let directory = project.join(".rho/plugins/example/dist");
         fs::create_dir_all(&directory).unwrap();
-        let (capability, kind_name, result, output_schema) = match kind {
+        let (capability, kind_name, panel_slot, result, output_schema) = match kind {
             ContributionKind::Command => (
                 "ui.command.csv_summary",
                 "command",
+                None,
                 serde_json::json!({
                     "kind": "notification",
                     "message": "CSV metadata is ready"
@@ -3967,6 +4000,7 @@ mod tests {
             ContributionKind::Viewer => (
                 "ui.viewer.csv_summary",
                 "viewer",
+                None,
                 serde_json::json!({
                     "contract": rho_extension_runtime::PLUGIN_VIEWER_DOCUMENT_CONTRACT,
                     "title": "CSV metadata",
@@ -3999,7 +4033,45 @@ mod tests {
                     "required": ["contract", "title", "blocks"]
                 }),
             ),
-            _ => panic!("UI fixture supports only Command or Viewer"),
+            ContributionKind::Panel => (
+                "ui.panel.csv_summary",
+                "panel",
+                Some(rho_extension_runtime::PLUGIN_DETAILS_PANEL_SLOT),
+                serde_json::json!({
+                    "contract": rho_extension_runtime::PLUGIN_VIEWER_DOCUMENT_CONTRACT,
+                    "title": "CSV plugin details",
+                    "blocks": [{
+                        "kind": "notice",
+                        "tone": "info",
+                        "text": "Panel content is untrusted project data."
+                    }]
+                }),
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "contract": {
+                            "type": "string",
+                            "enum": [rho_extension_runtime::PLUGIN_VIEWER_DOCUMENT_CONTRACT]
+                        },
+                        "title": {"type": "string", "maxLength": 128},
+                        "blocks": {
+                            "type": "array",
+                            "maxItems": 128,
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "kind": {"type": "string", "enum": ["notice"]},
+                                    "tone": {"type": "string", "enum": ["info"]},
+                                    "text": {"type": "string", "maxLength": 65536}
+                                },
+                                "required": ["kind", "tone", "text"]
+                            }
+                        }
+                    },
+                    "required": ["contract", "title", "blocks"]
+                }),
+            ),
+            _ => panic!("UI fixture supports only Command, Viewer or Panel"),
         };
         install_immediate_contribution_module(project, result);
         let empty = serde_json::json!({"type": "object", "properties": {}});
@@ -4020,7 +4092,8 @@ mod tests {
                     "label": "CSV summary",
                     "purpose": "Show bounded CSV metadata",
                     "inputSchema": empty,
-                    "outputSchema": output_schema
+                    "outputSchema": output_schema,
+                    "panelSlot": panel_slot
                 }]
             }))
             .unwrap(),
@@ -5773,6 +5846,161 @@ mod tests {
         }))
         .unwrap();
         assert!(validate_viewer_artifacts(&store, &context_a, &wrong_media).is_err());
+    }
+
+    #[test]
+    fn named_plugin_details_panel_reuses_viewer_contract_and_rejects_other_routes() {
+        let directory = tempdir().unwrap();
+        write_ui_fixture_plugin(directory.path(), ContributionKind::Panel);
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let registry = deterministic_registry();
+        let context = context(directory.path());
+        registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        let listed = registry.list_contributions(&context);
+        assert_eq!(listed.contributions.len(), 1);
+        assert_eq!(listed.contributions[0].kind, "panel");
+        let panel = registry
+            .get_panel_contribution(
+                &context,
+                "ui.panel.csv_summary",
+                serde_json::json!({}),
+                &mut store,
+            )
+            .unwrap();
+        assert_eq!(panel.document.title, "CSV plugin details");
+        assert!(matches!(
+            panel.document.blocks[0],
+            rho_extension_runtime::ViewerBlockV1::Notice { .. }
+        ));
+        assert!(
+            registry
+                .open_viewer_contribution(
+                    &context,
+                    "ui.panel.csv_summary",
+                    serde_json::json!({}),
+                    &mut store,
+                )
+                .is_err()
+        );
+        assert!(
+            registry
+                .invoke_command_contribution(
+                    &context,
+                    "ui.panel.csv_summary",
+                    serde_json::json!({}),
+                    &mut store,
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn contribution_a_b_a_generations_never_reuse_stale_routes() {
+        let directory_a = tempdir().unwrap();
+        let directory_b = tempdir().unwrap();
+        write_ui_fixture_plugin(directory_a.path(), ContributionKind::Panel);
+        write_ui_fixture_plugin(directory_b.path(), ContributionKind::Panel);
+        let mut store_a = Store::open(directory_a.path().join("rho.sqlite")).unwrap();
+        let mut store_b = Store::open(directory_b.path().join("rho.sqlite")).unwrap();
+        let registry = deterministic_registry();
+        let context_a = context(directory_a.path());
+        let mut context_b = context(directory_b.path());
+        context_b.project_scope_id = ScopeId::new("project.other").unwrap();
+        registry
+            .request_enable(&context_a, "org.example.plugin", &mut store_a)
+            .unwrap();
+        registry
+            .request_enable(&context_b, "org.example.plugin", &mut store_b)
+            .unwrap();
+        let (a1, b1) = {
+            let state = registry
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            (
+                state
+                    .contributions
+                    .current_identity(
+                        &context_a.project_scope_id,
+                        &PluginId::new("org.example.plugin").unwrap(),
+                    )
+                    .unwrap()
+                    .unwrap(),
+                state
+                    .contributions
+                    .current_identity(
+                        &context_b.project_scope_id,
+                        &PluginId::new("org.example.plugin").unwrap(),
+                    )
+                    .unwrap()
+                    .unwrap(),
+            )
+        };
+        assert_ne!(a1.activation_generation, b1.activation_generation);
+
+        registry.invalidate_project(&context_a.project_root);
+        {
+            let state = registry
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            assert!(
+                state
+                    .contributions
+                    .list(&context_a.project_scope_id)
+                    .is_empty()
+            );
+            assert_eq!(
+                state.contributions.list(&context_b.project_scope_id).len(),
+                1
+            );
+        }
+        let manifest_path = directory_a
+            .path()
+            .join(".rho/plugins/example/rho-plugin.json");
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+        manifest["version"] = serde_json::json!("2.0.0");
+        manifest["contributions"][0]["label"] = serde_json::json!("CSV details v2");
+        fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        registry
+            .request_enable(&context_a, "org.example.plugin", &mut store_a)
+            .unwrap();
+        let mut state = registry
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let a2 = state
+            .contributions
+            .current_identity(
+                &context_a.project_scope_id,
+                &PluginId::new("org.example.plugin").unwrap(),
+            )
+            .unwrap()
+            .unwrap();
+        assert_ne!(a1.activation_generation, a2.activation_generation);
+        assert_ne!(a1.host_instance_id, a2.host_instance_id);
+        assert_ne!(a1.package_digest, a2.package_digest);
+        assert_eq!(
+            state.contributions.unpublish(&a1),
+            Err(rho_extension_runtime::ContributionError::ExpectedOldMismatch)
+        );
+        assert_eq!(
+            state.contributions.list(&context_a.project_scope_id).len(),
+            1
+        );
+        assert_eq!(
+            state
+                .contributions
+                .current_identity(
+                    &context_b.project_scope_id,
+                    &PluginId::new("org.example.plugin").unwrap(),
+                )
+                .unwrap(),
+            Some(b1)
+        );
     }
 
     #[test]

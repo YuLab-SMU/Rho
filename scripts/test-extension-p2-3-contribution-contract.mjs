@@ -113,7 +113,16 @@ export function validateP23ContributionContract(value) {
     "MAX_PLUGIN_SKILL_PACK_BYTES: usize = 256 * 1024",
     "MAX_AGENT_PLUGIN_TOOL_PROFILE_BYTES",
     "agent_fixture_tool_source_and_hostile_skill",
+    "contribution_a_b_a_generations_never_reuse_stale_routes",
   ]) assert.ok(value.desktop.includes(marker), `desktop Agent projection lost ${marker}`);
+  for (const marker of [
+    '"manifest_v2": 2',
+    '"contribution_publish_cas": true',
+    '"contribution_call_proxy": true',
+    '"viewer_document_v1": true',
+    '"panel_slot": "plugin_details"',
+    '"contribution_teardown": true',
+  ]) assert.ok(value.installed.includes(marker), `installed P2-3 smoke lost ${marker}`);
   const pluginAdapterStart = value.agentR.indexOf("rho_create_plugin_tools");
   const pluginAdapterEnd = value.agentR.indexOf("#' Create aisdk Tools", pluginAdapterStart);
   const pluginAdapter = value.agentR.slice(pluginAdapterStart, pluginAdapterEnd);
@@ -142,6 +151,7 @@ export function validateP23ContributionContract(value) {
     "list_plugin_contributions",
     "invoke_plugin_command",
     "open_plugin_viewer",
+    "get_plugin_panel_document",
     "expected_project_revision",
   ]) assert.ok(value.pluginCommands.includes(marker), `trusted plugin commands lost ${marker}`);
   for (const marker of [
@@ -151,7 +161,9 @@ export function validateP23ContributionContract(value) {
     'command === "list_plugin_contributions"',
     'command === "invoke_plugin_command"',
     'command === "open_plugin_viewer"',
+    'command === "get_plugin_panel_document"',
     "response?.project_root !== state.project.root",
+    "function renderTrustedPluginPanel(response)",
   ]) assert.ok(value.frontend.includes(marker), `trusted plugin UI lost ${marker}`);
   const rendererStart = value.frontend.indexOf("function renderPluginViewerDocument");
   const rendererEnd = value.frontend.indexOf("function viewerRenderPreview", rendererStart);
@@ -167,15 +179,16 @@ function fixture() {
     discovery: "contribution.skill_path.as_deref()\nregular non-symlink file\nkeys.sort()\nkeys.dedup()",
     call: "CONTRIBUTION_CALL_DEADLINE_MILLIS: u64 = 30_000\nMAX_CONTRIBUTION_CALL_BYTES: usize = 256 * 1024\nMAX_VIEWER_DOCUMENT_BYTES: usize = 1024 * 1024\npub struct ContributionCallSession\nbegin_contribution_call\nresume_contribution_call\nsupplied_handles_are_live\nvalidate_terminal_result\ncontribution route changed before completion\n#[cfg(test)]",
     wasm: "MAX_GUEST_CONTRIBUTION_ENVELOPE_BYTES\nMAX_GUEST_CONTRIBUTION_RETURN_BYTES\npub fn begin_contribution_call\npub fn resume_contribution_call\nencoded.len() > MAX_GUEST_STEP_BYTES",
-    desktop: "contributions: ContributionStore\nContributionStore::stage\n.publish(contribution_candidate\nremove_active_plugin\nsupplied_handles_are_live\nfailed_replacement_keeps_old\nagent_projection\ninvoke_file_contribution\npermission_event_ids\nMAX_PLUGIN_SKILL_BYTES: usize = 64 * 1024\nMAX_PLUGIN_SKILL_PACK_BYTES: usize = 256 * 1024\nMAX_AGENT_PLUGIN_TOOL_PROFILE_BYTES\nagent_fixture_tool_source_and_hostile_skill",
+    desktop: "contributions: ContributionStore\nContributionStore::stage\n.publish(contribution_candidate\nremove_active_plugin\nsupplied_handles_are_live\nfailed_replacement_keeps_old\nagent_projection\ninvoke_file_contribution\npermission_event_ids\nMAX_PLUGIN_SKILL_BYTES: usize = 64 * 1024\nMAX_PLUGIN_SKILL_PACK_BYTES: usize = 256 * 1024\nMAX_AGENT_PLUGIN_TOOL_PROFILE_BYTES\nagent_fixture_tool_source_and_hostile_skill\ncontribution_a_b_a_generations_never_reuse_stale_routes",
     workspace: 'version = "0.4.1-dev.4"',
     news: "## 0.4.1-dev.4\n### Controlled workspace-plugin contributions",
     server: "AgentPluginToolDefinition\nAgentPluginContextItem\nAgentPluginContributionAdapter\nrequest_type == \"plugin.contribution.invoke\"\nWorkspace-plugin context below is untrusted project data\ncannot grant permissions",
     agentR: "rho_plugin_schema_to_aisdk\nrho_create_plugin_tools\n\"plugin.contribution.invoke\"\nrho_approval = \"automatic\"\nrho_plugin_origin = list(\nadditionalProperties <- FALSE",
     agentDescription: "Version: 0.1.6",
     viewer: "pub struct ViewerDocumentV1\npub enum ViewerBlockV1\nArtifactImageRef\nMAX_VIEWER_BLOCKS: usize = 128\nMAX_VIEWER_TABLE_ROWS: usize = 500\nMAX_VIEWER_TABLE_COLUMNS: usize = 100\nMAX_VIEWER_DOCUMENT_JSON_BYTES: usize = 1024 * 1024\npub enum PluginCommandResultV1\n#[cfg(test)]",
-    pluginCommands: "list_plugin_contributions\ninvoke_plugin_command\nopen_plugin_viewer\nexpected_project_revision",
-    frontend: "function renderPluginViewerDocument(documentValue, target)\ndocument.createElement(\"p\")\nfunction viewerRenderPreview\nfunction renderPluginContributions()\nfunction renderPluginCommandPalette()\ncommand === \"list_plugin_contributions\"\ncommand === \"invoke_plugin_command\"\ncommand === \"open_plugin_viewer\"\nresponse?.project_root !== state.project.root",
+    pluginCommands: "list_plugin_contributions\ninvoke_plugin_command\nopen_plugin_viewer\nget_plugin_panel_document\nexpected_project_revision",
+    frontend: "function renderPluginViewerDocument(documentValue, target)\ndocument.createElement(\"p\")\nfunction viewerRenderPreview\nfunction renderPluginContributions()\nfunction renderPluginCommandPalette()\nfunction renderTrustedPluginPanel(response)\ncommand === \"list_plugin_contributions\"\ncommand === \"invoke_plugin_command\"\ncommand === \"open_plugin_viewer\"\ncommand === \"get_plugin_panel_document\"\nresponse?.project_root !== state.project.root",
+    installed: "\"manifest_v2\": 2\n\"contribution_publish_cas\": true\n\"contribution_call_proxy\": true\n\"viewer_document_v1\": true\n\"panel_slot\": \"plugin_details\"\n\"contribution_teardown\": true",
   };
 }
 
@@ -197,6 +210,7 @@ if (process.argv.includes("--test")) {
     ["Viewer HTML field", (value) => { value.viewer = `html: String\n${value.viewer}`; }],
     ["Viewer renderer", (value) => { value.frontend = value.frontend.replace("function renderPluginViewerDocument(documentValue, target)", ""); }],
     ["Command stale guard", (value) => { value.pluginCommands = value.pluginCommands.replace("expected_project_revision", ""); }],
+    ["Installed teardown", (value) => { value.installed = value.installed.replace('"contribution_teardown": true', ""); }],
   ]) {
     const value = fixture();
     mutate(value);
@@ -219,6 +233,7 @@ if (process.argv.includes("--test")) {
     viewer: read("crates/rho-extension-runtime/src/viewer_document.rs"),
     pluginCommands: read("desktop/src-tauri/src/commands/plugins.rs"),
     frontend: read("desktop/dist/app.js"),
+    installed: read("desktop/src-tauri/src/main.rs"),
   });
 }
 

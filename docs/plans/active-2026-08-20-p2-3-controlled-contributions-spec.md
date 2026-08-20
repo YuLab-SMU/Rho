@@ -4,15 +4,15 @@ Status: active under the owner-approved local-first exception; P2-3A Manifest
 V2 + pure Source/Panel contracts and P2-3B Guest ABI V2 contribution proxy +
 transactional registry, plus P2-3C fixture Tool/Source/Skill + Agent integration,
 and P2-3D trusted Command/Viewer descriptor renderer completed locally
-2026-08-20; P2-3E named Panel/teardown/two-project/installed review activated;
-P2-1/P2-2 hosted and cross-platform installed acceptance remain open and
-mandatory before final Phase 2 acceptance
+2026-08-20; P2-3E named Panel/teardown/two-project/local macOS installed review
+completed; P2-4A activated under the local-first exception; P2-1/P2-2/P2-3
+hosted and cross-platform installed acceptance remain open and mandatory before
+final Phase 2 acceptance
 
-Active work package: P2-3E only. It may add the optional named
-`plugin_details` Panel and combined teardown/installed evidence but no new
-contribution kind, broker operation or authority. P2-3D added three trusted
-Tauri commands, Plugin palette/details UI and Viewer renderer; Panel and final
-P2-3 acceptance remain open.
+Active P2-3 work package: none. The local source/macOS implementation is frozen
+for P2-4 consumption. P2-3 remains active—not implemented/accepted—until the
+hosted six-leg, Windows/Linux packaged, three-platform installed, independent
+Agent/UI/security and exact-candidate acceptance gates pass.
 
 Change class: D3 capability graph, Agent tool, trusted UI, Wasm protocol, and
 cross-project lifecycle behavior. Risk: R3.
@@ -486,6 +486,60 @@ normalized project and host-generated contribution call identity; the frontend
 cannot supply plugin/digest/generation/permission authority. Browser/mock mode
 implements deterministic disabled/loading/ready/permission/stale/trap/oversize/
 disposed states without pretending to execute untrusted code.
+
+### P2-3E local closeout evidence
+
+P2-3E activates the single named `plugin_details` Panel slot. A Panel must
+declare that exact slot, accepts only the same ViewerDocument contract, loads
+after explicit user action inside Workspace Plugins, carries visible
+plugin/digest origin and cannot choose geometry or enter a trusted dialog.
+Clear, modal close, grant revoke, host failure and project invalidation remove
+its DOM/data. The frontend mock and fixed Tauri command
+`get_plugin_panel_document` remain project-revision guarded and expose no
+authority identity.
+
+Combined teardown tests cover exact contribution removal on resume trap,
+project switch, revoke and explicit clear; the A-B-A test enables the same
+plugin in two roots, tears down A without affecting B, then re-enables changed A
+with fresh digest/generation/host and proves the stale A identity cannot
+unpublish or route the new generation. P2-3 contract checks now run in both
+Draft Fast and Rust compatibility workflows.
+
+Final local P2-3 verification on 2026-08-20:
+
+- stable and exact Rust `1.88.0` complete workspace all-target checks and
+  `cargo test --workspace --locked --no-fail-fast` passed; desktop 232 passed
+  with one existing opt-in Keychain test ignored, extension runtime 197,
+  server 84 and Store 176 within each full matrix;
+- `rho.bridge 0.1.15` passed 581 and `rho.agent 0.1.6` passed 136 tests with no
+  failure, warning or skip;
+- extension-runtime strict clippy passed on both toolchains; Store/server/
+  desktop capped clippy completed against their existing broad warning
+  baseline; rustfmt and diff checks passed;
+- Rust MSRV, 129-command inventory, AGPL license, Run History, P1-3, Phase 1,
+  P2 host, P2-2 broker, P2-3 contribution, trusted plugin UI and MAC4 contracts
+  plus all negative self-tests passed;
+- real Browser checks covered contribution details, Plugin Command palette,
+  fixed Viewer and named Panel: one modal, in-viewport/no document overflow,
+  focus/filter/Escape behavior, origin labelling, literal hostile markup with
+  zero script/iframe nodes, explicit invocation and revoke/close/clear teardown;
+- current-source candidate and legacy desktop smoke passed Manifest V2,
+  expected-old CAS, contribution call/schema, ViewerDocument, named Panel and
+  exact teardown probes;
+- Tauri release produced the current `0.4.1-dev.4` arm64 App/DMG and updater
+  archive, then signing failed closed because no private updater key was
+  configured; this is not a signed release candidate;
+- the generated arm64 App passed candidate and legacy installed smoke with all
+  P2-1/P2-2/P2-3 probes. Executable: 47,345,360 bytes, SHA-256
+  `963b93265b825294252e4d5774d0c83776d07403a84a2fdd7afa3958096e9eb8`;
+  DMG: 26,143,725 bytes, SHA-256
+  `4e9572b904739bf54e7b14d30c7b572464f6b18a4e2d8466503ad2b53afc37c1`.
+
+No Windows/Linux installed evidence, hosted six-leg run, independent final
+Agent/UI/security review, signing, publication or release decision exists yet.
+Under the local-first exception this closes only P2-3 source and local macOS
+engineering, leaves P2-3 active, and activates P2-4A; it does not authorize
+Phase 2 acceptance or distribution.
 
 ## Work Packages And Stop Points
 

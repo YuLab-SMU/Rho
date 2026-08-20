@@ -22,8 +22,9 @@ this file records behavior included in a versioned build candidate.
   explicitly untrusted, origin-labelled project content. The trusted Workspace
   Plugins surface can explicitly run zero-input Commands and open Viewers using
   fixed Text/Code/KeyValue/Table/Notice/Artifact-image blocks; plugin HTML,
-  URLs, scripts, styles, paths, and base64 documents are rejected. The optional
-  named Panel remains a later P2-3 acceptance gate.
+  URLs, scripts, styles, paths, and base64 documents are rejected. Optional
+  Panels use the same renderer only inside the named `plugin_details` slot and
+  are cleared on close, revoke, host teardown, or project change.
 
 ## 0.4.1-dev.3 - 2026-08-20
 
