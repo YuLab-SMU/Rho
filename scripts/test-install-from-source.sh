@@ -162,9 +162,11 @@ if grep -qE "no Ark build|not wired" <<<"$RHO_ARM64_OUTPUT"; then
   fail linux-arm64-no-warning "arm64 branch must not warn about Ark availability"
 fi
 
-# Other Linux architectures: no Ark build in the manifest.
-RHO_FIXTURE_UNAME_M=riscv64 run_expect linux-riscv64-no-ark 2 "$RHO_TEST_ROOT/os-release-ubuntu" -- \
-  "runtime/ark.json has no Ark build for linux/riscv64"
+# Any architecture other than x86_64 / arm64 is rejected: Linux is supported
+# on exactly those two platforms (matching runtime/ark.json).
+RHO_UNSUPPORTED_ARCH_OUTPUT="$(RHO_UNAME_M=riscv64 RHO_OS_RELEASE="$RHO_TEST_ROOT/os-release-ubuntu" PATH="$RHO_SHIM" "$RHO_SOURCE" 2>&1)" && rc=0 || rc=$?
+[[ "$rc" -eq 1 ]] || fail linux-unsupported-arch "expected exit 1 for riscv64, got $rc"
+grep -qF "unsupported Linux architecture: riscv64" <<<"$RHO_UNSUPPORTED_ARCH_OUTPUT" || fail linux-unsupported-arch "missing architecture rejection message"
 
 # --- JSON schema ---------------------------------------------------------------
 output="$(RHO_OS_RELEASE="$RHO_TEST_ROOT/os-release-arch" PATH="$RHO_SHIM" "$RHO_SOURCE" --json 2>&1)" && rc=0 || rc=$?

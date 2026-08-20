@@ -10,10 +10,11 @@ set -euo pipefail
 # distro-specific package that provides it, builds the rho-desktop binary
 # from source, and installs it under a configurable prefix (default
 # /usr/local). Platform support follows the Ark R sidecar manifest
-# (runtime/ark.json): Linux x86-64 and Linux arm64 are both wired through
-# bootstrap-ark-linux.sh; BSD is unsupported because Ark has no BSD build.
-# Unsupported/unknown Linux distributions fall back to a generic report plus
-# an invitation to contribute a package map via PR.
+# (runtime/ark.json): Linux is supported on exactly x86_64 and arm64 (both
+# wired through bootstrap-ark-linux.sh); any other unix-like system — BSD
+# included — is rejected explicitly. Unsupported/unknown Linux distributions
+# fall back to a generic report plus an invitation to contribute a package
+# map via PR.
 #
 # Exit codes (stable contract, see the spec):
 #   0 installed (or built with --build-only)
@@ -103,11 +104,16 @@ case "$RHO_OS" in
     ;;
 esac
 
-# Linux architectures covered by the manifest's linux-x64 / linux-arm64
-# entries (both are fully wired through bootstrap-ark-linux.sh).
-RHO_ARK_LINUX_ARCH_SUPPORTED=0
+# Linux is supported on exactly the two architectures covered by the Ark
+# manifest: x86_64 and aarch64/arm64. Any other Linux architecture is
+# rejected explicitly, matching the product decision that Linux means these
+# two platforms only (BSD and other unix-like systems are rejected above).
 case "$RHO_ARCH" in
-  x86_64|aarch64|arm64) RHO_ARK_LINUX_ARCH_SUPPORTED=1 ;;
+  x86_64|aarch64|arm64) : ;;
+  *)
+    echo "error: unsupported Linux architecture: $RHO_ARCH. Source install supports linux x86_64 and arm64 only (matching runtime/ark.json)." >&2
+    exit 1
+    ;;
 esac
 
 # --- distro package maps -------------------------------------------------------
@@ -271,11 +277,9 @@ if [[ "$RHO_SKIP_DEPS" -eq 0 ]]; then
   require_pkgconfig webkit2gtk-4.1 "Tauri WebKitGTK 4.1 headers and runtime library"
   require_pkgconfig gtk+-3.0 "Tauri GTK 3 headers and runtime library"
 
-  # Ark availability follows runtime/ark.json; both Linux manifest entries
-  # (linux-x64, linux-arm64) are fully wired through bootstrap-ark-linux.sh.
-  if [[ "$RHO_ARK_LINUX_ARCH_SUPPORTED" -eq 0 ]]; then
-    RHO_WARNINGS+=("runtime/ark.json has no Ark build for $RHO_OS/$RHO_ARCH; R sessions will not work (use --skip-ark to make that explicit)")
-  fi
+  # Both Linux manifest entries (linux-x64, linux-arm64) are fully wired
+  # through bootstrap-ark-linux.sh; the architecture check above guarantees
+  # this platform has a usable Ark sidecar.
 fi
 
 # --- report ---------------------------------------------------------------------
@@ -343,7 +347,7 @@ if [[ "$RHO_SKIP_DEPS" -eq 0 ]]; then
 fi
 
 # --- build ---------------------------------------------------------------------
-if [[ "$RHO_ARK_LINUX_ARCH_SUPPORTED" -eq 1 && "$RHO_SKIP_ARK" -eq 0 ]]; then
+if [[ "$RHO_SKIP_ARK" -eq 0 ]]; then
   "$RHO_SCRIPT_ROOT/bootstrap-ark-linux.sh"
   "$RHO_SCRIPT_ROOT/prepare-runtime-resources.sh"
 else
@@ -384,6 +388,3 @@ RHO_VERSION="$(sed -n 's/^version = "\([^"]*\)"/\1/p' "$RHO_REPOSITORY_ROOT/Carg
 printf 'Installed: %s/bin/rho-desktop\n' "$RHO_PREFIX"
 printf 'Version: %s\n' "${RHO_VERSION:-unknown}"
 printf 'Installed-from-source binaries are not covered by the official auto-update channel.\n'
-if [[ "$RHO_ARK_LINUX_ARCH_SUPPORTED" -eq 0 ]]; then
-  printf 'Note: no usable Ark R sidecar for %s/%s (see runtime/ark.json); R sessions are not available.\n' "$RHO_OS" "$RHO_ARCH"
-fi

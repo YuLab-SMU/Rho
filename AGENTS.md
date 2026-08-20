@@ -124,8 +124,9 @@ AI workflow is:
    `scripts/bootstrap-ark-linux.sh` (arch detection, sidecar name, ELF check)
    and `scripts/prepare-runtime-resources.sh` — both already handle
    x86-64/aarch64 and are the template.
-5. `--skip-ark` opts out of the Ark bootstrap (R sessions will not work);
-   on manifest-less architectures the script warns and skips automatically.
+5. `--skip-ark` opts out of the Ark bootstrap (R sessions will not work).
+   Linux is supported on exactly `x86_64` and `arm64`; BSD and any other
+   architecture are rejected with exit 1.
 
 Authoritative contract: `docs/plans/active-2026-08-20-source-install-diagnostic-script-spec.md`.
 

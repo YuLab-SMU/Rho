@@ -261,11 +261,10 @@ Unknown systems: generic fallback + PR invitation (see Diagnostics Phase).
   incremental state is kept, so a retry resumes).
 - Install failure (prefix not writable): exit 4; nothing is written; the user
   re-runs with `sudo` or `--prefix`.
-- `--skip-ark`: explicit opt-out; on the wired Linux architectures
-  (`x86_64`, `aarch64`/`arm64`) it skips an otherwise-working bootstrap, while
-  on other Linux architectures (no Ark build in `runtime/ark.json`) the script
-  warns and skips the bootstrap automatically because it could not succeed;
-  the final report then states that R sessions will not work.
+- `--skip-ark`: explicit opt-out; it skips an otherwise-working bootstrap and
+  the final report states that R sessions will not work. (Linux is supported
+  on exactly `x86_64` and `aarch64`/`arm64` per the owner decision; any other
+  `uname -m` value is rejected with exit 1, as is BSD.)
 - The script never mutates the repository beyond what the existing bootstrap
   scripts already do (staged sidecar and runtime resources under
   `.rho/runtime` and `desktop/src-tauri/binaries`), and it never requires

@@ -18,3 +18,4 @@
 /test/generated-manual-fixtures/
 test/environment-demo/renv
 .reasonix
+reasonix.toml
