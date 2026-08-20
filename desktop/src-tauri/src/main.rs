@@ -7,6 +7,7 @@ mod git_review;
 mod platform;
 mod project;
 mod update;
+mod workspace_plugins;
 
 use std::collections::HashMap;
 use std::ffi::OsString;
@@ -262,6 +263,7 @@ struct AppState {
     environment_approvals: Arc<PendingApprovalRegistry>,
     project_transition_gate: Arc<Mutex<()>>,
     extension_host: Arc<ExtensionHost>,
+    plugin_permissions: Arc<workspace_plugins::PendingPluginPermissionRegistry>,
     agent_tasks: Arc<Mutex<HashMap<String, AgentTaskEntry>>>,
     agent_workspace_lane: Arc<AgentWorkspaceLane>,
     agent_file_mutations: Arc<AgentFileMutationRegistry>,
@@ -5825,6 +5827,28 @@ async fn shutdown_application(state: &AppState) -> Result<(), String> {
     }
     agent_llm::clear_session_credentials();
 
+    let plugin_project_root = {
+        let root = state.project_root.read().await.clone();
+        normalize_project_root(root.to_string_lossy().as_ref())
+    };
+    state
+        .plugin_permissions
+        .invalidate_project(&plugin_project_root);
+    match read_store(state) {
+        Ok(mut store) => {
+            if let Err(error) = store
+                .recover_pending_plugin_permission_requests(&plugin_project_root, "broker_shutdown")
+            {
+                write_startup_log(&format!(
+                    "Workspace plugin permission shutdown recovery failed: {error:#}"
+                ));
+            }
+        }
+        Err(error) => write_startup_log(&format!(
+            "Workspace plugin permission store was unavailable during shutdown: {error:#}"
+        )),
+    }
+
     if let Some(watcher) = state.project_watcher.lock().await.take() {
         watcher.stop();
     }
@@ -5980,6 +6004,12 @@ async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus> {
     store
         .recover_incomplete_environment_operations()
         .context("recovering incomplete environment operations after desktop restart")?;
+    store
+        .recover_pending_plugin_permission_requests(&normalized_project_root, "broker_restart")
+        .context("recovering pending workspace plugin permission requests")?;
+    store
+        .recover_transient_plugin_permission_grants(&normalized_project_root, "broker_restart")
+        .context("recovering one-shot workspace plugin grants")?;
     let file_recovery = recover_incomplete_agent_file_mutations(
         &mut store,
         &project_root,
@@ -6816,6 +6846,33 @@ where
                 "kind": "internal_extension_orphan_workspace_rollback",
                 "outcome": report.outcome,
             }));
+        }
+    }
+
+    let previous_normalized_root =
+        normalize_project_root(previous_ui_root.to_string_lossy().as_ref());
+    if previous_normalized_root != normalized_root {
+        state
+            .plugin_permissions
+            .invalidate_project(&previous_normalized_root);
+        match read_store(state) {
+            Ok(mut store) => {
+                if let Err(error) = store.recover_pending_plugin_permission_requests(
+                    &previous_normalized_root,
+                    "project_switched",
+                ) {
+                    write_startup_event(json!({
+                        "kind": "plugin_permission_project_switch_recovery_failed",
+                        "project_root": previous_normalized_root,
+                        "message": bounded_diagnostic(&error.to_string()),
+                    }));
+                }
+            }
+            Err(error) => write_startup_event(json!({
+                "kind": "plugin_permission_project_switch_store_unavailable",
+                "project_root": previous_normalized_root,
+                "message": bounded_diagnostic(&error.to_string()),
+            })),
         }
     }
 
@@ -9157,6 +9214,7 @@ mod tests {
             environment_approvals: Arc::new(PendingApprovalRegistry::default()),
             project_transition_gate: Arc::new(Mutex::new(())),
             extension_host,
+            plugin_permissions: crate::workspace_plugins::PendingPluginPermissionRegistry::new(),
             agent_tasks: Arc::new(Mutex::new(HashMap::new())),
             agent_workspace_lane: Arc::new(AgentWorkspaceLane::default()),
             agent_file_mutations: Arc::new(AgentFileMutationRegistry::default()),
@@ -14082,6 +14140,8 @@ fn main() {
                 environment_approvals: Arc::new(PendingApprovalRegistry::default()),
                 project_transition_gate: Arc::new(Mutex::new(())),
                 extension_host,
+                plugin_permissions: crate::workspace_plugins::PendingPluginPermissionRegistry::new(
+                ),
                 agent_tasks: Arc::new(Mutex::new(HashMap::new())),
                 agent_workspace_lane: Arc::new(AgentWorkspaceLane::default()),
                 agent_file_mutations: Arc::new(AgentFileMutationRegistry::default()),
@@ -14141,6 +14201,13 @@ fn main() {
             respond_environment_operation,
             list_installed_packages,
             list_lockfile_packages,
+            commands::plugins::list_workspace_plugins,
+            commands::plugins::request_workspace_plugin_enable,
+            commands::plugins::list_plugin_permission_requests,
+            commands::plugins::get_plugin_permission_request,
+            commands::plugins::respond_plugin_permission,
+            commands::plugins::list_plugin_grants,
+            commands::plugins::revoke_plugin_grant,
             commands::runs::list_runs,
             list_plot_artifacts,
             export_plot_artifact,

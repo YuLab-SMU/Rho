@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-const EXPECTED_HANDLER_DIGEST = "47e37bd1f93a989e629875fdf11c6ebbcc0e841a6363b5a647d0279cc0610629";
+const EXPECTED_HANDLER_DIGEST = "b4a67d11112816f79c9d0561092c1418ee2d16fdbf9d4494a8a5d0485c37924f";
 
 const RUN_COMMANDS = [
   "audit_reproducibility",
@@ -11,6 +11,16 @@ const RUN_COMMANDS = [
   "get_run_detail",
   "list_problems",
   "list_runs",
+];
+
+const PLUGIN_COMMANDS = [
+  "get_plugin_permission_request",
+  "list_plugin_grants",
+  "list_plugin_permission_requests",
+  "list_workspace_plugins",
+  "request_workspace_plugin_enable",
+  "respond_plugin_permission",
+  "revoke_plugin_grant",
 ];
 
 function rustFiles(root) {
@@ -118,15 +128,34 @@ export function validateCommandInventory({ sources, main, frontend, expectedHand
     );
   }
 
+  const pluginSource = sources.find(({ name }) => name.endsWith("commands/plugins.rs"));
+  assert.ok(pluginSource, "Workspace Plugins command module is missing");
+  assert.deepEqual(
+    commandDefinitions([pluginSource]).map(({ name }) => name).sort(),
+    PLUGIN_COMMANDS,
+    "Workspace Plugins command module ownership changed",
+  );
+  for (const command of PLUGIN_COMMANDS) {
+    assert.equal(
+      occurrences(frontend, new RegExp(`command === ["']${command}["']`, "g")),
+      1,
+      `browser mock must define exactly one ${command} handler`,
+    );
+  }
+
   return { commands: definitionNames.length, sources: sources.length };
 }
 
 function fixtures() {
+  const pluginHandlers = PLUGIN_COMMANDS.map(
+    (command) => `  commands::plugins::${command},`,
+  ).join("\n");
   const main = `
 #[tauri::command]
 async fn app_info() {}
 .invoke_handler(tauri::generate_handler![
   app_info,
+${pluginHandlers}
   commands::runs::list_runs,
   commands::runs::list_problems,
   commands::runs::get_run_detail,
@@ -140,11 +169,16 @@ async fn app_info() {}
     sources: [
       { name: "main.rs", text: main },
       { name: "commands/runs.rs", text: runs },
+      { name: "commands/plugins.rs", text: PLUGIN_COMMANDS.map(
+        (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
+      ).join("\n") },
     ],
     main,
     frontend: RUN_COMMANDS.map(
       (command) => `if (command === "${command}") return {};`,
-    ).join("\n"),
+    ).concat(PLUGIN_COMMANDS.map(
+      (command) => `if (command === "${command}") return {};`,
+    )).join("\n"),
   };
 }
 

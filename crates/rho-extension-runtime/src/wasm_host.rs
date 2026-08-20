@@ -31,6 +31,10 @@ pub const MAX_WASM_TABLE_ELEMENTS: usize = 1024;
 pub const DEFAULT_WASM_FUEL: u64 = 1_000_000;
 /// Maximum exact request ids that may be cancelled before dispatch.
 pub const MAX_PENDING_WASM_CANCELLATIONS: usize = 256;
+/// Zero-permission diagnostic ABI retained for P2-1 fixtures.
+pub const GUEST_ABI_V1: u64 = 1;
+/// No-import yield/resume ABI required by every permission-bearing plugin.
+pub const GUEST_ABI_V2: u64 = 2;
 
 /// Binary Guest ABI V1 fixture compiled into packaged smoke tests. It exports
 /// only the six P2-1 ABI items and imports nothing.
@@ -59,6 +63,9 @@ const GUEST_ECHO_EXPORT: &str = "rho_echo";
 const GUEST_HEARTBEAT_EXPORT: &str = "rho_heartbeat";
 const GUEST_QUIESCE_EXPORT: &str = "rho_quiesce";
 const GUEST_DISPOSE_EXPORT: &str = "rho_dispose";
+const GUEST_BEGIN_EXPORT: &str = "rho_begin";
+const GUEST_RESUME_EXPORT: &str = "rho_resume";
+const GUEST_CANCEL_EXPORT: &str = "rho_cancel";
 
 /// Exact identity bound to one executable Wasm host.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -121,6 +128,13 @@ struct WasmRuntime {
     heartbeat: TypedFunc<(), i32>,
     quiesce: TypedFunc<(), i32>,
     dispose: TypedFunc<(), i32>,
+    _broker: Option<GuestBrokerAbi>,
+}
+
+struct GuestBrokerAbi {
+    _begin: TypedFunc<(i32, i32), i64>,
+    _resume: TypedFunc<(i32, i32), i64>,
+    _cancel: TypedFunc<(i32, i32), i32>,
 }
 
 #[derive(Default)]
@@ -182,6 +196,7 @@ pub struct WasmPluginHost {
     runtime: Option<WasmRuntime>,
     state: HostInstanceState,
     negotiated_version: Option<u64>,
+    guest_abi_version: u64,
     cancellation: Arc<CancellationState>,
 }
 
@@ -193,6 +208,7 @@ impl std::fmt::Debug for WasmPluginHost {
             .field("module_digest", &self.module_digest)
             .field("state", &self.state)
             .field("negotiated_version", &self.negotiated_version)
+            .field("guest_abi_version", &self.guest_abi_version)
             .field("runtime_present", &self.runtime.is_some())
             .finish_non_exhaustive()
     }
@@ -239,6 +255,11 @@ impl WasmPluginHost {
             .map_err(|_| protocol_error(HostProtocolErrorCode::GuestTrap))?
             .map_err(|error| protocol_error(classify_wasmtime_error(&error, false)))?;
         let runtime = bind_guest_abi(store, instance)?;
+        let guest_abi_version = if runtime._broker.is_some() {
+            GUEST_ABI_V2
+        } else {
+            GUEST_ABI_V1
+        };
 
         Ok(Self {
             identity,
@@ -247,6 +268,7 @@ impl WasmPluginHost {
             runtime: Some(runtime),
             state: HostInstanceState::Created,
             negotiated_version: None,
+            guest_abi_version,
             cancellation: Arc::new(CancellationState::new()),
         })
     }
@@ -261,6 +283,10 @@ impl WasmPluginHost {
 
     pub fn module_digest(&self) -> &PackageDigest {
         &self.module_digest
+    }
+
+    pub fn guest_abi_version(&self) -> u64 {
+        self.guest_abi_version
     }
 
     pub fn cancellation_handle(&self) -> WasmCancellationHandle {
@@ -331,10 +357,11 @@ impl WasmPluginHost {
         {
             return Err(invalid_state(self.state));
         }
+        let guest_abi_version = self.guest_abi_version;
         let status = self.call_guest(|runtime| {
             runtime
                 .activate
-                .call(&mut runtime.store, HOST_PROTOCOL_VERSION as i32)
+                .call(&mut runtime.store, guest_abi_version as i32)
         })?;
         self.require_success(status)?;
         self.state = HostInstanceState::Active;
@@ -590,6 +617,19 @@ fn bind_guest_abi(
     let heartbeat = typed_export::<(), i32>(&instance, &mut store, GUEST_HEARTBEAT_EXPORT)?;
     let quiesce = typed_export::<(), i32>(&instance, &mut store, GUEST_QUIESCE_EXPORT)?;
     let dispose = typed_export::<(), i32>(&instance, &mut store, GUEST_DISPOSE_EXPORT)?;
+    let broker_export_count = [GUEST_BEGIN_EXPORT, GUEST_RESUME_EXPORT, GUEST_CANCEL_EXPORT]
+        .into_iter()
+        .filter(|name| instance.get_export(&mut store, name).is_some())
+        .count();
+    let broker = match broker_export_count {
+        0 => None,
+        3 => Some(GuestBrokerAbi {
+            _begin: typed_export::<(i32, i32), i64>(&instance, &mut store, GUEST_BEGIN_EXPORT)?,
+            _resume: typed_export::<(i32, i32), i64>(&instance, &mut store, GUEST_RESUME_EXPORT)?,
+            _cancel: typed_export::<(i32, i32), i32>(&instance, &mut store, GUEST_CANCEL_EXPORT)?,
+        }),
+        _ => return Err(protocol_error(HostProtocolErrorCode::InvalidExport)),
+    };
     Ok(WasmRuntime {
         store,
         _instance: instance,
@@ -599,6 +639,7 @@ fn bind_guest_abi(
         heartbeat,
         quiesce,
         dispose,
+        _broker: broker,
     })
 }
 
@@ -663,6 +704,24 @@ mod tests {
 
     fn valid_wasm() -> Vec<u8> {
         P2_1_SMOKE_WASM.to_vec()
+    }
+
+    fn valid_v2_wasm() -> Vec<u8> {
+        wasm(
+            r#"(module
+                (memory (export "memory") 1 1)
+                (func (export "rho_activate") (param $abi i32) (result i32)
+                  local.get $abi i32.const 2 i32.ne)
+                (func (export "rho_echo") (param $ptr i32) (param $len i32) (result i64)
+                  local.get $ptr i64.extend_i32_u i64.const 32 i64.shl
+                  local.get $len i64.extend_i32_u i64.or)
+                (func (export "rho_heartbeat") (result i32) i32.const 0)
+                (func (export "rho_quiesce") (result i32) i32.const 0)
+                (func (export "rho_dispose") (result i32) i32.const 0)
+                (func (export "rho_begin") (param i32 i32) (result i64) i64.const 0)
+                (func (export "rho_resume") (param i32 i32) (result i64) i64.const 0)
+                (func (export "rho_cancel") (param i32 i32) (result i32) i32.const 0))"#,
+        )
     }
 
     fn identity(project: &str, digest: char) -> WasmHostIdentity {
@@ -749,6 +808,32 @@ mod tests {
                 .unwrap_err()
                 .code,
             HostProtocolErrorCode::InvalidStateTransition
+        );
+    }
+
+    #[test]
+    fn guest_abi_v2_requires_the_complete_no_import_export_set() {
+        let mut v2 =
+            WasmPluginHost::from_bytes(identity("project.a", 'a'), &valid_v2_wasm()).unwrap();
+        assert_eq!(v2.guest_abi_version(), GUEST_ABI_V2);
+        activate(&mut v2);
+        assert_eq!(v2.state(), HostInstanceState::Active);
+
+        let partial = wasm(
+            r#"(module
+                (memory (export "memory") 1 1)
+                (func (export "rho_activate") (param i32) (result i32) i32.const 0)
+                (func (export "rho_echo") (param i32 i32) (result i64) i64.const 0)
+                (func (export "rho_heartbeat") (result i32) i32.const 0)
+                (func (export "rho_quiesce") (result i32) i32.const 0)
+                (func (export "rho_dispose") (result i32) i32.const 0)
+                (func (export "rho_begin") (param i32 i32) (result i64) i64.const 0))"#,
+        );
+        assert_eq!(
+            WasmPluginHost::from_bytes(identity("project.a", 'a'), &partial)
+                .unwrap_err()
+                .code,
+            HostProtocolErrorCode::InvalidExport
         );
     }
 

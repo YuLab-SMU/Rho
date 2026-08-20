@@ -153,53 +153,90 @@ impl Store {
         &mut self,
         draft: &PluginPermissionRequestDraft,
     ) -> Result<PluginPermissionRequest, StoreError> {
-        let request = validate_request(draft)?;
-        let now = Utc::now().to_rfc3339();
-        let transaction = self
-            .connection
-            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-        transaction.execute(
-            "INSERT INTO plugin_permission_requests(
-                request_id, project_root, plugin_id, plugin_version, package_digest,
-                runtime_kind, permission, constraints_json, constraints_digest,
-                purpose_text, status, requested_at, expected_project_revision
-             ) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'pending', ?11, ?12)",
-            params![
-                request.request_id,
-                request.project_root,
-                request.plugin_id,
-                request.plugin_version,
-                request.package_digest,
-                request.runtime_kind,
-                request.permission,
-                request.constraints_json,
-                request.constraints_digest,
-                request.purpose_text,
-                now,
-                request.expected_project_revision,
-            ],
-        )?;
-        insert_event(
-            &transaction,
-            PermissionEventDraft {
-                project_root: &request.project_root,
-                plugin_id: &request.plugin_id,
-                package_digest: &request.package_digest,
-                request_id: Some(&request.request_id),
-                grant_id: None,
-                event_type: "request_created",
-                status: "pending",
-                reason_code: None,
-                created_at: &now,
-            },
-        )?;
-        transaction.commit()?;
-        self.get_plugin_permission_request(&request.project_root, &request.request_id)?
+        self.create_plugin_permission_requests(std::slice::from_ref(draft))?
+            .pop()
             .ok_or_else(|| {
                 StoreError::Validation(
                     "new plugin permission request could not be reloaded".to_string(),
                 )
             })
+    }
+
+    pub fn create_plugin_permission_requests(
+        &mut self,
+        drafts: &[PluginPermissionRequestDraft],
+    ) -> Result<Vec<PluginPermissionRequest>, StoreError> {
+        if drafts.is_empty() || drafts.len() > 64 {
+            return Err(StoreError::Validation(
+                "plugin permission request batch must contain 1..=64 entries".to_string(),
+            ));
+        }
+        let requests = drafts
+            .iter()
+            .map(validate_request)
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut request_ids = std::collections::BTreeSet::new();
+        if requests
+            .iter()
+            .any(|request| !request_ids.insert(request.request_id.as_str()))
+        {
+            return Err(StoreError::Validation(
+                "plugin permission request batch contains duplicate ids".to_string(),
+            ));
+        }
+        let now = Utc::now().to_rfc3339();
+        let transaction = self
+            .connection
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        for request in &requests {
+            transaction.execute(
+                "INSERT INTO plugin_permission_requests(
+                    request_id, project_root, plugin_id, plugin_version, package_digest,
+                    runtime_kind, permission, constraints_json, constraints_digest,
+                    purpose_text, status, requested_at, expected_project_revision
+                 ) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'pending', ?11, ?12)",
+                params![
+                    request.request_id,
+                    request.project_root,
+                    request.plugin_id,
+                    request.plugin_version,
+                    request.package_digest,
+                    request.runtime_kind,
+                    request.permission,
+                    request.constraints_json,
+                    request.constraints_digest,
+                    request.purpose_text,
+                    now,
+                    request.expected_project_revision,
+                ],
+            )?;
+            insert_event(
+                &transaction,
+                PermissionEventDraft {
+                    project_root: &request.project_root,
+                    plugin_id: &request.plugin_id,
+                    package_digest: &request.package_digest,
+                    request_id: Some(&request.request_id),
+                    grant_id: None,
+                    event_type: "request_created",
+                    status: "pending",
+                    reason_code: None,
+                    created_at: &now,
+                },
+            )?;
+        }
+        transaction.commit()?;
+        requests
+            .iter()
+            .map(|request| {
+                self.get_plugin_permission_request(&request.project_root, &request.request_id)?
+                    .ok_or_else(|| {
+                        StoreError::Validation(
+                            "new plugin permission request could not be reloaded".to_string(),
+                        )
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()
     }
 
     pub fn get_plugin_permission_request(
@@ -675,6 +712,73 @@ impl Store {
                     grant_id: None,
                     event_type: "recovery_cancelled",
                     status: "cancelled",
+                    reason_code: Some(&reason_code),
+                    created_at: &now,
+                },
+            )?;
+            recovered += 1;
+        }
+        transaction.commit()?;
+        Ok(recovered)
+    }
+
+    /// Restart/shutdown recovery for one-shot decisions. A durable allow-once
+    /// row is audit evidence, never a reusable authorization after the live
+    /// broker session disappears.
+    pub fn recover_transient_plugin_permission_grants(
+        &mut self,
+        project_root: &str,
+        reason_code: &str,
+    ) -> Result<usize, StoreError> {
+        let project_root = required_project_root(project_root)?;
+        let reason_code = validate_reason_code(Some(reason_code))?.ok_or_else(|| {
+            StoreError::Validation("plugin permission recovery reason is required".to_string())
+        })?;
+        let now = Utc::now().to_rfc3339();
+        let transaction = self
+            .connection
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        let grants = {
+            let mut statement = transaction.prepare(
+                "SELECT grant_id, plugin_id, package_digest
+                 FROM plugin_permission_grants
+                 WHERE project_root = ?1 AND status = 'active'
+                   AND grant_source = 'allow_once'
+                 ORDER BY grant_id ASC
+                 LIMIT ?2",
+            )?;
+            statement
+                .query_map(params![project_root, MAX_RECOVERY_RECORDS as i64], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                })?
+                .collect::<Result<Vec<_>, _>>()?
+        };
+        let mut recovered = 0;
+        for (grant_id, plugin_id, package_digest) in grants {
+            let changed = transaction.execute(
+                "UPDATE plugin_permission_grants
+                 SET status = 'revoked', revoked_at = ?3
+                 WHERE project_root = ?1 AND grant_id = ?2
+                   AND status = 'active' AND grant_source = 'allow_once'",
+                params![project_root, grant_id, now],
+            )?;
+            if changed != 1 {
+                continue;
+            }
+            insert_event(
+                &transaction,
+                PermissionEventDraft {
+                    project_root: &project_root,
+                    plugin_id: &plugin_id,
+                    package_digest: &package_digest,
+                    request_id: None,
+                    grant_id: Some(&grant_id),
+                    event_type: "grant_revoked",
+                    status: "completed",
                     reason_code: Some(&reason_code),
                     created_at: &now,
                 },
@@ -1423,6 +1527,38 @@ mod tests {
     }
 
     #[test]
+    fn request_batch_is_all_or_nothing_on_second_insert_failure() {
+        let directory = TempDir::new().unwrap();
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        store
+            .connection
+            .execute_batch(
+                "CREATE TRIGGER fail_second_plugin_permission_request
+                 BEFORE INSERT ON plugin_permission_requests
+                 WHEN NEW.request_id = 'request.b'
+                 BEGIN SELECT RAISE(FAIL, 'injected second request failure'); END;",
+            )
+            .unwrap();
+        let drafts = [
+            request("request.a", "D:/project/a"),
+            request("request.b", "D:/project/a"),
+        ];
+        assert!(store.create_plugin_permission_requests(&drafts).is_err());
+        assert!(
+            store
+                .list_plugin_permission_requests("D:/project/a", None, None)
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            store
+                .list_plugin_permission_events("D:/project/a", None)
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
     fn deny_is_atomic_idempotent_and_stale_safe() {
         let (_directory, mut store) = store();
         store
@@ -1571,6 +1707,62 @@ mod tests {
                 .unwrap()
                 .status,
             "pending"
+        );
+    }
+
+    #[test]
+    fn restart_recovery_revokes_only_exact_project_allow_once_grants() {
+        let (_directory, mut store) = store();
+        for (request_id, project) in [
+            ("request.once.a", "D:/project/a"),
+            ("request.project.a", "D:/project/a"),
+            ("request.once.b", "D:/project/b"),
+        ] {
+            store
+                .create_plugin_permission_request(&request(request_id, project))
+                .unwrap();
+        }
+        store
+            .resolve_plugin_permission_request(&allow_once("request.once.a", "D:/project/a"))
+            .unwrap();
+        let mut project_decision = allow_once("request.project.a", "D:/project/a");
+        project_decision.decision = PluginPermissionDecision::AllowProject;
+        project_decision.grant_id = Some("grant.request.project.a".to_string());
+        project_decision.expires_at = Some((Utc::now() + Duration::days(20)).to_rfc3339());
+        store
+            .resolve_plugin_permission_request(&project_decision)
+            .unwrap();
+        store
+            .resolve_plugin_permission_request(&allow_once("request.once.b", "D:/project/b"))
+            .unwrap();
+
+        assert_eq!(
+            store
+                .recover_transient_plugin_permission_grants("D:/project/a", "broker_restart")
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            store
+                .recover_transient_plugin_permission_grants("D:/project/a", "broker_restart")
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            store
+                .list_plugin_permission_grants("D:/project/a", None, Some("active"))
+                .unwrap()
+                .iter()
+                .map(|grant| grant.grant_source.as_str())
+                .collect::<Vec<_>>(),
+            vec!["project"]
+        );
+        assert_eq!(
+            store
+                .list_plugin_permission_grants("D:/project/b", None, Some("active"))
+                .unwrap()
+                .len(),
+            1
         );
     }
 

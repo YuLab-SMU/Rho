@@ -6,7 +6,7 @@ const read = (file) => normalizeLineEndings(fs.readFileSync(file, "utf8"));
 const count = (text, pattern) => [...text.matchAll(pattern)].length;
 const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-const expectedVersion = "0.4.1-dev.2";
+const expectedVersion = "0.4.1-dev.3";
 const normalPublishVersion = "0.4.0";
 const expectedVersionPattern = escapeRegExp(expectedVersion);
 const normalPublishVersionPattern = escapeRegExp(normalPublishVersion);

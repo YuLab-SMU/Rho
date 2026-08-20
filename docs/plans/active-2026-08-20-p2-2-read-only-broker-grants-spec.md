@@ -1,15 +1,16 @@
 # P2-2 Read-only Broker Grants And Trusted Permission UI
 
 Status: active; complete Phase 2 direction and local-first exception authorized
-2026-08-20; P2-2A schema + dedicated permission persistence checkpoint complete
-locally and P2-2B trusted permission UI/fresh-handle slice activated; P2-1
+2026-08-20; P2-2A schema/persistence and P2-2B trusted permission UI/fresh
+handle checkpoints complete locally; P2-2C `project.fs.read` activated; P2-1
 Windows/Linux hosted acceptance remains open and mandatory before final Phase 2
 acceptance
 
-Active work package: P2-2B only. P2-2C through P2-2F remain inactive until the
-trusted permission UI/fresh-handle stop gate passes. P2-2B may mint only
-in-memory handles for the exact approved identity and exposes no filesystem,
-network, or Workspace R operation.
+Active work package: P2-2C only. P2-2D through P2-2F remain inactive until the
+`project.fs.read` containment/isolation/recovery stop gate passes. P2-2C may
+add only the bounded read operation; network, Workspace R inspection, writes,
+directory listing, watch, mmap, and arbitrary file-handle authority remain
+absent.
 
 Change class: D3 security, schema, approval, network, filesystem, Workspace R,
 and cross-module behavior. Risk: R3.
@@ -409,6 +410,70 @@ versions and does not add `NEWS.md` copy. Hosted CI, independent privileged
 operation review, browser/installed acceptance, and release authority remain
 open. This evidence closes only the local P2-2A stop gate and activates P2-2B.
 
+### P2-2B checkpoint evidence
+
+P2-2B is implemented locally as a separate `workspace_plugins` application
+coordinator plus a thin `commands/plugins.rs` Tauri module. Seven fixed
+commands cover discovery, explicit enable, dedicated request inspection,
+decision, grant projection, and revoke. The browser mock implements each
+command exactly once, and the generated command inventory fixes 125 registered
+commands across 11 Rust source files.
+
+The live reference monitor now uses 256 random bits from the OS-backed RNG,
+injected clock/token sources for deterministic tests, redacted handle debug
+output, canonical constraint digests, explicit completion for allow-once,
+in-flight reservation, durable-grant replacement with a new token, and exact
+bindings for normalized project, plugin/version/digest/runtime, scope,
+generation, host, permission, constraints, policy revision, expiry, and
+Workspace lineage. SQLite still receives no raw handle, handle digest, host,
+generation, or Workspace authority. Restart revokes durable allow-once rows;
+project switch and shutdown invalidate in-memory authority and recover pending
+requests.
+
+Permission-bearing modules must expose the complete no-import Guest ABI V2
+export set; V1 remains valid only for zero-permission diagnostics. P2-2B detects
+and activates V2 but deliberately executes no broker step or privileged
+operation. Durable decisions that precede a package change or host failure are
+reported truthfully as saved with `stale_digest` or `host_unavailable`, while
+the live-handle count remains zero.
+
+The trusted dialog renders plugin name, exact version/digest/project,
+permission, normalized constraints, fixed consequence copy, duration choices,
+and separately labelled untrusted purpose using DOM `textContent`. Deny, Allow
+once, Allow for this project, revoke, Escape, focus trap/restore, and browser
+mock parity are present. The surface never accepts plugin HTML, labels,
+severity, or decision wording and never exposes a raw handle.
+
+Local verification on 2026-08-20:
+
+- stable and exact Rust `1.88.0`: `rho-extension-runtime` 169 tests,
+  `rho-store` 174 tests, and desktop 212 passed with one existing opt-in
+  Keychain smoke ignored on each toolchain;
+- stable and Rust `1.88.0` extension-runtime strict clippy passed with
+  `-D warnings`; rustfmt, lockfile use, JS syntax, and `git diff --check`
+  passed;
+- focused failures cover request-batch rollback, stale project/digest,
+  duplicate/concurrent decisions, multi-permission denial, invalid constraints,
+  host activation failure after durable success, one-shot restart recovery,
+  fresh-token replacement, revoke, shutdown/project invalidation, and
+  two-project persistence isolation;
+- command inventory, Phase 1 acceptance/version agreement, MAC4 release
+  contract, Rust MSRV contract, and the Workspace Plugins trusted-UI contract
+  passed;
+- real local browser review passed at 1440x900, 1024x768, and 390x844 with one
+  modal, no horizontal overflow, all decision buttons visible, malicious
+  `<script>` purpose rendered as text with no child element, initial Deny focus,
+  post-decision Refresh focus, Escape restoring the View menu trigger, approve
+  and revoke state transitions, and no `handle.*` text. The only console
+  diagnostics observed were existing Monaco cancellation messages during
+  deliberate page reload; no plugin-specific warning/error was present.
+
+Application metadata and browser fixtures advance together to
+`0.4.1-dev.3`; `NEWS.md` records this first user-routable Phase 2 surface. R
+package versions remain unchanged. Packaged-app, hosted six-leg, independent
+privileged-operation review, and release acceptance remain open. This closes
+only the local P2-2B stop gate and activates P2-2C.
+
 ## Verification Matrix
 
 Every state mutation covers success, invalid input, policy denial, stale state,
@@ -425,10 +490,9 @@ Workspace security review, version/NEWS agreement, and exact candidate handoff.
 
 ## Version, NEWS, And Release
 
-The proposed contract changes no code or version. The first user-routable
-P2-2 slice allocates the next application development version after the current
-`0.4.1-dev.2` baseline and adds truthful NEWS copy describing local project
-plugins and permission prompts without claiming P2-3 contributions, P2-4
+The first user-routable P2-2 slice allocated application development version
+`0.4.1-dev.3` and added truthful NEWS copy describing local project plugins and
+permission prompts without claiming P2-3 contributions, P2-4 durable
 restart/upgrade completeness, a marketplace, signing, or public release.
 
 No R package version changes unless an exported bridge contract changes. No

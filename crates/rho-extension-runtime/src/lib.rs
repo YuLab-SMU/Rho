@@ -68,8 +68,10 @@ pub use gardener::{
     repair_eligibility, repair_parent_must_match,
 };
 pub use grant::{
-    CapabilityHandle, GrantErrorKind, GrantRequest, GrantSource, GrantStore, PermissionConstraints,
-    PermissionKind, PermissionUse, PluginGrant, Revalidation, RevalidationRequest,
+    CapabilityHandle, GrantClock, GrantErrorKind, GrantRequest, GrantSource, GrantStore,
+    GrantTokenSource, MAX_ALLOW_ONCE_TTL, MAX_PROJECT_GRANT_TTL, OsGrantTokenSource,
+    PermissionConstraints, PermissionKind, PermissionUse, PluginGrant, Revalidation,
+    RevalidationRequest, SystemGrantClock, WorkspaceGrantIdentity,
 };
 pub use host::{
     DEFAULT_HEARTBEAT_INTERVAL, DEFAULT_HEARTBEAT_TIMEOUT, HOST_PROTOCOL_VERSION,
@@ -97,9 +99,10 @@ pub use lifecycle::{
 pub use manifest::{
     MANIFEST_SCHEMA_VERSION, MAX_MANIFEST_BYTES, MAX_MANIFEST_OPTIONAL, MAX_MANIFEST_PERMISSIONS,
     MAX_MANIFEST_PROVIDES, MAX_MANIFEST_REQUIRES, MAX_PACKAGE_AGGREGATE_BYTES, MAX_PACKAGE_DEPTH,
-    MAX_PACKAGE_FILE_BYTES, MAX_PACKAGE_FILES, MAX_RELATIVE_PATH_BYTES, ManifestProvide,
-    ManifestRequire, PermissionRequest, RuntimeDeclaration, RuntimeKind, UiDeclaration,
-    WorkspacePluginManifest,
+    MAX_PACKAGE_FILE_BYTES, MAX_PACKAGE_FILES, MAX_PERMISSION_BYTES,
+    MAX_PERMISSION_CONSTRAINT_ITEMS, MAX_PERMISSION_PURPOSE_BYTES, MAX_RELATIVE_PATH_BYTES,
+    ManifestProvide, ManifestRequire, PermissionRequest, RuntimeDeclaration, RuntimeKind,
+    UiDeclaration, WorkspacePluginManifest,
 };
 pub use model::{
     ActivationPlan, ActivationPolicy, BindingResolution, CapabilityContractMajor,
@@ -115,9 +118,9 @@ pub use observation::{
 };
 pub use resolver::resolve_activation_plan;
 pub use wasm_host::{
-    DEFAULT_WASM_FUEL, MAX_PENDING_WASM_CANCELLATIONS, MAX_WASM_MEMORY_BYTES,
-    MAX_WASM_MODULE_BYTES, MAX_WASM_TABLE_ELEMENTS, P2_1_SMOKE_WASM, P2_1_WASI_IMPORT_SMOKE_WASM,
-    WasmCancellationHandle, WasmHostIdentity, WasmPluginHost,
+    DEFAULT_WASM_FUEL, GUEST_ABI_V1, GUEST_ABI_V2, MAX_PENDING_WASM_CANCELLATIONS,
+    MAX_WASM_MEMORY_BYTES, MAX_WASM_MODULE_BYTES, MAX_WASM_TABLE_ELEMENTS, P2_1_SMOKE_WASM,
+    P2_1_WASI_IMPORT_SMOKE_WASM, WasmCancellationHandle, WasmHostIdentity, WasmPluginHost,
 };
 
 pub const MAX_IDENTIFIER_BYTES: usize = 128;

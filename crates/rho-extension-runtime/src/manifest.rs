@@ -24,6 +24,12 @@ pub const MAX_MANIFEST_REQUIRES: usize = 64;
 pub const MAX_MANIFEST_OPTIONAL: usize = 64;
 /// Maximum number of permission requests declared by one plugin manifest.
 pub const MAX_MANIFEST_PERMISSIONS: usize = 64;
+/// Maximum number of resource constraints inside one permission declaration.
+pub const MAX_PERMISSION_CONSTRAINT_ITEMS: usize = 64;
+/// Maximum untrusted purpose text shown inside the trusted permission dialog.
+pub const MAX_PERMISSION_PURPOSE_BYTES: usize = 1024;
+/// Maximum read/response bound accepted by the initial broker operations.
+pub const MAX_PERMISSION_BYTES: u64 = 1024 * 1024;
 /// Maximum depth of a package file tree during discovery.
 pub const MAX_PACKAGE_DEPTH: usize = 32;
 /// Maximum bytes of a single package file before it is rejected.
@@ -108,6 +114,10 @@ pub struct ManifestRequire {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PermissionRequest {
     pub name: String,
+    /// Optional untrusted explanation. The shell labels and renders this as
+    /// plain text; it never supplies trusted decision wording or markup.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub purpose: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub paths: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -242,7 +252,7 @@ impl WorkspacePluginManifest {
         }
         if self.permissions.len() > MAX_MANIFEST_PERMISSIONS {
             return Err(ExtensionError::ManifestValidation {
-                reason: format!("permissions exceed {} entries", MAX_MANIFEST_PERMISSIONS),
+                reason: format!("permissions exceed {MAX_MANIFEST_PERMISSIONS} entries"),
             });
         }
 
@@ -331,6 +341,43 @@ fn validate_permission_request(permission: &PermissionRequest) -> Result<(), Ext
         ),
     };
 
+    if permission.purpose.as_ref().is_some_and(|purpose| {
+        purpose.trim() != purpose
+            || purpose.is_empty()
+            || purpose.len() > MAX_PERMISSION_PURPOSE_BYTES
+            || purpose.chars().any(char::is_control)
+            || purpose.chars().any(|character| {
+                matches!(
+                    character,
+                    '\u{061c}'
+                        | '\u{200e}'
+                        | '\u{200f}'
+                        | '\u{202a}'..='\u{202e}'
+                        | '\u{2066}'..='\u{2069}'
+                )
+            })
+    }) {
+        return Err(ExtensionError::ManifestValidation {
+            reason: "permission purpose is empty, oversized, or contains unsafe controls"
+                .to_string(),
+        });
+    }
+    for (label, values) in [
+        ("paths", &permission.paths),
+        ("operations", &permission.operations),
+        ("schemes", &permission.schemes),
+        ("hosts", &permission.hosts),
+        ("methods", &permission.methods),
+    ] {
+        if values.len() > MAX_PERMISSION_CONSTRAINT_ITEMS {
+            return Err(ExtensionError::ManifestValidation {
+                reason: format!(
+                    "permission {label} exceed {MAX_PERMISSION_CONSTRAINT_ITEMS} entries"
+                ),
+            });
+        }
+    }
+
     match permission.name.as_str() {
         "project.fs.read" => {
             if permission.paths.is_empty()
@@ -405,9 +452,9 @@ fn validate_permission_request(permission: &PermissionRequest) -> Result<(), Ext
 }
 
 fn validate_positive_bound(value: Option<u64>, name: &str) -> Result<(), ExtensionError> {
-    if !matches!(value, Some(value) if value > 0) {
+    if !matches!(value, Some(value) if value > 0 && value <= MAX_PERMISSION_BYTES) {
         return Err(ExtensionError::ManifestValidation {
-            reason: format!("{name} must be a positive integer"),
+            reason: format!("{name} must be between 1 and {MAX_PERMISSION_BYTES}"),
         });
     }
     Ok(())
@@ -505,7 +552,7 @@ fn validate_relative_paths<'a>(
         }
         if path.len() > MAX_RELATIVE_PATH_BYTES {
             return Err(ExtensionError::ManifestValidation {
-                reason: format!("path exceeds {} bytes", MAX_RELATIVE_PATH_BYTES),
+                reason: format!("path exceeds {MAX_RELATIVE_PATH_BYTES} bytes"),
             });
         }
         if path.starts_with('/') || path.starts_with('\\') {

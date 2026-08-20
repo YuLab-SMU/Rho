@@ -89,6 +89,28 @@ impl<'a> PluginPermissionMutationService<'a> {
         self.store.create_plugin_permission_request(&draft)
     }
 
+    pub fn create_requests(
+        &mut self,
+        project_root: &str,
+        drafts: &[PluginPermissionRequestDraft],
+    ) -> Result<Vec<PluginPermissionRequest>, StoreError> {
+        let project_root = required_project_root(project_root)?;
+        let mut normalized = Vec::with_capacity(drafts.len());
+        for draft in drafts {
+            let draft_root = required_project_root(&draft.project_root)?;
+            if project_root != draft_root {
+                return Err(StoreError::Validation(
+                    "plugin permission request project does not match the service project"
+                        .to_string(),
+                ));
+            }
+            let mut draft = draft.clone();
+            draft.project_root = project_root.clone();
+            normalized.push(draft);
+        }
+        self.store.create_plugin_permission_requests(&normalized)
+    }
+
     pub fn resolve_request(
         &mut self,
         project_root: &str,
@@ -151,6 +173,16 @@ impl<'a> PluginPermissionMutationService<'a> {
         let project_root = required_project_root(project_root)?;
         self.store
             .recover_pending_plugin_permission_requests(&project_root, reason_code)
+    }
+
+    pub fn recover_transient_grants(
+        &mut self,
+        project_root: &str,
+        reason_code: &str,
+    ) -> Result<usize, StoreError> {
+        let project_root = required_project_root(project_root)?;
+        self.store
+            .recover_transient_plugin_permission_grants(&project_root, reason_code)
     }
 
     pub fn expire_grants(&mut self, project_root: &str) -> Result<usize, StoreError> {

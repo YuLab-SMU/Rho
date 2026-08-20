@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Rho</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="styles.css?v=0.4.1-dev.2&rev=m3-scientific-review-v3&agent=output-review-v3&issue4=provider-first-v1&issue5=conversation-session-v2&issue6=repair-r5&issue9=task-rail-v1&viewer=row-shape-r1&references=envelope-r1" />
+    <link rel="stylesheet" href="styles.css?v=0.4.1-dev.3&rev=m3-scientific-review-v3&agent=output-review-v3&issue4=provider-first-v1&issue5=conversation-session-v2&issue6=repair-r5&issue9=task-rail-v1&viewer=row-shape-r1&references=envelope-r1&plugins=p2-2b-v1" />
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true">
@@ -111,6 +111,8 @@
               <button type="button" role="menuitem" data-menu-command="show-logs">Show Logs</button>
               <button type="button" role="menuitem" data-menu-command="show-plots">Show Plots</button>
               <button type="button" role="menuitem" data-menu-command="show-problems">Show Problems</button>
+              <div class="menu-separator" role="separator"></div>
+              <button type="button" role="menuitem" data-menu-command="workspace-plugins">Workspace Plugins...</button>
               <div class="menu-separator" role="separator"></div>
               <button type="button" role="menuitem" data-menu-command="reset-panel-sizes">Reset Panel Sizes</button>
             </div>
@@ -1196,6 +1198,57 @@ plot(
         </div>
       </div>
     </div>
+    <div id="pluginDialog" class="product-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="pluginDialogTitle">
+      <div class="product-dialog-scrim" data-plugin-close="true"></div>
+      <section class="product-dialog-surface plugin-dialog-surface" tabindex="-1">
+        <div class="product-dialog-header">
+          <div>
+            <strong id="pluginDialogTitle">Workspace Plugins</strong>
+            <p id="pluginDialogSubtitle" class="product-dialog-note">Project-local code is disabled until you explicitly enable it.</p>
+          </div>
+          <button id="pluginDialogClose" type="button" aria-label="Close Workspace Plugins">&times;</button>
+        </div>
+        <div id="pluginDialogError" class="agent-llm-banner hidden" role="alert"></div>
+        <section id="pluginListView">
+          <div class="plugin-dialog-toolbar">
+            <span id="pluginProjectLabel" class="environment-hint">Loading project…</span>
+            <button id="pluginRefresh" type="button">Refresh</button>
+          </div>
+          <div id="pluginList" class="plugin-list" aria-live="polite">
+            <div class="empty-tree">Loading workspace plugins…</div>
+          </div>
+          <details id="pluginGrantSection" class="plugin-grant-section">
+            <summary>Active and historical grants <span id="pluginGrantCount">0</span></summary>
+            <div id="pluginGrantList" class="plugin-grant-list"></div>
+          </details>
+        </section>
+        <section id="pluginPermissionView" class="hidden">
+          <div class="plugin-trust-banner">
+            <strong>Permission required</strong>
+            <span>This request is separate from Agent approvals and environment operations.</span>
+          </div>
+          <dl id="pluginPermissionIdentity" class="plugin-permission-identity"></dl>
+          <div class="plugin-permission-section">
+            <strong>Requested permission and constraints</strong>
+            <pre id="pluginPermissionConstraints">{}</pre>
+          </div>
+          <div class="plugin-permission-section">
+            <strong>What this allows</strong>
+            <p id="pluginPermissionConsequence"></p>
+          </div>
+          <div id="pluginPermissionPurposeSection" class="plugin-permission-section hidden">
+            <strong>Plugin-provided purpose (untrusted text)</strong>
+            <blockquote id="pluginPermissionPurpose"></blockquote>
+          </div>
+          <p class="plugin-upgrade-note">This decision applies only to this project and exact package digest. Upgrades require review and receive new handles.</p>
+          <div class="product-dialog-actions plugin-permission-actions">
+            <button id="pluginPermissionDeny" type="button">Deny</button>
+            <button id="pluginPermissionAllowOnce" type="button">Allow once</button>
+            <button id="pluginPermissionAllowProject" type="button" class="primary">Allow for this project</button>
+          </div>
+        </section>
+      </section>
+    </div>
     <!-- Generic product dialogs -->
     <div id="genericDialog" class="product-dialog hidden" role="dialog" aria-modal="true">
       <div class="product-dialog-scrim"></div>
@@ -1368,6 +1421,6 @@ plot(
     <script src="vendor/viewer/katex.min.js"></script>
     <script src="vendor/viewer/katex-auto-render.min.js"></script>
     <script src="vendor/viewer/papaparse.min.js"></script>
-    <script src="app.js?v=0.4.1-dev.2&rev=m3-scientific-review-v3&projection=wp4&help=console-v3&afo=act-output-v1&issue4=provider-first-v1&issue5=conversation-session-v2&issue6=repair-r5&issue9=task-rail-v1&issue33=focus-stability-v1&viewer=row-shape-r1&references=envelope-r1&outputs=image-artifact-r1"></script>
+    <script src="app.js?v=0.4.1-dev.3&rev=m3-scientific-review-v3&projection=wp4&help=console-v3&afo=act-output-v1&issue4=provider-first-v1&issue5=conversation-session-v2&issue6=repair-r5&issue9=task-rail-v1&issue33=focus-stability-v1&viewer=row-shape-r1&references=envelope-r1&outputs=image-artifact-r1&plugins=p2-2b-v1"></script>
   </body>
 </html>

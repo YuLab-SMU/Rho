@@ -4,6 +4,24 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.1-dev.3 - 2026-08-20
+
+### Workspace plugins
+
+- Project-local Wasm packages under `.rho/plugins` now appear in a dedicated
+  Workspace Plugins surface and remain disabled until explicitly enabled.
+- Permission-bearing plugins use a separate trusted dialog and durable
+  request/grant/event lane. Decisions bind the exact project, plugin version,
+  package digest, permission constraints, policy revision, host generation,
+  and Workspace lineage where applicable; raw session handles are never shown
+  or persisted.
+- The initial permission choices are Deny, Allow once, and bounded access for
+  this project. One-shot grants are revoked during restart recovery, upgrades
+  require review, and project switching invalidates in-memory authority.
+- This checkpoint establishes trusted enablement and fresh handles; actual
+  filesystem, Workspace R, and network operations remain unavailable until
+  their separately tested Phase 2 slices land in this development candidate.
+
 ## 0.4.1-dev.1 - 2026-08-18
 
 ### Credentials
