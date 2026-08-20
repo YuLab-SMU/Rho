@@ -561,6 +561,16 @@ impl GrantStore {
             .map(|grant| grant.durable_grant_id.as_str())
     }
 
+    pub fn permission_constraints_for_handle(
+        &self,
+        handle_id: &str,
+    ) -> Option<PermissionConstraints> {
+        let handle_digest = sha256_hex(handle_id.as_bytes());
+        self.grants
+            .get(&handle_digest)
+            .map(|grant| grant.constraints.clone())
+    }
+
     pub fn complete_success(&mut self, handle_id: &str) -> bool {
         self.complete(handle_id, CompletionClass::Success)
     }

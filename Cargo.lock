@@ -4162,6 +4162,7 @@ dependencies = [
  "base64 0.22.1",
  "clap",
  "rand 0.9.5",
+ "reqwest 0.12.28",
  "rho-agent-transport",
  "rho-core",
  "rho-kernel",

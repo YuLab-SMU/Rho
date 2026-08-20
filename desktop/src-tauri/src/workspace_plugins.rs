@@ -26,6 +26,11 @@ use rho_extension_runtime::{
 use rho_kernel::ArkSession;
 use rho_server::coordinator::{CoordinatorRuntime, dispatch_workspace_request};
 use rho_server::plugin_fs::{ProjectFsReadErrorCode, ProjectFsReadRequest, read_project_file};
+use rho_server::plugin_network::{
+    NetworkAuthorizer, NetworkFetchEngine, NetworkFetchError, NetworkFetchErrorCode,
+    NetworkFetchPolicy, NetworkFetchRequest, NetworkHopAuthorization,
+    network_request_authorization,
+};
 use rho_server::plugin_workspace::{
     PreparedWorkspaceInspection, WorkspaceInspectErrorCode, WorkspaceInspectOperation,
     WorkspaceInspectRequest, WorkspaceInspectionContext, WorkspaceObjectReferenceRegistry,
@@ -216,6 +221,7 @@ struct RegistryState {
     grants: GrantStore,
     broker_call_id_source: Arc<dyn BrokerCallIdSource>,
     workspace_objects: WorkspaceObjectReferenceRegistry,
+    network_engine: Arc<NetworkFetchEngine>,
 }
 
 impl Default for RegistryState {
@@ -227,6 +233,7 @@ impl Default for RegistryState {
             grants: GrantStore::new(),
             broker_call_id_source: Arc::new(OsBrokerCallIdSource),
             workspace_objects: WorkspaceObjectReferenceRegistry::new(),
+            network_engine: Arc::new(NetworkFetchEngine::new()),
         }
     }
 }
@@ -234,6 +241,39 @@ impl Default for RegistryState {
 #[derive(Default)]
 pub(crate) struct PendingPluginPermissionRegistry {
     state: Mutex<RegistryState>,
+}
+
+struct LiveNetworkAuthorizer<'a> {
+    registry: &'a PendingPluginPermissionRegistry,
+    key: &'a str,
+    template: RevalidationRequest,
+}
+
+impl NetworkAuthorizer for LiveNetworkAuthorizer<'_> {
+    fn authorize(&self, hop: &NetworkHopAuthorization) -> Result<(), NetworkFetchError> {
+        let state = self
+            .registry
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let session_current = state.active.get(self.key).is_some_and(|active| {
+            active.host.identity().host_instance_id() == &self.template.host_instance_id
+        });
+        let mut request = self.template.clone();
+        request.permission_use = PermissionUse::NetworkFetch {
+            scheme: hop.scheme.clone(),
+            host: hop.host.clone(),
+            method: hop.method.clone(),
+            requested_response_bytes: hop.requested_response_bytes,
+        };
+        if session_current && state.grants.revalidate_admitted(&request) == Revalidation::Allowed {
+            Ok(())
+        } else {
+            Err(NetworkFetchError::new(
+                NetworkFetchErrorCode::AuthorizationDenied,
+            ))
+        }
+    }
 }
 
 impl PendingPluginPermissionRegistry {
@@ -586,6 +626,403 @@ impl PendingPluginPermissionRegistry {
             .workspace_objects
             .issue_from_snapshot(&workspace_context, snapshot_response)
             .map_err(Into::into)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) async fn invoke_network_plugin(
+        &self,
+        context: &PluginRuntimeContext,
+        plugin_id: &str,
+        request: serde_json::Value,
+        store_path: &Path,
+    ) -> Result<WorkspacePluginCallResult> {
+        let key = registry_key(&context.project_root, plugin_id);
+        let request_id = HostRequestId::generate();
+        let mut step = {
+            let mut state = self
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let active = state
+                .active
+                .get_mut(&key)
+                .context("workspace plugin is not enabled for this project")?;
+            let handles = active
+                .handles
+                .values()
+                .map(|handle| (handle.permission.as_static_str(), handle.id.clone()))
+                .collect::<BTreeMap<_, _>>();
+            active
+                .host
+                .begin_broker_call(
+                    request_id.clone(),
+                    serde_json::json!({
+                        "request": request,
+                        "capability_handles": handles,
+                    }),
+                )
+                .map_err(|error| anyhow!("workspace plugin broker begin failed: {error:?}"))?
+        };
+        let mut broker_steps = 0;
+        loop {
+            match step {
+                GuestStep::Complete { result, .. } => {
+                    return Ok(WorkspacePluginCallResult {
+                        plugin_id: plugin_id.to_string(),
+                        status: "completed".to_string(),
+                        result: Some(result),
+                        error_code: None,
+                        broker_steps,
+                    });
+                }
+                GuestStep::Error { code, .. } => {
+                    return Ok(WorkspacePluginCallResult {
+                        plugin_id: plugin_id.to_string(),
+                        status: "failed".to_string(),
+                        result: None,
+                        error_code: Some(code),
+                        broker_steps,
+                    });
+                }
+                GuestStep::BrokerRequest {
+                    handle_id,
+                    permission,
+                    operation,
+                    args,
+                    ..
+                } => {
+                    broker_steps += 1;
+                    if permission != "network.fetch" || operation != "network.fetch" {
+                        step =
+                            self.resume_plugin_error(&key, &request_id, "operation_not_available")?;
+                        continue;
+                    }
+                    let fetch_request: NetworkFetchRequest = match serde_json::from_value(args) {
+                        Ok(request) => request,
+                        Err(_) => {
+                            step =
+                                self.resume_plugin_error(&key, &request_id, "invalid_arguments")?;
+                            continue;
+                        }
+                    };
+                    let (
+                        revalidation,
+                        grant_id,
+                        plugin_identity_id,
+                        package_digest,
+                        policy,
+                        network_engine,
+                    ) = {
+                        let mut state = self
+                            .state
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        let active = state
+                            .active
+                            .get(&key)
+                            .context("workspace plugin was disabled before call admission")?;
+                        let identity = active.host.identity().clone();
+                        let setup = (|| {
+                            let constraints = state
+                                .grants
+                                .permission_constraints_for_handle(&handle_id)
+                                .ok_or("unknown_handle")?;
+                            let policy = NetworkFetchPolicy {
+                                allowed_hosts: constraints.hosts,
+                                allowed_methods: constraints.methods,
+                                max_response_bytes: constraints
+                                    .max_response_bytes
+                                    .ok_or("invalid_grant")?,
+                                current_project_revision: u64::try_from(context.project_revision)
+                                    .map_err(|_| "stale_project")?,
+                            };
+                            let initial = network_request_authorization(&fetch_request, &policy)
+                                .map_err(|error| network_error_code(error.code))?;
+                            Ok::<_, &'static str>((policy, initial))
+                        })();
+                        let (policy, initial) = match setup {
+                            Ok(setup) => setup,
+                            Err(code) => {
+                                drop(state);
+                                let mut store = Store::open(store_path)?;
+                                if let Err(persistence_error) = record_call_event(
+                                    &mut store,
+                                    context,
+                                    identity.plugin_id().as_str(),
+                                    identity.package_digest().as_str(),
+                                    None,
+                                    "call_denied",
+                                    "failed",
+                                    Some(code),
+                                    serde_json::json!({"operation": "network.fetch"}),
+                                    false,
+                                ) {
+                                    self.cancel_plugin_call(&key, &request_id);
+                                    return Err(persistence_error);
+                                }
+                                step = self.resume_plugin_error(&key, &request_id, code)?;
+                                continue;
+                            }
+                        };
+                        let revalidation = RevalidationRequest {
+                            handle_id: handle_id.clone(),
+                            plugin_id: identity.plugin_id().clone(),
+                            host_instance_id: identity.host_instance_id().clone(),
+                            package_digest: identity.package_digest().clone(),
+                            project_id: identity.project_id().clone(),
+                            scope_id: identity.project_id().clone(),
+                            generation: identity.activation_generation(),
+                            permission: PermissionKind::NetworkFetch,
+                            permission_use: PermissionUse::NetworkFetch {
+                                scheme: initial.scheme,
+                                host: initial.host,
+                                method: initial.method,
+                                requested_response_bytes: initial.requested_response_bytes,
+                            },
+                            workspace: None,
+                        };
+                        let admitted = state.grants.revalidate(revalidation.clone());
+                        if let Revalidation::Denied(error) = admitted {
+                            drop(state);
+                            let mut store = Store::open(store_path)?;
+                            if let Err(persistence_error) = record_call_event(
+                                &mut store,
+                                context,
+                                identity.plugin_id().as_str(),
+                                identity.package_digest().as_str(),
+                                None,
+                                "call_denied",
+                                "failed",
+                                Some(grant_error_code(error)),
+                                serde_json::json!({"operation": "network.fetch"}),
+                                false,
+                            ) {
+                                self.cancel_plugin_call(&key, &request_id);
+                                return Err(persistence_error);
+                            }
+                            step = self.resume_plugin_error(
+                                &key,
+                                &request_id,
+                                grant_error_code(error),
+                            )?;
+                            continue;
+                        }
+                        let grant_id = state
+                            .grants
+                            .durable_grant_id_for_handle(&handle_id)
+                            .context("admitted network handle has no durable grant identity")?
+                            .to_string();
+                        (
+                            revalidation,
+                            grant_id,
+                            identity.plugin_id().to_string(),
+                            identity.package_digest().to_string(),
+                            policy,
+                            Arc::clone(&state.network_engine),
+                        )
+                    };
+                    {
+                        let mut store = Store::open(store_path)?;
+                        if let Err(error) = record_call_event(
+                            &mut store,
+                            context,
+                            &plugin_identity_id,
+                            &package_digest,
+                            Some(&grant_id),
+                            "call_admitted",
+                            "completed",
+                            None,
+                            serde_json::json!({"operation": "network.fetch"}),
+                            false,
+                        ) {
+                            self.release_plugin_admission(&handle_id);
+                            self.cancel_plugin_call(&key, &request_id);
+                            return Err(error);
+                        }
+                    }
+                    let authorizer = LiveNetworkAuthorizer {
+                        registry: self,
+                        key: &key,
+                        template: revalidation.clone(),
+                    };
+                    let started = Instant::now();
+                    let fetched = network_engine
+                        .fetch(&fetch_request, &policy, &authorizer)
+                        .await;
+                    let fetched = match fetched {
+                        Ok(result) => result,
+                        Err(error) => {
+                            let code = network_error_code(error.code);
+                            let authorization_stale =
+                                error.code == NetworkFetchErrorCode::AuthorizationDenied;
+                            let mut store = Store::open(store_path)?;
+                            let persisted = if authorization_stale {
+                                record_call_event(
+                                    &mut store,
+                                    context,
+                                    &plugin_identity_id,
+                                    &package_digest,
+                                    None,
+                                    "call_denied",
+                                    "stale",
+                                    Some(code),
+                                    serde_json::json!({"operation": "network.fetch"}),
+                                    false,
+                                )
+                            } else if error.completion_uncertain {
+                                record_call_event(
+                                    &mut store,
+                                    context,
+                                    &plugin_identity_id,
+                                    &package_digest,
+                                    Some(&grant_id),
+                                    "completion_uncertain",
+                                    "failed",
+                                    Some(code),
+                                    serde_json::json!({"operation": "network.fetch"}),
+                                    true,
+                                )
+                            } else {
+                                record_call_event(
+                                    &mut store,
+                                    context,
+                                    &plugin_identity_id,
+                                    &package_digest,
+                                    Some(&grant_id),
+                                    "call_failed",
+                                    "failed",
+                                    Some(code),
+                                    serde_json::json!({"operation": "network.fetch"}),
+                                    false,
+                                )
+                            };
+                            if authorization_stale {
+                                self.release_plugin_admission(&handle_id);
+                            } else if error.completion_uncertain {
+                                self.complete_plugin_uncertain(&handle_id);
+                            } else {
+                                self.release_plugin_admission(&handle_id);
+                            }
+                            if let Err(persistence_error) = persisted {
+                                self.cancel_plugin_call(&key, &request_id);
+                                return Err(persistence_error);
+                            }
+                            step = self.resume_plugin_error(&key, &request_id, code)?;
+                            continue;
+                        }
+                    };
+                    let final_admitted = {
+                        let state = self
+                            .state
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        state.grants.revalidate_admitted(&revalidation) == Revalidation::Allowed
+                    };
+                    if !final_admitted {
+                        let mut store = Store::open(store_path)?;
+                        if let Err(persistence_error) = record_call_event(
+                            &mut store,
+                            context,
+                            &plugin_identity_id,
+                            &package_digest,
+                            None,
+                            "call_denied",
+                            "stale",
+                            Some("stale_after_dispatch"),
+                            serde_json::json!({"operation": "network.fetch"}),
+                            false,
+                        ) {
+                            self.release_plugin_admission(&handle_id);
+                            self.cancel_plugin_call(&key, &request_id);
+                            return Err(persistence_error);
+                        }
+                        self.release_plugin_admission(&handle_id);
+                        step =
+                            self.resume_plugin_error(&key, &request_id, "stale_after_dispatch")?;
+                        continue;
+                    }
+                    {
+                        let mut store = Store::open(store_path)?;
+                        if let Err(error) = record_call_event(
+                            &mut store,
+                            context,
+                            &plugin_identity_id,
+                            &package_digest,
+                            Some(&grant_id),
+                            "call_completed",
+                            "completed",
+                            None,
+                            serde_json::json!({
+                                "durationMs": started.elapsed().as_millis().min(u64::MAX as u128) as u64,
+                                "operation": "network.fetch",
+                                "redirectCount": fetched.redirect_count,
+                                "sizeBytes": fetched.size_bytes,
+                                "statusCode": fetched.status
+                            }),
+                            true,
+                        ) {
+                            self.complete_plugin_uncertain(&handle_id);
+                            self.cancel_plugin_call(&key, &request_id);
+                            return Err(error);
+                        }
+                    }
+                    let fetched_bytes = fetched.size_bytes as usize;
+                    let fetched = serde_json::to_value(fetched)?;
+                    let resume_result = (|| -> Result<GuestStep> {
+                        let mut state = self
+                            .state
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        ensure!(
+                            state.grants.revalidate_admitted(&revalidation)
+                                == Revalidation::Allowed,
+                            "network grant became stale after durable completion"
+                        );
+                        state.grants.complete_success(&handle_id);
+                        state
+                            .active
+                            .get_mut(&key)
+                            .context(
+                                "workspace plugin was disabled before network result delivery",
+                            )?
+                            .host
+                            .resume_broker_call(
+                                &request_id,
+                                &serde_json::json!({"ok": true, "value": fetched}),
+                                fetched_bytes,
+                            )
+                            .map_err(|error| anyhow!("network plugin resume failed: {error:?}"))
+                    })();
+                    step = match resume_result {
+                        Ok(step) => step,
+                        Err(error) => {
+                            let mut state = self
+                                .state
+                                .lock()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner);
+                            if let Some(active) = state.active.remove(&key) {
+                                state.grants.invalidate_host(&active.host_instance_id);
+                            }
+                            drop(state);
+                            let mut store = Store::open(store_path)?;
+                            record_call_event(
+                                &mut store,
+                                context,
+                                &plugin_identity_id,
+                                &package_digest,
+                                None,
+                                "call_failed",
+                                "failed",
+                                Some("completion_delivery_failed"),
+                                serde_json::json!({"operation": "network.fetch"}),
+                                false,
+                            )?;
+                            return Err(error);
+                        }
+                    };
+                }
+            }
+        }
     }
 
     #[allow(dead_code)]
@@ -1326,6 +1763,14 @@ impl PendingPluginPermissionRegistry {
         state.grants.complete_failure_before_dispatch(handle_id);
     }
 
+    fn complete_plugin_uncertain(&self, handle_id: &str) {
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.grants.complete_uncertain(handle_id);
+    }
+
     fn cancel_plugin_call(&self, key: &str, request_id: &HostRequestId) {
         let mut state = self
             .state
@@ -1427,6 +1872,23 @@ fn workspace_error_code(error: WorkspaceInspectErrorCode) -> &'static str {
         WorkspaceInspectErrorCode::ObjectChanged => "object_changed",
         WorkspaceInspectErrorCode::MalformedResult => "malformed_workspace_result",
         WorkspaceInspectErrorCode::ResultTooLarge => "workspace_result_too_large",
+    }
+}
+
+fn network_error_code(error: NetworkFetchErrorCode) -> &'static str {
+    match error {
+        NetworkFetchErrorCode::InvalidUrl => "invalid_url",
+        NetworkFetchErrorCode::HostNotAllowed => "host_not_allowed",
+        NetworkFetchErrorCode::MethodNotAllowed => "method_not_allowed",
+        NetworkFetchErrorCode::StaleProject => "stale_project",
+        NetworkFetchErrorCode::DnsFailed => "dns_failed",
+        NetworkFetchErrorCode::NonPublicAddress => "non_public_address",
+        NetworkFetchErrorCode::AuthorizationDenied => "authorization_denied",
+        NetworkFetchErrorCode::RedirectMissingLocation => "redirect_missing_location",
+        NetworkFetchErrorCode::TooManyRedirects => "too_many_redirects",
+        NetworkFetchErrorCode::ResponseTooLarge => "response_too_large",
+        NetworkFetchErrorCode::Timeout => "network_timeout",
+        NetworkFetchErrorCode::TransportFailed => "transport_failed",
     }
 }
 
@@ -1859,8 +2321,10 @@ fn grant_view(grant: PluginPermissionGrant, grants: &GrantStore) -> Result<Plugi
 mod tests {
     use super::*;
     use rho_extension_runtime::{GrantTokenSource, P2_1_SMOKE_WASM, SystemGrantClock};
+    use rho_server::plugin_network::{NetworkResolver, NetworkTransport, NetworkTransportResponse};
     use rho_server::plugin_workspace::{WorkspaceReferenceClock, WorkspaceReferenceIdSource};
     use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::Duration;
     use tempfile::tempdir;
 
     #[derive(Debug)]
@@ -1900,6 +2364,12 @@ mod tests {
     }
 
     fn deterministic_registry() -> PendingPluginPermissionRegistry {
+        deterministic_registry_with_network(NetworkFetchEngine::new())
+    }
+
+    fn deterministic_registry_with_network(
+        network_engine: NetworkFetchEngine,
+    ) -> PendingPluginPermissionRegistry {
         PendingPluginPermissionRegistry {
             state: Mutex::new(RegistryState {
                 next_generation: 1,
@@ -1911,6 +2381,7 @@ mod tests {
                     Arc::new(FixedWorkspaceClock(AtomicU64::new(123))),
                     Arc::new(FixedWorkspaceReferenceId),
                 ),
+                network_engine: Arc::new(network_engine),
             }),
         }
     }
@@ -1994,6 +2465,56 @@ mod tests {
             "args": {
                 "object_reference": format!("object.{}", "07".repeat(16)),
                 "operation": "preview"
+            }
+        })
+        .to_string();
+        let complete = serde_json::json!({
+            "type": "complete",
+            "call_id": call_id,
+            "result": {"received": true}
+        })
+        .to_string();
+        let begin_pointer = 1024_u64;
+        let complete_pointer = 4096_u64;
+        let begin_packed = (begin_pointer << 32) | begin.len() as u64;
+        let complete_packed = (complete_pointer << 32) | complete.len() as u64;
+        let module = wat::parse_str(format!(
+            r#"(module
+                (memory (export "memory") 1 32)
+                (data (i32.const {begin_pointer}) "{}")
+                (data (i32.const {complete_pointer}) "{}")
+                (func (export "rho_activate") (param i32) (result i32) i32.const 0)
+                (func (export "rho_echo") (param i32 i32) (result i64) i64.const 0)
+                (func (export "rho_heartbeat") (result i32) i32.const 0)
+                (func (export "rho_quiesce") (result i32) i32.const 0)
+                (func (export "rho_dispose") (result i32) i32.const 0)
+                (func (export "rho_begin") (param i32 i32) (result i64) i64.const {begin_packed})
+                (func (export "rho_resume") (param i32 i32) (result i64) i64.const {complete_packed})
+                (func (export "rho_cancel") (param i32 i32) (result i32) i32.const 0))"#,
+            wat_data(&begin),
+            wat_data(&complete),
+        ))
+        .unwrap();
+        fs::write(
+            project.join(".rho/plugins/example/dist/plugin.wasm"),
+            module,
+        )
+        .unwrap();
+    }
+
+    fn install_network_broker_module(project: &Path) {
+        let call_id = "call.000000000000002a";
+        let begin = serde_json::json!({
+            "type": "broker_request",
+            "call_id": call_id,
+            "handle_id": format!("handle.{}", "07".repeat(32)),
+            "permission": "network.fetch",
+            "operation": "network.fetch",
+            "args": {
+                "url": "https://api.example.org/data",
+                "method": "GET",
+                "max_response_bytes": 16,
+                "expected_project_revision": 3
             }
         })
         .to_string();
@@ -2157,6 +2678,69 @@ mod tests {
                 })
             })
         }
+    }
+
+    struct NetworkResolverFixture {
+        addresses: Vec<std::net::IpAddr>,
+    }
+
+    impl NetworkResolver for NetworkResolverFixture {
+        fn resolve<'a>(
+            &'a self,
+            _host: &'a str,
+        ) -> Pin<
+            Box<dyn Future<Output = Result<Vec<std::net::IpAddr>, NetworkFetchError>> + Send + 'a>,
+        > {
+            Box::pin(async move { Ok(self.addresses.clone()) })
+        }
+    }
+
+    struct NetworkTransportFixture {
+        response: NetworkTransportResponse,
+        delay: Duration,
+    }
+
+    impl NetworkTransport for NetworkTransportFixture {
+        fn send<'a>(
+            &'a self,
+            _hop: &'a rho_server::plugin_network::NetworkHop,
+            _maximum_bytes: u64,
+        ) -> Pin<
+            Box<
+                dyn Future<Output = Result<NetworkTransportResponse, NetworkFetchError>>
+                    + Send
+                    + 'a,
+            >,
+        > {
+            Box::pin(async move {
+                tokio::time::sleep(self.delay).await;
+                Ok(self.response.clone())
+            })
+        }
+    }
+
+    fn network_engine(
+        addresses: Vec<std::net::IpAddr>,
+        body: &[u8],
+        delay: Duration,
+        timeout: Duration,
+    ) -> NetworkFetchEngine {
+        NetworkFetchEngine::with_parts(
+            Arc::new(NetworkResolverFixture { addresses }),
+            Arc::new(NetworkTransportFixture {
+                response: NetworkTransportResponse {
+                    status: 200,
+                    safe_headers: BTreeMap::from([
+                        ("content-type".to_string(), "text/plain".to_string()),
+                        ("set-cookie".to_string(), "secret=never".to_string()),
+                    ]),
+                    location: None,
+                    body: body.to_vec(),
+                },
+                delay,
+            }),
+            timeout,
+        )
     }
 
     #[test]
@@ -2861,6 +3445,246 @@ mod tests {
                 .unwrap()
                 .len(),
             1
+        );
+    }
+
+    #[tokio::test]
+    async fn network_fetch_consumes_once_and_persists_only_bounded_metadata() {
+        let directory = tempdir().unwrap();
+        write_plugin(
+            directory.path(),
+            serde_json::json!([{
+                "name": "network.fetch",
+                "schemes": ["https"],
+                "hosts": ["api.example.org"],
+                "methods": ["GET"],
+                "maxResponseBytes": 16
+            }]),
+        );
+        install_network_broker_module(directory.path());
+        let database = directory.path().join("rho.sqlite");
+        let mut store = Store::open(&database).unwrap();
+        let registry = deterministic_registry_with_network(network_engine(
+            vec!["93.184.216.34".parse().unwrap()],
+            b"hello",
+            Duration::ZERO,
+            Duration::from_secs(1),
+        ));
+        let context = context(directory.path());
+        let requested = registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        registry
+            .respond(
+                &context,
+                PluginPermissionDecisionInput {
+                    request_id: requested.request_ids[0].clone(),
+                    decision: "allow_once".to_string(),
+                    expected_project_revision: 3,
+                },
+                &mut store,
+            )
+            .unwrap();
+        drop(store);
+        let result = registry
+            .invoke_network_plugin(
+                &context,
+                "org.example.plugin",
+                serde_json::json!({}),
+                &database,
+            )
+            .await
+            .unwrap();
+        assert_eq!(result.status, "completed");
+        let store = Store::open(&database).unwrap();
+        assert_eq!(
+            PluginPermissionQueryService::new(&store)
+                .list_grants(&context.project_root, None, Some("consumed"))
+                .unwrap()
+                .len(),
+            1
+        );
+        let events = PluginPermissionQueryService::new(&store)
+            .list_events(&context.project_root, Some(100))
+            .unwrap();
+        assert!(
+            events
+                .iter()
+                .any(|event| event.event_type == "call_completed")
+        );
+        let encoded = serde_json::to_string(&events).unwrap();
+        assert!(!encoded.contains("api.example.org"));
+        assert!(!encoded.contains("set-cookie"));
+        assert!(!encoded.contains("handle."));
+    }
+
+    #[tokio::test]
+    async fn network_timeout_consumes_once_uncertain_while_private_dns_remains_retryable() {
+        for (addresses, delay, timeout, expected_status, expected_event, reason) in [
+            (
+                vec!["93.184.216.34".parse().unwrap()],
+                Duration::from_millis(20),
+                Duration::from_millis(1),
+                "consumed",
+                "completion_uncertain",
+                "network_timeout",
+            ),
+            (
+                vec!["127.0.0.1".parse().unwrap()],
+                Duration::ZERO,
+                Duration::from_secs(1),
+                "active",
+                "call_failed",
+                "non_public_address",
+            ),
+        ] {
+            let directory = tempdir().unwrap();
+            write_plugin(
+                directory.path(),
+                serde_json::json!([{
+                    "name": "network.fetch",
+                    "schemes": ["https"],
+                    "hosts": ["api.example.org"],
+                    "methods": ["GET"],
+                    "maxResponseBytes": 16
+                }]),
+            );
+            install_network_broker_module(directory.path());
+            let database = directory.path().join("rho.sqlite");
+            let mut store = Store::open(&database).unwrap();
+            let registry = deterministic_registry_with_network(network_engine(
+                addresses, b"ok", delay, timeout,
+            ));
+            let context = context(directory.path());
+            let requested = registry
+                .request_enable(&context, "org.example.plugin", &mut store)
+                .unwrap();
+            registry
+                .respond(
+                    &context,
+                    PluginPermissionDecisionInput {
+                        request_id: requested.request_ids[0].clone(),
+                        decision: "allow_once".to_string(),
+                        expected_project_revision: 3,
+                    },
+                    &mut store,
+                )
+                .unwrap();
+            drop(store);
+            let result = registry
+                .invoke_network_plugin(
+                    &context,
+                    "org.example.plugin",
+                    serde_json::json!({}),
+                    &database,
+                )
+                .await
+                .unwrap();
+            assert_eq!(result.status, "completed");
+            let store = Store::open(&database).unwrap();
+            assert_eq!(
+                PluginPermissionQueryService::new(&store)
+                    .list_grants(&context.project_root, None, Some(expected_status))
+                    .unwrap()
+                    .len(),
+                1
+            );
+            let events = PluginPermissionQueryService::new(&store)
+                .list_events(&context.project_root, Some(100))
+                .unwrap();
+            assert!(events.iter().any(|event| {
+                event.event_type == expected_event && event.reason_code.as_deref() == Some(reason)
+            }));
+            assert!(
+                !events
+                    .iter()
+                    .any(|event| event.event_type == "call_completed")
+            );
+        }
+    }
+
+    #[test]
+    fn live_network_authorizer_observes_durable_revoke_between_hops() {
+        let directory = tempdir().unwrap();
+        write_plugin(
+            directory.path(),
+            serde_json::json!([{
+                "name": "network.fetch",
+                "schemes": ["https"],
+                "hosts": ["api.example.org"],
+                "methods": ["GET"],
+                "maxResponseBytes": 16
+            }]),
+        );
+        install_network_broker_module(directory.path());
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let registry = deterministic_registry();
+        let context = context(directory.path());
+        let requested = registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        registry
+            .respond(
+                &context,
+                PluginPermissionDecisionInput {
+                    request_id: requested.request_ids[0].clone(),
+                    decision: "allow_project".to_string(),
+                    expected_project_revision: 3,
+                },
+                &mut store,
+            )
+            .unwrap();
+        let key = registry_key(&context.project_root, "org.example.plugin");
+        let template = {
+            let mut state = registry
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let identity = state.active[&key].host.identity().clone();
+            let request = RevalidationRequest {
+                handle_id: format!("handle.{}", "07".repeat(32)),
+                plugin_id: identity.plugin_id().clone(),
+                host_instance_id: identity.host_instance_id().clone(),
+                package_digest: identity.package_digest().clone(),
+                project_id: identity.project_id().clone(),
+                scope_id: identity.project_id().clone(),
+                generation: identity.activation_generation(),
+                permission: PermissionKind::NetworkFetch,
+                permission_use: PermissionUse::NetworkFetch {
+                    scheme: "https".to_string(),
+                    host: "api.example.org".to_string(),
+                    method: "GET".to_string(),
+                    requested_response_bytes: 16,
+                },
+                workspace: None,
+            };
+            assert_eq!(
+                state.grants.revalidate(request.clone()),
+                Revalidation::Allowed
+            );
+            request
+        };
+        let authorizer = LiveNetworkAuthorizer {
+            registry: &registry,
+            key: &key,
+            template,
+        };
+        let hop = NetworkHopAuthorization {
+            scheme: "https".to_string(),
+            host: "api.example.org".to_string(),
+            method: "GET".to_string(),
+            requested_response_bytes: 16,
+        };
+        assert!(authorizer.authorize(&hop).is_ok());
+        let grant_id = PluginPermissionQueryService::new(&store)
+            .list_grants(&context.project_root, None, Some("active"))
+            .unwrap()[0]
+            .grant_id
+            .clone();
+        registry.revoke(&context, &grant_id, &mut store).unwrap();
+        assert_eq!(
+            authorizer.authorize(&hop).unwrap_err().code,
+            NetworkFetchErrorCode::AuthorizationDenied
         );
     }
 

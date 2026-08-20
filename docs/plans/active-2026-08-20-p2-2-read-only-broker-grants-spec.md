@@ -2,17 +2,16 @@
 
 Status: active; complete Phase 2 direction and local-first exception authorized
 2026-08-20; P2-2A schema/persistence, P2-2B trusted permission UI/fresh
-handles, P2-2C `project.fs.read`, and P2-2D `workspace.r.inspect` checkpoints
-complete locally; P2-2E `network.fetch` activated; P2-1
+handles, P2-2C `project.fs.read`, P2-2D `workspace.r.inspect`, and P2-2E
+`network.fetch` checkpoints complete locally; P2-2F combined acceptance
+activated; P2-1
 Windows/Linux hosted acceptance remains open and mandatory before final Phase 2
 acceptance
 
-Active work package: P2-2E only. P2-2F remains inactive until the HTTPS,
-redirect, DNS, timeout, streaming, credential/proxy, and revoke-during-fetch
-gate passes. P2-2E may add only bounded credential-free GET/HEAD requests to
-approved public HTTPS origins; arbitrary network, private/link-local targets,
-cookies, proxy credentials, custom headers, uploads, and non-HTTP protocols
-remain absent.
+Active work package: P2-2F only. It may add no new permission or privileged
+operation. Its scope is combined restart/revoke/concurrency/browser/installed
+review, recovery truth, contract evidence, and the P2-2 closeout decision.
+P2-3 remains inactive until this stop gate passes.
 
 Change class: D3 security, schema, approval, network, filesystem, Workspace R,
 and cross-module behavior. Risk: R3.
@@ -585,6 +584,61 @@ P2-2D adds no Tauri command, public protocol, application version, or
 user-facing contribution route. Hosted/installed Workspace crash and platform
 review remain open. This closes only the local P2-2D stop gate and activates
 P2-2E.
+
+### P2-2E checkpoint evidence
+
+P2-2E adds an injectable `NetworkFetchEngine` with separate resolver,
+transport, and live-authorizer contracts. The production transport constructs
+a new rustls client for each vetted hop with HTTPS-only mode, no proxy,
+automatic redirects disabled, referer disabled, fixed user agent, 15-second
+timeout, no cookie/client-certificate/custom-header surface, and
+`resolve_to_addrs` bound only to the trusted resolver's accepted addresses.
+
+URL validation rejects oversized/control input, non-HTTPS schemes, userinfo,
+fragments, IP literals, trailing-dot or invalid IDNA hosts, non-443 ports, and
+hosts outside the exact/wildcard grant grammar. Hostnames are canonical IDNA
+ASCII. Every DNS answer must be public; mixed public/private, loopback,
+private, carrier-grade NAT, link-local, multicast, unspecified,
+documentation/benchmark/reserved IPv4, IPv4-mapped/special/non-global IPv6,
+and DNS rebinding fail closed.
+
+Redirects are followed manually at most three times. Every hop repeats URL,
+host, method, byte, project, digest, host-session, expiry, and live-grant
+validation before DNS, after DNS/before send, and after response. Response
+bodies stream to the smaller call/grant/one-MiB limit; overflow returns no
+prefix. Only content type/length, ETag, last-modified, status, approved final
+origin, redirect count, base64 data, size, and `truncated=false` survive.
+Cookie, auth, proxy, connection, server, and other headers are dropped.
+
+An invalid initial request or rejected DNS resolution releases an allow-once
+reservation for retry. Once any request is dispatched, timeout, transport,
+redirect, or overflow uncertainty persists `completion_uncertain` and consumes
+allow-once fail-closed. Revoke/project/host change during DNS, redirect, or
+response delivery stops the next hop/result. No URL, headers, credentials,
+content, raw handle, or DNS answer is persisted in audit.
+
+Local verification on 2026-08-20:
+
+- stable and exact Rust `1.88.0`: `rho-server` 82 and desktop 221 tests passed
+  with one existing opt-in Keychain smoke ignored on each toolchain;
+- extension-runtime strict clippy passed on both toolchains; server clippy
+  completed on both with no `plugin_network` warning; rustfmt, locked builds,
+  P2-2 broker negative contracts, and MSRV workflow enforcement passed;
+- fake resolver/transport tests cover public HTTPS success, safe-header
+  projection, request unknown fields/body/header injection, GET/HEAD policy,
+  IDNA, trailing dot/userinfo/IP/port/scheme/fragment rejection, wildcard
+  confusion, mixed answers, IPv4/IPv6 special ranges, same-host rebinding,
+  foreign/private redirects, exactly three redirects, per-hop revoke,
+  timeout, streaming overflow, and dispatched-vs-pre-dispatch uncertainty;
+- desktop integration covers fresh-handle admission, bounded audit with no URL
+  or secret header, allow-once success consumption, timeout uncertain
+  consumption, private-DNS retryability, and durable revoke becoming a live
+  authorizer denial between hops.
+
+P2-2E adds no Tauri command, public protocol, version change, credential use,
+or user-facing contribution route. Hosted network-stack behavior, installed
+smoke, and independent SSRF review remain open. This closes only the local
+P2-2E stop gate and activates P2-2F.
 
 ## Verification Matrix
 

@@ -21,8 +21,10 @@ this file records behavior included in a versioned build candidate.
 - The bounded `project.fs.read` broker lane is implemented behind the no-import
   Guest ABI V2 loop. Workspace R metadata/preview inspection is also
   implemented through fixed object references and strips function source, but
-  no user-facing contribution routes either operation yet. Network access
-  remains unavailable pending its separately tested Phase 2 slice.
+  no user-facing contribution routes either operation yet. Network access is
+  likewise implemented as credential-free, public-HTTPS-only GET/HEAD with
+  per-hop DNS and grant revalidation, but remains unreachable until the
+  controlled contribution slice lands.
 
 ## 0.4.1-dev.1 - 2026-08-18
 

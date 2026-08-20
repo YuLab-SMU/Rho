@@ -61,6 +61,25 @@ export function validateP22BrokerContract(value) {
   assert.match(value.rBridge, /Active bindings cannot be inspected without evaluating project code/);
 
   for (const marker of [
+    ".https_only(true)",
+    ".no_proxy()",
+    ".redirect(reqwest::redirect::Policy::none())",
+    ".referer(false)",
+    ".resolve_to_addrs(&hop.host, &socket_addresses)",
+    "MAX_PLUGIN_NETWORK_REDIRECTS: usize = 3",
+    "PLUGIN_NETWORK_TIMEOUT: Duration = Duration::from_secs(15)",
+    "addresses.iter().any(|address| !is_public_ip(*address))",
+    "authorize(&authorization)",
+    "filter_safe_header_map",
+    "completion_uncertain",
+  ]) assert.ok(value.networkBroker.includes(marker), `network.fetch lost ${marker}`);
+  assert.doesNotMatch(
+    value.networkBroker.split("#[cfg(test)]")[0],
+    /danger_accept_invalid|cookie_store|["'](?:authorization|proxy-authorization)["']|\.proxy\(/i,
+    "network broker gained credential, proxy, cookie, or invalid-TLS authority",
+  );
+
+  for (const marker of [
     "'call_admitted'",
     "'call_completed'",
     "'completion_uncertain'",
@@ -82,6 +101,9 @@ export function validateP22BrokerContract(value) {
     "invoke_workspace_plugin",
     "CoordinatorWorkspacePluginDispatcher",
     "issue_workspace_object_references",
+    "invoke_network_plugin",
+    "LiveNetworkAuthorizer",
+    "completion_uncertain",
   ]) assert.ok(value.desktop.includes(marker), `desktop broker loop lost ${marker}`);
   const fileLoopStart = value.desktop.indexOf("invoke_plugin_with_hook");
   const fileLoop = fileLoopStart >= 0 ? value.desktop.slice(fileLoopStart) : value.desktop;
@@ -102,9 +124,10 @@ function fixture() {
     fileBroker: "pub fn read_project_file\nMAX_PLUGIN_FILE_READ_BYTES: u64 = 1024 * 1024\nsymlink_metadata\nis_link_or_reparse\nNestedRepository\ncanonical_file.starts_with(&canonical_root)\n.take(request.max_bytes + 1)\nafter_canonical_file != canonical_file\n#[cfg(test)]",
     workspaceBroker: 'pub struct WorkspaceObjectReferenceRegistry\nrequest_type: "workspace.inspect_object"\nMAX_WORKSPACE_METADATA_BYTES: usize = 64 * 1024\nMAX_WORKSPACE_PREVIEW_BYTES: usize = 256 * 1024\nMAX_WORKSPACE_PREVIEW_ROWS: usize = 100\nMAX_WORKSPACE_PREVIEW_COLUMNS: usize = 50\nMAX_WORKSPACE_PREVIEW_DEPTH: usize = 4\nObjectChanged\nsame_workspace_lineage\n#[cfg(test)]',
     rBridge: "bindingIsActive(name, envir)\nActive bindings cannot be inspected without evaluating project code",
+    networkBroker: ".https_only(true)\n.no_proxy()\n.redirect(reqwest::redirect::Policy::none())\n.referer(false)\n.resolve_to_addrs(&hop.host, &socket_addresses)\nMAX_PLUGIN_NETWORK_REDIRECTS: usize = 3\nPLUGIN_NETWORK_TIMEOUT: Duration = Duration::from_secs(15)\naddresses.iter().any(|address| !is_public_ip(*address))\nauthorize(&authorization)\nfilter_safe_header_map\ncompletion_uncertain\n#[cfg(test)]",
     migration: "'call_admitted'\n'call_completed'\n'completion_uncertain'",
     store: "record_plugin_permission_call_event\nconsume_allow_once\nplugin permission call details contain a forbidden field",
-    desktop: "invoke_plugin_with_hook\nbegin_broker_call\ncall_admitted\nread_project_file(\nrevalidate_admitted\ncall_completed\nstale_after_dispatch\nresume_broker_call\ninvoke_workspace_plugin\nCoordinatorWorkspacePluginDispatcher\nissue_workspace_object_references",
+    desktop: "invoke_plugin_with_hook\nbegin_broker_call\ncall_admitted\nread_project_file(\nrevalidate_admitted\ncall_completed\nstale_after_dispatch\nresume_broker_call\ninvoke_workspace_plugin\nCoordinatorWorkspacePluginDispatcher\nissue_workspace_object_references\ninvoke_network_plugin\nLiveNetworkAuthorizer\ncompletion_uncertain",
   };
 }
 
@@ -116,6 +139,8 @@ if (process.argv.includes("--test")) {
     ["no post-revoke check", (value) => { value.desktop = value.desktop.replace("revalidate_admitted", ""); }],
     ["active binding evaluation", (value) => { value.rBridge = value.rBridge.replace("bindingIsActive(name, envir)", ""); }],
     ["arbitrary R", (value) => { value.workspaceBroker = `workspace.execute\n${value.workspaceBroker}`; }],
+    ["proxy inheritance", (value) => { value.networkBroker = value.networkBroker.replace(".no_proxy()", ""); }],
+    ["private address check", (value) => { value.networkBroker = value.networkBroker.replace("addresses.iter().any(|address| !is_public_ip(*address))", ""); }],
   ]) {
     const value = fixture();
     mutate(value);
@@ -128,6 +153,7 @@ if (process.argv.includes("--test")) {
     fileBroker: read("crates/rho-server/src/plugin_fs.rs"),
     workspaceBroker: read("crates/rho-server/src/plugin_workspace.rs"),
     rBridge: read("r/rho.bridge/R/workspace.R"),
+    networkBroker: read("crates/rho-server/src/plugin_network.rs"),
     migration: read("crates/rho-store/src/migration.rs"),
     store: read("crates/rho-store/src/plugin_permission.rs"),
     desktop: read("desktop/src-tauri/src/workspace_plugins.rs"),

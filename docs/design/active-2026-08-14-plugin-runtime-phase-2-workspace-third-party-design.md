@@ -5,9 +5,10 @@ authorized rapid implementation of the complete Phase 2 end state on
 2026-08-20; P2-1 Wasm host source/local macOS evidence is complete while
 Windows/Linux hosted acceptance remains open; local-first exception active;
 P2-2A schema/persistence, P2-2B trusted permission UI/fresh handles, P2-2C
-`project.fs.read`, and P2-2D `workspace.r.inspect` checkpoints are locally
-complete; `0.4.1-dev.3` and `rho.bridge 0.1.15` allocated; P2-2E
-`network.fetch` is active and P2-2F through P2-4 remain sequentially gated
+`project.fs.read`, P2-2D `workspace.r.inspect`, and P2-2E `network.fetch`
+checkpoints are locally complete; `0.4.1-dev.3` and `rho.bridge 0.1.15`
+allocated; P2-2F combined acceptance is active and P2-3/P2-4 remain
+sequentially gated
 
 Date: 2026-08-14
 Issue: [#17](https://github.com/YuLab-SMU/Rho/issues/17)
