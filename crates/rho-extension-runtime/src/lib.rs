@@ -59,7 +59,8 @@ pub use contribution_call::{
 pub use digest::PackageDigest;
 pub use discovery::{
     DiscoveredPlugin, DiscoveryFailure, DiscoveryReport, MANIFEST_NAME, PLUGINS_DIR,
-    discover_workspace_plugins,
+    WorkspacePluginPackageFile, WorkspacePluginPackageSnapshot, discover_workspace_plugins,
+    snapshot_workspace_plugin_cache_directory, snapshot_workspace_plugin_package,
 };
 pub use error::{
     DescriptorErrorReason, DiagnosticCode, DiagnosticSeverity, ExtensionDiagnostic, ExtensionError,

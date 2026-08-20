@@ -14,6 +14,7 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 rho-kernel = { path = "../rho-kernel" }
 rho-agent-transport = { path = "../rho-agent-transport" }
 rho-core = { path = "../rho-core" }
+rho-extension-runtime = { path = "../rho-extension-runtime" }
 rho-protocol = { path = "../rho-protocol" }
 rho-store = { path = "../rho-store" }
 serde.workspace = true

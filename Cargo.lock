@@ -4165,6 +4165,7 @@ dependencies = [
  "reqwest 0.12.28",
  "rho-agent-transport",
  "rho-core",
+ "rho-extension-runtime",
  "rho-kernel",
  "rho-protocol",
  "rho-store",

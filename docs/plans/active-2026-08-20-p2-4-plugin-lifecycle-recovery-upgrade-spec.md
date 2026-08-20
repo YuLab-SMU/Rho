@@ -5,10 +5,10 @@ state/transition/event/tombstone persistence completed its local stop gate
 2026-08-20; P2-1/P2-2/P2-3/P2-4A hosted and cross-platform installed gates
 remain open and mandatory before final Phase 2 acceptance
 
-Active work package: P2-4B1 only — bounded exact-package snapshot and
-broker-owned immutable-cache foundation. P2-4B2/P2-4B3 and P2-4C through P2-4G
-remain inactive. P2-4B1 creates no enable/restart route, permission decision,
-live host, contribution publication, UI or new guest-visible operation.
+Active work package: none at the P2-4B1 checkpoint. P2-4B2/P2-4B3 and P2-4C
+through P2-4G remain inactive pending explicit amendment/cross-review. P2-4B1
+created no enable/restart route, permission decision, live host, contribution
+publication, UI or new guest-visible operation.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -441,6 +441,34 @@ The schema-v14 persistence boundary is locally complete:
 Application metadata remains `0.4.1-dev.4`: P2-4A is persistence-only and has
 no installed user-visible lifecycle control. Hosted CI and installed-platform
 acceptance remain deliberately open.
+
+### P2-4B1 local checkpoint — 2026-08-20
+
+The exact snapshot/cache foundation is locally complete:
+
+- discovery now returns a bounded path-relative inventory only after exact
+  project/plugin/digest validation and repeats discovery after the read;
+- cached-directory read-back reparses the Manifest, revalidates all declared
+  paths and recomputes the complete canonical package digest;
+- the Broker cache uses project-hash/plugin/digest isolation, exclusive file
+  creation, file/directory sync, same-parent atomic rename, exact read-back and
+  current-user read-only sealing;
+- identical concurrent prepares converge on one exact target; same plugin and
+  digest in two projects receives different project cache keys;
+- write, pre-rename and post-rename interruptions, source mutation, symlinked
+  cache root, unexpected entries, changed/cross-plugin content and package/
+  digest/project bounds fail closed; no eviction or recursive user action was
+  added;
+- `rho-extension-runtime` passed 126 unit, 26 contract, 13 discovery and 34
+  lifecycle tests (199 total); `rho-server` passed 91 library and 1 binary test;
+  the B1 contract passed positive and negative modes;
+- stable Rust 1.97 and MSRV Rust 1.88 all-target workspace checks passed;
+  extension-runtime strict Clippy passed, and capped server Clippy reported no
+  warning in the new cache module.
+
+Application metadata remains `0.4.1-dev.4`: B1 is a broker-only foundation and
+has no user-visible or installed runtime effect. Hosted and installed-platform
+gates remain open.
 
 ## Verification Matrix
 

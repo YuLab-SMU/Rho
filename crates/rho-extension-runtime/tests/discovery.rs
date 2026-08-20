@@ -7,7 +7,10 @@
 use std::fs;
 use std::path::Path;
 
-use rho_extension_runtime::discover_workspace_plugins;
+use rho_extension_runtime::{
+    PackageDigest, PluginId, discover_workspace_plugins, snapshot_workspace_plugin_cache_directory,
+    snapshot_workspace_plugin_package,
+};
 
 /// Write a minimal valid manifest into `dir/rho-plugin.json`.
 fn write_valid_manifest(dir: &Path, id: &str) {
@@ -104,6 +107,87 @@ fn discovery_finds_and_digests_a_valid_plugin_without_executing() {
     assert_eq!(discovered.manifest.id.as_str(), "org.example.one");
     // The digest must be non-empty and stable.
     assert!(!discovered.digest.as_str().is_empty());
+}
+
+#[test]
+fn exact_snapshot_is_bounded_path_relative_and_digest_revalidated() {
+    let project = temp_project();
+    write_valid_manifest(project.path(), "org.example.snapshot");
+    let discovered = discover_workspace_plugins(project.path())
+        .unwrap()
+        .unwrap()
+        .plugins
+        .remove(0);
+    let snapshot = snapshot_workspace_plugin_package(
+        project.path(),
+        "org.example.snapshot",
+        &discovered.digest,
+    )
+    .unwrap();
+    assert_eq!(snapshot.manifest, discovered.manifest);
+    assert_eq!(snapshot.digest, discovered.digest);
+    assert_eq!(snapshot.files.len(), 2);
+    assert_eq!(
+        snapshot.file_bytes("dist\\plugin.wasm"),
+        Some(b"\0asm".as_slice())
+    );
+    assert!(
+        snapshot
+            .files
+            .iter()
+            .all(|file| !Path::new(&file.relative_path).is_absolute())
+    );
+    assert_eq!(
+        snapshot.aggregate_bytes,
+        snapshot
+            .files
+            .iter()
+            .map(|file| file.bytes.len())
+            .sum::<usize>()
+    );
+
+    let wrong_digest = PackageDigest::parse("f".repeat(64)).unwrap();
+    assert!(
+        snapshot_workspace_plugin_package(project.path(), "org.example.snapshot", &wrong_digest,)
+            .is_err()
+    );
+}
+
+#[test]
+fn cache_directory_readback_rejects_changed_or_cross_plugin_content() {
+    let project = temp_project();
+    write_valid_manifest(project.path(), "org.example.cached");
+    let discovered = discover_workspace_plugins(project.path())
+        .unwrap()
+        .unwrap()
+        .plugins
+        .remove(0);
+    let package_directory = plugins_root(project.path()).join("org.example.cached");
+    assert!(
+        snapshot_workspace_plugin_cache_directory(
+            &package_directory,
+            &PluginId::new("org.example.cached").unwrap(),
+            &discovered.digest,
+        )
+        .is_ok()
+    );
+    assert!(
+        snapshot_workspace_plugin_cache_directory(
+            &package_directory,
+            &PluginId::new("org.example.other").unwrap(),
+            &discovered.digest,
+        )
+        .is_err()
+    );
+    fs::write(package_directory.join("dist/plugin.wasm"), b"changed").unwrap();
+    assert!(
+        snapshot_workspace_plugin_cache_directory(
+            &package_directory,
+            &PluginId::new("org.example.cached").unwrap(),
+            &discovered.digest,
+        )
+        .is_err()
+    );
 }
 
 #[test]
