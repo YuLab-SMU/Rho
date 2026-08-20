@@ -5,10 +5,10 @@ state/transition/event/tombstone persistence completed its local stop gate
 2026-08-20; P2-1/P2-2/P2-3/P2-4A hosted and cross-platform installed gates
 remain open and mandatory before final Phase 2 acceptance
 
-Active work package: none at the P2-4C1 checkpoint. P2-4C2/C3 and P2-4D through
-P2-4G remain inactive pending explicit amendment/cross-review. C1 added one
-trusted Disable command only; project-switch/shutdown reuse, Retry, uninstall,
-update and rollback remain unavailable.
+Active work package: P2-4C2 only — bounded project switch, Workspace restart
+and application shutdown teardown reuse. P2-4C3 and P2-4D through P2-4G remain
+inactive. C2 adds no new command/UI action and may not activate Retry,
+uninstall, update or rollback.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -306,7 +306,7 @@ P2-4C is divided into three local stops:
    errors are stable-code-only and remaining cleanup continues. A persistence
    failure after route closure returns truthful `completion_uncertain` and never
    restores routing.
-2. **P2-4C2 — project switch, Workspace restart and shutdown reuse (inactive).**
+2. **P2-4C2 — project switch, Workspace restart and shutdown reuse (active).**
    Replace abrupt `invalidate_project` at trusted lifecycle boundaries with the
    same bounded teardown for every active/pending project plugin; BH2 continues
    after forced quarantine and records uncertainty without waiting forever.
@@ -322,6 +322,21 @@ cover already-disabled idempotency, active and permission-pending disable,
 in-flight cancellation, guest quiesce/dispose rejection/trap, persistence
 failure after route closure, two projects, concurrent disable/call/enable, and
 no stale route/handle/contribution or false durable completion.
+
+C2 distinguishes runtime teardown from user Disable. `project_teardown` and
+`shutdown` transitions preserve durable desired `enabled` while moving observed
+state to terminal `stopped`; this is required so exact packages can reconstruct
+on return/restart. They may preserve desired `disabled`, but never revive
+uninstalled intent. The completed system transition, exact accepted digest and
+stopped state are the evidence B3 requires before reactivation. Every project
+boundary enumerates durable/active/pending plugin IDs, attempts the full C1
+cleanup independently, forcibly invalidates any plugin whose durable request or
+cleanup fails, records a bounded stable-code report, and lets BH2 continue.
+
+Tests cover Workspace restart fresh reconstruction, A→B→A project switching,
+shutdown followed by reopen, pending permissions, two active plugins with one
+guest failure, transition persistence failure, deadline/forced quarantine, and
+the invariant that no old route/handle/host remains after the boundary.
 
 Project switching and application shutdown use the same sequence but are not
 held indefinitely: after deadlines the host is forcibly quarantined/dropped,

@@ -59,9 +59,7 @@ export function validateP24DisableContract(value) {
     '"disable_host_disposed": true',
     '"disable_terminal_durable": true',
   ]) assert.ok(value.installed.includes(marker), `installed C1 smoke lost ${marker}`);
-  assert.match(value.spec, /Active work package: none at the P2-4C1 checkpoint/);
   assert.match(value.spec, /P2-4C1 local checkpoint — 2026-08-20/);
-  assert.match(value.spec, /P2-4C2\/C3 and P2-4D through\s+P2-4G remain inactive/);
   assert.doesNotMatch(
     value.commands,
     /retry_workspace_plugin|uninstall_workspace_plugin|accept_workspace_plugin_update|rollback_workspace_plugin/,
@@ -80,7 +78,7 @@ function fixture() {
     packageJson: '{"version":"0.4.1-dev.6"}',
     news: "## 0.4.1-dev.6\n### Workspace-plugin disable",
     installed: '"explicit_disable": true\n"disable_route_closed": true\n"disable_host_disposed": true\n"disable_terminal_durable": true',
-    spec: "Active work package: none at the P2-4C1 checkpoint\nP2-4C1 local checkpoint — 2026-08-20\nP2-4C2/C3 and P2-4D through P2-4G remain inactive",
+    spec: "P2-4C1 local checkpoint — 2026-08-20",
   };
 }
 
