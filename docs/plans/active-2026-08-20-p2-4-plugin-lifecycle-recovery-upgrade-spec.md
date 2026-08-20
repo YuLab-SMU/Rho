@@ -5,10 +5,10 @@ state/transition/event/tombstone persistence completed its local stop gate
 2026-08-20; P2-1/P2-2/P2-3/P2-4A hosted and cross-platform installed gates
 remain open and mandatory before final Phase 2 acceptance
 
-Active work package: P2-4B2 only — durable first enable. P2-4B3 and P2-4C
-through P2-4G remain inactive. B2 may replace the existing trusted enable
-coordination but may not add disable/retry/uninstall/update/rollback commands,
-restart auto-activation or new guest authority.
+Active work package: none at the P2-4B2 checkpoint. P2-4B3 and P2-4C through
+P2-4G remain inactive pending explicit amendment/cross-review. B2 added no
+disable/retry/uninstall/update/rollback command, restart auto-activation or new
+guest authority.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -165,7 +165,7 @@ command surface.
 
 P2-4B is divided into three local integration stops:
 
-1. **P2-4B1 — exact snapshot and cache foundation (active).** Discovery exposes
+1. **P2-4B1 — exact snapshot and cache foundation (locally complete).** Discovery exposes
    one bounded read-only snapshot of the canonical package inventory only after
    the project root, `.rho/plugins` root, single-component directory, manifest,
    every file and expected digest are revalidated. The Rust Broker owns an
@@ -179,7 +179,7 @@ P2-4B is divided into three local integration stops:
    reuse fail closed. B1 enforces 32 MiB/package, three digests/plugin and 256
    MiB/project by refusal; it performs no eviction or deletion. Deterministic
    failure injection covers write, pre-rename and post-rename/read-back points.
-2. **P2-4B2 — durable first enable (active).** The existing trusted
+2. **P2-4B2 — durable first enable (locally complete).** The existing trusted
    `request_workspace_plugin_enable` command will persist one exact enable
    transition before permission work, prepare/cache the package before host
    construction, allocate generation through schema v14, load Wasm and bounded
@@ -480,6 +480,48 @@ The exact snapshot/cache foundation is locally complete:
 Application metadata remains `0.4.1-dev.4`: B1 is a broker-only foundation and
 has no user-visible or installed runtime effect. Hosted and installed-platform
 gates remain open.
+
+### P2-4B2 local checkpoint — 2026-08-20
+
+Durable first enable is locally complete at application `0.4.1-dev.5`:
+
+- explicit enable persists discovery, one exact transition and desired state
+  before package/permission/host work; permission continuation retains the same
+  transition identity;
+- activation generation is allocated monotonically from schema v14; Wasm and
+  bounded Skill content come from the fully read-back cache snapshot;
+- candidate host, fresh handles and contributions remain hidden until the
+  candidate journal; first publication requires expected-old `None`; accepted
+  digest/active terminal truth commits before Enabled is returned;
+- failures before publication persist disabled/failed when possible. Injected
+  failure at routing-journal and terminal-commit boundaries removes the exact
+  contribution route and invalidates handles, then leaves respectively
+  `candidate_activated` or `pointer_swapped` nonterminal recovery truth;
+- concurrent identical enable calls converge on one transition/generation;
+  changed accepted packages remain `update_pending` and keep the old exact
+  route rather than using first enable as an upgrade;
+- trusted UI/mock expose desired/observed/transition/accepted state. Browser
+  review at 951×811 verified Enabling, Update pending and Blocked are one
+  in-viewport modal with exact reason text and no unauthorized action;
+- all 235 desktop tests ran: 234 passed and the opt-in disposable-Keychain smoke
+  remained explicitly ignored. The complete locked Rust workspace, stable
+  all-target and Rust 1.88 all-target matrices passed; all P2-1/P2-3/P2-4,
+  version and UI contracts passed. Capped desktop Clippy reported only the
+  pre-existing `record_call_event` argument-count warning outside this slice;
+- debug candidate/legacy smoke and packaged macOS arm64 candidate/legacy smoke
+  both proved `schema_v14_lifecycle`, `exact_package_cache`,
+  `durable_first_enable`, generation 1 and completion-after-routing;
+- local arm64 artifacts: executable 47,539,008 bytes SHA-256
+  `89f20b72300caab1522f70d192b3a5822f631a365814e35544551212be89bc1d`;
+  DMG 26,219,179 bytes SHA-256
+  `b9ed563b65f9c1268a92ac96cf8af92d6e3b6f746bff5df7421ef9707ad92b66`;
+  updater archive 26,966,496 bytes SHA-256
+  `c26773e5efa8dd0193122f569018d94ced2c2789bf173c6f87df3105ad20477d`.
+
+The local updater signature used an ephemeral rehearsal key and intentionally
+does not match the production updater public key. It is build evidence, not a
+publishable update. Hosted CI, Windows/Linux installed acceptance and final
+Phase 2 acceptance remain open.
 
 ## Verification Matrix
 

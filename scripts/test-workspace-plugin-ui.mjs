@@ -60,6 +60,11 @@ for (const command of [
 }
 
 assert.match(js, /function renderWorkspacePlugins\(\)/);
+for (const marker of ["desired_state", "observed_state", "accepted_digest", "transition_id"]) {
+  assert.ok(js.includes(marker), `Workspace plugin mock lost durable field ${marker}`);
+}
+assert.match(js, /enabling: "Enabling"/);
+assert.match(js, /update_pending: "Update pending"/);
 assert.match(js, /function renderPluginContributions\(\)/);
 assert.match(js, /function renderPluginCommandPalette\(\)/);
 assert.match(js, /function renderTrustedPluginPanel\(response\)/);

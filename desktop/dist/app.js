@@ -506,6 +506,10 @@ const mockWorkspacePlugins = [{
   pending_request_count: 0,
   active_grant_count: 0,
   status: "disabled",
+  desired_state: "disabled",
+  observed_state: "discovered",
+  accepted_digest: null,
+  transition_id: null,
   message: null,
 }];
 const mockPluginPermissionRequests = [];
@@ -2248,7 +2252,7 @@ async function mockInvoke(command, args) {
   await new Promise((resolve) => setTimeout(resolve, command === "run_agent" ? 800 : 300));
   if (command === "app_info") {
     return {
-      version: "0.4.1-dev.4",
+      version: "0.4.1-dev.5",
       channel: "stable",
       commit: "4090cf725c53ab657ba9dfc9743ec6159f27dcf9",
       platform: mockPlatformFixture.platform,
@@ -2266,7 +2270,7 @@ async function mockInvoke(command, args) {
     return {
       status: "up_to_date",
       channel: "stable",
-      installed_version: "0.4.1-dev.4",
+      installed_version: "0.4.1-dev.5",
       available_version: null,
       published_at: null,
       summary: null,
@@ -2317,9 +2321,15 @@ async function mockInvoke(command, args) {
     if (Number(args.expectedProjectRevision) !== Number(state.revision.project_revision)) {
       throw new Error("Workspace plugin enable request is stale after a project change.");
     }
+    const transitionId = plugin.transition_id || `transition.enable.${crypto.randomUUID().replaceAll("-", "")}`;
+    plugin.transition_id = transitionId;
+    plugin.desired_state = "enabled";
+    plugin.observed_state = "resolving";
     if (plugin.permission_count === 0) {
       plugin.status = "enabled";
-      return { status: "enabled", plugin_id: plugin.plugin_id, request_ids: [], active_grant_count: 0, message: "The plugin is enabled with zero privileged permissions." };
+      plugin.observed_state = "active";
+      plugin.accepted_digest = plugin.package_digest;
+      return { status: "enabled", plugin_id: plugin.plugin_id, request_ids: [], active_grant_count: 0, transition_id: transitionId, message: "The exact cached plugin package is durably enabled with zero privileged permissions." };
     }
     let request = mockPluginPermissionRequests.find((item) => item.plugin_id === plugin.plugin_id && item.status === "pending");
     if (!request) {
@@ -2346,7 +2356,7 @@ async function mockInvoke(command, args) {
     }
     plugin.status = "permission_required";
     plugin.pending_request_count = 1;
-    return { status: "permission_required", plugin_id: plugin.plugin_id, request_ids: [request.request_id], active_grant_count: 0, message: "Review the requested permissions before this plugin can start." };
+    return { status: "permission_required", plugin_id: plugin.plugin_id, request_ids: [request.request_id], active_grant_count: 0, transition_id: transitionId, message: "Review the requested permissions before this plugin can start." };
   }
   if (command === "list_plugin_permission_requests") {
     return structuredClone(mockPluginPermissionRequests.filter((request) => !args.status || request.status === args.status));
@@ -2370,6 +2380,7 @@ async function mockInvoke(command, args) {
     plugin.pending_request_count = 0;
     if (input.decision === "deny") {
       plugin.status = "denied";
+      plugin.observed_state = "disabled";
       return { outcome: "applied", request: structuredClone(request), plugin_status: "denied", active_grant_count: 0, message: null };
     }
     const grant = {
@@ -2388,6 +2399,8 @@ async function mockInvoke(command, args) {
     };
     mockPluginGrants.push(grant);
     plugin.status = "enabled";
+    plugin.observed_state = "active";
+    plugin.accepted_digest = plugin.package_digest;
     plugin.active_grant_count = 1;
     return { outcome: "applied", request: structuredClone(request), plugin_status: "enabled", active_grant_count: 1, message: null };
   }
@@ -15356,6 +15369,18 @@ async function maybeApplyPreviewScenario() {
   if (scenario === "workspace-plugins") {
     const pluginState = previewParams.get("state") || "default";
     if (pluginState === "empty") mockWorkspacePlugins.splice(0);
+    if (["enabling", "update-pending", "blocked"].includes(pluginState) && mockWorkspacePlugins[0]) {
+      const status = pluginState.replace("-", "_");
+      mockWorkspacePlugins[0].status = status;
+      mockWorkspacePlugins[0].desired_state = "enabled";
+      mockWorkspacePlugins[0].observed_state = status === "enabling" ? "activating" : status;
+      mockWorkspacePlugins[0].transition_id = "transition.enable.preview";
+      mockWorkspacePlugins[0].message = status === "update_pending"
+        ? "The package digest changed. Update review is not available until the trusted update slice."
+        : status === "blocked"
+          ? "The plugin is blocked and remains non-routable pending trusted recovery."
+          : "The durable enable transition has not completed; no enabled result is claimed.";
+    }
     await openWorkspacePluginDialog();
     if (["permission", "malicious-text"].includes(pluginState) && mockWorkspacePlugins[0]) {
       await requestWorkspacePluginEnable(mockWorkspacePlugins[0].plugin_id);
@@ -20918,8 +20943,12 @@ function pluginStateLabel(status) {
     disabled: "Disabled",
     permission_required: "Permission required",
     enabled: "Enabled",
+    enabling: "Enabling",
     denied: "Denied",
     stale_digest: "Package changed",
+    update_pending: "Update pending",
+    blocked: "Blocked",
+    crashed: "Crashed",
     host_unavailable: "Host unavailable",
   }[status] || String(status || "Unavailable").replaceAll("_", " ");
 }
@@ -20956,10 +20985,10 @@ function renderWorkspacePlugins() {
     header.append(title, chip);
     const meta = document.createElement("div");
     meta.className = "plugin-card-meta";
-    meta.textContent = `Wasm · digest ${plugin.short_digest} · ${plugin.permission_count} requested permission${plugin.permission_count === 1 ? "" : "s"}`;
+    meta.textContent = `Wasm · digest ${plugin.short_digest} · ${plugin.permission_count} requested permission${plugin.permission_count === 1 ? "" : "s"} · desired ${plugin.desired_state || "disabled"} · observed ${plugin.observed_state || "discovered"}`;
     const actions = document.createElement("div");
     actions.className = "plugin-card-actions";
-    if (plugin.status !== "enabled") {
+    if (!["enabled", "enabling", "update_pending", "blocked", "crashed"].includes(plugin.status)) {
       const enable = document.createElement("button");
       enable.type = "button";
       enable.className = "primary";

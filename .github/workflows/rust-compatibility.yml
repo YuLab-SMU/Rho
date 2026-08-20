@@ -56,6 +56,7 @@ on:
       - "scripts/test-extension-p2-3-contribution-contract.mjs"
       - "scripts/test-extension-p2-4-lifecycle-contract.mjs"
       - "scripts/test-extension-p2-4-package-cache-contract.mjs"
+      - "scripts/test-extension-p2-4-durable-enable-contract.mjs"
       - "scripts/test-workspace-plugin-ui.mjs"
       - "scripts/test-installed-license-surface.mjs"
       - "scripts/test-signpath-readiness.mjs"
@@ -144,6 +145,7 @@ on:
       - "scripts/test-extension-p2-3-contribution-contract.mjs"
       - "scripts/test-extension-p2-4-lifecycle-contract.mjs"
       - "scripts/test-extension-p2-4-package-cache-contract.mjs"
+      - "scripts/test-extension-p2-4-durable-enable-contract.mjs"
       - "scripts/test-workspace-plugin-ui.mjs"
       - "scripts/test-installed-license-surface.mjs"
       - "scripts/test-signpath-readiness.mjs"
@@ -395,6 +397,8 @@ jobs:
           node scripts/test-extension-p2-4-lifecycle-contract.mjs
           node scripts/test-extension-p2-4-package-cache-contract.mjs --test
           node scripts/test-extension-p2-4-package-cache-contract.mjs
+          node scripts/test-extension-p2-4-durable-enable-contract.mjs --test
+          node scripts/test-extension-p2-4-durable-enable-contract.mjs
           node scripts/test-workspace-plugin-ui.mjs
           cargo check --workspace --all-targets --locked
           cargo test --workspace --locked --no-fail-fast

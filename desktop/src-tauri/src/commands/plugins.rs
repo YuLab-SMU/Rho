@@ -20,6 +20,7 @@ pub(crate) async fn runtime_context(state: &AppState) -> Result<PluginRuntimeCon
     let project_revision = i64::try_from(identity.project_revision)
         .context("project revision exceeds the plugin permission range")?;
     Ok(PluginRuntimeContext {
+        app_data_dir: state.data_dir.clone(),
         project_scope_id: extension_project_scope_id(&project_root)?,
         project_root,
         project_revision,
@@ -37,10 +38,10 @@ pub(crate) async fn list_workspace_plugins(
     state: State<'_, AppState>,
 ) -> Result<WorkspacePluginList, String> {
     let context = runtime_context(&state).await.map_err(display_error)?;
-    let store = read_store(&state).map_err(display_error)?;
+    let mut store = read_store(&state).map_err(display_error)?;
     state
         .plugin_permissions
-        .list(&context, &store)
+        .list(&context, &mut store)
         .map_err(display_error)
 }
 

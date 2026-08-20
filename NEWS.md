@@ -4,6 +4,24 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.1-dev.5 - 2026-08-20
+
+### Durable workspace-plugin enablement
+
+- Explicit first enable now persists project/plugin desired and observed state,
+  an exact transition journal, bounded lifecycle events, and a monotonic
+  activation generation in SQLite. The UI reports Enabled only after the exact
+  accepted digest and active terminal state commit.
+- Before host construction, Rho copies the fully revalidated package into a
+  project-isolated app-local immutable cache using exclusive writes, sync,
+  atomic rename, and complete digest read-back. Wasm and Skill text are loaded
+  from that exact cache snapshot rather than mutable project files.
+- Permission review retains the same transition identity through activation.
+  If persistence fails after contribution publication, Rho closes the route,
+  revokes live handles, reports failure, and leaves nonterminal recovery truth;
+  it does not claim durable completion. Changed packages remain update-pending
+  and cannot use the first-enable path as an unreviewed upgrade.
+
 ## 0.4.1-dev.4 - 2026-08-20
 
 ### Controlled workspace-plugin contributions

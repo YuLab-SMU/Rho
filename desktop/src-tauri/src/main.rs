@@ -4829,6 +4829,7 @@ async fn start_agent_turn(
             .context("Cannot start Agent without an active project identity")
             .map_err(display_error)?;
         plugin_runtime_context = workspace_plugins::PluginRuntimeContext {
+            app_data_dir: config.data_dir.clone(),
             project_scope_id: extension_project_scope_id(&project_root).map_err(display_error)?,
             project_root: project_root.clone(),
             project_revision: i64::try_from(identity.project_revision)
@@ -13852,9 +13853,9 @@ fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Valu
         ViewerDocumentV1, WasmHostIdentity, WasmPluginHost, WorkspacePluginManifest,
     };
     use rho_store::{
-        PluginPermissionDecision, PluginPermissionDecisionDraft, PluginPermissionMutationOutcome,
-        PluginPermissionMutationService, PluginPermissionQueryService,
-        PluginPermissionRequestDraft,
+        PluginLifecycleQueryService, PluginPermissionDecision, PluginPermissionDecisionDraft,
+        PluginPermissionMutationOutcome, PluginPermissionMutationService,
+        PluginPermissionQueryService, PluginPermissionRequestDraft,
     };
 
     #[derive(Debug)]
@@ -14287,6 +14288,80 @@ fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Valu
         "installed P2-3 contribution teardown left a live route"
     );
 
+    let p24_root = tempfile::tempdir()?;
+    let p24_project = p24_root.path().join("project");
+    let p24_data = p24_root.path().join("data");
+    let p24_plugin = p24_project.join(".rho/plugins/installed-smoke");
+    std::fs::create_dir_all(p24_plugin.join("dist"))?;
+    std::fs::create_dir_all(&p24_data)?;
+    std::fs::write(p24_plugin.join("dist/plugin.wasm"), P2_1_SMOKE_WASM)?;
+    std::fs::write(
+        p24_plugin.join("rho-plugin.json"),
+        serde_json::to_vec(&json!({
+            "schemaVersion": 1,
+            "id": "org.yulab.rho.phase2-durable-enable-smoke",
+            "name": "Durable enable smoke",
+            "version": "1.0.0",
+            "apiVersion": "^1.0",
+            "runtime": {"kind": "wasm", "entry": "dist/plugin.wasm", "scope": "project"}
+        }))?,
+    )?;
+    let p24_project_root =
+        normalize_project_root(p24_project.canonicalize()?.to_string_lossy().as_ref());
+    let p24_context = crate::workspace_plugins::PluginRuntimeContext {
+        app_data_dir: p24_data.clone(),
+        project_root: p24_project_root.clone(),
+        project_revision: 1,
+        project_scope_id: ScopeId::new("project.installed-durable-enable-smoke")?,
+        workspace: None,
+    };
+    let mut p24_store = Store::open(p24_root.path().join("rho.sqlite"))?;
+    let p24_registry = crate::workspace_plugins::PendingPluginPermissionRegistry::default();
+    let p24_enabled = p24_registry.request_enable(
+        &p24_context,
+        "org.yulab.rho.phase2-durable-enable-smoke",
+        &mut p24_store,
+    )?;
+    ensure!(
+        p24_enabled.status == "enabled" && p24_enabled.transition_id.is_some(),
+        "installed P2-4 durable first enable did not complete"
+    );
+    let p24_state = PluginLifecycleQueryService::new(&p24_store)
+        .get_state(
+            &p24_project_root,
+            "org.yulab.rho.phase2-durable-enable-smoke",
+        )?
+        .context("installed P2-4 lifecycle state is missing")?;
+    ensure!(
+        p24_state.desired_state == "enabled"
+            && p24_state.observed_state == "active"
+            && p24_state.accepted_digest.is_some()
+            && p24_state.pending_digest.is_none()
+            && p24_state.last_activation_generation == 1,
+        "installed P2-4 durable lifecycle truth is incomplete"
+    );
+    let p24_transition = PluginLifecycleQueryService::new(&p24_store)
+        .get_transition(
+            &p24_project_root,
+            p24_enabled.transition_id.as_deref().unwrap_or_default(),
+        )?
+        .context("installed P2-4 lifecycle transition is missing")?;
+    ensure!(
+        p24_transition.phase == "completed" && p24_transition.status == "completed",
+        "installed P2-4 transition did not reach durable completion"
+    );
+    let p24_cached = rho_server::plugin_package_cache::PluginPackageCache::new(&p24_data)
+        .load_exact(
+            &p24_project_root,
+            "org.yulab.rho.phase2-durable-enable-smoke",
+            p24_state.accepted_digest.as_deref().unwrap_or_default(),
+        )?;
+    ensure!(
+        p24_cached.file_bytes("dist/plugin.wasm") == Some(P2_1_SMOKE_WASM),
+        "installed P2-4 immutable cache read-back diverged"
+    );
+    p24_registry.invalidate_project(&p24_project_root);
+
     Ok(json!({
         "runtime": "wasmtime-38.0.4",
         "guest_abi": 1,
@@ -14308,6 +14383,11 @@ fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Valu
         "viewer_document_v1": true,
         "panel_slot": "plugin_details",
         "contribution_teardown": true,
+        "schema_v14_lifecycle": true,
+        "exact_package_cache": true,
+        "durable_first_enable": true,
+        "durable_activation_generation": 1,
+        "durable_completion_after_routing": true,
     }))
 }
 

@@ -5,10 +5,8 @@
 //! filesystem, network, Workspace R, contribution, install, or update call.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
 use std::future::Future;
-use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -18,14 +16,15 @@ use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use rho_core::ExecutionOrigin;
 use rho_extension_runtime::{
     ActivationGeneration, BrokerCallIdSource, CapabilityHandle, ContributionCallOutcome,
-    ContributionCallRequest, ContributionCallSession, ContributionInstanceIdentity,
-    ContributionInvocationOrigin, ContributionKind, ContributionStore, DiscoveredPlugin,
-    GrantErrorKind, GrantRequest, GrantSource, GrantStore, GuestStep, HOST_PROTOCOL_VERSION,
-    HostFrame, HostInstanceId, HostInstanceState, HostMessage, HostRequestId, HostResponse,
-    MAX_WASM_MODULE_BYTES, OsBrokerCallIdSource, PermissionConstraints, PermissionKind,
-    PermissionUse, PluginCommandResultV1, PluginId, Revalidation, RevalidationRequest, RuntimeKind,
-    ScopeId, SystemContributionClock, ViewerDocumentV1, WasmHostIdentity, WasmPluginHost,
-    WorkspaceGrantIdentity, discover_workspace_plugins,
+    ContributionCallRequest, ContributionCallSession, ContributionCandidate,
+    ContributionInstanceIdentity, ContributionInvocationOrigin, ContributionKind,
+    ContributionStore, DiscoveredPlugin, GrantErrorKind, GrantRequest, GrantSource, GrantStore,
+    GuestStep, HOST_PROTOCOL_VERSION, HostFrame, HostInstanceId, HostInstanceState, HostMessage,
+    HostRequestId, HostResponse, MAX_WASM_MODULE_BYTES, OsBrokerCallIdSource,
+    PermissionConstraints, PermissionKind, PermissionUse, PluginCommandResultV1, PluginId,
+    Revalidation, RevalidationRequest, RuntimeKind, ScopeId, SystemContributionClock,
+    ViewerDocumentV1, WasmHostIdentity, WasmPluginHost, WorkspaceGrantIdentity,
+    discover_workspace_plugins,
 };
 use rho_kernel::ArkSession;
 use rho_server::coordinator::{
@@ -38,16 +37,19 @@ use rho_server::plugin_network::{
     NetworkFetchPolicy, NetworkFetchRequest, NetworkHopAuthorization,
     network_request_authorization,
 };
+use rho_server::plugin_package_cache::{CachedPluginPackage, PluginPackageCache};
 use rho_server::plugin_workspace::{
     PreparedWorkspaceInspection, WorkspaceInspectErrorCode, WorkspaceInspectOperation,
     WorkspaceInspectRequest, WorkspaceInspectionContext, WorkspaceObjectReferenceRegistry,
     WorkspaceObjectReferenceView,
 };
 use rho_store::{
+    PluginLifecycleMutationOutcome, PluginLifecycleMutationService, PluginLifecycleQueryService,
     PluginPermissionCallEventDraft, PluginPermissionDecision, PluginPermissionDecisionDraft,
     PluginPermissionGrant, PluginPermissionMutationOutcome, PluginPermissionMutationService,
     PluginPermissionQueryService, PluginPermissionRequest, PluginPermissionRequestDraft, Store,
-    normalize_project_root,
+    WorkspacePluginDiscoveredDraft, WorkspacePluginState, WorkspacePluginTransitionAdvance,
+    WorkspacePluginTransitionDraft, normalize_project_root,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -125,6 +127,10 @@ pub(crate) struct WorkspacePluginView {
     pub pending_request_count: usize,
     pub active_grant_count: usize,
     pub status: String,
+    pub desired_state: String,
+    pub observed_state: String,
+    pub accepted_digest: Option<String>,
+    pub transition_id: Option<String>,
     pub message: Option<String>,
 }
 
@@ -140,6 +146,7 @@ pub(crate) struct WorkspacePluginEnableResult {
     pub plugin_id: String,
     pub request_ids: Vec<String>,
     pub active_grant_count: usize,
+    pub transition_id: Option<String>,
     pub message: String,
 }
 
@@ -200,6 +207,7 @@ pub(crate) struct WorkspacePluginCallResult {
 
 #[derive(Debug, Clone)]
 pub(crate) struct PluginRuntimeContext {
+    pub app_data_dir: PathBuf,
     pub project_root: String,
     pub project_revision: i64,
     pub project_scope_id: ScopeId,
@@ -258,6 +266,7 @@ struct PendingEnable {
     plugin_id: String,
     plugin_version: String,
     package_digest: String,
+    transition_id: String,
     request_ids: Vec<String>,
     expected_project_revision: i64,
 }
@@ -271,10 +280,10 @@ struct ActivePlugin {
     handles: BTreeMap<String, CapabilityHandle>,
     permission_count: usize,
     contribution_identity: Option<ContributionInstanceIdentity>,
+    skill_instructions: BTreeMap<String, String>,
 }
 
 struct RegistryState {
-    next_generation: u64,
     pending: BTreeMap<String, PendingEnable>,
     active: BTreeMap<String, ActivePlugin>,
     contributions: ContributionStore,
@@ -287,7 +296,6 @@ struct RegistryState {
 impl Default for RegistryState {
     fn default() -> Self {
         Self {
-            next_generation: 1,
             pending: BTreeMap::new(),
             active: BTreeMap::new(),
             contributions: ContributionStore::new(),
@@ -345,7 +353,7 @@ impl PendingPluginPermissionRegistry {
     pub(crate) fn list(
         &self,
         context: &PluginRuntimeContext,
-        store: &Store,
+        store: &mut Store,
     ) -> Result<WorkspacePluginList> {
         let report = discover_workspace_plugins(Path::new(&context.project_root))?;
         let requests = PluginPermissionQueryService::new(store).list_requests(
@@ -358,6 +366,11 @@ impl PendingPluginPermissionRegistry {
             Some(100),
             None,
         )?;
+        let lifecycle_states = PluginLifecycleQueryService::new(store)
+            .list_states(&context.project_root, Some(100))?
+            .into_iter()
+            .map(|state| (state.plugin_id.clone(), state))
+            .collect::<BTreeMap<_, _>>();
         let state = self
             .state
             .lock()
@@ -375,7 +388,16 @@ impl PendingPluginPermissionRegistry {
         let plugins = report
             .plugins
             .iter()
-            .map(|plugin| plugin_view(&context.project_root, plugin, &requests, &grants, &state))
+            .map(|plugin| {
+                plugin_view(
+                    &context.project_root,
+                    plugin,
+                    &requests,
+                    &grants,
+                    lifecycle_states.get(plugin.manifest.id.as_str()),
+                    &state,
+                )
+            })
             .collect();
         Ok(WorkspacePluginList {
             project_root: context.project_root.clone(),
@@ -497,23 +519,13 @@ impl PendingPluginPermissionRegistry {
                     )?;
                 }
                 ContributionKind::Skill => {
-                    let loaded = read_plugin_skill(context, &record).and_then(|instructions| {
+                    let loaded = {
                         let state = self
                             .state
                             .lock()
                             .unwrap_or_else(std::sync::PoisonError::into_inner);
-                        let current = state
-                            .contributions
-                            .get(&record.project_id, &record.contribution.capability)
-                            .is_some_and(|current| {
-                                current.plugin_id == record.plugin_id
-                                    && current.package_digest == record.package_digest
-                                    && current.activation_generation == record.activation_generation
-                                    && current.host_instance_id == record.host_instance_id
-                            });
-                        ensure!(current, "plugin Skill route changed while reading");
-                        Ok(instructions)
-                    });
+                        read_plugin_skill(&state, context, &record)
+                    };
                     let (status, content) = match loaded {
                         Ok(instructions)
                             if skill_pack_bytes
@@ -726,23 +738,54 @@ impl PendingPluginPermissionRegistry {
             plugin.manifest.runtime.kind == RuntimeKind::Wasm,
             "only Wasm workspace plugins are executable in Phase 2"
         );
+        PluginLifecycleMutationService::new(store).discover(
+            &context.project_root,
+            &WorkspacePluginDiscoveredDraft {
+                project_root: context.project_root.clone(),
+                plugin_id: plugin.manifest.id.to_string(),
+                directory_name: plugin.directory.clone(),
+                plugin_version: plugin.manifest.version.to_string(),
+                runtime_kind: plugin.manifest.runtime.kind.to_string(),
+                discovered_digest: plugin.digest.to_string(),
+            },
+        )?;
         let key = registry_key(&context.project_root, plugin_id);
         let mut state = self
             .state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let lifecycle = PluginLifecycleQueryService::new(store)
+            .get_state(&context.project_root, plugin.manifest.id.as_str())?
+            .context("durable plugin lifecycle state disappeared after discovery")?;
 
         if let Some(active) = state.active.get(&key)
             && active.package_digest == plugin.digest.as_str()
             && active.plugin_version == plugin.manifest.version.to_string()
+            && lifecycle.desired_state == "enabled"
+            && lifecycle.observed_state == "active"
+            && lifecycle.accepted_digest.as_deref() == Some(plugin.digest.as_str())
         {
             return Ok(WorkspacePluginEnableResult {
                 status: "enabled".to_string(),
                 plugin_id: plugin_id.to_string(),
                 request_ids: Vec::new(),
                 active_grant_count: active.handles.len(),
+                transition_id: lifecycle.transition_id,
                 message: "The exact plugin package is already enabled.".to_string(),
             });
+        }
+        if lifecycle
+            .accepted_digest
+            .as_deref()
+            .is_some_and(|accepted| accepted != plugin.digest.as_str())
+            || state.active.get(&key).is_some_and(|active| {
+                active.package_digest != plugin.digest.as_str()
+                    || active.plugin_version != plugin.manifest.version.to_string()
+            })
+        {
+            bail!(
+                "plugin package changed after enablement; update review is not available until P2-4E"
+            );
         }
         if let Some(pending) = state.pending.get(&key)
             && pending.package_digest == plugin.digest.as_str()
@@ -754,12 +797,94 @@ impl PendingPluginPermissionRegistry {
                 plugin_id: plugin_id.to_string(),
                 request_ids: pending.request_ids.clone(),
                 active_grant_count: 0,
+                transition_id: Some(pending.transition_id.clone()),
                 message: "Review the requested permissions before this plugin can start."
                     .to_string(),
             });
         }
 
+        remove_active_plugin(&mut state, &key);
         state.pending.remove(&key);
+
+        let transition_id = format!("transition.enable.{}", uuid::Uuid::new_v4().simple());
+        let requested = PluginLifecycleMutationService::new(store).request_transition(
+            &context.project_root,
+            &WorkspacePluginTransitionDraft {
+                transition_id: transition_id.clone(),
+                project_root: context.project_root.clone(),
+                plugin_id: plugin.manifest.id.to_string(),
+                kind: "enable".to_string(),
+                desired_state: "enabled".to_string(),
+                expected_old_digest: None,
+                candidate_digest: Some(plugin.digest.to_string()),
+                rollback_digest: None,
+                backup_path_key: None,
+            },
+        )?;
+        ensure!(
+            matches!(
+                requested.outcome,
+                PluginLifecycleMutationOutcome::Applied | PluginLifecycleMutationOutcome::Unchanged
+            ),
+            "plugin enable conflicts with another durable lifecycle transition"
+        );
+        advance_enable_transition(
+            store,
+            context,
+            &transition_id,
+            "requested",
+            "preflight",
+            "running",
+            "resolving",
+            None,
+            false,
+            None,
+            "preflight",
+            "completed",
+            None,
+        )?;
+        let cache = PluginPackageCache::new(&context.app_data_dir);
+        let cached = match cache.prepare_exact(
+            Path::new(&context.project_root),
+            plugin.manifest.id.as_str(),
+            plugin.digest.as_str(),
+        ) {
+            Ok(cached) => cached,
+            Err(error) => {
+                let _ = fail_enable_transition(
+                    store,
+                    context,
+                    &transition_id,
+                    "package_cache_failed",
+                    "disabled",
+                );
+                return Err(error.into());
+            }
+        };
+        if let Err(error) = advance_enable_transition(
+            store,
+            context,
+            &transition_id,
+            "preflight",
+            "backup_prepared",
+            "running",
+            "resolving",
+            None,
+            false,
+            None,
+            "package_backed_up",
+            "completed",
+            None,
+        ) {
+            let _ = fail_enable_transition(
+                store,
+                context,
+                &transition_id,
+                "package_backup_journal_failed",
+                "disabled",
+            );
+            return Err(error);
+        }
 
         let durable_grants = matching_project_grants(store, context, &plugin)?;
         let mut requests = Vec::new();
@@ -788,8 +913,21 @@ impl PendingPluginPermissionRegistry {
         }
 
         if !requests.is_empty() {
-            let created = PluginPermissionMutationService::new(store)
-                .create_requests(&context.project_root, &requests)?;
+            let created = match PluginPermissionMutationService::new(store)
+                .create_requests(&context.project_root, &requests)
+            {
+                Ok(created) => created,
+                Err(error) => {
+                    let _ = fail_enable_transition(
+                        store,
+                        context,
+                        &transition_id,
+                        "permission_request_failed",
+                        "disabled",
+                    );
+                    return Err(error.into());
+                }
+            };
             let request_ids = created
                 .into_iter()
                 .map(|request| request.request_id)
@@ -800,6 +938,7 @@ impl PendingPluginPermissionRegistry {
                     plugin_id: plugin_id.to_string(),
                     plugin_version: plugin.manifest.version.to_string(),
                     package_digest: plugin.digest.to_string(),
+                    transition_id: transition_id.clone(),
                     request_ids: request_ids.clone(),
                     expected_project_revision: context.project_revision,
                 },
@@ -809,15 +948,18 @@ impl PendingPluginPermissionRegistry {
                 plugin_id: plugin_id.to_string(),
                 request_ids,
                 active_grant_count: reusable_grants.len(),
+                transition_id: Some(transition_id),
                 message: "Review the requested permissions before this plugin can start."
                     .to_string(),
             });
         }
 
-        activate_plugin(
+        activate_plugin_durable(
             &mut state,
             context,
             &plugin,
+            &cached,
+            &transition_id,
             reusable_grants.values(),
             store,
         )
@@ -2791,6 +2933,7 @@ fn plugin_view(
     plugin: &DiscoveredPlugin,
     requests: &[PluginPermissionRequest],
     grants: &[PluginPermissionGrant],
+    lifecycle: Option<&WorkspacePluginState>,
     state: &RegistryState,
 ) -> WorkspacePluginView {
     let plugin_id = plugin.manifest.id.to_string();
@@ -2810,15 +2953,31 @@ fn plugin_view(
                 && grant.status == "active"
         })
         .count();
-    let active = state.active.values().find(|active| {
-        active.project_root == project_root
-            && active.package_digest == plugin.digest.as_str()
-            && active.plugin_version == plugin.manifest.version.to_string()
+    let active = state
+        .active
+        .get(&registry_key(project_root, &plugin_id))
+        .filter(|active| {
+            active.project_root == project_root
+                && active.package_digest == plugin.digest.as_str()
+                && active.plugin_version == plugin.manifest.version.to_string()
+        });
+    let durable_active = lifecycle.is_some_and(|lifecycle| {
+        lifecycle.desired_state == "enabled"
+            && lifecycle.observed_state == "active"
+            && lifecycle.accepted_digest.as_deref() == Some(plugin.digest.as_str())
     });
-    let status = if active.is_some() {
+    let status = if active.is_some() && durable_active {
         "enabled"
     } else if pending_request_count > 0 {
         "permission_required"
+    } else if lifecycle.is_some_and(|lifecycle| {
+        lifecycle.desired_state == "enabled"
+            && matches!(
+                lifecycle.observed_state.as_str(),
+                "resolving" | "activating"
+            )
+    }) {
+        "enabling"
     } else if requests
         .iter()
         .filter(exact_request)
@@ -2826,8 +2985,19 @@ fn plugin_view(
     {
         "denied"
     } else {
-        "disabled"
+        match lifecycle.map(|lifecycle| lifecycle.observed_state.as_str()) {
+            Some("update_pending") => "update_pending",
+            Some("blocked") => "blocked",
+            Some("crashed") => "crashed",
+            _ => "disabled",
+        }
     };
+    let desired_state = lifecycle
+        .map(|lifecycle| lifecycle.desired_state.clone())
+        .unwrap_or_else(|| "disabled".to_string());
+    let observed_state = lifecycle
+        .map(|lifecycle| lifecycle.observed_state.clone())
+        .unwrap_or_else(|| "discovered".to_string());
     WorkspacePluginView {
         plugin_id,
         name: plugin.manifest.name.clone(),
@@ -2839,8 +3009,33 @@ fn plugin_view(
         pending_request_count,
         active_grant_count,
         status: status.to_string(),
-        message: (plugin.manifest.runtime.kind != RuntimeKind::Wasm)
-            .then(|| "This runtime kind is not executable in Phase 2.".to_string()),
+        desired_state,
+        observed_state,
+        accepted_digest: lifecycle.and_then(|lifecycle| lifecycle.accepted_digest.clone()),
+        transition_id: lifecycle.and_then(|lifecycle| lifecycle.transition_id.clone()),
+        message: if plugin.manifest.runtime.kind != RuntimeKind::Wasm {
+            Some("This runtime kind is not executable in Phase 2.".to_string())
+        } else {
+            match status {
+                "enabling" => Some(
+                    "The durable enable transition has not completed; no enabled result is claimed."
+                        .to_string(),
+                ),
+                "update_pending" => Some(
+                    "The package digest changed. Update review is not available until the trusted update slice."
+                        .to_string(),
+                ),
+                "blocked" => Some(
+                    "The plugin is blocked and remains non-routable pending trusted recovery."
+                        .to_string(),
+                ),
+                "crashed" => Some(
+                    "The plugin crashed and remains non-routable; Retry is not available yet."
+                        .to_string(),
+                ),
+                _ => None,
+            }
+        },
     }
 }
 
@@ -3009,74 +3204,37 @@ fn validate_agent_tool_schema(schema: &serde_json::Value) -> Result<()> {
 }
 
 fn read_plugin_skill(
+    state: &RegistryState,
     context: &PluginRuntimeContext,
     record: &rho_extension_runtime::ContributionRecord,
 ) -> Result<String> {
-    let relative = record
-        .contribution
-        .skill_path
-        .as_deref()
-        .context("published Skill contribution has no skillPath")?;
-    let plugin =
-        discover_exact_plugin(Path::new(&context.project_root), record.plugin_id.as_str())?;
+    let current = state
+        .contributions
+        .get(&record.project_id, &record.contribution.capability)
+        .is_some_and(|current| {
+            current.plugin_id == record.plugin_id
+                && current.package_digest == record.package_digest
+                && current.activation_generation == record.activation_generation
+                && current.host_instance_id == record.host_instance_id
+        });
+    ensure!(current, "plugin Skill route changed while reading");
+    let active = state
+        .active
+        .get(&registry_key(
+            &context.project_root,
+            record.plugin_id.as_str(),
+        ))
+        .context("plugin Skill host is not active")?;
     ensure!(
-        plugin.digest == record.package_digest,
-        "Skill package digest changed before Agent projection"
+        active.package_digest == record.package_digest.as_str()
+            && active.host_instance_id == record.host_instance_id,
+        "plugin Skill host identity changed before Agent projection"
     );
-    let plugin_root = Path::new(&context.project_root)
-        .join(rho_extension_runtime::PLUGINS_DIR)
-        .join(&plugin.directory);
-    let canonical_plugin_root = fs::canonicalize(&plugin_root)
-        .with_context(|| format!("canonicalizing plugin root {}", plugin_root.display()))?;
-    let skill_path = plugin_root.join(relative);
-    let metadata = fs::symlink_metadata(&skill_path)
-        .with_context(|| format!("reading plugin Skill metadata: {}", skill_path.display()))?;
-    ensure!(
-        metadata.is_file() && !metadata.file_type().is_symlink(),
-        "plugin Skill must remain a regular non-symlink file"
-    );
-    ensure!(
-        metadata.len() <= MAX_PLUGIN_SKILL_BYTES as u64,
-        "plugin Skill exceeds {MAX_PLUGIN_SKILL_BYTES} bytes"
-    );
-    let canonical_skill = fs::canonicalize(&skill_path)
-        .with_context(|| format!("canonicalizing plugin Skill {}", skill_path.display()))?;
-    ensure!(
-        canonical_skill.starts_with(&canonical_plugin_root),
-        "plugin Skill escaped its exact package root"
-    );
-    let mut file = fs::File::open(&canonical_skill)
-        .with_context(|| format!("opening plugin Skill {}", canonical_skill.display()))?;
-    let opened = file
-        .metadata()
-        .context("reading opened plugin Skill metadata")?;
-    ensure!(
-        opened.is_file(),
-        "opened plugin Skill is not a regular file"
-    );
-    let mut bytes = Vec::new();
-    file.by_ref()
-        .take((MAX_PLUGIN_SKILL_BYTES + 1) as u64)
-        .read_to_end(&mut bytes)
-        .context("reading bounded plugin Skill")?;
-    ensure!(
-        bytes.len() <= MAX_PLUGIN_SKILL_BYTES,
-        "plugin Skill exceeded its byte budget while reading"
-    );
-    let after = file
-        .metadata()
-        .context("rechecking plugin Skill metadata")?;
-    ensure!(
-        opened.len() == after.len(),
-        "plugin Skill changed while reading"
-    );
-    let rediscovered =
-        discover_exact_plugin(Path::new(&context.project_root), record.plugin_id.as_str())?;
-    ensure!(
-        rediscovered.digest == record.package_digest,
-        "plugin package changed while reading Skill content"
-    );
-    String::from_utf8(bytes).context("plugin Skill must be UTF-8 plain text")
+    active
+        .skill_instructions
+        .get(record.contribution.capability.as_str())
+        .cloned()
+        .context("exact cached plugin Skill content is unavailable")
 }
 
 fn remove_active_plugin(state: &mut RegistryState, key: &str) -> Option<ActivePlugin> {
@@ -3137,6 +3295,86 @@ fn matching_project_grants(
     Ok(matching)
 }
 
+#[allow(clippy::too_many_arguments)]
+fn advance_enable_transition(
+    store: &mut Store,
+    context: &PluginRuntimeContext,
+    transition_id: &str,
+    expected_phase: &str,
+    next_phase: &str,
+    status: &str,
+    observed_state: &str,
+    accepted_digest: Option<&str>,
+    clear_pending_digest: bool,
+    last_host_session_id: Option<&str>,
+    event_type: &str,
+    event_status: &str,
+    reason_code: Option<&str>,
+) -> Result<()> {
+    let outcome = PluginLifecycleMutationService::new(store).advance_transition(
+        &context.project_root,
+        &WorkspacePluginTransitionAdvance {
+            project_root: context.project_root.clone(),
+            transition_id: transition_id.to_string(),
+            expected_phase: expected_phase.to_string(),
+            next_phase: next_phase.to_string(),
+            status: status.to_string(),
+            observed_state: observed_state.to_string(),
+            accepted_digest: accepted_digest.map(str::to_string),
+            pending_digest: None,
+            rollback_digest: None,
+            clear_pending_digest,
+            last_host_session_id: last_host_session_id.map(str::to_string),
+            last_error_code: reason_code.map(str::to_string),
+            reason_code: reason_code.map(str::to_string),
+            event_type: event_type.to_string(),
+            event_status: event_status.to_string(),
+            details_json: "{}".to_string(),
+        },
+    )?;
+    ensure!(
+        matches!(
+            outcome,
+            PluginLifecycleMutationOutcome::Applied | PluginLifecycleMutationOutcome::Unchanged
+        ),
+        "plugin lifecycle transition advance was stale"
+    );
+    Ok(())
+}
+
+fn fail_enable_transition(
+    store: &mut Store,
+    context: &PluginRuntimeContext,
+    transition_id: &str,
+    reason_code: &str,
+    observed_state: &str,
+) -> Result<()> {
+    let transition = PluginLifecycleQueryService::new(store)
+        .get_transition(&context.project_root, transition_id)?
+        .context("plugin enable transition disappeared before failure persistence")?;
+    if matches!(
+        transition.status.as_str(),
+        "completed" | "failed" | "cancelled"
+    ) {
+        return Ok(());
+    }
+    advance_enable_transition(
+        store,
+        context,
+        transition_id,
+        &transition.phase,
+        "completed",
+        "failed",
+        observed_state,
+        None,
+        false,
+        None,
+        "transition_failed",
+        "failed",
+        Some(reason_code),
+    )
+}
+
 fn try_activate_pending(
     state: &mut RegistryState,
     context: &PluginRuntimeContext,
@@ -3167,24 +3405,62 @@ fn try_activate_pending(
         return Ok(("permission_required".to_string(), 0));
     }
     if requests.iter().any(|request| request.status != "granted") {
+        let _ = fail_enable_transition(
+            store,
+            context,
+            &pending.transition_id,
+            "permission_denied",
+            "disabled",
+        );
         state.pending.remove(&key);
         return Ok(("denied".to_string(), 0));
     }
-    let plugin = discover_exact_plugin(Path::new(&context.project_root), plugin_id)?;
-    ensure!(
-        plugin.manifest.version.to_string() == pending.plugin_version
-            && plugin.digest.as_str() == pending.package_digest,
-        "plugin package changed while permission review was open"
-    );
+    let plugin = match discover_exact_plugin(Path::new(&context.project_root), plugin_id) {
+        Ok(plugin)
+            if plugin.manifest.version.to_string() == pending.plugin_version
+                && plugin.digest.as_str() == pending.package_digest =>
+        {
+            plugin
+        }
+        Ok(_) | Err(_) => {
+            let _ = fail_enable_transition(
+                store,
+                context,
+                &pending.transition_id,
+                "stale_digest",
+                "update_pending",
+            );
+            bail!("plugin package changed while permission review was open");
+        }
+    };
+    let cached = match PluginPackageCache::new(&context.app_data_dir).prepare_exact(
+        Path::new(&context.project_root),
+        plugin_id,
+        &pending.package_digest,
+    ) {
+        Ok(cached) => cached,
+        Err(error) => {
+            let _ = fail_enable_transition(
+                store,
+                context,
+                &pending.transition_id,
+                "package_cache_failed",
+                "disabled",
+            );
+            return Err(error.into());
+        }
+    };
     let durable_grants = PluginPermissionQueryService::new(store).list_grants(
         &context.project_root,
         Some(100),
         Some("active"),
     )?;
-    let result = activate_plugin(
+    let result = activate_plugin_durable(
         state,
         context,
         &plugin,
+        &cached,
+        &pending.transition_id,
         durable_grants.iter().filter(|grant| {
             grant.plugin_id == plugin_id
                 && grant.plugin_version == pending.plugin_version
@@ -3196,16 +3472,229 @@ fn try_activate_pending(
     Ok((result.status, result.active_grant_count))
 }
 
-fn activate_plugin<'a>(
+struct PreparedPluginActivation {
+    contribution_candidate: ContributionCandidate,
+    active: ActivePlugin,
+    active_grant_count: usize,
+}
+
+fn activate_plugin_durable<'a>(
     state: &mut RegistryState,
     context: &PluginRuntimeContext,
     plugin: &DiscoveredPlugin,
+    cached: &CachedPluginPackage,
+    transition_id: &str,
     durable_grants: impl IntoIterator<Item = &'a PluginPermissionGrant>,
     store: &mut Store,
 ) -> Result<WorkspacePluginEnableResult> {
-    let module_bytes = read_exact_entry(Path::new(&context.project_root), plugin)?;
-    let generation = ActivationGeneration::new(state.next_generation)
-        .context("allocating workspace plugin activation generation")?;
+    let prepared = match prepare_plugin_activation(
+        state,
+        context,
+        plugin,
+        cached,
+        transition_id,
+        durable_grants,
+        store,
+    ) {
+        Ok(prepared) => prepared,
+        Err(error) => {
+            let _ = fail_enable_transition(
+                store,
+                context,
+                transition_id,
+                "candidate_activation_failed",
+                "disabled",
+            );
+            return Err(error);
+        }
+    };
+    let host_instance_id = prepared.active.host_instance_id.clone();
+    if let Err(error) = advance_enable_transition(
+        store,
+        context,
+        transition_id,
+        "grants_ready",
+        "candidate_activated",
+        "running",
+        "activating",
+        None,
+        false,
+        Some(host_instance_id.as_str()),
+        "activation",
+        "completed",
+        None,
+    ) {
+        state.grants.invalidate_host(&host_instance_id);
+        let _ = fail_enable_transition(
+            store,
+            context,
+            transition_id,
+            "candidate_journal_failed",
+            "disabled",
+        );
+        return Err(error);
+    }
+
+    let key = registry_key(&context.project_root, plugin.manifest.id.as_str());
+    if let Err(error) = state
+        .contributions
+        .publish(prepared.contribution_candidate, None)
+    {
+        state.grants.invalidate_host(&host_instance_id);
+        let _ = fail_enable_transition(
+            store,
+            context,
+            transition_id,
+            "contribution_publication_failed",
+            "disabled",
+        );
+        return Err(anyhow!(
+            "workspace plugin contribution publication failed: {error:?}"
+        ));
+    }
+    if let Some(previous) = state.active.insert(key.clone(), prepared.active) {
+        state.grants.invalidate_host(&previous.host_instance_id);
+    }
+    if let Err(error) = advance_enable_transition(
+        store,
+        context,
+        transition_id,
+        "candidate_activated",
+        "pointer_swapped",
+        "running",
+        "activating",
+        None,
+        false,
+        Some(host_instance_id.as_str()),
+        "routing_published",
+        "completed",
+        None,
+    ) {
+        remove_active_plugin(state, &key);
+        return Err(error
+            .context("plugin route was closed after routing publication could not be journaled"));
+    }
+    if let Err(error) = advance_enable_transition(
+        store,
+        context,
+        transition_id,
+        "pointer_swapped",
+        "completed",
+        "completed",
+        "active",
+        Some(plugin.digest.as_str()),
+        true,
+        Some(host_instance_id.as_str()),
+        "transition_completed",
+        "completed",
+        None,
+    ) {
+        remove_active_plugin(state, &key);
+        return Err(
+            error.context("plugin route was closed because durable enable completion failed")
+        );
+    }
+
+    Ok(WorkspacePluginEnableResult {
+        status: "enabled".to_string(),
+        plugin_id: plugin.manifest.id.to_string(),
+        request_ids: Vec::new(),
+        active_grant_count: prepared.active_grant_count,
+        transition_id: Some(transition_id.to_string()),
+        message: if prepared.active_grant_count == 0 {
+            "The exact cached plugin package is durably enabled with zero privileged permissions."
+        } else {
+            "The exact cached plugin package is durably enabled with fresh session-bound handles."
+        }
+        .to_string(),
+    })
+}
+
+fn prepare_plugin_activation<'a>(
+    state: &mut RegistryState,
+    context: &PluginRuntimeContext,
+    plugin: &DiscoveredPlugin,
+    cached: &CachedPluginPackage,
+    transition_id: &str,
+    durable_grants: impl IntoIterator<Item = &'a PluginPermissionGrant>,
+    store: &mut Store,
+) -> Result<PreparedPluginActivation> {
+    ensure!(
+        cached.plugin_id == plugin.manifest.id.as_str()
+            && cached.package_digest == plugin.digest.as_str()
+            && cached.snapshot.manifest == plugin.manifest
+            && cached.snapshot.digest == plugin.digest,
+        "cached plugin package identity does not match the activation candidate"
+    );
+    let module_bytes = cached
+        .file_bytes(&plugin.manifest.runtime.entry)
+        .context("exact cached plugin entry is missing")?;
+    ensure!(
+        module_bytes.len() <= MAX_WASM_MODULE_BYTES,
+        "cached plugin entry exceeds the Wasm module bound"
+    );
+    let mut skill_instructions = BTreeMap::new();
+    let mut skill_bytes = 0usize;
+    for contribution in &plugin.manifest.contributions {
+        if contribution.kind != ContributionKind::Skill {
+            continue;
+        }
+        let path = contribution
+            .skill_path
+            .as_deref()
+            .context("Skill contribution has no exact cached path")?;
+        let bytes = cached
+            .file_bytes(path)
+            .context("exact cached Skill content is missing")?;
+        ensure!(
+            bytes.len() <= MAX_PLUGIN_SKILL_BYTES,
+            "plugin Skill exceeds {MAX_PLUGIN_SKILL_BYTES} bytes"
+        );
+        skill_bytes = skill_bytes
+            .checked_add(bytes.len())
+            .filter(|total| *total <= MAX_PLUGIN_SKILL_PACK_BYTES)
+            .context("plugin Skill pack exceeds its byte budget")?;
+        skill_instructions.insert(
+            contribution.id.to_string(),
+            std::str::from_utf8(bytes)
+                .context("plugin Skill must be UTF-8 plain text")?
+                .to_string(),
+        );
+    }
+    let lifecycle = PluginLifecycleQueryService::new(store)
+        .get_state(&context.project_root, plugin.manifest.id.as_str())?
+        .context("durable plugin lifecycle state is missing")?;
+    ensure!(
+        lifecycle.transition_id.as_deref() == Some(transition_id),
+        "plugin activation transition is no longer current"
+    );
+    let allocation = PluginLifecycleMutationService::new(store).allocate_generation(
+        &context.project_root,
+        plugin.manifest.id.as_str(),
+        transition_id,
+        lifecycle.last_activation_generation,
+    )?;
+    ensure!(
+        allocation.outcome == PluginLifecycleMutationOutcome::Applied,
+        "plugin activation generation allocation was stale"
+    );
+    let generation = ActivationGeneration::new(u64::try_from(allocation.generation)?)
+        .context("allocating durable workspace plugin activation generation")?;
+    advance_enable_transition(
+        store,
+        context,
+        transition_id,
+        "backup_prepared",
+        "grants_ready",
+        "running",
+        "resolving",
+        None,
+        false,
+        None,
+        "grant_state",
+        "completed",
+        None,
+    )?;
     let host_instance_id = HostInstanceId::generate();
     let identity = WasmHostIdentity::new(
         context.project_scope_id.clone(),
@@ -3216,7 +3705,7 @@ fn activate_plugin<'a>(
     );
     let mut host = WasmPluginHost::from_bytes_with_call_id_source(
         identity,
-        &module_bytes,
+        module_bytes,
         Arc::clone(&state.broker_call_id_source),
     )
     .map_err(|error| anyhow!("workspace plugin host rejected the module: {error:?}"))?;
@@ -3271,9 +3760,13 @@ fn activate_plugin<'a>(
         .contributions
         .current_identity(&context.project_scope_id, &plugin.manifest.id)
         .map_err(|error| anyhow!("reading current contribution identity: {error:?}"))?;
+    ensure!(
+        expected_old.is_none(),
+        "durable first enable cannot replace an existing contribution generation"
+    );
     let mut preview = state.contributions.clone();
     preview
-        .publish(contribution_candidate.clone(), expected_old.as_ref())
+        .publish(contribution_candidate.clone(), None)
         .map_err(|error| anyhow!("workspace plugin contribution candidate conflicts: {error:?}"))?;
 
     let grants = durable_grants.into_iter().collect::<Vec<_>>();
@@ -3356,26 +3849,12 @@ fn activate_plugin<'a>(
         handles.insert(grant.grant_id.clone(), handle);
     }
 
-    state.next_generation = state
-        .next_generation
-        .checked_add(1)
-        .context("workspace plugin activation generation is exhausted")?;
     let active_grant_count = handles.len();
-    let key = registry_key(&context.project_root, plugin.manifest.id.as_str());
-    if let Err(error) = state
-        .contributions
-        .publish(contribution_candidate, expected_old.as_ref())
-    {
-        state.grants.invalidate_host(&host_instance_id);
-        return Err(anyhow!(
-            "workspace plugin contribution publication failed: {error:?}"
-        ));
-    }
     let contribution_identity =
         (!plugin.manifest.contributions.is_empty()).then_some(contribution_identity);
-    let previous = state.active.insert(
-        key,
-        ActivePlugin {
+    Ok(PreparedPluginActivation {
+        contribution_candidate,
+        active: ActivePlugin {
             project_root: context.project_root.clone(),
             plugin_version: plugin.manifest.version.to_string(),
             package_digest: plugin.digest.to_string(),
@@ -3384,59 +3863,10 @@ fn activate_plugin<'a>(
             handles,
             permission_count: plugin.manifest.permissions.len(),
             contribution_identity,
+            skill_instructions,
         },
-    );
-    if let Some(previous) = previous {
-        state.grants.invalidate_host(&previous.host_instance_id);
-    }
-    Ok(WorkspacePluginEnableResult {
-        status: "enabled".to_string(),
-        plugin_id: plugin.manifest.id.to_string(),
-        request_ids: Vec::new(),
         active_grant_count,
-        message: if active_grant_count == 0 {
-            "The plugin is enabled with zero privileged permissions."
-        } else {
-            "The plugin is enabled with fresh session-bound handles."
-        }
-        .to_string(),
     })
-}
-
-fn read_exact_entry(project_root: &Path, plugin: &DiscoveredPlugin) -> Result<Vec<u8>> {
-    let plugin_directory = project_root
-        .join(rho_extension_runtime::PLUGINS_DIR)
-        .join(&plugin.directory);
-    let entry_path = plugin_directory.join(&plugin.manifest.runtime.entry);
-    let metadata = fs::symlink_metadata(&entry_path)
-        .with_context(|| format!("reading plugin entry metadata: {}", entry_path.display()))?;
-    ensure!(
-        metadata.is_file() && !metadata.file_type().is_symlink(),
-        "plugin entry must remain a regular non-symlink file"
-    );
-    ensure!(
-        metadata.len() <= MAX_WASM_MODULE_BYTES as u64,
-        "plugin entry exceeds the Wasm module bound"
-    );
-    let canonical_directory = fs::canonicalize(&plugin_directory)?;
-    let canonical_entry = fs::canonicalize(&entry_path)?;
-    ensure!(
-        canonical_entry.starts_with(&canonical_directory),
-        "plugin entry escaped its package directory"
-    );
-    let bytes = fs::read(&canonical_entry)?;
-    ensure!(
-        bytes.len() <= MAX_WASM_MODULE_BYTES,
-        "plugin entry grew beyond the Wasm module bound"
-    );
-    let rediscovered = discover_exact_plugin(project_root, plugin.manifest.id.as_str())?;
-    ensure!(
-        rediscovered.digest == plugin.digest
-            && rediscovered.manifest.version == plugin.manifest.version
-            && rediscovered.manifest.runtime == plugin.manifest.runtime,
-        "plugin package changed during activation"
-    );
-    Ok(bytes)
 }
 
 fn grant_view(grant: PluginPermissionGrant, grants: &GrantStore) -> Result<PluginGrantView> {
@@ -3466,6 +3896,7 @@ mod tests {
     use rho_server::plugin_workspace::{WorkspaceReferenceClock, WorkspaceReferenceIdSource};
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::Duration;
+    use std::{fs, path::Path};
     use tempfile::tempdir;
 
     #[derive(Debug)]
@@ -3513,7 +3944,6 @@ mod tests {
     ) -> PendingPluginPermissionRegistry {
         PendingPluginPermissionRegistry {
             state: Mutex::new(RegistryState {
-                next_generation: 1,
                 pending: BTreeMap::new(),
                 active: BTreeMap::new(),
                 contributions: ContributionStore::new(),
@@ -4104,7 +4534,10 @@ mod tests {
     fn context(project: &Path) -> PluginRuntimeContext {
         let canonical = project.canonicalize().unwrap();
         let root = normalize_project_root(canonical.to_string_lossy().as_ref());
+        let app_data_dir = canonical.join(".test-app-data");
+        fs::create_dir_all(&app_data_dir).unwrap();
         PluginRuntimeContext {
+            app_data_dir,
             project_root: root,
             project_revision: 3,
             project_scope_id: ScopeId::new("project.test").unwrap(),
@@ -4253,11 +4686,43 @@ mod tests {
         let database = directory.path().join("rho.sqlite");
         let mut store = Store::open(&database).unwrap();
         let registry = PendingPluginPermissionRegistry::default();
+        let context = context(directory.path());
         let result = registry
-            .request_enable(&context(directory.path()), "org.example.plugin", &mut store)
+            .request_enable(&context, "org.example.plugin", &mut store)
             .unwrap();
         assert_eq!(result.status, "enabled");
         assert_eq!(result.active_grant_count, 0);
+        let transition_id = result.transition_id.as_deref().unwrap();
+        let lifecycle = PluginLifecycleQueryService::new(&store)
+            .get_state(&context.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        assert_eq!(lifecycle.desired_state, "enabled");
+        assert_eq!(lifecycle.observed_state, "active");
+        assert!(lifecycle.accepted_digest.is_some());
+        assert!(lifecycle.pending_digest.is_none());
+        assert_eq!(lifecycle.last_activation_generation, 1);
+        let transition = PluginLifecycleQueryService::new(&store)
+            .get_transition(&context.project_root, transition_id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(transition.phase, "completed");
+        assert_eq!(transition.status, "completed");
+        let events = PluginLifecycleQueryService::new(&store)
+            .list_events(&context.project_root, Some(50))
+            .unwrap();
+        for event_type in [
+            "discovery",
+            "user_requested",
+            "preflight",
+            "package_backed_up",
+            "grant_state",
+            "activation",
+            "routing_published",
+            "transition_completed",
+        ] {
+            assert!(events.iter().any(|event| event.event_type == event_type));
+        }
         assert_eq!(
             registry
                 .state
@@ -4266,6 +4731,54 @@ mod tests {
                 .grants
                 .active_handle_count(),
             0
+        );
+    }
+
+    #[test]
+    fn concurrent_identical_enable_requests_converge_on_one_durable_generation() {
+        let directory = tempdir().unwrap();
+        write_plugin(directory.path(), serde_json::json!([]));
+        let database = directory.path().join("rho.sqlite");
+        Store::open(&database).unwrap();
+        let registry = Arc::new(PendingPluginPermissionRegistry::default());
+        let context = context(directory.path());
+        let barrier = Arc::new(std::sync::Barrier::new(2));
+        let handles = (0..2)
+            .map(|_| {
+                let registry = Arc::clone(&registry);
+                let barrier = Arc::clone(&barrier);
+                let context = context.clone();
+                let database = database.clone();
+                std::thread::spawn(move || {
+                    let mut store = Store::open(database).unwrap();
+                    barrier.wait();
+                    registry
+                        .request_enable(&context, "org.example.plugin", &mut store)
+                        .unwrap()
+                })
+            })
+            .collect::<Vec<_>>();
+        let results = handles
+            .into_iter()
+            .map(|handle| handle.join().unwrap())
+            .collect::<Vec<_>>();
+        assert!(results.iter().all(|result| result.status == "enabled"));
+        assert_eq!(results[0].transition_id, results[1].transition_id);
+        let store = Store::open(&database).unwrap();
+        let lifecycle = PluginLifecycleQueryService::new(&store)
+            .get_state(&context.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        assert_eq!(lifecycle.last_activation_generation, 1);
+        assert_eq!(lifecycle.observed_state, "active");
+        assert_eq!(
+            PluginLifecycleQueryService::new(&store)
+                .list_events(&context.project_root, Some(50))
+                .unwrap()
+                .iter()
+                .filter(|event| event.event_type == "user_requested")
+                .count(),
+            1
         );
     }
 
@@ -4288,6 +4801,13 @@ mod tests {
             .request_enable(&context, "org.example.plugin", &mut store)
             .unwrap();
         assert_eq!(requested.status, "permission_required");
+        let transition_id = requested.transition_id.clone().unwrap();
+        let pending_transition = PluginLifecycleQueryService::new(&store)
+            .get_transition(&context.project_root, &transition_id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(pending_transition.phase, "backup_prepared");
+        assert_eq!(pending_transition.status, "running");
         let decision = registry
             .respond(
                 &context,
@@ -4301,6 +4821,12 @@ mod tests {
             .unwrap();
         assert_eq!(decision.plugin_status, "enabled");
         assert_eq!(decision.active_grant_count, 1);
+        let completed = PluginLifecycleQueryService::new(&store)
+            .get_transition(&context.project_root, &transition_id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(completed.phase, "completed");
+        assert_eq!(completed.status, "completed");
         let encoded = serde_json::to_string(&decision).unwrap();
         assert!(!encoded.contains("handle."));
         assert_eq!(
@@ -4312,6 +4838,63 @@ mod tests {
                 .active_handle_count(),
             1
         );
+    }
+
+    #[test]
+    fn post_publication_persistence_failure_closes_routes_and_leaves_recovery_truth() {
+        for (event_type, expected_phase) in [
+            ("routing_published", "candidate_activated"),
+            ("transition_completed", "pointer_swapped"),
+        ] {
+            let directory = tempdir().unwrap();
+            write_ui_fixture_plugin(directory.path(), ContributionKind::Panel);
+            let database = directory.path().join("rho.sqlite");
+            let mut store = Store::open(&database).unwrap();
+            let trigger = rusqlite::Connection::open(&database).unwrap();
+            trigger
+                .execute_batch(&format!(
+                    "CREATE TRIGGER fail_lifecycle_event
+                     BEFORE INSERT ON workspace_plugin_lifecycle_events
+                     WHEN NEW.event_type = '{event_type}'
+                     BEGIN SELECT RAISE(FAIL, 'injected lifecycle persistence failure'); END;"
+                ))
+                .unwrap();
+            drop(trigger);
+            let registry = deterministic_registry();
+            let context = context(directory.path());
+            assert!(
+                registry
+                    .request_enable(&context, "org.example.plugin", &mut store)
+                    .is_err()
+            );
+            let state = registry
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            assert!(state.active.is_empty());
+            assert!(
+                state
+                    .contributions
+                    .list(&context.project_scope_id)
+                    .is_empty()
+            );
+            assert_eq!(state.grants.active_handle_count(), 0);
+            drop(state);
+            let transitions = PluginLifecycleQueryService::new(&store)
+                .list_nonterminal_transitions(&context.project_root, Some(10))
+                .unwrap();
+            assert_eq!(transitions.len(), 1);
+            assert_eq!(transitions[0].phase, expected_phase);
+            assert_eq!(transitions[0].status, "running");
+            let lifecycle = PluginLifecycleQueryService::new(&store)
+                .get_state(&context.project_root, "org.example.plugin")
+                .unwrap()
+                .unwrap();
+            assert_eq!(lifecycle.desired_state, "enabled");
+            assert_eq!(lifecycle.observed_state, "activating");
+            assert!(lifecycle.accepted_digest.is_none());
+            assert_eq!(lifecycle.last_activation_generation, 1);
+        }
     }
 
     #[test]
@@ -5262,7 +5845,7 @@ mod tests {
     }
 
     #[test]
-    fn manifest_v2_contributions_publish_atomically_and_failed_replacement_keeps_old() {
+    fn manifest_v2_changed_package_stays_update_pending_and_keeps_old_route() {
         let directory = tempdir().unwrap();
         write_contributing_plugin(directory.path(), "1.0.0", "tool.fixture.old", false);
         let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
@@ -5325,37 +5908,20 @@ mod tests {
         }
 
         write_contributing_plugin(directory.path(), "2.0.0", "tool.fixture.next", false);
-        assert_eq!(
+        assert!(
             registry
                 .request_enable(&context, "org.example.plugin", &mut store)
-                .unwrap()
-                .status,
-            "enabled"
+                .is_err()
         );
-        {
-            let state = registry
-                .state
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            assert!(
-                state
-                    .contributions
-                    .get(
-                        &context.project_scope_id,
-                        &rho_extension_runtime::CapabilityId::new("tool.fixture.old").unwrap(),
-                    )
-                    .is_none()
-            );
-            assert!(
-                state
-                    .contributions
-                    .get(
-                        &context.project_scope_id,
-                        &rho_extension_runtime::CapabilityId::new("tool.fixture.next").unwrap(),
-                    )
-                    .is_some()
-            );
-        }
+        let lifecycle = PluginLifecycleQueryService::new(&store)
+            .get_state(&context.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        assert_eq!(lifecycle.observed_state, "update_pending");
+        assert_ne!(
+            lifecycle.accepted_digest.as_deref(),
+            lifecycle.pending_digest.as_deref()
+        );
         registry.invalidate_project(&context.project_root);
         let state = registry
             .state
@@ -5520,6 +6086,25 @@ mod tests {
                 .unwrap()
                 .contains("Ignore all previous instructions")
         );
+        let cached_instructions = skill.content["instructions"].clone();
+        fs::write(
+            directory_a
+                .path()
+                .join(".rho/plugins/example/skills/guide.md"),
+            "mutated after durable enable",
+        )
+        .unwrap();
+        let projection_after_source_mutation =
+            registry.agent_projection(&context_a, &mut store_a).unwrap();
+        assert_eq!(
+            projection_after_source_mutation
+                .context
+                .iter()
+                .find(|item| item.kind == "skill")
+                .unwrap()
+                .content["instructions"],
+            cached_instructions
+        );
 
         let tool_result = registry
             .invoke_file_contribution(
@@ -5564,37 +6149,34 @@ mod tests {
 
     #[test]
     fn plugin_skill_accepts_64_kib_and_rejects_one_byte_over() {
-        let directory = tempdir().unwrap();
-        write_agent_fixture_plugin(directory.path());
-        let skill_path = directory
-            .path()
-            .join(".rho/plugins/example/skills/guide.md");
-        let context = context(directory.path());
         for (size, accepted) in [
             (MAX_PLUGIN_SKILL_BYTES, true),
             (MAX_PLUGIN_SKILL_BYTES + 1, false),
         ] {
+            let directory = tempdir().unwrap();
+            write_agent_fixture_plugin(directory.path());
+            let skill_path = directory
+                .path()
+                .join(".rho/plugins/example/skills/guide.md");
             fs::write(&skill_path, vec![b'x'; size]).unwrap();
-            let discovered =
-                discover_exact_plugin(Path::new(&context.project_root), "org.example.plugin")
-                    .unwrap();
-            let declaration = discovered
-                .manifest
-                .contributions
-                .iter()
-                .find(|contribution| contribution.kind == ContributionKind::Skill)
-                .unwrap()
-                .clone();
-            let record = rho_extension_runtime::ContributionRecord {
-                contribution: rho_extension_runtime::Contribution::from_declaration(declaration)
-                    .unwrap(),
-                plugin_id: discovered.manifest.id,
-                package_digest: discovered.digest,
-                project_id: context.project_scope_id.clone(),
-                activation_generation: ActivationGeneration::new(1).unwrap(),
-                host_instance_id: HostInstanceId::new("instance.skill-boundary").unwrap(),
-            };
-            assert_eq!(read_plugin_skill(&context, &record).is_ok(), accepted);
+            let context = context(directory.path());
+            let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+            let registry = deterministic_registry();
+            let requested = registry
+                .request_enable(&context, "org.example.plugin", &mut store)
+                .unwrap();
+            let result = registry
+                .respond(
+                    &context,
+                    PluginPermissionDecisionInput {
+                        request_id: requested.request_ids[0].clone(),
+                        decision: "allow_project".to_string(),
+                        expected_project_revision: context.project_revision,
+                    },
+                    &mut store,
+                )
+                .unwrap();
+            assert_eq!(result.plugin_status == "enabled", accepted);
         }
     }
 
@@ -5790,12 +6372,14 @@ mod tests {
         let directory = tempdir().unwrap();
         let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
         let context_a = PluginRuntimeContext {
+            app_data_dir: directory.path().join("app-data"),
             project_root: normalize_project_root("/project/a"),
             project_revision: 1,
             project_scope_id: ScopeId::new("project.a").unwrap(),
             workspace: None,
         };
         let context_b = PluginRuntimeContext {
+            app_data_dir: directory.path().join("app-data"),
             project_root: normalize_project_root("/project/b"),
             project_revision: 1,
             project_scope_id: ScopeId::new("project.b").unwrap(),
@@ -5938,7 +6522,10 @@ mod tests {
                     .unwrap(),
             )
         };
-        assert_ne!(a1.activation_generation, b1.activation_generation);
+        assert_eq!(a1.activation_generation.get(), 1);
+        assert_eq!(b1.activation_generation.get(), 1);
+        assert_ne!(a1.project_id, b1.project_id);
+        assert_ne!(a1.host_instance_id, b1.host_instance_id);
 
         registry.invalidate_project(&context_a.project_root);
         {
@@ -5957,14 +6544,6 @@ mod tests {
                 1
             );
         }
-        let manifest_path = directory_a
-            .path()
-            .join(".rho/plugins/example/rho-plugin.json");
-        let mut manifest: serde_json::Value =
-            serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
-        manifest["version"] = serde_json::json!("2.0.0");
-        manifest["contributions"][0]["label"] = serde_json::json!("CSV details v2");
-        fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
         registry
             .request_enable(&context_a, "org.example.plugin", &mut store_a)
             .unwrap();
@@ -5982,7 +6561,7 @@ mod tests {
             .unwrap();
         assert_ne!(a1.activation_generation, a2.activation_generation);
         assert_ne!(a1.host_instance_id, a2.host_instance_id);
-        assert_ne!(a1.package_digest, a2.package_digest);
+        assert_eq!(a1.package_digest, a2.package_digest);
         assert_eq!(
             state.contributions.unpublish(&a1),
             Err(rho_extension_runtime::ContributionError::ExpectedOldMismatch)

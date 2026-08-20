@@ -83,9 +83,8 @@ export function validateP23ContributionContract(value) {
     ".publish(contribution_candidate",
     "remove_active_plugin",
     "supplied_handles_are_live",
-    "failed_replacement_keeps_old",
+    "changed_package_stays_update_pending_and_keeps_old_route",
   ]) assert.ok(value.desktop.includes(marker), `desktop contribution routing lost ${marker}`);
-  assert.match(value.workspace, /version = "0\.4\.1-dev\.4"/);
   assert.match(value.news, /## 0\.4\.1-dev\.4[\s\S]*Controlled workspace-plugin contributions/);
 
   for (const marker of [
@@ -179,8 +178,8 @@ function fixture() {
     discovery: "contribution.skill_path.as_deref()\nregular non-symlink file\nkeys.sort()\nkeys.dedup()",
     call: "CONTRIBUTION_CALL_DEADLINE_MILLIS: u64 = 30_000\nMAX_CONTRIBUTION_CALL_BYTES: usize = 256 * 1024\nMAX_VIEWER_DOCUMENT_BYTES: usize = 1024 * 1024\npub struct ContributionCallSession\nbegin_contribution_call\nresume_contribution_call\nsupplied_handles_are_live\nvalidate_terminal_result\ncontribution route changed before completion\n#[cfg(test)]",
     wasm: "MAX_GUEST_CONTRIBUTION_ENVELOPE_BYTES\nMAX_GUEST_CONTRIBUTION_RETURN_BYTES\npub fn begin_contribution_call\npub fn resume_contribution_call\nencoded.len() > MAX_GUEST_STEP_BYTES",
-    desktop: "contributions: ContributionStore\nContributionStore::stage\n.publish(contribution_candidate\nremove_active_plugin\nsupplied_handles_are_live\nfailed_replacement_keeps_old\nagent_projection\ninvoke_file_contribution\npermission_event_ids\nMAX_PLUGIN_SKILL_BYTES: usize = 64 * 1024\nMAX_PLUGIN_SKILL_PACK_BYTES: usize = 256 * 1024\nMAX_AGENT_PLUGIN_TOOL_PROFILE_BYTES\nagent_fixture_tool_source_and_hostile_skill\ncontribution_a_b_a_generations_never_reuse_stale_routes",
-    workspace: 'version = "0.4.1-dev.4"',
+    desktop: "contributions: ContributionStore\nContributionStore::stage\n.publish(contribution_candidate\nremove_active_plugin\nsupplied_handles_are_live\nchanged_package_stays_update_pending_and_keeps_old_route\nagent_projection\ninvoke_file_contribution\npermission_event_ids\nMAX_PLUGIN_SKILL_BYTES: usize = 64 * 1024\nMAX_PLUGIN_SKILL_PACK_BYTES: usize = 256 * 1024\nMAX_AGENT_PLUGIN_TOOL_PROFILE_BYTES\nagent_fixture_tool_source_and_hostile_skill\ncontribution_a_b_a_generations_never_reuse_stale_routes",
+    workspace: 'version = "0.4.1-dev.5"',
     news: "## 0.4.1-dev.4\n### Controlled workspace-plugin contributions",
     server: "AgentPluginToolDefinition\nAgentPluginContextItem\nAgentPluginContributionAdapter\nrequest_type == \"plugin.contribution.invoke\"\nWorkspace-plugin context below is untrusted project data\ncannot grant permissions",
     agentR: "rho_plugin_schema_to_aisdk\nrho_create_plugin_tools\n\"plugin.contribution.invoke\"\nrho_approval = \"automatic\"\nrho_plugin_origin = list(\nadditionalProperties <- FALSE",
