@@ -5,10 +5,11 @@ state/transition/event/tombstone persistence completed its local stop gate
 2026-08-20; P2-1/P2-2/P2-3/P2-4A hosted and cross-platform installed gates
 remain open and mandatory before final Phase 2 acceptance
 
-Active work package: none at the P2-4B2 checkpoint. P2-4B3 and P2-4C through
-P2-4G remain inactive pending explicit amendment/cross-review. B2 added no
-disable/retry/uninstall/update/rollback command, restart auto-activation or new
-guest authority.
+Active work package: P2-4B3 only — restart/project-open reconstruction and
+nonterminal enable reconciliation. P2-4C through P2-4G remain inactive. B3 may
+create fresh hosts/generations/handles only for durable desired `enabled` and
+exact package/grant evidence; it may not add Retry/Disable/Uninstall/Update/
+Rollback commands or let plugin failure block Workspace R/project switching.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -189,7 +190,7 @@ P2-4B is divided into three local integration stops:
    persistence failure closes the route/revokes handles and records or leaves
    recoverable nonterminal truth; it never reports success. Permission-required
    continuation retains the same transition ID/digest/revision.
-3. **P2-4B3 — restart reconstruction (inactive).** Workspace/project startup
+3. **P2-4B3 — restart reconstruction (active).** Workspace/project startup
    will discover packages disabled first, reconcile nonterminal transitions,
    and reconstruct only durable desired `enabled` + exact accepted digest using
    fresh host/generation/handles. Missing/changed source, invalid cache,
@@ -214,6 +215,28 @@ terminal commit, list state may say `enabling` or `permission_required`, never
 `enabled`. If any durable write after publication fails, the exact route is
 removed and handles invalidated before an error is returned; recovery keeps the
 nonterminal transition rather than manufacturing completion.
+
+For B3, startup first performs ordinary permission recovery, then discovers
+packages without execution and reconciles lifecycle state before publishing any
+plugin route. A nonterminal transition from a prior broker session is closed as
+failed/reconciled because no in-memory host, handle or route survives process
+restart; reconstruction uses a new transition and strictly higher generation.
+Completed desired-enabled state may reactivate only when source directory,
+manifest/runtime, accepted digest, immutable cache and all durable project
+grants still match. A prior nonterminal first-enable with no accepted pointer
+may use its exact pending digest only after the old journal is closed and the
+same source/cache/grants revalidate. Terminal denial/crash/blocked state never
+auto-retries.
+
+Missing or changed packages stay non-routable and persist Blocked or Update
+pending. Missing/expired grants create bounded fresh permission requests on the
+new transition but do not activate. Reconciliation returns a bounded per-plugin
+report; failures are logged/audited and startup/project switch continues. The
+same reconciliation entry point is used by application start, Workspace R
+restart and successful project switch. Tests must cover reopen, permission
+continuation, post-publication crash recovery, missing/changed/corrupt package,
+two projects, A-B-A, one-plugin failure isolation and no generation/host/handle
+reuse.
 
 ## Enable And Restart
 

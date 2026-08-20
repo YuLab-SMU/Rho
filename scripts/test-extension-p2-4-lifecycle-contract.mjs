@@ -50,7 +50,7 @@ export function validateP24LifecycleContract(value) {
     "does not match service project",
   ]) assert.ok(value.service.includes(marker), `lifecycle service seam lost ${marker}`);
   assert.match(value.spec, /Status: active under the owner-approved local-first exception/);
-  assert.match(value.spec, /Active work package: none at the P2-4B2 checkpoint/);
+  assert.match(value.spec, /Active work package: P2-4B3 only/);
   assert.match(value.spec, /P2-4A local checkpoint — 2026-08-20/);
   assert.match(value.crossReview, /plans\/active-2026-08-20-p2-4-plugin-lifecycle-recovery-upgrade-spec\.md/);
 }
@@ -61,7 +61,7 @@ function fixture() {
     migration: "create_plugin_lifecycle_schema\nworkspace_plugin_states\nworkspace_plugin_transitions\nworkspace_plugin_lifecycle_events\nworkspace_plugin_package_tombstones\nidx_workspace_plugin_transitions_one_active\npub(crate) fn assert_plugin_lifecycle_schema\ninvalid_plugin_lifecycle_authority",
     lifecycle: "WorkspacePluginState\nWorkspacePluginTransition\nWorkspacePluginLifecycleEvent\nWorkspacePluginPackageTombstone\nrequest_workspace_plugin_transition\nadvance_workspace_plugin_transition\nallocate_workspace_plugin_generation\nrecord_workspace_plugin_tombstone\nexpected_old_digest\ncompletion_uncertain\nplugin lifecycle details contain a forbidden field\n#[cfg(test)]",
     service: "PluginLifecycleQueryService\nPluginLifecycleMutationService\nrequired_project_root\ndoes not match service project",
-    spec: "Status: active under the owner-approved local-first exception\nActive work package: none at the P2-4B2 checkpoint\nP2-4A local checkpoint — 2026-08-20",
+    spec: "Status: active under the owner-approved local-first exception\nActive work package: P2-4B3 only\nP2-4A local checkpoint — 2026-08-20",
     crossReview: "plans/active-2026-08-20-p2-4-plugin-lifecycle-recovery-upgrade-spec.md",
   };
 }
