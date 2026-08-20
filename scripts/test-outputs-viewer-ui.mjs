@@ -20,7 +20,8 @@ assert.match(html, /vendor\/viewer\/katex\.min\.js/);
 assert.match(html, /vendor\/viewer\/katex-auto-render\.min\.js/);
 assert.match(html, /vendor\/viewer\/katex\.min\.css/);
 assert.match(html, /vendor\/viewer\/papaparse\.min\.js/);
-assert.match(html, /app\.js\?v=0\.4\.0/);
+assert.match(html, /app\.js\?v=0\.4\.1-dev\.1/);
+assert.match(html, /outputs=image-artifact-r1/);
 
 assert.match(project, /MAX_VIEWER_FILE_BYTES: u64 = 4 \* 1024 \* 1024/);
 assert.match(project, /MAX_VIEWER_HTML_BYTES: u64 = 32 \* 1024 \* 1024/);
@@ -66,6 +67,27 @@ assert.match(js, /new Blob\(\[String\(input\.content\)\]\)\.size > contentLimit/
 assert.match(js, /This file is too large to preview\. Open it as source instead\./);
 assert.match(js, /result\.project_root !== state\.project\.root/);
 assert.match(js, /function openViewerForActiveDocument\(\)/);
+assert.match(js, /selectedArtifactPreview: null/);
+assert.match(js, /artifactPreviewRequestSequence: 0/);
+assert.match(js, /const ARTIFACT_IMAGE_MEDIA_TYPES = new Set\(\["image\/png", "image\/jpeg", "image\/gif", "image\/webp"\]\)/);
+assert.match(js, /async function loadSelectedArtifactPreview\(\{ quiet = false \} = \{\}\)/);
+assert.match(js, /invoke\("viewer_read_file", \{ path: artifact\.output_path \}\)/);
+assert.match(js, /requestSequence !== state\.artifactPreviewRequestSequence[\s\S]*projectRoot !== state\.project\.root[\s\S]*artifactId !== state\.selectedArtifactId/);
+assert.match(js, /result\.project_root !== projectRoot \|\| result\.path !== artifact\.output_path/);
+assert.match(js, /function renderSelectedArtifactPreview\(\)/);
+assert.doesNotMatch(
+  js.slice(js.indexOf("function renderSelectedArtifactPreview()"), js.indexOf("async function selectArtifactForOutputs", js.indexOf("function renderSelectedArtifactPreview()"))),
+  /if \(state\.selectedPlotId\) return false/,
+);
+assert.match(js, /Saved image unavailable/);
+assert.match(js, /selectArtifactForOutputs\(artifact/);
+assert.match(js, /state\.selectedPlotId = null;[\s\S]*state\.selectedArtifactId = artifact\.artifact_id/);
+assert.match(js, /if \(!artifactPreviewRendered\)[\s\S]*showPlotSurfaceState\("empty", "No plots yet"/);
+assert.match(js, /clearSelectedArtifactPreview\(\);[\s\S]*state\.selectedPlotId = plot\.plot_id/);
+assert.match(js, /const artifactPreviewActive = Boolean\([\s\S]*state\.selectedArtifactPreview\.artifactId === state\.selectedArtifactId/);
+assert.match(js, /const selected = !artifactPreviewActive && plot\.plot_id === selectedPlot\?\.plot_id/);
+assert.match(js, /if \(!artifactPreviewActive && state\.selectedPlotId\)/);
+assert.match(js, /state\.selectedArtifactDetail = null;\s*clearSelectedArtifactPreview\(\)/);
 assert.match(js, /sourceIsActiveDocument/);
 assert.match(js, /classList\.toggle\("hidden", !viewer\.sourcePath \|\| sourceIsActiveDocument\)/);
 assert.match(js, /await openDocument\(state\.viewer\.sourcePath\);\s*closeViewer\(\)/);
@@ -79,6 +101,7 @@ const loadRunDataEnd = js.indexOf("async function loadGitStatus(", loadRunDataSt
 assert.notEqual(loadRunDataStart, -1, "Run data loader must exist");
 assert.notEqual(loadRunDataEnd, -1, "Run data loader boundary must exist");
 const loadRunData = js.slice(loadRunDataStart, loadRunDataEnd);
+assert.match(loadRunData, /await loadSelectedArtifactPreview\(\{ quiet \}\)/);
 const firstPlotRender = loadRunData.indexOf("renderPlots();");
 const artifactDetailLoad = loadRunData.indexOf('invoke("get_artifact_record"');
 const agentConsoleSync = loadRunData.indexOf("syncAgentRunsToConsole(state.runs)");
@@ -102,6 +125,19 @@ assert.match(
   /try \{\s*const detail = await invoke\("get_artifact_record"[\s\S]*?\} catch \(error\) \{[\s\S]*?selectedArtifactDetail = listedArtifact[\s\S]*?state\.selectedArtifactDetail = selectedArtifactDetail/,
   "Saved-output detail failure must be isolated from core Outputs rendering",
 );
+
+const sourceStart = js.indexOf("function artifactPreviewImageSource(preview)");
+const sourceEnd = js.indexOf("\nasync function loadSelectedArtifactPreview", sourceStart);
+const artifactPreviewImageSource = new Function(
+  "ARTIFACT_IMAGE_MEDIA_TYPES",
+  `return (${js.slice(sourceStart, sourceEnd)});`,
+)(new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]));
+assert.equal(
+  artifactPreviewImageSource({ status: "ready", mediaType: "image/png", contentEncoding: "base64", content: "aGVsbG8=" }),
+  "data:image/png;base64,aGVsbG8=",
+);
+assert.equal(artifactPreviewImageSource({ status: "loading", mediaType: "image/png", contentEncoding: "base64", content: "aGVsbG8=" }), null);
+assert.equal(artifactPreviewImageSource({ status: "ready", mediaType: "text/html", contentEncoding: "utf-8", content: "x" }), null);
 
 assert.match(css, /\.workspace\.viewer-open \.editor-region \{ display: none; \}/);
 assert.match(css, /\.viewer-body \{ display: grid; grid-template-columns:/);

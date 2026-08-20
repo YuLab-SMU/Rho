@@ -10,8 +10,11 @@ on:
       - ".cargo/**"
       - "crates/**/*.rs"
       - "desktop/src-tauri/**"
+      - "r/rho.agent/R/aisdk_adapter.R"
       - "desktop/dist/app.js"
       - "desktop/dist/index.html"
+      - "desktop/package.json"
+      - "desktop/package-lock.json"
       - "desktop/dist/styles.css"
       - "LICENSE"
       - "LICENSES.md"
@@ -29,6 +32,7 @@ on:
       - "scripts/build-windows-installer.ps1"
       - "scripts/tauri-bundle-type.mjs"
       - ".github/workflows/rust-compatibility.yml"
+      - ".github/workflows/rust-fast.yml"
       - ".github/workflows/candidate-build-draft.yml"
       - ".github/workflows/candidate-publish.yml"
       - ".github/workflows/native-updater-acceptance-target.yml"
@@ -42,6 +46,9 @@ on:
       - "scripts/tauri-native-updater.mjs"
       - "scripts/native-updater-acceptance.mjs"
       - "scripts/test-rust-msrv-contract.mjs"
+      - "scripts/test-extension-run-history-contract.mjs"
+      - "scripts/test-extension-p1-3-contract.mjs"
+      - "scripts/test-extension-phase-1-acceptance.mjs"
       - "scripts/test-installed-license-surface.mjs"
       - "scripts/test-signpath-readiness.mjs"
       - "scripts/test-signpath-free-trial-smoke.mjs"
@@ -75,6 +82,7 @@ on:
       - "docs/release/historical-0.4.0-stable-release-checklist.md"
   pull_request:
     branches: [main]
+    types: [opened, reopened, synchronize, ready_for_review]
     paths:
       - "**/Cargo.toml"
       - "Cargo.lock"
@@ -82,8 +90,11 @@ on:
       - ".cargo/**"
       - "crates/**/*.rs"
       - "desktop/src-tauri/**"
+      - "r/rho.agent/R/aisdk_adapter.R"
       - "desktop/dist/app.js"
       - "desktop/dist/index.html"
+      - "desktop/package.json"
+      - "desktop/package-lock.json"
       - "desktop/dist/styles.css"
       - "LICENSE"
       - "LICENSES.md"
@@ -101,6 +112,7 @@ on:
       - "scripts/build-windows-installer.ps1"
       - "scripts/tauri-bundle-type.mjs"
       - ".github/workflows/rust-compatibility.yml"
+      - ".github/workflows/rust-fast.yml"
       - ".github/workflows/candidate-build-draft.yml"
       - ".github/workflows/candidate-publish.yml"
       - ".github/workflows/native-updater-acceptance-target.yml"
@@ -114,6 +126,9 @@ on:
       - "scripts/tauri-native-updater.mjs"
       - "scripts/native-updater-acceptance.mjs"
       - "scripts/test-rust-msrv-contract.mjs"
+      - "scripts/test-extension-run-history-contract.mjs"
+      - "scripts/test-extension-p1-3-contract.mjs"
+      - "scripts/test-extension-phase-1-acceptance.mjs"
       - "scripts/test-installed-license-surface.mjs"
       - "scripts/test-signpath-readiness.mjs"
       - "scripts/test-signpath-free-trial-smoke.mjs"
@@ -155,9 +170,10 @@ concurrency:
 
 jobs:
   rust-compatibility:
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
     name: ${{ matrix.os }} / Rust ${{ matrix.toolchain }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -188,6 +204,7 @@ jobs:
             host: x86_64-unknown-linux-gnu
     env:
       RUSTUP_TOOLCHAIN: ${{ matrix.rustup_toolchain }}
+      CARGO_INCREMENTAL: "0"
 
     steps:
       - name: Check out exact source
@@ -207,6 +224,23 @@ jobs:
           r-version: "4.6.1"
           rtools-version: "45"
           use-public-rspm: true
+
+      - name: Set up R for Unix installed-app acceptance
+        if: matrix.toolchain == 'stable' && runner.os != 'Windows'
+        uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: "4.6.1"
+          use-public-rspm: true
+
+      - name: Install Workspace smoke R dependency on Unix
+        if: matrix.toolchain == 'stable' && runner.os != 'Windows'
+        shell: bash
+        run: Rscript -e "if (!requireNamespace('jsonlite', quietly = TRUE)) install.packages('jsonlite'); stopifnot(requireNamespace('jsonlite', quietly = TRUE))"
+
+      - name: Install Workspace smoke R dependency on Windows
+        if: matrix.toolchain == 'stable' && runner.os == 'Windows'
+        shell: pwsh
+        run: Rscript -e "if (!requireNamespace('jsonlite', quietly = TRUE)) install.packages('jsonlite'); stopifnot(requireNamespace('jsonlite', quietly = TRUE))"
 
       - name: Configure Windows GNU linker
         if: runner.os == 'Windows'
@@ -280,6 +314,18 @@ jobs:
           }
           cargo -vV
 
+      - name: Restore Cargo dependency and build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-
+
       - name: Stage pinned macOS Ark sidecar for Tauri compilation
         if: runner.os == 'macOS'
         shell: bash
@@ -319,5 +365,191 @@ jobs:
       - name: Verify locked workspace at selected Rust version
         run: |
           node scripts/test-rust-msrv-contract.mjs
+          node scripts/test-extension-phase-1-acceptance.mjs --test
+          node scripts/test-extension-phase-1-acceptance.mjs
           cargo check --workspace --all-targets --locked
           cargo test --workspace --locked --no-fail-fast
+
+      - name: Build, install, smoke and remove unsigned Windows app
+        if: matrix.toolchain == 'stable' && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $env:PATH="$env:RHO_RTOOLS_BIN;$env:PATH"
+          $keyDirectory = Join-Path $env:RUNNER_TEMP "rho-p1-windows-updater-key"
+          New-Item -ItemType Directory -Path $keyDirectory -Force | Out-Null
+          $keyPath = Join-Path $keyDirectory "private.key"
+          & npx.cmd -y "@tauri-apps/cli@2.11.4" signer generate --ci --write-keys $keyPath
+          if ($LASTEXITCODE -ne 0) { throw "Could not create ephemeral Tauri key." }
+          $env:TAURI_SIGNING_PRIVATE_KEY = Get-Content -LiteralPath $keyPath -Raw
+          $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""
+          try {
+            ./scripts/bootstrap-ark-windows.ps1
+            if ($LASTEXITCODE -ne 0) { throw "Windows Ark bootstrap failed." }
+            ./scripts/build-windows-installer.ps1
+            if ($LASTEXITCODE -ne 0) { throw "Windows installer build failed." }
+            $version = (Get-Content desktop\src-tauri\tauri.conf.json -Raw | ConvertFrom-Json).version
+            $binary = (Resolve-Path target\release\rho-desktop.exe).Path
+            $installer = @(Get-ChildItem target\release\bundle\nsis\Rho_*-setup.exe -File)
+            if ($installer.Count -ne 1 -or $installer[0].Name -ne "Rho_${version}_x64-setup.exe") {
+              throw "Expected one versioned NSIS installer."
+            }
+            Remove-Item Env:RHO_INTERNAL_EXTENSION_RUNTIME -ErrorAction SilentlyContinue
+            & $binary --smoke-test
+            if ($LASTEXITCODE -ne 0) { throw "Unbundled default-candidate smoke failed." }
+            $env:RHO_INTERNAL_EXTENSION_RUNTIME = "legacy"
+            & $binary --smoke-test
+            if ($LASTEXITCODE -ne 0) { throw "Unbundled legacy smoke failed." }
+            Remove-Item Env:RHO_INTERNAL_EXTENSION_RUNTIME -ErrorAction SilentlyContinue
+
+            function Get-RhoUninstallEntry {
+              Get-ItemProperty -Path @(
+                "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
+                "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
+                "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+              ) -ErrorAction SilentlyContinue |
+                Where-Object { $_.DisplayName -eq "Rho" -or $_.DisplayName -like "Rho *" } |
+                Select-Object -First 1
+            }
+            if (Get-RhoUninstallEntry) { throw "Hosted runner already contains Rho." }
+            $installedExecutable = $null
+            $uninstaller = $null
+            try {
+              $install = Start-Process -FilePath $installer[0].FullName -ArgumentList "/S" -PassThru -Wait
+              if ($install.ExitCode -ne 0) { throw "NSIS install failed with $($install.ExitCode)." }
+              $entry = Get-RhoUninstallEntry
+              if (-not $entry -or [string]$entry.DisplayVersion -ne $version) {
+                throw "Installed Rho registry identity is missing or stale."
+              }
+              $locations = @(
+                (Join-Path $env:LOCALAPPDATA "Rho\rho-desktop.exe"),
+                (Join-Path $env:LOCALAPPDATA "Programs\Rho\rho-desktop.exe")
+              )
+              if ($entry.InstallLocation) {
+                $installLocation = ([string]$entry.InstallLocation).Trim().Trim('"')
+                $locations += Join-Path $installLocation "rho-desktop.exe"
+                $locations += Join-Path $installLocation "Rho.exe"
+              }
+              $installedExecutable = $locations | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } | Select-Object -First 1
+              if (-not $installedExecutable) {
+                $installedExecutable = Get-ChildItem -LiteralPath $env:LOCALAPPDATA -Filter "rho-desktop.exe" -File -Recurse -Depth 5 -ErrorAction SilentlyContinue |
+                  Select-Object -ExpandProperty FullName -First 1
+              }
+              if (-not $installedExecutable) { throw "Installed Rho executable was not found." }
+              $installedExecutable = (Resolve-Path -LiteralPath $installedExecutable).Path
+              if ($installedExecutable.StartsWith((Resolve-Path $env:GITHUB_WORKSPACE).Path, [System.StringComparison]::OrdinalIgnoreCase)) {
+                throw "Installed executable remained inside the source workspace."
+              }
+              Remove-Item Env:RHO_INTERNAL_EXTENSION_RUNTIME -ErrorAction SilentlyContinue
+              & $installedExecutable --smoke-test
+              if ($LASTEXITCODE -ne 0) { throw "Installed default-candidate smoke failed." }
+              $env:RHO_INTERNAL_EXTENSION_RUNTIME = "legacy"
+              & $installedExecutable --smoke-test
+              if ($LASTEXITCODE -ne 0) { throw "Installed legacy smoke failed." }
+              Remove-Item Env:RHO_INTERNAL_EXTENSION_RUNTIME -ErrorAction SilentlyContinue
+              $match = [regex]::Match([string]$entry.UninstallString, '^"?(.+?\.exe)"?(?:\s.*)?$')
+              if ($match.Success) { $uninstaller = $match.Groups[1].Value }
+              if (-not $uninstaller -or -not (Test-Path -LiteralPath $uninstaller -PathType Leaf)) {
+                throw "Installed Rho uninstaller was not found."
+              }
+              Write-Host "Windows binary SHA-256: $((Get-FileHash $binary -Algorithm SHA256).Hash.ToLowerInvariant())"
+              Write-Host "Windows installer SHA-256: $((Get-FileHash $installer[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant())"
+            }
+            finally {
+              Remove-Item Env:RHO_INTERNAL_EXTENSION_RUNTIME -ErrorAction SilentlyContinue
+              Get-Process -Name "rho-desktop" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+              $cleanupEntry = Get-RhoUninstallEntry
+              if ((-not $uninstaller -or -not (Test-Path -LiteralPath $uninstaller -PathType Leaf)) -and $cleanupEntry -and $cleanupEntry.UninstallString) {
+                $cleanupMatch = [regex]::Match([string]$cleanupEntry.UninstallString, '^"?(.+?\.exe)"?(?:\s.*)?$')
+                if ($cleanupMatch.Success) { $uninstaller = $cleanupMatch.Groups[1].Value }
+              }
+              if ($uninstaller -and (Test-Path -LiteralPath $uninstaller -PathType Leaf)) {
+                $cleanup = Start-Process -FilePath $uninstaller -ArgumentList "/S" -PassThru -Wait
+                if ($cleanup.ExitCode -ne 0) { throw "Rho uninstall failed with $($cleanup.ExitCode)." }
+              }
+              for ($attempt = 0; $attempt -lt 60; $attempt += 1) {
+                $registryRemoved = -not [bool](Get-RhoUninstallEntry)
+                $executableRemoved = -not $installedExecutable -or -not (Test-Path -LiteralPath $installedExecutable -PathType Leaf)
+                if ($registryRemoved -and $executableRemoved) { break }
+                Start-Sleep -Milliseconds 500
+              }
+              if (Get-RhoUninstallEntry) { throw "Rho uninstall registry cleanup failed." }
+              if ($installedExecutable -and (Test-Path -LiteralPath $installedExecutable -PathType Leaf)) {
+                throw "Rho uninstall executable cleanup failed."
+              }
+            }
+          }
+          finally {
+            Remove-Item Env:TAURI_SIGNING_PRIVATE_KEY -ErrorAction SilentlyContinue
+            Remove-Item Env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $keyDirectory -Recurse -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Build, mount and smoke unsigned macOS app
+        if: matrix.toolchain == 'stable' && runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          key_dir="$(mktemp -d "$RUNNER_TEMP/rho-p1-macos-key.XXXXXX")"
+          key_path="$key_dir/private.key"
+          mount_dir="$(mktemp -d "$RUNNER_TEMP/rho-p1-macos-mount.XXXXXX")"
+          mounted=0
+          cleanup() {
+            if [[ "$mounted" == 1 ]]; then hdiutil detach "$mount_dir" -force >/dev/null || true; fi
+            rm -rf -- "$key_dir" "$mount_dir"
+          }
+          trap cleanup EXIT
+          npx -y "@tauri-apps/cli@2.11.4" signer generate --ci --write-keys "$key_path"
+          export TAURI_SIGNING_PRIVATE_KEY="$(cat "$key_path")"
+          export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
+          (cd desktop/src-tauri && npx -y "@tauri-apps/cli@2.11.4" build --target aarch64-apple-darwin --bundles app,dmg)
+          version="$(node -e 'const fs=require("fs"); process.stdout.write(JSON.parse(fs.readFileSync("desktop/src-tauri/tauri.conf.json","utf8")).version)')"
+          app="target/aarch64-apple-darwin/release/bundle/macos/Rho.app"
+          dmg="target/aarch64-apple-darwin/release/bundle/dmg/Rho_${version}_aarch64.dmg"
+          test -x "$app/Contents/MacOS/rho-desktop"
+          test -f "$dmg"
+          test "$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")" = "$version"
+          test "$(lipo -archs "$app/Contents/MacOS/rho-desktop")" = "arm64"
+          ark="$(find "$app/Contents/MacOS" -maxdepth 1 -type f -name 'ark*' -print -quit)"
+          test -n "$ark"
+          test "$(lipo -archs "$ark")" = "arm64"
+          test -f "$app/Contents/Resources/licenses/rho/LICENSE.txt"
+          cmp -s LICENSE "$app/Contents/Resources/licenses/rho/LICENSE.txt"
+          env -u RHO_INTERNAL_EXTENSION_RUNTIME "$app/Contents/MacOS/rho-desktop" --smoke-test
+          RHO_INTERNAL_EXTENSION_RUNTIME=legacy "$app/Contents/MacOS/rho-desktop" --smoke-test
+          hdiutil verify "$dmg"
+          hdiutil attach -readonly -nobrowse -mountpoint "$mount_dir" "$dmg" >/dev/null
+          mounted=1
+          mounted_app="$mount_dir/Rho.app"
+          test -x "$mounted_app/Contents/MacOS/rho-desktop"
+          env -u RHO_INTERNAL_EXTENSION_RUNTIME "$mounted_app/Contents/MacOS/rho-desktop" --smoke-test
+          RHO_INTERNAL_EXTENSION_RUNTIME=legacy "$mounted_app/Contents/MacOS/rho-desktop" --smoke-test
+          shasum -a 256 "$app/Contents/MacOS/rho-desktop" "$dmg"
+
+      - name: Build, extract and smoke unsigned Linux AppImage
+        if: matrix.toolchain == 'stable' && runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          key_dir="$(mktemp -d "${RUNNER_TEMP:-/tmp}/rho-p1-linux-key.XXXXXX")"
+          extract_dir="$(mktemp -d "${RUNNER_TEMP:-/tmp}/rho-p1-linux-extract.XXXXXX")"
+          cleanup() { rm -rf -- "$key_dir" "$extract_dir"; }
+          trap cleanup EXIT
+          key_path="$key_dir/private.key"
+          npx -y "@tauri-apps/cli@2.11.4" signer generate --ci --write-keys "$key_path"
+          export TAURI_SIGNING_PRIVATE_KEY="$(cat "$key_path")"
+          export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
+          scripts/build-linux.sh
+          version="$(node -e 'const fs=require("fs"); process.stdout.write(JSON.parse(fs.readFileSync("desktop/src-tauri/tauri.conf.json","utf8")).version)')"
+          appimage="target/release/bundle/appimage/Rho_${version}_x86_64.AppImage"
+          test -x "$appimage"
+          (cd "$extract_dir" && "$GITHUB_WORKSPACE/$appimage" --appimage-extract >/dev/null)
+          executable="$(find "$extract_dir/squashfs-root" -type f -name rho-desktop -perm -111 -print -quit)"
+          test -n "$executable"
+          file -b "$executable" | grep -Eq 'ELF 64-bit.*x86-64'
+          app_run="$extract_dir/squashfs-root/AppRun"
+          test -x "$app_run"
+          test -f "$extract_dir/squashfs-root/usr/share/licenses/rho/LICENSE.txt" || find "$extract_dir/squashfs-root" -path '*/licenses/rho/LICENSE.txt' -type f -print -quit | grep -q .
+          env -u RHO_INTERNAL_EXTENSION_RUNTIME "$app_run" --smoke-test
+          RHO_INTERNAL_EXTENSION_RUNTIME=legacy "$app_run" --smoke-test
+          sha256sum "$executable" "$appimage"

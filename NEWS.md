@@ -4,6 +4,41 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.1-dev.1 - 2026-08-18
+
+### Credentials
+
+- macOS startup and ordinary Model settings projection no longer read every
+  Provider API key. Keychain access is deferred to the exact Provider used by
+  an Agent turn, model test, model discovery, or explicit credential action,
+  preventing one authorization dialog per configured Provider.
+- The first successful use of a Provider keeps its key only in a zeroizing
+  process-session cache, so later conversations do not ask Keychain again.
+  Replacement, deletion, refresh, and graceful shutdown clear the entry;
+  secrets remain absent from settings, browser storage, logs, and diagnostics.
+
+### Agent reliability
+
+- Provider failures now retain and display a bounded redacted cause, including
+  actionable HTTP 401/403, 404, 429, and 5xx guidance instead of a bare
+  `Failed` state.
+- Invalid file proposals such as `replace_selection` without a captured
+  selection are labelled before review and cannot be accepted. Valid proposals
+  wait until their parent Agent turn is terminal, while true file changes keep
+  their separate stale-file recovery message.
+
+## 0.4.1-dev.0 - 2026-08-18
+
+### Internal extension runtime
+
+- Rho now uses its compiled-in Phase 1 extension runtime by default for Run
+  History, Workspace Snapshot, and Project File Viewer composition while
+  preserving the existing commands, Agent tool, data authorities, and viewer
+  protocol.
+- A private `RHO_INTERNAL_EXTENSION_RUNTIME=legacy` override remains available
+  for one development release cycle. This is an internal first-party runtime,
+  not a public plugin SDK or third-party loading interface.
+
 ## 0.4.0 - 2026-08-17
 
 ### Stable release

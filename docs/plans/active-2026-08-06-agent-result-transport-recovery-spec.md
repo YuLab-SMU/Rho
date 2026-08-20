@@ -1,6 +1,6 @@
 # Agent Result Transport Recovery
 
-Status: active; ART-1 implementation, contract review, and automated verification complete 2026-08-06; installed acceptance open
+Status: active; ART-1 complete; ART-2 redacted Provider-failure projection, focused tests, and exact local persisted 404/429 UI acceptance passed 2026-08-19; broader installed acceptance open
 
 Date: 2026-08-06
 
@@ -63,6 +63,70 @@ Artifact payload storage, execution cancellation, provider retry policy,
 approval semantics, project revisions, frontend state, database schema, or
 release acceptance.
 
+## ART-2 Redacted Provider Failure Projection
+
+The project owner's `0.4.1-dev.1` local test reproduced a second result-loss
+defect. Multiple turns reached the private `115-newapi` Provider and received:
+
+```text
+API request failed with status 429
+URL: [REDACTED]/messages
+Unknown error (could not read body)
+```
+
+The raw framed `desktop.agent_failed` event was persisted in the broker event
+ledger, but `project_agent_turn_event()` omitted that event type and the normal
+completion path finalized `agent_turns.error_message` as `NULL`. The UI could
+therefore render only `Failed`, hiding the actionable Provider cause.
+
+ART-2 is a D1/R2 repair with these invariants:
+
+- `desktop.agent_failed` is a terminal failure with one redacted, bounded
+  Provider error string;
+- the same bounded value is persisted in `agent_turns.error_message` and as one
+  visible `desktop.agent_failed` timeline event;
+- Rust applies `redact_sensitive_text()` again at the host boundary and bounds
+  the result before either projection, even though Agent R already redacts
+  runtime-profile secrets;
+- ordinary turn cards use controlled friendly mappings for HTTP 400, 401/403,
+  404, 429, 5xx, timeout, and network failure, preserving the status code and a
+  next action without exposing a URL, credential, raw response body, command,
+  process, or transport identifier;
+- expanded Activity may show the same controlled Provider failure message, not
+  raw payload JSON;
+- successful turns, tool failures, retry/cancel semantics, Provider selection,
+  credentials, request shape, quota policy, and no-fallback behavior do not
+  change; and
+- no historical backfill guesses which raw broker event belongs to an old turn;
+  the repaired projection applies to newly completed turns only.
+
+Regression evidence must cover the observed 429 shape, 401/403, 5xx, unknown
+redacted failure, 2 KiB bound, secret/URL removal, one terminal timeline event,
+turn error persistence, successful completion remaining error-free, and
+frontend card/activity copy. Local acceptance uses a synthetic persisted event
+shape and then an owner-triggered Provider failure; Rho does not generate
+automatic Provider requests for this repair.
+
+ART-2 focused evidence on 2026-08-19:
+
+```text
+cargo test -p rho-server provider_failure --locked
+  passed: 2
+node --check desktop/dist/app.js
+node scripts/test-human-facing-information-ui.mjs
+node scripts/test-agent-output-review-ui.mjs
+  passed
+git diff --check
+  passed
+```
+
+The local store then supplied owner-generated failures without a new automatic
+Provider request. Newly completed turns persist bounded redacted 404/429 text
+in `agent_turns.error_message` rather than `NULL`. Computer Use opened an exact
+failed turn and confirmed visible copy: `Provider returned HTTP 404. Check the
+model ID, Base URL, and compatible endpoint.` The UI exposed no URL, body, key,
+process, or transport detail. Historical pre-ART-2 failures remain unmodified.
+
 ## Failure And Recovery Contract
 
 For ordinary results, the broker removes the duplicate `events` array and
@@ -89,8 +153,9 @@ session.
   retains user-facing output and Plot review behavior; ART-1 changes only the
   internal model-facing projection.
 - The [human-facing information projection](active-2026-08-05-human-facing-information-projection-spec.md)
-  retains ordinary UI error language; no new frontend error surface is
-  introduced.
+  retains ordinary UI error language. ART-2 may add only its controlled
+  redacted Provider-failure category to the existing turn card and Activity
+  surfaces; raw Provider payloads remain excluded.
 - No competing schema, persistence, approval, policy, or project identity
   ownership is introduced.
 

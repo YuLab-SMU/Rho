@@ -169,6 +169,10 @@ function validate(value) {
   assert.match(value.buildScript, /"BundleOnly"[\s\S]*"bundle"[\s\S]*"--bundles", "nsis"/);
   assert.match(value.buildScript, /Release executable changed during BundleOnly/);
   assert.match(value.buildScript, /NoBundle mode must not produce an installer/);
+  assert.match(
+    value.buildScript,
+    /\$BuildMode -eq "Full"[\s\S]*Remove-Item -LiteralPath \$installerDirectory -Recurse -Force/,
+  );
   assert.match(value.bundleType, /__TAURI_BUNDLE_TYPE_VAR_UNK/);
   assert.match(value.bundleType, /__TAURI_BUNDLE_TYPE_VAR_NSS/);
   assert.match(value.bundleType, /exactly one unknown bundle token/);

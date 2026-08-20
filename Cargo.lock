@@ -129,6 +129,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "arc-swap"
+version = "1.9.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c049c0be4daef0b145cb3555416b3b8ef5b7888a38aea1a3a155801fe7b0810b"
+dependencies = [
+ "rustversion",
+]
+
+[[package]]
 name = "ashpd"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1317,6 +1326,12 @@ name = "find-msvc-tools"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
+
+[[package]]
+name = "fixedbitset"
+version = "0.5.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d674e81391d1e1ab681a28d99df07927c6d4aa5b027d7da16ba32d1d21ecd99"
 
 [[package]]
 name = "flate2"
@@ -3108,6 +3123,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
+name = "petgraph"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8701b58ea97060d5e5b155d383a69952a60943f0e6dfe30b04c287beb0b27455"
+dependencies = [
+ "fixedbitset",
+ "hashbrown 0.15.5",
+ "indexmap 2.14.0",
+]
+
+[[package]]
 name = "phf"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3709,7 +3735,7 @@ dependencies = [
 
 [[package]]
 name = "rho-agent-transport"
-version = "0.4.0"
+version = "0.4.1-dev.1"
 dependencies = [
  "rand 0.9.5",
  "rho-protocol",
@@ -3720,7 +3746,7 @@ dependencies = [
 
 [[package]]
 name = "rho-cli"
-version = "0.4.0"
+version = "0.4.1-dev.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -3735,7 +3761,7 @@ dependencies = [
 
 [[package]]
 name = "rho-core"
-version = "0.4.0"
+version = "0.4.1-dev.1"
 dependencies = [
  "rho-protocol",
  "serde",
@@ -3744,7 +3770,7 @@ dependencies = [
 
 [[package]]
 name = "rho-desktop"
-version = "0.4.0"
+version = "0.4.1-dev.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -3756,6 +3782,7 @@ dependencies = [
  "reqwest 0.12.28",
  "rfd",
  "rho-core",
+ "rho-extension-runtime",
  "rho-kernel",
  "rho-protocol",
  "rho-server",
@@ -3771,11 +3798,26 @@ dependencies = [
  "tempfile",
  "tokio",
  "uuid",
+ "zeroize",
+]
+
+[[package]]
+name = "rho-extension-runtime"
+version = "0.4.1-dev.1"
+dependencies = [
+ "arc-swap",
+ "petgraph",
+ "semver",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
 ]
 
 [[package]]
 name = "rho-kernel"
-version = "0.4.0"
+version = "0.4.1-dev.1"
 dependencies = [
  "anyhow",
  "jet_core",
@@ -3787,7 +3829,7 @@ dependencies = [
 
 [[package]]
 name = "rho-mcp"
-version = "0.4.0"
+version = "0.4.1-dev.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -3800,7 +3842,7 @@ dependencies = [
 
 [[package]]
 name = "rho-protocol"
-version = "0.4.0"
+version = "0.4.1-dev.1"
 dependencies = [
  "chrono",
  "serde",
@@ -3811,7 +3853,7 @@ dependencies = [
 
 [[package]]
 name = "rho-server"
-version = "0.4.0"
+version = "0.4.1-dev.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -3830,7 +3872,7 @@ dependencies = [
 
 [[package]]
 name = "rho-store"
-version = "0.4.0"
+version = "0.4.1-dev.1"
 dependencies = [
  "chrono",
  "rho-protocol",
@@ -3844,7 +3886,7 @@ dependencies = [
 
 [[package]]
 name = "rho-updater-verifier"
-version = "0.4.0"
+version = "0.4.1-dev.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -5075,6 +5117,7 @@ dependencies = [
  "futures-core",
  "futures-io",
  "futures-sink",
+ "futures-util",
  "pin-project-lite",
  "tokio",
 ]

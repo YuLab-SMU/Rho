@@ -819,6 +819,20 @@ mod tests {
         assert!(read_viewer_file(&root, ".").is_err());
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn viewer_file_rejects_symlink_escape() {
+        let directory = TempDir::new().unwrap();
+        let root_path = directory.path().join("project");
+        std::fs::create_dir_all(&root_path).unwrap();
+        let outside = directory.path().join("outside.html");
+        std::fs::write(&outside, "<p>outside</p>").unwrap();
+        std::os::unix::fs::symlink(&outside, root_path.join("linked.html")).unwrap();
+        let root = root_path.canonicalize().unwrap();
+
+        assert!(read_viewer_file(&root, "linked.html").is_err());
+    }
+
     #[test]
     fn viewer_file_enforces_byte_boundary() {
         let directory = TempDir::new().unwrap();

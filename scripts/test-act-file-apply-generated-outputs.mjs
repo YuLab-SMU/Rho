@@ -10,11 +10,16 @@ const js = read("desktop", "dist", "app.js");
 const rust = read("crates", "rho-server", "src", "coordinator.rs");
 
 assert.match(html, /id="actAutoApprove"[^>]*> Authorize R execution and file changes for this session/);
-assert.match(html, /app\.js\?v=0\.4\.0(?:&amp;|&)[^"']*afo=act-output-v1/);
+assert.match(html, /app\.js\?v=0\.4\.1-dev\.1(?:&amp;|&)[^"']*afo=act-output-v1/);
 assert.match(js, /actAuthorizedTurnIds: new Set\(\)/);
 assert.match(js, /fileEditAutoApplyAttempts: new Set\(\)/);
 assert.match(js, /if \(authorizeChanges && response\?\.turn_id\) state\.actAuthorizedTurnIds\.add\(response\.turn_id\)/);
 assert.match(js, /function maybeAutoApplyFileEditProposal\(\)/);
+assert.ok(
+  js.indexOf("fileEditProposalPreflight(proposal).state !== \"ready\"")
+    < js.indexOf("state.fileEditAutoApplyAttempts.add(proposal.key)"),
+  "Automatic apply must wait for a valid terminal proposal before consuming its attempt",
+);
 assert.match(js, /state\.actAuthorizedTurnIds\.has\(proposal\.turnId\)/);
 assert.match(js, /proposal\.editorContext\?\.project_root !== state\.project\.root/);
 assert.match(js, /state\.fileEditAutoApplyAttempts\.add\(proposal\.key\)/);
