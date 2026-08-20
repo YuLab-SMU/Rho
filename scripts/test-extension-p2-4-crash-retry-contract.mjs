@@ -53,7 +53,6 @@ export function validateP24CrashRetryContract(value) {
     '"retry_fresh_authority": true',
     '"third_crash_blocked": true',
   ]) assert.ok(value.installed.includes(marker), `installed C3 smoke lost ${marker}`);
-  assert.match(value.spec, /Active work package: none at the P2-4C3\/P2-4C checkpoint/);
   assert.match(value.spec, /P2-4C3 \/ P2-4C local checkpoint — 2026-08-20/);
   assert.doesNotMatch(
     value.commands,
@@ -74,7 +73,7 @@ function fixture() {
     packageJson: '{"version":"0.4.1-dev.7"}',
     news: "## 0.4.1-dev.7\n### Workspace-plugin crash recovery",
     installed: '"crash_state_durable": true\n"heartbeat_timeout_classified": true\n"retry_fresh_authority": true\n"third_crash_blocked": true',
-    spec: "Active work package: none at the P2-4C3/P2-4C checkpoint\nP2-4C3 / P2-4C local checkpoint — 2026-08-20",
+    spec: "P2-4C3 / P2-4C local checkpoint — 2026-08-20",
   };
 }
 

@@ -5,9 +5,10 @@ state/transition/event/tombstone persistence completed its local stop gate
 2026-08-20; P2-1/P2-2/P2-3/P2-4A hosted and cross-platform installed gates
 remain open and mandatory before final Phase 2 acceptance
 
-Active work package: none at the P2-4C3/P2-4C checkpoint. P2-4D through P2-4G
-remain inactive pending explicit amendment/cross-review. C3 added one trusted
-Retry command only; uninstall, update and rollback remain unavailable.
+Active work package: P2-4D1 only — symlink-safe recoverable package move/restore
+foundation. P2-4D2/D3 and P2-4E through P2-4G remain inactive. D1 adds no
+command/UI and performs no recursive deletion, retention purge, install, update
+or rollback.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -385,6 +386,36 @@ trash path owns the exact digest and restores one truthful state. No recursive
 delete occurs in the user action. Permanent deletion is a later BH4 retention
 action with expiry, exact tombstone and separate failure recovery. Restore from
 trash is explicit and returns the package disabled; it never auto-enables.
+
+### Activated P2-4D contract
+
+P2-4D is divided into three local stops:
+
+1. **P2-4D1 — exact package move/restore foundation (active).** A Broker-owned
+   filesystem service accepts only normalized project root, validated
+   single-component directory, exact plugin/digest and opaque transition key.
+   It revalidates `.rho`, `.rho/plugins`, `.rho/plugin-trash`, source package and
+   every inventory entry immediately before an atomic same-filesystem rename.
+   Source and trash cannot both own the package; links/reparse points,
+   replacement roots, preexisting targets, wrong digest and cross-project keys
+   fail closed. Restore revalidates the tombstoned trash inventory and requires
+   the original source component to be absent. Deterministic pre/post-rename
+   failure points prove idempotent ownership recovery. D1 exposes typed evidence
+   only and creates no Store/UI lifecycle truth.
+2. **P2-4D2 — trusted Uninstall/Restore commands and tombstone transaction
+   (inactive).** Uninstall confirms exact project revision/directory/digest,
+   completes C1 teardown, revokes durable grants, atomically moves to trash and
+   records tombstone plus uninstalled state. Restore uses exact tombstone/digest,
+   moves back and returns disabled without authority.
+3. **P2-4D3 — BH4 retention handoff (inactive).** Expiry and purge-pending are
+   explicit Store transitions; permanent removal uses exact tombstone ownership,
+   safe recursive deletion inside trash only, failure recovery and no user-action
+   delete claim.
+
+D1 tests cover source/trash root replacement, directory/digest mismatch,
+symlink/reparse/non-file inventory, preexisting target, rename failure,
+post-rename interruption, reopen/idempotency, restore collision and two-project
+isolation. D2 is the next user-visible versioned slice, not D1.
 
 ## Upgrade
 
