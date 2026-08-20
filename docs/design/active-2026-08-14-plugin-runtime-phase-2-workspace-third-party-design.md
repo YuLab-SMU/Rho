@@ -2,9 +2,11 @@
 
 Status: active; P2-0 and pure-contract remediation complete; owner explicitly
 authorized rapid implementation of the complete Phase 2 end state on
-2026-08-20; P2-1 Wasm host source/local macOS evidence is complete under its
-focused contract while Windows/Linux hosted acceptance remains open; P2-2
-through P2-4 remain sequentially gated
+2026-08-20; P2-1 Wasm host source/local macOS evidence is complete while
+Windows/Linux hosted acceptance remains open; local-first exception active;
+P2-2A schema/persistence checkpoint is locally complete and P2-2B trusted
+permission UI/fresh-handle slice is active; P2-2C through P2-4 remain
+sequentially gated
 
 Date: 2026-08-14
 Issue: [#17](https://github.com/YuLab-SMU/Rho/issues/17)

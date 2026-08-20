@@ -1,8 +1,15 @@
 # P2-2 Read-only Broker Grants And Trusted Permission UI
 
-Status: proposed implementation contract; product intent authorized as part of
-the complete Phase 2 direction on 2026-08-20; activation and product-code work
-blocked until P2-1 Windows/Linux hosted installed acceptance closes
+Status: active; complete Phase 2 direction and local-first exception authorized
+2026-08-20; P2-2A schema + dedicated permission persistence checkpoint complete
+locally and P2-2B trusted permission UI/fresh-handle slice activated; P2-1
+Windows/Linux hosted acceptance remains open and mandatory before final Phase 2
+acceptance
+
+Active work package: P2-2B only. P2-2C through P2-2F remain inactive until the
+trusted permission UI/fresh-handle stop gate passes. P2-2B may mint only
+in-memory handles for the exact approved identity and exposes no filesystem,
+network, or Workspace R operation.
 
 Change class: D3 security, schema, approval, network, filesystem, Workspace R,
 and cross-module behavior. Risk: R3.
@@ -360,6 +367,47 @@ Once active, it proceeds vertically:
 
 Stop after each slice. Later slices cannot make an earlier half-wired schema or
 UI falsely authoritative.
+
+### P2-2A checkpoint evidence
+
+P2-2A is implemented locally in schema version 13 and the dedicated
+`PluginPermissionQueryService` / `PluginPermissionMutationService` seam. The
+three plugin-permission tables are separate from Agent approvals and scientific
+environment requests. Migration performs no historical backfill, preserves a
+backup, rolls back on injected failure, and rejects current-schema identity,
+foreign-key, constraint, or live-authority tampering.
+
+The persistence lane validates explicit normalized project identity, plugin
+identity/version/package digest, canonical permission constraints, bounded
+purpose/reason text, decision duration, reserved filesystem paths, and network
+host/method shapes. Request resolution, grant creation, event creation,
+cancellation, consume, revoke, expiry, and recovery are atomic, stale-safe,
+idempotent, and project-scoped. Grant rows deliberately omit raw handles,
+handle digests, host/generation/Workspace identity, response content, and other
+live authority.
+
+Local verification on 2026-08-20:
+
+- stable and exact Rust `1.88.0` `cargo test -p rho-store --locked
+  --no-fail-fast`: 138 unit and 34 scenario tests passed on each toolchain;
+- the concurrent identical-decision regression passed ten consecutive focused
+  repetitions; its first review run exposed a deferred-transaction
+  `DatabaseBusy` race, after which every permission mutation was changed to an
+  `IMMEDIATE` transaction and the full matrix passed;
+- grant-insert failure rollback, v12 migration rollback/recovery, reopen,
+  cancellation, expiry, duplicate/idempotent decisions, invalid payloads, and
+  two-project isolation passed;
+- stable and Rust `1.88.0` clippy completed with warnings capped. Strict
+  `-D warnings` is not claimed because `rho-store` has existing crate-wide
+  warning debt (principally the large `StoreError` result); the one new
+  non-baseline structural warning was removed by replacing the positional
+  ten-argument event writer with a named event draft;
+- rustfmt and `git diff --check` passed before the checkpoint review.
+
+P2-2A is non-routable and therefore does not advance application or R package
+versions and does not add `NEWS.md` copy. Hosted CI, independent privileged
+operation review, browser/installed acceptance, and release authority remain
+open. This evidence closes only the local P2-2A stop gate and activates P2-2B.
 
 ## Verification Matrix
 

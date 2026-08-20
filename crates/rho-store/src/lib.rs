@@ -6,7 +6,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub(crate) const SCHEMA_VERSION: i64 = 12;
+pub(crate) const SCHEMA_VERSION: i64 = 13;
 const DEFAULT_LIMIT: usize = 50;
 const MAX_AGENT_LIST_LIMIT: usize = 100;
 const MAX_DIAGNOSTIC_LINE: u32 = 10_000_000;
@@ -22,6 +22,8 @@ mod environment;
 mod evidence;
 mod migration;
 mod mutation;
+mod plugin_permission;
+mod plugin_permission_service;
 mod project;
 mod query;
 mod run;
@@ -49,6 +51,14 @@ pub use evidence::{
     EvidenceEntryDraft,
 };
 pub use mutation::ProjectMutationService;
+pub use plugin_permission::{
+    PluginPermissionDecision, PluginPermissionDecisionDraft, PluginPermissionEvent,
+    PluginPermissionGrant, PluginPermissionMutationOutcome, PluginPermissionRequest,
+    PluginPermissionRequestDraft,
+};
+pub use plugin_permission_service::{
+    PluginPermissionMutationService, PluginPermissionQueryService,
+};
 pub use project::{
     PlotPayloadPruneResult, ProjectRetentionSummary, RetentionPolicy, RetentionScopeSummary,
 };
@@ -242,6 +252,8 @@ struct StoreOpenOptions {
     inject_v10_failure_before_commit: bool,
     #[cfg(test)]
     inject_v11_failure_before_commit: bool,
+    #[cfg(test)]
+    inject_v12_failure_before_commit: bool,
 }
 
 #[derive(Debug)]
@@ -271,6 +283,7 @@ impl Store {
     fn migrate(&mut self, path: &Path, options: &StoreOpenOptions) -> Result<(), StoreError> {
         if migration::database_is_empty(&self.connection)? {
             self.connection.execute_batch(migration::v8_schema_sql())?;
+            migration::create_plugin_permission_schema(&self.connection)?;
             self.set_schema_version(SCHEMA_VERSION)?;
             self.assert_current_schema()?;
             self.migration_outcome = MigrationOutcome::bootstrapped_current();
@@ -313,6 +326,12 @@ impl Store {
                 let outcome = self.migrate_v11_to_v12(backup_path, options)?;
                 self.migration_outcome = outcome;
             }
+            Some(12) => {
+                let backup_path =
+                    migration::create_pre_migration_backup(&self.connection, path, 12)?;
+                let outcome = self.migrate_v12_to_v13(backup_path, options)?;
+                self.migration_outcome = outcome;
+            }
             Some(other) => {
                 return Err(StoreError::MigrationRejected {
                     message: format!("unsupported schema version {other}"),
@@ -348,7 +367,7 @@ impl Store {
         backup_path: Option<PathBuf>,
         _options: &StoreOpenOptions,
     ) -> Result<MigrationOutcome, StoreError> {
-        let _backup_path_string = backup_path
+        let backup_path_string = backup_path
             .as_ref()
             .map(|path| path.to_string_lossy().replace('\\', "/"));
         let transaction = self.connection.transaction()?;
@@ -358,7 +377,7 @@ impl Store {
                 message: "malformed project identity metadata".to_string(),
                 outcome: MigrationOutcome::rejected(
                     Some(7),
-                    _backup_path_string,
+                    backup_path_string,
                     counts,
                     "malformed_project_identity",
                 ),
@@ -371,6 +390,7 @@ impl Store {
         migration::rebuild_plot_artifacts_v8(&transaction)?;
         migration::create_claim_review_schema(&transaction)?;
         migration::create_agent_conversation_schema(&transaction)?;
+        migration::create_plugin_permission_schema(&transaction)?;
         transaction.execute_batch(
             "
             CREATE INDEX IF NOT EXISTS idx_runs_project_started
@@ -395,7 +415,7 @@ impl Store {
                 message: "injected migration failure".to_string(),
                 outcome: MigrationOutcome::rejected(
                     Some(7),
-                    _backup_path_string,
+                    backup_path_string,
                     counts,
                     "injected_failure",
                 ),
@@ -425,6 +445,7 @@ impl Store {
         migration::create_claim_review_schema(&transaction)?;
         migration::add_run_error_range_columns(&transaction)?;
         migration::create_agent_conversation_schema(&transaction)?;
+        migration::create_plugin_permission_schema(&transaction)?;
         transaction.execute(
             "INSERT INTO metadata(key, value) VALUES('schema_version', ?1)
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -464,6 +485,7 @@ impl Store {
         let transaction = self.connection.transaction()?;
         migration::add_run_error_range_columns(&transaction)?;
         migration::create_agent_conversation_schema(&transaction)?;
+        migration::create_plugin_permission_schema(&transaction)?;
         transaction.execute(
             "INSERT INTO metadata(key, value) VALUES('schema_version', ?1)
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -526,6 +548,7 @@ impl Store {
             transaction.query_row("SELECT COUNT(*) FROM runs", [], |row| row.get(0))?;
         migration::rebuild_runs_error_range_kind_v11(&transaction)?;
         migration::create_agent_conversation_schema(&transaction)?;
+        migration::create_plugin_permission_schema(&transaction)?;
         let after_count: i64 =
             transaction.query_row("SELECT COUNT(*) FROM runs", [], |row| row.get(0))?;
         if before_count != after_count {
@@ -615,6 +638,7 @@ impl Store {
             });
         }
         migration::create_agent_conversation_schema(&transaction)?;
+        migration::create_plugin_permission_schema(&transaction)?;
         let mapping_count: i64 =
             transaction.query_row("SELECT COUNT(*) FROM agent_conversation_turns", [], |row| {
                 row.get(0)
@@ -666,6 +690,44 @@ impl Store {
         Ok(())
     }
 
+    fn migrate_v12_to_v13(
+        &mut self,
+        backup_path: Option<PathBuf>,
+        _options: &StoreOpenOptions,
+    ) -> Result<MigrationOutcome, StoreError> {
+        let _backup_path_string = backup_path
+            .as_ref()
+            .map(|path| path.to_string_lossy().replace('\\', "/"));
+        let transaction = self.connection.transaction()?;
+        migration::create_plugin_permission_schema(&transaction)?;
+        transaction.execute(
+            "INSERT INTO metadata(key, value) VALUES('schema_version', ?1)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            [SCHEMA_VERSION.to_string()],
+        )?;
+        #[cfg(test)]
+        if _options.inject_v12_failure_before_commit {
+            return Err(StoreError::MigrationRejected {
+                message: "injected v12 migration failure".to_string(),
+                outcome: MigrationOutcome::rejected(
+                    Some(12),
+                    _backup_path_string,
+                    MigrationRecordCounts::default(),
+                    "injected_failure",
+                ),
+            });
+        }
+        transaction.commit()?;
+        self.assert_current_schema()?;
+        Ok(MigrationOutcome::migrated(
+            12,
+            backup_path
+                .as_ref()
+                .map(|path| path.to_string_lossy().replace('\\', "/")),
+            MigrationRecordCounts::default(),
+        ))
+    }
+
     fn assert_current_schema(&self) -> Result<(), StoreError> {
         migration::assert_not_null_project_identity(&self.connection, "runs")?;
         migration::assert_not_null_project_identity(&self.connection, "agent_turns")?;
@@ -690,6 +752,7 @@ impl Store {
         }
         migration::assert_runs_error_range_kind_constraint(&self.connection)?;
         migration::assert_agent_conversation_schema(&self.connection)?;
+        migration::assert_plugin_permission_schema(&self.connection)?;
         Ok(())
     }
 
@@ -2902,7 +2965,7 @@ fn text_preview(text: &str, limit: usize) -> String {
 mod tests {
     use super::*;
     use crate::migration::{
-        assert_index_exists, assert_not_null_project_identity,
+        assert_index_exists, assert_not_null_project_identity, assert_plugin_permission_schema,
         assert_runs_error_range_kind_constraint, read_schema_version, set_schema_version,
     };
     use rho_protocol::{MessageKind, WorkspaceIdentity};
@@ -4807,7 +4870,7 @@ mod tests {
     }
 
     #[test]
-    fn bootstraps_empty_store_to_v12_and_reopens_idempotently() {
+    fn bootstraps_empty_store_to_v13_and_reopens_idempotently() {
         let directory = TempDir::new().unwrap();
         let database = directory.path().join("rho.sqlite");
 
@@ -4826,7 +4889,7 @@ mod tests {
     }
 
     #[test]
-    fn migrates_v7_to_v12_and_marks_legacy_unscoped_records() {
+    fn migrates_v7_to_v13_and_marks_legacy_unscoped_records() {
         let directory = TempDir::new().unwrap();
         let database = directory.path().join("rho.sqlite");
         create_v7_fixture(&database);
@@ -4834,7 +4897,10 @@ mod tests {
         let store = Store::open(&database).unwrap();
         assert_eq!(store.migration_outcome().status, MigrationStatus::Migrated);
         assert_eq!(store.migration_outcome().from_schema_version, Some(7));
-        assert_eq!(store.migration_outcome().to_schema_version, Some(12));
+        assert_eq!(
+            store.migration_outcome().to_schema_version,
+            Some(SCHEMA_VERSION)
+        );
         assert_eq!(store.migration_outcome().scoped_count, 4);
         assert_eq!(store.migration_outcome().legacy_unscoped_count, 4);
         assert_eq!(store.migration_outcome().rejected_count, 0);
@@ -4978,14 +5044,17 @@ mod tests {
                  DROP INDEX IF EXISTS idx_agent_conversation_turns_conversation;
                  DROP INDEX IF EXISTS idx_agent_conversations_project_updated;
                  DROP TABLE agent_conversation_turns;
-                 DROP TABLE agent_conversations;",
+                 DROP TABLE agent_conversations;
+                 DROP TABLE plugin_permission_events;
+                 DROP TABLE plugin_permission_grants;
+                 DROP TABLE plugin_permission_requests;",
             )
             .unwrap();
         set_schema_version(&connection, 8).unwrap();
     }
 
     #[test]
-    fn migrates_v8_to_v12_with_backup_and_reopens() {
+    fn migrates_v8_to_v13_with_backup_and_reopens() {
         let directory = TempDir::new().unwrap();
         let database = directory.path().join("rho.sqlite");
         create_v8_fixture(&database);
@@ -4993,7 +5062,10 @@ mod tests {
         let store = Store::open(&database).unwrap();
         assert_eq!(store.migration_outcome().status, MigrationStatus::Migrated);
         assert_eq!(store.migration_outcome().from_schema_version, Some(8));
-        assert_eq!(store.migration_outcome().to_schema_version, Some(12));
+        assert_eq!(
+            store.migration_outcome().to_schema_version,
+            Some(SCHEMA_VERSION)
+        );
         assert!(Path::new(store.migration_outcome().backup_path.as_deref().unwrap()).exists());
         assert_index_exists(&store.connection, "idx_evidence_claims_project").unwrap();
         drop(store);
@@ -5033,7 +5105,10 @@ mod tests {
         drop(verification);
 
         let recovered = Store::open(&database).unwrap();
-        assert_eq!(recovered.migration_outcome().to_schema_version, Some(12));
+        assert_eq!(
+            recovered.migration_outcome().to_schema_version,
+            Some(SCHEMA_VERSION)
+        );
     }
 
     fn create_v9_fixture(path: &Path) {
@@ -5057,7 +5132,7 @@ mod tests {
     }
 
     #[test]
-    fn migrates_v9_to_v12_without_guessing_historical_ranges_and_reopens() {
+    fn migrates_v9_to_v13_without_guessing_historical_ranges_and_reopens() {
         let directory = TempDir::new().unwrap();
         let database = directory.path().join("rho.sqlite");
         create_v9_fixture(&database);
@@ -5081,7 +5156,10 @@ mod tests {
         let store = Store::open(&database).unwrap();
         assert_eq!(store.migration_outcome().status, MigrationStatus::Migrated);
         assert_eq!(store.migration_outcome().from_schema_version, Some(9));
-        assert_eq!(store.migration_outcome().to_schema_version, Some(12));
+        assert_eq!(
+            store.migration_outcome().to_schema_version,
+            Some(SCHEMA_VERSION)
+        );
         assert!(
             store
                 .migration_outcome()
@@ -5133,7 +5211,10 @@ mod tests {
         drop(verification);
 
         let recovered = Store::open(&database).unwrap();
-        assert_eq!(recovered.migration_outcome().to_schema_version, Some(12));
+        assert_eq!(
+            recovered.migration_outcome().to_schema_version,
+            Some(SCHEMA_VERSION)
+        );
     }
 
     fn create_v10_fixture(path: &Path) {
@@ -5154,7 +5235,7 @@ mod tests {
     }
 
     #[test]
-    fn migrates_v10_to_v12_preserving_expression_ranges_without_parse_backfill() {
+    fn migrates_v10_to_v13_preserving_expression_ranges_without_parse_backfill() {
         let directory = TempDir::new().unwrap();
         let database = directory.path().join("rho.sqlite");
         create_v10_fixture(&database);
@@ -5196,7 +5277,10 @@ mod tests {
         let store = Store::open(&database).unwrap();
         assert_eq!(store.migration_outcome().status, MigrationStatus::Migrated);
         assert_eq!(store.migration_outcome().from_schema_version, Some(10));
-        assert_eq!(store.migration_outcome().to_schema_version, Some(12));
+        assert_eq!(
+            store.migration_outcome().to_schema_version,
+            Some(SCHEMA_VERSION)
+        );
         assert!(
             store
                 .migration_outcome()
@@ -5288,7 +5372,10 @@ mod tests {
         drop(verification);
 
         let recovered = Store::open(&database).unwrap();
-        assert_eq!(recovered.migration_outcome().to_schema_version, Some(12));
+        assert_eq!(
+            recovered.migration_outcome().to_schema_version,
+            Some(SCHEMA_VERSION)
+        );
         assert_runs_error_range_kind_constraint(&recovered.connection).unwrap();
     }
 
@@ -5379,7 +5466,10 @@ mod tests {
                 "DROP INDEX IF EXISTS idx_agent_conversation_turns_conversation;
                  DROP INDEX IF EXISTS idx_agent_conversations_project_updated;
                  DROP TABLE agent_conversation_turns;
-                 DROP TABLE agent_conversations;",
+                 DROP TABLE agent_conversations;
+                 DROP TABLE plugin_permission_events;
+                 DROP TABLE plugin_permission_grants;
+                 DROP TABLE plugin_permission_requests;",
             )
             .unwrap();
         set_schema_version(&connection, 11).unwrap();
@@ -5394,7 +5484,10 @@ mod tests {
         let mut store = Store::open(&database).unwrap();
         assert_eq!(store.migration_outcome().status, MigrationStatus::Migrated);
         assert_eq!(store.migration_outcome().from_schema_version, Some(11));
-        assert_eq!(store.migration_outcome().to_schema_version, Some(12));
+        assert_eq!(
+            store.migration_outcome().to_schema_version,
+            Some(SCHEMA_VERSION)
+        );
         assert!(
             store
                 .migration_outcome()
@@ -5498,7 +5591,10 @@ mod tests {
         drop(verification);
 
         let recovered = Store::open(&database).unwrap();
-        assert_eq!(recovered.migration_outcome().to_schema_version, Some(12));
+        assert_eq!(
+            recovered.migration_outcome().to_schema_version,
+            Some(SCHEMA_VERSION)
+        );
         assert_eq!(
             recovered
                 .list_agent_conversations("D:/projects/A", None)
@@ -5555,6 +5651,187 @@ mod tests {
         );
     }
 
+    fn create_v12_fixture(path: &Path) {
+        let store = Store::open(path).unwrap();
+        drop(store);
+        let connection = Connection::open(path).unwrap();
+        connection
+            .execute_batch(
+                "DROP TABLE plugin_permission_events;
+                 DROP TABLE plugin_permission_grants;
+                 DROP TABLE plugin_permission_requests;",
+            )
+            .unwrap();
+        set_schema_version(&connection, 12).unwrap();
+    }
+
+    #[test]
+    fn migrates_v12_to_v13_without_guessing_plugin_permissions() {
+        let directory = TempDir::new().unwrap();
+        let database = directory.path().join("rho.sqlite");
+        create_v12_fixture(&database);
+
+        let store = Store::open(&database).unwrap();
+        assert_eq!(store.migration_outcome().status, MigrationStatus::Migrated);
+        assert_eq!(store.migration_outcome().from_schema_version, Some(12));
+        assert_eq!(
+            store.migration_outcome().to_schema_version,
+            Some(SCHEMA_VERSION)
+        );
+        assert!(
+            store
+                .migration_outcome()
+                .backup_path
+                .as_deref()
+                .unwrap()
+                .ends_with("rho.sqlite.schema-v12.bak")
+        );
+        assert_plugin_permission_schema(&store.connection).unwrap();
+        for table in [
+            "plugin_permission_requests",
+            "plugin_permission_grants",
+            "plugin_permission_events",
+        ] {
+            let count: i64 = store
+                .connection
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                    row.get(0)
+                })
+                .unwrap();
+            assert_eq!(count, 0, "{table} must not backfill historical authority");
+        }
+        drop(store);
+
+        let reopened = Store::open(&database).unwrap();
+        assert_eq!(
+            reopened.migration_outcome(),
+            &MigrationOutcome::opened_current()
+        );
+    }
+
+    #[test]
+    fn rolls_back_v12_plugin_permission_migration_and_recovers() {
+        let directory = TempDir::new().unwrap();
+        let database = directory.path().join("rho.sqlite");
+        create_v12_fixture(&database);
+
+        let error = Store::open_with_options(
+            &database,
+            StoreOpenOptions {
+                inject_v12_failure_before_commit: true,
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+        let outcome = error.migration_outcome().unwrap();
+        assert_eq!(outcome.status, MigrationStatus::Rejected);
+        assert_eq!(outcome.from_schema_version, Some(12));
+        assert_eq!(outcome.reason_code.as_deref(), Some("injected_failure"));
+        assert!(Path::new(outcome.backup_path.as_deref().unwrap()).exists());
+
+        let verification = Connection::open(&database).unwrap();
+        assert_eq!(read_schema_version(&verification).unwrap(), Some(12));
+        assert!(
+            verification
+                .prepare("SELECT * FROM plugin_permission_requests")
+                .is_err()
+        );
+        drop(verification);
+
+        let recovered = Store::open(&database).unwrap();
+        assert_eq!(
+            recovered.migration_outcome().to_schema_version,
+            Some(SCHEMA_VERSION)
+        );
+        assert_plugin_permission_schema(&recovered.connection).unwrap();
+    }
+
+    #[test]
+    fn rejects_current_plugin_permission_identity_tampering() {
+        let directory = TempDir::new().unwrap();
+        let database = directory.path().join("rho.sqlite");
+        let store = Store::open(&database).unwrap();
+        let now = Utc::now().to_rfc3339();
+        store
+            .connection
+            .execute(
+                "INSERT INTO plugin_permission_requests(
+                    request_id, project_root, plugin_id, plugin_version, package_digest,
+                    runtime_kind, permission, constraints_json, constraints_digest,
+                    status, requested_at, resolved_at, decision, grant_source,
+                    expected_project_revision
+                 ) VALUES(
+                    'request.a', 'D:/projects/A', 'org.example.a', '1.0.0', ?1,
+                    'wasm', 'project.fs.read', '{}', ?2, 'granted', ?3, ?3,
+                    'allow_once', 'allow_once', 1
+                 )",
+                params!["a".repeat(64), "b".repeat(64), now],
+            )
+            .unwrap();
+        store
+            .connection
+            .execute(
+                "INSERT INTO plugin_permission_grants(
+                    grant_id, project_root, plugin_id, plugin_version, package_digest,
+                    runtime_kind, permission, constraints_json, constraints_digest,
+                    grant_source, policy_revision, created_at, expires_at, status,
+                    originating_request_id
+                 ) VALUES(
+                    'grant.a', 'D:/projects/A', 'org.example.a', '1.0.0', ?1,
+                    'wasm', 'project.fs.read', '{}', ?2, 'allow_once', 1, ?3, ?4,
+                    'active', 'request.a'
+                 )",
+                params![
+                    "a".repeat(64),
+                    "b".repeat(64),
+                    now,
+                    (Utc::now() + chrono::Duration::minutes(4)).to_rfc3339()
+                ],
+            )
+            .unwrap();
+        store
+            .connection
+            .execute(
+                "UPDATE plugin_permission_grants SET plugin_id = 'org.example.other'
+                 WHERE grant_id = 'grant.a'",
+                [],
+            )
+            .unwrap();
+        drop(store);
+
+        let error = Store::open(&database).unwrap_err();
+        let outcome = error.migration_outcome().unwrap();
+        assert_eq!(outcome.from_schema_version, Some(SCHEMA_VERSION));
+        assert_eq!(
+            outcome.reason_code.as_deref(),
+            Some("invalid_plugin_permission_identity")
+        );
+        assert_eq!(outcome.rejected_count, 1);
+    }
+
+    #[test]
+    fn rejects_current_plugin_permission_live_handle_column() {
+        let directory = TempDir::new().unwrap();
+        let database = directory.path().join("rho.sqlite");
+        let store = Store::open(&database).unwrap();
+        store
+            .connection
+            .execute(
+                "ALTER TABLE plugin_permission_grants ADD COLUMN handle_id TEXT",
+                [],
+            )
+            .unwrap();
+        drop(store);
+
+        let error = Store::open(&database).unwrap_err();
+        let outcome = error.migration_outcome().unwrap();
+        assert_eq!(outcome.from_schema_version, Some(SCHEMA_VERSION));
+        assert_eq!(
+            outcome.reason_code.as_deref(),
+            Some("invalid_plugin_permission_authority")
+        );
+    }
+
     #[test]
     fn rejects_current_schema_with_a_cross_project_conversation_mapping() {
         let directory = TempDir::new().unwrap();
@@ -5605,7 +5882,7 @@ mod tests {
         let error = Store::open(&database).unwrap_err();
         let outcome = error.migration_outcome().unwrap();
         assert_eq!(outcome.status, MigrationStatus::Rejected);
-        assert_eq!(outcome.from_schema_version, Some(12));
+        assert_eq!(outcome.from_schema_version, Some(SCHEMA_VERSION));
         assert_eq!(
             outcome.reason_code.as_deref(),
             Some("invalid_conversation_mapping")

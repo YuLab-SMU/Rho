@@ -327,6 +327,391 @@ pub(crate) fn v8_schema_sql() -> &'static str {
     "
 }
 
+pub(crate) fn create_plugin_permission_schema(connection: &Connection) -> Result<(), StoreError> {
+    connection.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS plugin_permission_requests (
+            request_id TEXT PRIMARY KEY,
+            project_root TEXT NOT NULL CHECK (project_root <> ''),
+            plugin_id TEXT NOT NULL CHECK (length(plugin_id) BETWEEN 1 AND 128),
+            plugin_version TEXT NOT NULL CHECK (length(plugin_version) BETWEEN 1 AND 128),
+            package_digest TEXT NOT NULL CHECK (
+                length(package_digest) = 64 AND
+                package_digest = lower(package_digest) AND
+                package_digest NOT GLOB '*[^0-9a-f]*'
+            ),
+            runtime_kind TEXT NOT NULL CHECK (runtime_kind = 'wasm'),
+            permission TEXT NOT NULL CHECK (
+                permission IN ('project.fs.read', 'workspace.r.inspect', 'network.fetch')
+            ),
+            constraints_json TEXT NOT NULL CHECK (
+                json_valid(constraints_json) AND
+                length(CAST(constraints_json AS BLOB)) BETWEEN 2 AND 65536
+            ),
+            constraints_digest TEXT NOT NULL CHECK (
+                length(constraints_digest) = 64 AND
+                constraints_digest = lower(constraints_digest) AND
+                constraints_digest NOT GLOB '*[^0-9a-f]*'
+            ),
+            purpose_text TEXT CHECK (
+                purpose_text IS NULL OR
+                length(CAST(purpose_text AS BLOB)) <= 2048
+            ),
+            status TEXT NOT NULL CHECK (
+                status IN ('pending', 'granted', 'denied', 'cancelled', 'stale')
+            ),
+            requested_at TEXT NOT NULL,
+            resolved_at TEXT,
+            decision TEXT CHECK (
+                decision IS NULL OR decision IN ('deny', 'allow_once', 'allow_project')
+            ),
+            grant_source TEXT CHECK (
+                grant_source IS NULL OR grant_source IN ('allow_once', 'project')
+            ),
+            reason_code TEXT CHECK (
+                reason_code IS NULL OR length(CAST(reason_code AS BLOB)) <= 256
+            ),
+            expected_project_revision INTEGER NOT NULL CHECK (expected_project_revision >= 0),
+            UNIQUE(request_id, project_root),
+            CHECK (
+                (status = 'pending' AND resolved_at IS NULL AND decision IS NULL AND grant_source IS NULL) OR
+                (status = 'granted' AND resolved_at IS NOT NULL AND decision IN ('allow_once', 'allow_project') AND grant_source IS NOT NULL) OR
+                (status = 'denied' AND resolved_at IS NOT NULL AND decision = 'deny' AND grant_source IS NULL) OR
+                (status IN ('cancelled', 'stale') AND resolved_at IS NOT NULL AND decision IS NULL AND grant_source IS NULL)
+            )
+        );
+
+        CREATE TABLE IF NOT EXISTS plugin_permission_grants (
+            grant_id TEXT PRIMARY KEY,
+            project_root TEXT NOT NULL CHECK (project_root <> ''),
+            plugin_id TEXT NOT NULL CHECK (length(plugin_id) BETWEEN 1 AND 128),
+            plugin_version TEXT NOT NULL CHECK (length(plugin_version) BETWEEN 1 AND 128),
+            package_digest TEXT NOT NULL CHECK (
+                length(package_digest) = 64 AND
+                package_digest = lower(package_digest) AND
+                package_digest NOT GLOB '*[^0-9a-f]*'
+            ),
+            runtime_kind TEXT NOT NULL CHECK (runtime_kind = 'wasm'),
+            permission TEXT NOT NULL CHECK (
+                permission IN ('project.fs.read', 'workspace.r.inspect', 'network.fetch')
+            ),
+            constraints_json TEXT NOT NULL CHECK (
+                json_valid(constraints_json) AND
+                length(CAST(constraints_json AS BLOB)) BETWEEN 2 AND 65536
+            ),
+            constraints_digest TEXT NOT NULL CHECK (
+                length(constraints_digest) = 64 AND
+                constraints_digest = lower(constraints_digest) AND
+                constraints_digest NOT GLOB '*[^0-9a-f]*'
+            ),
+            grant_source TEXT NOT NULL CHECK (grant_source IN ('allow_once', 'project')),
+            policy_revision INTEGER NOT NULL CHECK (policy_revision > 0),
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            revoked_at TEXT,
+            consumed_at TEXT,
+            status TEXT NOT NULL CHECK (status IN ('active', 'consumed', 'revoked', 'expired')),
+            originating_request_id TEXT NOT NULL,
+            UNIQUE(grant_id, project_root),
+            UNIQUE(originating_request_id),
+            FOREIGN KEY(originating_request_id, project_root)
+                REFERENCES plugin_permission_requests(request_id, project_root)
+                ON DELETE RESTRICT,
+            CHECK (
+                (status = 'active' AND revoked_at IS NULL AND consumed_at IS NULL) OR
+                (status = 'consumed' AND consumed_at IS NOT NULL AND revoked_at IS NULL) OR
+                (status = 'revoked' AND revoked_at IS NOT NULL AND consumed_at IS NULL) OR
+                (status = 'expired' AND revoked_at IS NULL AND consumed_at IS NULL)
+            )
+        );
+
+        CREATE TABLE IF NOT EXISTS plugin_permission_events (
+            event_id TEXT PRIMARY KEY,
+            project_root TEXT NOT NULL CHECK (project_root <> ''),
+            plugin_id TEXT NOT NULL CHECK (length(plugin_id) BETWEEN 1 AND 128),
+            package_digest TEXT NOT NULL CHECK (
+                length(package_digest) = 64 AND
+                package_digest = lower(package_digest) AND
+                package_digest NOT GLOB '*[^0-9a-f]*'
+            ),
+            request_id TEXT,
+            grant_id TEXT,
+            event_type TEXT NOT NULL CHECK (
+                event_type IN (
+                    'request_created', 'request_granted', 'request_denied',
+                    'request_cancelled', 'request_stale', 'grant_consumed',
+                    'grant_revoked', 'grant_expired', 'recovery_cancelled'
+                )
+            ),
+            status TEXT NOT NULL CHECK (
+                status IN ('pending', 'completed', 'failed', 'cancelled', 'stale')
+            ),
+            reason_code TEXT CHECK (
+                reason_code IS NULL OR length(CAST(reason_code AS BLOB)) <= 256
+            ),
+            details_json TEXT NOT NULL DEFAULT '{}' CHECK (
+                json_valid(details_json) AND
+                length(CAST(details_json AS BLOB)) <= 8192
+            ),
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(request_id, project_root)
+                REFERENCES plugin_permission_requests(request_id, project_root)
+                ON DELETE RESTRICT,
+            FOREIGN KEY(grant_id, project_root)
+                REFERENCES plugin_permission_grants(grant_id, project_root)
+                ON DELETE RESTRICT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_plugin_permission_requests_project_status
+            ON plugin_permission_requests(project_root, status, requested_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_plugin_permission_requests_plugin_digest
+            ON plugin_permission_requests(project_root, plugin_id, package_digest, requested_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_plugin_permission_grants_project_status
+            ON plugin_permission_grants(project_root, status, expires_at);
+        CREATE INDEX IF NOT EXISTS idx_plugin_permission_grants_plugin_digest
+            ON plugin_permission_grants(project_root, plugin_id, package_digest, permission);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_plugin_permission_grants_active_identity
+            ON plugin_permission_grants(
+                project_root, plugin_id, package_digest, runtime_kind, permission,
+                constraints_digest, grant_source, policy_revision
+            ) WHERE status = 'active';
+        CREATE INDEX IF NOT EXISTS idx_plugin_permission_events_project_created
+            ON plugin_permission_events(project_root, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_plugin_permission_events_request
+            ON plugin_permission_events(request_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_plugin_permission_events_grant
+            ON plugin_permission_events(grant_id, created_at);
+        ",
+    )?;
+    Ok(())
+}
+
+pub(crate) fn assert_plugin_permission_schema(connection: &Connection) -> Result<(), StoreError> {
+    for table in [
+        "plugin_permission_requests",
+        "plugin_permission_grants",
+        "plugin_permission_events",
+    ] {
+        assert_table_exists(connection, table)?;
+        assert_not_null_project_identity(connection, table)?;
+    }
+    for index in [
+        "idx_plugin_permission_requests_project_status",
+        "idx_plugin_permission_requests_plugin_digest",
+        "idx_plugin_permission_grants_project_status",
+        "idx_plugin_permission_grants_plugin_digest",
+        "idx_plugin_permission_grants_active_identity",
+        "idx_plugin_permission_events_project_created",
+        "idx_plugin_permission_events_request",
+        "idx_plugin_permission_events_grant",
+    ] {
+        assert_index_exists(connection, index)?;
+    }
+    assert_table_sql_contains(
+        connection,
+        "plugin_permission_requests",
+        &[
+            "runtime_kindtextnotnullcheck(runtime_kind='wasm')",
+            "statusin('pending','granted','denied','cancelled','stale')",
+            "permissionin('project.fs.read','workspace.r.inspect','network.fetch')",
+        ],
+    )?;
+    assert_table_sql_contains(
+        connection,
+        "plugin_permission_grants",
+        &[
+            "statusin('active','consumed','revoked','expired')",
+            "grant_sourcein('allow_once','project')",
+            "foreignkey(originating_request_id,project_root)referencesplugin_permission_requests",
+        ],
+    )?;
+    assert_table_sql_contains(
+        connection,
+        "plugin_permission_events",
+        &[
+            "'request_created'",
+            "'grant_revoked'",
+            "foreignkey(grant_id,project_root)referencesplugin_permission_grants",
+        ],
+    )?;
+    for table in [
+        "plugin_permission_requests",
+        "plugin_permission_grants",
+        "plugin_permission_events",
+    ] {
+        for forbidden in [
+            "handle_id",
+            "handle_digest",
+            "host_instance_id",
+            "activation_generation",
+            "workspace_id",
+        ] {
+            assert_column_absent(connection, table, forbidden)?;
+        }
+    }
+
+    let mismatched_grants: i64 = connection.query_row(
+        "SELECT COUNT(*)
+         FROM plugin_permission_grants AS grant_record
+         JOIN plugin_permission_requests AS request_record
+           ON request_record.request_id = grant_record.originating_request_id
+         WHERE request_record.project_root <> grant_record.project_root
+            OR request_record.plugin_id <> grant_record.plugin_id
+            OR request_record.plugin_version <> grant_record.plugin_version
+            OR request_record.package_digest <> grant_record.package_digest
+            OR request_record.runtime_kind <> grant_record.runtime_kind
+            OR request_record.permission <> grant_record.permission
+            OR request_record.constraints_digest <> grant_record.constraints_digest
+            OR request_record.status <> 'granted'",
+        [],
+        |row| row.get(0),
+    )?;
+    let mismatched_events: i64 = connection.query_row(
+        "SELECT COUNT(*)
+         FROM plugin_permission_events AS event_record
+         LEFT JOIN plugin_permission_requests AS request_record
+           ON request_record.request_id = event_record.request_id
+         LEFT JOIN plugin_permission_grants AS grant_record
+           ON grant_record.grant_id = event_record.grant_id
+         WHERE (event_record.request_id IS NOT NULL AND (
+                   request_record.request_id IS NULL
+                OR request_record.project_root <> event_record.project_root
+                OR request_record.plugin_id <> event_record.plugin_id
+                OR request_record.package_digest <> event_record.package_digest
+               ))
+            OR (event_record.grant_id IS NOT NULL AND (
+                   grant_record.grant_id IS NULL
+                OR grant_record.project_root <> event_record.project_root
+                OR grant_record.plugin_id <> event_record.plugin_id
+                OR grant_record.package_digest <> event_record.package_digest
+               ))",
+        [],
+        |row| row.get(0),
+    )?;
+    if mismatched_grants != 0 || mismatched_events != 0 {
+        return Err(StoreError::MigrationRejected {
+            message: "plugin permission identity mapping is not project/digest scoped".to_string(),
+            outcome: MigrationOutcome::rejected(
+                Some(SCHEMA_VERSION),
+                None,
+                MigrationRecordCounts {
+                    rejected: mismatched_grants + mismatched_events,
+                    ..MigrationRecordCounts::default()
+                },
+                "invalid_plugin_permission_identity",
+            ),
+        });
+    }
+    let foreign_key_failures: i64 = connection.query_row(
+        "SELECT COUNT(*) FROM pragma_foreign_key_check
+         WHERE \"table\" IN (
+            'plugin_permission_requests',
+            'plugin_permission_grants',
+            'plugin_permission_events'
+         )",
+        [],
+        |row| row.get(0),
+    )?;
+    if foreign_key_failures != 0 {
+        return Err(StoreError::MigrationRejected {
+            message: "plugin permission foreign keys are inconsistent".to_string(),
+            outcome: MigrationOutcome::rejected(
+                Some(SCHEMA_VERSION),
+                None,
+                MigrationRecordCounts {
+                    rejected: foreign_key_failures,
+                    ..MigrationRecordCounts::default()
+                },
+                "invalid_plugin_permission_foreign_key",
+            ),
+        });
+    }
+    Ok(())
+}
+
+fn assert_table_sql_contains(
+    connection: &Connection,
+    table_name: &str,
+    markers: &[&str],
+) -> Result<(), StoreError> {
+    let sql = connection
+        .query_row(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?1",
+            [table_name],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?
+        .unwrap_or_default()
+        .chars()
+        .filter(|character| !character.is_whitespace())
+        .collect::<String>()
+        .to_ascii_lowercase();
+    if markers.iter().all(|marker| sql.contains(marker)) {
+        Ok(())
+    } else {
+        Err(StoreError::MigrationRejected {
+            message: format!("{table_name} constraints are not current"),
+            outcome: MigrationOutcome::rejected(
+                Some(SCHEMA_VERSION),
+                None,
+                MigrationRecordCounts::default(),
+                "invalid_plugin_permission_schema",
+            ),
+        })
+    }
+}
+
+fn assert_table_exists(connection: &Connection, table_name: &str) -> Result<(), StoreError> {
+    let exists = connection
+        .query_row(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1",
+            [table_name],
+            |_row| Ok(()),
+        )
+        .optional()?
+        .is_some();
+    if exists {
+        Ok(())
+    } else {
+        Err(StoreError::MigrationRejected {
+            message: format!("required table {table_name} is missing"),
+            outcome: MigrationOutcome::rejected(
+                Some(SCHEMA_VERSION),
+                None,
+                MigrationRecordCounts::default(),
+                "invalid_current_schema",
+            ),
+        })
+    }
+}
+
+fn assert_column_absent(
+    connection: &Connection,
+    table_name: &str,
+    column_name: &str,
+) -> Result<(), StoreError> {
+    let pragma = format!("PRAGMA table_info({table_name})");
+    let mut statement = connection.prepare(&pragma)?;
+    let present = statement
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<Result<Vec<_>, _>>()?
+        .iter()
+        .any(|name| name == column_name);
+    if present {
+        Err(StoreError::MigrationRejected {
+            message: format!("{table_name}.{column_name} must not persist live handle authority"),
+            outcome: MigrationOutcome::rejected(
+                Some(SCHEMA_VERSION),
+                None,
+                MigrationRecordCounts::default(),
+                "invalid_plugin_permission_authority",
+            ),
+        })
+    } else {
+        Ok(())
+    }
+}
+
 pub(crate) fn create_claim_review_schema(
     transaction: &rusqlite::Transaction<'_>,
 ) -> Result<(), StoreError> {
