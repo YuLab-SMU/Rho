@@ -5,10 +5,10 @@ state/transition/event/tombstone persistence completed its local stop gate
 2026-08-20; P2-1/P2-2/P2-3/P2-4A hosted and cross-platform installed gates
 remain open and mandatory before final Phase 2 acceptance
 
-Active work package: none at this checkpoint. P2-4B through P2-4G remain
-inactive until the next package is explicitly amended/cross-reviewed. P2-4A
-created no package cache, live restart activation, disable/uninstall/upgrade
-route, UI or new privileged operation.
+Active work package: P2-4B1 only — bounded exact-package snapshot and
+broker-owned immutable-cache foundation. P2-4B2/P2-4B3 and P2-4C through P2-4G
+remain inactive. P2-4B1 creates no enable/restart route, permission decision,
+live host, contribution publication, UI or new guest-visible operation.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -154,6 +154,55 @@ Rules:
   publisher trust signal.
 
 If backup cannot be proven exact, enable/upgrade fails before routing changes.
+
+### Activated P2-4B contract
+
+The existing P2-3 enable path is intentionally not accepted as durable
+lifecycle behavior: it allocates generation in process memory, loads Wasm and
+Skill text from the mutable discovery directory, and loses enabled intent on
+restart. P2-4B replaces that behavior without adding a new permission class or
+command surface.
+
+P2-4B is divided into three local integration stops:
+
+1. **P2-4B1 — exact snapshot and cache foundation (active).** Discovery exposes
+   one bounded read-only snapshot of the canonical package inventory only after
+   the project root, `.rho/plugins` root, single-component directory, manifest,
+   every file and expected digest are revalidated. The Rust Broker owns an
+   app-local cache rooted at `plugin-package-cache/<project-hash>/<plugin-id>/
+   <digest>/`; callers receive typed evidence/file bytes, never an authority
+   handle exposed to guest code. Copy uses a same-parent temporary directory,
+   exclusive files, per-file sync, directory sync where supported, atomic
+   rename and full read-back digest validation. Existing exact entries are
+   idempotently revalidated. Links/reparse points, non-files, case collisions,
+   traversal, unexpected cache entries, partial targets and cross-project path
+   reuse fail closed. B1 enforces 32 MiB/package, three digests/plugin and 256
+   MiB/project by refusal; it performs no eviction or deletion. Deterministic
+   failure injection covers write, pre-rename and post-rename/read-back points.
+2. **P2-4B2 — durable first enable (inactive).** The existing trusted
+   `request_workspace_plugin_enable` command will persist one exact enable
+   transition before permission work, prepare/cache the package before host
+   construction, allocate generation through schema v14, load Wasm and bounded
+   Skill text from the verified cache snapshot, stage host/handles/
+   contributions while hidden, publish with expected-old `None`, and report
+   enabled only after accepted digest/active state commits. A post-publication
+   persistence failure closes the route/revokes handles and records or leaves
+   recoverable nonterminal truth; it never reports success. Permission-required
+   continuation retains the same transition ID/digest/revision.
+3. **P2-4B3 — restart reconstruction (inactive).** Workspace/project startup
+   will discover packages disabled first, reconcile nonterminal transitions,
+   and reconstruct only durable desired `enabled` + exact accepted digest using
+   fresh host/generation/handles. Missing/changed source, invalid cache,
+   expired/missing grants or malformed history remains non-routable and becomes
+   truthful `blocked`, `update_pending` or permission-required state. A plugin
+   recovery failure is audited but cannot block Workspace R or project switch.
+
+B2 is the first user-visible P2-4 slice and therefore must synchronize the
+application development version after `0.4.1-dev.4`, update `NEWS.md`, preserve
+the existing command/mock inventory, and expose desired/observed/transition
+truth without claiming that disable/uninstall/upgrade are available. B3 must
+add restart/reopen, A-B-A and two-project installed-smoke probes. Each sub-slice
+requires contract review and its own local stop before the next activates.
 
 ## Enable And Restart
 
