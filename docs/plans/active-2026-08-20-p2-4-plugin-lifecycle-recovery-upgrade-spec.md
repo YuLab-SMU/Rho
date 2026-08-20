@@ -5,10 +5,9 @@ state/transition/event/tombstone persistence completed its local stop gate
 2026-08-20; P2-1/P2-2/P2-3/P2-4A hosted and cross-platform installed gates
 remain open and mandatory before final Phase 2 acceptance
 
-Active work package: P2-4D1 only — symlink-safe recoverable package move/restore
-foundation. P2-4D2/D3 and P2-4E through P2-4G remain inactive. D1 adds no
-command/UI and performs no recursive deletion, retention purge, install, update
-or rollback.
+Active work package: none at the P2-4D1 checkpoint. P2-4D2/D3 and P2-4E through
+P2-4G remain inactive pending explicit amendment/cross-review. D1 added no
+command/UI, recursive deletion, retention purge, install, update or rollback.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -391,7 +390,7 @@ trash is explicit and returns the package disabled; it never auto-enables.
 
 P2-4D is divided into three local stops:
 
-1. **P2-4D1 — exact package move/restore foundation (active).** A Broker-owned
+1. **P2-4D1 — exact package move/restore foundation (locally complete).** A Broker-owned
    filesystem service accepts only normalized project root, validated
    single-component directory, exact plugin/digest and opaque transition key.
    It revalidates `.rho`, `.rho/plugins`, `.rho/plugin-trash`, source package and
@@ -416,6 +415,25 @@ D1 tests cover source/trash root replacement, directory/digest mismatch,
 symlink/reparse/non-file inventory, preexisting target, rename failure,
 post-rename interruption, reopen/idempotency, restore collision and two-project
 isolation. D2 is the next user-visible versioned slice, not D1.
+
+### P2-4D1 local checkpoint — 2026-08-20
+
+The recoverable filesystem foundation is locally complete:
+
+- exact project/plugin/directory/digest/trash-key validation and canonical real
+  `.rho`, plugins and trash roots precede every same-filesystem rename;
+- source and trash dual ownership, neither ownership, wrong digest, traversal,
+  symlinked trash, preexisting restore target and cross-project lookup fail
+  closed;
+- move/restore and replay are idempotent; deterministic before/after-rename
+  interruption recovers to one exact owner without deletion;
+- rho-server passed 95 library plus 1 binary test, stable and Rust 1.88
+  all-target workspace checks, the positive/negative D1 contract and capped
+  Clippy with no warning from the new module.
+
+Application version remains `0.4.1-dev.7`: D1 is broker-only and not wired to a
+command, Store lifecycle or installed user behavior. D2, hosted and installed
+gates remain open.
 
 ## Upgrade
 
