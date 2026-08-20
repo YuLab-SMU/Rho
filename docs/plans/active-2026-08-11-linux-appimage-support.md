@@ -17,6 +17,30 @@ and LIN5 remain unrun; the M3 release decision remains open and unauthorized.
 
 Date: 2026-08-11 (authored); 2026-08-13 (activated)
 
+2026-08-20 amendment (PR #79 review follow-up): the project owner authorized
+the two remaining Linux distribution decisions that PR #79 had activated
+without contract authority ("我们最流行的ubuntu的deb,并提供了appimage... 理应支持
+linux x64和arm64"):
+
+- **deb packaging is an authorized Linux distribution target.** The default
+  Linux bundle targets are `appimage` and `deb` (`desktop/src-tauri/
+  tauri.linux.conf.json`), with `deb.recommends: r-base-core`.
+- **Linux arm64 is authorized for the staging/build path.** `runtime/ark.json`
+  `linux-arm64` is wired through `scripts/bootstrap-ark-linux.sh` and
+  `scripts/prepare-runtime-resources.sh` (arch-aware manifest key, sidecar
+  name `ark-aarch64-unknown-linux-gnu`, ELF verification, runtime dir);
+  source installs on Linux x86-64 and arm64 are in scope. The official
+  **AppImage lane remains x86-64** and arm64 AppImage packaging stays
+  deferred (source install already covers arm64).
+- The bundled `resources/runtime/ark` for the deb layout is now staged and
+  checksum-verified by `scripts/prepare-runtime-resources.sh` instead of
+  relying on whatever ignored file happens to exist in the runtime directory
+  (PR #79 review comment 2).
+
+Non-Goals were amended accordingly (see below). Everything else in this
+document — AppImage as the primary portable distribution, LIN1-LIN6 scope,
+LIN5 manual acceptance, and the M3 release gate — is unchanged.
+
 Scope: Linux x64 AppImage distribution for the desktop application, a runtime
 dependency check for the missing WebKitGTK 4.1 library, local and hosted build
 lanes, and the Linux R discovery path.
@@ -87,8 +111,13 @@ This proposal will:
 
 This proposal does not authorize:
 
-- a `.deb` / `.rpm` package lane (deferred until a user need exists);
-- Linux arm64 AppImage (Ark `linux-arm64` asset exists; deferred);
+- ~~a `.deb` / `.rpm` package lane (deferred until a user need exists)~~ —
+  **amended 2026-08-20**: a `.deb` lane is authorized (owner: deb is the most
+  popular Ubuntu distribution); `.rpm` remains deferred;
+- ~~Linux arm64 AppImage (Ark `linux-arm64` asset exists; deferred)~~ —
+  **amended 2026-08-20**: Linux arm64 is authorized for the source staging/
+  build path (bootstrap + runtime resources); the **arm64 AppImage/deb
+  packaging lane itself remains deferred** (source install covers arm64);
 - automatic update delivery for Linux (the update manifest remains
   redirect-only discovery);
 - executing user shell startup files;

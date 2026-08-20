@@ -633,6 +633,29 @@ pub fn list_project_files(root: &Path) -> Result<ProjectState> {
     })
 }
 
+/// Collect directory entries, skipping (and logging) individual entries that
+/// fail to materialize mid-scan. A vanishing or unreadable entry must not
+/// fail the whole project scan; only a failure to open the directory itself
+/// is handled by the caller.
+fn collect_dir_entries(
+    iterator: impl IntoIterator<Item = std::io::Result<std::fs::DirEntry>>,
+    directory: &Path,
+) -> Vec<std::fs::DirEntry> {
+    iterator
+        .into_iter()
+        .filter_map(|entry| match entry {
+            Ok(entry) => Some(entry),
+            Err(error) => {
+                eprintln!(
+                    "project scan: skipping unreadable entry under {}: {error}",
+                    directory.display()
+                );
+                None
+            }
+        })
+        .collect()
+}
+
 fn collect_project_files(
     root: &Path,
     directory: &Path,
@@ -649,18 +672,19 @@ fn collect_project_files(
     }
     // Unreadable directories inside the project (for example root-owned cache
     // directories under the home directory) are skipped instead of failing the
-    // whole scan; only the project root itself must be readable.
+    // whole scan; only the project root itself must be readable. Individual
+    // entries that vanish or become unreadable mid-scan are skipped and
+    // logged as well, so a transient per-entry error cannot fail project
+    // restore.
     let entries = match std::fs::read_dir(directory) {
-        Ok(entries) => entries
-            .take(remaining_entries + 1)
-            .collect::<std::io::Result<Vec<_>>>(),
+        Ok(entries) => collect_dir_entries(entries.take(remaining_entries + 1), directory),
         Err(error) => {
             if directory == root {
                 return Err(error.into());
             }
             return Ok(false);
         }
-    }?;
+    };
     let mut entries = entries;
     let entry_limit_reached = entries.len() > remaining_entries;
     entries.truncate(remaining_entries);
@@ -770,6 +794,31 @@ mod tests {
         let state = list_project_files(&root).unwrap();
         assert_eq!(state.files.len(), 1);
         assert_eq!(state.files[0].path, "analysis.R");
+    }
+
+    #[test]
+    fn project_scan_skips_failed_entries_mid_scan() {
+        // Regression for the PR #79 review comment: a per-entry error inside
+        // read_dir (e.g. an entry vanishing or becoming unreadable mid-scan)
+        // must be skipped and logged, not propagated as a scan failure.
+        let directory = TempDir::new().unwrap();
+        std::fs::write(directory.path().join("a.txt"), "a").unwrap();
+        std::fs::write(directory.path().join("b.txt"), "b").unwrap();
+        let mut real_entries = std::fs::read_dir(directory.path()).unwrap();
+        let first = real_entries.next().unwrap().unwrap();
+        let second = real_entries.next().unwrap().unwrap();
+        let mixed: Vec<std::io::Result<std::fs::DirEntry>> = vec![
+            Ok(first),
+            Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "entry vanished mid-scan",
+            )),
+            Ok(second),
+        ];
+        let collected = collect_dir_entries(mixed, directory.path());
+        assert_eq!(collected.len(), 2);
+        assert!(collected.iter().any(|e| e.file_name() == "a.txt"));
+        assert!(collected.iter().any(|e| e.file_name() == "b.txt"));
     }
 
     #[test]

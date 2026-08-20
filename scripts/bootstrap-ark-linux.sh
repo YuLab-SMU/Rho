@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# LIN1: download, verify, and stage the pinned Ark linux-x64 sidecar.
+# LIN1: download, verify, and stage the pinned Ark Linux sidecar for the
+# current architecture (linux-x64 or linux-arm64).
 #
-# Authority: runtime/ark.json (linux-x64), the same manifest discipline used
-# on Windows and macOS. This script:
+# Authority: runtime/ark.json (linux-x64, linux-arm64), the same manifest
+# discipline used on Windows and macOS. This script:
 #   - downloads the pinned archive with checksum verification (or reuses
 #     RHO_ARK_ARCHIVE when provided);
-#   - rejects non-x86-64 ELF binaries, missing LICENSE/NOTICE, checksum
-#     mismatch, and alternate versions;
+#   - rejects non-matching ELF binaries (x86-64 / aarch64), missing
+#     LICENSE/NOTICE, checksum mismatch, and alternate versions;
 #   - stages the sidecar as desktop/src-tauri/binaries/ark-x86_64-unknown-linux-gnu
-#     (Tauri externalBin naming); LICENSE/NOTICE stay in the runtime root and
-#     are copied into the Tauri resource tree by prepare-runtime-resources.sh
-#     before a build;
+#     or ark-aarch64-unknown-linux-gnu (Tauri externalBin naming); LICENSE/NOTICE
+#     stay in the runtime root and are copied into the Tauri resource tree by
+#     prepare-runtime-resources.sh before a build;
 #   - writes a Linux kernelspec with the resolved R home/bin/libraries and a
 #     controlled PATH (no user/site/project startup files), matching the
 #     Windows/Mac controlled-startup policy.
@@ -24,16 +25,35 @@ if [[ "$(uname -s)" != "Linux" ]]; then
   echo "bootstrap-ark-linux.sh supports Linux only" >&2
   exit 1
 fi
-if [[ "$(uname -m)" != "x86_64" ]]; then
-  echo "LIN1 supports Linux x86-64 only" >&2
-  exit 1
-fi
+
+# Test override hook (same style as the install-from-source fixture):
+# uname -m cannot be faked on the fixture host, so arm64 branches are tested
+# by injecting RHO_UNAME_M.
+RHO_UNAME_M="${RHO_UNAME_M:-$(uname -m 2>/dev/null || echo unknown)}"
+case "$RHO_UNAME_M" in
+  x86_64)
+    RHO_ARK_MANIFEST_KEY="linux-x64"
+    RHO_ARK_SIDECAR_NAME="ark-x86_64-unknown-linux-gnu"
+    RHO_ARK_ELF_PATTERN='ELF 64-bit LSB (executable|pie executable|shared object), x86-64'
+    RHO_ARCH_DISPLAY="an x86-64"
+    ;;
+  aarch64|arm64)
+    RHO_ARK_MANIFEST_KEY="linux-arm64"
+    RHO_ARK_SIDECAR_NAME="ark-aarch64-unknown-linux-gnu"
+    RHO_ARK_ELF_PATTERN='ELF 64-bit LSB (executable|pie executable|shared object), ARM aarch64'
+    RHO_ARCH_DISPLAY="a aarch64"
+    ;;
+  *)
+    echo "bootstrap-ark-linux.sh supports linux x86-64 and aarch64 only (got $RHO_UNAME_M)" >&2
+    exit 1
+    ;;
+esac
 
 RHO_SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RHO_REPOSITORY_ROOT="$(cd "$RHO_SCRIPT_ROOT/.." && pwd)"
 RHO_MANIFEST="$RHO_REPOSITORY_ROOT/runtime/ark.json"
 RHO_RUNTIME_ROOT="${RHO_ARK_RUNTIME_ROOT:-$RHO_REPOSITORY_ROOT/.rho/runtime}"
-RHO_SIDECAR="${RHO_ARK_SIDECAR:-$RHO_REPOSITORY_ROOT/desktop/src-tauri/binaries/ark-x86_64-unknown-linux-gnu}"
+RHO_SIDECAR="${RHO_ARK_SIDECAR:-$RHO_REPOSITORY_ROOT/desktop/src-tauri/binaries/$RHO_ARK_SIDECAR_NAME}"
 
 read_manifest() {
   node -e '
@@ -46,10 +66,10 @@ read_manifest() {
 }
 
 RHO_ARK_VERSION="$(read_manifest version)"
-RHO_ARK_URL="$(read_manifest linux-x64.url)"
-RHO_EXPECTED_SHA256="$(read_manifest linux-x64.sha256 | tr '[:upper:]' '[:lower:]')"
-RHO_INSTALL_ROOT="$RHO_RUNTIME_ROOT/ark-$RHO_ARK_VERSION-linux-x64"
-RHO_ARCHIVE_DEFAULT="$RHO_RUNTIME_ROOT/ark-$RHO_ARK_VERSION-linux-x64.zip"
+RHO_ARK_URL="$(read_manifest "$RHO_ARK_MANIFEST_KEY.url")"
+RHO_EXPECTED_SHA256="$(read_manifest "$RHO_ARK_MANIFEST_KEY.sha256" | tr '[:upper:]' '[:lower:]')"
+RHO_INSTALL_ROOT="$RHO_RUNTIME_ROOT/ark-$RHO_ARK_VERSION-$RHO_ARK_MANIFEST_KEY"
+RHO_ARCHIVE_DEFAULT="$RHO_RUNTIME_ROOT/ark-$RHO_ARK_VERSION-$RHO_ARK_MANIFEST_KEY.zip"
 RHO_ARCHIVE="${RHO_ARK_ARCHIVE:-$RHO_ARCHIVE_DEFAULT}"
 RHO_ARK_BINARY="$RHO_INSTALL_ROOT/ark"
 RHO_KERNEL_SPEC="$RHO_INSTALL_ROOT/kernel.json"
@@ -89,8 +109,8 @@ for RHO_NOTICE_FILE in LICENSE NOTICE; do
 done
 
 chmod 755 "$RHO_ARK_BINARY"
-if ! file "$RHO_ARK_BINARY" | grep -Eq 'ELF 64-bit LSB (executable|pie executable|shared object), x86-64'; then
-  echo "Ark executable is not an x86-64 ELF binary" >&2
+if ! file "$RHO_ARK_BINARY" | grep -Eq "$RHO_ARK_ELF_PATTERN"; then
+  echo "Ark executable is not $RHO_ARCH_DISPLAY ELF binary" >&2
   exit 1
 fi
 

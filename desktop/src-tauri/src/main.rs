@@ -6553,6 +6553,7 @@ fn ark_candidate_paths(
             resource_dir.join("resources/runtime/ark"),
             current_exe.parent().unwrap_or(current_exe).join("ark"),
             manifest_dir.join("../resources/runtime/ark"),
+            manifest_dir.join("binaries/ark-aarch64-unknown-linux-gnu"),
         ],
         _ => Vec::new(),
     }
@@ -10321,6 +10322,7 @@ mod tests {
         let resource_dir = directory.path().join("usr/share/rho");
         let current_exe = directory.path().join("usr/bin/rho-desktop");
         std::fs::create_dir_all(current_exe.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(manifest_dir.join("binaries")).unwrap();
         std::fs::create_dir_all(manifest_dir.join("../resources/runtime")).unwrap();
         std::fs::create_dir_all(resource_dir.join("resources/runtime")).unwrap();
         let candidates = ark_candidate_paths(
@@ -10333,15 +10335,21 @@ mod tests {
         let bundled = resource_dir.join("resources/runtime/ark");
         let installed = current_exe.parent().unwrap().join("ark");
         let deb_development = manifest_dir.join("../resources/runtime/ark");
+        let development = manifest_dir.join("binaries/ark-aarch64-unknown-linux-gnu");
         assert_eq!(
             candidates,
-            vec![bundled.clone(), installed.clone(), deb_development.clone()]
+            vec![
+                bundled.clone(),
+                installed.clone(),
+                deb_development.clone(),
+                development.clone()
+            ]
         );
 
-        std::fs::write(&deb_development, b"development").unwrap();
+        std::fs::write(&development, b"development").unwrap();
         assert_eq!(
             locate_ark_from_candidates(candidates.clone()).unwrap(),
-            deb_development
+            development
         );
         std::fs::write(&bundled, b"bundled").unwrap();
         assert_eq!(locate_ark_from_candidates(candidates).unwrap(), bundled);
