@@ -118,5 +118,6 @@ jobs:
           path: |
             target/release/bundle/appimage/Rho_*_x86_64.AppImage
             target/release/bundle/appimage/Rho_*_x86_64.AppImage.sha256
+            target/release/bundle/appimage/Rho_*_x86_64.AppImage.sig
           if-no-files-found: error
           retention-days: 14

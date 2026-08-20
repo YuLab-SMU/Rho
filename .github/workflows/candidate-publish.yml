@@ -6,7 +6,7 @@ on:
       release_tag:
         description: Exact accepted draft tag
         required: true
-        default: v0.4.0-dev.40
+        default: v0.4.0
 
 permissions:
   contents: read
@@ -33,6 +33,9 @@ jobs:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
+            if (process.env.RELEASE_TAG === "v0.4.0-dev.41") {
+              throw new Error("The dev.41 native updater acceptance target may be published only by its dedicated protected workflow.");
+            }
             const matches = (await github.paginate(github.rest.repos.listReleases, {
               owner,
               repo,
@@ -42,11 +45,14 @@ jobs:
               throw new Error("Publish admission requires exactly one Release matching the requested tag.");
             }
             const release = matches[0];
-            if (!release.draft || !release.prerelease || !/^[0-9a-f]{40}$/.test(release.target_commitish)) {
-              throw new Error("Publish admission requires a draft prerelease bound to a full commit SHA.");
+            const version = process.env.RELEASE_TAG.replace(/^v/, "");
+            const expectedPrerelease = version.includes("-");
+            if (!release.draft || release.prerelease !== expectedPrerelease || !/^[0-9a-f]{40}$/.test(release.target_commitish)) {
+              throw new Error("Publish admission requires a Draft with SemVer-matched prerelease state bound to a full commit SHA.");
             }
             core.setOutput("release_id", String(release.id));
             core.setOutput("commit", release.target_commitish);
+            core.setOutput("prerelease", String(expectedPrerelease));
 
       - name: Check out the exact draft contract
         uses: actions/checkout@v4
@@ -61,6 +67,7 @@ jobs:
           RELEASE_TAG: ${{ inputs.release_tag }}
           RELEASE_ID: ${{ steps.identity.outputs.release_id }}
           EXPECTED_COMMIT: ${{ steps.identity.outputs.commit }}
+          EXPECTED_PRERELEASE: ${{ steps.identity.outputs.prerelease }}
           PUBLISH_ACTOR: ${{ github.actor }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -72,10 +79,13 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const releaseId = Number(process.env.RELEASE_ID);
+            const expectedPrerelease = process.env.EXPECTED_PRERELEASE === "true";
             if (!Number.isSafeInteger(releaseId) || releaseId <= 0) throw new Error("Resolved draft Release ID is invalid.");
             const release = await github.rest.repos.getRelease({ owner, repo, release_id: releaseId });
             if (release.data.tag_name !== process.env.RELEASE_TAG) throw new Error("Draft tag changed before admission validation.");
-            if (!release.data.draft || !release.data.prerelease) throw new Error("Only a draft prerelease may enter publish admission.");
+            if (!release.data.draft || release.data.prerelease !== expectedPrerelease) {
+              throw new Error("Only a Draft with SemVer-matched prerelease state may enter publish admission.");
+            }
             if (release.data.target_commitish !== process.env.EXPECTED_COMMIT) throw new Error("Draft commit changed before admission validation.");
             const version = process.env.RELEASE_TAG.replace(/^v/, "");
             const releaseNotesPath = path.join(".github", "release-notes", `${process.env.RELEASE_TAG}.md`);
@@ -119,6 +129,8 @@ jobs:
             const windowsUpdaterSignatureName = `Rho_${version}_x64-setup.exe.sig`;
             const macosUpdaterArchiveName = `Rho_${version}_aarch64.app.tar.gz`;
             const macosUpdaterSignatureName = `${macosUpdaterArchiveName}.sig`;
+            const linuxAppImageName = `Rho_${version}_x86_64.AppImage`;
+            const linuxUpdaterSignatureName = `${linuxAppImageName}.sig`;
             const required = new Set([
               `Rho_${version}_x64-setup.exe`,
               `Rho_${version}_x64-setup.exe.sha256`,
@@ -126,11 +138,15 @@ jobs:
               `Rho_${version}_aarch64.dmg`,
               `Rho_${version}_aarch64.dmg.sha256`,
               `rho-${version}-macos-aarch64-evidence.json`,
+              linuxAppImageName,
+              `${linuxAppImageName}.sha256`,
+              `rho-${version}-linux-x86_64-evidence.json`,
               candidateName,
               acceptanceName,
               windowsUpdaterSignatureName,
               macosUpdaterArchiveName,
               macosUpdaterSignatureName,
+              linuxUpdaterSignatureName,
               nativeUpdaterEvidenceName,
             ]);
             if (release.data.assets.length !== required.size || release.data.assets.some((asset) => !required.has(asset.name))) {
@@ -140,7 +156,7 @@ jobs:
               const asset = release.data.assets.find((item) => item.name === boundedName);
               if (!asset || asset.size <= 0 || asset.size > 256 * 1024) throw new Error(`${boundedName} exceeds the evidence byte budget.`);
             }
-            for (const signatureName of [windowsUpdaterSignatureName, macosUpdaterSignatureName]) {
+            for (const signatureName of [windowsUpdaterSignatureName, macosUpdaterSignatureName, linuxUpdaterSignatureName]) {
               const asset = release.data.assets.find((item) => item.name === signatureName);
               if (!asset || asset.size <= 0 || asset.size > 16 * 1024) throw new Error(`${signatureName} exceeds the updater signature byte budget.`);
             }
@@ -176,6 +192,7 @@ jobs:
               platform_evidence: {
                 windows_x86_64: JSON.parse(fs.readFileSync(path.join("target", "publish", `rho-${version}-windows-x86_64-evidence.json`), "utf8")),
                 macos_aarch64: JSON.parse(fs.readFileSync(path.join("target", "publish", `rho-${version}-macos-aarch64-evidence.json`), "utf8")),
+                linux_x86_64: JSON.parse(fs.readFileSync(path.join("target", "publish", `rho-${version}-linux-x86_64-evidence.json`), "utf8")),
               },
               candidate_evidence: JSON.parse(candidateBytes.toString("utf8")),
               candidate_evidence_asset: {
@@ -193,6 +210,7 @@ jobs:
               native_updater_signatures: {
                 windows_x86_64: fs.readFileSync(path.join("target", "publish", windowsUpdaterSignatureName), "utf8"),
                 macos_aarch64: fs.readFileSync(path.join("target", "publish", macosUpdaterSignatureName), "utf8"),
+                linux_x86_64: fs.readFileSync(path.join("target", "publish", linuxUpdaterSignatureName), "utf8"),
               },
             };
             fs.writeFileSync("target/publish-record.json", `${JSON.stringify(record, null, 2)}\n`);
@@ -200,6 +218,7 @@ jobs:
               release_id: release.data.id,
               tag_name: release.data.tag_name,
               target_commitish: release.data.target_commitish,
+              prerelease: release.data.prerelease,
               body_sha256: releaseBodySha256,
               assets: release.data.assets.map((asset) => [asset.id, asset.name, asset.size]).sort((left, right) => left[1].localeCompare(right[1])),
             }, null, 2)}\n`);
@@ -225,7 +244,9 @@ jobs:
             const releaseId = Number(process.env.RELEASE_ID);
             const snapshot = JSON.parse(fs.readFileSync("target/publish-release-snapshot.json", "utf8"));
             const before = await github.rest.repos.getRelease({ owner, repo, release_id: releaseId });
-            if (!before.data.draft || !before.data.prerelease) throw new Error("Draft state changed after admission validation.");
+            if (!before.data.draft || before.data.prerelease !== snapshot.prerelease) {
+              throw new Error("Draft release state changed after admission validation.");
+            }
             const beforeBodySha256 = crypto.createHash("sha256").update(Buffer.from(before.data.body || "", "utf8")).digest("hex");
             const beforeAssets = before.data.assets.map((asset) => [asset.id, asset.name, asset.size]).sort((left, right) => left[1].localeCompare(right[1]));
             if (
@@ -240,14 +261,14 @@ jobs:
               repo,
               release_id: releaseId,
               draft: false,
-              prerelease: true,
+              prerelease: snapshot.prerelease,
             });
             const after = await github.rest.repos.getRelease({ owner, repo, release_id: releaseId });
             const afterBodySha256 = crypto.createHash("sha256").update(Buffer.from(after.data.body || "", "utf8")).digest("hex");
             const afterAssets = after.data.assets.map((asset) => [asset.id, asset.name, asset.size]).sort((left, right) => left[1].localeCompare(right[1]));
             if (
               after.data.draft
-              || !after.data.prerelease
+              || after.data.prerelease !== snapshot.prerelease
               || after.data.id !== snapshot.release_id
               || after.data.tag_name !== snapshot.tag_name
               || after.data.target_commitish !== snapshot.target_commitish

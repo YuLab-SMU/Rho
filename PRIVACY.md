@@ -45,16 +45,15 @@ Do not place credentials in a Base URL, project file, Issue, or diagnostic.
 
 ## When Rho can access the network
 
-Rho does not perform automatic update checks. It contacts the fixed Rho update
-service only after you choose **Help > Check for Updates...** or **Try Again**
-in that dialog. The check does not add project content, Provider settings, or
-credentials. It does expose ordinary HTTPS metadata such as IP address, time,
-TLS/HTTP headers, and user agent to the service and its hosting providers.
+After local startup becomes ready, Rho automatically contacts the fixed Rho
+update service once to check for a newer signed release. The check does not add
+project content, Provider settings, or credentials. It does expose ordinary
+HTTPS metadata such as IP address, time, TLS/HTTP headers, and user agent to the
+service and its hosting providers.
 
-For a supported installed build, choosing the separately labelled **Install and
-Restart** action may then download a signed Rho installer/archive from its
-published GitHub Release. This is a second explicit user action; Rho verifies
-the updater signature before installation. That download likewise exposes
+For a supported installed build, a newer release is downloaded from its
+published GitHub Release and installed automatically after signature
+verification. Manual **Check for Updates** remains a retry path. That download exposes
 ordinary HTTPS metadata to GitHub Releases and intervening network providers,
 but does not include project content, Provider settings, or credentials.
 

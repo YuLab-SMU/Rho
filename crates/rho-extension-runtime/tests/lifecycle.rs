@@ -1,0 +1,2105 @@
+use std::{
+    future::{Future, pending},
+    pin::Pin,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+    },
+    time::Duration,
+};
+
+use rho_extension_runtime::{
+    ActivationError, ActivationGeneration, BoundedJson, BrokerError, BrokerRequest, BrokerResponse,
+    BrokerResponseClass, CandidateBuildError, CapabilityDeclaration, CapabilityId,
+    CapabilityRequirement, CollectingDiagnosticSink, DEFAULT_BROKER_PAYLOAD_BYTES, DiagnosticCode,
+    DiagnosticSeverity, DiagnosticSink, Disposable, DisposeError, DisposeOutcome, EffectStatus,
+    ExtensionDiagnostic, ExtensionHost, InternalExtensionRuntimeMode, InternalPlugin,
+    LifecycleDeadlines, NoopDiagnosticSink, PROJECT_FILE_VIEWER_HTML_BYTES, PluginContext,
+    PluginDescriptor, PluginId, PluginVersion, ProjectFileViewerContribution,
+    ProjectFileViewerResolveError, RegistryError, RejectingBrokerFacade, RoutingError, ScopeId,
+    ScopeIdentity, ScopeLifecycleState, ScopePolicy, ScopeSlot, SourceCallError, SourceHandler,
+    TaskAdmissionError, WORKSPACE_SNAPSHOT_RESPONSE_BYTES, WorkspaceToolCallError,
+    WorkspaceToolHandler, build_scope_candidate,
+};
+use serde_json::{Value, json};
+use tokio_util::task::TaskTracker;
+
+#[derive(Clone)]
+enum DisposeBehavior {
+    Success,
+    Fail,
+    Hang,
+    Delay(Duration),
+    Panic,
+}
+
+struct TestDisposable {
+    label: String,
+    behavior: DisposeBehavior,
+    log: Arc<Mutex<Vec<String>>>,
+    calls: Arc<AtomicUsize>,
+}
+
+impl Disposable for TestDisposable {
+    fn dispose<'a>(
+        &'a mut self,
+    ) -> Pin<Box<dyn Future<Output = Result<(), DisposeError>> + Send + 'a>> {
+        Box::pin(async move {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            self.log.lock().unwrap().push(self.label.clone());
+            match self.behavior {
+                DisposeBehavior::Success => Ok(()),
+                DisposeBehavior::Fail => Err(DisposeError::new(
+                    "injected_cleanup_failure",
+                    format!("{} failed", self.label),
+                )),
+                DisposeBehavior::Hang => pending().await,
+                DisposeBehavior::Delay(duration) => {
+                    tokio::time::sleep(duration).await;
+                    Ok(())
+                }
+                DisposeBehavior::Panic => panic!("injected disposer panic"),
+            }
+        })
+    }
+}
+
+#[derive(Clone)]
+struct PlannedEffect {
+    label: String,
+    behavior: DisposeBehavior,
+    calls: Arc<AtomicUsize>,
+}
+
+#[derive(Clone)]
+enum PlannedTask {
+    None,
+    NonCooperative,
+}
+
+struct TestPlugin {
+    descriptor: PluginDescriptor,
+    effects: Vec<PlannedEffect>,
+    marker: Option<CapabilityId>,
+    task: PlannedTask,
+    fail: Option<ActivationError>,
+    log: Arc<Mutex<Vec<String>>>,
+}
+
+impl InternalPlugin for TestPlugin {
+    fn descriptor(&self) -> &PluginDescriptor {
+        &self.descriptor
+    }
+
+    fn activate<'a>(
+        &'a self,
+        context: PluginContext<'a>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), ActivationError>> + Send + 'a>> {
+        Box::pin(async move {
+            for effect in &self.effects {
+                context.effects.push(Box::new(TestDisposable {
+                    label: effect.label.clone(),
+                    behavior: effect.behavior.clone(),
+                    log: Arc::clone(&self.log),
+                    calls: Arc::clone(&effect.calls),
+                }));
+            }
+            if let Some(marker) = self.marker.clone() {
+                context
+                    .effects
+                    .register_marker(context.registry, marker)
+                    .map_err(registry_activation_error)?;
+            }
+            match &self.task {
+                PlannedTask::None => {}
+                PlannedTask::NonCooperative => {
+                    context
+                        .tasks
+                        .spawn(async move { pending::<()>().await })
+                        .map_err(|error| {
+                            ActivationError::new("task_admission", error.to_string())
+                        })?;
+                }
+            }
+            if let Some(error) = self.fail.clone() {
+                return Err(error);
+            }
+            Ok(())
+        })
+    }
+}
+
+struct SpoofingDiagnosticPlugin {
+    descriptor: PluginDescriptor,
+}
+
+struct CancellingPlugin {
+    descriptor: PluginDescriptor,
+}
+
+struct PanickingActivationPlugin {
+    descriptor: PluginDescriptor,
+    log: Arc<Mutex<Vec<String>>>,
+    calls: Arc<AtomicUsize>,
+}
+
+struct EchoSourceHandler {
+    fail: bool,
+}
+
+impl SourceHandler for EchoSourceHandler {
+    fn call<'a>(
+        &'a self,
+        request: BoundedJson,
+    ) -> Pin<Box<dyn Future<Output = Result<BoundedJson, BrokerError>> + Send + 'a>> {
+        Box::pin(async move {
+            if self.fail {
+                Err(BrokerError::rejected("injected_source_failure", "failed"))
+            } else {
+                Ok(request)
+            }
+        })
+    }
+}
+
+struct SourcePlugin {
+    descriptor: PluginDescriptor,
+    capability_id: CapabilityId,
+    fail: bool,
+}
+
+struct OversizedSourceHandler;
+
+impl SourceHandler for OversizedSourceHandler {
+    fn call<'a>(
+        &'a self,
+        _request: BoundedJson,
+    ) -> Pin<Box<dyn Future<Output = Result<BoundedJson, BrokerError>> + Send + 'a>> {
+        Box::pin(async move {
+            Ok(BoundedJson::new(
+                Value::String("x".repeat(DEFAULT_BROKER_PAYLOAD_BYTES)),
+                DEFAULT_BROKER_PAYLOAD_BYTES + 2,
+            )
+            .unwrap())
+        })
+    }
+}
+
+struct OversizedSourcePlugin {
+    descriptor: PluginDescriptor,
+    capability_id: CapabilityId,
+}
+
+impl InternalPlugin for OversizedSourcePlugin {
+    fn descriptor(&self) -> &PluginDescriptor {
+        &self.descriptor
+    }
+
+    fn activate<'a>(
+        &'a self,
+        context: PluginContext<'a>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), ActivationError>> + Send + 'a>> {
+        Box::pin(async move {
+            context
+                .effects
+                .register_source(
+                    context.registry,
+                    self.capability_id.clone(),
+                    Arc::new(OversizedSourceHandler),
+                )
+                .map_err(|error| ActivationError::new("source_registration", error.to_string()))?;
+            Ok(())
+        })
+    }
+}
+
+#[derive(Clone)]
+enum WorkspaceToolBehavior {
+    Echo,
+    Fail,
+    Hang,
+    Fixed(Value, usize),
+}
+
+struct TestWorkspaceToolHandler {
+    behavior: WorkspaceToolBehavior,
+}
+
+impl WorkspaceToolHandler for TestWorkspaceToolHandler {
+    fn call<'a>(
+        &'a self,
+        request: BoundedJson,
+    ) -> Pin<Box<dyn Future<Output = Result<BoundedJson, BrokerError>> + Send + 'a>> {
+        Box::pin(async move {
+            match &self.behavior {
+                WorkspaceToolBehavior::Echo => Ok(request),
+                WorkspaceToolBehavior::Fail => {
+                    Err(BrokerError::rejected("workspace_tool_failed", "failed"))
+                }
+                WorkspaceToolBehavior::Hang => pending().await,
+                WorkspaceToolBehavior::Fixed(value, maximum_bytes) => {
+                    Ok(BoundedJson::new(value.clone(), *maximum_bytes).unwrap())
+                }
+            }
+        })
+    }
+}
+
+struct WorkspaceToolPlugin {
+    descriptor: PluginDescriptor,
+    capability_id: CapabilityId,
+    behavior: WorkspaceToolBehavior,
+}
+
+impl InternalPlugin for WorkspaceToolPlugin {
+    fn descriptor(&self) -> &PluginDescriptor {
+        &self.descriptor
+    }
+
+    fn activate<'a>(
+        &'a self,
+        context: PluginContext<'a>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), ActivationError>> + Send + 'a>> {
+        Box::pin(async move {
+            context
+                .effects
+                .register_workspace_tool(
+                    context.registry,
+                    self.capability_id.clone(),
+                    Arc::new(TestWorkspaceToolHandler {
+                        behavior: self.behavior.clone(),
+                    }),
+                )
+                .map_err(|error| {
+                    ActivationError::new("workspace_tool_registration", error.to_string())
+                })?;
+            Ok(())
+        })
+    }
+}
+
+struct ViewerPlugin {
+    descriptor: PluginDescriptor,
+    capability_id: CapabilityId,
+}
+
+impl InternalPlugin for ViewerPlugin {
+    fn descriptor(&self) -> &PluginDescriptor {
+        &self.descriptor
+    }
+
+    fn activate<'a>(
+        &'a self,
+        context: PluginContext<'a>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), ActivationError>> + Send + 'a>> {
+        Box::pin(async move {
+            context
+                .effects
+                .register_project_file_viewer(
+                    context.registry,
+                    self.capability_id.clone(),
+                    ProjectFileViewerContribution::new(
+                        vec!["text/html".to_string(), "text/plain".to_string()],
+                        4 * 1024 * 1024,
+                        PROJECT_FILE_VIEWER_HTML_BYTES,
+                    ),
+                )
+                .map_err(|error| ActivationError::new("viewer_registration", error.to_string()))?;
+            Ok(())
+        })
+    }
+}
+
+impl InternalPlugin for SourcePlugin {
+    fn descriptor(&self) -> &PluginDescriptor {
+        &self.descriptor
+    }
+
+    fn activate<'a>(
+        &'a self,
+        context: PluginContext<'a>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), ActivationError>> + Send + 'a>> {
+        Box::pin(async move {
+            context
+                .effects
+                .register_source(
+                    context.registry,
+                    self.capability_id.clone(),
+                    Arc::new(EchoSourceHandler { fail: self.fail }),
+                )
+                .map_err(|error| ActivationError::new("source_registration", error.to_string()))?;
+            Ok(())
+        })
+    }
+}
+
+impl InternalPlugin for PanickingActivationPlugin {
+    fn descriptor(&self) -> &PluginDescriptor {
+        &self.descriptor
+    }
+
+    fn activate<'a>(
+        &'a self,
+        context: PluginContext<'a>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), ActivationError>> + Send + 'a>> {
+        context.effects.push(Box::new(TestDisposable {
+            label: "panic.rollback".to_string(),
+            behavior: DisposeBehavior::Success,
+            log: Arc::clone(&self.log),
+            calls: Arc::clone(&self.calls),
+        }));
+        Box::pin(async move { panic!("injected activation panic") })
+    }
+}
+
+impl InternalPlugin for CancellingPlugin {
+    fn descriptor(&self) -> &PluginDescriptor {
+        &self.descriptor
+    }
+
+    fn activate<'a>(
+        &'a self,
+        context: PluginContext<'a>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), ActivationError>> + Send + 'a>> {
+        Box::pin(async move {
+            context.cancellation.cancel();
+            Ok(())
+        })
+    }
+}
+
+impl InternalPlugin for SpoofingDiagnosticPlugin {
+    fn descriptor(&self) -> &PluginDescriptor {
+        &self.descriptor
+    }
+
+    fn activate<'a>(
+        &'a self,
+        context: PluginContext<'a>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), ActivationError>> + Send + 'a>> {
+        Box::pin(async move {
+            context.diagnostics.emit(ExtensionDiagnostic {
+                code: DiagnosticCode::ActivationStarted,
+                severity: DiagnosticSeverity::Warning,
+                plugin_id: Some(plugin_id("plugin.spoofed")),
+                capability_id: None,
+                scope_kind: Some(ScopePolicy::application_kind()),
+                scope_id: Some(ScopeId::new("spoofed.scope").unwrap()),
+                activation_generation: Some(ActivationGeneration::new(999).unwrap()),
+                effect_order: None,
+                related_plugins: vec![plugin_id("plugin.spoofed"); 300],
+                cycle_path: vec![plugin_id("plugin.spoofed"); 300],
+                message: "x".repeat(2_000),
+            });
+            Ok(())
+        })
+    }
+}
+
+fn registry_activation_error(error: RegistryError) -> ActivationError {
+    ActivationError::new("registry_rejected", error.to_string())
+}
+
+fn plugin_id(value: &str) -> PluginId {
+    PluginId::new(value).unwrap()
+}
+
+fn capability_id(value: &str) -> CapabilityId {
+    CapabilityId::new(value).unwrap()
+}
+
+fn descriptor(id: &str, scope_kind: rho_extension_runtime::ScopeKindId) -> PluginDescriptor {
+    PluginDescriptor::new(
+        plugin_id(id),
+        PluginVersion::parse("1.0.0").unwrap(),
+        vec![scope_kind],
+    )
+}
+
+fn project_identity(id: &str, generation: u64) -> ScopeIdentity {
+    ScopeIdentity::new(
+        ScopePolicy::project_kind(),
+        ScopeId::new(id).unwrap(),
+        Some(ScopeId::new("application").unwrap()),
+        ActivationGeneration::new(generation).unwrap(),
+    )
+}
+
+fn workspace_identity(parent: &ScopeIdentity, id: &str, generation: u64) -> ScopeIdentity {
+    ScopeIdentity::new(
+        ScopePolicy::workspace_kind(),
+        ScopeId::new(id).unwrap(),
+        Some(parent.id.clone()),
+        ActivationGeneration::new(generation).unwrap(),
+    )
+}
+
+fn deadlines() -> LifecycleDeadlines {
+    LifecycleDeadlines {
+        quiesce: Duration::from_millis(100),
+        effect: Duration::from_millis(50),
+        scope: Duration::from_millis(500),
+    }
+}
+
+fn diagnostics() -> (Arc<CollectingDiagnosticSink>, Arc<dyn DiagnosticSink>) {
+    let collecting = Arc::new(CollectingDiagnosticSink::default());
+    let sink: Arc<dyn DiagnosticSink> = collecting.clone();
+    (collecting, sink)
+}
+
+fn host(sink: Arc<dyn DiagnosticSink>, lifecycle_deadlines: LifecycleDeadlines) -> ExtensionHost {
+    ExtensionHost::new_empty(
+        InternalExtensionRuntimeMode::Candidate,
+        sink,
+        lifecycle_deadlines,
+    )
+    .unwrap()
+}
+
+async fn build_project(
+    host: &ExtensionHost,
+    id: &str,
+    plugins: Vec<Arc<dyn InternalPlugin>>,
+    sink: Arc<dyn DiagnosticSink>,
+    lifecycle_deadlines: LifecycleDeadlines,
+) -> Result<Arc<rho_extension_runtime::ScopeSnapshot>, CandidateBuildError> {
+    let application = host.scopes().application();
+    let identity = host
+        .scopes()
+        .next_identity(
+            ScopePolicy::project_kind(),
+            ScopeId::new(id).unwrap(),
+            Some(application.as_ref()),
+        )
+        .unwrap();
+    build_scope_candidate(
+        identity,
+        Some(application.plan()),
+        plugins,
+        Arc::new(RejectingBrokerFacade),
+        sink,
+        lifecycle_deadlines,
+    )
+    .await
+}
+
+#[test]
+fn invalid_runtime_mode_falls_back_to_legacy_with_one_typed_diagnostic() {
+    let (collecting, sink) = diagnostics();
+    let invalid = "x".repeat(2_000);
+    assert_eq!(
+        InternalExtensionRuntimeMode::parse(Some(&invalid), sink.as_ref()),
+        InternalExtensionRuntimeMode::Legacy
+    );
+    let diagnostics = collecting.diagnostics();
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].code, DiagnosticCode::InvalidRuntimeMode);
+    assert!(!diagnostics[0].message.contains(&invalid));
+    assert!(diagnostics[0].message.len() <= 512);
+
+    assert_eq!(
+        InternalExtensionRuntimeMode::parse(None, sink.as_ref()),
+        InternalExtensionRuntimeMode::Candidate
+    );
+    assert_eq!(
+        InternalExtensionRuntimeMode::parse(Some("candidate"), sink.as_ref()),
+        InternalExtensionRuntimeMode::Candidate
+    );
+    assert_eq!(
+        InternalExtensionRuntimeMode::parse(Some("legacy"), sink.as_ref()),
+        InternalExtensionRuntimeMode::Legacy
+    );
+    assert_eq!(collecting.diagnostics().len(), 1);
+}
+
+#[tokio::test]
+async fn plugin_diagnostics_are_rebound_and_bounded_by_the_host() {
+    let (collecting, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let plugin: Arc<dyn InternalPlugin> = Arc::new(SpoofingDiagnosticPlugin {
+        descriptor: descriptor("plugin.real", ScopePolicy::project_kind()),
+    });
+    let candidate = build_project(&host, "project.a", vec![plugin], sink, deadlines())
+        .await
+        .unwrap();
+    let diagnostic = collecting
+        .diagnostics()
+        .into_iter()
+        .find(|item| {
+            item.severity == DiagnosticSeverity::Warning
+                && item.code == DiagnosticCode::ActivationStarted
+        })
+        .unwrap();
+    assert_eq!(diagnostic.plugin_id, Some(plugin_id("plugin.real")));
+    assert_eq!(diagnostic.scope_id, Some(candidate.identity().id.clone()));
+    assert_eq!(
+        diagnostic.activation_generation,
+        Some(candidate.identity().generation)
+    );
+    assert!(diagnostic.message.len() <= 512);
+    assert_eq!(diagnostic.related_plugins.len(), 256);
+    assert_eq!(diagnostic.cycle_path.len(), 257);
+}
+
+#[tokio::test]
+async fn plugin_cancellation_token_cannot_cancel_the_whole_scope() {
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let plugin: Arc<dyn InternalPlugin> = Arc::new(CancellingPlugin {
+        descriptor: descriptor("plugin.cancel-self", ScopePolicy::project_kind()),
+    });
+    let candidate = build_project(&host, "project.a", vec![plugin], sink, deadlines())
+        .await
+        .unwrap();
+    assert!(!candidate.cancellation().is_cancelled());
+}
+
+#[test]
+fn broker_payload_classes_enforce_exact_byte_boundaries() {
+    let exact_generic =
+        Value::String("x".repeat(rho_extension_runtime::DEFAULT_BROKER_PAYLOAD_BYTES - 2));
+    assert_eq!(
+        BoundedJson::generic(exact_generic).unwrap().encoded_bytes(),
+        rho_extension_runtime::DEFAULT_BROKER_PAYLOAD_BYTES
+    );
+    let over_generic =
+        Value::String("x".repeat(rho_extension_runtime::DEFAULT_BROKER_PAYLOAD_BYTES - 1));
+    assert!(BoundedJson::generic(over_generic).is_err());
+
+    let request = BrokerRequest::new(
+        rho_extension_runtime::OperationId::new("workspace.snapshot").unwrap(),
+        json!({}),
+        BrokerResponseClass::WorkspaceSnapshot,
+    )
+    .unwrap();
+    let exact_workspace = Value::String("x".repeat(WORKSPACE_SNAPSHOT_RESPONSE_BYTES - 2));
+    assert_eq!(
+        BrokerResponse::new(exact_workspace, &request)
+            .unwrap()
+            .payload
+            .encoded_bytes(),
+        WORKSPACE_SNAPSHOT_RESPONSE_BYTES
+    );
+    let over_workspace = Value::String("x".repeat(WORKSPACE_SNAPSHOT_RESPONSE_BYTES - 1));
+    assert!(BrokerResponse::new(over_workspace, &request).is_err());
+    assert_eq!(
+        BrokerResponseClass::ProjectFileViewerHtml.maximum_bytes(),
+        PROJECT_FILE_VIEWER_HTML_BYTES
+    );
+}
+
+#[tokio::test]
+async fn source_registration_is_candidate_hidden_routable_and_reversibly_disposed() {
+    let capability = capability_id("source.project.test");
+    let plugin: Arc<dyn InternalPlugin> = Arc::new(SourcePlugin {
+        descriptor: descriptor("plugin.source", ScopePolicy::project_kind()),
+        capability_id: capability.clone(),
+        fail: false,
+    });
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let candidate = build_project(
+        &host,
+        "project.a",
+        vec![plugin],
+        Arc::clone(&sink),
+        deadlines(),
+    )
+    .await
+    .unwrap();
+    assert!(matches!(
+        candidate
+            .registry()
+            .call_source(
+                &capability,
+                BoundedJson::generic(json!({ "limit": 1 })).unwrap()
+            )
+            .await,
+        Err(SourceCallError::Routing(RoutingError::Closed))
+    ));
+    let slot = ScopeSlot::empty(Arc::clone(&sink));
+    slot.publish(None, candidate.clone(), deadlines())
+        .await
+        .unwrap();
+    let result = candidate
+        .registry()
+        .call_source(
+            &capability,
+            BoundedJson::generic(json!({ "limit": 1 })).unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(result.scope, *candidate.identity());
+    assert_eq!(result.payload.value(), &json!({ "limit": 1 }));
+
+    let replacement = host
+        .build_empty_project_candidate(ScopeId::new("project.b").unwrap())
+        .await
+        .unwrap();
+    slot.publish(Some(candidate.clone()), replacement, deadlines())
+        .await
+        .unwrap();
+    assert!(candidate.registry().source_owner(&capability).is_none());
+    assert!(matches!(
+        candidate
+            .registry()
+            .call_source(&capability, BoundedJson::generic(json!({})).unwrap())
+            .await,
+        Err(SourceCallError::Routing(RoutingError::Closed))
+    ));
+}
+
+#[tokio::test]
+async fn source_duplicate_and_handler_failure_remain_truthful() {
+    let capability = capability_id("source.project.test");
+    let plugin = |id: &str, fail: bool| -> Arc<dyn InternalPlugin> {
+        Arc::new(SourcePlugin {
+            descriptor: descriptor(id, ScopePolicy::project_kind()),
+            capability_id: capability.clone(),
+            fail,
+        })
+    };
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let duplicate = build_project(
+        &host,
+        "project.a",
+        vec![plugin("plugin.a", false), plugin("plugin.b", false)],
+        Arc::clone(&sink),
+        deadlines(),
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(duplicate, CandidateBuildError::Activation { .. }));
+
+    let failing = build_project(
+        &host,
+        "project.b",
+        vec![plugin("plugin.fail", true)],
+        Arc::clone(&sink),
+        deadlines(),
+    )
+    .await
+    .unwrap();
+    ScopeSlot::from_active(failing.clone(), sink).unwrap();
+    assert!(matches!(
+        failing
+            .registry()
+            .call_source(&capability, BoundedJson::generic(json!({})).unwrap())
+            .await,
+        Err(SourceCallError::Handler(BrokerError::Rejected { .. }))
+    ));
+}
+
+#[tokio::test]
+async fn source_boundary_rebinds_request_and_response_to_generic_limit() {
+    let capability = capability_id("source.project.test");
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let echo = build_project(
+        &host,
+        "project.request",
+        vec![Arc::new(SourcePlugin {
+            descriptor: descriptor("plugin.source.request", ScopePolicy::project_kind()),
+            capability_id: capability.clone(),
+            fail: false,
+        })],
+        Arc::clone(&sink),
+        deadlines(),
+    )
+    .await
+    .unwrap();
+    ScopeSlot::from_active(echo.clone(), Arc::clone(&sink)).unwrap();
+    let widened_request = BoundedJson::new(
+        Value::String("x".repeat(DEFAULT_BROKER_PAYLOAD_BYTES)),
+        DEFAULT_BROKER_PAYLOAD_BYTES + 2,
+    )
+    .unwrap();
+    assert!(matches!(
+        echo.registry()
+            .call_source(&capability, widened_request)
+            .await,
+        Err(SourceCallError::Payload(
+            rho_extension_runtime::BrokerPayloadError::TooLarge { .. }
+        ))
+    ));
+
+    let oversized = build_project(
+        &host,
+        "project.response",
+        vec![Arc::new(OversizedSourcePlugin {
+            descriptor: descriptor("plugin.source.response", ScopePolicy::project_kind()),
+            capability_id: capability.clone(),
+        })],
+        Arc::clone(&sink),
+        deadlines(),
+    )
+    .await
+    .unwrap();
+    ScopeSlot::from_active(oversized.clone(), sink).unwrap();
+    assert!(matches!(
+        oversized
+            .registry()
+            .call_source(&capability, BoundedJson::generic(json!({})).unwrap())
+            .await,
+        Err(SourceCallError::Payload(
+            rho_extension_runtime::BrokerPayloadError::TooLarge { .. }
+        ))
+    ));
+}
+
+#[tokio::test]
+async fn identical_source_capabilities_are_isolated_between_project_scopes() {
+    let capability = capability_id("source.project.test");
+    let plugin = |id: &str| -> Arc<dyn InternalPlugin> {
+        Arc::new(SourcePlugin {
+            descriptor: descriptor(id, ScopePolicy::project_kind()),
+            capability_id: capability.clone(),
+            fail: false,
+        })
+    };
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let project_a = build_project(
+        &host,
+        "project.a",
+        vec![plugin("plugin.source")],
+        Arc::clone(&sink),
+        deadlines(),
+    )
+    .await
+    .unwrap();
+    let project_b = build_project(
+        &host,
+        "project.b",
+        vec![plugin("plugin.source")],
+        Arc::clone(&sink),
+        deadlines(),
+    )
+    .await
+    .unwrap();
+    let slot_a = ScopeSlot::from_active(project_a.clone(), Arc::clone(&sink)).unwrap();
+    ScopeSlot::from_active(project_b.clone(), Arc::clone(&sink)).unwrap();
+
+    let request = BoundedJson::generic(json!({ "project": "same-shape" })).unwrap();
+    let result_a = project_a
+        .registry()
+        .call_source(&capability, request.clone())
+        .await
+        .unwrap();
+    let result_b = project_b
+        .registry()
+        .call_source(&capability, request)
+        .await
+        .unwrap();
+    assert_ne!(result_a.scope, result_b.scope);
+    assert_eq!(result_a.payload, result_b.payload);
+
+    let replacement = host
+        .build_empty_project_candidate(ScopeId::new("project.a.replacement").unwrap())
+        .await
+        .unwrap();
+    slot_a
+        .publish(Some(project_a), replacement, deadlines())
+        .await
+        .unwrap();
+    assert!(project_b.registry().source_owner(&capability).is_some());
+    assert!(
+        project_b
+            .registry()
+            .call_source(&capability, BoundedJson::generic(json!({})).unwrap())
+            .await
+            .is_ok()
+    );
+}
+
+#[tokio::test]
+async fn workspace_tool_is_scoped_effect_bound_and_fixed_to_two_mib() {
+    let capability = capability_id("tool.workspace.snapshot");
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let project = host
+        .build_empty_project_candidate(ScopeId::new("project.a").unwrap())
+        .await
+        .unwrap();
+    host.publish_project_candidate(None, project.clone())
+        .await
+        .unwrap();
+    let plugin = |id: &str, behavior: WorkspaceToolBehavior| -> Arc<dyn InternalPlugin> {
+        Arc::new(WorkspaceToolPlugin {
+            descriptor: descriptor(id, ScopePolicy::workspace_kind()),
+            capability_id: capability.clone(),
+            behavior,
+        })
+    };
+    let candidate = host
+        .build_workspace_candidate(
+            &project,
+            ScopeId::new("workspace.a").unwrap(),
+            vec![plugin("plugin.workspace.echo", WorkspaceToolBehavior::Echo)],
+            Arc::new(RejectingBrokerFacade),
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        candidate
+            .registry()
+            .call_workspace_tool(&capability, BoundedJson::generic(json!({})).unwrap())
+            .await,
+        Err(WorkspaceToolCallError::Routing(RoutingError::Closed))
+    ));
+    host.publish_workspace_candidate(None, candidate.clone())
+        .await
+        .unwrap();
+    let result = candidate
+        .registry()
+        .call_workspace_tool(
+            &capability,
+            BoundedJson::generic(json!({ "operation": "snapshot" })).unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(result.scope, *candidate.identity());
+    assert_eq!(result.payload.value(), &json!({ "operation": "snapshot" }));
+
+    let exact_value = Value::String("x".repeat(WORKSPACE_SNAPSHOT_RESPONSE_BYTES - 2));
+    let exact = host
+        .build_workspace_candidate(
+            &project,
+            ScopeId::new("workspace.exact").unwrap(),
+            vec![plugin(
+                "plugin.workspace.exact",
+                WorkspaceToolBehavior::Fixed(exact_value, WORKSPACE_SNAPSHOT_RESPONSE_BYTES),
+            )],
+            Arc::new(RejectingBrokerFacade),
+        )
+        .await
+        .unwrap();
+    host.publish_workspace_candidate(Some(candidate.clone()), exact.clone())
+        .await
+        .unwrap();
+    assert_eq!(
+        exact
+            .registry()
+            .call_workspace_tool(&capability, BoundedJson::generic(json!({})).unwrap())
+            .await
+            .unwrap()
+            .payload
+            .encoded_bytes(),
+        WORKSPACE_SNAPSHOT_RESPONSE_BYTES
+    );
+    assert!(
+        candidate
+            .registry()
+            .workspace_tool_owner(&capability)
+            .is_none()
+    );
+
+    let over = host
+        .build_workspace_candidate(
+            &project,
+            ScopeId::new("workspace.over").unwrap(),
+            vec![plugin(
+                "plugin.workspace.over",
+                WorkspaceToolBehavior::Fixed(
+                    Value::String("x".repeat(WORKSPACE_SNAPSHOT_RESPONSE_BYTES - 1)),
+                    WORKSPACE_SNAPSHOT_RESPONSE_BYTES + 1,
+                ),
+            )],
+            Arc::new(RejectingBrokerFacade),
+        )
+        .await
+        .unwrap();
+    host.publish_workspace_candidate(Some(exact), over.clone())
+        .await
+        .unwrap();
+    assert!(matches!(
+        over.registry()
+            .call_workspace_tool(&capability, BoundedJson::generic(json!({})).unwrap())
+            .await,
+        Err(WorkspaceToolCallError::Payload(
+            rho_extension_runtime::BrokerPayloadError::TooLarge { .. }
+        ))
+    ));
+
+    let widened_request = BoundedJson::new(
+        Value::String("x".repeat(DEFAULT_BROKER_PAYLOAD_BYTES)),
+        DEFAULT_BROKER_PAYLOAD_BYTES + 2,
+    )
+    .unwrap();
+    assert!(matches!(
+        over.registry()
+            .call_workspace_tool(&capability, widened_request)
+            .await,
+        Err(WorkspaceToolCallError::Payload(
+            rho_extension_runtime::BrokerPayloadError::TooLarge { .. }
+        ))
+    ));
+
+    let hanging = host
+        .build_workspace_candidate(
+            &project,
+            ScopeId::new("workspace.hanging").unwrap(),
+            vec![plugin(
+                "plugin.workspace.hanging",
+                WorkspaceToolBehavior::Hang,
+            )],
+            Arc::new(RejectingBrokerFacade),
+        )
+        .await
+        .unwrap();
+    host.publish_workspace_candidate(Some(over), hanging.clone())
+        .await
+        .unwrap();
+    let registry = hanging.registry().clone();
+    let call_capability = capability.clone();
+    let call = tokio::spawn(async move {
+        registry
+            .call_workspace_tool(&call_capability, BoundedJson::generic(json!({})).unwrap())
+            .await
+    });
+    tokio::time::timeout(Duration::from_millis(100), async {
+        while hanging.registry().active_leases() == 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    call.abort();
+    assert!(call.await.unwrap_err().is_cancelled());
+    assert_eq!(hanging.registry().active_leases(), 0);
+    let report = host
+        .clear_workspace_scope(Some(hanging))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(report.outcome, DisposeOutcome::Disposed);
+}
+
+#[tokio::test]
+async fn project_workspace_tree_second_cas_failure_restores_old_tree_then_success_replaces_it() {
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let project_a = host
+        .build_empty_project_candidate(ScopeId::new("project.a").unwrap())
+        .await
+        .unwrap();
+    host.publish_project_candidate(None, project_a.clone())
+        .await
+        .unwrap();
+    let workspace_a = host
+        .build_workspace_candidate(
+            &project_a,
+            ScopeId::new("workspace.a").unwrap(),
+            Vec::new(),
+            Arc::new(RejectingBrokerFacade),
+        )
+        .await
+        .unwrap();
+    host.publish_workspace_candidate(None, workspace_a.clone())
+        .await
+        .unwrap();
+
+    let project_parent_mismatch = host
+        .build_empty_project_candidate(ScopeId::new("project.parent-mismatch").unwrap())
+        .await
+        .unwrap();
+    let workspace_parent_mismatch = host
+        .build_workspace_candidate(
+            &project_a,
+            ScopeId::new("workspace.parent-mismatch").unwrap(),
+            Vec::new(),
+            Arc::new(RejectingBrokerFacade),
+        )
+        .await
+        .unwrap();
+    let parent_error = host
+        .publish_project_tree_candidates(
+            Some(project_a.clone()),
+            project_parent_mismatch.clone(),
+            Some(workspace_a.clone()),
+            workspace_parent_mismatch.clone(),
+        )
+        .await
+        .unwrap_err();
+    assert!(parent_error.reason.contains("child scope parent"));
+    assert!(matches!(
+        project_parent_mismatch.state(),
+        ScopeLifecycleState::Disposed | ScopeLifecycleState::Failed
+    ));
+    assert!(matches!(
+        workspace_parent_mismatch.state(),
+        ScopeLifecycleState::Disposed | ScopeLifecycleState::Failed
+    ));
+    assert!(Arc::ptr_eq(&host.scopes().project().unwrap(), &project_a));
+    assert!(Arc::ptr_eq(
+        &host.scopes().workspace().unwrap(),
+        &workspace_a
+    ));
+
+    let project_b_loser = host
+        .build_empty_project_candidate(ScopeId::new("project.b.loser").unwrap())
+        .await
+        .unwrap();
+    let workspace_b_loser = host
+        .build_workspace_candidate(
+            &project_b_loser,
+            ScopeId::new("workspace.b.loser").unwrap(),
+            Vec::new(),
+            Arc::new(RejectingBrokerFacade),
+        )
+        .await
+        .unwrap();
+    let stale_workspace = host
+        .build_workspace_candidate(
+            &project_a,
+            ScopeId::new("workspace.stale").unwrap(),
+            Vec::new(),
+            Arc::new(RejectingBrokerFacade),
+        )
+        .await
+        .unwrap();
+    let error = host
+        .publish_project_tree_candidates(
+            Some(project_a.clone()),
+            project_b_loser.clone(),
+            Some(stale_workspace.clone()),
+            workspace_b_loser.clone(),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(error.reason, "workspace_expected_old_mismatch");
+    assert!(Arc::ptr_eq(&host.scopes().project().unwrap(), &project_a));
+    assert!(Arc::ptr_eq(
+        &host.scopes().workspace().unwrap(),
+        &workspace_a
+    ));
+    assert_eq!(project_a.state(), ScopeLifecycleState::Active);
+    assert_eq!(workspace_a.state(), ScopeLifecycleState::Active);
+    assert!(matches!(
+        project_b_loser.state(),
+        ScopeLifecycleState::Disposed | ScopeLifecycleState::Failed
+    ));
+    assert!(matches!(
+        workspace_b_loser.state(),
+        ScopeLifecycleState::Disposed | ScopeLifecycleState::Failed
+    ));
+    host.rollback_candidate(&stale_workspace).await;
+
+    let project_b = host
+        .build_empty_project_candidate(ScopeId::new("project.b").unwrap())
+        .await
+        .unwrap();
+    let workspace_b = host
+        .build_workspace_candidate(
+            &project_b,
+            ScopeId::new("workspace.b").unwrap(),
+            Vec::new(),
+            Arc::new(RejectingBrokerFacade),
+        )
+        .await
+        .unwrap();
+    let report = host
+        .publish_project_tree_candidates(
+            Some(project_a.clone()),
+            project_b.clone(),
+            Some(workspace_a.clone()),
+            workspace_b.clone(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(report.project, *project_b.identity());
+    assert_eq!(report.workspace, *workspace_b.identity());
+    assert!(Arc::ptr_eq(&host.scopes().project().unwrap(), &project_b));
+    assert!(Arc::ptr_eq(
+        &host.scopes().workspace().unwrap(),
+        &workspace_b
+    ));
+    assert!(matches!(
+        project_a.state(),
+        ScopeLifecycleState::Disposed | ScopeLifecycleState::Failed
+    ));
+    assert!(matches!(
+        workspace_a.state(),
+        ScopeLifecycleState::Disposed | ScopeLifecycleState::Failed
+    ));
+}
+
+#[tokio::test]
+async fn application_viewer_contribution_is_path_free_routable_and_disposed() {
+    let capability = capability_id("ui.viewer.project-file");
+    let mut viewer_descriptor = descriptor("plugin.viewer", ScopePolicy::application_kind());
+    viewer_descriptor.provides = vec![CapabilityDeclaration::new(capability.clone(), 1)];
+    let plugin: Arc<dyn InternalPlugin> = Arc::new(ViewerPlugin {
+        descriptor: viewer_descriptor,
+        capability_id: capability.clone(),
+    });
+    let (_, sink) = diagnostics();
+    let host = ExtensionHost::new_with_application_plugins(
+        InternalExtensionRuntimeMode::Candidate,
+        vec![CapabilityDeclaration::new(capability_id("service.host"), 1)],
+        vec![plugin],
+        Arc::new(RejectingBrokerFacade),
+        sink,
+        deadlines(),
+    )
+    .await
+    .unwrap();
+    let application = host.scopes().application();
+    let resolution = application
+        .registry()
+        .resolve_project_file_viewer(&capability)
+        .unwrap();
+    assert_eq!(resolution.scope(), application.identity());
+    assert_eq!(
+        resolution.contribution().supported_media_types(),
+        &["text/html".to_string(), "text/plain".to_string()]
+    );
+    assert_eq!(
+        resolution.contribution().html_maximum_bytes(),
+        PROJECT_FILE_VIEWER_HTML_BYTES
+    );
+    let encoded = serde_json::to_value(resolution.contribution()).unwrap();
+    assert!(encoded.get("project_root").is_none());
+    assert!(encoded.get("path").is_none());
+    drop(resolution);
+
+    let report = host.shutdown().await;
+    assert_eq!(report.outcome, DisposeOutcome::Disposed);
+    assert!(matches!(
+        application
+            .registry()
+            .resolve_project_file_viewer(&capability),
+        Err(ProjectFileViewerResolveError::Routing(RoutingError::Closed))
+    ));
+}
+
+#[tokio::test]
+async fn duplicate_workspace_tool_and_viewer_registration_roll_back() {
+    let tool_capability = capability_id("tool.workspace.snapshot");
+    let viewer_capability = capability_id("ui.viewer.project-file");
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let project = host
+        .build_empty_project_candidate(ScopeId::new("project.duplicate").unwrap())
+        .await
+        .unwrap();
+    let tool = |id: &str| -> Arc<dyn InternalPlugin> {
+        Arc::new(WorkspaceToolPlugin {
+            descriptor: descriptor(id, ScopePolicy::workspace_kind()),
+            capability_id: tool_capability.clone(),
+            behavior: WorkspaceToolBehavior::Fail,
+        })
+    };
+    assert!(matches!(
+        host.build_workspace_candidate(
+            &project,
+            ScopeId::new("workspace.duplicate").unwrap(),
+            vec![tool("plugin.tool.a"), tool("plugin.tool.b")],
+            Arc::new(RejectingBrokerFacade),
+        )
+        .await,
+        Err(CandidateBuildError::Activation { .. })
+    ));
+
+    let viewer = |id: &str| -> Arc<dyn InternalPlugin> {
+        Arc::new(ViewerPlugin {
+            descriptor: descriptor(id, ScopePolicy::application_kind()),
+            capability_id: viewer_capability.clone(),
+        })
+    };
+    assert!(matches!(
+        ExtensionHost::new_with_application_plugins(
+            InternalExtensionRuntimeMode::Candidate,
+            Vec::new(),
+            vec![viewer("plugin.viewer.a"), viewer("plugin.viewer.b")],
+            Arc::new(RejectingBrokerFacade),
+            sink,
+            deadlines(),
+        )
+        .await,
+        Err(rho_extension_runtime::ExtensionHostError::ApplicationBuild(
+            _
+        ))
+    ));
+}
+
+#[tokio::test]
+async fn activation_and_dependency_disposal_are_reverse_ordered() {
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut provider_descriptor = descriptor("plugin.provider", ScopePolicy::project_kind());
+    provider_descriptor.provides = vec![CapabilityDeclaration::new(
+        capability_id("service.shared"),
+        1,
+    )];
+    let provider = Arc::new(TestPlugin {
+        descriptor: provider_descriptor,
+        effects: vec![PlannedEffect {
+            label: "provider.0".to_string(),
+            behavior: DisposeBehavior::Success,
+            calls: Arc::clone(&calls),
+        }],
+        marker: None,
+        task: PlannedTask::None,
+        fail: None,
+        log: Arc::clone(&log),
+    });
+    let mut consumer_descriptor = descriptor("plugin.consumer", ScopePolicy::project_kind());
+    consumer_descriptor.requires = vec![CapabilityRequirement::new(
+        capability_id("service.shared"),
+        1,
+    )];
+    let consumer = Arc::new(TestPlugin {
+        descriptor: consumer_descriptor,
+        effects: vec![
+            PlannedEffect {
+                label: "consumer.0".to_string(),
+                behavior: DisposeBehavior::Success,
+                calls: Arc::clone(&calls),
+            },
+            PlannedEffect {
+                label: "consumer.1".to_string(),
+                behavior: DisposeBehavior::Success,
+                calls: Arc::clone(&calls),
+            },
+        ],
+        marker: None,
+        task: PlannedTask::None,
+        fail: None,
+        log: Arc::clone(&log),
+    });
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let plugins: Vec<Arc<dyn InternalPlugin>> = vec![consumer, provider];
+    let candidate = build_project(&host, "project.a", plugins, sink, deadlines())
+        .await
+        .unwrap();
+    let slot = ScopeSlot::empty(Arc::new(NoopDiagnosticSink));
+    slot.publish(None, Arc::clone(&candidate), deadlines())
+        .await
+        .unwrap();
+    assert!(candidate.registry().is_routable());
+
+    let replacement = host
+        .build_empty_project_candidate(ScopeId::new("project.b").unwrap())
+        .await
+        .unwrap();
+    slot.publish(Some(candidate), replacement, deadlines())
+        .await
+        .unwrap();
+    assert_eq!(
+        *log.lock().unwrap(),
+        vec!["consumer.1", "consumer.0", "provider.0"]
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 3);
+}
+
+#[tokio::test]
+async fn activation_failure_rolls_back_current_and_prior_plugins() {
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let calls = Arc::new(AtomicUsize::new(0));
+    let provider = Arc::new(TestPlugin {
+        descriptor: descriptor("plugin.a", ScopePolicy::project_kind()),
+        effects: vec![PlannedEffect {
+            label: "a.0".to_string(),
+            behavior: DisposeBehavior::Success,
+            calls: Arc::clone(&calls),
+        }],
+        marker: None,
+        task: PlannedTask::None,
+        fail: None,
+        log: Arc::clone(&log),
+    });
+    let failing = Arc::new(TestPlugin {
+        descriptor: descriptor("plugin.b", ScopePolicy::project_kind()),
+        effects: vec![
+            PlannedEffect {
+                label: "b.0".to_string(),
+                behavior: DisposeBehavior::Success,
+                calls: Arc::clone(&calls),
+            },
+            PlannedEffect {
+                label: "b.1".to_string(),
+                behavior: DisposeBehavior::Success,
+                calls: Arc::clone(&calls),
+            },
+        ],
+        marker: None,
+        task: PlannedTask::None,
+        fail: Some(ActivationError::new("injected", "fail after effects")),
+        log: Arc::clone(&log),
+    });
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let plugins: Vec<Arc<dyn InternalPlugin>> = vec![provider, failing];
+    let error = build_project(&host, "project.a", plugins, sink, deadlines())
+        .await
+        .unwrap_err();
+    match error {
+        CandidateBuildError::Activation { rollback, .. } => {
+            assert_eq!(rollback.outcome, DisposeOutcome::Disposed)
+        }
+        other => panic!("unexpected error: {other:?}"),
+    }
+    assert_eq!(*log.lock().unwrap(), vec!["b.1", "b.0", "a.0"]);
+    assert_eq!(calls.load(Ordering::SeqCst), 3);
+}
+
+#[tokio::test]
+async fn activation_failure_before_effects_has_empty_truthful_rollback() {
+    let plugin = Arc::new(TestPlugin {
+        descriptor: descriptor("plugin.fail", ScopePolicy::project_kind()),
+        effects: Vec::new(),
+        marker: None,
+        task: PlannedTask::None,
+        fail: Some(ActivationError::new("injected", "fail immediately")),
+        log: Arc::new(Mutex::new(Vec::new())),
+    });
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let plugins: Vec<Arc<dyn InternalPlugin>> = vec![plugin];
+    let error = build_project(&host, "project.a", plugins, sink, deadlines())
+        .await
+        .unwrap_err();
+    match error {
+        CandidateBuildError::Activation { rollback, .. } => {
+            assert_eq!(rollback.outcome, DisposeOutcome::Disposed);
+            assert_eq!(rollback.plugin_reports.len(), 1);
+            assert!(rollback.plugin_reports[0].1.records.is_empty());
+        }
+        other => panic!("unexpected error: {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn activation_panic_is_contained_and_recorded_effects_roll_back() {
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let calls = Arc::new(AtomicUsize::new(0));
+    let plugin: Arc<dyn InternalPlugin> = Arc::new(PanickingActivationPlugin {
+        descriptor: descriptor("plugin.panic", ScopePolicy::project_kind()),
+        log: Arc::clone(&log),
+        calls: Arc::clone(&calls),
+    });
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let error = build_project(&host, "project.a", vec![plugin], sink, deadlines())
+        .await
+        .unwrap_err();
+    match error {
+        CandidateBuildError::Activation {
+            error, rollback, ..
+        } => {
+            assert_eq!(error.code(), "activation_panicked");
+            assert_eq!(rollback.outcome, DisposeOutcome::Disposed);
+        }
+        other => panic!("unexpected error: {other:?}"),
+    }
+    assert_eq!(*log.lock().unwrap(), vec!["panic.rollback"]);
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn disposer_panic_is_contained_and_remaining_cleanup_continues() {
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let calls = Arc::new(AtomicUsize::new(0));
+    let plugin: Arc<dyn InternalPlugin> = Arc::new(TestPlugin {
+        descriptor: descriptor("plugin.dispose-panic", ScopePolicy::project_kind()),
+        effects: vec![
+            PlannedEffect {
+                label: "success".to_string(),
+                behavior: DisposeBehavior::Success,
+                calls: Arc::clone(&calls),
+            },
+            PlannedEffect {
+                label: "panic".to_string(),
+                behavior: DisposeBehavior::Panic,
+                calls: Arc::clone(&calls),
+            },
+        ],
+        marker: None,
+        task: PlannedTask::None,
+        fail: None,
+        log: Arc::clone(&log),
+    });
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let candidate = build_project(&host, "project.a", vec![plugin], sink, deadlines())
+        .await
+        .unwrap();
+    ScopeSlot::from_active(candidate.clone(), Arc::new(NoopDiagnosticSink)).unwrap();
+    let report = candidate.quiesce_and_dispose(deadlines()).await;
+    assert_eq!(report.outcome, DisposeOutcome::Failed);
+    assert_eq!(*log.lock().unwrap(), vec!["panic", "success"]);
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    assert_eq!(
+        report.plugin_reports[0].1.records[1]
+            .cleanup_error
+            .as_ref()
+            .unwrap()
+            .code(),
+        "effect_dispose_panicked"
+    );
+}
+
+#[tokio::test]
+async fn dispose_is_concurrently_idempotent() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let plugin = Arc::new(TestPlugin {
+        descriptor: descriptor("plugin.one", ScopePolicy::project_kind()),
+        effects: vec![PlannedEffect {
+            label: "one".to_string(),
+            behavior: DisposeBehavior::Success,
+            calls: Arc::clone(&calls),
+        }],
+        marker: None,
+        task: PlannedTask::None,
+        fail: None,
+        log: Arc::new(Mutex::new(Vec::new())),
+    });
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let plugins: Vec<Arc<dyn InternalPlugin>> = vec![plugin];
+    let candidate = build_project(&host, "project.a", plugins, sink, deadlines())
+        .await
+        .unwrap();
+    let slot = ScopeSlot::from_active(candidate.clone(), Arc::new(NoopDiagnosticSink)).unwrap();
+    assert!(slot.current().is_some());
+    let (first, second) = tokio::join!(
+        candidate.quiesce_and_dispose(deadlines()),
+        candidate.quiesce_and_dispose(deadlines())
+    );
+    assert_eq!(first, second);
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn cleanup_failure_and_timeout_continue_remaining_effects() {
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let calls = Arc::new(AtomicUsize::new(0));
+    let plugin = Arc::new(TestPlugin {
+        descriptor: descriptor("plugin.cleanup", ScopePolicy::project_kind()),
+        effects: vec![
+            PlannedEffect {
+                label: "success.first".to_string(),
+                behavior: DisposeBehavior::Success,
+                calls: Arc::clone(&calls),
+            },
+            PlannedEffect {
+                label: "failure".to_string(),
+                behavior: DisposeBehavior::Fail,
+                calls: Arc::clone(&calls),
+            },
+            PlannedEffect {
+                label: "timeout".to_string(),
+                behavior: DisposeBehavior::Hang,
+                calls: Arc::clone(&calls),
+            },
+        ],
+        marker: None,
+        task: PlannedTask::None,
+        fail: None,
+        log: Arc::clone(&log),
+    });
+    let (_, sink) = diagnostics();
+    let short = LifecycleDeadlines {
+        quiesce: Duration::from_millis(20),
+        effect: Duration::from_millis(10),
+        scope: Duration::from_millis(100),
+    };
+    let host = host(Arc::clone(&sink), short);
+    let plugins: Vec<Arc<dyn InternalPlugin>> = vec![plugin];
+    let candidate = build_project(&host, "project.a", plugins, sink, short)
+        .await
+        .unwrap();
+    ScopeSlot::from_active(candidate.clone(), Arc::new(NoopDiagnosticSink)).unwrap();
+    let report = candidate.quiesce_and_dispose(short).await;
+    assert_eq!(report.outcome, DisposeOutcome::Failed);
+    assert_eq!(
+        *log.lock().unwrap(),
+        vec!["timeout", "failure", "success.first"]
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 3);
+    let records = &report.plugin_reports[0].1.records;
+    assert_eq!(records[0].status, EffectStatus::Disposed);
+    assert_eq!(records[1].status, EffectStatus::Failed);
+    assert_eq!(records[2].status, EffectStatus::Failed);
+    assert!(candidate.registry().lease().is_err());
+}
+
+#[tokio::test]
+async fn total_scope_deadline_marks_unstarted_effects_as_leaked() {
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let first_calls = Arc::new(AtomicUsize::new(0));
+    let second_calls = Arc::new(AtomicUsize::new(0));
+    let third_calls = Arc::new(AtomicUsize::new(0));
+    let plugin = Arc::new(TestPlugin {
+        descriptor: descriptor("plugin.total-timeout", ScopePolicy::project_kind()),
+        effects: vec![
+            PlannedEffect {
+                label: "unstarted".to_string(),
+                behavior: DisposeBehavior::Success,
+                calls: Arc::clone(&first_calls),
+            },
+            PlannedEffect {
+                label: "second".to_string(),
+                behavior: DisposeBehavior::Delay(Duration::from_millis(25)),
+                calls: Arc::clone(&second_calls),
+            },
+            PlannedEffect {
+                label: "third".to_string(),
+                behavior: DisposeBehavior::Delay(Duration::from_millis(25)),
+                calls: Arc::clone(&third_calls),
+            },
+        ],
+        marker: None,
+        task: PlannedTask::None,
+        fail: None,
+        log: Arc::clone(&log),
+    });
+    let short = LifecycleDeadlines {
+        quiesce: Duration::from_millis(5),
+        effect: Duration::from_millis(100),
+        scope: Duration::from_millis(35),
+    };
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), short);
+    let plugins: Vec<Arc<dyn InternalPlugin>> = vec![plugin];
+    let candidate = build_project(&host, "project.a", plugins, sink, short)
+        .await
+        .unwrap();
+    ScopeSlot::from_active(candidate.clone(), Arc::new(NoopDiagnosticSink)).unwrap();
+    let report = candidate.quiesce_and_dispose(short).await;
+    assert_eq!(report.outcome, DisposeOutcome::Failed);
+    assert_eq!(third_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(second_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(first_calls.load(Ordering::SeqCst), 0);
+    assert_eq!(
+        report.plugin_reports[0].1.records[0].status,
+        EffectStatus::Failed
+    );
+}
+
+#[tokio::test]
+async fn quiesce_rejects_routes_and_tasks_before_cancellation_then_drains() {
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let candidate = host
+        .build_empty_project_candidate(ScopeId::new("project.a").unwrap())
+        .await
+        .unwrap();
+    let slot = ScopeSlot::empty(Arc::clone(&sink));
+    slot.publish(None, candidate.clone(), deadlines())
+        .await
+        .unwrap();
+    let lease = candidate.registry().lease().unwrap();
+    let token = candidate.cancellation();
+    let registry = candidate.registry().clone();
+    let routing_closed_on_cancel = Arc::new(AtomicBool::new(false));
+    let observed = Arc::clone(&routing_closed_on_cancel);
+    candidate
+        .tasks()
+        .spawn(async move {
+            token.cancelled().await;
+            observed.store(
+                matches!(registry.lease(), Err(RoutingError::Closed)),
+                Ordering::SeqCst,
+            );
+        })
+        .unwrap();
+
+    let disposing = candidate.clone();
+    let handle = tokio::spawn(async move { disposing.quiesce_and_dispose(deadlines()).await });
+    tokio::time::sleep(Duration::from_millis(10)).await;
+    assert!(!handle.is_finished());
+    assert!(matches!(
+        candidate.tasks().spawn(async {}),
+        Err(TaskAdmissionError::Closed)
+    ));
+    drop(lease);
+    let report = handle.await.unwrap();
+    assert_eq!(report.outcome, DisposeOutcome::Disposed);
+    assert!(routing_closed_on_cancel.load(Ordering::SeqCst));
+}
+
+#[tokio::test]
+async fn publication_closes_old_routing_before_waiting_for_existing_leases() {
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let slot = Arc::new(ScopeSlot::empty(Arc::clone(&sink)));
+    let first = host
+        .build_empty_project_candidate(ScopeId::new("project.a").unwrap())
+        .await
+        .unwrap();
+    slot.publish(None, first.clone(), deadlines())
+        .await
+        .unwrap();
+    let existing_lease = first.registry().lease().unwrap();
+    let replacement = host
+        .build_empty_project_candidate(ScopeId::new("project.b").unwrap())
+        .await
+        .unwrap();
+    let publishing_slot = Arc::clone(&slot);
+    let publishing_first = first.clone();
+    let publishing = tokio::spawn(async move {
+        publishing_slot
+            .publish(Some(publishing_first), replacement, deadlines())
+            .await
+    });
+    tokio::time::sleep(Duration::from_millis(10)).await;
+    assert!(!publishing.is_finished());
+    assert!(matches!(
+        first.registry().lease(),
+        Err(RoutingError::Closed)
+    ));
+    drop(existing_lease);
+    publishing.await.unwrap().unwrap();
+}
+
+#[tokio::test]
+async fn non_cooperative_task_times_out_and_scope_stays_non_routable() {
+    let short = LifecycleDeadlines {
+        quiesce: Duration::from_millis(10),
+        effect: Duration::from_millis(10),
+        scope: Duration::from_millis(50),
+    };
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), short);
+    let candidate = host
+        .build_empty_project_candidate(ScopeId::new("project.a").unwrap())
+        .await
+        .unwrap();
+    let slot = ScopeSlot::empty(Arc::clone(&sink));
+    slot.publish(None, candidate.clone(), short).await.unwrap();
+    let task = candidate
+        .tasks()
+        .spawn(async { pending::<()>().await })
+        .unwrap();
+    let report = candidate.quiesce_and_dispose(short).await;
+    assert_eq!(report.outcome, DisposeOutcome::Failed);
+    assert!(report.quiesce_timed_out);
+    assert_eq!(report.remaining_tasks, 1);
+    assert_eq!(candidate.state(), ScopeLifecycleState::Failed);
+    assert!(!candidate.registry().is_routable());
+    task.abort();
+}
+
+#[tokio::test]
+async fn rho_task_admission_closes_the_gap_left_by_raw_task_tracker() {
+    let raw = TaskTracker::new();
+    raw.close();
+    assert_eq!(raw.spawn(async { 7 }).await.unwrap(), 7);
+
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let candidate = host
+        .build_empty_project_candidate(ScopeId::new("project.a").unwrap())
+        .await
+        .unwrap();
+    ScopeSlot::from_active(candidate.clone(), sink).unwrap();
+    candidate.quiesce_and_dispose(deadlines()).await;
+    assert!(matches!(
+        candidate.tasks().spawn(async { 7 }),
+        Err(TaskAdmissionError::Closed)
+    ));
+}
+
+#[tokio::test]
+async fn child_scope_disposes_before_parent_scope() {
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let calls = Arc::new(AtomicUsize::new(0));
+    let parent_plugin = Arc::new(TestPlugin {
+        descriptor: descriptor("plugin.parent", ScopePolicy::project_kind()),
+        effects: vec![PlannedEffect {
+            label: "parent".to_string(),
+            behavior: DisposeBehavior::Success,
+            calls: Arc::clone(&calls),
+        }],
+        marker: None,
+        task: PlannedTask::None,
+        fail: None,
+        log: Arc::clone(&log),
+    });
+    let child_plugin = Arc::new(TestPlugin {
+        descriptor: descriptor("plugin.child", ScopePolicy::workspace_kind()),
+        effects: vec![PlannedEffect {
+            label: "child".to_string(),
+            behavior: DisposeBehavior::Success,
+            calls: Arc::clone(&calls),
+        }],
+        marker: None,
+        task: PlannedTask::None,
+        fail: None,
+        log: Arc::clone(&log),
+    });
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let parent_plugins: Vec<Arc<dyn InternalPlugin>> = vec![parent_plugin];
+    let parent = build_project(
+        &host,
+        "project.a",
+        parent_plugins,
+        Arc::clone(&sink),
+        deadlines(),
+    )
+    .await
+    .unwrap();
+    ScopeSlot::from_active(parent.clone(), Arc::clone(&sink)).unwrap();
+
+    let child_identity = workspace_identity(parent.identity(), "workspace.a", 50);
+    let child_plugins: Vec<Arc<dyn InternalPlugin>> = vec![child_plugin];
+    let child = build_scope_candidate(
+        child_identity,
+        Some(parent.plan()),
+        child_plugins,
+        Arc::new(RejectingBrokerFacade),
+        Arc::clone(&sink),
+        deadlines(),
+    )
+    .await
+    .unwrap();
+    ScopeSlot::from_active(child.clone(), sink).unwrap();
+    parent.attach_child(child).unwrap();
+
+    let report = parent.quiesce_and_dispose(deadlines()).await;
+    assert_eq!(report.outcome, DisposeOutcome::Disposed);
+    assert_eq!(*log.lock().unwrap(), vec!["child", "parent"]);
+}
+
+#[tokio::test]
+async fn child_task_timeout_is_reported_with_exact_remaining_count() {
+    let short = LifecycleDeadlines {
+        quiesce: Duration::from_millis(10),
+        effect: Duration::from_millis(10),
+        scope: Duration::from_millis(100),
+    };
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), short);
+    let parent = host
+        .build_empty_project_candidate(ScopeId::new("project.a").unwrap())
+        .await
+        .unwrap();
+    ScopeSlot::from_active(parent.clone(), Arc::clone(&sink)).unwrap();
+
+    let child_plugin: Arc<dyn InternalPlugin> = Arc::new(TestPlugin {
+        descriptor: descriptor("plugin.child-task", ScopePolicy::workspace_kind()),
+        effects: Vec::new(),
+        marker: None,
+        task: PlannedTask::NonCooperative,
+        fail: None,
+        log: Arc::new(Mutex::new(Vec::new())),
+    });
+    let child = build_scope_candidate(
+        workspace_identity(parent.identity(), "workspace.a", 50),
+        Some(parent.plan()),
+        vec![child_plugin],
+        Arc::new(RejectingBrokerFacade),
+        Arc::clone(&sink),
+        short,
+    )
+    .await
+    .unwrap();
+    ScopeSlot::from_active(child.clone(), sink).unwrap();
+    parent.attach_child(child).unwrap();
+
+    let report = parent.quiesce_and_dispose(short).await;
+    assert_eq!(report.outcome, DisposeOutcome::Failed);
+    assert_eq!(report.child_reports.len(), 1);
+    assert_eq!(report.child_reports[0].remaining_tasks, 1);
+    assert!(report.child_reports[0].quiesce_timed_out);
+}
+
+#[tokio::test]
+async fn stale_expected_old_cannot_overwrite_newer_winner_and_rolls_back_loser() {
+    let (collecting, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let slot = ScopeSlot::empty(Arc::clone(&sink));
+    let first = host
+        .build_empty_project_candidate(ScopeId::new("project.a").unwrap())
+        .await
+        .unwrap();
+    slot.publish(None, first.clone(), deadlines())
+        .await
+        .unwrap();
+    let stale_expected = first.clone();
+
+    let winner = host
+        .build_empty_project_candidate(ScopeId::new("project.b").unwrap())
+        .await
+        .unwrap();
+    slot.publish(Some(first), winner.clone(), deadlines())
+        .await
+        .unwrap();
+
+    let loser = host
+        .build_empty_project_candidate(ScopeId::new("project.c").unwrap())
+        .await
+        .unwrap();
+    let error = slot
+        .publish(Some(stale_expected), loser.clone(), deadlines())
+        .await
+        .unwrap_err();
+    assert_eq!(error.reason, "expected_old_mismatch");
+    assert_eq!(loser.state(), ScopeLifecycleState::Disposed);
+    assert!(Arc::ptr_eq(&slot.current().unwrap(), &winner));
+    assert!(winner.registry().is_routable());
+    assert!(
+        collecting
+            .diagnostics()
+            .iter()
+            .any(|item| item.code == DiagnosticCode::CandidateCasRejected)
+    );
+}
+
+#[tokio::test]
+async fn cas_uses_arc_pointer_identity_not_equal_scope_values() {
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let application = host.scopes().application();
+    let identity = project_identity("project.same", 77);
+    let current = build_scope_candidate(
+        identity.clone(),
+        Some(application.plan()),
+        Vec::new(),
+        Arc::new(RejectingBrokerFacade),
+        Arc::clone(&sink),
+        deadlines(),
+    )
+    .await
+    .unwrap();
+    let equal_but_distinct = build_scope_candidate(
+        identity,
+        Some(application.plan()),
+        Vec::new(),
+        Arc::new(RejectingBrokerFacade),
+        Arc::clone(&sink),
+        deadlines(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(current.identity(), equal_but_distinct.identity());
+    assert!(!Arc::ptr_eq(&current, &equal_but_distinct));
+    let slot = ScopeSlot::from_active(current.clone(), Arc::clone(&sink)).unwrap();
+    let candidate = host
+        .build_empty_project_candidate(ScopeId::new("project.candidate").unwrap())
+        .await
+        .unwrap();
+    let error = slot
+        .publish(
+            Some(equal_but_distinct.clone()),
+            candidate.clone(),
+            deadlines(),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(error.reason, "expected_old_mismatch");
+    assert!(Arc::ptr_eq(&slot.current().unwrap(), &current));
+    assert_eq!(candidate.state(), ScopeLifecycleState::Disposed);
+    equal_but_distinct.quiesce_and_dispose(deadlines()).await;
+}
+
+#[tokio::test]
+async fn project_a_b_a_reuses_scope_id_but_never_generation() {
+    let (_, sink) = diagnostics();
+    let host = host(sink, deadlines());
+    let first_a = host
+        .build_empty_project_candidate(ScopeId::new("project.a").unwrap())
+        .await
+        .unwrap();
+    host.publish_project_candidate(None, first_a.clone())
+        .await
+        .unwrap();
+    let b = host
+        .build_empty_project_candidate(ScopeId::new("project.b").unwrap())
+        .await
+        .unwrap();
+    host.publish_project_candidate(Some(first_a.clone()), b.clone())
+        .await
+        .unwrap();
+    let second_a = host
+        .build_empty_project_candidate(ScopeId::new("project.a").unwrap())
+        .await
+        .unwrap();
+    host.publish_project_candidate(Some(b.clone()), second_a.clone())
+        .await
+        .unwrap();
+
+    assert_eq!(first_a.identity().id, second_a.identity().id);
+    assert_ne!(
+        first_a.identity().generation,
+        second_a.identity().generation
+    );
+    assert_eq!(first_a.state(), ScopeLifecycleState::Disposed);
+    assert_eq!(b.state(), ScopeLifecycleState::Disposed);
+    assert_eq!(second_a.state(), ScopeLifecycleState::Active);
+    assert!(Arc::ptr_eq(&host.scopes().project().unwrap(), &second_a));
+    assert!(
+        host.scopes()
+            .validate_project_current(first_a.identity())
+            .is_err()
+    );
+    host.scopes()
+        .validate_project_current(second_a.identity())
+        .unwrap();
+}
+
+#[tokio::test]
+async fn identical_registry_markers_are_isolated_between_project_candidates() {
+    let marker = capability_id("source.shared");
+    let plugin_for = |id: &str, log: Arc<Mutex<Vec<String>>>| -> Arc<dyn InternalPlugin> {
+        Arc::new(TestPlugin {
+            descriptor: descriptor(id, ScopePolicy::project_kind()),
+            effects: Vec::new(),
+            marker: Some(marker.clone()),
+            task: PlannedTask::None,
+            fail: None,
+            log,
+        })
+    };
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let a = build_project(
+        &host,
+        "project.a",
+        vec![plugin_for(
+            "plugin.marker",
+            Arc::new(Mutex::new(Vec::new())),
+        )],
+        Arc::clone(&sink),
+        deadlines(),
+    )
+    .await
+    .unwrap();
+    let b = build_project(
+        &host,
+        "project.b",
+        vec![plugin_for(
+            "plugin.marker",
+            Arc::new(Mutex::new(Vec::new())),
+        )],
+        Arc::clone(&sink),
+        deadlines(),
+    )
+    .await
+    .unwrap();
+    assert_ne!(
+        a.registry().marker_owner(&marker).unwrap().scope.id,
+        b.registry().marker_owner(&marker).unwrap().scope.id
+    );
+    let slot = ScopeSlot::empty(sink);
+    slot.publish(None, a.clone(), deadlines()).await.unwrap();
+    slot.publish(Some(a), b.clone(), deadlines()).await.unwrap();
+    assert!(b.registry().is_routable());
+}
+
+#[tokio::test]
+async fn duplicate_registry_marker_rejects_activation_and_rolls_back() {
+    let marker = capability_id("source.duplicate");
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let plugin = |id: &str| -> Arc<dyn InternalPlugin> {
+        Arc::new(TestPlugin {
+            descriptor: descriptor(id, ScopePolicy::project_kind()),
+            effects: Vec::new(),
+            marker: Some(marker.clone()),
+            task: PlannedTask::None,
+            fail: None,
+            log: Arc::clone(&log),
+        })
+    };
+    let (_, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), deadlines());
+    let error = build_project(
+        &host,
+        "project.a",
+        vec![plugin("plugin.a"), plugin("plugin.b")],
+        sink,
+        deadlines(),
+    )
+    .await
+    .unwrap_err();
+    match error {
+        CandidateBuildError::Activation {
+            error, rollback, ..
+        } => {
+            assert_eq!(error.code(), "registry_rejected");
+            assert_eq!(rollback.outcome, DisposeOutcome::Disposed);
+        }
+        other => panic!("unexpected error: {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn application_shutdown_cascades_project_before_application() {
+    let (collecting, sink) = diagnostics();
+    let host = host(sink, deadlines());
+    let project = host
+        .build_empty_project_candidate(ScopeId::new("project.a").unwrap())
+        .await
+        .unwrap();
+    host.publish_project_candidate(None, project).await.unwrap();
+    let report = host.shutdown().await;
+    assert_eq!(report.outcome, DisposeOutcome::Disposed);
+    let disposed: Vec<_> = collecting
+        .diagnostics()
+        .into_iter()
+        .filter(|item| item.code == DiagnosticCode::ScopeDisposed)
+        .filter_map(|item| item.scope_id)
+        .collect();
+    assert_eq!(
+        disposed,
+        vec![
+            ScopeId::new("project.a").unwrap(),
+            ScopeId::new("application").unwrap(),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn activation_failure_cancels_tasks_and_reports_noncooperative_leak() {
+    let short = LifecycleDeadlines {
+        quiesce: Duration::from_millis(10),
+        effect: Duration::from_millis(10),
+        scope: Duration::from_millis(50),
+    };
+    let plugin = Arc::new(TestPlugin {
+        descriptor: descriptor("plugin.task-fail", ScopePolicy::project_kind()),
+        effects: Vec::new(),
+        marker: None,
+        task: PlannedTask::NonCooperative,
+        fail: Some(ActivationError::new("injected", "fail after task")),
+        log: Arc::new(Mutex::new(Vec::new())),
+    });
+    let (collecting, sink) = diagnostics();
+    let host = host(Arc::clone(&sink), short);
+    let plugins: Vec<Arc<dyn InternalPlugin>> = vec![plugin];
+    let error = build_project(&host, "project.a", plugins, sink, short)
+        .await
+        .unwrap_err();
+    match error {
+        CandidateBuildError::Activation { rollback, .. } => {
+            assert_eq!(rollback.outcome, DisposeOutcome::Failed);
+            assert!(rollback.quiesce_timed_out);
+        }
+        other => panic!("unexpected error: {other:?}"),
+    }
+    assert!(
+        collecting
+            .diagnostics()
+            .iter()
+            .any(|item| item.code == DiagnosticCode::ActivationRollbackFailed)
+    );
+}
+
+#[test]
+fn helper_project_identity_is_valid_for_phase_one_policy() {
+    let application = ScopeIdentity::new(
+        ScopePolicy::application_kind(),
+        ScopeId::new("application").unwrap(),
+        None,
+        ActivationGeneration::new(1).unwrap(),
+    );
+    ScopePolicy::phase_one()
+        .validate_identity(&project_identity("project.a", 2), Some(&application))
+        .unwrap();
+}

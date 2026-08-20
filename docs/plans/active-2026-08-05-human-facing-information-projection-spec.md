@@ -20,6 +20,13 @@ retains this document's friendly status/error, raw-detail exclusion, and
 credential-redaction rules. The historical WP4 evidence below describes the
 pre-CRED-UX2 layout and is not the current layout acceptance contract.
 
+ART-2, authorized on 2026-08-18 in the active Agent result transport recovery
+specification, may project a redacted bounded Provider failure into existing
+Agent turn and Activity surfaces. This document retains presentation policy:
+show the HTTP class/status and useful next action, while excluding Provider
+URLs, response bodies, credentials, process/transport identifiers, and raw
+payload JSON.
+
 Mandatory stop: implement, test, review, document, and commit each work package
 before starting the next package.
 

@@ -135,8 +135,16 @@ assert.match(rust, /async fn list_agent_conversations\(/);
 assert.match(rust, /async fn create_agent_conversation\(/);
 assert.match(rust, /async fn retry_agent_turn\(/);
 assert.match(rust, /async fn delete_agent_conversation\(/);
-assert.match(rust, /fn list_agent_turns\([\s\S]*conversation_id: Option<String>/);
-assert.match(rust, /list_agent_turns_for_conversation\(&project_root, &conversation_id, limit\)/);
+const listAgentTurnsRust = rust.match(
+  /async fn list_agent_turns\([\s\S]*?\n\}\n\n#\[tauri::command\]/,
+)?.[0];
+assert.ok(listAgentTurnsRust, "list_agent_turns command must remain discoverable");
+assert.match(listAgentTurnsRust, /conversation_id: Option<String>/);
+assert.match(
+  listAgentTurnsRust,
+  /ProjectQueryService::new\(&store\)[\s\S]*\.list_agent_turns\(project_root\.as_ref\(\), conversation_id\.as_deref\(\), limit\)/,
+  "Agent turn listing must route through the shared project-scoped query service",
+);
 assert.match(project, /pub selected_agent_conversation_id: Option<String>/);
 assert.match(project, /const MAX_AGENT_CONVERSATION_ID_BYTES: usize = 256/);
 assert.match(project, /fn selected_agent_conversation_session_is_compatible_and_project_scoped\(\)/);

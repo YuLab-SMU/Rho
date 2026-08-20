@@ -9,7 +9,7 @@ const html = read("desktop", "dist", "index.html");
 const js = read("desktop", "dist", "app.js");
 const rust = read("desktop", "src-tauri", "src", "main.rs");
 const coordinator = read("crates", "rho-server", "src", "coordinator.rs");
-const bridge = read("R", "rho.bridge", "R", "workspace.R");
+const bridge = read("r", "rho.bridge", "R", "workspace.R");
 
 assert.match(html, /id="dataViewerFilter"[^>]*type="search"[^>]*placeholder="Search all rows"/);
 assert.match(html, /id="dataViewerStatus"[^>]*aria-live="polite"/);

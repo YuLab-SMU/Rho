@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: rho-update-site
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   publish-update-site:
@@ -25,6 +25,18 @@ jobs:
         with:
           ref: main
 
+      - name: Refuse normal Pages deployment while an acceptance fixture is active
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: target/current-pages
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate that no acceptance fixture can be overwritten
+        shell: bash
+        run: node scripts/native-updater-acceptance.mjs --mode assert-no-active-fixture --site target/current-pages
+
       - name: Collect validated release records
         uses: actions/github-script@v7
         with:
@@ -32,6 +44,8 @@ jobs:
           script: |
             const crypto = require("crypto");
             const fs = require("fs");
+            const path = require("path");
+            const childProcess = require("child_process");
             const releases = await github.paginate(github.rest.repos.listReleases, {
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -40,6 +54,69 @@ jobs:
             const records = [];
             for (const release of releases.filter((item) => !item.draft)) {
               const version = String(release.tag_name || "").replace(/^v/, "");
+              const targetMarkerAssets = release.assets.filter((asset) => /-native-updater-acceptance-target\.json$/.test(asset.name || ""));
+              if (targetMarkerAssets.length) {
+                const markerName = "rho-0.4.0-dev.41-native-updater-acceptance-target.json";
+                if (
+                  targetMarkerAssets.length !== 1
+                  || version !== "0.4.0-dev.41"
+                  || targetMarkerAssets[0].name !== markerName
+                  || release.assets.some((asset) => asset.name === `rho-${version}-acceptance.json`)
+                ) throw new Error(`Native updater acceptance target marker is invalid for ${release.tag_name}`);
+                const targetEvidenceAsset = release.assets.find((asset) => asset.name === `rho-${version}-candidate-evidence.json`);
+                if (!targetEvidenceAsset || targetEvidenceAsset.size <= 0 || targetEvidenceAsset.size > 256 * 1024) {
+                  throw new Error(`Native updater acceptance target evidence is missing or exceeds its byte budget for ${release.tag_name}`);
+                }
+                const evidenceResponse = await github.request("GET /repos/{owner}/{repo}/releases/assets/{asset_id}", {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  asset_id: targetEvidenceAsset.id,
+                  headers: { accept: "application/octet-stream" },
+                });
+                const evidenceBytes = Buffer.from(evidenceResponse.data);
+                if (evidenceBytes.length !== targetEvidenceAsset.size || JSON.parse(evidenceBytes.toString("utf8")).type !== "rho_candidate_evidence") {
+                  throw new Error(`Native updater acceptance target evidence is malformed for ${release.tag_name}`);
+                }
+                const directory = path.join("target", "native-updater-acceptance-target", version);
+                fs.mkdirSync(directory, { recursive: true });
+                const names = new Set();
+                for (const asset of release.assets) {
+                  if (!asset?.name || path.basename(asset.name) !== asset.name || names.has(asset.name) || !Number.isSafeInteger(asset.size) || asset.size <= 0) {
+                    throw new Error(`Native updater acceptance target asset is unsafe or duplicated: ${asset?.name || "<empty>"}`);
+                  }
+                  names.add(asset.name);
+                  const response = await github.request("GET /repos/{owner}/{repo}/releases/assets/{asset_id}", {
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    asset_id: asset.id,
+                    headers: { accept: "application/octet-stream" },
+                  });
+                  const bytes = Buffer.from(response.data);
+                  if (bytes.length !== asset.size) throw new Error(`Native updater acceptance target asset size mismatch for ${asset.name}`);
+                  fs.writeFileSync(path.join(directory, asset.name), bytes, { flag: "wx" });
+                }
+                const releaseRecord = {
+                  release_id: String(release.id),
+                  tag_name: release.tag_name,
+                  target_commitish: release.target_commitish,
+                  draft: release.draft,
+                  prerelease: release.prerelease,
+                  name: release.name || "",
+                  body: release.body || "",
+                  published_at: release.published_at,
+                  html_url: release.html_url,
+                  assets: release.assets.map((asset) => ({ name: asset.name, size: asset.size })).sort((left, right) => left.name.localeCompare(right.name)),
+                };
+                const releasePath = path.join("target", "native-updater-acceptance-target", `${version}-release.json`);
+                fs.writeFileSync(releasePath, `${JSON.stringify(releaseRecord, null, 2)}\n`, { flag: "wx" });
+                childProcess.execFileSync(process.execPath, [
+                  path.join(process.cwd(), "scripts", "native-updater-acceptance.mjs"),
+                  "--mode", "validate-public-target",
+                  "--release", releasePath,
+                  "--directory", directory,
+                ], { stdio: "inherit" });
+                continue;
+              }
               const evidenceAsset = release.assets.find((asset) => asset.name === `rho-${version}-candidate-evidence.json`)
                 || release.assets.find((asset) => asset.name === "rho-0.2-release.json");
               if (!evidenceAsset) continue;
@@ -54,6 +131,9 @@ jobs:
               if (evidenceBytes.length !== evidenceAsset.size) throw new Error(`Release evidence size mismatch for ${release.tag_name}`);
               const evidenceSha256 = crypto.createHash("sha256").update(evidenceBytes).digest("hex");
               const evidence = JSON.parse(evidenceBytes.toString("utf8"));
+              if (version === "0.4.0-dev.41" && evidence.type === "rho_candidate_evidence") {
+                throw new Error("The public dev.41 native updater acceptance target is missing its required exclusion marker.");
+              }
               let platformEvidence;
               let acceptanceEvidence;
               let nativeUpdaterEvidence;
@@ -74,7 +154,7 @@ jobs:
                 if (acceptanceBytes.length !== acceptanceAsset.size) throw new Error(`Candidate acceptance size mismatch for ${release.tag_name}`);
                 acceptanceEvidence = JSON.parse(acceptanceBytes.toString("utf8"));
                 platformEvidence = {};
-                for (const platform of ["windows_x86_64", "macos_aarch64"]) {
+                for (const platform of Object.keys(evidence.platforms || {})) {
                   const expected = evidence.platforms?.[platform]?.evidence;
                   const asset = release.assets.find((item) => item.name === expected?.name);
                   if (!expected || !asset || asset.size !== expected.size_bytes || asset.size <= 0 || asset.size > 256 * 1024) {
@@ -97,6 +177,7 @@ jobs:
                 const nativeSignatureNames = {
                   windows_x86_64: `Rho_${version}_x64-setup.exe.sig`,
                   macos_aarch64: `Rho_${version}_aarch64.app.tar.gz.sig`,
+                  ...(evidence.platforms?.linux_x86_64 ? { linux_x86_64: `Rho_${version}_x86_64.AppImage.sig` } : {}),
                 };
                 const nativeEvidenceAssetCandidate = release.assets.find((asset) => asset.name === nativeEvidenceName);
                 const anyNativeAsset = release.assets.some((asset) => asset.name === nativeEvidenceName || Object.values(nativeSignatureNames).includes(asset.name));
@@ -178,10 +259,18 @@ jobs:
           result="$(node scripts/generate-update-site.mjs --input target/releases-for-pages.json --output target/pages)"
           development_version="$(node -e 'const value=JSON.parse(process.argv[1]); if(!value.development) process.exit(1); process.stdout.write(value.development)' "$result")"
           native_development_version="$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.native_development || "")' "$result")"
-          development_has_macos="$(node -e 'const fs=require("fs"); const value=JSON.parse(fs.readFileSync("target/pages/updates/development.json", "utf8")); process.stdout.write(String(Boolean(value.artifacts.macos_aarch64)))')"
+          stable_version="$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.stable || "")' "$result")"
+          native_stable_version="$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.native_stable || "")' "$result")"
+          file_hash() { sha256sum "$1" | awk '{print $1}'; }
           echo "development_version=$development_version" >> "$GITHUB_OUTPUT"
           echo "native_development_version=$native_development_version" >> "$GITHUB_OUTPUT"
-          echo "development_has_macos=$development_has_macos" >> "$GITHUB_OUTPUT"
+          echo "stable_version=$stable_version" >> "$GITHUB_OUTPUT"
+          echo "native_stable_version=$native_stable_version" >> "$GITHUB_OUTPUT"
+          echo "index_sha256=$(file_hash target/pages/index.html)" >> "$GITHUB_OUTPUT"
+          echo "development_sha256=$(file_hash target/pages/updates/development.json)" >> "$GITHUB_OUTPUT"
+          echo "native_development_sha256=$(file_hash target/pages/updates/tauri/development.json)" >> "$GITHUB_OUTPUT"
+          if [[ -n "$stable_version" ]]; then echo "stable_sha256=$(file_hash target/pages/updates/stable.json)" >> "$GITHUB_OUTPUT"; fi
+          if [[ -n "$native_stable_version" ]]; then echo "native_stable_sha256=$(file_hash target/pages/updates/tauri/stable.json)" >> "$GITHUB_OUTPUT"; fi
 
       - name: Publish to gh-pages
         uses: peaceiris/actions-gh-pages@v4
@@ -195,13 +284,14 @@ jobs:
         shell: bash
         env:
           EXPECTED_DEVELOPMENT_VERSION: ${{ steps.update_site.outputs.development_version }}
-          EXPECTED_MACOS: ${{ steps.update_site.outputs.development_has_macos }}
+          EXPECTED_SHA256: ${{ steps.update_site.outputs.development_sha256 }}
         run: |
           set -euo pipefail
           development_url="https://yulab-smu.top/Rho/updates/development.json"
           for attempt in {1..12}; do
             if curl --fail --silent --show-error "$development_url?attempt=$attempt" -o development.json; then
-              if node -e 'const fs=require("fs"); const value=JSON.parse(fs.readFileSync("development.json","utf8")); const artifacts=value.artifacts||{}; const keys=Object.keys(artifacts); const validKeys=keys.every((key)=>["windows_x86_64","macos_aarch64"].includes(key)); const validArtifacts=keys.length>0 && keys.every((key)=>/^[0-9a-f]{64}$/.test(artifacts[key].sha256) && Number.isSafeInteger(artifacts[key].size) && artifacts[key].size>0); const macosExpected=process.env.EXPECTED_MACOS==="true"; if(value.schema_version!==1 || value.channel!=="development" || value.version!==process.env.EXPECTED_DEVELOPMENT_VERSION || !artifacts.windows_x86_64 || Boolean(artifacts.macos_aarch64)!==macosExpected || !validKeys || !validArtifacts) process.exit(1)'; then
+              actual_sha256="$(sha256sum development.json | awk '{print $1}')"
+              if [[ "$actual_sha256" == "$EXPECTED_SHA256" ]] && node -e 'const fs=require("fs"); const value=JSON.parse(fs.readFileSync("development.json","utf8")); if(value.schema_version!==1 || value.channel!=="development" || value.version!==process.env.EXPECTED_DEVELOPMENT_VERSION) process.exit(1)'; then
                 exit 0
               fi
             fi
@@ -215,16 +305,62 @@ jobs:
         shell: bash
         env:
           EXPECTED_NATIVE_DEVELOPMENT_VERSION: ${{ steps.update_site.outputs.native_development_version }}
+          EXPECTED_SHA256: ${{ steps.update_site.outputs.native_development_sha256 }}
         run: |
           set -euo pipefail
           native_url="https://yulab-smu.top/Rho/updates/tauri/development.json"
           for attempt in {1..12}; do
             if curl --fail --silent --show-error "$native_url?attempt=$attempt" -o native-development.json; then
-              if node -e 'const fs=require("fs"); const value=JSON.parse(fs.readFileSync("native-development.json","utf8")); const keys=Object.keys(value.platforms||{}).sort(); const valid=JSON.stringify(keys)===JSON.stringify(["darwin-aarch64","windows-x86_64"]) && keys.every((key)=>typeof value.platforms[key].url==="string" && typeof value.platforms[key].signature==="string" && value.platforms[key].signature.length>0); if(value.version!==process.env.EXPECTED_NATIVE_DEVELOPMENT_VERSION || !valid) process.exit(1)'; then
+              actual_sha256="$(sha256sum native-development.json | awk '{print $1}')"
+              if [[ "$actual_sha256" == "$EXPECTED_SHA256" ]] && node -e 'const fs=require("fs"); const value=JSON.parse(fs.readFileSync("native-development.json","utf8")); if(value.version!==process.env.EXPECTED_NATIVE_DEVELOPMENT_VERSION || Object.keys(value.platforms||{}).length===0) process.exit(1)'; then
                 exit 0
               fi
             fi
             sleep 10
           done
           echo "The deployed native development manifest did not reach $EXPECTED_NATIVE_DEVELOPMENT_VERSION." >&2
+          exit 1
+
+      - name: Verify deployed stable manifests
+        if: ${{ steps.update_site.outputs.stable_version != '' }}
+        shell: bash
+        env:
+          EXPECTED_STABLE_VERSION: ${{ steps.update_site.outputs.stable_version }}
+          EXPECTED_STABLE_SHA256: ${{ steps.update_site.outputs.stable_sha256 }}
+          EXPECTED_NATIVE_STABLE_VERSION: ${{ steps.update_site.outputs.native_stable_version }}
+          EXPECTED_NATIVE_STABLE_SHA256: ${{ steps.update_site.outputs.native_stable_sha256 }}
+        run: |
+          set -euo pipefail
+          verify_exact() {
+            local url="$1" output="$2" expected_sha="$3"
+            for attempt in {1..12}; do
+              if curl --fail --silent --show-error "$url?attempt=$attempt" -o "$output"; then
+                actual_sha="$(sha256sum "$output" | awk '{print $1}')"
+                if [[ "$actual_sha" == "$expected_sha" ]]; then return 0; fi
+              fi
+              sleep 10
+            done
+            return 1
+          }
+          verify_exact "https://yulab-smu.top/Rho/updates/stable.json" stable.json "$EXPECTED_STABLE_SHA256"
+          node -e 'const fs=require("fs"); const value=JSON.parse(fs.readFileSync("stable.json","utf8")); if(value.schema_version!==1 || value.channel!=="stable" || value.version!==process.env.EXPECTED_STABLE_VERSION || JSON.stringify(Object.keys(value.artifacts||{}).sort())!==JSON.stringify(["linux_x86_64","macos_aarch64","windows_x86_64"])) process.exit(1)'
+          if [[ -n "$EXPECTED_NATIVE_STABLE_VERSION" ]]; then
+            verify_exact "https://yulab-smu.top/Rho/updates/tauri/stable.json" native-stable.json "$EXPECTED_NATIVE_STABLE_SHA256"
+            node -e 'const fs=require("fs"); const value=JSON.parse(fs.readFileSync("native-stable.json","utf8")); if(value.version!==process.env.EXPECTED_NATIVE_STABLE_VERSION || JSON.stringify(Object.keys(value.platforms||{}).sort())!==JSON.stringify(["darwin-aarch64","linux-x86_64","windows-x86_64"])) process.exit(1)'
+          fi
+
+      - name: Verify deployed download page
+        shell: bash
+        env:
+          EXPECTED_INDEX_SHA256: ${{ steps.update_site.outputs.index_sha256 }}
+        run: |
+          set -euo pipefail
+          for attempt in {1..12}; do
+            if curl --fail --silent --show-error "https://yulab-smu.top/Rho/?attempt=$attempt" -o index.html; then
+              actual_sha256="$(sha256sum index.html | awk '{print $1}')"
+              if [[ "$actual_sha256" == "$EXPECTED_INDEX_SHA256" ]]; then exit 0; fi
+            fi
+            sleep 10
+          done
+          echo "The deployed download page did not reach the exact generated bytes." >&2
           exit 1

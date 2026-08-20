@@ -7,6 +7,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const html = fs.readFileSync(path.join(root, "desktop", "dist", "index.html"), "utf8");
 const js = fs.readFileSync(path.join(root, "desktop", "dist", "app.js"), "utf8");
 const rust = fs.readFileSync(path.join(root, "desktop", "src-tauri", "src", "main.rs"), "utf8");
+const backend = fs.readFileSync(path.join(root, "desktop", "src-tauri", "src", "agent_llm.rs"), "utf8");
+const cargo = fs.readFileSync(path.join(root, "desktop", "src-tauri", "Cargo.toml"), "utf8");
 
 assert.match(
   html,
@@ -60,12 +62,40 @@ for (const id of ["agentLlmProviderList", "agentLlmModelList"]) {
 
 for (const status of [
   "Stored securely",
+  "Checked when used",
   "Not set",
   "Not required",
   "Credential storage unavailable",
 ]) assert.ok(js.includes(status), `Missing friendly credential state: ${status}`);
 assert.doesNotMatch(html, /Open user environment file|Reload credentials|Copy API key template/);
 assert.doesNotMatch(js, /agent_llm_open_user_environ|credential_source = "environment"/);
+
+const settingsProjection = backend.slice(
+  backend.indexOf("pub fn settings_view("),
+  backend.indexOf("pub fn refresh_credentials_view"),
+);
+assert.doesNotMatch(settingsProjection, /credential_store\.get|\.get_password\(|&SystemCredentialStore/,
+  "Settings projection and ordinary startup must not read Provider secrets");
+assert.match(settingsProjection, /current_system_credential_observations\(\)/);
+assert.match(backend, /enum CredentialObservation[\s\S]*Detected[\s\S]*NotDetected[\s\S]*Unavailable/);
+assert.match(backend, /"unchecked"\.to_string\(\)/);
+assert.match(cargo, /zeroize\.workspace = true/);
+assert.match(backend, /struct SessionCredentialCache[\s\S]*Zeroizing<String>/);
+assert.match(backend, /fn get_or_load<[\s\S]*if let Some\(cached\) = entries\.get\(provider_id\)/);
+assert.match(backend, /fn clear_session_credentials\(\)[\s\S]*clear_system_credential_session\(\)/);
+assert.match(rust, /agent_llm::clear_session_credentials\(\)/,
+  "Graceful desktop shutdown must zeroize the Provider session cache");
+assert.doesNotMatch(backend, /derive\([^)]*Serialize[^)]*\)[\s\S]{0,120}SessionCredentialCache/,
+  "The secret session cache must not be serializable");
+assert.match(js, /\["detected", "not_required", "unchecked"\]\.includes\(route\.credential_status\)/,
+  "An unchecked Keychain item must be admitted to the selected-Provider backend check");
+assert.match(js, /provider\.api_key_required && provider\.credential_status === "not_detected"/,
+  "Only a known-missing key may make Provider readiness request setup");
+assert.match(js, /\["not_detected", "unavailable"\]\.includes\(provider\.credential_status\)/,
+  "Unchecked credentials must not disable the explicit selected-Provider test");
+assert.match(js, /modelSettingsPreviewState === "credential-unchecked"/);
+assert.match(js, /provider\?\.credential_status === "unchecked"[\s\S]*"Check and remove key"/,
+  "Unknown credential presence must not be described as a known stored key");
 
 assert.match(js, /command === "agent_llm_set_credential"/);
 assert.match(js, /command === "agent_llm_delete_credential"/);

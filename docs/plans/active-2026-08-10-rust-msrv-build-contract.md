@@ -3,15 +3,17 @@
 Status: active integrated build contract; Issue #28 authorized `MSRV-1` on
 2026-08-10; source implementation, exact local validation, final hosted
 four-leg PR acceptance, upstream integration, and exact-merge main validation
-complete; Issue #28 closed
+complete; Issue #28 closed; CI-FAST1 Draft-feedback amendment authorized
+2026-08-18
 
 Date: 2026-08-10
 Issue: https://github.com/YuLab-SMU/Rho/issues/28
 Change class: D3 shared build and toolchain policy
 Risk: R3 cross-platform build and release-validation foundation
 Authorized work package: `MSRV-1`
-Next mandatory stop: enforce the Rust 1.88 floor and dual-toolchain matrix
-continuously; any dependency, target, runner, packaging, or MSRV change requires
+Next mandatory stop: enforce the Rust 1.88 floor continuously through fast
+Draft feedback and the full dual-toolchain matrix at non-Draft integration
+boundaries; any dependency, target, runner, packaging, or MSRV change requires
 a separately reviewed contract
 
 ## Problem And Reproduction
@@ -39,8 +41,8 @@ explicitly selecting rustc 1.88.0 on macOS arm64 passed both:
 - `cargo test --workspace --locked --no-fail-fast` with 361 passed, zero
   failed, and one opt-in Keychain test ignored.
 
-Windows GNU Rust 1.88 remains unaccepted until the hosted native matrix leg
-passes.
+Windows GNU Rust 1.88 was accepted by the hosted native matrix and was
+reconfirmed with Linux added at the P1-4 six-leg integration boundary.
 
 ## Goals
 
@@ -48,8 +50,9 @@ passes.
 - Make every Rho workspace package inherit and publish that contract.
 - Make dependency resolution prefer versions compatible with the declared
   floor.
-- Continuously exercise current stable and the exact 1.88.0 compiler on the two
-  supported native Rust targets.
+- Exercise current stable and the exact 1.88.0 compiler on all supported native
+  Rust targets at integration boundaries, with one current-stable Linux signal
+  during Draft iteration.
 - Prevent the repository toolchain override from silently invalidating a CI
   matrix leg.
 - Keep the committed lockfile authoritative during compatibility and candidate
@@ -115,9 +118,12 @@ root declaration without member inheritance is a failure.
 
 ## CI Contract
 
-The dedicated compatibility workflow runs for pull requests targeting `main`
-and pushes to `main`. It has read-only repository permission, no credentials,
-no release environment, and no write authority.
+The dedicated compatibility workflow runs its matrix for affected pushes to
+`main` and affected non-Draft pull requests targeting `main`. A Draft PR event
+may instantiate a skipped job but must not consume matrix runners. The separate
+`Rust Fast` workflow supplies affected Draft PR feedback. Both workflows have
+read-only repository permission, no credentials, no release environment, and
+no write authority.
 
 Its required matrix contains exactly these compatibility identities:
 
@@ -127,6 +133,8 @@ Its required matrix contains exactly these compatibility identities:
 | `macos-26` | `1.88.0` | `1.88.0-aarch64-apple-darwin` |
 | `windows-latest` | `stable` | `stable-x86_64-pc-windows-gnu` |
 | `windows-latest` | `1.88.0` | `1.88.0-x86_64-pc-windows-gnu` |
+| `ubuntu-22.04` | `stable` | `stable-x86_64-unknown-linux-gnu` |
+| `ubuntu-22.04` | `1.88.0` | `1.88.0-x86_64-unknown-linux-gnu` |
 
 Every leg must:
 
@@ -150,10 +158,39 @@ that cannot affect Rust source, manifests, lock state, the toolchain contract,
 or the workflow itself. It must run when any workspace manifest, `Cargo.lock`,
 `rust-toolchain.toml`, Rust source tree, or its own contract test changes.
 
+### CI-FAST1 Draft feedback amendment
+
+The user authorized CI-FAST1 on 2026-08-18 after PR #75 demonstrated that six
+cold native jobs on every long-lived Draft push delayed early construction.
+`docs/plans/implemented-2026-08-18-rust-fast-development-ci-spec.md` owns the bounded
+implementation and acceptance details.
+
+The durable policy is:
+
+- affected Draft PRs run one Ubuntu stable fast job with formatting, contract
+  checks, locked all-target workspace check, and locked workspace tests;
+- affected non-Draft PRs and `main` pushes run the complete six-leg matrix;
+- the compatibility workflow remains triggered for PR lifecycle events but its
+  matrix job admits only `pull_request.draft == false`;
+- a `ready_for_review` event triggers the full integration boundary;
+- Cargo cache entries are isolated by cache schema, OS, explicit toolchain, and
+  lockfile hash and never count as evidence; and
+- candidate workflows retain their independent locked native validation.
+
+For the long-lived Draft PR #75, P1-0 through P1-3 consume fast feedback only.
+P1-4 completes the whole Phase 1 implementation before the PR becomes Ready
+and the exact-head six-leg matrix becomes mandatory. This is a timing change,
+not removal of native/MSRV acceptance.
+
+CI-FAST1 implementation, deterministic local verification, exact-head Draft
+feedback, Ready skip, and deferred six-leg evidence completed on 2026-08-18.
+The exact results remain owned by its implemented specification and are not
+inferred from local YAML or contract checks.
+
 ## Candidate Validation Contract
 
-The existing Windows and macOS candidate source-validation steps must execute
-workspace Rust tests with `--locked`. The macOS setup step must also export its
+The existing Windows, macOS, and Linux candidate source-validation steps must
+execute workspace Rust tests with `--locked`. The macOS setup step must also export its
 installed stable toolchain through `RUSTUP_TOOLCHAIN`; changing the rustup
 default is insufficient because the repository file has higher priority. These
 changes tighten dependency and toolchain determinism but do not duplicate the
@@ -209,8 +246,10 @@ cargo +1.97.0-aarch64-apple-darwin test --workspace --locked --no-fail-fast
 git diff --check
 ```
 
-Hosted acceptance additionally requires all four matrix identities on the PR
-commit. Local macOS evidence does not substitute for hosted Windows GNU
+During Draft development, hosted acceptance requires exact-head Rust Fast plus
+the owning package's local evidence. Native compatibility acceptance requires
+all six matrix identities on the exact non-Draft PR commit or `main` commit;
+local macOS evidence does not substitute for hosted Windows GNU or Linux
 evidence.
 
 ## Implementation And Local Evidence
@@ -348,3 +387,6 @@ is merged.
   or unrelated-worktree expansion.
 - Documentation records exact evidence and remaining integration state without
   claiming candidate or release readiness.
+- CI-FAST1 preserves those integrated historical facts while requiring fast
+  exact-head Draft feedback and deferring the unchanged six-leg matrix to a
+  non-Draft integration boundary.

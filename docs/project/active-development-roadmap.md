@@ -2,11 +2,11 @@
 
 Status: active
 
-Date: 2026-08-09
-Current source baseline: `0.4.0-dev.40`
-Active published identity: `0.4.0-dev.24` (authoritative candidate,
-owner-installed acceptance, MAC5 GO, protected public prerelease, and live
-development update manifest pass)
+Date: 2026-08-17
+Current source baseline: stable `0.4.0`
+Active published identity: stable `0.4.0` (protected exact three-platform
+candidate, passed acceptance, public non-prerelease Release, and live signed
+stable/development update manifests)
 Implemented successor correction: Issue #9 `TASK-RAIL-SEMANTICS-1` separates
 mode shape, status color, and risk ownership. It advances the user-visible
 source identity rather than relabelling the historical `dev.23` source.
@@ -152,6 +152,67 @@ update run `31734975029` passed. Release `370143482` is public with eight exact
 assets and a visible conditional warning. The two human observations remain
 `NOT RUN`; this is not ordinary MAC5, stable, production-ready, or public
 Windows-trust acceptance.
+
+UPDATER-1 then advanced the source through native-updater candidate
+`0.4.0-dev.40` and the bounded public acceptance-only target
+`0.4.0-dev.41`. PR #80 integrated the transport, run `31989055536` published
+the exact marker-bound twelve-asset dev.41 target without normal Update Site
+projection, signature-rejection window `31990624696` passed on Windows x86-64
+and macOS arm64, and valid window `31991536953` passed both deterministic
+post-shutdown recovery paths and both explicit install/restart paths. Each
+window cleaned the temporary native endpoint back to verified `404`, and About
+reported dev.41 on both platforms. Installed Windows inspection then found
+`rho-desktop.exe` was `NotSigned`: the Free Trial signature covered only the
+outer NSIS installer. Dev.40 is therefore an immutable unpublished NO-GO and
+dev.41 remains only the acceptance target.
+
+SP-FT2-DEV42 is the active D4/R4 successor. The owner chose continued SignPath
+Free Trial use and created the strict `github-actions-rho-desktop-binary`
+configuration. Fresh `0.4.0-dev.42` must build without bundling, sign the
+binary, bundle without changing it, sign the installer, prove the installed
+payload carries the same self-signed certificate, and only then repeat
+candidate/native-update acceptance. Free Trial `UnknownError`/untrusted and
+SmartScreen limitations remain explicit; Foundation/public trust is not
+claimed. Source implementation and local affected validation pass, and the
+binary-configuration secret is registered; protected hosted validation and
+integration are the current checkpoint. No dev.42 artifact or permanent
+native endpoint exists.
+
+Initial dev.42 candidate run `31999076405` passed macOS and both Windows
+SignPath requests but rejected the installed executable hash. Exact pinned
+Tauri source review showed NSIS bundling temporarily patches the binary's
+bundle-type token after the pre-bundle Authenticode signature and restores the
+source file afterward, hiding the embedded mutation from the source hash
+check. No tag, Draft, Release, or Windows platform evidence was created, so all
+run evidence is non-composable and dev.42 remains unused. The current repair
+checkpoint deterministically patches the one unknown token to NSIS before
+binary signing; its local matrix passes, and protected integration plus a new
+exact-main run remain pending.
+
+Repair run `32002355917` stopped before SignPath because Windows optimization
+retained an unrelated NSIS enum literal. The patch contract now mirrors
+Tauri's actual invariant: exactly one unknown placeholder is replaced and the
+NSIS-token count must increase by one. All repair-run artifacts are
+non-composable and dev.42 remains unused.
+
+AUTO3-DEV43 advanced the source to fresh `0.4.0-dev.43`. The owner removed
+manual observation as a release prerequisite and authorized readiness-bound
+automatic updates plus Release-page downloads for Windows x64, macOS arm64,
+and Linux x86-64. PRs #86-#89, exact-main run `32016789844`, candidate run
+`32016818404`, publish run `32018692323`, and Pages run `32018756430` passed;
+the immutable three-platform prerelease is public.
+
+STABLE-040 is the authorized bounded promotion to `0.4.0`. It changes release
+identity/channel metadata only, rebuilds rather than reuses dev.43 artifacts,
+requires exact protected source and three-platform candidate evidence, and
+publishes both stable and development updater manifests only after the
+owner-authorized exact gates pass. Windows Free Trial self-signed trust remains
+explicitly untrusted and is not relabelled as Foundation acceptance.
+
+STABLE-040 completed on 2026-08-18. Release `372041662` targets exact source
+`fca8e307`; candidate/publish passed, PR #91 repaired the legacy Pages fixture
+guard, and run `32090281523` deployed exact stable/development download and
+Tauri manifests for all three platforms. Independent live verification passed.
 
 Issue #28's Rust 1.88/Resolver 3 build contract integrated through PR #29 at
 `9e0b36b`. Exact PR-head run `31509554882` and exact-merge main run

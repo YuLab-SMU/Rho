@@ -16,13 +16,13 @@ on:
         required: true
         default: main
       release_tag:
-        description: Single-use prerelease tag
+        description: Single-use release tag
         required: true
-        default: v0.4.0-dev.40
+        default: v0.4.0
       release_name:
         description: Draft release title
         required: true
-        default: Rho 0.4.0-dev.40
+        default: Rho 0.4.0
 
 permissions:
   contents: read
@@ -68,10 +68,15 @@ jobs:
             exit 1
           fi
           version="$(node -e 'const fs=require("fs"); const value=fs.readFileSync("Cargo.toml", "utf8").match(/^version = "([^"]+)"/m); if(!value) process.exit(1); process.stdout.write(value[1])')"
-          test "$INPUT_RELEASE_NAME" = "Rho $version"
+          expected_release_name="Rho $version"
+          if [[ "$version" == "0.4.0-dev.41" ]]; then
+            expected_release_name="Rho 0.4.0-dev.41 Native Updater Acceptance Target"
+          fi
+          test "$INPUT_RELEASE_NAME" = "$expected_release_name"
           node scripts/candidate-release.mjs --mode identity --version "$version" --tag "$INPUT_RELEASE_TAG" --commit "$commit"
           node scripts/candidate-release.mjs --test true
           node scripts/release-notes.mjs --test true
+          node scripts/native-updater-acceptance.mjs --test true
           if [[ "$BUILD_MODE" == "candidate" ]]; then
             node scripts/release-notes.mjs --mode validate --version "$version" --tag "$INPUT_RELEASE_TAG"
           fi
@@ -161,7 +166,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "Failed deterministic test: $($_.Name)" }
           }
 
-      - name: Build and smoke-test Windows installer
+      - name: Build and smoke-test unsigned Windows executable
         shell: pwsh
         env:
           CANDIDATE_MODE: ${{ needs.identity.outputs.build_mode }}
@@ -173,6 +178,7 @@ jobs:
             if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY) -or [string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD)) {
               throw "Candidate native updater signing secrets are required."
             }
+            ./scripts/build-windows-installer.ps1 -BuildMode NoBundle
           } else {
             $ephemeralKey = Join-Path $env:RUNNER_TEMP "rho-rehearsal-tauri-updater.key"
             & npx -y "@tauri-apps/cli@2.11.4" signer generate --ci --write-keys "$ephemeralKey"
@@ -181,26 +187,47 @@ jobs:
             }
             $env:TAURI_SIGNING_PRIVATE_KEY = Get-Content -LiteralPath $ephemeralKey -Raw
             $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""
+            ./scripts/build-windows-installer.ps1 -BuildMode Full
           }
-          ./scripts/build-windows-installer.ps1
           $binary = Join-Path $PWD "target\release\rho-desktop.exe"
           & $binary --smoke-test
           if ($LASTEXITCODE -ne 0) { throw "Windows Workspace smoke failed." }
-          $expected = "Rho_$($env:CANDIDATE_VERSION)_x64-setup.exe"
-          $installer = Get-ChildItem -LiteralPath "target\release\bundle\nsis" -Filter "*-setup.exe"
-          if ($installer.Count -ne 1 -or $installer[0].Name -ne $expected) { throw "Expected exactly $expected." }
-          $bundlerSignature = Join-Path $installer[0].DirectoryName "$expected.sig"
-          if (-not (Test-Path -LiteralPath $bundlerSignature -PathType Leaf)) {
-            throw "Tauri did not create the required updater artifact signature."
+          $binarySignature = Get-AuthenticodeSignature -LiteralPath $binary
+          if ([string]$binarySignature.Status -ne "NotSigned" -or $null -ne $binarySignature.SignerCertificate) {
+            throw "Initial Windows executable must be unsigned."
           }
-          New-Item -ItemType Directory -Path "target\candidate" -Force | Out-Null
-          Copy-Item -LiteralPath $installer[0].FullName -Destination (Join-Path "target\candidate" $expected)
+          if ($env:CANDIDATE_MODE -eq "rehearsal") {
+            $expected = "Rho_$($env:CANDIDATE_VERSION)_x64-setup.exe"
+            $installer = @(Get-ChildItem -LiteralPath "target\release\bundle\nsis" -Filter "*-setup.exe" -File)
+            if ($installer.Count -ne 1 -or $installer[0].Name -ne $expected) { throw "Expected exactly $expected." }
+            $bundlerSignature = Join-Path $installer[0].DirectoryName "$expected.sig"
+            if (-not (Test-Path -LiteralPath $bundlerSignature -PathType Leaf)) {
+              throw "Tauri did not create the required updater artifact signature."
+            }
+            New-Item -ItemType Directory -Path "target\candidate" -Force | Out-Null
+            Copy-Item -LiteralPath $installer[0].FullName -Destination (Join-Path "target\candidate" $expected)
+          }
+
+      - name: Patch unsigned Windows executable for exact NSIS bundle type
+        if: ${{ needs.identity.outputs.build_mode == 'candidate' }}
+        shell: pwsh
+        run: |
+          $binary = Join-Path $PWD "target\release\rho-desktop.exe"
+          & node scripts/tauri-bundle-type.mjs --mode patch --file $binary
+          if ($LASTEXITCODE -ne 0) { throw "Exact Tauri NSIS bundle-type patch failed." }
+          & $binary --smoke-test
+          if ($LASTEXITCODE -ne 0) { throw "NSIS-patched Windows Workspace smoke failed." }
+          $signature = Get-AuthenticodeSignature -LiteralPath $binary
+          if ([string]$signature.Status -ne "NotSigned" -or $null -ne $signature.SignerCertificate) {
+            throw "NSIS-patched Windows executable must remain unsigned before SignPath."
+          }
 
       - name: Load protected SignPath deployment configuration
         if: ${{ needs.identity.outputs.build_mode == 'candidate' }}
         shell: pwsh
         env:
           SIGNPATH_DEPLOYMENT_CONFIG: ${{ secrets.SIGNPATH_DEPLOYMENT_CONFIG }}
+          SIGNPATH_BINARY_ARTIFACT_CONFIGURATION_SLUG: ${{ secrets.SIGNPATH_BINARY_ARTIFACT_CONFIGURATION_SLUG }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:SIGNPATH_DEPLOYMENT_CONFIG)) {
             throw "Required protected SignPath deployment configuration is missing."
@@ -247,40 +274,50 @@ jobs:
             throw "SIGNPATH_CERTIFICATE_THUMBPRINT must be a 40-digit SHA-1 certificate thumbprint."
           }
           $validated.SIGNPATH_CERTIFICATE_THUMBPRINT = $thumbprint
+          $binaryConfigurationSlug = [string]$env:SIGNPATH_BINARY_ARTIFACT_CONFIGURATION_SLUG
+          if ([string]::IsNullOrWhiteSpace($binaryConfigurationSlug) -or $binaryConfigurationSlug -match "[\r\n]") {
+            throw "SIGNPATH_BINARY_ARTIFACT_CONFIGURATION_SLUG contains a blank or multiline value."
+          }
+          if ($binaryConfigurationSlug -notmatch '^[A-Za-z0-9._-]+$') {
+            throw "SIGNPATH_BINARY_ARTIFACT_CONFIGURATION_SLUG contains an invalid slug."
+          }
+          if ($binaryConfigurationSlug -eq $validated.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG) {
+            throw "SIGNPATH_BINARY_ARTIFACT_CONFIGURATION_SLUG must differ from the installer artifact configuration slug."
+          }
           foreach ($name in $required) {
             $value = $validated[$name]
             Write-Output "::add-mask::$value"
             Add-Content -LiteralPath $env:GITHUB_ENV -Value "$name=$value" -Encoding utf8
           }
+          Write-Output "::add-mask::$binaryConfigurationSlug"
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "SIGNPATH_BINARY_ARTIFACT_CONFIGURATION_SLUG=$binaryConfigurationSlug" -Encoding utf8
 
-      - name: Verify and isolate exact unsigned candidate
+      - name: Verify and isolate exact unsigned Windows executable
         if: ${{ needs.identity.outputs.build_mode == 'candidate' }}
         shell: pwsh
-        env:
-          CANDIDATE_VERSION: ${{ needs.identity.outputs.version }}
         run: |
-          $expected = "Rho_$($env:CANDIDATE_VERSION)_x64-setup.exe"
-          $candidate = Join-Path $PWD "target\candidate\$expected"
-          if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) {
-            throw "Expected unsigned candidate is missing."
+          $expected = "rho-desktop.exe"
+          $binary = Join-Path $PWD "target\release\$expected"
+          if (-not (Test-Path -LiteralPath $binary -PathType Leaf)) {
+            throw "Expected unsigned Windows executable is missing."
           }
-          $signature = Get-AuthenticodeSignature -LiteralPath $candidate
+          $signature = Get-AuthenticodeSignature -LiteralPath $binary
           if ([string]$signature.Status -ne "NotSigned" -or $null -ne $signature.SignerCertificate) {
-            throw "Candidate signing input must be exactly unsigned."
+            throw "Windows executable signing input must be exactly unsigned."
           }
-          $unsignedHash = (Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash.ToLowerInvariant()
-          Add-Content -LiteralPath $env:GITHUB_ENV -Value "RHO_UNSIGNED_INSTALLER_SHA256=$unsignedHash" -Encoding utf8
-          New-Item -ItemType Directory -Path "target\signpath-input" -Force | Out-Null
-          $isolatedInstaller = Join-Path $PWD "target\signpath-input\$expected"
-          Copy-Item -LiteralPath $candidate -Destination $isolatedInstaller
-          $inputArchive = Join-Path $PWD "target\signpath-input\rho-signpath-candidate-input.zip"
-          Compress-Archive -LiteralPath $isolatedInstaller -DestinationPath $inputArchive
+          $unsignedHash = (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant()
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "RHO_UNSIGNED_BINARY_SHA256=$unsignedHash" -Encoding utf8
+          New-Item -ItemType Directory -Path "target\signpath-binary-input" -Force | Out-Null
+          $isolatedBinary = Join-Path $PWD "target\signpath-binary-input\$expected"
+          Copy-Item -LiteralPath $binary -Destination $isolatedBinary
+          $inputArchive = Join-Path $PWD "target\signpath-binary-input\rho-signpath-binary-input.zip"
+          Compress-Archive -LiteralPath $isolatedBinary -DestinationPath $inputArchive
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $archive = [System.IO.Compression.ZipFile]::OpenRead($inputArchive)
           try {
             $entries = @($archive.Entries | Where-Object { -not [string]::IsNullOrEmpty($_.Name) })
             if ($entries.Count -ne 1 -or $entries[0].FullName -ne $expected) {
-              throw "The SignPath input ZIP must contain exactly the candidate installer at its root."
+              throw "The SignPath binary input ZIP must contain exactly rho-desktop.exe at its root."
             }
           } finally {
             $archive.Dispose()
@@ -308,9 +345,9 @@ jobs:
           Add-Content -LiteralPath $env:GITHUB_ENV -Value "SIGNPATH_MODULE_VERSION=$($env:SIGNPATH_MODULE_VERSION)" -Encoding utf8
           Add-Content -LiteralPath $env:GITHUB_ENV -Value "SIGNPATH_MODULE_SHA256=$moduleHash" -Encoding utf8
 
-      - name: Submit exact candidate through official SignPath REST module
+      - name: Submit exact Windows executable through official SignPath REST module
         if: ${{ needs.identity.outputs.build_mode == 'candidate' }}
-        id: candidate-signpath
+        id: binary-signpath
         shell: pwsh
         env:
           SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
@@ -332,10 +369,198 @@ jobs:
             throw "The SignPath module changed after verification."
           }
           Import-Module -Name $module.Path -Force -ErrorAction Stop
-          $inputArchive = Join-Path $PWD "target\signpath-input\rho-signpath-candidate-input.zip"
-          $outputDirectory = Join-Path $PWD "target\signpath-output"
+          $inputArchive = Join-Path $PWD "target\signpath-binary-input\rho-signpath-binary-input.zip"
+          $outputDirectory = Join-Path $PWD "target\signpath-binary-output"
           New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
-          $signedArchive = Join-Path $outputDirectory "rho-signpath-candidate-output.zip"
+          $signedArchive = Join-Path $outputDirectory "rho-signpath-binary-output.zip"
+          $signingRequestId = Submit-SigningRequest `
+            -InputArtifactPath $inputArchive `
+            -ProjectSlug $env:SIGNPATH_PROJECT_SLUG `
+            -SigningPolicySlug $env:SIGNPATH_SIGNING_POLICY_SLUG `
+            -ArtifactConfigurationSlug $env:SIGNPATH_BINARY_ARTIFACT_CONFIGURATION_SLUG `
+            -WaitForCompletion `
+            -OutputArtifactPath $signedArchive `
+            -WaitForCompletionTimeoutInSeconds 900 `
+            -UploadAndDownloadRequestTimeoutInSeconds 300 `
+            -OrganizationId $env:SIGNPATH_ORGANIZATION_ID `
+            -ApiToken $env:SIGNPATH_API_TOKEN `
+            -Description "Rho executable $env:CANDIDATE_VERSION at $env:CANDIDATE_COMMIT run $env:GITHUB_RUN_ID attempt $env:GITHUB_RUN_ATTEMPT"
+          $signingRequestId = ([string]$signingRequestId).ToLowerInvariant()
+          if ($signingRequestId -notmatch '^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$') {
+            throw "SignPath did not return a signing request identifier."
+          }
+          if (-not (Test-Path -LiteralPath $signedArchive -PathType Leaf)) {
+            throw "SignPath did not return the signed ZIP."
+          }
+          Write-Output "binary_signing_request_id=$signingRequestId" >> $env:GITHUB_OUTPUT
+
+      - name: Verify and promote returned test-signed Windows executable
+        if: ${{ needs.identity.outputs.build_mode == 'candidate' }}
+        shell: pwsh
+        env:
+          BINARY_SIGNING_REQUEST_ID: ${{ steps.binary-signpath.outputs.binary_signing_request_id }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:BINARY_SIGNING_REQUEST_ID)) {
+            throw "SignPath did not return a binary signing request identifier."
+          }
+          $expected = "rho-desktop.exe"
+          $signedArchive = Join-Path $PWD "target\signpath-binary-output\rho-signpath-binary-output.zip"
+          $extractedDirectory = Join-Path $PWD "target\signpath-binary-output\extracted"
+          New-Item -ItemType Directory -Path $extractedDirectory -Force | Out-Null
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [System.IO.Compression.ZipFile]::OpenRead($signedArchive)
+          try {
+            $entries = @($archive.Entries | Where-Object { -not [string]::IsNullOrEmpty($_.Name) })
+            if ($entries.Count -ne 1 -or $entries[0].FullName -ne $expected) {
+              throw "The returned SignPath binary ZIP must contain exactly rho-desktop.exe at its root."
+            }
+            $returnedBinary = Join-Path $extractedDirectory $expected
+            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entries[0], $returnedBinary, $false)
+          } finally {
+            $archive.Dispose()
+          }
+          $returnedFiles = @(Get-ChildItem -LiteralPath $extractedDirectory -Recurse -File)
+          if ($returnedFiles.Count -ne 1 -or $returnedFiles[0].Name -ne $expected) {
+            throw "SignPath must return exactly one correctly named Windows executable."
+          }
+          $signedHash = (Get-FileHash -LiteralPath $returnedFiles[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($signedHash -eq $env:RHO_UNSIGNED_BINARY_SHA256) {
+            throw "SignPath returned unchanged Windows executable bytes."
+          }
+          $signature = Get-AuthenticodeSignature -LiteralPath $returnedFiles[0].FullName
+          if ($null -eq $signature.SignerCertificate) {
+            throw "Returned Windows executable has no Authenticode signer certificate."
+          }
+          if ([string]$signature.Status -ne "UnknownError") {
+            throw "Free Trial candidate must retain the expected untrusted self-signed status."
+          }
+          $actualThumbprint = ($signature.SignerCertificate.Thumbprint -replace '[^0-9A-Fa-f]', '').ToUpperInvariant()
+          if ($actualThumbprint -ne $env:SIGNPATH_CERTIFICATE_THUMBPRINT) {
+            throw "Returned installer signer thumbprint does not match protected configuration."
+          }
+          if ($signature.SignerCertificate.Subject -ne $signature.SignerCertificate.Issuer) {
+            throw "Free Trial signer certificate must be self-signed."
+          }
+          $releaseBinary = Join-Path $PWD "target\release\$expected"
+          Copy-Item -LiteralPath $returnedFiles[0].FullName -Destination $releaseBinary -Force
+          $promotedHash = (Get-FileHash -LiteralPath $releaseBinary -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($promotedHash -ne $signedHash) {
+            throw "Promoted Windows executable does not match returned signed bytes."
+          }
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "RHO_SIGNED_BINARY_SHA256=$signedHash" -Encoding utf8
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "RHO_BINARY_SIGNATURE_STATUS=$([string]$signature.Status)" -Encoding utf8
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "RHO_BINARY_SIGNING_REQUEST_ID=$($env:BINARY_SIGNING_REQUEST_ID.ToLowerInvariant())" -Encoding utf8
+
+      - name: Bundle NSIS without rebuilding signed Windows executable
+        if: ${{ needs.identity.outputs.build_mode == 'candidate' }}
+        shell: pwsh
+        env:
+          CANDIDATE_VERSION: ${{ needs.identity.outputs.version }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY) -or [string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD)) {
+            throw "Candidate native updater signing secrets are required for BundleOnly."
+          }
+          ./scripts/build-windows-installer.ps1 -BuildMode BundleOnly
+          $binary = Join-Path $PWD "target\release\rho-desktop.exe"
+          $bundledHash = (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($bundledHash -ne $env:RHO_SIGNED_BINARY_SHA256) {
+            throw "Signed Windows executable changed while bundling NSIS."
+          }
+          $signature = Get-AuthenticodeSignature -LiteralPath $binary
+          if ($null -eq $signature.SignerCertificate -or [string]$signature.Status -ne "UnknownError") {
+            throw "Signed Windows executable lost its expected Free Trial signature while bundling."
+          }
+          $actualThumbprint = ($signature.SignerCertificate.Thumbprint -replace '[^0-9A-Fa-f]', '').ToUpperInvariant()
+          if ($actualThumbprint -ne $env:SIGNPATH_CERTIFICATE_THUMBPRINT -or $signature.SignerCertificate.Subject -ne $signature.SignerCertificate.Issuer) {
+            throw "Signed Windows executable certificate changed while bundling."
+          }
+          $expected = "Rho_$($env:CANDIDATE_VERSION)_x64-setup.exe"
+          $installers = @(Get-ChildItem -LiteralPath "target\release\bundle\nsis" -Filter "*-setup.exe" -File)
+          if ($installers.Count -ne 1 -or $installers[0].Name -ne $expected) {
+            throw "BundleOnly did not create exactly $expected."
+          }
+          $staleBundlerSignature = "$($installers[0].FullName).sig"
+          if (-not (Test-Path -LiteralPath $staleBundlerSignature -PathType Leaf)) {
+            throw "Tauri did not create the provisional updater signature during BundleOnly."
+          }
+          Remove-Item -LiteralPath $staleBundlerSignature -Force
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "RHO_BINARY_BUNDLED_SHA256=$bundledHash" -Encoding utf8
+
+      - name: Verify signed executable survival and isolate unsigned Windows installer
+        if: ${{ needs.identity.outputs.build_mode == 'candidate' }}
+        shell: pwsh
+        env:
+          CANDIDATE_VERSION: ${{ needs.identity.outputs.version }}
+        run: |
+          $binary = Join-Path $PWD "target\release\rho-desktop.exe"
+          $binaryHash = (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($binaryHash -ne $env:RHO_SIGNED_BINARY_SHA256 -or $binaryHash -ne $env:RHO_BINARY_BUNDLED_SHA256) {
+            throw "Signed Windows executable changed while bundling NSIS."
+          }
+          $binarySignature = Get-AuthenticodeSignature -LiteralPath $binary
+          $binaryThumbprint = if ($binarySignature.SignerCertificate) {
+            ($binarySignature.SignerCertificate.Thumbprint -replace '[^0-9A-Fa-f]', '').ToUpperInvariant()
+          } else { "" }
+          if ([string]$binarySignature.Status -ne "UnknownError" -or $binaryThumbprint -ne $env:SIGNPATH_CERTIFICATE_THUMBPRINT) {
+            throw "Signed Windows executable signature did not survive NSIS bundling."
+          }
+          $expected = "Rho_$($env:CANDIDATE_VERSION)_x64-setup.exe"
+          $installer = Join-Path $PWD "target\release\bundle\nsis\$expected"
+          if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) {
+            throw "Expected unsigned Windows installer is missing."
+          }
+          $installerSignature = Get-AuthenticodeSignature -LiteralPath $installer
+          if ([string]$installerSignature.Status -ne "NotSigned" -or $null -ne $installerSignature.SignerCertificate) {
+            throw "Windows installer signing input must be exactly unsigned."
+          }
+          $unsignedHash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "RHO_UNSIGNED_INSTALLER_SHA256=$unsignedHash" -Encoding utf8
+          New-Item -ItemType Directory -Path "target\signpath-installer-input" -Force | Out-Null
+          $isolatedInstaller = Join-Path $PWD "target\signpath-installer-input\$expected"
+          Copy-Item -LiteralPath $installer -Destination $isolatedInstaller
+          $inputArchive = Join-Path $PWD "target\signpath-installer-input\rho-signpath-installer-input.zip"
+          Compress-Archive -LiteralPath $isolatedInstaller -DestinationPath $inputArchive
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [System.IO.Compression.ZipFile]::OpenRead($inputArchive)
+          try {
+            $entries = @($archive.Entries | Where-Object { -not [string]::IsNullOrEmpty($_.Name) })
+            if ($entries.Count -ne 1 -or $entries[0].FullName -ne $expected) {
+              throw "The SignPath installer input ZIP must contain exactly the candidate installer at its root."
+            }
+          } finally {
+            $archive.Dispose()
+          }
+
+      - name: Submit exact Windows installer through official SignPath REST module
+        if: ${{ needs.identity.outputs.build_mode == 'candidate' }}
+        id: installer-signpath
+        shell: pwsh
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          CANDIDATE_VERSION: ${{ needs.identity.outputs.version }}
+          CANDIDATE_COMMIT: ${{ needs.identity.outputs.commit }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:SIGNPATH_API_TOKEN)) {
+            throw "Required SignPath API token is missing."
+          }
+          $module = Get-Module -ListAvailable -Name SignPath |
+            Where-Object { $_.Version.ToString() -eq $env:SIGNPATH_MODULE_VERSION } |
+            Select-Object -First 1
+          if ($null -eq $module) {
+            throw "The verified SignPath module is unavailable."
+          }
+          $moduleFile = Join-Path $module.ModuleBase "SignPath.psm1"
+          $moduleHash = (Get-FileHash -LiteralPath $moduleFile -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($moduleHash -ne $env:SIGNPATH_MODULE_SHA256) {
+            throw "The SignPath module changed after verification."
+          }
+          Import-Module -Name $module.Path -Force -ErrorAction Stop
+          $inputArchive = Join-Path $PWD "target\signpath-installer-input\rho-signpath-installer-input.zip"
+          $outputDirectory = Join-Path $PWD "target\signpath-installer-output"
+          New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
+          $signedArchive = Join-Path $outputDirectory "rho-signpath-installer-output.zip"
           $signingRequestId = Submit-SigningRequest `
             -InputArtifactPath $inputArchive `
             -ProjectSlug $env:SIGNPATH_PROJECT_SLUG `
@@ -347,29 +572,35 @@ jobs:
             -UploadAndDownloadRequestTimeoutInSeconds 300 `
             -OrganizationId $env:SIGNPATH_ORGANIZATION_ID `
             -ApiToken $env:SIGNPATH_API_TOKEN `
-            -Description "Rho candidate $env:CANDIDATE_VERSION at $env:CANDIDATE_COMMIT run $env:GITHUB_RUN_ID attempt $env:GITHUB_RUN_ATTEMPT"
+            -Description "Rho installer $env:CANDIDATE_VERSION at $env:CANDIDATE_COMMIT run $env:GITHUB_RUN_ID attempt $env:GITHUB_RUN_ATTEMPT"
           $signingRequestId = ([string]$signingRequestId).ToLowerInvariant()
           if ($signingRequestId -notmatch '^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$') {
-            throw "SignPath did not return a signing request identifier."
+            throw "SignPath did not return an installer signing request identifier."
+          }
+          if ($signingRequestId -eq $env:RHO_BINARY_SIGNING_REQUEST_ID) {
+            throw "Binary and installer SignPath request identifiers must be distinct."
           }
           if (-not (Test-Path -LiteralPath $signedArchive -PathType Leaf)) {
-            throw "SignPath did not return the signed ZIP."
+            throw "SignPath did not return the signed installer ZIP."
           }
-          Write-Output "signing_request_id=$signingRequestId" >> $env:GITHUB_OUTPUT
+          Write-Output "installer_signing_request_id=$signingRequestId" >> $env:GITHUB_OUTPUT
 
-      - name: Verify and promote returned test-signed installer
+      - name: Verify and promote returned test-signed Windows installer
         if: ${{ needs.identity.outputs.build_mode == 'candidate' }}
         shell: pwsh
         env:
           CANDIDATE_VERSION: ${{ needs.identity.outputs.version }}
-          SIGNING_REQUEST_ID: ${{ steps.candidate-signpath.outputs.signing_request_id }}
+          INSTALLER_SIGNING_REQUEST_ID: ${{ steps.installer-signpath.outputs.installer_signing_request_id }}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:SIGNING_REQUEST_ID)) {
-            throw "SignPath did not return a signing request identifier."
+          if ([string]::IsNullOrWhiteSpace($env:INSTALLER_SIGNING_REQUEST_ID)) {
+            throw "SignPath did not return an installer signing request identifier."
+          }
+          if ($env:INSTALLER_SIGNING_REQUEST_ID -eq $env:RHO_BINARY_SIGNING_REQUEST_ID) {
+            throw "Binary and installer SignPath request identifiers must be distinct."
           }
           $expected = "Rho_$($env:CANDIDATE_VERSION)_x64-setup.exe"
-          $signedArchive = Join-Path $PWD "target\signpath-output\rho-signpath-candidate-output.zip"
-          $extractedDirectory = Join-Path $PWD "target\signpath-output\extracted"
+          $signedArchive = Join-Path $PWD "target\signpath-installer-output\rho-signpath-installer-output.zip"
+          $extractedDirectory = Join-Path $PWD "target\signpath-installer-output\extracted"
           New-Item -ItemType Directory -Path $extractedDirectory -Force | Out-Null
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $archive = [System.IO.Compression.ZipFile]::OpenRead($signedArchive)
@@ -405,23 +636,203 @@ jobs:
           if ($signature.SignerCertificate.Subject -ne $signature.SignerCertificate.Issuer) {
             throw "Free Trial signer certificate must be self-signed."
           }
+          New-Item -ItemType Directory -Path "target\candidate" -Force | Out-Null
           $candidate = Join-Path $PWD "target\candidate\$expected"
           Copy-Item -LiteralPath $returnedFiles[0].FullName -Destination $candidate -Force
           $promotedHash = (Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($promotedHash -ne $signedHash) {
             throw "Promoted Windows candidate does not match returned signed bytes."
           }
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "RHO_SIGNED_INSTALLER_SHA256=$signedHash" -Encoding utf8
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "RHO_INSTALLER_SIGNATURE_STATUS=$([string]$signature.Status)" -Encoding utf8
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "RHO_INSTALLER_SIGNING_REQUEST_ID=$($env:INSTALLER_SIGNING_REQUEST_ID.ToLowerInvariant())" -Encoding utf8
+
+      - name: Sign final Authenticode Windows updater artifact
+        if: ${{ needs.identity.outputs.build_mode == 'candidate' }}
+        shell: pwsh
+        env:
+          CANDIDATE_VERSION: ${{ needs.identity.outputs.version }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY) -or [string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD)) {
+            throw "Candidate native updater signing secrets are required."
+          }
+          $artifact = Join-Path $PWD "target\candidate\Rho_$($env:CANDIDATE_VERSION)_x64-setup.exe"
+          if (-not (Test-Path -LiteralPath $artifact -PathType Leaf)) { throw "Final Authenticode installer is missing." }
+          $artifactHash = (Get-FileHash -LiteralPath $artifact -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($artifactHash -ne $env:RHO_SIGNED_INSTALLER_SHA256) { throw "Final installer changed before Tauri updater signing." }
+          & npx -y "@tauri-apps/cli@2.11.4" signer sign "$artifact"
+          if ($LASTEXITCODE -ne 0) { throw "Tauri updater signing failed for the final Windows installer." }
+          if ((Get-FileHash -LiteralPath $artifact -Algorithm SHA256).Hash.ToLowerInvariant() -ne $artifactHash) {
+            throw "Tauri updater signing changed the final Windows installer bytes."
+          }
+          $signature = "$artifact.sig"
+          if (-not (Test-Path -LiteralPath $signature -PathType Leaf)) { throw "Final Windows updater signature is missing." }
+          $signatureLength = (Get-Item -LiteralPath $signature).Length
+          if ($signatureLength -le 0 -or $signatureLength -gt 16384) { throw "Final Windows updater signature is outside its byte budget." }
+          & cargo run --locked -p rho-updater-verifier -- --config "desktop/src-tauri/tauri.conf.json" --artifact "$artifact" --signature "$signature"
+          if ($LASTEXITCODE -ne 0) { throw "Final Windows updater signature does not verify against the configured public key." }
+
+      - name: Install and verify signed Windows payload
+        if: ${{ needs.identity.outputs.build_mode == 'candidate' }}
+        shell: pwsh
+        env:
+          CANDIDATE_VERSION: ${{ needs.identity.outputs.version }}
+        run: |
+          function ConvertFrom-RhoRegistryPath {
+            param([AllowNull()][object]$Value)
+            if ($null -eq $Value) { return $null }
+            $pathValue = ([string]$Value).Trim()
+            $startsQuoted = $pathValue.StartsWith('"')
+            $endsQuoted = $pathValue.EndsWith('"')
+            if ($startsQuoted -xor $endsQuoted) { throw "Malformed quoted registry path: $pathValue" }
+            if ($startsQuoted -and $pathValue.Length -ge 2) {
+              $pathValue = $pathValue.Substring(1, $pathValue.Length - 2)
+            }
+            if (-not $pathValue -or -not [System.IO.Path]::IsPathFullyQualified($pathValue)) {
+              throw "Registry path is not fully qualified: $pathValue"
+            }
+            return $pathValue
+          }
+
+          function Get-RhoUninstallEntry {
+            $registryPaths = @(
+              "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
+              "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
+              "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+            )
+            Get-ItemProperty -Path $registryPaths -ErrorAction SilentlyContinue |
+              Where-Object { $_.DisplayName -eq "Rho" -or $_.DisplayName -like "Rho *" } |
+              Select-Object -First 1
+          }
+
+          $installer = Join-Path $PWD "target\candidate\Rho_$($env:CANDIDATE_VERSION)_x64-setup.exe"
+          if ((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant() -ne $env:RHO_SIGNED_INSTALLER_SHA256) {
+            throw "Final installer changed before installed-payload verification."
+          }
+          if (Get-RhoUninstallEntry) {
+            throw "Hosted Windows candidate runner is not clean; a Rho installation already exists."
+          }
+          $installedExecutable = $null
+          $uninstaller = $null
+          $installedHash = $null
+          $installedSignatureStatus = $null
+          $installedThumbprint = $null
+          $cleanupVerified = $false
+          $installationObserved = $false
+          try {
+            $installerProcess = Start-Process -FilePath $installer -ArgumentList "/S" -PassThru -Wait
+            if ($installerProcess.ExitCode -ne 0) { throw "NSIS silent install failed with $($installerProcess.ExitCode)." }
+            $entry = Get-RhoUninstallEntry
+            if (-not $entry) { throw "The installed Rho registry entry was not found." }
+            if ([string]$entry.DisplayVersion -ne $env:CANDIDATE_VERSION) {
+              throw "Installed Rho version does not match the exact candidate."
+            }
+            $installationObserved = $true
+            $candidates = [System.Collections.Generic.List[string]]::new()
+            $installLocation = ConvertFrom-RhoRegistryPath $entry.InstallLocation
+            if ($installLocation) {
+              $candidates.Add((Join-Path $installLocation "rho-desktop.exe"))
+              $candidates.Add((Join-Path $installLocation "Rho.exe"))
+            }
+            if ($entry.DisplayIcon) {
+              $icon = [regex]::Match([string]$entry.DisplayIcon, '^"?(.+?\.exe)"?(?:,\d+)?$')
+              if ($icon.Success) { $candidates.Add($icon.Groups[1].Value) }
+            }
+            $candidates.Add((Join-Path $env:LOCALAPPDATA "Rho\rho-desktop.exe"))
+            $candidates.Add((Join-Path $env:LOCALAPPDATA "Programs\Rho\rho-desktop.exe"))
+            $installedExecutable = $candidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+            if (-not $installedExecutable) {
+              $installedExecutable = Get-ChildItem -LiteralPath $env:LOCALAPPDATA -Filter "rho-desktop.exe" -File -Recurse -Depth 5 -ErrorAction SilentlyContinue |
+                Select-Object -ExpandProperty FullName -First 1
+            }
+            if (-not $installedExecutable) { throw "The installed rho-desktop.exe was not found." }
+            $installedExecutable = (Resolve-Path -LiteralPath $installedExecutable).Path
+            $workspaceRoot = (Resolve-Path -LiteralPath $env:GITHUB_WORKSPACE).Path
+            $separator = [System.IO.Path]::DirectorySeparatorChar
+            $workspacePrefix = $workspaceRoot.TrimEnd($separator) + $separator
+            if ($installedExecutable.Equals($workspaceRoot, [System.StringComparison]::OrdinalIgnoreCase) -or
+                $installedExecutable.StartsWith($workspacePrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+              throw "The installed executable is inside the workspace: $installedExecutable"
+            }
+            $installedHash = (Get-FileHash -LiteralPath $installedExecutable -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($installedHash -ne $env:RHO_SIGNED_BINARY_SHA256) {
+              throw "The installed executable does not match the exact signed Windows executable."
+            }
+            $installedSignature = Get-AuthenticodeSignature -LiteralPath $installedExecutable
+            if ($null -eq $installedSignature.SignerCertificate -or [string]$installedSignature.Status -ne "UnknownError") {
+              throw "The installed executable does not retain the expected Free Trial Authenticode signature."
+            }
+            $installedSignatureStatus = [string]$installedSignature.Status
+            $installedThumbprint = ($installedSignature.SignerCertificate.Thumbprint -replace '[^0-9A-Fa-f]', '').ToUpperInvariant()
+            if ($installedThumbprint -ne $env:SIGNPATH_CERTIFICATE_THUMBPRINT) {
+              throw "The installed executable signer thumbprint does not match protected configuration."
+            }
+            if ($installedSignature.SignerCertificate.Subject -ne $installedSignature.SignerCertificate.Issuer) {
+              throw "The installed executable Free Trial signer certificate must be self-signed."
+            }
+            $smoke = Start-Process -FilePath $installedExecutable -ArgumentList "--smoke-test" -PassThru -Wait
+            if ($smoke.ExitCode -ne 0) { throw "Installed Windows Workspace smoke failed." }
+            if ($entry.UninstallString) {
+              $uninstallMatch = [regex]::Match([string]$entry.UninstallString, '^"?(.+?\.exe)"?(?:\s.*)?$')
+              if ($uninstallMatch.Success) { $uninstaller = $uninstallMatch.Groups[1].Value }
+            }
+            if (-not $uninstaller -or -not (Test-Path -LiteralPath $uninstaller -PathType Leaf)) {
+              $uninstaller = Get-ChildItem -LiteralPath (Split-Path -Parent $installedExecutable) -Filter "uninstall*.exe" -File -ErrorAction SilentlyContinue |
+                Select-Object -ExpandProperty FullName -First 1
+            }
+            if (-not $uninstaller -or -not (Test-Path -LiteralPath $uninstaller -PathType Leaf)) {
+              throw "The exact registered Rho uninstaller was not found."
+            }
+          }
+          finally {
+            Get-Process -Name "rho-desktop" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            $cleanupEntry = Get-RhoUninstallEntry
+            if ($cleanupEntry) { $installationObserved = $true }
+            if ((-not $uninstaller -or -not (Test-Path -LiteralPath $uninstaller -PathType Leaf)) -and $cleanupEntry.UninstallString) {
+              $cleanupMatch = [regex]::Match([string]$cleanupEntry.UninstallString, '^"?(.+?\.exe)"?(?:\s.*)?$')
+              if ($cleanupMatch.Success) { $uninstaller = $cleanupMatch.Groups[1].Value }
+            }
+            if ($uninstaller -and (Test-Path -LiteralPath $uninstaller -PathType Leaf)) {
+              $cleanup = Start-Process -FilePath $uninstaller -ArgumentList "/S" -PassThru -Wait
+              if ($cleanup.ExitCode -ne 0) { throw "Installed Rho cleanup failed with $($cleanup.ExitCode)." }
+            }
+            for ($attempt = 0; $attempt -lt 60; $attempt += 1) {
+              $executableRemoved = -not $installedExecutable -or -not (Test-Path -LiteralPath $installedExecutable -PathType Leaf)
+              $registryRemoved = -not [bool](Get-RhoUninstallEntry)
+              if ($executableRemoved -and $registryRemoved) { $cleanupVerified = $true; break }
+              Start-Sleep -Milliseconds 500
+            }
+            if ($installationObserved -and -not $cleanupVerified) {
+              throw "Installed Rho cleanup did not remove executable and registry state."
+            }
+          }
+          if (-not $installationObserved -or -not $cleanupVerified) {
+            throw "Installed-payload verification did not complete with cleanup."
+          }
           $evidence = [ordered]@{
+            schema_version = 2
             provider = "signpath"
-            profile = "free_trial_self_signed"
-            request_id = $env:SIGNING_REQUEST_ID.ToLowerInvariant()
+            profile = "free_trial_self_signed_two_stage"
             module_version = $env:SIGNPATH_MODULE_VERSION
             module_sha256 = $env:SIGNPATH_MODULE_SHA256.ToLowerInvariant()
-            signer_thumbprint = $actualThumbprint.ToLowerInvariant()
+            signer_thumbprint = $env:SIGNPATH_CERTIFICATE_THUMBPRINT.ToLowerInvariant()
             self_signed = $true
-            signature_status = [string]$signature.Status
-            unsigned_sha256 = $env:RHO_UNSIGNED_INSTALLER_SHA256.ToLowerInvariant()
-            signed_sha256 = $signedHash
+            binary_request_id = $env:RHO_BINARY_SIGNING_REQUEST_ID.ToLowerInvariant()
+            binary_signature_status = $env:RHO_BINARY_SIGNATURE_STATUS
+            binary_unsigned_sha256 = $env:RHO_UNSIGNED_BINARY_SHA256.ToLowerInvariant()
+            binary_signed_sha256 = $env:RHO_SIGNED_BINARY_SHA256.ToLowerInvariant()
+            binary_bundled_sha256 = $env:RHO_BINARY_BUNDLED_SHA256.ToLowerInvariant()
+            installer_request_id = $env:RHO_INSTALLER_SIGNING_REQUEST_ID.ToLowerInvariant()
+            installer_signature_status = $env:RHO_INSTALLER_SIGNATURE_STATUS
+            installer_unsigned_sha256 = $env:RHO_UNSIGNED_INSTALLER_SHA256.ToLowerInvariant()
+            installer_signed_sha256 = $env:RHO_SIGNED_INSTALLER_SHA256.ToLowerInvariant()
+            installed_binary_sha256 = $installedHash
+            installed_signature_status = $installedSignatureStatus
+            installed_signer_thumbprint = $installedThumbprint.ToLowerInvariant()
+            installed_outside_workspace = $true
+            cleanup_verified = $true
           }
           $evidence | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath "target\candidate\windows-signing-evidence.json" -Encoding utf8
 
@@ -434,10 +845,19 @@ jobs:
             "SIGNPATH_PROJECT_SLUG",
             "SIGNPATH_SIGNING_POLICY_SLUG",
             "SIGNPATH_ARTIFACT_CONFIGURATION_SLUG",
+            "SIGNPATH_BINARY_ARTIFACT_CONFIGURATION_SLUG",
             "SIGNPATH_CERTIFICATE_THUMBPRINT",
             "SIGNPATH_MODULE_VERSION",
             "SIGNPATH_MODULE_SHA256",
-            "RHO_UNSIGNED_INSTALLER_SHA256"
+            "RHO_UNSIGNED_BINARY_SHA256",
+            "RHO_SIGNED_BINARY_SHA256",
+            "RHO_BINARY_BUNDLED_SHA256",
+            "RHO_BINARY_SIGNATURE_STATUS",
+            "RHO_BINARY_SIGNING_REQUEST_ID",
+            "RHO_UNSIGNED_INSTALLER_SHA256",
+            "RHO_SIGNED_INSTALLER_SHA256",
+            "RHO_INSTALLER_SIGNATURE_STATUS",
+            "RHO_INSTALLER_SIGNING_REQUEST_ID"
           ) | ForEach-Object {
             Add-Content -LiteralPath $env:GITHUB_ENV -Value "$_=" -Encoding utf8
           }
@@ -464,34 +884,12 @@ jobs:
             "--output", $evidence
           )
           if ($env:CANDIDATE_MODE -eq "candidate") {
-            $checks = "$checks,authenticode,signpath_request_binding,free_trial_self_signed"
+            $checks = "$checks,authenticode_binary,authenticode_installer,installed_payload_signature,signpath_binary_request_binding,signpath_installer_request_binding,free_trial_self_signed"
             $arguments += @("--signing", "target\candidate\windows-signing-evidence.json")
           }
           $arguments += @("--checks", $checks)
           & node @arguments
           if ($LASTEXITCODE -ne 0) { throw "Windows platform evidence validation failed." }
-
-      - name: Sign final Authenticode Windows updater artifact
-        if: ${{ needs.identity.outputs.build_mode == 'candidate' }}
-        shell: pwsh
-        env:
-          CANDIDATE_VERSION: ${{ needs.identity.outputs.version }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ needs.identity.outputs.build_mode == 'candidate' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ needs.identity.outputs.build_mode == 'candidate' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY) -or [string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD)) {
-            throw "Candidate native updater signing secrets are required."
-          }
-          $artifact = Join-Path $PWD "target\candidate\Rho_$($env:CANDIDATE_VERSION)_x64-setup.exe"
-          if (-not (Test-Path -LiteralPath $artifact -PathType Leaf)) { throw "Final Authenticode installer is missing." }
-          & npx -y "@tauri-apps/cli@2.11.4" signer sign "$artifact"
-          if ($LASTEXITCODE -ne 0) { throw "Tauri updater signing failed for the final Windows installer." }
-          $signature = "$artifact.sig"
-          if (-not (Test-Path -LiteralPath $signature -PathType Leaf)) { throw "Final Windows updater signature is missing." }
-          $signatureLength = (Get-Item -LiteralPath $signature).Length
-          if ($signatureLength -le 0 -or $signatureLength -gt 16384) { throw "Final Windows updater signature is outside its byte budget." }
-          & cargo run --locked -p rho-updater-verifier -- --config "desktop/src-tauri/tauri.conf.json" --artifact "$artifact" --signature "$signature"
-          if ($LASTEXITCODE -ne 0) { throw "Final Windows updater signature does not verify against the configured public key." }
 
       - name: Upload immutable Windows candidate inputs
         uses: actions/upload-artifact@v4
@@ -1043,10 +1441,128 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  linux-candidate:
+    name: Build Linux x86-64 AppImage candidate
+    needs: identity
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    steps:
+      - name: Check out immutable candidate commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.identity.outputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Linux build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y build-essential curl wget file unzip zip libwebkit2gtk-4.1-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev squashfs-tools pkg-config
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up R and test dependencies
+        uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: "4.6.1"
+          use-public-rspm: true
+
+      - name: Install R test dependencies
+        shell: bash
+        env:
+          GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          Rscript -e "if (!requireNamespace('remotes', quietly = TRUE)) install.packages('remotes')"
+          Rscript -e "remotes::install_deps('r/rho.bridge', dependencies = TRUE, upgrade = 'never')"
+          Rscript -e "remotes::install_deps('r/rho.agent', dependencies = TRUE, upgrade = 'never')"
+
+      - name: Install pinned Linux Rust toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup set profile minimal
+          rustup toolchain install 1.97.0-x86_64-unknown-linux-gnu --no-self-update
+          rustup component add rustfmt --toolchain 1.97.0-x86_64-unknown-linux-gnu
+          rustup default 1.97.0
+          rustc -vV | grep -Fx 'host: x86_64-unknown-linux-gnu'
+
+      - name: Bootstrap pinned Linux Ark runtime
+        shell: bash
+        run: scripts/bootstrap-ark-linux.sh
+
+      - name: Prepare Linux runtime resources
+        shell: bash
+        run: scripts/prepare-runtime-resources.sh
+
+      - name: Run complete Linux candidate validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo test --workspace --locked --no-fail-fast
+          Rscript -e "testthat::test_local('r/rho.bridge', reporter = 'summary')"
+          Rscript -e "testthat::test_local('r/rho.agent', reporter = 'summary')"
+          node --check desktop/dist/app.js
+          for test_script in scripts/test-*.mjs; do node "$test_script"; done
+
+      - name: Build AppRun-patched and final-signed Linux AppImage
+        id: build
+        shell: bash
+        env:
+          CANDIDATE_MODE: ${{ needs.identity.outputs.build_mode }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ needs.identity.outputs.build_mode == 'candidate' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ needs.identity.outputs.build_mode == 'candidate' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
+        run: |
+          set -euo pipefail
+          if [[ "$CANDIDATE_MODE" == "candidate" ]]; then
+            test -n "$TAURI_SIGNING_PRIVATE_KEY"
+            test -n "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD"
+          fi
+          scripts/build-linux.sh
+
+      - name: Verify and stage exact Linux candidate
+        shell: bash
+        env:
+          CANDIDATE_MODE: ${{ needs.identity.outputs.build_mode }}
+          CANDIDATE_VERSION: ${{ needs.identity.outputs.version }}
+          CANDIDATE_TAG: ${{ needs.identity.outputs.release_tag }}
+          CANDIDATE_COMMIT: ${{ needs.identity.outputs.commit }}
+        run: |
+          set -euo pipefail
+          artifact="target/release/bundle/appimage/Rho_${CANDIDATE_VERSION}_x86_64.AppImage"
+          signature="$artifact.sig"
+          test -x "$artifact"
+          test -s "$signature"
+          if [[ "$CANDIDATE_MODE" == "candidate" ]]; then
+            cargo run --locked -p rho-updater-verifier -- --config desktop/src-tauri/tauri.conf.json --artifact "$artifact" --signature "$signature"
+          fi
+          mkdir -p target/candidate
+          cp "$artifact" "target/candidate/$(basename "$artifact")"
+          cp "$signature" "target/candidate/$(basename "$signature")"
+          node scripts/candidate-release.mjs --mode platform --version "$CANDIDATE_VERSION" --tag "$CANDIDATE_TAG" --commit "$CANDIDATE_COMMIT" --platform linux_x86_64 --artifact "target/candidate/$(basename "$artifact")" --output "target/candidate/rho-${CANDIDATE_VERSION}-linux-x86_64-evidence.json" --checks release_metadata,rust_workspace,rho_bridge,rho_agent,frontend,workspace_smoke,x86_64,appimage,apprun,license_boundary,native_updater_signature
+
+      - name: Upload immutable Linux candidate and updater inputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: rho-${{ needs.identity.outputs.version }}-linux-x86-64-${{ github.run_id }}
+          path: |
+            target/candidate/Rho_${{ needs.identity.outputs.version }}_x86_64.AppImage
+            target/candidate/Rho_${{ needs.identity.outputs.version }}_x86_64.AppImage.sha256
+            target/candidate/Rho_${{ needs.identity.outputs.version }}_x86_64.AppImage.sig
+            target/candidate/rho-${{ needs.identity.outputs.version }}-linux-x86_64-evidence.json
+          if-no-files-found: error
+          retention-days: 14
+
   rehearsal-evidence:
     name: Assemble review-only rehearsal artifact
     if: ${{ needs.identity.outputs.build_mode == 'rehearsal' && github.repository == 'YuLab-SMU/Rho_for_mac' }}
-    needs: [identity, windows-candidate, macos-finalize]
+    needs: [identity, windows-candidate, macos-finalize, linux-candidate]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -1074,7 +1590,7 @@ jobs:
           set -euo pipefail
           candidate_evidence="target/candidate/rho-${CANDIDATE_VERSION}-candidate-evidence.json"
           rehearsal_evidence="target/candidate/rho-${CANDIDATE_VERSION}-rehearsal-evidence.json"
-          node scripts/candidate-release.mjs --mode aggregate --version "$CANDIDATE_VERSION" --tag "$CANDIDATE_TAG" --commit "$CANDIDATE_COMMIT" --directory target/candidate --windows_evidence "target/candidate/rho-${CANDIDATE_VERSION}-windows-x86_64-evidence.json" --macos_evidence "target/candidate/rho-${CANDIDATE_VERSION}-macos-aarch64-evidence.json" --output "$candidate_evidence"
+          node scripts/candidate-release.mjs --mode aggregate --version "$CANDIDATE_VERSION" --tag "$CANDIDATE_TAG" --commit "$CANDIDATE_COMMIT" --directory target/candidate --windows_evidence "target/candidate/rho-${CANDIDATE_VERSION}-windows-x86_64-evidence.json" --macos_evidence "target/candidate/rho-${CANDIDATE_VERSION}-macos-aarch64-evidence.json" --linux_evidence "target/candidate/rho-${CANDIDATE_VERSION}-linux-x86_64-evidence.json" --output "$candidate_evidence"
           node scripts/candidate-release.mjs --mode rehearsal --input "$candidate_evidence" --repository "$GITHUB_REPOSITORY" --run_id "$GITHUB_RUN_ID" --run_attempt "$GITHUB_RUN_ATTEMPT" --output "$rehearsal_evidence"
           node -e 'require("node:fs").unlinkSync(process.argv[1])' "$candidate_evidence"
 
@@ -1089,14 +1605,17 @@ jobs:
             target/candidate/Rho_${{ needs.identity.outputs.version }}_aarch64.dmg
             target/candidate/Rho_${{ needs.identity.outputs.version }}_aarch64.dmg.sha256
             target/candidate/rho-${{ needs.identity.outputs.version }}-macos-aarch64-evidence.json
+            target/candidate/Rho_${{ needs.identity.outputs.version }}_x86_64.AppImage
+            target/candidate/Rho_${{ needs.identity.outputs.version }}_x86_64.AppImage.sha256
+            target/candidate/rho-${{ needs.identity.outputs.version }}-linux-x86_64-evidence.json
             target/candidate/rho-${{ needs.identity.outputs.version }}-rehearsal-evidence.json
           if-no-files-found: error
           retention-days: 14
 
   draft-candidate:
-    name: Assemble immutable draft prerelease
+    name: Assemble immutable draft release
     if: ${{ needs.identity.outputs.build_mode == 'candidate' && github.repository == 'YuLab-SMU/Rho' }}
-    needs: [identity, windows-candidate, macos-finalize]
+    needs: [identity, windows-candidate, macos-finalize, linux-candidate]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -1122,8 +1641,9 @@ jobs:
           CANDIDATE_COMMIT: ${{ needs.identity.outputs.commit }}
         run: |
           set -euo pipefail
-          node scripts/candidate-release.mjs --mode aggregate --version "$CANDIDATE_VERSION" --tag "$CANDIDATE_TAG" --commit "$CANDIDATE_COMMIT" --directory target/candidate --windows_evidence "target/candidate/rho-${CANDIDATE_VERSION}-windows-x86_64-evidence.json" --macos_evidence "target/candidate/rho-${CANDIDATE_VERSION}-macos-aarch64-evidence.json" --output "target/candidate/rho-${CANDIDATE_VERSION}-candidate-evidence.json" --require_windows_signing true
+          node scripts/candidate-release.mjs --mode aggregate --version "$CANDIDATE_VERSION" --tag "$CANDIDATE_TAG" --commit "$CANDIDATE_COMMIT" --directory target/candidate --windows_evidence "target/candidate/rho-${CANDIDATE_VERSION}-windows-x86_64-evidence.json" --macos_evidence "target/candidate/rho-${CANDIDATE_VERSION}-macos-aarch64-evidence.json" --linux_evidence "target/candidate/rho-${CANDIDATE_VERSION}-linux-x86_64-evidence.json" --output "target/candidate/rho-${CANDIDATE_VERSION}-candidate-evidence.json" --require_windows_signing true
           node scripts/tauri-native-updater.mjs --mode evidence --version "$CANDIDATE_VERSION" --tag "$CANDIDATE_TAG" --commit "$CANDIDATE_COMMIT" --directory target/candidate --output "target/candidate/rho-${CANDIDATE_VERSION}-tauri-native-updater-evidence.json"
+          node scripts/candidate-release.mjs --mode automated-acceptance --input "target/candidate/rho-${CANDIDATE_VERSION}-candidate-evidence.json" --output "target/candidate/rho-${CANDIDATE_VERSION}-acceptance.json"
 
       - name: Prepare reviewed release notes from the exact candidate commit
         shell: bash
@@ -1163,6 +1683,7 @@ jobs:
               if (error.status !== 404) throw error;
             }
             const version = process.env.CANDIDATE_VERSION;
+            const prerelease = version.includes("-");
             const releaseNotesModule = await import(pathToFileURL(path.join(process.cwd(), "scripts", "release-notes.mjs")).href);
             const releaseNotes = releaseNotesModule.validateReleaseNotesRecord(
               JSON.parse(fs.readFileSync(path.join("target", "candidate", "release-notes.json"), "utf8")),
@@ -1175,10 +1696,15 @@ jobs:
               `Rho_${version}_aarch64.dmg`,
               `Rho_${version}_aarch64.dmg.sha256`,
               `rho-${version}-macos-aarch64-evidence.json`,
+              `Rho_${version}_x86_64.AppImage`,
+              `Rho_${version}_x86_64.AppImage.sha256`,
+              `rho-${version}-linux-x86_64-evidence.json`,
               `rho-${version}-candidate-evidence.json`,
+              `rho-${version}-acceptance.json`,
               `Rho_${version}_x64-setup.exe.sig`,
               `Rho_${version}_aarch64.app.tar.gz`,
               `Rho_${version}_aarch64.app.tar.gz.sig`,
+              `Rho_${version}_x86_64.AppImage.sig`,
               `rho-${version}-tauri-native-updater-evidence.json`,
             ];
             const files = requiredNames.map((name) => {
@@ -1195,7 +1721,7 @@ jobs:
               name: process.env.CANDIDATE_NAME,
               body: releaseNotes.body,
               draft: true,
-              prerelease: true,
+              prerelease,
             });
             for (const file of files) {
               await github.rest.repos.uploadReleaseAsset({
@@ -1210,7 +1736,7 @@ jobs:
             const checked = await github.rest.repos.getRelease({ owner, repo, release_id: release.data.id });
             if (
               !checked.data.draft
-              || !checked.data.prerelease
+              || checked.data.prerelease !== prerelease
               || checked.data.tag_name !== process.env.CANDIDATE_TAG
               || checked.data.target_commitish !== process.env.CANDIDATE_COMMIT
               || checked.data.name !== process.env.CANDIDATE_NAME
@@ -1228,4 +1754,4 @@ jobs:
         shell: bash
         env:
           DRAFT_URL: ${{ steps.draft.outputs.release_url }}
-        run: echo "Candidate remains an unpublished draft at $DRAFT_URL"
+        run: echo "Candidate remains an unpublished draft Release at $DRAFT_URL"

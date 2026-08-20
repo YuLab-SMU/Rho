@@ -1,4 +1,6 @@
 param(
+    [ValidateSet("Full", "NoBundle", "BundleOnly")]
+    [string]$BuildMode = "Full",
     [string]$CargoHome = $env:CARGO_HOME,
     [string]$RustupHome = $env:RUSTUP_HOME,
     [string]$RtoolsBin = $env:RTOOLS_BIN,
@@ -64,6 +66,7 @@ $productName = $tauriConfig.productName
 $version = $tauriConfig.version
 $installerDirectory = Join-Path $repo "target\release\bundle\nsis"
 $releaseExecutable = Join-Path $repo "target\release\rho-desktop.exe"
+$expectedInstallerName = "Rho_${version}_x64-setup.exe"
 
 function Test-RhoTransientTauriBundleFailure {
     param(
@@ -114,6 +117,9 @@ if ($TauriConfigOverlayPath) {
     }
 }
 if ($MaximumTauriBuildAttempts -gt 1) {
+    if ($BuildMode -ne "Full") {
+        throw "Multiple Tauri attempts are supported only in Full mode."
+    }
     $issue33AcceptanceOverlay = (Resolve-Path -LiteralPath (Join-Path $repo "desktop\src-tauri\tauri.issue33-acceptance.conf.json") -ErrorAction Stop).Path
     if (-not $resolvedTauriConfigOverlayPath -or
         -not $resolvedTauriConfigOverlayPath.Equals($issue33AcceptanceOverlay, [System.StringComparison]::OrdinalIgnoreCase)) {
@@ -121,11 +127,44 @@ if ($MaximumTauriBuildAttempts -gt 1) {
     }
 }
 
-& (Join-Path $PSScriptRoot "prepare-runtime-resources.ps1") -RuntimeRoot $RuntimeRoot
+if ($BuildMode -eq "Full" -and (Test-Path -LiteralPath $installerDirectory)) {
+    # `target/` is restored by CI caches. A Full build owns the complete NSIS
+    # output directory, so remove stale installers/signatures before bundling;
+    # otherwise exact-artifact validation can count a prior cached version.
+    Remove-Item -LiteralPath $installerDirectory -Recurse -Force
+}
+
+if ($BuildMode -eq "NoBundle" -and (Test-Path -LiteralPath $installerDirectory)) {
+    $staleNoBundleInstallers = @(Get-ChildItem -LiteralPath $installerDirectory -Filter "*-setup.exe" -File -ErrorAction SilentlyContinue)
+    if ($staleNoBundleInstallers.Count -gt 0) {
+        throw "NoBundle mode requires a clean installer directory; remove stale installers before building."
+    }
+}
+
+$releaseExecutableHashBeforeBundle = $null
+if ($BuildMode -eq "BundleOnly") {
+    if (-not (Test-Path -LiteralPath $releaseExecutable -PathType Leaf)) {
+        throw "BundleOnly mode requires a pre-existing release executable at $releaseExecutable."
+    }
+    if (Test-Path -LiteralPath $installerDirectory) {
+        $staleBundleInstallers = @(Get-ChildItem -LiteralPath $installerDirectory -Filter "*-setup.exe" -File -ErrorAction SilentlyContinue)
+        if ($staleBundleInstallers.Count -gt 0) {
+            throw "BundleOnly mode requires a clean installer directory; stale installers are not accepted."
+        }
+    }
+    $releaseExecutableHashBeforeBundle = (Get-FileHash -LiteralPath $releaseExecutable -Algorithm SHA256).Hash.ToLowerInvariant()
+} else {
+    & (Join-Path $PSScriptRoot "prepare-runtime-resources.ps1") -RuntimeRoot $RuntimeRoot
+}
 
 Push-Location (Join-Path $repo "desktop\src-tauri")
 try {
-    $tauriArguments = @("-y", "@tauri-apps/cli@$TauriCliVersion", "build")
+    $tauriArguments = switch ($BuildMode) {
+        "Full" { @("-y", "@tauri-apps/cli@$TauriCliVersion", "build") }
+        "NoBundle" { @("-y", "@tauri-apps/cli@$TauriCliVersion", "build", "--no-bundle") }
+        "BundleOnly" { @("-y", "@tauri-apps/cli@$TauriCliVersion", "bundle", "--bundles", "nsis") }
+        default { throw "Unsupported Windows build mode: $BuildMode" }
+    }
     if ($resolvedTauriConfigOverlayPath) {
         $tauriArguments += @("--config", $resolvedTauriConfigOverlayPath)
     }
@@ -139,10 +178,10 @@ try {
             break
         }
 
-        $transientBundleFailure = Test-RhoTransientTauriBundleFailure `
-            -Output $tauriOutput `
-            -InstallerDirectory $installerDirectory `
-            -ReleaseExecutable $releaseExecutable
+        $transientBundleFailure = $BuildMode -eq "Full" -and (Test-RhoTransientTauriBundleFailure `
+                -Output $tauriOutput `
+                -InstallerDirectory $installerDirectory `
+                -ReleaseExecutable $releaseExecutable)
         if (-not $transientBundleFailure -or $attempt -ge $MaximumTauriBuildAttempts) {
             throw "Tauri build failed with exit code $tauriExitCode on attempt $attempt of $MaximumTauriBuildAttempts."
         }
@@ -160,17 +199,48 @@ finally {
     Pop-Location
 }
 
-$installer = Get-ChildItem -LiteralPath $installerDirectory -Filter "*-setup.exe" -ErrorAction Stop |
-    Sort-Object LastWriteTimeUtc -Descending |
-    Select-Object -First 1
-if (-not $installer) {
-    throw "Installer not found under $installerDirectory after building $productName $version."
+if (-not (Test-Path -LiteralPath $releaseExecutable -PathType Leaf)) {
+    throw "Release executable not found at $releaseExecutable after $BuildMode for $productName $version."
 }
+$releaseExecutableHash = (Get-FileHash -LiteralPath $releaseExecutable -Algorithm SHA256).Hash.ToLowerInvariant()
+
+if ($BuildMode -eq "NoBundle") {
+    $unexpectedInstallers = if (Test-Path -LiteralPath $installerDirectory) {
+        @(Get-ChildItem -LiteralPath $installerDirectory -Filter "*-setup.exe" -File -ErrorAction SilentlyContinue)
+    } else {
+        @()
+    }
+    if ($unexpectedInstallers.Count -ne 0) {
+        throw "NoBundle mode must not produce an installer."
+    }
+    Write-Host "Rho executable: $releaseExecutable"
+    if ($env:GITHUB_OUTPUT) {
+        Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "executable_path=$releaseExecutable"
+        Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "executable_sha256=$releaseExecutableHash"
+        Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "product_name=$productName"
+        Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "app_version=$version"
+        Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "build_mode=$BuildMode"
+    }
+    return
+}
+
+if ($BuildMode -eq "BundleOnly" -and $releaseExecutableHash -ne $releaseExecutableHashBeforeBundle) {
+    throw "Release executable changed during BundleOnly mode."
+}
+
+$installers = @(Get-ChildItem -LiteralPath $installerDirectory -Filter "*-setup.exe" -File -ErrorAction Stop)
+if ($installers.Count -ne 1 -or $installers[0].Name -ne $expectedInstallerName) {
+    throw "Expected exactly $expectedInstallerName under $installerDirectory after $BuildMode for $productName $version."
+}
+$installer = $installers[0]
 
 Write-Host "Rho installer: $($installer.FullName)"
 if ($env:GITHUB_OUTPUT) {
+    Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "executable_path=$releaseExecutable"
+    Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "executable_sha256=$releaseExecutableHash"
     Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "installer_path=$($installer.FullName)"
     Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "installer_name=$($installer.Name)"
     Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "product_name=$productName"
     Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "app_version=$version"
+    Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "build_mode=$BuildMode"
 }

@@ -45,6 +45,11 @@ Scope: Linux x64 AppImage distribution for the desktop application, a runtime
 dependency check for the missing WebKitGTK 4.1 library, local and hosted build
 lanes, and the Linux R discovery path.
 
+2026-08-17 amendment: `AUTO3-DEV43` activates Linux x86-64 automatic update
+delivery, final post-AppRun updater signing, transactional same-path AppImage
+replacement, three-platform candidate evidence, Release publication, and the
+normal development manifest. The earlier update deferral remains historical.
+
 Cross-reviewed against:
 
 - `docs/project/active-development-roadmap.md` (M3 cross-platform beta;

@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+  "crates/rho-extension-runtime",
   "crates/rho-protocol",
   "crates/rho-store",
   "crates/rho-kernel",
@@ -15,7 +16,7 @@ members = [
 exclude = ["vendor/jet"]
 
 [workspace.package]
-version = "0.4.0-dev.40"
+version = "0.4.1-dev.1"
 edition = "2024"
 rust-version = "1.88"
 license = "AGPL-3.0-only"
@@ -23,15 +24,21 @@ repository = "https://github.com/YuLab-SMU/Rho"
 
 [workspace.dependencies]
 anyhow = "1.0"
+arc-swap = { version = "1.9", default-features = false }
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
 jet_core = { path = "vendor/jet/crates/core" }
 libc = "0.2"
 rand = "0.9"
+petgraph = { version = "0.8", default-features = false, features = ["std"] }
 rusqlite = { version = "0.37", features = ["bundled"] }
+semver = { version = "1.0", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+sha2 = "0.10"
 tempfile = "3.20"
 thiserror = "2.0"
 tokio = { version = "1.0", features = ["full"] }
+tokio-util = { version = "0.7", default-features = false, features = ["rt"] }
 uuid = { version = "1.18", features = ["v4", "serde"] }
+zeroize = "1.9"

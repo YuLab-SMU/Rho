@@ -9,6 +9,7 @@ use anyhow::{Context, Result, bail, ensure};
 use chrono::Utc;
 use rho_server::coordinator::{AgentRuntimeCapabilityRoute, AgentRuntimeModelProfile};
 use serde::{Deserialize, Serialize};
+use zeroize::Zeroizing;
 
 use crate::project::atomic_write;
 
@@ -33,6 +34,9 @@ const CREDENTIAL_SERVICE: &str = "Rho Agent LLM";
 const MAX_CREDENTIAL_BYTES: usize = 16 * 1024;
 
 static SETTINGS_MUTATION_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+static SYSTEM_CREDENTIAL_OBSERVATIONS: OnceLock<Mutex<HashMap<String, CredentialObservation>>> =
+    OnceLock::new();
+static SYSTEM_CREDENTIAL_SESSION: OnceLock<SessionCredentialCache> = OnceLock::new();
 
 fn settings_mutation_guard() -> MutexGuard<'static, ()> {
     SETTINGS_MUTATION_LOCK
@@ -50,17 +54,136 @@ trait CredentialStore {
 #[derive(Debug, Default, Clone, Copy)]
 struct SystemCredentialStore;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CredentialObservation {
+    Detected,
+    NotDetected,
+    Unavailable,
+}
+
+#[derive(Default)]
+struct SessionCredentialCache {
+    entries: Mutex<HashMap<String, Option<Zeroizing<String>>>>,
+}
+
+impl SessionCredentialCache {
+    fn get_or_load<F>(&self, provider_id: &str, load: F) -> Result<Option<String>>
+    where
+        F: FnOnce() -> Result<Option<String>>,
+    {
+        let mut entries = self
+            .entries
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(cached) = entries.get(provider_id) {
+            return Ok(cached
+                .as_ref()
+                .map(|credential| credential.as_str().to_string()));
+        }
+        let loaded = load()?;
+        entries.insert(
+            provider_id.to_string(),
+            loaded
+                .as_ref()
+                .map(|credential| Zeroizing::new(credential.clone())),
+        );
+        Ok(loaded)
+    }
+
+    fn set(&self, provider_id: &str, credential: &str) {
+        self.entries
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(
+                provider_id.to_string(),
+                Some(Zeroizing::new(credential.to_string())),
+            );
+    }
+
+    fn mark_missing(&self, provider_id: &str) {
+        self.entries
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(provider_id.to_string(), None);
+    }
+
+    fn clear(&self) {
+        self.entries
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clear();
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.entries
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .len()
+    }
+}
+
+fn system_credential_session() -> &'static SessionCredentialCache {
+    SYSTEM_CREDENTIAL_SESSION.get_or_init(SessionCredentialCache::default)
+}
+
+fn system_credential_observations() -> &'static Mutex<HashMap<String, CredentialObservation>> {
+    SYSTEM_CREDENTIAL_OBSERVATIONS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn record_system_credential_observation(provider_id: &str, observation: CredentialObservation) {
+    system_credential_observations()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .insert(provider_id.to_string(), observation);
+}
+
+fn current_system_credential_observations() -> HashMap<String, CredentialObservation> {
+    system_credential_observations()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone()
+}
+
+fn clear_system_credential_session() {
+    system_credential_session().clear();
+    system_credential_observations()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clear();
+}
+
 impl CredentialStore for SystemCredentialStore {
     fn get(&self, provider_id: &str) -> Result<Option<String>> {
-        system_credential_get(provider_id)
+        let result = system_credential_session()
+            .get_or_load(provider_id, || system_credential_get(provider_id));
+        record_system_credential_observation(
+            provider_id,
+            match &result {
+                Ok(Some(_)) => CredentialObservation::Detected,
+                Ok(None) => CredentialObservation::NotDetected,
+                Err(_) => CredentialObservation::Unavailable,
+            },
+        );
+        result
     }
 
     fn set(&self, provider_id: &str, credential: &str) -> Result<()> {
-        system_credential_set(provider_id, credential)
+        let result = system_credential_set(provider_id, credential);
+        if result.is_ok() {
+            system_credential_session().set(provider_id, credential);
+            record_system_credential_observation(provider_id, CredentialObservation::Detected);
+        }
+        result
     }
 
     fn delete(&self, provider_id: &str) -> Result<()> {
-        system_credential_delete(provider_id)
+        let result = system_credential_delete(provider_id);
+        if result.is_ok() {
+            system_credential_session().mark_missing(provider_id);
+            record_system_credential_observation(provider_id, CredentialObservation::NotDetected);
+        }
+        result
     }
 }
 
@@ -1008,16 +1131,28 @@ pub fn settings_view(data_dir: &Path, _rscript: &Path) -> Result<AgentLlmSetting
 }
 
 pub fn settings_view_from_settings(settings: AgentLlmSettings) -> Result<AgentLlmSettingsView> {
-    let statuses = credential_status_map(&settings.providers, &SystemCredentialStore)?;
-    Ok(build_settings_view(
+    let observations = current_system_credential_observations();
+    Ok(settings_view_from_settings_with_observations(
         settings,
-        system_credential_info(),
-        statuses,
+        &observations,
     ))
 }
 
+fn settings_view_from_settings_with_observations(
+    settings: AgentLlmSettings,
+    observations: &HashMap<String, CredentialObservation>,
+) -> AgentLlmSettingsView {
+    let statuses = credential_status_map(&settings.providers, observations);
+    build_settings_view(settings, system_credential_info(), statuses)
+}
+
 pub fn refresh_credentials_view(data_dir: &Path, rscript: &Path) -> Result<AgentLlmSettingsView> {
+    clear_system_credential_session();
     settings_view(data_dir, rscript)
+}
+
+pub fn clear_session_credentials() {
+    clear_system_credential_session();
 }
 
 pub fn catalog(rscript: &Path) -> Result<Vec<AgentCatalogEntry>> {
@@ -1632,29 +1767,19 @@ pub fn test_model(
         "Only language models use the text connection test. Image and embedding probes are not installed."
     );
     let resolved = resolve_model_with_settings(&settings, Some(model_id))?;
-    let credential_statuses = credential_status_map(&settings.providers, &SystemCredentialStore)?;
-    let provider_credential = credential_statuses.get(&resolved.provider_id).cloned();
-    let credential_status = provider_credential
-        .as_ref()
-        .map(|status| status.status.clone())
-        .unwrap_or_else(|| {
-            credential_statuses
-                .get(&resolved.runtime_profile.runtime_provider_id)
-                .map(|status| status.status.clone())
-                .unwrap_or_else(|| {
-                    let provider = settings
-                        .providers
-                        .iter()
-                        .find(|item| item.id == resolved.provider_id);
-                    provider
-                        .map(credential_label_for_provider)
-                        .unwrap_or_else(|| "not_detected".to_string())
-                })
-        });
-    let result = if matches!(credential_status.as_str(), "not_detected" | "unavailable")
-        && resolved.runtime_profile.api_key_required
-    {
-        AgentConnectionTestResponse {
+    let credential_override =
+        credential_override_with_store(&settings, &resolved.provider_id, &SystemCredentialStore);
+    let result = match credential_override {
+        Err(_) => AgentConnectionTestResponse {
+            status: "error".to_string(),
+            credential_status: "unavailable".to_string(),
+            model_resolved: false,
+            latency_ms: None,
+            capabilities: inferred_capabilities(&resolved.runtime_profile),
+            message: "The system credential store is unavailable.".to_string(),
+            error_class: Some("credential".to_string()),
+        },
+        Ok(None) if resolved.runtime_profile.api_key_required => AgentConnectionTestResponse {
             status: "error".to_string(),
             credential_status: "not_detected".to_string(),
             model_resolved: false,
@@ -1662,27 +1787,14 @@ pub fn test_model(
             capabilities: inferred_capabilities(&resolved.runtime_profile),
             message: "No API key is available for this provider.".to_string(),
             error_class: Some("credential".to_string()),
-        }
-    } else {
-        let credential_override = if provider_credential
-            .as_ref()
-            .is_some_and(|credential| credential.source == "system")
-        {
-            credential_override_with_store(
-                &settings,
-                &resolved.provider_id,
-                &SystemCredentialStore,
-            )?
-        } else {
-            None
-        };
-        run_connection_test(
+        },
+        Ok(credential_override) => run_connection_test(
             rscript,
             agent_package,
             &resolved.runtime_profile,
             credential_override.as_ref(),
             test_control,
-        )?
+        )?,
     };
     let _guard = settings_mutation_guard();
     let mut latest_settings = load_settings(data_dir)?;
@@ -1695,12 +1807,7 @@ pub fn test_model(
     update_model_after_test(&mut latest_settings, model_id, &result)?;
     increment_revision(&mut latest_settings)?;
     save_settings(data_dir, &latest_settings)?;
-    let statuses = credential_status_map(&latest_settings.providers, &SystemCredentialStore)?;
-    Ok(build_settings_view(
-        latest_settings,
-        system_credential_info(),
-        statuses,
-    ))
+    settings_view_from_settings(latest_settings)
 }
 
 pub fn resolve_model_for_turn(
@@ -2627,29 +2734,33 @@ struct CredentialPresentation {
 
 fn credential_status_map(
     providers: &[AgentProviderProfile],
-    credential_store: &impl CredentialStore,
-) -> Result<HashMap<String, CredentialPresentation>> {
-    Ok(providers
+    observations: &HashMap<String, CredentialObservation>,
+) -> HashMap<String, CredentialPresentation> {
+    providers
         .iter()
         .map(|provider| {
             let presentation = if !provider.api_key_required {
                 credential_presentation_for_provider(provider)
             } else {
-                match credential_store.get(&provider.id) {
-                    Ok(Some(_)) => CredentialPresentation {
+                match observations.get(&provider.id) {
+                    Some(CredentialObservation::Detected) => CredentialPresentation {
                         status: "detected".to_string(),
                         source: "system".to_string(),
                     },
-                    Ok(None) => credential_presentation_for_provider(provider),
-                    Err(_) => CredentialPresentation {
+                    Some(CredentialObservation::NotDetected) => CredentialPresentation {
+                        status: "not_detected".to_string(),
+                        source: "none".to_string(),
+                    },
+                    Some(CredentialObservation::Unavailable) => CredentialPresentation {
                         status: "unavailable".to_string(),
                         source: "unavailable".to_string(),
                     },
+                    None => credential_presentation_for_provider(provider),
                 }
             };
             (provider.id.clone(), presentation)
         })
-        .collect())
+        .collect()
 }
 
 fn selector_status(
@@ -2687,7 +2798,7 @@ fn credential_label_for_provider(provider: &AgentProviderProfile) -> String {
     if !provider.api_key_required {
         "not_required".to_string()
     } else {
-        "not_detected".to_string()
+        "unchecked".to_string()
     }
 }
 
@@ -2695,7 +2806,7 @@ fn credential_presentation_for_provider(provider: &AgentProviderProfile) -> Cred
     CredentialPresentation {
         status: credential_label_for_provider(provider),
         source: if provider.api_key_required {
-            "none".to_string()
+            "unchecked".to_string()
         } else {
             "not_required".to_string()
         },
@@ -2915,7 +3026,10 @@ mod tests {
     use super::*;
     use std::io::Write as _;
     use std::net::TcpListener;
-    use std::sync::Barrier;
+    use std::sync::{
+        Barrier,
+        atomic::{AtomicUsize, Ordering},
+    };
     use std::thread;
     use tempfile::TempDir;
 
@@ -3562,6 +3676,10 @@ mod tests {
             )
             .is_err()
         );
+        assert_eq!(
+            store.get_calls.lock().unwrap().as_slice(),
+            &["provider-deepseek-existing", "provider-act"]
+        );
         assert!(!serde_json::to_string(&settings).unwrap().contains("secret"));
     }
 
@@ -3802,12 +3920,151 @@ mod tests {
     }
 
     #[test]
-    fn missing_system_credential_is_not_reported_from_process_environment() {
-        let store = MemoryCredentialStore::default();
-        let statuses = credential_status_map(&default_settings().providers, &store).unwrap();
-        let status = statuses.get("provider-deepseek-existing").unwrap();
-        assert_eq!(status.status, "not_detected");
-        assert_eq!(status.source, "none");
+    fn settings_projection_is_lazy_and_never_reads_provider_credentials() {
+        let settings = default_settings();
+        let store = MemoryCredentialStore {
+            entries: Mutex::new(HashMap::from([(
+                "provider-deepseek-existing".to_string(),
+                "secret-that-must-not-be-read".to_string(),
+            )])),
+            ..Default::default()
+        };
+        let view = settings_view_from_settings_with_observations(settings, &HashMap::new());
+        let provider = view
+            .providers
+            .iter()
+            .find(|provider| provider.profile.id == "provider-deepseek-existing")
+            .unwrap();
+
+        assert_eq!(provider.credential_status, "unchecked");
+        assert_eq!(provider.credential_source, "unchecked");
+        assert!(store.get_calls.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn session_cache_reads_each_provider_once_and_caches_missing_values() {
+        let cache = SessionCredentialCache::default();
+        let loads = AtomicUsize::new(0);
+        let first = cache
+            .get_or_load("provider-first", || {
+                loads.fetch_add(1, Ordering::SeqCst);
+                Ok(Some("first-secret".to_string()))
+            })
+            .unwrap();
+        let repeated = cache
+            .get_or_load("provider-first", || {
+                panic!("cached Provider must not call Keychain again")
+            })
+            .unwrap();
+        let missing = cache
+            .get_or_load("provider-missing", || {
+                loads.fetch_add(1, Ordering::SeqCst);
+                Ok(None)
+            })
+            .unwrap();
+        let repeated_missing = cache
+            .get_or_load("provider-missing", || {
+                panic!("known-missing Provider must not call Keychain again")
+            })
+            .unwrap();
+
+        assert_eq!(first.as_deref(), Some("first-secret"));
+        assert_eq!(repeated.as_deref(), Some("first-secret"));
+        assert_eq!(missing, None);
+        assert_eq!(repeated_missing, None);
+        assert_eq!(loads.load(Ordering::SeqCst), 2);
+        assert_eq!(cache.len(), 2);
+    }
+
+    #[test]
+    fn session_cache_replaces_deletes_clears_and_retries_failures() {
+        let cache = SessionCredentialCache::default();
+        cache.set("provider", "first-secret");
+        assert_eq!(
+            cache
+                .get_or_load("provider", || panic!("set value must be cached"))
+                .unwrap()
+                .as_deref(),
+            Some("first-secret")
+        );
+        cache.set("provider", "replacement-secret");
+        assert_eq!(
+            cache
+                .get_or_load("provider", || panic!("replacement must be cached"))
+                .unwrap()
+                .as_deref(),
+            Some("replacement-secret")
+        );
+        cache.mark_missing("provider");
+        assert_eq!(
+            cache
+                .get_or_load("provider", || panic!("delete state must be cached"))
+                .unwrap(),
+            None
+        );
+
+        let attempts = AtomicUsize::new(0);
+        assert!(
+            cache
+                .get_or_load("provider-retry", || {
+                    attempts.fetch_add(1, Ordering::SeqCst);
+                    bail!("injected Keychain denial")
+                })
+                .is_err()
+        );
+        assert_eq!(
+            cache
+                .get_or_load("provider-retry", || {
+                    attempts.fetch_add(1, Ordering::SeqCst);
+                    Ok(Some("retry-secret".to_string()))
+                })
+                .unwrap()
+                .as_deref(),
+            Some("retry-secret")
+        );
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
+        cache.clear();
+        assert_eq!(cache.len(), 0);
+    }
+
+    #[test]
+    fn non_secret_observations_project_exact_credential_states() {
+        let mut settings = default_settings();
+        for (id, required) in [
+            ("provider-missing", true),
+            ("provider-unavailable", true),
+            ("provider-optional", false),
+        ] {
+            let mut provider = settings.providers[0].clone();
+            provider.id = id.to_string();
+            provider.api_key_required = required;
+            provider.api_key_env = required.then(|| format!("{}_KEY", id.to_ascii_uppercase()));
+            settings.providers.push(provider);
+        }
+        let observations = HashMap::from([
+            (
+                "provider-deepseek-existing".to_string(),
+                CredentialObservation::Detected,
+            ),
+            (
+                "provider-missing".to_string(),
+                CredentialObservation::NotDetected,
+            ),
+            (
+                "provider-unavailable".to_string(),
+                CredentialObservation::Unavailable,
+            ),
+        ]);
+        let statuses = credential_status_map(&settings.providers, &observations);
+
+        assert_eq!(statuses["provider-deepseek-existing"].status, "detected");
+        assert_eq!(statuses["provider-deepseek-existing"].source, "system");
+        assert_eq!(statuses["provider-missing"].status, "not_detected");
+        assert_eq!(statuses["provider-missing"].source, "none");
+        assert_eq!(statuses["provider-unavailable"].status, "unavailable");
+        assert_eq!(statuses["provider-unavailable"].source, "unavailable");
+        assert_eq!(statuses["provider-optional"].status, "not_required");
+        assert_eq!(statuses["provider-optional"].source, "not_required");
     }
 
     #[test]

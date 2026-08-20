@@ -6,8 +6,10 @@ const read = (file) => normalizeLineEndings(fs.readFileSync(file, "utf8"));
 const count = (text, pattern) => [...text.matchAll(pattern)].length;
 const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-const expectedVersion = "0.4.0-dev.40";
+const expectedVersion = "0.4.1-dev.1";
+const normalPublishVersion = "0.4.0";
 const expectedVersionPattern = escapeRegExp(expectedVersion);
+const normalPublishVersionPattern = escapeRegExp(normalPublishVersion);
 const cargo = read("Cargo.toml");
 const cargoVersion = cargo.match(/^version = "([^"]+)"/m)?.[1];
 assert.equal(cargoVersion, expectedVersion, "Cargo candidate version must be synchronized");
@@ -25,7 +27,7 @@ assert.ok(
 
 const localPackagePattern = /name = "rho-[^"]+"\r?\nversion = "([^"]+)"/g;
 assert.deepEqual(
-  [...'name = "rho-fixture"\r\nversion = "0.4.0-dev.40"'.matchAll(localPackagePattern)].map((match) => match[1]),
+  [...`name = "rho-fixture"\r\nversion = "${expectedVersion}"`.matchAll(localPackagePattern)].map((match) => match[1]),
   [expectedVersion],
   "Cargo.lock parsing must accept Windows CRLF checkouts",
 );
@@ -36,8 +38,8 @@ assert.ok(lockLocalVersions.every((version) => version === expectedVersion), "Ca
 const build = read(".github/workflows/candidate-build-draft.yml");
 assert.equal(
   count(build, /cargo test --workspace --locked --no-fail-fast/g),
-  2,
-  "Windows and macOS candidate validation must both use the committed Cargo.lock",
+  3,
+  "Windows, macOS, and Linux candidate validation must use the committed Cargo.lock",
 );
 assert.doesNotMatch(build, /cargo test --workspace --no-fail-fast/);
 assert.match(build, /export RUSTUP_TOOLCHAIN=stable-aarch64-apple-darwin/);
@@ -59,14 +61,14 @@ assert.match(
 );
 assert.match(build, /name: Build Rho Candidate \/ Rehearsal/);
 assert.match(build, buildModePattern);
-assert.match(build, new RegExp(`release_tag:\\n[\\s\\S]*?default: v${expectedVersionPattern}`));
-assert.match(build, new RegExp(`release_name:\\n[\\s\\S]*?default: Rho ${expectedVersionPattern}`));
+assert.match(build, new RegExp(`release_tag:\\n[\\s\\S]*?default: v${normalPublishVersionPattern}`));
+assert.match(build, /release_name:\n[\s\S]*?default: Rho 0\.4\.0/);
 assert.match(build, /candidate-release\.mjs --mode admission --build_mode "\$BUILD_MODE" --repository "\$GITHUB_REPOSITORY" --workflow_ref "\$GITHUB_REF" --default_branch "\$DEFAULT_BRANCH"/);
 assert.match(build, /release-notes\.mjs --test true/);
 assert.match(build, /release-notes\.mjs --mode validate --version "\$version" --tag "\$INPUT_RELEASE_TAG"/);
 assert.match(build, /commit="\$\(git rev-parse "\$\{INPUT_REF\}\^\{commit\}"\)"/);
 assert.match(build, /Requested commit \$commit is not the current default-branch commit \$default_commit/);
-assert.equal(count(build, /persist-credentials: false/g), 7, "Every candidate checkout must avoid persisted Git credentials");
+assert.equal(count(build, /persist-credentials: false/g), 8, "Every candidate checkout must avoid persisted Git credentials");
 assert.match(build, /runs-on: macos-26\b/);
 assert.doesNotMatch(build, /macos-26-arm64/);
 assert.match(build, /DEVELOPER_DIR: \/Applications\/Xcode_26\.6\.app\/Contents\/Developer/);
@@ -124,7 +126,7 @@ assert.match(
 
 const macSubmitJob = build.match(/\n  macos-submit:[\s\S]*?(?=\n  macos-notary-wait:)/)?.[0];
 const macWaitJob = build.match(/\n  macos-notary-wait:[\s\S]*?(?=\n  macos-finalize:)/)?.[0];
-const macFinalizeJob = build.match(/\n  macos-finalize:[\s\S]*?(?=\n  rehearsal-evidence:)/)?.[0];
+const macFinalizeJob = build.match(/\n  macos-finalize:[\s\S]*?(?=\n  linux-candidate:)/)?.[0];
 assert.ok(macSubmitJob && macWaitJob && macFinalizeJob, "Missing asynchronous macOS notarization jobs");
 assert.match(macSubmitJob, /runs-on: macos-26\n\s+timeout-minutes: 60/);
 assert.match(macSubmitJob, /xcrun notarytool submit "\$submitted_dmg"[^\n]+ --no-wait --output-format json/);
@@ -214,7 +216,7 @@ const imports = bridgeDescription.match(/Imports:\n((?:    .+\n?)+)/)?.[1]
   .map((value) => value.trim().split(/\s+/)[0])
   .filter(Boolean);
 assert.deepEqual(imports?.filter((name) => !["methods", "utils"].includes(name)).sort(), ["jsonlite"]);
-assert.match(build, /needs: \[identity, windows-candidate, macos-finalize\]/g);
+assert.match(build, /needs: \[identity, windows-candidate, macos-finalize, linux-candidate\]/g);
 assert.doesNotMatch(build, /macos-candidate/);
 
 const entitlementValidator = read("scripts/validate-macos-entitlements.mjs");
@@ -231,10 +233,12 @@ assert.match(notaryContract, /dsaEncoding: "ieee-p1363"/);
 assert.match(notaryContract, /EXACT_DEVELOPER_LOG_HOSTS = new Set\(\["notary-artifacts-prod\.s3\.amazonaws\.com"\]\)/);
 assert.match(
   read(".github/workflows/candidate-publish.yml"),
-  new RegExp(`default: v${expectedVersionPattern}`),
+  new RegExp(`default: v${escapeRegExp(normalPublishVersion)}`),
 );
 assert.match(build, /draft: true/);
-assert.match(build, /prerelease: true/);
+assert.match(build, /const prerelease = version\.includes\("-"\)/);
+assert.match(build, /prerelease,/);
+assert.match(build, /checked\.data\.prerelease !== prerelease/);
 assert.match(build, /getReleaseByTag/);
 assert.match(build, /git\.getRef/);
 assert.doesNotMatch(build, /deleteReleaseAsset/);
@@ -246,7 +250,7 @@ assert.match(build, /name: rho-\$\{\{ needs\.identity\.outputs\.version \}\}-win
 assert.match(build, /name: rho-\$\{\{ needs\.identity\.outputs\.version \}\}-macos-arm64-\$\{\{ github\.run_id \}\}/);
 assert.equal(count(build, /name: rho-notary-(?:submission|acceptance)-\$\{\{ needs\.identity\.outputs\.version \}\}-\$\{\{ github\.run_id \}\}/g), 5);
 assert.doesNotMatch(build, /name: rho-notary-(?:submission|acceptance)[\s\S]{0,300}overwrite: true/);
-assert.equal(count(build, /needs: \[identity, windows-candidate, macos-finalize\]/g), 2);
+assert.equal(count(build, /needs: \[identity, windows-candidate, macos-finalize, linux-candidate\]/g), 2);
 
 const rehearsalJob = build.match(/\n  rehearsal-evidence:[\s\S]*?(?=\n  draft-candidate:)/)?.[0];
 assert.ok(rehearsalJob, "Missing rehearsal evidence job");
@@ -258,7 +262,7 @@ assert.match(rehearsalJob, /unlinkSync/);
 assert.doesNotMatch(rehearsalJob, /contents: write|createRelease|uploadReleaseAsset|getReleaseByTag|git\.getRef/);
 const rehearsalUpload = rehearsalJob.match(/- name: Upload exact review-only rehearsal artifact[\s\S]*$/)?.[0];
 assert.ok(rehearsalUpload, "Missing rehearsal artifact upload");
-assert.equal(count(rehearsalUpload, /^\s+target\/candidate\//gm), 7, "Rehearsal artifact must contain exactly seven files");
+assert.equal(count(rehearsalUpload, /^\s+target\/candidate\//gm), 10, "Rehearsal artifact must contain exactly ten three-platform files");
 assert.match(rehearsalUpload, /rho-\$\{\{ needs\.identity\.outputs\.version \}\}-rehearsal-evidence\.json/);
 assert.match(rehearsalUpload, /github\.run_id/);
 assert.match(rehearsalUpload, /github\.run_attempt/);
@@ -305,7 +309,9 @@ assert.match(publish, /Draft identity, reviewed body, or assets changed after co
 assert.match(publish, /afterBodySha256 !== snapshot\.body_sha256/);
 assert.match(publish, /rho-\$\{version\}-acceptance\.json/);
 assert.match(publish, /draft: false/);
-assert.match(publish, /prerelease: true/);
+assert.match(publish, /const expectedPrerelease = version\.includes\("-"\)/);
+assert.match(publish, /prerelease: snapshot\.prerelease/);
+assert.match(publish, /after\.data\.prerelease !== snapshot\.prerelease/);
 assert.doesNotMatch(publish, /uploadReleaseAsset|deleteReleaseAsset|createRelease/);
 assert.equal(count(publish, /updateRelease/g), 1, "Publish workflow may perform one release state transition");
 assert.match(candidateTool, /CONDITIONAL_ACCEPTANCE_VERSIONS = new Set\(\["0\.4\.0-dev\.39"\]\)/);
@@ -322,18 +328,25 @@ assert.match(pages, /rho-\$\{version\}-candidate-evidence\.json/);
 assert.match(pages, /rho-\$\{version\}-acceptance\.json/);
 assert.match(pages, /evidence_sha256: evidenceSha256/);
 assert.match(pages, /target_commitish: release\.target_commitish/);
-assert.match(pages, /artifacts\.macos_aarch64/);
+assert.match(pages, /stable_version=/);
+assert.match(pages, /native_stable_version=/);
+assert.match(pages, /Verify deployed stable manifests/);
+assert.match(pages, /EXPECTED_STABLE_SHA256/);
+assert.match(pages, /EXPECTED_NATIVE_STABLE_SHA256/);
+assert.match(pages, /Verify deployed download page/);
 assert.match(pages, /Platform evidence content mismatch/);
 
 const update = read("desktop/src-tauri/src/update.rs");
 assert.match(update, /NATIVE_UPDATE_DEVELOPMENT_ENDPOINT/);
 assert.match(update, /native_updater_supported_for\(os: &str, arch: &str\)/);
 assert.match(update, /\("macos", "aarch64"\)/);
+assert.match(update, /\("linux", "x86_64"\)/);
 assert.match(update, /UPDATE_INVALID: native update notes/);
-assert.match(read("desktop/dist/app.js"), /Native updates are available only for Windows x64 and Apple Silicon Macs\./);
+assert.match(read("desktop/dist/app.js"), /Native updates are unavailable for this operating-system architecture\./);
 const generator = read("scripts/generate-update-site.mjs");
 assert.match(generator, /validateAggregateEvidence/);
 assert.match(generator, /Download for macOS \(Apple Silicon\)/);
+assert.match(generator, /Download for Linux x86-64/);
 assert.match(generator, /candidate platforms/);
 assert.match(generator, /validateAcceptanceEvidence/);
 assert.match(generator, /Conditional prerelease:/);

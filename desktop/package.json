@@ -1,7 +1,7 @@
 {
   "name": "rho-desktop-frontend",
   "private": true,
-  "version": "0.4.0-dev.40",
+  "version": "0.4.1-dev.1",
   "description": "Static frontend asset tooling for Rho desktop",
   "license": "AGPL-3.0-only",
   "scripts": {

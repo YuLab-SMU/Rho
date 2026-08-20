@@ -1,6 +1,6 @@
 # Outputs And Viewer Specification
 
-Status: active; OUTPUTS-VIEWER-1 authorized 2026-08-05
+Status: active; OUTPUTS-VIEWER-1 and prior repairs implemented; OUTPUTS-IMAGE-ARTIFACT-R1 implementation and exact local zero-Plot PNG acceptance complete 2026-08-19; broader release-candidate acceptance remains open
 
 Date: 2026-08-05
 Change class: D2 bounded workflow feature
@@ -405,3 +405,74 @@ is made because no new distributable candidate was produced and this repair is
 not present in `0.4.0-dev.14`. The next rebuilt candidate must advance to
 `0.4.0-dev.15`, record the repair in `NEWS.md`, and repeat the exact installed
 `pbmc3k_分析报告.html` link acceptance.
+
+### Saved image Artifact preview repair (2026-08-19)
+
+The project owner's local `0.4.1-dev.1` test selected a valid generated PNG
+Artifact while the current Workspace session contained zero Plot records. The
+file exists inside the project (`2400 x 1800`, `image/png`, 189,734 bytes), its
+same-project Artifact record is complete, and historical Plot payloads remain
+renderable. `renderPlotsContent()` nevertheless called `showPlotSurfaceState`
+and returned immediately on `!plots.length`; `renderArtifactRecords()` rendered
+metadata only. Artifact selection therefore could not populate the main Outputs
+preview, and Viewer required a separate action.
+
+`OUTPUTS-IMAGE-ARTIFACT-R1` is an explicitly authorized D1/R3 repair:
+
+- current-session/history Plot filtering remains Plot-only and cannot suppress
+  a selected Saved image Artifact;
+- selecting an Artifact clears active Plot selection and loads only that exact
+  Artifact path through existing `viewer_read_file()` containment, media, size,
+  generation, and active-project checks;
+- supported image media are `image/png`, `image/jpeg`, `image/gif`, and
+  `image/webp`; their bounded base64 response is rendered in the existing main
+  Outputs image stage without creating another file read or durable record;
+- asynchronous preview state is bound to project root, Artifact ID, path, and a
+  monotonic request sequence; late project/selection results are discarded;
+- loading, missing, unsupported, malformed, oversized, stale-project, and read
+  failure states clear any previous image and display truthful output-specific
+  copy;
+- clicking a Plot restores Plot preview precedence; clicking a Saved image
+  Artifact immediately restores Artifact preview and makes Open in Viewer
+  target the Artifact rather than a previously selected Plot;
+- non-image HTML, Markdown, table, and source Artifacts retain central Viewer
+  behavior and are not injected into the image stage;
+- project switching clears Artifact preview bytes and invalidates pending
+  requests; and
+- no schema, persistence, network, execution, write, remote URL, sandbox,
+  retention, provenance, or filesystem authority changes.
+
+Regression evidence must cover zero Plot + selected PNG, Plot + selected PNG,
+artifact/plot switching, missing/unsupported/error, stale request/project,
+project reset, Open in Viewer target selection, and the existing 4 MiB image
+limit. Local acceptance uses the owner's existing PNG and performs no Agent or
+Workspace execution.
+
+Implementation and bounded local evidence on 2026-08-19:
+
+- Artifact preview state is now bound to the selected Artifact, normalized
+  active project, exact Viewer response path, media type, and monotonic request
+  sequence. A selected image retains main-stage and Open-in-Viewer precedence
+  across background Plot-list refresh; explicit Plot selection clears it.
+- The existing WebView script URL gained the `outputs=image-artifact-r1`
+  cache-buster so a rebuilt app cannot continue executing a cached pre-repair
+  `app.js` under the unchanged development version.
+- `node --check desktop/dist/app.js`,
+  `node scripts/test-outputs-viewer-ui.mjs`,
+  `node scripts/test-agent-output-review-ui.mjs`, and `git diff --check`
+  passed.
+- An unsigned Apple Silicon app build completed with
+  `npx -y "@tauri-apps/cli@2.11.4" build --target
+  aarch64-apple-darwin --bundles app`. The exact repository bundle, rather than
+  the same-bundle-ID copy in `/Applications`, was targeted for acceptance.
+- In the owner's `test_rho` project, selecting the recorded
+  `scatter_plot_example.png` while Session showed zero Plots rendered the real
+  `2400 x 1800` PNG in the main Outputs stage. No Agent call or Workspace
+  execution was performed.
+
+The browser/mock matrix, failure injection, two-project isolation, and full
+cross-platform matrix were not run in this local repair round. No application
+version or `NEWS.md` change is made because this is an uncommitted local test
+build, not a newly named or distributed candidate; the next candidate that
+includes the repair must advance version metadata, add release notes, and run
+the remaining acceptance matrix.

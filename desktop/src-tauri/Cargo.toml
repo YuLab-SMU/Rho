@@ -17,6 +17,7 @@ minisign-verify = "0.2"
 notify = "8.2"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 rho-core = { path = "../../crates/rho-core" }
+rho-extension-runtime = { path = "../../crates/rho-extension-runtime" }
 rho-kernel = { path = "../../crates/rho-kernel" }
 rho-protocol = { path = "../../crates/rho-protocol" }
 rho-server = { path = "../../crates/rho-server" }
@@ -32,6 +33,7 @@ tempfile.workspace = true
 tar = "0.4"
 tokio.workspace = true
 uuid.workspace = true
+zeroize.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 keyring = { version = "4.1.6", default-features = false, features = ["v1", "windows-native-keyring-store"] }

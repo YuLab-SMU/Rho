@@ -7,7 +7,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
 const js = read("desktop", "dist", "app.js");
 const css = read("desktop", "dist", "styles.css");
-const bridge = read("R", "rho.bridge", "R", "workspace.R");
+const bridge = read("r", "rho.bridge", "R", "workspace.R");
 
 assert.match(js, /\["qc", "qc_paged", "qc_types"\]/);
 assert.match(js, /cell_states: \["value", "value", "value", "empty"/);

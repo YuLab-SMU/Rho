@@ -21,7 +21,9 @@ mod compare;
 mod environment;
 mod evidence;
 mod migration;
+mod mutation;
 mod project;
+mod query;
 mod run;
 mod workbench;
 
@@ -46,9 +48,11 @@ pub use evidence::{
     ClaimReviewStatus, EvidenceClaim, EvidenceClaimDraft, EvidenceClaimReview, EvidenceEntry,
     EvidenceEntryDraft,
 };
+pub use mutation::ProjectMutationService;
 pub use project::{
     PlotPayloadPruneResult, ProjectRetentionSummary, RetentionPolicy, RetentionScopeSummary,
 };
+pub use query::ProjectQueryService;
 pub use run::{ProblemSummary, RunDetail, RunDraft, RunErrorRange, RunFinish, RunSummary};
 
 pub fn normalize_project_root(root: &str) -> String {

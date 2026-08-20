@@ -4,6 +4,90 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.1-dev.1 - 2026-08-18
+
+### Credentials
+
+- macOS startup and ordinary Model settings projection no longer read every
+  Provider API key. Keychain access is deferred to the exact Provider used by
+  an Agent turn, model test, model discovery, or explicit credential action,
+  preventing one authorization dialog per configured Provider.
+- The first successful use of a Provider keeps its key only in a zeroizing
+  process-session cache, so later conversations do not ask Keychain again.
+  Replacement, deletion, refresh, and graceful shutdown clear the entry;
+  secrets remain absent from settings, browser storage, logs, and diagnostics.
+
+### Agent reliability
+
+- Provider failures now retain and display a bounded redacted cause, including
+  actionable HTTP 401/403, 404, 429, and 5xx guidance instead of a bare
+  `Failed` state.
+- Invalid file proposals such as `replace_selection` without a captured
+  selection are labelled before review and cannot be accepted. Valid proposals
+  wait until their parent Agent turn is terminal, while true file changes keep
+  their separate stale-file recovery message.
+
+## 0.4.1-dev.0 - 2026-08-18
+
+### Internal extension runtime
+
+- Rho now uses its compiled-in Phase 1 extension runtime by default for Run
+  History, Workspace Snapshot, and Project File Viewer composition while
+  preserving the existing commands, Agent tool, data authorities, and viewer
+  protocol.
+- A private `RHO_INTERNAL_EXTENSION_RUNTIME=legacy` override remains available
+  for one development release cycle. This is an internal first-party runtime,
+  not a public plugin SDK or third-party loading interface.
+
+## 0.4.0 - 2026-08-17
+
+### Stable release
+
+- Rho 0.4.0 is the first stable three-platform release for Windows x64, macOS
+  Apple Silicon, and Linux x86-64.
+- Signed automatic updates start after the local workbench is ready and use
+  distinct stable/development manifests with transactional recovery.
+- Stable download and updater manifests bind all platform URLs, hashes,
+  signatures, and candidate evidence to one protected source commit.
+- Windows packages retain the SignPath Free Trial self-signed test certificate;
+  it is not publicly trusted and Windows or SmartScreen may still warn.
+
+## 0.4.0-dev.43 - 2026-08-17
+
+### Updates
+
+- Signed automatic updates now cover Windows x64, macOS Apple Silicon, and
+  Linux x86-64 AppImage builds.
+- Update discovery begins only after local startup is ready; verified updates
+  install and restart automatically, while failure preserves the current app.
+- Development Releases and the download page now carry all three platform
+  packages, checksums, evidence, and updater signatures.
+
+## 0.4.0-dev.42 - 2026-08-17
+
+### Distribution
+
+- Windows candidate packaging now Authenticode-signs the application
+  executable before NSIS bundling, verifies that bundling preserves those
+  exact bytes, then signs the outer installer in a separate SignPath request.
+- Candidate evidence now binds both requests and verifies that a silent test
+  installation contains the exact signed executable, passes smoke testing,
+  and can be uninstalled without leftover executable or registry state.
+- Development prereleases continue to use the SignPath Free Trial self-signed
+  certificate. It is not publicly trusted and Windows or SmartScreen may warn;
+  this does not claim SignPath Foundation acceptance.
+
+## 0.4.0-dev.41 - 2026-08-15
+
+### Verification
+
+- `dev.41` is an acceptance-only native-updater target for a controlled
+  Windows/macOS `dev.40 -> dev.41` test. It is explicitly excluded from the
+  normal Update Site and does not publish or enable `dev.40` native updates.
+- The target transport binds the immutable source Draft and final target
+  signatures to one marker, permits only a time-bounded test manifest, and
+  requires exact cleanup before normal Pages publication can continue.
+
 ## 0.4.0-dev.40 - 2026-08-15
 
 ### Updates

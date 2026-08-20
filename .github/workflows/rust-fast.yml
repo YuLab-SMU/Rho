@@ -1,0 +1,119 @@
+name: Rust Fast
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize]
+    paths:
+      - "**/Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".cargo/**"
+      - "crates/**/*.rs"
+      - "desktop/src-tauri/**"
+      - "desktop/dist/app.js"
+      - "desktop/dist/index.html"
+      - "desktop/package.json"
+      - "desktop/package-lock.json"
+      - "NEWS.md"
+      - "r/rho.agent/R/aisdk_adapter.R"
+      - "vendor/jet/**/*.rs"
+      - "runtime/ark.json"
+      - "scripts/bootstrap-ark-linux.sh"
+      - "scripts/prepare-runtime-resources.sh"
+      - ".github/workflows/rust-fast.yml"
+      - ".github/workflows/rust-compatibility.yml"
+      - "scripts/test-rust-msrv-contract.mjs"
+      - "scripts/test-license-contract.mjs"
+      - "scripts/test-extension-run-history-contract.mjs"
+      - "scripts/test-extension-p1-3-contract.mjs"
+      - "scripts/test-extension-phase-1-acceptance.mjs"
+      - "LICENSE"
+      - "LICENSES.md"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-fast-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust-fast:
+    if: github.event.pull_request.draft == true
+    name: Ubuntu stable fast
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      RUSTUP_TOOLCHAIN: stable-x86_64-unknown-linux-gnu
+      CARGO_INCREMENTAL: "0"
+
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Linux desktop build dependencies
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev squashfs-tools pkg-config unzip zip
+
+      - name: Install and verify current stable Rust
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup set profile minimal
+          rustup toolchain install "$RUSTUP_TOOLCHAIN" --no-self-update
+          rustup component add rustfmt --toolchain "$RUSTUP_TOOLCHAIN"
+          active="$(rustup show active-toolchain)"
+          [[ "$active" == "$RUSTUP_TOOLCHAIN "* ]]
+          rustc -vV | grep -Fx "host: x86_64-unknown-linux-gnu"
+          cargo -vV
+
+      - name: Restore Cargo dependency and build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-
+
+      - name: Stage pinned Linux Ark sidecar for Tauri compilation
+        shell: bash
+        run: |
+          ./scripts/bootstrap-ark-linux.sh
+          ./scripts/prepare-runtime-resources.sh
+
+      - name: Verify deterministic build contracts
+        run: |
+          node --check scripts/test-rust-msrv-contract.mjs
+          node scripts/test-rust-msrv-contract.mjs --test
+          node scripts/test-rust-msrv-contract.mjs
+          node scripts/test-license-contract.mjs --test
+          node scripts/test-license-contract.mjs
+          node scripts/test-extension-run-history-contract.mjs --test
+          node scripts/test-extension-run-history-contract.mjs
+          node scripts/test-extension-p1-3-contract.mjs --test
+          node scripts/test-extension-p1-3-contract.mjs
+          node scripts/test-extension-phase-1-acceptance.mjs --test
+          node scripts/test-extension-phase-1-acceptance.mjs
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Check locked workspace
+        run: cargo check --workspace --all-targets --locked
+
+      - name: Test locked workspace
+        run: cargo test --workspace --locked --no-fail-fast

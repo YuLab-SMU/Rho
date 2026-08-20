@@ -1,0 +1,394 @@
+name: Run Native Updater Acceptance Window
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Open one bounded test window or remove one expired exact fixture
+        required: true
+        default: window
+        type: choice
+        options:
+          - window
+          - recover_cleanup
+      fixture_mode:
+        description: The only permitted development-manifest test mode
+        required: true
+        default: signature_rejection
+        type: choice
+        options:
+          - signature_rejection
+          - valid
+      duration_minutes:
+        description: Positive bounded fixture duration, from 1 through 45 minutes
+        required: true
+        default: "20"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rho-update-site
+  cancel-in-progress: false
+
+jobs:
+  activate:
+    name: Publish one bounded native-updater fixture
+    if: ${{ inputs.operation == 'window' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: rho-release
+    permissions:
+      contents: write
+    outputs:
+      fixture_ready: ${{ steps.fixture_armed.outputs.ready }}
+    steps:
+      - name: Verify fixed admission and bounded duration
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          FIXTURE_MODE: ${{ inputs.fixture_mode }}
+          DURATION_MINUTES: ${{ inputs.duration_minutes }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "YuLab-SMU/Rho"
+          test "$GITHUB_REF" = "refs/heads/$DEFAULT_BRANCH"
+          case "$FIXTURE_MODE" in signature_rejection|valid) ;; *) exit 1 ;; esac
+          [[ "$DURATION_MINUTES" =~ ^([1-9]|[1-3][0-9]|4[0-5])$ ]]
+
+      - name: Check out protected fixture contract
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download and bind the immutable source Draft and public acceptance target
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require("fs");
+            const path = require("path");
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const releases = await github.paginate(github.rest.repos.listReleases, { owner, repo, per_page: 100 });
+            const exactlyOne = (tag) => {
+              const matches = releases.filter((release) => release.tag_name === tag);
+              if (matches.length !== 1) throw new Error(`Expected exactly one Release for ${tag}.`);
+              return matches[0];
+            };
+            const source = exactlyOne("v0.4.0-dev.40");
+            const target = exactlyOne("v0.4.0-dev.41");
+            if (
+              !source.draft
+              || !source.prerelease
+              || source.target_commitish !== "14b16ced90df02621e37913e23c6a555cf5963f0"
+              || source.name !== "Rho 0.4.0-dev.40"
+            ) {
+              throw new Error("The immutable dev.40 source Draft is unavailable.");
+            }
+            if (target.draft || !target.prerelease || target.name !== "Rho 0.4.0-dev.41 Native Updater Acceptance Target") {
+              throw new Error("The public dev.41 acceptance target is unavailable.");
+            }
+            const releaseRecord = (release) => ({
+              release_id: String(release.id),
+              tag_name: release.tag_name,
+              target_commitish: release.target_commitish,
+              draft: release.draft,
+              prerelease: release.prerelease,
+              name: release.name || "",
+              body: release.body || "",
+              published_at: release.published_at ?? null,
+              html_url: `https://github.com/${owner}/${repo}/releases/tag/${release.tag_name}`,
+              assets: release.assets.map((asset) => ({ name: asset.name, size: asset.size })).sort((left, right) => left.name.localeCompare(right.name)),
+            });
+            const download = async (release, directory, label) => {
+              fs.mkdirSync(directory, { recursive: true });
+              const names = new Set();
+              for (const asset of release.assets) {
+                if (!asset?.name || path.basename(asset.name) !== asset.name || names.has(asset.name) || !Number.isSafeInteger(asset.size) || asset.size <= 0) {
+                  throw new Error(`Unsafe or duplicate ${label} asset: ${asset?.name || "<empty>"}`);
+                }
+                names.add(asset.name);
+                const response = await github.request("GET /repos/{owner}/{repo}/releases/assets/{asset_id}", {
+                  owner,
+                  repo,
+                  asset_id: asset.id,
+                  headers: { accept: "application/octet-stream" },
+                });
+                const bytes = Buffer.from(response.data);
+                if (bytes.length !== asset.size) throw new Error(`${label} downloaded size mismatch for ${asset.name}`);
+                fs.writeFileSync(path.join(directory, asset.name), bytes, { flag: "wx" });
+              }
+            };
+            await download(source, "target/fixture/source", "Source Draft");
+            await download(target, "target/fixture/release", "Public target");
+            fs.writeFileSync("target/fixture/source-release.json", `${JSON.stringify(releaseRecord(source), null, 2)}\n`, { flag: "wx" });
+            fs.writeFileSync("target/fixture/public-release.json", `${JSON.stringify(releaseRecord(target), null, 2)}\n`, { flag: "wx" });
+
+      - name: Validate public target and prepare the bounded manifest
+        id: fixture
+        shell: bash
+        env:
+          FIXTURE_MODE: ${{ inputs.fixture_mode }}
+          DURATION_MINUTES: ${{ inputs.duration_minutes }}
+        run: |
+          set -euo pipefail
+          [[ "$DURATION_MINUTES" =~ ^([1-9]|[1-3][0-9]|4[0-5])$ ]]
+          node scripts/native-updater-acceptance.mjs --test true
+          node scripts/native-updater-acceptance.mjs --mode validate-acceptance-pair \
+            --source_release target/fixture/source-release.json \
+            --source_directory target/fixture/source \
+            --target_release target/fixture/public-release.json \
+            --target_directory target/fixture/release
+          deployed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          expires_at="$(date -u -d "+$DURATION_MINUTES minutes" +%Y-%m-%dT%H:%M:%SZ)"
+          node scripts/native-updater-acceptance.mjs --mode fixture \
+            --release target/fixture/public-release.json \
+            --directory target/fixture/release \
+            --fixture_mode "$FIXTURE_MODE" \
+            --expires_at "$expires_at" \
+            --output target/fixture/seed.json \
+            --manifest_output target/fixture/development.json \
+            --signature_directory target/fixture/signatures
+          {
+            echo "deployed_at=$deployed_at"
+            echo "expires_at=$expires_at"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Prove the selected signature behavior before Pages mutation
+        shell: bash
+        env:
+          FIXTURE_MODE: ${{ inputs.fixture_mode }}
+        run: |
+          set -euo pipefail
+          verify() {
+            cargo run --locked -p rho-updater-verifier -- --config desktop/src-tauri/tauri.conf.json --artifact "$1" --signature "$2"
+          }
+          windows_artifact="target/fixture/release/Rho_0.4.0-dev.41_x64-setup.exe"
+          macos_artifact="target/fixture/release/Rho_0.4.0-dev.41_aarch64.app.tar.gz"
+          if [[ "$FIXTURE_MODE" == "valid" ]]; then
+            verify "$windows_artifact" target/fixture/signatures/windows-x86_64.sig
+            verify "$macos_artifact" target/fixture/signatures/darwin-aarch64.sig
+          else
+            if verify "$windows_artifact" target/fixture/signatures/windows-x86_64.sig >target/fixture/windows-rejection.out 2>target/fixture/windows-rejection.err; then
+              echo "The intentionally mutated Windows signature unexpectedly verified." >&2
+              exit 1
+            fi
+            if verify "$macos_artifact" target/fixture/signatures/darwin-aarch64.sig >target/fixture/macos-rejection.out 2>target/fixture/macos-rejection.err; then
+              echo "The intentionally mutated macOS signature unexpectedly verified." >&2
+              exit 1
+            fi
+            grep -F "does not verify against the configured public key" target/fixture/windows-rejection.err
+            grep -F "does not verify against the configured public key" target/fixture/macos-rejection.err
+          fi
+
+      - name: Check out the current Pages tree without credentials
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: target/pages
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Stage the exact fixture and capture the protected baseline
+        shell: bash
+        env:
+          DEPLOYED_AT: ${{ steps.fixture.outputs.deployed_at }}
+        run: |
+          set -euo pipefail
+          test -f target/pages/index.html
+          test -f target/pages/updates/development.json
+          node scripts/native-updater-acceptance.mjs --mode stage-fixture \
+            --fixture target/fixture/seed.json \
+            --manifest target/fixture/development.json \
+            --site target/pages \
+            --deployed_at "$DEPLOYED_AT" \
+            --output target/fixture/active.json
+
+      - name: Retain exact cleanup inputs before deployment
+        uses: actions/upload-artifact@v4
+        with:
+          name: rho-native-updater-acceptance-fixture-${{ github.run_id }}
+          path: |
+            target/fixture/active.json
+            target/fixture/seed.json
+            target/fixture/development.json
+            target/fixture/public-release.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Arm exact cleanup before Pages deployment
+        id: fixture_armed
+        shell: bash
+        run: echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Publish only the staged fixture tree
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: target/pages
+          force_orphan: false
+          full_commit_message: "UPDATER-1C-T1 temporary native updater fixture"
+
+      - name: Verify the deployed fixture byte-for-byte over HTTPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="$(sha256sum target/fixture/development.json | awk '{print $1}')"
+          url="https://yulab-smu.top/Rho/updates/tauri/development.json?run=$GITHUB_RUN_ID"
+          for attempt in {1..18}; do
+            if curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' "$url&attempt=$attempt" -o target/fixture/deployed.json; then
+              actual="$(sha256sum target/fixture/deployed.json | awk '{print $1}')"
+              if [[ "$actual" == "$expected" ]]; then
+                exit 0
+              fi
+            fi
+            sleep 10
+          done
+          echo "The deployed native updater fixture did not match its prepared bytes." >&2
+          exit 1
+
+      - name: Hold the bounded human acceptance window
+        shell: bash
+        env:
+          EXPIRES_AT: ${{ steps.fixture.outputs.expires_at }}
+        run: |
+          set -euo pipefail
+          expires_epoch="$(date -u -d "$EXPIRES_AT" +%s)"
+          now_epoch="$(date -u +%s)"
+          remaining="$((expires_epoch - now_epoch))"
+          if (( remaining > 0 )); then
+            sleep "$remaining"
+          fi
+
+  cleanup:
+    name: Remove the exact fixture after every deployed-window outcome
+    needs: activate
+    if: ${{ always() && inputs.operation == 'window' && needs.activate.outputs.fixture_ready == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - name: Check out protected cleanup contract
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Download the exact deployed cleanup record
+        uses: actions/download-artifact@v5
+        with:
+          name: rho-native-updater-acceptance-fixture-${{ github.run_id }}
+          path: target/fixture
+
+      - name: Check out the current Pages tree without credentials
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: target/pages
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Remove only the bound marker-manifest pair, or prove it was never deployed
+        id: remove
+        shell: bash
+        run: |
+          set -euo pipefail
+          result="$(node scripts/native-updater-acceptance.mjs --mode remove-fixture-or-assert-absent --fixture target/fixture/active.json --site target/pages)"
+          echo "$result"
+          removed="$(node -e 'const value=JSON.parse(process.argv[1]); if(typeof value.removed !== "boolean") process.exit(1); process.stdout.write(String(value.removed))' "$result")"
+          echo "removed=$removed" >> "$GITHUB_OUTPUT"
+
+      - name: Publish the exact cleanup tree
+        if: ${{ steps.remove.outputs.removed == 'true' }}
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: target/pages
+          force_orphan: false
+          full_commit_message: "UPDATER-1C-T1 remove temporary native updater fixture"
+
+      - name: Prove the native development endpoint is absent over HTTPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://yulab-smu.top/Rho/updates/tauri/development.json?cleanup=$GITHUB_RUN_ID"
+          for attempt in {1..18}; do
+            status="$(curl --silent --show-error --location --proto '=https' --proto-redir '=https' --output /dev/null --write-out '%{http_code}' "$url&attempt=$attempt")"
+            if [[ "$status" == "404" ]]; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "The temporary native updater endpoint remains reachable after cleanup." >&2
+          exit 1
+
+  recover-cleanup:
+    name: Remove one expired exact fixture without activation authority
+    if: ${{ inputs.operation == 'recover_cleanup' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - name: Verify trusted bounded recovery dispatch
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "YuLab-SMU/Rho"
+          test "$GITHUB_REF" = "refs/heads/$DEFAULT_BRANCH"
+
+      - name: Check out protected cleanup contract
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Check out the current Pages tree without credentials
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: target/pages
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Remove only an expired marker-manifest pair
+        shell: bash
+        run: |
+          set -euo pipefail
+          now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          node scripts/native-updater-acceptance.mjs --mode recover-expired-fixture --site target/pages --now "$now"
+
+      - name: Publish the exact recovery cleanup tree
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: target/pages
+          force_orphan: false
+          full_commit_message: "UPDATER-1C-T1 recover expired native updater fixture"
+
+      - name: Prove the recovered native development endpoint is absent
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://yulab-smu.top/Rho/updates/tauri/development.json?recovery=$GITHUB_RUN_ID"
+          for attempt in {1..18}; do
+            status="$(curl --silent --show-error --location --proto '=https' --proto-redir '=https' --output /dev/null --write-out '%{http_code}' "$url&attempt=$attempt")"
+            if [[ "$status" == "404" ]]; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "The temporary native updater endpoint remains reachable after recovery cleanup." >&2
+          exit 1
