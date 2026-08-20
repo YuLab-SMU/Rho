@@ -5,9 +5,10 @@ state/transition/event/tombstone persistence completed its local stop gate
 2026-08-20; P2-1/P2-2/P2-3/P2-4A hosted and cross-platform installed gates
 remain open and mandatory before final Phase 2 acceptance
 
-Active work package: none at the P2-4D1 checkpoint. P2-4D2/D3 and P2-4E through
-P2-4G remain inactive pending explicit amendment/cross-review. D1 added no
-command/UI, recursive deletion, retention purge, install, update or rollback.
+Active work package: P2-4D2 only — trusted recoverable Uninstall/Restore plus
+atomic tombstone truth. P2-4D3 and P2-4E through P2-4G remain inactive. D2 may
+add Uninstall/Restore commands and confirmation UI, but no permanent deletion,
+install, update or rollback.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -402,7 +403,7 @@ P2-4D is divided into three local stops:
    failure points prove idempotent ownership recovery. D1 exposes typed evidence
    only and creates no Store/UI lifecycle truth.
 2. **P2-4D2 — trusted Uninstall/Restore commands and tombstone transaction
-   (inactive).** Uninstall confirms exact project revision/directory/digest,
+   (active).** Uninstall confirms exact project revision/directory/digest,
    completes C1 teardown, revokes durable grants, atomically moves to trash and
    records tombstone plus uninstalled state. Restore uses exact tombstone/digest,
    moves back and returns disabled without authority.
@@ -434,6 +435,21 @@ The recoverable filesystem foundation is locally complete:
 Application version remains `0.4.1-dev.7`: D1 is broker-only and not wired to a
 command, Store lifecycle or installed user behavior. D2, hosted and installed
 gates remain open.
+
+D2 ordering is fixed: validate confirmation → C1 exact teardown → cancel
+pending and revoke every durable grant for that exact plugin/digest → request
+uninstall transition with expected accepted digest → D1 atomic move → persist
+`package_moved` → atomically insert/replay tombstone and terminal uninstalled
+state. If final persistence fails, source remains absent, trash owns the exact
+package and the nonterminal transition is recoverable; success is never claimed.
+
+Restore requires the exact recoverable tombstone plus current project revision,
+uses D1 restore, then atomically marks `restored_at` and returns desired/observed
+disabled with no host, route, pending request or live/durable grant. A stale
+directory/digest/tombstone/revision, source collision or foreign project fails
+closed. The next synchronized application version after `0.4.1-dev.7`, NEWS,
+trusted confirmation copy, mock parity, Browser review and packaged smoke are
+mandatory.
 
 ## Upgrade
 

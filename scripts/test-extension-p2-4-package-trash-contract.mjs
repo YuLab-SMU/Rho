@@ -25,7 +25,6 @@ export function validateP24PackageTrashContract(value) {
     "D1 gained delete, network, process, grant, Wasm, Tauri, or Store authority",
   );
   assert.match(value.server, /pub mod plugin_package_trash/);
-  assert.match(value.spec, /Active work package: none at the P2-4D1 checkpoint/);
   assert.match(value.spec, /P2-4D1 local checkpoint — 2026-08-20/);
 }
 
@@ -33,7 +32,7 @@ function fixture() {
   return {
     trash: "PLUGIN_TRASH_DIRECTORY\nPluginPackageOwnershipOutcome\nPluginPackageMoveEvidence\npub fn move_exact(\npub fn restore_exact(\nsnapshot_workspace_plugin_package\nsnapshot_workspace_plugin_cache_directory\nfs::rename\nsource and trash both exist\nTrashFailurePoint::BeforeRename\nTrashFailurePoint::AfterRename\nmove_restore_and_replays_are_exact_and_idempotent\nsymlinked_trash_root_and_restore_collision_are_rejected\n#[cfg(test)]",
     server: "pub mod plugin_package_trash;",
-    spec: "Active work package: none at the P2-4D1 checkpoint\nP2-4D1 local checkpoint — 2026-08-20",
+    spec: "P2-4D1 local checkpoint — 2026-08-20",
   };
 }
 
