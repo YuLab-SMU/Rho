@@ -59,8 +59,8 @@ use rho_store::{
     ArtifactRecordDraft, ArtifactRecordSummary, AuditLimits, AuditResponse, AuditScope,
     CompareRunsResponse, EnvironmentOperationRequestSummary, EvidenceClaim, EvidenceClaimDraft,
     EvidenceClaimReview, EvidenceEntry, EvidenceEntryDraft, PlotArtifactSummary,
-    PlotPayloadPruneResult, ProblemSummary, ProjectRetentionSummary, RetentionPolicy, RunDetail,
-    RunSummary, Store, normalize_project_root,
+    PlotPayloadPruneResult, ProblemSummary, ProjectMutationService, ProjectQueryService,
+    ProjectRetentionSummary, RetentionPolicy, RunDetail, RunSummary, Store, normalize_project_root,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -3874,10 +3874,10 @@ async fn list_runs_legacy(
     state: &AppState,
 ) -> Result<Vec<RunSummary>, String> {
     let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy().replace('\\', "/");
-    read_store(state)
-        .map_err(display_error)?
-        .list_runs(&project_root, limit)
+    let project_root = root.to_string_lossy();
+    let store = read_store(state).map_err(display_error)?;
+    ProjectQueryService::new(&store)
+        .list_runs(project_root.as_ref(), limit)
         .map_err(display_error)
 }
 
@@ -3955,10 +3955,10 @@ async fn list_problems(
     state: State<'_, AppState>,
 ) -> Result<Vec<ProblemSummary>, String> {
     let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy().replace('\\', "/");
-    read_store(&state)
-        .map_err(display_error)?
-        .list_problems(&project_root, limit)
+    let project_root = root.to_string_lossy();
+    let store = read_store(&state).map_err(display_error)?;
+    ProjectQueryService::new(&store)
+        .list_problems(project_root.as_ref(), limit)
         .map_err(display_error)
 }
 
@@ -3968,10 +3968,10 @@ async fn get_run_detail(
     state: State<'_, AppState>,
 ) -> Result<Option<RunDetail>, String> {
     let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy().replace('\\', "/");
-    read_store(&state)
-        .map_err(display_error)?
-        .get_run_detail(&project_root, &run_id)
+    let project_root = root.to_string_lossy();
+    let store = read_store(&state).map_err(display_error)?;
+    ProjectQueryService::new(&store)
+        .get_run_detail(project_root.as_ref(), &run_id)
         .map_err(display_error)
 }
 
@@ -3982,10 +3982,10 @@ async fn compare_runs(
     state: State<'_, AppState>,
 ) -> Result<CompareRunsResponse, String> {
     let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy().replace('\\', "/");
-    read_store(&state)
-        .map_err(display_error)?
-        .compare_runs(&project_root, &left_run_id, &right_run_id)
+    let project_root = root.to_string_lossy();
+    let store = read_store(&state).map_err(display_error)?;
+    ProjectQueryService::new(&store)
+        .compare_runs(project_root.as_ref(), &left_run_id, &right_run_id)
         .map_err(display_error)
 }
 
@@ -4474,9 +4474,10 @@ async fn clear_artifact_records(
     let context = active_context(&state).await.map_err(display_error)?;
     let workspace_id = context.lock().await.broker.identity().workspace_id.clone();
     let mut store = read_store(&state).map_err(display_error)?;
-    let deleted = store
+    let project_root = root.to_string_lossy();
+    let deleted = ProjectMutationService::new(&mut store)
         .clear_artifact_records(
-            &root.to_string_lossy().replace('\\', "/"),
+            project_root.as_ref(),
             Some(&workspace_id),
             session_only.unwrap_or(false),
         )
@@ -4494,9 +4495,9 @@ async fn clear_plot_artifacts(
     let context = active_context(&state).await.map_err(display_error)?;
     let workspace_id = context.lock().await.broker.identity().workspace_id.clone();
     let mut store = read_store(&state).map_err(display_error)?;
-    let deleted = store
+    let deleted = ProjectMutationService::new(&mut store)
         .clear_plot_artifacts(
-            Some(&project_root),
+            &project_root,
             Some(&workspace_id),
             session_only.unwrap_or(true),
         )
@@ -4572,9 +4573,9 @@ async fn create_evidence_entry(
     state: State<'_, AppState>,
 ) -> Result<EvidenceEntry, String> {
     let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy().replace('\\', "/");
+    let project_root = root.to_string_lossy().into_owned();
     let mut store = read_store(&state).map_err(display_error)?;
-    store
+    ProjectMutationService::new(&mut store)
         .create_evidence_entry(&EvidenceEntryDraft {
             project_root,
             title,
@@ -4616,10 +4617,10 @@ async fn get_evidence_entry(
 #[tauri::command]
 async fn delete_evidence_entry(id: i64, state: State<'_, AppState>) -> Result<bool, String> {
     let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy().replace('\\', "/");
+    let project_root = root.to_string_lossy();
     let mut store = read_store(&state).map_err(display_error)?;
-    store
-        .delete_evidence_entry(&project_root, id)
+    ProjectMutationService::new(&mut store)
+        .delete_evidence_entry(project_root.as_ref(), id)
         .map_err(display_error)
 }
 
@@ -5408,10 +5409,10 @@ async fn list_agent_conversations(
     state: State<'_, AppState>,
 ) -> Result<Vec<AgentConversationSummary>, String> {
     let root = state.project_root.read().await.clone();
-    let project_root = durable_project_root(&root);
-    read_store(&state)
-        .map_err(display_error)?
-        .list_agent_conversations(&project_root, limit)
+    let project_root = root.to_string_lossy();
+    let store = read_store(&state).map_err(display_error)?;
+    ProjectQueryService::new(&store)
+        .list_agent_conversations(project_root.as_ref(), limit)
         .map_err(display_error)
 }
 
@@ -5440,16 +5441,11 @@ async fn list_agent_turns(
     state: State<'_, AppState>,
 ) -> Result<Vec<AgentTurnSummary>, String> {
     let root = state.project_root.read().await.clone();
-    let project_root = durable_project_root(&root);
+    let project_root = root.to_string_lossy();
     let store = read_store(&state).map_err(display_error)?;
-    match conversation_id {
-        Some(conversation_id) => store
-            .list_agent_turns_for_conversation(&project_root, &conversation_id, limit)
-            .map_err(display_error),
-        None => store
-            .list_agent_turns(&project_root, limit)
-            .map_err(display_error),
-    }
+    ProjectQueryService::new(&store)
+        .list_agent_turns(project_root.as_ref(), conversation_id.as_deref(), limit)
+        .map_err(display_error)
 }
 
 #[tauri::command]
@@ -5484,7 +5480,8 @@ async fn delete_agent_conversation_state(conversation_id: &str, state: &AppState
         !state.agent_file_mutations.has_any_turn(&turn_ids),
         "Wait for the selected Conversation's file operation before deleting it."
     );
-    let deleted_turns = store.delete_agent_conversation(&project_root, &conversation_id)?;
+    let deleted_turns = ProjectMutationService::new(&mut store)
+        .delete_agent_conversation(&project_root, &conversation_id)?;
     drop(tasks);
     Ok(json!({
         "status": "deleted",
@@ -5501,10 +5498,10 @@ async fn list_approval_requests(
     state: State<'_, AppState>,
 ) -> Result<Vec<ApprovalRequestSummary>, String> {
     let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy().replace('\\', "/");
-    read_store(&state)
-        .map_err(display_error)?
-        .list_approval_requests(&project_root, limit, status.as_deref())
+    let project_root = root.to_string_lossy();
+    let store = read_store(&state).map_err(display_error)?;
+    ProjectQueryService::new(&store)
+        .list_approval_requests(project_root.as_ref(), limit, status.as_deref())
         .map_err(display_error)
 }
 
@@ -5514,10 +5511,10 @@ async fn get_agent_turn_detail(
     state: State<'_, AppState>,
 ) -> Result<Option<AgentTurnDetail>, String> {
     let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy().replace('\\', "/");
-    read_store(&state)
-        .map_err(display_error)?
-        .get_agent_turn_detail(&project_root, &turn_id)
+    let project_root = root.to_string_lossy();
+    let store = read_store(&state).map_err(display_error)?;
+    ProjectQueryService::new(&store)
+        .get_agent_turn_detail(project_root.as_ref(), &turn_id)
         .map_err(display_error)
 }
 
@@ -6218,7 +6215,7 @@ async fn request_run_interrupt(run_id: Option<String>, state: &AppState) -> Resu
             .context("No active run is available to interrupt")?,
     };
     ensure!(
-        store
+        ProjectMutationService::new(&mut store)
             .request_cancel(&project_root, &target)
             .context("marking run as cancel-requested")?,
         "Run is not active: {target}"
@@ -8069,7 +8066,7 @@ async fn clear_agent_history(state: State<'_, AppState>) -> Result<Value, String
         return Err("Wait for Agent file operations before clearing history.".to_string());
     }
     let mut store = read_store(&state).map_err(display_error)?;
-    let deleted = store
+    let deleted = ProjectMutationService::new(&mut store)
         .clear_agent_history(&project_root)
         .map_err(display_error)?;
     drop(tasks);
