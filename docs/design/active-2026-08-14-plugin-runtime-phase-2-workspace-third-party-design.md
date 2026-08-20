@@ -9,9 +9,10 @@ P2-2A schema/persistence, P2-2B trusted permission UI/fresh handles, P2-2C
 P2-2F combined acceptance are locally complete; `0.4.1-dev.3` and
 `rho.bridge 0.1.15` allocated; P2-2 hosted/cross-platform acceptance remains
 open; P2-3A Manifest V2/bounded-schema/Source/Panel pure contracts and P2-3B
-Guest ABI contribution proxy/transactional registry are locally complete;
-`0.4.1-dev.4` allocated; P2-3C is active under the local-first exception and
-later slices/P2-4 remain sequentially gated
+Guest ABI contribution proxy/transactional registry plus P2-3C Agent Tool/
+Source/Skill integration are locally complete; `0.4.1-dev.4` and `rho.agent
+0.1.6` allocated; P2-3D is active under the local-first exception and P2-3E/
+P2-4 remain sequentially gated
 
 Date: 2026-08-14
 Issue: [#17](https://github.com/YuLab-SMU/Rho/issues/17)

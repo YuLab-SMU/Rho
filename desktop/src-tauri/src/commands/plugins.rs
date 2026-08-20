@@ -10,7 +10,7 @@ use crate::workspace_plugins::{
 };
 use crate::{AppState, active_context, display_error, extension_project_scope_id, read_store};
 
-async fn runtime_context(state: &AppState) -> Result<PluginRuntimeContext> {
+pub(crate) async fn runtime_context(state: &AppState) -> Result<PluginRuntimeContext> {
     let root = state.project_root.read().await.clone();
     let project_root = rho_store::normalize_project_root(root.to_string_lossy().as_ref());
     ensure!(!project_root.is_empty(), "an active project is required");

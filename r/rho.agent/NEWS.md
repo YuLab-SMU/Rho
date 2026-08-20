@@ -1,3 +1,12 @@
+# rho.agent 0.1.6
+
+- `rho_create_workspace_tools()` now accepts exact-project Manifest V2 Tool
+  projections, converts the bounded Rho schema subset to aisdk schemas, labels
+  plugin/package origin, and routes execution back to the Rust broker without
+  granting authority in Agent R.
+- Plugin Tool descriptions, Source results, and Skill text remain explicitly
+  untrusted project content and cannot override instruction or approval policy.
+
 # rho.agent 0.1.5
 
 - Registered Provider profiles now construct and register the isolated

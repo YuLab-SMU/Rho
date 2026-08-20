@@ -195,7 +195,7 @@ impl<'a> PluginPermissionMutationService<'a> {
         project_root: &str,
         draft: &PluginPermissionCallEventDraft,
         consume_allow_once: bool,
-    ) -> Result<(), StoreError> {
+    ) -> Result<String, StoreError> {
         let project_root = required_project_root(project_root)?;
         let draft_root = required_project_root(&draft.project_root)?;
         if project_root != draft_root {

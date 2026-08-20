@@ -491,6 +491,17 @@ impl GrantStore {
             .is_some_and(|grant| grant.is_active(now))
     }
 
+    /// Final contribution publication check. A successfully consumed
+    /// allow-once handle remains valid for the exact admitted call, but an
+    /// expired or revoked handle does not.
+    pub fn handle_allows_admitted_completion(&self, handle_id: &str) -> bool {
+        let handle_digest = sha256_hex(handle_id.as_bytes());
+        let now = self.clock.now_millis();
+        self.grants
+            .get(&handle_digest)
+            .is_some_and(|grant| grant.revoked_at_millis.is_none() && now < grant.expires_at_millis)
+    }
+
     /// Invalidate all live authority for an exact normalized project.
     pub fn invalidate_project(&mut self, normalized_project_root: &str) -> usize {
         let now = self.clock.now_millis();

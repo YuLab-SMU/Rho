@@ -45,11 +45,12 @@ use rho_extension_runtime::{
     DiagnosticSink, DisposeOutcome, ExtensionDiagnostic, ExtensionHost,
     InternalExtensionRuntimeMode, InternalPlugin, LifecycleDeadlines, OperationId, PluginContext,
     PluginDescriptor, PluginVersion, ProjectFileViewerContribution, ScopeId, ScopeKindId,
-    ScopeSnapshot, SourceHandler, WorkspaceToolHandler,
+    ScopeSnapshot, SourceHandler, WorkspaceGrantIdentity, WorkspaceToolHandler,
 };
 use rho_kernel::{ArkLaunchConfig, ArkSession, KernelEvent};
 use rho_server::coordinator::{
-    AgentWorkspaceLane, ApprovalResponseInput, CoordinatorRuntime, EnvironmentOperationArguments,
+    AgentPluginContributionAdapter, AgentRuntimeAdapters, AgentWorkspaceLane,
+    ApprovalResponseInput, CoordinatorRuntime, EnvironmentOperationArguments,
     PendingApprovalRegistry, ProjectSkillDiscoverySummary, WorkspaceSnapshotAdapter,
     bootstrap_bridge, decide_environment_operation, discover_project_skill_summaries,
     dispatch_workspace_request, dispatch_workspace_request_with_execution_id,
@@ -3191,6 +3192,32 @@ impl WorkspaceSnapshotAdapter for ExtensionWorkspaceSnapshotAdapter {
     }
 }
 
+struct WorkspacePluginAgentAdapter {
+    registry: Arc<workspace_plugins::PendingPluginPermissionRegistry>,
+    context: workspace_plugins::PluginRuntimeContext,
+    store_path: PathBuf,
+}
+
+impl AgentPluginContributionAdapter for WorkspacePluginAgentAdapter {
+    fn invoke<'a>(
+        &'a self,
+        contribution_id: &'a str,
+        input: Value,
+    ) -> Pin<Box<dyn Future<Output = Result<Value>> + Send + 'a>> {
+        Box::pin(async move {
+            let mut store = Store::open(&self.store_path)
+                .context("opening Store for Agent plugin contribution")?;
+            self.registry.invoke_file_contribution(
+                &self.context,
+                contribution_id,
+                rho_extension_runtime::ContributionInvocationOrigin::AgentTool,
+                input,
+                &mut store,
+            )
+        })
+    }
+}
+
 async fn snapshot_workspace_with_state(state: &AppState) -> Result<Value, String> {
     if state.extension_host.mode() == InternalExtensionRuntimeMode::Candidate {
         let context = active_context(state).await.map_err(display_error)?;
@@ -4789,6 +4816,9 @@ async fn start_agent_turn(
     .map_err(display_error)?;
     let auto_approve = task_kind == "agent_turn" && auto_approve.unwrap_or(false) && mode == "act";
     let conversation_id;
+    let plugin_runtime_context;
+    let plugin_projection;
+    let mut agent_runtime_profile = resolved_model.runtime_profile.clone();
     {
         let mut context_guard = context.lock().await;
         let identity = context_guard.broker.identity().clone();
@@ -4798,6 +4828,24 @@ async fn start_agent_turn(
             .map_err(display_error)?
             .context("Cannot start Agent without an active project identity")
             .map_err(display_error)?;
+        plugin_runtime_context = workspace_plugins::PluginRuntimeContext {
+            project_scope_id: extension_project_scope_id(&project_root).map_err(display_error)?,
+            project_root: project_root.clone(),
+            project_revision: i64::try_from(identity.project_revision)
+                .context("project revision exceeds the plugin contribution range")
+                .map_err(display_error)?,
+            workspace: Some(WorkspaceGrantIdentity {
+                workspace_id: identity.workspace_id.clone(),
+                kernel_instance_id: identity.kernel_instance_id.clone(),
+                state_revision: identity.state_revision,
+                project_revision: identity.project_revision,
+            }),
+        };
+        plugin_projection = state
+            .plugin_permissions
+            .agent_projection(&plugin_runtime_context, &mut context_guard.store)
+            .map_err(display_error)?;
+        agent_runtime_profile.plugin_tools = plugin_projection.tools.clone();
         let turn_draft = AgentTurnDraft {
             turn_id: turn_id.clone(),
             project_root: project_root.clone(),
@@ -4858,7 +4906,9 @@ async fn start_agent_turn(
                     "provider_display_name": resolved_model.provider_display_name,
                     "effective_model": resolved_model.effective_model_ref,
                     "model_settings_revision": resolved_model.settings_revision,
-                    "capability_route": resolved_model.route_capability
+                    "capability_route": resolved_model.route_capability,
+                    "plugin_tool_count": plugin_projection.tools.len(),
+                    "plugin_context_count": plugin_projection.context.len()
                 }))
                 .map_err(display_error)?,
             });
@@ -4896,7 +4946,15 @@ async fn start_agent_turn(
                 context: Arc::clone(&context),
             }) as Arc<dyn WorkspaceSnapshotAdapter>
         });
-    let runtime_profile = resolved_model.runtime_profile.clone();
+    let plugin_contribution_adapter: Option<Arc<dyn AgentPluginContributionAdapter>> =
+        (!agent_runtime_profile.plugin_tools.is_empty()).then(|| {
+            Arc::new(WorkspacePluginAgentAdapter {
+                registry: Arc::clone(&state.plugin_permissions),
+                context: plugin_runtime_context,
+                store_path: config.store_path.clone(),
+            }) as Arc<dyn AgentPluginContributionAdapter>
+        });
+    let runtime_profile = agent_runtime_profile;
     let task_mode = mode.clone();
     let (registered_tx, registered_rx) = oneshot::channel();
     let task = tauri::async_runtime::spawn(async move {
@@ -4920,7 +4978,11 @@ async fn start_agent_turn(
             environment_approvals,
             auto_approve,
             editor_context,
-            workspace_snapshot_adapter,
+            AgentRuntimeAdapters {
+                workspace_snapshot: workspace_snapshot_adapter,
+                plugin_contribution: plugin_contribution_adapter,
+            },
+            plugin_projection.context,
         )
         .await;
         task_agent_tasks.lock().await.remove(&task_turn_id);
@@ -13721,7 +13783,8 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
             Arc::new(PendingApprovalRegistry::default()),
             false,
             None,
-            None,
+            AgentRuntimeAdapters::default(),
+            Vec::new(),
         )
         .await?;
         let completed = result["events"]

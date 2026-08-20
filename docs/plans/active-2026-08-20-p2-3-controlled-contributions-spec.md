@@ -2,14 +2,15 @@
 
 Status: active under the owner-approved local-first exception; P2-3A Manifest
 V2 + pure Source/Panel contracts and P2-3B Guest ABI V2 contribution proxy +
-transactional registry completed locally 2026-08-20; P2-3C fixture Tool/
-Source/Skill + Agent integration activated; P2-1/P2-2 hosted and cross-platform
-installed acceptance remain open and mandatory before final Phase 2 acceptance
+transactional registry, plus P2-3C fixture Tool/Source/Skill + Agent integration,
+completed locally 2026-08-20; P2-3D trusted Command/Viewer descriptor renderer
+activated; P2-1/P2-2 hosted and cross-platform installed acceptance remain open
+and mandatory before final Phase 2 acceptance
 
-Active work package: P2-3C only. P2-3D and P2-3E remain inactive until the
-fixture Tool/Source/Skill and Agent-isolation stop gate passes. P2-3B created an
-internal trusted contribution route but no Tauri command, Agent projection,
-trusted command/viewer UI, persistence, or new privileged operation.
+Active work package: P2-3D only. P2-3E remains inactive until trusted Command/
+Viewer routing, rendering, accessibility and teardown pass. P2-3C added the
+exact-project Agent projection but no public Tauri contribution command,
+command-palette UI, Viewer/Panel renderer, new schema or privileged operation.
 
 Change class: D3 capability graph, Agent tool, trusted UI, Wasm protocol, and
 cross-project lifecycle behavior. Risk: R3.
@@ -307,6 +308,63 @@ root using the same symlink/reparse/root validation as discovery. The Skill:
 
 The fixture Skill explains how to invoke the fixture tool/source and contains
 adversarial instruction text used to prove precedence and origin labelling.
+
+### P2-3C local closeout evidence
+
+P2-3C adds one hostile CSV fixture with independent Tool, Source and
+declarative Skill routes. Tool/Source both cross Guest ABI V2 and the durable
+`project.fs.read` lane before returning bounded metadata; the result provenance
+contains exact project/plugin/digest/generation/host/call plus the real
+permission event IDs returned by Store. Agent R never receives a raw grant
+handle or gains filesystem, Store, Workspace, policy, credential or Tauri
+authority.
+
+The desktop projects only active exact-project Tool declarations into the
+Agent profile. Stable host-generated Tool names bind contribution/digest;
+labels and declared purposes are explicitly described as untrusted data.
+`rho.agent` converts the already validated closed schema to aisdk 1.5.0
+`z_schema` objects, keeps `additionalProperties` false, and routes
+`plugin.contribution.invoke` back to a Rust adapter. Rust revalidates kind and
+origin so Agent calls can invoke Tool—not Source/Command/Viewer/Panel—routes.
+Model selection does not grant authority and Ask/Plan/Act remain read-only for
+this lane.
+
+Source results and Skill text enter only the bounded Rust-built prompt context
+with contribution/plugin/digest/status origin and a higher-priority statement
+that the content cannot override instructions, grant permission or prove
+durable completion. Historical Agent turns retain a bounded origin-only event,
+not copied Skill/Source payload. Skill reads re-discover the exact package,
+enforce regular non-symlink UTF-8 files at 64 KiB each and a 256 KiB pack, and
+recheck digest/route after reading. Automatic Source context refuses to consume
+an allow-once grant; it reports `deferred_allow_once` until an explicit Tool
+use consumes that grant.
+
+Local verification on 2026-08-20:
+
+- extension-runtime passed strict all-target clippy and 193 tests on stable and
+  exact Rust `1.88.0`; both full workspace all-target checks passed;
+- Store passed its 176-test stable matrix and 23 focused permission/isolation
+  tests on Rust `1.88.0`; server passed 84 tests and desktop passed 22 focused
+  workspace-plugin tests on both toolchains;
+- `rho.agent 0.1.6` passed 136 tests with no failure, warning or skip; the
+  dynamic aisdk Tool test verifies schema, origin metadata and the exact
+  Rust-bound request envelope;
+- hostile Skill instruction precedence, Tool/Source independent routing,
+  permission event provenance, handle redaction, revoke, allow-once deferral,
+  resume-trap route teardown, exact 64 KiB Skill boundary, Agent profile/
+  context byte budgets and two-project isolation passed;
+- extension P2-3/P2-2/host/Phase 1, MAC4, command inventory, JS syntax,
+  rustfmt and diff contracts passed, including P2-3 negative self-tests;
+- rho-store/rho-server/rho-desktop capped clippy completed on stable and Rust
+  `1.88.0`; the existing broad lint baseline remains and is not misreported as
+  a strict clean run.
+
+Application version remains `0.4.1-dev.4`; its NEWS entry now names the exact
+Agent Tool/Source/Skill behavior. The exported R tool-construction contract
+advanced `rho.agent` from `0.1.5` to `0.1.6`. Store schema stays v13 and no
+Tauri command, browser/mock UI, command/viewer/panel surface, public protocol or
+release authority was added. This closes only the local P2-3C stop gate and
+activates P2-3D under the recorded local-first exception.
 
 ## Trusted Command Contributions
 

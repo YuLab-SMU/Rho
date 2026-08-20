@@ -17,9 +17,10 @@ this file records behavior included in a versioned build candidate.
   removes the exact live routes.
 - Calls use the no-import Guest ABI V2 loop with a 30-second deadline, exact
   call-bound handles, closed input/output schemas, bounded results, and
-  provenance. This candidate does not yet expose third-party contributions to
-  Agent tools, the command palette, Viewers, or Panels; those surfaces remain
-  later P2-3 acceptance gates.
+  provenance. Active Tool contributions are projected into the exact-project
+  Agent tool set; Source results and declarative Skills enter Agent context as
+  explicitly untrusted, origin-labelled project content. The command palette,
+  Viewers, and Panels remain later P2-3 acceptance gates.
 
 ## 0.4.1-dev.3 - 2026-08-20
 

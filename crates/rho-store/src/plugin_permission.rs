@@ -907,7 +907,7 @@ impl Store {
         &mut self,
         draft: &PluginPermissionCallEventDraft,
         consume_allow_once: bool,
-    ) -> Result<(), StoreError> {
+    ) -> Result<String, StoreError> {
         let project_root = required_project_root(&draft.project_root)?;
         let plugin_id = validate_identifier(&draft.plugin_id, "plugin id")?;
         let package_digest = validate_digest(&draft.package_digest, "package digest")?;
@@ -955,7 +955,7 @@ impl Store {
         } else {
             None
         };
-        insert_call_event(
+        let call_event_id = insert_call_event(
             &transaction,
             &PluginPermissionCallEventDraft {
                 project_root: project_root.clone(),
@@ -1003,7 +1003,7 @@ impl Store {
             )?;
         }
         transaction.commit()?;
-        Ok(())
+        Ok(call_event_id)
     }
 }
 
@@ -1535,7 +1535,7 @@ fn insert_call_event(
     connection: &rusqlite::Connection,
     event: &PluginPermissionCallEventDraft,
     created_at: &str,
-) -> Result<(), StoreError> {
+) -> Result<String, StoreError> {
     let event_id = format!("event.{}", uuid::Uuid::new_v4().simple());
     connection.execute(
         "INSERT INTO plugin_permission_events(
@@ -1543,7 +1543,7 @@ fn insert_call_event(
             event_type, status, reason_code, details_json, created_at
          ) VALUES(?1, ?2, ?3, ?4, NULL, ?5, ?6, ?7, ?8, ?9, ?10)",
         params![
-            event_id,
+            &event_id,
             event.project_root,
             event.plugin_id,
             event.package_digest,
@@ -1555,7 +1555,7 @@ fn insert_call_event(
             created_at,
         ],
     )?;
-    Ok(())
+    Ok(event_id)
 }
 
 fn insert_event(
@@ -2020,7 +2020,7 @@ mod tests {
                 reason_code: None,
                 details_json: details_json.to_string(),
             };
-        store
+        let admitted_event_id = store
             .record_plugin_permission_call_event(
                 &event(
                     "call_admitted",
@@ -2030,7 +2030,7 @@ mod tests {
                 false,
             )
             .unwrap();
-        store
+        let completed_event_id = store
             .record_plugin_permission_call_event(
                 &event(
                     "call_completed",
@@ -2040,6 +2040,9 @@ mod tests {
                 true,
             )
             .unwrap();
+        assert!(admitted_event_id.starts_with("event."));
+        assert!(completed_event_id.starts_with("event."));
+        assert_ne!(admitted_event_id, completed_event_id);
         assert_eq!(
             store
                 .list_plugin_permission_grants("D:/project/a", None, Some("consumed"))

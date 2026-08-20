@@ -2475,6 +2475,7 @@ fn resolve_model_id_with_settings(
             model_type: route_model_type,
             required_model_capabilities,
         }],
+        plugin_tools: Vec::new(),
     };
     Ok(ResolvedAgentModel {
         settings_revision: settings.revision,
