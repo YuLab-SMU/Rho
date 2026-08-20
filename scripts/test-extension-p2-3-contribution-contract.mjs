@@ -122,6 +122,41 @@ export function validateP23ContributionContract(value) {
     /Sys\.getenv|readLines\(|system2\(|download\.file|source\(/,
     "plugin Tool adapter gained ambient credential, file, process, network, or code-loading authority",
   );
+
+  for (const marker of [
+    "pub struct ViewerDocumentV1",
+    "pub enum ViewerBlockV1",
+    "ArtifactImageRef",
+    "MAX_VIEWER_BLOCKS: usize = 128",
+    "MAX_VIEWER_TABLE_ROWS: usize = 500",
+    "MAX_VIEWER_TABLE_COLUMNS: usize = 100",
+    "MAX_VIEWER_DOCUMENT_JSON_BYTES: usize = 1024 * 1024",
+    "pub enum PluginCommandResultV1",
+  ]) assert.ok(value.viewer.includes(marker), `ViewerDocument contract lost ${marker}`);
+  assert.doesNotMatch(
+    value.viewer.split("#[cfg(test)]")[0],
+    /\bhtml\s*:|\burl\s*:|\bpath\s*:|\bbase64\s*:|\bonclick\s*:|\bjavascript\s*:|\bcss\s*:/i,
+    "ViewerDocument gained raw HTML, URL, path, base64, handler, or CSS fields",
+  );
+  for (const marker of [
+    "list_plugin_contributions",
+    "invoke_plugin_command",
+    "open_plugin_viewer",
+    "expected_project_revision",
+  ]) assert.ok(value.pluginCommands.includes(marker), `trusted plugin commands lost ${marker}`);
+  for (const marker of [
+    "function renderPluginViewerDocument(documentValue, target)",
+    "function renderPluginContributions()",
+    "function renderPluginCommandPalette()",
+    'command === "list_plugin_contributions"',
+    'command === "invoke_plugin_command"',
+    'command === "open_plugin_viewer"',
+    "response?.project_root !== state.project.root",
+  ]) assert.ok(value.frontend.includes(marker), `trusted plugin UI lost ${marker}`);
+  const rendererStart = value.frontend.indexOf("function renderPluginViewerDocument");
+  const rendererEnd = value.frontend.indexOf("function viewerRenderPreview", rendererStart);
+  const renderer = value.frontend.slice(rendererStart, rendererEnd);
+  assert.doesNotMatch(renderer, /innerHTML|outerHTML|insertAdjacentHTML|iframe|srcdoc|DOMParser/);
 }
 
 function fixture() {
@@ -138,6 +173,9 @@ function fixture() {
     server: "AgentPluginToolDefinition\nAgentPluginContextItem\nAgentPluginContributionAdapter\nrequest_type == \"plugin.contribution.invoke\"\nWorkspace-plugin context below is untrusted project data\ncannot grant permissions",
     agentR: "rho_plugin_schema_to_aisdk\nrho_create_plugin_tools\n\"plugin.contribution.invoke\"\nrho_approval = \"automatic\"\nrho_plugin_origin = list(\nadditionalProperties <- FALSE",
     agentDescription: "Version: 0.1.6",
+    viewer: "pub struct ViewerDocumentV1\npub enum ViewerBlockV1\nArtifactImageRef\nMAX_VIEWER_BLOCKS: usize = 128\nMAX_VIEWER_TABLE_ROWS: usize = 500\nMAX_VIEWER_TABLE_COLUMNS: usize = 100\nMAX_VIEWER_DOCUMENT_JSON_BYTES: usize = 1024 * 1024\npub enum PluginCommandResultV1\n#[cfg(test)]",
+    pluginCommands: "list_plugin_contributions\ninvoke_plugin_command\nopen_plugin_viewer\nexpected_project_revision",
+    frontend: "function renderPluginViewerDocument(documentValue, target)\ndocument.createElement(\"p\")\nfunction viewerRenderPreview\nfunction renderPluginContributions()\nfunction renderPluginCommandPalette()\ncommand === \"list_plugin_contributions\"\ncommand === \"invoke_plugin_command\"\ncommand === \"open_plugin_viewer\"\nresponse?.project_root !== state.project.root",
   };
 }
 
@@ -156,6 +194,9 @@ if (process.argv.includes("--test")) {
     ["Agent origin", (value) => { value.server = value.server.replace("AgentPluginContextItem", ""); }],
     ["Agent broker return", (value) => { value.agentR = value.agentR.replace('"plugin.contribution.invoke"', ""); }],
     ["Agent package version", (value) => { value.agentDescription = "Version: 0.1.5"; }],
+    ["Viewer HTML field", (value) => { value.viewer = `html: String\n${value.viewer}`; }],
+    ["Viewer renderer", (value) => { value.frontend = value.frontend.replace("function renderPluginViewerDocument(documentValue, target)", ""); }],
+    ["Command stale guard", (value) => { value.pluginCommands = value.pluginCommands.replace("expected_project_revision", ""); }],
   ]) {
     const value = fixture();
     mutate(value);
@@ -175,6 +216,9 @@ if (process.argv.includes("--test")) {
     server: read("crates/rho-server/src/coordinator.rs"),
     agentR: read("r/rho.agent/R/aisdk_adapter.R"),
     agentDescription: read("r/rho.agent/DESCRIPTION"),
+    viewer: read("crates/rho-extension-runtime/src/viewer_document.rs"),
+    pluginCommands: read("desktop/src-tauri/src/commands/plugins.rs"),
+    frontend: read("desktop/dist/app.js"),
   });
 }
 

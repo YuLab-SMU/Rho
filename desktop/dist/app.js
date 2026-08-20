@@ -40,10 +40,13 @@ const state = {
     open: false,
     busy: false,
     list: null,
+    contributions: [],
     grants: [],
     pendingRequests: [],
     currentRequestId: null,
     returnFocus: null,
+    commandPaletteOpen: false,
+    commandPaletteQuery: "",
   },
   busy: false,
   consoleHistory: [],
@@ -505,6 +508,30 @@ const mockWorkspacePlugins = [{
 }];
 const mockPluginPermissionRequests = [];
 const mockPluginGrants = [];
+const mockPluginContributions = [
+  {
+    contribution_id: "ui.command.csv_summary",
+    kind: "command",
+    label: "Summarize CSV <text only>",
+    purpose: "Show bounded CSV metadata",
+    contract_major: 1,
+    plugin_id: "org.example.research-summary",
+    package_digest: "a".repeat(64),
+    short_digest: "aaaaaaaaaaaa",
+    accepts_empty_input: true,
+  },
+  {
+    contribution_id: "ui.viewer.csv_summary",
+    kind: "viewer",
+    label: "CSV metadata viewer",
+    purpose: "Render bounded metadata blocks",
+    contract_major: 1,
+    plugin_id: "org.example.research-summary",
+    package_digest: "a".repeat(64),
+    short_digest: "aaaaaaaaaaaa",
+    accepts_empty_input: true,
+  },
+];
 
 function seedMockEvidenceClaims() {
   const currentProject = mockLastProject;
@@ -2365,6 +2392,68 @@ async function mockInvoke(command, args) {
       plugin.status = "disabled";
     }
     return { outcome: "applied", grant_id: grant.grant_id, live_handle_revoked: true };
+  }
+  if (command === "list_plugin_contributions") {
+    const contributions = mockPluginContributions.map((item) => {
+      const plugin = mockWorkspacePlugins.find((candidate) => candidate.plugin_id === item.plugin_id);
+      const available = plugin?.status === "enabled" && (plugin.permission_count === 0 || plugin.active_grant_count === plugin.permission_count);
+      return {
+        ...structuredClone(item),
+        status: available ? "ready" : "permission_unavailable",
+        available,
+      };
+    });
+    return {
+      project_root: mockLastProject,
+      project_revision: state.revision.project_revision,
+      contributions,
+    };
+  }
+  if (command === "invoke_plugin_command") {
+    if (Number(args.expectedProjectRevision) !== Number(state.revision.project_revision)) throw new Error("Plugin Command is stale after the project changed.");
+    const contribution = (await mockInvoke("list_plugin_contributions")).contributions.find((item) => item.contribution_id === args.contributionId && item.kind === "command");
+    if (!contribution?.available) throw new Error("Plugin Command is unavailable without its exact live grant.");
+    return {
+      project_root: mockLastProject,
+      project_revision: state.revision.project_revision,
+      contribution_id: contribution.contribution_id,
+      result: { kind: "notification", message: "CSV metadata is ready" },
+      provenance: {
+        contribution_id: contribution.contribution_id,
+        plugin_id: contribution.plugin_id,
+        package_digest: contribution.package_digest,
+        call_id: "call.mock-command",
+        permission_event_ids: ["event.mock-admitted", "event.mock-completed"],
+      },
+    };
+  }
+  if (command === "open_plugin_viewer") {
+    if (Number(args.expectedProjectRevision) !== Number(state.revision.project_revision)) throw new Error("Plugin Viewer is stale after the project changed.");
+    const contribution = (await mockInvoke("list_plugin_contributions")).contributions.find((item) => item.contribution_id === args.contributionId && item.kind === "viewer");
+    if (!contribution?.available) throw new Error("Plugin Viewer is unavailable without its exact live grant.");
+    return {
+      project_root: mockLastProject,
+      project_revision: state.revision.project_revision,
+      contribution_id: contribution.contribution_id,
+      document: {
+        contract: "rho.plugin_viewer_document.v1",
+        title: "CSV metadata <text only>",
+        blocks: [
+          { kind: "text", text: "Rows and columns returned by the exact project plugin. <script>text only</script>" },
+          { kind: "key_value", items: [{ key: "Rows", value: "2" }, { key: "Columns", value: "a, b" }] },
+          { kind: "table", columns: ["column", "type"], rows: [["a", "integer"], ["b", "integer"]] },
+          { kind: "code", code: "summary(data)", language: "r" },
+          { kind: "notice", tone: "info", text: "Plugin output is untrusted project data." },
+        ],
+      },
+      provenance: {
+        contribution_id: contribution.contribution_id,
+        plugin_id: contribution.plugin_id,
+        package_digest: contribution.package_digest,
+        call_id: "call.mock-viewer",
+        permission_event_ids: ["event.mock-admitted", "event.mock-completed"],
+      },
+    };
   }
   if (command === "project_restore_session") {
     const project = mockProjectState(mockLastProject);
@@ -4660,6 +4749,7 @@ function viewerPathExtension(path) {
 
 function viewerTypeLabel(kind, mediaType) {
   if (kind === "plot") return "Plot";
+  if (kind === "plugin") return "Workspace plugin · trusted renderer";
   if (mediaType === "text/markdown") return "Markdown preview";
   if (mediaType === "text/html") return "Interactive HTML";
   if (mediaType === "image/png") return "PNG image";
@@ -4787,6 +4877,118 @@ function viewerRenderTable(content, extension) {
   return { table, truncated: truncatedRows || truncatedColumns, rowCount: Math.max(0, rows.length - 1), columnCount: maxColumns };
 }
 
+function pluginViewerBoundedText(value, maximumBytes, label) {
+  const text = String(value ?? "");
+  if (new TextEncoder().encode(text).length > maximumBytes || text.includes("\0")) {
+    throw new Error(`${label} exceeds the trusted ViewerDocument boundary.`);
+  }
+  return text;
+}
+
+async function hydratePluginArtifactImage(block, figure) {
+  const status = document.createElement("span");
+  status.textContent = "Loading same-project Artifact image…";
+  figure.append(status);
+  try {
+    const detail = await invoke("get_artifact_record", { artifactId: block.artifact_id });
+    const artifact = detail?.artifact || detail;
+    if (!artifact || artifact.artifact_id !== block.artifact_id || artifact.project_root !== state.project.root) throw new Error("Artifact ownership changed");
+    if (artifact.media_type !== block.media_type || !artifact.output_path) throw new Error("Artifact media type is unavailable");
+    const viewed = await invoke("viewer_read_file", { path: artifact.output_path });
+    if (viewed.project_root !== state.project.root || viewed.media_type !== block.media_type || viewed.content_encoding !== "base64") throw new Error("Artifact Viewer response is stale");
+    const image = document.createElement("img");
+    image.alt = pluginViewerBoundedText(block.alt, 1024, "Artifact alt text");
+    image.src = `data:${block.media_type};base64,${viewed.content}`;
+    figure.replaceChildren(image);
+  } catch (error) {
+    status.textContent = reportUiFailure("load plugin Viewer Artifact", error, "The referenced Artifact image is unavailable.");
+    status.className = "viewer-error";
+  }
+}
+
+function renderPluginViewerDocument(documentValue, target) {
+  const encoded = new TextEncoder().encode(JSON.stringify(documentValue || {}));
+  if (encoded.length > 1024 * 1024) throw new Error("ViewerDocument exceeds 1 MiB.");
+  if (documentValue?.contract !== "rho.plugin_viewer_document.v1" || !Array.isArray(documentValue.blocks) || documentValue.blocks.length > 128) {
+    throw new Error("Plugin Viewer returned an invalid ViewerDocument contract.");
+  }
+  const article = document.createElement("article");
+  article.className = "plugin-viewer-document";
+  for (const block of documentValue.blocks) {
+    if (!block || typeof block.kind !== "string") throw new Error("ViewerDocument block is invalid.");
+    if (block.kind === "text") {
+      const text = document.createElement("p");
+      text.className = "plugin-viewer-text";
+      text.textContent = pluginViewerBoundedText(block.text, 64 * 1024, "Text block");
+      article.append(text);
+    } else if (block.kind === "code") {
+      const pre = document.createElement("pre");
+      pre.className = "plugin-viewer-code";
+      const code = document.createElement("code");
+      code.textContent = pluginViewerBoundedText(block.code, 64 * 1024, "Code block");
+      if (block.language) code.dataset.language = String(block.language).slice(0, 32);
+      pre.append(code);
+      article.append(pre);
+    } else if (block.kind === "key_value") {
+      if (!Array.isArray(block.items) || block.items.length > 128) throw new Error("ViewerDocument key/value block is invalid.");
+      const list = document.createElement("dl");
+      list.className = "plugin-viewer-key-value";
+      for (const item of block.items) {
+        const key = document.createElement("dt");
+        key.textContent = pluginViewerBoundedText(item?.key, 1024, "Key");
+        const value = document.createElement("dd");
+        value.textContent = pluginViewerBoundedText(item?.value, 64 * 1024, "Value");
+        list.append(key, value);
+      }
+      article.append(list);
+    } else if (block.kind === "table") {
+      if (!Array.isArray(block.columns) || !block.columns.length || block.columns.length > 100 || !Array.isArray(block.rows) || block.rows.length > 500) throw new Error("ViewerDocument table is outside its bounds.");
+      const wrapper = document.createElement("div");
+      wrapper.className = "plugin-viewer-table-wrap";
+      const table = document.createElement("table");
+      table.className = "plugin-viewer-table";
+      const head = document.createElement("thead");
+      const heading = document.createElement("tr");
+      for (const column of block.columns) {
+        const th = document.createElement("th");
+        th.scope = "col";
+        th.textContent = pluginViewerBoundedText(column, 1024, "Table column");
+        heading.append(th);
+      }
+      head.append(heading);
+      const body = document.createElement("tbody");
+      for (const row of block.rows) {
+        if (!Array.isArray(row) || row.length !== block.columns.length) throw new Error("ViewerDocument row width is invalid.");
+        const tr = document.createElement("tr");
+        for (const cell of row) {
+          const td = document.createElement("td");
+          td.textContent = pluginViewerBoundedText(cell, 64 * 1024, "Table cell");
+          tr.append(td);
+        }
+        body.append(tr);
+      }
+      table.append(head, body);
+      wrapper.append(table);
+      article.append(wrapper);
+    } else if (block.kind === "notice") {
+      if (!["info", "warning", "error"].includes(block.tone)) throw new Error("ViewerDocument notice tone is invalid.");
+      const notice = document.createElement("div");
+      notice.className = `plugin-viewer-notice ${block.tone}`;
+      notice.textContent = pluginViewerBoundedText(block.text, 64 * 1024, "Notice");
+      article.append(notice);
+    } else if (block.kind === "artifact_image_ref") {
+      if (!["image/png", "image/jpeg", "image/gif", "image/webp"].includes(block.media_type)) throw new Error("ViewerDocument Artifact media type is invalid.");
+      const figure = document.createElement("figure");
+      figure.className = "plugin-viewer-artifact";
+      article.append(figure);
+      void hydratePluginArtifactImage(block, figure);
+    } else {
+      throw new Error(`Unsupported ViewerDocument block: ${block.kind}`);
+    }
+  }
+  target.append(article);
+}
+
 function viewerRenderPreview() {
   const target = $("#viewerPreviewContent");
   target.replaceChildren();
@@ -4806,7 +5008,10 @@ function viewerRenderPreview() {
     return;
   }
   try {
-    if (viewer.kind === "plot") {
+    if (viewer.kind === "plugin") {
+      renderPluginViewerDocument(viewer.pluginDocument, target);
+      $("#viewerPreviewStatus").textContent = "trusted block renderer";
+    } else if (viewer.kind === "plot") {
       const image = document.createElement("img");
       image.className = "plot-image";
       image.alt = viewer.title || "R plot";
@@ -4877,10 +5082,11 @@ function renderViewer() {
   viewerRegion.classList.add(`viewer-mode-${viewer.mode}`);
   $(".workspace").classList.toggle("viewer-open", viewer.open);
   $("#viewerTitle").textContent = viewer.title || "No output selected";
-  $("#viewerMeta").textContent = viewer.open ? [viewerTypeLabel(viewer.kind, viewer.mediaType), viewer.path || ""].filter(Boolean).join(" · ") : "";
+  $("#viewerMeta").textContent = viewer.open ? [viewerTypeLabel(viewer.kind, viewer.mediaType), viewer.kind === "plugin" ? viewer.pluginOrigin : viewer.path || ""].filter(Boolean).join(" · ") : "";
   $("#viewerSourcePath").textContent = viewer.sourcePath || viewer.path || "";
   $("#viewerSourceContent").textContent = viewer.sourceContent || viewer.content || "";
   const sourceIsActiveDocument = Boolean(viewer.sourcePath && viewer.sourcePath === state.activeDocument);
+  $("#viewerPaneMode").classList.toggle("hidden", viewer.kind === "plugin");
   $("#viewerOpenSource").classList.toggle("hidden", !viewer.sourcePath || sourceIsActiveDocument);
   $("#viewerOpenSource").disabled = !viewer.sourcePath || sourceIsActiveDocument;
   for (const button of $$('[data-viewer-mode]')) {
@@ -4892,7 +5098,7 @@ function renderViewer() {
 }
 
 function closeViewer() {
-  state.viewer = { ...state.viewer, open: false, busy: false, error: null, notice: null };
+  state.viewer = { ...state.viewer, open: false, busy: false, error: null, notice: null, pluginDocument: null, pluginOrigin: null };
   renderViewer();
 }
 
@@ -4912,6 +5118,8 @@ async function openViewer(input) {
     sourceContent: input.sourceContent || "",
     content: "",
     mediaType: input.mediaType || null,
+    pluginDocument: null,
+    pluginOrigin: null,
   };
   state.viewer = viewer;
   renderViewer();
@@ -15116,10 +15324,15 @@ async function maybeApplyPreviewScenario() {
     await openWorkspacePluginDialog();
     if (["permission", "malicious-text"].includes(pluginState) && mockWorkspacePlugins[0]) {
       await requestWorkspacePluginEnable(mockWorkspacePlugins[0].plugin_id);
-    } else if (pluginState === "active" && mockWorkspacePlugins[0]) {
+    } else if (["active", "contributions", "palette", "viewer"].includes(pluginState) && mockWorkspacePlugins[0]) {
       await requestWorkspacePluginEnable(mockWorkspacePlugins[0].plugin_id);
       await respondWorkspacePluginPermission("allow_project");
       $("#pluginGrantSection").open = true;
+      if (pluginState === "viewer") {
+        await invokeTrustedPluginContribution("ui.viewer.csv_summary", "viewer");
+      } else if (pluginState === "palette") {
+        openPluginCommandPalette();
+      }
     }
     requestAnimationFrame(() => recordPreviewLayoutEvidence());
     return;
@@ -16120,10 +16333,16 @@ function recordPreviewLayoutEvidence() {
         && dialog.right <= window.innerWidth && dialog.bottom <= window.innerHeight,
       permission_view: permission,
       plugin_cards: $$("#pluginList .plugin-card").length,
+      contribution_rows: $$("#pluginContributionList .plugin-contribution-row").length,
+      palette_rows: $$("#pluginCommandPaletteList .plugin-command-palette-item").length,
       grant_rows: $$("#pluginGrantList .plugin-grant-row").length,
       raw_handle_exposed: $("#pluginDialog").textContent.includes("handle."),
       purpose_rendered_as_text: !permission || !$("#pluginPermissionPurpose").querySelector("script, img, svg"),
       active_modal_count: $$('[role="dialog"][aria-modal="true"]:not(.hidden)').length,
+      plugin_viewer_open: state.viewer.open && state.viewer.kind === "plugin",
+      plugin_palette_open: state.plugins.commandPaletteOpen,
+      plugin_viewer_script_elements: $$("#viewerPreviewContent script, #viewerPreviewContent iframe").length,
+      plugin_viewer_text_preserved: $("#viewerPreviewContent").textContent.includes("<script>text only</script>"),
     };
     target.textContent = JSON.stringify(evidence);
     window.__rhoPreviewEvidence = evidence;
@@ -20733,6 +20952,113 @@ function renderWorkspacePlugins() {
   }
 }
 
+function renderPluginContributions() {
+  const section = $("#pluginContributionSection");
+  const list = $("#pluginContributionList");
+  const contributions = (state.plugins.contributions || []).filter((item) => ["command", "viewer"].includes(item.kind));
+  section.classList.toggle("hidden", !contributions.length);
+  $("#pluginContributionCount").textContent = String(contributions.length);
+  list.replaceChildren();
+  for (const contribution of contributions) {
+    const row = document.createElement("article");
+    row.className = "plugin-contribution-row";
+    const description = document.createElement("div");
+    const label = document.createElement("strong");
+    label.textContent = contribution.label;
+    const purpose = document.createElement("span");
+    purpose.textContent = `${contribution.purpose} · ${contribution.plugin_id} · digest ${contribution.short_digest}`;
+    const status = document.createElement("span");
+    status.textContent = contribution.available
+      ? "Ready in this exact project"
+      : contribution.status === "host_unavailable"
+        ? "Plugin host is unavailable"
+        : "Required permission is unavailable";
+    description.append(label, purpose, status);
+    const action = document.createElement("button");
+    action.type = "button";
+    action.textContent = contribution.kind === "command" ? "Run" : "Open";
+    action.dataset.pluginContribution = contribution.contribution_id;
+    action.dataset.pluginContributionKind = contribution.kind;
+    action.disabled = state.plugins.busy || !contribution.available || !contribution.accepts_empty_input;
+    if (!contribution.accepts_empty_input) action.title = "This contribution requires typed input that this trusted surface does not yet collect.";
+    row.append(description, action);
+    list.append(row);
+  }
+}
+
+function renderPluginCommandPalette() {
+  const list = $("#pluginCommandPaletteList");
+  const query = state.plugins.commandPaletteQuery.trim().toLowerCase();
+  const commands = (state.plugins.contributions || [])
+    .filter((item) => item.kind === "command")
+    .filter((item) => !query || `${item.label} ${item.purpose} ${item.plugin_id}`.toLowerCase().includes(query));
+  list.replaceChildren();
+  if (!commands.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-tree";
+    empty.textContent = "No matching Plugin Commands are active in this project.";
+    list.append(empty);
+    return;
+  }
+  for (const command of commands) {
+    const item = document.createElement("article");
+    item.className = "plugin-command-palette-item";
+    item.setAttribute("role", "option");
+    const description = document.createElement("div");
+    const label = document.createElement("strong");
+    label.textContent = command.label;
+    const purpose = document.createElement("span");
+    purpose.textContent = `${command.purpose} · ${command.plugin_id} · digest ${command.short_digest}`;
+    description.append(label, purpose);
+    const run = document.createElement("button");
+    run.type = "button";
+    run.textContent = "Run";
+    run.dataset.pluginPaletteCommand = command.contribution_id;
+    run.disabled = state.plugins.busy || !command.available || !command.accepts_empty_input;
+    item.append(description, run);
+    list.append(item);
+  }
+}
+
+function openPluginCommandPalette() {
+  state.plugins.commandPaletteOpen = true;
+  state.plugins.commandPaletteQuery = "";
+  $("#pluginDialog").classList.add("hidden");
+  state.plugins.open = false;
+  $("#pluginCommandPaletteSearch").value = "";
+  $("#pluginCommandPalette").classList.remove("hidden");
+  renderPluginCommandPalette();
+  $("#pluginCommandPaletteSearch").focus();
+}
+
+function closePluginCommandPalette() {
+  $("#pluginCommandPalette").classList.add("hidden");
+  state.plugins.commandPaletteOpen = false;
+  $("#pluginDialog").classList.remove("hidden");
+  state.plugins.open = true;
+  $("#pluginCommandPaletteOpen").focus();
+}
+
+function trapPluginCommandPaletteFocus(event) {
+  const dialog = $("#pluginCommandPalette");
+  if (dialog.classList.contains("hidden")) return;
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closePluginCommandPalette();
+    return;
+  }
+  if (event.key !== "Tab") return;
+  const focusable = Array.from(dialog.querySelectorAll("input, button:not([disabled]), [tabindex]:not([tabindex='-1'])"))
+    .filter((element) => element.getClientRects().length > 0);
+  if (!focusable.length) return;
+  const current = focusable.indexOf(document.activeElement);
+  const next = current < 0
+    ? (event.shiftKey ? focusable.length - 1 : 0)
+    : (current + (event.shiftKey ? -1 : 1) + focusable.length) % focusable.length;
+  event.preventDefault();
+  focusable[next].focus();
+}
+
 function renderPluginGrants() {
   const list = $("#pluginGrantList");
   list.replaceChildren();
@@ -20786,20 +21112,26 @@ function showPluginListView() {
 async function loadWorkspacePluginSurface() {
   setPluginDialogError("");
   state.plugins.busy = true;
+  state.plugins.contributions = [];
   renderWorkspacePlugins();
+  renderPluginContributions();
   try {
-    const [list, grantList] = await Promise.all([
+    const [list, grantList, contributionList] = await Promise.all([
       invoke("list_workspace_plugins"),
       invoke("list_plugin_grants"),
+      invoke("list_plugin_contributions"),
     ]);
     state.plugins.list = list;
     state.plugins.grants = grantList?.grants || [];
+    state.plugins.contributions = contributionList?.contributions || [];
   } catch (error) {
     setPluginDialogError(userFacingError(error, "Workspace plugins could not be loaded."));
   } finally {
     state.plugins.busy = false;
     renderWorkspacePlugins();
     renderPluginGrants();
+    renderPluginContributions();
+    if (state.plugins.commandPaletteOpen) renderPluginCommandPalette();
   }
 }
 
@@ -20912,6 +21244,85 @@ async function revokeWorkspacePluginGrant(grantId) {
     setPluginDialogError(userFacingError(error, "The plugin grant could not be revoked."));
   } finally {
     state.plugins.busy = false;
+  }
+}
+
+function openTrustedPluginViewer(response) {
+  if (response?.project_root !== state.project.root || Number(response?.project_revision) !== Number(state.revision.project_revision)) {
+    throw new Error("The project changed before the Plugin Viewer could open.");
+  }
+  const provenance = response.provenance || {};
+  const origin = [provenance.plugin_id, String(provenance.package_digest || "").slice(0, 12)]
+    .filter(Boolean)
+    .join(" · ");
+  state.viewer = {
+    ...state.viewer,
+    open: true,
+    busy: false,
+    error: null,
+    notice: "Rendered by the trusted Rho shell. All plugin strings are untrusted text.",
+    kind: "plugin",
+    mode: "preview",
+    path: null,
+    title: String(response.document?.title || "Workspace plugin Viewer"),
+    sourcePath: null,
+    sourceContent: "",
+    content: "",
+    mediaType: "application/vnd.rho.plugin-viewer+json",
+    pluginDocument: response.document,
+    pluginOrigin: origin,
+  };
+  closeWorkspacePluginDialog();
+  renderViewer();
+}
+
+async function invokeTrustedPluginContribution(contributionId, kind) {
+  if (state.plugins.busy) return;
+  const contribution = (state.plugins.contributions || []).find((item) => item.contribution_id === contributionId && item.kind === kind);
+  if (!contribution?.available || !contribution.accepts_empty_input) return;
+  const requestRoot = state.project.root;
+  const requestRevision = state.revision.project_revision;
+  state.plugins.busy = true;
+  renderPluginContributions();
+  setPluginDialogError("");
+  try {
+    if (kind === "viewer") {
+      const response = await invoke("open_plugin_viewer", {
+        contributionId,
+        input: {},
+        expectedProjectRevision: requestRevision,
+      });
+      if (state.project.root !== requestRoot || state.revision.project_revision !== requestRevision) throw new Error("The project changed while opening the Plugin Viewer.");
+      openTrustedPluginViewer(response);
+      return;
+    }
+    const response = await invoke("invoke_plugin_command", {
+      contributionId,
+      input: {},
+      expectedProjectRevision: requestRevision,
+    });
+    if (response?.project_root !== requestRoot || state.project.root !== requestRoot || Number(response?.project_revision) !== Number(requestRevision)) throw new Error("The project changed while running the Plugin Command.");
+    if (response.result?.kind === "notification") {
+      toast(pluginViewerBoundedText(response.result.message, 1024, "Plugin notification"));
+    } else if (response.result?.kind === "viewer_document") {
+      openTrustedPluginViewer({ ...response, document: response.result.document });
+      return;
+    } else if (response.result?.kind === "artifact_ref") {
+      const detail = await invoke("get_artifact_record", { artifactId: response.result.artifact_id });
+      const artifact = detail?.artifact || detail;
+      if (!artifact || artifact.project_root !== requestRoot || !artifact.output_path) throw new Error("The same-project Artifact is unavailable.");
+      closeWorkspacePluginDialog();
+      await openViewer({ kind: "artifact", path: artifact.output_path, title: artifact.output_path, artifactId: artifact.artifact_id });
+      return;
+    } else {
+      throw new Error("Plugin Command returned an unsupported result kind.");
+    }
+    await loadWorkspacePluginSurface();
+  } catch (error) {
+    setPluginDialogError(userFacingError(error, "The plugin contribution could not be completed."));
+  } finally {
+    state.plugins.busy = false;
+    renderPluginContributions();
   }
 }
 
@@ -21969,9 +22380,27 @@ $("#aboutClose").addEventListener("click", () => closeProductDialog("about"));
 $("#pluginDialogClose").addEventListener("click", closeWorkspacePluginDialog);
 $("#pluginDialog [data-plugin-close]").addEventListener("click", closeWorkspacePluginDialog);
 $("#pluginRefresh").addEventListener("click", () => loadWorkspacePluginSurface());
+$("#pluginCommandPaletteOpen").addEventListener("click", openPluginCommandPalette);
+$("#pluginCommandPaletteClose").addEventListener("click", closePluginCommandPalette);
+$("#pluginCommandPalette [data-plugin-palette-close]").addEventListener("click", closePluginCommandPalette);
+$("#pluginCommandPaletteSearch").addEventListener("input", (event) => {
+  state.plugins.commandPaletteQuery = event.target.value;
+  renderPluginCommandPalette();
+});
+$("#pluginCommandPaletteList").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-plugin-palette-command]");
+  if (!button) return;
+  closePluginCommandPalette();
+  void invokeTrustedPluginContribution(button.dataset.pluginPaletteCommand, "command");
+});
+$("#pluginCommandPalette").addEventListener("keydown", trapPluginCommandPaletteFocus);
 $("#pluginList").addEventListener("click", (event) => {
   const button = event.target.closest("[data-plugin-enable]");
   if (button) requestWorkspacePluginEnable(button.dataset.pluginEnable);
+});
+$("#pluginContributionList").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-plugin-contribution]");
+  if (button) void invokeTrustedPluginContribution(button.dataset.pluginContribution, button.dataset.pluginContributionKind);
 });
 $("#pluginGrantList").addEventListener("click", (event) => {
   const button = event.target.closest("[data-plugin-grant-revoke]");

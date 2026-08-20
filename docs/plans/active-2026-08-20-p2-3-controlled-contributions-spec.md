@@ -3,14 +3,16 @@
 Status: active under the owner-approved local-first exception; P2-3A Manifest
 V2 + pure Source/Panel contracts and P2-3B Guest ABI V2 contribution proxy +
 transactional registry, plus P2-3C fixture Tool/Source/Skill + Agent integration,
-completed locally 2026-08-20; P2-3D trusted Command/Viewer descriptor renderer
-activated; P2-1/P2-2 hosted and cross-platform installed acceptance remain open
-and mandatory before final Phase 2 acceptance
+and P2-3D trusted Command/Viewer descriptor renderer completed locally
+2026-08-20; P2-3E named Panel/teardown/two-project/installed review activated;
+P2-1/P2-2 hosted and cross-platform installed acceptance remain open and
+mandatory before final Phase 2 acceptance
 
-Active work package: P2-3D only. P2-3E remains inactive until trusted Command/
-Viewer routing, rendering, accessibility and teardown pass. P2-3C added the
-exact-project Agent projection but no public Tauri contribution command,
-command-palette UI, Viewer/Panel renderer, new schema or privileged operation.
+Active work package: P2-3E only. It may add the optional named
+`plugin_details` Panel and combined teardown/installed evidence but no new
+contribution kind, broker operation or authority. P2-3D added three trusted
+Tauri commands, Plugin palette/details UI and Viewer renderer; Panel and final
+P2-3 acceptance remain open.
 
 Change class: D3 capability graph, Agent tool, trusted UI, Wasm protocol, and
 cross-project lifecycle behavior. Risk: R3.
@@ -411,6 +413,60 @@ Environment/Git/destructive surfaces.
 The fixture viewer renders CSV metadata and one same-project Artifact image
 reference. The panel remains optional but, if implemented for Phase 2
 acceptance, uses the same renderer and teardown tests.
+
+### P2-3D local closeout evidence
+
+P2-3D adds `ViewerDocumentV1` with only Text, Code, KeyValue, Table, Notice and
+same-project `ArtifactImageRef` blocks. Rust denies unknown fields and result
+kinds, reserved trusted-surface wording in titles/notifications, more than 128
+blocks, 64 KiB text/code, tables over 500x100, malformed row widths, unsupported
+image media, bidi/control spoofing and documents over 1 MiB. Command results
+are limited to a bounded notification, validated ViewerDocument or exact
+same-project Artifact ID. Artifact references must exist in Store under the
+current project, match the declared media type and retain a trusted output
+path before they reach the shell.
+
+Three Tauri commands are now fixed: `list_plugin_contributions`,
+`invoke_plugin_command`, and `open_plugin_viewer`. Frontend input contains only
+contribution ID, bounded input and expected project revision; it cannot select
+plugin/digest/generation/host/grant identity. Rust returns explicit project/
+revision and provenance, and the frontend rejects late cross-project results.
+Only zero-input declarations are currently enabled in the product surface;
+other valid declarations remain visible but disabled until a later trusted
+input-form contract exists.
+
+The existing Workspace Plugins dialog contains trusted contribution details
+and a dedicated Plugin Command palette. It never creates top-level menus,
+shortcuts, startup hooks, default/destructive buttons or trusted-dialog
+placement. Viewer rendering uses only `createElement`, `textContent` and fixed
+attributes/classes; the Plugin renderer contains no inner/outer HTML, iframe,
+`srcdoc`, DOMParser or links. Artifact image bytes are loaded only through the
+existing same-project Artifact and `viewer_read_file` path after media/project
+revalidation.
+
+Local verification on 2026-08-20:
+
+- extension-runtime strict all-target clippy and its 126 unit, 26 contract, 11
+  discovery and 34 lifecycle tests passed on stable and Rust `1.88.0` (197 per
+  toolchain); both workspace all-target checks passed;
+- desktop passed 24 focused plugin tests on both toolchains, including fixed
+  Command/Viewer result kinds, wrong-kind rejection, exact same-project
+  Artifact/media checks and zero raw-handle projection;
+- 128-command registration/mock inventory and negative self-test, JS syntax,
+  trusted plugin UI, P2-3 negative contract, P2-2/host/Phase 1, MAC4, rustfmt
+  and diff checks passed;
+- real Browser review at 951x811 passed in-viewport details/palette, one active
+  modal, initial search focus, filtering, Escape return, pure-text malicious
+  labels, explicit Command invocation, origin-labelled five-block Viewer,
+  literal `<script>` text with zero script/iframe nodes, no overflow, and
+  revoke-driven Run/Open disablement; responsive 640px rules are covered by
+  the deterministic UI contract pending final installed/narrow acceptance.
+
+Application version remains `0.4.1-dev.4` and `rho.agent` remains `0.1.6`; the
+existing NEWS entry now names Commands and the fixed Viewer renderer. No Store
+schema, R API, broker operation, CLI/MCP, raw HTML/URL/path/base64 document,
+Panel, signing or release authority was added. This closes only the local
+P2-3D stop gate and activates P2-3E under the local-first exception.
 
 ## Public Commands And Mock Contract
 

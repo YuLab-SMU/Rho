@@ -21,10 +21,11 @@ use rho_extension_runtime::{
     ContributionCallRequest, ContributionCallSession, ContributionInstanceIdentity,
     ContributionInvocationOrigin, ContributionKind, ContributionStore, DiscoveredPlugin,
     GrantErrorKind, GrantRequest, GrantSource, GrantStore, GuestStep, HOST_PROTOCOL_VERSION,
-    HostFrame, HostInstanceId, HostMessage, HostRequestId, HostResponse, MAX_WASM_MODULE_BYTES,
-    OsBrokerCallIdSource, PermissionConstraints, PermissionKind, PermissionUse, PluginId,
-    Revalidation, RevalidationRequest, RuntimeKind, ScopeId, SystemContributionClock,
-    WasmHostIdentity, WasmPluginHost, WorkspaceGrantIdentity, discover_workspace_plugins,
+    HostFrame, HostInstanceId, HostInstanceState, HostMessage, HostRequestId, HostResponse,
+    MAX_WASM_MODULE_BYTES, OsBrokerCallIdSource, PermissionConstraints, PermissionKind,
+    PermissionUse, PluginCommandResultV1, PluginId, Revalidation, RevalidationRequest, RuntimeKind,
+    ScopeId, SystemContributionClock, ViewerDocumentV1, WasmHostIdentity, WasmPluginHost,
+    WorkspaceGrantIdentity, discover_workspace_plugins,
 };
 use rho_kernel::ArkSession;
 use rho_server::coordinator::{
@@ -61,6 +62,46 @@ const MAX_AGENT_PLUGIN_CONTEXT_PROFILE_BYTES: usize = 512 * 1024;
 pub(crate) struct WorkspacePluginAgentProjection {
     pub tools: Vec<AgentPluginToolDefinition>,
     pub context: Vec<AgentPluginContextItem>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct PluginContributionList {
+    pub project_root: String,
+    pub project_revision: i64,
+    pub contributions: Vec<PluginContributionView>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct PluginContributionView {
+    pub contribution_id: String,
+    pub kind: String,
+    pub label: String,
+    pub purpose: String,
+    pub contract_major: u64,
+    pub plugin_id: String,
+    pub package_digest: String,
+    pub short_digest: String,
+    pub status: String,
+    pub available: bool,
+    pub accepts_empty_input: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct PluginCommandInvocationView {
+    pub project_root: String,
+    pub project_revision: i64,
+    pub contribution_id: String,
+    pub result: PluginCommandResultV1,
+    pub provenance: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct PluginViewerDocumentView {
+    pub project_root: String,
+    pub project_revision: i64,
+    pub contribution_id: String,
+    pub document: ViewerDocumentV1,
+    pub provenance: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -228,6 +269,7 @@ struct ActivePlugin {
     host_instance_id: HostInstanceId,
     host: WasmPluginHost,
     handles: BTreeMap<String, CapabilityHandle>,
+    permission_count: usize,
     contribution_identity: Option<ContributionInstanceIdentity>,
 }
 
@@ -516,6 +558,127 @@ impl PendingPluginPermissionRegistry {
         Ok(WorkspacePluginAgentProjection {
             tools,
             context: prompt_context,
+        })
+    }
+
+    pub(crate) fn list_contributions(
+        &self,
+        context: &PluginRuntimeContext,
+    ) -> PluginContributionList {
+        let state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let contributions = state
+            .contributions
+            .list(&context.project_scope_id)
+            .into_iter()
+            .map(|record| {
+                let key = registry_key(&context.project_root, record.plugin_id.as_str());
+                let exact_active = state.active.get(&key).filter(|active| {
+                    active.host.identity().project_id() == &record.project_id
+                        && active.host.identity().plugin_id() == &record.plugin_id
+                        && active.host.identity().package_digest() == &record.package_digest
+                        && active.host.identity().activation_generation()
+                            == record.activation_generation
+                        && active.host.identity().host_instance_id() == &record.host_instance_id
+                });
+                let available = exact_active.is_some_and(|active| {
+                    active.host.state() == HostInstanceState::Active
+                        && (active.permission_count == 0
+                            || active.handles.len() == active.permission_count)
+                });
+                let status = if available {
+                    "ready"
+                } else if exact_active
+                    .is_some_and(|active| active.host.state() != HostInstanceState::Active)
+                {
+                    "host_unavailable"
+                } else {
+                    "permission_unavailable"
+                };
+                let accepts_empty_input = record
+                    .contribution
+                    .input_schema
+                    .as_ref()
+                    .is_some_and(|schema| schema.validate_instance(&serde_json::json!({})).is_ok());
+                PluginContributionView {
+                    contribution_id: record.contribution.capability.to_string(),
+                    kind: contribution_kind_name(record.contribution.kind).to_string(),
+                    label: record.contribution.label.clone(),
+                    purpose: record.contribution.purpose.clone(),
+                    contract_major: record.contribution.contract_major,
+                    plugin_id: record.plugin_id.to_string(),
+                    package_digest: record.package_digest.to_string(),
+                    short_digest: record.package_digest.as_str()[..12].to_string(),
+                    status: status.to_string(),
+                    available,
+                    accepts_empty_input,
+                }
+            })
+            .collect();
+        PluginContributionList {
+            project_root: context.project_root.clone(),
+            project_revision: context.project_revision,
+            contributions,
+        }
+    }
+
+    pub(crate) fn invoke_command_contribution(
+        &self,
+        context: &PluginRuntimeContext,
+        contribution_id: &str,
+        input: serde_json::Value,
+        store: &mut Store,
+    ) -> Result<PluginCommandInvocationView> {
+        let outcome = self.invoke_file_contribution(
+            context,
+            contribution_id,
+            ContributionInvocationOrigin::UserCommand,
+            input,
+            store,
+        )?;
+        ensure!(
+            outcome["status"] == "completed",
+            "plugin Command returned a failed terminal result"
+        );
+        let result = PluginCommandResultV1::parse(outcome["result"].clone())?;
+        validate_command_result_artifacts(store, context, &result)?;
+        Ok(PluginCommandInvocationView {
+            project_root: context.project_root.clone(),
+            project_revision: context.project_revision,
+            contribution_id: contribution_id.to_string(),
+            result,
+            provenance: outcome["provenance"].clone(),
+        })
+    }
+
+    pub(crate) fn open_viewer_contribution(
+        &self,
+        context: &PluginRuntimeContext,
+        contribution_id: &str,
+        input: serde_json::Value,
+        store: &mut Store,
+    ) -> Result<PluginViewerDocumentView> {
+        let outcome = self.invoke_file_contribution(
+            context,
+            contribution_id,
+            ContributionInvocationOrigin::TrustedViewer,
+            input,
+            store,
+        )?;
+        ensure!(
+            outcome["status"] == "completed",
+            "plugin Viewer returned a failed terminal result"
+        );
+        let document = ViewerDocumentV1::parse(outcome["result"].clone())?;
+        validate_viewer_artifacts(store, context, &document)?;
+        Ok(PluginViewerDocumentView {
+            project_root: context.project_root.clone(),
+            project_revision: context.project_revision,
+            contribution_id: contribution_id.to_string(),
+            document,
+            provenance: outcome["provenance"].clone(),
         })
     }
 
@@ -2140,6 +2303,12 @@ impl PendingPluginPermissionRegistry {
                     ) | (
                         ContributionInvocationOrigin::TrustedSource,
                         ContributionKind::Source
+                    ) | (
+                        ContributionInvocationOrigin::UserCommand,
+                        ContributionKind::Command
+                    ) | (
+                        ContributionInvocationOrigin::TrustedViewer,
+                        ContributionKind::Viewer
                     )
                 ),
                 "contribution kind does not match its trusted invocation origin"
@@ -2658,6 +2827,70 @@ fn registry_key(project_root: &str, plugin_id: &str) -> String {
     format!("{}\0{plugin_id}", normalize_project_root(project_root))
 }
 
+fn contribution_kind_name(kind: ContributionKind) -> &'static str {
+    match kind {
+        ContributionKind::Command => "command",
+        ContributionKind::Viewer => "viewer",
+        ContributionKind::Source => "source",
+        ContributionKind::Tool => "tool",
+        ContributionKind::Skill => "skill",
+        ContributionKind::Panel => "panel",
+    }
+}
+
+fn validate_command_result_artifacts(
+    store: &Store,
+    context: &PluginRuntimeContext,
+    result: &PluginCommandResultV1,
+) -> Result<()> {
+    match result {
+        PluginCommandResultV1::Notification { .. } => Ok(()),
+        PluginCommandResultV1::ViewerDocument { document } => {
+            validate_viewer_artifacts(store, context, document)
+        }
+        PluginCommandResultV1::ArtifactRef { artifact_id } => {
+            validate_same_project_artifact(store, context, artifact_id, None)
+        }
+    }
+}
+
+fn validate_viewer_artifacts(
+    store: &Store,
+    context: &PluginRuntimeContext,
+    document: &ViewerDocumentV1,
+) -> Result<()> {
+    for (artifact_id, media_type) in document.artifact_image_refs() {
+        validate_same_project_artifact(store, context, artifact_id, Some(media_type))?;
+    }
+    Ok(())
+}
+
+fn validate_same_project_artifact(
+    store: &Store,
+    context: &PluginRuntimeContext,
+    artifact_id: &str,
+    expected_media_type: Option<&str>,
+) -> Result<()> {
+    let artifact = store
+        .get_artifact_record(&context.project_root, artifact_id)?
+        .context("plugin Viewer referenced an unavailable same-project Artifact")?;
+    ensure!(
+        artifact.project_root == context.project_root,
+        "plugin Viewer Artifact belongs to another project"
+    );
+    if let Some(expected_media_type) = expected_media_type {
+        ensure!(
+            artifact.media_type == expected_media_type,
+            "plugin Viewer Artifact media type does not match its descriptor"
+        );
+    }
+    ensure!(
+        !artifact.output_path.trim().is_empty(),
+        "plugin Viewer Artifact has no trusted output path"
+    );
+    Ok(())
+}
+
 fn agent_plugin_tool_name(contribution_id: &str, package_digest: &str) -> String {
     let stem = contribution_id
         .rsplit('.')
@@ -3117,6 +3350,7 @@ fn activate_plugin<'a>(
             host_instance_id,
             host,
             handles,
+            permission_count: plugin.manifest.permissions.len(),
             contribution_identity,
         },
     );
@@ -3369,6 +3603,38 @@ mod tests {
                 (func (export "rho_resume") (param i32 i32) (result i64) i64.const {complete_packed})
                 (func (export "rho_cancel") (param i32 i32) (result i32) i32.const 0))"#,
             wat_data(&begin),
+            wat_data(&complete),
+        ))
+        .unwrap();
+        fs::write(
+            project.join(".rho/plugins/example/dist/plugin.wasm"),
+            module,
+        )
+        .unwrap();
+    }
+
+    fn install_immediate_contribution_module(project: &Path, result: serde_json::Value) {
+        let call_id = "call.000000000000002a";
+        let complete = serde_json::json!({
+            "type": "complete",
+            "call_id": call_id,
+            "result": result
+        })
+        .to_string();
+        let pointer = 4096_u64;
+        let packed = (pointer << 32) | complete.len() as u64;
+        let module = wat::parse_str(format!(
+            r#"(module
+                (memory (export "memory") 1 32)
+                (data (i32.const {pointer}) "{}")
+                (func (export "rho_activate") (param i32) (result i32) i32.const 0)
+                (func (export "rho_echo") (param i32 i32) (result i64) i64.const 0)
+                (func (export "rho_heartbeat") (result i32) i32.const 0)
+                (func (export "rho_quiesce") (result i32) i32.const 0)
+                (func (export "rho_dispose") (result i32) i32.const 0)
+                (func (export "rho_begin") (param i32 i32) (result i64) i64.const {packed})
+                (func (export "rho_resume") (param i32 i32) (result i64) i64.const {packed})
+                (func (export "rho_cancel") (param i32 i32) (result i32) i32.const 0))"#,
             wat_data(&complete),
         ))
         .unwrap();
@@ -3672,6 +3938,90 @@ mod tests {
                         "skillPath": "skills/guide.md"
                     }
                 ]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+    }
+
+    fn write_ui_fixture_plugin(project: &Path, kind: ContributionKind) {
+        let directory = project.join(".rho/plugins/example/dist");
+        fs::create_dir_all(&directory).unwrap();
+        let (capability, kind_name, result, output_schema) = match kind {
+            ContributionKind::Command => (
+                "ui.command.csv_summary",
+                "command",
+                serde_json::json!({
+                    "kind": "notification",
+                    "message": "CSV metadata is ready"
+                }),
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "kind": {"type": "string", "enum": ["notification"]},
+                        "message": {"type": "string", "maxLength": 1024}
+                    },
+                    "required": ["kind", "message"]
+                }),
+            ),
+            ContributionKind::Viewer => (
+                "ui.viewer.csv_summary",
+                "viewer",
+                serde_json::json!({
+                    "contract": rho_extension_runtime::PLUGIN_VIEWER_DOCUMENT_CONTRACT,
+                    "title": "CSV metadata",
+                    "blocks": [{
+                        "kind": "text",
+                        "text": "Rows: 2; columns: a, b <script>text only</script>"
+                    }]
+                }),
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "contract": {
+                            "type": "string",
+                            "enum": [rho_extension_runtime::PLUGIN_VIEWER_DOCUMENT_CONTRACT]
+                        },
+                        "title": {"type": "string", "maxLength": 128},
+                        "blocks": {
+                            "type": "array",
+                            "maxItems": 128,
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "kind": {"type": "string", "enum": ["text"]},
+                                    "text": {"type": "string", "maxLength": 65536}
+                                },
+                                "required": ["kind", "text"]
+                            }
+                        }
+                    },
+                    "required": ["contract", "title", "blocks"]
+                }),
+            ),
+            _ => panic!("UI fixture supports only Command or Viewer"),
+        };
+        install_immediate_contribution_module(project, result);
+        let empty = serde_json::json!({"type": "object", "properties": {}});
+        fs::write(
+            project.join(".rho/plugins/example/rho-plugin.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "schemaVersion": 2,
+                "id": "org.example.plugin",
+                "name": "UI fixture",
+                "version": "1.0.0",
+                "apiVersion": "^1.0",
+                "runtime": { "kind": "wasm", "entry": "dist/plugin.wasm", "scope": "project" },
+                "provides": [{"capability": capability, "contract_major": 1}],
+                "contributions": [{
+                    "id": capability,
+                    "kind": kind_name,
+                    "contractMajor": 1,
+                    "label": "CSV summary",
+                    "purpose": "Show bounded CSV metadata",
+                    "inputSchema": empty,
+                    "outputSchema": output_schema
+                }]
             }))
             .unwrap(),
         )
@@ -5285,6 +5635,144 @@ mod tests {
                         && event.reason_code.as_deref() == Some("guest_resume_failed")
                 })
         );
+    }
+
+    #[test]
+    fn trusted_command_and_viewer_routes_accept_only_fixed_result_contracts() {
+        let command_directory = tempdir().unwrap();
+        write_ui_fixture_plugin(command_directory.path(), ContributionKind::Command);
+        let mut command_store = Store::open(command_directory.path().join("rho.sqlite")).unwrap();
+        let command_registry = deterministic_registry();
+        let command_context = context(command_directory.path());
+        command_registry
+            .request_enable(&command_context, "org.example.plugin", &mut command_store)
+            .unwrap();
+        let listed = command_registry.list_contributions(&command_context);
+        assert_eq!(listed.contributions.len(), 1);
+        assert_eq!(listed.contributions[0].kind, "command");
+        assert!(listed.contributions[0].available);
+        assert!(listed.contributions[0].accepts_empty_input);
+        assert!(!serde_json::to_string(&listed).unwrap().contains("handle."));
+        let command = command_registry
+            .invoke_command_contribution(
+                &command_context,
+                "ui.command.csv_summary",
+                serde_json::json!({}),
+                &mut command_store,
+            )
+            .unwrap();
+        assert_eq!(
+            command.result,
+            PluginCommandResultV1::Notification {
+                message: "CSV metadata is ready".to_string()
+            }
+        );
+        assert!(
+            command_registry
+                .open_viewer_contribution(
+                    &command_context,
+                    "ui.command.csv_summary",
+                    serde_json::json!({}),
+                    &mut command_store,
+                )
+                .is_err()
+        );
+
+        let viewer_directory = tempdir().unwrap();
+        write_ui_fixture_plugin(viewer_directory.path(), ContributionKind::Viewer);
+        let mut viewer_store = Store::open(viewer_directory.path().join("rho.sqlite")).unwrap();
+        let viewer_registry = deterministic_registry();
+        let viewer_context = context(viewer_directory.path());
+        viewer_registry
+            .request_enable(&viewer_context, "org.example.plugin", &mut viewer_store)
+            .unwrap();
+        let viewer = viewer_registry
+            .open_viewer_contribution(
+                &viewer_context,
+                "ui.viewer.csv_summary",
+                serde_json::json!({}),
+                &mut viewer_store,
+            )
+            .unwrap();
+        assert_eq!(viewer.document.title, "CSV metadata");
+        assert!(matches!(
+            &viewer.document.blocks[0],
+            rho_extension_runtime::ViewerBlockV1::Text { text }
+                if text.contains("<script>text only</script>")
+        ));
+        assert!(
+            viewer_registry
+                .invoke_command_contribution(
+                    &viewer_context,
+                    "ui.viewer.csv_summary",
+                    serde_json::json!({}),
+                    &mut viewer_store,
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn plugin_viewer_artifact_refs_require_same_project_and_exact_media_type() {
+        let directory = tempdir().unwrap();
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let context_a = PluginRuntimeContext {
+            project_root: normalize_project_root("/project/a"),
+            project_revision: 1,
+            project_scope_id: ScopeId::new("project.a").unwrap(),
+            workspace: None,
+        };
+        let context_b = PluginRuntimeContext {
+            project_root: normalize_project_root("/project/b"),
+            project_revision: 1,
+            project_scope_id: ScopeId::new("project.b").unwrap(),
+            workspace: None,
+        };
+        store
+            .create_artifact_record(&rho_store::ArtifactRecordDraft {
+                artifact_id: "artifact_plot".to_string(),
+                artifact_kind: "plot".to_string(),
+                run_id: None,
+                project_root: context_a.project_root.clone(),
+                output_path: "outputs/plot.png".to_string(),
+                source_path: None,
+                execution_mode: None,
+                document_version: None,
+                workspace_id: None,
+                state_revision: None,
+                project_revision: Some(1),
+                media_type: "image/png".to_string(),
+                metadata_json: "{}".to_string(),
+                provenance_complete: true,
+                incomplete_reason: None,
+            })
+            .unwrap();
+        let document = ViewerDocumentV1::parse(serde_json::json!({
+            "contract": rho_extension_runtime::PLUGIN_VIEWER_DOCUMENT_CONTRACT,
+            "title": "Plot",
+            "blocks": [{
+                "kind": "artifact_image_ref",
+                "artifact_id": "artifact_plot",
+                "media_type": "image/png",
+                "alt": "Plot"
+            }]
+        }))
+        .unwrap();
+        assert!(validate_viewer_artifacts(&store, &context_a, &document).is_ok());
+        assert!(validate_viewer_artifacts(&store, &context_b, &document).is_err());
+
+        let wrong_media = ViewerDocumentV1::parse(serde_json::json!({
+            "contract": rho_extension_runtime::PLUGIN_VIEWER_DOCUMENT_CONTRACT,
+            "title": "Plot",
+            "blocks": [{
+                "kind": "artifact_image_ref",
+                "artifact_id": "artifact_plot",
+                "media_type": "image/jpeg",
+                "alt": "Plot"
+            }]
+        }))
+        .unwrap();
+        assert!(validate_viewer_artifacts(&store, &context_a, &wrong_media).is_err());
     }
 
     #[test]

@@ -1,12 +1,13 @@
 use anyhow::{Context, Result, ensure};
 use rho_extension_runtime::WorkspaceGrantIdentity;
 use rho_store::{PluginPermissionQueryService, PluginPermissionRequest};
+use serde_json::Value;
 use tauri::State;
 
 use crate::workspace_plugins::{
-    PluginGrantList, PluginGrantRevokeResult, PluginPermissionDecisionInput,
-    PluginPermissionDecisionResult, PluginRuntimeContext, WorkspacePluginEnableResult,
-    WorkspacePluginList,
+    PluginCommandInvocationView, PluginContributionList, PluginGrantList, PluginGrantRevokeResult,
+    PluginPermissionDecisionInput, PluginPermissionDecisionResult, PluginRuntimeContext,
+    PluginViewerDocumentView, WorkspacePluginEnableResult, WorkspacePluginList,
 };
 use crate::{AppState, active_context, display_error, extension_project_scope_id, read_store};
 
@@ -119,5 +120,59 @@ pub(crate) async fn revoke_plugin_grant(
     state
         .plugin_permissions
         .revoke(&context, &grant_id, &mut store)
+        .map_err(display_error)
+}
+
+#[tauri::command]
+pub(crate) async fn list_plugin_contributions(
+    state: State<'_, AppState>,
+) -> Result<PluginContributionList, String> {
+    let context = runtime_context(&state).await.map_err(display_error)?;
+    Ok(state.plugin_permissions.list_contributions(&context))
+}
+
+#[tauri::command]
+pub(crate) async fn invoke_plugin_command(
+    contribution_id: String,
+    input: Option<Value>,
+    expected_project_revision: i64,
+    state: State<'_, AppState>,
+) -> Result<PluginCommandInvocationView, String> {
+    let context = runtime_context(&state).await.map_err(display_error)?;
+    if expected_project_revision != context.project_revision {
+        return Err("Plugin Command is stale after the project changed.".to_string());
+    }
+    let mut store = read_store(&state).map_err(display_error)?;
+    state
+        .plugin_permissions
+        .invoke_command_contribution(
+            &context,
+            &contribution_id,
+            input.unwrap_or_else(|| serde_json::json!({})),
+            &mut store,
+        )
+        .map_err(display_error)
+}
+
+#[tauri::command]
+pub(crate) async fn open_plugin_viewer(
+    contribution_id: String,
+    input: Option<Value>,
+    expected_project_revision: i64,
+    state: State<'_, AppState>,
+) -> Result<PluginViewerDocumentView, String> {
+    let context = runtime_context(&state).await.map_err(display_error)?;
+    if expected_project_revision != context.project_revision {
+        return Err("Plugin Viewer is stale after the project changed.".to_string());
+    }
+    let mut store = read_store(&state).map_err(display_error)?;
+    state
+        .plugin_permissions
+        .open_viewer_contribution(
+            &context,
+            &contribution_id,
+            input.unwrap_or_else(|| serde_json::json!({})),
+            &mut store,
+        )
         .map_err(display_error)
 }

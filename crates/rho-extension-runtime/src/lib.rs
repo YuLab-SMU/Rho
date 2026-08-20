@@ -30,6 +30,7 @@ mod manifest;
 mod model;
 mod observation;
 mod resolver;
+mod viewer_document;
 mod wasm_host;
 
 pub use broker::{
@@ -134,6 +135,12 @@ pub use observation::{
     self_grant_attempt_rejected,
 };
 pub use resolver::resolve_activation_plan;
+pub use viewer_document::{
+    MAX_VIEWER_BLOCKS, MAX_VIEWER_DOCUMENT_JSON_BYTES, MAX_VIEWER_KEY_VALUE_ITEMS,
+    MAX_VIEWER_TABLE_COLUMNS, MAX_VIEWER_TABLE_ROWS, MAX_VIEWER_TEXT_BYTES,
+    PLUGIN_VIEWER_DOCUMENT_CONTRACT, PluginCommandResultV1, ViewerBlockV1, ViewerDocumentError,
+    ViewerDocumentV1, ViewerKeyValueItemV1, ViewerNoticeToneV1,
+};
 pub use wasm_host::{
     BrokerCallIdSource, DEFAULT_WASM_FUEL, GUEST_ABI_V1, GUEST_ABI_V2, GuestStep,
     MAX_GUEST_BROKER_RESULT_BYTES, MAX_GUEST_BROKER_RESUME_BYTES, MAX_GUEST_BROKER_STEPS,

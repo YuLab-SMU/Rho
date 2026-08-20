@@ -19,8 +19,11 @@ this file records behavior included in a versioned build candidate.
   call-bound handles, closed input/output schemas, bounded results, and
   provenance. Active Tool contributions are projected into the exact-project
   Agent tool set; Source results and declarative Skills enter Agent context as
-  explicitly untrusted, origin-labelled project content. The command palette,
-  Viewers, and Panels remain later P2-3 acceptance gates.
+  explicitly untrusted, origin-labelled project content. The trusted Workspace
+  Plugins surface can explicitly run zero-input Commands and open Viewers using
+  fixed Text/Code/KeyValue/Table/Notice/Artifact-image blocks; plugin HTML,
+  URLs, scripts, styles, paths, and base64 documents are rejected. The optional
+  named Panel remains a later P2-3 acceptance gate.
 
 ## 0.4.1-dev.3 - 2026-08-20
 

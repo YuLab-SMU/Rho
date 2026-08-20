@@ -11,6 +11,11 @@ for (const id of [
   "pluginDialogClose",
   "pluginListView",
   "pluginList",
+  "pluginContributionSection",
+  "pluginContributionList",
+  "pluginCommandPalette",
+  "pluginCommandPaletteSearch",
+  "pluginCommandPaletteList",
   "pluginGrantSection",
   "pluginGrantList",
   "pluginPermissionView",
@@ -39,6 +44,9 @@ for (const command of [
   "respond_plugin_permission",
   "list_plugin_grants",
   "revoke_plugin_grant",
+  "list_plugin_contributions",
+  "invoke_plugin_command",
+  "open_plugin_viewer",
 ]) {
   assert.equal(
     js.match(new RegExp(`command === ["']${command}["']`, "g"))?.length ?? 0,
@@ -48,6 +56,9 @@ for (const command of [
 }
 
 assert.match(js, /function renderWorkspacePlugins\(\)/);
+assert.match(js, /function renderPluginContributions\(\)/);
+assert.match(js, /function renderPluginCommandPalette\(\)/);
+assert.match(js, /function renderPluginViewerDocument\(documentValue, target\)/);
 assert.match(js, /strong\.textContent = plugin\.name/);
 assert.match(js, /\$\("#pluginPermissionPurpose"\)\.textContent = purpose/);
 assert.doesNotMatch(
@@ -55,6 +66,25 @@ assert.doesNotMatch(
   /innerHTML/,
   "untrusted plugin request rendering must not use innerHTML",
 );
+const pluginViewerRenderer = js.slice(
+  js.indexOf("function renderPluginViewerDocument"),
+  js.indexOf("function viewerRenderPreview"),
+);
+assert.doesNotMatch(
+  pluginViewerRenderer,
+  /innerHTML|outerHTML|insertAdjacentHTML|createElement\(["']iframe["']\)|srcdoc|DOMParser|\.href\s*=/,
+  "plugin Viewer rendering must remain exact text/block composition",
+);
+for (const marker of [
+  'document.createElement("p")',
+  'document.createElement("code")',
+  'document.createElement("dl")',
+  'document.createElement("table")',
+  'document.createElement("figure")',
+  ".textContent =",
+]) assert.ok(pluginViewerRenderer.includes(marker), `plugin Viewer renderer lost ${marker}`);
+assert.match(js, /response\?\.project_root !== state\.project\.root/);
+assert.match(js, /expectedProjectRevision: requestRevision/);
 assert.match(js, /expectedProjectRevision: state\.plugins\.list\?\.project_revision/);
 assert.match(js, /decision,\s*expectedProjectRevision:/);
 assert.match(js, /if \(event\.key === "Escape"\)[\s\S]*closeWorkspacePluginDialog\(\)/);
@@ -65,7 +95,11 @@ assert.match(js, /\["permission", "malicious-text"\]/);
 
 assert.match(css, /\.plugin-dialog-surface\s*\{/);
 assert.match(css, /\.plugin-permission-actions\s*\{/);
+assert.match(css, /\.plugin-contribution-section\s*\{/);
+assert.match(css, /\.plugin-viewer-document\s*\{/);
+assert.match(css, /\.plugin-command-palette-surface\s*\{/);
 assert.match(css, /@media \(max-width: 640px\)[\s\S]*\.plugin-permission-identity/);
+assert.match(css, /@media \(max-width: 640px\)[\s\S]*\.plugin-contribution-row, \.plugin-command-palette-item/);
 assert.match(css, /overflow-wrap:\s*anywhere/);
 
 console.log("Workspace plugin trusted UI contract checks passed.");
