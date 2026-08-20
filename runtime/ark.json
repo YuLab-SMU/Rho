@@ -11,5 +11,9 @@
   "linux-x64": {
     "url": "https://github.com/posit-dev/ark/releases/download/0.1.252/ark-0.1.252-linux-x64.zip",
     "sha256": "7dda5d05b6c4d67e7ae74e70b6bec5fd3bc526b19e222fa78306e14972cf4495"
+  },
+  "linux-arm64": {
+    "url": "https://github.com/posit-dev/ark/releases/download/0.1.252/ark-0.1.252-linux-arm64.zip",
+    "sha256": "aed35067f053c495d1e379649620df56142870f011695e1d88580ce32bcedefe"
   }
 }

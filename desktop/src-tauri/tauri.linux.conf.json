@@ -2,19 +2,25 @@
   "$schema": "https://schema.tauri.app/config/2",
   "bundle": {
     "createUpdaterArtifacts": true,
-    "targets": ["appimage"],
+    "targets": ["appimage", "deb"],
     "externalBin": ["binaries/ark"],
     "resources": {
       "../../LICENSE": "licenses/rho/LICENSE.txt",
       "../../LICENSES.md": "licenses/rho/THIRD-PARTY-NOTICES.md",
       "../resources/runtime/LICENSE": "licenses/ark/LICENSE",
-      "../resources/runtime/NOTICE": "licenses/ark/NOTICE"
+      "../resources/runtime/NOTICE": "licenses/ark/NOTICE",
+      "../resources/runtime/": "resources/runtime/"
     },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon-512.png"
-    ]
+    ],
+    "linux": {
+      "deb": {
+        "recommends": ["r-base-core"]
+      }
+    }
   }
 }

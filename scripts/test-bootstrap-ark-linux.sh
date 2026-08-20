@@ -23,7 +23,8 @@ write_manifest() {
     const [path, sha256] = process.argv.slice(1);
     fs.writeFileSync(path, JSON.stringify({
       version: "test",
-      "linux-x64": {url: "https://example.invalid/ark.zip", sha256}
+      "linux-x64": {url: "https://example.invalid/ark.zip", sha256},
+      "linux-arm64": {url: "https://example.invalid/ark-arm64.zip", sha256}
     }));
   ' "$manifest" "$sha256"
 }
@@ -33,6 +34,7 @@ expect_failure() {
   local expected="$2"
   local sha256="$3"
   local archive="$4"
+  local uname_m="${5:-}"
   local case_root="$RHO_TEST_ROOT/$label"
   local output="$case_root/output.log"
   local case_repository="$case_root/repository"
@@ -42,6 +44,7 @@ expect_failure() {
   if RHO_ARK_ARCHIVE="$archive" \
     RHO_ARK_RUNTIME_ROOT="$case_root/runtime" \
     RHO_ARK_SIDECAR="$case_root/staged/ark-x86_64-unknown-linux-gnu" \
+    RHO_UNAME_M="$uname_m" \
     "$case_repository/scripts/bootstrap-ark-linux.sh" >"$output" 2>&1; then
     echo "$label unexpectedly succeeded" >&2
     exit 1
@@ -97,6 +100,27 @@ expect_failure \
   "Ark archive did not contain LICENSE" \
   "$RHO_MISSING_LICENSE_SHA" \
   "$RHO_TEST_ROOT/missing-license.zip"
+
+# arm64 branch: the same non-matching fixture must be rejected as not-aarch64,
+# and the sidecar naming/runtime dir follow the linux-arm64 manifest entry.
+expect_failure \
+  arm64-architecture \
+  "Ark executable is not a aarch64 ELF binary" \
+  "$RHO_BAD_ARCH_SHA" \
+  "$RHO_TEST_ROOT/bad-arch.zip" \
+  aarch64
+
+# Unsupported Linux architectures are rejected before any manifest access.
+RHO_UNSUPPORTED_ARCH_OUTPUT="$(RHO_UNAME_M=riscv64 "$RHO_TEST_BOOTSTRAP_SOURCE" 2>&1)" && rc=0 || rc=$?
+if [[ "$rc" -eq 0 ]]; then
+  echo "unsupported-arch unexpectedly succeeded" >&2
+  exit 1
+fi
+if ! grep -q "supports linux x86-64 and aarch64 only" <<<"$RHO_UNSUPPORTED_ARCH_OUTPUT"; then
+  echo "unsupported-arch did not report the expected rejection" >&2
+  sed -n '1,40p' <<<"$RHO_UNSUPPORTED_ARCH_OUTPUT" >&2
+  exit 1
+fi
 
 echo "Ark Linux bootstrap failure fixtures passed"
 
