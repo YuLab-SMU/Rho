@@ -48,8 +48,8 @@ use rho_store::{
     PluginPermissionCallEventDraft, PluginPermissionDecision, PluginPermissionDecisionDraft,
     PluginPermissionGrant, PluginPermissionMutationOutcome, PluginPermissionMutationService,
     PluginPermissionQueryService, PluginPermissionRequest, PluginPermissionRequestDraft, Store,
-    WorkspacePluginDiscoveredDraft, WorkspacePluginState, WorkspacePluginTransitionAdvance,
-    WorkspacePluginTransitionDraft, normalize_project_root,
+    WorkspacePluginCrashOutcome, WorkspacePluginDiscoveredDraft, WorkspacePluginState,
+    WorkspacePluginTransitionAdvance, WorkspacePluginTransitionDraft, normalize_project_root,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -184,6 +184,15 @@ pub(crate) struct WorkspacePluginBoundaryTeardownEntry {
     pub status: String,
     pub route_closed: bool,
     pub error_codes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct WorkspacePluginHeartbeatReport {
+    pub project_root: String,
+    pub checked: usize,
+    pub crashed: usize,
+    pub blocked: usize,
+    pub failures: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -337,6 +346,13 @@ struct ActivePlugin {
     permission_count: usize,
     contribution_identity: Option<ContributionInstanceIdentity>,
     skill_instructions: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone)]
+struct ActiveCrashIdentity {
+    plugin_id: String,
+    package_digest: String,
+    host_instance_id: HostInstanceId,
 }
 
 struct RegistryState {
@@ -1179,6 +1195,115 @@ impl PendingPluginPermissionRegistry {
             });
         }
 
+        activate_plugin_durable(
+            &mut state,
+            context,
+            &plugin,
+            &cached,
+            &transition_id,
+            reusable_grants.values(),
+            store,
+        )
+    }
+
+    pub(crate) fn retry(
+        &self,
+        context: &PluginRuntimeContext,
+        plugin_id: &str,
+        store: &mut Store,
+    ) -> Result<WorkspacePluginEnableResult> {
+        ensure!(
+            context.project_revision >= 0,
+            "plugin Retry requires a current project revision"
+        );
+        PluginId::new(plugin_id.to_string()).context("validating workspace plugin id")?;
+        let key = registry_key(&context.project_root, plugin_id);
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let lifecycle = PluginLifecycleQueryService::new(store)
+            .get_state(&context.project_root, plugin_id)?
+            .context("workspace plugin has no durable lifecycle state")?;
+        ensure!(
+            lifecycle.desired_state == "enabled",
+            "only a durably enabled plugin can be retried"
+        );
+        if lifecycle.observed_state == "blocked" {
+            bail!("plugin Retry is blocked after repeated crashes; disable and review it first");
+        }
+        ensure!(
+            lifecycle.observed_state == "crashed",
+            "plugin Retry is available only for crashed plugins"
+        );
+        ensure!(
+            !state.active.contains_key(&key),
+            "crashed plugin still has a live host"
+        );
+        let accepted_digest = lifecycle
+            .accepted_digest
+            .as_deref()
+            .context("crashed plugin has no accepted package digest")?;
+        let plugin = discover_exact_plugin(Path::new(&context.project_root), plugin_id)?;
+        ensure!(
+            plugin.digest.as_str() == accepted_digest,
+            "crashed plugin package changed before Retry"
+        );
+        let (transition_id, cached) = prepare_retry_transition(store, context, &plugin)?;
+        let (reusable_grants, requests) = match plan_plugin_permissions(store, context, &plugin) {
+            Ok(plan) => plan,
+            Err(error) => {
+                let _ = fail_enable_transition(
+                    store,
+                    context,
+                    &transition_id,
+                    "retry_permission_plan_failed",
+                    "crashed",
+                );
+                return Err(error);
+            }
+        };
+        if !requests.is_empty() {
+            let created = match PluginPermissionMutationService::new(store)
+                .create_requests(&context.project_root, &requests)
+            {
+                Ok(created) => created,
+                Err(error) => {
+                    let _ = fail_enable_transition(
+                        store,
+                        context,
+                        &transition_id,
+                        "retry_permission_request_failed",
+                        "crashed",
+                    );
+                    return Err(error.into());
+                }
+            };
+            let request_ids = created
+                .into_iter()
+                .map(|request| request.request_id)
+                .collect::<Vec<_>>();
+            state.pending.insert(
+                key,
+                PendingEnable {
+                    plugin_id: plugin_id.to_string(),
+                    plugin_version: plugin.manifest.version.to_string(),
+                    package_digest: plugin.digest.to_string(),
+                    transition_id: transition_id.clone(),
+                    request_ids: request_ids.clone(),
+                    expected_project_revision: context.project_revision,
+                },
+            );
+            return Ok(WorkspacePluginEnableResult {
+                status: "permission_required".to_string(),
+                plugin_id: plugin_id.to_string(),
+                request_ids,
+                active_grant_count: reusable_grants.len(),
+                transition_id: Some(transition_id),
+                message: "Retry requires fresh permission review before a new host can start."
+                    .to_string(),
+            });
+        }
         activate_plugin_durable(
             &mut state,
             context,
@@ -2689,6 +2814,27 @@ impl PendingPluginPermissionRegistry {
         after_read: &mut impl FnMut(&Self, &mut Store, &str) -> Result<()>,
     ) -> Result<WorkspacePluginCallResult> {
         let key = registry_key(&context.project_root, plugin_id);
+        let crash_identity = self.crash_identity(&key);
+        let result =
+            self.invoke_plugin_with_hook_inner(context, plugin_id, request, store, after_read);
+        if result.is_err()
+            && let Some(identity) = crash_identity.as_ref()
+        {
+            let _ =
+                self.persist_crash_if_needed(context, &key, identity, "guest_call_failed", store);
+        }
+        result
+    }
+
+    fn invoke_plugin_with_hook_inner(
+        &self,
+        context: &PluginRuntimeContext,
+        plugin_id: &str,
+        request: serde_json::Value,
+        store: &mut Store,
+        after_read: &mut impl FnMut(&Self, &mut Store, &str) -> Result<()>,
+    ) -> Result<WorkspacePluginCallResult> {
+        let key = registry_key(&context.project_root, plugin_id);
         let request_id = HostRequestId::generate();
         let mut step = {
             let mut state = self
@@ -3208,6 +3354,56 @@ impl PendingPluginPermissionRegistry {
         input: serde_json::Value,
         store: &mut Store,
     ) -> Result<serde_json::Value> {
+        let crash_context = {
+            let state = self
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            rho_extension_runtime::CapabilityId::new(contribution_id.to_string())
+                .ok()
+                .and_then(|capability| {
+                    state
+                        .contributions
+                        .get(&context.project_scope_id, &capability)
+                })
+                .and_then(|record| {
+                    let key = registry_key(&context.project_root, record.plugin_id.as_str());
+                    state.active.get(&key).map(|active| {
+                        (
+                            key,
+                            ActiveCrashIdentity {
+                                plugin_id: record.plugin_id.to_string(),
+                                package_digest: record.package_digest.to_string(),
+                                host_instance_id: active.host_instance_id.clone(),
+                            },
+                        )
+                    })
+                })
+        };
+        let result =
+            self.invoke_file_contribution_inner(context, contribution_id, origin, input, store);
+        if result.is_err()
+            && let Some((key, identity)) = crash_context.as_ref()
+        {
+            let _ = self.persist_crash_if_needed(
+                context,
+                key,
+                identity,
+                "contribution_host_failed",
+                store,
+            );
+        }
+        result
+    }
+
+    fn invoke_file_contribution_inner(
+        &self,
+        context: &PluginRuntimeContext,
+        contribution_id: &str,
+        origin: ContributionInvocationOrigin,
+        input: serde_json::Value,
+        store: &mut Store,
+    ) -> Result<serde_json::Value> {
         {
             let state = self
                 .state
@@ -3554,6 +3750,190 @@ impl PendingPluginPermissionRegistry {
         state.workspace_objects.invalidate_project(&project_root);
         invalidated
     }
+
+    pub(crate) fn quarantine_timed_out_plugin(
+        &self,
+        context: &PluginRuntimeContext,
+        plugin_id: &str,
+        store: &mut Store,
+    ) -> Result<WorkspacePluginCrashOutcome> {
+        let key = registry_key(&context.project_root, plugin_id);
+        let identity = self
+            .crash_identity(&key)
+            .context("timed-out plugin has no active host")?;
+        {
+            let mut state = self
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if let Some(active) = state.active.get_mut(&key) {
+                active.host.quarantine_for_timeout();
+            }
+            remove_active_plugin(&mut state, &key);
+        }
+        PluginLifecycleMutationService::new(store)
+            .record_crash(
+                &context.project_root,
+                &identity.plugin_id,
+                &identity.package_digest,
+                identity.host_instance_id.as_str(),
+                "heartbeat_timeout",
+            )
+            .map_err(Into::into)
+    }
+
+    pub(crate) fn sweep_project_heartbeats(
+        &self,
+        context: &PluginRuntimeContext,
+        store: &mut Store,
+    ) -> WorkspacePluginHeartbeatReport {
+        let prefix = format!("{}\0", normalize_project_root(&context.project_root));
+        let mut failed = Vec::new();
+        let checked = {
+            let mut state = self
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let keys = state
+                .active
+                .keys()
+                .filter(|key| key.starts_with(&prefix))
+                .cloned()
+                .collect::<Vec<_>>();
+            for key in &keys {
+                let unhealthy = if let Some(active) = state.active.get_mut(key) {
+                    let identity = active.host.identity().clone();
+                    !matches!(
+                        active.host.handle_frame(HostFrame {
+                            instance_id: identity.host_instance_id().clone(),
+                            message: HostMessage::Heartbeat,
+                        }),
+                        Ok(Some(HostResponse::HeartbeatAck))
+                    )
+                } else {
+                    false
+                };
+                if unhealthy && let Some(active) = state.active.get(key) {
+                    failed.push((
+                        key.clone(),
+                        ActiveCrashIdentity {
+                            plugin_id: active.host.identity().plugin_id().to_string(),
+                            package_digest: active.package_digest.clone(),
+                            host_instance_id: active.host_instance_id.clone(),
+                        },
+                    ));
+                }
+            }
+            for (key, _) in &failed {
+                remove_active_plugin(&mut state, key);
+            }
+            keys.len()
+        };
+        let mut report = WorkspacePluginHeartbeatReport {
+            project_root: context.project_root.clone(),
+            checked,
+            crashed: 0,
+            blocked: 0,
+            failures: 0,
+        };
+        for (_, identity) in failed {
+            match PluginLifecycleMutationService::new(store).record_crash(
+                &context.project_root,
+                &identity.plugin_id,
+                &identity.package_digest,
+                identity.host_instance_id.as_str(),
+                "heartbeat_failed",
+            ) {
+                Ok(crash) if crash.outcome == PluginLifecycleMutationOutcome::Applied => {
+                    if crash.blocked {
+                        report.blocked += 1;
+                    } else {
+                        report.crashed += 1;
+                    }
+                }
+                Ok(_) => report.failures += 1,
+                Err(_) => {
+                    report.failures += 1;
+                    if let Ok(Some(lifecycle)) = PluginLifecycleQueryService::new(store)
+                        .get_state(&context.project_root, &identity.plugin_id)
+                    {
+                        let _ = persist_recovery_block(
+                            store,
+                            context,
+                            &lifecycle,
+                            "heartbeat_persistence_failed",
+                        );
+                    }
+                }
+            }
+        }
+        report
+    }
+
+    fn crash_identity(&self, key: &str) -> Option<ActiveCrashIdentity> {
+        let state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.active.get(key).map(|active| ActiveCrashIdentity {
+            plugin_id: active.host.identity().plugin_id().to_string(),
+            package_digest: active.package_digest.clone(),
+            host_instance_id: active.host_instance_id.clone(),
+        })
+    }
+
+    fn persist_crash_if_needed(
+        &self,
+        context: &PluginRuntimeContext,
+        key: &str,
+        identity: &ActiveCrashIdentity,
+        reason_code: &str,
+        store: &mut Store,
+    ) -> Result<bool> {
+        {
+            let mut state = self
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let exact = state.active.get(key).is_some_and(|active| {
+                active.host_instance_id == identity.host_instance_id
+                    && active.package_digest == identity.package_digest
+            });
+            if exact {
+                let quarantined = state
+                    .active
+                    .get(key)
+                    .is_some_and(|active| active.host.state() == HostInstanceState::Quarantined);
+                if !quarantined {
+                    return Ok(false);
+                }
+                remove_active_plugin(&mut state, key);
+            }
+        }
+        let crash = PluginLifecycleMutationService::new(store).record_crash(
+            &context.project_root,
+            &identity.plugin_id,
+            &identity.package_digest,
+            identity.host_instance_id.as_str(),
+            reason_code,
+        );
+        match crash {
+            Ok(crash) => Ok(crash.outcome == PluginLifecycleMutationOutcome::Applied),
+            Err(error) => {
+                if let Ok(Some(lifecycle)) = PluginLifecycleQueryService::new(store)
+                    .get_state(&context.project_root, &identity.plugin_id)
+                {
+                    let _ = persist_recovery_block(
+                        store,
+                        context,
+                        &lifecycle,
+                        "crash_persistence_failed",
+                    );
+                }
+                Err(error.into())
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -3896,6 +4276,93 @@ fn prepare_recovery_enable_transition(
     Ok((transition_id, cached))
 }
 
+fn prepare_retry_transition(
+    store: &mut Store,
+    context: &PluginRuntimeContext,
+    plugin: &DiscoveredPlugin,
+) -> Result<(String, CachedPluginPackage)> {
+    let transition_id = format!("transition.retry.{}", uuid::Uuid::new_v4().simple());
+    let requested = PluginLifecycleMutationService::new(store).request_transition(
+        &context.project_root,
+        &WorkspacePluginTransitionDraft {
+            transition_id: transition_id.clone(),
+            project_root: context.project_root.clone(),
+            plugin_id: plugin.manifest.id.to_string(),
+            kind: "retry".to_string(),
+            request_event_type: "user_requested".to_string(),
+            desired_state: "enabled".to_string(),
+            expected_old_digest: None,
+            candidate_digest: Some(plugin.digest.to_string()),
+            rollback_digest: None,
+            backup_path_key: None,
+        },
+    )?;
+    ensure!(
+        matches!(
+            requested.outcome,
+            PluginLifecycleMutationOutcome::Applied | PluginLifecycleMutationOutcome::Unchanged
+        ),
+        "plugin Retry conflicts with another lifecycle transition"
+    );
+    advance_enable_transition(
+        store,
+        context,
+        &transition_id,
+        "requested",
+        "preflight",
+        "running",
+        "resolving",
+        None,
+        false,
+        None,
+        "preflight",
+        "completed",
+        None,
+    )?;
+    let cached = match PluginPackageCache::new(&context.app_data_dir).prepare_exact(
+        Path::new(&context.project_root),
+        plugin.manifest.id.as_str(),
+        plugin.digest.as_str(),
+    ) {
+        Ok(cached) => cached,
+        Err(error) => {
+            let _ = fail_enable_transition(
+                store,
+                context,
+                &transition_id,
+                "retry_package_cache_failed",
+                "crashed",
+            );
+            return Err(error.into());
+        }
+    };
+    if let Err(error) = advance_enable_transition(
+        store,
+        context,
+        &transition_id,
+        "preflight",
+        "backup_prepared",
+        "running",
+        "resolving",
+        None,
+        false,
+        None,
+        "package_backed_up",
+        "completed",
+        None,
+    ) {
+        let _ = fail_enable_transition(
+            store,
+            context,
+            &transition_id,
+            "retry_backup_journal_failed",
+            "crashed",
+        );
+        return Err(error);
+    }
+    Ok((transition_id, cached))
+}
+
 fn persist_missing_plugin_block(
     store: &mut Store,
     context: &PluginRuntimeContext,
@@ -4183,7 +4650,7 @@ fn plugin_view(
                         .to_string(),
                 ),
                 "crashed" => Some(
-                    "The plugin crashed and remains non-routable; Retry is not available yet."
+                    "The plugin crashed and remains non-routable. Use trusted Retry to create fresh authority."
                         .to_string(),
                 ),
                 _ => None,
@@ -4775,6 +5242,14 @@ fn activate_plugin_durable<'a>(
     durable_grants: impl IntoIterator<Item = &'a PluginPermissionGrant>,
     store: &mut Store,
 ) -> Result<WorkspacePluginEnableResult> {
+    let retry_transition = PluginLifecycleQueryService::new(store)
+        .get_transition(&context.project_root, transition_id)?
+        .is_some_and(|transition| transition.kind == "retry");
+    let failure_observed_state = if retry_transition {
+        "crashed"
+    } else {
+        "disabled"
+    };
     let prepared = match prepare_plugin_activation(
         state,
         context,
@@ -4791,7 +5266,7 @@ fn activate_plugin_durable<'a>(
                 context,
                 transition_id,
                 "candidate_activation_failed",
-                "disabled",
+                failure_observed_state,
             );
             return Err(error);
         }
@@ -4818,7 +5293,7 @@ fn activate_plugin_durable<'a>(
             context,
             transition_id,
             "candidate_journal_failed",
-            "disabled",
+            failure_observed_state,
         );
         return Err(error);
     }
@@ -4834,7 +5309,7 @@ fn activate_plugin_durable<'a>(
             context,
             transition_id,
             "contribution_publication_failed",
-            "disabled",
+            failure_observed_state,
         );
         return Err(anyhow!(
             "workspace plugin contribution publication failed: {error:?}"
@@ -7286,6 +7761,243 @@ mod tests {
             event.event_type == "call_failed"
                 && event.reason_code.as_deref() == Some("guest_resume_failed")
         }));
+        let retry = registry
+            .retry(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        assert_eq!(retry.status, "permission_required");
+        assert_eq!(retry.request_ids.len(), 1);
+    }
+
+    #[test]
+    fn contribution_crashes_are_durable_retry_is_fresh_and_third_crash_blocks() {
+        let directory = tempdir().unwrap();
+        write_ui_fixture_plugin(directory.path(), ContributionKind::Command);
+        let trap = wat::parse_str(
+            r#"(module
+                (memory (export "memory") 1 32)
+                (func (export "rho_activate") (param i32) (result i32) i32.const 0)
+                (func (export "rho_echo") (param i32 i32) (result i64) i64.const 0)
+                (func (export "rho_heartbeat") (result i32) i32.const 0)
+                (func (export "rho_quiesce") (result i32) i32.const 0)
+                (func (export "rho_dispose") (result i32) i32.const 0)
+                (func (export "rho_begin") (param i32 i32) (result i64) unreachable)
+                (func (export "rho_resume") (param i32 i32) (result i64) i64.const 0)
+                (func (export "rho_cancel") (param i32 i32) (result i32) i32.const 0))"#,
+        )
+        .unwrap();
+        fs::write(
+            directory
+                .path()
+                .join(".rho/plugins/example/dist/plugin.wasm"),
+            trap,
+        )
+        .unwrap();
+        let context = context(directory.path());
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let registry = deterministic_registry();
+        registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        let contribution_id = registry
+            .list_contributions(&context)
+            .contributions
+            .into_iter()
+            .find(|contribution| contribution.kind == "command")
+            .unwrap()
+            .contribution_id;
+        for crash_count in 1..=3 {
+            assert!(
+                registry
+                    .invoke_file_contribution(
+                        &context,
+                        &contribution_id,
+                        ContributionInvocationOrigin::UserCommand,
+                        serde_json::json!({}),
+                        &mut store,
+                    )
+                    .is_err()
+            );
+            assert!(
+                registry
+                    .state
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .active
+                    .is_empty()
+            );
+            let lifecycle = PluginLifecycleQueryService::new(&store)
+                .get_state(&context.project_root, "org.example.plugin")
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                lifecycle.observed_state,
+                if crash_count == 3 {
+                    "blocked"
+                } else {
+                    "crashed"
+                }
+            );
+            let crash_events = PluginLifecycleQueryService::new(&store)
+                .list_events(&context.project_root, Some(100))
+                .unwrap()
+                .into_iter()
+                .filter(|event| event.event_type == "host_quarantined")
+                .count();
+            assert_eq!(crash_events, crash_count);
+            if crash_count < 3 {
+                let retried = registry
+                    .retry(&context, "org.example.plugin", &mut store)
+                    .unwrap();
+                assert_eq!(retried.status, "enabled");
+                assert_eq!(
+                    PluginLifecycleQueryService::new(&store)
+                        .get_state(&context.project_root, "org.example.plugin")
+                        .unwrap()
+                        .unwrap()
+                        .last_activation_generation,
+                    i64::try_from(crash_count + 1).unwrap()
+                );
+            }
+        }
+        assert!(
+            registry
+                .retry(&context, "org.example.plugin", &mut store)
+                .unwrap_err()
+                .to_string()
+                .contains("blocked after repeated crashes")
+        );
+    }
+
+    #[test]
+    fn heartbeat_timeout_closes_exact_host_and_retry_reconstructs() {
+        let directory = tempdir().unwrap();
+        write_plugin(directory.path(), serde_json::json!([]));
+        let heartbeat_trap = wat::parse_str(
+            r#"(module
+                (memory (export "memory") 1 1)
+                (func (export "rho_activate") (param i32) (result i32) i32.const 0)
+                (func (export "rho_echo") (param i32 i32) (result i64) i64.const 0)
+                (func (export "rho_heartbeat") (result i32) unreachable)
+                (func (export "rho_quiesce") (result i32) i32.const 0)
+                (func (export "rho_dispose") (result i32) i32.const 0))"#,
+        )
+        .unwrap();
+        fs::write(
+            directory
+                .path()
+                .join(".rho/plugins/example/dist/plugin.wasm"),
+            heartbeat_trap,
+        )
+        .unwrap();
+        let context = context(directory.path());
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let registry = deterministic_registry();
+        registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        let heartbeat = registry.sweep_project_heartbeats(&context, &mut store);
+        assert_eq!(heartbeat.checked, 1);
+        assert_eq!(heartbeat.crashed, 1);
+        assert_eq!(heartbeat.blocked, 0);
+        assert_eq!(heartbeat.failures, 0);
+        assert_eq!(
+            PluginLifecycleQueryService::new(&store)
+                .get_state(&context.project_root, "org.example.plugin")
+                .unwrap()
+                .unwrap()
+                .observed_state,
+            "crashed"
+        );
+        assert!(
+            registry
+                .list_contributions(&context)
+                .contributions
+                .is_empty()
+        );
+        let retried = registry
+            .retry(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        assert_eq!(retried.status, "enabled");
+        assert_eq!(
+            PluginLifecycleQueryService::new(&store)
+                .get_state(&context.project_root, "org.example.plugin")
+                .unwrap()
+                .unwrap()
+                .last_activation_generation,
+            2
+        );
+    }
+
+    #[test]
+    fn crash_persistence_failure_never_restores_route_and_blocks_recovery() {
+        let directory = tempdir().unwrap();
+        write_ui_fixture_plugin(directory.path(), ContributionKind::Command);
+        let trap = wat::parse_str(
+            r#"(module
+                (memory (export "memory") 1 32)
+                (func (export "rho_activate") (param i32) (result i32) i32.const 0)
+                (func (export "rho_echo") (param i32 i32) (result i64) i64.const 0)
+                (func (export "rho_heartbeat") (result i32) i32.const 0)
+                (func (export "rho_quiesce") (result i32) i32.const 0)
+                (func (export "rho_dispose") (result i32) i32.const 0)
+                (func (export "rho_begin") (param i32 i32) (result i64) unreachable)
+                (func (export "rho_resume") (param i32 i32) (result i64) i64.const 0)
+                (func (export "rho_cancel") (param i32 i32) (result i32) i32.const 0))"#,
+        )
+        .unwrap();
+        fs::write(
+            directory
+                .path()
+                .join(".rho/plugins/example/dist/plugin.wasm"),
+            trap,
+        )
+        .unwrap();
+        let database = directory.path().join("rho.sqlite");
+        let context = context(directory.path());
+        let mut store = Store::open(&database).unwrap();
+        let registry = deterministic_registry();
+        registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        let contribution_id = registry.list_contributions(&context).contributions[0]
+            .contribution_id
+            .clone();
+        let connection = rusqlite::Connection::open(&database).unwrap();
+        connection
+            .execute_batch(
+                "CREATE TRIGGER fail_crash_event
+                 BEFORE INSERT ON workspace_plugin_lifecycle_events
+                 WHEN NEW.event_type = 'host_quarantined'
+                 BEGIN SELECT RAISE(FAIL, 'injected crash persistence failure'); END;",
+            )
+            .unwrap();
+        drop(connection);
+        assert!(
+            registry
+                .invoke_file_contribution(
+                    &context,
+                    &contribution_id,
+                    ContributionInvocationOrigin::UserCommand,
+                    serde_json::json!({}),
+                    &mut store,
+                )
+                .is_err()
+        );
+        assert!(
+            registry
+                .list_contributions(&context)
+                .contributions
+                .is_empty()
+        );
+        let lifecycle = PluginLifecycleQueryService::new(&store)
+            .get_state(&context.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        assert_eq!(lifecycle.observed_state, "blocked");
+        assert_eq!(
+            lifecycle.last_error_code.as_deref(),
+            Some("crash_persistence_failed")
+        );
     }
 
     #[tokio::test]

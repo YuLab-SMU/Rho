@@ -4,6 +4,20 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.1-dev.7 - 2026-08-20
+
+### Workspace-plugin crash recovery
+
+- Guest traps, invalid outputs, fuel/epoch failures, heartbeat timeouts, and
+  unexpected host loss now remove the exact route and live handles before Rho
+  records durable Crashed state. The third exact-project/plugin crash within
+  ten minutes becomes Blocked, preventing a restart loop.
+- Crashed plugins expose one trusted Retry action. Retry requires the unchanged
+  accepted source/cache digest and current grants, allocates a higher generation
+  and fresh host/handles, and returns to permission review when grants are no
+  longer reusable. Blocked, changed, disabled, missing, and foreign plugins
+  cannot use Retry.
+
 ## 0.4.1-dev.6 - 2026-08-20
 
 ### Workspace-plugin disable

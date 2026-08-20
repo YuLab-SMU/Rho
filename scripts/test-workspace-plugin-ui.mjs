@@ -43,6 +43,7 @@ for (const command of [
   "list_workspace_plugins",
   "request_workspace_plugin_enable",
   "disable_workspace_plugin",
+  "retry_workspace_plugin",
   "list_plugin_permission_requests",
   "get_plugin_permission_request",
   "respond_plugin_permission",
@@ -62,7 +63,9 @@ for (const command of [
 
 assert.match(js, /function renderWorkspacePlugins\(\)/);
 assert.match(js, /async function disableWorkspacePlugin\(pluginId\)/);
+assert.match(js, /async function retryWorkspacePlugin\(pluginId\)/);
 assert.match(js, /data-plugin-disable/);
+assert.match(js, /data-plugin-retry/);
 for (const marker of ["desired_state", "observed_state", "accepted_digest", "transition_id"]) {
   assert.ok(js.includes(marker), `Workspace plugin mock lost durable field ${marker}`);
 }

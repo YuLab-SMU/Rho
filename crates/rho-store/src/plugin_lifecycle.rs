@@ -4,7 +4,7 @@
 //! does not discover packages, copy files, activate Wasm, mint handles, route
 //! contributions, or perform uninstall/upgrade mutations.
 
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use rusqlite::{OptionalExtension, Row, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
 
@@ -178,6 +178,14 @@ pub struct WorkspacePluginTransitionRequestResult {
 pub struct WorkspacePluginGenerationAllocation {
     pub outcome: PluginLifecycleMutationOutcome,
     pub generation: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspacePluginCrashOutcome {
+    pub outcome: PluginLifecycleMutationOutcome,
+    pub crash_count: usize,
+    pub blocked: bool,
+    pub state: WorkspacePluginState,
 }
 
 impl Store {
@@ -608,6 +616,98 @@ impl Store {
             self.get_workspace_plugin_tombstone(&draft.project_root, &draft.tombstone_id)?
                 .ok_or_else(|| StoreError::Validation("tombstone disappeared".to_string()))?,
         ))
+    }
+
+    pub fn record_workspace_plugin_crash(
+        &mut self,
+        project_root: &str,
+        plugin_id: &str,
+        package_digest: &str,
+        host_session_id: &str,
+        reason_code: &str,
+    ) -> Result<WorkspacePluginCrashOutcome, StoreError> {
+        let project_root = required_project_root(project_root)?;
+        let plugin_id = validate_identifier(plugin_id, "plugin id")?;
+        let package_digest = validate_digest(package_digest, "package digest")?;
+        let host_session_id = validate_identifier(host_session_id, "host session id")?;
+        let reason_code = validate_identifier(reason_code, "crash reason code")?;
+        let now = Utc::now();
+        let now_text = now.to_rfc3339();
+        let cutoff = (now - Duration::minutes(10)).to_rfc3339();
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let state = get_state_on(&transaction, &project_root, &plugin_id)?.ok_or_else(|| {
+            StoreError::Validation("crashed plugin lifecycle state is missing".to_string())
+        })?;
+        let exact = state.desired_state == "enabled"
+            && state.accepted_digest.as_deref() == Some(package_digest.as_str())
+            && state.last_host_session_id.as_deref() == Some(host_session_id.as_str());
+        if !exact {
+            transaction.commit()?;
+            return Ok(WorkspacePluginCrashOutcome {
+                outcome: PluginLifecycleMutationOutcome::Stale,
+                crash_count: 0,
+                blocked: false,
+                state,
+            });
+        }
+        let prior_crashes: i64 = transaction.query_row(
+            "SELECT COUNT(*) FROM workspace_plugin_lifecycle_events
+             WHERE project_root = ?1 AND plugin_id = ?2
+               AND event_type = 'host_quarantined' AND created_at >= ?3",
+            params![project_root, plugin_id, cutoff],
+            |row| row.get(0),
+        )?;
+        let crash_count = usize::try_from(prior_crashes)
+            .unwrap_or(usize::MAX)
+            .saturating_add(1);
+        let blocked = crash_count >= 3;
+        transaction.execute(
+            "UPDATE workspace_plugin_states
+             SET observed_state = ?3, last_error_code = ?4, updated_at = ?5
+             WHERE project_root = ?1 AND plugin_id = ?2",
+            params![
+                project_root,
+                plugin_id,
+                if blocked { "blocked" } else { "crashed" },
+                if blocked {
+                    "crash_loop_blocked"
+                } else {
+                    reason_code.as_str()
+                },
+                now_text,
+            ],
+        )?;
+        insert_lifecycle_event(
+            &transaction,
+            LifecycleEventInsert {
+                project_root: &project_root,
+                plugin_id: &plugin_id,
+                transition_id: state.transition_id.as_deref(),
+                package_digest: Some(&package_digest),
+                event_type: "host_quarantined",
+                status: "failed",
+                phase: "completed",
+                reason_code: Some(if blocked {
+                    "crash_loop_blocked"
+                } else {
+                    reason_code.as_str()
+                }),
+                details_json: &serde_json::json!({"crash_count": crash_count}).to_string(),
+                created_at: &now_text,
+            },
+        )?;
+        let updated = get_state_on(&transaction, &project_root, &plugin_id)?.ok_or_else(|| {
+            StoreError::Validation("crashed plugin state disappeared".to_string())
+        })?;
+        transaction.commit()?;
+        Ok(WorkspacePluginCrashOutcome {
+            outcome: PluginLifecycleMutationOutcome::Applied,
+            crash_count,
+            blocked,
+            state: updated,
+        })
     }
 
     pub fn get_workspace_plugin_state(
@@ -1970,6 +2070,76 @@ mod tests {
                 .unwrap()
                 .len(),
             baseline_events
+        );
+    }
+
+    #[test]
+    fn crash_events_are_exact_durable_and_block_on_third_event_in_window() {
+        let directory = tempdir().unwrap();
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let project = "/project/a";
+        store
+            .upsert_discovered_workspace_plugin(&discovered(project))
+            .unwrap();
+        let enable = transition(
+            project,
+            "transition.crash-enable",
+            "enable",
+            "enabled",
+            None,
+            Some(digest('a')),
+        );
+        store.request_workspace_plugin_transition(&enable).unwrap();
+        let mut completed = advance(
+            project,
+            "transition.crash-enable",
+            "requested",
+            "completed",
+            "completed",
+            "active",
+        );
+        completed.accepted_digest = Some(digest('a'));
+        completed.clear_pending_digest = true;
+        completed.last_host_session_id = Some("instance.crash-a".to_string());
+        completed.event_type = "transition_completed".to_string();
+        store
+            .advance_workspace_plugin_transition(&completed)
+            .unwrap();
+        let stale = store
+            .record_workspace_plugin_crash(
+                project,
+                "org.example.plugin",
+                &digest('a'),
+                "instance.foreign",
+                "guest_trap",
+            )
+            .unwrap();
+        assert_eq!(stale.outcome, PluginLifecycleMutationOutcome::Stale);
+        for expected in 1..=3 {
+            let crash = store
+                .record_workspace_plugin_crash(
+                    project,
+                    "org.example.plugin",
+                    &digest('a'),
+                    "instance.crash-a",
+                    "guest_trap",
+                )
+                .unwrap();
+            assert_eq!(crash.crash_count, expected);
+            assert_eq!(crash.blocked, expected == 3);
+            assert_eq!(
+                crash.state.observed_state,
+                if expected == 3 { "blocked" } else { "crashed" }
+            );
+        }
+        assert_eq!(
+            store
+                .list_workspace_plugin_lifecycle_events(project, Some(100))
+                .unwrap()
+                .iter()
+                .filter(|event| event.event_type == "host_quarantined")
+                .count(),
+            3
         );
     }
 }

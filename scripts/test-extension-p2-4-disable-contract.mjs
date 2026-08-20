@@ -48,9 +48,6 @@ export function validateP24DisableContract(value) {
     "route_closed: true",
     'status: "disabled"',
   ]) assert.ok(value.frontend.includes(marker), `Disable UI/mock lost ${marker}`);
-  assert.match(value.workspace, /version = "0\.4\.1-dev\.6"/);
-  assert.equal(JSON.parse(value.tauri).version, "0.4.1-dev.6");
-  assert.equal(JSON.parse(value.packageJson).version, "0.4.1-dev.6");
   assert.match(value.news, /## 0\.4\.1-dev\.6[\s\S]*Workspace-plugin disable/);
   for (const marker of [
     '"explicit_disable": true',
@@ -61,7 +58,7 @@ export function validateP24DisableContract(value) {
   assert.match(value.spec, /P2-4C1 local checkpoint — 2026-08-20/);
   assert.doesNotMatch(
     value.commands,
-    /retry_workspace_plugin|uninstall_workspace_plugin|accept_workspace_plugin_update|rollback_workspace_plugin/,
+    /uninstall_workspace_plugin|accept_workspace_plugin_update|rollback_workspace_plugin/,
     "C1 prematurely added a later lifecycle command",
   );
 }
@@ -89,8 +86,7 @@ if (process.argv.includes("--test")) {
     ["uncertainty", (value) => { value.desktop = value.desktop.replace('"completion_uncertain"', ""); }],
     ["stale command", (value) => { value.commands = value.commands.replace("expected_project_revision", ""); }],
     ["mock", (value) => { value.frontend = value.frontend.replace('command === "disable_workspace_plugin"', ""); }],
-    ["version", (value) => { value.workspace = 'version = "0.4.1-dev.5"'; }],
-    ["later command", (value) => { value.commands += "\nretry_workspace_plugin"; }],
+    ["later command", (value) => { value.commands += "\nuninstall_workspace_plugin"; }],
   ]) {
     const value = fixture();
     mutate(value);

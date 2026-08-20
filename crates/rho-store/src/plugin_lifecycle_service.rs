@@ -1,11 +1,12 @@
 //! Project-scoped application seam for durable workspace-plugin lifecycle facts.
 
 use crate::{
-    PluginLifecycleMutationOutcome, Store, StoreError, WorkspacePluginDiscoveredDraft,
-    WorkspacePluginGenerationAllocation, WorkspacePluginLifecycleEvent,
-    WorkspacePluginPackageTombstone, WorkspacePluginState, WorkspacePluginTombstoneDraft,
-    WorkspacePluginTransition, WorkspacePluginTransitionAdvance, WorkspacePluginTransitionDraft,
-    WorkspacePluginTransitionRequestResult, query::required_project_root,
+    PluginLifecycleMutationOutcome, Store, StoreError, WorkspacePluginCrashOutcome,
+    WorkspacePluginDiscoveredDraft, WorkspacePluginGenerationAllocation,
+    WorkspacePluginLifecycleEvent, WorkspacePluginPackageTombstone, WorkspacePluginState,
+    WorkspacePluginTombstoneDraft, WorkspacePluginTransition, WorkspacePluginTransitionAdvance,
+    WorkspacePluginTransitionDraft, WorkspacePluginTransitionRequestResult,
+    query::required_project_root,
 };
 
 pub struct PluginLifecycleQueryService<'a> {
@@ -171,5 +172,22 @@ impl<'a> PluginLifecycleMutationService<'a> {
         let mut draft = draft.clone();
         draft.project_root = project_root;
         self.store.record_workspace_plugin_tombstone(&draft)
+    }
+
+    pub fn record_crash(
+        &mut self,
+        project_root: &str,
+        plugin_id: &str,
+        package_digest: &str,
+        host_session_id: &str,
+        reason_code: &str,
+    ) -> Result<WorkspacePluginCrashOutcome, StoreError> {
+        self.store.record_workspace_plugin_crash(
+            &required_project_root(project_root)?,
+            plugin_id,
+            package_digest,
+            host_session_id,
+            reason_code,
+        )
     }
 }

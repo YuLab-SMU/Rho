@@ -42,7 +42,7 @@ use rho_core::{BrokerState, ExecutionOrigin};
 use rho_extension_runtime::{
     ActivationError, BoundedJson, BrokerError, BrokerFacade, BrokerRequest, BrokerResponse,
     BrokerResponseClass, CapabilityDeclaration, CapabilityId, CapabilityRequirement,
-    DiagnosticSink, DisposeOutcome, ExtensionDiagnostic, ExtensionHost,
+    DEFAULT_HEARTBEAT_INTERVAL, DiagnosticSink, DisposeOutcome, ExtensionDiagnostic, ExtensionHost,
     InternalExtensionRuntimeMode, InternalPlugin, LifecycleDeadlines, OperationId, PluginContext,
     PluginDescriptor, PluginVersion, ProjectFileViewerContribution, ScopeId, ScopeKindId,
     ScopeSnapshot, SourceHandler, WorkspaceGrantIdentity, WorkspaceToolHandler,
@@ -6138,6 +6138,49 @@ async fn reconcile_workspace_plugins_for_boundary(
                 "trigger": trigger,
                 "reason_code": "runtime_context_unavailable",
                 "message": bounded_diagnostic(&error.to_string()),
+            }));
+        }
+    }
+}
+
+async fn monitor_workspace_plugin_heartbeats(app: AppHandle) {
+    loop {
+        tokio::time::sleep(DEFAULT_HEARTBEAT_INTERVAL).await;
+        let state = app.state::<AppState>();
+        if state.shutdown_started.load(Ordering::SeqCst) {
+            break;
+        }
+        let _project_transition = state.project_transition_gate.lock().await;
+        if state.shutdown_started.load(Ordering::SeqCst) {
+            break;
+        }
+        let project_root = {
+            let root = state.project_root.read().await.clone();
+            normalize_project_root(root.to_string_lossy().as_ref())
+        };
+        let data_dir = match runtime_config(&state) {
+            Ok(config) => config.data_dir,
+            Err(_) => continue,
+        };
+        let context = match active_context(&state).await {
+            Ok(context) => context,
+            Err(_) => continue,
+        };
+        let mut context = context.lock().await;
+        let identity = context.broker.identity().clone();
+        let plugin_context =
+            match workspace_plugin_runtime_context(data_dir, project_root, &identity) {
+                Ok(context) => context,
+                Err(_) => continue,
+            };
+        let report = state
+            .plugin_permissions
+            .sweep_project_heartbeats(&plugin_context, &mut context.store);
+        drop(context);
+        if report.checked > 0 || report.failures > 0 {
+            write_startup_event(json!({
+                "kind": "workspace_plugin_heartbeat_sweep",
+                "report": report,
             }));
         }
     }
@@ -14587,6 +14630,63 @@ fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Valu
         p24_boundary_reactivation.reactivated == 1,
         "installed P2-4 stopped boundary did not reconstruct exactly"
     );
+    for expected_crash_count in 1..=3 {
+        let crash = p24_restarted.quarantine_timed_out_plugin(
+            &p24_context,
+            "org.yulab.rho.phase2-durable-enable-smoke",
+            &mut p24_store,
+        )?;
+        ensure!(
+            crash.crash_count == expected_crash_count
+                && crash.blocked == (expected_crash_count == 3),
+            "installed P2-4 crash loop count/block state diverged"
+        );
+        if expected_crash_count < 3 {
+            ensure!(
+                p24_restarted
+                    .retry(
+                        &p24_context,
+                        "org.yulab.rho.phase2-durable-enable-smoke",
+                        &mut p24_store,
+                    )?
+                    .status
+                    == "enabled",
+                "installed P2-4 Retry did not create fresh authority"
+            );
+        }
+    }
+    ensure!(
+        p24_restarted
+            .retry(
+                &p24_context,
+                "org.yulab.rho.phase2-durable-enable-smoke",
+                &mut p24_store,
+            )
+            .is_err(),
+        "installed P2-4 blocked crash loop accepted Retry"
+    );
+    ensure!(
+        p24_restarted
+            .disable(
+                &p24_context,
+                "org.yulab.rho.phase2-durable-enable-smoke",
+                &mut p24_store,
+            )?
+            .status
+            == "disabled",
+        "installed P2-4 blocked plugin could not be explicitly disabled"
+    );
+    ensure!(
+        p24_restarted
+            .request_enable(
+                &p24_context,
+                "org.yulab.rho.phase2-durable-enable-smoke",
+                &mut p24_store,
+            )?
+            .status
+            == "enabled",
+        "installed P2-4 reviewed crash loop could not re-enable exactly"
+    );
     p24_restarted.invalidate_project(&p24_project_root);
     let p24_manifest_path = p24_plugin.join("rho-plugin.json");
     let mut p24_changed_manifest: Value =
@@ -14647,6 +14747,10 @@ fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Valu
         "boundary_teardown_reused": true,
         "boundary_enabled_intent_preserved": true,
         "boundary_reactivated": true,
+        "crash_state_durable": true,
+        "heartbeat_timeout_classified": true,
+        "retry_fresh_authority": true,
+        "third_crash_blocked": true,
     }))
 }
 
@@ -14947,6 +15051,10 @@ fn main() {
                 operation_gate: Mutex::new(()),
                 pending: Mutex::new(None),
             });
+            let heartbeat_app = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                monitor_workspace_plugin_heartbeats(heartbeat_app).await;
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -14994,6 +15102,7 @@ fn main() {
             commands::plugins::list_workspace_plugins,
             commands::plugins::request_workspace_plugin_enable,
             commands::plugins::disable_workspace_plugin,
+            commands::plugins::retry_workspace_plugin,
             commands::plugins::list_plugin_permission_requests,
             commands::plugins::get_plugin_permission_request,
             commands::plugins::respond_plugin_permission,

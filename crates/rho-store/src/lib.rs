@@ -54,7 +54,7 @@ pub use evidence::{
 };
 pub use mutation::ProjectMutationService;
 pub use plugin_lifecycle::{
-    PluginLifecycleMutationOutcome, WorkspacePluginDiscoveredDraft,
+    PluginLifecycleMutationOutcome, WorkspacePluginCrashOutcome, WorkspacePluginDiscoveredDraft,
     WorkspacePluginGenerationAllocation, WorkspacePluginLifecycleEvent,
     WorkspacePluginPackageTombstone, WorkspacePluginState, WorkspacePluginTombstoneDraft,
     WorkspacePluginTransition, WorkspacePluginTransitionAdvance, WorkspacePluginTransitionDraft,

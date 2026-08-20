@@ -83,6 +83,23 @@ pub(crate) async fn disable_workspace_plugin(
 }
 
 #[tauri::command]
+pub(crate) async fn retry_workspace_plugin(
+    plugin_id: String,
+    expected_project_revision: i64,
+    state: State<'_, AppState>,
+) -> Result<WorkspacePluginEnableResult, String> {
+    let context = runtime_context(&state).await.map_err(display_error)?;
+    if expected_project_revision != context.project_revision {
+        return Err("Workspace plugin Retry is stale after a project change.".to_string());
+    }
+    let mut store = read_store(&state).map_err(display_error)?;
+    state
+        .plugin_permissions
+        .retry(&context, &plugin_id, &mut store)
+        .map_err(display_error)
+}
+
+#[tauri::command]
 pub(crate) async fn list_plugin_permission_requests(
     status: Option<String>,
     state: State<'_, AppState>,

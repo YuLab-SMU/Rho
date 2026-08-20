@@ -60,6 +60,7 @@ on:
       - "scripts/test-extension-p2-4-restart-contract.mjs"
       - "scripts/test-extension-p2-4-disable-contract.mjs"
       - "scripts/test-extension-p2-4-boundary-teardown-contract.mjs"
+      - "scripts/test-extension-p2-4-crash-retry-contract.mjs"
       - "scripts/test-workspace-plugin-ui.mjs"
       - "scripts/test-installed-license-surface.mjs"
       - "scripts/test-signpath-readiness.mjs"
@@ -152,6 +153,7 @@ on:
       - "scripts/test-extension-p2-4-restart-contract.mjs"
       - "scripts/test-extension-p2-4-disable-contract.mjs"
       - "scripts/test-extension-p2-4-boundary-teardown-contract.mjs"
+      - "scripts/test-extension-p2-4-crash-retry-contract.mjs"
       - "scripts/test-workspace-plugin-ui.mjs"
       - "scripts/test-installed-license-surface.mjs"
       - "scripts/test-signpath-readiness.mjs"
@@ -411,6 +413,8 @@ jobs:
           node scripts/test-extension-p2-4-disable-contract.mjs
           node scripts/test-extension-p2-4-boundary-teardown-contract.mjs --test
           node scripts/test-extension-p2-4-boundary-teardown-contract.mjs
+          node scripts/test-extension-p2-4-crash-retry-contract.mjs --test
+          node scripts/test-extension-p2-4-crash-retry-contract.mjs
           node scripts/test-workspace-plugin-ui.mjs
           cargo check --workspace --all-targets --locked
           cargo test --workspace --locked --no-fail-fast

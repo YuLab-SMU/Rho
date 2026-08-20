@@ -2252,7 +2252,7 @@ async function mockInvoke(command, args) {
   await new Promise((resolve) => setTimeout(resolve, command === "run_agent" ? 800 : 300));
   if (command === "app_info") {
     return {
-      version: "0.4.1-dev.6",
+      version: "0.4.1-dev.7",
       channel: "stable",
       commit: "4090cf725c53ab657ba9dfc9743ec6159f27dcf9",
       platform: mockPlatformFixture.platform,
@@ -2270,7 +2270,7 @@ async function mockInvoke(command, args) {
     return {
       status: "up_to_date",
       channel: "stable",
-      installed_version: "0.4.1-dev.6",
+      installed_version: "0.4.1-dev.7",
       available_version: null,
       published_at: null,
       summary: null,
@@ -2393,6 +2393,23 @@ async function mockInvoke(command, args) {
       errors: [],
       message: "The plugin is durably disabled and no route or live handle remains.",
     };
+  }
+  if (command === "retry_workspace_plugin") {
+    const plugin = mockWorkspacePlugins.find((item) => item.plugin_id === args.pluginId);
+    if (!plugin) throw new Error("Workspace plugin has no durable lifecycle state.");
+    if (Number(args.expectedProjectRevision) !== Number(state.revision.project_revision)) {
+      throw new Error("Workspace plugin Retry is stale after a project change.");
+    }
+    if (plugin.status === "blocked") throw new Error("Plugin Retry is blocked after repeated crashes; disable and review it first.");
+    if (plugin.status !== "crashed") throw new Error("Plugin Retry is available only for crashed plugins.");
+    const transitionId = `transition.retry.${crypto.randomUUID().replaceAll("-", "")}`;
+    plugin.status = "enabled";
+    plugin.desired_state = "enabled";
+    plugin.observed_state = "active";
+    plugin.transition_id = transitionId;
+    plugin.active_grant_count = mockPluginGrants.filter((grant) => grant.plugin_id === plugin.plugin_id && grant.status === "active").length;
+    for (const grant of mockPluginGrants.filter((grant) => grant.plugin_id === plugin.plugin_id && grant.status === "active")) grant.live_handle = true;
+    return { status: "enabled", plugin_id: plugin.plugin_id, request_ids: [], active_grant_count: plugin.active_grant_count, transition_id: transitionId, message: "The crashed plugin restarted with fresh exact authority." };
   }
   if (command === "list_plugin_permission_requests") {
     return structuredClone(mockPluginPermissionRequests.filter((request) => !args.status || request.status === args.status));
@@ -15406,7 +15423,7 @@ async function maybeApplyPreviewScenario() {
   if (scenario === "workspace-plugins") {
     const pluginState = previewParams.get("state") || "default";
     if (pluginState === "empty") mockWorkspacePlugins.splice(0);
-    if (["enabling", "update-pending", "blocked"].includes(pluginState) && mockWorkspacePlugins[0]) {
+    if (["enabling", "update-pending", "blocked", "crashed"].includes(pluginState) && mockWorkspacePlugins[0]) {
       const status = pluginState.replace("-", "_");
       mockWorkspacePlugins[0].status = status;
       mockWorkspacePlugins[0].desired_state = "enabled";
@@ -15416,6 +15433,8 @@ async function maybeApplyPreviewScenario() {
         ? "The package digest changed. Update review is not available until the trusted update slice."
         : status === "blocked"
           ? "The plugin is blocked and remains non-routable pending trusted recovery."
+          : status === "crashed"
+            ? "The plugin crashed and remains non-routable. Use trusted Retry to create fresh authority."
           : "The durable enable transition has not completed; no enabled result is claimed.";
     }
     await openWorkspacePluginDialog();
@@ -21025,13 +21044,21 @@ function renderWorkspacePlugins() {
     meta.textContent = `Wasm · digest ${plugin.short_digest} · ${plugin.permission_count} requested permission${plugin.permission_count === 1 ? "" : "s"} · desired ${plugin.desired_state || "disabled"} · observed ${plugin.observed_state || "discovered"}`;
     const actions = document.createElement("div");
     actions.className = "plugin-card-actions";
-    if (plugin.status === "enabled") {
+    if (["enabled", "blocked"].includes(plugin.status)) {
       const disable = document.createElement("button");
       disable.type = "button";
       disable.textContent = "Disable";
       disable.dataset.pluginDisable = plugin.plugin_id;
       disable.disabled = state.plugins.busy;
       actions.append(disable);
+    } else if (plugin.status === "crashed") {
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.className = "primary";
+      retry.textContent = "Retry";
+      retry.dataset.pluginRetry = plugin.plugin_id;
+      retry.disabled = state.plugins.busy;
+      actions.append(retry);
     } else if (!["enabling", "update_pending", "blocked", "crashed", "uninstalled"].includes(plugin.status)) {
       const enable = document.createElement("button");
       enable.type = "button";
@@ -21326,6 +21353,33 @@ async function disableWorkspacePlugin(pluginId) {
     toast(result.message || "Workspace plugin disabled.", result.status === "completion_uncertain");
   } catch (error) {
     setPluginDialogError(userFacingError(error, "The workspace plugin could not be disabled."));
+  } finally {
+    state.plugins.busy = false;
+    renderWorkspacePlugins();
+  }
+}
+
+async function retryWorkspacePlugin(pluginId) {
+  if (state.plugins.busy) return;
+  state.plugins.busy = true;
+  setPluginDialogError("");
+  renderWorkspacePlugins();
+  try {
+    const result = await invoke("retry_workspace_plugin", {
+      pluginId,
+      expectedProjectRevision: state.plugins.list?.project_revision,
+    });
+    if (result.status === "permission_required") {
+      const requests = await invoke("list_plugin_permission_requests", { status: "pending" });
+      const request = requests.find((item) => item.plugin_id === pluginId);
+      if (request) await reviewPluginPermission(request.request_id);
+      else throw new Error("The durable Retry permission request could not be loaded.");
+    } else {
+      await loadWorkspacePluginSurface();
+      toast(result.message || "Workspace plugin restarted.");
+    }
+  } catch (error) {
+    setPluginDialogError(userFacingError(error, "The workspace plugin could not be retried."));
   } finally {
     state.plugins.busy = false;
     renderWorkspacePlugins();
@@ -22574,6 +22628,8 @@ $("#pluginList").addEventListener("click", (event) => {
   if (enable) requestWorkspacePluginEnable(enable.dataset.pluginEnable);
   const disable = event.target.closest("[data-plugin-disable]");
   if (disable) disableWorkspacePlugin(disable.dataset.pluginDisable);
+  const retry = event.target.closest("[data-plugin-retry]");
+  if (retry) retryWorkspacePlugin(retry.dataset.pluginRetry);
 });
 $("#pluginContributionList").addEventListener("click", (event) => {
   const button = event.target.closest("[data-plugin-contribution]");

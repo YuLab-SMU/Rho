@@ -5,9 +5,9 @@ state/transition/event/tombstone persistence completed its local stop gate
 2026-08-20; P2-1/P2-2/P2-3/P2-4A hosted and cross-platform installed gates
 remain open and mandatory before final Phase 2 acceptance
 
-Active work package: P2-4C3 only — crash/hang classification, durable loop
-blocking and explicit Retry. P2-4D through P2-4G remain inactive. C3 may add one
-trusted Retry command but no uninstall/update/rollback authority.
+Active work package: none at the P2-4C3/P2-4C checkpoint. P2-4D through P2-4G
+remain inactive pending explicit amendment/cross-review. C3 added one trusted
+Retry command only; uninstall, update and rollback remain unavailable.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -309,7 +309,7 @@ P2-4C is divided into three local stops:
    Replace abrupt `invalidate_project` at trusted lifecycle boundaries with the
    same bounded teardown for every active/pending project plugin; BH2 continues
    after forced quarantine and records uncertainty without waiting forever.
-3. **P2-4C3 — crash/hang classification and explicit Retry (active).** Route,
+3. **P2-4C3 — crash/hang classification and explicit Retry (locally complete).** Route,
    handle and contribution removal precedes durable crashed/blocked state;
    three crashes in ten minutes block automatic eligibility; only trusted Retry
    creates a fresh exact transition/generation/host/handles.
@@ -707,6 +707,43 @@ Boundary teardown reuse is locally complete at `0.4.1-dev.6`:
 
 The updater signature is rehearsal-only. C3 crash/Retry, hosted CI and
 Windows/Linux installed acceptance remain open.
+
+### P2-4C3 / P2-4C local checkpoint — 2026-08-20
+
+Crash/hang classification and explicit Retry are locally complete at
+`0.4.1-dev.7`:
+
+- contribution/direct-call guest failures and the periodic broker-owned
+  heartbeat sweep remove exact routes/handles before recording crash truth;
+  heartbeat calls run under the existing Wasmtime fuel/epoch bounds;
+- crash writes verify current project, accepted digest and host session, append
+  stable `host_quarantined` audit and derive the ten-minute count from SQLite;
+  crash three persists Blocked/`crash_loop_blocked`. A crash-event persistence
+  failure leaves the route closed and falls back to durable Blocked recovery;
+- trusted Retry accepts only exact desired-enabled Crashed state. It uses kind
+  retry, revalidates source/cache/grants, allocates a higher generation and new
+  host/handles, or returns to permission review. Blocked exposes only Disable;
+- tests cover three-crash loop, stale host identity, heartbeat trap, crash
+  persistence injection, Retry generation/permission behavior, guest resume
+  trap and restart refusal for crashed/blocked. The full locked workspace passed
+  with 255 desktop tests (254 passed, one opt-in Keychain test ignored), 152
+  Store unit tests, stable/Rust-1.88 all-target checks and all C3/UI/version
+  contracts;
+- Browser review at 951×811 verified Crashed has only Retry, Retry returns to
+  active plus Disable without raw handles, and Blocked has only Disable in one
+  in-viewport modal;
+- debug and packaged candidate/legacy smoke prove durable crash state,
+  heartbeat-timeout classification, fresh Retry authority and third-crash
+  blocking;
+- local C3 executable: 47,800,032 bytes, SHA-256
+  `497c74ed8e483a0bc911caf72d3b7fe7bdd16ca6de565e51ef2895e9d6338fb6`;
+  DMG: 26,309,703 bytes, SHA-256
+  `791a4eb3cf2f108cfc6632d76d5d73304d002727701ea58f49dd9f6cec5f3c35`;
+  updater archive: 27,058,374 bytes, SHA-256
+  `bc31e6d87de44a7fde445d6b993542a0797f11c69ea001b7a499d9671644104f`.
+
+The updater signature is rehearsal-only. P2-4D+, hosted CI and Windows/Linux
+installed acceptance remain open; local C completion is not Phase 2 acceptance.
 
 For C3, every host trap, invalid ABI/guest output, fuel/epoch violation,
 heartbeat timeout or unexpected loss first removes the exact contribution route
