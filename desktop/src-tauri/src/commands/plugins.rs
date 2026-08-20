@@ -7,7 +7,8 @@ use tauri::State;
 use crate::workspace_plugins::{
     PluginCommandInvocationView, PluginContributionList, PluginGrantList, PluginGrantRevokeResult,
     PluginPermissionDecisionInput, PluginPermissionDecisionResult, PluginRuntimeContext,
-    PluginViewerDocumentView, WorkspacePluginEnableResult, WorkspacePluginList,
+    PluginViewerDocumentView, WorkspacePluginDisableResult, WorkspacePluginEnableResult,
+    WorkspacePluginList,
 };
 use crate::{AppState, active_context, display_error, extension_project_scope_id, read_store};
 
@@ -59,6 +60,25 @@ pub(crate) async fn request_workspace_plugin_enable(
     state
         .plugin_permissions
         .request_enable(&context, &plugin_id, &mut store)
+        .map_err(display_error)
+}
+
+#[tauri::command]
+pub(crate) async fn disable_workspace_plugin(
+    plugin_id: String,
+    expected_project_revision: i64,
+    state: State<'_, AppState>,
+) -> Result<WorkspacePluginDisableResult, String> {
+    let context = runtime_context(&state).await.map_err(display_error)?;
+    if expected_project_revision != context.project_revision {
+        return Err(
+            "Workspace plugin disable request is stale after a project change.".to_string(),
+        );
+    }
+    let mut store = read_store(&state).map_err(display_error)?;
+    state
+        .plugin_permissions
+        .disable(&context, &plugin_id, &mut store)
         .map_err(display_error)
 }
 

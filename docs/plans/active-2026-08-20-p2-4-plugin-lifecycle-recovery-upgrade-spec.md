@@ -5,10 +5,10 @@ state/transition/event/tombstone persistence completed its local stop gate
 2026-08-20; P2-1/P2-2/P2-3/P2-4A hosted and cross-platform installed gates
 remain open and mandatory before final Phase 2 acceptance
 
-Active work package: P2-4C1 only — explicit Disable and exact-host teardown.
-P2-4C2/C3 and P2-4D through P2-4G remain inactive. C1 may add one trusted
-Disable command and its mock/UI state, but may not yet change project-switch or
-shutdown sequencing, add Retry, or authorize uninstall/update/rollback.
+Active work package: none at the P2-4C1 checkpoint. P2-4C2/C3 and P2-4D through
+P2-4G remain inactive pending explicit amendment/cross-review. C1 added one
+trusted Disable command only; project-switch/shutdown reuse, Retry, uninstall,
+update and rollback remain unavailable.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -295,7 +295,7 @@ state is `completion_uncertain` for recovery.
 
 P2-4C is divided into three local stops:
 
-1. **P2-4C1 — explicit Disable and exact-host teardown (active).** The trusted
+1. **P2-4C1 — explicit Disable and exact-host teardown (locally complete).** The trusted
    shell sends plugin ID plus current project revision. Rust persists desired
    disabled before closing routes, then cancels the exact yielded guest call
    where present, cancels that plugin's pending permission requests, revokes
@@ -620,6 +620,47 @@ Restart and project-open reconstruction are locally complete at
 The updater archive again uses an ephemeral rehearsal signature and is not
 publishable. Hosted CI, Windows/Linux installed evidence and all P2-4C+ gates
 remain open; P2-4B local completion is not Phase 2 acceptance.
+
+### P2-4C1 local checkpoint — 2026-08-20
+
+Explicit Disable is locally complete at application `0.4.1-dev.6`:
+
+- one revision-bound trusted command persists disabled intent before removing
+  the exact contribution generation from routing;
+- yielded guest calls are cancelled by their exact request ID; plugin-specific
+  pending permission requests are cancelled, live handles invalidated,
+  contribution effects cleared, and the guest is quiesced/disposed or forcibly
+  quarantined/dropped;
+- monotonic lifecycle events record routing close, call drain, handle revoke,
+  contribution disposal, host disposal and terminal disabled truth with bounded
+  counts. Durable project grants remain reusable facts but the UI now labels
+  them `Active grant · not live` after Disable;
+- guest dispose trap still reaches durable disabled-with-errors and no route;
+  injected lifecycle-event failure after route close yields non-routable
+  `completion_uncertain`, preserves the same transition on replay, and never
+  claims disabled completion;
+- tests cover active, already-disabled, permission-pending, exact yielded call,
+  guest trap, persistence failure, concurrent duplicate Disable and two-project
+  isolation. All 249 desktop tests ran: 248 passed and the opt-in disposable
+  Keychain test remained ignored; extension-runtime 199 tests and the complete
+  locked workspace passed, as did stable/Rust-1.88 all-target checks and all
+  C1/UI/version contracts;
+- Browser review at 951×811 verified the sole Enabled action is Disable; after
+  activation it shows durable `disabled/disabled`, removes the action, disables
+  all contribution controls, exposes no raw handle, and shows active durable
+  grants as not live in one in-viewport modal;
+- debug and packaged macOS arm64 candidate/legacy smoke both proved explicit
+  Disable, route closure, host disposal and durable terminal truth;
+- local C1 executable: 47,670,592 bytes, SHA-256
+  `d6b3a70cdf0478414e37065fafb29b9d70bf701ac7c213ba3e50fc227cdb82cf`;
+  DMG: 26,276,236 bytes, SHA-256
+  `4257fa455a4993f6bab5a54200fab4f4c22410063c65af9083d4738400ae38ed`;
+  updater archive: 27,020,485 bytes, SHA-256
+  `a00646550cd3c4b84ac869df660ae5e721a0003cf7c56a95be4960ec6e054854`.
+
+The updater signature is rehearsal-only and not publishable. C2 project/
+shutdown reuse, C3 crash/Retry, hosted CI and Windows/Linux installed evidence
+remain open.
 
 ## Verification Matrix
 

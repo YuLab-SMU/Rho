@@ -42,9 +42,6 @@ export function validateP24DurableEnableContract(value) {
     "pub accepted_digest: Option<String>",
     "pub transition_id: Option<String>",
   ]) assert.ok(value.desktop.includes(marker), `trusted plugin view lost ${marker}`);
-  assert.match(value.workspace, /version = "0\.4\.1-dev\.5"/);
-  assert.equal(JSON.parse(value.tauri).version, "0.4.1-dev.5");
-  assert.equal(JSON.parse(value.packageJson).version, "0.4.1-dev.5");
   assert.match(value.news, /## 0\.4\.1-dev\.5[\s\S]*Durable workspace-plugin enablement/);
   for (const marker of [
     "desired_state",
@@ -86,7 +83,6 @@ if (process.argv.includes("--test")) {
     ["publication CAS", (value) => { value.desktop = value.desktop.replace(".publish(prepared.contribution_candidate, None)", ""); }],
     ["post-publication cleanup", (value) => { value.desktop = value.desktop.replace("remove_active_plugin(state, &key)", ""); }],
     ["mutable Skill", (value) => { value.desktop = value.desktop.replace("active.skill_instructions", "fs::read"); }],
-    ["version", (value) => { value.workspace = 'version = "0.4.1-dev.4"'; }],
     ["installed", (value) => { value.installed = value.installed.replace('"durable_first_enable": true', ""); }],
   ]) {
     const value = fixture();

@@ -2252,7 +2252,7 @@ async function mockInvoke(command, args) {
   await new Promise((resolve) => setTimeout(resolve, command === "run_agent" ? 800 : 300));
   if (command === "app_info") {
     return {
-      version: "0.4.1-dev.5",
+      version: "0.4.1-dev.6",
       channel: "stable",
       commit: "4090cf725c53ab657ba9dfc9743ec6159f27dcf9",
       platform: mockPlatformFixture.platform,
@@ -2270,7 +2270,7 @@ async function mockInvoke(command, args) {
     return {
       status: "up_to_date",
       channel: "stable",
-      installed_version: "0.4.1-dev.5",
+      installed_version: "0.4.1-dev.6",
       available_version: null,
       published_at: null,
       summary: null,
@@ -2357,6 +2357,42 @@ async function mockInvoke(command, args) {
     plugin.status = "permission_required";
     plugin.pending_request_count = 1;
     return { status: "permission_required", plugin_id: plugin.plugin_id, request_ids: [request.request_id], active_grant_count: 0, transition_id: transitionId, message: "Review the requested permissions before this plugin can start." };
+  }
+  if (command === "disable_workspace_plugin") {
+    const plugin = mockWorkspacePlugins.find((item) => item.plugin_id === args.pluginId);
+    if (!plugin) throw new Error("Workspace plugin has no durable lifecycle state.");
+    if (Number(args.expectedProjectRevision) !== Number(state.revision.project_revision)) {
+      throw new Error("Workspace plugin disable request is stale after a project change.");
+    }
+    const transitionId = plugin.status === "disabled" && plugin.transition_id
+      ? plugin.transition_id
+      : `transition.disable.${crypto.randomUUID().replaceAll("-", "")}`;
+    const pending = mockPluginPermissionRequests.filter((request) => request.plugin_id === plugin.plugin_id && request.status === "pending");
+    for (const request of pending) {
+      request.status = "cancelled";
+      request.resolved_at = new Date().toISOString();
+      request.reason_code = "plugin_disabled";
+    }
+    for (const grant of mockPluginGrants.filter((grant) => grant.plugin_id === plugin.plugin_id)) grant.live_handle = false;
+    plugin.status = "disabled";
+    plugin.desired_state = "disabled";
+    plugin.observed_state = "disabled";
+    plugin.transition_id = transitionId;
+    plugin.pending_request_count = 0;
+    plugin.active_grant_count = 0;
+    return {
+      status: "disabled",
+      plugin_id: plugin.plugin_id,
+      transition_id: transitionId,
+      route_closed: true,
+      calls_cancelled: 0,
+      pending_requests_cancelled: pending.length,
+      handles_revoked: 1,
+      contributions_disposed: mockPluginContributions.filter((item) => item.plugin_id === plugin.plugin_id).length,
+      host_disposed: true,
+      errors: [],
+      message: "The plugin is durably disabled and no route or live handle remains.",
+    };
   }
   if (command === "list_plugin_permission_requests") {
     return structuredClone(mockPluginPermissionRequests.filter((request) => !args.status || request.status === args.status));
@@ -20989,7 +21025,14 @@ function renderWorkspacePlugins() {
     meta.textContent = `Wasm · digest ${plugin.short_digest} · ${plugin.permission_count} requested permission${plugin.permission_count === 1 ? "" : "s"} · desired ${plugin.desired_state || "disabled"} · observed ${plugin.observed_state || "discovered"}`;
     const actions = document.createElement("div");
     actions.className = "plugin-card-actions";
-    if (!["enabled", "enabling", "update_pending", "blocked", "crashed", "uninstalled"].includes(plugin.status)) {
+    if (plugin.status === "enabled") {
+      const disable = document.createElement("button");
+      disable.type = "button";
+      disable.textContent = "Disable";
+      disable.dataset.pluginDisable = plugin.plugin_id;
+      disable.disabled = state.plugins.busy;
+      actions.append(disable);
+    } else if (!["enabling", "update_pending", "blocked", "crashed", "uninstalled"].includes(plugin.status)) {
       const enable = document.createElement("button");
       enable.type = "button";
       enable.className = "primary";
@@ -21150,8 +21193,12 @@ function renderPluginGrants() {
     const title = document.createElement("strong");
     title.textContent = grant.permission;
     const chip = document.createElement("span");
-    chip.className = `plugin-state-chip ${grant.status === "active" ? "enabled" : ""}`;
-    chip.textContent = grant.live_handle ? "Active handle" : pluginStateLabel(grant.status);
+    chip.className = `plugin-state-chip ${grant.live_handle ? "enabled" : ""}`;
+    chip.textContent = grant.live_handle
+      ? "Active handle"
+      : grant.status === "active"
+        ? "Active grant · not live"
+        : pluginStateLabel(grant.status);
     header.append(title, chip);
     const meta = document.createElement("div");
     meta.className = "plugin-grant-meta";
@@ -21259,6 +21306,26 @@ async function requestWorkspacePluginEnable(pluginId) {
     }
   } catch (error) {
     setPluginDialogError(userFacingError(error, "The workspace plugin could not be enabled."));
+  } finally {
+    state.plugins.busy = false;
+    renderWorkspacePlugins();
+  }
+}
+
+async function disableWorkspacePlugin(pluginId) {
+  if (state.plugins.busy) return;
+  state.plugins.busy = true;
+  setPluginDialogError("");
+  renderWorkspacePlugins();
+  try {
+    const result = await invoke("disable_workspace_plugin", {
+      pluginId,
+      expectedProjectRevision: state.plugins.list?.project_revision,
+    });
+    await loadWorkspacePluginSurface();
+    toast(result.message || "Workspace plugin disabled.", result.status === "completion_uncertain");
+  } catch (error) {
+    setPluginDialogError(userFacingError(error, "The workspace plugin could not be disabled."));
   } finally {
     state.plugins.busy = false;
     renderWorkspacePlugins();
@@ -22503,8 +22570,10 @@ $("#pluginCommandPaletteList").addEventListener("click", (event) => {
 $("#pluginCommandPalette").addEventListener("keydown", trapPluginCommandPaletteFocus);
 $("#pluginPanelClear").addEventListener("click", clearTrustedPluginPanel);
 $("#pluginList").addEventListener("click", (event) => {
-  const button = event.target.closest("[data-plugin-enable]");
-  if (button) requestWorkspacePluginEnable(button.dataset.pluginEnable);
+  const enable = event.target.closest("[data-plugin-enable]");
+  if (enable) requestWorkspacePluginEnable(enable.dataset.pluginEnable);
+  const disable = event.target.closest("[data-plugin-disable]");
+  if (disable) disableWorkspacePlugin(disable.dataset.pluginDisable);
 });
 $("#pluginContributionList").addEventListener("click", (event) => {
   const button = event.target.closest("[data-plugin-contribution]");

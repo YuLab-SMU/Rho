@@ -424,6 +424,14 @@ impl WasmPluginHost {
         self.broker_call.is_some()
     }
 
+    /// Return the exact yielded broker request owned by this host, if any.
+    /// The identifier is diagnostic/cancellation identity, never authority.
+    pub fn active_broker_request_id(&self) -> Option<HostRequestId> {
+        self.broker_call
+            .as_ref()
+            .map(|active| active.request_id.clone())
+    }
+
     /// Begin one no-import Guest ABI V2 call. The guest fully yields a typed
     /// step before any broker I/O is allowed to run.
     pub fn begin_broker_call(
@@ -1365,11 +1373,13 @@ mod tests {
             .begin_broker_call(request_id.clone(), serde_json::json!({"command": "read"}))
             .unwrap();
         assert!(matches!(step, GuestStep::BrokerRequest { .. }));
+        assert_eq!(host.active_broker_request_id(), Some(request_id.clone()));
         assert!(!format!("{step:?}").contains("handle."));
         let terminal = host
             .resume_broker_call(&request_id, &serde_json::json!({"ok": true}), 5)
             .unwrap();
         assert!(matches!(terminal, GuestStep::Complete { .. }));
+        assert!(host.active_broker_request_id().is_none());
         assert_eq!(host.state(), HostInstanceState::Active);
 
         assert_eq!(

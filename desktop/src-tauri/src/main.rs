@@ -14459,6 +14459,38 @@ fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Valu
             && p24_restarted_state.last_activation_generation == 2,
         "installed P2-4 restart reused or lost activation generation"
     );
+    let p24_disabled = p24_restarted.disable(
+        &p24_context,
+        "org.yulab.rho.phase2-durable-enable-smoke",
+        &mut p24_store,
+    )?;
+    ensure!(
+        p24_disabled.status == "disabled"
+            && p24_disabled.route_closed
+            && p24_disabled.host_disposed
+            && p24_disabled.errors.is_empty(),
+        "installed P2-4 explicit Disable did not complete exact teardown"
+    );
+    let p24_disabled_state = PluginLifecycleQueryService::new(&p24_store)
+        .get_state(
+            &p24_project_root,
+            "org.yulab.rho.phase2-durable-enable-smoke",
+        )?
+        .context("installed P2-4 disabled lifecycle state is missing")?;
+    ensure!(
+        p24_disabled_state.desired_state == "disabled"
+            && p24_disabled_state.observed_state == "disabled",
+        "installed P2-4 explicit Disable did not persist terminal truth"
+    );
+    let p24_reenabled = p24_restarted.request_enable(
+        &p24_context,
+        "org.yulab.rho.phase2-durable-enable-smoke",
+        &mut p24_store,
+    )?;
+    ensure!(
+        p24_reenabled.status == "enabled",
+        "installed P2-4 exact package could not re-enable after Disable"
+    );
     p24_restarted.invalidate_project(&p24_project_root);
     let p24_manifest_path = p24_plugin.join("rho-plugin.json");
     let mut p24_changed_manifest: Value =
@@ -14512,6 +14544,10 @@ fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Valu
         "restart_generation": 2,
         "restart_authority_fresh": true,
         "changed_package_update_pending": true,
+        "explicit_disable": true,
+        "disable_route_closed": true,
+        "disable_host_disposed": true,
+        "disable_terminal_durable": true,
     }))
 }
 
@@ -14858,6 +14894,7 @@ fn main() {
             list_lockfile_packages,
             commands::plugins::list_workspace_plugins,
             commands::plugins::request_workspace_plugin_enable,
+            commands::plugins::disable_workspace_plugin,
             commands::plugins::list_plugin_permission_requests,
             commands::plugins::get_plugin_permission_request,
             commands::plugins::respond_plugin_permission,

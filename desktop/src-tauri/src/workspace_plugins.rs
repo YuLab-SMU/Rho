@@ -152,6 +152,21 @@ pub(crate) struct WorkspacePluginEnableResult {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub(crate) struct WorkspacePluginDisableResult {
+    pub status: String,
+    pub plugin_id: String,
+    pub transition_id: Option<String>,
+    pub route_closed: bool,
+    pub calls_cancelled: usize,
+    pub pending_requests_cancelled: usize,
+    pub handles_revoked: usize,
+    pub contributions_disposed: usize,
+    pub host_disposed: bool,
+    pub errors: Vec<String>,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub(crate) struct WorkspacePluginReconciliationReport {
     pub project_root: String,
     pub reactivated: usize,
@@ -1153,6 +1168,390 @@ impl PendingPluginPermissionRegistry {
             reusable_grants.values(),
             store,
         )
+    }
+
+    pub(crate) fn disable(
+        &self,
+        context: &PluginRuntimeContext,
+        plugin_id: &str,
+        store: &mut Store,
+    ) -> Result<WorkspacePluginDisableResult> {
+        ensure!(
+            context.project_revision >= 0,
+            "plugin disable requires a current project revision"
+        );
+        PluginId::new(plugin_id.to_string()).context("validating workspace plugin id")?;
+        let key = registry_key(&context.project_root, plugin_id);
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut lifecycle = PluginLifecycleQueryService::new(store)
+            .get_state(&context.project_root, plugin_id)?
+            .context("workspace plugin has no durable lifecycle state")?;
+        if lifecycle.desired_state == "disabled"
+            && !state.active.contains_key(&key)
+            && !state.pending.contains_key(&key)
+        {
+            let transition_nonterminal = lifecycle
+                .transition_id
+                .as_deref()
+                .map(|transition_id| {
+                    PluginLifecycleQueryService::new(store)
+                        .get_transition(&context.project_root, transition_id)
+                })
+                .transpose()?
+                .flatten()
+                .is_some_and(|transition| {
+                    matches!(
+                        transition.status.as_str(),
+                        "pending" | "running" | "completion_uncertain"
+                    )
+                });
+            if transition_nonterminal {
+                return Ok(WorkspacePluginDisableResult {
+                    status: "completion_uncertain".to_string(),
+                    plugin_id: plugin_id.to_string(),
+                    transition_id: lifecycle.transition_id,
+                    route_closed: true,
+                    calls_cancelled: 0,
+                    pending_requests_cancelled: 0,
+                    handles_revoked: 0,
+                    contributions_disposed: 0,
+                    host_disposed: true,
+                    errors: vec!["durable_teardown_nonterminal".to_string()],
+                    message: "The plugin is non-routable, but durable teardown completion remains uncertain."
+                        .to_string(),
+                });
+            }
+            return Ok(WorkspacePluginDisableResult {
+                status: "disabled".to_string(),
+                plugin_id: plugin_id.to_string(),
+                transition_id: lifecycle.transition_id,
+                route_closed: true,
+                calls_cancelled: 0,
+                pending_requests_cancelled: 0,
+                handles_revoked: 0,
+                contributions_disposed: 0,
+                host_disposed: true,
+                errors: Vec::new(),
+                message: "The plugin is already durably disabled.".to_string(),
+            });
+        }
+        if let Some(current_transition_id) = lifecycle.transition_id.as_deref()
+            && let Some(current) = PluginLifecycleQueryService::new(store)
+                .get_transition(&context.project_root, current_transition_id)?
+            && matches!(
+                current.status.as_str(),
+                "pending" | "running" | "completion_uncertain"
+            )
+        {
+            fail_enable_transition(
+                store,
+                context,
+                current_transition_id,
+                "user_disabled",
+                "disabled",
+            )?;
+            lifecycle = PluginLifecycleQueryService::new(store)
+                .get_state(&context.project_root, plugin_id)?
+                .context("workspace plugin lifecycle state disappeared during disable")?;
+        }
+        let transition_id = format!("transition.disable.{}", uuid::Uuid::new_v4().simple());
+        let requested = PluginLifecycleMutationService::new(store).request_transition(
+            &context.project_root,
+            &WorkspacePluginTransitionDraft {
+                transition_id: transition_id.clone(),
+                project_root: context.project_root.clone(),
+                plugin_id: plugin_id.to_string(),
+                kind: "disable".to_string(),
+                request_event_type: "user_requested".to_string(),
+                desired_state: "disabled".to_string(),
+                expected_old_digest: lifecycle.accepted_digest.clone(),
+                candidate_digest: None,
+                rollback_digest: None,
+                backup_path_key: None,
+            },
+        )?;
+        ensure!(
+            matches!(
+                requested.outcome,
+                PluginLifecycleMutationOutcome::Applied | PluginLifecycleMutationOutcome::Unchanged
+            ),
+            "plugin disable conflicts with another durable lifecycle transition"
+        );
+
+        let mut errors = Vec::new();
+        let mut persistence_failed = false;
+        let pending_memory = state.pending.remove(&key);
+        let mut active = state.active.remove(&key);
+        let contributions_disposed = active
+            .as_ref()
+            .and_then(|active| active.contribution_identity.as_ref())
+            .map(|identity| {
+                let count = state
+                    .contributions
+                    .list(&identity.project_id)
+                    .into_iter()
+                    .filter(|record| {
+                        record.plugin_id == identity.plugin_id
+                            && record.package_digest == identity.package_digest
+                            && record.activation_generation == identity.activation_generation
+                            && record.host_instance_id == identity.host_instance_id
+                    })
+                    .count();
+                state.contributions.clear_instance(
+                    &identity.project_id,
+                    &identity.plugin_id,
+                    &identity.package_digest,
+                    identity.activation_generation,
+                    &identity.host_instance_id,
+                );
+                count
+            })
+            .unwrap_or(0);
+        if record_disable_phase(
+            store,
+            context,
+            &transition_id,
+            "requested",
+            "routing_closed",
+            "running",
+            "quiescing",
+            "call_drain",
+            "pending",
+            None,
+            serde_json::json!({"routes_closed": contributions_disposed}),
+        )
+        .is_err()
+        {
+            persistence_failed = true;
+            push_teardown_error(&mut errors, "routing_close_persistence_failed");
+        }
+
+        let mut calls_cancelled = 0usize;
+        if let Some(active) = active.as_mut()
+            && let Some(request_id) = active.host.active_broker_request_id()
+        {
+            match active.host.cancel_broker_call(&request_id) {
+                Ok(true) => calls_cancelled = 1,
+                Ok(false) => {}
+                Err(_) => {
+                    push_teardown_error(&mut errors, "guest_call_cancel_failed");
+                    active.host.quarantine_for_timeout();
+                }
+            }
+        }
+        if record_disable_phase(
+            store,
+            context,
+            &transition_id,
+            "routing_closed",
+            "calls_drained",
+            "running",
+            "quiescing",
+            "call_drain",
+            "completed",
+            None,
+            serde_json::json!({"calls_cancelled": calls_cancelled}),
+        )
+        .is_err()
+        {
+            persistence_failed = true;
+            push_teardown_error(&mut errors, "call_drain_persistence_failed");
+        }
+
+        let pending_requests = PluginPermissionQueryService::new(store)
+            .list_requests(&context.project_root, Some(100), Some("pending"))?
+            .into_iter()
+            .filter(|request| request.plugin_id == plugin_id)
+            .collect::<Vec<_>>();
+        let mut pending_requests_cancelled = 0usize;
+        for request in pending_requests {
+            match PluginPermissionMutationService::new(store).cancel_request(
+                &context.project_root,
+                &request.request_id,
+                request.expected_project_revision,
+                "plugin_disabled",
+            ) {
+                Ok(PluginPermissionMutationOutcome::Applied)
+                | Ok(PluginPermissionMutationOutcome::Unchanged) => {
+                    pending_requests_cancelled += 1;
+                }
+                Ok(_) | Err(_) => {
+                    persistence_failed = true;
+                    push_teardown_error(&mut errors, "permission_cancel_failed");
+                }
+            }
+        }
+        if let Some(pending) = pending_memory {
+            pending_requests_cancelled = pending_requests_cancelled.max(pending.request_ids.len());
+        }
+        let handles_revoked = active
+            .as_ref()
+            .map(|active| state.grants.invalidate_host(&active.host_instance_id))
+            .unwrap_or(0);
+        if record_disable_phase(
+            store,
+            context,
+            &transition_id,
+            "calls_drained",
+            "handles_revoked",
+            "running",
+            "disposing",
+            "handles_revoked",
+            "completed",
+            None,
+            serde_json::json!({
+                "revoked_count": handles_revoked,
+                "requests_cancelled": pending_requests_cancelled
+            }),
+        )
+        .is_err()
+        {
+            persistence_failed = true;
+            push_teardown_error(&mut errors, "handle_revoke_persistence_failed");
+        }
+        if record_disable_phase(
+            store,
+            context,
+            &transition_id,
+            "handles_revoked",
+            "contributions_disposed",
+            "running",
+            "disposing",
+            "contributions_disposed",
+            "completed",
+            None,
+            serde_json::json!({"contributions_disposed": contributions_disposed}),
+        )
+        .is_err()
+        {
+            persistence_failed = true;
+            push_teardown_error(&mut errors, "contribution_dispose_persistence_failed");
+        }
+
+        let mut host_disposed = active.is_none();
+        if let Some(active) = active.as_mut() {
+            let instance_id = active.host_instance_id.clone();
+            if matches!(
+                active.host.state(),
+                HostInstanceState::Active | HostInstanceState::Ready
+            ) && !matches!(
+                active.host.handle_frame(HostFrame {
+                    instance_id: instance_id.clone(),
+                    message: HostMessage::Quiesce,
+                }),
+                Ok(Some(HostResponse::Quiesced))
+            ) {
+                push_teardown_error(&mut errors, "guest_quiesce_failed");
+            }
+            if matches!(
+                active.host.state(),
+                HostInstanceState::Active | HostInstanceState::Ready | HostInstanceState::Quiescing
+            ) {
+                host_disposed = matches!(
+                    active.host.handle_frame(HostFrame {
+                        instance_id,
+                        message: HostMessage::Dispose,
+                    }),
+                    Ok(Some(HostResponse::Disposed))
+                );
+            }
+            if !host_disposed {
+                active.host.quarantine_for_timeout();
+                host_disposed = true;
+                push_teardown_error(&mut errors, "guest_dispose_forced");
+            }
+        }
+        drop(active);
+        if record_disable_phase(
+            store,
+            context,
+            &transition_id,
+            "contributions_disposed",
+            "host_disposed",
+            "running",
+            "stopped",
+            "host_disposed",
+            "completed",
+            errors.first().map(String::as_str),
+            serde_json::json!({"host_disposed": host_disposed}),
+        )
+        .is_err()
+        {
+            persistence_failed = true;
+            push_teardown_error(&mut errors, "host_dispose_persistence_failed");
+        }
+
+        if !persistence_failed {
+            let terminal_reason = (!errors.is_empty()).then_some("teardown_cleanup_error");
+            if record_disable_phase(
+                store,
+                context,
+                &transition_id,
+                "host_disposed",
+                "completed",
+                "completed",
+                "disabled",
+                "transition_completed",
+                "completed",
+                terminal_reason,
+                serde_json::json!({"cleanup_errors": errors.len()}),
+            )
+            .is_err()
+            {
+                persistence_failed = true;
+                push_teardown_error(&mut errors, "terminal_persistence_failed");
+            }
+        }
+        if persistence_failed
+            && let Ok(Some(current)) = PluginLifecycleQueryService::new(store)
+                .get_transition(&context.project_root, &transition_id)
+            && !matches!(
+                current.status.as_str(),
+                "completed" | "failed" | "cancelled"
+            )
+        {
+            let _ = record_disable_phase(
+                store,
+                context,
+                &transition_id,
+                &current.phase,
+                "durable_committed",
+                "completion_uncertain",
+                "stopped",
+                "recovery",
+                "uncertain",
+                Some("teardown_persistence_failed"),
+                serde_json::json!({"cleanup_errors": errors.len()}),
+            );
+        }
+        let status = if persistence_failed {
+            "completion_uncertain"
+        } else if errors.is_empty() {
+            "disabled"
+        } else {
+            "disabled_with_errors"
+        };
+        Ok(WorkspacePluginDisableResult {
+            status: status.to_string(),
+            plugin_id: plugin_id.to_string(),
+            transition_id: Some(transition_id),
+            route_closed: true,
+            calls_cancelled,
+            pending_requests_cancelled,
+            handles_revoked,
+            contributions_disposed,
+            host_disposed,
+            errors,
+            message: match status {
+                "disabled" => "The plugin is durably disabled and no route or live handle remains.",
+                "disabled_with_errors" => "The plugin is disabled and non-routable; cleanup diagnostics were recorded.",
+                _ => "The plugin is non-routable, but durable teardown completion is uncertain and will be reconciled.",
+            }
+            .to_string(),
+        })
     }
 
     pub(crate) fn respond(
@@ -4031,6 +4430,57 @@ fn fail_enable_transition(
     )
 }
 
+fn push_teardown_error(errors: &mut Vec<String>, code: &str) {
+    if errors.len() < 16 && !errors.iter().any(|existing| existing == code) {
+        errors.push(code.to_string());
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn record_disable_phase(
+    store: &mut Store,
+    context: &PluginRuntimeContext,
+    transition_id: &str,
+    expected_phase: &str,
+    next_phase: &str,
+    status: &str,
+    observed_state: &str,
+    event_type: &str,
+    event_status: &str,
+    reason_code: Option<&str>,
+    details: serde_json::Value,
+) -> Result<()> {
+    let outcome = PluginLifecycleMutationService::new(store).advance_transition(
+        &context.project_root,
+        &WorkspacePluginTransitionAdvance {
+            project_root: context.project_root.clone(),
+            transition_id: transition_id.to_string(),
+            expected_phase: expected_phase.to_string(),
+            next_phase: next_phase.to_string(),
+            status: status.to_string(),
+            observed_state: observed_state.to_string(),
+            accepted_digest: None,
+            pending_digest: None,
+            rollback_digest: None,
+            clear_pending_digest: false,
+            last_host_session_id: None,
+            last_error_code: reason_code.map(str::to_string),
+            reason_code: reason_code.map(str::to_string),
+            event_type: event_type.to_string(),
+            event_status: event_status.to_string(),
+            details_json: details.to_string(),
+        },
+    )?;
+    ensure!(
+        matches!(
+            outcome,
+            PluginLifecycleMutationOutcome::Applied | PluginLifecycleMutationOutcome::Unchanged
+        ),
+        "plugin disable transition phase was stale"
+    );
+    Ok(())
+}
+
 fn try_activate_pending(
     state: &mut RegistryState,
     context: &PluginRuntimeContext,
@@ -5465,6 +5915,392 @@ mod tests {
                 .filter(|event| event.event_type == "user_requested")
                 .count(),
             1
+        );
+    }
+
+    #[test]
+    fn explicit_disable_closes_routes_revokes_handles_and_persists_terminal_truth() {
+        let directory = tempdir().unwrap();
+        write_ui_fixture_plugin(directory.path(), ContributionKind::Panel);
+        let database = directory.path().join("rho.sqlite");
+        let context = context(directory.path());
+        let mut store = Store::open(&database).unwrap();
+        let registry = deterministic_registry();
+        registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        let disabled = registry
+            .disable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        assert_eq!(disabled.status, "disabled", "{disabled:?}");
+        assert!(disabled.route_closed);
+        assert_eq!(disabled.contributions_disposed, 1);
+        assert!(disabled.host_disposed);
+        assert!(disabled.errors.is_empty());
+        let state = registry
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert!(state.active.is_empty());
+        assert!(
+            state
+                .contributions
+                .list(&context.project_scope_id)
+                .is_empty()
+        );
+        assert_eq!(state.grants.active_handle_count(), 0);
+        drop(state);
+        let lifecycle = PluginLifecycleQueryService::new(&store)
+            .get_state(&context.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        assert_eq!(lifecycle.desired_state, "disabled");
+        assert_eq!(lifecycle.observed_state, "disabled");
+        assert!(lifecycle.accepted_digest.is_some());
+        let transition = PluginLifecycleQueryService::new(&store)
+            .get_transition(
+                &context.project_root,
+                disabled.transition_id.as_deref().unwrap(),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(transition.phase, "completed");
+        assert_eq!(transition.status, "completed");
+        let events = PluginLifecycleQueryService::new(&store)
+            .list_events(&context.project_root, Some(100))
+            .unwrap();
+        for event_type in [
+            "call_drain",
+            "handles_revoked",
+            "contributions_disposed",
+            "host_disposed",
+            "transition_completed",
+        ] {
+            assert!(events.iter().any(|event| event.event_type == event_type));
+        }
+        let again = registry
+            .disable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        assert_eq!(again.status, "disabled");
+        assert_eq!(again.transition_id, disabled.transition_id);
+    }
+
+    #[test]
+    fn disable_cancels_permission_pending_enable_before_starting_a_new_transition() {
+        let directory = tempdir().unwrap();
+        write_plugin(
+            directory.path(),
+            serde_json::json!([{
+                "name": "project.fs.read",
+                "purpose": "Read bounded CSV inputs",
+                "paths": ["data/**/*.csv"],
+                "maxBytes": 1024
+            }]),
+        );
+        let context = context(directory.path());
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let registry = deterministic_registry();
+        let pending = registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        assert_eq!(pending.status, "permission_required");
+        let enable_transition = pending.transition_id.clone().unwrap();
+        let disabled = registry
+            .disable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        assert_eq!(disabled.status, "disabled", "{disabled:?}");
+        assert_eq!(disabled.pending_requests_cancelled, 1);
+        assert!(
+            registry
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .pending
+                .is_empty()
+        );
+        let request = PluginPermissionQueryService::new(&store)
+            .get_request(&context.project_root, &pending.request_ids[0])
+            .unwrap()
+            .unwrap();
+        assert_eq!(request.status, "cancelled");
+        let old = PluginLifecycleQueryService::new(&store)
+            .get_transition(&context.project_root, &enable_transition)
+            .unwrap()
+            .unwrap();
+        assert_eq!(old.status, "failed");
+        assert_eq!(old.reason_code.as_deref(), Some("user_disabled"));
+    }
+
+    #[test]
+    fn disable_cancels_exact_yielded_guest_call_and_withholds_late_route() {
+        let directory = tempdir().unwrap();
+        write_file_contributing_plugin(directory.path());
+        let context = context(directory.path());
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let registry = deterministic_registry();
+        let requested = registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        registry
+            .respond(
+                &context,
+                PluginPermissionDecisionInput {
+                    request_id: requested.request_ids[0].clone(),
+                    decision: "allow_project".to_string(),
+                    expected_project_revision: context.project_revision,
+                },
+                &mut store,
+            )
+            .unwrap();
+        let request_id = HostRequestId::new("request.disable-inflight").unwrap();
+        {
+            let mut state = registry
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let active = state
+                .active
+                .get_mut(&registry_key(&context.project_root, "org.example.plugin"))
+                .unwrap();
+            assert!(matches!(
+                active
+                    .host
+                    .begin_contribution_call(request_id.clone(), serde_json::json!({}))
+                    .unwrap(),
+                GuestStep::BrokerRequest { .. }
+            ));
+            assert_eq!(
+                active.host.active_broker_request_id(),
+                Some(request_id.clone())
+            );
+        }
+        let disabled = registry
+            .disable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        assert_eq!(disabled.calls_cancelled, 1);
+        assert!(disabled.route_closed);
+        assert!(
+            registry
+                .list_contributions(&context)
+                .contributions
+                .is_empty()
+        );
+        assert!(
+            registry
+                .invoke_file_contribution(
+                    &context,
+                    "tool.csv.metadata",
+                    ContributionInvocationOrigin::AgentTool,
+                    serde_json::json!({}),
+                    &mut store,
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn disable_forces_guest_dispose_failure_but_still_completes_non_routable() {
+        let directory = tempdir().unwrap();
+        write_plugin(directory.path(), serde_json::json!([]));
+        let trap = wat::parse_str(
+            r#"(module
+                (memory (export "memory") 1 1)
+                (func (export "rho_activate") (param i32) (result i32) i32.const 0)
+                (func (export "rho_echo") (param i32 i32) (result i64) i64.const 0)
+                (func (export "rho_heartbeat") (result i32) i32.const 0)
+                (func (export "rho_quiesce") (result i32) i32.const 0)
+                (func (export "rho_dispose") (result i32) unreachable))"#,
+        )
+        .unwrap();
+        fs::write(
+            directory
+                .path()
+                .join(".rho/plugins/example/dist/plugin.wasm"),
+            trap,
+        )
+        .unwrap();
+        let context = context(directory.path());
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let registry = deterministic_registry();
+        registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        let disabled = registry
+            .disable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        assert_eq!(disabled.status, "disabled_with_errors", "{disabled:?}");
+        assert!(disabled.host_disposed);
+        assert!(
+            disabled
+                .errors
+                .iter()
+                .any(|error| error == "guest_dispose_forced")
+        );
+        assert!(
+            registry
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .active
+                .is_empty()
+        );
+        assert_eq!(
+            PluginLifecycleQueryService::new(&store)
+                .get_state(&context.project_root, "org.example.plugin")
+                .unwrap()
+                .unwrap()
+                .observed_state,
+            "disabled"
+        );
+    }
+
+    #[test]
+    fn disable_persistence_failure_after_route_close_is_completion_uncertain() {
+        let directory = tempdir().unwrap();
+        write_ui_fixture_plugin(directory.path(), ContributionKind::Panel);
+        let database = directory.path().join("rho.sqlite");
+        let context = context(directory.path());
+        let mut store = Store::open(&database).unwrap();
+        let registry = deterministic_registry();
+        registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        let connection = rusqlite::Connection::open(&database).unwrap();
+        connection
+            .execute_batch(
+                "CREATE TRIGGER fail_disable_journal
+                 BEFORE INSERT ON workspace_plugin_lifecycle_events
+                 WHEN NEW.event_type = 'call_drain'
+                 BEGIN SELECT RAISE(FAIL, 'injected disable journal failure'); END;",
+            )
+            .unwrap();
+        drop(connection);
+        let disabled = registry
+            .disable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        assert_eq!(disabled.status, "completion_uncertain");
+        assert!(disabled.route_closed);
+        assert!(disabled.host_disposed);
+        assert!(
+            registry
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .active
+                .is_empty()
+        );
+        let transition = PluginLifecycleQueryService::new(&store)
+            .get_transition(
+                &context.project_root,
+                disabled.transition_id.as_deref().unwrap(),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(transition.phase, "durable_committed");
+        assert_eq!(transition.status, "completion_uncertain");
+        let lifecycle = PluginLifecycleQueryService::new(&store)
+            .get_state(&context.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        assert_eq!(lifecycle.desired_state, "disabled");
+        assert_eq!(lifecycle.observed_state, "stopped");
+        let replay = registry
+            .disable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        assert_eq!(replay.status, "completion_uncertain");
+        assert_eq!(replay.transition_id, disabled.transition_id);
+    }
+
+    #[test]
+    fn disable_is_project_scoped_and_concurrent_duplicates_converge() {
+        let directory = tempdir().unwrap();
+        let project_a = directory.path().join("project-a");
+        let project_b = directory.path().join("project-b");
+        fs::create_dir_all(&project_a).unwrap();
+        fs::create_dir_all(&project_b).unwrap();
+        write_ui_fixture_plugin(&project_a, ContributionKind::Panel);
+        write_ui_fixture_plugin(&project_b, ContributionKind::Panel);
+        let database = directory.path().join("rho.sqlite");
+        let app_data = directory.path().join("app-data");
+        fs::create_dir_all(&app_data).unwrap();
+        let mut context_a = context(&project_a);
+        context_a.app_data_dir = app_data.clone();
+        context_a.project_scope_id = ScopeId::new("project.disable.a").unwrap();
+        let mut context_b = context(&project_b);
+        context_b.app_data_dir = app_data;
+        context_b.project_scope_id = ScopeId::new("project.disable.b").unwrap();
+        let registry = Arc::new(deterministic_registry());
+        let mut store = Store::open(&database).unwrap();
+        registry
+            .request_enable(&context_a, "org.example.plugin", &mut store)
+            .unwrap();
+        registry
+            .request_enable(&context_b, "org.example.plugin", &mut store)
+            .unwrap();
+        drop(store);
+        let barrier = Arc::new(std::sync::Barrier::new(2));
+        let handles = (0..2)
+            .map(|_| {
+                let registry = Arc::clone(&registry);
+                let barrier = Arc::clone(&barrier);
+                let database = database.clone();
+                let context = context_a.clone();
+                std::thread::spawn(move || {
+                    let mut store = Store::open(database).unwrap();
+                    barrier.wait();
+                    registry
+                        .disable(&context, "org.example.plugin", &mut store)
+                        .unwrap()
+                })
+            })
+            .collect::<Vec<_>>();
+        let results = handles
+            .into_iter()
+            .map(|handle| handle.join().unwrap())
+            .collect::<Vec<_>>();
+        assert!(results.iter().all(|result| result.status == "disabled"));
+        assert_eq!(results[0].transition_id, results[1].transition_id);
+        let state = registry
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert!(
+            !state
+                .active
+                .contains_key(&registry_key(&context_a.project_root, "org.example.plugin"))
+        );
+        assert!(
+            state
+                .active
+                .contains_key(&registry_key(&context_b.project_root, "org.example.plugin"))
+        );
+        assert!(
+            state
+                .contributions
+                .list(&context_a.project_scope_id)
+                .is_empty()
+        );
+        assert_eq!(
+            state.contributions.list(&context_b.project_scope_id).len(),
+            1
+        );
+        drop(state);
+        let store = Store::open(&database).unwrap();
+        assert_eq!(
+            PluginLifecycleQueryService::new(&store)
+                .get_state(&context_a.project_root, "org.example.plugin")
+                .unwrap()
+                .unwrap()
+                .desired_state,
+            "disabled"
+        );
+        assert_eq!(
+            PluginLifecycleQueryService::new(&store)
+                .get_state(&context_b.project_root, "org.example.plugin")
+                .unwrap()
+                .unwrap()
+                .desired_state,
+            "enabled"
         );
     }
 

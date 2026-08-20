@@ -37,6 +37,7 @@ on:
       - "scripts/test-extension-p2-4-package-cache-contract.mjs"
       - "scripts/test-extension-p2-4-durable-enable-contract.mjs"
       - "scripts/test-extension-p2-4-restart-contract.mjs"
+      - "scripts/test-extension-p2-4-disable-contract.mjs"
       - "scripts/test-workspace-plugin-ui.mjs"
       - "LICENSE"
       - "LICENSES.md"
@@ -134,6 +135,8 @@ jobs:
           node scripts/test-extension-p2-4-durable-enable-contract.mjs
           node scripts/test-extension-p2-4-restart-contract.mjs --test
           node scripts/test-extension-p2-4-restart-contract.mjs
+          node scripts/test-extension-p2-4-disable-contract.mjs --test
+          node scripts/test-extension-p2-4-disable-contract.mjs
           node scripts/test-workspace-plugin-ui.mjs
 
       - name: Check formatting

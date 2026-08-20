@@ -4,6 +4,21 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.1-dev.6 - 2026-08-20
+
+### Workspace-plugin disable
+
+- The trusted Workspace Plugins surface can now explicitly disable an enabled
+  plugin with the current project revision. Rho persists disabled intent before
+  closing contribution routes, then cancels the exact yielded guest call and
+  pending permission requests, revokes live handles, disposes contributions,
+  and drops or quarantines the Wasm host.
+- Teardown continues after guest quiesce/dispose errors and reports only stable
+  diagnostic codes. Enabled is never shown after route closure. If lifecycle
+  persistence fails during cleanup, the result is `completion_uncertain`, the
+  plugin remains non-routable, and recovery retains the monotonic transition
+  rather than manufacturing durable completion.
+
 ## 0.4.1-dev.5 - 2026-08-20
 
 ### Durable workspace-plugin enablement
