@@ -5,10 +5,10 @@ state/transition/event/tombstone persistence completed its local stop gate
 2026-08-20; P2-1/P2-2/P2-3/P2-4A hosted and cross-platform installed gates
 remain open and mandatory before final Phase 2 acceptance
 
-Active work package: none at the P2-4B1 checkpoint. P2-4B2/P2-4B3 and P2-4C
-through P2-4G remain inactive pending explicit amendment/cross-review. P2-4B1
-created no enable/restart route, permission decision, live host, contribution
-publication, UI or new guest-visible operation.
+Active work package: P2-4B2 only — durable first enable. P2-4B3 and P2-4C
+through P2-4G remain inactive. B2 may replace the existing trusted enable
+coordination but may not add disable/retry/uninstall/update/rollback commands,
+restart auto-activation or new guest authority.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -179,7 +179,7 @@ P2-4B is divided into three local integration stops:
    reuse fail closed. B1 enforces 32 MiB/package, three digests/plugin and 256
    MiB/project by refusal; it performs no eviction or deletion. Deterministic
    failure injection covers write, pre-rename and post-rename/read-back points.
-2. **P2-4B2 — durable first enable (inactive).** The existing trusted
+2. **P2-4B2 — durable first enable (active).** The existing trusted
    `request_workspace_plugin_enable` command will persist one exact enable
    transition before permission work, prepare/cache the package before host
    construction, allocate generation through schema v14, load Wasm and bounded
@@ -203,6 +203,17 @@ the existing command/mock inventory, and expose desired/observed/transition
 truth without claiming that disable/uninstall/upgrade are available. B3 must
 add restart/reopen, A-B-A and two-project installed-smoke probes. Each sub-slice
 requires contract review and its own local stop before the next activates.
+
+For B2 the durable order is fixed: discovery upsert → transition request →
+preflight → exact cache backup → permission continuation (if any) → durable
+generation allocation → hidden candidate/handles/contributions →
+`candidate_activated` journal → expected-old contribution publication →
+`pointer_swapped` journal → accepted digest/active terminal commit. The same
+transition ID is carried through permission-required continuation. Before the
+terminal commit, list state may say `enabling` or `permission_required`, never
+`enabled`. If any durable write after publication fails, the exact route is
+removed and handles invalidated before an error is returned; recovery keeps the
+nonterminal transition rather than manufacturing completion.
 
 ## Enable And Restart
 

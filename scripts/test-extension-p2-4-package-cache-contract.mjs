@@ -41,9 +41,9 @@ export function validateP24PackageCacheContract(value) {
   );
   assert.match(value.serverCargo, /rho-extension-runtime\s*=\s*\{\s*path/);
   assert.match(value.serverLib, /pub mod plugin_package_cache/);
-  assert.match(value.spec, /Active work package: none at the P2-4B1 checkpoint/);
+  assert.match(value.spec, /Active work package: P2-4B2 only/);
   assert.match(value.spec, /P2-4B1 local checkpoint — 2026-08-20/);
-  assert.match(value.spec, /P2-4B2 — durable first enable \(inactive\)/);
+  assert.match(value.spec, /P2-4B2 — durable first enable \(active\)/);
   assert.match(value.spec, /P2-4B3 — restart reconstruction \(inactive\)/);
 }
 
@@ -53,7 +53,7 @@ function fixture() {
     cache: "PLUGIN_PACKAGE_CACHE_DIRECTORY\nMAX_CACHED_PLUGIN_DIGESTS\nMAX_PROJECT_PLUGIN_CACHE_BYTES\nprepare_exact\nload_exact\ncreate_new(true)\nsync_all()\nfs::rename\ninspect_project_cache\nmake_tree_read_only\ncleanup_temporary\nCacheFailurePoint::AfterFirstFile\nCacheFailurePoint::BeforeRename\nCacheFailurePoint::AfterRename\n#[cfg(test)]",
     serverCargo: 'rho-extension-runtime = { path = "../rho-extension-runtime" }',
     serverLib: "pub mod plugin_package_cache;",
-    spec: "Active work package: none at the P2-4B1 checkpoint\nP2-4B1 local checkpoint — 2026-08-20\nP2-4B2 — durable first enable (inactive)\nP2-4B3 — restart reconstruction (inactive)",
+    spec: "Active work package: P2-4B2 only\nP2-4B1 local checkpoint — 2026-08-20\nP2-4B2 — durable first enable (active)\nP2-4B3 — restart reconstruction (inactive)",
   };
 }
 
@@ -64,7 +64,7 @@ if (process.argv.includes("--test")) {
     ["atomic rename", (value) => { value.cache = value.cache.replace("fs::rename", ""); }],
     ["cache bounds", (value) => { value.cache = value.cache.replace("MAX_PROJECT_PLUGIN_CACHE_BYTES", ""); }],
     ["ambient network", (value) => { value.cache = `reqwest::get\n${value.cache}`; }],
-    ["checkpoint", (value) => { value.spec = value.spec.replace("P2-4B1 checkpoint", "P2-4B2 checkpoint"); }],
+    ["active slice", (value) => { value.spec = value.spec.replace("P2-4B2 only", "P2-4B3 only"); }],
   ]) {
     const value = fixture();
     mutate(value);
