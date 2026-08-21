@@ -1,8 +1,10 @@
-# Local Plugin Authoring Foundation
+# Local Plugin Engineering Loop
 
 Status: active local-development contract; the project owner authorized rapid
 local iteration on 2026-08-21 and explicitly excluded CI and multi-platform
-work from the current development loop
+work from the current development loop; the owner clarified that the product
+goal is freely evolving, project-shaped software components rather than a
+traditional distribution/marketplace ecosystem
 
 Date: 2026-08-21
 Issue: [#104](https://github.com/YuLab-SMU/Rho/issues/104)
@@ -10,8 +12,8 @@ Owning implementation baseline:
 `docs/design/implemented-2026-08-14-plugin-runtime-phase-2-workspace-third-party-design.md`
 
 Change class: D3 because the work exposes the accepted plugin package and Guest
-ABI contracts to developers. Current-slice risk: R1 because it adds only a
-repository-local developer tool, fixture package, diagnostics, and tests. It
+ABI contracts to the local component engineering loop. Current-slice risk: R1
+because it adds only a repository-local tool, fixture component, diagnostics, and tests. It
 does not change runtime authority, persistence, desktop routing, permissions,
 or application behavior.
 
@@ -22,25 +24,46 @@ machine and not spend the current loop on CI or multi-platform gates. This is
 not a waiver that converts local evidence into release, public SDK, or
 multi-platform acceptance.
 
-Only F1 is active:
+F1 is locally accepted. F2 is now active:
 
-- add an Ark/Tauri-independent `rho-plugin-dev` command;
-- add one real project-local Manifest V2 example with a zero-permission Command;
-- prove build, package validation, dynamic-call-ID Guest ABI V2 activation, and
-  Command result validation locally;
-- cover focused rejection paths locally;
-- stop for review before adding Tool, Viewer, permissions, desktop UI,
-  distribution, or compatibility promises.
+- keep the Ark/Tauri-independent `rho-plugin-dev` loop from F1;
+- evolve the same exact Manifest V2 package from one zero-permission Command to
+  Command + Agent Tool + controlled Viewer;
+- make the one Wasm component dispatch the three contribution identities under
+  the same package digest and Guest ABI V2 instance;
+- add local smoke commands that validate Tool output schema and trusted
+  ViewerDocument output without broadening authority;
+- prove that a source change produces a new digest and that the rebuilt exact
+  package remains locally checkable and callable;
+- stop for review before permission-bearing calls or application integration.
 
-The broader #104 outcome remains intact. F2 will extend the same package and
-harness with Agent Tool and controlled Viewer contributions. F3 will add the
-read-only grant/revoke path and the real desktop workflow. Those packages are
-not authorized implicitly by F1.
+F3 will connect this locally evolved component to the existing exact-digest
+update/rollback lifecycle and then add the minimum read-only grant/revoke path.
+It is not authorized implicitly by F2.
+
+## Product Direction
+
+Rho pluginization is not currently optimized for a public store, publisher
+network, or traditional third-party distribution funnel. Its nearer purpose is
+“千人千面”: stable trusted infrastructure underneath project-shaped components
+that can be recomposed and evolved without editing the kernel for every user or
+workflow.
+
+The engineering loop is therefore:
+
+```text
+component source -> local build -> authoritative check -> isolated smoke
+                 -> exact digest -> UI / Agent / Viewer contribution
+                 -> changed source -> new candidate digest -> review / rollback
+```
+
+Marketplace, signing, publisher identity, catalog, and global distribution are
+not prerequisites for this loop and are not current milestones.
 
 ## Evidence And Problem
 
 The accepted Phase 2 implementation already contains the required runtime
-primitives, but the author path is not usable:
+primitives, but the component engineering loop was not usable:
 
 - WAT packages and Manifest V2 examples exist only as private test helpers in
   `desktop/src-tauri/src/workspace_plugins.rs`;
@@ -56,7 +79,7 @@ primitives, but the author path is not usable:
 - there is no checked-in example project or local package checker.
 
 The shortest path is to expose the already accepted contracts through a small
-developer-only crate rather than route author validation through the desktop.
+local engineering crate rather than route component validation through the desktop.
 
 ## Goals
 
@@ -74,7 +97,7 @@ F1 will:
    trusted `PluginCommandResultV1` contract;
 6. emit concise plugin ID, digest, ABI, contribution, and result evidence while
    never printing capability handles or project file contents;
-7. add one checked-in example project that can be built, checked, and smoked
+7. add one checked-in component project that can be built, checked, and smoked
    using three short local commands;
 8. make `HostProtocolError` usable through ordinary Rust error propagation
    without changing its serialized shape or stable codes.
@@ -91,8 +114,9 @@ F1 does not add or authorize:
 - filesystem, Workspace R, network, write, process, arbitrary R, Provider, or
   credential authority;
 - install, catalog, marketplace, signing, publisher, global plugin, or update
-  distribution behavior;
-- Agent-authored or self-evolving plugins;
+  distribution behavior; these are not needed for the current product goal;
+- automatic component evolution in F1/F2; these slices build the deterministic
+  substrate that a later evolution controller must reuse;
 - a second manifest, digest, schema, Wasm, or policy implementation.
 
 ## Commands And Contracts
@@ -103,6 +127,8 @@ The local interface is:
 cargo run -p rho-plugin-dev -- build <project-root>
 cargo run -p rho-plugin-dev -- check <project-root>
 cargo run -p rho-plugin-dev -- smoke-command <project-root> <plugin-id> <contribution-id>
+cargo run -p rho-plugin-dev -- smoke-tool <project-root> <plugin-id> <contribution-id>
+cargo run -p rho-plugin-dev -- smoke-viewer <project-root> <plugin-id> <contribution-id>
 ```
 
 ### `build`
@@ -128,18 +154,20 @@ cargo run -p rho-plugin-dev -- smoke-command <project-root> <plugin-id> <contrib
 - reports `check_ok`, plugin ID, version, digest, runtime kind, and contribution
   count.
 
-### `smoke-command`
+### `smoke-command`, `smoke-tool`, And `smoke-viewer`
 
 - first performs `check`;
-- selects one exact plugin ID and one declared Command contribution;
-- rejects packages that request permissions or Commands whose input schema does
-  not accept `{}`;
+- selects one exact plugin ID and one declared contribution of the requested
+  kind;
+- rejects packages that request permissions, kind mismatches, or contributions
+  whose input schema does not accept `{}`;
 - instantiates the exact snapshotted entry with the accepted no-import Wasm
   host, negotiates the current host protocol, and activates Guest ABI V2;
 - invokes with the ordinary host call-ID source, not a fixed test ID;
 - accepts only a terminal Complete step;
-- validates the result with the declared output schema and
-  `PluginCommandResultV1`;
+- validates every result with its declared output schema;
+- additionally validates Commands with `PluginCommandResultV1` and Viewers with
+  `ViewerDocumentV1`; Tool output remains bound to its declared closed schema;
 - disposes the host before returning `smoke_ok`.
 
 The checked-in WAT example must copy the call ID from the actual host envelope;
@@ -158,9 +186,10 @@ The binary exits non-zero and prints one bounded `plugin_dev_error:` line for:
 - malformed, imported/WASI, missing-export, wrong-export, trapping, rejected,
   or non-V2 Wasm during smoke;
 - unknown plugin or contribution;
-- non-Command, permission-bearing, or non-empty-input smoke request;
-- guest broker request, guest error, invalid output schema, or invalid trusted
-  Command result.
+- contribution-kind mismatch, permission-bearing, or non-empty-input smoke
+  request;
+- guest broker request, guest error, invalid output schema, invalid trusted
+  Command result, or invalid trusted ViewerDocument.
 
 Debug output must not include handles, source contents, arbitrary guest output,
 or unbounded project paths.
@@ -196,8 +225,8 @@ application behavior or R package contract, so it does not bump the application
 or R package versions and does not add a `NEWS.md` entry.
 
 The document remains active after local F1 completion because #104 still owns
-Tool, Viewer, read-only permission, and real application author workflow
-packages. F1 creates no release or public-distribution decision.
+Tool, Viewer, exact-digest evolution, read-only permission, and real application
+component workflow packages. F1 creates no release or public-distribution decision.
 
 ## F1 Definition Of Done
 
@@ -215,8 +244,8 @@ F1 is locally complete when:
 ## F1 Local Checkpoint — 2026-08-21
 
 F1 is implemented and passes its local stop gate. The broader document remains
-active because F2 Tool/Viewer and F3 read-only permission/application workflow
-are still open.
+active because F2 multi-surface components and F3 exact-digest evolution plus
+read-only permission/application workflow are still open.
 
 Implemented:
 
@@ -277,6 +306,99 @@ Explicitly unrun: every CI/remote check, every non-local platform check, full
 workspace/desktop/Tauri/Ark/R suite, installed application, UI/manual workflow,
 installer, signing, publication, and release gate. None is claimed passing.
 
-Next stop: F2 may extend this same local example and harness with one Agent Tool
-and one trusted Viewer only after a separate local package activation. F3
-permission and real-application work remains later and separately gated.
+Next stop: F2 extends this same component and harness with one Agent Tool and one
+trusted Viewer under the same digest. F3 exact-digest update/rollback,
+permission, and real-application work remains later and separately gated.
+
+## F2 Local Contract — Active 2026-08-21
+
+Owner clarification: the purpose of this stream is a freely evolving local
+component system, not an author marketplace. F2 therefore validates one package
+as a multi-surface component:
+
+- `ui.command.local_hello` proves direct trusted-shell invocation semantics;
+- `tool.local_status` proves the same component can project a bounded Agent
+  capability;
+- `ui.viewer.local_status` proves the same component can produce a controlled
+  ViewerDocument;
+- all three declarations share one manifest, one Wasm entry, one package
+  digest, and one no-import Guest ABI V2 boundary;
+- changing checked-in component source must change the authoritative digest;
+  after rebuild, all three smokes must bind to and pass under the new digest.
+
+F2 may add `smoke-tool` and `smoke-viewer` wrappers plus contribution-aware
+dispatch inside the example WAT. It may not add a second runtime entry,
+permission, Store state, desktop route, Agent implementation change, arbitrary
+UI, or distribution concept.
+
+F2 local acceptance requires:
+
+- build/check reports exactly three contributions for the example;
+- Command, Tool, and Viewer smokes all pass with the same digest and ordinary
+  host call IDs;
+- Tool output passes its closed schema and Viewer output passes both its closed
+  schema and `ViewerDocumentV1`;
+- CLI success output reports only kind/contract evidence and no guest payload;
+- wrong-kind selection and stale Tool output schema fail with stable codes;
+- a source-only change changes the digest, rebuild succeeds, and all three
+  surfaces pass under the new digest;
+- focused local tests, strict clippy, rustfmt, and diff checks pass without any
+  CI, multi-platform, desktop, Ark, R, version, or NEWS work.
+
+## F2 Local Checkpoint — 2026-08-21
+
+F2 is implemented and passes its local stop gate.
+
+Implemented:
+
+- the same `org.yulab.rho.local-hello` package now declares Command
+  `ui.command.local_hello`, Agent Tool `tool.local_status`, and Viewer
+  `ui.viewer.local_status` under one Manifest V2 and one package digest;
+- the no-import WAT component uses bounded core-Wasm byte loops to recognize
+  the requested contribution ID, copy the ordinary host-generated call ID, and
+  return the contribution-specific terminal result without bulk memory, WASI,
+  imports, or multiple runtime entries;
+- `rho-plugin-dev` now exposes `smoke-command`, `smoke-tool`, and
+  `smoke-viewer` over one shared admission/activation/disposal path;
+- all three paths require zero permissions, `{}` input acceptance, exact
+  snapshot identity, Guest ABI V2, a terminal Complete result, and declared
+  output-schema validation;
+- Command additionally passes `PluginCommandResultV1`; Viewer additionally
+  passes `ViewerDocumentV1`; Tool remains constrained by its closed schema;
+- successful CLI output reports contribution kind and validated result contract
+  only, never the guest payload.
+
+Local evidence:
+
+- the rebuilt 1,138-byte Wasm entry has SHA-256
+  `44a615034567ed855b5357cf3187b5d5466d5dfa87c691c2c0df64ada9d1fb4e`;
+- authoritative package check reports digest
+  `de293a98e0bd24c08ebe75c4e4a7d09e3410fb19e7dd26a104eca45ea364fa3d`
+  and exactly three contributions;
+- all three documented smoke commands pass with that same digest and ABI 2;
+- `cargo test -p rho-plugin-dev --no-fail-fast` passes 1 unit and 7 expanded
+  integration tests, including all-three-surface same-digest behavior,
+  source-change digest evolution, rebuild and all-three re-smoke;
+- wrong-kind selection and a stale Tool output schema fail with stable errors;
+- strict `rho-plugin-dev` clippy, rustfmt, and diff checks pass locally.
+
+Contract review:
+
+- F2 changed only the local engineering crate, fixture component, active
+  contract, cross-review row, and generated example Wasm;
+- no authority, permission, Store, application, desktop, Agent implementation,
+  Viewer renderer, Tauri, Ark, R, version, NEWS, CI, platform, installer,
+  release, marketplace, author, publisher, or signature surface changed;
+- the fixture's contribution-ID dispatch is deliberately a minimal versioned
+  component example, not a general guest SDK or long-term ABI promise;
+- F2 proves component recomposition across UI/Agent/Viewer and digest evolution;
+  it does not yet publish a candidate into the application's durable
+  update/rollback lifecycle.
+
+Explicitly unrun remains unchanged: every CI/remote, multi-platform,
+desktop/Tauri/Ark/R, installed-app, packaging, signing, publication, and release
+check. None is claimed passing.
+
+Next engineering stop: F3 should compose a locally checked candidate with the
+already implemented exact-digest update/rollback lifecycle without creating a
+second cache, second state machine, or any marketplace/distribution layer.

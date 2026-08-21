@@ -13,6 +13,14 @@
     {
       "capability": "ui.command.local_hello",
       "contract_major": 1
+    },
+    {
+      "capability": "tool.local_status",
+      "contract_major": 1
+    },
+    {
+      "capability": "ui.viewer.local_status",
+      "contract_major": 1
     }
   ],
   "permissions": [],
@@ -44,6 +52,92 @@
         "required": [
           "kind",
           "message"
+        ]
+      }
+    },
+    {
+      "id": "tool.local_status",
+      "kind": "tool",
+      "contractMajor": 1,
+      "label": "Local component status",
+      "purpose": "Return the local component status to the Agent",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "component": {
+            "type": "string",
+            "enum": [
+              "local-hello"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready"
+            ]
+          }
+        },
+        "required": [
+          "component",
+          "status"
+        ]
+      }
+    },
+    {
+      "id": "ui.viewer.local_status",
+      "kind": "viewer",
+      "contractMajor": 1,
+      "label": "Open local component status",
+      "purpose": "Render the local component status in a trusted Viewer",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "contract": {
+            "type": "string",
+            "enum": [
+              "rho.plugin_viewer_document.v1"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "blocks": {
+            "type": "array",
+            "maxItems": 128,
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "text"
+                  ]
+                },
+                "text": {
+                  "type": "string",
+                  "maxLength": 65536
+                }
+              },
+              "required": [
+                "kind",
+                "text"
+              ]
+            }
+          }
+        },
+        "required": [
+          "contract",
+          "title",
+          "blocks"
         ]
       }
     }

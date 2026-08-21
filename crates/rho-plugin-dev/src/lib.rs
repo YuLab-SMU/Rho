@@ -14,8 +14,8 @@ use rho_extension_runtime::{
     ActivationGeneration, ContributionKind, GuestStep, HOST_PROTOCOL_VERSION, HostFrame,
     HostInstanceId, HostMessage, HostRequestId, HostResponse, MANIFEST_NAME, MAX_MANIFEST_BYTES,
     MAX_PACKAGE_FILE_BYTES, PLUGINS_DIR, PluginCommandResultV1, RuntimeKind, ScopeId,
-    WasmHostIdentity, WasmPluginHost, WorkspacePluginManifest, discover_workspace_plugins,
-    snapshot_workspace_plugin_package,
+    ViewerDocumentV1, WasmHostIdentity, WasmPluginHost, WorkspacePluginManifest,
+    discover_workspace_plugins, snapshot_workspace_plugin_package,
 };
 use serde::Serialize;
 use serde_json::json;
@@ -76,13 +76,17 @@ pub struct BuildReport {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct CommandSmokeReport {
+pub struct ContributionSmokeReport {
     pub plugin_id: String,
     pub contribution_id: String,
+    pub contribution_kind: String,
     pub digest: String,
     pub guest_abi: u64,
+    pub result_contract: String,
     pub result: serde_json::Value,
 }
+
+pub type CommandSmokeReport = ContributionSmokeReport;
 
 pub fn build_project(project_root: &Path) -> Result<BuildReport, PluginDevError> {
     let project_root = checked_project_root(project_root)?;
@@ -211,6 +215,50 @@ pub fn smoke_command(
     plugin_id: &str,
     contribution_id: &str,
 ) -> Result<CommandSmokeReport, PluginDevError> {
+    smoke_contribution(
+        project_root,
+        plugin_id,
+        contribution_id,
+        ContributionKind::Command,
+        "user_command",
+    )
+}
+
+pub fn smoke_tool(
+    project_root: &Path,
+    plugin_id: &str,
+    contribution_id: &str,
+) -> Result<ContributionSmokeReport, PluginDevError> {
+    smoke_contribution(
+        project_root,
+        plugin_id,
+        contribution_id,
+        ContributionKind::Tool,
+        "agent_tool",
+    )
+}
+
+pub fn smoke_viewer(
+    project_root: &Path,
+    plugin_id: &str,
+    contribution_id: &str,
+) -> Result<ContributionSmokeReport, PluginDevError> {
+    smoke_contribution(
+        project_root,
+        plugin_id,
+        contribution_id,
+        ContributionKind::Viewer,
+        "trusted_viewer",
+    )
+}
+
+fn smoke_contribution(
+    project_root: &Path,
+    plugin_id: &str,
+    contribution_id: &str,
+    expected_kind: ContributionKind,
+    origin: &'static str,
+) -> Result<ContributionSmokeReport, PluginDevError> {
     let project_root = checked_project_root(project_root)?;
     check_project(&project_root)?;
     let report = discover_workspace_plugins(&project_root)
@@ -247,10 +295,19 @@ pub fn smoke_command(
                 format!("unknown contribution {contribution_id}"),
             )
         })?;
-    if contribution.kind != ContributionKind::Command {
+    if contribution.kind != expected_kind {
+        let code = match expected_kind {
+            ContributionKind::Command => "contribution_not_command",
+            ContributionKind::Tool => "contribution_not_tool",
+            ContributionKind::Viewer => "contribution_not_viewer",
+            _ => "contribution_kind_mismatch",
+        };
         return Err(PluginDevError::new(
-            "contribution_not_command",
-            format!("{contribution_id} is not a Command contribution"),
+            code,
+            format!(
+                "{contribution_id} is {:?}, not {:?}",
+                contribution.kind, expected_kind
+            ),
         ));
     }
     let input = json!({});
@@ -326,7 +383,7 @@ pub fn smoke_command(
                     "package_digest": plugin.digest,
                     "activation_generation": 1,
                     "host_instance_id": host.identity().host_instance_id(),
-                    "origin": "user_command",
+                    "origin": origin,
                     "input": input,
                     "capability_handles": [],
                     "deadline_millis": 30000,
@@ -351,19 +408,40 @@ pub fn smoke_command(
         output_schema
             .validate_instance(&result)
             .map_err(|error| PluginDevError::new("output_schema_rejected", error.to_string()))?;
-        PluginCommandResultV1::parse(result.clone())
-            .map_err(|error| PluginDevError::new("command_result_rejected", error.to_string()))?;
-        Ok(result)
+        let result_contract = match expected_kind {
+            ContributionKind::Command => {
+                let command = PluginCommandResultV1::parse(result.clone()).map_err(|error| {
+                    PluginDevError::new("command_result_rejected", error.to_string())
+                })?;
+                match command {
+                    PluginCommandResultV1::Notification { .. } => "notification",
+                    PluginCommandResultV1::ViewerDocument { .. } => "viewer_document",
+                    PluginCommandResultV1::ArtifactRef { .. } => "artifact_ref",
+                }
+                .to_string()
+            }
+            ContributionKind::Tool => "declared_output_schema".to_string(),
+            ContributionKind::Viewer => {
+                let document = ViewerDocumentV1::parse(result.clone()).map_err(|error| {
+                    PluginDevError::new("viewer_document_rejected", error.to_string())
+                })?;
+                document.contract
+            }
+            _ => unreachable!("only Command, Tool and Viewer are admitted"),
+        };
+        Ok((result, result_contract))
     })();
     let dispose_result = dispose_host(&mut host);
-    let result = call_result?;
+    let (result, result_contract) = call_result?;
     dispose_result?;
 
-    Ok(CommandSmokeReport {
+    Ok(ContributionSmokeReport {
         plugin_id: plugin_id.to_string(),
         contribution_id: contribution_id.to_string(),
+        contribution_kind: format!("{expected_kind:?}").to_lowercase(),
         digest: snapshot.digest.to_string(),
         guest_abi: host.guest_abi_version(),
+        result_contract,
         result,
     })
 }

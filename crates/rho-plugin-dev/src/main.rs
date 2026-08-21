@@ -2,7 +2,7 @@ use std::env;
 use std::path::Path;
 use std::process::ExitCode;
 
-use rho_plugin_dev::{build_project, check_project, smoke_command};
+use rho_plugin_dev::{build_project, check_project, smoke_command, smoke_tool, smoke_viewer};
 
 fn main() -> ExitCode {
     match run(env::args().skip(1).collect()) {
@@ -40,21 +40,34 @@ fn run(arguments: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
         }
         [command, project_root, plugin_id, contribution_id] if command == "smoke-command" => {
             let report = smoke_command(Path::new(project_root), plugin_id, contribution_id)?;
-            println!(
-                "smoke_ok plugin={} contribution={} digest={} abi={} result_kind={}",
-                report.plugin_id,
-                report.contribution_id,
-                report.digest,
-                report.guest_abi,
-                report.result["kind"].as_str().unwrap_or("validated")
-            );
+            print_smoke(report);
+        }
+        [command, project_root, plugin_id, contribution_id] if command == "smoke-tool" => {
+            let report = smoke_tool(Path::new(project_root), plugin_id, contribution_id)?;
+            print_smoke(report);
+        }
+        [command, project_root, plugin_id, contribution_id] if command == "smoke-viewer" => {
+            let report = smoke_viewer(Path::new(project_root), plugin_id, contribution_id)?;
+            print_smoke(report);
         }
         _ => {
             return Err(
-                "usage: rho-plugin-dev <build|check> <project-root> | rho-plugin-dev smoke-command <project-root> <plugin-id> <contribution-id>"
+                "usage: rho-plugin-dev <build|check> <project-root> | rho-plugin-dev <smoke-command|smoke-tool|smoke-viewer> <project-root> <plugin-id> <contribution-id>"
                     .into(),
             );
         }
     }
     Ok(())
+}
+
+fn print_smoke(report: rho_plugin_dev::ContributionSmokeReport) {
+    println!(
+        "smoke_ok plugin={} contribution={} kind={} digest={} abi={} result_contract={}",
+        report.plugin_id,
+        report.contribution_id,
+        report.contribution_kind,
+        report.digest,
+        report.guest_abi,
+        report.result_contract
+    );
 }

@@ -3,10 +3,12 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use rho_plugin_dev::{build_project, check_project, smoke_command};
+use rho_plugin_dev::{build_project, check_project, smoke_command, smoke_tool, smoke_viewer};
 
 const PLUGIN_ID: &str = "org.yulab.rho.local-hello";
 const COMMAND_ID: &str = "ui.command.local_hello";
+const TOOL_ID: &str = "tool.local_status";
+const VIEWER_ID: &str = "ui.viewer.local_status";
 
 fn example_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -70,15 +72,23 @@ fn example_build_check_and_dynamic_command_smoke_form_one_local_loop() {
 
     let checked = check_project(project.path()).unwrap();
     assert_eq!(checked.plugins[0].plugin_id, PLUGIN_ID);
-    assert_eq!(checked.plugins[0].contribution_count, 1);
+    assert_eq!(checked.plugins[0].contribution_count, 3);
     let original_digest = checked.plugins[0].digest.clone();
 
     let first = smoke_command(project.path(), PLUGIN_ID, COMMAND_ID).unwrap();
     let second = smoke_command(project.path(), PLUGIN_ID, COMMAND_ID).unwrap();
+    let tool = smoke_tool(project.path(), PLUGIN_ID, TOOL_ID).unwrap();
+    let viewer = smoke_viewer(project.path(), PLUGIN_ID, VIEWER_ID).unwrap();
     assert_eq!(first.guest_abi, 2);
     assert_eq!(first.result["kind"], "notification");
     assert_eq!(first.result["message"], "Rho local plugin is running");
     assert_eq!(second.result, first.result);
+    assert_eq!(tool.digest, first.digest);
+    assert_eq!(tool.result["component"], "local-hello");
+    assert_eq!(tool.result["status"], "ready");
+    assert_eq!(viewer.digest, first.digest);
+    assert_eq!(viewer.result["contract"], "rho.plugin_viewer_document.v1");
+    assert_eq!(viewer.result["blocks"][0]["kind"], "text");
 
     let wat_path = plugin_path(project.path(), "src/plugin.wat");
     writeln!(
@@ -88,6 +98,26 @@ fn example_build_check_and_dynamic_command_smoke_form_one_local_loop() {
     .unwrap();
     let changed = check_project(project.path()).unwrap();
     assert_ne!(changed.plugins[0].digest, original_digest);
+    let evolved = build_project(project.path()).unwrap();
+    assert_eq!(evolved.check.plugins[0].digest, changed.plugins[0].digest);
+    assert_eq!(
+        smoke_command(project.path(), PLUGIN_ID, COMMAND_ID)
+            .unwrap()
+            .digest,
+        changed.plugins[0].digest
+    );
+    assert_eq!(
+        smoke_tool(project.path(), PLUGIN_ID, TOOL_ID)
+            .unwrap()
+            .digest,
+        changed.plugins[0].digest
+    );
+    assert_eq!(
+        smoke_viewer(project.path(), PLUGIN_ID, VIEWER_ID)
+            .unwrap()
+            .digest,
+        changed.plugins[0].digest
+    );
 }
 
 #[test]
@@ -116,9 +146,39 @@ fn cli_reports_the_same_checked_and_smoked_package() {
     assert!(smoke.status.success());
     let smoke_stdout = String::from_utf8(smoke.stdout).unwrap();
     assert!(smoke_stdout.contains("smoke_ok"));
-    assert!(smoke_stdout.contains("result_kind=notification"));
+    assert!(smoke_stdout.contains("kind=command"));
+    assert!(smoke_stdout.contains("result_contract=notification"));
     assert!(!smoke_stdout.contains("Rho local plugin is running"));
     assert!(!smoke_stdout.contains("handle."));
+
+    for (command, contribution, expected) in [
+        (
+            "smoke-tool",
+            TOOL_ID,
+            "result_contract=declared_output_schema",
+        ),
+        (
+            "smoke-viewer",
+            VIEWER_ID,
+            "result_contract=rho.plugin_viewer_document.v1",
+        ),
+    ] {
+        let output = Command::new(binary)
+            .args([
+                command,
+                project.path().to_str().unwrap(),
+                PLUGIN_ID,
+                contribution,
+            ])
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        assert!(stdout.contains("smoke_ok"));
+        assert!(stdout.contains(expected));
+        assert!(!stdout.contains("Rho local"));
+        assert!(!stdout.contains("handle."));
+    }
 }
 
 #[test]
@@ -208,6 +268,31 @@ fn build_rejects_missing_source_and_smoke_rejects_permissions() {
             .unwrap_err()
             .code(),
         "contribution_not_command"
+    );
+    let wrong_kind = copied_example();
+    assert_eq!(
+        smoke_tool(wrong_kind.path(), PLUGIN_ID, COMMAND_ID)
+            .unwrap_err()
+            .code(),
+        "contribution_not_tool"
+    );
+    assert_eq!(
+        smoke_viewer(wrong_kind.path(), PLUGIN_ID, TOOL_ID)
+            .unwrap_err()
+            .code(),
+        "contribution_not_viewer"
+    );
+
+    let stale_tool_schema = copied_example();
+    let mut value = manifest(stale_tool_schema.path());
+    value["contributions"][1]["outputSchema"]["properties"]["status"]["enum"] =
+        serde_json::json!(["stale"]);
+    write_manifest(stale_tool_schema.path(), &value);
+    assert_eq!(
+        smoke_tool(stale_tool_schema.path(), PLUGIN_ID, TOOL_ID)
+            .unwrap_err()
+            .code(),
+        "output_schema_rejected"
     );
 }
 
