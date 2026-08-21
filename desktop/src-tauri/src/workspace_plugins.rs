@@ -5688,7 +5688,7 @@ fn plugin_view(
                         .to_string(),
                 ),
                 "update_pending" => Some(
-                    "The package digest changed. Update review is not available until the trusted update slice."
+                    "The package digest changed. Review the exact local Update before replacing the accepted runtime."
                         .to_string(),
                 ),
                 "blocked" => Some(
@@ -11341,6 +11341,18 @@ mod tests {
         assert_ne!(
             lifecycle.accepted_digest.as_deref(),
             lifecycle.pending_digest.as_deref()
+        );
+        let listed = registry.list(&context, &mut store).unwrap();
+        let projected = listed
+            .plugins
+            .iter()
+            .find(|plugin| plugin.plugin_id == "org.example.plugin")
+            .unwrap();
+        assert_eq!(
+            projected.message.as_deref(),
+            Some(
+                "The package digest changed. Review the exact local Update before replacing the accepted runtime."
+            )
         );
         registry.invalidate_project(&context.project_root);
         let state = registry

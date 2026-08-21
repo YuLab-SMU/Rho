@@ -15631,7 +15631,7 @@ async function maybeApplyPreviewScenario() {
       mockWorkspacePlugins[0].transition_id = "transition.enable.preview";
       if (status === "update_pending") mockWorkspacePlugins[0].accepted_digest = "b".repeat(64);
       mockWorkspacePlugins[0].message = status === "update_pending"
-        ? "The package digest changed. Update review is not available until the trusted update slice."
+        ? "The package digest changed. Review the exact local Update before replacing the accepted runtime."
         : status === "blocked"
           ? "The plugin is blocked and remains non-routable pending trusted recovery."
           : status === "crashed"

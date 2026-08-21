@@ -1,8 +1,9 @@
 # Local Plugin Engineering Loop
 
-Status: active local-development contract; the project owner authorized rapid
-local iteration on 2026-08-21 and explicitly excluded CI and multi-platform
-work from the current development loop; the owner clarified that the product
+Status: implemented and locally accepted on 2026-08-21; F1 build/check,
+F2 same-component UI/Agent/Viewer, F3A immutable baseline/candidate comparison,
+and exact-debug F3B Update/Rollback manual acceptance are complete; the owner
+explicitly excluded CI and multi-platform work and clarified that the product
 goal is freely evolving, project-shaped software components rather than a
 traditional distribution/marketplace ecosystem
 
@@ -574,3 +575,85 @@ edit -> build -> check -> smoke UI/Agent/Viewer -> immutable baseline compare
 The next implementation stream should address component evolution policy and
 automation only if it composes these accepted identities. Marketplace, author,
 publisher, signing, and distribution work remains unnecessary.
+
+## F3B Local UI Wording Repair — Implemented 2026-08-21
+
+Exact-debug manual review reproduced one stale phase-era message: an
+`update_pending` plugin displayed an enabled Update button while its message
+claimed Update review was unavailable until a future trusted slice. The trusted
+Update slice is already implemented, so the message contradicted the available
+action.
+
+Defect invariant: whenever `update_pending` exposes the trusted Update action,
+the message must direct the user to review the exact local candidate and must
+not claim the action is unavailable. Real Tauri projection and browser/mock
+projection must use the same truthful copy.
+
+This is a D1/R1 wording correction with no state, authority, protocol, schema,
+permission, or sequencing change. Add a deterministic trusted-Update contract
+assertion that rejects the obsolete sentence. Application version and NEWS are
+deferred to the next named integration candidate; this local branch must not be
+distributed under the existing candidate identity.
+
+## Exact-Debug Manual Acceptance — 2026-08-21
+
+The actual local application workflow passed using the exact checkout debug
+executable at `target/debug/rho-desktop`.
+
+To avoid Computer Use selecting another installed Rho with the same bundle ID,
+the exact executable was launched through a temporary uniquely identified
+`.app` whose only executable was a symlink to that path. Process inspection
+resolved the running command to the exact requested debug binary; no installed
+or release Rho desktop process was running during acceptance.
+
+Local prerequisites and observations:
+
+- repository-pinned Ark `0.1.252` was downloaded, checksum-verified, and staged
+  by `scripts/bootstrap-ark-macos.sh`; R 4.5.2 arm64 started successfully;
+- the debug application restored Workspace R, opened
+  `examples/workspace-plugin-minimal`, discovered `Local Hello` disabled at
+  digest `de293a98e0bd...`, and enabled it to desired-enabled/observed-active;
+- Command invocation displayed `Rho local plugin is running` in the real shell;
+- Viewer invocation rendered `Rho local viewer is running` through the trusted
+  Viewer block renderer with exact plugin/digest origin;
+- the Agent layout opened with project R ready. No Provider request was sent;
+  Tool execution remained verified by the local ABI/schema smoke and existing
+  Agent projection tests, avoiding any external data transmission;
+- a reversible WAT source comment plus local build produced candidate digest
+  `432f6e9a5e49...`; the real UI showed `update_pending` while contributions
+  remained routed to baseline `de293a98e0bd...`;
+- the trusted Update review displayed the full accepted and candidate digests,
+  then expected-old Update activated `432f6e9a5e49...`; its Command route passed;
+- trusted Rollback displayed current `432f6e9a5e49...` and cached target
+  `de293a98e0bd...`, then reactivated the cached baseline while leaving mutable
+  candidate source visible as designed;
+- the temporary source comment was removed and the component rebuilt to exact
+  digest `de293a98e0bd...`; Refresh returned the real UI to Enabled/active and
+  the Git worktree returned to the committed component bytes;
+- after the wording repair was rebuilt, a second reversible candidate
+  `f72421f0640b...` showed the truthful message “Review the exact local Update
+  before replacing the accepted runtime.” The obsolete unavailable-review text
+  did not appear. Source and generated Wasm were then restored again.
+
+The app data retains the enabled example component and verified rollback cache
+as local development state. Project source and repository-tracked generated
+bytes are clean.
+
+## Final Local Handoff
+
+The local engineering loop is implemented:
+
+```text
+edit -> build -> authoritative check -> UI/Agent/Viewer smoke
+     -> immutable baseline/candidate comparison
+     -> real update_pending -> exact Update -> cached Rollback
+```
+
+No CI, remote check, multi-platform validation, marketplace, author/publisher,
+signature, catalog, global distribution, or release action was performed.
+
+Version/NEWS decision: no application candidate is created by this local
+handoff. The user-visible wording fix and any decision to distribute these
+local engineering capabilities require the next unused synchronized
+application version and NEWS update in a separately authorized integration
+candidate. Until then this branch is local-development-only.

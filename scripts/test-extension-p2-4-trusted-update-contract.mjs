@@ -19,6 +19,7 @@ export function validateP24TrustedUpdate(value) {
     "update_denial_or_changed_candidate_preserves_old_route_and_pointer",
     "update_rejects_stale_revision_digest_and_foreign_project_before_cas",
     "exact_update_isolates_two_projects_with_same_plugin_id",
+    "Review the exact local Update before replacing the accepted runtime.",
   ]) assert.ok(value.runtime.includes(marker), `E2 trusted Update lost ${marker}`);
   for (const marker of [
     "pub(crate) async fn accept_workspace_plugin_update",
@@ -33,6 +34,7 @@ export function validateP24TrustedUpdate(value) {
     "expectedOldDigest",
     "candidateDigest",
     "not a marketplace",
+    "Review the exact local Update before replacing the accepted runtime.",
   ]) assert.ok(value.frontend.includes(marker), `E2 UI/mock lost ${marker}`);
   for (const marker of [
     'id="pluginUpdateView"',
@@ -52,13 +54,15 @@ export function validateP24TrustedUpdate(value) {
   ]) assert.ok(value.installed.includes(marker), `installed E2 smoke lost ${marker}`);
   assert.match(value.spec, /P2-4E2 — trusted Update \(locally complete\)/);
   assert.doesNotMatch(value.commands, /\binstall_workspace_plugin\b/, "E2 contract saw install authority");
+  assert.doesNotMatch(value.runtime, /Update review is not available/, "real Update copy is stale");
+  assert.doesNotMatch(value.frontend, /Update review is not available/, "mock Update copy is stale");
 }
 
 function fixture() {
   return {
-    runtime: "WorkspacePluginUpdateInput\nPendingActivationKind::Upgrade\npub(crate) fn request_update(\nworkspace plugin Update is stale after a project change\nworkspace plugin Update pointers are stale\nkind: \"upgrade\"\nupdate_permission_request_failed\nactivate_plugin_replacement_durable\nrevoke_exact_durable_grants\n\"plugin_updated\"\ntrusted_update_accepts_only_current_candidate_and_revokes_old_digest_grants\nupdate_denial_or_changed_candidate_preserves_old_route_and_pointer\nupdate_rejects_stale_revision_digest_and_foreign_project_before_cas\nexact_update_isolates_two_projects_with_same_plugin_id",
+    runtime: "WorkspacePluginUpdateInput\nPendingActivationKind::Upgrade\npub(crate) fn request_update(\nworkspace plugin Update is stale after a project change\nworkspace plugin Update pointers are stale\nkind: \"upgrade\"\nupdate_permission_request_failed\nactivate_plugin_replacement_durable\nrevoke_exact_durable_grants\n\"plugin_updated\"\ntrusted_update_accepts_only_current_candidate_and_revokes_old_digest_grants\nupdate_denial_or_changed_candidate_preserves_old_route_and_pointer\nupdate_rejects_stale_revision_digest_and_foreign_project_before_cas\nexact_update_isolates_two_projects_with_same_plugin_id\nReview the exact local Update before replacing the accepted runtime.",
     commands: "pub(crate) async fn accept_workspace_plugin_update\nproject_transition_gate.lock().await\n.request_update(",
-    frontend: "command === \"accept_workspace_plugin_update\"\nreviewWorkspacePluginUpdate(pluginId)\nconfirmWorkspacePluginUpdate()\ndata-plugin-update\nexpectedOldDigest\ncandidateDigest\nnot a marketplace",
+    frontend: "command === \"accept_workspace_plugin_update\"\nreviewWorkspacePluginUpdate(pluginId)\nconfirmWorkspacePluginUpdate()\ndata-plugin-update\nexpectedOldDigest\ncandidateDigest\nnot a marketplace\nReview the exact local Update before replacing the accepted runtime.",
     html: 'id="pluginUpdateView"\nid="pluginUpdateIdentity"\nid="pluginUpdateConfirm"\nThis is not a marketplace',
     workspace: 'version = "0.4.1-dev.11"',
     tauri: '{"version":"0.4.1-dev.11"}',
@@ -74,6 +78,10 @@ if (process.argv.includes("--test")) {
   for (const [name, mutate] of [
     ["fresh grants", (value) => { value.runtime = value.runtime.replace("revoke_exact_durable_grants", ""); }],
     ["project gate", (value) => { value.commands = value.commands.replace("project_transition_gate.lock().await", ""); }],
+    ["truthful copy", (value) => {
+      value.runtime = value.runtime.replace("Review the exact local Update before replacing the accepted runtime.", "Update review is not available");
+      value.frontend = value.frontend.replace("Review the exact local Update before replacing the accepted runtime.", "Update review is not available");
+    }],
     ["mock", (value) => { value.frontend = value.frontend.replace('command === "accept_workspace_plugin_update"', ""); }],
     ["disclaimer", (value) => { value.html = value.html.replace("This is not a marketplace", ""); }],
     ["installed", (value) => { value.installed = value.installed.replace('report["update_expected_old_cas"] = json!(true)', ""); }],
