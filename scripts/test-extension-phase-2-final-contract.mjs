@@ -135,7 +135,7 @@ if (process.argv.includes("--test")) {
     tauri: read("desktop/src-tauri/tauri.conf.json"),
     packageJson: read("desktop/package.json"),
     news: read("NEWS.md"),
-    spec: read("docs/plans/active-2026-08-20-p2-4-plugin-lifecycle-recovery-upgrade-spec.md"),
+    spec: read("docs/plans/implemented-2026-08-20-p2-4-plugin-lifecycle-recovery-upgrade-spec.md"),
     commands: read("desktop/src-tauri/src/commands/plugins.rs"),
     frontend: read("desktop/dist/app.js"),
   });

@@ -34,7 +34,7 @@ Cross-reviewed against:
 - Phase 1 in [PR #75](https://github.com/YuLab-SMU/Rho/pull/75), especially
   capability identity, scope generation, candidate publication, reversible
   effects, quiesce/dispose, and rollback;
-- `docs/design/active-2026-08-14-plugin-runtime-phase-2-workspace-third-party-design.md`,
+- `docs/design/implemented-2026-08-14-plugin-runtime-phase-2-workspace-third-party-design.md`,
   especially digest-bound identity, isolated execution, constrained handles,
   permission grants, upgrade, audit, and recovery;
 - `docs/implementation/implemented-wp4-project-skills-interface.md`;

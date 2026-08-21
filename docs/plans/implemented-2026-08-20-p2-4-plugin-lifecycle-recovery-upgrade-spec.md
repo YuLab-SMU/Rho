@@ -7,7 +7,8 @@ are complete at `0.4.1-dev.11`; exact implementation head
 explicitly removed the Browser visual review from this integration gate and
 moved visual modularization to a separate follow-on design stream
 
-Active work package: none. PR #2 merge to `main` is authorized. No release,
+Completed work package: none active. PR #102 merged the accepted Phase 2
+implementation to `main`. No release,
 publication, distribution, plugin install/catalog, Phase 2.5 execution,
 Phase 3, or visual-redesign authority is included.
 

@@ -75,7 +75,7 @@ if (process.argv.includes("--test")) {
     cache: read("crates/rho-server/src/plugin_package_cache.rs"),
     serverCargo: read("crates/rho-server/Cargo.toml"),
     serverLib: read("crates/rho-server/src/lib.rs"),
-    spec: read("docs/plans/active-2026-08-20-p2-4-plugin-lifecycle-recovery-upgrade-spec.md"),
+    spec: read("docs/plans/implemented-2026-08-20-p2-4-plugin-lifecycle-recovery-upgrade-spec.md"),
   });
 }
 

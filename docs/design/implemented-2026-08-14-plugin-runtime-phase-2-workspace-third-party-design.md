@@ -7,9 +7,10 @@ P2-4 are complete at application `0.4.1-dev.11`, `rho.bridge 0.1.15`, and
 `32456277341` and all six stable/Rust-1.88 macOS/Windows/Linux source plus
 packaged acceptance legs in run `32456281744`; the owner explicitly removed
 the tool-policy-blocked Browser visual review from the Phase 2 integration gate
-and assigned visual modularization to a separate follow-on design stream; PR #2
-merge to `main` is authorized, while release, publication, distribution,
-Phase 2.5 execution, Phase 3, and visual redesign remain separately gated
+and assigned visual modularization to a separate follow-on design stream; PR
+#102 merged the accepted implementation to `main`, while release, publication,
+distribution, Phase 2.5 execution, Phase 3, and visual redesign remain separately
+gated
 
 Date: 2026-08-14
 Issue: [#17](https://github.com/YuLab-SMU/Rho/issues/17)
@@ -1008,7 +1009,7 @@ focused stop gate passes; P2-2, P2-3, and P2-4 activate sequentially after the
 preceding review.
 
 P2-1 is governed by
-`docs/plans/active-2026-08-20-p2-1-wasm-isolated-host-spec.md`. It selects exact
+`docs/plans/implemented-2026-08-20-p2-1-wasm-isolated-host-spec.md`. It selects exact
 `wasmtime 38.0.4` with Rust 1.88, one no-WASI/no-import Engine/Store/Instance
 per plugin, fuel/memory/epoch bounds, Host Protocol V1, and only a synthetic
 echo/diagnostic ABI. It does not yet create a desktop route, grant, permission

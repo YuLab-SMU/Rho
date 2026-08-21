@@ -6,7 +6,7 @@ persistence, P2-2B trusted permission UI/fresh handles, P2-2C
 P2-2F combined acceptance passed locally and in exact-head three-platform
 stable/Rust-1.88 run `32456281744` on 2026-08-21
 
-Active P2-2 work package: none. The accepted implementation is frozen for P2-3
+Completed P2-2 work package: none active. The accepted implementation is frozen for P2-3
 consumption. Any new filesystem, Workspace, network, storage, write, process,
 credential, or permission authority requires a separate active contract.
 

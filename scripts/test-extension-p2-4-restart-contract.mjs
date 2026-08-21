@@ -100,7 +100,7 @@ if (process.argv.includes("--test")) {
     commands: read("desktop/src-tauri/src/commands/plugins.rs"),
     store: read("crates/rho-store/src/plugin_lifecycle.rs"),
     installed: read("desktop/src-tauri/src/main.rs"),
-    spec: read("docs/plans/active-2026-08-20-p2-4-plugin-lifecycle-recovery-upgrade-spec.md"),
+    spec: read("docs/plans/implemented-2026-08-20-p2-4-plugin-lifecycle-recovery-upgrade-spec.md"),
   });
 }
 

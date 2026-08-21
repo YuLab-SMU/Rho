@@ -96,7 +96,7 @@ if (process.argv.includes("--test")) {
     host: read("crates/rho-extension-runtime/src/wasm_host.rs"),
     desktop: read("desktop/src-tauri/src/main.rs"),
     compatibility: read(".github/workflows/rust-compatibility.yml"),
-    spec: read("docs/plans/active-2026-08-20-p2-1-wasm-isolated-host-spec.md"),
+    spec: read("docs/plans/implemented-2026-08-20-p2-1-wasm-isolated-host-spec.md"),
     licenses: read("LICENSES.md"),
   });
 }
