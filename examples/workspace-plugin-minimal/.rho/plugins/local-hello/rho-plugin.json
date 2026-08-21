@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 2,
+  "id": "org.yulab.rho.local-hello",
+  "name": "Local Hello",
+  "version": "0.1.0",
+  "apiVersion": "^1.0",
+  "runtime": {
+    "kind": "wasm",
+    "entry": "dist/plugin.wasm",
+    "scope": "project"
+  },
+  "provides": [
+    {
+      "capability": "ui.command.local_hello",
+      "contract_major": 1
+    }
+  ],
+  "permissions": [],
+  "contributions": [
+    {
+      "id": "ui.command.local_hello",
+      "kind": "command",
+      "contractMajor": 1,
+      "label": "Run local hello",
+      "purpose": "Verify the local plugin author loop",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "notification"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 1024
+          }
+        },
+        "required": [
+          "kind",
+          "message"
+        ]
+      }
+    }
+  ]
+}

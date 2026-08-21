@@ -11,6 +11,7 @@
 //! broker-supervised lifecycle below.
 
 use std::collections::BTreeMap;
+use std::fmt;
 use std::time::Duration;
 
 use serde::{Deserialize, Deserializer, Serialize, de};
@@ -208,6 +209,41 @@ pub enum HostProtocolErrorCode {
     Cancelled,
 }
 
+impl HostProtocolErrorCode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::MalformedFrame => "malformed_frame",
+            Self::UnknownInstance => "unknown_instance",
+            Self::VersionMismatch => "version_mismatch",
+            Self::PayloadTooLarge => "payload_too_large",
+            Self::InvalidStateTransition => "invalid_state_transition",
+            Self::Timeout => "timeout",
+            Self::UnknownRequest => "unknown_request",
+            Self::ModuleTooLarge => "module_too_large",
+            Self::InvalidModule => "invalid_module",
+            Self::ForbiddenImport => "forbidden_import",
+            Self::MissingExport => "missing_export",
+            Self::InvalidExport => "invalid_export",
+            Self::ResourceLimit => "resource_limit",
+            Self::FuelExhausted => "fuel_exhausted",
+            Self::GuestTrap => "guest_trap",
+            Self::InvalidGuestOutput => "invalid_guest_output",
+            Self::InvalidBrokerStep => "invalid_broker_step",
+            Self::BrokerSequenceViolation => "broker_sequence_violation",
+            Self::BrokerStepLimit => "broker_step_limit",
+            Self::BrokerResultLimit => "broker_result_limit",
+            Self::GuestRejected => "guest_rejected",
+            Self::Cancelled => "cancelled",
+        }
+    }
+}
+
+impl fmt::Display for HostProtocolErrorCode {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct HostProtocolError {
@@ -215,6 +251,18 @@ pub struct HostProtocolError {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 }
+
+impl fmt::Display for HostProtocolError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}", self.code)?;
+        if let Some(message) = self.message.as_deref() {
+            write!(formatter, ": {message}")?;
+        }
+        Ok(())
+    }
+}
+
+impl std::error::Error for HostProtocolError {}
 
 /// The broker-supervised lifecycle state of a single host instance.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -651,5 +699,21 @@ mod tests {
 
         let invalid = br#"{"instance_id":"","message":{"type":"activate"}}"#;
         assert!(HostFrame::decode(invalid).is_err());
+    }
+
+    #[test]
+    fn protocol_errors_support_standard_bounded_diagnostics() {
+        fn accepts_standard_error(_: &dyn std::error::Error) {}
+
+        let error = HostProtocolError {
+            code: HostProtocolErrorCode::ForbiddenImport,
+            message: Some("guest imports are disabled".to_string()),
+        };
+        accepts_standard_error(&error);
+        assert_eq!(error.code.as_str(), "forbidden_import");
+        assert_eq!(
+            error.to_string(),
+            "forbidden_import: guest imports are disabled"
+        );
     }
 }

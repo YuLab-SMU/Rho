@@ -1,0 +1,17 @@
+[package]
+name = "rho-plugin-dev"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+rho-extension-runtime = { path = "../rho-extension-runtime" }
+serde.workspace = true
+serde_json.workspace = true
+wat.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

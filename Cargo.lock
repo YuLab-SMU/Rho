@@ -4144,6 +4144,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rho-plugin-dev"
+version = "0.4.1-dev.11"
+dependencies = [
+ "rho-extension-runtime",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "wat",
+]
+
+[[package]]
 name = "rho-protocol"
 version = "0.4.1-dev.11"
 dependencies = [
