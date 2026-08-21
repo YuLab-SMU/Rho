@@ -6,9 +6,9 @@ D2 Browser visual review was blocked by the Browser local-file URL policy and
 remains open; hosted and cross-platform installed gates remain mandatory before
 final Phase 2 acceptance
 
-Active work package: none at the P2-4D2 stop. P2-4D3 and P2-4E through P2-4G
-remain inactive until their explicit activation commits. No permanent deletion,
-install, update or rollback is active.
+Active work package: P2-4D3 only — explicit BH4 retention transitions and exact
+trash purge. P2-4E through P2-4G remain inactive. D3 adds no user command,
+automatic schedule, install, update or rollback.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -407,10 +407,60 @@ P2-4D is divided into three local stops:
    completes C1 teardown, revokes durable grants, atomically moves to trash and
    records tombstone plus uninstalled state. Restore uses exact tombstone/digest,
    moves back and returns disabled without authority.
-3. **P2-4D3 — BH4 retention handoff (inactive).** Expiry and purge-pending are
+3. **P2-4D3 — BH4 retention handoff (active).** Expiry and purge-pending are
    explicit Store transitions; permanent removal uses exact tombstone ownership,
    safe recursive deletion inside trash only, failure recovery and no user-action
    delete claim.
+
+### Activated P2-4D3 contract — 2026-08-21
+
+D3 owns a retention service boundary, not a new user action. It does not infer a
+clock policy or silently schedule deletion. A trusted caller must supply an
+explicit RFC 3339 cutoff, bounded batch limit, current normalized project and
+exact tombstone identity. Product scheduling/policy remains a later BH4-owned
+decision; D3 makes the safe transition and purge mechanism available and
+testable.
+
+The Store sequence is fixed:
+
+1. one immediate transaction marks only current-project, non-restored,
+   non-deleted `recoverable` tombstones with `moved_at <= cutoff` as `expired`
+   and appends bounded retention events;
+2. exact project/tombstone/plugin/digest/backup-key comparison changes one
+   `expired` tombstone to `purge_pending`; replay is idempotent, while
+   recoverable/restored/deleted/foreign/mismatched evidence fails closed;
+3. only after Broker filesystem evidence proves the exact trash package absent
+   does one immediate transaction set `deleted_at`, return the retention class
+   to `expired`, and append the terminal event. A persistence failure leaves
+   replayable `purge_pending` truth and never recreates the package.
+
+The Broker filesystem sequence is fixed:
+
+- accept only the D1 validated project/plugin/directory/digest/trash key plus a
+  derived same-component purge key; re-open real `.rho`, plugins and trash
+  roots and reject symlink/reparse/root replacement;
+- require discovery source absent, validate the exact trash inventory, rename
+  it atomically to the derived purge key, sync the trash directory, then delete
+  only that exact quarantined directory using a bounded no-follow tree walk;
+- replay after pre-rename, post-rename, mid-delete or post-delete interruption
+  proves one of exact-trash, exact-purging or absent ownership. Dual ownership,
+  unexpected entries, links/non-files, source collision, digest mismatch,
+  foreign project and over-budget trees fail closed;
+- never call recursive deletion on `.rho`, `.rho/plugins`, `.rho/plugin-trash`,
+  the project root, an unresolved variable/glob, an accepted package cache or a
+  restored/discovery package.
+
+D3 tests must cover cutoff boundaries, bounded batches, idempotency,
+concurrency, Store failure rollback/reopen, all filesystem interruption points,
+two-project isolation, root/link replacement, malformed identity and exact
+terminal audit. Installed smoke must prove an uninstalled package can be
+expired, made purge-pending, removed only from trash and terminally tombstoned,
+while a sibling project and discovery source remain untouched.
+
+D3 is internal and does not change visible application behavior, so the
+application remains `0.4.1-dev.8` and `NEWS.md` is unchanged. Its mandatory
+stop is source tests, stable/MSRV checks, exact-package installed smoke,
+contract review and a local commit before P2-4E activation.
 
 D1 tests cover source/trash root replacement, directory/digest mismatch,
 symlink/reparse/non-file inventory, preexisting target, rename failure,
