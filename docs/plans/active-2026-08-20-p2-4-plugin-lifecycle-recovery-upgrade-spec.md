@@ -6,9 +6,10 @@ D2 Browser visual review was blocked by the Browser local-file URL policy and
 remains open; hosted and cross-platform installed gates remain mandatory before
 final Phase 2 acceptance
 
-Active work package: none at the P2-4D3 stop. P2-4E through P2-4G remain
-inactive until their explicit activation commits. No install, update or
-rollback is active.
+Active work package: P2-4E1 only — atomic accepted/rollback pointer completion
+and hidden runtime replacement primitive. E2 Update UI/command, E3 Rollback,
+and P2-4F/G remain inactive. No install, visible Update or Rollback action is
+active.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -631,6 +632,44 @@ Candidate failure before CAS leaves old active. Stale CAS disposes the loser.
 Failure after old quiesce but before candidate publication reopens old routing
 only if its exact host/effects/grants remain valid; otherwise both stay closed
 and recovery uses the durable accepted pointer. Code never live-patches.
+
+### Activated P2-4E contract — 2026-08-21
+
+E is split into three mandatory local stops:
+
+1. **P2-4E1 — replacement/pointer foundation (active).** Store atomically
+   completes an exact `pointer_swapped` Upgrade/Rollback transition by comparing
+   project/plugin/transition kind, expected accepted digest, candidate digest,
+   and current state pointer; then sets accepted=candidate,
+   rollback=expected-old, clears pending, persists the fresh host identity and
+   Active terminal event. Runtime preparation loads only a fully verified cache
+   snapshot, stages host/handles/contributions hidden, and publishes through
+   `ContributionStore::publish(candidate, Some(expected_old_identity))`. No
+   command or UI is added.
+2. **P2-4E2 — trusted Update (inactive).** The current discovered changed digest
+   is the only candidate. The command confirms current project revision and
+   exact expected-old/candidate digests, creates/caches the candidate, obtains
+   fresh candidate-digest grants, prepares hidden authority, quiesces/cancels
+   the old host, performs expected-old CAS, commits pointer truth, and disposes
+   old authority. Candidate denial/failure/stale CAS keeps or reconstructs old
+   routing when exact; post-CAS persistence failure closes both and remains
+   recoverable. UI/mock/version/NEWS/Browser/packaged smoke are required.
+3. **P2-4E3 — trusted Rollback and restart truth (inactive).** Rollback target is
+   exactly `rollback_digest` from verified immutable cache, never an arbitrary
+   path. It always creates a fresh generation/host/handles and requires fresh
+   permission review for any nonempty permission envelope. Durable rollback may
+   run from cache while the newer discovery package remains visible as a future
+   Update candidate; restart reconstructs the accepted cached digest without
+   granting authority to the changed source. Fixed UI/mock, failure recovery,
+   two-project/A-B-A and installed smoke are required.
+
+E1 Store tests cover success/idempotency, wrong kind/phase/digest/project,
+concurrent stale completion, event failure rollback and reopen. Runtime tests
+cover hidden preparation, expected-old CAS winner/loser, old route preservation
+on pre-CAS failure, new route only after CAS, no generation/host/handle reuse,
+and post-CAS terminal persistence failure closing the candidate. E1 remains
+internal `0.4.1-dev.8`; no `NEWS.md`, command/mock, R package or schema change.
+Its local commit is mandatory before E2 activation.
 
 ## Rollback
 
