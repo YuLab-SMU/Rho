@@ -6,8 +6,9 @@ D2 Browser visual review was blocked by the Browser local-file URL policy and
 remains open; hosted and cross-platform installed gates remain mandatory before
 final Phase 2 acceptance
 
-Active work package: none at the P2-4E2 stop. E3 Rollback and P2-4F/G remain
-inactive until explicit activation. No install or Rollback action is active.
+Active work package: P2-4E3 only — exact cached Rollback command, forced fresh
+permission review, fixed UI/mock and restart reconstruction of the accepted
+cached digest. P2-4F/G remain inactive. No install is active.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -652,7 +653,7 @@ E is split into three mandatory local stops:
    old authority. Candidate denial/failure/stale CAS keeps or reconstructs old
    routing when exact; post-CAS persistence failure closes both and remains
    recoverable. UI/mock/version/NEWS/Browser/packaged smoke are required.
-3. **P2-4E3 — trusted Rollback and restart truth (inactive).** Rollback target is
+3. **P2-4E3 — trusted Rollback and restart truth (active).** Rollback target is
    exactly `rollback_digest` from verified immutable cache, never an arbitrary
    path. It always creates a fresh generation/host/handles and requires fresh
    permission review for any nonempty permission envelope. Durable rollback may
@@ -738,6 +739,47 @@ changed digest during review, candidate failure, terminal persistence failure,
 concurrency, two projects/A-B-A and packaged candidate/legacy smoke. Browser
 visual evidence must be attempted and any tool-policy block reported truthfully.
 E2 stops at its own local commit before E3 activation.
+
+### Activated P2-4E3 contract — 2026-08-21
+
+The frozen command is `rollback_workspace_plugin`. Input is deny-unknown-fields
+and carries plugin ID, exact current accepted digest, exact `rollback_digest`
+target and expected project revision. The project transition gate is held. The
+current discovery package must still equal the current accepted digest; target
+bytes come only from `PluginPackageCache::load_exact` for the same normalized
+project/plugin/rollback pointer.
+
+Rollback never reuses an existing durable grant, including a project grant
+issued when the target was previously accepted. Every target permission creates
+a new trusted request and fresh grant/handle; zero-permission targets may
+continue immediately. Permission continuation is typed Rollback with exact
+current/target/revision. Success uses E1 hidden activation and expected-old CAS,
+then atomically sets accepted=target and rollback=previous current, revokes
+current-digest grants and disposes current authority.
+
+On restart/project return, the only source/cache mismatch eligible for cached
+rollback reconstruction is the exact durable pair:
+
+```text
+accepted_digest != discovered_digest
+rollback_digest == discovered_digest
+```
+
+The accepted cache must revalidate to the same plugin/manifest/digest. Recovery
+then follows the normal fresh generation/host/handle path using target-digest
+grants; changed discovery remains visible as Update pending and receives no
+authority. Any other mismatch stays non-routable Update pending/Blocked. No
+arbitrary cache digest, another project, absent pointer or raw path is accepted.
+
+The fixed Roll back review shows current and target full digests, project and
+escaped plugin identity, and states that cached code receives fresh permission
+review and a fresh host. It does not imply source-file rollback, marketplace,
+publisher/signature or automatic update. Tests cover zero/multi-permission,
+forced non-reuse, denial, missing/corrupt/wrong-project cache, stale pointers,
+success/failure/CAS, restart and A-B-A/two-project isolation. E3 is visible and
+must bump the next development version after `0.4.1-dev.9`, update NEWS/cache
+keys/contracts, attempt Browser evidence, pass packaged candidate/legacy smoke,
+and stop at a local commit before P2-4F.
 
 ### P2-4E2 local checkpoint — 2026-08-21
 
