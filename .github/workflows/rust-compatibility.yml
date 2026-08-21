@@ -64,6 +64,7 @@ on:
       - "scripts/test-extension-p2-4-package-trash-contract.mjs"
       - "scripts/test-extension-p2-4-uninstall-restore-contract.mjs"
       - "scripts/test-extension-p2-4-retention-purge-contract.mjs"
+      - "scripts/test-extension-p2-4-replacement-foundation-contract.mjs"
       - "scripts/test-workspace-plugin-ui.mjs"
       - "scripts/test-installed-license-surface.mjs"
       - "scripts/test-signpath-readiness.mjs"
@@ -160,6 +161,7 @@ on:
       - "scripts/test-extension-p2-4-package-trash-contract.mjs"
       - "scripts/test-extension-p2-4-uninstall-restore-contract.mjs"
       - "scripts/test-extension-p2-4-retention-purge-contract.mjs"
+      - "scripts/test-extension-p2-4-replacement-foundation-contract.mjs"
       - "scripts/test-workspace-plugin-ui.mjs"
       - "scripts/test-installed-license-surface.mjs"
       - "scripts/test-signpath-readiness.mjs"
@@ -427,6 +429,8 @@ jobs:
           node scripts/test-extension-p2-4-uninstall-restore-contract.mjs
           node scripts/test-extension-p2-4-retention-purge-contract.mjs --test
           node scripts/test-extension-p2-4-retention-purge-contract.mjs
+          node scripts/test-extension-p2-4-replacement-foundation-contract.mjs --test
+          node scripts/test-extension-p2-4-replacement-foundation-contract.mjs
           node scripts/test-workspace-plugin-ui.mjs
           cargo check --workspace --all-targets --locked
           cargo test --workspace --locked --no-fail-fast

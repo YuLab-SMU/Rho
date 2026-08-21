@@ -5584,6 +5584,7 @@ fn try_activate_pending(
 
 struct PreparedPluginActivation {
     contribution_candidate: ContributionCandidate,
+    expected_old_contribution: Option<ContributionInstanceIdentity>,
     active: ActivePlugin,
     active_grant_count: usize,
 }
@@ -5612,6 +5613,7 @@ fn activate_plugin_durable<'a>(
         cached,
         transition_id,
         durable_grants,
+        None,
         store,
     ) {
         Ok(prepared) => prepared,
@@ -5654,10 +5656,10 @@ fn activate_plugin_durable<'a>(
     }
 
     let key = registry_key(&context.project_root, plugin.manifest.id.as_str());
-    if let Err(error) = state
-        .contributions
-        .publish(prepared.contribution_candidate, None)
-    {
+    if let Err(error) = state.contributions.publish(
+        prepared.contribution_candidate,
+        prepared.expected_old_contribution.as_ref(),
+    ) {
         state.grants.invalidate_host(&host_instance_id);
         let _ = fail_enable_transition(
             store,
@@ -5728,6 +5730,176 @@ fn activate_plugin_durable<'a>(
     })
 }
 
+#[allow(dead_code)] // Activated by the next E2 command slice after the E1 stop.
+fn activate_plugin_replacement_durable<'a>(
+    state: &mut RegistryState,
+    context: &PluginRuntimeContext,
+    plugin: &DiscoveredPlugin,
+    cached: &CachedPluginPackage,
+    transition_id: &str,
+    expected_old_digest: &str,
+    durable_grants: impl IntoIterator<Item = &'a PluginPermissionGrant>,
+    store: &mut Store,
+) -> Result<WorkspacePluginEnableResult> {
+    let key = registry_key(&context.project_root, plugin.manifest.id.as_str());
+    let expected_old_contribution = {
+        let old = state
+            .active
+            .get(&key)
+            .context("replacement requires an exact active plugin")?;
+        ensure!(
+            old.project_root == context.project_root
+                && old.package_digest == expected_old_digest
+                && old.host.identity().package_digest().as_str() == expected_old_digest,
+            "replacement active plugin identity is stale"
+        );
+        old.contribution_identity.clone()
+    };
+    let prepared = match prepare_plugin_activation(
+        state,
+        context,
+        plugin,
+        cached,
+        transition_id,
+        durable_grants,
+        expected_old_contribution.as_ref(),
+        store,
+    ) {
+        Ok(prepared) => prepared,
+        Err(error) => {
+            let _ = fail_enable_transition(
+                store,
+                context,
+                transition_id,
+                "replacement_candidate_failed",
+                "update_pending",
+            );
+            return Err(error);
+        }
+    };
+    let candidate_host_id = prepared.active.host_instance_id.clone();
+    if let Err(error) = advance_enable_transition(
+        store,
+        context,
+        transition_id,
+        "grants_ready",
+        "candidate_activated",
+        "running",
+        "activating",
+        None,
+        false,
+        Some(candidate_host_id.as_str()),
+        "activation",
+        "completed",
+        None,
+    ) {
+        state.grants.invalidate_host(&candidate_host_id);
+        return Err(error);
+    }
+
+    let old_host_id = {
+        let old = state
+            .active
+            .get_mut(&key)
+            .context("replacement active plugin disappeared before CAS")?;
+        ensure!(
+            old.package_digest == expected_old_digest
+                && old.contribution_identity == prepared.expected_old_contribution,
+            "replacement expected-old runtime identity changed"
+        );
+        if let Some(request_id) = old.host.active_broker_request_id() {
+            old.host
+                .cancel_broker_call(&request_id)
+                .map_err(|error| anyhow!("cancelling old plugin call failed: {error:?}"))?;
+        }
+        let old_host_id = old.host_instance_id.clone();
+        ensure!(
+            matches!(
+                old.host.handle_frame(HostFrame {
+                    instance_id: old_host_id.clone(),
+                    message: HostMessage::Quiesce,
+                }),
+                Ok(Some(HostResponse::Quiesced))
+            ),
+            "old plugin host did not quiesce before replacement CAS"
+        );
+        old_host_id
+    };
+
+    if let Err(error) = state.contributions.publish(
+        prepared.contribution_candidate,
+        prepared.expected_old_contribution.as_ref(),
+    ) {
+        state.grants.invalidate_host(&candidate_host_id);
+        let _ = fail_enable_transition(
+            store,
+            context,
+            transition_id,
+            "replacement_cas_failed",
+            "update_pending",
+        );
+        return Err(anyhow!(
+            "workspace plugin replacement CAS failed: {error:?}"
+        ));
+    }
+    let mut old = state
+        .active
+        .insert(key.clone(), prepared.active)
+        .context("replacement lost the expected-old active plugin")?;
+    if let Err(error) = advance_enable_transition(
+        store,
+        context,
+        transition_id,
+        "candidate_activated",
+        "pointer_swapped",
+        "running",
+        "activating",
+        None,
+        false,
+        Some(candidate_host_id.as_str()),
+        "pointer_cas",
+        "completed",
+        None,
+    ) {
+        remove_active_plugin(state, &key);
+        state.grants.invalidate_host(&old_host_id);
+        let _ = fail_enable_transition(
+            store,
+            context,
+            transition_id,
+            "replacement_pointer_journal_failed",
+            "update_pending",
+        );
+        return Err(error.context("replacement routes closed after pointer journal failure"));
+    }
+    if let Err(error) = PluginLifecycleMutationService::new(store).complete_replacement(
+        &context.project_root,
+        transition_id,
+        candidate_host_id.as_str(),
+    ) {
+        remove_active_plugin(state, &key);
+        state.grants.invalidate_host(&old_host_id);
+        return Err(error.into());
+    }
+
+    state.grants.invalidate_host(&old_host_id);
+    if matches!(old.host.state(), HostInstanceState::Quiescing) {
+        let _ = old.host.handle_frame(HostFrame {
+            instance_id: old_host_id,
+            message: HostMessage::Dispose,
+        });
+    }
+    Ok(WorkspacePluginEnableResult {
+        status: "enabled".to_string(),
+        plugin_id: plugin.manifest.id.to_string(),
+        request_ids: Vec::new(),
+        active_grant_count: prepared.active_grant_count,
+        transition_id: Some(transition_id.to_string()),
+        message: "The exact replacement package is durably active with a fresh host and expected-old routing CAS."
+            .to_string(),
+    })
+}
+
 fn prepare_plugin_activation<'a>(
     state: &mut RegistryState,
     context: &PluginRuntimeContext,
@@ -5735,6 +5907,7 @@ fn prepare_plugin_activation<'a>(
     cached: &CachedPluginPackage,
     transition_id: &str,
     durable_grants: impl IntoIterator<Item = &'a PluginPermissionGrant>,
+    expected_old_contribution: Option<&ContributionInstanceIdentity>,
     store: &mut Store,
 ) -> Result<PreparedPluginActivation> {
     ensure!(
@@ -5879,12 +6052,12 @@ fn prepare_plugin_activation<'a>(
         .current_identity(&context.project_scope_id, &plugin.manifest.id)
         .map_err(|error| anyhow!("reading current contribution identity: {error:?}"))?;
     ensure!(
-        expected_old.is_none(),
-        "durable first enable cannot replace an existing contribution generation"
+        expected_old.as_ref() == expected_old_contribution,
+        "plugin contribution replacement expectation is stale"
     );
     let mut preview = state.contributions.clone();
     preview
-        .publish(contribution_candidate.clone(), None)
+        .publish(contribution_candidate.clone(), expected_old_contribution)
         .map_err(|error| anyhow!("workspace plugin contribution candidate conflicts: {error:?}"))?;
 
     let grants = durable_grants.into_iter().collect::<Vec<_>>();
@@ -5972,6 +6145,7 @@ fn prepare_plugin_activation<'a>(
         (!plugin.manifest.contributions.is_empty()).then_some(contribution_identity);
     Ok(PreparedPluginActivation {
         contribution_candidate,
+        expected_old_contribution: expected_old_contribution.cloned(),
         active: ActivePlugin {
             project_root: context.project_root.clone(),
             plugin_version: plugin.manifest.version.to_string(),
@@ -6696,6 +6870,83 @@ mod tests {
                 project_revision: 3,
             }),
         }
+    }
+
+    fn prepare_runtime_replacement(
+        project: &Path,
+        context: &PluginRuntimeContext,
+        registry: &PendingPluginPermissionRegistry,
+        store: &mut Store,
+        transition_id: &str,
+        candidate_fails: bool,
+    ) -> (DiscoveredPlugin, CachedPluginPackage, String, String) {
+        write_contributing_plugin(project, "1.0.0", "tool.fixture.replace", false);
+        registry
+            .request_enable(context, "org.example.plugin", store)
+            .unwrap();
+        let old = PluginLifecycleQueryService::new(store)
+            .get_state(&context.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        let old_digest = old.accepted_digest.unwrap();
+        let old_host = old.last_host_session_id.unwrap();
+        write_contributing_plugin(project, "2.0.0", "tool.fixture.replace", candidate_fails);
+        let candidate = discover_exact_plugin(project, "org.example.plugin").unwrap();
+        PluginLifecycleMutationService::new(store)
+            .discover(
+                &context.project_root,
+                &WorkspacePluginDiscoveredDraft {
+                    project_root: context.project_root.clone(),
+                    plugin_id: candidate.manifest.id.to_string(),
+                    directory_name: candidate.directory.clone(),
+                    plugin_version: candidate.manifest.version.to_string(),
+                    runtime_kind: candidate.manifest.runtime.kind.to_string(),
+                    discovered_digest: candidate.digest.to_string(),
+                },
+            )
+            .unwrap();
+        let requested = PluginLifecycleMutationService::new(store)
+            .request_transition(
+                &context.project_root,
+                &WorkspacePluginTransitionDraft {
+                    transition_id: transition_id.to_string(),
+                    project_root: context.project_root.clone(),
+                    plugin_id: candidate.manifest.id.to_string(),
+                    kind: "upgrade".to_string(),
+                    request_event_type: "user_requested".to_string(),
+                    desired_state: "enabled".to_string(),
+                    expected_old_digest: Some(old_digest.clone()),
+                    candidate_digest: Some(candidate.digest.to_string()),
+                    rollback_digest: None,
+                    backup_path_key: None,
+                },
+            )
+            .unwrap();
+        assert_eq!(requested.outcome, PluginLifecycleMutationOutcome::Applied);
+        let cached = PluginPackageCache::new(&context.app_data_dir)
+            .prepare_exact(
+                project,
+                candidate.manifest.id.as_str(),
+                candidate.digest.as_str(),
+            )
+            .unwrap();
+        advance_enable_transition(
+            store,
+            context,
+            transition_id,
+            "requested",
+            "backup_prepared",
+            "running",
+            "resolving",
+            None,
+            false,
+            None,
+            "package_backed_up",
+            "completed",
+            None,
+        )
+        .unwrap();
+        (candidate, cached, old_digest, old_host)
     }
 
     fn protocol_workspace(context: &PluginRuntimeContext) -> rho_protocol::WorkspaceIdentity {
@@ -9009,6 +9260,197 @@ mod tests {
         );
         assert!(host.broker_call_active());
         assert!(host.cancel_broker_call(&inflight).unwrap());
+    }
+
+    #[test]
+    fn hidden_replacement_uses_expected_old_cas_and_fresh_runtime_identity() {
+        let directory = tempdir().unwrap();
+        let context = context(directory.path());
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let registry = deterministic_registry();
+        let transition_id = "transition.upgrade.runtime";
+        let (candidate, cached, old_digest, old_host) = prepare_runtime_replacement(
+            directory.path(),
+            &context,
+            &registry,
+            &mut store,
+            transition_id,
+            false,
+        );
+        let mut state = registry
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let old_identity = state
+            .contributions
+            .current_identity(&context.project_scope_id, &candidate.manifest.id)
+            .unwrap()
+            .unwrap();
+        let result = activate_plugin_replacement_durable(
+            &mut state,
+            &context,
+            &candidate,
+            &cached,
+            transition_id,
+            &old_digest,
+            std::iter::empty(),
+            &mut store,
+        )
+        .unwrap();
+        assert_eq!(result.status, "enabled");
+        let active = state
+            .active
+            .get(&registry_key(&context.project_root, "org.example.plugin"))
+            .unwrap();
+        assert_eq!(active.package_digest, candidate.digest.as_str());
+        assert_ne!(active.host_instance_id.as_str(), old_host);
+        let current_identity = state
+            .contributions
+            .current_identity(&context.project_scope_id, &candidate.manifest.id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(current_identity.package_digest, candidate.digest);
+        assert_ne!(
+            current_identity.host_instance_id,
+            old_identity.host_instance_id
+        );
+        drop(state);
+        let lifecycle = PluginLifecycleQueryService::new(&store)
+            .get_state(&context.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            lifecycle.accepted_digest,
+            Some(candidate.digest.to_string())
+        );
+        assert_eq!(lifecycle.rollback_digest, Some(old_digest));
+        assert!(lifecycle.pending_digest.is_none());
+        assert_eq!(lifecycle.last_activation_generation, 2);
+    }
+
+    #[test]
+    fn replacement_candidate_failure_preserves_exact_old_route() {
+        let directory = tempdir().unwrap();
+        let context = context(directory.path());
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let registry = deterministic_registry();
+        let transition_id = "transition.upgrade.pre-cas-failure";
+        let (candidate, cached, old_digest, old_host) = prepare_runtime_replacement(
+            directory.path(),
+            &context,
+            &registry,
+            &mut store,
+            transition_id,
+            true,
+        );
+        let mut state = registry
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert!(
+            activate_plugin_replacement_durable(
+                &mut state,
+                &context,
+                &candidate,
+                &cached,
+                transition_id,
+                &old_digest,
+                std::iter::empty(),
+                &mut store,
+            )
+            .is_err()
+        );
+        let active = state
+            .active
+            .get(&registry_key(&context.project_root, "org.example.plugin"))
+            .unwrap();
+        assert_eq!(active.package_digest, old_digest);
+        assert_eq!(active.host_instance_id.as_str(), old_host);
+        assert_eq!(
+            state
+                .contributions
+                .current_identity(&context.project_scope_id, &candidate.manifest.id)
+                .unwrap()
+                .unwrap()
+                .package_digest
+                .as_str(),
+            active.package_digest
+        );
+        drop(state);
+        let lifecycle = PluginLifecycleQueryService::new(&store)
+            .get_state(&context.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        assert_eq!(lifecycle.accepted_digest, Some(old_digest));
+        assert_eq!(lifecycle.observed_state, "update_pending");
+    }
+
+    #[test]
+    fn replacement_terminal_persistence_failure_closes_old_and_candidate_routes() {
+        let directory = tempdir().unwrap();
+        let database = directory.path().join("rho.sqlite");
+        let context = context(directory.path());
+        let mut store = Store::open(&database).unwrap();
+        let registry = deterministic_registry();
+        let transition_id = "transition.upgrade.terminal-failure";
+        let (candidate, cached, old_digest, _) = prepare_runtime_replacement(
+            directory.path(),
+            &context,
+            &registry,
+            &mut store,
+            transition_id,
+            false,
+        );
+        let injection = rusqlite::Connection::open(&database).unwrap();
+        injection
+            .execute_batch(
+                "CREATE TRIGGER fail_runtime_replacement_terminal
+                 BEFORE INSERT ON workspace_plugin_lifecycle_events
+                 WHEN NEW.event_type = 'transition_completed'
+                   AND NEW.transition_id = 'transition.upgrade.terminal-failure'
+                 BEGIN SELECT RAISE(FAIL, 'injected runtime replacement failure'); END;",
+            )
+            .unwrap();
+        let mut state = registry
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert!(
+            activate_plugin_replacement_durable(
+                &mut state,
+                &context,
+                &candidate,
+                &cached,
+                transition_id,
+                &old_digest,
+                std::iter::empty(),
+                &mut store,
+            )
+            .is_err()
+        );
+        assert!(state.active.is_empty());
+        assert!(
+            state
+                .contributions
+                .list(&context.project_scope_id)
+                .is_empty()
+        );
+        assert_eq!(state.grants.active_handle_count(), 0);
+        drop(state);
+        let lifecycle = PluginLifecycleQueryService::new(&store)
+            .get_state(&context.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        assert_eq!(lifecycle.accepted_digest, Some(old_digest));
+        assert_eq!(lifecycle.pending_digest, Some(candidate.digest.to_string()));
+        assert_eq!(
+            PluginLifecycleQueryService::new(&store)
+                .get_transition(&context.project_root, transition_id)
+                .unwrap()
+                .unwrap()
+                .phase,
+            "pointer_swapped"
+        );
     }
 
     #[test]

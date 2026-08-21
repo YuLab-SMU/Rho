@@ -20,12 +20,17 @@ export function validateP24DurableEnableContract(value) {
     '"transition_completed"',
     "allocate_generation",
     "prepare_plugin_activation",
-    ".publish(prepared.contribution_candidate, None)",
+    "prepared.expected_old_contribution.as_ref()",
     "remove_active_plugin(state, &key)",
     "fail_enable_transition",
     "post_publication_persistence_failure_closes_routes_and_leaves_recovery_truth",
     "changed_package_stays_update_pending_and_keeps_old_route",
   ]) assert.ok(value.desktop.includes(marker), `durable first enable lost ${marker}`);
+  assert.match(
+    value.desktop,
+    /prepare_plugin_activation\([\s\S]{0,500}?durable_grants,\s*None,\s*store/,
+    "durable first enable no longer requires expected-old None",
+  );
 
   const skillStart = value.desktop.indexOf("fn read_plugin_skill(");
   const skillEnd = value.desktop.indexOf("fn remove_active_plugin", skillStart);
@@ -65,7 +70,7 @@ export function validateP24DurableEnableContract(value) {
 
 function fixture() {
   return {
-    desktop: "PluginLifecycleMutationService\nPluginLifecycleQueryService\nPluginPackageCache::new\nWorkspacePluginDiscoveredDraft\nWorkspacePluginTransitionDraft\nWorkspacePluginTransitionAdvance\ntransition.enable.\n\"preflight\"\n\"backup_prepared\"\n\"grants_ready\"\n\"candidate_activated\"\n\"pointer_swapped\"\n\"transition_completed\"\nallocate_generation\nprepare_plugin_activation\n.publish(prepared.contribution_candidate, None)\nremove_active_plugin(state, &key)\nfail_enable_transition\npost_publication_persistence_failure_closes_routes_and_leaves_recovery_truth\nchanged_package_stays_update_pending_and_keeps_old_route\npub desired_state: String\npub observed_state: String\npub accepted_digest: Option<String>\npub transition_id: Option<String>\nfn read_plugin_skill(\nactive.skill_instructions\nfn remove_active_plugin",
+    desktop: "PluginLifecycleMutationService\nPluginLifecycleQueryService\nPluginPackageCache::new\nWorkspacePluginDiscoveredDraft\nWorkspacePluginTransitionDraft\nWorkspacePluginTransitionAdvance\ntransition.enable.\n\"preflight\"\n\"backup_prepared\"\n\"grants_ready\"\n\"candidate_activated\"\n\"pointer_swapped\"\n\"transition_completed\"\nallocate_generation\nprepare_plugin_activation(\nstate, context, plugin, cached, transition_id, durable_grants, None, store\nprepared.expected_old_contribution.as_ref()\nremove_active_plugin(state, &key)\nfail_enable_transition\npost_publication_persistence_failure_closes_routes_and_leaves_recovery_truth\nchanged_package_stays_update_pending_and_keeps_old_route\npub desired_state: String\npub observed_state: String\npub accepted_digest: Option<String>\npub transition_id: Option<String>\nfn read_plugin_skill(\nactive.skill_instructions\nfn remove_active_plugin",
     workspace: 'version = "0.4.1-dev.5"',
     tauri: '{"version":"0.4.1-dev.5"}',
     packageJson: '{"version":"0.4.1-dev.5"}',
@@ -80,7 +85,7 @@ if (process.argv.includes("--test")) {
   validateP24DurableEnableContract(fixture());
   for (const [name, mutate] of [
     ["generation", (value) => { value.desktop = value.desktop.replace("allocate_generation", ""); }],
-    ["publication CAS", (value) => { value.desktop = value.desktop.replace(".publish(prepared.contribution_candidate, None)", ""); }],
+    ["publication CAS", (value) => { value.desktop = value.desktop.replace("prepared.expected_old_contribution.as_ref()", ""); }],
     ["post-publication cleanup", (value) => { value.desktop = value.desktop.replace("remove_active_plugin(state, &key)", ""); }],
     ["mutable Skill", (value) => { value.desktop = value.desktop.replace("active.skill_instructions", "fs::read"); }],
     ["installed", (value) => { value.installed = value.installed.replace('"durable_first_enable": true', ""); }],

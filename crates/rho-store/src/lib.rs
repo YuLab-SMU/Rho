@@ -57,10 +57,10 @@ pub use plugin_lifecycle::{
     PluginLifecycleMutationOutcome, WorkspacePluginCrashOutcome, WorkspacePluginDiscoveredDraft,
     WorkspacePluginGenerationAllocation, WorkspacePluginLifecycleEvent,
     WorkspacePluginPackageTombstone, WorkspacePluginPurgeDraft, WorkspacePluginPurgeResult,
-    WorkspacePluginRestoreCompletion, WorkspacePluginRetentionSweep, WorkspacePluginState,
-    WorkspacePluginTombstoneDraft, WorkspacePluginTransition, WorkspacePluginTransitionAdvance,
-    WorkspacePluginTransitionDraft, WorkspacePluginTransitionRequestResult,
-    WorkspacePluginUninstallCompletion,
+    WorkspacePluginReplacementCompletion, WorkspacePluginRestoreCompletion,
+    WorkspacePluginRetentionSweep, WorkspacePluginState, WorkspacePluginTombstoneDraft,
+    WorkspacePluginTransition, WorkspacePluginTransitionAdvance, WorkspacePluginTransitionDraft,
+    WorkspacePluginTransitionRequestResult, WorkspacePluginUninstallCompletion,
 };
 pub use plugin_lifecycle_service::{PluginLifecycleMutationService, PluginLifecycleQueryService};
 pub use plugin_permission::{

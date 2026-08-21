@@ -226,6 +226,13 @@ pub struct WorkspacePluginPurgeResult {
     pub tombstone: WorkspacePluginPackageTombstone,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspacePluginReplacementCompletion {
+    pub outcome: PluginLifecycleMutationOutcome,
+    pub state: WorkspacePluginState,
+    pub transition: WorkspacePluginTransition,
+}
+
 impl Store {
     pub fn upsert_discovered_workspace_plugin(
         &mut self,
@@ -1092,6 +1099,135 @@ impl Store {
         Ok(WorkspacePluginPurgeResult {
             outcome: PluginLifecycleMutationOutcome::Applied,
             tombstone,
+        })
+    }
+
+    pub fn complete_workspace_plugin_replacement(
+        &mut self,
+        project_root: &str,
+        transition_id: &str,
+        host_session_id: &str,
+    ) -> Result<WorkspacePluginReplacementCompletion, StoreError> {
+        let project_root = required_project_root(project_root)?;
+        let transition_id = validate_identifier(transition_id, "transition id")?;
+        let host_session_id = validate_identifier(host_session_id, "host session id")?;
+        let now = Utc::now().to_rfc3339();
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let transition = get_transition_on(&transaction, &project_root, &transition_id)?
+            .ok_or_else(|| {
+                StoreError::Validation("replacement transition is missing".to_string())
+            })?;
+        if !matches!(transition.kind.as_str(), "upgrade" | "rollback") {
+            return Err(StoreError::Validation(
+                "replacement completion requires Upgrade or Rollback".to_string(),
+            ));
+        }
+        let expected_old = transition.expected_old_digest.clone().ok_or_else(|| {
+            StoreError::Validation("replacement expected digest is missing".to_string())
+        })?;
+        let candidate = transition.candidate_digest.clone().ok_or_else(|| {
+            StoreError::Validation("replacement candidate digest is missing".to_string())
+        })?;
+        let plugin_id = transition.plugin_id.clone();
+        let replacement_kind = transition.kind.clone();
+        let state = get_state_on(&transaction, &project_root, &plugin_id)?.ok_or_else(|| {
+            StoreError::Validation("replacement plugin state is missing".to_string())
+        })?;
+        if transition.phase == "completed"
+            && transition.status == "completed"
+            && state.accepted_digest.as_deref() == Some(candidate.as_str())
+            && state.rollback_digest.as_deref() == Some(expected_old.as_str())
+            && state.last_host_session_id.as_deref() == Some(host_session_id.as_str())
+        {
+            transaction.commit()?;
+            return Ok(WorkspacePluginReplacementCompletion {
+                outcome: PluginLifecycleMutationOutcome::Unchanged,
+                state,
+                transition,
+            });
+        }
+        let exact = transition.phase == "pointer_swapped"
+            && matches!(
+                transition.status.as_str(),
+                "running" | "completion_uncertain"
+            )
+            && state.desired_state == "enabled"
+            && state.accepted_digest.as_deref() == Some(expected_old.as_str())
+            && state.pending_digest.as_deref() == Some(candidate.as_str())
+            && state.transition_id.as_deref() == Some(transition_id.as_str());
+        if !exact {
+            transaction.commit()?;
+            return Ok(WorkspacePluginReplacementCompletion {
+                outcome: PluginLifecycleMutationOutcome::Stale,
+                state,
+                transition,
+            });
+        }
+        let transition_changed = transaction.execute(
+            "UPDATE workspace_plugin_transitions
+             SET phase = 'completed', status = 'completed', updated_at = ?3,
+                 completed_at = ?3, reason_code = NULL
+             WHERE project_root = ?1 AND transition_id = ?2
+               AND phase = 'pointer_swapped'
+               AND status IN ('running', 'completion_uncertain')",
+            params![project_root, transition_id, now],
+        )?;
+        let state_changed = transaction.execute(
+            "UPDATE workspace_plugin_states
+             SET accepted_digest = ?3, pending_digest = NULL, rollback_digest = ?4,
+                 observed_state = 'active', last_host_session_id = ?5,
+                 last_error_code = NULL, enabled_at = ?6, updated_at = ?6
+             WHERE project_root = ?1 AND plugin_id = ?2 AND transition_id = ?7
+               AND accepted_digest = ?4 AND pending_digest = ?3",
+            params![
+                project_root,
+                plugin_id,
+                candidate,
+                expected_old,
+                host_session_id,
+                now,
+                transition_id,
+            ],
+        )?;
+        if transition_changed != 1 || state_changed != 1 {
+            return Err(StoreError::Validation(
+                "replacement pointer completion was stale".to_string(),
+            ));
+        }
+        let details = serde_json::json!({
+            "replacement_kind": replacement_kind,
+            "expected_old_digest": expected_old,
+            "candidate_digest": candidate
+        })
+        .to_string();
+        insert_lifecycle_event(
+            &transaction,
+            LifecycleEventInsert {
+                project_root: &project_root,
+                plugin_id: &plugin_id,
+                transition_id: Some(&transition_id),
+                package_digest: Some(&candidate),
+                event_type: "transition_completed",
+                status: "completed",
+                phase: "completed",
+                reason_code: None,
+                details_json: &details,
+                created_at: &now,
+            },
+        )?;
+        let state = get_state_on(&transaction, &project_root, &plugin_id)?
+            .ok_or_else(|| StoreError::Validation("replacement state disappeared".to_string()))?;
+        let transition = get_transition_on(&transaction, &project_root, &transition_id)?
+            .ok_or_else(|| {
+                StoreError::Validation("replacement transition disappeared".to_string())
+            })?;
+        transaction.commit()?;
+        Ok(WorkspacePluginReplacementCompletion {
+            outcome: PluginLifecycleMutationOutcome::Applied,
+            state,
+            transition,
         })
     }
 
@@ -2203,6 +2339,78 @@ mod tests {
         }
     }
 
+    fn prepare_pointer_swapped_replacement(
+        store: &mut Store,
+        project_root: &str,
+        transition_id: &str,
+        kind: &str,
+        expected_old: char,
+        candidate: char,
+    ) {
+        if store
+            .get_workspace_plugin_state(project_root, "org.example.plugin")
+            .unwrap()
+            .is_none()
+        {
+            let mut initial = discovered(project_root);
+            initial.discovered_digest = digest(expected_old);
+            store.upsert_discovered_workspace_plugin(&initial).unwrap();
+            let enable = transition(
+                project_root,
+                &format!("{transition_id}.enable"),
+                "enable",
+                "enabled",
+                None,
+                Some(digest(expected_old)),
+            );
+            store.request_workspace_plugin_transition(&enable).unwrap();
+            let mut enabled = advance(
+                project_root,
+                &format!("{transition_id}.enable"),
+                "requested",
+                "completed",
+                "completed",
+                "active",
+            );
+            enabled.accepted_digest = Some(digest(expected_old));
+            enabled.clear_pending_digest = true;
+            enabled.event_type = "transition_completed".to_string();
+            store.advance_workspace_plugin_transition(&enabled).unwrap();
+        }
+        let mut changed = discovered(project_root);
+        changed.discovered_digest = digest(candidate);
+        store.upsert_discovered_workspace_plugin(&changed).unwrap();
+        let replacement = transition(
+            project_root,
+            transition_id,
+            kind,
+            "enabled",
+            Some(digest(expected_old)),
+            Some(digest(candidate)),
+        );
+        assert_eq!(
+            store
+                .request_workspace_plugin_transition(&replacement)
+                .unwrap()
+                .outcome,
+            PluginLifecycleMutationOutcome::Applied
+        );
+        let mut swapped = advance(
+            project_root,
+            transition_id,
+            "requested",
+            "pointer_swapped",
+            "running",
+            "activating",
+        );
+        swapped.event_type = "pointer_cas".to_string();
+        swapped.last_host_session_id = Some(format!("host.{transition_id}"));
+        assert_eq!(
+            store.advance_workspace_plugin_transition(&swapped).unwrap(),
+            PluginLifecycleMutationOutcome::Applied
+        );
+    }
+
     #[test]
     fn discovery_transition_generation_and_reopen_are_monotonic_and_project_scoped() {
         let directory = tempdir().unwrap();
@@ -2949,6 +3157,177 @@ mod tests {
                     barrier.wait();
                     store
                         .request_workspace_plugin_purge(&draft)
+                        .unwrap()
+                        .outcome
+                })
+            })
+            .collect::<Vec<_>>();
+        let outcomes = handles
+            .into_iter()
+            .map(|handle| handle.join().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            outcomes
+                .iter()
+                .filter(|outcome| **outcome == PluginLifecycleMutationOutcome::Applied)
+                .count(),
+            1
+        );
+        assert_eq!(
+            outcomes
+                .iter()
+                .filter(|outcome| **outcome == PluginLifecycleMutationOutcome::Unchanged)
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn replacement_completion_atomically_swaps_and_reverses_digest_pointers() {
+        let directory = tempdir().unwrap();
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let project = "/project/a";
+        let upgrade_id = "transition.upgrade.atomic";
+        prepare_pointer_swapped_replacement(&mut store, project, upgrade_id, "upgrade", 'a', 'b');
+        let upgraded = store
+            .complete_workspace_plugin_replacement(project, upgrade_id, "host.upgrade.atomic")
+            .unwrap();
+        assert_eq!(upgraded.outcome, PluginLifecycleMutationOutcome::Applied);
+        assert_eq!(upgraded.state.accepted_digest, Some(digest('b')));
+        assert_eq!(upgraded.state.rollback_digest, Some(digest('a')));
+        assert!(upgraded.state.pending_digest.is_none());
+        assert_eq!(upgraded.state.observed_state, "active");
+        assert_eq!(upgraded.transition.phase, "completed");
+        assert_eq!(
+            store
+                .complete_workspace_plugin_replacement(project, upgrade_id, "host.upgrade.atomic",)
+                .unwrap()
+                .outcome,
+            PluginLifecycleMutationOutcome::Unchanged
+        );
+        assert_eq!(
+            store
+                .complete_workspace_plugin_replacement(project, upgrade_id, "host.other")
+                .unwrap()
+                .outcome,
+            PluginLifecycleMutationOutcome::Stale
+        );
+
+        let rollback_id = "transition.rollback.atomic";
+        prepare_pointer_swapped_replacement(&mut store, project, rollback_id, "rollback", 'b', 'a');
+        let rolled_back = store
+            .complete_workspace_plugin_replacement(project, rollback_id, "host.rollback.atomic")
+            .unwrap();
+        assert_eq!(rolled_back.state.accepted_digest, Some(digest('a')));
+        assert_eq!(rolled_back.state.rollback_digest, Some(digest('b')));
+        assert!(
+            store
+                .complete_workspace_plugin_replacement(
+                    "/project/b",
+                    rollback_id,
+                    "host.rollback.atomic",
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn replacement_terminal_event_failure_rolls_back_pointer_and_reopens() {
+        let directory = tempdir().unwrap();
+        let database = directory.path().join("rho.sqlite");
+        let project = "/project/a";
+        let transition_id = "transition.upgrade.failure";
+        let mut store = Store::open(&database).unwrap();
+        prepare_pointer_swapped_replacement(
+            &mut store,
+            project,
+            transition_id,
+            "upgrade",
+            'a',
+            'b',
+        );
+        store
+            .connection
+            .execute_batch(
+                "CREATE TRIGGER fail_replacement_terminal_event
+                 BEFORE INSERT ON workspace_plugin_lifecycle_events
+                 WHEN NEW.event_type = 'transition_completed'
+                   AND NEW.transition_id = 'transition.upgrade.failure'
+                 BEGIN SELECT RAISE(ABORT, 'injected replacement event failure'); END;",
+            )
+            .unwrap();
+        assert!(
+            store
+                .complete_workspace_plugin_replacement(
+                    project,
+                    transition_id,
+                    "host.upgrade.failure",
+                )
+                .is_err()
+        );
+        let unchanged = store
+            .get_workspace_plugin_state(project, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        assert_eq!(unchanged.accepted_digest, Some(digest('a')));
+        assert_eq!(unchanged.pending_digest, Some(digest('b')));
+        assert_eq!(
+            store
+                .get_workspace_plugin_transition(project, transition_id)
+                .unwrap()
+                .unwrap()
+                .phase,
+            "pointer_swapped"
+        );
+        store
+            .connection
+            .execute_batch("DROP TRIGGER fail_replacement_terminal_event;")
+            .unwrap();
+        drop(store);
+        let mut reopened = Store::open(&database).unwrap();
+        assert_eq!(
+            reopened
+                .complete_workspace_plugin_replacement(
+                    project,
+                    transition_id,
+                    "host.upgrade.failure",
+                )
+                .unwrap()
+                .outcome,
+            PluginLifecycleMutationOutcome::Applied
+        );
+    }
+
+    #[test]
+    fn concurrent_replacement_completion_has_one_pointer_winner() {
+        let directory = tempdir().unwrap();
+        let database = directory.path().join("rho.sqlite");
+        let project = "/project/a";
+        let transition_id = "transition.upgrade.concurrent";
+        let mut store = Store::open(&database).unwrap();
+        prepare_pointer_swapped_replacement(
+            &mut store,
+            project,
+            transition_id,
+            "upgrade",
+            'a',
+            'b',
+        );
+        drop(store);
+        let barrier = Arc::new(Barrier::new(2));
+        let handles = (0..2)
+            .map(|_| {
+                let database = database.clone();
+                let barrier = Arc::clone(&barrier);
+                std::thread::spawn(move || {
+                    let mut store = Store::open(database).unwrap();
+                    barrier.wait();
+                    store
+                        .complete_workspace_plugin_replacement(
+                            project,
+                            transition_id,
+                            "host.upgrade.concurrent",
+                        )
                         .unwrap()
                         .outcome
                 })

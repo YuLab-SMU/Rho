@@ -1,15 +1,14 @@
 # P2-4 Plugin Lifecycle, Recovery, Uninstall And Upgrade
 
 Status: active under the owner-approved local-first exception; P2-4A through
-P2-4D3 source implementation and local packaged-smoke checkpoints are complete;
+P2-4D3 packaged checkpoints and P2-4E1 source checkpoint are complete;
 D2 Browser visual review was blocked by the Browser local-file URL policy and
 remains open; hosted and cross-platform installed gates remain mandatory before
 final Phase 2 acceptance
 
-Active work package: P2-4E1 only — atomic accepted/rollback pointer completion
-and hidden runtime replacement primitive. E2 Update UI/command, E3 Rollback,
-and P2-4F/G remain inactive. No install, visible Update or Rollback action is
-active.
+Active work package: none at the P2-4E1 stop. E2 Update UI/command, E3
+Rollback, and P2-4F/G remain inactive until explicit activation. No install,
+visible Update or Rollback action is active.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -637,7 +636,7 @@ and recovery uses the durable accepted pointer. Code never live-patches.
 
 E is split into three mandatory local stops:
 
-1. **P2-4E1 — replacement/pointer foundation (active).** Store atomically
+1. **P2-4E1 — replacement/pointer foundation (locally complete).** Store atomically
    completes an exact `pointer_swapped` Upgrade/Rollback transition by comparing
    project/plugin/transition kind, expected accepted digest, candidate digest,
    and current state pointer; then sets accepted=candidate,
@@ -670,6 +669,36 @@ on pre-CAS failure, new route only after CAS, no generation/host/handle reuse,
 and post-CAS terminal persistence failure closing the candidate. E1 remains
 internal `0.4.1-dev.8`; no `NEWS.md`, command/mock, R package or schema change.
 Its local commit is mandatory before E2 activation.
+
+### P2-4E1 local checkpoint — 2026-08-21
+
+The replacement foundation is locally complete without a product command:
+
+- Store now completes only an exact Upgrade/Rollback transition already at
+  `pointer_swapped`; one immediate transaction compares expected accepted and
+  pending candidate pointers, writes accepted=candidate and
+  rollback=expected-old, clears pending, records the fresh host and Active
+  terminal event. Wrong kind/phase/project/digest/host is stale or rejected;
+  duplicate completion converges, concurrent completion has one winner, and an
+  injected event failure rolls back both pointers and reopens cleanly.
+- Runtime preparation takes a verified cache snapshot, allocates a strictly
+  higher durable generation, creates a fresh host/handles and stages
+  contributions hidden. It compares the exact active runtime and contribution
+  identity before quiesce, then publishes through expected-old contribution
+  CAS. Candidate activation failure preserves the exact old route; success
+  replaces it and disposes old authority; terminal persistence failure removes
+  candidate routing, invalidates old authority and leaves `pointer_swapped`
+  recovery truth rather than reporting Enabled.
+- Full Rust workspace tests passed: desktop 259/one opt-in Keychain ignored,
+  Store 162, Server 101 plus one binary, extension-runtime 126 unit/26
+  contract/13 discovery/34 lifecycle and all other suites. Stable and exact
+  Rust `1.88.0` workspace all-target checks passed. The E1 positive/negative
+  contract, all prior P2-4 contracts, command inventory, formatting and diff
+  checks passed.
+
+E1 adds no command, UI/mock state, schema, R contract, installed user behavior
+or version/NEWS impact. Application metadata remains `0.4.1-dev.8`; D2 Browser
+visual review plus hosted/cross-platform and final Phase 2 gates remain open.
 
 ## Rollback
 

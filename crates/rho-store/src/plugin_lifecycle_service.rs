@@ -4,11 +4,11 @@ use crate::{
     PluginLifecycleMutationOutcome, Store, StoreError, WorkspacePluginCrashOutcome,
     WorkspacePluginDiscoveredDraft, WorkspacePluginGenerationAllocation,
     WorkspacePluginLifecycleEvent, WorkspacePluginPackageTombstone, WorkspacePluginPurgeDraft,
-    WorkspacePluginPurgeResult, WorkspacePluginRestoreCompletion, WorkspacePluginRetentionSweep,
-    WorkspacePluginState, WorkspacePluginTombstoneDraft, WorkspacePluginTransition,
-    WorkspacePluginTransitionAdvance, WorkspacePluginTransitionDraft,
-    WorkspacePluginTransitionRequestResult, WorkspacePluginUninstallCompletion,
-    query::required_project_root,
+    WorkspacePluginPurgeResult, WorkspacePluginReplacementCompletion,
+    WorkspacePluginRestoreCompletion, WorkspacePluginRetentionSweep, WorkspacePluginState,
+    WorkspacePluginTombstoneDraft, WorkspacePluginTransition, WorkspacePluginTransitionAdvance,
+    WorkspacePluginTransitionDraft, WorkspacePluginTransitionRequestResult,
+    WorkspacePluginUninstallCompletion, query::required_project_root,
 };
 
 pub struct PluginLifecycleQueryService<'a> {
@@ -235,6 +235,19 @@ impl<'a> PluginLifecycleMutationService<'a> {
         let mut draft = draft.clone();
         draft.project_root = project_root;
         self.store.complete_workspace_plugin_purge(&draft)
+    }
+
+    pub fn complete_replacement(
+        &mut self,
+        project_root: &str,
+        transition_id: &str,
+        host_session_id: &str,
+    ) -> Result<WorkspacePluginReplacementCompletion, StoreError> {
+        self.store.complete_workspace_plugin_replacement(
+            &required_project_root(project_root)?,
+            transition_id,
+            host_session_id,
+        )
     }
 
     pub fn record_crash(
