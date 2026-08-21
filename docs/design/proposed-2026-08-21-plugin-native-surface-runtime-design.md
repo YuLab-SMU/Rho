@@ -172,10 +172,12 @@ Studio/Vibe composition system after migration:
 - a plugin may make Surfaces available, but it cannot silently replace the
   current Scene/Page or focus itself.
 
-During compatibility migration, existing Human/Agent posture and Code/Analyze/
-Agent presets are projected as legacy Scenes. Their context-preservation and
-execution-policy semantics remain intact until an authorized cutover removes
-the old controls.
+The existing Human/Agent posture and Code/Analyze/Agent controls remain only in
+the frozen old frontend while the new shell is constructed. They are not
+projected into Studio Scenes and their layout state is not migrated. Durable
+documents, drafts, conversations, scientific records, policy, and context-
+preservation semantics survive the one-way frontend cutover; the old
+presentation model does not.
 
 ### Surface-local action budget
 
@@ -253,21 +255,32 @@ SurfaceDefinitionV1 {
   purpose
   renderer_kind
   scope                     // application | project
-  instance_policy           // singleton | per_resource | multi_instance
-  default_instance_limit
-  hard_instance_limit
+  instance_policy           // singleton | multi_instance
+  instance_quota_class
   resource_kinds[]
-  variants[]
+  modes[]
+  sizing_hints
   accepted_contexts[]
   commands[]
   origin
 }
 
-SurfaceVariantV1 {
-  variant_id
+SurfaceModeV1 {
+  mode_id
   label
-  resource_kind
   interaction_kind          // read_only | interactive
+}
+
+SurfaceSizingHintsV1 {
+  min_inline
+  min_block
+  ideal_inline?
+  ideal_block?
+  max_inline?
+  max_block?
+  stretch_inline
+  stretch_block
+  presentation_classes[]    // full | compact | strip
 }
 
 SurfaceInstanceV1 {
@@ -278,8 +291,9 @@ SurfaceInstanceV1 {
   package_digest
   activation_generation
   surface_revision
-  variant_id
+  mode_id?
   resource_binding?
+  runtime_binding?
   view_group_id?
   view_state                 // host-owned, bounded to 64 KiB;
                              // focus, selection, viewport, local draft only
@@ -293,12 +307,23 @@ ResourceBindingV1 {
   resource_revision?
 }
 
+RuntimeBindingV1 {
+  runtime_provider_id
+  runtime_instance_id
+  runtime_kind
+  project_id
+  activation_generation
+  state_revision
+  attach_capabilities[]
+}
+
 OpenSurfaceRequestV1 {
   surface_id
-  variant_id
+  mode_id?
   resource_binding?
+  runtime_binding?
   instance_disposition       // reuse_exact | new_instance
-  placement_intent           // current | beside | stack | grid_cell
+  placement_intent           // current | beside | stack | container
   expected_project_revision
   expected_layout_revision
 }
@@ -307,22 +332,27 @@ OpenSurfaceRequestV1 {
 `SurfaceDefinitionV1` is therefore a factory contract, not a visual singleton.
 The host allocates every `instance_id`; a plugin cannot forge, reuse, or select
 another instance. `reuse_exact` may focus an existing instance with the same
-factory, variant, and resource. `new_instance` creates an independent view even
+factory and caller-selected binding key. `new_instance` creates an independent view even
 when the resource is the same.
 
-`singleton` permits one project instance. `per_resource` permits one instance
-per exact resource-and-variant key, so one file may have simultaneous Source
-and Preview instances without duplicating either exact view. `multi_instance`
-permits duplicate views such as four Console instances. Effective limits are
-computed by trusted host policy; a plugin declaration may request a lower
-limit but cannot raise the host cap.
+`singleton` permits one project instance. `multi_instance` permits any number
+admitted by the current project resource budget, including repeated instances
+with the same resource and the same mode. Resource or mode equality never
+implies deduplication. `reuse_exact` is an explicit caller preference, not a
+factory invariant.
 
-The default workspace-plugin limit is eight live instances per Surface
-definition and the hard host limit is sixteen. Application plugins may receive
-a separately reviewed higher default under the same project-wide cap. A Studio
-composition may retain 32 live instances and show at most 16 simultaneously;
-the project-wide live cap is 64. Hidden Stack members remain instances but may
-be suspended under host memory policy.
+Instance quotas are technical resource budgets, not layout geometry. The host
+computes them from encoded Scene size, live DOM/view cost, plugin Host memory,
+payload leases, and runtime/service policy. A plugin may declare a lower
+quota class but cannot raise host limits. Hidden Stack members remain instances
+but may be suspended under host memory pressure.
+
+Sizing values are bounded logical-pixel hints, not geometry authority. A
+plugin may say that a status Surface works as a short intrinsic strip or that a
+plot needs a meaningful minimum size. The user still chooses placement and may
+resize within safe minimum/accessibility constraints. The layout solver, not
+the plugin, chooses `full`, `compact`, or `strip` presentation from the actual
+available rectangle.
 
 Registration is transactional and reversible. A disabled, failed, replaced, or
 stale plugin loses its Surface routes before its host is disposed. An open
@@ -335,7 +365,8 @@ RSR distinguishes four independent scaling dimensions:
 
 1. **view scaling** — many Surface instances from one definition;
 2. **resource scaling** — each instance binds a different file, Artifact, Run,
-   object, finding, task, or view variant;
+   object, finding, task, or plugin-defined mode—or deliberately repeats the
+   same binding;
 3. **runtime scaling** — instances may share one authoritative service/runtime
    or bind an explicitly isolated runtime capability;
 4. **event scaling** — the plugin Host admits a bounded number of concurrent or
@@ -347,37 +378,55 @@ Those require their own declared capability and authority.
 
 #### Console example
 
-Four Console instances in a 4x4 Studio Grid are valid. Each has independent
+Any number of Console instances admitted by resource policy is valid. Each has independent
 input draft, history position, scroll, filters, and optional origin/channel
-view. All four bind the same `workspace_console` resource and the same
-broker-owned Workspace R execution coordinator unless a separately authorized
-multi-runtime capability exists.
+view. Every Console explicitly binds one attachable runtime instance selected
+from the broker-owned Runtime Registry.
 
-- submissions are globally ordered by the Workspace execution lane;
+- several Consoles may bind the same runtime, while others bind different R,
+  Python, remote, or future runtime instances exposed through reviewed runtime
+  providers;
+- the Console factory cannot attach to Agent R, a credential-bearing internal
+  process, or any runtime that does not declare the exact console-attach
+  capability;
+- submissions are ordered by the selected runtime's execution lane;
 - each run records the originating Console instance without making that
   instance the run authority;
-- every Console may show all output or an instance-local filtered projection;
-- interrupt, restart, busy/idle, state revision, and project identity remain
-  Workspace-global truth;
+- every Console may show all output for its runtime or an instance-local
+  filtered/channel projection;
+- interrupt, restart, busy/idle, state revision, and project identity are truth
+  of the bound runtime, not of the Console Surface;
 - closing one Console removes only that view and its local draft/scroll state.
 
-Four Consoles are therefore four working perspectives over one scientific
-runtime, not four silently divergent R sessions.
+Opening a Console does not create a runtime implicitly. `runtime.create`,
+attach, detach, stop, and dispose are separate broker-owned commands and
+policies. Closing the last Console does not stop a persistent runtime; an
+ephemeral leased runtime follows its reviewed lease/confirmation policy.
+
+This supports four perspectives over one Workspace R, four Consoles attached
+to four different runtimes, or any intentional combination without confusing
+visual multiplicity with runtime authority.
 
 #### File source and preview example
 
-The file-view factory may expose variants such as `source`, `preview`, `diff`,
-and `outline`. Opening two files creates two instances with different resource
-bindings. Opening one file as source beside preview creates two instances with
-the same normalized project-relative resource and revision but different
-variants.
+A file-capable plugin may expose `source`, `preview`, `diff`, `outline`, or any
+other mode, or it may expose separate Surface definitions for those views. RSR
+does not define a privileged Source/Preview pair and does not require the same
+plugin to provide both.
 
-Both instances share the one broker/document-session content model. Source
-cursor, preview scroll, selected heading, and zoom remain instance-local.
-Preview output is explicitly bound to the document content revision; an
-outdated render shows stale rather than pretending to match the latest source.
-Two source instances may share the same Monaco text model while keeping
-independent cursor, selection, viewport, and focus state.
+Opening two files creates two arbitrary instances. Opening one file twice in
+Preview, twice in Source, or in any mix of identical/different modes is equally
+valid under `multi_instance`. No resource-and-mode tuple is automatically
+unique.
+
+Content sharing is a separate resource-provider contract. Two instances may
+share one broker/document-session text model, or a preview plugin may consume
+only an immutable file/revision snapshot. The Surface Runtime does not assume
+either. When a view claims correspondence to source content, its output must
+bind an exact content/resource revision and show stale when that revision
+changes. Cursor, preview scroll, selected heading, zoom, focus, and other view
+state remain instance-local unless a user explicitly links them through a
+`view_group_id`.
 
 #### Plugin Host event scaling
 
@@ -394,24 +443,27 @@ per-instance cancellation, memory/fuel budgets, fairness, teardown, and crash
 tests. Application-plugin Surfaces may use existing broker services with their
 already accepted concurrency contracts; the UI layer does not redefine them.
 
-### 3. Scene Graph
+### 3. Studio layout container
 
-The first layout contract is a bounded tiling graph, not free-form absolute
-coordinates:
+Studio provides a recursive layout container, not a fixed Grid catalog. The
+same primitive represents one pane, an asymmetric two-pane split, a tiny
+status strip beside a large plot, a deeply nested dashboard, or a user-created
+four-by-four arrangement:
 
 ```text
 LayoutNodeV1 =
-  Split { axis, ratio, first, second }
-  Grid { rows, columns, cells[] }
+  Container { axis, children[] }
   Stack { active_instance_id, instances[] }
   Surface { instance_id }
 
-GridCellV1 {
-  row                       // 1..4
-  column                    // 1..4
-  row_span                  // 1..4
-  column_span               // 1..4
+LayoutChildV1 {
   child: LayoutNodeV1
+  basis                     // auto | intrinsic | fixed | fraction | minmax
+  value?
+  min?
+  max?
+  resizable
+  collapse_priority?
 }
 
 SceneStateV1 {
@@ -425,13 +477,24 @@ SceneStateV1 {
 
 Rules:
 
-- maximum depth 8, 64 nodes, and 32 live Surface instances per Scene;
-- Grid supports at most four rows by four columns and sixteen simultaneously
-  visible cells; cells may contain a Surface or Stack and may span rows/columns
-  without overlap;
-- split ratios are clamped and minimum Surface sizes are host policy;
-- move, split, grid, stack, duplicate, close, and focus are revisioned layout
-  transactions;
+- there is no semantic row, column, symmetry, or four-by-four limit;
+- recursive horizontal/vertical Containers produce arbitrary asymmetric
+  layouts, while Stack overlays sibling instances in one rectangle;
+- `auto` and `intrinsic` allow a small plugin to occupy a content-sized strip;
+  `fraction`, `fixed`, and `minmax` support user-directed proportions;
+- dragging a boundary updates the two adjacent child bases under exact layout
+  revision and the declared/user-safe minimums; it does not rewrite siblings;
+- the encoded Scene is bounded to 1 MiB, depth 32, 256 layout nodes, and 128
+  Surface placements as an initial denial-of-service budget. These are storage
+  and runtime safety limits, not a visible grid shape;
+- move, insert, remove, nest, unnest, stack, duplicate, resize, close, and focus
+  are revisioned layout transactions;
+- user size choices override plugin ideals within safe minimum/maximum bounds;
+  the host may offer Normalize/Distribute commands but never silently makes an
+  asymmetric Scene symmetric;
+- on narrow windows, user-authored collapse priorities and Stack alternatives
+  apply before the host presents overflow; the solver never deletes or
+  reorders a Surface to make it fit;
 - a plugin may request `open(surface_id, context)` after an explicit user or
   authorized Agent action, but the host chooses placement from user policy;
 - plugins cannot write Scene state, create overlays, force focus, or reserve a
@@ -439,8 +502,9 @@ Rules:
 - trusted approval, credential, permission, updater, privacy, and destructive
   confirmation UI is outside the Scene Graph.
 
-This gives users layout freedom while keeping security, accessibility, narrow
-viewport behavior, and recovery deterministic.
+This makes RSR a layout container rather than an IDE template engine. Studio
+presets are ordinary initial container trees that users may duplicate and
+change; only the immutable built-in preset remains resettable.
 
 ### 3b. Vibe Page Flow
 
@@ -604,9 +668,11 @@ Requirements:
 - project A and B cannot share instances, context references, revisions, or
   plugin generation identity even when paths and plugin IDs match;
 - a plugin package update never rewrites layout state directly;
-- persisted instance specs contain only factory/variant/resource bindings and
-  host-owned presentation state. Plugin-private runtime state is not persisted
-  unless a separate bounded plugin-storage contract is authorized;
+- persisted instance specs contain only factory/mode/resource bindings,
+  durable runtime-attachment intent, and host-owned presentation state. Live
+  runtime generation IDs are re-resolved after restart rather than trusted
+  from disk. Plugin-private runtime state is not persisted unless a separate
+  bounded plugin-storage contract is authorized;
 - missing/disabled Surface instances become explicit placeholders;
 - stale or failed persistence leaves the last durable Scene truthful and does
   not claim a move/close/save completed;
@@ -615,10 +681,11 @@ Requirements:
 - a layout export/import or project-shared Scene file is deferred. It must not
   be guessed from local state or silently committed to a project.
 
-Current `PanelSizes` may be migrated once into a `Legacy Workbench` Studio
-Scene. The migration may map only known built-in panels. Unknown or inconsistent state
-falls back to a default Scene while preserving the old session snapshot for
-recovery; it must not guess historical plugin ownership.
+Current `PanelSizes`, posture, layout presets, and frontend-only surface state
+are intentionally not migrated. The new UI profile starts from the immutable
+`Rho Studio` preset and restores only separately authoritative documents,
+drafts, conversations, runtime/scientific records, and plugin lifecycle state.
+This removes historical layout ambiguity rather than guessing ownership.
 
 ## Plugin Lifecycle And Layout
 
@@ -665,102 +732,23 @@ disposes a shared resource model still referenced elsewhere.
 | 7 overall density | every operation becomes a button | one Command Registry with contextual projection and action budgets |
 | 8 region clarity | good macro-regions, excessive local chrome | Studio uses Surface regions; Vibe uses ordered content/Surface blocks |
 
-## First Component And Migration Plan
+## Complete Construction Direction
 
 The first component remains **Check project**, because its rule engine and
 result UI have clear typed boundaries and low ambient authority. RSR should be
 proven with one real vertical component rather than an empty framework rewrite.
 
-No work package below is active until the owner authorizes it.
+The complete continuous program is owned by
+`docs/plans/proposed-2026-08-21-rsr-full-construction-plan.md`. Its dependency
+order is new React/Vite shell, pure RSR contracts, Command/Context kernel,
+Surface instances, Studio container, Runtime/Resource registries, durable UI
+profile, workspace-plugin Surfaces, Check project, ProseMirror Vibe, remaining
+domain Surfaces, one-way cutover, legacy deletion, and hardening.
 
-### RSR-0 — Shared contracts and compatibility adapter
-
-- define bounded Surface, Command, Studio Scene, Vibe Page, and event contracts
-  in a module that is independent of the frontend renderer;
-- define singleton/per-resource/multi-instance factory policy, resource and
-  variant bindings, open disposition, instance/view-state bounds, and the
-  separate runtime-authority rule;
-- add validators, projection fixtures, and lifecycle simulations;
-- wrap the existing fixed workbench as one `Legacy Workbench` Studio Scene with no
-  visible behavior change;
-- register existing first-party commands through one compatibility Command
-  Registry while retaining current handlers;
-- stop before persistence migration or new plugin UI.
-
-### RSR-1A — Usable Studio composition
-
-- ship one reviewed `Rho Studio` preset through the Scene Graph;
-- let the user duplicate, rename, split, stack, resize, close, and reset a
-  custom Scene while the built-in preset remains immutable;
-- adapt existing Editor, Agent, Context, and utility Dock regions without
-  changing their scientific or focus behavior;
-- support Split, Stack, and non-overlapping Grid layouts up to four-by-four;
-- retain one command that returns to the exact legacy layout;
-- stop before multi-instance resource adapters, Vibe, layout sharing, or raw
-  workspace-plugin UI.
-
-### RSR-1B — Multi-instance vertical slice
-
-- make File view and Console registered Surface factories rather than single
-  pane identities;
-- prove two different files, and one file as side-by-side source/preview,
-  through shared canonical document models and independent view state;
-- prove four Console instances in one Studio Grid share one Workspace R
-  execution/state authority while preserving independent drafts, filters,
-  focus, and scroll;
-- enforce per-definition/project/Scene caps, fair plugin event queueing,
-  close-one/keep-siblings, suspend/resume, restart, and unavailable
-  placeholders;
-- stop before adding another runtime/session capability or widening Phase 2
-  guest-call concurrency.
-
-### RSR-2 — First dual-mode component: Check project
-
-- register `project.check` as one typed Command;
-- register `project.check.results` as an application-plugin Surface;
-- move the current Check project trigger out of permanent top chrome and make
-  it the primary contextual command only when the project context permits;
-- open findings as the dominant Surface, with source/evidence actions routed
-  through Commands;
-- keep the trusted check orchestrator, project snapshot, execution admission,
-  and finding renderer authoritative;
-- allow workspace plugins to contribute bounded check rules, not layout or
-  trusted result claims;
-- open the same result as a Studio Surface or as a systematic Project review
-  Vibe Page containing summary, finding, evidence, and remediation blocks;
-- prove disable/update/rollback, stale result, project A/B isolation, and
-  unavailable placeholder behavior;
-- stop before general-purpose Vibe authoring or migrating Agent.
-
-### RSR-3 — Vibe authoring foundation and shell reduction
-
-- make Section/flow/grid block editing revisioned and keyboard accessible;
-- support text, references, and live Surface blocks under one layout system;
-- reduce permanent chrome to Project, Studio/Vibe, Scene/Page, command search,
-  and status/primary action;
-- preserve document order across wide/narrow layouts and deterministic export;
-- keep Page mutation user-owned and proposals reviewable;
-- stop before collaborative/shared Pages or plugin-provided templates.
-
-### RSR-4 — Agent Surface in both modes
-
-- mount Agent timeline and composer as one Surface;
-- remove duplicate Agent posture/layout controls only after state and focus
-  compatibility tests pass;
-- keep Ask/Plan/Act, approvals, Agent dependency health, cancellation, and
-  model routing unchanged;
-- reduce the composer to attachment, text, and send, with model/policy in one
-  disclosure;
-- render the same Agent task as a Studio Surface or a Vibe task/activity block
-  without creating separate conversations or execution state.
-
-### RSR-5 — First-party surface migration
-
-- migrate Editor/Viewer, Console/Logs/Problems, Environment, Evidence, Git,
-  Help, and Runs one vertical slice at a time;
-- delete fixed grid/tab code only after the equivalent Surface passes exact
-  behavior, focus, narrow-layout, restart, and project-switch acceptance;
-- never keep two persistent authorities for the same layout state.
+The old frontend is frozen during construction. It is neither wrapped as a
+Surface nor maintained as a runtime compatibility mode. Repository integration
+boundaries stay buildable and automatically verified, but the program has no
+planned manual product pauses between them.
 
 ## Verification And Failure Matrix
 
@@ -779,16 +767,19 @@ Pure contract tests must cover:
 
 Multi-instance tests must cover:
 
-- singleton, per-resource, and multi-instance policies;
+- singleton and multi-instance policies with resource/mode equality never
+  forcing reuse;
 - `reuse_exact` versus `new_instance`, duplicate-view admission, instance caps,
   project caps, queue caps, fair ordering, cancellation, and one-instance
   failure without sibling teardown;
-- a four-by-four Studio Grid, overlapping/invalid cells, hidden Stack members,
-  suspend/resume, close-one/keep-siblings, and focus/scroll isolation;
-- four Console instances sharing one Workspace execution/state authority and
-  preserving global interrupt/restart truth;
-- two files in one viewer factory, plus one file source/preview variants sharing
-  one content model and rejecting a stale preview revision;
+- deeply nested asymmetric Containers, fixed/fraction/intrinsic/minmax sizing,
+  drag boundaries, compact strips, hidden Stack members, suspend/resume,
+  close-one/keep-siblings, and focus/scroll isolation;
+- multiple Console instances deliberately sharing and not sharing runtime
+  instances, with interrupt/restart truth isolated to each exact binding;
+- repeated identical file/mode instances, separate Source/Preview providers,
+  optional shared content models, and stale revision rejection only when a view
+  claims correspondence to an exact source revision;
 - disable, crash, update, rollback, project switch, and reopen with multiple
   exact instances and unavailable placeholders;
 - no live interactive instance mounted twice and no cross-project instance,
@@ -829,9 +820,9 @@ failure, cancellation, restart/recovery, and two-project isolation evidence.
   Surface declaration later but cannot activate it, mutate a Scene, or bypass
   RSR review and existing plugin grants;
 - the Human/Agent posture design and Agent-first adaptive work surface retain
-  current presentation authority until an RSR cutover is explicitly
-  authorized. RSR proposes that their layout-only state become legacy Scenes;
-  Agent policy and context-preservation invariants survive;
+  current presentation authority only in the frozen old frontend until the RSR
+  cutover. Their layout-only state is retired rather than migrated; Agent
+  policy, durable content, and context-preservation invariants survive;
 - interface modernization retains visual tokens, accessibility styling, and
   current installed acceptance obligations. RSR owns future composition, not a
   competing theme;
@@ -856,14 +847,14 @@ This proposal does not authorize:
 - Agent-authored activation, autonomous layout mutation, or UI self-repair;
 - a second project/session/layout persistence authority;
 - changing scientific execution, approval, credential, or Provider policy;
-- removing the legacy layout before equivalent Surfaces are accepted;
+- retaining the legacy layout as a shipped compatibility mode after cutover;
 - version, NEWS, installed-app, release, CI, or multi-platform claims from this
   proposal alone.
 
-The host implementation may move from the current monolithic JavaScript toward
-TypeScript/ES modules and component boundaries, but the Surface and Command
-protocol must remain implementation-library independent. Choosing a rendering
-library is a later engineering detail, not the foundation contract.
+The host implementation uses React 19.2.7, TypeScript, Vite 8.0.10, and
+ProseMirror as recorded in the full construction plan. Surface, Command,
+Resource, Runtime, Scene, and Page wire contracts remain implementation-library
+independent.
 
 ## Product Decisions Recommended For Authorization
 
@@ -880,12 +871,17 @@ library is a later engineering detail, not the foundation contract.
 7. make Check project the first dual-mode Surface and pluginized rule component;
 8. keep Studio Scenes and Vibe Pages local and project-scoped initially; defer
    sharing/export;
-9. preserve a complete legacy Studio Scene until the migrated surface set is
-   accepted;
+9. construct the new frontend separately, perform one cutover, and delete the
+   old fixed shell without a shipped compatibility toggle;
 10. treat every plugin Surface declaration as a bounded factory supporting
-    explicit multi-instance/resource/variant policy rather than one panel;
-11. support a four-by-four Studio Grid while keeping runtime authority and
-    plugin Host concurrency independent from visual instance count.
+    explicit multi-instance/resource/mode/runtime binding rather than one
+    panel;
+11. make Studio a recursive layout container with arbitrary asymmetric,
+    draggable, intrinsic, fixed, and fractional sizing rather than a fixed
+    Grid vocabulary;
+12. keep runtime identity/authority and plugin Host concurrency independent
+    from visual instance count, with every Console binding an exact attachable
+    runtime.
 
 Implementation begins only after the owner approves one bounded work package,
 the proposal is renamed or handed off to an active contract, and cross-review
