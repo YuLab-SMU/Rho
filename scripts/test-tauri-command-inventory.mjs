@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-const EXPECTED_HANDLER_DIGEST = "d42c7d24505133fd4277201c9a7e60b3a9417b3ce059cb5966b651361e7ffa7f";
+const EXPECTED_HANDLER_DIGEST = "fc870974bf8736822609964782d03806b211fafa07f28c3ed6731a1b037aeffb";
 
 const RUN_COMMANDS = [
   "audit_reproducibility",
@@ -14,6 +14,7 @@ const RUN_COMMANDS = [
 ];
 
 const PLUGIN_COMMANDS = [
+  "disable_workspace_plugin",
   "get_plugin_panel_document",
   "get_plugin_permission_request",
   "invoke_plugin_command",
@@ -24,7 +25,10 @@ const PLUGIN_COMMANDS = [
   "open_plugin_viewer",
   "request_workspace_plugin_enable",
   "respond_plugin_permission",
+  "restore_workspace_plugin",
+  "retry_workspace_plugin",
   "revoke_plugin_grant",
+  "uninstall_workspace_plugin",
 ];
 
 function rustFiles(root) {

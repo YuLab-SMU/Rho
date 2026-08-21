@@ -4,6 +4,24 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.1-dev.8 - 2026-08-21
+
+### Workspace-plugin recoverable Uninstall
+
+- The trusted Workspace Plugins surface can now confirm an exact project,
+  directory, accepted package digest, and project revision before Uninstall.
+  Rho first completes plugin teardown, cancels pending permission requests,
+  revokes every durable grant for that exact digest, and then atomically moves
+  the package directory from discovery into project-local recoverable trash.
+- Package ownership, the recoverable tombstone, and durable Uninstalled state
+  are journaled without claiming permanent deletion. If terminal persistence
+  fails after the move, the package remains in trash and the nonterminal
+  transition stays recoverable; the UI does not report success.
+- Restore requires the exact current-project tombstone and revision, rejects
+  source collisions and any surviving authority, and returns the package in
+  Disabled state. It never recreates a host, route, handle, permission request,
+  or durable grant.
+
 ## 0.4.1-dev.7 - 2026-08-20
 
 ### Workspace-plugin crash recovery

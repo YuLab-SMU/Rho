@@ -8,7 +8,8 @@ use crate::workspace_plugins::{
     PluginCommandInvocationView, PluginContributionList, PluginGrantList, PluginGrantRevokeResult,
     PluginPermissionDecisionInput, PluginPermissionDecisionResult, PluginRuntimeContext,
     PluginViewerDocumentView, WorkspacePluginDisableResult, WorkspacePluginEnableResult,
-    WorkspacePluginList,
+    WorkspacePluginList, WorkspacePluginRestoreInput, WorkspacePluginRestoreResult,
+    WorkspacePluginUninstallInput, WorkspacePluginUninstallResult,
 };
 use crate::{AppState, active_context, display_error, extension_project_scope_id, read_store};
 
@@ -97,6 +98,55 @@ pub(crate) async fn retry_workspace_plugin(
         .plugin_permissions
         .retry(&context, &plugin_id, &mut store)
         .map_err(display_error)
+}
+
+async fn persist_plugin_project_change(state: &AppState) -> Result<i64> {
+    let coordinator = active_context(state).await?;
+    let mut coordinator = coordinator.lock().await;
+    coordinator.broker.project_changed();
+    let identity = coordinator.broker.identity().clone();
+    coordinator.store.save_identity(&identity)?;
+    i64::try_from(identity.project_revision).context("project revision exceeds plugin range")
+}
+
+#[tauri::command]
+pub(crate) async fn uninstall_workspace_plugin(
+    input: WorkspacePluginUninstallInput,
+    state: State<'_, AppState>,
+) -> Result<WorkspacePluginUninstallResult, String> {
+    let _project_transition = state.project_transition_gate.lock().await;
+    let context = runtime_context(&state).await.map_err(display_error)?;
+    let mut result = {
+        let mut store = read_store(&state).map_err(display_error)?;
+        state
+            .plugin_permissions
+            .uninstall(&context, &input, &mut store)
+            .map_err(display_error)?
+    };
+    result.project_revision = persist_plugin_project_change(&state)
+        .await
+        .map_err(display_error)?;
+    Ok(result)
+}
+
+#[tauri::command]
+pub(crate) async fn restore_workspace_plugin(
+    input: WorkspacePluginRestoreInput,
+    state: State<'_, AppState>,
+) -> Result<WorkspacePluginRestoreResult, String> {
+    let _project_transition = state.project_transition_gate.lock().await;
+    let context = runtime_context(&state).await.map_err(display_error)?;
+    let mut result = {
+        let mut store = read_store(&state).map_err(display_error)?;
+        state
+            .plugin_permissions
+            .restore(&context, &input, &mut store)
+            .map_err(display_error)?
+    };
+    result.project_revision = persist_plugin_project_change(&state)
+        .await
+        .map_err(display_error)?;
+    Ok(result)
 }
 
 #[tauri::command]

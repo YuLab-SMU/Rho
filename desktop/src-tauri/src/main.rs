@@ -14687,6 +14687,80 @@ fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Valu
             == "enabled",
         "installed P2-4 reviewed crash loop could not re-enable exactly"
     );
+    let p24_uninstall_state = PluginLifecycleQueryService::new(&p24_store)
+        .get_state(
+            &p24_project_root,
+            "org.yulab.rho.phase2-durable-enable-smoke",
+        )?
+        .context("installed P2-4 Uninstall state is missing")?;
+    let p24_uninstalled = p24_restarted.uninstall(
+        &p24_context,
+        &crate::workspace_plugins::WorkspacePluginUninstallInput {
+            plugin_id: "org.yulab.rho.phase2-durable-enable-smoke".to_string(),
+            directory_name: "installed-smoke".to_string(),
+            package_digest: p24_uninstall_state
+                .accepted_digest
+                .clone()
+                .context("installed P2-4 Uninstall accepted digest is missing")?,
+            expected_project_revision: p24_context.project_revision,
+            confirmed: true,
+        },
+        &mut p24_store,
+    )?;
+    let p24_uninstalled_state = PluginLifecycleQueryService::new(&p24_store)
+        .get_state(
+            &p24_project_root,
+            "org.yulab.rho.phase2-durable-enable-smoke",
+        )?
+        .context("installed P2-4 durable Uninstalled state is missing")?;
+    let p24_tombstone = PluginLifecycleQueryService::new(&p24_store)
+        .get_tombstone(&p24_project_root, &p24_uninstalled.tombstone_id)?
+        .context("installed P2-4 recoverable tombstone is missing")?;
+    ensure!(
+        p24_uninstalled.status == "uninstalled"
+            && p24_uninstalled.route_closed
+            && p24_uninstalled_state.desired_state == "uninstalled"
+            && p24_uninstalled_state.observed_state == "uninstalled"
+            && !p24_plugin.exists()
+            && p24_tombstone.restored_at.is_none(),
+        "installed P2-4 recoverable Uninstall truth diverged"
+    );
+    let p24_restored = p24_restarted.restore(
+        &p24_context,
+        &crate::workspace_plugins::WorkspacePluginRestoreInput {
+            tombstone_id: p24_uninstalled.tombstone_id.clone(),
+            expected_project_revision: p24_context.project_revision,
+        },
+        &mut p24_store,
+    )?;
+    let p24_restored_state = PluginLifecycleQueryService::new(&p24_store)
+        .get_state(
+            &p24_project_root,
+            "org.yulab.rho.phase2-durable-enable-smoke",
+        )?
+        .context("installed P2-4 restored lifecycle state is missing")?;
+    ensure!(
+        p24_restored.status == "disabled"
+            && p24_plugin.is_dir()
+            && p24_restored_state.desired_state == "disabled"
+            && p24_restored_state.observed_state == "disabled"
+            && p24_restored_state.last_host_session_id.is_none()
+            && PluginPermissionQueryService::new(&p24_store)
+                .list_grants(&p24_project_root, Some(100), Some("active"))?
+                .is_empty(),
+        "installed P2-4 Restore created authority or non-disabled truth"
+    );
+    ensure!(
+        p24_restarted
+            .request_enable(
+                &p24_context,
+                "org.yulab.rho.phase2-durable-enable-smoke",
+                &mut p24_store,
+            )?
+            .status
+            == "enabled",
+        "installed P2-4 restored package could not be explicitly re-enabled"
+    );
     p24_restarted.invalidate_project(&p24_project_root);
     let p24_manifest_path = p24_plugin.join("rho-plugin.json");
     let mut p24_changed_manifest: Value =
@@ -14710,7 +14784,7 @@ fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Valu
         "installed P2-4 trusted projection hid update-pending state"
     );
 
-    Ok(json!({
+    let mut report = json!({
         "runtime": "wasmtime-38.0.4",
         "guest_abi": 1,
         "guest_echo": true,
@@ -14751,7 +14825,12 @@ fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Valu
         "heartbeat_timeout_classified": true,
         "retry_fresh_authority": true,
         "third_crash_blocked": true,
-    }))
+    });
+    report["recoverable_uninstall"] = json!(true);
+    report["uninstall_tombstone_atomic"] = json!(true);
+    report["uninstall_package_in_trash"] = json!(true);
+    report["restore_disabled_no_authority"] = json!(true);
+    Ok(report)
 }
 
 async fn smoke_extension_runtime(
@@ -15103,6 +15182,8 @@ fn main() {
             commands::plugins::request_workspace_plugin_enable,
             commands::plugins::disable_workspace_plugin,
             commands::plugins::retry_workspace_plugin,
+            commands::plugins::uninstall_workspace_plugin,
+            commands::plugins::restore_workspace_plugin,
             commands::plugins::list_plugin_permission_requests,
             commands::plugins::get_plugin_permission_request,
             commands::plugins::respond_plugin_permission,

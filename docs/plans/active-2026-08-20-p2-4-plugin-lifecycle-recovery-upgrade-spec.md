@@ -1,14 +1,14 @@
 # P2-4 Plugin Lifecycle, Recovery, Uninstall And Upgrade
 
-Status: active under the owner-approved local-first exception; P2-4A schema v14
-state/transition/event/tombstone persistence completed its local stop gate
-2026-08-20; P2-1/P2-2/P2-3/P2-4A hosted and cross-platform installed gates
-remain open and mandatory before final Phase 2 acceptance
+Status: active under the owner-approved local-first exception; P2-4A through
+P2-4D2 source implementation and local packaged-smoke checkpoints are complete;
+D2 Browser visual review was blocked by the Browser local-file URL policy and
+remains open; hosted and cross-platform installed gates remain mandatory before
+final Phase 2 acceptance
 
-Active work package: P2-4D2 only — trusted recoverable Uninstall/Restore plus
-atomic tombstone truth. P2-4D3 and P2-4E through P2-4G remain inactive. D2 may
-add Uninstall/Restore commands and confirmation UI, but no permanent deletion,
-install, update or rollback.
+Active work package: none at the P2-4D2 stop. P2-4D3 and P2-4E through P2-4G
+remain inactive until their explicit activation commits. No permanent deletion,
+install, update or rollback is active.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -450,6 +450,69 @@ directory/digest/tombstone/revision, source collision or foreign project fails
 closed. The next synchronized application version after `0.4.1-dev.7`, NEWS,
 trusted confirmation copy, mock parity, Browser review and packaged smoke are
 mandatory.
+
+### P2-4D2 local implementation checkpoint — 2026-08-21
+
+The trusted recoverable Uninstall/Restore implementation is locally integrated:
+
+- Store terminal completion now uses one immediate transaction for the exact
+  `package_moved` uninstall transition, recoverable tombstone, lifecycle event,
+  and desired/observed Uninstalled state. Standalone tombstone creation was
+  removed from the application service so the product path cannot claim trash
+  ownership without the matching transition. Restore atomically marks the exact
+  tombstone restored and returns desired/observed Disabled.
+- The command validates explicit confirmation, current project revision,
+  single-component directory and accepted digest; reuses exact C1 teardown;
+  cancels pending permission requests; revokes all active durable grants for the
+  exact plugin/digest; revalidates discovery; uses D1 same-filesystem rename;
+  persists `package_moved`; and reports success only after terminal Store truth.
+  Restore rejects a foreign/stale/deleted/non-recoverable tombstone, source
+  collision, live/pending host state or surviving durable grant.
+- The trusted UI contains fixed recoverable-Uninstall consequence text and exact
+  project/directory/full digest identity, plus a fixed Restore-disabled action.
+  Tauri command/mock inventory is 133 commands with exactly one mock handler per
+  command. Update, Rollback and permanent purge commands remain absent.
+- Application version metadata and browser cache keys are synchronized at
+  `0.4.1-dev.8`; `NEWS.md` records the visible behavior. R package versions are
+  unchanged because no `rho.bridge` or `rho.agent` contract changed.
+
+Verification completed on local Apple Silicon macOS:
+
+- `cargo test --workspace --all-targets`: desktop 256 passed/one opt-in Keychain
+  test ignored; Store 156; Server 95 library plus one binary; extension-runtime
+  126 unit, 26 contract, 13 discovery and 34 lifecycle tests; all remaining
+  workspace suites passed;
+- stable and exact Rust `1.88.0` workspace all-target checks passed; capped
+  Clippy completed on both toolchains with only the repository's existing broad
+  `StoreError`/legacy warnings and no D2-specific non-baseline warning;
+- D2 self-negative/positive contract, Phase 1 acceptance, MSRV, MAC4 and command
+  inventory contracts passed; JS syntax and Rust formatting passed;
+- source `--smoke-test`, unpacked App candidate/legacy, and read-only mounted DMG
+  candidate/legacy all reported `recoverable_uninstall`,
+  `uninstall_tombstone_atomic`, `uninstall_package_in_trash`, and
+  `restore_disabled_no_authority` true, with project-switch and Workspace-restart
+  isolation true.
+
+Local build evidence for the unsigned `0.4.1-dev.8` rehearsal candidate:
+
+- arm64 executable: 48,026,848 bytes, SHA-256
+  `19c41128f249705ad75259058be0df1707956a962301fb9f9ae827daa143f1d8`;
+- DMG: 26,364,434 bytes, SHA-256
+  `100d10912cd5d2fd69a57987d5cf4422e9894cbd1fca8140225e6008541c5dd8`;
+- updater archive: 27,122,027 bytes, SHA-256
+  `6fa01d252b5f9bb32a5f5bfb5677dfe5413e1dd0e9a6cc0dc75e4e3419ba237c`.
+
+The updater archive used an ephemeral rehearsal key and intentionally does not
+match the production updater public key. `codesign --verify --deep --strict`
+did not pass for this unsigned local App, so none of this is signing,
+notarization, release or publication evidence.
+
+Browser visual review remains explicitly open: the in-app Browser rejected the
+local `file://` preview under its URL security policy. The agent did not bypass
+that policy or substitute another browser surface. Deterministic preview
+evidence hooks and mock parity are present, but they are not recorded as a
+visual pass. Hosted/cross-platform installed acceptance and final Phase 2 review
+also remain open.
 
 ## Upgrade
 

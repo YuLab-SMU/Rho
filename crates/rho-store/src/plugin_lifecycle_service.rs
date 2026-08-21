@@ -3,9 +3,10 @@
 use crate::{
     PluginLifecycleMutationOutcome, Store, StoreError, WorkspacePluginCrashOutcome,
     WorkspacePluginDiscoveredDraft, WorkspacePluginGenerationAllocation,
-    WorkspacePluginLifecycleEvent, WorkspacePluginPackageTombstone, WorkspacePluginState,
-    WorkspacePluginTombstoneDraft, WorkspacePluginTransition, WorkspacePluginTransitionAdvance,
-    WorkspacePluginTransitionDraft, WorkspacePluginTransitionRequestResult,
+    WorkspacePluginLifecycleEvent, WorkspacePluginPackageTombstone,
+    WorkspacePluginRestoreCompletion, WorkspacePluginState, WorkspacePluginTombstoneDraft,
+    WorkspacePluginTransition, WorkspacePluginTransitionAdvance, WorkspacePluginTransitionDraft,
+    WorkspacePluginTransitionRequestResult, WorkspacePluginUninstallCompletion,
     query::required_project_root,
 };
 
@@ -72,6 +73,15 @@ impl<'a> PluginLifecycleQueryService<'a> {
     ) -> Result<Option<WorkspacePluginPackageTombstone>, StoreError> {
         self.store
             .get_workspace_plugin_tombstone(&required_project_root(project_root)?, tombstone_id)
+    }
+
+    pub fn list_tombstones(
+        &self,
+        project_root: &str,
+        limit: Option<usize>,
+    ) -> Result<Vec<WorkspacePluginPackageTombstone>, StoreError> {
+        self.store
+            .list_workspace_plugin_tombstones(&required_project_root(project_root)?, limit)
     }
 }
 
@@ -151,27 +161,32 @@ impl<'a> PluginLifecycleMutationService<'a> {
         )
     }
 
-    pub fn record_tombstone(
+    pub fn complete_uninstall(
         &mut self,
         project_root: &str,
+        transition_id: &str,
         draft: &WorkspacePluginTombstoneDraft,
-    ) -> Result<
-        (
-            PluginLifecycleMutationOutcome,
-            WorkspacePluginPackageTombstone,
-        ),
-        StoreError,
-    > {
+    ) -> Result<WorkspacePluginUninstallCompletion, StoreError> {
         let project_root = required_project_root(project_root)?;
         let draft_root = required_project_root(&draft.project_root)?;
         if project_root != draft_root {
             return Err(StoreError::Validation(
-                "workspace plugin tombstone project does not match service project".to_string(),
+                "workspace plugin uninstall project does not match service project".to_string(),
             ));
         }
         let mut draft = draft.clone();
         draft.project_root = project_root;
-        self.store.record_workspace_plugin_tombstone(&draft)
+        self.store
+            .complete_workspace_plugin_uninstall(transition_id, &draft)
+    }
+
+    pub fn complete_restore(
+        &mut self,
+        project_root: &str,
+        tombstone_id: &str,
+    ) -> Result<WorkspacePluginRestoreCompletion, StoreError> {
+        self.store
+            .complete_workspace_plugin_restore(&required_project_root(project_root)?, tombstone_id)
     }
 
     pub fn record_crash(

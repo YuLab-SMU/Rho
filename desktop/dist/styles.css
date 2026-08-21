@@ -1563,6 +1563,8 @@ body.resizing-vertical { cursor: col-resize; }
 .plugin-contribution-row button:disabled { opacity: 0.55; cursor: not-allowed; }
 .plugin-trust-banner { display: grid; gap: 3px; padding: 10px 12px; border: 1px solid #e6bf74; border-radius: 6px; color: #63440f; background: #fff8e8; }
 .plugin-trust-banner span { font-size: 11px; line-height: 1.45; }
+.plugin-destructive-banner { border-color: #df9b8d; color: #742d26; background: #fff2ef; }
+.product-dialog-actions button.danger { color: #fff; border-color: #a43d32; background: #a43d32; }
 .plugin-permission-identity { display: grid; grid-template-columns: minmax(100px, auto) minmax(0, 1fr); gap: 6px 12px; margin: 0; font-size: 11px; }
 .plugin-permission-identity dt { color: var(--muted); }
 .plugin-permission-identity dd { margin: 0; overflow-wrap: anywhere; }

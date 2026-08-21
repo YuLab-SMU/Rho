@@ -188,6 +188,21 @@ pub struct WorkspacePluginCrashOutcome {
     pub state: WorkspacePluginState,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspacePluginUninstallCompletion {
+    pub outcome: PluginLifecycleMutationOutcome,
+    pub state: WorkspacePluginState,
+    pub transition: WorkspacePluginTransition,
+    pub tombstone: WorkspacePluginPackageTombstone,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspacePluginRestoreCompletion {
+    pub outcome: PluginLifecycleMutationOutcome,
+    pub state: WorkspacePluginState,
+    pub tombstone: WorkspacePluginPackageTombstone,
+}
+
 impl Store {
     pub fn upsert_discovered_workspace_plugin(
         &mut self,
@@ -556,66 +571,269 @@ impl Store {
         })
     }
 
-    pub fn record_workspace_plugin_tombstone(
+    /// Atomically records exact trash ownership and the durable uninstall
+    /// terminal state. The caller must already have moved the package and
+    /// advanced the exact uninstall transition to `package_moved`.
+    pub fn complete_workspace_plugin_uninstall(
         &mut self,
+        transition_id: &str,
         draft: &WorkspacePluginTombstoneDraft,
-    ) -> Result<
-        (
-            PluginLifecycleMutationOutcome,
-            WorkspacePluginPackageTombstone,
-        ),
-        StoreError,
-    > {
+    ) -> Result<WorkspacePluginUninstallCompletion, StoreError> {
+        let transition_id = validate_identifier(transition_id, "transition id")?;
         let draft = validate_tombstone(draft)?;
-        let state = self
-            .get_workspace_plugin_state(&draft.project_root, &draft.plugin_id)?
-            .ok_or_else(|| {
-                StoreError::Validation("tombstone plugin state is missing".to_string())
-            })?;
-        if state.desired_state != "uninstalled" {
-            return Err(StoreError::Validation(
-                "plugin tombstone requires durable uninstalled intent".to_string(),
-            ));
-        }
-        if let Some(existing) =
-            self.get_workspace_plugin_tombstone(&draft.project_root, &draft.tombstone_id)?
-        {
-            let exact = existing.plugin_id == draft.plugin_id
-                && existing.package_digest == draft.package_digest
-                && existing.backup_path_key == draft.backup_path_key
-                && existing.original_directory_name == draft.original_directory_name
-                && existing.retention_class == draft.retention_class
-                && existing.reason_code == draft.reason_code;
-            if exact {
-                return Ok((PluginLifecycleMutationOutcome::Unchanged, existing));
-            }
-            return Err(StoreError::Validation(
-                "tombstone ID already belongs to different package evidence".to_string(),
-            ));
-        }
-        self.connection.execute(
-            "INSERT INTO workspace_plugin_package_tombstones(
-                tombstone_id, project_root, plugin_id, package_digest,
-                backup_path_key, original_directory_name, moved_at,
-                deleted_at, restored_at, retention_class, reason_code
-             ) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, NULL, ?8, ?9)",
-            params![
-                draft.tombstone_id,
-                draft.project_root,
-                draft.plugin_id,
-                draft.package_digest,
-                draft.backup_path_key,
-                draft.original_directory_name,
-                Utc::now().to_rfc3339(),
-                draft.retention_class,
-                draft.reason_code,
-            ],
+        let now = Utc::now().to_rfc3339();
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let transition = get_transition_on(&transaction, &draft.project_root, &transition_id)?
+            .ok_or_else(|| StoreError::Validation("uninstall transition is missing".to_string()))?;
+        let state = get_state_on(&transaction, &draft.project_root, &draft.plugin_id)?.ok_or_else(
+            || StoreError::Validation("uninstall plugin state is missing".to_string()),
         )?;
-        Ok((
-            PluginLifecycleMutationOutcome::Applied,
-            self.get_workspace_plugin_tombstone(&draft.project_root, &draft.tombstone_id)?
-                .ok_or_else(|| StoreError::Validation("tombstone disappeared".to_string()))?,
-        ))
+        let existing = get_tombstone_on(&transaction, &draft.project_root, &draft.tombstone_id)?;
+
+        let exact_transition = transition.plugin_id == draft.plugin_id
+            && transition.kind == "uninstall"
+            && transition.expected_old_digest.as_deref() == Some(draft.package_digest.as_str())
+            && transition.backup_path_key.as_deref() == Some(draft.backup_path_key.as_str());
+        let exact_state = state.directory_name == draft.original_directory_name
+            && state.accepted_digest.as_deref() == Some(draft.package_digest.as_str())
+            && state.desired_state == "uninstalled"
+            && state.transition_id.as_deref() == Some(transition_id.as_str());
+        let recoverable_user_uninstall =
+            draft.retention_class == "recoverable" && draft.reason_code == "user_uninstall";
+        if !exact_transition || !exact_state || !recoverable_user_uninstall {
+            return Err(StoreError::Validation(
+                "uninstall completion does not match durable lifecycle identity".to_string(),
+            ));
+        }
+
+        if transition.phase == "completed"
+            && transition.status == "completed"
+            && state.observed_state == "uninstalled"
+        {
+            let tombstone = existing.ok_or_else(|| {
+                StoreError::Validation("completed uninstall is missing tombstone truth".to_string())
+            })?;
+            ensure_tombstone_matches(&tombstone, &draft)?;
+            transaction.commit()?;
+            return Ok(WorkspacePluginUninstallCompletion {
+                outcome: PluginLifecycleMutationOutcome::Unchanged,
+                state,
+                transition,
+                tombstone,
+            });
+        }
+
+        if transition.phase != "package_moved"
+            || !matches!(
+                transition.status.as_str(),
+                "pending" | "running" | "completion_uncertain"
+            )
+        {
+            transaction.commit()?;
+            return Ok(WorkspacePluginUninstallCompletion {
+                outcome: PluginLifecycleMutationOutcome::Stale,
+                state,
+                transition,
+                tombstone: existing.unwrap_or_else(|| synthetic_tombstone(&draft)),
+            });
+        }
+
+        let tombstone = if let Some(existing) = existing {
+            ensure_tombstone_matches(&existing, &draft)?;
+            existing
+        } else {
+            transaction.execute(
+                "INSERT INTO workspace_plugin_package_tombstones(
+                    tombstone_id, project_root, plugin_id, package_digest,
+                    backup_path_key, original_directory_name, moved_at,
+                    deleted_at, restored_at, retention_class, reason_code
+                 ) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, NULL, ?8, ?9)",
+                params![
+                    draft.tombstone_id,
+                    draft.project_root,
+                    draft.plugin_id,
+                    draft.package_digest,
+                    draft.backup_path_key,
+                    draft.original_directory_name,
+                    now,
+                    draft.retention_class,
+                    draft.reason_code,
+                ],
+            )?;
+            get_tombstone_on(&transaction, &draft.project_root, &draft.tombstone_id)?.ok_or_else(
+                || StoreError::Validation("uninstall tombstone disappeared".to_string()),
+            )?
+        };
+
+        let changed = transaction.execute(
+            "UPDATE workspace_plugin_transitions
+             SET phase = 'completed', status = 'completed', updated_at = ?3,
+                 completed_at = ?3, reason_code = 'user_uninstall'
+             WHERE project_root = ?1 AND transition_id = ?2
+               AND phase = 'package_moved'
+               AND status IN ('pending', 'running', 'completion_uncertain')",
+            params![draft.project_root, transition_id, now],
+        )?;
+        if changed != 1 {
+            transaction.rollback()?;
+            return Ok(WorkspacePluginUninstallCompletion {
+                outcome: PluginLifecycleMutationOutcome::Stale,
+                state,
+                transition,
+                tombstone,
+            });
+        }
+        let state_changed = transaction.execute(
+            "UPDATE workspace_plugin_states
+             SET desired_state = 'uninstalled', observed_state = 'uninstalled',
+                 pending_digest = NULL, last_host_session_id = NULL,
+                 last_error_code = NULL, disabled_at = ?3, updated_at = ?3
+             WHERE project_root = ?1 AND plugin_id = ?2 AND transition_id = ?4",
+            params![draft.project_root, draft.plugin_id, now, transition_id],
+        )?;
+        if state_changed != 1 {
+            return Err(StoreError::Validation(
+                "uninstall terminal state update was stale".to_string(),
+            ));
+        }
+        insert_lifecycle_event(
+            &transaction,
+            LifecycleEventInsert {
+                project_root: &draft.project_root,
+                plugin_id: &draft.plugin_id,
+                transition_id: Some(&transition_id),
+                package_digest: Some(&draft.package_digest),
+                event_type: "transition_completed",
+                status: "completed",
+                phase: "completed",
+                reason_code: Some("user_uninstall"),
+                details_json: r#"{"package_ownership":"trash","recoverable":true}"#,
+                created_at: &now,
+            },
+        )?;
+        let state = get_state_on(&transaction, &draft.project_root, &draft.plugin_id)?.ok_or_else(
+            || StoreError::Validation("uninstalled plugin state disappeared".to_string()),
+        )?;
+        let transition = get_transition_on(&transaction, &draft.project_root, &transition_id)?
+            .ok_or_else(|| {
+                StoreError::Validation("uninstall transition disappeared".to_string())
+            })?;
+        transaction.commit()?;
+        Ok(WorkspacePluginUninstallCompletion {
+            outcome: PluginLifecycleMutationOutcome::Applied,
+            state,
+            transition,
+            tombstone,
+        })
+    }
+
+    /// Atomically marks an exact tombstone restored and leaves the package
+    /// disabled. The caller must already have restored the physical package.
+    pub fn complete_workspace_plugin_restore(
+        &mut self,
+        project_root: &str,
+        tombstone_id: &str,
+    ) -> Result<WorkspacePluginRestoreCompletion, StoreError> {
+        let project_root = required_project_root(project_root)?;
+        let tombstone_id = validate_identifier(tombstone_id, "tombstone id")?;
+        let now = Utc::now().to_rfc3339();
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let tombstone = get_tombstone_on(&transaction, &project_root, &tombstone_id)?
+            .ok_or_else(|| StoreError::Validation("plugin tombstone is missing".to_string()))?;
+        if tombstone.deleted_at.is_some() {
+            return Err(StoreError::Validation(
+                "deleted plugin tombstone cannot be restored".to_string(),
+            ));
+        }
+        if tombstone.retention_class != "recoverable" {
+            return Err(StoreError::Validation(
+                "plugin tombstone is not recoverable".to_string(),
+            ));
+        }
+        let state =
+            get_state_on(&transaction, &project_root, &tombstone.plugin_id)?.ok_or_else(|| {
+                StoreError::Validation("restored plugin state is missing".to_string())
+            })?;
+        let exact = state.directory_name == tombstone.original_directory_name
+            && state.accepted_digest.as_deref() == Some(tombstone.package_digest.as_str());
+        if !exact {
+            return Err(StoreError::Validation(
+                "restore tombstone does not match durable lifecycle identity".to_string(),
+            ));
+        }
+        if tombstone.restored_at.is_some()
+            && state.desired_state == "disabled"
+            && state.observed_state == "disabled"
+        {
+            transaction.commit()?;
+            return Ok(WorkspacePluginRestoreCompletion {
+                outcome: PluginLifecycleMutationOutcome::Unchanged,
+                state,
+                tombstone,
+            });
+        }
+        if tombstone.restored_at.is_some()
+            || state.desired_state != "uninstalled"
+            || state.observed_state != "uninstalled"
+        {
+            transaction.commit()?;
+            return Ok(WorkspacePluginRestoreCompletion {
+                outcome: PluginLifecycleMutationOutcome::Stale,
+                state,
+                tombstone,
+            });
+        }
+        let tombstone_changed = transaction.execute(
+            "UPDATE workspace_plugin_package_tombstones
+             SET restored_at = ?3
+             WHERE project_root = ?1 AND tombstone_id = ?2 AND restored_at IS NULL",
+            params![project_root, tombstone_id, now],
+        )?;
+        let state_changed = transaction.execute(
+            "UPDATE workspace_plugin_states
+             SET desired_state = 'disabled', observed_state = 'disabled',
+                 transition_id = NULL, pending_digest = NULL,
+                 last_host_session_id = NULL, last_error_code = NULL,
+                 disabled_at = ?3, updated_at = ?3
+             WHERE project_root = ?1 AND plugin_id = ?2",
+            params![project_root, tombstone.plugin_id, now],
+        )?;
+        if tombstone_changed != 1 || state_changed != 1 {
+            return Err(StoreError::Validation(
+                "plugin Restore terminal update was stale".to_string(),
+            ));
+        }
+        insert_lifecycle_event(
+            &transaction,
+            LifecycleEventInsert {
+                project_root: &project_root,
+                plugin_id: &tombstone.plugin_id,
+                transition_id: None,
+                package_digest: Some(&tombstone.package_digest),
+                event_type: "recovery",
+                status: "completed",
+                phase: "completed",
+                reason_code: Some("user_restore"),
+                details_json: r#"{"package_ownership":"discovery","enabled":false}"#,
+                created_at: &now,
+            },
+        )?;
+        let state =
+            get_state_on(&transaction, &project_root, &tombstone.plugin_id)?.ok_or_else(|| {
+                StoreError::Validation("restored plugin state disappeared".to_string())
+            })?;
+        let tombstone = get_tombstone_on(&transaction, &project_root, &tombstone_id)?
+            .ok_or_else(|| StoreError::Validation("restored tombstone disappeared".to_string()))?;
+        transaction.commit()?;
+        Ok(WorkspacePluginRestoreCompletion {
+            outcome: PluginLifecycleMutationOutcome::Applied,
+            state,
+            tombstone,
+        })
     }
 
     pub fn record_workspace_plugin_crash(
@@ -817,17 +1035,32 @@ impl Store {
     ) -> Result<Option<WorkspacePluginPackageTombstone>, StoreError> {
         let project_root = required_project_root(project_root)?;
         let tombstone_id = validate_identifier(tombstone_id, "tombstone id")?;
-        self.connection
-            .query_row(
-                "SELECT tombstone_id, project_root, plugin_id, package_digest,
-                        backup_path_key, original_directory_name, moved_at,
-                        deleted_at, restored_at, retention_class, reason_code
-                 FROM workspace_plugin_package_tombstones
-                 WHERE project_root = ?1 AND tombstone_id = ?2",
-                params![project_root, tombstone_id],
+        get_tombstone_on(&self.connection, &project_root, &tombstone_id)
+    }
+
+    pub fn list_workspace_plugin_tombstones(
+        &self,
+        project_root: &str,
+        limit: Option<usize>,
+    ) -> Result<Vec<WorkspacePluginPackageTombstone>, StoreError> {
+        let project_root = required_project_root(project_root)?;
+        let mut statement = self.connection.prepare(
+            "SELECT tombstone_id, project_root, plugin_id, package_digest,
+                    backup_path_key, original_directory_name, moved_at,
+                    deleted_at, restored_at, retention_class, reason_code
+             FROM workspace_plugin_package_tombstones
+             WHERE project_root = ?1
+             ORDER BY moved_at DESC, tombstone_id LIMIT ?2",
+        )?;
+        statement
+            .query_map(
+                params![
+                    project_root,
+                    limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as i64
+                ],
                 decode_tombstone,
-            )
-            .optional()
+            )?
+            .collect::<Result<Vec<_>, _>>()
             .map_err(StoreError::from)
     }
 }
@@ -868,6 +1101,25 @@ fn get_transition_on(
              WHERE project_root = ?1 AND transition_id = ?2",
             params![project_root, transition_id],
             decode_transition,
+        )
+        .optional()
+        .map_err(StoreError::from)
+}
+
+fn get_tombstone_on(
+    connection: &rusqlite::Connection,
+    project_root: &str,
+    tombstone_id: &str,
+) -> Result<Option<WorkspacePluginPackageTombstone>, StoreError> {
+    connection
+        .query_row(
+            "SELECT tombstone_id, project_root, plugin_id, package_digest,
+                    backup_path_key, original_directory_name, moved_at,
+                    deleted_at, restored_at, retention_class, reason_code
+             FROM workspace_plugin_package_tombstones
+             WHERE project_root = ?1 AND tombstone_id = ?2",
+            params![project_root, tombstone_id],
+            decode_tombstone,
         )
         .optional()
         .map_err(StoreError::from)
@@ -1156,6 +1408,43 @@ fn validate_tombstone(
         retention_class: draft.retention_class.clone(),
         reason_code: validate_identifier(&draft.reason_code, "reason code")?,
     })
+}
+
+fn ensure_tombstone_matches(
+    tombstone: &WorkspacePluginPackageTombstone,
+    draft: &WorkspacePluginTombstoneDraft,
+) -> Result<(), StoreError> {
+    let exact = tombstone.plugin_id == draft.plugin_id
+        && tombstone.package_digest == draft.package_digest
+        && tombstone.backup_path_key == draft.backup_path_key
+        && tombstone.original_directory_name == draft.original_directory_name
+        && tombstone.retention_class == draft.retention_class
+        && tombstone.reason_code == draft.reason_code
+        && tombstone.deleted_at.is_none()
+        && tombstone.restored_at.is_none();
+    if exact {
+        Ok(())
+    } else {
+        Err(StoreError::Validation(
+            "tombstone ID already belongs to different package evidence".to_string(),
+        ))
+    }
+}
+
+fn synthetic_tombstone(draft: &WorkspacePluginTombstoneDraft) -> WorkspacePluginPackageTombstone {
+    WorkspacePluginPackageTombstone {
+        tombstone_id: draft.tombstone_id.clone(),
+        project_root: draft.project_root.clone(),
+        plugin_id: draft.plugin_id.clone(),
+        package_digest: draft.package_digest.clone(),
+        backup_path_key: draft.backup_path_key.clone(),
+        original_directory_name: draft.original_directory_name.clone(),
+        moved_at: String::new(),
+        deleted_at: None,
+        restored_at: None,
+        retention_class: draft.retention_class.clone(),
+        reason_code: draft.reason_code.clone(),
+    }
 }
 
 fn transition_matches_draft(
@@ -1540,6 +1829,80 @@ mod tests {
         }
     }
 
+    fn prepare_package_moved_uninstall(
+        store: &mut Store,
+        project_root: &str,
+        transition_id: &str,
+    ) -> WorkspacePluginTombstoneDraft {
+        store
+            .upsert_discovered_workspace_plugin(&discovered(project_root))
+            .unwrap();
+        let enable_id = format!("{transition_id}.enable");
+        let enable = transition(
+            project_root,
+            &enable_id,
+            "enable",
+            "enabled",
+            None,
+            Some(digest('a')),
+        );
+        store.request_workspace_plugin_transition(&enable).unwrap();
+        let mut enabled = advance(
+            project_root,
+            &enable_id,
+            "requested",
+            "completed",
+            "completed",
+            "active",
+        );
+        enabled.accepted_digest = Some(digest('a'));
+        enabled.clear_pending_digest = true;
+        enabled.event_type = "transition_completed".to_string();
+        store.advance_workspace_plugin_transition(&enabled).unwrap();
+
+        let trash_key = format!("trash.{transition_id}");
+        let mut uninstall = transition(
+            project_root,
+            transition_id,
+            "uninstall",
+            "uninstalled",
+            Some(digest('a')),
+            None,
+        );
+        uninstall.backup_path_key = Some(trash_key.clone());
+        assert_eq!(
+            store
+                .request_workspace_plugin_transition(&uninstall)
+                .unwrap()
+                .outcome,
+            PluginLifecycleMutationOutcome::Applied
+        );
+        let mut moved = advance(
+            project_root,
+            transition_id,
+            "requested",
+            "package_moved",
+            "running",
+            "disposing",
+        );
+        moved.event_type = "recovery".to_string();
+        moved.details_json = r#"{"package_ownership":"trash"}"#.to_string();
+        assert_eq!(
+            store.advance_workspace_plugin_transition(&moved).unwrap(),
+            PluginLifecycleMutationOutcome::Applied
+        );
+        WorkspacePluginTombstoneDraft {
+            tombstone_id: format!("tombstone.{transition_id}"),
+            project_root: project_root.to_string(),
+            plugin_id: "org.example.plugin".to_string(),
+            package_digest: digest('a'),
+            backup_path_key: trash_key,
+            original_directory_name: "example-plugin".to_string(),
+            retention_class: "recoverable".to_string(),
+            reason_code: "user_uninstall".to_string(),
+        }
+    }
+
     #[test]
     fn discovery_transition_generation_and_reopen_are_monotonic_and_project_scoped() {
         let directory = tempdir().unwrap();
@@ -1843,7 +2206,7 @@ mod tests {
                 .outcome,
             PluginLifecycleMutationOutcome::Stale
         );
-        let uninstall = transition(
+        let mut uninstall = transition(
             project,
             "transition.uninstall",
             "uninstall",
@@ -1851,6 +2214,7 @@ mod tests {
             Some(digest('a')),
             None,
         );
+        uninstall.backup_path_key = Some("trash.transition_uninstall".to_string());
         assert_eq!(
             store
                 .request_workspace_plugin_transition(&uninstall)
@@ -1868,18 +2232,28 @@ mod tests {
             retention_class: "recoverable".to_string(),
             reason_code: "user_uninstall".to_string(),
         };
+        let mut moved = advance(
+            project,
+            "transition.uninstall",
+            "requested",
+            "package_moved",
+            "running",
+            "disposing",
+        );
+        moved.event_type = "recovery".to_string();
+        store.advance_workspace_plugin_transition(&moved).unwrap();
         assert_eq!(
             store
-                .record_workspace_plugin_tombstone(&tombstone)
+                .complete_workspace_plugin_uninstall("transition.uninstall", &tombstone)
                 .unwrap()
-                .0,
+                .outcome,
             PluginLifecycleMutationOutcome::Applied
         );
         assert_eq!(
             store
-                .record_workspace_plugin_tombstone(&tombstone)
+                .complete_workspace_plugin_uninstall("transition.uninstall", &tombstone)
                 .unwrap()
-                .0,
+                .outcome,
             PluginLifecycleMutationOutcome::Unchanged
         );
         let mut unsafe_tombstone = tombstone.clone();
@@ -1887,7 +2261,7 @@ mod tests {
         unsafe_tombstone.backup_path_key = "../escape".to_string();
         assert!(
             store
-                .record_workspace_plugin_tombstone(&unsafe_tombstone)
+                .complete_workspace_plugin_uninstall("transition.uninstall", &unsafe_tombstone)
                 .is_err()
         );
         assert!(
@@ -1895,6 +2269,253 @@ mod tests {
                 .get_workspace_plugin_tombstone("/project/b", "tombstone.a")
                 .unwrap()
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn uninstall_completion_and_restore_are_atomic_idempotent_and_reopen_safe() {
+        let directory = tempdir().unwrap();
+        let database = directory.path().join("rho.sqlite");
+        let project = "/project/a";
+        let transition_id = "transition.uninstall.atomic";
+        let mut store = Store::open(&database).unwrap();
+        let tombstone = prepare_package_moved_uninstall(&mut store, project, transition_id);
+
+        let completed = store
+            .complete_workspace_plugin_uninstall(transition_id, &tombstone)
+            .unwrap();
+        assert_eq!(completed.outcome, PluginLifecycleMutationOutcome::Applied);
+        assert_eq!(completed.state.desired_state, "uninstalled");
+        assert_eq!(completed.state.observed_state, "uninstalled");
+        assert_eq!(completed.transition.phase, "completed");
+        assert_eq!(completed.transition.status, "completed");
+        assert_eq!(
+            completed.tombstone.backup_path_key,
+            tombstone.backup_path_key
+        );
+        assert_eq!(
+            store
+                .complete_workspace_plugin_uninstall(transition_id, &tombstone)
+                .unwrap()
+                .outcome,
+            PluginLifecycleMutationOutcome::Unchanged
+        );
+        assert_eq!(
+            store
+                .list_workspace_plugin_tombstones(project, None)
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(
+            store
+                .get_workspace_plugin_tombstone("/project/b", &tombstone.tombstone_id)
+                .unwrap()
+                .is_none()
+        );
+        drop(store);
+
+        let mut reopened = Store::open(&database).unwrap();
+        let restored = reopened
+            .complete_workspace_plugin_restore(project, &tombstone.tombstone_id)
+            .unwrap();
+        assert_eq!(restored.outcome, PluginLifecycleMutationOutcome::Applied);
+        assert_eq!(restored.state.desired_state, "disabled");
+        assert_eq!(restored.state.observed_state, "disabled");
+        assert!(restored.state.transition_id.is_none());
+        assert!(restored.tombstone.restored_at.is_some());
+        assert_eq!(
+            reopened
+                .complete_workspace_plugin_restore(project, &tombstone.tombstone_id)
+                .unwrap()
+                .outcome,
+            PluginLifecycleMutationOutcome::Unchanged
+        );
+        assert!(
+            reopened
+                .complete_workspace_plugin_restore("/project/b", &tombstone.tombstone_id)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn uninstall_completion_failure_rolls_back_tombstone_and_terminal_state() {
+        let directory = tempdir().unwrap();
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let project = "/project/a";
+        let transition_id = "transition.uninstall.injected";
+        let tombstone = prepare_package_moved_uninstall(&mut store, project, transition_id);
+        store
+            .connection
+            .execute_batch(
+                "CREATE TRIGGER fail_plugin_uninstall_terminal
+                 BEFORE UPDATE OF phase ON workspace_plugin_transitions
+                 WHEN NEW.phase = 'completed' AND OLD.kind = 'uninstall'
+                 BEGIN SELECT RAISE(ABORT, 'injected uninstall terminal failure'); END;",
+            )
+            .unwrap();
+        assert!(
+            store
+                .complete_workspace_plugin_uninstall(transition_id, &tombstone)
+                .is_err()
+        );
+        assert!(
+            store
+                .get_workspace_plugin_tombstone(project, &tombstone.tombstone_id)
+                .unwrap()
+                .is_none()
+        );
+        let state = store
+            .get_workspace_plugin_state(project, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        assert_eq!(state.desired_state, "uninstalled");
+        assert_ne!(state.observed_state, "uninstalled");
+        let transition = store
+            .get_workspace_plugin_transition(project, transition_id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(transition.phase, "package_moved");
+        assert_eq!(transition.status, "running");
+
+        store
+            .connection
+            .execute_batch("DROP TRIGGER fail_plugin_uninstall_terminal;")
+            .unwrap();
+        assert_eq!(
+            store
+                .complete_workspace_plugin_uninstall(transition_id, &tombstone)
+                .unwrap()
+                .outcome,
+            PluginLifecycleMutationOutcome::Applied
+        );
+    }
+
+    #[test]
+    fn restore_completion_failure_rolls_back_tombstone_and_state_then_retries() {
+        let directory = tempdir().unwrap();
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let project = "/project/a";
+        let transition_id = "transition.uninstall.restore-injected";
+        let tombstone = prepare_package_moved_uninstall(&mut store, project, transition_id);
+        store
+            .complete_workspace_plugin_uninstall(transition_id, &tombstone)
+            .unwrap();
+        store
+            .connection
+            .execute_batch(
+                "CREATE TRIGGER fail_plugin_restore_state
+                 BEFORE UPDATE OF desired_state ON workspace_plugin_states
+                 WHEN NEW.desired_state = 'disabled' AND OLD.desired_state = 'uninstalled'
+                 BEGIN SELECT RAISE(ABORT, 'injected restore state failure'); END;",
+            )
+            .unwrap();
+        assert!(
+            store
+                .complete_workspace_plugin_restore(project, &tombstone.tombstone_id)
+                .is_err()
+        );
+        let unchanged_tombstone = store
+            .get_workspace_plugin_tombstone(project, &tombstone.tombstone_id)
+            .unwrap()
+            .unwrap();
+        assert!(unchanged_tombstone.restored_at.is_none());
+        let unchanged_state = store
+            .get_workspace_plugin_state(project, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        assert_eq!(unchanged_state.desired_state, "uninstalled");
+        assert_eq!(unchanged_state.observed_state, "uninstalled");
+
+        store
+            .connection
+            .execute_batch("DROP TRIGGER fail_plugin_restore_state;")
+            .unwrap();
+        assert_eq!(
+            store
+                .complete_workspace_plugin_restore(project, &tombstone.tombstone_id)
+                .unwrap()
+                .outcome,
+            PluginLifecycleMutationOutcome::Applied
+        );
+    }
+
+    #[test]
+    fn uninstall_completion_rejects_wrong_phase_digest_and_project() {
+        let directory = tempdir().unwrap();
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let project = "/project/a";
+        store
+            .upsert_discovered_workspace_plugin(&discovered(project))
+            .unwrap();
+        let enable = transition(
+            project,
+            "transition.enable.stale-uninstall",
+            "enable",
+            "enabled",
+            None,
+            Some(digest('a')),
+        );
+        store.request_workspace_plugin_transition(&enable).unwrap();
+        let mut enabled = advance(
+            project,
+            "transition.enable.stale-uninstall",
+            "requested",
+            "completed",
+            "completed",
+            "active",
+        );
+        enabled.accepted_digest = Some(digest('a'));
+        enabled.event_type = "transition_completed".to_string();
+        store.advance_workspace_plugin_transition(&enabled).unwrap();
+        let mut uninstall = transition(
+            project,
+            "transition.uninstall.not-moved",
+            "uninstall",
+            "uninstalled",
+            Some(digest('a')),
+            None,
+        );
+        uninstall.backup_path_key = Some("trash.not-moved".to_string());
+        store
+            .request_workspace_plugin_transition(&uninstall)
+            .unwrap();
+        let tombstone = WorkspacePluginTombstoneDraft {
+            tombstone_id: "tombstone.not-moved".to_string(),
+            project_root: project.to_string(),
+            plugin_id: "org.example.plugin".to_string(),
+            package_digest: digest('a'),
+            backup_path_key: "trash.not-moved".to_string(),
+            original_directory_name: "example-plugin".to_string(),
+            retention_class: "recoverable".to_string(),
+            reason_code: "user_uninstall".to_string(),
+        };
+        assert_eq!(
+            store
+                .complete_workspace_plugin_uninstall("transition.uninstall.not-moved", &tombstone,)
+                .unwrap()
+                .outcome,
+            PluginLifecycleMutationOutcome::Stale
+        );
+        let mut wrong_digest = tombstone.clone();
+        wrong_digest.package_digest = digest('b');
+        assert!(
+            store
+                .complete_workspace_plugin_uninstall(
+                    "transition.uninstall.not-moved",
+                    &wrong_digest,
+                )
+                .is_err()
+        );
+        let mut wrong_project = tombstone;
+        wrong_project.project_root = "/project/b".to_string();
+        assert!(
+            store
+                .complete_workspace_plugin_uninstall(
+                    "transition.uninstall.not-moved",
+                    &wrong_project,
+                )
+                .is_err()
         );
     }
 

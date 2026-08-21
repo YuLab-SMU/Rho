@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Rho</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="styles.css?v=0.4.1-dev.7&rev=m3-scientific-review-v3&agent=output-review-v3&issue4=provider-first-v1&issue5=conversation-session-v2&issue6=repair-r5&issue9=task-rail-v1&viewer=row-shape-r1&references=envelope-r1&plugins=p2-4c3-v1" />
+    <link rel="stylesheet" href="styles.css?v=0.4.1-dev.8&rev=m3-scientific-review-v3&agent=output-review-v3&issue4=provider-first-v1&issue5=conversation-session-v2&issue6=repair-r5&issue9=task-rail-v1&viewer=row-shape-r1&references=envelope-r1&plugins=p2-4d2-v1" />
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true">
@@ -1268,6 +1268,22 @@ plot(
             <button id="pluginPermissionAllowProject" type="button" class="primary">Allow for this project</button>
           </div>
         </section>
+        <section id="pluginUninstallView" class="hidden">
+          <div class="plugin-trust-banner plugin-destructive-banner">
+            <strong>Uninstall exact project package?</strong>
+            <span>Rho will stop the plugin, revoke its durable grants, and move this exact directory into recoverable Rho trash. It will not permanently delete it.</span>
+          </div>
+          <dl id="pluginUninstallIdentity" class="plugin-permission-identity"></dl>
+          <div class="plugin-permission-section">
+            <strong>Consequences</strong>
+            <p id="pluginUninstallConsequence"></p>
+          </div>
+          <p class="plugin-upgrade-note">Restore is explicit and always returns the package Disabled. It never recreates a host, route, handle, permission request, or durable grant.</p>
+          <div class="product-dialog-actions plugin-permission-actions">
+            <button id="pluginUninstallCancel" type="button">Cancel</button>
+            <button id="pluginUninstallConfirm" type="button" class="danger">Move to recoverable trash</button>
+          </div>
+        </section>
       </section>
     </div>
     <div id="pluginCommandPalette" class="product-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="pluginCommandPaletteTitle">
@@ -1456,6 +1472,6 @@ plot(
     <script src="vendor/viewer/katex.min.js"></script>
     <script src="vendor/viewer/katex-auto-render.min.js"></script>
     <script src="vendor/viewer/papaparse.min.js"></script>
-    <script src="app.js?v=0.4.1-dev.7&rev=m3-scientific-review-v3&projection=wp4&help=console-v3&afo=act-output-v1&issue4=provider-first-v1&issue5=conversation-session-v2&issue6=repair-r5&issue9=task-rail-v1&issue33=focus-stability-v1&viewer=row-shape-r1&references=envelope-r1&outputs=image-artifact-r1&plugins=p2-4c3-v1"></script>
+    <script src="app.js?v=0.4.1-dev.8&rev=m3-scientific-review-v3&projection=wp4&help=console-v3&afo=act-output-v1&issue4=provider-first-v1&issue5=conversation-session-v2&issue6=repair-r5&issue9=task-rail-v1&issue33=focus-stability-v1&viewer=row-shape-r1&references=envelope-r1&outputs=image-artifact-r1&plugins=p2-4d2-v1"></script>
   </body>
 </html>
