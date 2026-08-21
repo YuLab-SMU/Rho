@@ -183,8 +183,10 @@ assert.match(agentReviewDetail, /reportUiFailure\("load Agent run review"/);
 assert.doesNotMatch(agentReviewDetail, /state\.agentReviewRunError = String\(error\)/);
 
 const agentRuntimeRetry = js.slice(js.indexOf('$("#agentRuntimeRetryButton").addEventListener'), js.indexOf('$("#agentCancelButton").addEventListener'));
-assert.match(agentRuntimeRetry, /userFacingError\(state\.agentRuntime\.error/);
-assert.match(agentRuntimeRetry, /reportUiFailure\("retry Agent runtime"/);
+assert.match(agentRuntimeRetry, /agentRuntimeSummary\(state\.agentRuntime\)/);
+assert.match(agentRuntimeRetry, /reportUiFailure\("retry Agent dependency check"/);
+assert.match(agentRuntimeRetry, /Workspace R remains available/);
+assert.doesNotMatch(agentRuntimeRetry, /assistant connection/i);
 assert.doesNotMatch(agentRuntimeRetry, /toast\(state\.agentRuntime\.available \? "Agent runtime is ready\." : state\.agentRuntime\.error/);
 
 const auditedRenderers = [projectSkills, timeline, installedHelp, localHelp, projectReferences, environmentSummary, environmentOperation, dataViewer, evidenceClaims, compare, agentRunReview, modelSettings].join("\n");

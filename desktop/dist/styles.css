@@ -1186,6 +1186,14 @@ body.resizing-vertical { cursor: col-resize; }
 .timeline-item strong { display: block; margin: 1px 0 4px; font-size: 12.5px; }
 .timeline-item p { margin: 0; color: var(--muted); line-height: 1.48; white-space: pre-wrap; overflow-wrap: anywhere; }
 .timeline-item p + p { margin-top: 4px; }
+.agent-dependency-diagnostics { display: grid; gap: 8px; margin-top: 10px; padding: 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-subtle); }
+.agent-dependency-diagnostics > p { font-size: 10.5px; }
+.agent-dependency-item { display: grid; gap: 3px; padding-top: 8px; border-top: 1px solid var(--border); }
+.agent-dependency-item > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.agent-dependency-item p { font-size: 10.5px; }
+.agent-dependency-remediation { color: var(--text); }
+.agent-dependency-provider-note { padding-top: 7px; border-top: 1px solid var(--border); }
+.agent-dependency-copy { justify-self: start; }
 .timeline-final-message { margin-top: 8px; padding: 8px 10px; overflow-wrap: anywhere; border-left: 2px solid var(--accent); color: #334449; background: #edf6f5; font: inherit; line-height: 1.5; white-space: pre-wrap; }
 .timeline-markdown { margin: 0; color: inherit; line-height: 1.55; }
 .timeline-markdown h1, .timeline-markdown h2, .timeline-markdown h3 { margin: 0.9em 0 0.45em; line-height: 1.25; }

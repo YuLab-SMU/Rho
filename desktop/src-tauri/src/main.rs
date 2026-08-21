@@ -137,19 +137,83 @@ struct StartupView {
     issue: Option<StartupIssue>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+struct AgentDependencyStatus {
+    package: String,
+    status: String,
+    installed_version: Option<String>,
+    required_version: String,
+    resolved_path: Option<String>,
+    detail: Option<String>,
+    remediation: Option<String>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct AgentRuntimeStatus {
     available: bool,
+    #[serde(default = "default_agent_runtime_status")]
+    status: String,
+    #[serde(default)]
+    rscript: Option<String>,
+    #[serde(default)]
+    r_version: Option<String>,
     aisdk_version: Option<String>,
+    #[serde(default)]
+    provider_adapters_available: bool,
+    #[serde(default = "default_provider_health")]
+    provider_health: String,
+    #[serde(default)]
+    dependencies: Vec<AgentDependencyStatus>,
     error: Option<String>,
 }
 
+#[cfg(test)]
 fn deferred_agent_runtime_status() -> AgentRuntimeStatus {
+    deferred_agent_runtime_status_for(None, None)
+}
+
+fn deferred_agent_runtime_status_for(
+    rscript: Option<&Path>,
+    r_version: Option<&str>,
+) -> AgentRuntimeStatus {
     AgentRuntimeStatus {
         available: false,
+        status: "checking".to_string(),
+        rscript: rscript.map(normalized_display_path),
+        r_version: r_version.map(str::to_string),
         aisdk_version: None,
+        provider_adapters_available: false,
+        provider_health: "not_checked".to_string(),
+        dependencies: vec![
+            checking_agent_dependency("aisdk", MINIMUM_AGENT_AISDK_VERSION),
+            checking_agent_dependency("aisdk.providers", MINIMUM_AGENT_AISDK_PROVIDERS_VERSION),
+        ],
         error: Some("Agent runtime check is continuing in the background.".to_string()),
     }
+}
+
+fn default_agent_runtime_status() -> String {
+    "needs_attention".to_string()
+}
+
+fn default_provider_health() -> String {
+    "not_checked".to_string()
+}
+
+fn checking_agent_dependency(package: &str, required_version: &str) -> AgentDependencyStatus {
+    AgentDependencyStatus {
+        package: package.to_string(),
+        status: "checking".to_string(),
+        installed_version: None,
+        required_version: required_version.to_string(),
+        resolved_path: None,
+        detail: None,
+        remediation: None,
+    }
+}
+
+fn normalized_display_path(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
 }
 
 #[derive(Serialize)]
@@ -205,6 +269,10 @@ struct RRuntimeProbe {
 
 const RUNTIME_CACHE_VERSION: u32 = 2;
 const MINIMUM_AGENT_AISDK_VERSION: &str = "1.5.0";
+const MINIMUM_AGENT_AISDK_PROVIDERS_VERSION: &str = "0.1.0";
+const REVIEWED_AISDK_REMOTE: &str = "YuLab-SMU/aisdk@1e2fa54358dda647a6d5cbf64c0625642c673e4c";
+const REVIEWED_AISDK_PROVIDERS_REMOTE: &str =
+    "YuLab-SMU/aisdk.providers@5cf315e5eedad7d83b224c96595da346e1192a85";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct RuntimeFileSignature {
@@ -1195,11 +1263,13 @@ async fn startup_open_log_directory() -> Result<Value, String> {
 async fn agent_runtime_retry(state: State<'_, AppState>) -> Result<AgentRuntimeStatus, String> {
     let config = runtime_config(&state).map_err(display_error)?;
     let rscript = config.rscript.clone();
+    let r_version = config.r_version.clone();
     let r_profile_user = config.r_profile_user.clone();
     let r_environ_user = config.r_environ_user.clone();
     let status = tauri::async_runtime::spawn_blocking(move || {
         probe_agent_runtime(
             &rscript,
+            &r_version,
             r_profile_user.as_deref(),
             r_environ_user.as_deref(),
         )
@@ -7557,6 +7627,8 @@ fn prepare_runtime_files_with_rscript(
             "startup_phase=runtime_cache outcome=hit elapsed_ms={}",
             started.elapsed().as_millis()
         ));
+        let agent_runtime =
+            deferred_agent_runtime_status_for(Some(&rscript), Some(&cache.r_version));
         (
             cache.r_home,
             cache.r_bin,
@@ -7570,7 +7642,7 @@ fn prepare_runtime_files_with_rscript(
             cache
                 .r_environ_user
                 .map(|signature| PathBuf::from(signature.path)),
-            deferred_agent_runtime_status(),
+            agent_runtime,
         )
     } else {
         let probe_started = Instant::now();
@@ -7589,7 +7661,7 @@ fn prepare_runtime_files_with_rscript(
             "startup_phase=runtime_probe elapsed_ms={} agent_probe=deferred",
             probe_started.elapsed().as_millis()
         ));
-        let agent_runtime = deferred_agent_runtime_status();
+        let agent_runtime = deferred_agent_runtime_status_for(Some(&rscript), Some(&r_version));
         let cache = RuntimeCacheFile {
             version: RUNTIME_CACHE_VERSION,
             rscript: runtime_file_signature(&rscript)?,
@@ -8058,6 +8130,7 @@ fn probe_value(stdout: &str, prefix: &str) -> Option<String> {
 
 fn probe_agent_runtime(
     rscript: &Path,
+    r_version: &str,
     r_profile_user: Option<&Path>,
     r_environ_user: Option<&Path>,
 ) -> AgentRuntimeStatus {
@@ -8074,71 +8147,349 @@ fn probe_agent_runtime(
     ) {
         Ok(output) => output,
         Err(error) => {
-            return AgentRuntimeStatus {
-                available: false,
-                aisdk_version: None,
-                error: Some(format!("Agent R check could not start: {error:#}")),
-            };
+            return agent_runtime_status_from_probe(
+                ProbeProcessOutput {
+                    success: false,
+                    exit_code: None,
+                    stdout: String::new(),
+                    stderr: format!("Agent R check could not start: {error:#}"),
+                    elapsed_ms: 0,
+                    timed_out: false,
+                },
+                Some(rscript),
+                Some(r_version),
+            );
         }
     };
-    agent_runtime_status_from_probe(output)
+    agent_runtime_status_from_probe(output, Some(rscript), Some(r_version))
 }
 
 fn agent_runtime_probe_expression() -> String {
     format!(
         r#"
-loadNamespace("aisdk")
-version <- utils::packageVersion("aisdk")
-cat("__RHO_AISDK__", as.character(version), "\n", sep = "")
-minimum <- base::package_version("{MINIMUM_AGENT_AISDK_VERSION}")
-if (version < minimum) {{
-  stop(sprintf(
-    "Rho Agent requires aisdk >= %s, but %s is installed.",
-    as.character(minimum),
-    as.character(version)
-  ))
+clean_field <- function(value) {{
+  value <- paste(as.character(value), collapse = " ")
+  value <- gsub("[\t\r\n|]+", " ", value)
+  substr(trimws(value), 1L, 1024L)
 }}
-required_exports <- c("normalize_capability_model_routes", "set_run_trace_sink")
-missing_exports <- setdiff(required_exports, getNamespaceExports("aisdk"))
-if (length(missing_exports)) {{
-  stop(sprintf(
-    "Installed aisdk is missing required Rho Agent APIs: %s.",
-    paste(missing_exports, collapse = ", ")
-  ))
+
+emit_dependency <- function(name, status, installed, required, path, detail) {{
+  cat(
+    "__RHO_AGENT_DEP__",
+    clean_field(name),
+    clean_field(status),
+    clean_field(installed),
+    clean_field(required),
+    clean_field(path),
+    clean_field(detail),
+    "\n",
+    sep = "\t"
+  )
 }}
+
+probe_dependency <- function(name, required, required_exports) {{
+  path <- tryCatch(find.package(name, quiet = TRUE), error = function(error) "")
+  if (!length(path) || !nzchar(path[[1L]])) {{
+    emit_dependency(name, "missing", "", required, "", "Package is not installed in the selected R library paths.")
+    return("missing")
+  }}
+  path <- normalizePath(path[[1L]], winslash = "/", mustWork = FALSE)
+  version_result <- tryCatch(
+    as.character(utils::packageVersion(name)),
+    error = function(error) error
+  )
+  if (inherits(version_result, "error")) {{
+    emit_dependency(name, "namespace_load_failed", "", required, path, conditionMessage(version_result))
+    return("namespace_load_failed")
+  }}
+  installed <- as.character(version_result)
+  version_ready <- tryCatch(
+    base::package_version(installed) >= base::package_version(required),
+    error = function(error) FALSE
+  )
+  if (!isTRUE(version_ready)) {{
+    emit_dependency(name, "incompatible_version", installed, required, path, sprintf("Installed %s is below required %s.", installed, required))
+    return("incompatible_version")
+  }}
+  namespace_result <- tryCatch(loadNamespace(name), error = function(error) error)
+  if (inherits(namespace_result, "error")) {{
+    emit_dependency(name, "namespace_load_failed", installed, required, path, conditionMessage(namespace_result))
+    return("namespace_load_failed")
+  }}
+  missing_exports <- setdiff(required_exports, getNamespaceExports(name))
+  if (length(missing_exports)) {{
+    emit_dependency(name, "incompatible_api", installed, required, path, sprintf("Missing required APIs: %s.", paste(missing_exports, collapse = ", ")))
+    return("incompatible_api")
+  }}
+  emit_dependency(name, "ready", installed, required, path, "")
+  "ready"
+}}
+
+invisible(probe_dependency(
+  "aisdk",
+  "{MINIMUM_AGENT_AISDK_VERSION}",
+  c("normalize_capability_model_routes", "set_run_trace_sink")
+))
+invisible(probe_dependency(
+  "aisdk.providers",
+  "{MINIMUM_AGENT_AISDK_PROVIDERS_VERSION}",
+  c(
+    "create_deepseek", "create_moonshot", "create_kimi_code",
+    "create_stepfun", "create_volcengine", "create_aihubmix", "create_xai",
+    "create_openrouter", "create_bailian", "create_nvidia"
+  )
+))
 "#
     )
 }
 
-fn agent_runtime_status_from_probe(output: ProbeProcessOutput) -> AgentRuntimeStatus {
-    let version = output.stdout.lines().find_map(|line| {
-        line.strip_prefix("__RHO_AISDK__")
-            .map(str::trim)
-            .map(str::to_string)
-    });
+fn agent_runtime_status_from_probe(
+    output: ProbeProcessOutput,
+    rscript: Option<&Path>,
+    r_version: Option<&str>,
+) -> AgentRuntimeStatus {
+    let mut dependencies = output
+        .stdout
+        .lines()
+        .filter_map(parse_agent_dependency_marker)
+        .fold(BTreeMap::new(), |mut packages, dependency| {
+            // Package startup code may write arbitrary stdout while its namespace loads.
+            // The probe-owned marker is emitted after load returns, so the final marker for
+            // each exact package is authoritative inside this short-lived process.
+            packages.insert(dependency.package.clone(), dependency);
+            packages
+        })
+        .into_values()
+        .collect::<Vec<_>>();
     if !output.success {
         return AgentRuntimeStatus {
             available: false,
-            aisdk_version: version,
+            status: "probe_failed".to_string(),
+            rscript: rscript.map(normalized_display_path),
+            r_version: r_version.map(str::to_string),
+            aisdk_version: dependency_version(&dependencies, "aisdk"),
+            provider_adapters_available: false,
+            provider_health: "not_checked".to_string(),
+            dependencies: complete_probe_failed_dependencies(
+                dependencies,
+                &format!(
+                    "Agent dependency probe failed (exit_code={:?}, timed_out={}).",
+                    output.exit_code, output.timed_out
+                ),
+            ),
             error: Some(format!(
-                "Agent R cannot use aisdk (exit_code={:?}, timed_out={}): {}",
+                "Agent dependency probe failed (exit_code={:?}, timed_out={}): {}",
                 output.exit_code,
                 output.timed_out,
                 bounded_diagnostic(&output.stderr)
             )),
         };
     }
-    match version {
-        Some(version) => AgentRuntimeStatus {
-            available: true,
-            aisdk_version: Some(version),
-            error: None,
+    dependencies = complete_probe_failed_dependencies(
+        dependencies,
+        "Agent dependency probe returned no structured package result.",
+    );
+    let core = dependency_status(&dependencies, "aisdk");
+    let providers = dependency_status(&dependencies, "aisdk.providers");
+    let available = core.is_some_and(|dependency| dependency.status == "ready");
+    let provider_adapters_available =
+        providers.is_some_and(|dependency| dependency.status == "ready");
+    let status = if !available {
+        "needs_attention"
+    } else if !provider_adapters_available {
+        "degraded"
+    } else {
+        "ready"
+    };
+    let error = if !available {
+        core.map(agent_dependency_summary)
+            .or_else(|| Some("The core Agent dependency result is unavailable.".to_string()))
+    } else if !provider_adapters_available {
+        Some(
+            "Core Agent dependencies are ready, but reviewed Provider adapters need attention."
+                .to_string(),
+        )
+    } else {
+        None
+    };
+    AgentRuntimeStatus {
+        available,
+        status: status.to_string(),
+        rscript: rscript.map(normalized_display_path),
+        r_version: r_version.map(str::to_string),
+        aisdk_version: dependency_version(&dependencies, "aisdk"),
+        provider_adapters_available,
+        provider_health: if provider_adapters_available {
+            "dependency_ready".to_string()
+        } else {
+            "dependency_unavailable".to_string()
         },
-        None => AgentRuntimeStatus {
-            available: false,
-            aisdk_version: None,
-            error: Some("Agent R check returned no aisdk version".to_string()),
+        dependencies,
+        error,
+    }
+}
+
+fn parse_agent_dependency_marker(line: &str) -> Option<AgentDependencyStatus> {
+    let encoded = line.strip_prefix("__RHO_AGENT_DEP__\t")?;
+    let mut fields = encoded.splitn(6, '\t');
+    let package = fields.next()?.trim();
+    let status = fields.next()?.trim();
+    let installed_version = optional_agent_field(fields.next()?);
+    let required_version = bounded_agent_dependency_field(fields.next()?);
+    let resolved_path = optional_agent_field(fields.next()?);
+    let detail = optional_agent_field(fields.next()?);
+    if !matches!(package, "aisdk" | "aisdk.providers")
+        || !matches!(
+            status,
+            "ready"
+                | "missing"
+                | "incompatible_version"
+                | "namespace_load_failed"
+                | "incompatible_api"
+        )
+        || required_version.is_empty()
+    {
+        return None;
+    }
+    let mut dependency = AgentDependencyStatus {
+        package: package.to_string(),
+        status: status.to_string(),
+        installed_version,
+        required_version,
+        resolved_path,
+        detail,
+        remediation: None,
+    };
+    dependency.remediation = agent_dependency_remediation(&dependency);
+    Some(dependency)
+}
+
+fn optional_agent_field(value: &str) -> Option<String> {
+    let value = bounded_agent_dependency_field(value);
+    (!value.is_empty()).then_some(value)
+}
+
+fn bounded_agent_dependency_field(value: &str) -> String {
+    bounded_diagnostic(value).chars().take(1024).collect()
+}
+
+fn agent_dependency_remediation(dependency: &AgentDependencyStatus) -> Option<String> {
+    if dependency.status == "ready" || dependency.status == "checking" {
+        return None;
+    }
+    let message = match dependency.package.as_str() {
+        "aisdk" => match dependency.status.as_str() {
+            "missing" | "incompatible_version" => format!(
+                "Install the reviewed aisdk build for this Rho version. A CRAN-only install may remain below >= {}; for local development use remotes::install_github(\"{}\"), then retry the Agent dependency check.",
+                dependency.required_version, REVIEWED_AISDK_REMOTE
+            ),
+            "namespace_load_failed" => format!(
+                "Repair the reviewed aisdk package and its dependencies at the resolved library path, then retry. Local development source: {}.",
+                REVIEWED_AISDK_REMOTE
+            ),
+            "incompatible_api" => format!(
+                "Replace aisdk with the reviewed Rho revision {}, then retry the Agent dependency check.",
+                REVIEWED_AISDK_REMOTE
+            ),
+            _ => "Retry the Agent dependency check after repairing the selected R library."
+                .to_string(),
         },
+        "aisdk.providers" => match dependency.status.as_str() {
+            "missing" | "incompatible_version" => format!(
+                "Install the reviewed Provider adapter package with remotes::install_github(\"{}\"), then retry. Provider credentials and network are checked separately in Model settings.",
+                REVIEWED_AISDK_PROVIDERS_REMOTE
+            ),
+            "namespace_load_failed" => format!(
+                "Repair the reviewed aisdk.providers package and its dependencies at the resolved library path. Local development source: {}. Provider credentials and network are checked separately.",
+                REVIEWED_AISDK_PROVIDERS_REMOTE
+            ),
+            "incompatible_api" => format!(
+                "Replace aisdk.providers with the reviewed Rho revision {}. Provider credentials and network are checked separately.",
+                REVIEWED_AISDK_PROVIDERS_REMOTE
+            ),
+            _ => "Retry after repairing the reviewed Provider adapter package.".to_string(),
+        },
+        _ => return None,
+    };
+    Some(bounded_agent_dependency_field(&message))
+}
+
+fn probe_failed_dependency(
+    package: &str,
+    required_version: &str,
+    detail: &str,
+) -> AgentDependencyStatus {
+    AgentDependencyStatus {
+        package: package.to_string(),
+        status: "probe_failed".to_string(),
+        installed_version: None,
+        required_version: required_version.to_string(),
+        resolved_path: None,
+        detail: Some(bounded_agent_dependency_field(detail)),
+        remediation: Some(
+            "Retry the Agent dependency check. Workspace R does not need to restart.".to_string(),
+        ),
+    }
+}
+
+fn complete_probe_failed_dependencies(
+    mut dependencies: Vec<AgentDependencyStatus>,
+    detail: &str,
+) -> Vec<AgentDependencyStatus> {
+    for (package, required) in [
+        ("aisdk", MINIMUM_AGENT_AISDK_VERSION),
+        ("aisdk.providers", MINIMUM_AGENT_AISDK_PROVIDERS_VERSION),
+    ] {
+        if dependencies
+            .iter()
+            .all(|dependency| dependency.package != package)
+        {
+            dependencies.push(probe_failed_dependency(package, required, detail));
+        }
+    }
+    dependencies.sort_by(|left, right| left.package.cmp(&right.package));
+    dependencies
+}
+
+fn dependency_status<'a>(
+    dependencies: &'a [AgentDependencyStatus],
+    package: &str,
+) -> Option<&'a AgentDependencyStatus> {
+    dependencies
+        .iter()
+        .find(|dependency| dependency.package == package)
+}
+
+fn dependency_version(dependencies: &[AgentDependencyStatus], package: &str) -> Option<String> {
+    dependency_status(dependencies, package)
+        .and_then(|dependency| dependency.installed_version.clone())
+}
+
+fn agent_dependency_summary(dependency: &AgentDependencyStatus) -> String {
+    match dependency.status.as_str() {
+        "missing" => format!(
+            "{} is missing; required >= {}. Workspace R remains available.",
+            dependency.package, dependency.required_version
+        ),
+        "incompatible_version" => format!(
+            "{} {} is installed, but >= {} is required. Workspace R remains available.",
+            dependency.package,
+            dependency.installed_version.as_deref().unwrap_or("unknown"),
+            dependency.required_version
+        ),
+        "namespace_load_failed" => format!(
+            "{} is installed but its namespace could not load. Workspace R remains available.",
+            dependency.package
+        ),
+        "incompatible_api" => format!(
+            "{} is installed but does not provide the required Rho Agent API. Workspace R remains available.",
+            dependency.package
+        ),
+        "probe_failed" => {
+            "The Agent dependency check could not complete. Workspace R remains available."
+                .to_string()
+        }
+        _ => "Agent dependencies need attention. Workspace R remains available.".to_string(),
     }
 }
 
@@ -8726,9 +9077,10 @@ fn classify_startup_error(detail: &str) -> StartupIssue {
 mod tests {
     use super::{
         AgentFileApplyRequest, AgentFileApplyTestControl, AgentFileMutationRegistry,
-        AgentFileUndoRequest, AgentModelTestControl, AgentRuntimeStatus, AgentTaskEntry, AppState,
-        ExecuteRequest, ExecuteSourceRange, MINIMUM_AGENT_AISDK_VERSION,
-        PersistedAgentFileProposal, ProbeProcessOutput, RUNTIME_CACHE_VERSION, RUserStartupFiles,
+        AgentFileUndoRequest, AgentModelTestControl, AgentTaskEntry, AppState, ExecuteRequest,
+        ExecuteSourceRange, MINIMUM_AGENT_AISDK_PROVIDERS_VERSION, MINIMUM_AGENT_AISDK_VERSION,
+        PersistedAgentFileProposal, ProbeProcessOutput, REVIEWED_AISDK_PROVIDERS_REMOTE,
+        REVIEWED_AISDK_REMOTE, RProbeStartup, RUNTIME_CACHE_VERSION, RUserStartupFiles,
         RenderJobState, RuntimeCacheFile, RuntimeConfig, StartupView, SwitchTestControl,
         SwitchTestStep, active_context, agent_file_postwrite_failure, agent_file_write_failure,
         agent_retry_source, agent_runtime_probe_expression, agent_runtime_status_from_probe,
@@ -8744,11 +9096,11 @@ mod tests {
         lockfile_inventory_arguments, parse_r_runtime_probe, pending_native_update_matches,
         project_switch_blocker, r_architecture_supported, reconcile_render_job,
         recover_incomplete_agent_file_mutations, render_job_is_terminal, retry_run_arguments,
-        run_is_retryable, runtime_file_signature, safe_delete_project_file, save_runtime_cache,
-        shutdown_application, source_claim_snapshot, switch_project_with_watcher_factory,
-        text_sha256, undo_agent_file_edit_state, validate_execute_source_range_shape,
-        validate_persisted_agent_file_proposal_structure, workspace_project_root_code,
-        write_r_probe_script,
+        run_is_retryable, run_r_probe, runtime_file_signature, safe_delete_project_file,
+        save_runtime_cache, shutdown_application, source_claim_snapshot,
+        switch_project_with_watcher_factory, text_sha256, undo_agent_file_edit_state,
+        validate_execute_source_range_shape, validate_persisted_agent_file_proposal_structure,
+        workspace_project_root_code, write_r_probe_script,
     };
     use crate::commands::runs::{contain_audit_panic, list_runs_with_state};
     use crate::platform;
@@ -9140,44 +9492,291 @@ mod tests {
         assert!(load_runtime_cache(directory.path(), &rscript, &ark).is_none());
     }
 
+    fn dependency_marker(
+        package: &str,
+        status: &str,
+        installed: &str,
+        required: &str,
+        path: &str,
+        detail: &str,
+    ) -> String {
+        format!(
+            "__RHO_AGENT_DEP__\t{package}\t{status}\t{installed}\t{required}\t{path}\t{detail}\n"
+        )
+    }
+
+    fn dependency_probe(stdout: String, success: bool) -> ProbeProcessOutput {
+        ProbeProcessOutput {
+            success,
+            exit_code: success.then_some(0).or(Some(1)),
+            stdout,
+            stderr: (!success)
+                .then(|| "probe failed without package output".to_string())
+                .unwrap_or_default(),
+            elapsed_ms: 10,
+            timed_out: false,
+        }
+    }
+
+    fn ready_dependency_markers() -> String {
+        format!(
+            "{}{}",
+            dependency_marker(
+                "aisdk",
+                "ready",
+                "1.5.0",
+                MINIMUM_AGENT_AISDK_VERSION,
+                "C:/R/library/aisdk",
+                "",
+            ),
+            dependency_marker(
+                "aisdk.providers",
+                "ready",
+                "0.1.0",
+                MINIMUM_AGENT_AISDK_PROVIDERS_VERSION,
+                "C:/R/library/aisdk.providers",
+                "",
+            )
+        )
+    }
+
     #[test]
-    fn agent_runtime_contract_requires_the_pinned_aisdk_agent_apis() {
+    fn agent_runtime_probe_contract_covers_core_and_provider_apis_without_aborting() {
         assert_eq!(MINIMUM_AGENT_AISDK_VERSION, "1.5.0");
+        assert_eq!(MINIMUM_AGENT_AISDK_PROVIDERS_VERSION, "0.1.0");
         let expression = agent_runtime_probe_expression();
+        assert!(expression.contains("__RHO_AGENT_DEP__"));
+        assert!(expression.contains("utils::packageVersion"));
         assert!(expression.contains("base::package_version"));
-        assert!(!expression.contains("utils::package_version"));
-        assert!(expression.contains("version < minimum"));
         assert!(expression.contains("normalize_capability_model_routes"));
         assert!(expression.contains("set_run_trace_sink"));
+        assert!(expression.contains("aisdk.providers"));
+        assert!(expression.contains("create_deepseek"));
+        assert!(expression.contains("create_nvidia"));
+        assert!(expression.contains("tryCatch(loadNamespace(name)"));
+        assert!(!expression.contains("stop(sprintf"));
+    }
 
-        let incompatible = agent_runtime_status_from_probe(ProbeProcessOutput {
-            success: false,
-            exit_code: Some(1),
-            stdout: "__RHO_AISDK__1.4.12\n".to_string(),
-            stderr: "Rho Agent requires aisdk >= 1.5.0, but 1.4.12 is installed.".to_string(),
-            elapsed_ms: 10,
-            timed_out: false,
-        });
-        assert!(!incompatible.available);
-        assert_eq!(incompatible.aisdk_version.as_deref(), Some("1.4.12"));
-        assert!(
-            incompatible
-                .error
-                .as_deref()
-                .is_some_and(|error| error.contains("requires aisdk >= 1.5.0"))
+    #[test]
+    fn local_debug_agent_probe_expression_emits_structured_markers_when_requested() {
+        if std::env::var_os("RHO_DEBUG_LIVE_AGENT_PROBE").is_none() {
+            return;
+        }
+        let rscript = locate_rscript(None).unwrap();
+        let output = run_r_probe(
+            &rscript,
+            &agent_runtime_probe_expression(),
+            Duration::from_secs(30),
+            RProbeStartup::Controlled,
+            None,
+        )
+        .unwrap();
+        eprintln!(
+            "success={} stdout={:?} stderr={:?}",
+            output.success, output.stdout, output.stderr
         );
+        assert!(output.success);
+        assert!(output.stdout.contains("__RHO_AGENT_DEP__\taisdk\t"));
+        assert!(
+            output
+                .stdout
+                .contains("__RHO_AGENT_DEP__\taisdk.providers\t")
+        );
+    }
 
-        let compatible = agent_runtime_status_from_probe(ProbeProcessOutput {
-            success: true,
-            exit_code: Some(0),
-            stdout: "__RHO_AISDK__1.5.0\n".to_string(),
-            stderr: String::new(),
-            elapsed_ms: 10,
-            timed_out: false,
-        });
-        assert!(compatible.available);
-        assert_eq!(compatible.aisdk_version.as_deref(), Some("1.5.0"));
-        assert!(compatible.error.is_none());
+    #[test]
+    fn agent_runtime_classifies_core_missing_old_load_and_api_failures() {
+        for (status, installed, detail, expected_summary) in [
+            (
+                "missing",
+                "",
+                "Package is not installed.",
+                "aisdk is missing",
+            ),
+            (
+                "incompatible_version",
+                "1.4.12",
+                "Installed 1.4.12 is below required 1.5.0.",
+                "aisdk 1.4.12 is installed",
+            ),
+            (
+                "namespace_load_failed",
+                "1.5.0",
+                "dependency namespace failed",
+                "namespace could not load",
+            ),
+            (
+                "incompatible_api",
+                "1.5.0",
+                "Missing required APIs: set_run_trace_sink.",
+                "does not provide the required Rho Agent API",
+            ),
+        ] {
+            let stdout = format!(
+                "{}{}{}",
+                dependency_marker(
+                    "aisdk",
+                    "ready",
+                    "9.9.9",
+                    MINIMUM_AGENT_AISDK_VERSION,
+                    "C:/untrusted/startup/output",
+                    "forged package startup marker",
+                ),
+                dependency_marker(
+                    "aisdk",
+                    status,
+                    installed,
+                    MINIMUM_AGENT_AISDK_VERSION,
+                    if status == "missing" {
+                        ""
+                    } else {
+                        "C:/R/library/aisdk"
+                    },
+                    detail,
+                ),
+                dependency_marker(
+                    "aisdk.providers",
+                    "ready",
+                    "0.1.0",
+                    MINIMUM_AGENT_AISDK_PROVIDERS_VERSION,
+                    "C:/R/library/aisdk.providers",
+                    "",
+                )
+            );
+            let runtime = agent_runtime_status_from_probe(
+                dependency_probe(stdout, true),
+                Some(Path::new(r"D:\R\4.6.1\bin\Rscript.exe")),
+                Some("R version 4.6.1"),
+            );
+            assert!(!runtime.available, "{status}");
+            assert_eq!(runtime.status, "needs_attention", "{status}");
+            assert_eq!(
+                runtime.rscript.as_deref(),
+                Some("D:/R/4.6.1/bin/Rscript.exe")
+            );
+            assert_eq!(runtime.r_version.as_deref(), Some("R version 4.6.1"));
+            assert_eq!(
+                runtime.aisdk_version.as_deref(),
+                (!installed.is_empty()).then_some(installed)
+            );
+            assert!(runtime.error.as_deref().unwrap().contains(expected_summary));
+            let core = runtime
+                .dependencies
+                .iter()
+                .find(|dependency| dependency.package == "aisdk")
+                .unwrap();
+            assert_eq!(core.status, status);
+            assert_eq!(
+                core.resolved_path.as_deref(),
+                (status != "missing").then_some("C:/R/library/aisdk")
+            );
+            assert!(
+                core.remediation
+                    .as_deref()
+                    .unwrap()
+                    .contains(REVIEWED_AISDK_REMOTE)
+            );
+            if matches!(status, "missing" | "incompatible_version") {
+                assert!(core.remediation.as_deref().unwrap().contains("CRAN-only"));
+            }
+        }
+    }
+
+    #[test]
+    fn provider_dependency_degrades_only_provider_adapters() {
+        for status in [
+            "missing",
+            "incompatible_version",
+            "namespace_load_failed",
+            "incompatible_api",
+        ] {
+            let stdout = format!(
+                "{}{}",
+                dependency_marker(
+                    "aisdk",
+                    "ready",
+                    "1.5.0",
+                    MINIMUM_AGENT_AISDK_VERSION,
+                    "C:/R/library/aisdk",
+                    "",
+                ),
+                dependency_marker(
+                    "aisdk.providers",
+                    status,
+                    if status == "missing" { "" } else { "0.1.0" },
+                    MINIMUM_AGENT_AISDK_PROVIDERS_VERSION,
+                    "C:/R/library/aisdk.providers",
+                    "provider adapter fixture",
+                )
+            );
+            let runtime = agent_runtime_status_from_probe(
+                dependency_probe(stdout, true),
+                Some(Path::new("C:/R/bin/Rscript.exe")),
+                Some("R version 4.6.1"),
+            );
+            assert!(runtime.available, "{status}");
+            assert_eq!(runtime.status, "degraded", "{status}");
+            assert!(!runtime.provider_adapters_available);
+            assert_eq!(runtime.provider_health, "dependency_unavailable");
+            let provider = runtime
+                .dependencies
+                .iter()
+                .find(|dependency| dependency.package == "aisdk.providers")
+                .unwrap();
+            assert_eq!(provider.status, status);
+            assert!(
+                provider
+                    .remediation
+                    .as_deref()
+                    .unwrap()
+                    .contains(REVIEWED_AISDK_PROVIDERS_REMOTE)
+            );
+            assert!(
+                provider
+                    .remediation
+                    .as_deref()
+                    .unwrap()
+                    .contains("separately")
+            );
+        }
+    }
+
+    #[test]
+    fn ready_and_process_failure_states_remain_structured_and_bounded() {
+        let ready = agent_runtime_status_from_probe(
+            dependency_probe(ready_dependency_markers(), true),
+            Some(Path::new("C:/R/bin/Rscript.exe")),
+            Some("R version 4.6.1"),
+        );
+        assert!(ready.available);
+        assert_eq!(ready.status, "ready");
+        assert!(ready.provider_adapters_available);
+        assert_eq!(ready.provider_health, "dependency_ready");
+        assert!(ready.error.is_none());
+
+        let failed = agent_runtime_status_from_probe(
+            ProbeProcessOutput {
+                success: false,
+                exit_code: None,
+                stdout: String::new(),
+                stderr: format!("token=secret\n{}", "x".repeat(6000)),
+                elapsed_ms: 30_000,
+                timed_out: true,
+            },
+            Some(Path::new("C:/R/bin/Rscript.exe")),
+            Some("R version 4.6.1"),
+        );
+        assert!(!failed.available);
+        assert_eq!(failed.status, "probe_failed");
+        assert_eq!(failed.dependencies.len(), 2);
+        assert!(
+            failed
+                .dependencies
+                .iter()
+                .all(|dependency| dependency.status == "probe_failed")
+        );
+        assert!(!serde_json::to_string(&failed).unwrap().contains("secret"));
+        assert!(failed.error.as_deref().unwrap().len() <= 4200);
     }
 
     #[test]
@@ -9436,11 +10035,11 @@ mod tests {
             r_environ_user: None,
             bridge_package: data_dir.join("rho.bridge"),
             agent_package: data_dir.join("rho.agent"),
-            agent_runtime: AgentRuntimeStatus {
-                available: true,
-                aisdk_version: Some("1.0.0".to_string()),
-                error: None,
-            },
+            agent_runtime: agent_runtime_status_from_probe(
+                dependency_probe(ready_dependency_markers(), true),
+                Some(Path::new("Rscript")),
+                Some("R version 4.6.1"),
+            ),
             store_path: store_path.to_path_buf(),
         }
     }

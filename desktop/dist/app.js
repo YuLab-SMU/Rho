@@ -2251,6 +2251,97 @@ function mockWorkspaceResponse(executionId, execution) {
   };
 }
 
+function mockAgentDependency(packageName, status, options = {}) {
+  const required = packageName === "aisdk" ? "1.5.0" : "0.1.0";
+  const unresolved = ["missing", "checking", "probe_failed"].includes(status);
+  const installed = options.installedVersion ?? (unresolved ? null : required);
+  const path = unresolved ? null : `C:/R/library/${packageName}`;
+  const reviewed = packageName === "aisdk"
+    ? "YuLab-SMU/aisdk@1e2fa54358dda647a6d5cbf64c0625642c673e4c"
+    : "YuLab-SMU/aisdk.providers@5cf315e5eedad7d83b224c96595da346e1192a85";
+  const details = {
+    missing: "Package is not installed in the selected R library paths.",
+    incompatible_version: `Installed ${installed || "unknown"} is below required ${required}.`,
+    namespace_load_failed: "A package dependency prevented the namespace from loading.",
+    incompatible_api: "The installed package is missing required Rho Agent APIs.",
+  };
+  return {
+    package: packageName,
+    status,
+    installed_version: installed,
+    required_version: required,
+    resolved_path: path,
+    detail: details[status] || null,
+    remediation: status === "ready" || status === "checking"
+      ? null
+      : packageName === "aisdk"
+        ? `Install the reviewed aisdk build. A CRAN-only install may remain below >= ${required}; local development source: ${reviewed}.`
+        : `Install the reviewed Provider adapter package from ${reviewed}. Provider credentials and network are checked separately in Model settings.`,
+    ...options,
+  };
+}
+
+function mockAgentRuntimeFixture(kind = "ready") {
+  if (kind === "checking") {
+    return {
+      available: false,
+      status: "checking",
+      rscript: mockPlatformFixture.rscript,
+      r_version: "R version 4.6.0",
+      aisdk_version: null,
+      provider_adapters_available: false,
+      provider_health: "not_checked",
+      dependencies: [
+        mockAgentDependency("aisdk", "checking"),
+        mockAgentDependency("aisdk.providers", "checking"),
+      ],
+      error: "Agent runtime check is continuing in the background.",
+    };
+  }
+  if (kind === "probe") {
+    return {
+      available: false,
+      status: "probe_failed",
+      rscript: mockPlatformFixture.rscript,
+      r_version: "R version 4.6.0",
+      aisdk_version: null,
+      provider_adapters_available: false,
+      provider_health: "not_checked",
+      dependencies: [
+        mockAgentDependency("aisdk", "probe_failed", { detail: "The Agent dependency check timed out.", remediation: "Retry the Agent dependency check. Workspace R does not need to restart." }),
+        mockAgentDependency("aisdk.providers", "probe_failed", { detail: "The Agent dependency check timed out.", remediation: "Retry the Agent dependency check. Workspace R does not need to restart." }),
+      ],
+      error: "The Agent dependency check timed out. Workspace R remains available.",
+    };
+  }
+  const coreStatus = {
+    missing: "missing",
+    old: "incompatible_version",
+    namespace: "namespace_load_failed",
+    api: "incompatible_api",
+  }[kind] || "ready";
+  const providerStatus = kind === "providers" ? "missing" : "ready";
+  const core = mockAgentDependency("aisdk", coreStatus, {
+    installedVersion: kind === "old" ? "1.4.12" : undefined,
+  });
+  const providers = mockAgentDependency("aisdk.providers", providerStatus);
+  const available = core.status === "ready";
+  const providerReady = providers.status === "ready";
+  return {
+    available,
+    status: !available ? "needs_attention" : providerReady ? "ready" : "degraded",
+    rscript: mockPlatformFixture.rscript,
+    r_version: "R version 4.6.0",
+    aisdk_version: core.installed_version,
+    provider_adapters_available: providerReady,
+    provider_health: providerReady ? "dependency_ready" : "dependency_unavailable",
+    dependencies: [core, providers],
+    error: !available
+      ? `${core.package} ${core.status.replaceAll("_", " ")}. Workspace R remains available.`
+      : providerReady ? null : "Core Agent dependencies are ready, but reviewed Provider adapters need attention.",
+  };
+}
+
 async function mockInvoke(command, args) {
   if (mockGitFailureCommand === command) {
     throw new Error(`Injected ${command} preview failure`);
@@ -2292,21 +2383,21 @@ async function mockInvoke(command, args) {
       runtime: {
         rscript: mockPlatformFixture.rscript,
         r_version: "R version 4.6.0",
-        agent_runtime: { available: true, aisdk_version: "1.5.0", error: null },
+        agent_runtime: mockAgentRuntimeFixture(),
       },
       issue: null,
     };
   }
   if (command === "startup_diagnostics") return "Rho mock startup diagnostics";
   if (command === "startup_open_log_directory") return { path: mockPlatformFixture.logPath };
-  if (command === "agent_runtime_retry") return { available: true, aisdk_version: "1.5.0", error: null };
+  if (command === "agent_runtime_retry") return mockAgentRuntimeFixture();
   if (command === "workspace_start") {
     return {
       status: "idle",
       r_version: "R version 4.6.0",
       kernel_pid: 14208,
       workspace: { execution_seq: 1, state_revision: 1, project_revision: 0 },
-      agent_runtime: { available: true, aisdk_version: "1.5.0", error: null },
+      agent_runtime: mockAgentRuntimeFixture(),
       python_required: false,
     };
   }
@@ -6693,6 +6784,7 @@ function addTimeline(title, body, status = "completed", code = null) {
   }
   row.append(marker, content);
   appendWithPinnedScroll($("#agentTimeline"), () => $("#agentTimeline").append(row));
+  return { row, content };
 }
 
 function prettyOrigin(origin) {
@@ -8182,6 +8274,16 @@ function selectedAgentModel() {
   return state.agentLlm.settings?.selected_model || null;
 }
 
+function selectedAgentProvider() {
+  const settings = state.agentLlm.settings;
+  if (!settings) return null;
+  const selected = selectedAgentModel();
+  const model = (settings.models || []).find((item) =>
+    item.id === selected?.id || item.id === settings.selected_model_id
+  ) || null;
+  return (settings.providers || []).find((provider) => provider.id === model?.provider_id) || null;
+}
+
 function agentCapabilityRouteView(capability) {
   return (state.agentLlm.settings?.capability_routes || []).find((route) => route.capability === capability) || null;
 }
@@ -8209,12 +8311,144 @@ function prettyToolCalling(value) {
   return "Act unavailable";
 }
 
+const AGENT_DEPENDENCY_STATUS_LABELS = {
+  checking: "Checking",
+  ready: "Ready",
+  missing: "Missing",
+  incompatible_version: "Version too old",
+  namespace_load_failed: "Load failed",
+  incompatible_api: "API incompatible",
+  probe_failed: "Check failed",
+};
+
+function agentDependencyStatusLabel(status) {
+  return AGENT_DEPENDENCY_STATUS_LABELS[status] || "Needs attention";
+}
+
+function agentRuntimeSummary(runtime = state.agentRuntime) {
+  if (!runtime) return "Agent dependencies have not been checked yet. Workspace R remains separate.";
+  if (runtime.status === "checking") return "Checking Agent packages in the selected R installation. Workspace R remains available.";
+  if (runtime.status === "degraded") return "Core Agent packages are ready, but reviewed Provider adapters need attention. Provider credentials and network are checked separately.";
+  if (runtime.available) return "Agent dependencies are ready.";
+  const core = (runtime.dependencies || []).find((dependency) => dependency.package === "aisdk");
+  if (!core) return userFacingError(runtime.error, "The Agent dependency check could not complete. Workspace R remains available.");
+  if (core.status === "missing") return `aisdk is missing; >= ${core.required_version || "1.5.0"} is required. Workspace R remains available.`;
+  if (core.status === "incompatible_version") return `aisdk ${core.installed_version || "unknown"} is installed; >= ${core.required_version || "1.5.0"} is required. Workspace R remains available.`;
+  if (core.status === "namespace_load_failed") return "aisdk is installed, but its namespace could not load. Workspace R remains available.";
+  if (core.status === "incompatible_api") return "aisdk is installed, but its Rho Agent API is incompatible. Workspace R remains available.";
+  return userFacingError(runtime.error, "Agent dependencies need attention. Workspace R remains available.");
+}
+
+function agentProbeFailureRuntime(error, startupView = state.startupView) {
+  const detail = userFacingError(error, "The Agent dependency check could not complete.");
+  const dependency = (packageName, requiredVersion) => ({
+    package: packageName,
+    status: "probe_failed",
+    installed_version: null,
+    required_version: requiredVersion,
+    resolved_path: null,
+    detail,
+    remediation: "Retry the Agent dependency check. Workspace R does not need to restart.",
+  });
+  return {
+    available: false,
+    status: "probe_failed",
+    rscript: startupView?.runtime?.rscript || null,
+    r_version: startupView?.runtime?.r_version || null,
+    aisdk_version: null,
+    provider_adapters_available: false,
+    provider_health: "not_checked",
+    dependencies: [dependency("aisdk", "1.5.0"), dependency("aisdk.providers", "0.1.0")],
+    error: `${detail} Workspace R remains available.`,
+  };
+}
+
+function agentRuntimeDiagnosticsText(runtime = state.agentRuntime) {
+  if (!runtime) return "Agent dependency diagnostics\nStatus: not checked";
+  const lines = [
+    "Agent dependency diagnostics",
+    `Status: ${runtime.status || (runtime.available ? "ready" : "needs_attention")}`,
+    `Rscript: ${runtime.rscript || "Not resolved"}`,
+    `R version: ${runtime.r_version || "Not resolved"}`,
+    "Workspace R: independent; no restart requested",
+    `Provider connection: ${runtime.provider_health === "dependency_ready" ? "dependencies ready; credentials/network checked separately" : "not checked here"}`,
+  ];
+  for (const dependency of runtime.dependencies || []) {
+    lines.push(
+      "",
+      `${dependency.package}: ${agentDependencyStatusLabel(dependency.status)}`,
+      `  installed: ${dependency.installed_version || "missing/unavailable"}`,
+      `  required: >= ${dependency.required_version || "unknown"}`,
+      `  path: ${dependency.resolved_path || "not resolved"}`,
+    );
+    if (dependency.detail) lines.push(`  detail: ${dependency.detail}`);
+    if (dependency.remediation) lines.push(`  next: ${dependency.remediation}`);
+  }
+  return lines.join("\n").slice(0, 16_384);
+}
+
+function appendAgentRuntimeDiagnostics(container, runtime = state.agentRuntime) {
+  const card = document.createElement("section");
+  card.className = "agent-dependency-diagnostics";
+  const rHeading = document.createElement("strong");
+  rHeading.textContent = "Selected R";
+  const rDetail = document.createElement("p");
+  rDetail.textContent = `${runtime?.r_version || "Version unavailable"} · ${runtime?.rscript || "Rscript path unavailable"}`;
+  card.append(rHeading, rDetail);
+  for (const dependency of runtime?.dependencies || []) {
+    const item = document.createElement("div");
+    item.className = `agent-dependency-item status-${dependency.status || "unknown"}`;
+    const heading = document.createElement("div");
+    const name = document.createElement("strong");
+    name.textContent = dependency.package;
+    heading.append(name, createStateChip(agentDependencyStatusLabel(dependency.status), dependency.status === "ready" ? "completed" : "warning"));
+    const versions = document.createElement("p");
+    versions.textContent = `Installed: ${dependency.installed_version || "missing/unavailable"} · Required: >= ${dependency.required_version || "unknown"}`;
+    const path = document.createElement("p");
+    path.textContent = `Resolved path: ${dependency.resolved_path || "not resolved"}`;
+    item.append(heading, versions, path);
+    if (dependency.detail) {
+      const detail = document.createElement("p");
+      detail.textContent = dependency.detail;
+      item.append(detail);
+    }
+    if (dependency.remediation) {
+      const next = document.createElement("p");
+      next.className = "agent-dependency-remediation";
+      next.textContent = `Next: ${dependency.remediation}`;
+      item.append(next);
+    }
+    card.append(item);
+  }
+  const provider = document.createElement("p");
+  provider.className = "agent-dependency-provider-note";
+  provider.textContent = "Provider credentials, endpoints, and network are checked separately in Model settings.";
+  const copy = document.createElement("button");
+  copy.type = "button";
+  copy.className = "agent-dependency-copy";
+  copy.textContent = "Copy diagnostics";
+  copy.addEventListener("click", async () => {
+    try {
+      await copyText(agentRuntimeDiagnosticsText(runtime));
+      copy.textContent = "Copied";
+    } catch (error) {
+      toast(reportUiFailure("copy Agent dependency diagnostics", error, "Diagnostics could not be copied. Select the visible details instead."), true);
+    }
+  });
+  card.append(provider, copy);
+  container.append(card);
+}
+
 function agentSendDisabledReason() {
   if (state.agentRuntime && !state.agentRuntime.available) {
-    return userFacingError(state.agentRuntime.error, "The assistant connection is unavailable. Retry the connection from this panel.");
+    return agentRuntimeSummary(state.agentRuntime);
   }
   if (state.agentLlm.settings?.validation_error) return "The assistant configuration needs attention. Open model settings to review it.";
   if (!selectedAgentModel()) return "No enabled Agent model is configured.";
+  const provider = selectedAgentProvider();
+  if (state.agentRuntime?.provider_adapters_available === false && provider?.kind === "registered") {
+    return `${provider.display_name || "The selected Provider"} requires aisdk.providers, but the adapter package is unavailable. Choose another Provider or repair aisdk.providers; Workspace R remains available.`;
+  }
   return null;
 }
 
@@ -8447,13 +8681,23 @@ function updateAgentHeader() {
   const runtime = state.agentRuntime;
   updateAgentModelLabel();
   renderAgentModelSelector();
+  if (runtime?.status === "checking") {
+    $("#agentRuntimeRetryButton").classList.add("hidden");
+    state.agentBusy = true;
+    syncAgentComposerState();
+    $("#agentCancelButton").classList.add("hidden");
+    $("#agentRetryTurnButton").classList.add("hidden");
+    $("#agentState").textContent = "Checking dependencies";
+    $("#agentStateDot").className = "agent-state-dot busy";
+    return;
+  }
   if (runtime && !runtime.available) {
     $("#agentRuntimeRetryButton").classList.remove("hidden");
     state.agentBusy = true;
     syncAgentComposerState();
     $("#agentCancelButton").classList.add("hidden");
     $("#agentRetryTurnButton").classList.add("hidden");
-    $("#agentState").textContent = "Unavailable";
+    $("#agentState").textContent = "Agent needs attention";
     $("#agentStateDot").className = "agent-state-dot error";
     return;
   }
@@ -8469,6 +8713,11 @@ function updateAgentHeader() {
     if (runningCount) aggregate.push(`${runningCount} running`);
     if (waitingCount) aggregate.push(`${waitingCount} waiting approval${waitingCount === 1 ? "" : "s"}`);
     $("#agentState").textContent = aggregate.join(" · ");
+    $("#agentStateDot").className = "agent-state-dot busy";
+    return;
+  }
+  if (runtime?.status === "degraded") {
+    $("#agentState").textContent = "Ready · adapters need attention";
     $("#agentStateDot").className = "agent-state-dot busy";
     return;
   }
@@ -10834,7 +11083,19 @@ function agentTimelineRenderSignature() {
     modelLabels: visibleTurns.map((turn) => [turn.model, agentModelDisplayName(turn.model)]),
     events: state.selectedTurnDetail?.events || [],
     activityExpanded: Array.from(state.agentActivityExpanded).sort(),
-    runtime: state.agentRuntime ? { available: state.agentRuntime.available, error: state.agentRuntime.error } : null,
+    runtime: state.agentRuntime ? {
+      available: state.agentRuntime.available,
+      status: state.agentRuntime.status,
+      provider_health: state.agentRuntime.provider_health,
+      error: state.agentRuntime.error,
+      dependencies: (state.agentRuntime.dependencies || []).map((dependency) => ({
+        package: dependency.package,
+        status: dependency.status,
+        installed_version: dependency.installed_version,
+        required_version: dependency.required_version,
+        resolved_path: dependency.resolved_path,
+      })),
+    } : null,
   });
 }
 
@@ -10852,10 +11113,20 @@ function renderAgentTimeline() {
 function renderAgentTimelineContent() {
   const panel = $("#agentTimeline");
   panel.replaceChildren();
+  if (state.agentRuntime?.status === "checking") {
+    addTimeline("Checking Agent dependencies", agentRuntimeSummary(state.agentRuntime), "running");
+    if (!state.agentTurns.length) return;
+  } else if (state.agentRuntime && !state.agentRuntime.available) {
+    const timeline = addTimeline("Agent dependencies need attention", agentRuntimeSummary(state.agentRuntime), "error");
+    appendAgentRuntimeDiagnostics(timeline.content, state.agentRuntime);
+    if (!state.agentTurns.length) return;
+  } else if (state.agentRuntime?.status === "degraded") {
+    const timeline = addTimeline("Provider adapters need attention", agentRuntimeSummary(state.agentRuntime), "running");
+    appendAgentRuntimeDiagnostics(timeline.content, state.agentRuntime);
+    if (!state.agentTurns.length) return;
+  }
   if (!state.agentTurns.length) {
-    if (state.agentRuntime && !state.agentRuntime.available) {
-      addTimeline("Assistant unavailable", userFacingError(state.agentRuntime.error, "Retry the assistant connection when you are ready."), "error");
-    } else if (state.selectedConversationId) {
+    if (state.selectedConversationId) {
       addTimeline("New conversation", "Describe the scientific goal to start this independent conversation.", "completed");
     } else {
       addTimeline("R session ready", "Ask Rho about the current project or attach a file for review.", "completed");
@@ -15618,8 +15889,21 @@ async function runDataViewerRefreshMockProbe() {
 async function maybeApplyPreviewScenario() {
   if (state.previewScenarioApplied || isDesktop) return;
   const scenario = previewParams.get("preview");
-  if (!["agent-first-direct", "interface-shell", "console-logs", "git-review", "wp2-data-viewer", "wp3-artifacts", "environment-lockfile", "environment-package", "local-help", "installed-help", "console-help", "project-references", "lint-quick-fix", "agent-help-link", "editor-refactor", "editor-format", "evidence-claims", "usability-problems", "usability-save", "model-settings", "workspace-plugins"].includes(scenario)) return;
+  if (!["agent-first-direct", "interface-shell", "console-logs", "git-review", "wp2-data-viewer", "wp3-artifacts", "environment-lockfile", "environment-package", "local-help", "installed-help", "console-help", "project-references", "lint-quick-fix", "agent-help-link", "editor-refactor", "editor-format", "evidence-claims", "usability-problems", "usability-save", "model-settings", "workspace-plugins", "agent-dependencies"].includes(scenario)) return;
   state.previewScenarioApplied = true;
+  if (scenario === "agent-dependencies") {
+    state.agentRuntime = mockAgentRuntimeFixture(previewParams.get("state") || "missing");
+    state.agentTurns = [];
+    state.agentConversations = [];
+    state.selectedConversationId = null;
+    state.selectedTurnId = null;
+    state.humanPreset = "agent";
+    applyWorkbenchLayout("agent");
+    switchContextTab("agent");
+    updateAgentHeader();
+    renderAgentTimeline();
+    return;
+  }
   if (scenario === "workspace-plugins") {
     const pluginState = previewParams.get("state") || "default";
     if (pluginState === "empty") mockWorkspacePlugins.splice(0);
@@ -22785,7 +23069,12 @@ async function finishWorkbenchStartup(startupView) {
         renderAgentTimeline();
         addLog("SYSTEM", "Agent runtime check completed");
       })
-      .catch((error) => addLog("SYSTEM", `Agent runtime check failed: ${String(error)}`, "warning"));
+      .catch((error) => {
+        state.agentRuntime = agentProbeFailureRuntime(error, startupView);
+        updateAgentHeader();
+        renderAgentTimeline();
+        addLog("SYSTEM", "Agent dependency check failed; Workspace R remains available.", "warning");
+      });
     const agentSettings = loadAgentLlmSettings();
     const response = await invoke("project_restore_session");
     await agentSettings;
@@ -23323,12 +23612,14 @@ $("#agentRuntimeRetryButton").addEventListener("click", async () => {
     renderAgentTimeline();
     toast(
       state.agentRuntime.available
-        ? "Agent runtime is ready."
-        : userFacingError(state.agentRuntime.error, "The assistant connection is still unavailable. Review model settings and try again."),
+        ? state.agentRuntime.status === "degraded"
+          ? "Core Agent dependencies are ready; reviewed Provider adapters still need attention."
+          : "Agent dependencies are ready."
+        : agentRuntimeSummary(state.agentRuntime),
       !state.agentRuntime.available,
     );
   } catch (error) {
-    toast(reportUiFailure("retry Agent runtime", error, "The assistant connection could not be retried. Review model settings and try again."), true);
+    toast(reportUiFailure("retry Agent dependency check", error, "The Agent dependency check could not be retried. Workspace R remains available."), true);
   } finally {
     button.disabled = false;
   }
