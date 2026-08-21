@@ -50,6 +50,14 @@ export function validatePhase2FinalContract(value) {
   assert.equal(JSON.parse(value.packageJson).version, "0.4.1-dev.11");
   assert.match(value.news, /## 0\.4\.1-dev\.11[\s\S]*Workspace-plugin crash-point recovery truth/);
   assert.match(value.spec, /Activated P2-4G contract — 2026-08-21/);
+  for (const marker of [
+    "Owner Phase 2 integration acceptance and visual-gate disposition — 2026-08-21",
+    "dbd51d18038820c0ead6f1d3006ef28d164d2df3",
+    "32456277341",
+    "32456281744",
+    "Visual modularization is a separate",
+    "does not authorize release, publication, distribution",
+  ]) assert.ok(value.spec.includes(marker), `Phase 2 acceptance disposition lost ${marker}`);
   assert.doesNotMatch(value.commands, /\binstall_workspace_plugin\b/, "Phase 2 added install command");
   assert.doesNotMatch(value.frontend, /data-plugin-install/, "Phase 2 added install UI");
 }
@@ -89,7 +97,7 @@ jobs:
     tauri: '{"version":"0.4.1-dev.11"}',
     packageJson: '{"version":"0.4.1-dev.11"}',
     news: "## 0.4.1-dev.11\n### Workspace-plugin crash-point recovery truth",
-    spec: "Activated P2-4G contract — 2026-08-21",
+    spec: "Activated P2-4G contract — 2026-08-21\nOwner Phase 2 integration acceptance and visual-gate disposition — 2026-08-21\ndbd51d18038820c0ead6f1d3006ef28d164d2df3\n32456277341\n32456281744\nVisual modularization is a separate follow-on design stream\ndoes not authorize release, publication, distribution",
     commands: "list_workspace_plugins",
     frontend: "Workspace Plugins",
   };
@@ -103,6 +111,7 @@ if (process.argv.includes("--test")) {
     ["matrix", (value) => { value.compatibility = value.compatibility.replaceAll("- os: windows-latest", "- os: omitted"); }],
     ["installed", (value) => { value.installed = value.installed.replace('report["rollback_restart_cached"] = json!(true)', ""); }],
     ["version", (value) => { value.workspace = 'version = "0.4.1-dev.10"'; }],
+    ["visual disposition", (value) => { value.spec = value.spec.replace("Visual modularization is a separate", "Visual work is bundled"); }],
     ["install", (value) => { value.commands += "\ninstall_workspace_plugin"; }],
   ]) {
     const value = fixture();

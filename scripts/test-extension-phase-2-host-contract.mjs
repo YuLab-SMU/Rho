@@ -50,7 +50,10 @@ export function validatePhase2HostContract(value) {
     (value.compatibility.match(/--smoke-test/g) ?? []).length >= 6,
     "all packaged platform legs must retain candidate/legacy smoke",
   );
-  assert.match(value.spec, /Status: active; P2-1 implementation[\s\S]*hosted installed acceptance pending/);
+  assert.match(
+    value.spec,
+    /Status: implemented and accepted for Phase 2 integration[\s\S]*32456281744/,
+  );
   assert.match(value.spec, /default features, WASI[\s\S]*excluded from the production build/);
   assert.match(value.spec, /P2-1 defines no imports at all/);
   assert.match(value.spec, /one Engine\/Store\/Instance per/);
@@ -64,7 +67,7 @@ function fixture() {
     host: 'pub struct WasmPluginHost\npub struct WasmHostIdentity\nmodule.imports().next().is_some()\nStoreLimitsBuilder::new()\n.memory_size(MAX_WASM_MEMORY_BYTES)\n.consume_fuel(true)\n.epoch_interruption(true)\n.wasm_memory64(false)\n.wasm_multi_memory(false)\n.wasm_simd(false)\n.wasm_bulk_memory(false)\nP2_1_WASI_IMPORT_SMOKE_WASM\nTrap::OutOfFuel\nTrap::Interrupt if cancellation_requested\npub fn quarantine_for_timeout',
     desktop: 'fn smoke_wasm_plugin_host(\n"runtime": "wasmtime-38.0.4"\n"guest_abi": 1\n"guest_echo": true\n"wasi_rejected": true\n"imports_exposed": 0',
     compatibility: "--smoke-test\n".repeat(6),
-    spec: "Status: active; P2-1 implementation hosted installed acceptance pending\ndefault features, WASI excluded from the production build\nP2-1 defines no imports at all\none Engine/Store/Instance per",
+    spec: "Status: implemented and accepted for Phase 2 integration\n32456281744\ndefault features, WASI excluded from the production build\nP2-1 defines no imports at all\none Engine/Store/Instance per",
     licenses: "Wasmtime / Cranelift Apache-2.0 WITH LLVM-exception",
   };
 }

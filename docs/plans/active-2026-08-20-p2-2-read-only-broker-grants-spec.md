@@ -1,18 +1,14 @@
 # P2-2 Read-only Broker Grants And Trusted Permission UI
 
-Status: active; complete Phase 2 direction and local-first exception authorized
-2026-08-20; P2-2A schema/persistence, P2-2B trusted permission UI/fresh
-handles, P2-2C `project.fs.read`, P2-2D `workspace.r.inspect`, P2-2E
-`network.fetch`, and P2-2F combined acceptance are complete locally; hosted
-and cross-platform installed acceptance remain open; P2-3A activated under the
-local-first exception; P2-1
-Windows/Linux hosted acceptance remains open and mandatory before final Phase 2
-acceptance
+Status: implemented and accepted for Phase 2 integration; P2-2A schema/
+persistence, P2-2B trusted permission UI/fresh handles, P2-2C
+`project.fs.read`, P2-2D `workspace.r.inspect`, P2-2E `network.fetch`, and
+P2-2F combined acceptance passed locally and in exact-head three-platform
+stable/Rust-1.88 run `32456281744` on 2026-08-21
 
-Active P2-2 work package: none. The local implementation is frozen for P2-3
-consumption. P2-2 remains active—not implemented/accepted—until hosted six-leg,
-Windows/Linux packaged smoke, three-platform installed review, and independent
-filesystem/Workspace/network security acceptance pass.
+Active P2-2 work package: none. The accepted implementation is frozen for P2-3
+consumption. Any new filesystem, Workspace, network, storage, write, process,
+credential, or permission authority requires a separate active contract.
 
 Change class: D3 security, schema, approval, network, filesystem, Workspace R,
 and cross-module behavior. Risk: R3.

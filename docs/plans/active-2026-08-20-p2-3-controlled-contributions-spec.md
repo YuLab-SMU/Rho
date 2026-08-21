@@ -1,18 +1,15 @@
 # P2-3 Controlled Third-party Contributions
 
-Status: active under the owner-approved local-first exception; P2-3A Manifest
-V2 + pure Source/Panel contracts and P2-3B Guest ABI V2 contribution proxy +
-transactional registry, plus P2-3C fixture Tool/Source/Skill + Agent integration,
-and P2-3D trusted Command/Viewer descriptor renderer completed locally
-2026-08-20; P2-3E named Panel/teardown/two-project/local macOS installed review
-completed; P2-4A activated under the local-first exception; P2-1/P2-2/P2-3
-hosted and cross-platform installed acceptance remain open and mandatory before
-final Phase 2 acceptance
+Status: implemented and accepted for Phase 2 integration; P2-3A Manifest V2,
+P2-3B Guest ABI V2 contribution proxy/transactional registry, P2-3C Tool/
+Source/Skill and Agent integration, P2-3D trusted Command/Viewer rendering, and
+P2-3E named Panel/teardown/two-project behavior passed local and exact-head
+three-platform stable/Rust-1.88 run `32456281744` on 2026-08-21
 
-Active P2-3 work package: none. The local source/macOS implementation is frozen
-for P2-4 consumption. P2-3 remains active—not implemented/accepted—until the
-hosted six-leg, Windows/Linux packaged, three-platform installed, independent
-Agent/UI/security and exact-candidate acceptance gates pass.
+Active P2-3 work package: none. The accepted contribution contract is frozen
+for P2-4 consumption. Dynamic registration, raw DOM/HTML/Tauri, Provider,
+process, write, arbitrary-R, credential, or new trusted-UI authority remains
+outside Phase 2.
 
 Change class: D3 capability graph, Agent tool, trusted UI, Wasm protocol, and
 cross-project lifecycle behavior. Risk: R3.

@@ -1,15 +1,15 @@
 # P2-4 Plugin Lifecycle, Recovery, Uninstall And Upgrade
 
-Status: active under the owner-approved local-first exception; P2-4A through
-P2-4F local packaged checkpoints are complete;
-D2 Browser visual review was blocked by the Browser local-file URL policy and
-remains open; hosted and cross-platform installed gates remain mandatory before
-final Phase 2 acceptance
+Status: implemented and accepted for Phase 2 integration; P2-4A through P2-4G
+are complete at `0.4.1-dev.11`; exact implementation head
+`dbd51d18038820c0ead6f1d3006ef28d164d2df3` passed Draft Fast run
+`32456277341` and all six hosted/package legs in run `32456281744`; the owner
+explicitly removed the Browser visual review from this integration gate and
+moved visual modularization to a separate follow-on design stream
 
-Active work package: P2-4G only — final local audit, Draft PR handoff, hosted
-Draft Fast plus explicit six-leg compatibility/installed matrix, and Phase 2
-acceptance decision. No product authority, install command, merge, release or
-publication is active.
+Active work package: none. PR #2 merge to `main` is authorized. No release,
+publication, distribution, plugin install/catalog, Phase 2.5 execution,
+Phase 3, or visual-redesign authority is included.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -1125,6 +1125,48 @@ and exact Rust 1.88 `x86_64-pc-windows-gnu` all-target `rho-server` checks, and
 candidate plus legacy source smoke. The first run remains failed evidence and
 is not composed into the repaired-head acceptance result.
 
+### Owner Phase 2 integration acceptance and visual-gate disposition — 2026-08-21
+
+This later owner decision supersedes G's earlier instruction to leave the PR
+Draft when the Browser gate is policy-blocked; intermediate checkpoint records
+remain historical evidence and are not rewritten as if visual review passed.
+
+The repaired implementation head
+`dbd51d18038820c0ead6f1d3006ef28d164d2df3` passed Draft Fast run
+`32456277341` and explicit read-only Compatibility run `32456281744`. All six
+macOS arm64, Windows x64 GNU and Linux x86-64 stable/Rust-1.88 legs passed.
+Stable legs built and exercised the platform packages: Windows completed NSIS
+install, installed candidate/legacy smoke and uninstall cleanup; macOS built,
+mounted and smoked App/DMG; Linux built, extracted and smoked AppImage.
+
+Hosted rehearsal hashes are:
+
+- Windows binary
+  `6f4e908f02a119c1dc075f90beab106d70dba6f9bebfef419eacca1a6fe357e1`
+  and NSIS
+  `4c6390b04bd7e768c649a27be8d103e8adae74ef9baf7f8e18dc45a73d480559`;
+- macOS binary
+  `6a3b4ffa724ab39cd1f456708221255fde5419d2af6f081d2fe93aac3ca7706a`
+  and DMG
+  `09db0af0bdefba3e4688aadcfa0e8a466fcb371333613aad5299b865b1289388`;
+- Linux extracted binary
+  `bbe34792d6138a59d4a1c977b47cac37f9314d64525a04514be6c4420996918f`
+  and AppImage
+  `783632fc58b96d1693e8a1fbdcb07717bcfdb025f2cfe3aa1ce3db6de55a54e3`.
+
+After reviewing that evidence, the owner explicitly authorized direct PR #2
+merge to `main` and removed the policy-blocked Browser visual review as a Phase
+2 integration acceptance requirement. This does not manufacture a visual pass
+or claim the current presentation is final. Visual modularization is a separate
+follow-on design stream with its own proposal, component boundaries, visual
+acceptance and implementation authorization.
+
+This disposition accepts P2-0 through P2-4 engineering integration only. It
+does not authorize release, publication, distribution, production signing,
+plugin install/catalog/marketplace, remote plugin update, Phase 2.5 execution,
+Phase 3, or visual redesign. The lifecycle-only closeout changes no runtime,
+schema, command, application/R-package version, or `NEWS.md` behavior.
+
 ### P2-4A local checkpoint — 2026-08-20
 
 The schema-v14 persistence boundary is locally complete:
@@ -1423,9 +1465,10 @@ hashes and evidence are required; browser/source tests cannot substitute.
 
 Before lifecycle status advances to implemented/accepted, audit every Definition
 of Done item in the active Phase 2 design against exact source, tests, installed
-artifacts and manual UI evidence. P2-0 through P2-4 documents, roadmap and
-cross-review matrix must distinguish implementation, hosted validation,
-installed acceptance and release decision.
+artifacts and the recorded owner disposition for any manual visual gate. P2-0
+through P2-4 documents, roadmap and cross-review matrix must distinguish
+implementation, hosted validation, installed acceptance, visual-design scope
+and release decision.
 
 Phase 2 acceptance explicitly excludes marketplace, publisher signatures,
 catalog, global plugins, remote code/update, write/process/arbitrary R,

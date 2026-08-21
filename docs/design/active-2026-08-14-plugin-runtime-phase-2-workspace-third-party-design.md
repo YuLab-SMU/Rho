@@ -1,29 +1,15 @@
 # Phase 2 Workspace Third-Party Plugin Runtime Design
 
-Status: active; P2-0 and pure-contract remediation complete; owner explicitly
-authorized rapid implementation of the complete Phase 2 end state on
-2026-08-20; P2-1 Wasm host source/local macOS evidence is complete while
-Windows/Linux hosted acceptance remains open; local-first exception active;
-P2-2A schema/persistence, P2-2B trusted permission UI/fresh handles, P2-2C
-`project.fs.read`, P2-2D `workspace.r.inspect`, P2-2E `network.fetch`, and
-P2-2F combined acceptance are locally complete; `0.4.1-dev.3` and
-`rho.bridge 0.1.15` allocated; P2-2 hosted/cross-platform acceptance remains
-open; P2-3A Manifest V2/bounded-schema/Source/Panel pure contracts and P2-3B
-Guest ABI contribution proxy/transactional registry plus P2-3C Agent Tool/
-Source/Skill integration and P2-3D trusted Command/Viewer renderer are locally
-complete together with P2-3E named Panel/final local macOS acceptance;
-`0.4.1-dev.4` and `rho.agent 0.1.6` allocated; P2-3 hosted/cross-platform gates
-remain open; P2-4A schema-v14 persistence and P2-4B1 exact snapshot/cache
-foundation plus P2-4B2/B3 durable first enable and restart reconstruction at
-`0.4.1-dev.5` passed their local stops under the local-first exception;
-P2-4C1 explicit Disable and C2 bounded project/restart/shutdown teardown reuse
-at `0.4.1-dev.6`, plus C3 crash/Retry and D1 recoverable move foundation at
-`0.4.1-dev.7`, passed locally; D2 trusted recoverable Uninstall/Restore source
-and packaged smoke are complete at `0.4.1-dev.8`, with Browser visual review
-open; D3 exact retention/purge and E1 replacement/pointer foundation are
-locally complete; E2 Update and E3 exact cached Rollback are locally complete
-through `0.4.1-dev.10`; F exhaustive recovery/UI truth is locally complete at
-`0.4.1-dev.11`; G final hosted/installed audit is active
+Status: implemented and accepted for integration on 2026-08-21; P2-0 through
+P2-4 are complete at application `0.4.1-dev.11`, `rho.bridge 0.1.15`, and
+`rho.agent 0.1.6`; exact implementation head
+`dbd51d18038820c0ead6f1d3006ef28d164d2df3` passed Draft Fast run
+`32456277341` and all six stable/Rust-1.88 macOS/Windows/Linux source plus
+packaged acceptance legs in run `32456281744`; the owner explicitly removed
+the tool-policy-blocked Browser visual review from the Phase 2 integration gate
+and assigned visual modularization to a separate follow-on design stream; PR #2
+merge to `main` is authorized, while release, publication, distribution,
+Phase 2.5 execution, Phase 3, and visual redesign remain separately gated
 
 Date: 2026-08-14
 Issue: [#17](https://github.com/YuLab-SMU/Rho/issues/17)
