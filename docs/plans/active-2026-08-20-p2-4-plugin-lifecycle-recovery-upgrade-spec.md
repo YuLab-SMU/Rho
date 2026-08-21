@@ -1095,6 +1095,36 @@ and hosted gates may close but final visual/Phase 2 acceptance stays explicitly
 open; no workaround or manual claim is manufactured. G then leaves the Draft PR
 and exact residual gate for owner/reviewer handoff rather than merging.
 
+### P2-4G hosted Windows compatibility repair — 2026-08-21
+
+The first exact-head six-leg run exposed a Windows stable compiler failure in
+the P2-2 `project.fs.read` identity guard: Rust's Windows
+`MetadataExt::volume_serial_number` and `MetadataExt::file_index` remain behind
+the unstable `windows_by_handle` feature. This is a D1/R3 portability defect,
+not new product behavior or authority.
+
+The bounded repair preserves the existing before/opened-handle/after identity
+comparison while obtaining the Windows volume serial and file index through
+stable `windows-sys 0.60` `GetFileInformationByHandle`. Directory/root probes
+request only `FILE_READ_ATTRIBUTES` with `FILE_FLAG_BACKUP_SEMANTICS`; no
+generic content read, write/create/truncate, path enumeration or new filesystem
+authority beyond exact identity probes is admitted. The P2-2
+contract rejects the unstable metadata methods, missing Win32 features,
+missing directory-open flag and any write-capable probe. Local macOS tests plus
+stable/MSRV Windows-target compilation must pass before the feature branch is
+updated; the exact repaired head then receives one bounded Draft Fast and
+six-leg rerun under the active G contract.
+
+Initial exact-head run `32454144138` at
+`f791abe2eeb3433b1456398688e54d4631c4ca32` passed both macOS legs, both Linux
+legs including stable AppImage smoke, and failed both Windows legs only at the
+same unstable calls; the stable leg also reported the Windows-only unused
+`File` import repaired in this slice. Before commit, the repaired source passed
+the P2-2 positive/negative contract, 101 `rho-server` unit tests, current stable
+and exact Rust 1.88 `x86_64-pc-windows-gnu` all-target `rho-server` checks, and
+candidate plus legacy source smoke. The first run remains failed evidence and
+is not composed into the repaired-head acceptance result.
+
 ### P2-4A local checkpoint — 2026-08-20
 
 The schema-v14 persistence boundary is locally complete:

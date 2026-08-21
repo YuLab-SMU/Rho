@@ -103,7 +103,11 @@ fn read_project_file_with_hook(
             ProjectFsReadErrorCode::InvalidProject,
         ));
     }
-    let root_identity = identity(&root_metadata);
+    let root_identity = path_identity(
+        trusted_project_root,
+        &root_metadata,
+        ProjectFsReadErrorCode::InvalidProject,
+    )?;
     let canonical_root = fs::canonicalize(trusted_project_root)
         .map_err(|_| ProjectFsReadError::new(ProjectFsReadErrorCode::InvalidProject))?;
     let normalized_root =
@@ -149,7 +153,11 @@ fn read_project_file_with_hook(
 
     let before_path_metadata = fs::symlink_metadata(&current)
         .map_err(|_| ProjectFsReadError::new(ProjectFsReadErrorCode::IoFailed))?;
-    let before_file_identity = identity(&before_path_metadata);
+    let before_file_identity = path_identity(
+        &current,
+        &before_path_metadata,
+        ProjectFsReadErrorCode::IoFailed,
+    )?;
     let canonical_file = fs::canonicalize(&current)
         .map_err(|_| ProjectFsReadError::new(ProjectFsReadErrorCode::IoFailed))?;
     if !canonical_file.starts_with(&canonical_root) {
@@ -160,11 +168,13 @@ fn read_project_file_with_hook(
 
     let mut file = File::open(&current)
         .map_err(|_| ProjectFsReadError::new(ProjectFsReadErrorCode::IoFailed))?;
-    if identity(
+    if opened_file_identity(
+        &file,
         &file
             .metadata()
             .map_err(|_| ProjectFsReadError::new(ProjectFsReadErrorCode::IoFailed))?,
-    ) != before_file_identity
+        ProjectFsReadErrorCode::IoFailed,
+    )? != before_file_identity
     {
         return Err(ProjectFsReadError::new(ProjectFsReadErrorCode::FileChanged));
     }
@@ -189,9 +199,21 @@ fn read_project_file_with_hook(
         .map_err(|_| ProjectFsReadError::new(ProjectFsReadErrorCode::FileChanged))?;
     let after_canonical_file = fs::canonicalize(&current)
         .map_err(|_| ProjectFsReadError::new(ProjectFsReadErrorCode::FileChanged))?;
-    if identity(&after_file_metadata) != before_file_identity
-        || identity(&after_path_metadata) != before_file_identity
-        || identity(&after_root_metadata) != root_identity
+    if opened_file_identity(
+        &file,
+        &after_file_metadata,
+        ProjectFsReadErrorCode::FileChanged,
+    )? != before_file_identity
+        || path_identity(
+            &current,
+            &after_path_metadata,
+            ProjectFsReadErrorCode::FileChanged,
+        )? != before_file_identity
+        || path_identity(
+            trusted_project_root,
+            &after_root_metadata,
+            ProjectFsReadErrorCode::FileChanged,
+        )? != root_identity
         || after_canonical_root != canonical_root
         || after_canonical_file != canonical_file
         || !after_canonical_file.starts_with(&after_canonical_root)
@@ -301,11 +323,9 @@ struct FileIdentity {
     index: Option<u64>,
 }
 
-fn identity(metadata: &Metadata) -> FileIdentity {
+fn metadata_identity(metadata: &Metadata) -> FileIdentity {
     #[cfg(unix)]
     use std::os::unix::fs::MetadataExt;
-    #[cfg(windows)]
-    use std::os::windows::fs::MetadataExt;
     FileIdentity {
         len: metadata.len(),
         modified_nanos: metadata
@@ -318,10 +338,74 @@ fn identity(metadata: &Metadata) -> FileIdentity {
         #[cfg(unix)]
         inode: metadata.ino(),
         #[cfg(windows)]
-        volume: metadata.volume_serial_number(),
+        volume: None,
         #[cfg(windows)]
-        index: metadata.file_index(),
+        index: None,
     }
+}
+
+#[cfg(not(windows))]
+fn path_identity(
+    _path: &Path,
+    metadata: &Metadata,
+    _error_code: ProjectFsReadErrorCode,
+) -> Result<FileIdentity, ProjectFsReadError> {
+    Ok(metadata_identity(metadata))
+}
+
+#[cfg(windows)]
+fn path_identity(
+    path: &Path,
+    metadata: &Metadata,
+    error_code: ProjectFsReadErrorCode,
+) -> Result<FileIdentity, ProjectFsReadError> {
+    use std::fs::OpenOptions;
+    use std::os::windows::fs::OpenOptionsExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        FILE_FLAG_BACKUP_SEMANTICS, FILE_READ_ATTRIBUTES,
+    };
+
+    let file = OpenOptions::new()
+        .access_mode(FILE_READ_ATTRIBUTES)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+        .open(path)
+        .map_err(|_| ProjectFsReadError::new(error_code))?;
+    opened_file_identity(&file, metadata, error_code)
+}
+
+#[cfg(not(windows))]
+fn opened_file_identity(
+    _file: &File,
+    metadata: &Metadata,
+    _error_code: ProjectFsReadErrorCode,
+) -> Result<FileIdentity, ProjectFsReadError> {
+    Ok(metadata_identity(metadata))
+}
+
+#[cfg(windows)]
+fn opened_file_identity(
+    file: &File,
+    metadata: &Metadata,
+    error_code: ProjectFsReadErrorCode,
+) -> Result<FileIdentity, ProjectFsReadError> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Storage::FileSystem::{
+        BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle,
+    };
+
+    let mut information = BY_HANDLE_FILE_INFORMATION::default();
+    // SAFETY: `file` owns a live Windows handle for the duration of the call,
+    // and `information` is a valid writable output buffer of the exact API type.
+    let succeeded =
+        unsafe { GetFileInformationByHandle(file.as_raw_handle() as _, &mut information) };
+    if succeeded == 0 {
+        return Err(ProjectFsReadError::new(error_code));
+    }
+    let mut identity = metadata_identity(metadata);
+    identity.volume = Some(information.dwVolumeSerialNumber);
+    identity.index =
+        Some((u64::from(information.nFileIndexHigh) << 32) | u64::from(information.nFileIndexLow));
+    Ok(identity)
 }
 
 fn media_type(path: &Path) -> &'static str {

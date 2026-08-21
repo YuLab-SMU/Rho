@@ -4,7 +4,7 @@
 //! snapshot into app-local storage, verifies the complete inventory after an
 //! atomic rename, and returns only typed evidence plus bounded file bytes.
 
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -530,7 +530,7 @@ fn cache_inspection_error(error: std::io::Error) -> PluginPackageCacheError {
 fn sync_directory(path: &Path) -> Result<(), PluginPackageCacheError> {
     #[cfg(unix)]
     {
-        File::open(path)
+        fs::File::open(path)
             .and_then(|directory| directory.sync_all())
             .map_err(|error| {
                 PluginPackageCacheError::WriteFailed(format!(
