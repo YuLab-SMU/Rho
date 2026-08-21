@@ -5,7 +5,7 @@ source verification, exact Rust 1.88 evidence, independent security review,
 and three-platform hosted/package acceptance passed through exact-head run
 `32456281744` on 2026-08-21
 
-Authorization: the project owner explicitly authorized rapid iteration through
+Historical authorization: the project owner explicitly authorized rapid iteration through
 the complete Phase 2 end state on 2026-08-20. This authorizes P2-1 through P2-4
 in product intent, but the development-governance stop gates remain sequential.
 Only P2-1 may change executable-host contracts in this package; P2-2 does not

@@ -53,7 +53,7 @@ if (process.argv.includes("--test")) {
   validateP24PackageTrashContract({
     trash: read("crates/rho-server/src/plugin_package_trash.rs"),
     server: read("crates/rho-server/src/lib.rs"),
-    spec: read("docs/plans/active-2026-08-20-p2-4-plugin-lifecycle-recovery-upgrade-spec.md"),
+    spec: read("docs/plans/implemented-2026-08-20-p2-4-plugin-lifecycle-recovery-upgrade-spec.md"),
   });
 }
 

@@ -51,7 +51,7 @@ export function validateP24LifecycleContract(value) {
   ]) assert.ok(value.service.includes(marker), `lifecycle service seam lost ${marker}`);
   assert.match(value.spec, /Status: implemented and accepted for Phase 2 integration/);
   assert.match(value.spec, /P2-4A local checkpoint — 2026-08-20/);
-  assert.match(value.crossReview, /plans\/active-2026-08-20-p2-4-plugin-lifecycle-recovery-upgrade-spec\.md/);
+  assert.match(value.crossReview, /plans\/implemented-2026-08-20-p2-4-plugin-lifecycle-recovery-upgrade-spec\.md/);
 }
 
 function fixture() {
@@ -61,7 +61,7 @@ function fixture() {
     lifecycle: "WorkspacePluginState\nWorkspacePluginTransition\nWorkspacePluginLifecycleEvent\nWorkspacePluginPackageTombstone\nrequest_workspace_plugin_transition\nadvance_workspace_plugin_transition\nallocate_workspace_plugin_generation\ncomplete_workspace_plugin_uninstall\nexpected_old_digest\ncompletion_uncertain\nplugin lifecycle details contain a forbidden field\n#[cfg(test)]",
     service: "PluginLifecycleQueryService\nPluginLifecycleMutationService\nrequired_project_root\ndoes not match service project",
     spec: "Status: implemented and accepted for Phase 2 integration\nP2-4A local checkpoint — 2026-08-20",
-    crossReview: "plans/active-2026-08-20-p2-4-plugin-lifecycle-recovery-upgrade-spec.md",
+    crossReview: "plans/implemented-2026-08-20-p2-4-plugin-lifecycle-recovery-upgrade-spec.md",
   };
 }
 
@@ -89,7 +89,7 @@ if (process.argv.includes("--test")) {
     migration: read("crates/rho-store/src/migration.rs"),
     lifecycle: read("crates/rho-store/src/plugin_lifecycle.rs"),
     service: read("crates/rho-store/src/plugin_lifecycle_service.rs"),
-    spec: read("docs/plans/active-2026-08-20-p2-4-plugin-lifecycle-recovery-upgrade-spec.md"),
+    spec: read("docs/plans/implemented-2026-08-20-p2-4-plugin-lifecycle-recovery-upgrade-spec.md"),
     crossReview: read("docs/project/active-document-cross-review.md"),
   });
 }

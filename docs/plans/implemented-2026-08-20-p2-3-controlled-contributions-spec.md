@@ -6,7 +6,7 @@ Source/Skill and Agent integration, P2-3D trusted Command/Viewer rendering, and
 P2-3E named Panel/teardown/two-project behavior passed local and exact-head
 three-platform stable/Rust-1.88 run `32456281744` on 2026-08-21
 
-Active P2-3 work package: none. The accepted contribution contract is frozen
+Completed P2-3 work package: none active. The accepted contribution contract is frozen
 for P2-4 consumption. Dynamic registration, raw DOM/HTML/Tauri, Provider,
 process, write, arbitrary-R, credential, or new trusted-UI authority remains
 outside Phase 2.
