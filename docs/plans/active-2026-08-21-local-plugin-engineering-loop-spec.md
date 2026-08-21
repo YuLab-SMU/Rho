@@ -402,3 +402,175 @@ check. None is claimed passing.
 Next engineering stop: F3 should compose a locally checked candidate with the
 already implemented exact-digest update/rollback lifecycle without creating a
 second cache, second state machine, or any marketplace/distribution layer.
+
+## F3A Immutable Baseline And Candidate Contract — Active 2026-08-21
+
+F3 is split so the local loop can reuse accepted lifecycle primitives without
+pulling application state forward prematurely. Only F3A is active.
+
+F3A adds two local commands:
+
+```text
+cargo run -p rho-plugin-dev -- snapshot <project-root> <plugin-id> <cache-root>
+cargo run -p rho-plugin-dev -- compare <project-root> <plugin-id> <cache-root> <baseline-digest>
+```
+
+`snapshot` must:
+
+- perform authoritative project check and select one exact plugin digest;
+- require a real existing cache root outside the mutable project root;
+- call the existing broker-owned `PluginPackageCache::prepare_exact` rather
+  than copy files or invent a developer cache;
+- return the exact cached digest without changing Store lifecycle state,
+  manifest source, or application enablement.
+
+`compare` must:
+
+- fail when current source still has the baseline digest;
+- load the immutable baseline through `PluginPackageCache::load_exact` without
+  consulting mutable source for its bytes;
+- snapshot the exact current candidate through the accepted discovery path;
+- require the baseline and candidate to expose the same F3A Command/Tool/Viewer
+  identities and kinds;
+- smoke every baseline and candidate surface independently through the same
+  schema/trusted-result validators used by F2;
+- report only baseline digest, candidate digest, and validated surface count;
+- leave the candidate unaccepted and leave both source and cached baseline
+  unchanged.
+
+F3A may depend on `rho-server` only to use its existing immutable package cache.
+It may not import desktop orchestration, duplicate cache layout/key/digest
+logic, write Store lifecycle state, auto-publish a candidate, or claim that the
+application rolled back.
+
+F3A local acceptance requires:
+
+- snapshot caches the original F2 component and read-back bytes/digest match;
+- a source change plus rebuild produces a distinct candidate digest;
+- compare proves all three baseline surfaces and all three candidate surfaces
+  pass independently;
+- mutable source changes after snapshot cannot alter cached baseline bytes;
+- unchanged candidate, unknown baseline, surface-kind/identity drift, cache
+  containment failure, and invalid candidate smoke fail with stable errors;
+- local tests, strict clippy, rustfmt, and diff checks pass without CI,
+  multi-platform, desktop, Ark, R, Store mutation, version, or NEWS work.
+
+F3B remains separately gated: it will compose a passed candidate with the
+already implemented durable expected-old update/rollback transition. F3A is
+immutable evaluation evidence, not acceptance authority.
+
+## F3A Local Checkpoint — 2026-08-21
+
+F3A is implemented and passes its local stop gate.
+
+Implemented:
+
+- `rho-plugin-dev snapshot` selects the exact checked component and delegates
+  storage/read-back to `rho_server::plugin_package_cache::PluginPackageCache`;
+- `rho-plugin-dev compare` loads the immutable cached baseline, snapshots the
+  mutable current candidate, rejects an unchanged digest or surface drift, and
+  independently smokes every Command/Tool/Viewer surface on both snapshots;
+- comparison reports only component ID, baseline digest, candidate digest, and
+  validated surface count; it does not emit guest payloads or accept the
+  candidate;
+- the tool depends on `rho-server` solely to reuse the existing cache owner. It
+  adds no cache path/key/digest implementation and writes no Store lifecycle
+  row.
+
+Local evidence:
+
+- `cargo test -p rho-plugin-dev --no-fail-fast` passes 1 unit and 10 integration
+  tests;
+- the positive evolution test caches the original three-surface component,
+  changes source, rebuilds to a distinct digest, compares baseline/candidate,
+  runs six independent smokes, and reloads the original cached Wasm/source
+  bytes after mutable source changed;
+- the CLI test performs the same `snapshot -> source edit -> build -> compare`
+  loop and reports `surfaces=3` without payload or handles;
+- rejection tests cover unchanged digest, unknown baseline, surface drift,
+  unsupported Source/Skill/Panel evolution, malformed candidate Wasm, a cache
+  inside the project, and a symlinked broker cache root with no write outside
+  containment;
+- `cargo clippy -p rho-plugin-dev --all-targets --no-deps -- -D warnings`,
+  `cargo fmt --all -- --check`, and `git diff --check` pass locally.
+
+Clippy scope note: dependency-inclusive `-D warnings` was intentionally not
+reported as passing. It reaches the preserved broad `rho-store` warning
+baseline and reports 286 unrelated existing lints. The new crate itself passes
+strict all-target clippy with `--no-deps`; tests compile and execute the real
+`rho-server` cache path.
+
+Contract review:
+
+- no second cache, lifecycle state machine, permission lane, Store mutation,
+  desktop/Tauri/Ark/R/Agent implementation, application version, NEWS, CI,
+  platform, distribution, marketplace, publisher, or signing surface exists in
+  the F3A diff;
+- cached baseline bytes remain immutable and source-independent; candidate
+  bytes remain unaccepted mutable project content;
+- surface identity must remain stable in F3A. Adding/removing/retyping a
+  contribution is treated as `surface_drift` and requires a later explicit
+  compatibility contract;
+- F3A proves evaluable rollback bytes, not application rollback completion.
+
+Explicitly unrun remains every CI/remote and multi-platform check, full
+workspace/desktop/Tauri/Ark/R suite, Store lifecycle transition, installed app,
+packaging, signing, publication, and release gate. None is claimed passing.
+
+Next engineering stop: F3B may feed an F3A-passed candidate into the existing
+durable expected-old update/rollback transition. It must reuse the accepted
+Store and desktop lifecycle owner rather than granting `rho-plugin-dev` direct
+acceptance authority.
+
+## F3B Existing Lifecycle Composition Audit — 2026-08-21
+
+The audit found no missing product-code seam. The existing application already
+composes an edited local package with the durable lifecycle required by this
+engineering loop:
+
+- discovery records a changed source digest as `update_pending` while the old
+  accepted route remains active;
+- trusted Update submits exact `expected_old_digest`, `candidate_digest`, and
+  project revision;
+- Update re-discovers the exact candidate, verifies durable pending pointers,
+  prepares it through the same broker cache, activates behind expected-old CAS,
+  revokes old digest grants, and records the old digest as rollback target;
+- trusted Rollback requires exact current/rollback pointers, loads only the
+  verified cached target, creates a fresh host/generation and fresh permission
+  review where needed, and never rewrites mutable project source;
+- project A/B isolation and restart reconstruction already use those same
+  identities.
+
+No F3B runtime or UI code was added because doing so would duplicate an accepted
+owner. The local engineering handoff is the digest pair already emitted by
+`compare`; the trusted shell, not `rho-plugin-dev`, supplies acceptance intent
+and current project revision.
+
+Local source evidence:
+
+- trusted Update, trusted Rollback, replacement-foundation, and exact-package-
+  cache JavaScript contract checks pass;
+- with local test-only `TAURI_CONFIG` clearing bundle `externalBin` and
+  `resources`, the focused desktop tests
+  `trusted_update_accepts_only_current_candidate_and_revokes_old_digest_grants`,
+  `manifest_v2_changed_package_stays_update_pending_and_keeps_old_route`,
+  `update_rejects_stale_revision_digest_and_foreign_project_before_cas`,
+  `exact_update_isolates_two_projects_with_same_plugin_id`, and
+  `exact_cached_rollback_is_fresh_and_restart_reconstructs_accepted_cache` pass;
+- the Tauri override affects test bundling only and is not a repository or
+  application configuration change.
+
+Remaining local acceptance: the actual desktop UI flow has not been opened
+because this checkout has no staged Ark/runtime bundle resources. That manual
+observation remains unrun, not failed. It does not justify more lifecycle code.
+
+At this point the source-level engineering loop is closed:
+
+```text
+edit -> build -> check -> smoke UI/Agent/Viewer -> immutable baseline compare
+     -> app detects update_pending -> exact Update -> cached Rollback
+```
+
+The next implementation stream should address component evolution policy and
+automation only if it composes these accepted identities. Marketplace, author,
+publisher, signing, and distribution work remains unnecessary.

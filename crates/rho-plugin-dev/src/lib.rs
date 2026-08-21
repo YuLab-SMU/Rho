@@ -1,10 +1,11 @@
-//! Local-only authoring tools for project-scoped Rho plugins.
+//! Local-only engineering tools for project-scoped Rho components.
 //!
 //! This crate deliberately reuses the accepted runtime parser, package digest,
-//! snapshot, Wasm host, schema, and trusted command-result contracts. It owns
-//! no product runtime, permission, persistence, desktop, install, or release
-//! authority.
+//! snapshot, broker-owned immutable cache, Wasm host, schema, and trusted
+//! result contracts. It owns no product runtime, permission, Store lifecycle,
+//! desktop, install, or release authority.
 
+use std::collections::BTreeMap;
 use std::fmt;
 use std::fs::{self, File};
 use std::io::Read;
@@ -15,8 +16,9 @@ use rho_extension_runtime::{
     HostInstanceId, HostMessage, HostRequestId, HostResponse, MANIFEST_NAME, MAX_MANIFEST_BYTES,
     MAX_PACKAGE_FILE_BYTES, PLUGINS_DIR, PluginCommandResultV1, RuntimeKind, ScopeId,
     ViewerDocumentV1, WasmHostIdentity, WasmPluginHost, WorkspacePluginManifest,
-    discover_workspace_plugins, snapshot_workspace_plugin_package,
+    WorkspacePluginPackageSnapshot, discover_workspace_plugins, snapshot_workspace_plugin_package,
 };
+use rho_server::plugin_package_cache::PluginPackageCache;
 use serde::Serialize;
 use serde_json::json;
 
@@ -87,6 +89,20 @@ pub struct ContributionSmokeReport {
 }
 
 pub type CommandSmokeReport = ContributionSmokeReport;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ComponentSnapshotReport {
+    pub plugin_id: String,
+    pub digest: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct EvolutionComparisonReport {
+    pub plugin_id: String,
+    pub baseline_digest: String,
+    pub candidate_digest: String,
+    pub validated_surfaces: usize,
+}
 
 pub fn build_project(project_root: &Path) -> Result<BuildReport, PluginDevError> {
     let project_root = checked_project_root(project_root)?;
@@ -260,8 +276,84 @@ fn smoke_contribution(
     origin: &'static str,
 ) -> Result<ContributionSmokeReport, PluginDevError> {
     let project_root = checked_project_root(project_root)?;
-    check_project(&project_root)?;
-    let report = discover_workspace_plugins(&project_root)
+    let snapshot = current_snapshot(&project_root, plugin_id)?;
+    smoke_snapshot(&snapshot, contribution_id, expected_kind, origin)
+}
+
+pub fn snapshot_component(
+    project_root: &Path,
+    plugin_id: &str,
+    cache_root: &Path,
+) -> Result<ComponentSnapshotReport, PluginDevError> {
+    let project_root = checked_project_root(project_root)?;
+    let cache_root = checked_cache_root(cache_root, &project_root)?;
+    let snapshot = current_snapshot(&project_root, plugin_id)?;
+    let cache = PluginPackageCache::new(&cache_root);
+    let cached = cache
+        .prepare_exact(&project_root, plugin_id, snapshot.digest.as_str())
+        .map_err(|error| PluginDevError::new("cache_prepare_failed", error.to_string()))?;
+    Ok(ComponentSnapshotReport {
+        plugin_id: cached.plugin_id,
+        digest: cached.package_digest,
+    })
+}
+
+pub fn compare_component(
+    project_root: &Path,
+    plugin_id: &str,
+    cache_root: &Path,
+    baseline_digest: &str,
+) -> Result<EvolutionComparisonReport, PluginDevError> {
+    let project_root = checked_project_root(project_root)?;
+    let cache_root = checked_cache_root(cache_root, &project_root)?;
+    let candidate = current_snapshot(&project_root, plugin_id)?;
+    if candidate.digest.as_str() == baseline_digest {
+        return Err(PluginDevError::new(
+            "candidate_unchanged",
+            "current component digest still matches the baseline",
+        ));
+    }
+    let cache = PluginPackageCache::new(&cache_root);
+    let baseline = cache
+        .load_exact(
+            project_root.to_string_lossy().as_ref(),
+            plugin_id,
+            baseline_digest,
+        )
+        .map_err(|error| PluginDevError::new("baseline_load_failed", error.to_string()))?;
+    let baseline_surfaces = evolution_surfaces(&baseline.snapshot)?;
+    let candidate_surfaces = evolution_surfaces(&candidate)?;
+    if baseline_surfaces.is_empty() {
+        return Err(PluginDevError::new(
+            "no_evolution_surfaces",
+            "baseline has no Command, Tool, or Viewer contribution",
+        ));
+    }
+    if baseline_surfaces != candidate_surfaces {
+        return Err(PluginDevError::new(
+            "surface_drift",
+            "candidate Command, Tool, and Viewer identities or kinds differ from baseline",
+        ));
+    }
+    for (contribution_id, kind) in &baseline_surfaces {
+        let origin = origin_for_kind(*kind);
+        smoke_snapshot(&baseline.snapshot, contribution_id, *kind, origin)?;
+        smoke_snapshot(&candidate, contribution_id, *kind, origin)?;
+    }
+    Ok(EvolutionComparisonReport {
+        plugin_id: plugin_id.to_string(),
+        baseline_digest: baseline.package_digest,
+        candidate_digest: candidate.digest.to_string(),
+        validated_surfaces: candidate_surfaces.len(),
+    })
+}
+
+fn current_snapshot(
+    project_root: &Path,
+    plugin_id: &str,
+) -> Result<WorkspacePluginPackageSnapshot, PluginDevError> {
+    check_project(project_root)?;
+    let report = discover_workspace_plugins(project_root)
         .map_err(|error| PluginDevError::new("discovery_failed", error.to_string()))?
         .ok_or_else(|| PluginDevError::new("plugin_root_missing", PLUGINS_DIR))?;
     if !report.failures.is_empty() {
@@ -278,13 +370,23 @@ fn smoke_contribution(
         .ok_or_else(|| {
             PluginDevError::new("plugin_not_found", format!("unknown plugin {plugin_id}"))
         })?;
-    if !plugin.manifest.permissions.is_empty() {
+    snapshot_workspace_plugin_package(project_root, plugin.manifest.id.as_str(), &plugin.digest)
+        .map_err(|error| PluginDevError::new("snapshot_rejected", error.to_string()))
+}
+
+fn smoke_snapshot(
+    snapshot: &WorkspacePluginPackageSnapshot,
+    contribution_id: &str,
+    expected_kind: ContributionKind,
+    origin: &'static str,
+) -> Result<ContributionSmokeReport, PluginDevError> {
+    if !snapshot.manifest.permissions.is_empty() {
         return Err(PluginDevError::new(
             "permissions_not_supported",
-            "local F1 smoke accepts only zero-permission packages",
+            "local component smoke accepts only zero-permission packages",
         ));
     }
-    let contribution = plugin
+    let contribution = snapshot
         .manifest
         .contributions
         .iter()
@@ -321,20 +423,14 @@ fn smoke_contribution(
         .output_schema
         .as_ref()
         .ok_or_else(|| PluginDevError::new("output_schema_missing", contribution_id))?;
-    let snapshot = snapshot_workspace_plugin_package(
-        &project_root,
-        plugin.manifest.id.as_str(),
-        &plugin.digest,
-    )
-    .map_err(|error| PluginDevError::new("snapshot_rejected", error.to_string()))?;
     let module = snapshot
-        .file_bytes(&plugin.manifest.runtime.entry)
-        .ok_or_else(|| PluginDevError::new("entry_missing", &plugin.manifest.runtime.entry))?;
+        .file_bytes(&snapshot.manifest.runtime.entry)
+        .ok_or_else(|| PluginDevError::new("entry_missing", &snapshot.manifest.runtime.entry))?;
     let identity = WasmHostIdentity::new(
         ScopeId::new("plugin-dev.local")
             .map_err(|error| PluginDevError::new("identity_failed", error.to_string()))?,
-        plugin.manifest.id.clone(),
-        plugin.digest.clone(),
+        snapshot.manifest.id.clone(),
+        snapshot.digest.clone(),
         ActivationGeneration::new(1)
             .map_err(|error| PluginDevError::new("identity_failed", error.to_string()))?,
         HostInstanceId::generate(),
@@ -379,8 +475,8 @@ fn smoke_contribution(
                         "contract_major": contribution.contract_major,
                     },
                     "project_id": "plugin-dev.local",
-                    "plugin_id": plugin.manifest.id,
-                    "package_digest": plugin.digest,
+                    "plugin_id": snapshot.manifest.id,
+                    "package_digest": snapshot.digest,
                     "activation_generation": 1,
                     "host_instance_id": host.identity().host_instance_id(),
                     "origin": origin,
@@ -389,13 +485,13 @@ fn smoke_contribution(
                     "deadline_millis": 30000,
                 }),
             )
-            .map_err(|error| host_error("command_rejected", error))?;
+            .map_err(|error| host_error("contribution_rejected", error))?;
         let result = match step {
             GuestStep::Complete { result, .. } => result,
             GuestStep::BrokerRequest { .. } => {
                 return Err(PluginDevError::new(
                     "unexpected_broker_request",
-                    "zero-permission Command requested a broker operation",
+                    "zero-permission contribution requested a broker operation",
                 ));
             }
             GuestStep::Error { code, .. } => {
@@ -436,14 +532,57 @@ fn smoke_contribution(
     dispose_result?;
 
     Ok(ContributionSmokeReport {
-        plugin_id: plugin_id.to_string(),
+        plugin_id: snapshot.manifest.id.to_string(),
         contribution_id: contribution_id.to_string(),
-        contribution_kind: format!("{expected_kind:?}").to_lowercase(),
+        contribution_kind: kind_name(expected_kind).to_string(),
         digest: snapshot.digest.to_string(),
         guest_abi: host.guest_abi_version(),
         result_contract,
         result,
     })
+}
+
+fn evolution_surfaces(
+    snapshot: &WorkspacePluginPackageSnapshot,
+) -> Result<BTreeMap<String, ContributionKind>, PluginDevError> {
+    let mut surfaces = BTreeMap::new();
+    for contribution in &snapshot.manifest.contributions {
+        if !matches!(
+            contribution.kind,
+            ContributionKind::Command | ContributionKind::Tool | ContributionKind::Viewer
+        ) {
+            return Err(PluginDevError::new(
+                "unsupported_evolution_surface",
+                format!(
+                    "F3A cannot compare {} contribution {}",
+                    kind_name(contribution.kind),
+                    contribution.id
+                ),
+            ));
+        }
+        surfaces.insert(contribution.id.to_string(), contribution.kind);
+    }
+    Ok(surfaces)
+}
+
+fn origin_for_kind(kind: ContributionKind) -> &'static str {
+    match kind {
+        ContributionKind::Command => "user_command",
+        ContributionKind::Tool => "agent_tool",
+        ContributionKind::Viewer => "trusted_viewer",
+        _ => unreachable!("only evolution surfaces are admitted"),
+    }
+}
+
+fn kind_name(kind: ContributionKind) -> &'static str {
+    match kind {
+        ContributionKind::Command => "command",
+        ContributionKind::Tool => "tool",
+        ContributionKind::Viewer => "viewer",
+        ContributionKind::Source => "source",
+        ContributionKind::Skill => "skill",
+        ContributionKind::Panel => "panel",
+    }
 }
 
 fn checked_project_root(project_root: &Path) -> Result<PathBuf, PluginDevError> {
@@ -465,6 +604,34 @@ fn checked_project_root(project_root: &Path) -> Result<PathBuf, PluginDevError> 
             format!("cannot canonicalize project root: {error}"),
         )
     })
+}
+
+fn checked_cache_root(cache_root: &Path, project_root: &Path) -> Result<PathBuf, PluginDevError> {
+    let metadata = fs::symlink_metadata(cache_root).map_err(|error| {
+        PluginDevError::new(
+            "cache_root_rejected",
+            format!("cannot inspect cache root: {error}"),
+        )
+    })?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(PluginDevError::new(
+            "cache_root_rejected",
+            "cache root must be a real existing directory",
+        ));
+    }
+    let cache_root = fs::canonicalize(cache_root).map_err(|error| {
+        PluginDevError::new(
+            "cache_root_rejected",
+            format!("cannot canonicalize cache root: {error}"),
+        )
+    })?;
+    if cache_root.starts_with(project_root) {
+        return Err(PluginDevError::new(
+            "cache_root_rejected",
+            "cache root must remain outside the mutable project root",
+        ));
+    }
+    Ok(cache_root)
 }
 
 fn ensure_real_directory(path: &Path, code: &'static str) -> Result<(), PluginDevError> {

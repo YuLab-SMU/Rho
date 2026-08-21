@@ -2,7 +2,10 @@ use std::env;
 use std::path::Path;
 use std::process::ExitCode;
 
-use rho_plugin_dev::{build_project, check_project, smoke_command, smoke_tool, smoke_viewer};
+use rho_plugin_dev::{
+    build_project, check_project, compare_component, smoke_command, smoke_tool, smoke_viewer,
+    snapshot_component,
+};
 
 fn main() -> ExitCode {
     match run(env::args().skip(1).collect()) {
@@ -50,9 +53,38 @@ fn run(arguments: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
             let report = smoke_viewer(Path::new(project_root), plugin_id, contribution_id)?;
             print_smoke(report);
         }
+        [command, project_root, plugin_id, cache_root] if command == "snapshot" => {
+            let report =
+                snapshot_component(Path::new(project_root), plugin_id, Path::new(cache_root))?;
+            println!(
+                "snapshot_ok plugin={} digest={}",
+                report.plugin_id, report.digest
+            );
+        }
+        [
+            command,
+            project_root,
+            plugin_id,
+            cache_root,
+            baseline_digest,
+        ] if command == "compare" => {
+            let report = compare_component(
+                Path::new(project_root),
+                plugin_id,
+                Path::new(cache_root),
+                baseline_digest,
+            )?;
+            println!(
+                "compare_ok plugin={} baseline_digest={} candidate_digest={} surfaces={}",
+                report.plugin_id,
+                report.baseline_digest,
+                report.candidate_digest,
+                report.validated_surfaces
+            );
+        }
         _ => {
             return Err(
-                "usage: rho-plugin-dev <build|check> <project-root> | rho-plugin-dev <smoke-command|smoke-tool|smoke-viewer> <project-root> <plugin-id> <contribution-id>"
+                "usage: rho-plugin-dev <build|check> <project-root> | rho-plugin-dev <smoke-command|smoke-tool|smoke-viewer> <project-root> <plugin-id> <contribution-id> | rho-plugin-dev snapshot <project-root> <plugin-id> <cache-root> | rho-plugin-dev compare <project-root> <plugin-id> <cache-root> <baseline-digest>"
                     .into(),
             );
         }

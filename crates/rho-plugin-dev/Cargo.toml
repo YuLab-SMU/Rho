@@ -9,6 +9,7 @@ publish = false
 
 [dependencies]
 rho-extension-runtime = { path = "../rho-extension-runtime" }
+rho-server = { path = "../rho-server" }
 serde.workspace = true
 serde_json.workspace = true
 wat.workspace = true

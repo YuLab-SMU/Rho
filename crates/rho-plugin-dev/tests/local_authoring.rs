@@ -3,7 +3,11 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use rho_plugin_dev::{build_project, check_project, smoke_command, smoke_tool, smoke_viewer};
+use rho_plugin_dev::{
+    build_project, check_project, compare_component, smoke_command, smoke_tool, smoke_viewer,
+    snapshot_component,
+};
+use rho_server::plugin_package_cache::PluginPackageCache;
 
 const PLUGIN_ID: &str = "org.yulab.rho.local-hello";
 const COMMAND_ID: &str = "ui.command.local_hello";
@@ -179,6 +183,54 @@ fn cli_reports_the_same_checked_and_smoked_package() {
         assert!(!stdout.contains("Rho local"));
         assert!(!stdout.contains("handle."));
     }
+
+    let cache_root = tempfile::tempdir().unwrap();
+    let snapshot = Command::new(binary)
+        .args([
+            "snapshot",
+            project.path().to_str().unwrap(),
+            PLUGIN_ID,
+            cache_root.path().to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(snapshot.status.success());
+    let snapshot_stdout = String::from_utf8(snapshot.stdout).unwrap();
+    let baseline_digest = snapshot_stdout
+        .split_whitespace()
+        .find_map(|field| field.strip_prefix("digest="))
+        .unwrap()
+        .to_string();
+    writeln!(
+        fs::OpenOptions::new()
+            .append(true)
+            .open(plugin_path(project.path(), "src/plugin.wat"))
+            .unwrap(),
+        ";; CLI evolution candidate"
+    )
+    .unwrap();
+    let build = Command::new(binary)
+        .args(["build", project.path().to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(build.status.success());
+    let compare = Command::new(binary)
+        .args([
+            "compare",
+            project.path().to_str().unwrap(),
+            PLUGIN_ID,
+            cache_root.path().to_str().unwrap(),
+            &baseline_digest,
+        ])
+        .output()
+        .unwrap();
+    assert!(compare.status.success());
+    let compare_stdout = String::from_utf8(compare.stdout).unwrap();
+    assert!(compare_stdout.contains("compare_ok"));
+    assert!(compare_stdout.contains("surfaces=3"));
+    assert!(compare_stdout.contains(&format!("baseline_digest={baseline_digest}")));
+    assert!(!compare_stdout.contains("Rho local"));
+    assert!(!compare_stdout.contains("handle."));
 }
 
 #[test]
@@ -362,6 +414,190 @@ fn build_leaves_valid_binary_only_plugins_unchanged() {
     assert_eq!(
         fs::read(binary_only.join("dist/plugin.wasm")).unwrap(),
         binary_before
+    );
+}
+
+#[test]
+fn immutable_baseline_and_evolved_candidate_both_keep_all_surfaces_callable() {
+    let project = copied_example();
+    let cache_root = tempfile::tempdir().unwrap();
+    let baseline = snapshot_component(project.path(), PLUGIN_ID, cache_root.path()).unwrap();
+    let baseline_entry = fs::read(plugin_path(project.path(), "dist/plugin.wasm")).unwrap();
+    assert_eq!(
+        compare_component(
+            project.path(),
+            PLUGIN_ID,
+            cache_root.path(),
+            &baseline.digest,
+        )
+        .unwrap_err()
+        .code(),
+        "candidate_unchanged"
+    );
+
+    writeln!(
+        fs::OpenOptions::new()
+            .append(true)
+            .open(plugin_path(project.path(), "src/plugin.wat"))
+            .unwrap(),
+        ";; evolved component candidate"
+    )
+    .unwrap();
+    let candidate = build_project(project.path()).unwrap();
+    assert_ne!(candidate.check.plugins[0].digest, baseline.digest);
+    let compared = compare_component(
+        project.path(),
+        PLUGIN_ID,
+        cache_root.path(),
+        &baseline.digest,
+    )
+    .unwrap();
+    assert_eq!(compared.baseline_digest, baseline.digest);
+    assert_eq!(compared.candidate_digest, candidate.check.plugins[0].digest);
+    assert_eq!(compared.validated_surfaces, 3);
+
+    let canonical = project.path().canonicalize().unwrap();
+    let cached = PluginPackageCache::new(cache_root.path())
+        .load_exact(
+            canonical.to_string_lossy().as_ref(),
+            PLUGIN_ID,
+            &baseline.digest,
+        )
+        .unwrap();
+    assert_eq!(
+        cached.file_bytes("dist/plugin.wasm").unwrap(),
+        baseline_entry
+    );
+    assert_ne!(
+        cached.file_bytes("src/plugin.wat").unwrap(),
+        fs::read(plugin_path(project.path(), "src/plugin.wat"))
+            .unwrap()
+            .as_slice()
+    );
+}
+
+#[test]
+fn compare_rejects_unknown_baseline_surface_drift_and_invalid_candidate() {
+    let unknown = copied_example();
+    let cache_root = tempfile::tempdir().unwrap();
+    snapshot_component(unknown.path(), PLUGIN_ID, cache_root.path()).unwrap();
+    fs::write(
+        plugin_path(unknown.path(), "dist/plugin.wasm"),
+        b"candidate change",
+    )
+    .unwrap();
+    assert_eq!(
+        compare_component(
+            unknown.path(),
+            PLUGIN_ID,
+            cache_root.path(),
+            &"a".repeat(64),
+        )
+        .unwrap_err()
+        .code(),
+        "baseline_load_failed"
+    );
+
+    let drift = copied_example();
+    let cache_root = tempfile::tempdir().unwrap();
+    let baseline = snapshot_component(drift.path(), PLUGIN_ID, cache_root.path()).unwrap();
+    let mut value = manifest(drift.path());
+    value["provides"].as_array_mut().unwrap().pop();
+    value["contributions"].as_array_mut().unwrap().pop();
+    write_manifest(drift.path(), &value);
+    assert_eq!(
+        compare_component(drift.path(), PLUGIN_ID, cache_root.path(), &baseline.digest,)
+            .unwrap_err()
+            .code(),
+        "surface_drift"
+    );
+
+    let invalid = copied_example();
+    let cache_root = tempfile::tempdir().unwrap();
+    let baseline = snapshot_component(invalid.path(), PLUGIN_ID, cache_root.path()).unwrap();
+    fs::write(plugin_path(invalid.path(), "dist/plugin.wasm"), b"\0asm").unwrap();
+    assert_eq!(
+        compare_component(
+            invalid.path(),
+            PLUGIN_ID,
+            cache_root.path(),
+            &baseline.digest,
+        )
+        .unwrap_err()
+        .code(),
+        "wasm_rejected"
+    );
+
+    let unsupported = copied_example();
+    let cache_root = tempfile::tempdir().unwrap();
+    let baseline = snapshot_component(unsupported.path(), PLUGIN_ID, cache_root.path()).unwrap();
+    let mut value = manifest(unsupported.path());
+    value["provides"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({
+            "capability": "skill.local_guide",
+            "contract_major": 1
+        }));
+    value["contributions"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({
+            "id": "skill.local_guide",
+            "kind": "skill",
+            "contractMajor": 1,
+            "label": "Local guide",
+            "purpose": "Guide the local component",
+            "skillPath": "skills/guide.md"
+        }));
+    write_manifest(unsupported.path(), &value);
+    fs::create_dir_all(plugin_path(unsupported.path(), "skills")).unwrap();
+    fs::write(
+        plugin_path(unsupported.path(), "skills/guide.md"),
+        "Local component guidance.",
+    )
+    .unwrap();
+    assert_eq!(
+        compare_component(
+            unsupported.path(),
+            PLUGIN_ID,
+            cache_root.path(),
+            &baseline.digest,
+        )
+        .unwrap_err()
+        .code(),
+        "unsupported_evolution_surface"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn snapshot_rejects_a_symlinked_broker_cache_root() {
+    use std::os::unix::fs::symlink;
+
+    let project = copied_example();
+    let cache_root = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    symlink(
+        outside.path(),
+        cache_root.path().join("plugin-package-cache"),
+    )
+    .unwrap();
+    assert_eq!(
+        snapshot_component(project.path(), PLUGIN_ID, cache_root.path())
+            .unwrap_err()
+            .code(),
+        "cache_prepare_failed"
+    );
+    assert!(fs::read_dir(outside.path()).unwrap().next().is_none());
+
+    let project_cache = project.path().join(".plugin-dev-cache");
+    fs::create_dir(&project_cache).unwrap();
+    assert_eq!(
+        snapshot_component(project.path(), PLUGIN_ID, &project_cache)
+            .unwrap_err()
+            .code(),
+        "cache_root_rejected"
     );
 }
 

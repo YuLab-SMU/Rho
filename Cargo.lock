@@ -4148,6 +4148,7 @@ name = "rho-plugin-dev"
 version = "0.4.1-dev.11"
 dependencies = [
  "rho-extension-runtime",
+ "rho-server",
  "serde",
  "serde_json",
  "tempfile",
