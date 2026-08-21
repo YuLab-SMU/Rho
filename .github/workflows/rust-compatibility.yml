@@ -215,7 +215,7 @@ concurrency:
 jobs:
   rust-compatibility:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
-    name: ${{ matrix.os }} / Rust ${{ matrix.toolchain }}
+    name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     strategy:
@@ -226,26 +226,44 @@ jobs:
             toolchain: "stable"
             rustup_toolchain: stable-aarch64-apple-darwin
             host: aarch64-apple-darwin
+            lane: source
+            name: macos-26 / Rust stable
           - os: macos-26
             toolchain: "1.88.0"
             rustup_toolchain: 1.88.0-aarch64-apple-darwin
             host: aarch64-apple-darwin
+            lane: source
+            name: macos-26 / Rust 1.88.0
           - os: windows-latest
             toolchain: "stable"
             rustup_toolchain: stable-x86_64-pc-windows-gnu
             host: x86_64-pc-windows-gnu
+            lane: source
+            name: windows-latest / Rust stable
+          - os: windows-latest
+            toolchain: "stable"
+            rustup_toolchain: stable-x86_64-pc-windows-gnu
+            host: x86_64-pc-windows-gnu
+            lane: installed
+            name: windows-latest / installed acceptance
           - os: windows-latest
             toolchain: "1.88.0"
             rustup_toolchain: 1.88.0-x86_64-pc-windows-gnu
             host: x86_64-pc-windows-gnu
+            lane: source
+            name: windows-latest / Rust 1.88.0
           - os: ubuntu-22.04
             toolchain: "stable"
             rustup_toolchain: stable-x86_64-unknown-linux-gnu
             host: x86_64-unknown-linux-gnu
+            lane: source
+            name: ubuntu-22.04 / Rust stable
           - os: ubuntu-22.04
             toolchain: "1.88.0"
             rustup_toolchain: 1.88.0-x86_64-unknown-linux-gnu
             host: x86_64-unknown-linux-gnu
+            lane: source
+            name: ubuntu-22.04 / Rust 1.88.0
     env:
       RUSTUP_TOOLCHAIN: ${{ matrix.rustup_toolchain }}
       CARGO_INCREMENTAL: "0"
@@ -270,14 +288,14 @@ jobs:
           use-public-rspm: true
 
       - name: Set up R for Unix installed-app acceptance
-        if: matrix.toolchain == 'stable' && runner.os != 'Windows'
+        if: matrix.lane == 'source' && matrix.toolchain == 'stable' && runner.os != 'Windows'
         uses: r-lib/actions/setup-r@v2
         with:
           r-version: "4.6.1"
           use-public-rspm: true
 
       - name: Install Workspace smoke R dependency on Unix
-        if: matrix.toolchain == 'stable' && runner.os != 'Windows'
+        if: matrix.lane == 'source' && matrix.toolchain == 'stable' && runner.os != 'Windows'
         shell: bash
         run: Rscript -e "if (!requireNamespace('jsonlite', quietly = TRUE)) install.packages('jsonlite'); stopifnot(requireNamespace('jsonlite', quietly = TRUE))"
 
@@ -366,8 +384,10 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ hashFiles('Cargo.lock') }}
+          key: rho-rust-v2-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ matrix.lane }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
+            rho-rust-v2-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ matrix.lane }}-
+            rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ hashFiles('Cargo.lock') }}
             rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-
 
       - name: Stage pinned macOS Ark sidecar for Tauri compilation
@@ -383,11 +403,11 @@ jobs:
           ./scripts/prepare-runtime-resources.sh
 
       - name: Enforce current stable formatting
-        if: matrix.toolchain == 'stable'
+        if: matrix.lane == 'source' && matrix.toolchain == 'stable'
         run: cargo fmt --all -- --check
 
       - name: Verify installed license surface
-        if: matrix.toolchain == 'stable'
+        if: matrix.lane == 'source' && matrix.toolchain == 'stable'
         run: |
           node scripts/test-installed-license-surface.mjs
           node scripts/generate-update-site.mjs --test true
@@ -407,6 +427,7 @@ jobs:
           node scripts/test-three-platform-auto-updater.mjs
 
       - name: Verify locked workspace at selected Rust version
+        if: matrix.lane == 'source'
         run: |
           node scripts/test-rust-msrv-contract.mjs
           node scripts/test-tauri-command-inventory.mjs --test
@@ -454,7 +475,7 @@ jobs:
           cargo test --workspace --locked --no-fail-fast
 
       - name: Build, install, smoke and remove unsigned Windows app
-        if: matrix.toolchain == 'stable' && runner.os == 'Windows'
+        if: matrix.lane == 'installed' && matrix.toolchain == 'stable' && runner.os == 'Windows'
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -569,7 +590,7 @@ jobs:
           }
 
       - name: Build, mount and smoke unsigned macOS app
-        if: matrix.toolchain == 'stable' && runner.os == 'macOS'
+        if: matrix.lane == 'source' && matrix.toolchain == 'stable' && runner.os == 'macOS'
         shell: bash
         run: |
           set -euo pipefail
@@ -610,7 +631,7 @@ jobs:
           shasum -a 256 "$app/Contents/MacOS/rho-desktop" "$dmg"
 
       - name: Build, extract and smoke unsigned Linux AppImage
-        if: matrix.toolchain == 'stable' && runner.os == 'Linux'
+        if: matrix.lane == 'source' && matrix.toolchain == 'stable' && runner.os == 'Linux'
         shell: bash
         run: |
           set -euo pipefail

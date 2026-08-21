@@ -1167,6 +1167,36 @@ plugin install/catalog/marketplace, remote plugin update, Phase 2.5 execution,
 Phase 3, or visual redesign. The lifecycle-only closeout changes no runtime,
 schema, command, application/R-package version, or `NEWS.md` behavior.
 
+### Windows Ready validation critical-path repair — 2026-08-21
+
+The owner authorized direct workflow optimization after exact-head Ready run
+`32460167558` passed but took 31 minutes 49 seconds on Windows stable. Step
+timing proves the bottleneck: setup took about one minute, locked workspace
+validation took 14 minutes 1 second, Windows release/NSIS install acceptance
+took 15 minutes 13 seconds, and cache finalization took 1 minute 23 seconds.
+Run `32456281744` showed the same two serial 14/15-minute phases, so the delay
+is structural rather than a transient runner anomaly.
+
+The bounded repair keeps the six existing macOS/Windows/Linux stable/MSRV
+source identities and every command they run. It adds one separate Windows
+stable `installed` matrix lane so release build, NSIS install, candidate/legacy
+smoke and uninstall cleanup execute in parallel with the Windows stable
+`source` lane instead of after its complete workspace tests. The installed lane
+uses the same GNU Rust host, Rtools45 path, R 4.6.1/jsonlite setup, ephemeral
+updater key, checksum output and cleanup assertions. It has no `needs` edge to
+the source lane; the workflow succeeds only when both independent lanes pass.
+
+Cache ownership becomes lane-specific under a v2 key. Source and installed
+lanes cannot race to publish incompatible debug/release contents under one
+immutable key, while a bounded v1 same-OS/same-toolchain/Cargo.lock restore
+bridge reuses the already reviewed cache during migration. Permissions remain
+`contents: read`; no secret, artifact upload, signing service, release,
+publication or deployment authority is added. The repair changes CI topology
+and deterministic contracts only, with no runtime, schema, command, version or
+`NEWS.md` impact. Acceptance requires positive/negative workflow-contract
+tests and a fresh exact-head Ready run whose seven required lanes pass; measured
+critical-path improvement is recorded without weakening any gate.
+
 ### P2-4A local checkpoint — 2026-08-20
 
 The schema-v14 persistence boundary is locally complete:

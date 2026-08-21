@@ -34,6 +34,9 @@ export function validatePhase2FinalContract(value) {
     "Build, install, smoke and remove unsigned Windows app",
     "Build, mount and smoke unsigned macOS app",
     "Build, extract and smoke unsigned Linux AppImage",
+    "lane: installed",
+    "matrix.lane == 'installed'",
+    "rho-rust-v2-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ matrix.lane }}",
     "RHO_INTERNAL_EXTENSION_RUNTIME=legacy",
     "--smoke-test",
   ]) assert.ok(value.compatibility.includes(marker), `Phase 2 installed gate lost ${marker}`);
@@ -81,6 +84,7 @@ jobs:
             toolchain: "1.88.0"
           - os: windows-latest
             toolchain: stable
+            lane: installed
           - os: windows-latest
             toolchain: "1.88.0"
           - os: ubuntu-22.04
@@ -89,8 +93,10 @@ jobs:
             toolchain: "1.88.0"
     steps:
       - name: Build, install, smoke and remove unsigned Windows app
+        if: matrix.lane == 'installed'
       - name: Build, mount and smoke unsigned macOS app
       - name: Build, extract and smoke unsigned Linux AppImage
+      - run: echo 'rho-rust-v2-\${{ runner.os }}-\${{ env.RUSTUP_TOOLCHAIN }}-\${{ matrix.lane }}'
       - run: RHO_INTERNAL_EXTENSION_RUNTIME=legacy rho-desktop --smoke-test`,
     installed: '"durable_first_enable": true\nreport["recoverable_uninstall"] = json!(true)\nreport["exact_trash_purged"] = json!(true)\nreport["update_expected_old_cas"] = json!(true)\nreport["rollback_restart_cached"] = json!(true)\nreport["recovery_project_revision_once"] = json!(true)',
     workspace: 'version = "0.4.1-dev.11"',
@@ -110,6 +116,7 @@ if (process.argv.includes("--test")) {
     ["read only", (value) => { value.compatibility = value.compatibility.replace("contents: read", "contents: write"); }],
     ["matrix", (value) => { value.compatibility = value.compatibility.replaceAll("- os: windows-latest", "- os: omitted"); }],
     ["installed", (value) => { value.installed = value.installed.replace('report["rollback_restart_cached"] = json!(true)', ""); }],
+    ["Windows installed lane", (value) => { value.compatibility = value.compatibility.replace("lane: installed", "lane: source"); }],
     ["version", (value) => { value.workspace = 'version = "0.4.1-dev.10"'; }],
     ["visual disposition", (value) => { value.spec = value.spec.replace("Visual modularization is a separate", "Visual work is bundled"); }],
     ["install", (value) => { value.commands += "\ninstall_workspace_plugin"; }],

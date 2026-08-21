@@ -7,12 +7,13 @@ import { fileURLToPath } from "node:url";
 export const EXPECTED_MSRV = "1.88";
 
 const REQUIRED_MATRIX = new Set([
-  "macos-26|stable|stable-aarch64-apple-darwin|aarch64-apple-darwin",
-  "macos-26|1.88.0|1.88.0-aarch64-apple-darwin|aarch64-apple-darwin",
-  "windows-latest|stable|stable-x86_64-pc-windows-gnu|x86_64-pc-windows-gnu",
-  "windows-latest|1.88.0|1.88.0-x86_64-pc-windows-gnu|x86_64-pc-windows-gnu",
-  "ubuntu-22.04|stable|stable-x86_64-unknown-linux-gnu|x86_64-unknown-linux-gnu",
-  "ubuntu-22.04|1.88.0|1.88.0-x86_64-unknown-linux-gnu|x86_64-unknown-linux-gnu",
+  "macos-26|stable|stable-aarch64-apple-darwin|aarch64-apple-darwin|source",
+  "macos-26|1.88.0|1.88.0-aarch64-apple-darwin|aarch64-apple-darwin|source",
+  "windows-latest|stable|stable-x86_64-pc-windows-gnu|x86_64-pc-windows-gnu|source",
+  "windows-latest|stable|stable-x86_64-pc-windows-gnu|x86_64-pc-windows-gnu|installed",
+  "windows-latest|1.88.0|1.88.0-x86_64-pc-windows-gnu|x86_64-pc-windows-gnu|source",
+  "ubuntu-22.04|stable|stable-x86_64-unknown-linux-gnu|x86_64-unknown-linux-gnu|source",
+  "ubuntu-22.04|1.88.0|1.88.0-x86_64-unknown-linux-gnu|x86_64-unknown-linux-gnu|source",
 ]);
 
 const normalizeLineEndings = (text) => text.replace(/\r\n/g, "\n");
@@ -24,20 +25,32 @@ const REQUIRED_CACHE_PATHS = [
   "target/",
 ];
 
-function validateCargoCache(workflow) {
+function validateCargoCache(workflow, { laneSeparated = false } = {}) {
   if (!workflow.includes("uses: actions/cache@v4")) {
     fail("Rust CI must use the reviewed official actions/cache major");
   }
   for (const cachePath of REQUIRED_CACHE_PATHS) {
     if (!workflow.includes(cachePath)) fail(`Rust CI cache is missing ${cachePath}`);
   }
-  const cacheKey = "rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ hashFiles('Cargo.lock') }}";
+  const cacheKey = laneSeparated
+    ? "rho-rust-v2-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ matrix.lane }}-${{ hashFiles('Cargo.lock') }}"
+    : "rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ hashFiles('Cargo.lock') }}";
   if (!workflow.includes(cacheKey)) {
     fail("Rust CI cache key must isolate schema, OS, explicit toolchain, and Cargo.lock");
   }
-  const restoreKey = "rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-";
+  const restoreKey = laneSeparated
+    ? "rho-rust-v2-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ matrix.lane }}-"
+    : "rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-";
   if (!workflow.includes(restoreKey)) {
     fail("Rust CI restore key must remain inside the same OS and toolchain");
+  }
+  if (laneSeparated) {
+    for (const bridge of [
+      "rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ hashFiles('Cargo.lock') }}",
+      "rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-",
+    ]) {
+      if (!workflow.includes(bridge)) fail(`Lane-separated cache lost v1 migration bridge: ${bridge}`);
+    }
   }
   if (!/^      CARGO_INCREMENTAL: "0"$/m.test(workflow)) {
     fail("Rust CI must disable incremental compilation for the shared build cache");
@@ -92,7 +105,7 @@ function unquote(value) {
 
 function matrixIdentities(workflow) {
   const normalized = normalizeLineEndings(workflow);
-  const pattern = /^\s{10}- os:\s*(.+)\n\s{12}toolchain:\s*(.+)\n\s{12}rustup_toolchain:\s*(.+)\n\s{12}host:\s*(.+)$/gm;
+  const pattern = /^\s{10}- os:\s*(.+)\n\s{12}toolchain:\s*(.+)\n\s{12}rustup_toolchain:\s*(.+)\n\s{12}host:\s*(.+)\n\s{12}lane:\s*(.+)$/gm;
   return new Set(
     [...normalized.matchAll(pattern)].map((match) => match.slice(1).map(unquote).join("|")),
   );
@@ -155,6 +168,13 @@ export function validateCompatibilityWorkflow(text) {
   }
   const actualMatrix = matrixIdentities(workflow);
   assert.deepEqual(actualMatrix, REQUIRED_MATRIX, "Rust compatibility matrix identities changed");
+  if ((workflow.match(/^\s{12}lane: installed$/gm) ?? []).length !== 1) {
+    fail("Rust compatibility must have exactly one Windows installed lane");
+  }
+  if (!/^    name: \$\{\{ matrix\.name \}\}$/m.test(workflow)
+      || (workflow.match(/^\s{12}name: windows-latest \/ installed acceptance$/gm) ?? []).length !== 1) {
+    fail("Rust compatibility must preserve source check names and expose the installed lane");
+  }
   if (!/^      RUSTUP_TOOLCHAIN: \$\{\{ matrix\.rustup_toolchain \}\}$/m.test(workflow)) {
     fail("Every matrix leg must explicitly override rust-toolchain.toml through RUSTUP_TOOLCHAIN");
   }
@@ -174,7 +194,7 @@ export function validateCompatibilityWorkflow(text) {
   ]) {
     if (!workflow.includes(command)) fail(`Rust compatibility workflow is missing: ${command}`);
   }
-  if (!/if: matrix\.toolchain == 'stable'[\s\S]*cargo fmt --all -- --check/.test(workflow)) {
+  if (!/if: matrix\.lane == 'source' && matrix\.toolchain == 'stable'[\s\S]*cargo fmt --all -- --check/.test(workflow)) {
     fail("Only stable compatibility legs may enforce rustfmt");
   }
   if (!/RHO_RTOOLS_BIN=C:\\rtools45\\x86_64-w64-mingw32\.static\.posix\\bin/.test(workflow)) {
@@ -197,15 +217,24 @@ export function validateCompatibilityWorkflow(text) {
   ]) {
     if (!workflow.includes(marker)) fail(`Rust compatibility installed-app gate is missing: ${marker}`);
   }
-  if ((workflow.match(/if: matrix\.toolchain == 'stable' && runner\.os ==/g) ?? []).length < 3) {
-    fail("Each installed-app acceptance leg must run only on stable Rust");
+  if (!/- name: Verify locked workspace at selected Rust version\n        if: matrix\.lane == 'source'/.test(workflow)) {
+    fail("Installed packaging lane must not duplicate the complete source/MSRV suite");
+  }
+  if (!/- name: Build, install, smoke and remove unsigned Windows app\n        if: matrix\.lane == 'installed' && matrix\.toolchain == 'stable' && runner\.os == 'Windows'/.test(workflow)) {
+    fail("Windows installed acceptance must run only in its parallel stable lane");
+  }
+  for (const os of ["macOS", "Linux"]) {
+    const escaped = os === "macOS" ? "macOS" : "Linux";
+    if (!new RegExp(`if: matrix\\.lane == 'source' && matrix\\.toolchain == 'stable' && runner\\.os == '${escaped}'`).test(workflow)) {
+      fail(`${os} installed acceptance must remain in its stable source lane`);
+    }
   }
   if (!/Rho uninstall registry cleanup failed/.test(workflow)
       || !/hdiutil detach/.test(workflow)
       || !/rm -rf -- "\$key_dir" "\$extract_dir"/.test(workflow)) {
     fail("Installed-app acceptance must prove Windows, macOS, and Linux cleanup");
   }
-  validateCargoCache(workflow);
+  validateCargoCache(workflow, { laneSeparated: true });
 }
 
 export function validateFastWorkflow(text) {
@@ -341,8 +370,9 @@ function fixtureMetadata(rustVersions = [EXPECTED_MSRV, EXPECTED_MSRV]) {
 function fixtureWorkflow() {
   const entries = [...REQUIRED_MATRIX]
     .map((identity) => {
-      const [os, toolchain, rustupToolchain, host] = identity.split("|");
-      return `          - os: ${os}\n            toolchain: "${toolchain}"\n            rustup_toolchain: ${rustupToolchain}\n            host: ${host}`;
+      const [os, toolchain, rustupToolchain, host, lane] = identity.split("|");
+      const name = lane === "installed" ? "windows-latest / installed acceptance" : `${os} / Rust ${toolchain}`;
+      return `          - os: ${os}\n            toolchain: "${toolchain}"\n            rustup_toolchain: ${rustupToolchain}\n            host: ${host}\n            lane: ${lane}\n            name: ${name}`;
     })
     .join("\n");
   return `name: Rust Compatibility
@@ -417,6 +447,7 @@ concurrency:
 jobs:
   rust-compatibility:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    name: \${{ matrix.name }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -434,16 +465,20 @@ ${entries}
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: rho-rust-v1-\${{ runner.os }}-\${{ env.RUSTUP_TOOLCHAIN }}-\${{ hashFiles('Cargo.lock') }}
+          key: rho-rust-v2-\${{ runner.os }}-\${{ env.RUSTUP_TOOLCHAIN }}-\${{ matrix.lane }}-\${{ hashFiles('Cargo.lock') }}
           restore-keys: |
+            rho-rust-v2-\${{ runner.os }}-\${{ env.RUSTUP_TOOLCHAIN }}-\${{ matrix.lane }}-
+            rho-rust-v1-\${{ runner.os }}-\${{ env.RUSTUP_TOOLCHAIN }}-\${{ hashFiles('Cargo.lock') }}
             rho-rust-v1-\${{ runner.os }}-\${{ env.RUSTUP_TOOLCHAIN }}-
       - if: runner.os == 'Windows'
         run: echo "RHO_RTOOLS_BIN=C:\\rtools45\\x86_64-w64-mingw32.static.posix\\bin"
       - if: runner.os == 'macOS'
         run: ./scripts/bootstrap-ark-macos.sh
-      - if: matrix.toolchain == 'stable'
+      - if: matrix.lane == 'source' && matrix.toolchain == 'stable'
         run: cargo fmt --all -- --check
-      - run: |
+      - name: Verify locked workspace at selected Rust version
+        if: matrix.lane == 'source'
+        run: |
           node scripts/test-rust-msrv-contract.mjs
           node scripts/test-tauri-command-inventory.mjs --test
           node scripts/test-tauri-command-inventory.mjs
@@ -457,18 +492,18 @@ ${entries}
           cargo check --workspace --all-targets --locked
           cargo test --workspace --locked --no-fail-fast
       - name: Build, install, smoke and remove unsigned Windows app
-        if: matrix.toolchain == 'stable' && runner.os == 'Windows'
+        if: matrix.lane == 'installed' && matrix.toolchain == 'stable' && runner.os == 'Windows'
         run: |
           ./scripts/build-windows-installer.ps1
           echo "Rho uninstall registry cleanup failed"
       - name: Build, mount and smoke unsigned macOS app
-        if: matrix.toolchain == 'stable' && runner.os == 'macOS'
+        if: matrix.lane == 'source' && matrix.toolchain == 'stable' && runner.os == 'macOS'
         run: |
           env -u RHO_INTERNAL_EXTENSION_RUNTIME rho-desktop --smoke-test
           RHO_INTERNAL_EXTENSION_RUNTIME=legacy rho-desktop --smoke-test
           hdiutil detach mount
       - name: Build, extract and smoke unsigned Linux AppImage
-        if: matrix.toolchain == 'stable' && runner.os == 'Linux'
+        if: matrix.lane == 'source' && matrix.toolchain == 'stable' && runner.os == 'Linux'
         run: |
           scripts/build-linux.sh
           env -u RHO_INTERNAL_EXTENSION_RUNTIME rho-desktop --smoke-test
@@ -577,8 +612,9 @@ function runSelfTests() {
   const workflow = fixtureWorkflow();
   validateCompatibilityWorkflow(workflow);
   const oneIdentity = [...REQUIRED_MATRIX][0];
-  const [os, toolchain, rustupToolchain, host] = oneIdentity.split("|");
-  const row = `          - os: ${os}\n            toolchain: "${toolchain}"\n            rustup_toolchain: ${rustupToolchain}\n            host: ${host}\n`;
+  const [os, toolchain, rustupToolchain, host, lane] = oneIdentity.split("|");
+  const name = lane === "installed" ? "windows-latest / installed acceptance" : `${os} / Rust ${toolchain}`;
+  const row = `          - os: ${os}\n            toolchain: "${toolchain}"\n            rustup_toolchain: ${rustupToolchain}\n            host: ${host}\n            lane: ${lane}\n            name: ${name}\n`;
   assert.throws(() => validateCompatibilityWorkflow(workflow.replace(row, "")), /matrix identities/);
   assert.throws(() => validateCompatibilityWorkflow(workflow.replace("RUSTUP_TOOLCHAIN:", "SELECTED_TOOLCHAIN:")), /explicitly override/);
   assert.throws(() => validateCompatibilityWorkflow(workflow.replace(" --locked", "")), /missing:/);
@@ -587,6 +623,24 @@ function runSelfTests() {
   assert.throws(() => validateCompatibilityWorkflow(workflow.replace("draft == false", "draft == true")), /gated/);
   assert.throws(() => validateCompatibilityWorkflow(workflow.replace("actions/cache@v4", "actions/cache@v3")), /cache/);
   assert.throws(() => validateCompatibilityWorkflow(workflow.replace("hashFiles('Cargo.lock')", "github.sha")), /cache key/);
+  assert.throws(
+    () => validateCompatibilityWorkflow(workflow.replace("matrix.lane == 'installed'", "matrix.lane == 'source'")),
+    /Windows installed acceptance/,
+  );
+  assert.throws(
+    () => validateCompatibilityWorkflow(workflow.replace(
+      "if: matrix.lane == 'source'\n        run: |",
+      "if: matrix.lane == 'installed'\n        run: |",
+    )),
+    /must not duplicate/,
+  );
+  assert.throws(
+    () => validateCompatibilityWorkflow(workflow.replace(
+      "rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ hashFiles('Cargo.lock') }}",
+      "rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-stale",
+    )),
+    /migration bridge/,
+  );
 
   const fastWorkflow = fixtureFastWorkflow();
   validateFastWorkflow(fastWorkflow);
