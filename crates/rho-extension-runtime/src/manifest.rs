@@ -10,8 +10,8 @@ use std::{collections::BTreeSet, fmt, str::FromStr};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    CapabilityDeclaration, CapabilityId, CapabilityRequirement, ExtensionError, PluginId,
-    PluginVersion, ScopeKindId,
+    CapabilityDeclaration, CapabilityId, CapabilityRequirement, ContributionDeclaration,
+    ExtensionError, MAX_CONTRIBUTIONS_PER_PACKAGE, PluginId, PluginVersion, ScopeKindId,
 };
 
 /// Maximum bytes for a single `rho-plugin.json` manifest before parsing.
@@ -24,6 +24,12 @@ pub const MAX_MANIFEST_REQUIRES: usize = 64;
 pub const MAX_MANIFEST_OPTIONAL: usize = 64;
 /// Maximum number of permission requests declared by one plugin manifest.
 pub const MAX_MANIFEST_PERMISSIONS: usize = 64;
+/// Maximum number of resource constraints inside one permission declaration.
+pub const MAX_PERMISSION_CONSTRAINT_ITEMS: usize = 64;
+/// Maximum untrusted purpose text shown inside the trusted permission dialog.
+pub const MAX_PERMISSION_PURPOSE_BYTES: usize = 1024;
+/// Maximum read/response bound accepted by the initial broker operations.
+pub const MAX_PERMISSION_BYTES: u64 = 1024 * 1024;
 /// Maximum depth of a package file tree during discovery.
 pub const MAX_PACKAGE_DEPTH: usize = 32;
 /// Maximum bytes of a single package file before it is rejected.
@@ -35,8 +41,10 @@ pub const MAX_PACKAGE_FILES: usize = 4096;
 /// Maximum bytes of a single relative path component or full relative path.
 pub const MAX_RELATIVE_PATH_BYTES: usize = 1024;
 
-/// The schema version this manifest parser accepts.
-pub const MANIFEST_SCHEMA_VERSION: u64 = 1;
+/// The newest schema version this manifest parser accepts. Manifest V1 remains
+/// supported for disabled discovery and permission-only P2-2 packages.
+pub const MANIFEST_SCHEMA_VERSION: u64 = 2;
+pub const MIN_MANIFEST_SCHEMA_VERSION: u64 = 1;
 
 /// Runtime kind declared by a plugin manifest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -108,6 +116,10 @@ pub struct ManifestRequire {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PermissionRequest {
     pub name: String,
+    /// Optional untrusted explanation. The shell labels and renders this as
+    /// plain text; it never supplies trusted decision wording or markup.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub purpose: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub paths: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -134,7 +146,7 @@ pub struct UiDeclaration {
     pub viewers: Vec<String>,
 }
 
-/// The fully validated Manifest V1.
+/// A fully validated Manifest V1 or V2.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WorkspacePluginManifest {
@@ -157,6 +169,10 @@ pub struct WorkspacePluginManifest {
     pub optional: Vec<ManifestRequire>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub permissions: Vec<PermissionRequest>,
+    /// Manifest V2 only. Manifest V1 `ui` strings remain discovery metadata and
+    /// never become live contributions.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub contributions: Vec<ContributionDeclaration>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ui: Option<UiDeclaration>,
 }
@@ -181,10 +197,15 @@ impl WorkspacePluginManifest {
     }
 
     fn validate(&self) -> Result<(), ExtensionError> {
-        if self.schema_version != MANIFEST_SCHEMA_VERSION {
+        if !(MIN_MANIFEST_SCHEMA_VERSION..=MANIFEST_SCHEMA_VERSION).contains(&self.schema_version) {
             return Err(ExtensionError::UnsupportedManifestSchema {
                 actual: self.schema_version,
                 supported: MANIFEST_SCHEMA_VERSION,
+            });
+        }
+        if self.schema_version == MIN_MANIFEST_SCHEMA_VERSION && !self.contributions.is_empty() {
+            return Err(ExtensionError::ManifestValidation {
+                reason: "Manifest V1 cannot declare live contributions".to_string(),
             });
         }
 
@@ -215,6 +236,11 @@ impl WorkspacePluginManifest {
                 .iter()
                 .filter_map(|provide| provide.path.as_deref()),
         )?;
+        validate_relative_paths(
+            self.contributions
+                .iter()
+                .filter_map(|contribution| contribution.skill_path.as_deref()),
+        )?;
 
         if self.provides.len() > MAX_MANIFEST_PROVIDES {
             return Err(ExtensionError::LimitExceeded {
@@ -242,7 +268,12 @@ impl WorkspacePluginManifest {
         }
         if self.permissions.len() > MAX_MANIFEST_PERMISSIONS {
             return Err(ExtensionError::ManifestValidation {
-                reason: format!("permissions exceed {} entries", MAX_MANIFEST_PERMISSIONS),
+                reason: format!("permissions exceed {MAX_MANIFEST_PERMISSIONS} entries"),
+            });
+        }
+        if self.contributions.len() > MAX_CONTRIBUTIONS_PER_PACKAGE {
+            return Err(ExtensionError::ManifestValidation {
+                reason: format!("contributions exceed {MAX_CONTRIBUTIONS_PER_PACKAGE} entries"),
             });
         }
 
@@ -275,12 +306,45 @@ impl WorkspacePluginManifest {
             }
         }
 
+        let mut provided_capabilities = BTreeSet::new();
         for provide in &self.provides {
             if provide.contract_major == 0 {
                 return Err(ExtensionError::ManifestValidation {
                     reason: format!(
                         "capability {} declares contract major 0",
                         provide.capability
+                    ),
+                });
+            }
+            if !provided_capabilities.insert(provide.capability.as_str()) {
+                return Err(ExtensionError::ManifestValidation {
+                    reason: format!("duplicate provided capability: {}", provide.capability),
+                });
+            }
+        }
+
+        let mut contribution_ids = BTreeSet::new();
+        for contribution in &self.contributions {
+            if !contribution_ids.insert(contribution.id.as_str()) {
+                return Err(ExtensionError::ManifestValidation {
+                    reason: format!("duplicate contribution: {}", contribution.id),
+                });
+            }
+            contribution
+                .validate_shape()
+                .map_err(|reason| ExtensionError::ManifestValidation {
+                    reason: format!("invalid contribution {}: {reason}", contribution.id),
+                })?;
+            let matching = self
+                .provides
+                .iter()
+                .filter(|provide| provide.capability == contribution.id)
+                .collect::<Vec<_>>();
+            if matching.len() != 1 || matching[0].contract_major != contribution.contract_major {
+                return Err(ExtensionError::ManifestValidation {
+                    reason: format!(
+                        "contribution {} must match exactly one provides entry and contract major",
+                        contribution.id
                     ),
                 });
             }
@@ -330,6 +394,43 @@ fn validate_permission_request(permission: &PermissionRequest) -> Result<(), Ext
             permission.name
         ),
     };
+
+    if permission.purpose.as_ref().is_some_and(|purpose| {
+        purpose.trim() != purpose
+            || purpose.is_empty()
+            || purpose.len() > MAX_PERMISSION_PURPOSE_BYTES
+            || purpose.chars().any(char::is_control)
+            || purpose.chars().any(|character| {
+                matches!(
+                    character,
+                    '\u{061c}'
+                        | '\u{200e}'
+                        | '\u{200f}'
+                        | '\u{202a}'..='\u{202e}'
+                        | '\u{2066}'..='\u{2069}'
+                )
+            })
+    }) {
+        return Err(ExtensionError::ManifestValidation {
+            reason: "permission purpose is empty, oversized, or contains unsafe controls"
+                .to_string(),
+        });
+    }
+    for (label, values) in [
+        ("paths", &permission.paths),
+        ("operations", &permission.operations),
+        ("schemes", &permission.schemes),
+        ("hosts", &permission.hosts),
+        ("methods", &permission.methods),
+    ] {
+        if values.len() > MAX_PERMISSION_CONSTRAINT_ITEMS {
+            return Err(ExtensionError::ManifestValidation {
+                reason: format!(
+                    "permission {label} exceed {MAX_PERMISSION_CONSTRAINT_ITEMS} entries"
+                ),
+            });
+        }
+    }
 
     match permission.name.as_str() {
         "project.fs.read" => {
@@ -405,9 +506,9 @@ fn validate_permission_request(permission: &PermissionRequest) -> Result<(), Ext
 }
 
 fn validate_positive_bound(value: Option<u64>, name: &str) -> Result<(), ExtensionError> {
-    if !matches!(value, Some(value) if value > 0) {
+    if !matches!(value, Some(value) if value > 0 && value <= MAX_PERMISSION_BYTES) {
         return Err(ExtensionError::ManifestValidation {
-            reason: format!("{name} must be a positive integer"),
+            reason: format!("{name} must be between 1 and {MAX_PERMISSION_BYTES}"),
         });
     }
     Ok(())
@@ -435,7 +536,7 @@ fn validate_host_pattern(host: &str) -> Result<(), ExtensionError> {
 
 /// Deserialize a stored major that is accepted as either an integer or a
 /// `"N"` string, but reject zero and negative values.
-fn deserialize_contract_major<'de, D>(deserializer: D) -> Result<u64, D::Error>
+pub(crate) fn deserialize_contract_major<'de, D>(deserializer: D) -> Result<u64, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -505,7 +606,7 @@ fn validate_relative_paths<'a>(
         }
         if path.len() > MAX_RELATIVE_PATH_BYTES {
             return Err(ExtensionError::ManifestValidation {
-                reason: format!("path exceeds {} bytes", MAX_RELATIVE_PATH_BYTES),
+                reason: format!("path exceeds {MAX_RELATIVE_PATH_BYTES} bytes"),
             });
         }
         if path.starts_with('/') || path.starts_with('\\') {
@@ -559,12 +660,193 @@ mod tests {
         .to_string()
     }
 
+    fn minimal_manifest_v2() -> serde_json::Value {
+        serde_json::json!({
+            "schemaVersion": 2,
+            "id": "org.example.rho-bioconductor",
+            "name": "Rho Bioconductor",
+            "version": "0.1.0",
+            "apiVersion": "^1.0",
+            "runtime": { "kind": "wasm", "entry": "dist/plugin.wasm", "scope": "project" },
+            "provides": [
+                { "capability": "tool.bio.enrichment", "contract_major": 1 }
+            ],
+            "contributions": [{
+                "id": "tool.bio.enrichment",
+                "kind": "tool",
+                "contractMajor": 1,
+                "label": "Enrichment summary",
+                "purpose": "Summarize bounded project data",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {"path": {"type": "string", "maxLength": 1024}},
+                    "required": ["path"]
+                },
+                "outputSchema": {
+                    "type": "object",
+                    "properties": {"rows": {"type": "integer", "minimum": 0}},
+                    "required": ["rows"]
+                }
+            }]
+        })
+    }
+
+    fn parse_json(value: &serde_json::Value) -> Result<WorkspacePluginManifest, ExtensionError> {
+        WorkspacePluginManifest::parse(&serde_json::to_vec(value).unwrap())
+    }
+
     #[test]
     fn parses_minimal_manifest() {
         let manifest = WorkspacePluginManifest::parse(minimal_manifest_json().as_bytes()).unwrap();
         assert_eq!(manifest.id.as_str(), "org.example.rho-bioconductor");
         assert_eq!(manifest.runtime.kind, RuntimeKind::Wasm);
         assert_eq!(manifest.provides.len(), 1);
+    }
+
+    #[test]
+    fn manifest_v1_remains_compatible_and_v2_adds_typed_contributions() {
+        let v1 = WorkspacePluginManifest::parse(minimal_manifest_json().as_bytes()).unwrap();
+        assert_eq!(v1.schema_version, 1);
+        assert!(v1.contributions.is_empty());
+
+        let v2 = parse_json(&minimal_manifest_v2()).unwrap();
+        assert_eq!(v2.schema_version, 2);
+        assert_eq!(v2.contributions.len(), 1);
+        assert_eq!(v2.contributions[0].kind, crate::ContributionKind::Tool);
+    }
+
+    #[test]
+    fn manifest_v1_cannot_smuggle_live_contributions() {
+        let mut value = minimal_manifest_v2();
+        value["schemaVersion"] = serde_json::json!(1);
+        assert!(parse_json(&value).is_err());
+    }
+
+    #[test]
+    fn source_panel_and_skill_shapes_are_explicit() {
+        let mut value = minimal_manifest_v2();
+        value["provides"] = serde_json::json!([
+            {"capability": "source.csv.metadata", "contract_major": 1},
+            {"capability": "ui.panel.csv", "contract_major": 1},
+            {"capability": "skill.csv.guide", "contract_major": 1}
+        ]);
+        let object_schema = serde_json::json!({"type": "object", "properties": {}});
+        value["contributions"] = serde_json::json!([
+            {
+                "id": "source.csv.metadata", "kind": "source", "contractMajor": 1,
+                "label": "CSV metadata", "purpose": "Provide bounded CSV context",
+                "inputSchema": object_schema, "outputSchema": object_schema
+            },
+            {
+                "id": "ui.panel.csv", "kind": "panel", "contractMajor": 1,
+                "label": "CSV details", "purpose": "Show bounded CSV details",
+                "inputSchema": object_schema, "outputSchema": object_schema,
+                "panelSlot": "plugin_details"
+            },
+            {
+                "id": "skill.csv.guide", "kind": "skill", "contractMajor": 1,
+                "label": "CSV guide", "purpose": "Explain the CSV metadata workflow",
+                "skillPath": "skills/csv.md"
+            }
+        ]);
+        assert!(parse_json(&value).is_ok());
+
+        value["contributions"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("outputSchema");
+        assert!(parse_json(&value).is_err());
+    }
+
+    #[test]
+    fn contributions_must_match_unique_provides_and_contracts() {
+        let mut mismatch = minimal_manifest_v2();
+        mismatch["contributions"][0]["contractMajor"] = serde_json::json!(2);
+        assert!(parse_json(&mismatch).is_err());
+
+        let mut wrong_kind = minimal_manifest_v2();
+        wrong_kind["contributions"][0]["kind"] = serde_json::json!("viewer");
+        assert!(parse_json(&wrong_kind).is_err());
+
+        let mut duplicate_provide = minimal_manifest_v2();
+        duplicate_provide["provides"] = serde_json::json!([
+            {"capability": "tool.bio.enrichment", "contract_major": 1},
+            {"capability": "tool.bio.enrichment", "contract_major": 1}
+        ]);
+        assert!(parse_json(&duplicate_provide).is_err());
+
+        let mut duplicate_contribution = minimal_manifest_v2();
+        let declaration = duplicate_contribution["contributions"][0].clone();
+        duplicate_contribution["contributions"] =
+            serde_json::json!([declaration.clone(), declaration]);
+        assert!(parse_json(&duplicate_contribution).is_err());
+    }
+
+    #[test]
+    fn contribution_count_accepts_32_and_rejects_33() {
+        let mut value = minimal_manifest_v2();
+        let empty = serde_json::json!({"type": "object", "properties": {}});
+        let declarations = (0..=MAX_CONTRIBUTIONS_PER_PACKAGE)
+            .map(|index| {
+                serde_json::json!({
+                    "id": format!("tool.fixture.item{index}"),
+                    "kind": "tool",
+                    "contractMajor": 1,
+                    "label": format!("Fixture item {index}"),
+                    "purpose": "Exercise the package contribution budget",
+                    "inputSchema": empty,
+                    "outputSchema": empty
+                })
+            })
+            .collect::<Vec<_>>();
+        let provides = (0..=MAX_CONTRIBUTIONS_PER_PACKAGE)
+            .map(|index| {
+                serde_json::json!({
+                    "capability": format!("tool.fixture.item{index}"),
+                    "contract_major": 1
+                })
+            })
+            .collect::<Vec<_>>();
+        value["contributions"] = serde_json::Value::Array(declarations.clone());
+        value["provides"] = serde_json::Value::Array(provides.clone());
+        assert!(parse_json(&value).is_err());
+
+        value["contributions"] = serde_json::Value::Array(
+            declarations
+                .into_iter()
+                .take(MAX_CONTRIBUTIONS_PER_PACKAGE)
+                .collect(),
+        );
+        value["provides"] = serde_json::Value::Array(
+            provides
+                .into_iter()
+                .take(MAX_CONTRIBUTIONS_PER_PACKAGE)
+                .collect(),
+        );
+        assert!(parse_json(&value).is_ok());
+    }
+
+    #[test]
+    fn contribution_text_and_schema_spoofing_fail_closed() {
+        for label in [
+            "<b>Trusted</b>",
+            "https://example.org",
+            "Approval request",
+            "Unsafe\u{202e}label",
+        ] {
+            let mut value = minimal_manifest_v2();
+            value["contributions"][0]["label"] = serde_json::json!(label);
+            assert!(parse_json(&value).is_err(), "accepted label {label:?}");
+        }
+
+        let mut unknown_schema = minimal_manifest_v2();
+        unknown_schema["contributions"][0]["inputSchema"]["$ref"] =
+            serde_json::json!("https://example.org/schema");
+        assert!(parse_json(&unknown_schema).is_err());
+
+        let mut unknown_declaration = minimal_manifest_v2();
+        unknown_declaration["contributions"][0]["invokeOnOpen"] = serde_json::json!(true);
+        assert!(parse_json(&unknown_declaration).is_err());
     }
 
     #[test]
@@ -635,7 +917,7 @@ mod tests {
 
     #[test]
     fn rejects_unsupported_schema() {
-        let json = minimal_manifest_json().replace("\"schemaVersion\": 1", "\"schemaVersion\": 2");
+        let json = minimal_manifest_json().replace("\"schemaVersion\": 1", "\"schemaVersion\": 3");
         assert!(WorkspacePluginManifest::parse(json.as_bytes()).is_err());
     }
 

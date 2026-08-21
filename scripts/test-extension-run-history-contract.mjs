@@ -93,7 +93,10 @@ if (process.argv.includes("--test")) {
   runSelfTests();
 } else {
   validateRunHistoryContract({
-    rust: read("desktop/src-tauri/src/main.rs"),
+    rust: [
+      read("desktop/src-tauri/src/main.rs"),
+      read("desktop/src-tauri/src/commands/runs.rs"),
+    ].join("\n"),
     frontend: read("desktop/dist/app.js"),
   });
 }

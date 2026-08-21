@@ -7,7 +7,10 @@
 use std::fs;
 use std::path::Path;
 
-use rho_extension_runtime::discover_workspace_plugins;
+use rho_extension_runtime::{
+    PackageDigest, PluginId, discover_workspace_plugins, snapshot_workspace_plugin_cache_directory,
+    snapshot_workspace_plugin_package,
+};
 
 /// Write a minimal valid manifest into `dir/rho-plugin.json`.
 fn write_valid_manifest(dir: &Path, id: &str) {
@@ -38,6 +41,36 @@ fn temp_project() -> tempfile::TempDir {
 
 fn plugins_root(project: &Path) -> std::path::PathBuf {
     project.join(".rho").join("plugins")
+}
+
+fn write_v2_skill_manifest(project: &Path) -> std::path::PathBuf {
+    let plugin = plugins_root(project).join("org.example.skill");
+    fs::create_dir_all(plugin.join("dist")).unwrap();
+    fs::create_dir_all(plugin.join("skills")).unwrap();
+    fs::write(plugin.join("dist/plugin.wasm"), b"\0asm").unwrap();
+    fs::write(plugin.join("skills/guide.md"), "Use bounded CSV metadata.").unwrap();
+    fs::write(
+        plugin.join("rho-plugin.json"),
+        r#"{
+            "schemaVersion": 2,
+            "id": "org.example.skill",
+            "name": "Skill fixture",
+            "version": "0.1.0",
+            "apiVersion": "^1.0",
+            "runtime": { "kind": "wasm", "entry": "dist/plugin.wasm", "scope": "project" },
+            "provides": [{"capability": "skill.csv.guide", "contract_major": 1}],
+            "contributions": [{
+                "id": "skill.csv.guide",
+                "kind": "skill",
+                "contractMajor": 1,
+                "label": "CSV guide",
+                "purpose": "Explain the bounded CSV workflow",
+                "skillPath": "skills/guide.md"
+            }]
+        }"#,
+    )
+    .unwrap();
+    plugin
 }
 
 #[test]
@@ -74,6 +107,117 @@ fn discovery_finds_and_digests_a_valid_plugin_without_executing() {
     assert_eq!(discovered.manifest.id.as_str(), "org.example.one");
     // The digest must be non-empty and stable.
     assert!(!discovered.digest.as_str().is_empty());
+}
+
+#[test]
+fn exact_snapshot_is_bounded_path_relative_and_digest_revalidated() {
+    let project = temp_project();
+    write_valid_manifest(project.path(), "org.example.snapshot");
+    let discovered = discover_workspace_plugins(project.path())
+        .unwrap()
+        .unwrap()
+        .plugins
+        .remove(0);
+    let snapshot = snapshot_workspace_plugin_package(
+        project.path(),
+        "org.example.snapshot",
+        &discovered.digest,
+    )
+    .unwrap();
+    assert_eq!(snapshot.manifest, discovered.manifest);
+    assert_eq!(snapshot.digest, discovered.digest);
+    assert_eq!(snapshot.files.len(), 2);
+    assert_eq!(
+        snapshot.file_bytes("dist\\plugin.wasm"),
+        Some(b"\0asm".as_slice())
+    );
+    assert!(
+        snapshot
+            .files
+            .iter()
+            .all(|file| !Path::new(&file.relative_path).is_absolute())
+    );
+    assert_eq!(
+        snapshot.aggregate_bytes,
+        snapshot
+            .files
+            .iter()
+            .map(|file| file.bytes.len())
+            .sum::<usize>()
+    );
+
+    let wrong_digest = PackageDigest::parse("f".repeat(64)).unwrap();
+    assert!(
+        snapshot_workspace_plugin_package(project.path(), "org.example.snapshot", &wrong_digest,)
+            .is_err()
+    );
+}
+
+#[test]
+fn cache_directory_readback_rejects_changed_or_cross_plugin_content() {
+    let project = temp_project();
+    write_valid_manifest(project.path(), "org.example.cached");
+    let discovered = discover_workspace_plugins(project.path())
+        .unwrap()
+        .unwrap()
+        .plugins
+        .remove(0);
+    let package_directory = plugins_root(project.path()).join("org.example.cached");
+    assert!(
+        snapshot_workspace_plugin_cache_directory(
+            &package_directory,
+            &PluginId::new("org.example.cached").unwrap(),
+            &discovered.digest,
+        )
+        .is_ok()
+    );
+    assert!(
+        snapshot_workspace_plugin_cache_directory(
+            &package_directory,
+            &PluginId::new("org.example.other").unwrap(),
+            &discovered.digest,
+        )
+        .is_err()
+    );
+    fs::write(package_directory.join("dist/plugin.wasm"), b"changed").unwrap();
+    assert!(
+        snapshot_workspace_plugin_cache_directory(
+            &package_directory,
+            &PluginId::new("org.example.cached").unwrap(),
+            &discovered.digest,
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn manifest_v2_skill_asset_is_regular_and_digest_bound() {
+    let project = temp_project();
+    let plugin = write_v2_skill_manifest(project.path());
+    let first = discover_workspace_plugins(project.path())
+        .unwrap()
+        .unwrap()
+        .plugins
+        .remove(0)
+        .digest;
+    fs::write(plugin.join("skills/guide.md"), "Changed bounded workflow.").unwrap();
+    let second = discover_workspace_plugins(project.path())
+        .unwrap()
+        .unwrap()
+        .plugins
+        .remove(0)
+        .digest;
+    assert_ne!(first, second);
+
+    fs::remove_file(plugin.join("skills/guide.md")).unwrap();
+    fs::create_dir(plugin.join("skills/guide.md")).unwrap();
+    let report = discover_workspace_plugins(project.path()).unwrap().unwrap();
+    assert!(report.plugins.is_empty());
+    assert!(
+        report.failures[0]
+            .reason
+            .contains("regular non-symlink file")
+    );
 }
 
 #[test]

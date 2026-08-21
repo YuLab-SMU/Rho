@@ -7,15 +7,23 @@ license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+base64 = "0.22"
 clap.workspace = true
+rand.workspace = true
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 rho-kernel = { path = "../rho-kernel" }
 rho-agent-transport = { path = "../rho-agent-transport" }
 rho-core = { path = "../rho-core" }
+rho-extension-runtime = { path = "../rho-extension-runtime" }
 rho-protocol = { path = "../rho-protocol" }
 rho-store = { path = "../rho-store" }
 serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.10"
 tempfile.workspace = true
+thiserror.workspace = true
 tokio.workspace = true
 uuid.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.60", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }

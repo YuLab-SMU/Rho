@@ -49,6 +49,170 @@ pub struct DiscoveryFailure {
     pub reason: String,
 }
 
+/// One immutable, bounded file captured from an exact plugin package.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkspacePluginPackageFile {
+    pub relative_path: String,
+    pub bytes: Vec<u8>,
+}
+
+/// A read-only package snapshot whose inventory recomputes to `digest`.
+///
+/// This is trusted-host evidence, not a guest capability. It contains no
+/// absolute source path and cannot mutate either the project or a cache.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkspacePluginPackageSnapshot {
+    pub manifest: WorkspacePluginManifest,
+    pub digest: PackageDigest,
+    pub files: Vec<WorkspacePluginPackageFile>,
+    pub aggregate_bytes: usize,
+}
+
+impl WorkspacePluginPackageSnapshot {
+    pub fn file_bytes(&self, relative_path: &str) -> Option<&[u8]> {
+        let relative_path = normalize_manifest_relative(relative_path);
+        self.files
+            .binary_search_by(|file| file.relative_path.as_str().cmp(&relative_path))
+            .ok()
+            .map(|index| self.files[index].bytes.as_slice())
+    }
+}
+
+/// Revalidate and snapshot one exact package from a project discovery root.
+///
+/// Discovery is repeated after the bounded read so root/package replacement
+/// cannot silently change the identity accepted by the caller.
+pub fn snapshot_workspace_plugin_package(
+    project_root: &Path,
+    plugin_id: &str,
+    expected_digest: &PackageDigest,
+) -> Result<WorkspacePluginPackageSnapshot, ExtensionError> {
+    let plugin_id = PluginId::new(plugin_id.to_string())?;
+    let discovered = find_exact_discovered_plugin(project_root, &plugin_id, expected_digest)?;
+    let package_directory = project_root.join(PLUGINS_DIR).join(&discovered.directory);
+    let snapshot =
+        snapshot_workspace_plugin_cache_directory(&package_directory, &plugin_id, expected_digest)?;
+    let revalidated = find_exact_discovered_plugin(project_root, &plugin_id, expected_digest)?;
+    if revalidated.directory != discovered.directory
+        || revalidated.manifest != snapshot.manifest
+        || revalidated.digest != snapshot.digest
+    {
+        return Err(ExtensionError::InvalidPackageTree {
+            reason: "plugin package changed while its exact snapshot was read".to_string(),
+        });
+    }
+    Ok(snapshot)
+}
+
+/// Validate and read back an app-controlled cached package directory.
+///
+/// The caller owns containment of `package_directory`; this function proves
+/// only that the directory itself is real, bounded, symlink-free, manifest
+/// compatible, and hashes to the exact expected package identity.
+pub fn snapshot_workspace_plugin_cache_directory(
+    package_directory: &Path,
+    expected_plugin_id: &PluginId,
+    expected_digest: &PackageDigest,
+) -> Result<WorkspacePluginPackageSnapshot, ExtensionError> {
+    let metadata = fs::symlink_metadata(package_directory).map_err(|error| {
+        ExtensionError::InvalidPackageTree {
+            reason: format!(
+                "cannot stat package directory {}: {error}",
+                package_directory.display()
+            ),
+        }
+    })?;
+    if is_link_or_reparse(&metadata) || !metadata.is_dir() {
+        return Err(ExtensionError::InvalidPackageTree {
+            reason: "package snapshot root must be a real directory".to_string(),
+        });
+    }
+    let package_directory = fs::canonicalize(package_directory).map_err(|error| {
+        ExtensionError::InvalidPackageTree {
+            reason: format!("cannot canonicalize package snapshot root: {error}"),
+        }
+    })?;
+    let manifest_path = package_directory.join(MANIFEST_NAME);
+    let manifest_metadata = fs::symlink_metadata(&manifest_path).map_err(|error| {
+        ExtensionError::InvalidPackageTree {
+            reason: format!("cached package manifest is missing: {error}"),
+        }
+    })?;
+    if is_link_or_reparse(&manifest_metadata) || !manifest_metadata.is_file() {
+        return Err(ExtensionError::InvalidPackageTree {
+            reason: "cached package manifest must be a regular file".to_string(),
+        });
+    }
+    if manifest_metadata.len() as usize > MAX_MANIFEST_BYTES {
+        return Err(ExtensionError::ManifestTooLarge {
+            actual_bytes: manifest_metadata.len() as usize,
+            maximum_bytes: MAX_MANIFEST_BYTES,
+        });
+    }
+    let manifest_bytes = read_bounded_file(&manifest_path, MAX_MANIFEST_BYTES)
+        .map_err(|reason| ExtensionError::InvalidPackageTree { reason })?;
+    let manifest = WorkspacePluginManifest::parse(&manifest_bytes)?;
+    if &manifest.id != expected_plugin_id {
+        return Err(ExtensionError::InvalidPackageTree {
+            reason: "package manifest plugin ID does not match expected identity".to_string(),
+        });
+    }
+    validate_manifest_paths(&package_directory, &manifest)
+        .map_err(|reason| ExtensionError::InvalidPackageTree { reason })?;
+    let inventory = collect_package_inventory(&package_directory, &manifest.manifest_entry_keys())
+        .map_err(|reason| ExtensionError::InvalidPackageTree { reason })?;
+    let digest_entries = inventory
+        .iter()
+        .map(|(path, bytes)| (path.as_slice(), bytes.as_slice()))
+        .collect::<Vec<_>>();
+    let digest = PackageDigest::from_inventory(&digest_entries);
+    if &digest != expected_digest {
+        return Err(ExtensionError::InvalidPackageTree {
+            reason: "package snapshot digest does not match expected identity".to_string(),
+        });
+    }
+    let aggregate_bytes = inventory.values().map(Vec::len).sum();
+    let files = inventory
+        .into_iter()
+        .map(|(relative_path, bytes)| WorkspacePluginPackageFile {
+            relative_path: String::from_utf8(relative_path)
+                .expect("package inventory paths were already validated as UTF-8"),
+            bytes,
+        })
+        .collect();
+    Ok(WorkspacePluginPackageSnapshot {
+        manifest,
+        digest,
+        files,
+        aggregate_bytes,
+    })
+}
+
+fn find_exact_discovered_plugin(
+    project_root: &Path,
+    plugin_id: &PluginId,
+    expected_digest: &PackageDigest,
+) -> Result<DiscoveredPlugin, ExtensionError> {
+    let report = discover_workspace_plugins(project_root)?.ok_or_else(|| {
+        ExtensionError::DiscoveryFailure {
+            reason: "project has no workspace plugin discovery root".to_string(),
+        }
+    })?;
+    let plugin = report
+        .plugins
+        .into_iter()
+        .find(|plugin| &plugin.manifest.id == plugin_id)
+        .ok_or_else(|| ExtensionError::DiscoveryFailure {
+            reason: format!("workspace plugin {plugin_id} was not discovered"),
+        })?;
+    if &plugin.digest != expected_digest {
+        return Err(ExtensionError::InvalidPackageTree {
+            reason: "discovered package digest does not match expected identity".to_string(),
+        });
+    }
+    Ok(plugin)
+}
+
 /// Discover all plugins under `project_root/.rho/plugins`.
 ///
 /// Returns `Ok(None)` when the plugins directory does not exist (an empty,
@@ -310,6 +474,13 @@ impl WorkspacePluginManifest {
                 keys.push(path.clone());
             }
         }
+        for contribution in &self.contributions {
+            if let Some(path) = &contribution.skill_path {
+                keys.push(path.clone());
+            }
+        }
+        keys.sort();
+        keys.dedup();
         keys
     }
 }
@@ -373,10 +544,34 @@ fn validate_manifest_paths(
                 "declared package path must not be a symlink: {path}"
             ));
         }
+        if manifest.schema_version >= 2 && !metadata.is_file() {
+            return Err(format!(
+                "Manifest V2 declared package path must be a regular file: {path}"
+            ));
+        }
         let canonical = fs::canonicalize(&asset_path)
             .map_err(|error| format!("cannot canonicalize declared path {path}: {error}"))?;
         if !canonical.starts_with(directory) {
             return Err(format!("declared package path escapes plugin root: {path}"));
+        }
+    }
+    for path in manifest
+        .contributions
+        .iter()
+        .filter_map(|contribution| contribution.skill_path.as_deref())
+    {
+        let asset_path = directory.join(normalize_manifest_relative(path));
+        let metadata = fs::symlink_metadata(&asset_path)
+            .map_err(|error| format!("declared Skill path is missing: {path}: {error}"))?;
+        if is_link_or_reparse(&metadata) || !metadata.is_file() {
+            return Err(format!(
+                "declared Skill path must be a regular non-symlink file: {path}"
+            ));
+        }
+        let canonical = fs::canonicalize(&asset_path)
+            .map_err(|error| format!("cannot canonicalize Skill path {path}: {error}"))?;
+        if !canonical.starts_with(directory) {
+            return Err(format!("declared Skill path escapes plugin root: {path}"));
         }
     }
     Ok(())

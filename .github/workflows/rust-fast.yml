@@ -17,6 +17,7 @@ on:
       - "desktop/package-lock.json"
       - "NEWS.md"
       - "r/rho.agent/R/aisdk_adapter.R"
+      - "r/rho.bridge/**"
       - "vendor/jet/**/*.rs"
       - "runtime/ark.json"
       - "scripts/bootstrap-ark-linux.sh"
@@ -24,10 +25,30 @@ on:
       - ".github/workflows/rust-fast.yml"
       - ".github/workflows/rust-compatibility.yml"
       - "scripts/test-rust-msrv-contract.mjs"
+      - "scripts/test-tauri-command-inventory.mjs"
       - "scripts/test-license-contract.mjs"
       - "scripts/test-extension-run-history-contract.mjs"
       - "scripts/test-extension-p1-3-contract.mjs"
       - "scripts/test-extension-phase-1-acceptance.mjs"
+      - "scripts/test-extension-phase-2-host-contract.mjs"
+      - "scripts/test-extension-p2-2-broker-contract.mjs"
+      - "scripts/test-extension-p2-3-contribution-contract.mjs"
+      - "scripts/test-extension-p2-4-lifecycle-contract.mjs"
+      - "scripts/test-extension-p2-4-package-cache-contract.mjs"
+      - "scripts/test-extension-p2-4-durable-enable-contract.mjs"
+      - "scripts/test-extension-p2-4-restart-contract.mjs"
+      - "scripts/test-extension-p2-4-disable-contract.mjs"
+      - "scripts/test-extension-p2-4-boundary-teardown-contract.mjs"
+      - "scripts/test-extension-p2-4-crash-retry-contract.mjs"
+      - "scripts/test-extension-p2-4-package-trash-contract.mjs"
+      - "scripts/test-extension-p2-4-uninstall-restore-contract.mjs"
+      - "scripts/test-extension-p2-4-retention-purge-contract.mjs"
+      - "scripts/test-extension-p2-4-replacement-foundation-contract.mjs"
+      - "scripts/test-extension-p2-4-trusted-update-contract.mjs"
+      - "scripts/test-extension-p2-4-trusted-rollback-contract.mjs"
+      - "scripts/test-extension-p2-4-recovery-closeout-contract.mjs"
+      - "scripts/test-extension-phase-2-final-contract.mjs"
+      - "scripts/test-workspace-plugin-ui.mjs"
       - "LICENSE"
       - "LICENSES.md"
 
@@ -100,6 +121,8 @@ jobs:
           node --check scripts/test-rust-msrv-contract.mjs
           node scripts/test-rust-msrv-contract.mjs --test
           node scripts/test-rust-msrv-contract.mjs
+          node scripts/test-tauri-command-inventory.mjs --test
+          node scripts/test-tauri-command-inventory.mjs
           node scripts/test-license-contract.mjs --test
           node scripts/test-license-contract.mjs
           node scripts/test-extension-run-history-contract.mjs --test
@@ -108,6 +131,43 @@ jobs:
           node scripts/test-extension-p1-3-contract.mjs
           node scripts/test-extension-phase-1-acceptance.mjs --test
           node scripts/test-extension-phase-1-acceptance.mjs
+          node scripts/test-extension-phase-2-host-contract.mjs --test
+          node scripts/test-extension-phase-2-host-contract.mjs
+          node scripts/test-extension-p2-2-broker-contract.mjs --test
+          node scripts/test-extension-p2-2-broker-contract.mjs
+          node scripts/test-extension-p2-3-contribution-contract.mjs --test
+          node scripts/test-extension-p2-3-contribution-contract.mjs
+          node scripts/test-extension-p2-4-lifecycle-contract.mjs --test
+          node scripts/test-extension-p2-4-lifecycle-contract.mjs
+          node scripts/test-extension-p2-4-package-cache-contract.mjs --test
+          node scripts/test-extension-p2-4-package-cache-contract.mjs
+          node scripts/test-extension-p2-4-durable-enable-contract.mjs --test
+          node scripts/test-extension-p2-4-durable-enable-contract.mjs
+          node scripts/test-extension-p2-4-restart-contract.mjs --test
+          node scripts/test-extension-p2-4-restart-contract.mjs
+          node scripts/test-extension-p2-4-disable-contract.mjs --test
+          node scripts/test-extension-p2-4-disable-contract.mjs
+          node scripts/test-extension-p2-4-boundary-teardown-contract.mjs --test
+          node scripts/test-extension-p2-4-boundary-teardown-contract.mjs
+          node scripts/test-extension-p2-4-crash-retry-contract.mjs --test
+          node scripts/test-extension-p2-4-crash-retry-contract.mjs
+          node scripts/test-extension-p2-4-package-trash-contract.mjs --test
+          node scripts/test-extension-p2-4-package-trash-contract.mjs
+          node scripts/test-extension-p2-4-uninstall-restore-contract.mjs --test
+          node scripts/test-extension-p2-4-uninstall-restore-contract.mjs
+          node scripts/test-extension-p2-4-retention-purge-contract.mjs --test
+          node scripts/test-extension-p2-4-retention-purge-contract.mjs
+          node scripts/test-extension-p2-4-replacement-foundation-contract.mjs --test
+          node scripts/test-extension-p2-4-replacement-foundation-contract.mjs
+          node scripts/test-extension-p2-4-trusted-update-contract.mjs --test
+          node scripts/test-extension-p2-4-trusted-update-contract.mjs
+          node scripts/test-extension-p2-4-trusted-rollback-contract.mjs --test
+          node scripts/test-extension-p2-4-trusted-rollback-contract.mjs
+          node scripts/test-extension-p2-4-recovery-closeout-contract.mjs --test
+          node scripts/test-extension-p2-4-recovery-closeout-contract.mjs
+          node scripts/test-extension-phase-2-final-contract.mjs --test
+          node scripts/test-extension-phase-2-final-contract.mjs
+          node scripts/test-workspace-plugin-ui.mjs
 
       - name: Check formatting
         run: cargo fmt --all -- --check

@@ -36,6 +36,23 @@ const state = {
   startupPrepared: false,
   automaticUpdateStarted: false,
   product: { appInfo: null, updateResult: null, updateBusy: false, dialog: null, returnFocus: null },
+  plugins: {
+    open: false,
+    busy: false,
+    list: null,
+    contributions: [],
+    grants: [],
+    pendingRequests: [],
+    currentRequestId: null,
+    returnFocus: null,
+    commandPaletteOpen: false,
+    commandPaletteQuery: "",
+    panelDocument: null,
+    panelOrigin: "",
+    uninstallPluginId: null,
+    updatePluginId: null,
+    rollbackPluginId: null,
+  },
   busy: false,
   consoleHistory: [],
   consoleHistoryIndex: -1,
@@ -481,6 +498,63 @@ let mockProblemPreparationProjectSwitchOnce = false;
 let mockProblemListFailureOnce = false;
 let mockDataViewerInspectCount = 0;
 let mockDataViewerReadCount = 0;
+const mockWorkspacePlugins = [{
+  plugin_id: "org.example.research-summary",
+  directory_name: "research-summary",
+  name: "Research Summary <untrusted>",
+  version: "1.0.0",
+  package_digest: "a".repeat(64),
+  short_digest: "aaaaaaaaaaaa",
+  runtime_kind: "wasm",
+  permission_count: 1,
+  pending_request_count: 0,
+  active_grant_count: 0,
+  status: "disabled",
+  desired_state: "disabled",
+  observed_state: "discovered",
+  accepted_digest: null,
+  rollback_digest: null,
+  transition_id: null,
+  recoverable_tombstone_id: null,
+  message: null,
+}];
+const mockPluginPermissionRequests = [];
+const mockPluginGrants = [];
+const mockPluginContributions = [
+  {
+    contribution_id: "ui.command.csv_summary",
+    kind: "command",
+    label: "Summarize CSV <text only>",
+    purpose: "Show bounded CSV metadata",
+    contract_major: 1,
+    plugin_id: "org.example.research-summary",
+    package_digest: "a".repeat(64),
+    short_digest: "aaaaaaaaaaaa",
+    accepts_empty_input: true,
+  },
+  {
+    contribution_id: "ui.viewer.csv_summary",
+    kind: "viewer",
+    label: "CSV metadata viewer",
+    purpose: "Render bounded metadata blocks",
+    contract_major: 1,
+    plugin_id: "org.example.research-summary",
+    package_digest: "a".repeat(64),
+    short_digest: "aaaaaaaaaaaa",
+    accepts_empty_input: true,
+  },
+  {
+    contribution_id: "ui.panel.csv_details",
+    kind: "panel",
+    label: "CSV project details",
+    purpose: "Render the named plugin details slot",
+    contract_major: 1,
+    plugin_id: "org.example.research-summary",
+    package_digest: "a".repeat(64),
+    short_digest: "aaaaaaaaaaaa",
+    accepts_empty_input: true,
+  },
+];
 
 function seedMockEvidenceClaims() {
   const currentProject = mockLastProject;
@@ -2184,7 +2258,7 @@ async function mockInvoke(command, args) {
   await new Promise((resolve) => setTimeout(resolve, command === "run_agent" ? 800 : 300));
   if (command === "app_info") {
     return {
-      version: "0.4.1-dev.1",
+      version: "0.4.1-dev.11",
       channel: "stable",
       commit: "4090cf725c53ab657ba9dfc9743ec6159f27dcf9",
       platform: mockPlatformFixture.platform,
@@ -2202,7 +2276,7 @@ async function mockInvoke(command, args) {
     return {
       status: "up_to_date",
       channel: "stable",
-      installed_version: "0.4.1-dev.1",
+      installed_version: "0.4.1-dev.11",
       available_version: null,
       published_at: null,
       summary: null,
@@ -2234,6 +2308,450 @@ async function mockInvoke(command, args) {
       workspace: { execution_seq: 1, state_revision: 1, project_revision: 0 },
       agent_runtime: { available: true, aisdk_version: "1.5.0", error: null },
       python_required: false,
+    };
+  }
+  if (command === "list_workspace_plugins") {
+    return {
+      project_root: mockLastProject,
+      project_revision: state.revision.project_revision,
+      status: mockWorkspacePlugins.length ? "ready" : "none_discovered",
+      plugins: structuredClone(mockWorkspacePlugins),
+      failures: previewParams.get("state") === "discovery-error"
+        ? [{ path: `${mockLastProject}/.rho/plugins/broken`, reason: "Manifest contains an unsupported security field." }]
+        : [],
+    };
+  }
+  if (command === "get_workspace_plugin_transition") {
+    const plugin = mockWorkspacePlugins.find((item) => item.transition_id === args.transitionId);
+    if (!plugin) return null;
+    return {
+      transition_id: plugin.transition_id,
+      project_root: mockLastProject,
+      plugin_id: plugin.plugin_id,
+      kind: plugin.desired_state === "uninstalled" ? "uninstall" : "enable",
+      expected_old_digest: plugin.accepted_digest,
+      candidate_digest: plugin.package_digest,
+      rollback_digest: plugin.rollback_digest,
+      phase: plugin.status === "recovery_required" ? "package_moved" : "completed",
+      status: plugin.status === "recovery_required" ? "completion_uncertain" : "completed",
+      requested_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      completed_at: plugin.status === "recovery_required" ? null : new Date().toISOString(),
+      reason_code: plugin.status === "recovery_required" ? "package_recovery_failed" : null,
+      backup_path_key: null,
+    };
+  }
+  if (command === "request_workspace_plugin_enable") {
+    const plugin = mockWorkspacePlugins.find((item) => item.plugin_id === args.pluginId);
+    if (!plugin) throw new Error("Workspace plugin was not discovered.");
+    if (Number(args.expectedProjectRevision) !== Number(state.revision.project_revision)) {
+      throw new Error("Workspace plugin enable request is stale after a project change.");
+    }
+    const transitionId = plugin.transition_id || `transition.enable.${crypto.randomUUID().replaceAll("-", "")}`;
+    plugin.transition_id = transitionId;
+    plugin.desired_state = "enabled";
+    plugin.observed_state = "resolving";
+    if (plugin.permission_count === 0) {
+      plugin.status = "enabled";
+      plugin.observed_state = "active";
+      plugin.accepted_digest = plugin.package_digest;
+      return { status: "enabled", plugin_id: plugin.plugin_id, request_ids: [], active_grant_count: 0, transition_id: transitionId, message: "The exact cached plugin package is durably enabled with zero privileged permissions." };
+    }
+    let request = mockPluginPermissionRequests.find((item) => item.plugin_id === plugin.plugin_id && item.status === "pending");
+    if (!request) {
+      request = {
+        request_id: `request.${crypto.randomUUID().replaceAll("-", "")}`,
+        project_root: mockLastProject,
+        plugin_id: plugin.plugin_id,
+        plugin_version: plugin.version,
+        package_digest: plugin.package_digest,
+        runtime_kind: "wasm",
+        permission: "project.fs.read",
+        constraints_json: '{"maxBytes":1024,"paths":["data/**/*.csv"]}',
+        constraints_digest: "b".repeat(64),
+        purpose_text: "Summarize <script>alert('not markup')</script> bounded CSV inputs.",
+        status: "pending",
+        requested_at: new Date().toISOString(),
+        resolved_at: null,
+        decision: null,
+        grant_source: null,
+        reason_code: null,
+        expected_project_revision: state.revision.project_revision,
+      };
+      mockPluginPermissionRequests.push(request);
+    }
+    plugin.status = "permission_required";
+    plugin.pending_request_count = 1;
+    return { status: "permission_required", plugin_id: plugin.plugin_id, request_ids: [request.request_id], active_grant_count: 0, transition_id: transitionId, message: "Review the requested permissions before this plugin can start." };
+  }
+  if (command === "disable_workspace_plugin") {
+    const plugin = mockWorkspacePlugins.find((item) => item.plugin_id === args.pluginId);
+    if (!plugin) throw new Error("Workspace plugin has no durable lifecycle state.");
+    if (Number(args.expectedProjectRevision) !== Number(state.revision.project_revision)) {
+      throw new Error("Workspace plugin disable request is stale after a project change.");
+    }
+    const transitionId = plugin.status === "disabled" && plugin.transition_id
+      ? plugin.transition_id
+      : `transition.disable.${crypto.randomUUID().replaceAll("-", "")}`;
+    const pending = mockPluginPermissionRequests.filter((request) => request.plugin_id === plugin.plugin_id && request.status === "pending");
+    for (const request of pending) {
+      request.status = "cancelled";
+      request.resolved_at = new Date().toISOString();
+      request.reason_code = "plugin_disabled";
+    }
+    for (const grant of mockPluginGrants.filter((grant) => grant.plugin_id === plugin.plugin_id)) grant.live_handle = false;
+    plugin.status = "disabled";
+    plugin.desired_state = "disabled";
+    plugin.observed_state = "disabled";
+    plugin.transition_id = transitionId;
+    plugin.pending_request_count = 0;
+    plugin.active_grant_count = 0;
+    return {
+      status: "disabled",
+      plugin_id: plugin.plugin_id,
+      transition_id: transitionId,
+      route_closed: true,
+      calls_cancelled: 0,
+      pending_requests_cancelled: pending.length,
+      handles_revoked: 1,
+      contributions_disposed: mockPluginContributions.filter((item) => item.plugin_id === plugin.plugin_id).length,
+      host_disposed: true,
+      errors: [],
+      message: "The plugin is durably disabled and no route or live handle remains.",
+    };
+  }
+  if (command === "retry_workspace_plugin") {
+    const plugin = mockWorkspacePlugins.find((item) => item.plugin_id === args.pluginId);
+    if (!plugin) throw new Error("Workspace plugin has no durable lifecycle state.");
+    if (Number(args.expectedProjectRevision) !== Number(state.revision.project_revision)) {
+      throw new Error("Workspace plugin Retry is stale after a project change.");
+    }
+    if (plugin.status === "blocked") throw new Error("Plugin Retry is blocked after repeated crashes; disable and review it first.");
+    if (plugin.status !== "crashed") throw new Error("Plugin Retry is available only for crashed plugins.");
+    const transitionId = `transition.retry.${crypto.randomUUID().replaceAll("-", "")}`;
+    plugin.status = "enabled";
+    plugin.desired_state = "enabled";
+    plugin.observed_state = "active";
+    plugin.transition_id = transitionId;
+    plugin.active_grant_count = mockPluginGrants.filter((grant) => grant.plugin_id === plugin.plugin_id && grant.status === "active").length;
+    for (const grant of mockPluginGrants.filter((grant) => grant.plugin_id === plugin.plugin_id && grant.status === "active")) grant.live_handle = true;
+    return { status: "enabled", plugin_id: plugin.plugin_id, request_ids: [], active_grant_count: plugin.active_grant_count, transition_id: transitionId, message: "The crashed plugin restarted with fresh exact authority." };
+  }
+  if (command === "accept_workspace_plugin_update") {
+    const input = args.input || {};
+    const plugin = mockWorkspacePlugins.find((item) => item.plugin_id === input.pluginId);
+    if (!plugin) throw new Error("Workspace plugin has no durable lifecycle state.");
+    if (Number(input.expectedProjectRevision) !== Number(state.revision.project_revision)) {
+      throw new Error("Workspace plugin Update is stale after a project change.");
+    }
+    if (plugin.status !== "update_pending" || plugin.accepted_digest !== input.expectedOldDigest || plugin.package_digest !== input.candidateDigest) {
+      throw new Error("Workspace plugin Update pointers are stale.");
+    }
+    const transitionId = `transition.upgrade.${crypto.randomUUID().replaceAll("-", "")}`;
+    plugin.transition_id = transitionId;
+    let request = mockPluginPermissionRequests.find((item) => item.plugin_id === plugin.plugin_id && item.package_digest === plugin.package_digest && item.status === "pending");
+    if (!request && plugin.permission_count > 0) {
+      request = {
+        request_id: `request.${crypto.randomUUID().replaceAll("-", "")}`,
+        project_root: mockLastProject,
+        plugin_id: plugin.plugin_id,
+        plugin_version: plugin.version,
+        package_digest: plugin.package_digest,
+        runtime_kind: "wasm",
+        permission: "project.fs.read",
+        constraints_json: '{"maxBytes":1024,"paths":["data/**/*.csv"]}',
+        constraints_digest: "c".repeat(64),
+        purpose_text: "Review fresh bounded access for this exact local Update candidate.",
+        status: "pending",
+        requested_at: new Date().toISOString(),
+        resolved_at: null,
+        decision: null,
+        grant_source: null,
+        reason_code: null,
+        expected_project_revision: state.revision.project_revision,
+      };
+      mockPluginPermissionRequests.push(request);
+    }
+    if (request) {
+      plugin.status = "permission_required";
+      plugin.pending_request_count = 1;
+      return { status: "permission_required", plugin_id: plugin.plugin_id, request_ids: [request.request_id], active_grant_count: 0, transition_id: transitionId, message: "Review fresh permissions for the exact local Update candidate. The accepted old route remains active until CAS." };
+    }
+    plugin.rollback_digest = plugin.accepted_digest;
+    plugin.accepted_digest = plugin.package_digest;
+    plugin.status = "enabled";
+    plugin.observed_state = "active";
+    return { status: "enabled", plugin_id: plugin.plugin_id, request_ids: [], active_grant_count: 0, transition_id: transitionId, message: "The exact replacement package is durably active with a fresh host and expected-old routing CAS." };
+  }
+  if (command === "rollback_workspace_plugin") {
+    const input = args.input || {};
+    const plugin = mockWorkspacePlugins.find((item) => item.plugin_id === input.pluginId);
+    if (!plugin) throw new Error("Workspace plugin has no durable lifecycle state.");
+    if (Number(input.expectedProjectRevision) !== Number(state.revision.project_revision)) {
+      throw new Error("Workspace plugin Rollback is stale after a project change.");
+    }
+    if (plugin.status !== "enabled" || plugin.accepted_digest !== input.expectedCurrentDigest || plugin.rollback_digest !== input.rollbackDigest) {
+      throw new Error("Workspace plugin Rollback pointers are stale.");
+    }
+    const transitionId = `transition.rollback.${crypto.randomUUID().replaceAll("-", "")}`;
+    plugin.transition_id = transitionId;
+    let request = null;
+    if (plugin.permission_count > 0) {
+      request = {
+        request_id: `request.${crypto.randomUUID().replaceAll("-", "")}`,
+        project_root: mockLastProject,
+        plugin_id: plugin.plugin_id,
+        plugin_version: "previous cached version",
+        package_digest: input.rollbackDigest,
+        runtime_kind: "wasm",
+        permission: "project.fs.read",
+        constraints_json: '{"maxBytes":1024,"paths":["data/**/*.csv"]}',
+        constraints_digest: "d".repeat(64),
+        purpose_text: "Fresh review for the exact cached Rollback target.",
+        status: "pending",
+        requested_at: new Date().toISOString(),
+        resolved_at: null,
+        decision: null,
+        grant_source: null,
+        reason_code: null,
+        expected_project_revision: state.revision.project_revision,
+      };
+      mockPluginPermissionRequests.push(request);
+    }
+    if (request) {
+      plugin.status = "permission_required";
+      plugin.pending_request_count = 1;
+      return { status: "permission_required", plugin_id: plugin.plugin_id, request_ids: [request.request_id], active_grant_count: 0, transition_id: transitionId, message: "Rollback requires fresh permission review for the exact cached target. No historical grant or handle is reused." };
+    }
+    const currentDigest = plugin.accepted_digest;
+    plugin.accepted_digest = input.rollbackDigest;
+    plugin.rollback_digest = currentDigest;
+    plugin.status = "update_pending";
+    plugin.observed_state = "active";
+    return { status: "enabled", plugin_id: plugin.plugin_id, request_ids: [], active_grant_count: 0, transition_id: transitionId, message: "The exact replacement package is durably active with a fresh host and expected-old routing CAS." };
+  }
+  if (command === "uninstall_workspace_plugin") {
+    const input = args.input || {};
+    const plugin = mockWorkspacePlugins.find((item) => item.plugin_id === input.pluginId);
+    if (!plugin) throw new Error("Workspace plugin has no durable lifecycle state.");
+    if (!input.confirmed) throw new Error("Workspace plugin Uninstall was not confirmed.");
+    if (Number(input.expectedProjectRevision) !== Number(state.revision.project_revision)) {
+      throw new Error("Workspace plugin Uninstall is stale after a project change.");
+    }
+    if (plugin.directory_name !== input.directoryName || plugin.accepted_digest !== input.packageDigest) {
+      throw new Error("Workspace plugin Uninstall confirmation is stale for this directory or digest.");
+    }
+    const suffix = crypto.randomUUID().replaceAll("-", "");
+    const transitionId = `transition.uninstall.${suffix}`;
+    const tombstoneId = `tombstone.${suffix}`;
+    const pending = mockPluginPermissionRequests.filter((request) => request.plugin_id === plugin.plugin_id && request.package_digest === plugin.package_digest && request.status === "pending");
+    for (const request of pending) {
+      request.status = "cancelled";
+      request.resolved_at = new Date().toISOString();
+      request.reason_code = "plugin_uninstalled";
+    }
+    const grants = mockPluginGrants.filter((grant) => grant.plugin_id === plugin.plugin_id && grant.package_digest === plugin.package_digest && grant.status === "active");
+    for (const grant of grants) {
+      grant.status = "revoked";
+      grant.live_handle = false;
+    }
+    plugin.status = "uninstalled";
+    plugin.desired_state = "uninstalled";
+    plugin.observed_state = "uninstalled";
+    plugin.transition_id = transitionId;
+    plugin.recoverable_tombstone_id = tombstoneId;
+    plugin.pending_request_count = 0;
+    plugin.active_grant_count = 0;
+    plugin.message = "The exact package is in recoverable Rho trash. Restore returns it disabled and grants no authority.";
+    state.revision.project_revision += 1;
+    return {
+      status: "uninstalled",
+      plugin_id: plugin.plugin_id,
+      transition_id: transitionId,
+      tombstone_id: tombstoneId,
+      project_revision: state.revision.project_revision,
+      route_closed: true,
+      pending_requests_cancelled: pending.length,
+      durable_grants_revoked: grants.length,
+      message: "The exact package moved to recoverable Rho trash. It is uninstalled, non-routable, and has no durable grant.",
+    };
+  }
+  if (command === "restore_workspace_plugin") {
+    const input = args.input || {};
+    const plugin = mockWorkspacePlugins.find((item) => item.recoverable_tombstone_id === input.tombstoneId);
+    if (!plugin) throw new Error("Recoverable workspace plugin tombstone was not found.");
+    if (Number(input.expectedProjectRevision) !== Number(state.revision.project_revision)) {
+      throw new Error("Workspace plugin Restore is stale after a project change.");
+    }
+    if (plugin.status !== "uninstalled") throw new Error("Workspace plugin Restore identity is stale.");
+    plugin.status = "disabled";
+    plugin.desired_state = "disabled";
+    plugin.observed_state = "disabled";
+    plugin.transition_id = null;
+    plugin.recoverable_tombstone_id = null;
+    plugin.message = null;
+    state.revision.project_revision += 1;
+    return {
+      status: "disabled",
+      plugin_id: plugin.plugin_id,
+      tombstone_id: input.tombstoneId,
+      project_revision: state.revision.project_revision,
+      message: "The exact package was restored to this project in Disabled state. No route, host, handle, or durable grant was created.",
+    };
+  }
+  if (command === "list_plugin_permission_requests") {
+    return structuredClone(mockPluginPermissionRequests.filter((request) => !args.status || request.status === args.status));
+  }
+  if (command === "get_plugin_permission_request") {
+    return structuredClone(mockPluginPermissionRequests.find((request) => request.request_id === args.requestId) || null);
+  }
+  if (command === "respond_plugin_permission") {
+    const input = args.input || {};
+    const request = mockPluginPermissionRequests.find((item) => item.request_id === input.requestId);
+    if (!request) throw new Error("Plugin permission request was not found.");
+    if (Number(input.expectedProjectRevision) !== Number(state.revision.project_revision)) {
+      throw new Error("Plugin permission response is stale for the current project revision.");
+    }
+    const plugin = mockWorkspacePlugins.find((item) => item.plugin_id === request.plugin_id);
+    request.resolved_at = new Date().toISOString();
+    request.decision = input.decision;
+    request.status = input.decision === "deny" ? "denied" : "granted";
+    request.grant_source = input.decision === "allow_once" ? "allow_once" : input.decision === "allow_project" ? "project" : null;
+    request.reason_code = input.decision === "deny" ? "user_denied" : null;
+    plugin.pending_request_count = 0;
+    const replacingDigest = plugin.accepted_digest && plugin.accepted_digest !== request.package_digest
+      ? plugin.accepted_digest
+      : null;
+    if (input.decision === "deny") {
+      plugin.status = replacingDigest ? "update_pending" : "denied";
+      plugin.observed_state = replacingDigest ? "update_pending" : "disabled";
+      return { outcome: "applied", request: structuredClone(request), plugin_status: "denied", active_grant_count: 0, message: null };
+    }
+    const grant = {
+      grant_id: `grant.${crypto.randomUUID().replaceAll("-", "")}`,
+      plugin_id: plugin.plugin_id,
+      plugin_version: plugin.version,
+      package_digest: request.package_digest,
+      short_digest: request.package_digest.slice(0, 12),
+      permission: request.permission,
+      constraints: JSON.parse(request.constraints_json),
+      grant_source: request.grant_source,
+      policy_revision: 1,
+      expires_at: new Date(Date.now() + (input.decision === "allow_once" ? 5 * 60e3 : 30 * 24 * 60 * 60e3)).toISOString(),
+      status: "active",
+      live_handle: true,
+    };
+    mockPluginGrants.push(grant);
+    if (replacingDigest) {
+      for (const oldGrant of mockPluginGrants.filter((item) => item.plugin_id === plugin.plugin_id && item.package_digest === replacingDigest && item.status === "active")) {
+        oldGrant.status = "revoked";
+        oldGrant.live_handle = false;
+      }
+      plugin.rollback_digest = replacingDigest;
+    }
+    plugin.status = request.package_digest === plugin.package_digest ? "enabled" : "update_pending";
+    plugin.observed_state = "active";
+    plugin.accepted_digest = request.package_digest;
+    plugin.active_grant_count = 1;
+    return { outcome: "applied", request: structuredClone(request), plugin_status: "enabled", active_grant_count: 1, message: null };
+  }
+  if (command === "list_plugin_grants") {
+    return { project_root: mockLastProject, grants: structuredClone(mockPluginGrants) };
+  }
+  if (command === "revoke_plugin_grant") {
+    const grant = mockPluginGrants.find((item) => item.grant_id === args.grantId);
+    if (!grant) return { outcome: "not_found", grant_id: args.grantId, live_handle_revoked: false };
+    grant.status = "revoked";
+    grant.live_handle = false;
+    const plugin = mockWorkspacePlugins.find((item) => item.plugin_id === grant.plugin_id);
+    if (plugin) {
+      plugin.active_grant_count = 0;
+      plugin.status = "disabled";
+    }
+    return { outcome: "applied", grant_id: grant.grant_id, live_handle_revoked: true };
+  }
+  if (command === "list_plugin_contributions") {
+    const contributions = mockPluginContributions.map((item) => {
+      const plugin = mockWorkspacePlugins.find((candidate) => candidate.plugin_id === item.plugin_id);
+      const available = plugin?.status === "enabled" && (plugin.permission_count === 0 || plugin.active_grant_count === plugin.permission_count);
+      return {
+        ...structuredClone(item),
+        status: available ? "ready" : "permission_unavailable",
+        available,
+      };
+    });
+    return {
+      project_root: mockLastProject,
+      project_revision: state.revision.project_revision,
+      contributions,
+    };
+  }
+  if (command === "invoke_plugin_command") {
+    if (Number(args.expectedProjectRevision) !== Number(state.revision.project_revision)) throw new Error("Plugin Command is stale after the project changed.");
+    const contribution = (await mockInvoke("list_plugin_contributions")).contributions.find((item) => item.contribution_id === args.contributionId && item.kind === "command");
+    if (!contribution?.available) throw new Error("Plugin Command is unavailable without its exact live grant.");
+    return {
+      project_root: mockLastProject,
+      project_revision: state.revision.project_revision,
+      contribution_id: contribution.contribution_id,
+      result: { kind: "notification", message: "CSV metadata is ready" },
+      provenance: {
+        contribution_id: contribution.contribution_id,
+        plugin_id: contribution.plugin_id,
+        package_digest: contribution.package_digest,
+        call_id: "call.mock-command",
+        permission_event_ids: ["event.mock-admitted", "event.mock-completed"],
+      },
+    };
+  }
+  if (command === "open_plugin_viewer") {
+    if (Number(args.expectedProjectRevision) !== Number(state.revision.project_revision)) throw new Error("Plugin Viewer is stale after the project changed.");
+    const contribution = (await mockInvoke("list_plugin_contributions")).contributions.find((item) => item.contribution_id === args.contributionId && item.kind === "viewer");
+    if (!contribution?.available) throw new Error("Plugin Viewer is unavailable without its exact live grant.");
+    return {
+      project_root: mockLastProject,
+      project_revision: state.revision.project_revision,
+      contribution_id: contribution.contribution_id,
+      document: {
+        contract: "rho.plugin_viewer_document.v1",
+        title: "CSV metadata <text only>",
+        blocks: [
+          { kind: "text", text: "Rows and columns returned by the exact project plugin. <script>text only</script>" },
+          { kind: "key_value", items: [{ key: "Rows", value: "2" }, { key: "Columns", value: "a, b" }] },
+          { kind: "table", columns: ["column", "type"], rows: [["a", "integer"], ["b", "integer"]] },
+          { kind: "code", code: "summary(data)", language: "r" },
+          { kind: "notice", tone: "info", text: "Plugin output is untrusted project data." },
+        ],
+      },
+      provenance: {
+        contribution_id: contribution.contribution_id,
+        plugin_id: contribution.plugin_id,
+        package_digest: contribution.package_digest,
+        call_id: "call.mock-viewer",
+        permission_event_ids: ["event.mock-admitted", "event.mock-completed"],
+      },
+    };
+  }
+  if (command === "get_plugin_panel_document") {
+    if (Number(args.expectedProjectRevision) !== Number(state.revision.project_revision)) throw new Error("Plugin Panel is stale after the project changed.");
+    const contribution = (await mockInvoke("list_plugin_contributions")).contributions.find((item) => item.contribution_id === args.contributionId && item.kind === "panel");
+    if (!contribution?.available) throw new Error("Plugin Panel is unavailable without its exact live grant.");
+    return {
+      project_root: mockLastProject,
+      project_revision: state.revision.project_revision,
+      contribution_id: contribution.contribution_id,
+      document: {
+        contract: "rho.plugin_viewer_document.v1",
+        title: "CSV plugin details",
+        blocks: [{ kind: "notice", tone: "info", text: "Named Panel content is untrusted project data. <script>text only</script>" }],
+      },
+      provenance: {
+        contribution_id: contribution.contribution_id,
+        plugin_id: contribution.plugin_id,
+        package_digest: contribution.package_digest,
+        call_id: "call.mock-panel",
+        permission_event_ids: ["event.mock-admitted", "event.mock-completed"],
+      },
     };
   }
   if (command === "project_restore_session") {
@@ -4530,6 +5048,7 @@ function viewerPathExtension(path) {
 
 function viewerTypeLabel(kind, mediaType) {
   if (kind === "plot") return "Plot";
+  if (kind === "plugin") return "Workspace plugin · trusted renderer";
   if (mediaType === "text/markdown") return "Markdown preview";
   if (mediaType === "text/html") return "Interactive HTML";
   if (mediaType === "image/png") return "PNG image";
@@ -4657,6 +5176,118 @@ function viewerRenderTable(content, extension) {
   return { table, truncated: truncatedRows || truncatedColumns, rowCount: Math.max(0, rows.length - 1), columnCount: maxColumns };
 }
 
+function pluginViewerBoundedText(value, maximumBytes, label) {
+  const text = String(value ?? "");
+  if (new TextEncoder().encode(text).length > maximumBytes || text.includes("\0")) {
+    throw new Error(`${label} exceeds the trusted ViewerDocument boundary.`);
+  }
+  return text;
+}
+
+async function hydratePluginArtifactImage(block, figure) {
+  const status = document.createElement("span");
+  status.textContent = "Loading same-project Artifact image…";
+  figure.append(status);
+  try {
+    const detail = await invoke("get_artifact_record", { artifactId: block.artifact_id });
+    const artifact = detail?.artifact || detail;
+    if (!artifact || artifact.artifact_id !== block.artifact_id || artifact.project_root !== state.project.root) throw new Error("Artifact ownership changed");
+    if (artifact.media_type !== block.media_type || !artifact.output_path) throw new Error("Artifact media type is unavailable");
+    const viewed = await invoke("viewer_read_file", { path: artifact.output_path });
+    if (viewed.project_root !== state.project.root || viewed.media_type !== block.media_type || viewed.content_encoding !== "base64") throw new Error("Artifact Viewer response is stale");
+    const image = document.createElement("img");
+    image.alt = pluginViewerBoundedText(block.alt, 1024, "Artifact alt text");
+    image.src = `data:${block.media_type};base64,${viewed.content}`;
+    figure.replaceChildren(image);
+  } catch (error) {
+    status.textContent = reportUiFailure("load plugin Viewer Artifact", error, "The referenced Artifact image is unavailable.");
+    status.className = "viewer-error";
+  }
+}
+
+function renderPluginViewerDocument(documentValue, target) {
+  const encoded = new TextEncoder().encode(JSON.stringify(documentValue || {}));
+  if (encoded.length > 1024 * 1024) throw new Error("ViewerDocument exceeds 1 MiB.");
+  if (documentValue?.contract !== "rho.plugin_viewer_document.v1" || !Array.isArray(documentValue.blocks) || documentValue.blocks.length > 128) {
+    throw new Error("Plugin Viewer returned an invalid ViewerDocument contract.");
+  }
+  const article = document.createElement("article");
+  article.className = "plugin-viewer-document";
+  for (const block of documentValue.blocks) {
+    if (!block || typeof block.kind !== "string") throw new Error("ViewerDocument block is invalid.");
+    if (block.kind === "text") {
+      const text = document.createElement("p");
+      text.className = "plugin-viewer-text";
+      text.textContent = pluginViewerBoundedText(block.text, 64 * 1024, "Text block");
+      article.append(text);
+    } else if (block.kind === "code") {
+      const pre = document.createElement("pre");
+      pre.className = "plugin-viewer-code";
+      const code = document.createElement("code");
+      code.textContent = pluginViewerBoundedText(block.code, 64 * 1024, "Code block");
+      if (block.language) code.dataset.language = String(block.language).slice(0, 32);
+      pre.append(code);
+      article.append(pre);
+    } else if (block.kind === "key_value") {
+      if (!Array.isArray(block.items) || block.items.length > 128) throw new Error("ViewerDocument key/value block is invalid.");
+      const list = document.createElement("dl");
+      list.className = "plugin-viewer-key-value";
+      for (const item of block.items) {
+        const key = document.createElement("dt");
+        key.textContent = pluginViewerBoundedText(item?.key, 1024, "Key");
+        const value = document.createElement("dd");
+        value.textContent = pluginViewerBoundedText(item?.value, 64 * 1024, "Value");
+        list.append(key, value);
+      }
+      article.append(list);
+    } else if (block.kind === "table") {
+      if (!Array.isArray(block.columns) || !block.columns.length || block.columns.length > 100 || !Array.isArray(block.rows) || block.rows.length > 500) throw new Error("ViewerDocument table is outside its bounds.");
+      const wrapper = document.createElement("div");
+      wrapper.className = "plugin-viewer-table-wrap";
+      const table = document.createElement("table");
+      table.className = "plugin-viewer-table";
+      const head = document.createElement("thead");
+      const heading = document.createElement("tr");
+      for (const column of block.columns) {
+        const th = document.createElement("th");
+        th.scope = "col";
+        th.textContent = pluginViewerBoundedText(column, 1024, "Table column");
+        heading.append(th);
+      }
+      head.append(heading);
+      const body = document.createElement("tbody");
+      for (const row of block.rows) {
+        if (!Array.isArray(row) || row.length !== block.columns.length) throw new Error("ViewerDocument row width is invalid.");
+        const tr = document.createElement("tr");
+        for (const cell of row) {
+          const td = document.createElement("td");
+          td.textContent = pluginViewerBoundedText(cell, 64 * 1024, "Table cell");
+          tr.append(td);
+        }
+        body.append(tr);
+      }
+      table.append(head, body);
+      wrapper.append(table);
+      article.append(wrapper);
+    } else if (block.kind === "notice") {
+      if (!["info", "warning", "error"].includes(block.tone)) throw new Error("ViewerDocument notice tone is invalid.");
+      const notice = document.createElement("div");
+      notice.className = `plugin-viewer-notice ${block.tone}`;
+      notice.textContent = pluginViewerBoundedText(block.text, 64 * 1024, "Notice");
+      article.append(notice);
+    } else if (block.kind === "artifact_image_ref") {
+      if (!["image/png", "image/jpeg", "image/gif", "image/webp"].includes(block.media_type)) throw new Error("ViewerDocument Artifact media type is invalid.");
+      const figure = document.createElement("figure");
+      figure.className = "plugin-viewer-artifact";
+      article.append(figure);
+      void hydratePluginArtifactImage(block, figure);
+    } else {
+      throw new Error(`Unsupported ViewerDocument block: ${block.kind}`);
+    }
+  }
+  target.append(article);
+}
+
 function viewerRenderPreview() {
   const target = $("#viewerPreviewContent");
   target.replaceChildren();
@@ -4676,7 +5307,10 @@ function viewerRenderPreview() {
     return;
   }
   try {
-    if (viewer.kind === "plot") {
+    if (viewer.kind === "plugin") {
+      renderPluginViewerDocument(viewer.pluginDocument, target);
+      $("#viewerPreviewStatus").textContent = "trusted block renderer";
+    } else if (viewer.kind === "plot") {
       const image = document.createElement("img");
       image.className = "plot-image";
       image.alt = viewer.title || "R plot";
@@ -4747,10 +5381,11 @@ function renderViewer() {
   viewerRegion.classList.add(`viewer-mode-${viewer.mode}`);
   $(".workspace").classList.toggle("viewer-open", viewer.open);
   $("#viewerTitle").textContent = viewer.title || "No output selected";
-  $("#viewerMeta").textContent = viewer.open ? [viewerTypeLabel(viewer.kind, viewer.mediaType), viewer.path || ""].filter(Boolean).join(" · ") : "";
+  $("#viewerMeta").textContent = viewer.open ? [viewerTypeLabel(viewer.kind, viewer.mediaType), viewer.kind === "plugin" ? viewer.pluginOrigin : viewer.path || ""].filter(Boolean).join(" · ") : "";
   $("#viewerSourcePath").textContent = viewer.sourcePath || viewer.path || "";
   $("#viewerSourceContent").textContent = viewer.sourceContent || viewer.content || "";
   const sourceIsActiveDocument = Boolean(viewer.sourcePath && viewer.sourcePath === state.activeDocument);
+  $("#viewerPaneMode").classList.toggle("hidden", viewer.kind === "plugin");
   $("#viewerOpenSource").classList.toggle("hidden", !viewer.sourcePath || sourceIsActiveDocument);
   $("#viewerOpenSource").disabled = !viewer.sourcePath || sourceIsActiveDocument;
   for (const button of $$('[data-viewer-mode]')) {
@@ -4762,7 +5397,7 @@ function renderViewer() {
 }
 
 function closeViewer() {
-  state.viewer = { ...state.viewer, open: false, busy: false, error: null, notice: null };
+  state.viewer = { ...state.viewer, open: false, busy: false, error: null, notice: null, pluginDocument: null, pluginOrigin: null };
   renderViewer();
 }
 
@@ -4782,6 +5417,8 @@ async function openViewer(input) {
     sourceContent: input.sourceContent || "",
     content: "",
     mediaType: input.mediaType || null,
+    pluginDocument: null,
+    pluginOrigin: null,
   };
   state.viewer = viewer;
   renderViewer();
@@ -6074,6 +6711,9 @@ function prettyStatus(status) {
     cancelled: "Cancelled",
     interrupted: "Interrupted",
     crashed: "Crashed",
+    uninstalled: "Uninstalled",
+    recovery_required: "Recovery required",
+    uninstalled: "Uninstalled",
   }[status] || status || "Unknown";
 }
 
@@ -14978,8 +15618,64 @@ async function runDataViewerRefreshMockProbe() {
 async function maybeApplyPreviewScenario() {
   if (state.previewScenarioApplied || isDesktop) return;
   const scenario = previewParams.get("preview");
-  if (!["agent-first-direct", "interface-shell", "console-logs", "git-review", "wp2-data-viewer", "wp3-artifacts", "environment-lockfile", "environment-package", "local-help", "installed-help", "console-help", "project-references", "lint-quick-fix", "agent-help-link", "editor-refactor", "editor-format", "evidence-claims", "usability-problems", "usability-save", "model-settings"].includes(scenario)) return;
+  if (!["agent-first-direct", "interface-shell", "console-logs", "git-review", "wp2-data-viewer", "wp3-artifacts", "environment-lockfile", "environment-package", "local-help", "installed-help", "console-help", "project-references", "lint-quick-fix", "agent-help-link", "editor-refactor", "editor-format", "evidence-claims", "usability-problems", "usability-save", "model-settings", "workspace-plugins"].includes(scenario)) return;
   state.previewScenarioApplied = true;
+  if (scenario === "workspace-plugins") {
+    const pluginState = previewParams.get("state") || "default";
+    if (pluginState === "empty") mockWorkspacePlugins.splice(0);
+    if (["enabling", "update-pending", "update-confirm", "blocked", "crashed", "recovery-required"].includes(pluginState) && mockWorkspacePlugins[0]) {
+      const status = pluginState === "update-confirm" ? "update_pending" : pluginState.replace("-", "_");
+      mockWorkspacePlugins[0].status = status;
+      mockWorkspacePlugins[0].desired_state = "enabled";
+      mockWorkspacePlugins[0].observed_state = status === "enabling" ? "activating" : status;
+      mockWorkspacePlugins[0].transition_id = "transition.enable.preview";
+      if (status === "update_pending") mockWorkspacePlugins[0].accepted_digest = "b".repeat(64);
+      mockWorkspacePlugins[0].message = status === "update_pending"
+        ? "The package digest changed. Update review is not available until the trusted update slice."
+        : status === "blocked"
+          ? "The plugin is blocked and remains non-routable pending trusted recovery."
+          : status === "crashed"
+            ? "The plugin crashed and remains non-routable. Use trusted Retry to create fresh authority."
+          : status === "recovery_required"
+            ? "Rho could not prove one exact lifecycle recovery step. The plugin remains non-routable and no completion is claimed."
+          : "The durable enable transition has not completed; no enabled result is claimed.";
+    }
+    if (pluginState === "rollback-confirm" && mockWorkspacePlugins[0]) {
+      mockWorkspacePlugins[0].status = "enabled";
+      mockWorkspacePlugins[0].desired_state = "enabled";
+      mockWorkspacePlugins[0].observed_state = "active";
+      mockWorkspacePlugins[0].accepted_digest = mockWorkspacePlugins[0].package_digest;
+      mockWorkspacePlugins[0].rollback_digest = "b".repeat(64);
+      mockWorkspacePlugins[0].transition_id = "transition.upgrade.preview";
+    }
+    await openWorkspacePluginDialog();
+    if (pluginState === "rollback-confirm" && mockWorkspacePlugins[0]) {
+      reviewWorkspacePluginRollback(mockWorkspacePlugins[0].plugin_id);
+    } else if (pluginState === "update-confirm" && mockWorkspacePlugins[0]) {
+      reviewWorkspacePluginUpdate(mockWorkspacePlugins[0].plugin_id);
+    } else if (["permission", "malicious-text"].includes(pluginState) && mockWorkspacePlugins[0]) {
+      await requestWorkspacePluginEnable(mockWorkspacePlugins[0].plugin_id);
+    } else if (["active", "contributions", "palette", "panel", "viewer", "uninstall-confirm", "uninstalled"].includes(pluginState) && mockWorkspacePlugins[0]) {
+      await requestWorkspacePluginEnable(mockWorkspacePlugins[0].plugin_id);
+      await respondWorkspacePluginPermission("allow_project");
+      state.plugins.busy = false;
+      $("#pluginGrantSection").open = true;
+      if (pluginState === "uninstall-confirm") {
+        reviewWorkspacePluginUninstall(mockWorkspacePlugins[0].plugin_id);
+      } else if (pluginState === "uninstalled") {
+        reviewWorkspacePluginUninstall(mockWorkspacePlugins[0].plugin_id);
+        await confirmWorkspacePluginUninstall();
+      } else if (pluginState === "viewer") {
+        await invokeTrustedPluginContribution("ui.viewer.csv_summary", "viewer");
+      } else if (pluginState === "palette") {
+        openPluginCommandPalette();
+      } else if (pluginState === "panel") {
+        await invokeTrustedPluginContribution("ui.panel.csv_details", "panel");
+      }
+    }
+    requestAnimationFrame(() => recordPreviewLayoutEvidence());
+    return;
+  }
   if (scenario === "model-settings") {
     const modelSettingsPreviewState = previewParams.get("state") || "default";
     if (modelSettingsPreviewState === "empty") {
@@ -15957,13 +16653,51 @@ function rectsOverlap(a, b) {
 
 function recordPreviewLayoutEvidence() {
   const scenario = previewParams.get("preview");
-  if (!["agent-first-direct", "interface-shell", "console-logs", "git-review", "wp2-data-viewer", "wp3-artifacts", "environment-lockfile", "environment-package", "local-help", "installed-help", "console-help", "project-references", "lint-quick-fix", "agent-help-link", "editor-refactor", "editor-format", "evidence-claims", "usability-problems", "model-settings"].includes(scenario)) return;
+  if (!["agent-first-direct", "interface-shell", "console-logs", "git-review", "wp2-data-viewer", "wp3-artifacts", "environment-lockfile", "environment-package", "local-help", "installed-help", "console-help", "project-references", "lint-quick-fix", "agent-help-link", "editor-refactor", "editor-format", "evidence-claims", "usability-problems", "model-settings", "workspace-plugins"].includes(scenario)) return;
   let target = $("#previewEvidence");
   if (!target) {
     target = document.createElement("pre");
     target.id = "previewEvidence";
     target.hidden = true;
     document.body.append(target);
+  }
+  if (scenario === "workspace-plugins") {
+    const dialog = rectEvidence($("#pluginDialog .plugin-dialog-surface"));
+    const permission = !$("#pluginPermissionView").classList.contains("hidden");
+    const evidence = {
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      dialog,
+      dialog_within_viewport: Boolean(dialog)
+        && dialog.left >= 0 && dialog.top >= 0
+        && dialog.right <= window.innerWidth && dialog.bottom <= window.innerHeight,
+      permission_view: permission,
+      uninstall_confirmation: !$("#pluginUninstallView").classList.contains("hidden"),
+      update_confirmation: !$("#pluginUpdateView").classList.contains("hidden"),
+      update_confirmation_has_exact_digests: $("#pluginUpdateIdentity").textContent.includes("Accepted digest") && $("#pluginUpdateIdentity").textContent.includes("Candidate digest"),
+      update_confirmation_disclaims_marketplace: $("#pluginUpdateView").textContent.toLowerCase().includes("not a marketplace"),
+      rollback_confirmation: !$("#pluginRollbackView").classList.contains("hidden"),
+      rollback_confirmation_has_exact_digests: $("#pluginRollbackIdentity").textContent.includes("Current digest") && $("#pluginRollbackIdentity").textContent.includes("Rollback target"),
+      rollback_confirmation_says_fresh: $("#pluginRollbackView").textContent.toLowerCase().includes("fresh"),
+      uninstall_confirmation_has_exact_directory: $("#pluginUninstallIdentity").textContent.includes(".rho/plugins/"),
+      uninstall_confirmation_says_recoverable: $("#pluginUninstallView").textContent.toLowerCase().includes("recoverable"),
+      plugin_cards: $$("#pluginList .plugin-card").length,
+      contribution_rows: $$("#pluginContributionList .plugin-contribution-row").length,
+      palette_rows: $$("#pluginCommandPaletteList .plugin-command-palette-item").length,
+      grant_rows: $$("#pluginGrantList .plugin-grant-row").length,
+      raw_handle_exposed: $("#pluginDialog").textContent.includes("handle."),
+      purpose_rendered_as_text: !permission || !$("#pluginPermissionPurpose").querySelector("script, img, svg"),
+      active_modal_count: $$('[role="dialog"][aria-modal="true"]:not(.hidden)').length,
+      plugin_viewer_open: state.viewer.open && state.viewer.kind === "plugin",
+      plugin_palette_open: state.plugins.commandPaletteOpen,
+      plugin_panel_open: !$("#pluginPanelSlot").classList.contains("hidden"),
+      plugin_panel_script_elements: $$("#pluginPanelContent script, #pluginPanelContent iframe").length,
+      plugin_panel_text_preserved: $("#pluginPanelContent").textContent.includes("<script>text only</script>"),
+      plugin_viewer_script_elements: $$("#viewerPreviewContent script, #viewerPreviewContent iframe").length,
+      plugin_viewer_text_preserved: $("#viewerPreviewContent").textContent.includes("<script>text only</script>"),
+    };
+    target.textContent = JSON.stringify(evidence);
+    window.__rhoPreviewEvidence = evidence;
+    return;
   }
   if (scenario === "console-logs") {
     const lastEntry = $("#consoleOutput .terminal-entry:last-child");
@@ -20426,6 +21160,7 @@ function runWorkbenchMenuCommand(command) {
     "show-logs": () => switchDockTab("logs"),
     "show-plots": () => switchDockTab("plots"),
     "show-problems": () => switchDockTab("problems"),
+    "workspace-plugins": () => openWorkspacePluginDialog($('[data-menu-trigger="view"]')),
     "reset-panel-sizes": () => resetWorkbenchPanelSizes(),
     "check-updates": () => openUpdateDialog(),
     "about-rho": () => openAboutDialog(),
@@ -20474,6 +21209,862 @@ function setDefinitionList(element, entries) {
     dd.textContent = description || "Unavailable";
     element.append(dt, dd);
   }
+}
+
+const PLUGIN_PERMISSION_CONSEQUENCES = {
+  "project.fs.read": "Read only project files that match the listed relative paths, up to the displayed byte limit. This does not allow writing, watching, listing arbitrary directories, or reading outside the project.",
+  "workspace.r.inspect": "Inspect only bounded Workspace R metadata or previews named in the constraints. This does not allow arbitrary R evaluation or mutation.",
+  "network.fetch": "Send bounded HTTPS GET or HEAD requests only to the listed hosts. Credentials, cookies, proxy credentials, and arbitrary redirects are not included.",
+};
+
+function setPluginDialogError(message = "") {
+  const banner = $("#pluginDialogError");
+  banner.textContent = message;
+  banner.classList.toggle("hidden", !message);
+}
+
+function pluginStateLabel(status) {
+  return {
+    disabled: "Disabled",
+    permission_required: "Permission required",
+    enabled: "Enabled",
+    enabling: "Enabling",
+    denied: "Denied",
+    stale_digest: "Package changed",
+    update_pending: "Update pending",
+    blocked: "Blocked",
+    crashed: "Crashed",
+    host_unavailable: "Host unavailable",
+  }[status] || String(status || "Unavailable").replaceAll("_", " ");
+}
+
+function renderWorkspacePlugins() {
+  const response = state.plugins.list;
+  const list = $("#pluginList");
+  list.replaceChildren();
+  $("#pluginProjectLabel").textContent = response?.project_root || state.project.root || "No active project";
+  const plugins = response?.plugins || [];
+  if (!plugins.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-tree";
+    empty.textContent = response?.status === "none_discovered"
+      ? "No project-local plugins were discovered in .rho/plugins."
+      : "Workspace plugins are unavailable.";
+    list.append(empty);
+  }
+  for (const plugin of plugins) {
+    const card = document.createElement("article");
+    card.className = "plugin-card";
+    const header = document.createElement("div");
+    header.className = "plugin-card-header";
+    const title = document.createElement("div");
+    title.className = "plugin-card-title";
+    const strong = document.createElement("strong");
+    strong.textContent = plugin.name;
+    const id = document.createElement("span");
+    id.textContent = `${plugin.plugin_id} · ${plugin.version}`;
+    title.append(strong, id);
+    const chip = document.createElement("span");
+    chip.className = `plugin-state-chip ${plugin.status}`;
+    chip.textContent = pluginStateLabel(plugin.status);
+    header.append(title, chip);
+    const meta = document.createElement("div");
+    meta.className = "plugin-card-meta";
+    meta.textContent = `Wasm · digest ${plugin.short_digest} · ${plugin.permission_count} requested permission${plugin.permission_count === 1 ? "" : "s"} · desired ${plugin.desired_state || "disabled"} · observed ${plugin.observed_state || "discovered"}`;
+    const actions = document.createElement("div");
+    actions.className = "plugin-card-actions";
+    if (["enabled", "blocked"].includes(plugin.status)) {
+      const disable = document.createElement("button");
+      disable.type = "button";
+      disable.textContent = "Disable";
+      disable.dataset.pluginDisable = plugin.plugin_id;
+      disable.disabled = state.plugins.busy;
+      actions.append(disable);
+    } else if (plugin.status === "crashed") {
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.className = "primary";
+      retry.textContent = "Retry";
+      retry.dataset.pluginRetry = plugin.plugin_id;
+      retry.disabled = state.plugins.busy;
+      actions.append(retry);
+    } else if (!["enabling", "update_pending", "blocked", "crashed", "uninstalled"].includes(plugin.status)) {
+      const enable = document.createElement("button");
+      enable.type = "button";
+      enable.className = "primary";
+      enable.textContent = plugin.status === "permission_required" ? "Review" : "Enable";
+      enable.dataset.pluginEnable = plugin.plugin_id;
+      enable.disabled = state.plugins.busy || plugin.runtime_kind !== "wasm";
+      actions.append(enable);
+    }
+    const exactAcceptedPackage = plugin.accepted_digest && plugin.accepted_digest === plugin.package_digest;
+    if (exactAcceptedPackage && !["enabling", "update_pending", "blocked", "crashed", "uninstalled"].includes(plugin.status)) {
+      const uninstall = document.createElement("button");
+      uninstall.type = "button";
+      uninstall.textContent = "Uninstall";
+      uninstall.dataset.pluginUninstall = plugin.plugin_id;
+      uninstall.disabled = state.plugins.busy;
+      actions.append(uninstall);
+    }
+    if (plugin.status === "uninstalled" && plugin.recoverable_tombstone_id) {
+      const restore = document.createElement("button");
+      restore.type = "button";
+      restore.className = "primary";
+      restore.textContent = "Restore disabled";
+      restore.dataset.pluginRestore = plugin.recoverable_tombstone_id;
+      restore.disabled = state.plugins.busy;
+      actions.append(restore);
+    }
+    if (plugin.status === "update_pending" && plugin.accepted_digest && plugin.accepted_digest !== plugin.package_digest) {
+      const update = document.createElement("button");
+      update.type = "button";
+      update.className = "primary";
+      update.textContent = "Update";
+      update.dataset.pluginUpdate = plugin.plugin_id;
+      update.disabled = state.plugins.busy;
+      actions.append(update);
+    }
+    if (plugin.status === "enabled" && plugin.rollback_digest && plugin.rollback_digest !== plugin.accepted_digest) {
+      const rollback = document.createElement("button");
+      rollback.type = "button";
+      rollback.textContent = "Roll back";
+      rollback.dataset.pluginRollback = plugin.plugin_id;
+      rollback.disabled = state.plugins.busy;
+      actions.append(rollback);
+    }
+    if (plugin.message) {
+      const message = document.createElement("span");
+      message.className = "plugin-card-meta";
+      message.textContent = plugin.message;
+      actions.prepend(message);
+    }
+    card.append(header, meta, actions);
+    list.append(card);
+  }
+  for (const failure of response?.failures || []) {
+    const card = document.createElement("article");
+    card.className = "plugin-card";
+    const title = document.createElement("strong");
+    title.textContent = "Plugin package rejected";
+    const path = document.createElement("div");
+    path.className = "plugin-card-meta";
+    path.textContent = failure.path;
+    const reason = document.createElement("div");
+    reason.className = "plugin-card-meta";
+    reason.textContent = failure.reason;
+    card.append(title, path, reason);
+    list.append(card);
+  }
+}
+
+function renderPluginContributions() {
+  const section = $("#pluginContributionSection");
+  const list = $("#pluginContributionList");
+  const contributions = (state.plugins.contributions || []).filter((item) => ["command", "viewer", "panel"].includes(item.kind));
+  section.classList.toggle("hidden", !contributions.length);
+  $("#pluginContributionCount").textContent = String(contributions.length);
+  list.replaceChildren();
+  for (const contribution of contributions) {
+    const row = document.createElement("article");
+    row.className = "plugin-contribution-row";
+    const description = document.createElement("div");
+    const label = document.createElement("strong");
+    label.textContent = contribution.label;
+    const purpose = document.createElement("span");
+    purpose.textContent = `${contribution.purpose} · ${contribution.plugin_id} · digest ${contribution.short_digest}`;
+    const status = document.createElement("span");
+    status.textContent = contribution.available
+      ? "Ready in this exact project"
+      : contribution.status === "host_unavailable"
+        ? "Plugin host is unavailable"
+        : "Required permission is unavailable";
+    description.append(label, purpose, status);
+    const action = document.createElement("button");
+    action.type = "button";
+    action.textContent = contribution.kind === "command" ? "Run" : contribution.kind === "panel" ? "Load" : "Open";
+    action.dataset.pluginContribution = contribution.contribution_id;
+    action.dataset.pluginContributionKind = contribution.kind;
+    action.disabled = state.plugins.busy || !contribution.available || !contribution.accepts_empty_input;
+    if (!contribution.accepts_empty_input) action.title = "This contribution requires typed input that this trusted surface does not yet collect.";
+    row.append(description, action);
+    list.append(row);
+  }
+}
+
+function renderPluginCommandPalette() {
+  const list = $("#pluginCommandPaletteList");
+  const query = state.plugins.commandPaletteQuery.trim().toLowerCase();
+  const commands = (state.plugins.contributions || [])
+    .filter((item) => item.kind === "command")
+    .filter((item) => !query || `${item.label} ${item.purpose} ${item.plugin_id}`.toLowerCase().includes(query));
+  list.replaceChildren();
+  if (!commands.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-tree";
+    empty.textContent = "No matching Plugin Commands are active in this project.";
+    list.append(empty);
+    return;
+  }
+  for (const command of commands) {
+    const item = document.createElement("article");
+    item.className = "plugin-command-palette-item";
+    item.setAttribute("role", "option");
+    const description = document.createElement("div");
+    const label = document.createElement("strong");
+    label.textContent = command.label;
+    const purpose = document.createElement("span");
+    purpose.textContent = `${command.purpose} · ${command.plugin_id} · digest ${command.short_digest}`;
+    description.append(label, purpose);
+    const run = document.createElement("button");
+    run.type = "button";
+    run.textContent = "Run";
+    run.dataset.pluginPaletteCommand = command.contribution_id;
+    run.disabled = state.plugins.busy || !command.available || !command.accepts_empty_input;
+    item.append(description, run);
+    list.append(item);
+  }
+}
+
+function openPluginCommandPalette() {
+  state.plugins.commandPaletteOpen = true;
+  state.plugins.commandPaletteQuery = "";
+  $("#pluginDialog").classList.add("hidden");
+  state.plugins.open = false;
+  $("#pluginCommandPaletteSearch").value = "";
+  $("#pluginCommandPalette").classList.remove("hidden");
+  renderPluginCommandPalette();
+  $("#pluginCommandPaletteSearch").focus();
+}
+
+function closePluginCommandPalette() {
+  $("#pluginCommandPalette").classList.add("hidden");
+  state.plugins.commandPaletteOpen = false;
+  $("#pluginDialog").classList.remove("hidden");
+  state.plugins.open = true;
+  $("#pluginCommandPaletteOpen").focus();
+}
+
+function trapPluginCommandPaletteFocus(event) {
+  const dialog = $("#pluginCommandPalette");
+  if (dialog.classList.contains("hidden")) return;
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closePluginCommandPalette();
+    return;
+  }
+  if (event.key !== "Tab") return;
+  const focusable = Array.from(dialog.querySelectorAll("input, button:not([disabled]), [tabindex]:not([tabindex='-1'])"))
+    .filter((element) => element.getClientRects().length > 0);
+  if (!focusable.length) return;
+  const current = focusable.indexOf(document.activeElement);
+  const next = current < 0
+    ? (event.shiftKey ? focusable.length - 1 : 0)
+    : (current + (event.shiftKey ? -1 : 1) + focusable.length) % focusable.length;
+  event.preventDefault();
+  focusable[next].focus();
+}
+
+function renderPluginGrants() {
+  const list = $("#pluginGrantList");
+  list.replaceChildren();
+  const grants = state.plugins.grants || [];
+  $("#pluginGrantCount").textContent = String(grants.length);
+  if (!grants.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-tree";
+    empty.textContent = "No plugin grants have been recorded for this project.";
+    list.append(empty);
+    return;
+  }
+  for (const grant of grants) {
+    const row = document.createElement("article");
+    row.className = "plugin-grant-row";
+    const header = document.createElement("div");
+    header.className = "plugin-grant-header";
+    const title = document.createElement("strong");
+    title.textContent = grant.permission;
+    const chip = document.createElement("span");
+    chip.className = `plugin-state-chip ${grant.live_handle ? "enabled" : ""}`;
+    chip.textContent = grant.live_handle
+      ? "Active handle"
+      : grant.status === "active"
+        ? "Active grant · not live"
+        : pluginStateLabel(grant.status);
+    header.append(title, chip);
+    const meta = document.createElement("div");
+    meta.className = "plugin-grant-meta";
+    meta.textContent = `${grant.plugin_id} · ${grant.grant_source === "allow_once" ? "once" : "this project"} · expires ${new Date(grant.expires_at).toLocaleString()}`;
+    row.append(header, meta);
+    if (grant.status === "active") {
+      const actions = document.createElement("div");
+      actions.className = "plugin-grant-actions";
+      const revoke = document.createElement("button");
+      revoke.type = "button";
+      revoke.textContent = "Revoke";
+      revoke.dataset.pluginGrantRevoke = grant.grant_id;
+      revoke.disabled = state.plugins.busy;
+      actions.append(revoke);
+      row.append(actions);
+    }
+    list.append(row);
+  }
+}
+
+function showPluginListView() {
+  state.plugins.currentRequestId = null;
+  state.plugins.uninstallPluginId = null;
+  state.plugins.updatePluginId = null;
+  state.plugins.rollbackPluginId = null;
+  $("#pluginListView").classList.remove("hidden");
+  $("#pluginPermissionView").classList.add("hidden");
+  $("#pluginUninstallView").classList.add("hidden");
+  $("#pluginUpdateView").classList.add("hidden");
+  $("#pluginRollbackView").classList.add("hidden");
+  $("#pluginDialogTitle").textContent = "Workspace Plugins";
+  $("#pluginDialogSubtitle").textContent = "Project-local code is disabled until you explicitly enable it.";
+}
+
+function reviewWorkspacePluginRollback(pluginId) {
+  const plugin = (state.plugins.list?.plugins || []).find((item) => item.plugin_id === pluginId);
+  if (!plugin || plugin.status !== "enabled" || !plugin.rollback_digest || plugin.rollback_digest === plugin.accepted_digest) {
+    setPluginDialogError("The exact cached Rollback target is no longer current.");
+    return;
+  }
+  state.plugins.rollbackPluginId = pluginId;
+  $("#pluginListView").classList.add("hidden");
+  $("#pluginPermissionView").classList.add("hidden");
+  $("#pluginUninstallView").classList.add("hidden");
+  $("#pluginUpdateView").classList.add("hidden");
+  $("#pluginRollbackView").classList.remove("hidden");
+  $("#pluginDialogTitle").textContent = "Review cached plugin Rollback";
+  $("#pluginDialogSubtitle").textContent = "Only the trusted Rho shell can select the durable rollback pointer.";
+  setDefinitionList($("#pluginRollbackIdentity"), [
+    ["Plugin", `${plugin.plugin_id} ${plugin.version}`],
+    ["Project", state.plugins.list?.project_root],
+    ["Current digest", plugin.accepted_digest],
+    ["Rollback target", plugin.rollback_digest],
+  ]);
+  $("#pluginRollbackConfirm").disabled = false;
+  $("#pluginRollbackCancel").disabled = false;
+  $("#pluginRollbackCancel").focus();
+}
+
+async function confirmWorkspacePluginRollback() {
+  if (state.plugins.busy || !state.plugins.rollbackPluginId) return;
+  const plugin = (state.plugins.list?.plugins || []).find((item) => item.plugin_id === state.plugins.rollbackPluginId);
+  if (!plugin) return;
+  state.plugins.busy = true;
+  $("#pluginRollbackConfirm").disabled = true;
+  $("#pluginRollbackCancel").disabled = true;
+  setPluginDialogError("");
+  try {
+    const result = await invoke("rollback_workspace_plugin", {
+      input: {
+        pluginId: plugin.plugin_id,
+        expectedCurrentDigest: plugin.accepted_digest,
+        rollbackDigest: plugin.rollback_digest,
+        expectedProjectRevision: state.plugins.list?.project_revision,
+      },
+    });
+    if (result.status === "permission_required") {
+      const requests = await invoke("list_plugin_permission_requests", { status: "pending" });
+      const request = requests.find((item) => item.plugin_id === plugin.plugin_id && item.package_digest === plugin.rollback_digest);
+      if (request) await reviewPluginPermission(request.request_id);
+      else throw new Error("The fresh Rollback permission request could not be loaded.");
+    } else {
+      showPluginListView();
+      await loadWorkspacePluginSurface();
+      toast(result.message || "Workspace plugin rolled back.");
+    }
+  } catch (error) {
+    setPluginDialogError(userFacingError(error, "The exact cached plugin Rollback did not complete."));
+  } finally {
+    state.plugins.busy = false;
+    $("#pluginRollbackConfirm").disabled = false;
+    $("#pluginRollbackCancel").disabled = false;
+    renderWorkspacePlugins();
+  }
+}
+
+function reviewWorkspacePluginUpdate(pluginId) {
+  const plugin = (state.plugins.list?.plugins || []).find((item) => item.plugin_id === pluginId);
+  if (!plugin || plugin.status !== "update_pending" || !plugin.accepted_digest || plugin.accepted_digest === plugin.package_digest) {
+    setPluginDialogError("The exact local Update candidate is no longer current.");
+    return;
+  }
+  state.plugins.updatePluginId = pluginId;
+  $("#pluginListView").classList.add("hidden");
+  $("#pluginPermissionView").classList.add("hidden");
+  $("#pluginUninstallView").classList.add("hidden");
+  $("#pluginUpdateView").classList.remove("hidden");
+  $("#pluginRollbackView").classList.add("hidden");
+  $("#pluginDialogTitle").textContent = "Review local plugin Update";
+  $("#pluginDialogSubtitle").textContent = "Only the trusted Rho shell can replace the accepted runtime.";
+  setDefinitionList($("#pluginUpdateIdentity"), [
+    ["Plugin", `${plugin.plugin_id} ${plugin.version}`],
+    ["Project", state.plugins.list?.project_root],
+    ["Accepted digest", plugin.accepted_digest],
+    ["Candidate digest", plugin.package_digest],
+  ]);
+  $("#pluginUpdateConfirm").disabled = false;
+  $("#pluginUpdateCancel").disabled = false;
+  $("#pluginUpdateCancel").focus();
+}
+
+async function confirmWorkspacePluginUpdate() {
+  if (state.plugins.busy || !state.plugins.updatePluginId) return;
+  const plugin = (state.plugins.list?.plugins || []).find((item) => item.plugin_id === state.plugins.updatePluginId);
+  if (!plugin) return;
+  state.plugins.busy = true;
+  $("#pluginUpdateConfirm").disabled = true;
+  $("#pluginUpdateCancel").disabled = true;
+  setPluginDialogError("");
+  try {
+    const result = await invoke("accept_workspace_plugin_update", {
+      input: {
+        pluginId: plugin.plugin_id,
+        expectedOldDigest: plugin.accepted_digest,
+        candidateDigest: plugin.package_digest,
+        expectedProjectRevision: state.plugins.list?.project_revision,
+      },
+    });
+    if (result.status === "permission_required") {
+      const requests = await invoke("list_plugin_permission_requests", { status: "pending" });
+      const request = requests.find((item) => item.plugin_id === plugin.plugin_id && item.package_digest === plugin.package_digest);
+      if (request) await reviewPluginPermission(request.request_id);
+      else throw new Error("The fresh Update permission request could not be loaded.");
+    } else {
+      showPluginListView();
+      await loadWorkspacePluginSurface();
+      toast(result.message || "Workspace plugin updated.");
+    }
+  } catch (error) {
+    setPluginDialogError(userFacingError(error, "The exact local plugin Update did not complete."));
+  } finally {
+    state.plugins.busy = false;
+    $("#pluginUpdateConfirm").disabled = false;
+    $("#pluginUpdateCancel").disabled = false;
+    renderWorkspacePlugins();
+  }
+}
+
+function reviewWorkspacePluginUninstall(pluginId) {
+  const plugin = (state.plugins.list?.plugins || []).find((item) => item.plugin_id === pluginId);
+  if (!plugin || !plugin.accepted_digest || plugin.accepted_digest !== plugin.package_digest) {
+    setPluginDialogError("The exact accepted package is no longer available for Uninstall.");
+    return;
+  }
+  state.plugins.uninstallPluginId = pluginId;
+  $("#pluginListView").classList.add("hidden");
+  $("#pluginPermissionView").classList.add("hidden");
+  $("#pluginUninstallView").classList.remove("hidden");
+  $("#pluginUpdateView").classList.add("hidden");
+  $("#pluginRollbackView").classList.add("hidden");
+  $("#pluginDialogTitle").textContent = "Confirm recoverable Uninstall";
+  $("#pluginDialogSubtitle").textContent = "Only the trusted Rho shell can move this exact project package.";
+  setDefinitionList($("#pluginUninstallIdentity"), [
+    ["Plugin", `${plugin.plugin_id} ${plugin.version}`],
+    ["Project", state.plugins.list?.project_root],
+    ["Directory", `.rho/plugins/${plugin.directory_name}`],
+    ["Package", plugin.package_digest],
+  ]);
+  const contributionCount = (state.plugins.contributions || []).filter((item) => item.plugin_id === pluginId && item.available).length;
+  $("#pluginUninstallConsequence").textContent = `${plugin.active_grant_count || 0} active durable grant${plugin.active_grant_count === 1 ? "" : "s"} will be revoked and ${contributionCount} live contribution route${contributionCount === 1 ? "" : "s"} will be removed before the directory moves. The package remains recoverable.`;
+  $("#pluginUninstallConfirm").disabled = false;
+  $("#pluginUninstallCancel").disabled = false;
+  $("#pluginUninstallCancel").focus();
+}
+
+async function confirmWorkspacePluginUninstall() {
+  if (state.plugins.busy || !state.plugins.uninstallPluginId) return;
+  const plugin = (state.plugins.list?.plugins || []).find((item) => item.plugin_id === state.plugins.uninstallPluginId);
+  if (!plugin) return;
+  state.plugins.busy = true;
+  $("#pluginUninstallConfirm").disabled = true;
+  $("#pluginUninstallCancel").disabled = true;
+  setPluginDialogError("");
+  try {
+    const result = await invoke("uninstall_workspace_plugin", {
+      input: {
+        pluginId: plugin.plugin_id,
+        directoryName: plugin.directory_name,
+        packageDigest: plugin.package_digest,
+        expectedProjectRevision: state.plugins.list?.project_revision,
+        confirmed: true,
+      },
+    });
+    showPluginListView();
+    await loadWorkspacePluginSurface();
+    toast(result.message || "Workspace plugin moved to recoverable trash.");
+  } catch (error) {
+    setPluginDialogError(userFacingError(error, "The recoverable workspace plugin Uninstall did not complete."));
+  } finally {
+    state.plugins.busy = false;
+    $("#pluginUninstallConfirm").disabled = false;
+    $("#pluginUninstallCancel").disabled = false;
+    renderWorkspacePlugins();
+  }
+}
+
+async function restoreWorkspacePlugin(tombstoneId) {
+  if (state.plugins.busy) return;
+  state.plugins.busy = true;
+  setPluginDialogError("");
+  renderWorkspacePlugins();
+  try {
+    const result = await invoke("restore_workspace_plugin", {
+      input: {
+        tombstoneId,
+        expectedProjectRevision: state.plugins.list?.project_revision,
+      },
+    });
+    await loadWorkspacePluginSurface();
+    toast(result.message || "Workspace plugin restored disabled.");
+  } catch (error) {
+    setPluginDialogError(userFacingError(error, "The workspace plugin could not be restored."));
+  } finally {
+    state.plugins.busy = false;
+    renderWorkspacePlugins();
+  }
+}
+
+async function loadWorkspacePluginSurface() {
+  setPluginDialogError("");
+  state.plugins.busy = true;
+  state.plugins.contributions = [];
+  clearTrustedPluginPanel();
+  renderWorkspacePlugins();
+  renderPluginContributions();
+  try {
+    const [list, grantList, contributionList] = await Promise.all([
+      invoke("list_workspace_plugins"),
+      invoke("list_plugin_grants"),
+      invoke("list_plugin_contributions"),
+    ]);
+    state.plugins.list = list;
+    state.plugins.grants = grantList?.grants || [];
+    state.plugins.contributions = contributionList?.contributions || [];
+  } catch (error) {
+    setPluginDialogError(userFacingError(error, "Workspace plugins could not be loaded."));
+  } finally {
+    state.plugins.busy = false;
+    renderWorkspacePlugins();
+    renderPluginGrants();
+    renderPluginContributions();
+    if (state.plugins.commandPaletteOpen) renderPluginCommandPalette();
+  }
+}
+
+async function reviewPluginPermission(requestId) {
+  setPluginDialogError("");
+  const request = await invoke("get_plugin_permission_request", { requestId });
+  if (!request || request.status !== "pending") {
+    await loadWorkspacePluginSurface();
+    showPluginListView();
+    return;
+  }
+  state.plugins.currentRequestId = request.request_id;
+  $("#pluginListView").classList.add("hidden");
+  $("#pluginPermissionView").classList.remove("hidden");
+  $("#pluginUninstallView").classList.add("hidden");
+  $("#pluginUpdateView").classList.add("hidden");
+  $("#pluginRollbackView").classList.add("hidden");
+  $("#pluginDialogTitle").textContent = "Review plugin permission";
+  $("#pluginDialogSubtitle").textContent = "Only the trusted Rho shell controls this decision.";
+  setDefinitionList($("#pluginPermissionIdentity"), [
+    ["Plugin", `${request.plugin_id} ${request.plugin_version}`],
+    ["Package", request.package_digest.slice(0, 12)],
+    ["Project", request.project_root],
+    ["Permission", request.permission],
+  ]);
+  let constraints = request.constraints_json;
+  try { constraints = JSON.stringify(JSON.parse(request.constraints_json), null, 2); } catch {}
+  $("#pluginPermissionConstraints").textContent = constraints;
+  $("#pluginPermissionConsequence").textContent = PLUGIN_PERMISSION_CONSEQUENCES[request.permission] || "This permission is not recognized and cannot be approved.";
+  const purpose = String(request.purpose_text || "");
+  $("#pluginPermissionPurpose").textContent = purpose;
+  $("#pluginPermissionPurposeSection").classList.toggle("hidden", !purpose);
+  for (const button of $$(".plugin-permission-actions button")) button.disabled = false;
+  $("#pluginPermissionDeny").focus();
+}
+
+async function requestWorkspacePluginEnable(pluginId) {
+  if (state.plugins.busy) return;
+  state.plugins.busy = true;
+  setPluginDialogError("");
+  renderWorkspacePlugins();
+  try {
+    const result = await invoke("request_workspace_plugin_enable", {
+      pluginId,
+      expectedProjectRevision: state.plugins.list?.project_revision,
+    });
+    if (result.status === "permission_required") {
+      const requests = await invoke("list_plugin_permission_requests", { status: "pending" });
+      state.plugins.pendingRequests = requests;
+      const request = requests.find((item) => item.plugin_id === pluginId);
+      if (request) await reviewPluginPermission(request.request_id);
+      else throw new Error("The durable permission request could not be loaded.");
+    } else {
+      await loadWorkspacePluginSurface();
+      toast(result.message || "Workspace plugin enabled.");
+    }
+  } catch (error) {
+    setPluginDialogError(userFacingError(error, "The workspace plugin could not be enabled."));
+  } finally {
+    state.plugins.busy = false;
+    renderWorkspacePlugins();
+  }
+}
+
+async function disableWorkspacePlugin(pluginId) {
+  if (state.plugins.busy) return;
+  state.plugins.busy = true;
+  setPluginDialogError("");
+  renderWorkspacePlugins();
+  try {
+    const result = await invoke("disable_workspace_plugin", {
+      pluginId,
+      expectedProjectRevision: state.plugins.list?.project_revision,
+    });
+    await loadWorkspacePluginSurface();
+    toast(result.message || "Workspace plugin disabled.", result.status === "completion_uncertain");
+  } catch (error) {
+    setPluginDialogError(userFacingError(error, "The workspace plugin could not be disabled."));
+  } finally {
+    state.plugins.busy = false;
+    renderWorkspacePlugins();
+  }
+}
+
+async function retryWorkspacePlugin(pluginId) {
+  if (state.plugins.busy) return;
+  state.plugins.busy = true;
+  setPluginDialogError("");
+  renderWorkspacePlugins();
+  try {
+    const result = await invoke("retry_workspace_plugin", {
+      pluginId,
+      expectedProjectRevision: state.plugins.list?.project_revision,
+    });
+    if (result.status === "permission_required") {
+      const requests = await invoke("list_plugin_permission_requests", { status: "pending" });
+      const request = requests.find((item) => item.plugin_id === pluginId);
+      if (request) await reviewPluginPermission(request.request_id);
+      else throw new Error("The durable Retry permission request could not be loaded.");
+    } else {
+      await loadWorkspacePluginSurface();
+      toast(result.message || "Workspace plugin restarted.");
+    }
+  } catch (error) {
+    setPluginDialogError(userFacingError(error, "The workspace plugin could not be retried."));
+  } finally {
+    state.plugins.busy = false;
+    renderWorkspacePlugins();
+  }
+}
+
+async function respondWorkspacePluginPermission(decision) {
+  if (state.plugins.busy || !state.plugins.currentRequestId) return;
+  state.plugins.busy = true;
+  for (const button of $$(".plugin-permission-actions button")) button.disabled = true;
+  setPluginDialogError("");
+  try {
+    const result = await invoke("respond_plugin_permission", {
+      input: {
+        requestId: state.plugins.currentRequestId,
+        decision,
+        expectedProjectRevision: state.plugins.list?.project_revision,
+      },
+    });
+    if (result.plugin_status === "permission_required") {
+      const requests = await invoke("list_plugin_permission_requests", { status: "pending" });
+      const next = requests.find((request) => request.plugin_id === result.request.plugin_id);
+      if (next) await reviewPluginPermission(next.request_id);
+      else throw new Error("The next durable permission request could not be loaded.");
+    } else {
+      showPluginListView();
+      await loadWorkspacePluginSurface();
+      $("#pluginRefresh").focus();
+      const message = result.message || (result.plugin_status === "enabled"
+        ? "Workspace plugin enabled."
+        : result.plugin_status === "denied"
+          ? "Plugin permission denied."
+          : "The permission decision was saved, but no live plugin handle is available.");
+      toast(message, !["enabled", "denied"].includes(result.plugin_status));
+    }
+  } catch (error) {
+    setPluginDialogError(userFacingError(error, "The plugin permission decision was not completed."));
+  } finally {
+    state.plugins.busy = false;
+    if (!$("#pluginPermissionView").classList.contains("hidden")) {
+      for (const button of $$(".plugin-permission-actions button")) button.disabled = false;
+    }
+  }
+}
+
+async function revokeWorkspacePluginGrant(grantId) {
+  if (state.plugins.busy) return;
+  state.plugins.busy = true;
+  setPluginDialogError("");
+  try {
+    await invoke("revoke_plugin_grant", { grantId });
+    await loadWorkspacePluginSurface();
+    toast("Plugin grant revoked.");
+  } catch (error) {
+    setPluginDialogError(userFacingError(error, "The plugin grant could not be revoked."));
+  } finally {
+    state.plugins.busy = false;
+  }
+}
+
+function openTrustedPluginViewer(response) {
+  if (response?.project_root !== state.project.root || Number(response?.project_revision) !== Number(state.revision.project_revision)) {
+    throw new Error("The project changed before the Plugin Viewer could open.");
+  }
+  const provenance = response.provenance || {};
+  const origin = [provenance.plugin_id, String(provenance.package_digest || "").slice(0, 12)]
+    .filter(Boolean)
+    .join(" · ");
+  state.viewer = {
+    ...state.viewer,
+    open: true,
+    busy: false,
+    error: null,
+    notice: "Rendered by the trusted Rho shell. All plugin strings are untrusted text.",
+    kind: "plugin",
+    mode: "preview",
+    path: null,
+    title: String(response.document?.title || "Workspace plugin Viewer"),
+    sourcePath: null,
+    sourceContent: "",
+    content: "",
+    mediaType: "application/vnd.rho.plugin-viewer+json",
+    pluginDocument: response.document,
+    pluginOrigin: origin,
+  };
+  closeWorkspacePluginDialog();
+  renderViewer();
+}
+
+function clearTrustedPluginPanel() {
+  state.plugins.panelDocument = null;
+  state.plugins.panelOrigin = "";
+  $("#pluginPanelSlot")?.classList.add("hidden");
+  $("#pluginPanelContent")?.replaceChildren();
+  if ($("#pluginPanelOrigin")) $("#pluginPanelOrigin").textContent = "Untrusted project content";
+}
+
+function renderTrustedPluginPanel(response) {
+  if (response?.project_root !== state.project.root || Number(response?.project_revision) !== Number(state.revision.project_revision)) {
+    throw new Error("The project changed before the Plugin Panel could render.");
+  }
+  const provenance = response.provenance || {};
+  state.plugins.panelDocument = response.document;
+  state.plugins.panelOrigin = [provenance.plugin_id, String(provenance.package_digest || "").slice(0, 12)]
+    .filter(Boolean)
+    .join(" · ");
+  const content = $("#pluginPanelContent");
+  content.replaceChildren();
+  renderPluginViewerDocument(response.document, content);
+  $("#pluginPanelOrigin").textContent = `${state.plugins.panelOrigin} · untrusted project content`;
+  $("#pluginPanelSlot").classList.remove("hidden");
+}
+
+async function invokeTrustedPluginContribution(contributionId, kind) {
+  if (state.plugins.busy) return;
+  const contribution = (state.plugins.contributions || []).find((item) => item.contribution_id === contributionId && item.kind === kind);
+  if (!contribution?.available || !contribution.accepts_empty_input) return;
+  const requestRoot = state.project.root;
+  const requestRevision = state.revision.project_revision;
+  state.plugins.busy = true;
+  renderPluginContributions();
+  setPluginDialogError("");
+  try {
+    if (kind === "panel") {
+      const response = await invoke("get_plugin_panel_document", {
+        contributionId,
+        input: {},
+        expectedProjectRevision: requestRevision,
+      });
+      if (state.project.root !== requestRoot || state.revision.project_revision !== requestRevision) throw new Error("The project changed while loading the Plugin Panel.");
+      renderTrustedPluginPanel(response);
+      return;
+    }
+    if (kind === "viewer") {
+      const response = await invoke("open_plugin_viewer", {
+        contributionId,
+        input: {},
+        expectedProjectRevision: requestRevision,
+      });
+      if (state.project.root !== requestRoot || state.revision.project_revision !== requestRevision) throw new Error("The project changed while opening the Plugin Viewer.");
+      openTrustedPluginViewer(response);
+      return;
+    }
+    const response = await invoke("invoke_plugin_command", {
+      contributionId,
+      input: {},
+      expectedProjectRevision: requestRevision,
+    });
+    if (response?.project_root !== requestRoot || state.project.root !== requestRoot || Number(response?.project_revision) !== Number(requestRevision)) throw new Error("The project changed while running the Plugin Command.");
+    if (response.result?.kind === "notification") {
+      toast(pluginViewerBoundedText(response.result.message, 1024, "Plugin notification"));
+    } else if (response.result?.kind === "viewer_document") {
+      openTrustedPluginViewer({ ...response, document: response.result.document });
+      return;
+    } else if (response.result?.kind === "artifact_ref") {
+      const detail = await invoke("get_artifact_record", { artifactId: response.result.artifact_id });
+      const artifact = detail?.artifact || detail;
+      if (!artifact || artifact.project_root !== requestRoot || !artifact.output_path) throw new Error("The same-project Artifact is unavailable.");
+      closeWorkspacePluginDialog();
+      await openViewer({ kind: "artifact", path: artifact.output_path, title: artifact.output_path, artifactId: artifact.artifact_id });
+      return;
+    } else {
+      throw new Error("Plugin Command returned an unsupported result kind.");
+    }
+    await loadWorkspacePluginSurface();
+  } catch (error) {
+    setPluginDialogError(userFacingError(error, "The plugin contribution could not be completed."));
+  } finally {
+    state.plugins.busy = false;
+    renderPluginContributions();
+  }
+}
+
+function closeWorkspacePluginDialog() {
+  $("#pluginDialog").classList.add("hidden");
+  state.plugins.open = false;
+  state.plugins.currentRequestId = null;
+  clearTrustedPluginPanel();
+  state.plugins.returnFocus?.focus?.();
+}
+
+async function openWorkspacePluginDialog(trigger = null) {
+  state.plugins.returnFocus = trigger || document.activeElement;
+  state.plugins.open = true;
+  showPluginListView();
+  $("#pluginDialog").classList.remove("hidden");
+  $("#pluginDialog .plugin-dialog-surface").focus();
+  await loadWorkspacePluginSurface();
+}
+
+function trapWorkspacePluginDialogFocus(event) {
+  const dialog = $("#pluginDialog");
+  if (dialog.classList.contains("hidden")) return;
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeWorkspacePluginDialog();
+    return;
+  }
+  if (event.key !== "Tab") return;
+  const focusable = Array.from(dialog.querySelectorAll("button:not([disabled]), summary, [tabindex]:not([tabindex='-1'])"))
+    .filter((element) => !element.closest(".hidden") && element.getClientRects().length > 0);
+  if (!focusable.length) return;
+  const current = focusable.indexOf(document.activeElement);
+  const next = current < 0
+    ? (event.shiftKey ? focusable.length - 1 : 0)
+    : (current + (event.shiftKey ? -1 : 1) + focusable.length) % focusable.length;
+  event.preventDefault();
+  focusable[next].focus();
 }
 
 async function loadAppInfo() {
@@ -21491,6 +23082,58 @@ $("#environmentOperationDialog").addEventListener("click", (event) => {
   if (event.target?.dataset?.environmentOperationClose === "true") closeEnvironmentOperationDialog();
 });
 $("#aboutClose").addEventListener("click", () => closeProductDialog("about"));
+$("#pluginDialogClose").addEventListener("click", closeWorkspacePluginDialog);
+$("#pluginDialog [data-plugin-close]").addEventListener("click", closeWorkspacePluginDialog);
+$("#pluginRefresh").addEventListener("click", () => loadWorkspacePluginSurface());
+$("#pluginCommandPaletteOpen").addEventListener("click", openPluginCommandPalette);
+$("#pluginCommandPaletteClose").addEventListener("click", closePluginCommandPalette);
+$("#pluginCommandPalette [data-plugin-palette-close]").addEventListener("click", closePluginCommandPalette);
+$("#pluginCommandPaletteSearch").addEventListener("input", (event) => {
+  state.plugins.commandPaletteQuery = event.target.value;
+  renderPluginCommandPalette();
+});
+$("#pluginCommandPaletteList").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-plugin-palette-command]");
+  if (!button) return;
+  closePluginCommandPalette();
+  void invokeTrustedPluginContribution(button.dataset.pluginPaletteCommand, "command");
+});
+$("#pluginCommandPalette").addEventListener("keydown", trapPluginCommandPaletteFocus);
+$("#pluginPanelClear").addEventListener("click", clearTrustedPluginPanel);
+$("#pluginList").addEventListener("click", (event) => {
+  const enable = event.target.closest("[data-plugin-enable]");
+  if (enable) requestWorkspacePluginEnable(enable.dataset.pluginEnable);
+  const disable = event.target.closest("[data-plugin-disable]");
+  if (disable) disableWorkspacePlugin(disable.dataset.pluginDisable);
+  const retry = event.target.closest("[data-plugin-retry]");
+  if (retry) retryWorkspacePlugin(retry.dataset.pluginRetry);
+  const uninstall = event.target.closest("[data-plugin-uninstall]");
+  if (uninstall) reviewWorkspacePluginUninstall(uninstall.dataset.pluginUninstall);
+  const restore = event.target.closest("[data-plugin-restore]");
+  if (restore) restoreWorkspacePlugin(restore.dataset.pluginRestore);
+  const update = event.target.closest("[data-plugin-update]");
+  if (update) reviewWorkspacePluginUpdate(update.dataset.pluginUpdate);
+  const rollback = event.target.closest("[data-plugin-rollback]");
+  if (rollback) reviewWorkspacePluginRollback(rollback.dataset.pluginRollback);
+});
+$("#pluginContributionList").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-plugin-contribution]");
+  if (button) void invokeTrustedPluginContribution(button.dataset.pluginContribution, button.dataset.pluginContributionKind);
+});
+$("#pluginGrantList").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-plugin-grant-revoke]");
+  if (button) revokeWorkspacePluginGrant(button.dataset.pluginGrantRevoke);
+});
+$("#pluginPermissionDeny").addEventListener("click", () => respondWorkspacePluginPermission("deny"));
+$("#pluginPermissionAllowOnce").addEventListener("click", () => respondWorkspacePluginPermission("allow_once"));
+$("#pluginPermissionAllowProject").addEventListener("click", () => respondWorkspacePluginPermission("allow_project"));
+$("#pluginUninstallCancel").addEventListener("click", showPluginListView);
+$("#pluginUninstallConfirm").addEventListener("click", confirmWorkspacePluginUninstall);
+$("#pluginUpdateCancel").addEventListener("click", showPluginListView);
+$("#pluginUpdateConfirm").addEventListener("click", confirmWorkspacePluginUpdate);
+$("#pluginRollbackCancel").addEventListener("click", showPluginListView);
+$("#pluginRollbackConfirm").addEventListener("click", confirmWorkspacePluginRollback);
+$("#pluginDialog").addEventListener("keydown", trapWorkspacePluginDialogFocus);
 $("#updateClose").addEventListener("click", () => closeProductDialog("update"));
 $("#updateDone").addEventListener("click", () => closeProductDialog("update"));
 $$('[data-product-dialog-close]').forEach((scrim) => scrim.addEventListener("click", () => closeProductDialog(scrim.dataset.productDialogClose)));

@@ -46,3 +46,7 @@ keyring = { version = "4.1.6", default-features = false, features = ["v1"] }
 # on Linux (Secret Service over DBus). Same library and version as Windows/macOS;
 # all backend crates are already resolved in the committed Cargo.lock.
 keyring = { version = "4.1.6", default-features = false, features = ["v1"] }
+
+[dev-dependencies]
+rusqlite.workspace = true
+wat.workspace = true

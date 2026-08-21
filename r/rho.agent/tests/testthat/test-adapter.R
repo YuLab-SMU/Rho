@@ -49,6 +49,76 @@ test_that("aisdk workspace tools target the broker boundary", {
   )] == "required"))
 })
 
+test_that("Manifest V2 plugin tools use bounded aisdk schemas and labelled origin", {
+  skip_if_not_installed("aisdk")
+  definition <- list(
+    name = "plugin_csv_metadata_a1b2c3d4",
+    contribution_id = "tool.csv.metadata",
+    label = "CSV metadata",
+    purpose = "Summarize the granted CSV",
+    input_schema = list(
+      type = "object",
+      properties = list(
+        path = list(type = "string", minLength = 1L, maxLength = 128L),
+        limit = list(type = "integer", minimum = 1L, maximum = 100L)
+      ),
+      required = list("path")
+    ),
+    plugin_id = "org.example.csv",
+    package_digest = paste(rep("a", 64L), collapse = "")
+  )
+
+  tools <- rho_create_workspace_tools(list(definition))
+  plugin <- tools[[length(tools)]]
+  expect_identical(plugin$name, definition$name)
+  expect_identical(plugin$meta$rho_approval, "automatic")
+  expect_identical(plugin$meta$rho_plugin_origin$contribution_id, "tool.csv.metadata")
+  expect_match(plugin$description, "untrusted project plugin", fixed = TRUE)
+  expect_match(plugin$description, "org.example.csv", fixed = TRUE)
+  expect_s3_class(plugin$parameters, "z_schema")
+  expect_identical(plugin$parameters$type, "object")
+  expect_false(plugin$parameters$additionalProperties)
+  expect_named(plugin$parameters$properties, c("path", "limit"))
+  expect_identical(plugin$parameters$required, list("path"))
+  expect_identical(plugin$parameters$properties$path$maxLength, 128L)
+  expect_identical(plugin$parameters$properties$limit$maximum, 100L)
+
+  captured <- NULL
+  local_mocked_bindings(
+    rho_agent_request = function(type, payload, ...) {
+      captured <<- list(type = type, payload = payload)
+      list(ok = TRUE)
+    },
+    .package = "rho.agent"
+  )
+  rho_agent_set_workspace_identity(list(
+    kernel_instance_id = "kernel_1",
+    state_revision = 1L,
+    project_revision = 1L
+  ))
+  plugin$run(list(path = "data/input.csv", limit = 10L))
+  expect_identical(captured$type, "plugin.contribution.invoke")
+  expect_identical(
+    captured$payload$arguments$contribution_id,
+    "tool.csv.metadata"
+  )
+  expect_identical(
+    captured$payload$arguments$input,
+    list(path = "data/input.csv", limit = 10L)
+  )
+})
+
+test_that("plugin schema conversion rejects unsupported R bounds", {
+  skip_if_not_installed("aisdk")
+  expect_error(
+    rho.agent:::rho_plugin_schema_to_aisdk(list(
+      type = "string",
+      maxLength = .Machine$integer.max + 1
+    )),
+    "outside the supported R bound"
+  )
+})
+
 test_that("workspace snapshot preview is concise and readable", {
   value <- list(execution = list(
     r = list(version = "R version 4.6.0", platform = "x86_64-w64-mingw32", cwd = "D:/project"),

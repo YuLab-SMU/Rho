@@ -10,14 +10,19 @@
 //! execution and no privileged I/O; it is pure registry bookkeeping.
 
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 use crate::digest::PackageDigest;
 use crate::host::HostInstanceId;
-use crate::{ActivationGeneration, CapabilityId, PluginId, ScopeId};
+use crate::{ActivationGeneration, BoundedJsonSchema, CapabilityId, PluginId, ScopeId};
 
 pub const MAX_CONTRIBUTIONS_PER_PROJECT: usize = 256;
-pub const MAX_CONTRIBUTION_LABEL_BYTES: usize = 256;
-pub const MAX_CONTRIBUTION_PURPOSE_BYTES: usize = 2048;
+pub const MAX_CONTRIBUTIONS_PER_PACKAGE: usize = 32;
+pub const MAX_CONTRIBUTION_LABEL_BYTES: usize = 128;
+pub const MAX_CONTRIBUTION_PURPOSE_BYTES: usize = 1024;
+pub const MAX_CONTRIBUTION_MEDIA_TYPES: usize = 16;
+pub const MAX_CONTRIBUTION_MEDIA_TYPE_BYTES: usize = 128;
+pub const PLUGIN_DETAILS_PANEL_SLOT: &str = "plugin_details";
 
 /// The narrow, denied-by-default contribution surface.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -27,10 +32,14 @@ pub enum ContributionKind {
     Command,
     /// `ui.viewer.*` — a controlled viewer the trusted shell hosts.
     Viewer,
+    /// `source.*` — bounded, read-only context returned to trusted Rho code.
+    Source,
     /// `tool.*` — a bounded tool with schema honored by the broker façade.
     Tool,
     /// `skill.*` — declarative content only; never executable.
     Skill,
+    /// `ui.panel.*` — a document in the one named untrusted-content slot.
+    Panel,
 }
 
 impl ContributionKind {
@@ -41,13 +50,114 @@ impl ContributionKind {
         if let Some(rest) = value.strip_prefix("ui.viewer.") {
             return (!rest.is_empty()).then_some(Self::Viewer);
         }
+        if let Some(rest) = value.strip_prefix("source.") {
+            return (!rest.is_empty()).then_some(Self::Source);
+        }
         if let Some(rest) = value.strip_prefix("tool.") {
             return (!rest.is_empty()).then_some(Self::Tool);
         }
         if let Some(rest) = value.strip_prefix("skill.") {
             return (!rest.is_empty()).then_some(Self::Skill);
         }
+        if let Some(rest) = value.strip_prefix("ui.panel.") {
+            return (!rest.is_empty()).then_some(Self::Panel);
+        }
         None
+    }
+}
+
+/// One exact Manifest V2 declaration. Schemas are validated during
+/// deserialization and again when the full declaration is checked against its
+/// matching `provides` entry.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContributionDeclaration {
+    pub id: CapabilityId,
+    pub kind: ContributionKind,
+    #[serde(deserialize_with = "crate::manifest::deserialize_contract_major")]
+    pub contract_major: u64,
+    pub label: String,
+    pub purpose: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_schema: Option<BoundedJsonSchema>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_schema: Option<BoundedJsonSchema>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub media_types: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skill_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub panel_slot: Option<String>,
+}
+
+impl ContributionDeclaration {
+    pub(crate) fn validate_shape(&self) -> Result<(), String> {
+        if self.contract_major == 0 {
+            return Err("contribution contractMajor must be positive".to_string());
+        }
+        if ContributionKind::parse(self.id.as_str()) != Some(self.kind) {
+            return Err(format!(
+                "contribution {} does not match kind {:?}",
+                self.id, self.kind
+            ));
+        }
+        validate_untrusted_text(&self.label, MAX_CONTRIBUTION_LABEL_BYTES, "label")?;
+        validate_untrusted_text(&self.purpose, MAX_CONTRIBUTION_PURPOSE_BYTES, "purpose")?;
+        validate_media_types(&self.media_types)?;
+
+        let has_call_schemas = self.input_schema.is_some() && self.output_schema.is_some();
+        let has_partial_schemas = self.input_schema.is_some() != self.output_schema.is_some();
+        if has_partial_schemas {
+            return Err("inputSchema and outputSchema must be declared together".to_string());
+        }
+
+        match self.kind {
+            ContributionKind::Tool
+            | ContributionKind::Source
+            | ContributionKind::Command
+            | ContributionKind::Viewer => {
+                if !has_call_schemas {
+                    return Err(format!("contribution {} requires call schemas", self.id));
+                }
+                if self.skill_path.is_some() || self.panel_slot.is_some() {
+                    return Err(format!(
+                        "contribution {} declares fields owned by another kind",
+                        self.id
+                    ));
+                }
+                if self.kind != ContributionKind::Viewer && !self.media_types.is_empty() {
+                    return Err(format!(
+                        "contribution {} cannot declare mediaTypes",
+                        self.id
+                    ));
+                }
+            }
+            ContributionKind::Panel => {
+                if !has_call_schemas
+                    || self.panel_slot.as_deref() != Some(PLUGIN_DETAILS_PANEL_SLOT)
+                    || self.skill_path.is_some()
+                    || !self.media_types.is_empty()
+                {
+                    return Err(format!(
+                        "panel {} requires call schemas and panelSlot={PLUGIN_DETAILS_PANEL_SLOT}",
+                        self.id
+                    ));
+                }
+            }
+            ContributionKind::Skill => {
+                if self.skill_path.is_none()
+                    || has_call_schemas
+                    || self.panel_slot.is_some()
+                    || !self.media_types.is_empty()
+                {
+                    return Err(format!(
+                        "skill {} must declare only skillPath metadata",
+                        self.id
+                    ));
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -58,8 +168,14 @@ impl ContributionKind {
 pub struct Contribution {
     pub capability: CapabilityId,
     pub kind: ContributionKind,
+    pub contract_major: u64,
     pub label: String,
     pub purpose: String,
+    pub input_schema: Option<BoundedJsonSchema>,
+    pub output_schema: Option<BoundedJsonSchema>,
+    pub media_types: Vec<String>,
+    pub skill_path: Option<String>,
+    pub panel_slot: Option<String>,
 }
 
 impl Contribution {
@@ -69,23 +185,143 @@ impl Contribution {
         label: impl Into<String>,
         purpose: impl Into<String>,
     ) -> Self {
+        let call_schema = (kind != ContributionKind::Skill).then(|| {
+            BoundedJsonSchema::new(json!({"type": "object", "properties": {}}))
+                .expect("static empty-object contribution schema is valid")
+        });
         Self {
             capability,
             kind,
+            contract_major: 1,
             label: label.into(),
             purpose: purpose.into(),
+            input_schema: call_schema.clone(),
+            output_schema: call_schema,
+            media_types: Vec::new(),
+            skill_path: None,
+            panel_slot: (kind == ContributionKind::Panel)
+                .then(|| PLUGIN_DETAILS_PANEL_SLOT.to_string()),
         }
     }
 
-    fn is_valid(&self) -> bool {
-        ContributionKind::parse(self.capability.as_str()) == Some(self.kind)
-            && !self.label.is_empty()
-            && self.label.len() <= MAX_CONTRIBUTION_LABEL_BYTES
-            && !self.purpose.is_empty()
-            && self.purpose.len() <= MAX_CONTRIBUTION_PURPOSE_BYTES
-            && !self.label.chars().any(char::is_control)
-            && !self.purpose.chars().any(char::is_control)
+    pub fn from_declaration(
+        declaration: ContributionDeclaration,
+    ) -> Result<Self, ContributionError> {
+        declaration
+            .validate_shape()
+            .map_err(|_| ContributionError::Invalid)?;
+        Ok(Self {
+            capability: declaration.id,
+            kind: declaration.kind,
+            contract_major: declaration.contract_major,
+            label: declaration.label,
+            purpose: declaration.purpose,
+            input_schema: declaration.input_schema,
+            output_schema: declaration.output_schema,
+            media_types: declaration.media_types,
+            skill_path: declaration.skill_path,
+            panel_slot: declaration.panel_slot,
+        })
     }
+
+    fn is_valid(&self) -> bool {
+        ContributionDeclaration {
+            id: self.capability.clone(),
+            kind: self.kind,
+            contract_major: self.contract_major,
+            label: self.label.clone(),
+            purpose: self.purpose.clone(),
+            input_schema: self.input_schema.clone(),
+            output_schema: self.output_schema.clone(),
+            media_types: self.media_types.clone(),
+            skill_path: self.skill_path.clone(),
+            panel_slot: self.panel_slot.clone(),
+        }
+        .validate_shape()
+        .is_ok()
+    }
+}
+
+fn validate_untrusted_text(value: &str, maximum_bytes: usize, field: &str) -> Result<(), String> {
+    if value.is_empty()
+        || value.trim() != value
+        || value.len() > maximum_bytes
+        || value.chars().any(char::is_control)
+        || contains_bidi_override(value)
+    {
+        return Err(format!(
+            "contribution {field} is empty, oversized, or contains unsafe controls"
+        ));
+    }
+    let lowercase = value.to_lowercase();
+    if value.contains(['<', '>', '`'])
+        || value.contains("![")
+        || value.contains("](")
+        || ["http://", "https://", "file://", "data:", "www."]
+            .iter()
+            .any(|marker| lowercase.contains(marker))
+    {
+        return Err(format!(
+            "contribution {field} must be plain text without markup or URLs"
+        ));
+    }
+    if [
+        "approval",
+        "credential",
+        "password",
+        "updater",
+        "security alert",
+        "system dialog",
+    ]
+    .iter()
+    .any(|term| lowercase.contains(term))
+    {
+        return Err(format!(
+            "contribution {field} uses reserved trusted-surface terminology"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_media_types(media_types: &[String]) -> Result<(), String> {
+    if media_types.len() > MAX_CONTRIBUTION_MEDIA_TYPES {
+        return Err(format!(
+            "mediaTypes exceed {MAX_CONTRIBUTION_MEDIA_TYPES} entries"
+        ));
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    for media_type in media_types {
+        let parts = media_type.split_once('/');
+        if media_type.is_empty()
+            || media_type.len() > MAX_CONTRIBUTION_MEDIA_TYPE_BYTES
+            || media_type.contains('*')
+            || media_type.contains(';')
+            || media_type.matches('/').count() != 1
+            || parts.is_none_or(|(top, subtype)| top.is_empty() || subtype.is_empty())
+            || !media_type.bytes().all(|byte| {
+                byte.is_ascii_lowercase()
+                    || byte.is_ascii_digit()
+                    || matches!(byte, b'/' | b'+' | b'.' | b'-')
+            })
+            || !seen.insert(media_type.as_str())
+        {
+            return Err(format!("invalid or duplicate media type: {media_type}"));
+        }
+    }
+    Ok(())
+}
+
+fn contains_bidi_override(value: &str) -> bool {
+    value.chars().any(|character| {
+        matches!(
+            character,
+            '\u{061c}'
+                | '\u{200e}'
+                | '\u{200f}'
+                | '\u{202a}'..='\u{202e}'
+                | '\u{2066}'..='\u{2069}'
+        )
+    })
 }
 
 /// A committed contribution bound to a plugin instance, package digest, and
@@ -101,8 +337,57 @@ pub struct ContributionRecord {
     pub host_instance_id: HostInstanceId,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ContributionInstanceIdentity {
+    pub project_id: ScopeId,
+    pub plugin_id: PluginId,
+    pub package_digest: PackageDigest,
+    pub activation_generation: ActivationGeneration,
+    pub host_instance_id: HostInstanceId,
+}
+
+impl ContributionInstanceIdentity {
+    pub fn new(
+        project_id: ScopeId,
+        plugin_id: PluginId,
+        package_digest: PackageDigest,
+        activation_generation: ActivationGeneration,
+        host_instance_id: HostInstanceId,
+    ) -> Self {
+        Self {
+            project_id,
+            plugin_id,
+            package_digest,
+            activation_generation,
+            host_instance_id,
+        }
+    }
+}
+
+/// Hidden, fully validated candidate. Constructing it never mutates live
+/// routing; only an expected-old publication can expose its declarations.
+#[derive(Debug, Clone)]
+pub struct ContributionCandidate {
+    identity: ContributionInstanceIdentity,
+    contributions: Vec<Contribution>,
+}
+
+impl ContributionCandidate {
+    pub fn identity(&self) -> &ContributionInstanceIdentity {
+        &self.identity
+    }
+
+    pub fn len(&self) -> usize {
+        self.contributions.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.contributions.is_empty()
+    }
+}
+
 /// Reversible, project-scoped contribution store.
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ContributionStore {
     /// Keyed by `(project_id, capability)` so projects A and B are isolated.
     records: std::collections::BTreeMap<(ScopeId, CapabilityId), ContributionRecord>,
@@ -128,6 +413,9 @@ pub enum ContributionError {
     Invalid,
     /// Project contribution budget is exhausted.
     LimitExceeded,
+    /// Candidate publication did not match the exact currently published
+    /// plugin identity supplied by the caller.
+    ExpectedOldMismatch,
 }
 
 impl ContributionStore {
@@ -135,6 +423,120 @@ impl ContributionStore {
         Self {
             records: std::collections::BTreeMap::new(),
         }
+    }
+
+    pub fn stage(
+        identity: ContributionInstanceIdentity,
+        declarations: Vec<ContributionDeclaration>,
+    ) -> Result<ContributionCandidate, ContributionError> {
+        if declarations.len() > MAX_CONTRIBUTIONS_PER_PACKAGE {
+            return Err(ContributionError::LimitExceeded);
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        let mut contributions = Vec::with_capacity(declarations.len());
+        for declaration in declarations {
+            if !seen.insert(declaration.id.clone()) {
+                return Err(ContributionError::Duplicate);
+            }
+            contributions.push(Contribution::from_declaration(declaration)?);
+        }
+        Ok(ContributionCandidate {
+            identity,
+            contributions,
+        })
+    }
+
+    /// Publish a complete plugin contribution set atomically. A failed CAS,
+    /// duplicate, invalid declaration, or project-budget check leaves the
+    /// previous generation byte-for-byte unchanged.
+    pub fn publish(
+        &mut self,
+        candidate: ContributionCandidate,
+        expected_old: Option<&ContributionInstanceIdentity>,
+    ) -> Result<Option<ContributionInstanceIdentity>, ContributionError> {
+        let current = self.current_identity(
+            &candidate.identity.project_id,
+            &candidate.identity.plugin_id,
+        )?;
+        if current.as_ref() != expected_old {
+            return Err(ContributionError::ExpectedOldMismatch);
+        }
+
+        let mut next = self.clone();
+        next.records.retain(|(project, _), record| {
+            project != &candidate.identity.project_id
+                || record.plugin_id != candidate.identity.plugin_id
+        });
+        for contribution in candidate.contributions {
+            next.register(
+                candidate.identity.project_id.clone(),
+                candidate.identity.plugin_id.clone(),
+                candidate.identity.package_digest.clone(),
+                candidate.identity.activation_generation,
+                candidate.identity.host_instance_id.clone(),
+                contribution,
+            )?;
+        }
+        self.records = next.records;
+        Ok(current)
+    }
+
+    pub fn unpublish(
+        &mut self,
+        identity: &ContributionInstanceIdentity,
+    ) -> Result<(), ContributionError> {
+        if self
+            .current_identity(&identity.project_id, &identity.plugin_id)?
+            .as_ref()
+            != Some(identity)
+        {
+            return Err(ContributionError::ExpectedOldMismatch);
+        }
+        self.clear_instance(
+            &identity.project_id,
+            &identity.plugin_id,
+            &identity.package_digest,
+            identity.activation_generation,
+            &identity.host_instance_id,
+        );
+        Ok(())
+    }
+
+    pub fn get(
+        &self,
+        project_id: &ScopeId,
+        capability: &CapabilityId,
+    ) -> Option<&ContributionRecord> {
+        self.records.get(&(project_id.clone(), capability.clone()))
+    }
+
+    pub fn current_identity(
+        &self,
+        project_id: &ScopeId,
+        plugin_id: &PluginId,
+    ) -> Result<Option<ContributionInstanceIdentity>, ContributionError> {
+        let mut identity = None;
+        for record in self
+            .records
+            .values()
+            .filter(|record| &record.project_id == project_id && &record.plugin_id == plugin_id)
+        {
+            let record_identity = ContributionInstanceIdentity::new(
+                record.project_id.clone(),
+                record.plugin_id.clone(),
+                record.package_digest.clone(),
+                record.activation_generation,
+                record.host_instance_id.clone(),
+            );
+            if identity
+                .as_ref()
+                .is_some_and(|identity| identity != &record_identity)
+            {
+                return Err(ContributionError::Invalid);
+            }
+            identity = Some(record_identity);
+        }
+        Ok(identity)
     }
 
     /// Register a contribution for `project_id`. Fails on duplicate key.
@@ -280,6 +682,39 @@ mod tests {
 
     fn host() -> HostInstanceId {
         HostInstanceId::new("instance.a").unwrap()
+    }
+
+    fn declaration(id: &str, kind: ContributionKind) -> ContributionDeclaration {
+        let schema = BoundedJsonSchema::new(json!({"type": "object", "properties": {}})).unwrap();
+        ContributionDeclaration {
+            id: capability(id),
+            kind,
+            contract_major: 1,
+            label: id.to_string(),
+            purpose: "Exercise transactional contribution routing".to_string(),
+            input_schema: Some(schema.clone()),
+            output_schema: Some(schema),
+            media_types: Vec::new(),
+            skill_path: None,
+            panel_slot: (kind == ContributionKind::Panel)
+                .then(|| PLUGIN_DETAILS_PANEL_SLOT.to_string()),
+        }
+    }
+
+    fn identity(
+        project_id: &ScopeId,
+        plugin_id: &str,
+        digest_seed: &str,
+        generation_value: u64,
+        host_id: &str,
+    ) -> ContributionInstanceIdentity {
+        ContributionInstanceIdentity::new(
+            project_id.clone(),
+            plugin(plugin_id),
+            digest(digest_seed),
+            ActivationGeneration::new(generation_value).unwrap(),
+            HostInstanceId::new(host_id).unwrap(),
+        )
     }
 
     fn register(
@@ -453,5 +888,232 @@ mod tests {
             ),
             Err(ContributionError::WrongOwner)
         );
+    }
+
+    #[test]
+    fn source_and_named_panel_are_first_class_reversible_contracts() {
+        let mut store = ContributionStore::new();
+        let project = scope("scope.project");
+        register(
+            &mut store,
+            &project,
+            "org.example.a",
+            "pkg",
+            Contribution::new(
+                capability("source.csv.metadata"),
+                ContributionKind::Source,
+                "CSV metadata",
+                "Provide bounded project context",
+            ),
+        )
+        .unwrap();
+        register(
+            &mut store,
+            &project,
+            "org.example.a",
+            "pkg",
+            Contribution::new(
+                capability("ui.panel.csv"),
+                ContributionKind::Panel,
+                "CSV details",
+                "Show bounded CSV details",
+            ),
+        )
+        .unwrap();
+        assert_eq!(store.list(&project).len(), 2);
+        store.clear_instance(
+            &project,
+            &plugin("org.example.a"),
+            &digest("pkg"),
+            generation(),
+            &host(),
+        );
+        assert!(store.list(&project).is_empty());
+    }
+
+    #[test]
+    fn text_media_and_panel_spoofing_are_rejected() {
+        let mut store = ContributionStore::new();
+        let project = scope("scope.project");
+        for label in [
+            "<b>Trusted</b>",
+            "https://example.org",
+            "Approval request",
+            "Unsafe\u{202e}label",
+        ] {
+            let contribution = Contribution::new(
+                capability("tool.fixture.read"),
+                ContributionKind::Tool,
+                label,
+                "Read bounded fixture data",
+            );
+            assert_eq!(
+                register(&mut store, &project, "org.example.a", "pkg", contribution),
+                Err(ContributionError::Invalid)
+            );
+        }
+
+        let mut wrong_panel = Contribution::new(
+            capability("ui.panel.csv"),
+            ContributionKind::Panel,
+            "CSV details",
+            "Show bounded CSV details",
+        );
+        wrong_panel.panel_slot = Some("environment".to_string());
+        assert_eq!(
+            register(&mut store, &project, "org.example.a", "pkg", wrong_panel),
+            Err(ContributionError::Invalid)
+        );
+
+        let mut unsafe_media = Contribution::new(
+            capability("ui.viewer.csv"),
+            ContributionKind::Viewer,
+            "CSV viewer",
+            "Show bounded CSV details",
+        );
+        unsafe_media.media_types = vec!["text/*".to_string()];
+        assert_eq!(
+            register(&mut store, &project, "org.example.a", "pkg", unsafe_media),
+            Err(ContributionError::Invalid)
+        );
+    }
+
+    #[test]
+    fn project_budget_accepts_256_and_rejects_257() {
+        let mut store = ContributionStore::new();
+        let project = scope("scope.project");
+        for index in 0..MAX_CONTRIBUTIONS_PER_PROJECT {
+            register(
+                &mut store,
+                &project,
+                "org.example.a",
+                "pkg",
+                Contribution::new(
+                    capability(&format!("tool.fixture.item{index}")),
+                    ContributionKind::Tool,
+                    format!("Fixture item {index}"),
+                    "Exercise the resolved project contribution budget",
+                ),
+            )
+            .unwrap();
+        }
+        assert_eq!(store.list(&project).len(), MAX_CONTRIBUTIONS_PER_PROJECT);
+        assert_eq!(
+            register(
+                &mut store,
+                &project,
+                "org.example.a",
+                "pkg",
+                Contribution::new(
+                    capability("tool.fixture.overflow"),
+                    ContributionKind::Tool,
+                    "Overflow",
+                    "Must not exceed the project contribution budget",
+                ),
+            ),
+            Err(ContributionError::LimitExceeded)
+        );
+    }
+
+    #[test]
+    fn staged_candidate_is_hidden_and_expected_old_publish_is_atomic() {
+        let mut store = ContributionStore::new();
+        let project = scope("scope.project");
+        let old_identity = identity(&project, "org.example.a", "old", 1, "instance.old");
+        let old = ContributionStore::stage(
+            old_identity.clone(),
+            vec![declaration("tool.fixture.old", ContributionKind::Tool)],
+        )
+        .unwrap();
+        assert!(store.list(&project).is_empty());
+        assert_eq!(store.publish(old, None).unwrap(), None);
+        assert_eq!(store.list(&project).len(), 1);
+
+        let next_identity = identity(&project, "org.example.a", "next", 2, "instance.next");
+        let stale = ContributionStore::stage(
+            next_identity.clone(),
+            vec![declaration("source.fixture.next", ContributionKind::Source)],
+        )
+        .unwrap();
+        let wrong_old = identity(&project, "org.example.a", "wrong", 1, "instance.old");
+        assert_eq!(
+            store.publish(stale, Some(&wrong_old)),
+            Err(ContributionError::ExpectedOldMismatch)
+        );
+        assert!(
+            store
+                .get(&project, &capability("tool.fixture.old"))
+                .is_some()
+        );
+        assert!(
+            store
+                .get(&project, &capability("source.fixture.next"))
+                .is_none()
+        );
+
+        let next = ContributionStore::stage(
+            next_identity.clone(),
+            vec![declaration("source.fixture.next", ContributionKind::Source)],
+        )
+        .unwrap();
+        assert_eq!(
+            store.publish(next, Some(&old_identity)).unwrap(),
+            Some(old_identity)
+        );
+        assert!(
+            store
+                .get(&project, &capability("tool.fixture.old"))
+                .is_none()
+        );
+        assert!(
+            store
+                .get(&project, &capability("source.fixture.next"))
+                .is_some()
+        );
+        assert_eq!(
+            store.current_identity(&project, &plugin("org.example.a")),
+            Ok(Some(next_identity.clone()))
+        );
+        store.unpublish(&next_identity).unwrap();
+        assert!(store.list(&project).is_empty());
+    }
+
+    #[test]
+    fn duplicate_candidate_rolls_back_and_same_capability_is_project_isolated() {
+        let mut store = ContributionStore::new();
+        let a = scope("scope.project.a");
+        let b = scope("scope.project.b");
+        let capability_id = "tool.fixture.shared";
+        for (project, plugin_id, seed, host_id) in [
+            (&a, "org.example.a", "a", "instance.a"),
+            (&b, "org.example.b", "b", "instance.b"),
+        ] {
+            let candidate = ContributionStore::stage(
+                identity(project, plugin_id, seed, 1, host_id),
+                vec![declaration(capability_id, ContributionKind::Tool)],
+            )
+            .unwrap();
+            store.publish(candidate, None).unwrap();
+        }
+        assert_eq!(store.list(&a).len(), 1);
+        assert_eq!(store.list(&b).len(), 1);
+
+        let conflicting = ContributionStore::stage(
+            identity(
+                &a,
+                "org.example.conflict",
+                "conflict",
+                2,
+                "instance.conflict",
+            ),
+            vec![declaration(capability_id, ContributionKind::Tool)],
+        )
+        .unwrap();
+        assert_eq!(
+            store.publish(conflicting, None),
+            Err(ContributionError::Duplicate)
+        );
+        assert_eq!(store.list(&a).len(), 1);
+        assert_eq!(store.list(&b).len(), 1);
     }
 }

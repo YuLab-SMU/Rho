@@ -11,6 +11,7 @@ on:
       - "crates/**/*.rs"
       - "desktop/src-tauri/**"
       - "r/rho.agent/R/aisdk_adapter.R"
+      - "r/rho.bridge/**"
       - "desktop/dist/app.js"
       - "desktop/dist/index.html"
       - "desktop/package.json"
@@ -46,9 +47,29 @@ on:
       - "scripts/tauri-native-updater.mjs"
       - "scripts/native-updater-acceptance.mjs"
       - "scripts/test-rust-msrv-contract.mjs"
+      - "scripts/test-tauri-command-inventory.mjs"
       - "scripts/test-extension-run-history-contract.mjs"
       - "scripts/test-extension-p1-3-contract.mjs"
       - "scripts/test-extension-phase-1-acceptance.mjs"
+      - "scripts/test-extension-phase-2-host-contract.mjs"
+      - "scripts/test-extension-p2-2-broker-contract.mjs"
+      - "scripts/test-extension-p2-3-contribution-contract.mjs"
+      - "scripts/test-extension-p2-4-lifecycle-contract.mjs"
+      - "scripts/test-extension-p2-4-package-cache-contract.mjs"
+      - "scripts/test-extension-p2-4-durable-enable-contract.mjs"
+      - "scripts/test-extension-p2-4-restart-contract.mjs"
+      - "scripts/test-extension-p2-4-disable-contract.mjs"
+      - "scripts/test-extension-p2-4-boundary-teardown-contract.mjs"
+      - "scripts/test-extension-p2-4-crash-retry-contract.mjs"
+      - "scripts/test-extension-p2-4-package-trash-contract.mjs"
+      - "scripts/test-extension-p2-4-uninstall-restore-contract.mjs"
+      - "scripts/test-extension-p2-4-retention-purge-contract.mjs"
+      - "scripts/test-extension-p2-4-replacement-foundation-contract.mjs"
+      - "scripts/test-extension-p2-4-trusted-update-contract.mjs"
+      - "scripts/test-extension-p2-4-trusted-rollback-contract.mjs"
+      - "scripts/test-extension-p2-4-recovery-closeout-contract.mjs"
+      - "scripts/test-extension-phase-2-final-contract.mjs"
+      - "scripts/test-workspace-plugin-ui.mjs"
       - "scripts/test-installed-license-surface.mjs"
       - "scripts/test-signpath-readiness.mjs"
       - "scripts/test-signpath-free-trial-smoke.mjs"
@@ -91,6 +112,7 @@ on:
       - "crates/**/*.rs"
       - "desktop/src-tauri/**"
       - "r/rho.agent/R/aisdk_adapter.R"
+      - "r/rho.bridge/**"
       - "desktop/dist/app.js"
       - "desktop/dist/index.html"
       - "desktop/package.json"
@@ -126,9 +148,29 @@ on:
       - "scripts/tauri-native-updater.mjs"
       - "scripts/native-updater-acceptance.mjs"
       - "scripts/test-rust-msrv-contract.mjs"
+      - "scripts/test-tauri-command-inventory.mjs"
       - "scripts/test-extension-run-history-contract.mjs"
       - "scripts/test-extension-p1-3-contract.mjs"
       - "scripts/test-extension-phase-1-acceptance.mjs"
+      - "scripts/test-extension-phase-2-host-contract.mjs"
+      - "scripts/test-extension-p2-2-broker-contract.mjs"
+      - "scripts/test-extension-p2-3-contribution-contract.mjs"
+      - "scripts/test-extension-p2-4-lifecycle-contract.mjs"
+      - "scripts/test-extension-p2-4-package-cache-contract.mjs"
+      - "scripts/test-extension-p2-4-durable-enable-contract.mjs"
+      - "scripts/test-extension-p2-4-restart-contract.mjs"
+      - "scripts/test-extension-p2-4-disable-contract.mjs"
+      - "scripts/test-extension-p2-4-boundary-teardown-contract.mjs"
+      - "scripts/test-extension-p2-4-crash-retry-contract.mjs"
+      - "scripts/test-extension-p2-4-package-trash-contract.mjs"
+      - "scripts/test-extension-p2-4-uninstall-restore-contract.mjs"
+      - "scripts/test-extension-p2-4-retention-purge-contract.mjs"
+      - "scripts/test-extension-p2-4-replacement-foundation-contract.mjs"
+      - "scripts/test-extension-p2-4-trusted-update-contract.mjs"
+      - "scripts/test-extension-p2-4-trusted-rollback-contract.mjs"
+      - "scripts/test-extension-p2-4-recovery-closeout-contract.mjs"
+      - "scripts/test-extension-phase-2-final-contract.mjs"
+      - "scripts/test-workspace-plugin-ui.mjs"
       - "scripts/test-installed-license-surface.mjs"
       - "scripts/test-signpath-readiness.mjs"
       - "scripts/test-signpath-free-trial-smoke.mjs"
@@ -161,6 +203,8 @@ on:
       - "docs/release/historical-0.4.0-dev.43-three-platform-updater-checklist.md"
       - "docs/release/historical-0.4.0-stable-release-checklist.md"
 
+  workflow_dispatch:
+
 permissions:
   contents: read
 
@@ -170,8 +214,8 @@ concurrency:
 
 jobs:
   rust-compatibility:
-    if: github.event_name == 'push' || github.event.pull_request.draft == false
-    name: ${{ matrix.os }} / Rust ${{ matrix.toolchain }}
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     strategy:
@@ -182,26 +226,44 @@ jobs:
             toolchain: "stable"
             rustup_toolchain: stable-aarch64-apple-darwin
             host: aarch64-apple-darwin
+            lane: source
+            name: macos-26 / Rust stable
           - os: macos-26
             toolchain: "1.88.0"
             rustup_toolchain: 1.88.0-aarch64-apple-darwin
             host: aarch64-apple-darwin
+            lane: source
+            name: macos-26 / Rust 1.88.0
           - os: windows-latest
             toolchain: "stable"
             rustup_toolchain: stable-x86_64-pc-windows-gnu
             host: x86_64-pc-windows-gnu
+            lane: source
+            name: windows-latest / Rust stable
+          - os: windows-latest
+            toolchain: "stable"
+            rustup_toolchain: stable-x86_64-pc-windows-gnu
+            host: x86_64-pc-windows-gnu
+            lane: installed
+            name: windows-latest / installed acceptance
           - os: windows-latest
             toolchain: "1.88.0"
             rustup_toolchain: 1.88.0-x86_64-pc-windows-gnu
             host: x86_64-pc-windows-gnu
+            lane: source
+            name: windows-latest / Rust 1.88.0
           - os: ubuntu-22.04
             toolchain: "stable"
             rustup_toolchain: stable-x86_64-unknown-linux-gnu
             host: x86_64-unknown-linux-gnu
+            lane: source
+            name: ubuntu-22.04 / Rust stable
           - os: ubuntu-22.04
             toolchain: "1.88.0"
             rustup_toolchain: 1.88.0-x86_64-unknown-linux-gnu
             host: x86_64-unknown-linux-gnu
+            lane: source
+            name: ubuntu-22.04 / Rust 1.88.0
     env:
       RUSTUP_TOOLCHAIN: ${{ matrix.rustup_toolchain }}
       CARGO_INCREMENTAL: "0"
@@ -226,14 +288,14 @@ jobs:
           use-public-rspm: true
 
       - name: Set up R for Unix installed-app acceptance
-        if: matrix.toolchain == 'stable' && runner.os != 'Windows'
+        if: matrix.lane == 'source' && matrix.toolchain == 'stable' && runner.os != 'Windows'
         uses: r-lib/actions/setup-r@v2
         with:
           r-version: "4.6.1"
           use-public-rspm: true
 
       - name: Install Workspace smoke R dependency on Unix
-        if: matrix.toolchain == 'stable' && runner.os != 'Windows'
+        if: matrix.lane == 'source' && matrix.toolchain == 'stable' && runner.os != 'Windows'
         shell: bash
         run: Rscript -e "if (!requireNamespace('jsonlite', quietly = TRUE)) install.packages('jsonlite'); stopifnot(requireNamespace('jsonlite', quietly = TRUE))"
 
@@ -314,7 +376,8 @@ jobs:
           }
           cargo -vV
 
-      - name: Restore Cargo dependency and build cache
+      - name: Restore non-Windows Cargo dependency and build cache
+        if: runner.os != 'Windows'
         uses: actions/cache@v4
         with:
           path: |
@@ -325,6 +388,32 @@ jobs:
           key: rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
             rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-
+
+      - name: Restore Windows source build cache
+        if: runner.os == 'Windows' && matrix.lane == 'source'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/debug/
+          key: rho-rust-v3-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-source-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            rho-rust-v3-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-source-
+
+      - name: Restore Windows installed build cache
+        if: runner.os == 'Windows' && matrix.lane == 'installed'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/release/
+          key: rho-rust-v3-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-installed-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            rho-rust-v3-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-installed-
 
       - name: Stage pinned macOS Ark sidecar for Tauri compilation
         if: runner.os == 'macOS'
@@ -339,11 +428,11 @@ jobs:
           ./scripts/prepare-runtime-resources.sh
 
       - name: Enforce current stable formatting
-        if: matrix.toolchain == 'stable'
+        if: matrix.lane == 'source' && matrix.toolchain == 'stable'
         run: cargo fmt --all -- --check
 
       - name: Verify installed license surface
-        if: matrix.toolchain == 'stable'
+        if: matrix.lane == 'source' && matrix.toolchain == 'stable'
         run: |
           node scripts/test-installed-license-surface.mjs
           node scripts/generate-update-site.mjs --test true
@@ -363,15 +452,55 @@ jobs:
           node scripts/test-three-platform-auto-updater.mjs
 
       - name: Verify locked workspace at selected Rust version
+        if: matrix.lane == 'source'
         run: |
           node scripts/test-rust-msrv-contract.mjs
+          node scripts/test-tauri-command-inventory.mjs --test
+          node scripts/test-tauri-command-inventory.mjs
           node scripts/test-extension-phase-1-acceptance.mjs --test
           node scripts/test-extension-phase-1-acceptance.mjs
+          node scripts/test-extension-phase-2-host-contract.mjs --test
+          node scripts/test-extension-phase-2-host-contract.mjs
+          node scripts/test-extension-p2-2-broker-contract.mjs --test
+          node scripts/test-extension-p2-2-broker-contract.mjs
+          node scripts/test-extension-p2-3-contribution-contract.mjs --test
+          node scripts/test-extension-p2-3-contribution-contract.mjs
+          node scripts/test-extension-p2-4-lifecycle-contract.mjs --test
+          node scripts/test-extension-p2-4-lifecycle-contract.mjs
+          node scripts/test-extension-p2-4-package-cache-contract.mjs --test
+          node scripts/test-extension-p2-4-package-cache-contract.mjs
+          node scripts/test-extension-p2-4-durable-enable-contract.mjs --test
+          node scripts/test-extension-p2-4-durable-enable-contract.mjs
+          node scripts/test-extension-p2-4-restart-contract.mjs --test
+          node scripts/test-extension-p2-4-restart-contract.mjs
+          node scripts/test-extension-p2-4-disable-contract.mjs --test
+          node scripts/test-extension-p2-4-disable-contract.mjs
+          node scripts/test-extension-p2-4-boundary-teardown-contract.mjs --test
+          node scripts/test-extension-p2-4-boundary-teardown-contract.mjs
+          node scripts/test-extension-p2-4-crash-retry-contract.mjs --test
+          node scripts/test-extension-p2-4-crash-retry-contract.mjs
+          node scripts/test-extension-p2-4-package-trash-contract.mjs --test
+          node scripts/test-extension-p2-4-package-trash-contract.mjs
+          node scripts/test-extension-p2-4-uninstall-restore-contract.mjs --test
+          node scripts/test-extension-p2-4-uninstall-restore-contract.mjs
+          node scripts/test-extension-p2-4-retention-purge-contract.mjs --test
+          node scripts/test-extension-p2-4-retention-purge-contract.mjs
+          node scripts/test-extension-p2-4-replacement-foundation-contract.mjs --test
+          node scripts/test-extension-p2-4-replacement-foundation-contract.mjs
+          node scripts/test-extension-p2-4-trusted-update-contract.mjs --test
+          node scripts/test-extension-p2-4-trusted-update-contract.mjs
+          node scripts/test-extension-p2-4-trusted-rollback-contract.mjs --test
+          node scripts/test-extension-p2-4-trusted-rollback-contract.mjs
+          node scripts/test-extension-p2-4-recovery-closeout-contract.mjs --test
+          node scripts/test-extension-p2-4-recovery-closeout-contract.mjs
+          node scripts/test-extension-phase-2-final-contract.mjs --test
+          node scripts/test-extension-phase-2-final-contract.mjs
+          node scripts/test-workspace-plugin-ui.mjs
           cargo check --workspace --all-targets --locked
           cargo test --workspace --locked --no-fail-fast
 
       - name: Build, install, smoke and remove unsigned Windows app
-        if: matrix.toolchain == 'stable' && runner.os == 'Windows'
+        if: matrix.lane == 'installed' && matrix.toolchain == 'stable' && runner.os == 'Windows'
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -486,7 +615,7 @@ jobs:
           }
 
       - name: Build, mount and smoke unsigned macOS app
-        if: matrix.toolchain == 'stable' && runner.os == 'macOS'
+        if: matrix.lane == 'source' && matrix.toolchain == 'stable' && runner.os == 'macOS'
         shell: bash
         run: |
           set -euo pipefail
@@ -527,7 +656,7 @@ jobs:
           shasum -a 256 "$app/Contents/MacOS/rho-desktop" "$dmg"
 
       - name: Build, extract and smoke unsigned Linux AppImage
-        if: matrix.toolchain == 'stable' && runner.os == 'Linux'
+        if: matrix.lane == 'source' && matrix.toolchain == 'stable' && runner.os == 'Linux'
         shell: bash
         run: |
           set -euo pipefail

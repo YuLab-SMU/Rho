@@ -1,6 +1,6 @@
 Package: rho.bridge
 Title: Rho Workspace Bridge
-Version: 0.1.14
+Version: 0.1.15
 Authors@R: c(
     person("Rho", "Contributors", email = "rho@example.com", role = c("aut", "cre", "cph")),
     person("YuLab-SMU", role = "cph")

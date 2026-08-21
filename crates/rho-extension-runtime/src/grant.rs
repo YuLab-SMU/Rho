@@ -8,6 +8,7 @@
 //! network, Workspace R, or credential operation itself, and it never logs the
 //! raw token.
 
+use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -15,7 +16,15 @@ use sha2::{Digest, Sha256};
 
 use crate::digest::PackageDigest;
 use crate::host::HostInstanceId;
-use crate::{ActivationGeneration, ExtensionError, PluginId, ScopeId};
+use crate::{
+    ActivationGeneration, ExtensionError, PermissionRequest, PluginId, PluginVersion, RuntimeKind,
+    ScopeId,
+};
+
+/// Maximum unused lifetime of an `allow once` handle.
+pub const MAX_ALLOW_ONCE_TTL: Duration = Duration::from_secs(5 * 60);
+/// Maximum lifetime of a project decision before trusted review is required.
+pub const MAX_PROJECT_GRANT_TTL: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 
 /// The initial, read-only permission set. Writes, process spawn, arbitrary R
 /// evaluation, package install, raw credentials, and clipboard are all
@@ -63,6 +72,7 @@ pub enum GrantSource {
 /// Resource-level constraints bound to a grant. Kept intentionally small; the
 /// exact semantics are validated at the authoritative boundary, not here.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PermissionConstraints {
     /// Allowed relative path globs (project.fs.read).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -87,12 +97,65 @@ pub struct PermissionConstraints {
     pub max_response_bytes: Option<u64>,
 }
 
+impl PermissionConstraints {
+    pub fn from_manifest(request: &PermissionRequest) -> Result<Self, ExtensionError> {
+        let permission = PermissionKind::parse(&request.name).ok_or_else(|| {
+            ExtensionError::ManifestValidation {
+                reason: format!("unsupported permission request: {}", request.name),
+            }
+        })?;
+        let constraints = Self {
+            paths: request.paths.clone(),
+            operations: request.operations.clone(),
+            schemes: request.schemes.clone(),
+            hosts: request.hosts.clone(),
+            methods: request.methods.clone(),
+            max_bytes: request.max_bytes,
+            max_response_bytes: request.max_response_bytes,
+        };
+        validate_constraints(permission, &constraints)?;
+        Ok(constraints)
+    }
+
+    /// Canonical JSON used by both durable decisions and the live reference
+    /// monitor. `serde_json::Map` is key-sorted in this workspace, so parsing
+    /// and serializing the value yields a deterministic encoding.
+    pub fn canonical_json(&self) -> Result<String, ExtensionError> {
+        let value =
+            serde_json::to_value(self).map_err(|error| ExtensionError::ManifestValidation {
+                reason: format!("permission constraints could not be encoded: {error}"),
+            })?;
+        serde_json::to_string(&value).map_err(|error| ExtensionError::ManifestValidation {
+            reason: format!("permission constraints could not be canonicalized: {error}"),
+        })
+    }
+
+    pub fn digest(&self) -> Result<String, ExtensionError> {
+        self.canonical_json()
+            .map(|canonical| sha256_hex(canonical.as_bytes()))
+    }
+}
+
+/// Exact Workspace lineage optionally bound to a live grant. Filesystem and
+/// network grants use `None`; Workspace inspection grants require `Some`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspaceGrantIdentity {
+    pub workspace_id: String,
+    pub kernel_instance_id: String,
+    pub state_revision: u64,
+    pub project_revision: u64,
+}
+
 /// The authoritative broker grant record.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PluginGrant {
+    pub durable_grant_id: String,
     /// Opaque handle digest; the raw token is never persisted or logged.
     pub handle_digest: String,
+    pub normalized_project_root: String,
     pub plugin_id: PluginId,
+    pub plugin_version: PluginVersion,
+    pub runtime_kind: RuntimeKind,
     pub host_instance_id: HostInstanceId,
     pub package_digest: PackageDigest,
     pub project_id: ScopeId,
@@ -100,12 +163,18 @@ pub struct PluginGrant {
     pub activation_generation: ActivationGeneration,
     pub permission: PermissionKind,
     pub constraints: PermissionConstraints,
+    pub constraints_digest: String,
     pub grant_source: GrantSource,
+    pub policy_revision: u64,
+    pub workspace: Option<WorkspaceGrantIdentity>,
     pub created_at_millis: u64,
-    pub expires_at_millis: Option<u64>,
+    pub expires_at_millis: u64,
     pub revoked_at_millis: Option<u64>,
     /// `allow once` grants are consumed after a single successful use.
     pub used: bool,
+    /// Admission reserves an allow-once grant so two concurrent calls cannot
+    /// both start. Failure before dispatch releases this reservation.
+    pub in_flight: bool,
 }
 
 impl PluginGrant {
@@ -114,23 +183,31 @@ impl PluginGrant {
     }
 
     fn consumed(&self, now_millis: u64) -> bool {
-        self.used
-            || self
-                .expires_at_millis
-                .map(|expiry| now_millis >= expiry)
-                .unwrap_or(false)
+        self.used || now_millis >= self.expires_at_millis
     }
 }
 
 /// An opaque capability handle surfaced to a plugin. It carries only a
 /// non-secret identifier and never the authorization state itself.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CapabilityHandle {
     pub id: String,
     pub permission: PermissionKind,
     pub scope_id: ScopeId,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expires_at_millis: Option<u64>,
+}
+
+impl std::fmt::Debug for CapabilityHandle {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("CapabilityHandle")
+            .field("id", &"<redacted>")
+            .field("permission", &self.permission)
+            .field("scope_id", &self.scope_id)
+            .field("expires_at_millis", &self.expires_at_millis)
+            .finish()
+    }
 }
 
 /// Revalidation outcome for a privileged call.
@@ -147,6 +224,8 @@ pub enum GrantErrorKind {
     Revoked,
     Expired,
     Consumed,
+    InFlight,
+    NotAdmitted,
     WrongPlugin,
     WrongHostSession,
     WrongProject,
@@ -154,21 +233,72 @@ pub enum GrantErrorKind {
     WrongGeneration,
     WrongPackageDigest,
     WrongPermission,
+    WrongWorkspace,
     ConstraintViolation,
 }
 
 /// A broker-owned grant store. This is the reference monitor for read-only
 /// permissions: it grants, revokes, and revalidates. It performs no I/O and
 /// stores no raw tokens — only SHA-256 digests of the opaque handle id.
+pub trait GrantClock: Send + Sync {
+    fn now_millis(&self) -> u64;
+}
+
+pub trait GrantTokenSource: Send + Sync {
+    fn next_token(&self) -> [u8; 32];
+}
+
 #[derive(Debug, Default)]
+pub struct SystemGrantClock;
+
+impl GrantClock for SystemGrantClock {
+    fn now_millis(&self) -> u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_millis() as u64)
+            .unwrap_or(0)
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct OsGrantTokenSource;
+
+impl GrantTokenSource for OsGrantTokenSource {
+    fn next_token(&self) -> [u8; 32] {
+        rand::random()
+    }
+}
+
 pub struct GrantStore {
     grants: std::collections::BTreeMap<String, PluginGrant>,
+    durable_handles: std::collections::BTreeMap<String, String>,
+    clock: Arc<dyn GrantClock>,
+    token_source: Arc<dyn GrantTokenSource>,
+}
+
+impl std::fmt::Debug for GrantStore {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("GrantStore")
+            .field("grant_count", &self.grants.len())
+            .finish_non_exhaustive()
+    }
+}
+
+impl Default for GrantStore {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// The exact parameters required to issue a read-only grant.
 #[derive(Debug, Clone)]
 pub struct GrantRequest {
+    pub durable_grant_id: String,
+    pub normalized_project_root: String,
     pub plugin_id: PluginId,
+    pub plugin_version: PluginVersion,
+    pub runtime_kind: RuntimeKind,
     pub host_instance_id: HostInstanceId,
     pub package_digest: PackageDigest,
     pub project_id: ScopeId,
@@ -176,8 +306,11 @@ pub struct GrantRequest {
     pub activation_generation: ActivationGeneration,
     pub permission: PermissionKind,
     pub constraints: PermissionConstraints,
+    pub constraints_digest: String,
     pub grant_source: GrantSource,
-    pub ttl: Option<Duration>,
+    pub policy_revision: u64,
+    pub workspace: Option<WorkspaceGrantIdentity>,
+    pub expires_at_millis: u64,
 }
 
 /// The exact resource and operation requested for one privileged call.
@@ -212,13 +345,23 @@ pub struct RevalidationRequest {
     pub generation: ActivationGeneration,
     pub permission: PermissionKind,
     pub permission_use: PermissionUse,
-    pub now_millis: u64,
+    pub workspace: Option<WorkspaceGrantIdentity>,
 }
 
 impl GrantStore {
     pub fn new() -> Self {
+        Self::with_sources(Arc::new(SystemGrantClock), Arc::new(OsGrantTokenSource))
+    }
+
+    pub fn with_sources(
+        clock: Arc<dyn GrantClock>,
+        token_source: Arc<dyn GrantTokenSource>,
+    ) -> Self {
         Self {
             grants: std::collections::BTreeMap::new(),
+            durable_handles: std::collections::BTreeMap::new(),
+            clock,
+            token_source,
         }
     }
 
@@ -226,17 +369,50 @@ impl GrantStore {
     /// id the caller sees). The broker stores only the digest.
     pub fn grant(&mut self, request: GrantRequest) -> Result<CapabilityHandle, ExtensionError> {
         validate_constraints(request.permission, &request.constraints)?;
-        let now = now_millis();
-        let handle_id = format!("handle.{}", uuid::Uuid::new_v4().simple());
+        validate_grant_request(&request)?;
+        let now = self.clock.now_millis();
+        if request.expires_at_millis <= now {
+            return Err(ExtensionError::ManifestValidation {
+                reason: "grant expiry must be in the future".to_string(),
+            });
+        }
+        let maximum_ttl = match request.grant_source {
+            GrantSource::AllowOnce => MAX_ALLOW_ONCE_TTL,
+            GrantSource::Project => MAX_PROJECT_GRANT_TTL,
+        };
+        if request.expires_at_millis.saturating_sub(now) > maximum_ttl.as_millis() as u64 {
+            return Err(ExtensionError::ManifestValidation {
+                reason: "grant expiry exceeds its source policy".to_string(),
+            });
+        }
+        if let Some(existing_digest) = self.durable_handles.get(&request.durable_grant_id).cloned()
+        {
+            if self
+                .grants
+                .get(&existing_digest)
+                .is_some_and(|grant| grant.is_active(now))
+            {
+                return Err(ExtensionError::ManifestValidation {
+                    reason: "durable grant already has a live handle".to_string(),
+                });
+            }
+            self.durable_handles.remove(&request.durable_grant_id);
+        }
+        let handle_id = format!("handle.{}", hex_encode(&self.token_source.next_token()));
         let handle_digest = sha256_hex(handle_id.as_bytes());
-
-        let expires_at_millis = request
-            .ttl
-            .map(|ttl| now.saturating_add(ttl.as_millis() as u64));
+        if self.grants.contains_key(&handle_digest) {
+            return Err(ExtensionError::ManifestValidation {
+                reason: "handle token source produced a duplicate token".to_string(),
+            });
+        }
 
         let grant = PluginGrant {
+            durable_grant_id: request.durable_grant_id.clone(),
             handle_digest: handle_digest.clone(),
+            normalized_project_root: request.normalized_project_root,
             plugin_id: request.plugin_id,
+            plugin_version: request.plugin_version,
+            runtime_kind: request.runtime_kind,
             host_instance_id: request.host_instance_id,
             package_digest: request.package_digest,
             project_id: request.project_id.clone(),
@@ -244,19 +420,25 @@ impl GrantStore {
             activation_generation: request.activation_generation,
             permission: request.permission,
             constraints: request.constraints,
+            constraints_digest: request.constraints_digest,
             grant_source: request.grant_source,
+            policy_revision: request.policy_revision,
+            workspace: request.workspace,
             created_at_millis: now,
-            expires_at_millis,
+            expires_at_millis: request.expires_at_millis,
             revoked_at_millis: None,
             used: false,
+            in_flight: false,
         };
+        self.durable_handles
+            .insert(request.durable_grant_id, handle_digest.clone());
         self.grants.insert(handle_digest, grant);
 
         Ok(CapabilityHandle {
             id: handle_id,
             permission: request.permission,
             scope_id: request.scope_id,
-            expires_at_millis,
+            expires_at_millis: Some(request.expires_at_millis),
         })
     }
 
@@ -266,70 +448,307 @@ impl GrantStore {
         let handle_digest = sha256_hex(handle_id.as_bytes());
         match self.grants.get_mut(&handle_digest) {
             Some(grant) => {
-                grant.revoked_at_millis = Some(now_millis());
+                grant.revoked_at_millis = Some(self.clock.now_millis());
                 true
             }
             None => false,
         }
     }
 
+    /// Revoke the exact in-memory handle derived from one durable grant.
+    pub fn revoke_durable_grant(&mut self, durable_grant_id: &str) -> bool {
+        let Some(handle_digest) = self.durable_handles.get(durable_grant_id).cloned() else {
+            return false;
+        };
+        let Some(grant) = self.grants.get_mut(&handle_digest) else {
+            return false;
+        };
+        grant.revoked_at_millis = Some(self.clock.now_millis());
+        true
+    }
+
+    pub fn has_live_durable_grant(&self, durable_grant_id: &str) -> bool {
+        let now = self.clock.now_millis();
+        self.durable_handles
+            .get(durable_grant_id)
+            .and_then(|digest| self.grants.get(digest))
+            .is_some_and(|grant| grant.is_active(now))
+    }
+
+    pub fn active_handle_count(&self) -> usize {
+        let now = self.clock.now_millis();
+        self.grants
+            .values()
+            .filter(|grant| grant.is_active(now))
+            .count()
+    }
+
+    pub fn has_live_handle(&self, handle_id: &str) -> bool {
+        let handle_digest = sha256_hex(handle_id.as_bytes());
+        let now = self.clock.now_millis();
+        self.grants
+            .get(&handle_digest)
+            .is_some_and(|grant| grant.is_active(now))
+    }
+
+    /// Final contribution publication check. A successfully consumed
+    /// allow-once handle remains valid for the exact admitted call, but an
+    /// expired or revoked handle does not.
+    pub fn handle_allows_admitted_completion(&self, handle_id: &str) -> bool {
+        let handle_digest = sha256_hex(handle_id.as_bytes());
+        let now = self.clock.now_millis();
+        self.grants
+            .get(&handle_digest)
+            .is_some_and(|grant| grant.revoked_at_millis.is_none() && now < grant.expires_at_millis)
+    }
+
+    /// Invalidate all live authority for an exact normalized project.
+    pub fn invalidate_project(&mut self, normalized_project_root: &str) -> usize {
+        let now = self.clock.now_millis();
+        let mut invalidated = 0;
+        for grant in self.grants.values_mut() {
+            if grant.normalized_project_root == normalized_project_root
+                && grant.revoked_at_millis.is_none()
+            {
+                grant.revoked_at_millis = Some(now);
+                invalidated += 1;
+            }
+        }
+        invalidated
+    }
+
+    pub fn invalidate_host(&mut self, host_instance_id: &HostInstanceId) -> usize {
+        let now = self.clock.now_millis();
+        let mut invalidated = 0;
+        for grant in self.grants.values_mut() {
+            if &grant.host_instance_id == host_instance_id && grant.revoked_at_millis.is_none() {
+                grant.revoked_at_millis = Some(now);
+                invalidated += 1;
+            }
+        }
+        invalidated
+    }
+
+    pub fn invalidate_workspace(&mut self, workspace: &WorkspaceGrantIdentity) -> usize {
+        let now = self.clock.now_millis();
+        let mut invalidated = 0;
+        for grant in self.grants.values_mut() {
+            if grant.workspace.as_ref() == Some(workspace) && grant.revoked_at_millis.is_none() {
+                grant.revoked_at_millis = Some(now);
+                invalidated += 1;
+            }
+        }
+        invalidated
+    }
+
     /// Revalidate a privileged call against the stored grant.
-    ///
-    /// `now_millis` is injected for determinism in tests.
     pub fn revalidate(&mut self, request: RevalidationRequest) -> Revalidation {
         let handle_digest = sha256_hex(request.handle_id.as_bytes());
         let Some(grant) = self.grants.get_mut(&handle_digest) else {
             return Revalidation::Denied(GrantErrorKind::UnknownHandle);
         };
-
-        if grant.revoked_at_millis.is_some() {
-            return Revalidation::Denied(GrantErrorKind::Revoked);
-        }
-        if grant
-            .expires_at_millis
-            .map(|expiry| request.now_millis >= expiry)
-            .unwrap_or(false)
-        {
-            return Revalidation::Denied(GrantErrorKind::Expired);
-        }
-        if grant.used {
-            return Revalidation::Denied(GrantErrorKind::Consumed);
-        }
-        if grant.plugin_id != request.plugin_id {
-            return Revalidation::Denied(GrantErrorKind::WrongPlugin);
-        }
-        if grant.host_instance_id != request.host_instance_id {
-            return Revalidation::Denied(GrantErrorKind::WrongHostSession);
-        }
-        if grant.project_id != request.project_id {
-            return Revalidation::Denied(GrantErrorKind::WrongProject);
-        }
-        if grant.scope_id != request.scope_id {
-            return Revalidation::Denied(GrantErrorKind::WrongScope);
-        }
-        if grant.activation_generation != request.generation {
-            return Revalidation::Denied(GrantErrorKind::WrongGeneration);
-        }
-        if grant.package_digest != request.package_digest {
-            return Revalidation::Denied(GrantErrorKind::WrongPackageDigest);
-        }
-        if grant.permission != request.permission {
-            return Revalidation::Denied(GrantErrorKind::WrongPermission);
-        }
-        if !permission_use_allowed(
-            grant.permission,
-            &grant.constraints,
-            &request.permission_use,
-        ) {
-            return Revalidation::Denied(GrantErrorKind::ConstraintViolation);
+        let now_millis = self.clock.now_millis();
+        if let Some(error) = revalidation_error(grant, &request, now_millis, false) {
+            return Revalidation::Denied(error);
         }
 
-        // `allow once` consumes the grant on first successful revalidation.
+        // Reserve `allow once` on admission. The operation owner must report
+        // success, pre-dispatch failure, or uncertain completion explicitly.
         if grant.grant_source == GrantSource::AllowOnce {
-            grant.used = true;
+            grant.in_flight = true;
         }
         Revalidation::Allowed
     }
+
+    /// Recheck the exact call after broker work and before any result becomes
+    /// visible. An allow-once grant must still hold its original reservation.
+    pub fn revalidate_admitted(&self, request: &RevalidationRequest) -> Revalidation {
+        let handle_digest = sha256_hex(request.handle_id.as_bytes());
+        let Some(grant) = self.grants.get(&handle_digest) else {
+            return Revalidation::Denied(GrantErrorKind::UnknownHandle);
+        };
+        match revalidation_error(grant, request, self.clock.now_millis(), true) {
+            Some(error) => Revalidation::Denied(error),
+            None => Revalidation::Allowed,
+        }
+    }
+
+    pub fn durable_grant_id_for_handle(&self, handle_id: &str) -> Option<&str> {
+        let handle_digest = sha256_hex(handle_id.as_bytes());
+        self.grants
+            .get(&handle_digest)
+            .map(|grant| grant.durable_grant_id.as_str())
+    }
+
+    pub fn permission_constraints_for_handle(
+        &self,
+        handle_id: &str,
+    ) -> Option<PermissionConstraints> {
+        let handle_digest = sha256_hex(handle_id.as_bytes());
+        self.grants
+            .get(&handle_digest)
+            .map(|grant| grant.constraints.clone())
+    }
+
+    pub fn complete_success(&mut self, handle_id: &str) -> bool {
+        self.complete(handle_id, CompletionClass::Success)
+    }
+
+    pub fn complete_failure_before_dispatch(&mut self, handle_id: &str) -> bool {
+        self.complete(handle_id, CompletionClass::FailureBeforeDispatch)
+    }
+
+    pub fn complete_uncertain(&mut self, handle_id: &str) -> bool {
+        self.complete(handle_id, CompletionClass::Uncertain)
+    }
+
+    fn complete(&mut self, handle_id: &str, completion: CompletionClass) -> bool {
+        let handle_digest = sha256_hex(handle_id.as_bytes());
+        let Some(grant) = self.grants.get_mut(&handle_digest) else {
+            return false;
+        };
+        if grant.grant_source != GrantSource::AllowOnce || !grant.in_flight {
+            return false;
+        }
+        grant.in_flight = false;
+        match completion {
+            CompletionClass::Success | CompletionClass::Uncertain => grant.used = true,
+            CompletionClass::FailureBeforeDispatch => {}
+        }
+        true
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum CompletionClass {
+    Success,
+    FailureBeforeDispatch,
+    Uncertain,
+}
+
+fn revalidation_error(
+    grant: &PluginGrant,
+    request: &RevalidationRequest,
+    now_millis: u64,
+    admitted: bool,
+) -> Option<GrantErrorKind> {
+    if grant.revoked_at_millis.is_some() {
+        return Some(GrantErrorKind::Revoked);
+    }
+    if now_millis >= grant.expires_at_millis {
+        return Some(GrantErrorKind::Expired);
+    }
+    if grant.used {
+        return Some(GrantErrorKind::Consumed);
+    }
+    if admitted && grant.grant_source == GrantSource::AllowOnce && !grant.in_flight {
+        return Some(GrantErrorKind::NotAdmitted);
+    }
+    if !admitted && grant.in_flight {
+        return Some(GrantErrorKind::InFlight);
+    }
+    if grant.plugin_id != request.plugin_id {
+        return Some(GrantErrorKind::WrongPlugin);
+    }
+    if grant.host_instance_id != request.host_instance_id {
+        return Some(GrantErrorKind::WrongHostSession);
+    }
+    if grant.project_id != request.project_id {
+        return Some(GrantErrorKind::WrongProject);
+    }
+    if grant.scope_id != request.scope_id {
+        return Some(GrantErrorKind::WrongScope);
+    }
+    if grant.activation_generation != request.generation {
+        return Some(GrantErrorKind::WrongGeneration);
+    }
+    if grant.package_digest != request.package_digest {
+        return Some(GrantErrorKind::WrongPackageDigest);
+    }
+    if grant.permission != request.permission {
+        return Some(GrantErrorKind::WrongPermission);
+    }
+    if grant.workspace != request.workspace {
+        return Some(GrantErrorKind::WrongWorkspace);
+    }
+    if !permission_use_allowed(
+        grant.permission,
+        &grant.constraints,
+        &request.permission_use,
+    ) {
+        return Some(GrantErrorKind::ConstraintViolation);
+    }
+    None
+}
+
+fn validate_grant_request(request: &GrantRequest) -> Result<(), ExtensionError> {
+    let valid_opaque_id = |value: &str| {
+        !value.is_empty()
+            && value.len() <= crate::MAX_IDENTIFIER_BYTES
+            && value.bytes().all(|byte| {
+                byte.is_ascii_lowercase()
+                    || byte.is_ascii_digit()
+                    || matches!(byte, b'.' | b'_' | b'-')
+            })
+    };
+    if !valid_opaque_id(&request.durable_grant_id) {
+        return Err(ExtensionError::ManifestValidation {
+            reason: "durable grant id is invalid".to_string(),
+        });
+    }
+    if request.normalized_project_root.trim().is_empty()
+        || request.normalized_project_root == "legacy_unscoped"
+        || request.normalized_project_root.contains('\\')
+    {
+        return Err(ExtensionError::ManifestValidation {
+            reason: "grant requires an explicit normalized project root".to_string(),
+        });
+    }
+    if request.runtime_kind != RuntimeKind::Wasm {
+        return Err(ExtensionError::ManifestValidation {
+            reason: "live plugin grants require the Wasm runtime".to_string(),
+        });
+    }
+    if request.project_id != request.scope_id {
+        return Err(ExtensionError::ManifestValidation {
+            reason: "initial plugin grants must use the exact project scope".to_string(),
+        });
+    }
+    if request.policy_revision == 0 {
+        return Err(ExtensionError::ManifestValidation {
+            reason: "grant policy revision must be positive".to_string(),
+        });
+    }
+    if request.constraints.digest()? != request.constraints_digest {
+        return Err(ExtensionError::ManifestValidation {
+            reason: "grant constraints digest does not match canonical constraints".to_string(),
+        });
+    }
+    let workspace_shape_valid = match request.permission {
+        PermissionKind::WorkspaceRInspect => request.workspace.is_some(),
+        PermissionKind::ProjectFsRead | PermissionKind::NetworkFetch => request.workspace.is_none(),
+    };
+    if !workspace_shape_valid {
+        return Err(ExtensionError::ManifestValidation {
+            reason: "grant Workspace identity does not match its permission".to_string(),
+        });
+    }
+    if request.workspace.as_ref().is_some_and(|identity| {
+        identity.workspace_id.is_empty()
+            || identity.workspace_id.len() > 256
+            || identity.kernel_instance_id.is_empty()
+            || identity.kernel_instance_id.len() > 256
+            || identity
+                .workspace_id
+                .chars()
+                .chain(identity.kernel_instance_id.chars())
+                .any(char::is_control)
+    }) {
+        return Err(ExtensionError::ManifestValidation {
+            reason: "grant Workspace identity is invalid".to_string(),
+        });
+    }
+    Ok(())
 }
 
 fn validate_constraints(
@@ -553,16 +972,50 @@ fn sha256_hex(bytes: &[u8]) -> String {
     out
 }
 
-fn now_millis() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
+fn hex_encode(bytes: &[u8]) -> String {
+    use std::fmt::Write;
+    let mut encoded = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        write!(&mut encoded, "{byte:02x}").expect("writing to String cannot fail");
+    }
+    encoded
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    #[derive(Debug)]
+    struct TestClock(AtomicU64);
+
+    impl TestClock {
+        fn new(now: u64) -> Self {
+            Self(AtomicU64::new(now))
+        }
+
+        fn set(&self, now: u64) {
+            self.0.store(now, Ordering::SeqCst);
+        }
+    }
+
+    impl GrantClock for TestClock {
+        fn now_millis(&self) -> u64 {
+            self.0.load(Ordering::SeqCst)
+        }
+    }
+
+    #[derive(Debug, Default)]
+    struct TestTokenSource(AtomicU64);
+
+    impl GrantTokenSource for TestTokenSource {
+        fn next_token(&self) -> [u8; 32] {
+            let sequence = self.0.fetch_add(1, Ordering::SeqCst).to_be_bytes();
+            let mut token = [0_u8; 32];
+            token[24..].copy_from_slice(&sequence);
+            token
+        }
+    }
 
     fn scope(id: &str) -> ScopeId {
         ScopeId::new(id).unwrap()
@@ -605,31 +1058,68 @@ mod tests {
         }
     }
 
-    fn granted_handle() -> (GrantStore, CapabilityHandle, PluginGrant) {
-        let mut store = GrantStore::new();
+    fn test_store(now: u64) -> (GrantStore, Arc<TestClock>) {
+        let clock = Arc::new(TestClock::new(now));
+        let store = GrantStore::with_sources(clock.clone(), Arc::new(TestTokenSource::default()));
+        (store, clock)
+    }
+
+    fn grant_request(
+        durable_grant_id: &str,
+        permission: PermissionKind,
+        constraints: PermissionConstraints,
+        grant_source: GrantSource,
+        expires_at_millis: u64,
+    ) -> GrantRequest {
+        let constraints_digest = constraints.digest().unwrap();
+        GrantRequest {
+            durable_grant_id: durable_grant_id.to_string(),
+            normalized_project_root: "D:/project/a".to_string(),
+            plugin_id: plugin("org.example.a"),
+            plugin_version: PluginVersion::parse("1.0.0").unwrap(),
+            runtime_kind: RuntimeKind::Wasm,
+            host_instance_id: host("instance.a"),
+            package_digest: digest("pkg"),
+            project_id: scope("scope.project"),
+            scope_id: scope("scope.project"),
+            activation_generation: generation(1),
+            permission,
+            constraints,
+            constraints_digest,
+            grant_source,
+            policy_revision: 1,
+            workspace: (permission == PermissionKind::WorkspaceRInspect).then(|| {
+                WorkspaceGrantIdentity {
+                    workspace_id: "workspace.a".to_string(),
+                    kernel_instance_id: "kernel.a".to_string(),
+                    state_revision: 2,
+                    project_revision: 3,
+                }
+            }),
+            expires_at_millis,
+        }
+    }
+
+    fn granted_handle() -> (GrantStore, CapabilityHandle, PluginGrant, Arc<TestClock>) {
+        let (mut store, clock) = test_store(1_000);
         let handle = store
-            .grant(GrantRequest {
-                plugin_id: plugin("org.example.a"),
-                host_instance_id: host("instance.a"),
-                package_digest: digest("pkg"),
-                project_id: scope("scope.project"),
-                scope_id: scope("scope.project"),
-                activation_generation: generation(1),
-                permission: PermissionKind::ProjectFsRead,
-                constraints: file_constraints(),
-                grant_source: GrantSource::Project,
-                ttl: None,
-            })
+            .grant(grant_request(
+                "grant.a",
+                PermissionKind::ProjectFsRead,
+                file_constraints(),
+                GrantSource::Project,
+                60_000,
+            ))
             .unwrap();
         let grant = store
             .grants
             .get(&sha256_hex(handle.id.as_bytes()))
             .unwrap()
             .clone();
-        (store, handle, grant)
+        (store, handle, grant, clock)
     }
 
-    fn revalidation(handle: &CapabilityHandle, now: u64) -> RevalidationRequest {
+    fn revalidation(handle: &CapabilityHandle) -> RevalidationRequest {
         RevalidationRequest {
             handle_id: handle.id.clone(),
             plugin_id: plugin("org.example.a"),
@@ -643,29 +1133,30 @@ mod tests {
                 relative_path: "data/nested/input.csv".to_string(),
                 requested_bytes: 512,
             },
-            now_millis: now,
+            workspace: None,
         }
     }
 
     #[test]
     fn grant_and_revalidate_project_scoped() {
-        let (mut store, handle, grant) = granted_handle();
+        let (mut store, handle, grant, _) = granted_handle();
         assert_ne!(handle.id, grant.handle_digest);
-        let outcome = store.revalidate(revalidation(&handle, 1000));
+        assert_eq!(handle.id.len(), "handle.".len() + 64);
+        let outcome = store.revalidate(revalidation(&handle));
         assert_eq!(outcome, Revalidation::Allowed);
     }
 
     #[test]
     fn wrong_plugin_and_host_session_are_denied() {
-        let (mut store, handle, _) = granted_handle();
-        let mut wrong_plugin = revalidation(&handle, 1000);
+        let (mut store, handle, _, _) = granted_handle();
+        let mut wrong_plugin = revalidation(&handle);
         wrong_plugin.plugin_id = plugin("org.example.other");
         assert_eq!(
             store.revalidate(wrong_plugin),
             Revalidation::Denied(GrantErrorKind::WrongPlugin)
         );
 
-        let mut wrong_host = revalidation(&handle, 1000);
+        let mut wrong_host = revalidation(&handle);
         wrong_host.host_instance_id = host("instance.other");
         assert_eq!(
             store.revalidate(wrong_host),
@@ -675,8 +1166,8 @@ mod tests {
 
     #[test]
     fn file_path_and_byte_constraints_are_revalidated_per_call() {
-        let (mut store, handle, _) = granted_handle();
-        let mut outside = revalidation(&handle, 1000);
+        let (mut store, handle, _, _) = granted_handle();
+        let mut outside = revalidation(&handle);
         outside.permission_use = PermissionUse::ProjectFsRead {
             relative_path: "secrets/input.csv".to_string(),
             requested_bytes: 10,
@@ -686,7 +1177,7 @@ mod tests {
             Revalidation::Denied(GrantErrorKind::ConstraintViolation)
         );
 
-        let mut oversized = revalidation(&handle, 1000);
+        let mut oversized = revalidation(&handle);
         oversized.permission_use = PermissionUse::ProjectFsRead {
             relative_path: "data/nested/input.csv".to_string(),
             requested_bytes: 1025,
@@ -699,8 +1190,8 @@ mod tests {
 
     #[test]
     fn wrong_project_denied() {
-        let (mut store, handle, _) = granted_handle();
-        let mut request = revalidation(&handle, 1000);
+        let (mut store, handle, _, _) = granted_handle();
+        let mut request = revalidation(&handle);
         request.project_id = scope("scope.other");
         let outcome = store.revalidate(request);
         assert_eq!(outcome, Revalidation::Denied(GrantErrorKind::WrongProject));
@@ -708,8 +1199,8 @@ mod tests {
 
     #[test]
     fn wrong_digest_denied() {
-        let (mut store, handle, _) = granted_handle();
-        let mut request = revalidation(&handle, 1000);
+        let (mut store, handle, _, _) = granted_handle();
+        let mut request = revalidation(&handle);
         request.package_digest = digest("OTHER");
         let outcome = store.revalidate(request);
         assert_eq!(
@@ -720,30 +1211,25 @@ mod tests {
 
     #[test]
     fn revoke_denies_subsequent_calls() {
-        let (mut store, handle, _) = granted_handle();
+        let (mut store, handle, _, _) = granted_handle();
         assert!(store.revoke(&handle.id));
-        let outcome = store.revalidate(revalidation(&handle, 1000));
+        let outcome = store.revalidate(revalidation(&handle));
         assert_eq!(outcome, Revalidation::Denied(GrantErrorKind::Revoked));
     }
 
     #[test]
-    fn allow_once_is_consumed() {
-        let mut store = GrantStore::new();
+    fn allow_once_is_reserved_then_consumed_only_after_success() {
+        let (mut store, _) = test_store(1_000);
         let handle = store
-            .grant(GrantRequest {
-                plugin_id: plugin("org.example.a"),
-                host_instance_id: host("instance.a"),
-                package_digest: digest("pkg"),
-                project_id: scope("scope.project"),
-                scope_id: scope("scope.project"),
-                activation_generation: generation(1),
-                permission: PermissionKind::NetworkFetch,
-                constraints: network_constraints(),
-                grant_source: GrantSource::AllowOnce,
-                ttl: None,
-            })
+            .grant(grant_request(
+                "grant.once",
+                PermissionKind::NetworkFetch,
+                network_constraints(),
+                GrantSource::AllowOnce,
+                2_000,
+            ))
             .unwrap();
-        let mut request = revalidation(&handle, 1000);
+        let mut request = revalidation(&handle);
         request.permission = PermissionKind::NetworkFetch;
         request.permission_use = PermissionUse::NetworkFetch {
             scheme: "https".to_string(),
@@ -754,51 +1240,50 @@ mod tests {
 
         let first = store.revalidate(request.clone());
         assert_eq!(first, Revalidation::Allowed);
-        let second = store.revalidate(request);
-        assert_eq!(second, Revalidation::Denied(GrantErrorKind::Consumed));
+        assert_eq!(store.revalidate_admitted(&request), Revalidation::Allowed);
+        assert_eq!(
+            store.revalidate(request.clone()),
+            Revalidation::Denied(GrantErrorKind::InFlight)
+        );
+        assert!(store.complete_failure_before_dispatch(&handle.id));
+        assert_eq!(store.revalidate(request.clone()), Revalidation::Allowed);
+        assert!(store.complete_success(&handle.id));
+        assert_eq!(
+            store.revalidate(request),
+            Revalidation::Denied(GrantErrorKind::Consumed)
+        );
     }
 
     #[test]
     fn expired_grant_denied() {
-        // Use a ttl of 1 ms and revalidate far in the future so the injected
-        // `now_millis` is unambiguously past the pinned expiry.
-        let mut store = GrantStore::new();
+        let (mut store, clock) = test_store(1_000);
         let handle = store
-            .grant(GrantRequest {
-                plugin_id: plugin("org.example.a"),
-                host_instance_id: host("instance.a"),
-                package_digest: digest("pkg"),
-                project_id: scope("scope.project"),
-                scope_id: scope("scope.project"),
-                activation_generation: generation(1),
-                permission: PermissionKind::ProjectFsRead,
-                constraints: file_constraints(),
-                grant_source: GrantSource::Project,
-                ttl: Some(Duration::from_millis(1)),
-            })
+            .grant(grant_request(
+                "grant.expiring",
+                PermissionKind::ProjectFsRead,
+                file_constraints(),
+                GrantSource::Project,
+                1_001,
+            ))
             .unwrap();
-        let outcome = store.revalidate(revalidation(&handle, u64::MAX));
+        clock.set(1_001);
+        let outcome = store.revalidate(revalidation(&handle));
         assert_eq!(outcome, Revalidation::Denied(GrantErrorKind::Expired));
     }
 
     #[test]
     fn network_host_method_and_size_are_revalidated() {
-        let mut store = GrantStore::new();
+        let (mut store, _) = test_store(1_000);
         let handle = store
-            .grant(GrantRequest {
-                plugin_id: plugin("org.example.a"),
-                host_instance_id: host("instance.a"),
-                package_digest: digest("pkg"),
-                project_id: scope("scope.project"),
-                scope_id: scope("scope.project"),
-                activation_generation: generation(1),
-                permission: PermissionKind::NetworkFetch,
-                constraints: network_constraints(),
-                grant_source: GrantSource::Project,
-                ttl: None,
-            })
+            .grant(grant_request(
+                "grant.network",
+                PermissionKind::NetworkFetch,
+                network_constraints(),
+                GrantSource::Project,
+                60_000,
+            ))
             .unwrap();
-        let mut request = revalidation(&handle, 1000);
+        let mut request = revalidation(&handle);
         request.permission = PermissionKind::NetworkFetch;
         request.permission_use = PermissionUse::NetworkFetch {
             scheme: "https".to_string(),
@@ -814,19 +1299,172 @@ mod tests {
 
     #[test]
     fn empty_constraints_fail_closed_at_grant_time() {
-        let mut store = GrantStore::new();
-        let result = store.grant(GrantRequest {
-            plugin_id: plugin("org.example.a"),
-            host_instance_id: host("instance.a"),
-            package_digest: digest("pkg"),
-            project_id: scope("scope.project"),
-            scope_id: scope("scope.project"),
-            activation_generation: generation(1),
-            permission: PermissionKind::ProjectFsRead,
-            constraints: PermissionConstraints::default(),
-            grant_source: GrantSource::Project,
-            ttl: None,
-        });
+        let (mut store, _) = test_store(1_000);
+        let result = store.grant(grant_request(
+            "grant.empty",
+            PermissionKind::ProjectFsRead,
+            PermissionConstraints::default(),
+            GrantSource::Project,
+            60_000,
+        ));
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn durable_identity_and_constraints_digest_are_fail_closed() {
+        let (mut store, _) = test_store(1_000);
+        let mut wrong_digest = grant_request(
+            "grant.a",
+            PermissionKind::ProjectFsRead,
+            file_constraints(),
+            GrantSource::Project,
+            60_000,
+        );
+        wrong_digest.constraints_digest = "0".repeat(64);
+        assert!(store.grant(wrong_digest).is_err());
+
+        let mut wrong_runtime = grant_request(
+            "grant.b",
+            PermissionKind::ProjectFsRead,
+            file_constraints(),
+            GrantSource::Project,
+            60_000,
+        );
+        wrong_runtime.runtime_kind = RuntimeKind::WebWorker;
+        assert!(store.grant(wrong_runtime).is_err());
+
+        let mut workspace_missing = grant_request(
+            "grant.c",
+            PermissionKind::WorkspaceRInspect,
+            PermissionConstraints {
+                operations: vec!["metadata".to_string()],
+                max_bytes: Some(1024),
+                ..Default::default()
+            },
+            GrantSource::Project,
+            60_000,
+        );
+        workspace_missing.workspace = None;
+        assert!(store.grant(workspace_missing).is_err());
+        assert_eq!(store.active_handle_count(), 0);
+    }
+
+    #[test]
+    fn durable_revoke_and_project_invalidation_never_need_raw_handle() {
+        let (mut store, _) = test_store(1_000);
+        let first = store
+            .grant(grant_request(
+                "grant.a",
+                PermissionKind::ProjectFsRead,
+                file_constraints(),
+                GrantSource::Project,
+                60_000,
+            ))
+            .unwrap();
+        assert!(store.has_live_durable_grant("grant.a"));
+        assert!(store.revoke_durable_grant("grant.a"));
+        assert_eq!(
+            store.revalidate(revalidation(&first)),
+            Revalidation::Denied(GrantErrorKind::Revoked)
+        );
+        let replacement = store
+            .grant(grant_request(
+                "grant.a",
+                PermissionKind::ProjectFsRead,
+                file_constraints(),
+                GrantSource::Project,
+                60_000,
+            ))
+            .unwrap();
+        assert_ne!(replacement.id, first.id);
+        assert!(store.has_live_durable_grant("grant.a"));
+
+        let second = store
+            .grant(grant_request(
+                "grant.b",
+                PermissionKind::ProjectFsRead,
+                file_constraints(),
+                GrantSource::Project,
+                60_000,
+            ))
+            .unwrap();
+        assert_eq!(store.invalidate_project("D:/project/a"), 2);
+        assert_eq!(
+            store.revalidate(revalidation(&second)),
+            Revalidation::Denied(GrantErrorKind::Revoked)
+        );
+    }
+
+    #[test]
+    fn duplicate_token_and_excessive_duration_fail_without_overwrite() {
+        #[derive(Debug)]
+        struct RepeatingToken;
+        impl GrantTokenSource for RepeatingToken {
+            fn next_token(&self) -> [u8; 32] {
+                [7; 32]
+            }
+        }
+        let clock = Arc::new(TestClock::new(1_000));
+        let mut store = GrantStore::with_sources(clock, Arc::new(RepeatingToken));
+        store
+            .grant(grant_request(
+                "grant.a",
+                PermissionKind::ProjectFsRead,
+                file_constraints(),
+                GrantSource::Project,
+                60_000,
+            ))
+            .unwrap();
+        assert!(
+            store
+                .grant(grant_request(
+                    "grant.b",
+                    PermissionKind::ProjectFsRead,
+                    file_constraints(),
+                    GrantSource::Project,
+                    60_000,
+                ))
+                .is_err()
+        );
+        assert!(
+            store
+                .grant(grant_request(
+                    "grant.c",
+                    PermissionKind::ProjectFsRead,
+                    file_constraints(),
+                    GrantSource::Project,
+                    1_000 + MAX_PROJECT_GRANT_TTL.as_millis() as u64 + 1,
+                ))
+                .is_err()
+        );
+        assert_eq!(store.active_handle_count(), 1);
+    }
+
+    #[test]
+    fn admitted_call_observes_revoke_and_glob_grammar_distinguishes_star_from_double_star() {
+        let (mut store, _) = test_store(1_000);
+        let handle = store
+            .grant(grant_request(
+                "grant.once",
+                PermissionKind::ProjectFsRead,
+                file_constraints(),
+                GrantSource::AllowOnce,
+                2_000,
+            ))
+            .unwrap();
+        let request = revalidation(&handle);
+        assert_eq!(store.revalidate(request.clone()), Revalidation::Allowed);
+        assert!(store.revoke_durable_grant("grant.once"));
+        assert_eq!(
+            store.revalidate_admitted(&request),
+            Revalidation::Denied(GrantErrorKind::Revoked)
+        );
+
+        assert!(glob_matches("data/*.csv", "data/input.csv"));
+        assert!(!glob_matches("data/*.csv", "data/nested/input.csv"));
+        assert!(glob_matches("data/**/*.csv", "data/nested/input.csv"));
+        assert!(glob_matches("data/**/*.csv", "data/input.csv"));
+        assert!(glob_matches("data/input?.csv", "data/input1.csv"));
+        assert!(!glob_matches("data/input?.csv", "data/input/1.csv"));
     }
 }

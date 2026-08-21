@@ -4,6 +4,177 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.1-dev.11 - 2026-08-21
+
+### Workspace-plugin crash-point recovery truth
+
+- Startup, Workspace restart, project switch, and failed-switch restoration now
+  reconcile incomplete plugin Uninstall moves, purge-pending trash, and
+  interrupted Update/Rollback transitions before ordinary activation. Exact
+  source/trash/cache evidence is replayed idempotently; ambiguous ownership
+  remains non-routable.
+- File-moving recovery advances and persists project revision exactly once, then
+  repeats reconciliation against the fresh identity. One failed plugin cannot
+  block Workspace R, another plugin, or another project.
+- Unprovable lifecycle state is shown as Recovery required with no unsafe action
+  and no completion claim. A read-only transition inspection command exposes
+  only bounded stable IDs, phases, digests, timestamps, and reason codes.
+
+## 0.4.1-dev.10 - 2026-08-21
+
+### Exact cached workspace-plugin Rollback
+
+- Enabled plugins with a durable rollback pointer now expose one trusted
+  Roll back review action bound to the current project revision and exact
+  current/target digests. The target is loaded only from the verified immutable
+  cache for that same project and plugin.
+- Rollback always creates a new generation, host, and handles. Every target
+  permission is reviewed again even if that digest was previously accepted;
+  historical grants and live authority are never restored.
+- Successful Rollback atomically reverses accepted/rollback pointers through
+  expected-old CAS. The newer project package remains unchanged and visible as
+  an Update candidate. Restart reconstructs the accepted cached target only
+  when the durable pointer pair exactly proves this state.
+
+## 0.4.1-dev.9 - 2026-08-21
+
+### Exact local workspace-plugin Update
+
+- Update pending plugins now expose a trusted review action bound to the
+  current project revision, accepted digest, and changed local candidate digest.
+  This action does not download code or claim marketplace, publisher, signature,
+  or automatic-update trust.
+- Rho validates and caches the complete candidate, obtains fresh permissions
+  for its new digest, creates a hidden fresh host/generation/handles, and swaps
+  contribution routing only through expected-old CAS. Candidate failure or
+  denial preserves the accepted old route when safe.
+- Durable completion atomically advances accepted and rollback pointers before
+  old-digest grants are revoked. A post-CAS persistence failure closes both old
+  and candidate authority and leaves recoverable transition truth instead of
+  reporting a successful Update.
+
+## 0.4.1-dev.8 - 2026-08-21
+
+### Workspace-plugin recoverable Uninstall
+
+- The trusted Workspace Plugins surface can now confirm an exact project,
+  directory, accepted package digest, and project revision before Uninstall.
+  Rho first completes plugin teardown, cancels pending permission requests,
+  revokes every durable grant for that exact digest, and then atomically moves
+  the package directory from discovery into project-local recoverable trash.
+- Package ownership, the recoverable tombstone, and durable Uninstalled state
+  are journaled without claiming permanent deletion. If terminal persistence
+  fails after the move, the package remains in trash and the nonterminal
+  transition stays recoverable; the UI does not report success.
+- Restore requires the exact current-project tombstone and revision, rejects
+  source collisions and any surviving authority, and returns the package in
+  Disabled state. It never recreates a host, route, handle, permission request,
+  or durable grant.
+
+## 0.4.1-dev.7 - 2026-08-20
+
+### Workspace-plugin crash recovery
+
+- Guest traps, invalid outputs, fuel/epoch failures, heartbeat timeouts, and
+  unexpected host loss now remove the exact route and live handles before Rho
+  records durable Crashed state. The third exact-project/plugin crash within
+  ten minutes becomes Blocked, preventing a restart loop.
+- Crashed plugins expose one trusted Retry action. Retry requires the unchanged
+  accepted source/cache digest and current grants, allocates a higher generation
+  and fresh host/handles, and returns to permission review when grants are no
+  longer reusable. Blocked, changed, disabled, missing, and foreign plugins
+  cannot use Retry.
+
+## 0.4.1-dev.6 - 2026-08-20
+
+### Workspace-plugin disable
+
+- The trusted Workspace Plugins surface can now explicitly disable an enabled
+  plugin with the current project revision. Rho persists disabled intent before
+  closing contribution routes, then cancels the exact yielded guest call and
+  pending permission requests, revokes live handles, disposes contributions,
+  and drops or quarantines the Wasm host.
+- Teardown continues after guest quiesce/dispose errors and reports only stable
+  diagnostic codes. Enabled is never shown after route closure. If lifecycle
+  persistence fails during cleanup, the result is `completion_uncertain`, the
+  plugin remains non-routable, and recovery retains the monotonic transition
+  rather than manufacturing durable completion.
+- Workspace R restart, project switching, failed-switch restoration, and
+  application shutdown now reuse the same bounded teardown per plugin. These
+  system boundaries preserve durable enabled intent while recording stopped
+  runtime truth, so returning to an exact project reconstructs fresh authority;
+  a failed plugin teardown is forcibly made non-routable and cannot block the
+  project or application lifecycle.
+
+## 0.4.1-dev.5 - 2026-08-20
+
+### Durable workspace-plugin enablement
+
+- Explicit first enable now persists project/plugin desired and observed state,
+  an exact transition journal, bounded lifecycle events, and a monotonic
+  activation generation in SQLite. The UI reports Enabled only after the exact
+  accepted digest and active terminal state commit.
+- Before host construction, Rho copies the fully revalidated package into a
+  project-isolated app-local immutable cache using exclusive writes, sync,
+  atomic rename, and complete digest read-back. Wasm and Skill text are loaded
+  from that exact cache snapshot rather than mutable project files.
+- Permission review retains the same transition identity through activation.
+  If persistence fails after contribution publication, Rho closes the route,
+  revokes live handles, reports failure, and leaves nonterminal recovery truth;
+  it does not claim durable completion. Changed packages remain update-pending
+  and cannot use the first-enable path as an unreviewed upgrade.
+- Application start, Workspace R restart, and successful project switching now
+  reconcile durable enabled plugins without blocking the scientific workspace.
+  Exact accepted packages with valid project grants receive fresh hosts,
+  generations, and handles; one-shot grants return to permission review.
+  Interrupted enable transitions are closed and rebuilt from exact evidence,
+  while missing, changed, corrupt, denied, crashed, or otherwise unprovable
+  packages stay visibly non-routable as Blocked or Update pending.
+
+## 0.4.1-dev.4 - 2026-08-20
+
+### Controlled workspace-plugin contributions
+
+- Manifest V2 packages can declare bounded Tool, Source, Skill, Command,
+  Viewer, and named Panel contracts. Labels, schemas, assets, media types, and
+  project/package limits are validated before any declaration can become live.
+- Contribution proxies are published transactionally against the exact prior
+  project/plugin/digest/generation/host identity. A failed or stale candidate
+  leaves the previously accepted generation routable and project switching
+  removes the exact live routes.
+- Calls use the no-import Guest ABI V2 loop with a 30-second deadline, exact
+  call-bound handles, closed input/output schemas, bounded results, and
+  provenance. Active Tool contributions are projected into the exact-project
+  Agent tool set; Source results and declarative Skills enter Agent context as
+  explicitly untrusted, origin-labelled project content. The trusted Workspace
+  Plugins surface can explicitly run zero-input Commands and open Viewers using
+  fixed Text/Code/KeyValue/Table/Notice/Artifact-image blocks; plugin HTML,
+  URLs, scripts, styles, paths, and base64 documents are rejected. Optional
+  Panels use the same renderer only inside the named `plugin_details` slot and
+  are cleared on close, revoke, host teardown, or project change.
+
+## 0.4.1-dev.3 - 2026-08-20
+
+### Workspace plugins
+
+- Project-local Wasm packages under `.rho/plugins` now appear in a dedicated
+  Workspace Plugins surface and remain disabled until explicitly enabled.
+- Permission-bearing plugins use a separate trusted dialog and durable
+  request/grant/event lane. Decisions bind the exact project, plugin version,
+  package digest, permission constraints, policy revision, host generation,
+  and Workspace lineage where applicable; raw session handles are never shown
+  or persisted.
+- The initial permission choices are Deny, Allow once, and bounded access for
+  this project. One-shot grants are revoked during restart recovery, upgrades
+  require review, and project switching invalidates in-memory authority.
+- The bounded `project.fs.read` broker lane is implemented behind the no-import
+  Guest ABI V2 loop. Workspace R metadata/preview inspection is also
+  implemented through fixed object references and strips function source, but
+  no user-facing contribution routes either operation yet. Network access is
+  likewise implemented as credential-free, public-HTTPS-only GET/HEAD with
+  per-hop DNS and grant revalidation, but remains unreachable until the
+  controlled contribution slice lands.
+
 ## 0.4.1-dev.1 - 2026-08-18
 
 ### Credentials

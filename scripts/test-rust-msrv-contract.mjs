@@ -7,12 +7,13 @@ import { fileURLToPath } from "node:url";
 export const EXPECTED_MSRV = "1.88";
 
 const REQUIRED_MATRIX = new Set([
-  "macos-26|stable|stable-aarch64-apple-darwin|aarch64-apple-darwin",
-  "macos-26|1.88.0|1.88.0-aarch64-apple-darwin|aarch64-apple-darwin",
-  "windows-latest|stable|stable-x86_64-pc-windows-gnu|x86_64-pc-windows-gnu",
-  "windows-latest|1.88.0|1.88.0-x86_64-pc-windows-gnu|x86_64-pc-windows-gnu",
-  "ubuntu-22.04|stable|stable-x86_64-unknown-linux-gnu|x86_64-unknown-linux-gnu",
-  "ubuntu-22.04|1.88.0|1.88.0-x86_64-unknown-linux-gnu|x86_64-unknown-linux-gnu",
+  "macos-26|stable|stable-aarch64-apple-darwin|aarch64-apple-darwin|source",
+  "macos-26|1.88.0|1.88.0-aarch64-apple-darwin|aarch64-apple-darwin|source",
+  "windows-latest|stable|stable-x86_64-pc-windows-gnu|x86_64-pc-windows-gnu|source",
+  "windows-latest|stable|stable-x86_64-pc-windows-gnu|x86_64-pc-windows-gnu|installed",
+  "windows-latest|1.88.0|1.88.0-x86_64-pc-windows-gnu|x86_64-pc-windows-gnu|source",
+  "ubuntu-22.04|stable|stable-x86_64-unknown-linux-gnu|x86_64-unknown-linux-gnu|source",
+  "ubuntu-22.04|1.88.0|1.88.0-x86_64-unknown-linux-gnu|x86_64-unknown-linux-gnu|source",
 ]);
 
 const normalizeLineEndings = (text) => text.replace(/\r\n/g, "\n");
@@ -41,6 +42,37 @@ function validateCargoCache(workflow) {
   }
   if (!/^      CARGO_INCREMENTAL: "0"$/m.test(workflow)) {
     fail("Rust CI must disable incremental compilation for the shared build cache");
+  }
+}
+
+function validateCompatibilityCargoCaches(workflow) {
+  validateCargoCache(workflow);
+  for (const marker of [
+    "Restore non-Windows Cargo dependency and build cache",
+    "if: runner.os != 'Windows'",
+    "Restore Windows source build cache",
+    "if: runner.os == 'Windows' && matrix.lane == 'source'",
+    "target/debug/",
+    "rho-rust-v3-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-source-${{ hashFiles('Cargo.lock') }}",
+    "Restore Windows installed build cache",
+    "if: runner.os == 'Windows' && matrix.lane == 'installed'",
+    "target/release/",
+    "rho-rust-v3-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-installed-${{ hashFiles('Cargo.lock') }}",
+  ]) {
+    if (!workflow.includes(marker)) fail(`Rust compatibility cache topology lost ${marker}`);
+  }
+  if (/rho-rust-v2-/.test(workflow)) {
+    fail("Windows compatibility must not restore the rejected full-target v2 cache");
+  }
+  const sourceStart = workflow.indexOf("- name: Restore Windows source build cache");
+  const installedStart = workflow.indexOf("- name: Restore Windows installed build cache");
+  const cacheEnd = workflow.indexOf("- name: Stage pinned macOS Ark sidecar", installedStart);
+  const sourceCache = workflow.slice(sourceStart, installedStart);
+  const installedCache = workflow.slice(installedStart, cacheEnd);
+  for (const [lane, cache] of [["source", sourceCache], ["installed", installedCache]]) {
+    if (/^\s+target\/$/m.test(cache) || /rho-rust-v[12]-/.test(cache)) {
+      fail(`Windows ${lane} cache regressed to a full or historical target archive`);
+    }
   }
 }
 
@@ -92,7 +124,7 @@ function unquote(value) {
 
 function matrixIdentities(workflow) {
   const normalized = normalizeLineEndings(workflow);
-  const pattern = /^\s{10}- os:\s*(.+)\n\s{12}toolchain:\s*(.+)\n\s{12}rustup_toolchain:\s*(.+)\n\s{12}host:\s*(.+)$/gm;
+  const pattern = /^\s{10}- os:\s*(.+)\n\s{12}toolchain:\s*(.+)\n\s{12}rustup_toolchain:\s*(.+)\n\s{12}host:\s*(.+)\n\s{12}lane:\s*(.+)$/gm;
   return new Set(
     [...normalized.matchAll(pattern)].map((match) => match.slice(1).map(unquote).join("|")),
   );
@@ -103,6 +135,7 @@ export function validateCompatibilityWorkflow(text) {
   if (!/^name: Rust Compatibility$/m.test(workflow)) fail("Missing Rust Compatibility workflow name");
   if (!/^on:\n  push:\n    branches: \[main\]/m.test(workflow)) fail("Rust compatibility push trigger must target main");
   if (!/^  pull_request:\n    branches: \[main\]/m.test(workflow)) fail("Rust compatibility pull_request trigger must target main");
+  if (!/^  workflow_dispatch:$/m.test(workflow)) fail("Rust compatibility must support exact-head manual dispatch");
   if (!/^    types: \[opened, reopened, synchronize, ready_for_review\]$/m.test(workflow)) {
     fail("Rust compatibility must run at the Ready transition and later non-Draft updates");
   }
@@ -121,15 +154,20 @@ export function validateCompatibilityWorkflow(text) {
     '".github/workflows/rust-fast.yml"',
     '".github/workflows/candidate-build-draft.yml"',
     '"scripts/test-rust-msrv-contract.mjs"',
+    '"scripts/test-tauri-command-inventory.mjs"',
     '"scripts/test-extension-run-history-contract.mjs"',
     '"scripts/test-extension-p1-3-contract.mjs"',
     '"scripts/test-extension-phase-1-acceptance.mjs"',
+    '"scripts/test-extension-phase-2-host-contract.mjs"',
+    '"scripts/test-extension-p2-2-broker-contract.mjs"',
+    '"scripts/test-workspace-plugin-ui.mjs"',
     '"desktop/dist/app.js"',
     '"desktop/dist/index.html"',
     '"desktop/package.json"',
     '"desktop/package-lock.json"',
     '"NEWS.md"',
     '"r/rho.agent/R/aisdk_adapter.R"',
+    '"r/rho.bridge/**"',
   ]) {
     const occurrences = workflow.split(requiredPath).length - 1;
     if (occurrences !== 2) fail(`Both Rust compatibility triggers must include ${requiredPath}`);
@@ -140,8 +178,8 @@ export function validateCompatibilityWorkflow(text) {
   if (!/fail-fast: false/.test(workflow) || /continue-on-error:/.test(workflow)) {
     fail("All Rust compatibility legs must remain required and independently visible");
   }
-  if (!/^    if: github\.event_name == 'push' \|\| github\.event\.pull_request\.draft == false$/m.test(workflow)) {
-    fail("Rust compatibility matrix must be gated to main pushes and non-Draft PRs");
+  if (!/^    if: github\.event_name == 'push' \|\| github\.event_name == 'workflow_dispatch' \|\| github\.event\.pull_request\.draft == false$/m.test(workflow)) {
+    fail("Rust compatibility matrix must be gated to main pushes, explicit dispatch, and non-Draft PRs");
   }
   if (!/group: rust-compatibility-\$\{\{ github\.workflow \}\}-\$\{\{ github\.ref \}\}/.test(workflow)
       || !/cancel-in-progress: true/.test(workflow)) {
@@ -149,19 +187,33 @@ export function validateCompatibilityWorkflow(text) {
   }
   const actualMatrix = matrixIdentities(workflow);
   assert.deepEqual(actualMatrix, REQUIRED_MATRIX, "Rust compatibility matrix identities changed");
+  if ((workflow.match(/^\s{12}lane: installed$/gm) ?? []).length !== 1) {
+    fail("Rust compatibility must have exactly one Windows installed lane");
+  }
+  if (!/^    name: \$\{\{ matrix\.name \}\}$/m.test(workflow)
+      || (workflow.match(/^\s{12}name: windows-latest \/ installed acceptance$/gm) ?? []).length !== 1) {
+    fail("Rust compatibility must preserve source check names and expose the installed lane");
+  }
   if (!/^      RUSTUP_TOOLCHAIN: \$\{\{ matrix\.rustup_toolchain \}\}$/m.test(workflow)) {
     fail("Every matrix leg must explicitly override rust-toolchain.toml through RUSTUP_TOOLCHAIN");
   }
   for (const command of [
     "node scripts/test-rust-msrv-contract.mjs",
+    "node scripts/test-tauri-command-inventory.mjs --test",
+    "node scripts/test-tauri-command-inventory.mjs",
     "node scripts/test-extension-phase-1-acceptance.mjs --test",
     "node scripts/test-extension-phase-1-acceptance.mjs",
+    "node scripts/test-extension-phase-2-host-contract.mjs --test",
+    "node scripts/test-extension-phase-2-host-contract.mjs",
+    "node scripts/test-extension-p2-2-broker-contract.mjs --test",
+    "node scripts/test-extension-p2-2-broker-contract.mjs",
+    "node scripts/test-workspace-plugin-ui.mjs",
     "cargo check --workspace --all-targets --locked",
     "cargo test --workspace --locked --no-fail-fast",
   ]) {
     if (!workflow.includes(command)) fail(`Rust compatibility workflow is missing: ${command}`);
   }
-  if (!/if: matrix\.toolchain == 'stable'[\s\S]*cargo fmt --all -- --check/.test(workflow)) {
+  if (!/if: matrix\.lane == 'source' && matrix\.toolchain == 'stable'[\s\S]*cargo fmt --all -- --check/.test(workflow)) {
     fail("Only stable compatibility legs may enforce rustfmt");
   }
   if (!/RHO_RTOOLS_BIN=C:\\rtools45\\x86_64-w64-mingw32\.static\.posix\\bin/.test(workflow)) {
@@ -184,15 +236,24 @@ export function validateCompatibilityWorkflow(text) {
   ]) {
     if (!workflow.includes(marker)) fail(`Rust compatibility installed-app gate is missing: ${marker}`);
   }
-  if ((workflow.match(/if: matrix\.toolchain == 'stable' && runner\.os ==/g) ?? []).length < 3) {
-    fail("Each installed-app acceptance leg must run only on stable Rust");
+  if (!/- name: Verify locked workspace at selected Rust version\n        if: matrix\.lane == 'source'/.test(workflow)) {
+    fail("Installed packaging lane must not duplicate the complete source/MSRV suite");
+  }
+  if (!/- name: Build, install, smoke and remove unsigned Windows app\n        if: matrix\.lane == 'installed' && matrix\.toolchain == 'stable' && runner\.os == 'Windows'/.test(workflow)) {
+    fail("Windows installed acceptance must run only in its parallel stable lane");
+  }
+  for (const os of ["macOS", "Linux"]) {
+    const escaped = os === "macOS" ? "macOS" : "Linux";
+    if (!new RegExp(`if: matrix\\.lane == 'source' && matrix\\.toolchain == 'stable' && runner\\.os == '${escaped}'`).test(workflow)) {
+      fail(`${os} installed acceptance must remain in its stable source lane`);
+    }
   }
   if (!/Rho uninstall registry cleanup failed/.test(workflow)
       || !/hdiutil detach/.test(workflow)
       || !/rm -rf -- "\$key_dir" "\$extract_dir"/.test(workflow)) {
     fail("Installed-app acceptance must prove Windows, macOS, and Linux cleanup");
   }
-  validateCargoCache(workflow);
+  validateCompatibilityCargoCaches(workflow);
 }
 
 export function validateFastWorkflow(text) {
@@ -236,21 +297,28 @@ export function validateFastWorkflow(text) {
     '".github/workflows/rust-fast.yml"',
     '".github/workflows/rust-compatibility.yml"',
     '"scripts/test-rust-msrv-contract.mjs"',
+    '"scripts/test-tauri-command-inventory.mjs"',
     '"scripts/test-extension-run-history-contract.mjs"',
     '"scripts/test-extension-p1-3-contract.mjs"',
     '"scripts/test-extension-phase-1-acceptance.mjs"',
+    '"scripts/test-extension-phase-2-host-contract.mjs"',
+    '"scripts/test-extension-p2-2-broker-contract.mjs"',
+    '"scripts/test-workspace-plugin-ui.mjs"',
     '"desktop/dist/app.js"',
     '"desktop/dist/index.html"',
     '"desktop/package.json"',
     '"desktop/package-lock.json"',
     '"NEWS.md"',
     '"r/rho.agent/R/aisdk_adapter.R"',
+    '"r/rho.bridge/**"',
   ]) {
     if (!workflow.includes(requiredPath)) fail(`Rust Fast path filter is missing ${requiredPath}`);
   }
   for (const command of [
     "node scripts/test-rust-msrv-contract.mjs --test",
     "node scripts/test-rust-msrv-contract.mjs",
+    "node scripts/test-tauri-command-inventory.mjs --test",
+    "node scripts/test-tauri-command-inventory.mjs",
     "node scripts/test-license-contract.mjs --test",
     "node scripts/test-license-contract.mjs",
     "node scripts/test-extension-run-history-contract.mjs --test",
@@ -259,6 +327,11 @@ export function validateFastWorkflow(text) {
     "node scripts/test-extension-p1-3-contract.mjs",
     "node scripts/test-extension-phase-1-acceptance.mjs --test",
     "node scripts/test-extension-phase-1-acceptance.mjs",
+    "node scripts/test-extension-phase-2-host-contract.mjs --test",
+    "node scripts/test-extension-phase-2-host-contract.mjs",
+    "node scripts/test-extension-p2-2-broker-contract.mjs --test",
+    "node scripts/test-extension-p2-2-broker-contract.mjs",
+    "node scripts/test-workspace-plugin-ui.mjs",
     "cargo fmt --all -- --check",
     "cargo check --workspace --all-targets --locked",
     "cargo test --workspace --locked --no-fail-fast",
@@ -316,8 +389,9 @@ function fixtureMetadata(rustVersions = [EXPECTED_MSRV, EXPECTED_MSRV]) {
 function fixtureWorkflow() {
   const entries = [...REQUIRED_MATRIX]
     .map((identity) => {
-      const [os, toolchain, rustupToolchain, host] = identity.split("|");
-      return `          - os: ${os}\n            toolchain: "${toolchain}"\n            rustup_toolchain: ${rustupToolchain}\n            host: ${host}`;
+      const [os, toolchain, rustupToolchain, host, lane] = identity.split("|");
+      const name = lane === "installed" ? "windows-latest / installed acceptance" : `${os} / Rust ${toolchain}`;
+      return `          - os: ${os}\n            toolchain: "${toolchain}"\n            rustup_toolchain: ${rustupToolchain}\n            host: ${host}\n            lane: ${lane}\n            name: ${name}`;
     })
     .join("\n");
   return `name: Rust Compatibility
@@ -337,6 +411,7 @@ on:
       - "desktop/package-lock.json"
       - "NEWS.md"
       - "r/rho.agent/R/aisdk_adapter.R"
+      - "r/rho.bridge/**"
       - "vendor/jet/**/*.rs"
       - "runtime/ark.json"
       - "scripts/bootstrap-ark-macos.sh"
@@ -344,9 +419,13 @@ on:
       - ".github/workflows/rust-fast.yml"
       - ".github/workflows/candidate-build-draft.yml"
       - "scripts/test-rust-msrv-contract.mjs"
+      - "scripts/test-tauri-command-inventory.mjs"
       - "scripts/test-extension-run-history-contract.mjs"
       - "scripts/test-extension-p1-3-contract.mjs"
       - "scripts/test-extension-phase-1-acceptance.mjs"
+      - "scripts/test-extension-phase-2-host-contract.mjs"
+      - "scripts/test-extension-p2-2-broker-contract.mjs"
+      - "scripts/test-workspace-plugin-ui.mjs"
   pull_request:
     branches: [main]
     types: [opened, reopened, synchronize, ready_for_review]
@@ -363,6 +442,7 @@ on:
       - "desktop/package-lock.json"
       - "NEWS.md"
       - "r/rho.agent/R/aisdk_adapter.R"
+      - "r/rho.bridge/**"
       - "vendor/jet/**/*.rs"
       - "runtime/ark.json"
       - "scripts/bootstrap-ark-macos.sh"
@@ -370,9 +450,14 @@ on:
       - ".github/workflows/rust-fast.yml"
       - ".github/workflows/candidate-build-draft.yml"
       - "scripts/test-rust-msrv-contract.mjs"
+      - "scripts/test-tauri-command-inventory.mjs"
       - "scripts/test-extension-run-history-contract.mjs"
       - "scripts/test-extension-p1-3-contract.mjs"
       - "scripts/test-extension-phase-1-acceptance.mjs"
+      - "scripts/test-extension-phase-2-host-contract.mjs"
+      - "scripts/test-extension-p2-2-broker-contract.mjs"
+      - "scripts/test-workspace-plugin-ui.mjs"
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
@@ -380,7 +465,8 @@ concurrency:
   cancel-in-progress: true
 jobs:
   rust-compatibility:
-    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    name: \${{ matrix.name }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -391,7 +477,9 @@ ${entries}
       RUSTUP_TOOLCHAIN: \${{ matrix.rustup_toolchain }}
       CARGO_INCREMENTAL: "0"
     steps:
-      - uses: actions/cache@v4
+      - name: Restore non-Windows Cargo dependency and build cache
+        if: runner.os != 'Windows'
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry/index/
@@ -401,31 +489,64 @@ ${entries}
           key: rho-rust-v1-\${{ runner.os }}-\${{ env.RUSTUP_TOOLCHAIN }}-\${{ hashFiles('Cargo.lock') }}
           restore-keys: |
             rho-rust-v1-\${{ runner.os }}-\${{ env.RUSTUP_TOOLCHAIN }}-
+      - name: Restore Windows source build cache
+        if: runner.os == 'Windows' && matrix.lane == 'source'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/debug/
+          key: rho-rust-v3-\${{ runner.os }}-\${{ env.RUSTUP_TOOLCHAIN }}-source-\${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            rho-rust-v3-\${{ runner.os }}-\${{ env.RUSTUP_TOOLCHAIN }}-source-
+      - name: Restore Windows installed build cache
+        if: runner.os == 'Windows' && matrix.lane == 'installed'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/release/
+          key: rho-rust-v3-\${{ runner.os }}-\${{ env.RUSTUP_TOOLCHAIN }}-installed-\${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            rho-rust-v3-\${{ runner.os }}-\${{ env.RUSTUP_TOOLCHAIN }}-installed-
       - if: runner.os == 'Windows'
         run: echo "RHO_RTOOLS_BIN=C:\\rtools45\\x86_64-w64-mingw32.static.posix\\bin"
       - if: runner.os == 'macOS'
         run: ./scripts/bootstrap-ark-macos.sh
-      - if: matrix.toolchain == 'stable'
+      - if: matrix.lane == 'source' && matrix.toolchain == 'stable'
         run: cargo fmt --all -- --check
-      - run: |
+      - name: Verify locked workspace at selected Rust version
+        if: matrix.lane == 'source'
+        run: |
           node scripts/test-rust-msrv-contract.mjs
+          node scripts/test-tauri-command-inventory.mjs --test
+          node scripts/test-tauri-command-inventory.mjs
           node scripts/test-extension-phase-1-acceptance.mjs --test
           node scripts/test-extension-phase-1-acceptance.mjs
+          node scripts/test-extension-phase-2-host-contract.mjs --test
+          node scripts/test-extension-phase-2-host-contract.mjs
+          node scripts/test-extension-p2-2-broker-contract.mjs --test
+          node scripts/test-extension-p2-2-broker-contract.mjs
+          node scripts/test-workspace-plugin-ui.mjs
           cargo check --workspace --all-targets --locked
           cargo test --workspace --locked --no-fail-fast
       - name: Build, install, smoke and remove unsigned Windows app
-        if: matrix.toolchain == 'stable' && runner.os == 'Windows'
+        if: matrix.lane == 'installed' && matrix.toolchain == 'stable' && runner.os == 'Windows'
         run: |
           ./scripts/build-windows-installer.ps1
           echo "Rho uninstall registry cleanup failed"
       - name: Build, mount and smoke unsigned macOS app
-        if: matrix.toolchain == 'stable' && runner.os == 'macOS'
+        if: matrix.lane == 'source' && matrix.toolchain == 'stable' && runner.os == 'macOS'
         run: |
           env -u RHO_INTERNAL_EXTENSION_RUNTIME rho-desktop --smoke-test
           RHO_INTERNAL_EXTENSION_RUNTIME=legacy rho-desktop --smoke-test
           hdiutil detach mount
       - name: Build, extract and smoke unsigned Linux AppImage
-        if: matrix.toolchain == 'stable' && runner.os == 'Linux'
+        if: matrix.lane == 'source' && matrix.toolchain == 'stable' && runner.os == 'Linux'
         run: |
           scripts/build-linux.sh
           env -u RHO_INTERNAL_EXTENSION_RUNTIME rho-desktop --smoke-test
@@ -453,15 +574,20 @@ on:
       - "desktop/package-lock.json"
       - "NEWS.md"
       - "r/rho.agent/R/aisdk_adapter.R"
+      - "r/rho.bridge/**"
       - "vendor/jet/**/*.rs"
       - "runtime/ark.json"
       - "scripts/bootstrap-ark-linux.sh"
       - ".github/workflows/rust-fast.yml"
       - ".github/workflows/rust-compatibility.yml"
       - "scripts/test-rust-msrv-contract.mjs"
+      - "scripts/test-tauri-command-inventory.mjs"
       - "scripts/test-extension-run-history-contract.mjs"
       - "scripts/test-extension-p1-3-contract.mjs"
       - "scripts/test-extension-phase-1-acceptance.mjs"
+      - "scripts/test-extension-phase-2-host-contract.mjs"
+      - "scripts/test-extension-p2-2-broker-contract.mjs"
+      - "scripts/test-workspace-plugin-ui.mjs"
 permissions:
   contents: read
 concurrency:
@@ -492,6 +618,8 @@ jobs:
       - run: |
           node scripts/test-rust-msrv-contract.mjs --test
           node scripts/test-rust-msrv-contract.mjs
+          node scripts/test-tauri-command-inventory.mjs --test
+          node scripts/test-tauri-command-inventory.mjs
           node scripts/test-license-contract.mjs --test
           node scripts/test-license-contract.mjs
           node scripts/test-extension-run-history-contract.mjs --test
@@ -500,6 +628,11 @@ jobs:
           node scripts/test-extension-p1-3-contract.mjs
           node scripts/test-extension-phase-1-acceptance.mjs --test
           node scripts/test-extension-phase-1-acceptance.mjs
+          node scripts/test-extension-phase-2-host-contract.mjs --test
+          node scripts/test-extension-phase-2-host-contract.mjs
+          node scripts/test-extension-p2-2-broker-contract.mjs --test
+          node scripts/test-extension-p2-2-broker-contract.mjs
+          node scripts/test-workspace-plugin-ui.mjs
           cargo fmt --all -- --check
           cargo check --workspace --all-targets --locked
           cargo test --workspace --locked --no-fail-fast
@@ -522,15 +655,35 @@ function runSelfTests() {
   const workflow = fixtureWorkflow();
   validateCompatibilityWorkflow(workflow);
   const oneIdentity = [...REQUIRED_MATRIX][0];
-  const [os, toolchain, rustupToolchain, host] = oneIdentity.split("|");
-  const row = `          - os: ${os}\n            toolchain: "${toolchain}"\n            rustup_toolchain: ${rustupToolchain}\n            host: ${host}\n`;
+  const [os, toolchain, rustupToolchain, host, lane] = oneIdentity.split("|");
+  const name = lane === "installed" ? "windows-latest / installed acceptance" : `${os} / Rust ${toolchain}`;
+  const row = `          - os: ${os}\n            toolchain: "${toolchain}"\n            rustup_toolchain: ${rustupToolchain}\n            host: ${host}\n            lane: ${lane}\n            name: ${name}\n`;
   assert.throws(() => validateCompatibilityWorkflow(workflow.replace(row, "")), /matrix identities/);
   assert.throws(() => validateCompatibilityWorkflow(workflow.replace("RUSTUP_TOOLCHAIN:", "SELECTED_TOOLCHAIN:")), /explicitly override/);
   assert.throws(() => validateCompatibilityWorkflow(workflow.replace(" --locked", "")), /missing:/);
   assert.throws(() => validateCompatibilityWorkflow(workflow.replace("ready_for_review", "converted_to_draft")), /Ready transition/);
+  assert.throws(() => validateCompatibilityWorkflow(workflow.replace("  workflow_dispatch:\n", "")), /manual dispatch/);
   assert.throws(() => validateCompatibilityWorkflow(workflow.replace("draft == false", "draft == true")), /gated/);
-  assert.throws(() => validateCompatibilityWorkflow(workflow.replace("actions/cache@v4", "actions/cache@v3")), /cache/);
+  assert.throws(() => validateCompatibilityWorkflow(workflow.replaceAll("actions/cache@v4", "actions/cache@v3")), /cache/);
   assert.throws(() => validateCompatibilityWorkflow(workflow.replace("hashFiles('Cargo.lock')", "github.sha")), /cache key/);
+  assert.throws(
+    () => validateCompatibilityWorkflow(workflow.replace("matrix.lane == 'installed'", "matrix.lane == 'source'")),
+    /installed/,
+  );
+  assert.throws(
+    () => validateCompatibilityWorkflow(workflow.replace(
+      "if: matrix.lane == 'source'\n        run: |",
+      "if: matrix.lane == 'installed'\n        run: |",
+    )),
+    /must not duplicate/,
+  );
+  assert.throws(
+    () => validateCompatibilityWorkflow(workflow.replace(
+      "target/release/",
+      "target/full-release/",
+    )),
+    /cache topology/,
+  );
 
   const fastWorkflow = fixtureFastWorkflow();
   validateFastWorkflow(fastWorkflow);

@@ -30,7 +30,7 @@ rho_create_aisdk_session(
   connection = .rho_agent_state$connection
 )
 
-rho_create_workspace_tools()
+rho_create_workspace_tools(plugin_tools = list())
 
 rho_read_frame(connection)
 
