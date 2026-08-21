@@ -54,6 +54,7 @@ assert.match(rust, /file_edit\.outcome_uncertain/);
 assert.match(rust, /struct AppState \{[\s\S]*project_transition_gate: Arc<Mutex<\(\)>>/);
 assert.match(rust, /async fn create_agent_conversation\([\s\S]*project_transition_gate\.lock\(\)\.await/);
 assert.match(rust, /project_transition_orders_file_claim_before_switch_preflight/);
+assert.match(rust, /Agent file mutation claim was not registered before project switch preflight/);
 assert.match(rust, /fn persisted_agent_file_mutation_state/);
 assert.match(rust, /AGENT_FILE_ALREADY_DECIDED/);
 assert.match(rust, /restore_content_sha256/);

@@ -674,3 +674,38 @@ exact candidate and has SHA-256
 `4ae9aec04105951d7cedda004444bfd9ab5972bd8ff20905897b2a70c505b151`.
 Conditions 7 and 8 are intentionally performed only after this ledger is
 integrated. The Draft remains unpublished.
+
+## 2026-08-21 Ready Fast deterministic transition-order test repair
+
+Phase 2 integration Ready Fast run `32459444429` exposed a test-only race in
+`project_transition_orders_file_claim_before_switch_preflight`: the fixture
+held the project-transition mutex, spawned Apply and Switch tasks, released the
+mutex, then assumed the earlier-spawned Apply task would acquire it first.
+Tokio does not make that spawn-order guarantee. When Switch won, the fixture
+continued beyond file-mutation preflight and failed with `Workspace R is not
+running`. The same failure reproduced in a focused local run; no production
+runtime or Phase 2 source changed between earlier passing and failing runs.
+
+The D1/R2 repair removes the scheduler assumption. The fixture still holds the
+per-file lane, starts Apply, then waits with a bounded timeout until the real
+`AgentFileMutationRegistry` exposes the queued exact-project/exact-path claim.
+Only then does it start Switch and assert that preflight reports the Agent file
+mutation blocker, cancellation removes exactly that queued claim, and neither
+file content nor project state changes. A source contract fixes the explicit
+registration-before-preflight synchronization marker so the fixture cannot
+silently regress to spawn-order timing.
+
+This repair changes test synchronization only. It adds no product mutex,
+delay, retry, Workspace behavior, file authority, schema, command, application
+or R-package version, `NEWS.md`, release or publication impact. Completion
+requires repeated focused execution, the full desktop/workspace suite, the
+Agent concurrency contract, formatting and diff checks, followed by fresh
+Ready Fast and required protected checks on the repaired exact head.
+
+Local repair evidence passed: the focused transition-order regression passed
+20 consecutive executions; the Agent concurrency contract, Rust formatting,
+locked all-target workspace check and complete locked workspace tests passed.
+Desktop reported 270 passed with the existing opt-in Keychain test ignored.
+The separately observed run-history scheduler window passed 20 focused runs
+and the complete desktop/workspace rerun, so no unrelated timeout change was
+included in this repair.

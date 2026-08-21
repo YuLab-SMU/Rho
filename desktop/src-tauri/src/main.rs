@@ -10081,7 +10081,6 @@ mod tests {
                 .lane(&format!("{normalized_root}\0analysis.R"))
                 .await;
             let lane_guard = lane.lock().await;
-            let transition_guard = state.project_transition_gate.lock().await;
 
             let apply_state = state.clone();
             let (apply_started_tx, apply_started_rx) = oneshot::channel();
@@ -10100,6 +10099,23 @@ mod tests {
                 .await
             });
             apply_started_rx.await.unwrap();
+            // Do not infer Tokio lock acquisition order from spawn order. The
+            // product invariant starts only after Apply has registered its
+            // queued claim while waiting for the per-file lane.
+            tokio::time::timeout(Duration::from_secs(5), async {
+                loop {
+                    if state
+                        .agent_file_mutations
+                        .blocker(&normalized_root)
+                        .is_some()
+                    {
+                        break;
+                    }
+                    tokio::task::yield_now().await;
+                }
+            })
+            .await
+            .expect("Agent file mutation claim was not registered before project switch preflight");
 
             let switch_state = state.clone();
             let (switch_started_tx, switch_started_rx) = oneshot::channel();
@@ -10111,9 +10127,8 @@ mod tests {
                 .await
             });
             switch_started_rx.await.unwrap();
-            drop(transition_guard);
 
-            let response = tokio::time::timeout(Duration::from_secs(2), switch)
+            let response = tokio::time::timeout(Duration::from_secs(5), switch)
                 .await
                 .expect("project switch did not reach its preflight")
                 .unwrap()
