@@ -68,6 +68,7 @@ on:
       - "scripts/test-extension-p2-4-trusted-update-contract.mjs"
       - "scripts/test-extension-p2-4-trusted-rollback-contract.mjs"
       - "scripts/test-extension-p2-4-recovery-closeout-contract.mjs"
+      - "scripts/test-extension-phase-2-final-contract.mjs"
       - "scripts/test-workspace-plugin-ui.mjs"
       - "scripts/test-installed-license-surface.mjs"
       - "scripts/test-signpath-readiness.mjs"
@@ -168,6 +169,7 @@ on:
       - "scripts/test-extension-p2-4-trusted-update-contract.mjs"
       - "scripts/test-extension-p2-4-trusted-rollback-contract.mjs"
       - "scripts/test-extension-p2-4-recovery-closeout-contract.mjs"
+      - "scripts/test-extension-phase-2-final-contract.mjs"
       - "scripts/test-workspace-plugin-ui.mjs"
       - "scripts/test-installed-license-surface.mjs"
       - "scripts/test-signpath-readiness.mjs"
@@ -201,6 +203,8 @@ on:
       - "docs/release/historical-0.4.0-dev.43-three-platform-updater-checklist.md"
       - "docs/release/historical-0.4.0-stable-release-checklist.md"
 
+  workflow_dispatch:
+
 permissions:
   contents: read
 
@@ -210,7 +214,7 @@ concurrency:
 
 jobs:
   rust-compatibility:
-    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
     name: ${{ matrix.os }} / Rust ${{ matrix.toolchain }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
@@ -443,6 +447,8 @@ jobs:
           node scripts/test-extension-p2-4-trusted-rollback-contract.mjs
           node scripts/test-extension-p2-4-recovery-closeout-contract.mjs --test
           node scripts/test-extension-p2-4-recovery-closeout-contract.mjs
+          node scripts/test-extension-phase-2-final-contract.mjs --test
+          node scripts/test-extension-phase-2-final-contract.mjs
           node scripts/test-workspace-plugin-ui.mjs
           cargo check --workspace --all-targets --locked
           cargo test --workspace --locked --no-fail-fast

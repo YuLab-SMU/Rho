@@ -103,6 +103,7 @@ export function validateCompatibilityWorkflow(text) {
   if (!/^name: Rust Compatibility$/m.test(workflow)) fail("Missing Rust Compatibility workflow name");
   if (!/^on:\n  push:\n    branches: \[main\]/m.test(workflow)) fail("Rust compatibility push trigger must target main");
   if (!/^  pull_request:\n    branches: \[main\]/m.test(workflow)) fail("Rust compatibility pull_request trigger must target main");
+  if (!/^  workflow_dispatch:$/m.test(workflow)) fail("Rust compatibility must support exact-head manual dispatch");
   if (!/^    types: \[opened, reopened, synchronize, ready_for_review\]$/m.test(workflow)) {
     fail("Rust compatibility must run at the Ready transition and later non-Draft updates");
   }
@@ -145,8 +146,8 @@ export function validateCompatibilityWorkflow(text) {
   if (!/fail-fast: false/.test(workflow) || /continue-on-error:/.test(workflow)) {
     fail("All Rust compatibility legs must remain required and independently visible");
   }
-  if (!/^    if: github\.event_name == 'push' \|\| github\.event\.pull_request\.draft == false$/m.test(workflow)) {
-    fail("Rust compatibility matrix must be gated to main pushes and non-Draft PRs");
+  if (!/^    if: github\.event_name == 'push' \|\| github\.event_name == 'workflow_dispatch' \|\| github\.event\.pull_request\.draft == false$/m.test(workflow)) {
+    fail("Rust compatibility matrix must be gated to main pushes, explicit dispatch, and non-Draft PRs");
   }
   if (!/group: rust-compatibility-\$\{\{ github\.workflow \}\}-\$\{\{ github\.ref \}\}/.test(workflow)
       || !/cancel-in-progress: true/.test(workflow)) {
@@ -407,6 +408,7 @@ on:
       - "scripts/test-extension-phase-2-host-contract.mjs"
       - "scripts/test-extension-p2-2-broker-contract.mjs"
       - "scripts/test-workspace-plugin-ui.mjs"
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
@@ -414,7 +416,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   rust-compatibility:
-    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -581,6 +583,7 @@ function runSelfTests() {
   assert.throws(() => validateCompatibilityWorkflow(workflow.replace("RUSTUP_TOOLCHAIN:", "SELECTED_TOOLCHAIN:")), /explicitly override/);
   assert.throws(() => validateCompatibilityWorkflow(workflow.replace(" --locked", "")), /missing:/);
   assert.throws(() => validateCompatibilityWorkflow(workflow.replace("ready_for_review", "converted_to_draft")), /Ready transition/);
+  assert.throws(() => validateCompatibilityWorkflow(workflow.replace("  workflow_dispatch:\n", "")), /manual dispatch/);
   assert.throws(() => validateCompatibilityWorkflow(workflow.replace("draft == false", "draft == true")), /gated/);
   assert.throws(() => validateCompatibilityWorkflow(workflow.replace("actions/cache@v4", "actions/cache@v3")), /cache/);
   assert.throws(() => validateCompatibilityWorkflow(workflow.replace("hashFiles('Cargo.lock')", "github.sha")), /cache key/);

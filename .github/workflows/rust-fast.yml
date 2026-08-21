@@ -47,6 +47,7 @@ on:
       - "scripts/test-extension-p2-4-trusted-update-contract.mjs"
       - "scripts/test-extension-p2-4-trusted-rollback-contract.mjs"
       - "scripts/test-extension-p2-4-recovery-closeout-contract.mjs"
+      - "scripts/test-extension-phase-2-final-contract.mjs"
       - "scripts/test-workspace-plugin-ui.mjs"
       - "LICENSE"
       - "LICENSES.md"
@@ -164,6 +165,8 @@ jobs:
           node scripts/test-extension-p2-4-trusted-rollback-contract.mjs
           node scripts/test-extension-p2-4-recovery-closeout-contract.mjs --test
           node scripts/test-extension-p2-4-recovery-closeout-contract.mjs
+          node scripts/test-extension-phase-2-final-contract.mjs --test
+          node scripts/test-extension-phase-2-final-contract.mjs
           node scripts/test-workspace-plugin-ui.mjs
 
       - name: Check formatting
