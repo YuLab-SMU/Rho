@@ -21,7 +21,7 @@ at `0.4.1-dev.6`, plus C3 crash/Retry and D1 recoverable move foundation at
 `0.4.1-dev.7`, passed locally; D2 trusted recoverable Uninstall/Restore source
 and packaged smoke are complete at `0.4.1-dev.8`, with Browser visual review
 open; D3 exact retention/purge and E1 replacement/pointer foundation are
-locally complete; E2 and later slices remain gated
+locally complete; E2 trusted Update is active and later slices remain gated
 
 Date: 2026-08-14
 Issue: [#17](https://github.com/YuLab-SMU/Rho/issues/17)

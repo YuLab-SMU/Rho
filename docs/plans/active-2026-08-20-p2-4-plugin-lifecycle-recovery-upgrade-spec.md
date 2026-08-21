@@ -6,9 +6,9 @@ D2 Browser visual review was blocked by the Browser local-file URL policy and
 remains open; hosted and cross-platform installed gates remain mandatory before
 final Phase 2 acceptance
 
-Active work package: none at the P2-4E1 stop. E2 Update UI/command, E3
-Rollback, and P2-4F/G remain inactive until explicit activation. No install,
-visible Update or Rollback action is active.
+Active work package: P2-4E2 only — trusted exact Update command, fresh candidate
+permission continuation, fixed review UI/mock and packaged smoke. E3 Rollback
+and P2-4F/G remain inactive. No install or Rollback action is active.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -645,7 +645,7 @@ E is split into three mandatory local stops:
    snapshot, stages host/handles/contributions hidden, and publishes through
    `ContributionStore::publish(candidate, Some(expected_old_identity))`. No
    command or UI is added.
-2. **P2-4E2 — trusted Update (inactive).** The current discovered changed digest
+2. **P2-4E2 — trusted Update (active).** The current discovered changed digest
    is the only candidate. The command confirms current project revision and
    exact expected-old/candidate digests, creates/caches the candidate, obtains
    fresh candidate-digest grants, prepares hidden authority, quiesces/cancels
@@ -699,6 +699,46 @@ The replacement foundation is locally complete without a product command:
 E1 adds no command, UI/mock state, schema, R contract, installed user behavior
 or version/NEWS impact. Application metadata remains `0.4.1-dev.8`; D2 Browser
 visual review plus hosted/cross-platform and final Phase 2 gates remain open.
+
+### Activated P2-4E2 contract — 2026-08-21
+
+The frozen command is `accept_workspace_plugin_update`. Its deny-unknown-fields
+input contains only plugin ID, exact expected-old digest, exact discovered
+candidate digest and expected project revision. The command holds the project
+transition gate and fails stale before mutation. It accepts only durable
+desired Enabled + observed Update pending, exact active old runtime, current
+discovery candidate and verified immutable candidate cache.
+
+Update order is fixed: validate input/state/discovery → request exact Upgrade
+transition → journal preflight/cache backup → plan permissions for the candidate
+digest → create fresh requests or prepare candidate immediately → E1 hidden
+activation/old quiesce/expected-old CAS/pointer terminal → revoke every active
+durable grant for the old digest → report Enabled. Candidate-digest project
+grants may exist only if produced by this fresh review; no old-digest grant or
+live handle is reused. Permission continuation retains transition ID,
+expected-old/candidate digest and project revision.
+
+Deny, request persistence failure, changed candidate, candidate host failure or
+pre-CAS stale state leaves the exact old route active and Update pending where
+safe. A post-CAS failure closes old and candidate routes and reports recovery
+required; success is never inferred. Old durable grants are revoked only after
+candidate pointer completion, so a pre-terminal failure can still reconstruct
+the accepted old digest.
+
+The fixed UI shows exact old/new digests, project and plugin identity, explicitly
+states that this is a local project package rather than marketplace/publisher
+update, and uses plugin text only as escaped identity text. Update pending has
+one trusted Update action; permission review remains the existing separate
+trusted grant surface. Stale, malicious text, keyboard/focus, narrow viewport,
+mock parity and one-handler command inventory are required.
+
+E2 is user-visible and must synchronize the next development version after
+`0.4.1-dev.8`, `NEWS.md`, frontend cache keys and all version contracts. Tests
+cover zero/multi-permission success and denial, old-grant non-reuse/revocation,
+changed digest during review, candidate failure, terminal persistence failure,
+concurrency, two projects/A-B-A and packaged candidate/legacy smoke. Browser
+visual evidence must be attempted and any tool-policy block reported truthfully.
+E2 stops at its own local commit before E3 activation.
 
 ## Rollback
 
