@@ -23,7 +23,7 @@ and packaged smoke are complete at `0.4.1-dev.8`, with Browser visual review
 open; D3 exact retention/purge and E1 replacement/pointer foundation are
 locally complete; E2 Update and E3 exact cached Rollback are locally complete
 through `0.4.1-dev.10`; F exhaustive recovery/UI truth is locally complete at
-`0.4.1-dev.11` and G remains gated
+`0.4.1-dev.11`; G final hosted/installed audit is active
 
 Date: 2026-08-14
 Issue: [#17](https://github.com/YuLab-SMU/Rho/issues/17)

@@ -6,8 +6,10 @@ D2 Browser visual review was blocked by the Browser local-file URL policy and
 remains open; hosted and cross-platform installed gates remain mandatory before
 final Phase 2 acceptance
 
-Active work package: none at the P2-4F stop. P2-4G remains inactive until its
-explicit activation. No install or new plugin authority is active.
+Active work package: P2-4G only — final local audit, Draft PR handoff, hosted
+Draft Fast plus explicit six-leg compatibility/installed matrix, and Phase 2
+acceptance decision. No product authority, install command, merge, release or
+publication is active.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -1063,6 +1065,35 @@ review remains blocked by the selected Browser's local-file URL policy, and no
 prohibited retry/workaround/alternate browser was used. Deterministic preview/
 mock evidence is not claimed as visual acceptance. Browser, hosted,
 cross-platform installed and final Phase 2 gates remain open for G.
+
+### Activated P2-4G contract — 2026-08-21
+
+G adds no product behavior. It may add one `workflow_dispatch` trigger to Rust
+Compatibility so the exact feature-branch head can run the existing six-leg
+stable/MSRV matrix without marking the Draft PR ready or touching main. The job
+condition must explicitly admit `workflow_dispatch`; permissions stay
+`contents: read`; installed Windows/macOS/Linux stable legs, ephemeral updater
+keys, cleanup and existing smoke commands remain unchanged. No release,
+notarization, signing secret, artifact publication or deployment is authorized.
+
+Before remote work, G reruns all local contracts, formatting, full Rust/R
+affected tests, stable/MSRV checks, candidate/legacy source smoke and final
+worktree/diff/security review. It records the exact head and pushes only the
+feature branch, reuses any matching PR or creates one Draft PR, then runs/waits
+for Draft Fast and the explicit Rust Compatibility workflow on that exact head.
+Failures are diagnosed and fixed locally with a new reviewed commit before one
+bounded rerun; passing or open external checks are never inferred.
+
+Final review maps every Phase 2 requirement and non-goal to code/tests/evidence,
+checks no ambient authority/credential/storage/install/remote-update expansion,
+and distinguishes implementation complete, local packaged acceptance, Browser
+visual acceptance, hosted six-leg acceptance and Phase 2 final acceptance.
+
+Phase 2 may be marked implemented/accepted only if all mandatory gates are true.
+If Browser remains blocked by the selected tool's URL policy, the implementation
+and hosted gates may close but final visual/Phase 2 acceptance stays explicitly
+open; no workaround or manual claim is manufactured. G then leaves the Draft PR
+and exact residual gate for owner/reviewer handoff rather than merging.
 
 ### P2-4A local checkpoint — 2026-08-20
 
