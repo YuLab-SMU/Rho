@@ -1,14 +1,13 @@
 # P2-4 Plugin Lifecycle, Recovery, Uninstall And Upgrade
 
 Status: active under the owner-approved local-first exception; P2-4A through
-P2-4D3 and P2-4E2 local packaged checkpoints are complete;
+P2-4E3 local packaged checkpoints are complete;
 D2 Browser visual review was blocked by the Browser local-file URL policy and
 remains open; hosted and cross-platform installed gates remain mandatory before
 final Phase 2 acceptance
 
-Active work package: P2-4E3 only — exact cached Rollback command, forced fresh
-permission review, fixed UI/mock and restart reconstruction of the accepted
-cached digest. P2-4F/G remain inactive. No install is active.
+Active work package: none at the P2-4E3 stop. P2-4F/G remain inactive until
+explicit activation. No install is active.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -653,7 +652,7 @@ E is split into three mandatory local stops:
    old authority. Candidate denial/failure/stale CAS keeps or reconstructs old
    routing when exact; post-CAS persistence failure closes both and remains
    recoverable. UI/mock/version/NEWS/Browser/packaged smoke are required.
-3. **P2-4E3 — trusted Rollback and restart truth (active).** Rollback target is
+3. **P2-4E3 — trusted Rollback and restart truth (locally complete).** Rollback target is
    exactly `rollback_digest` from verified immutable cache, never an arbitrary
    path. It always creates a fresh generation/host/handles and requires fresh
    permission review for any nonempty permission envelope. Durable rollback may
@@ -780,6 +779,55 @@ success/failure/CAS, restart and A-B-A/two-project isolation. E3 is visible and
 must bump the next development version after `0.4.1-dev.9`, update NEWS/cache
 keys/contracts, attempt Browser evidence, pass packaged candidate/legacy smoke,
 and stop at a local commit before P2-4F.
+
+### P2-4E3 / P2-4E local checkpoint — 2026-08-21
+
+Exact cached Rollback and the complete E replacement package are locally
+complete at application `0.4.1-dev.10`:
+
+- `rollback_workspace_plugin` is deny-unknown-fields, project-transition gated
+  and exact revision/current/rollback-pointer bound. Current discovery must
+  still equal accepted; the target is loaded only by same-project/plugin/digest
+  immutable cache lookup and converted to a typed candidate without a raw path.
+- Rollback permission planning deliberately ignores all durable target grants
+  and always creates fresh requests. Tests prove a previously accepted target
+  receives a different new grant/handle, current-digest grants revoke after
+  terminal completion, denial/stale/missing-cache paths preserve current route,
+  and zero-permission Rollback advances with fresh generation/host.
+- Success reuses E1 hidden activation/expected-old CAS and atomically reverses
+  accepted/rollback pointers. Project source stays newer. Restart recognizes
+  only the exact durable pair `accepted != discovery && rollback == discovery`,
+  revalidates accepted cache, reconstructs fresh authority and continues to
+  project the newer source as Update pending; other mismatches remain closed.
+- The fixed trusted Roll back review shows full current/target digests, project
+  and escaped plugin identity, requires fresh authority, and explicitly states
+  source is not rewritten. Mock uses the same fresh permission and pointer
+  reversal behavior. Command inventory is 135; no install command/UI exists.
+- Full Rust workspace tests passed: desktop 266/one opt-in Keychain ignored,
+  Store 162, Server 101 plus one binary, extension-runtime 126 unit/26
+  contract/13 discovery/34 lifecycle and all other suites. Stable and exact
+  Rust `1.88.0` all-target checks, every P2-4 contract, Phase-1/MAC4/version/
+  command contracts, JS syntax, formatting and diff checks passed.
+- Source, unpacked App candidate/legacy and read-only mounted DMG
+  candidate/legacy smoke passed all prior fields plus
+  `rollback_exact_cache_only`, `rollback_fresh_authority`,
+  `rollback_pointer_reversed`, `rollback_source_unchanged` and
+  `rollback_restart_cached`.
+
+Exact unsigned local rehearsal artifacts:
+
+- arm64 executable: 48,373,456 bytes, SHA-256
+  `da78e220b8f238f58cb7b2234c30c0de0295ac34e481a4ac0b67c94e31869bf3`;
+- DMG: 26,491,911 bytes, SHA-256
+  `6ce01ebd468aa7fdfb341269eed967540180606750a94083bfe541e6c278238a`;
+- updater archive: 27,235,343 bytes, SHA-256
+  `0e5a91ff498473d7c0bc844683c6b19bd47fe54e67b0712054af5664a5aafb7f`.
+
+The updater signature remains ephemeral rehearsal evidence and is not
+production valid. Browser visual review remains blocked by the selected
+Browser's local-file URL policy; no retry/workaround/alternate browser was used.
+Deterministic preview/mock evidence is not claimed as visual acceptance. D2/E2/
+E3 Browser, hosted/cross-platform installed and final Phase 2 gates remain open.
 
 ### P2-4E2 local checkpoint — 2026-08-21
 

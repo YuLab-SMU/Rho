@@ -51,6 +51,7 @@ const state = {
     panelOrigin: "",
     uninstallPluginId: null,
     updatePluginId: null,
+    rollbackPluginId: null,
   },
   busy: false,
   consoleHistory: [],
@@ -2257,7 +2258,7 @@ async function mockInvoke(command, args) {
   await new Promise((resolve) => setTimeout(resolve, command === "run_agent" ? 800 : 300));
   if (command === "app_info") {
     return {
-      version: "0.4.1-dev.9",
+      version: "0.4.1-dev.10",
       channel: "stable",
       commit: "4090cf725c53ab657ba9dfc9743ec6159f27dcf9",
       platform: mockPlatformFixture.platform,
@@ -2275,7 +2276,7 @@ async function mockInvoke(command, args) {
     return {
       status: "up_to_date",
       channel: "stable",
-      installed_version: "0.4.1-dev.9",
+      installed_version: "0.4.1-dev.10",
       available_version: null,
       published_at: null,
       summary: null,
@@ -2462,6 +2463,53 @@ async function mockInvoke(command, args) {
     plugin.observed_state = "active";
     return { status: "enabled", plugin_id: plugin.plugin_id, request_ids: [], active_grant_count: 0, transition_id: transitionId, message: "The exact replacement package is durably active with a fresh host and expected-old routing CAS." };
   }
+  if (command === "rollback_workspace_plugin") {
+    const input = args.input || {};
+    const plugin = mockWorkspacePlugins.find((item) => item.plugin_id === input.pluginId);
+    if (!plugin) throw new Error("Workspace plugin has no durable lifecycle state.");
+    if (Number(input.expectedProjectRevision) !== Number(state.revision.project_revision)) {
+      throw new Error("Workspace plugin Rollback is stale after a project change.");
+    }
+    if (plugin.status !== "enabled" || plugin.accepted_digest !== input.expectedCurrentDigest || plugin.rollback_digest !== input.rollbackDigest) {
+      throw new Error("Workspace plugin Rollback pointers are stale.");
+    }
+    const transitionId = `transition.rollback.${crypto.randomUUID().replaceAll("-", "")}`;
+    plugin.transition_id = transitionId;
+    let request = null;
+    if (plugin.permission_count > 0) {
+      request = {
+        request_id: `request.${crypto.randomUUID().replaceAll("-", "")}`,
+        project_root: mockLastProject,
+        plugin_id: plugin.plugin_id,
+        plugin_version: "previous cached version",
+        package_digest: input.rollbackDigest,
+        runtime_kind: "wasm",
+        permission: "project.fs.read",
+        constraints_json: '{"maxBytes":1024,"paths":["data/**/*.csv"]}',
+        constraints_digest: "d".repeat(64),
+        purpose_text: "Fresh review for the exact cached Rollback target.",
+        status: "pending",
+        requested_at: new Date().toISOString(),
+        resolved_at: null,
+        decision: null,
+        grant_source: null,
+        reason_code: null,
+        expected_project_revision: state.revision.project_revision,
+      };
+      mockPluginPermissionRequests.push(request);
+    }
+    if (request) {
+      plugin.status = "permission_required";
+      plugin.pending_request_count = 1;
+      return { status: "permission_required", plugin_id: plugin.plugin_id, request_ids: [request.request_id], active_grant_count: 0, transition_id: transitionId, message: "Rollback requires fresh permission review for the exact cached target. No historical grant or handle is reused." };
+    }
+    const currentDigest = plugin.accepted_digest;
+    plugin.accepted_digest = input.rollbackDigest;
+    plugin.rollback_digest = currentDigest;
+    plugin.status = "update_pending";
+    plugin.observed_state = "active";
+    return { status: "enabled", plugin_id: plugin.plugin_id, request_ids: [], active_grant_count: 0, transition_id: transitionId, message: "The exact replacement package is durably active with a fresh host and expected-old routing CAS." };
+  }
   if (command === "uninstall_workspace_plugin") {
     const input = args.input || {};
     const plugin = mockWorkspacePlugins.find((item) => item.plugin_id === input.pluginId);
@@ -2563,8 +2611,8 @@ async function mockInvoke(command, args) {
       grant_id: `grant.${crypto.randomUUID().replaceAll("-", "")}`,
       plugin_id: plugin.plugin_id,
       plugin_version: plugin.version,
-      package_digest: plugin.package_digest,
-      short_digest: plugin.short_digest,
+      package_digest: request.package_digest,
+      short_digest: request.package_digest.slice(0, 12),
       permission: request.permission,
       constraints: JSON.parse(request.constraints_json),
       grant_source: request.grant_source,
@@ -2581,9 +2629,9 @@ async function mockInvoke(command, args) {
       }
       plugin.rollback_digest = replacingDigest;
     }
-    plugin.status = "enabled";
+    plugin.status = request.package_digest === plugin.package_digest ? "enabled" : "update_pending";
     plugin.observed_state = "active";
-    plugin.accepted_digest = plugin.package_digest;
+    plugin.accepted_digest = request.package_digest;
     plugin.active_grant_count = 1;
     return { outcome: "applied", request: structuredClone(request), plugin_status: "enabled", active_grant_count: 1, message: null };
   }
@@ -15569,8 +15617,18 @@ async function maybeApplyPreviewScenario() {
             ? "The plugin crashed and remains non-routable. Use trusted Retry to create fresh authority."
           : "The durable enable transition has not completed; no enabled result is claimed.";
     }
+    if (pluginState === "rollback-confirm" && mockWorkspacePlugins[0]) {
+      mockWorkspacePlugins[0].status = "enabled";
+      mockWorkspacePlugins[0].desired_state = "enabled";
+      mockWorkspacePlugins[0].observed_state = "active";
+      mockWorkspacePlugins[0].accepted_digest = mockWorkspacePlugins[0].package_digest;
+      mockWorkspacePlugins[0].rollback_digest = "b".repeat(64);
+      mockWorkspacePlugins[0].transition_id = "transition.upgrade.preview";
+    }
     await openWorkspacePluginDialog();
-    if (pluginState === "update-confirm" && mockWorkspacePlugins[0]) {
+    if (pluginState === "rollback-confirm" && mockWorkspacePlugins[0]) {
+      reviewWorkspacePluginRollback(mockWorkspacePlugins[0].plugin_id);
+    } else if (pluginState === "update-confirm" && mockWorkspacePlugins[0]) {
       reviewWorkspacePluginUpdate(mockWorkspacePlugins[0].plugin_id);
     } else if (["permission", "malicious-text"].includes(pluginState) && mockWorkspacePlugins[0]) {
       await requestWorkspacePluginEnable(mockWorkspacePlugins[0].plugin_id);
@@ -16594,6 +16652,9 @@ function recordPreviewLayoutEvidence() {
       update_confirmation: !$("#pluginUpdateView").classList.contains("hidden"),
       update_confirmation_has_exact_digests: $("#pluginUpdateIdentity").textContent.includes("Accepted digest") && $("#pluginUpdateIdentity").textContent.includes("Candidate digest"),
       update_confirmation_disclaims_marketplace: $("#pluginUpdateView").textContent.toLowerCase().includes("not a marketplace"),
+      rollback_confirmation: !$("#pluginRollbackView").classList.contains("hidden"),
+      rollback_confirmation_has_exact_digests: $("#pluginRollbackIdentity").textContent.includes("Current digest") && $("#pluginRollbackIdentity").textContent.includes("Rollback target"),
+      rollback_confirmation_says_fresh: $("#pluginRollbackView").textContent.toLowerCase().includes("fresh"),
       uninstall_confirmation_has_exact_directory: $("#pluginUninstallIdentity").textContent.includes(".rho/plugins/"),
       uninstall_confirmation_says_recoverable: $("#pluginUninstallView").textContent.toLowerCase().includes("recoverable"),
       plugin_cards: $$("#pluginList .plugin-card").length,
@@ -21240,6 +21301,14 @@ function renderWorkspacePlugins() {
       update.disabled = state.plugins.busy;
       actions.append(update);
     }
+    if (plugin.status === "enabled" && plugin.rollback_digest && plugin.rollback_digest !== plugin.accepted_digest) {
+      const rollback = document.createElement("button");
+      rollback.type = "button";
+      rollback.textContent = "Roll back";
+      rollback.dataset.pluginRollback = plugin.plugin_id;
+      rollback.disabled = state.plugins.busy;
+      actions.append(rollback);
+    }
     if (plugin.message) {
       const message = document.createElement("span");
       message.className = "plugin-card-meta";
@@ -21422,12 +21491,76 @@ function showPluginListView() {
   state.plugins.currentRequestId = null;
   state.plugins.uninstallPluginId = null;
   state.plugins.updatePluginId = null;
+  state.plugins.rollbackPluginId = null;
   $("#pluginListView").classList.remove("hidden");
   $("#pluginPermissionView").classList.add("hidden");
   $("#pluginUninstallView").classList.add("hidden");
   $("#pluginUpdateView").classList.add("hidden");
+  $("#pluginRollbackView").classList.add("hidden");
   $("#pluginDialogTitle").textContent = "Workspace Plugins";
   $("#pluginDialogSubtitle").textContent = "Project-local code is disabled until you explicitly enable it.";
+}
+
+function reviewWorkspacePluginRollback(pluginId) {
+  const plugin = (state.plugins.list?.plugins || []).find((item) => item.plugin_id === pluginId);
+  if (!plugin || plugin.status !== "enabled" || !plugin.rollback_digest || plugin.rollback_digest === plugin.accepted_digest) {
+    setPluginDialogError("The exact cached Rollback target is no longer current.");
+    return;
+  }
+  state.plugins.rollbackPluginId = pluginId;
+  $("#pluginListView").classList.add("hidden");
+  $("#pluginPermissionView").classList.add("hidden");
+  $("#pluginUninstallView").classList.add("hidden");
+  $("#pluginUpdateView").classList.add("hidden");
+  $("#pluginRollbackView").classList.remove("hidden");
+  $("#pluginDialogTitle").textContent = "Review cached plugin Rollback";
+  $("#pluginDialogSubtitle").textContent = "Only the trusted Rho shell can select the durable rollback pointer.";
+  setDefinitionList($("#pluginRollbackIdentity"), [
+    ["Plugin", `${plugin.plugin_id} ${plugin.version}`],
+    ["Project", state.plugins.list?.project_root],
+    ["Current digest", plugin.accepted_digest],
+    ["Rollback target", plugin.rollback_digest],
+  ]);
+  $("#pluginRollbackConfirm").disabled = false;
+  $("#pluginRollbackCancel").disabled = false;
+  $("#pluginRollbackCancel").focus();
+}
+
+async function confirmWorkspacePluginRollback() {
+  if (state.plugins.busy || !state.plugins.rollbackPluginId) return;
+  const plugin = (state.plugins.list?.plugins || []).find((item) => item.plugin_id === state.plugins.rollbackPluginId);
+  if (!plugin) return;
+  state.plugins.busy = true;
+  $("#pluginRollbackConfirm").disabled = true;
+  $("#pluginRollbackCancel").disabled = true;
+  setPluginDialogError("");
+  try {
+    const result = await invoke("rollback_workspace_plugin", {
+      input: {
+        pluginId: plugin.plugin_id,
+        expectedCurrentDigest: plugin.accepted_digest,
+        rollbackDigest: plugin.rollback_digest,
+        expectedProjectRevision: state.plugins.list?.project_revision,
+      },
+    });
+    if (result.status === "permission_required") {
+      const requests = await invoke("list_plugin_permission_requests", { status: "pending" });
+      const request = requests.find((item) => item.plugin_id === plugin.plugin_id && item.package_digest === plugin.rollback_digest);
+      if (request) await reviewPluginPermission(request.request_id);
+      else throw new Error("The fresh Rollback permission request could not be loaded.");
+    } else {
+      showPluginListView();
+      await loadWorkspacePluginSurface();
+      toast(result.message || "Workspace plugin rolled back.");
+    }
+  } catch (error) {
+    setPluginDialogError(userFacingError(error, "The exact cached plugin Rollback did not complete."));
+  } finally {
+    state.plugins.busy = false;
+    $("#pluginRollbackConfirm").disabled = false;
+    $("#pluginRollbackCancel").disabled = false;
+    renderWorkspacePlugins();
+  }
 }
 
 function reviewWorkspacePluginUpdate(pluginId) {
@@ -21441,6 +21574,7 @@ function reviewWorkspacePluginUpdate(pluginId) {
   $("#pluginPermissionView").classList.add("hidden");
   $("#pluginUninstallView").classList.add("hidden");
   $("#pluginUpdateView").classList.remove("hidden");
+  $("#pluginRollbackView").classList.add("hidden");
   $("#pluginDialogTitle").textContent = "Review local plugin Update";
   $("#pluginDialogSubtitle").textContent = "Only the trusted Rho shell can replace the accepted runtime.";
   setDefinitionList($("#pluginUpdateIdentity"), [
@@ -21501,6 +21635,8 @@ function reviewWorkspacePluginUninstall(pluginId) {
   $("#pluginListView").classList.add("hidden");
   $("#pluginPermissionView").classList.add("hidden");
   $("#pluginUninstallView").classList.remove("hidden");
+  $("#pluginUpdateView").classList.add("hidden");
+  $("#pluginRollbackView").classList.add("hidden");
   $("#pluginDialogTitle").textContent = "Confirm recoverable Uninstall";
   $("#pluginDialogSubtitle").textContent = "Only the trusted Rho shell can move this exact project package.";
   setDefinitionList($("#pluginUninstallIdentity"), [
@@ -21609,6 +21745,7 @@ async function reviewPluginPermission(requestId) {
   $("#pluginPermissionView").classList.remove("hidden");
   $("#pluginUninstallView").classList.add("hidden");
   $("#pluginUpdateView").classList.add("hidden");
+  $("#pluginRollbackView").classList.add("hidden");
   $("#pluginDialogTitle").textContent = "Review plugin permission";
   $("#pluginDialogSubtitle").textContent = "Only the trusted Rho shell controls this decision.";
   setDefinitionList($("#pluginPermissionIdentity"), [
@@ -22953,6 +23090,8 @@ $("#pluginList").addEventListener("click", (event) => {
   if (restore) restoreWorkspacePlugin(restore.dataset.pluginRestore);
   const update = event.target.closest("[data-plugin-update]");
   if (update) reviewWorkspacePluginUpdate(update.dataset.pluginUpdate);
+  const rollback = event.target.closest("[data-plugin-rollback]");
+  if (rollback) reviewWorkspacePluginRollback(rollback.dataset.pluginRollback);
 });
 $("#pluginContributionList").addEventListener("click", (event) => {
   const button = event.target.closest("[data-plugin-contribution]");
@@ -22969,6 +23108,8 @@ $("#pluginUninstallCancel").addEventListener("click", showPluginListView);
 $("#pluginUninstallConfirm").addEventListener("click", confirmWorkspacePluginUninstall);
 $("#pluginUpdateCancel").addEventListener("click", showPluginListView);
 $("#pluginUpdateConfirm").addEventListener("click", confirmWorkspacePluginUpdate);
+$("#pluginRollbackCancel").addEventListener("click", showPluginListView);
+$("#pluginRollbackConfirm").addEventListener("click", confirmWorkspacePluginRollback);
 $("#pluginDialog").addEventListener("keydown", trapWorkspacePluginDialogFocus);
 $("#updateClose").addEventListener("click", () => closeProductDialog("update"));
 $("#updateDone").addEventListener("click", () => closeProductDialog("update"));

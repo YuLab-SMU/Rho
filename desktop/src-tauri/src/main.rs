@@ -14870,6 +14870,60 @@ fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Valu
             && p24_updated_state.last_host_session_id != p24_update_old.last_host_session_id,
         "installed P2-4 exact Update did not commit fresh pointer/runtime truth"
     );
+    let p24_rolled_back = p24_update_registry.request_rollback(
+        &p24_update_context,
+        &crate::workspace_plugins::WorkspacePluginRollbackInput {
+            plugin_id: "org.yulab.rho.phase2-update-smoke".to_string(),
+            expected_current_digest: p24_update_candidate.digest.to_string(),
+            rollback_digest: p24_update_old_digest.clone(),
+            expected_project_revision: p24_update_context.project_revision,
+        },
+        &mut p24_store,
+    )?;
+    let p24_rollback_state = PluginLifecycleQueryService::new(&p24_store)
+        .get_state(&p24_update_root, "org.yulab.rho.phase2-update-smoke")?
+        .context("installed P2-4 Rollback terminal state is missing")?;
+    ensure!(
+        p24_rolled_back.status == "enabled"
+            && p24_rollback_state.accepted_digest.as_deref()
+                == Some(p24_update_old_digest.as_str())
+            && p24_rollback_state.rollback_digest.as_deref()
+                == Some(p24_update_candidate.digest.as_str())
+            && p24_rollback_state.last_activation_generation
+                > p24_updated_state.last_activation_generation
+            && p24_rollback_state.last_host_session_id != p24_updated_state.last_host_session_id
+            && rho_extension_runtime::discover_workspace_plugins(&p24_update_project)?
+                .context("installed Rollback source discovery disappeared")?
+                .plugins
+                .iter()
+                .any(|plugin| plugin.digest == p24_update_candidate.digest),
+        "installed P2-4 exact Rollback did not preserve source or fresh pointer truth"
+    );
+    p24_update_registry.invalidate_project(&p24_update_root);
+    let p24_rollback_restart = crate::workspace_plugins::PendingPluginPermissionRegistry::default();
+    let p24_rollback_restart_report =
+        p24_rollback_restart.reconcile_project(&p24_update_context, &mut p24_store);
+    ensure!(
+        p24_rollback_restart_report.reactivated == 1,
+        "installed P2-4 Rollback restart did not reconstruct accepted cache"
+    );
+    let p24_rollback_restart_state = PluginLifecycleQueryService::new(&p24_store)
+        .get_state(&p24_update_root, "org.yulab.rho.phase2-update-smoke")?
+        .context("installed P2-4 Rollback restart state is missing")?;
+    ensure!(
+        p24_rollback_restart_state.accepted_digest.as_deref()
+            == Some(p24_update_old_digest.as_str())
+            && p24_rollback_restart_state.rollback_digest.as_deref()
+                == Some(p24_update_candidate.digest.as_str())
+            && p24_rollback_restart_state.last_activation_generation
+                > p24_rollback_state.last_activation_generation
+            && p24_rollback_restart
+                .list(&p24_update_context, &mut p24_store)?
+                .plugins
+                .iter()
+                .any(|plugin| plugin.status == "update_pending"),
+        "installed P2-4 Rollback restart lost accepted cache or Update-pending source truth"
+    );
     let p24_retention_project = p24_root.path().join("retention-project");
     let p24_retention_plugin = p24_retention_project.join(".rho/plugins/retention-smoke");
     std::fs::create_dir_all(p24_retention_plugin.join("dist"))?;
@@ -15043,6 +15097,11 @@ fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Valu
     report["update_expected_old_cas"] = json!(true);
     report["update_pointer_durable"] = json!(true);
     report["update_generation_fresh"] = json!(true);
+    report["rollback_exact_cache_only"] = json!(true);
+    report["rollback_fresh_authority"] = json!(true);
+    report["rollback_pointer_reversed"] = json!(true);
+    report["rollback_source_unchanged"] = json!(true);
+    report["rollback_restart_cached"] = json!(true);
     Ok(report)
 }
 
@@ -15396,6 +15455,7 @@ fn main() {
             commands::plugins::disable_workspace_plugin,
             commands::plugins::retry_workspace_plugin,
             commands::plugins::accept_workspace_plugin_update,
+            commands::plugins::rollback_workspace_plugin,
             commands::plugins::uninstall_workspace_plugin,
             commands::plugins::restore_workspace_plugin,
             commands::plugins::list_plugin_permission_requests,

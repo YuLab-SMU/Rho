@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-const EXPECTED_HANDLER_DIGEST = "928e1382e8a4f702e5eb43561a81efc0a212912c669e27dfca2fe304d35f2f42";
+const EXPECTED_HANDLER_DIGEST = "6617e0d5834b782782944319167ae00dbce3e743fcaf814bee67aac37871cf09";
 
 const RUN_COMMANDS = [
   "audit_reproducibility",
@@ -29,6 +29,7 @@ const PLUGIN_COMMANDS = [
   "restore_workspace_plugin",
   "retry_workspace_plugin",
   "revoke_plugin_grant",
+  "rollback_workspace_plugin",
   "uninstall_workspace_plugin",
 ];
 

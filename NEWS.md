@@ -4,6 +4,22 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.1-dev.10 - 2026-08-21
+
+### Exact cached workspace-plugin Rollback
+
+- Enabled plugins with a durable rollback pointer now expose one trusted
+  Roll back review action bound to the current project revision and exact
+  current/target digests. The target is loaded only from the verified immutable
+  cache for that same project and plugin.
+- Rollback always creates a new generation, host, and handles. Every target
+  permission is reviewed again even if that digest was previously accepted;
+  historical grants and live authority are never restored.
+- Successful Rollback atomically reverses accepted/rollback pointers through
+  expected-old CAS. The newer project package remains unchanged and visible as
+  an Update candidate. Restart reconstructs the accepted cached target only
+  when the durable pointer pair exactly proves this state.
+
 ## 0.4.1-dev.9 - 2026-08-21
 
 ### Exact local workspace-plugin Update

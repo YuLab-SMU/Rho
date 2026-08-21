@@ -46,7 +46,7 @@ export function validateP24BoundaryTeardownContract(value) {
   assert.match(value.spec, /P2-4C2 local checkpoint — 2026-08-20/);
   assert.doesNotMatch(
     value.commands,
-    /rollback_workspace_plugin/,
+    /\binstall_workspace_plugin\b/,
     "C2 prematurely added a later lifecycle command",
   );
 }
@@ -70,7 +70,7 @@ if (process.argv.includes("--test")) {
     ["shutdown wiring", (value) => { value.main = value.main.replace('"broker_shutdown"', ""); }],
     ["store intent", (value) => { value.store = value.store.replace('"enabled" | "disabled"', '"disabled"'); }],
     ["installed", (value) => { value.installed = value.installed.replace('"boundary_reactivated": true', ""); }],
-    ["later command", (value) => { value.commands += "\nrollback_workspace_plugin"; }],
+    ["later command", (value) => { value.commands += "\ninstall_workspace_plugin"; }],
   ]) {
     const value = fixture();
     mutate(value);

@@ -51,7 +51,7 @@ export function validateP24RestartContract(value) {
   );
   assert.doesNotMatch(
     value.commands,
-    /rollback_workspace_plugin/,
+    /\binstall_workspace_plugin\b/,
     "B3 prematurely added a later lifecycle command",
   );
   for (const marker of [
@@ -86,7 +86,7 @@ if (process.argv.includes("--test")) {
     ["nonblocking wiring", (value) => { value.main = value.main.replace('"project_switched"', ""); }],
     ["permission order", (value) => { value.main = value.main.replace("recover_pending_plugin_permission_requests\nreconcile_project", "reconcile_project\nrecover_pending_plugin_permission_requests"); }],
     ["recovery audit", (value) => { value.store = value.store.replace('"user_requested" | "recovery"', '"user_requested"'); }],
-    ["later command", (value) => { value.commands += "\nrollback_workspace_plugin"; }],
+    ["later command", (value) => { value.commands += "\ninstall_workspace_plugin"; }],
     ["installed", (value) => { value.installed = value.installed.replace('"restart_reactivated": true', ""); }],
   ]) {
     const value = fixture();

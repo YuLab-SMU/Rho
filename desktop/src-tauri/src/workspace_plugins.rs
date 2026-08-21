@@ -219,6 +219,15 @@ pub(crate) struct WorkspacePluginUpdateInput {
     pub expected_project_revision: i64,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct WorkspacePluginRollbackInput {
+    pub plugin_id: String,
+    pub expected_current_digest: String,
+    pub rollback_digest: String,
+    pub expected_project_revision: i64,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct WorkspacePluginBoundaryTeardownReport {
     pub project_root: String,
@@ -395,6 +404,7 @@ enum PendingActivationKind {
     Enable,
     Retry,
     Upgrade { expected_old_digest: String },
+    Rollback { expected_old_digest: String },
 }
 
 struct ActivePlugin {
@@ -1594,6 +1604,186 @@ impl PendingPluginPermissionRegistry {
             &input.plugin_id,
             &input.expected_old_digest,
             "plugin_updated",
+        )?;
+        Ok(result)
+    }
+
+    pub(crate) fn request_rollback(
+        &self,
+        context: &PluginRuntimeContext,
+        input: &WorkspacePluginRollbackInput,
+        store: &mut Store,
+    ) -> Result<WorkspacePluginEnableResult> {
+        ensure!(
+            input.expected_project_revision == context.project_revision,
+            "workspace plugin Rollback is stale after a project change"
+        );
+        PluginId::new(input.plugin_id.clone()).context("validating workspace plugin id")?;
+        ensure!(
+            input.expected_current_digest != input.rollback_digest,
+            "workspace plugin Rollback target must differ from current digest"
+        );
+        let lifecycle = PluginLifecycleQueryService::new(store)
+            .get_state(&context.project_root, &input.plugin_id)?
+            .context("workspace plugin has no durable lifecycle state")?;
+        ensure!(
+            lifecycle.desired_state == "enabled"
+                && lifecycle.observed_state == "active"
+                && lifecycle.accepted_digest.as_deref()
+                    == Some(input.expected_current_digest.as_str())
+                && lifecycle.rollback_digest.as_deref() == Some(input.rollback_digest.as_str()),
+            "workspace plugin Rollback pointers are stale"
+        );
+        let current = discover_exact_plugin(Path::new(&context.project_root), &input.plugin_id)?;
+        ensure!(
+            current.digest.as_str() == input.expected_current_digest,
+            "workspace plugin source changed before Rollback"
+        );
+        let cached = PluginPackageCache::new(&context.app_data_dir)
+            .load_exact(
+                &context.project_root,
+                &input.plugin_id,
+                &input.rollback_digest,
+            )
+            .context("verified Rollback cache target is unavailable")?;
+        let target = discovered_from_cache(&lifecycle.directory_name, &cached);
+        ensure!(
+            target.manifest.id.as_str() == input.plugin_id
+                && target.digest.as_str() == input.rollback_digest,
+            "workspace plugin Rollback cache identity is stale"
+        );
+        let key = registry_key(&context.project_root, &input.plugin_id);
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let active = state
+            .active
+            .get(&key)
+            .context("workspace plugin Rollback requires the current runtime to be active")?;
+        ensure!(
+            active.package_digest == input.expected_current_digest,
+            "workspace plugin Rollback expected-current runtime is stale"
+        );
+        ensure!(
+            !state.pending.contains_key(&key),
+            "workspace plugin Rollback already has pending permission review"
+        );
+        let transition_id = format!("transition.rollback.{}", uuid::Uuid::new_v4().simple());
+        let requested = PluginLifecycleMutationService::new(store).request_transition(
+            &context.project_root,
+            &WorkspacePluginTransitionDraft {
+                transition_id: transition_id.clone(),
+                project_root: context.project_root.clone(),
+                plugin_id: input.plugin_id.clone(),
+                kind: "rollback".to_string(),
+                request_event_type: "user_requested".to_string(),
+                desired_state: "enabled".to_string(),
+                expected_old_digest: Some(input.expected_current_digest.clone()),
+                candidate_digest: Some(input.rollback_digest.clone()),
+                rollback_digest: None,
+                backup_path_key: None,
+            },
+        )?;
+        ensure!(
+            matches!(
+                requested.outcome,
+                PluginLifecycleMutationOutcome::Applied | PluginLifecycleMutationOutcome::Unchanged
+            ),
+            "workspace plugin Rollback conflicts with another lifecycle transition"
+        );
+        advance_enable_transition(
+            store,
+            context,
+            &transition_id,
+            "requested",
+            "preflight",
+            "running",
+            "rollback_pending",
+            None,
+            false,
+            None,
+            "preflight",
+            "completed",
+            None,
+        )?;
+        advance_enable_transition(
+            store,
+            context,
+            &transition_id,
+            "preflight",
+            "backup_prepared",
+            "running",
+            "rollback_pending",
+            None,
+            false,
+            None,
+            "package_backed_up",
+            "completed",
+            None,
+        )?;
+        let requests = plan_fresh_plugin_permissions(context, &target)?;
+        if !requests.is_empty() {
+            let created = match PluginPermissionMutationService::new(store)
+                .create_requests(&context.project_root, &requests)
+            {
+                Ok(created) => created,
+                Err(error) => {
+                    let _ = fail_enable_transition(
+                        store,
+                        context,
+                        &transition_id,
+                        "rollback_permission_request_failed",
+                        "rollback_pending",
+                    );
+                    return Err(error.into());
+                }
+            };
+            let request_ids = created
+                .into_iter()
+                .map(|request| request.request_id)
+                .collect::<Vec<_>>();
+            state.pending.insert(
+                key,
+                PendingEnable {
+                    kind: PendingActivationKind::Rollback {
+                        expected_old_digest: input.expected_current_digest.clone(),
+                    },
+                    plugin_id: input.plugin_id.clone(),
+                    plugin_version: target.manifest.version.to_string(),
+                    package_digest: input.rollback_digest.clone(),
+                    transition_id: transition_id.clone(),
+                    request_ids: request_ids.clone(),
+                    expected_project_revision: context.project_revision,
+                },
+            );
+            return Ok(WorkspacePluginEnableResult {
+                status: "permission_required".to_string(),
+                plugin_id: input.plugin_id.clone(),
+                request_ids,
+                active_grant_count: 0,
+                transition_id: Some(transition_id),
+                message: "Rollback requires fresh permission review for the exact cached target. No historical grant or handle is reused."
+                    .to_string(),
+            });
+        }
+        let result = activate_plugin_replacement_durable(
+            &mut state,
+            context,
+            &target,
+            &cached,
+            &transition_id,
+            &input.expected_current_digest,
+            std::iter::empty(),
+            store,
+        )?;
+        revoke_exact_durable_grants(
+            &mut state,
+            store,
+            context,
+            &input.plugin_id,
+            &input.expected_current_digest,
+            "plugin_rolled_back",
         )?;
         Ok(result)
     }
@@ -4654,12 +4844,33 @@ fn reconcile_discovered_plugin(
     let lifecycle = PluginLifecycleQueryService::new(store)
         .get_state(&context.project_root, plugin.manifest.id.as_str())?
         .context("plugin lifecycle state disappeared during restart reconciliation")?;
+    let mut recovery_plugin = plugin.clone();
+    let mut recovery_cache = None;
+    let mut rollback_cache_pair = false;
     let target_digest = if let Some(accepted) = lifecycle.accepted_digest.as_deref() {
         if accepted != plugin.digest.as_str() {
-            remove_active_plugin(registry, &key);
-            return Ok(ReconciliationStatus::UpdatePending);
+            if lifecycle.rollback_digest.as_deref() == Some(plugin.digest.as_str()) {
+                let cached = PluginPackageCache::new(&context.app_data_dir)
+                    .load_exact(&context.project_root, plugin.manifest.id.as_str(), accepted)
+                    .context("accepted Rollback cache is unavailable during restart")?;
+                recovery_plugin = discovered_from_cache(&lifecycle.directory_name, &cached);
+                ensure!(
+                    recovery_plugin.manifest.id == plugin.manifest.id
+                        && recovery_plugin.digest.as_str() == accepted,
+                    "accepted Rollback cache identity changed during restart"
+                );
+                recovery_cache = Some(cached);
+                rollback_cache_pair = true;
+            } else {
+                remove_active_plugin(registry, &key);
+                return Ok(ReconciliationStatus::UpdatePending);
+            }
         }
-        if prior_observed != "active" && !had_nonterminal && !stopped_by_boundary {
+        if prior_observed != "active"
+            && !had_nonterminal
+            && !stopped_by_boundary
+            && !rollback_cache_pair
+        {
             remove_active_plugin(registry, &key);
             persist_recovery_block(store, context, &lifecycle, "unprovable_restart_state")?;
             return Ok(ReconciliationStatus::Blocked);
@@ -4673,36 +4884,42 @@ fn reconcile_discovered_plugin(
         return Ok(ReconciliationStatus::Skipped);
     };
     remove_active_plugin(registry, &key);
-    let (transition_id, cached) =
-        match prepare_recovery_enable_transition(store, context, plugin, &target_digest) {
-            Ok(prepared) => prepared,
-            Err(error) => {
-                if PluginLifecycleQueryService::new(store)
-                    .get_state(&context.project_root, plugin.manifest.id.as_str())?
-                    .is_some_and(|state| state.observed_state == "blocked")
-                {
-                    return Ok(ReconciliationStatus::Blocked);
-                }
-                return Err(error);
-            }
-        };
-    let (reusable_grants, requests) = match plan_plugin_permissions(store, context, plugin) {
-        Ok(plan) => plan,
+    let (transition_id, cached) = match prepare_recovery_enable_transition(
+        store,
+        context,
+        &recovery_plugin,
+        &target_digest,
+        recovery_cache,
+    ) {
+        Ok(prepared) => prepared,
         Err(error) => {
-            if fail_enable_transition(
-                store,
-                context,
-                &transition_id,
-                "permission_plan_failed",
-                "blocked",
-            )
-            .is_ok()
+            if PluginLifecycleQueryService::new(store)
+                .get_state(&context.project_root, plugin.manifest.id.as_str())?
+                .is_some_and(|state| state.observed_state == "blocked")
             {
                 return Ok(ReconciliationStatus::Blocked);
             }
             return Err(error);
         }
     };
+    let (reusable_grants, requests) =
+        match plan_plugin_permissions(store, context, &recovery_plugin) {
+            Ok(plan) => plan,
+            Err(error) => {
+                if fail_enable_transition(
+                    store,
+                    context,
+                    &transition_id,
+                    "permission_plan_failed",
+                    "blocked",
+                )
+                .is_ok()
+                {
+                    return Ok(ReconciliationStatus::Blocked);
+                }
+                return Err(error);
+            }
+        };
     if !requests.is_empty() {
         let created = match PluginPermissionMutationService::new(store)
             .create_requests(&context.project_root, &requests)
@@ -4731,9 +4948,9 @@ fn reconcile_discovered_plugin(
             key,
             PendingEnable {
                 kind: PendingActivationKind::Enable,
-                plugin_id: plugin.manifest.id.to_string(),
-                plugin_version: plugin.manifest.version.to_string(),
-                package_digest: plugin.digest.to_string(),
+                plugin_id: recovery_plugin.manifest.id.to_string(),
+                plugin_version: recovery_plugin.manifest.version.to_string(),
+                package_digest: recovery_plugin.digest.to_string(),
                 transition_id,
                 request_ids,
                 expected_project_revision: context.project_revision,
@@ -4744,7 +4961,7 @@ fn reconcile_discovered_plugin(
     activate_plugin_durable(
         registry,
         context,
-        plugin,
+        &recovery_plugin,
         &cached,
         &transition_id,
         reusable_grants.values(),
@@ -4758,6 +4975,7 @@ fn prepare_recovery_enable_transition(
     context: &PluginRuntimeContext,
     plugin: &DiscoveredPlugin,
     target_digest: &str,
+    cached_override: Option<CachedPluginPackage>,
 ) -> Result<(String, CachedPluginPackage)> {
     ensure!(
         plugin.digest.as_str() == target_digest,
@@ -4801,21 +5019,32 @@ fn prepare_recovery_enable_transition(
         "completed",
         None,
     )?;
-    let cached = match PluginPackageCache::new(&context.app_data_dir).prepare_exact(
-        Path::new(&context.project_root),
-        plugin.manifest.id.as_str(),
-        target_digest,
-    ) {
-        Ok(cached) => cached,
-        Err(error) => {
-            let _ = fail_enable_transition(
-                store,
-                context,
-                &transition_id,
-                "package_cache_failed",
-                "blocked",
-            );
-            return Err(error.into());
+    let cached = if let Some(cached) = cached_override {
+        ensure!(
+            cached.plugin_id == plugin.manifest.id.as_str()
+                && cached.package_digest == target_digest
+                && cached.snapshot.manifest == plugin.manifest
+                && cached.snapshot.digest == plugin.digest,
+            "Rollback recovery cache does not match accepted target"
+        );
+        cached
+    } else {
+        match PluginPackageCache::new(&context.app_data_dir).prepare_exact(
+            Path::new(&context.project_root),
+            plugin.manifest.id.as_str(),
+            target_digest,
+        ) {
+            Ok(cached) => cached,
+            Err(error) => {
+                let _ = fail_enable_transition(
+                    store,
+                    context,
+                    &transition_id,
+                    "package_cache_failed",
+                    "blocked",
+                );
+                return Err(error.into());
+            }
         }
     };
     advance_enable_transition(
@@ -5609,6 +5838,41 @@ fn plan_plugin_permissions(
     Ok((reusable_grants, requests))
 }
 
+fn plan_fresh_plugin_permissions(
+    context: &PluginRuntimeContext,
+    plugin: &DiscoveredPlugin,
+) -> Result<Vec<PluginPermissionRequestDraft>> {
+    plugin
+        .manifest
+        .permissions
+        .iter()
+        .map(|permission| {
+            let constraints = PermissionConstraints::from_manifest(permission)?;
+            Ok(PluginPermissionRequestDraft {
+                request_id: format!("request.{}", uuid::Uuid::new_v4().simple()),
+                project_root: context.project_root.clone(),
+                plugin_id: plugin.manifest.id.to_string(),
+                plugin_version: plugin.manifest.version.to_string(),
+                package_digest: plugin.digest.to_string(),
+                runtime_kind: plugin.manifest.runtime.kind.to_string(),
+                permission: permission.name.clone(),
+                constraints_json: constraints.canonical_json()?,
+                constraints_digest: constraints.digest()?,
+                purpose_text: permission.purpose.clone(),
+                expected_project_revision: context.project_revision,
+            })
+        })
+        .collect()
+}
+
+fn discovered_from_cache(directory_name: &str, cached: &CachedPluginPackage) -> DiscoveredPlugin {
+    DiscoveredPlugin {
+        directory: directory_name.to_string(),
+        manifest: cached.snapshot.manifest.clone(),
+        digest: cached.snapshot.digest.clone(),
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn advance_enable_transition(
     store: &mut Store,
@@ -5773,6 +6037,7 @@ fn try_activate_pending(
         PendingActivationKind::Enable => "disabled",
         PendingActivationKind::Retry => "crashed",
         PendingActivationKind::Upgrade { .. } => "update_pending",
+        PendingActivationKind::Rollback { .. } => "rollback_pending",
     };
     if requests.iter().any(|request| request.status != "granted") {
         let _ = fail_enable_transition(
@@ -5785,39 +6050,96 @@ fn try_activate_pending(
         state.pending.remove(&key);
         return Ok(("denied".to_string(), 0));
     }
-    let plugin = match discover_exact_plugin(Path::new(&context.project_root), plugin_id) {
-        Ok(plugin)
-            if plugin.manifest.version.to_string() == pending.plugin_version
-                && plugin.digest.as_str() == pending.package_digest =>
-        {
-            plugin
+    let (plugin, cached) = match &pending.kind {
+        PendingActivationKind::Rollback {
+            expected_old_digest,
+        } => {
+            let source_current = discover_exact_plugin(Path::new(&context.project_root), plugin_id)
+                .is_ok_and(|plugin| plugin.digest.as_str() == expected_old_digest);
+            if !source_current {
+                let _ = fail_enable_transition(
+                    store,
+                    context,
+                    &pending.transition_id,
+                    "stale_digest",
+                    "rollback_pending",
+                );
+                bail!("plugin package changed while permission review was open");
+            }
+            let cached = match PluginPackageCache::new(&context.app_data_dir).load_exact(
+                &context.project_root,
+                plugin_id,
+                &pending.package_digest,
+            ) {
+                Ok(cached) => cached,
+                Err(error) => {
+                    let _ = fail_enable_transition(
+                        store,
+                        context,
+                        &pending.transition_id,
+                        "rollback_cache_failed",
+                        "rollback_pending",
+                    );
+                    return Err(error.into());
+                }
+            };
+            let lifecycle = PluginLifecycleQueryService::new(store)
+                .get_state(&context.project_root, plugin_id)?
+                .context("Rollback lifecycle state disappeared during permission review")?;
+            let plugin = discovered_from_cache(&lifecycle.directory_name, &cached);
+            if plugin.manifest.version.to_string() != pending.plugin_version
+                || plugin.digest.as_str() != pending.package_digest
+            {
+                let _ = fail_enable_transition(
+                    store,
+                    context,
+                    &pending.transition_id,
+                    "rollback_cache_changed",
+                    "rollback_pending",
+                );
+                bail!("plugin Rollback cache changed while permission review was open");
+            }
+            (plugin, cached)
         }
-        Ok(_) | Err(_) => {
-            let _ = fail_enable_transition(
-                store,
-                context,
-                &pending.transition_id,
-                "stale_digest",
-                "update_pending",
-            );
-            bail!("plugin package changed while permission review was open");
-        }
-    };
-    let cached = match PluginPackageCache::new(&context.app_data_dir).prepare_exact(
-        Path::new(&context.project_root),
-        plugin_id,
-        &pending.package_digest,
-    ) {
-        Ok(cached) => cached,
-        Err(error) => {
-            let _ = fail_enable_transition(
-                store,
-                context,
-                &pending.transition_id,
-                "package_cache_failed",
-                failure_observed_state,
-            );
-            return Err(error.into());
+        PendingActivationKind::Enable
+        | PendingActivationKind::Retry
+        | PendingActivationKind::Upgrade { .. } => {
+            let plugin = match discover_exact_plugin(Path::new(&context.project_root), plugin_id) {
+                Ok(plugin)
+                    if plugin.manifest.version.to_string() == pending.plugin_version
+                        && plugin.digest.as_str() == pending.package_digest =>
+                {
+                    plugin
+                }
+                Ok(_) | Err(_) => {
+                    let _ = fail_enable_transition(
+                        store,
+                        context,
+                        &pending.transition_id,
+                        "stale_digest",
+                        "update_pending",
+                    );
+                    bail!("plugin package changed while permission review was open");
+                }
+            };
+            let cached = match PluginPackageCache::new(&context.app_data_dir).prepare_exact(
+                Path::new(&context.project_root),
+                plugin_id,
+                &pending.package_digest,
+            ) {
+                Ok(cached) => cached,
+                Err(error) => {
+                    let _ = fail_enable_transition(
+                        store,
+                        context,
+                        &pending.transition_id,
+                        "package_cache_failed",
+                        failure_observed_state,
+                    );
+                    return Err(error.into());
+                }
+            };
+            (plugin, cached)
         }
     };
     let durable_grants = PluginPermissionQueryService::new(store).list_grants(
@@ -5833,8 +6155,12 @@ fn try_activate_pending(
                 && grant.package_digest == pending.package_digest
         })
         .collect::<Vec<_>>();
+    let pending_is_rollback = matches!(&pending.kind, PendingActivationKind::Rollback { .. });
     let result = match &pending.kind {
         PendingActivationKind::Upgrade {
+            expected_old_digest,
+        }
+        | PendingActivationKind::Rollback {
             expected_old_digest,
         } => {
             let result = activate_plugin_replacement_durable(
@@ -5853,7 +6179,11 @@ fn try_activate_pending(
                 context,
                 plugin_id,
                 expected_old_digest,
-                "plugin_updated",
+                if pending_is_rollback {
+                    "plugin_rolled_back"
+                } else {
+                    "plugin_updated"
+                },
             )?;
             result
         }
@@ -10097,6 +10427,315 @@ mod tests {
                 .unwrap()
                 .package_digest,
             old_b_digest
+        );
+    }
+
+    #[test]
+    fn exact_cached_rollback_is_fresh_and_restart_reconstructs_accepted_cache() {
+        let directory = tempdir().unwrap();
+        write_plugin(directory.path(), serde_json::json!([]));
+        let context = context(directory.path());
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let registry = PendingPluginPermissionRegistry::default();
+        registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        let v1 = PluginLifecycleQueryService::new(&store)
+            .get_state(&context.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        let v1_digest = v1.accepted_digest.clone().unwrap();
+        let manifest_path = directory
+            .path()
+            .join(".rho/plugins/example/rho-plugin.json");
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+        manifest["version"] = serde_json::json!("2.0.0");
+        fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        let v2 = discover_exact_plugin(directory.path(), "org.example.plugin").unwrap();
+        registry
+            .request_update(
+                &context,
+                &WorkspacePluginUpdateInput {
+                    plugin_id: "org.example.plugin".to_string(),
+                    expected_old_digest: v1_digest.clone(),
+                    candidate_digest: v2.digest.to_string(),
+                    expected_project_revision: context.project_revision,
+                },
+                &mut store,
+            )
+            .unwrap();
+        let updated = PluginLifecycleQueryService::new(&store)
+            .get_state(&context.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        let updated_host = updated.last_host_session_id.clone();
+        let rolled_back = registry
+            .request_rollback(
+                &context,
+                &WorkspacePluginRollbackInput {
+                    plugin_id: "org.example.plugin".to_string(),
+                    expected_current_digest: v2.digest.to_string(),
+                    rollback_digest: v1_digest.clone(),
+                    expected_project_revision: context.project_revision,
+                },
+                &mut store,
+            )
+            .unwrap();
+        assert_eq!(rolled_back.status, "enabled");
+        let rollback_state = PluginLifecycleQueryService::new(&store)
+            .get_state(&context.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        assert_eq!(rollback_state.accepted_digest, Some(v1_digest.clone()));
+        assert_eq!(rollback_state.rollback_digest, Some(v2.digest.to_string()));
+        assert!(rollback_state.last_activation_generation > updated.last_activation_generation);
+        assert_ne!(rollback_state.last_host_session_id, updated_host);
+        assert_eq!(
+            discover_exact_plugin(directory.path(), "org.example.plugin")
+                .unwrap()
+                .digest,
+            v2.digest
+        );
+        let listed = registry.list(&context, &mut store).unwrap();
+        assert_eq!(
+            listed
+                .plugins
+                .iter()
+                .find(|plugin| plugin.plugin_id == "org.example.plugin")
+                .unwrap()
+                .status,
+            "update_pending"
+        );
+
+        registry.invalidate_project(&context.project_root);
+        let restarted = PendingPluginPermissionRegistry::default();
+        let report = restarted.reconcile_project(&context, &mut store);
+        assert_eq!(report.reactivated, 1, "{report:?}");
+        let restart_state = PluginLifecycleQueryService::new(&store)
+            .get_state(&context.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        assert_eq!(restart_state.accepted_digest, Some(v1_digest.clone()));
+        assert_eq!(restart_state.rollback_digest, Some(v2.digest.to_string()));
+        assert!(
+            restart_state.last_activation_generation > rollback_state.last_activation_generation
+        );
+        let live = restarted
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(
+            live.active
+                .get(&registry_key(&context.project_root, "org.example.plugin"))
+                .unwrap()
+                .package_digest,
+            v1_digest
+        );
+    }
+
+    #[test]
+    fn rollback_forces_fresh_target_grant_and_revokes_current_digest_grant() {
+        let directory = tempdir().unwrap();
+        write_plugin(
+            directory.path(),
+            serde_json::json!([{
+                "name": "project.fs.read",
+                "purpose": "Read bounded CSV inputs",
+                "paths": ["data/**/*.csv"],
+                "maxBytes": 1024
+            }]),
+        );
+        let context = context(directory.path());
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let registry = PendingPluginPermissionRegistry::default();
+        let first = registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        registry
+            .respond(
+                &context,
+                PluginPermissionDecisionInput {
+                    request_id: first.request_ids[0].clone(),
+                    decision: "allow_project".to_string(),
+                    expected_project_revision: context.project_revision,
+                },
+                &mut store,
+            )
+            .unwrap();
+        let v1_state = PluginLifecycleQueryService::new(&store)
+            .get_state(&context.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        let v1_digest = v1_state.accepted_digest.clone().unwrap();
+        let first_v1_grant = PluginPermissionQueryService::new(&store)
+            .list_grants(&context.project_root, Some(100), Some("active"))
+            .unwrap()
+            .into_iter()
+            .find(|grant| grant.package_digest == v1_digest)
+            .unwrap()
+            .grant_id;
+        let manifest_path = directory
+            .path()
+            .join(".rho/plugins/example/rho-plugin.json");
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+        manifest["version"] = serde_json::json!("2.0.0");
+        fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        let v2 = discover_exact_plugin(directory.path(), "org.example.plugin").unwrap();
+        let update = registry
+            .request_update(
+                &context,
+                &WorkspacePluginUpdateInput {
+                    plugin_id: "org.example.plugin".to_string(),
+                    expected_old_digest: v1_digest.clone(),
+                    candidate_digest: v2.digest.to_string(),
+                    expected_project_revision: context.project_revision,
+                },
+                &mut store,
+            )
+            .unwrap();
+        registry
+            .respond(
+                &context,
+                PluginPermissionDecisionInput {
+                    request_id: update.request_ids[0].clone(),
+                    decision: "allow_project".to_string(),
+                    expected_project_revision: context.project_revision,
+                },
+                &mut store,
+            )
+            .unwrap();
+        let v2_grant = PluginPermissionQueryService::new(&store)
+            .list_grants(&context.project_root, Some(100), Some("active"))
+            .unwrap()
+            .into_iter()
+            .find(|grant| grant.package_digest == v2.digest.as_str())
+            .unwrap()
+            .grant_id;
+        let rollback = registry
+            .request_rollback(
+                &context,
+                &WorkspacePluginRollbackInput {
+                    plugin_id: "org.example.plugin".to_string(),
+                    expected_current_digest: v2.digest.to_string(),
+                    rollback_digest: v1_digest.clone(),
+                    expected_project_revision: context.project_revision,
+                },
+                &mut store,
+            )
+            .unwrap();
+        assert_eq!(rollback.status, "permission_required");
+        assert_eq!(rollback.request_ids.len(), 1);
+        let rollback_request = PluginPermissionQueryService::new(&store)
+            .get_request(&context.project_root, &rollback.request_ids[0])
+            .unwrap()
+            .unwrap();
+        assert_eq!(rollback_request.package_digest, v1_digest);
+        let completed = registry
+            .respond(
+                &context,
+                PluginPermissionDecisionInput {
+                    request_id: rollback.request_ids[0].clone(),
+                    decision: "allow_project".to_string(),
+                    expected_project_revision: context.project_revision,
+                },
+                &mut store,
+            )
+            .unwrap();
+        assert_eq!(completed.plugin_status, "enabled", "{completed:?}");
+        let grants = PluginPermissionQueryService::new(&store)
+            .list_grants(&context.project_root, Some(100), None)
+            .unwrap();
+        let fresh_v1 = grants
+            .iter()
+            .find(|grant| {
+                grant.package_digest == rollback_request.package_digest && grant.status == "active"
+            })
+            .unwrap();
+        assert_ne!(fresh_v1.grant_id, first_v1_grant);
+        assert!(
+            grants
+                .iter()
+                .any(|grant| { grant.grant_id == v2_grant && grant.status == "revoked" })
+        );
+    }
+
+    #[test]
+    fn rollback_rejects_stale_missing_cache_and_foreign_pointer_without_route_change() {
+        let directory = tempdir().unwrap();
+        write_plugin(directory.path(), serde_json::json!([]));
+        let context = context(directory.path());
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let registry = PendingPluginPermissionRegistry::default();
+        registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        let v1 = PluginLifecycleQueryService::new(&store)
+            .get_state(&context.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap()
+            .accepted_digest
+            .unwrap();
+        let manifest_path = directory
+            .path()
+            .join(".rho/plugins/example/rho-plugin.json");
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+        manifest["version"] = serde_json::json!("2.0.0");
+        fs::write(manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        let v2 = discover_exact_plugin(directory.path(), "org.example.plugin").unwrap();
+        registry
+            .request_update(
+                &context,
+                &WorkspacePluginUpdateInput {
+                    plugin_id: "org.example.plugin".to_string(),
+                    expected_old_digest: v1.clone(),
+                    candidate_digest: v2.digest.to_string(),
+                    expected_project_revision: context.project_revision,
+                },
+                &mut store,
+            )
+            .unwrap();
+        let base = WorkspacePluginRollbackInput {
+            plugin_id: "org.example.plugin".to_string(),
+            expected_current_digest: v2.digest.to_string(),
+            rollback_digest: v1.clone(),
+            expected_project_revision: context.project_revision,
+        };
+        let mut stale = base.clone();
+        stale.expected_project_revision += 1;
+        assert!(
+            registry
+                .request_rollback(&context, &stale, &mut store)
+                .is_err()
+        );
+        let mut wrong = base.clone();
+        wrong.rollback_digest = "f".repeat(64);
+        assert!(
+            registry
+                .request_rollback(&context, &wrong, &mut store)
+                .is_err()
+        );
+        let mut missing_context = context.clone();
+        missing_context.app_data_dir = directory.path().join("missing-cache");
+        fs::create_dir_all(&missing_context.app_data_dir).unwrap();
+        assert!(
+            registry
+                .request_rollback(&missing_context, &base, &mut store)
+                .is_err()
+        );
+        let state = registry
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(
+            state
+                .active
+                .get(&registry_key(&context.project_root, "org.example.plugin"))
+                .unwrap()
+                .package_digest,
+            v2.digest.as_str()
         );
     }
 

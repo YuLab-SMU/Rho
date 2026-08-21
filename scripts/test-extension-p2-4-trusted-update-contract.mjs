@@ -40,9 +40,9 @@ export function validateP24TrustedUpdate(value) {
     'id="pluginUpdateConfirm"',
     "This is not a marketplace",
   ]) assert.ok(value.html.includes(marker), `E2 fixed review surface lost ${marker}`);
-  assert.match(value.workspace, /version = "0\.4\.1-dev\.9"/);
-  assert.equal(JSON.parse(value.tauri).version, "0.4.1-dev.9");
-  assert.equal(JSON.parse(value.packageJson).version, "0.4.1-dev.9");
+  assert.match(value.workspace, /version = "0\.4\.1-dev\.10"/);
+  assert.equal(JSON.parse(value.tauri).version, "0.4.1-dev.10");
+  assert.equal(JSON.parse(value.packageJson).version, "0.4.1-dev.10");
   assert.match(value.news, /## 0\.4\.1-dev\.9[\s\S]*Exact local workspace-plugin Update/);
   for (const marker of [
     'report["update_local_candidate_only"] = json!(true)',
@@ -51,8 +51,7 @@ export function validateP24TrustedUpdate(value) {
     'report["update_generation_fresh"] = json!(true)',
   ]) assert.ok(value.installed.includes(marker), `installed E2 smoke lost ${marker}`);
   assert.match(value.spec, /P2-4E2 — trusted Update \(locally complete\)/);
-  assert.doesNotMatch(value.commands, /rollback_workspace_plugin/, "E2 added Rollback early");
-  assert.doesNotMatch(value.frontend, /data-plugin-rollback/, "E2 added Rollback UI early");
+  assert.doesNotMatch(value.commands, /\binstall_workspace_plugin\b/, "E2 contract saw install authority");
 }
 
 function fixture() {
@@ -61,9 +60,9 @@ function fixture() {
     commands: "pub(crate) async fn accept_workspace_plugin_update\nproject_transition_gate.lock().await\n.request_update(",
     frontend: "command === \"accept_workspace_plugin_update\"\nreviewWorkspacePluginUpdate(pluginId)\nconfirmWorkspacePluginUpdate()\ndata-plugin-update\nexpectedOldDigest\ncandidateDigest\nnot a marketplace",
     html: 'id="pluginUpdateView"\nid="pluginUpdateIdentity"\nid="pluginUpdateConfirm"\nThis is not a marketplace',
-    workspace: 'version = "0.4.1-dev.9"',
-    tauri: '{"version":"0.4.1-dev.9"}',
-    packageJson: '{"version":"0.4.1-dev.9"}',
+    workspace: 'version = "0.4.1-dev.10"',
+    tauri: '{"version":"0.4.1-dev.10"}',
+    packageJson: '{"version":"0.4.1-dev.10"}',
     news: "## 0.4.1-dev.9\n### Exact local workspace-plugin Update",
     installed: 'report["update_local_candidate_only"] = json!(true)\nreport["update_expected_old_cas"] = json!(true)\nreport["update_pointer_durable"] = json!(true)\nreport["update_generation_fresh"] = json!(true)',
     spec: "P2-4E2 — trusted Update (locally complete)",
@@ -78,8 +77,8 @@ if (process.argv.includes("--test")) {
     ["mock", (value) => { value.frontend = value.frontend.replace('command === "accept_workspace_plugin_update"', ""); }],
     ["disclaimer", (value) => { value.html = value.html.replace("This is not a marketplace", ""); }],
     ["installed", (value) => { value.installed = value.installed.replace('report["update_expected_old_cas"] = json!(true)', ""); }],
-    ["version", (value) => { value.workspace = 'version = "0.4.1-dev.8"'; }],
-    ["rollback", (value) => { value.commands += "\nrollback_workspace_plugin"; }],
+    ["version", (value) => { value.workspace = 'version = "0.4.1-dev.9"'; }],
+    ["install", (value) => { value.commands += "\ninstall_workspace_plugin"; }],
   ]) {
     const value = fixture();
     mutate(value);

@@ -43,10 +43,10 @@ export function validateP24CrashRetryContract(value) {
     'retry.textContent = "Retry"',
     'status === "blocked"',
   ]) assert.ok(value.frontend.includes(marker), `Retry UI/mock lost ${marker}`);
-  assert.match(value.workspace, /version = "0\.4\.1-dev\.9"/);
-  assert.equal(JSON.parse(value.tauri).version, "0.4.1-dev.9");
-  assert.equal(JSON.parse(value.packageJson).version, "0.4.1-dev.9");
-  assert.match(value.news, /## 0\.4\.1-dev\.9[\s\S]*Exact local workspace-plugin Update/);
+  assert.match(value.workspace, /version = "0\.4\.1-dev\.10"/);
+  assert.equal(JSON.parse(value.tauri).version, "0.4.1-dev.10");
+  assert.equal(JSON.parse(value.packageJson).version, "0.4.1-dev.10");
+  assert.match(value.news, /## 0\.4\.1-dev\.10[\s\S]*Exact cached workspace-plugin Rollback/);
   for (const marker of [
     '"crash_state_durable": true',
     '"heartbeat_timeout_classified": true',
@@ -56,7 +56,7 @@ export function validateP24CrashRetryContract(value) {
   assert.match(value.spec, /P2-4C3 \/ P2-4C local checkpoint — 2026-08-20/);
   assert.doesNotMatch(
     value.commands,
-    /rollback_workspace_plugin/,
+    /\binstall_workspace_plugin\b/,
     "C3 prematurely added a later lifecycle command",
   );
 }
@@ -68,10 +68,10 @@ function fixture() {
     commands: "pub(crate) async fn retry_workspace_plugin\nexpected_project_revision\nWorkspace plugin Retry is stale after a project change",
     main: "monitor_workspace_plugin_heartbeats\nDEFAULT_HEARTBEAT_INTERVAL\nworkspace_plugin_heartbeat_sweep",
     frontend: "command === \"retry_workspace_plugin\"\nasync function retryWorkspacePlugin(pluginId)\ndata-plugin-retry\nretry.textContent = \"Retry\"\nstatus === \"blocked\"",
-    workspace: 'version = "0.4.1-dev.9"',
-    tauri: '{"version":"0.4.1-dev.9"}',
-    packageJson: '{"version":"0.4.1-dev.9"}',
-    news: "## 0.4.1-dev.9\n### Exact local workspace-plugin Update",
+    workspace: 'version = "0.4.1-dev.10"',
+    tauri: '{"version":"0.4.1-dev.10"}',
+    packageJson: '{"version":"0.4.1-dev.10"}',
+    news: "## 0.4.1-dev.10\n### Exact cached workspace-plugin Rollback",
     installed: '"crash_state_durable": true\n"heartbeat_timeout_classified": true\n"retry_fresh_authority": true\n"third_crash_blocked": true',
     spec: "P2-4C3 / P2-4C local checkpoint — 2026-08-20",
   };
@@ -85,8 +85,8 @@ if (process.argv.includes("--test")) {
     ["blocked Retry", (value) => { value.desktop = value.desktop.replace("blocked after repeated crashes", ""); }],
     ["stale command", (value) => { value.commands = value.commands.replace("expected_project_revision", ""); }],
     ["mock", (value) => { value.frontend = value.frontend.replace('command === "retry_workspace_plugin"', ""); }],
-    ["version", (value) => { value.workspace = 'version = "0.4.1-dev.8"'; }],
-    ["later command", (value) => { value.commands += "\nrollback_workspace_plugin"; }],
+    ["version", (value) => { value.workspace = 'version = "0.4.1-dev.9"'; }],
+    ["later command", (value) => { value.commands += "\ninstall_workspace_plugin"; }],
   ]) {
     const value = fixture();
     mutate(value);
