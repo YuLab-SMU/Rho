@@ -6,8 +6,9 @@ D2 Browser visual review was blocked by the Browser local-file URL policy and
 remains open; hosted and cross-platform installed gates remain mandatory before
 final Phase 2 acceptance
 
-Active work package: none at the P2-4E3 stop. P2-4F/G remain inactive until
-explicit activation. No install is active.
+Active work package: P2-4F only — exhaustive durable/file crash recovery,
+recovery-required projection, transition inspection and UI/mock truth. P2-4G
+remains inactive. No install or new plugin authority is active.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -967,6 +968,54 @@ mandatory before final acceptance:
 
 Each is a separate integration boundary with complete vertical tests. No later
 slice repairs a half-authoritative earlier commit.
+
+### Activated P2-4F contract — 2026-08-21
+
+F runs one bounded recovery pass before ordinary plugin discovery activation on
+application start, Workspace restart, successful project switch and failed-
+switch restoration. Its report adds recovered Uninstall, purge, replacement,
+recovery-required and project-files-changed counts with bounded per-plugin
+stable reason codes; it contains no raw path, handle, credential, payload or
+Wasm data.
+
+Recovery rules are exact:
+
+- a nonterminal Uninstall with expected digest + backup key revalidates current
+  state/directory and calls D1 `move_exact`. Source ownership finishes the
+  requested move; trash ownership replays it. The transition advances to
+  `package_moved` if necessary and D2 atomically creates a deterministic
+  recovery tombstone plus terminal Uninstalled truth. Dual/neither/wrong
+  identity becomes recovery-required and never deletes;
+- every exact `purge_pending`, non-restored/non-deleted tombstone replays D3
+  purge service. Exact marker/absence completes terminal deletion; failure
+  remains purge-pending and recovery-required;
+- nonterminal Upgrade/Rollback is closed as restart-reconciled because no host,
+  route or handle survives. Accepted remains authoritative. If source differs,
+  accepted cache may reconstruct only when the failed replacement transition
+  proves accepted-old/candidate-source, or the completed Rollback pointer pair
+  already defined by E3. Candidate never gains authority from an incomplete
+  CAS journal;
+- terminal Uninstalled/expired/deleted facts and already terminal transitions
+  are idempotent. Malformed/missing identity, changed cache, missing roots and
+  persistence failure never guess ownership and cannot block Workspace R,
+  project switch, another project or a sibling plugin.
+
+If recovery actually moves a package source↔trash, the caller advances and
+persists project revision before returning the reconciliation event. Replaying
+without a new file move does not advance revision again.
+
+The fixed UI projects `recovery_required` with no unsafe action and exposes one
+read-only `get_workspace_plugin_transition` command for bounded stable support
+state. It distinguishes recovery-required from Blocked/Crashed/Update pending
+and never claims completion from UI state. Mock and command inventory stay exact.
+
+F tests inject every recorded phase for enable/disable/uninstall/update/
+rollback, package move/purge and terminal event persistence; cover source/trash/
+purging ownership, reopen/idempotency, concurrent recovery, two projects/A-B-A,
+one-plugin failure isolation, project revision once-only, malicious rows/text,
+and packaged candidate/legacy smoke. Because recovery status is visible, F must
+bump the next development version after `0.4.1-dev.10`, update NEWS/cache keys/
+contracts, attempt Browser evidence, and stop at a local commit before G.
 
 ### P2-4A local checkpoint — 2026-08-20
 
