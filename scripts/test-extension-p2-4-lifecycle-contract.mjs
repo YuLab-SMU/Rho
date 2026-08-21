@@ -33,7 +33,7 @@ export function validateP24LifecycleContract(value) {
     "request_workspace_plugin_transition",
     "advance_workspace_plugin_transition",
     "allocate_workspace_plugin_generation",
-    "record_workspace_plugin_tombstone",
+    "complete_workspace_plugin_uninstall",
     "expected_old_digest",
     "completion_uncertain",
     "plugin lifecycle details contain a forbidden field",
@@ -58,7 +58,7 @@ function fixture() {
   return {
     store: "SCHEMA_VERSION: i64 = 14",
     migration: "create_plugin_lifecycle_schema\nworkspace_plugin_states\nworkspace_plugin_transitions\nworkspace_plugin_lifecycle_events\nworkspace_plugin_package_tombstones\nidx_workspace_plugin_transitions_one_active\npub(crate) fn assert_plugin_lifecycle_schema\ninvalid_plugin_lifecycle_authority",
-    lifecycle: "WorkspacePluginState\nWorkspacePluginTransition\nWorkspacePluginLifecycleEvent\nWorkspacePluginPackageTombstone\nrequest_workspace_plugin_transition\nadvance_workspace_plugin_transition\nallocate_workspace_plugin_generation\nrecord_workspace_plugin_tombstone\nexpected_old_digest\ncompletion_uncertain\nplugin lifecycle details contain a forbidden field\n#[cfg(test)]",
+    lifecycle: "WorkspacePluginState\nWorkspacePluginTransition\nWorkspacePluginLifecycleEvent\nWorkspacePluginPackageTombstone\nrequest_workspace_plugin_transition\nadvance_workspace_plugin_transition\nallocate_workspace_plugin_generation\ncomplete_workspace_plugin_uninstall\nexpected_old_digest\ncompletion_uncertain\nplugin lifecycle details contain a forbidden field\n#[cfg(test)]",
     service: "PluginLifecycleQueryService\nPluginLifecycleMutationService\nrequired_project_root\ndoes not match service project",
     spec: "Status: active under the owner-approved local-first exception\nP2-4A local checkpoint — 2026-08-20",
     crossReview: "plans/active-2026-08-20-p2-4-plugin-lifecycle-recovery-upgrade-spec.md",

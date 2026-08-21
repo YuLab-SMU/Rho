@@ -3,9 +3,10 @@
 use crate::{
     PluginLifecycleMutationOutcome, Store, StoreError, WorkspacePluginCrashOutcome,
     WorkspacePluginDiscoveredDraft, WorkspacePluginGenerationAllocation,
-    WorkspacePluginLifecycleEvent, WorkspacePluginPackageTombstone,
-    WorkspacePluginRestoreCompletion, WorkspacePluginState, WorkspacePluginTombstoneDraft,
-    WorkspacePluginTransition, WorkspacePluginTransitionAdvance, WorkspacePluginTransitionDraft,
+    WorkspacePluginLifecycleEvent, WorkspacePluginPackageTombstone, WorkspacePluginPurgeDraft,
+    WorkspacePluginPurgeResult, WorkspacePluginRestoreCompletion, WorkspacePluginRetentionSweep,
+    WorkspacePluginState, WorkspacePluginTombstoneDraft, WorkspacePluginTransition,
+    WorkspacePluginTransitionAdvance, WorkspacePluginTransitionDraft,
     WorkspacePluginTransitionRequestResult, WorkspacePluginUninstallCompletion,
     query::required_project_root,
 };
@@ -187,6 +188,53 @@ impl<'a> PluginLifecycleMutationService<'a> {
     ) -> Result<WorkspacePluginRestoreCompletion, StoreError> {
         self.store
             .complete_workspace_plugin_restore(&required_project_root(project_root)?, tombstone_id)
+    }
+
+    pub fn expire_tombstones(
+        &mut self,
+        project_root: &str,
+        cutoff: &str,
+        limit: usize,
+    ) -> Result<WorkspacePluginRetentionSweep, StoreError> {
+        self.store.expire_workspace_plugin_tombstones(
+            &required_project_root(project_root)?,
+            cutoff,
+            limit,
+        )
+    }
+
+    pub fn request_purge(
+        &mut self,
+        project_root: &str,
+        draft: &WorkspacePluginPurgeDraft,
+    ) -> Result<WorkspacePluginPurgeResult, StoreError> {
+        let project_root = required_project_root(project_root)?;
+        let draft_root = required_project_root(&draft.project_root)?;
+        if project_root != draft_root {
+            return Err(StoreError::Validation(
+                "workspace plugin purge project does not match service project".to_string(),
+            ));
+        }
+        let mut draft = draft.clone();
+        draft.project_root = project_root;
+        self.store.request_workspace_plugin_purge(&draft)
+    }
+
+    pub fn complete_purge(
+        &mut self,
+        project_root: &str,
+        draft: &WorkspacePluginPurgeDraft,
+    ) -> Result<WorkspacePluginPurgeResult, StoreError> {
+        let project_root = required_project_root(project_root)?;
+        let draft_root = required_project_root(&draft.project_root)?;
+        if project_root != draft_root {
+            return Err(StoreError::Validation(
+                "workspace plugin purge project does not match service project".to_string(),
+            ));
+        }
+        let mut draft = draft.clone();
+        draft.project_root = project_root;
+        self.store.complete_workspace_plugin_purge(&draft)
     }
 
     pub fn record_crash(

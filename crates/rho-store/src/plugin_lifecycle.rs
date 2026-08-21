@@ -4,7 +4,7 @@
 //! does not discover packages, copy files, activate Wasm, mint handles, route
 //! contributions, or perform uninstall/upgrade mutations.
 
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 use rusqlite::{OptionalExtension, Row, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
 
@@ -14,6 +14,7 @@ const DEFAULT_LIMIT: usize = 50;
 const MAX_LIMIT: usize = 200;
 const MAX_IDENTIFIER_BYTES: usize = 128;
 const MAX_DETAILS_BYTES: usize = 8 * 1024;
+const MAX_RETENTION_BATCH: usize = 100;
 
 const TRANSITION_PHASES: &[&str] = &[
     "requested",
@@ -200,6 +201,28 @@ pub struct WorkspacePluginUninstallCompletion {
 pub struct WorkspacePluginRestoreCompletion {
     pub outcome: PluginLifecycleMutationOutcome,
     pub state: WorkspacePluginState,
+    pub tombstone: WorkspacePluginPackageTombstone,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspacePluginPurgeDraft {
+    pub project_root: String,
+    pub tombstone_id: String,
+    pub plugin_id: String,
+    pub package_digest: String,
+    pub backup_path_key: String,
+    pub original_directory_name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspacePluginRetentionSweep {
+    pub outcome: PluginLifecycleMutationOutcome,
+    pub expired: Vec<WorkspacePluginPackageTombstone>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspacePluginPurgeResult {
+    pub outcome: PluginLifecycleMutationOutcome,
     pub tombstone: WorkspacePluginPackageTombstone,
 }
 
@@ -836,6 +859,242 @@ impl Store {
         })
     }
 
+    pub fn expire_workspace_plugin_tombstones(
+        &mut self,
+        project_root: &str,
+        cutoff: &str,
+        limit: usize,
+    ) -> Result<WorkspacePluginRetentionSweep, StoreError> {
+        let project_root = required_project_root(project_root)?;
+        let cutoff = DateTime::parse_from_rfc3339(cutoff)
+            .map_err(|_| StoreError::Validation("plugin retention cutoff is invalid".to_string()))?
+            .with_timezone(&Utc)
+            .to_rfc3339();
+        if limit == 0 || limit > MAX_RETENTION_BATCH {
+            return Err(StoreError::Validation(
+                "plugin retention batch limit is invalid".to_string(),
+            ));
+        }
+        let now = Utc::now().to_rfc3339();
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let candidates = {
+            let mut statement = transaction.prepare(
+                "SELECT tombstone_id, project_root, plugin_id, package_digest,
+                        backup_path_key, original_directory_name, moved_at,
+                        deleted_at, restored_at, retention_class, reason_code
+                 FROM workspace_plugin_package_tombstones
+                 WHERE project_root = ?1 AND retention_class = 'recoverable'
+                   AND moved_at <= ?2 AND deleted_at IS NULL AND restored_at IS NULL
+                 ORDER BY moved_at, tombstone_id LIMIT ?3",
+            )?;
+            statement
+                .query_map(
+                    params![project_root, cutoff, limit as i64],
+                    decode_tombstone,
+                )?
+                .collect::<Result<Vec<_>, _>>()?
+        };
+        let mut expired = Vec::with_capacity(candidates.len());
+        for candidate in candidates {
+            let changed = transaction.execute(
+                "UPDATE workspace_plugin_package_tombstones
+                 SET retention_class = 'expired'
+                 WHERE project_root = ?1 AND tombstone_id = ?2
+                   AND retention_class = 'recoverable'
+                   AND deleted_at IS NULL AND restored_at IS NULL",
+                params![project_root, candidate.tombstone_id],
+            )?;
+            if changed != 1 {
+                return Err(StoreError::Validation(
+                    "plugin retention expiry update was stale".to_string(),
+                ));
+            }
+            insert_lifecycle_event(
+                &transaction,
+                LifecycleEventInsert {
+                    project_root: &project_root,
+                    plugin_id: &candidate.plugin_id,
+                    transition_id: None,
+                    package_digest: Some(&candidate.package_digest),
+                    event_type: "recovery",
+                    status: "completed",
+                    phase: "completed",
+                    reason_code: Some("retention_expired"),
+                    details_json: r#"{"retention_class":"expired"}"#,
+                    created_at: &now,
+                },
+            )?;
+            expired.push(
+                get_tombstone_on(&transaction, &project_root, &candidate.tombstone_id)?
+                    .ok_or_else(|| {
+                        StoreError::Validation("expired plugin tombstone disappeared".to_string())
+                    })?,
+            );
+        }
+        transaction.commit()?;
+        Ok(WorkspacePluginRetentionSweep {
+            outcome: if expired.is_empty() {
+                PluginLifecycleMutationOutcome::Unchanged
+            } else {
+                PluginLifecycleMutationOutcome::Applied
+            },
+            expired,
+        })
+    }
+
+    pub fn request_workspace_plugin_purge(
+        &mut self,
+        draft: &WorkspacePluginPurgeDraft,
+    ) -> Result<WorkspacePluginPurgeResult, StoreError> {
+        let draft = validate_purge_draft(draft)?;
+        let now = Utc::now().to_rfc3339();
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let tombstone = get_tombstone_on(&transaction, &draft.project_root, &draft.tombstone_id)?
+            .ok_or_else(|| {
+            StoreError::Validation("plugin purge tombstone is missing".to_string())
+        })?;
+        ensure_purge_identity(&tombstone, &draft)?;
+        if tombstone.deleted_at.is_some() && tombstone.retention_class == "expired" {
+            transaction.commit()?;
+            return Ok(WorkspacePluginPurgeResult {
+                outcome: PluginLifecycleMutationOutcome::Unchanged,
+                tombstone,
+            });
+        }
+        if tombstone.deleted_at.is_some() || tombstone.restored_at.is_some() {
+            transaction.commit()?;
+            return Ok(WorkspacePluginPurgeResult {
+                outcome: PluginLifecycleMutationOutcome::Stale,
+                tombstone,
+            });
+        }
+        if tombstone.retention_class == "purge_pending" {
+            transaction.commit()?;
+            return Ok(WorkspacePluginPurgeResult {
+                outcome: PluginLifecycleMutationOutcome::Unchanged,
+                tombstone,
+            });
+        }
+        if tombstone.retention_class != "expired" {
+            transaction.commit()?;
+            return Ok(WorkspacePluginPurgeResult {
+                outcome: PluginLifecycleMutationOutcome::Stale,
+                tombstone,
+            });
+        }
+        let changed = transaction.execute(
+            "UPDATE workspace_plugin_package_tombstones
+             SET retention_class = 'purge_pending'
+             WHERE project_root = ?1 AND tombstone_id = ?2
+               AND retention_class = 'expired'
+               AND deleted_at IS NULL AND restored_at IS NULL",
+            params![draft.project_root, draft.tombstone_id],
+        )?;
+        if changed != 1 {
+            return Err(StoreError::Validation(
+                "plugin purge request update was stale".to_string(),
+            ));
+        }
+        insert_lifecycle_event(
+            &transaction,
+            LifecycleEventInsert {
+                project_root: &draft.project_root,
+                plugin_id: &draft.plugin_id,
+                transition_id: None,
+                package_digest: Some(&draft.package_digest),
+                event_type: "recovery",
+                status: "pending",
+                phase: "completed",
+                reason_code: Some("purge_requested"),
+                details_json: r#"{"retention_class":"purge_pending"}"#,
+                created_at: &now,
+            },
+        )?;
+        let tombstone = get_tombstone_on(&transaction, &draft.project_root, &draft.tombstone_id)?
+            .ok_or_else(|| {
+            StoreError::Validation("pending purge tombstone disappeared".to_string())
+        })?;
+        transaction.commit()?;
+        Ok(WorkspacePluginPurgeResult {
+            outcome: PluginLifecycleMutationOutcome::Applied,
+            tombstone,
+        })
+    }
+
+    pub fn complete_workspace_plugin_purge(
+        &mut self,
+        draft: &WorkspacePluginPurgeDraft,
+    ) -> Result<WorkspacePluginPurgeResult, StoreError> {
+        let draft = validate_purge_draft(draft)?;
+        let now = Utc::now().to_rfc3339();
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let tombstone = get_tombstone_on(&transaction, &draft.project_root, &draft.tombstone_id)?
+            .ok_or_else(|| {
+            StoreError::Validation("plugin purge tombstone is missing".to_string())
+        })?;
+        ensure_purge_identity(&tombstone, &draft)?;
+        if tombstone.deleted_at.is_some() && tombstone.retention_class == "expired" {
+            transaction.commit()?;
+            return Ok(WorkspacePluginPurgeResult {
+                outcome: PluginLifecycleMutationOutcome::Unchanged,
+                tombstone,
+            });
+        }
+        if tombstone.retention_class != "purge_pending"
+            || tombstone.deleted_at.is_some()
+            || tombstone.restored_at.is_some()
+        {
+            transaction.commit()?;
+            return Ok(WorkspacePluginPurgeResult {
+                outcome: PluginLifecycleMutationOutcome::Stale,
+                tombstone,
+            });
+        }
+        let changed = transaction.execute(
+            "UPDATE workspace_plugin_package_tombstones
+             SET retention_class = 'expired', deleted_at = ?3
+             WHERE project_root = ?1 AND tombstone_id = ?2
+               AND retention_class = 'purge_pending'
+               AND deleted_at IS NULL AND restored_at IS NULL",
+            params![draft.project_root, draft.tombstone_id, now],
+        )?;
+        if changed != 1 {
+            return Err(StoreError::Validation(
+                "plugin purge completion update was stale".to_string(),
+            ));
+        }
+        insert_lifecycle_event(
+            &transaction,
+            LifecycleEventInsert {
+                project_root: &draft.project_root,
+                plugin_id: &draft.plugin_id,
+                transition_id: None,
+                package_digest: Some(&draft.package_digest),
+                event_type: "recovery",
+                status: "completed",
+                phase: "completed",
+                reason_code: Some("purge_completed"),
+                details_json: r#"{"package_ownership":"deleted","retention_class":"expired"}"#,
+                created_at: &now,
+            },
+        )?;
+        let tombstone = get_tombstone_on(&transaction, &draft.project_root, &draft.tombstone_id)?
+            .ok_or_else(|| {
+            StoreError::Validation("completed purge tombstone disappeared".to_string())
+        })?;
+        transaction.commit()?;
+        Ok(WorkspacePluginPurgeResult {
+            outcome: PluginLifecycleMutationOutcome::Applied,
+            tombstone,
+        })
+    }
+
     pub fn record_workspace_plugin_crash(
         &mut self,
         project_root: &str,
@@ -1410,6 +1669,36 @@ fn validate_tombstone(
     })
 }
 
+fn validate_purge_draft(
+    draft: &WorkspacePluginPurgeDraft,
+) -> Result<WorkspacePluginPurgeDraft, StoreError> {
+    Ok(WorkspacePluginPurgeDraft {
+        project_root: required_project_root(&draft.project_root)?,
+        tombstone_id: validate_identifier(&draft.tombstone_id, "tombstone id")?,
+        plugin_id: validate_identifier(&draft.plugin_id, "plugin id")?,
+        package_digest: validate_digest(&draft.package_digest, "package digest")?,
+        backup_path_key: validate_opaque_key(&draft.backup_path_key)?,
+        original_directory_name: validate_directory_name(&draft.original_directory_name)?,
+    })
+}
+
+fn ensure_purge_identity(
+    tombstone: &WorkspacePluginPackageTombstone,
+    draft: &WorkspacePluginPurgeDraft,
+) -> Result<(), StoreError> {
+    if tombstone.plugin_id == draft.plugin_id
+        && tombstone.package_digest == draft.package_digest
+        && tombstone.backup_path_key == draft.backup_path_key
+        && tombstone.original_directory_name == draft.original_directory_name
+    {
+        Ok(())
+    } else {
+        Err(StoreError::Validation(
+            "plugin purge identity does not match tombstone truth".to_string(),
+        ))
+    }
+}
+
 fn ensure_tombstone_matches(
     tombstone: &WorkspacePluginPackageTombstone,
     draft: &WorkspacePluginTombstoneDraft,
@@ -1900,6 +2189,17 @@ mod tests {
             original_directory_name: "example-plugin".to_string(),
             retention_class: "recoverable".to_string(),
             reason_code: "user_uninstall".to_string(),
+        }
+    }
+
+    fn purge_draft(tombstone: &WorkspacePluginTombstoneDraft) -> WorkspacePluginPurgeDraft {
+        WorkspacePluginPurgeDraft {
+            project_root: tombstone.project_root.clone(),
+            tombstone_id: tombstone.tombstone_id.clone(),
+            plugin_id: tombstone.plugin_id.clone(),
+            package_digest: tombstone.package_digest.clone(),
+            backup_path_key: tombstone.backup_path_key.clone(),
+            original_directory_name: tombstone.original_directory_name.clone(),
         }
     }
 
@@ -2437,6 +2737,240 @@ mod tests {
                 .unwrap()
                 .outcome,
             PluginLifecycleMutationOutcome::Applied
+        );
+    }
+
+    #[test]
+    fn retention_expiry_purge_and_terminal_tombstone_are_bounded_and_project_scoped() {
+        let directory = tempdir().unwrap();
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let project_a = "/project/a";
+        let project_b = "/project/b";
+        let tombstone_a =
+            prepare_package_moved_uninstall(&mut store, project_a, "transition.retention.a");
+        store
+            .complete_workspace_plugin_uninstall("transition.retention.a", &tombstone_a)
+            .unwrap();
+        let tombstone_b =
+            prepare_package_moved_uninstall(&mut store, project_b, "transition.retention.b");
+        store
+            .complete_workspace_plugin_uninstall("transition.retention.b", &tombstone_b)
+            .unwrap();
+
+        let before_move = (Utc::now() - Duration::minutes(1)).to_rfc3339();
+        assert_eq!(
+            store
+                .expire_workspace_plugin_tombstones(project_a, &before_move, 1)
+                .unwrap()
+                .outcome,
+            PluginLifecycleMutationOutcome::Unchanged
+        );
+        let after_move = (Utc::now() + Duration::minutes(1)).to_rfc3339();
+        let expired = store
+            .expire_workspace_plugin_tombstones(project_a, &after_move, 1)
+            .unwrap();
+        assert_eq!(expired.outcome, PluginLifecycleMutationOutcome::Applied);
+        assert_eq!(expired.expired.len(), 1);
+        assert_eq!(expired.expired[0].retention_class, "expired");
+        assert_eq!(
+            store
+                .get_workspace_plugin_tombstone(project_b, &tombstone_b.tombstone_id)
+                .unwrap()
+                .unwrap()
+                .retention_class,
+            "recoverable"
+        );
+        assert!(
+            store
+                .expire_workspace_plugin_tombstones(project_a, &after_move, 0)
+                .is_err()
+        );
+        assert!(
+            store
+                .expire_workspace_plugin_tombstones(project_a, &after_move, 101)
+                .is_err()
+        );
+        assert!(
+            store
+                .expire_workspace_plugin_tombstones(project_a, "not-a-time", 1)
+                .is_err()
+        );
+
+        let draft = purge_draft(&tombstone_a);
+        assert_eq!(
+            store
+                .request_workspace_plugin_purge(&draft)
+                .unwrap()
+                .outcome,
+            PluginLifecycleMutationOutcome::Applied
+        );
+        assert_eq!(
+            store
+                .request_workspace_plugin_purge(&draft)
+                .unwrap()
+                .outcome,
+            PluginLifecycleMutationOutcome::Unchanged
+        );
+        let mut wrong = draft.clone();
+        wrong.package_digest = digest('f');
+        assert!(store.request_workspace_plugin_purge(&wrong).is_err());
+        let completed = store.complete_workspace_plugin_purge(&draft).unwrap();
+        assert_eq!(completed.outcome, PluginLifecycleMutationOutcome::Applied);
+        assert_eq!(completed.tombstone.retention_class, "expired");
+        assert!(completed.tombstone.deleted_at.is_some());
+        assert_eq!(
+            store
+                .complete_workspace_plugin_purge(&draft)
+                .unwrap()
+                .outcome,
+            PluginLifecycleMutationOutcome::Unchanged
+        );
+        assert!(
+            store
+                .get_workspace_plugin_tombstone(project_b, &tombstone_a.tombstone_id)
+                .unwrap()
+                .is_none()
+        );
+        let reasons = store
+            .list_workspace_plugin_lifecycle_events(project_a, Some(100))
+            .unwrap()
+            .into_iter()
+            .filter_map(|event| event.reason_code)
+            .collect::<Vec<_>>();
+        for reason in ["retention_expired", "purge_requested", "purge_completed"] {
+            assert!(reasons.iter().any(|actual| actual == reason));
+        }
+    }
+
+    #[test]
+    fn retention_and_purge_persistence_failures_roll_back_and_reopen_retry() {
+        let directory = tempdir().unwrap();
+        let database = directory.path().join("rho.sqlite");
+        let project = "/project/a";
+        let transition_id = "transition.retention.failure";
+        let mut store = Store::open(&database).unwrap();
+        let tombstone = prepare_package_moved_uninstall(&mut store, project, transition_id);
+        store
+            .complete_workspace_plugin_uninstall(transition_id, &tombstone)
+            .unwrap();
+        let cutoff = (Utc::now() + Duration::minutes(1)).to_rfc3339();
+        store
+            .connection
+            .execute_batch(
+                "CREATE TRIGGER fail_retention_event
+                 BEFORE INSERT ON workspace_plugin_lifecycle_events
+                 WHEN NEW.reason_code = 'retention_expired'
+                 BEGIN SELECT RAISE(ABORT, 'injected retention event failure'); END;",
+            )
+            .unwrap();
+        assert!(
+            store
+                .expire_workspace_plugin_tombstones(project, &cutoff, 1)
+                .is_err()
+        );
+        assert_eq!(
+            store
+                .get_workspace_plugin_tombstone(project, &tombstone.tombstone_id)
+                .unwrap()
+                .unwrap()
+                .retention_class,
+            "recoverable"
+        );
+        store
+            .connection
+            .execute_batch("DROP TRIGGER fail_retention_event;")
+            .unwrap();
+        store
+            .expire_workspace_plugin_tombstones(project, &cutoff, 1)
+            .unwrap();
+        let draft = purge_draft(&tombstone);
+        store.request_workspace_plugin_purge(&draft).unwrap();
+        store
+            .connection
+            .execute_batch(
+                "CREATE TRIGGER fail_purge_terminal_event
+                 BEFORE INSERT ON workspace_plugin_lifecycle_events
+                 WHEN NEW.reason_code = 'purge_completed'
+                 BEGIN SELECT RAISE(ABORT, 'injected purge completion failure'); END;",
+            )
+            .unwrap();
+        assert!(store.complete_workspace_plugin_purge(&draft).is_err());
+        let pending = store
+            .get_workspace_plugin_tombstone(project, &tombstone.tombstone_id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(pending.retention_class, "purge_pending");
+        assert!(pending.deleted_at.is_none());
+        store
+            .connection
+            .execute_batch("DROP TRIGGER fail_purge_terminal_event;")
+            .unwrap();
+        drop(store);
+
+        let mut reopened = Store::open(&database).unwrap();
+        assert_eq!(
+            reopened
+                .complete_workspace_plugin_purge(&draft)
+                .unwrap()
+                .outcome,
+            PluginLifecycleMutationOutcome::Applied
+        );
+    }
+
+    #[test]
+    fn concurrent_exact_purge_requests_converge_without_cross_project_takeover() {
+        let directory = tempdir().unwrap();
+        let database = directory.path().join("rho.sqlite");
+        let project = "/project/a";
+        let transition_id = "transition.retention.concurrent";
+        let mut store = Store::open(&database).unwrap();
+        let tombstone = prepare_package_moved_uninstall(&mut store, project, transition_id);
+        store
+            .complete_workspace_plugin_uninstall(transition_id, &tombstone)
+            .unwrap();
+        store
+            .expire_workspace_plugin_tombstones(
+                project,
+                &(Utc::now() + Duration::minutes(1)).to_rfc3339(),
+                1,
+            )
+            .unwrap();
+        drop(store);
+
+        let draft = purge_draft(&tombstone);
+        let barrier = Arc::new(Barrier::new(2));
+        let handles = (0..2)
+            .map(|_| {
+                let database = database.clone();
+                let draft = draft.clone();
+                let barrier = Arc::clone(&barrier);
+                std::thread::spawn(move || {
+                    let mut store = Store::open(database).unwrap();
+                    barrier.wait();
+                    store
+                        .request_workspace_plugin_purge(&draft)
+                        .unwrap()
+                        .outcome
+                })
+            })
+            .collect::<Vec<_>>();
+        let outcomes = handles
+            .into_iter()
+            .map(|handle| handle.join().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            outcomes
+                .iter()
+                .filter(|outcome| **outcome == PluginLifecycleMutationOutcome::Applied)
+                .count(),
+            1
+        );
+        assert_eq!(
+            outcomes
+                .iter()
+                .filter(|outcome| **outcome == PluginLifecycleMutationOutcome::Unchanged)
+                .count(),
+            1
         );
     }
 

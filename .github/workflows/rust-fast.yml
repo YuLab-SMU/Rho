@@ -42,6 +42,7 @@ on:
       - "scripts/test-extension-p2-4-crash-retry-contract.mjs"
       - "scripts/test-extension-p2-4-package-trash-contract.mjs"
       - "scripts/test-extension-p2-4-uninstall-restore-contract.mjs"
+      - "scripts/test-extension-p2-4-retention-purge-contract.mjs"
       - "scripts/test-workspace-plugin-ui.mjs"
       - "LICENSE"
       - "LICENSES.md"
@@ -149,6 +150,8 @@ jobs:
           node scripts/test-extension-p2-4-package-trash-contract.mjs
           node scripts/test-extension-p2-4-uninstall-restore-contract.mjs --test
           node scripts/test-extension-p2-4-uninstall-restore-contract.mjs
+          node scripts/test-extension-p2-4-retention-purge-contract.mjs --test
+          node scripts/test-extension-p2-4-retention-purge-contract.mjs
           node scripts/test-workspace-plugin-ui.mjs
 
       - name: Check formatting

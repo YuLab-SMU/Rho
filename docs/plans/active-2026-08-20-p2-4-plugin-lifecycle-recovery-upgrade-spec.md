@@ -1,14 +1,14 @@
 # P2-4 Plugin Lifecycle, Recovery, Uninstall And Upgrade
 
 Status: active under the owner-approved local-first exception; P2-4A through
-P2-4D2 source implementation and local packaged-smoke checkpoints are complete;
+P2-4D3 source implementation and local packaged-smoke checkpoints are complete;
 D2 Browser visual review was blocked by the Browser local-file URL policy and
 remains open; hosted and cross-platform installed gates remain mandatory before
 final Phase 2 acceptance
 
-Active work package: P2-4D3 only — explicit BH4 retention transitions and exact
-trash purge. P2-4E through P2-4G remain inactive. D3 adds no user command,
-automatic schedule, install, update or rollback.
+Active work package: none at the P2-4D3 stop. P2-4E through P2-4G remain
+inactive until their explicit activation commits. No install, update or
+rollback is active.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -407,7 +407,7 @@ P2-4D is divided into three local stops:
    completes C1 teardown, revokes durable grants, atomically moves to trash and
    records tombstone plus uninstalled state. Restore uses exact tombstone/digest,
    moves back and returns disabled without authority.
-3. **P2-4D3 — BH4 retention handoff (active).** Expiry and purge-pending are
+3. **P2-4D3 — BH4 retention handoff (locally complete).** Expiry and purge-pending are
    explicit Store transitions; permanent removal uses exact tombstone ownership,
    safe recursive deletion inside trash only, failure recovery and no user-action
    delete claim.
@@ -461,6 +461,54 @@ D3 is internal and does not change visible application behavior, so the
 application remains `0.4.1-dev.8` and `NEWS.md` is unchanged. Its mandatory
 stop is source tests, stable/MSRV checks, exact-package installed smoke,
 contract review and a local commit before P2-4E activation.
+
+### P2-4D3 local checkpoint — 2026-08-21
+
+The explicit retention/purge mechanism is locally complete:
+
+- Store expiry accepts only a normalized project, caller-supplied canonical
+  cutoff and 1–100 batch limit; an immediate transaction changes only eligible
+  current-project recoverable tombstones to Expired and appends bounded
+  recovery audit. Exact purge request and terminal completion are immediate,
+  idempotent transactions with plugin/digest/directory/backup-key comparison,
+  failure rollback, reopen retry and concurrent convergence.
+- Broker purge refuses any discovery source, validates the full exact trash
+  inventory, writes and syncs a deterministic bounded identity marker, renames
+  the exact package to a derived purging component, and performs a bounded
+  no-follow/reparse-rejecting walk. The small marker is retained as deletion
+  evidence, allowing safe post-delete replay and making absent foreign-project
+  paths fail closed instead of being mistaken for prior completion.
+- Rename-before/after, mid-delete and post-delete interruption tests recover;
+  source collision, dual ownership, wrong digest/key/project, link/reparse,
+  marker tampering, over-depth trees and sibling-project mutation fail closed.
+  The orchestration service fixes Store pending → filesystem purge → Store
+  terminal order and exposes no UI, Tauri command, Agent/plugin call or schedule.
+- Full Rust workspace tests passed: desktop 256/one opt-in Keychain ignored,
+  Store 159, Server 101 library plus one binary, extension-runtime 126 unit/26
+  contract/13 discovery/34 lifecycle, and all remaining suites. Stable and
+  Rust `1.88.0` all-target checks passed; capped Clippy showed only existing
+  broad `StoreError` warnings in affected files. D3 positive/negative contract,
+  D2 contract, command inventory, formatting and diff checks passed.
+- Source, unpacked App candidate/legacy and read-only mounted DMG
+  candidate/legacy smoke all passed the D2 fields plus
+  `retention_expired`, `purge_pending_durable`, `exact_trash_purged`,
+  `purge_tombstone_terminal`, `purge_sibling_project_preserved` and
+  `purge_replay_idempotent`.
+
+The final local D3 rehearsal build remains internal `0.4.1-dev.8` because D3
+adds no visible behavior. Its exact unsigned artifacts are:
+
+- arm64 executable: 48,119,984 bytes, SHA-256
+  `0ece222d73b0b27a7dca440cdb5f84a7b9fce67bcabbeb7c3cf6236f00070971`;
+- DMG: 26,410,028 bytes, SHA-256
+  `77d44578c8620f340025940e277a3fb9a8ab7bcd915dfd2f72a21f7bfd79646d`;
+- updater archive: 27,153,054 bytes, SHA-256
+  `ac134aadb0d1c13934f38f4d8f43abdca0e48cb6edb50b1df76f3cb2aa7275ee`.
+
+The updater signature again uses an ephemeral rehearsal key and does not match
+the production public key. No signing, notarization, installation, publication
+or release readiness is claimed. D2 Browser visual review and all hosted/
+cross-platform installed gates remain open.
 
 D1 tests cover source/trash root replacement, directory/digest mismatch,
 symlink/reparse/non-file inventory, preexisting target, rename failure,

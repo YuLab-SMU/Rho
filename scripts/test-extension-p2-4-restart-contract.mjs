@@ -36,7 +36,8 @@ export function validateP24RestartContract(value) {
 
   for (const marker of [
     '"trigger": "workspace_start"',
-    '"trigger": "project_switch"',
+    '"project_switched"',
+    '"project_switch_restored"',
     '"workspace_plugin_reconciliation"',
     "workspace_plugin_runtime_context",
   ]) assert.ok(value.main.includes(marker), `desktop restart wiring lost ${marker}`);
@@ -50,7 +51,7 @@ export function validateP24RestartContract(value) {
   );
   assert.doesNotMatch(
     value.commands,
-    /retry_workspace_plugin|disable_workspace_plugin|uninstall_workspace_plugin|accept_workspace_plugin_update|rollback_workspace_plugin/,
+    /accept_workspace_plugin_update|rollback_workspace_plugin/,
     "B3 prematurely added a later lifecycle command",
   );
   for (const marker of [
@@ -70,7 +71,7 @@ export function validateP24RestartContract(value) {
 function fixture() {
   return {
     desktop: "pub(crate) struct WorkspacePluginReconciliationReport\nWorkspacePluginReconciliationEntry\nMAX_PLUGIN_RECONCILIATION_ENTRIES\npub truncated: bool\nreactivated\nentries\npub(crate) struct PluginPermissionDecisionInput\nreconcile_project\nreconcile_discovered_plugin\nprepare_recovery_enable_transition\npersist_missing_plugin_block\nmissing_workspace_plugin_view\nbroker_restart_reconciled\nrequest_event_type: \"recovery\"\nfresh_permission_review_required\nrestart_reconstructs_exact_durable_enable_with_fresh_generation_and_host\nrestart_recovers_nonterminal_post_publication_enable_without_reusing_generation\nrestart_reuses_only_valid_project_grants_and_never_reuses_live_handles\nrestart_reconciliation_isolates_two_projects_across_a_b_a\none_invalid_plugin_does_not_block_exact_sibling_reactivation\nrestart_invalid_discovery_root_blocks_all_durable_enablement\nrestart_corrupt_cache_blocks_without_loading_mutable_source",
-    main: "async fn start_workspace\nrecover_pending_plugin_permission_requests\nreconcile_project\nasync fn finalize_workspace_start\n\"trigger\": \"workspace_start\"\n\"trigger\": \"project_switch\"\n\"workspace_plugin_reconciliation\"\nworkspace_plugin_runtime_context",
+    main: "async fn start_workspace\nrecover_pending_plugin_permission_requests\nreconcile_project\nasync fn finalize_workspace_start\n\"trigger\": \"workspace_start\"\n\"project_switched\"\n\"project_switch_restored\"\n\"workspace_plugin_reconciliation\"\nworkspace_plugin_runtime_context",
     commands: "request_workspace_plugin_enable",
     store: "pub request_event_type: String\n\"user_requested\" | \"recovery\"\nevent_type: &draft.request_event_type",
     installed: '"restart_reactivated": true\n"restart_generation": 2\n"restart_authority_fresh": true\n"changed_package_update_pending": true',
@@ -82,10 +83,10 @@ if (process.argv.includes("--test")) {
   validateP24RestartContract(fixture());
   for (const [name, mutate] of [
     ["fresh generation", (value) => { value.desktop = value.desktop.replace("without_reusing_generation", ""); }],
-    ["nonblocking wiring", (value) => { value.main = value.main.replace('"trigger": "project_switch"', ""); }],
+    ["nonblocking wiring", (value) => { value.main = value.main.replace('"project_switched"', ""); }],
     ["permission order", (value) => { value.main = value.main.replace("recover_pending_plugin_permission_requests\nreconcile_project", "reconcile_project\nrecover_pending_plugin_permission_requests"); }],
     ["recovery audit", (value) => { value.store = value.store.replace('"user_requested" | "recovery"', '"user_requested"'); }],
-    ["later command", (value) => { value.commands += "\ndisable_workspace_plugin"; }],
+    ["later command", (value) => { value.commands += "\naccept_workspace_plugin_update"; }],
     ["installed", (value) => { value.installed = value.installed.replace('"restart_reactivated": true', ""); }],
   ]) {
     const value = fixture();

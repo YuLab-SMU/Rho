@@ -14052,9 +14052,10 @@ fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Valu
         ViewerDocumentV1, WasmHostIdentity, WasmPluginHost, WorkspacePluginManifest,
     };
     use rho_store::{
-        PluginLifecycleQueryService, PluginPermissionDecision, PluginPermissionDecisionDraft,
-        PluginPermissionMutationOutcome, PluginPermissionMutationService,
-        PluginPermissionQueryService, PluginPermissionRequestDraft,
+        PluginLifecycleMutationService, PluginLifecycleQueryService, PluginPermissionDecision,
+        PluginPermissionDecisionDraft, PluginPermissionMutationOutcome,
+        PluginPermissionMutationService, PluginPermissionQueryService,
+        PluginPermissionRequestDraft,
     };
 
     #[derive(Debug)]
@@ -14763,8 +14764,8 @@ fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Valu
     );
     p24_restarted.invalidate_project(&p24_project_root);
     let p24_manifest_path = p24_plugin.join("rho-plugin.json");
-    let mut p24_changed_manifest: Value =
-        serde_json::from_slice(&std::fs::read(&p24_manifest_path)?)?;
+    let p24_original_manifest = std::fs::read(&p24_manifest_path)?;
+    let mut p24_changed_manifest: Value = serde_json::from_slice(&p24_original_manifest)?;
     p24_changed_manifest["version"] = json!("2.0.0");
     std::fs::write(
         &p24_manifest_path,
@@ -14782,6 +14783,122 @@ fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Valu
             .iter()
             .any(|plugin| plugin.status == "update_pending"),
         "installed P2-4 trusted projection hid update-pending state"
+    );
+    let p24_retention_project = p24_root.path().join("retention-project");
+    let p24_retention_plugin = p24_retention_project.join(".rho/plugins/retention-smoke");
+    std::fs::create_dir_all(p24_retention_plugin.join("dist"))?;
+    std::fs::write(
+        p24_retention_plugin.join("dist/plugin.wasm"),
+        P2_1_SMOKE_WASM,
+    )?;
+    std::fs::write(
+        p24_retention_plugin.join("rho-plugin.json"),
+        serde_json::to_vec(&json!({
+            "schemaVersion": 1,
+            "id": "org.yulab.rho.phase2-retention-smoke",
+            "name": "Retention smoke",
+            "version": "1.0.0",
+            "apiVersion": "^1.0",
+            "runtime": {"kind": "wasm", "entry": "dist/plugin.wasm", "scope": "project"}
+        }))?,
+    )?;
+    let p24_retention_root = normalize_project_root(
+        p24_retention_project
+            .canonicalize()?
+            .to_string_lossy()
+            .as_ref(),
+    );
+    let p24_retention_context = crate::workspace_plugins::PluginRuntimeContext {
+        app_data_dir: p24_data.clone(),
+        project_root: p24_retention_root.clone(),
+        project_revision: 1,
+        project_scope_id: ScopeId::new("project.installed-retention-smoke")?,
+        workspace: None,
+    };
+    let p24_retention_registry =
+        crate::workspace_plugins::PendingPluginPermissionRegistry::default();
+    ensure!(
+        p24_retention_registry
+            .request_enable(
+                &p24_retention_context,
+                "org.yulab.rho.phase2-retention-smoke",
+                &mut p24_store,
+            )?
+            .status
+            == "enabled",
+        "installed P2-4 retention fixture did not enable"
+    );
+    let p24_retention_state = PluginLifecycleQueryService::new(&p24_store)
+        .get_state(&p24_retention_root, "org.yulab.rho.phase2-retention-smoke")?
+        .context("installed P2-4 retention lifecycle state is missing")?;
+    let p24_retention_uninstall = p24_retention_registry.uninstall(
+        &p24_retention_context,
+        &crate::workspace_plugins::WorkspacePluginUninstallInput {
+            plugin_id: "org.yulab.rho.phase2-retention-smoke".to_string(),
+            directory_name: "retention-smoke".to_string(),
+            package_digest: p24_retention_state
+                .accepted_digest
+                .clone()
+                .context("installed P2-4 retention accepted digest is missing")?,
+            expected_project_revision: p24_retention_context.project_revision,
+            confirmed: true,
+        },
+        &mut p24_store,
+    )?;
+    let p24_retention_tombstone = PluginLifecycleQueryService::new(&p24_store)
+        .get_tombstone(&p24_retention_root, &p24_retention_uninstall.tombstone_id)?
+        .context("installed P2-4 retention tombstone is missing")?;
+    let p24_sibling = p24_root.path().join("sibling-project/.rho/plugins/keep");
+    std::fs::create_dir_all(&p24_sibling)?;
+    std::fs::write(p24_sibling.join("sentinel.txt"), b"keep")?;
+    let retention_service = rho_server::plugin_retention::PluginTrashRetentionService::new();
+    let expired = retention_service.expire(
+        &mut p24_store,
+        &p24_retention_root,
+        &p24_retention_tombstone.moved_at,
+        1,
+    )?;
+    ensure!(
+        expired.expired.len() == 1 && expired.expired[0].retention_class == "expired",
+        "installed P2-4 retention expiry did not select the exact tombstone"
+    );
+    let p24_purge_draft = rho_store::WorkspacePluginPurgeDraft {
+        project_root: p24_retention_root.clone(),
+        tombstone_id: p24_retention_tombstone.tombstone_id.clone(),
+        plugin_id: p24_retention_tombstone.plugin_id.clone(),
+        package_digest: p24_retention_tombstone.package_digest.clone(),
+        backup_path_key: p24_retention_tombstone.backup_path_key.clone(),
+        original_directory_name: p24_retention_tombstone.original_directory_name.clone(),
+    };
+    ensure!(
+        PluginLifecycleMutationService::new(&mut p24_store)
+            .request_purge(&p24_retention_root, &p24_purge_draft)?
+            .tombstone
+            .retention_class
+            == "purge_pending",
+        "installed P2-4 purge-pending truth was not durable before deletion"
+    );
+    let p24_purged = retention_service.purge_exact_tombstone(
+        &mut p24_store,
+        &p24_retention_root,
+        &p24_retention_tombstone.tombstone_id,
+    )?;
+    ensure!(
+        p24_purged.tombstone.deleted_at.is_some()
+            && p24_purged.tombstone.retention_class == "expired"
+            && !p24_retention_plugin.exists()
+            && p24_sibling.join("sentinel.txt").is_file(),
+        "installed P2-4 exact purge damaged sibling truth or missed terminal tombstone"
+    );
+    let p24_purge_replay = retention_service.purge_exact_tombstone(
+        &mut p24_store,
+        &p24_retention_root,
+        &p24_retention_tombstone.tombstone_id,
+    )?;
+    ensure!(
+        p24_purge_replay.file_outcome
+            == rho_server::plugin_package_trash::PluginPackageOwnershipOutcome::AlreadyPurged,
+        "installed P2-4 exact purge replay was not idempotent"
     );
 
     let mut report = json!({
@@ -14830,6 +14947,12 @@ fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Valu
     report["uninstall_tombstone_atomic"] = json!(true);
     report["uninstall_package_in_trash"] = json!(true);
     report["restore_disabled_no_authority"] = json!(true);
+    report["retention_expired"] = json!(true);
+    report["purge_pending_durable"] = json!(true);
+    report["exact_trash_purged"] = json!(true);
+    report["purge_tombstone_terminal"] = json!(true);
+    report["purge_sibling_project_preserved"] = json!(true);
+    report["purge_replay_idempotent"] = json!(true);
     Ok(report)
 }
 

@@ -56,7 +56,8 @@ pub use mutation::ProjectMutationService;
 pub use plugin_lifecycle::{
     PluginLifecycleMutationOutcome, WorkspacePluginCrashOutcome, WorkspacePluginDiscoveredDraft,
     WorkspacePluginGenerationAllocation, WorkspacePluginLifecycleEvent,
-    WorkspacePluginPackageTombstone, WorkspacePluginRestoreCompletion, WorkspacePluginState,
+    WorkspacePluginPackageTombstone, WorkspacePluginPurgeDraft, WorkspacePluginPurgeResult,
+    WorkspacePluginRestoreCompletion, WorkspacePluginRetentionSweep, WorkspacePluginState,
     WorkspacePluginTombstoneDraft, WorkspacePluginTransition, WorkspacePluginTransitionAdvance,
     WorkspacePluginTransitionDraft, WorkspacePluginTransitionRequestResult,
     WorkspacePluginUninstallCompletion,

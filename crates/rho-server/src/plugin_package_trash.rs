@@ -4,7 +4,8 @@
 //! does not update SQLite, delete recursively, activate code, or expose paths
 //! to guest code.
 
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -12,9 +13,14 @@ use rho_extension_runtime::{
     PackageDigest, PluginId, snapshot_workspace_plugin_cache_directory,
     snapshot_workspace_plugin_package,
 };
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 pub const PLUGIN_TRASH_DIRECTORY: &str = ".rho/plugin-trash";
+const PURGE_MARKER_SUFFIX: &str = ".json";
+const MAX_PURGE_ENTRIES: usize = 4096;
+const MAX_PURGE_DEPTH: usize = 32;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PluginPackageOwnershipOutcome {
@@ -22,6 +28,8 @@ pub enum PluginPackageOwnershipOutcome {
     AlreadyMoved,
     Restored,
     AlreadyRestored,
+    Purged,
+    AlreadyPurged,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,6 +51,8 @@ pub enum PluginPackageTrashError {
     RenameFailed(String),
     #[error("plugin package exact validation failed: {0}")]
     ValidationFailed(String),
+    #[error("plugin package exact purge failed: {0}")]
+    DeleteFailed(String),
     #[cfg(test)]
     #[error("injected plugin package move failure: {0:?}")]
     Injected(TrashFailurePoint),
@@ -53,6 +63,10 @@ pub enum PluginPackageTrashError {
 pub enum TrashFailurePoint {
     BeforeRename,
     AfterRename,
+    BeforePurgeRename,
+    AfterPurgeRename,
+    MidPurgeDelete,
+    AfterPurgeDelete,
 }
 
 #[derive(Debug, Clone)]
@@ -236,6 +250,103 @@ impl PluginPackageTrash {
             )),
         }
     }
+
+    pub fn purge_exact(
+        &self,
+        project_root: &Path,
+        directory_name: &str,
+        plugin_id: &str,
+        expected_digest: &str,
+        trash_key: &str,
+    ) -> Result<PluginPackageMoveEvidence, PluginPackageTrashError> {
+        let identity =
+            ValidatedMoveIdentity::new(directory_name, plugin_id, expected_digest, trash_key)?;
+        let _gate = self
+            .gate
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let roots = ProjectTrashRoots::open(project_root, false)?;
+        let source = roots.plugins.join(&identity.directory_name);
+        if source.exists() {
+            return Err(PluginPackageTrashError::UnsafeOwnership(
+                "purge refuses a package present in discovery".to_string(),
+            ));
+        }
+        let target = roots.trash.join(&identity.trash_key);
+        let purge_key = identity.purge_key();
+        let purging = roots.trash.join(&purge_key);
+        let marker = roots
+            .trash
+            .join(format!("{purge_key}{PURGE_MARKER_SUFFIX}"));
+        let marker_evidence = PurgeMarker::from_identity(&identity);
+
+        match (target.exists(), purging.exists()) {
+            (true, true) => {
+                return Err(PluginPackageTrashError::UnsafeOwnership(
+                    "trash and purging directories both own one package".to_string(),
+                ));
+            }
+            (true, false) => {
+                validate_exact_directory(&target, &identity)?;
+                ensure_purge_marker(&roots.trash, &marker, &marker_evidence)?;
+                #[cfg(test)]
+                if self.failure == Some(TrashFailurePoint::BeforePurgeRename) {
+                    return Err(PluginPackageTrashError::Injected(
+                        TrashFailurePoint::BeforePurgeRename,
+                    ));
+                }
+                fs::rename(&target, &purging).map_err(|error| {
+                    PluginPackageTrashError::RenameFailed(format!(
+                        "quarantining exact plugin trash failed: {error}"
+                    ))
+                })?;
+                sync_directory(&roots.trash)?;
+                #[cfg(test)]
+                if self.failure == Some(TrashFailurePoint::AfterPurgeRename) {
+                    return Err(PluginPackageTrashError::Injected(
+                        TrashFailurePoint::AfterPurgeRename,
+                    ));
+                }
+            }
+            (false, true) => {
+                validate_purge_marker(&marker, &marker_evidence)?;
+            }
+            (false, false) => {
+                if marker.exists() {
+                    validate_purge_marker(&marker, &marker_evidence)?;
+                    return Ok(identity.evidence(PluginPackageOwnershipOutcome::AlreadyPurged));
+                }
+                return Err(PluginPackageTrashError::UnsafeOwnership(
+                    "purged package has no exact retained marker".to_string(),
+                ));
+            }
+        }
+
+        validate_purge_marker(&marker, &marker_evidence)?;
+        let mut entry_count = 0usize;
+        validate_bounded_purge_tree(&purging, 0, &mut entry_count)?;
+        let mut removed = 0usize;
+        let inject_mid = {
+            #[cfg(test)]
+            {
+                self.failure == Some(TrashFailurePoint::MidPurgeDelete)
+            }
+            #[cfg(not(test))]
+            {
+                false
+            }
+        };
+        remove_bounded_purge_tree(&purging, 0, &mut removed, inject_mid)?;
+        sync_directory(&roots.trash)?;
+        #[cfg(test)]
+        if self.failure == Some(TrashFailurePoint::AfterPurgeDelete) {
+            return Err(PluginPackageTrashError::Injected(
+                TrashFailurePoint::AfterPurgeDelete,
+            ));
+        }
+        validate_purge_marker(&marker, &marker_evidence)?;
+        Ok(identity.evidence(PluginPackageOwnershipOutcome::Purged))
+    }
 }
 
 struct ValidatedMoveIdentity {
@@ -269,6 +380,38 @@ impl ValidatedMoveIdentity {
             package_digest: self.digest.to_string(),
             directory_name: self.directory_name.clone(),
             trash_key: self.trash_key.clone(),
+        }
+    }
+
+    fn purge_key(&self) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(self.trash_key.as_bytes());
+        hasher.update([0]);
+        hasher.update(self.plugin_id.as_str().as_bytes());
+        hasher.update([0]);
+        hasher.update(self.digest.as_str().as_bytes());
+        format!("purging.{:x}", hasher.finalize())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PurgeMarker {
+    schema_version: u32,
+    plugin_id: String,
+    package_digest: String,
+    directory_name: String,
+    trash_key: String,
+}
+
+impl PurgeMarker {
+    fn from_identity(identity: &ValidatedMoveIdentity) -> Self {
+        Self {
+            schema_version: 1,
+            plugin_id: identity.plugin_id.to_string(),
+            package_digest: identity.digest.to_string(),
+            directory_name: identity.directory_name.clone(),
+            trash_key: identity.trash_key.clone(),
         }
     }
 }
@@ -319,6 +462,210 @@ fn validate_exact_directory(
             "package digest changed during ownership validation".to_string(),
         ));
     }
+    Ok(())
+}
+
+fn ensure_purge_marker(
+    trash_root: &Path,
+    marker_path: &Path,
+    evidence: &PurgeMarker,
+) -> Result<(), PluginPackageTrashError> {
+    if marker_path.exists() {
+        return validate_purge_marker(marker_path, evidence);
+    }
+    let temp_path = marker_path.with_extension("json.tmp");
+    if temp_path.exists() {
+        let metadata = fs::symlink_metadata(&temp_path).map_err(|error| {
+            PluginPackageTrashError::UnsafeOwnership(format!(
+                "cannot inspect purge marker temporary file: {error}"
+            ))
+        })?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() || is_reparse(&metadata) {
+            return Err(PluginPackageTrashError::UnsafeOwnership(
+                "purge marker temporary path is not a regular file".to_string(),
+            ));
+        }
+        fs::remove_file(&temp_path).map_err(|error| {
+            PluginPackageTrashError::DeleteFailed(format!(
+                "removing incomplete purge marker failed: {error}"
+            ))
+        })?;
+    }
+    let bytes = serde_json::to_vec(evidence)
+        .map_err(|error| PluginPackageTrashError::ValidationFailed(error.to_string()))?;
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp_path)
+        .map_err(|error| {
+            PluginPackageTrashError::RenameFailed(format!(
+                "creating purge marker temporary file failed: {error}"
+            ))
+        })?;
+    file.write_all(&bytes).map_err(|error| {
+        PluginPackageTrashError::RenameFailed(format!("writing purge marker failed: {error}"))
+    })?;
+    file.sync_all().map_err(|error| {
+        PluginPackageTrashError::RenameFailed(format!("syncing purge marker failed: {error}"))
+    })?;
+    fs::rename(&temp_path, marker_path).map_err(|error| {
+        PluginPackageTrashError::RenameFailed(format!("publishing purge marker failed: {error}"))
+    })?;
+    sync_directory(trash_root)?;
+    validate_purge_marker(marker_path, evidence)
+}
+
+fn validate_purge_marker(
+    marker_path: &Path,
+    evidence: &PurgeMarker,
+) -> Result<(), PluginPackageTrashError> {
+    let metadata = fs::symlink_metadata(marker_path).map_err(|error| {
+        PluginPackageTrashError::UnsafeOwnership(format!(
+            "cannot inspect exact purge marker: {error}"
+        ))
+    })?;
+    if metadata.file_type().is_symlink()
+        || !metadata.is_file()
+        || is_reparse(&metadata)
+        || metadata.len() > 4096
+    {
+        return Err(PluginPackageTrashError::UnsafeOwnership(
+            "exact purge marker is not a bounded regular file".to_string(),
+        ));
+    }
+    let actual: PurgeMarker = serde_json::from_slice(&fs::read(marker_path).map_err(|error| {
+        PluginPackageTrashError::ValidationFailed(format!(
+            "reading exact purge marker failed: {error}"
+        ))
+    })?)
+    .map_err(|error| {
+        PluginPackageTrashError::ValidationFailed(format!(
+            "decoding exact purge marker failed: {error}"
+        ))
+    })?;
+    if &actual != evidence {
+        return Err(PluginPackageTrashError::UnsafeOwnership(
+            "exact purge marker identity changed".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_bounded_purge_tree(
+    directory: &Path,
+    depth: usize,
+    count: &mut usize,
+) -> Result<(), PluginPackageTrashError> {
+    if depth > MAX_PURGE_DEPTH {
+        return Err(PluginPackageTrashError::UnsafeOwnership(
+            "purge tree exceeds its depth budget".to_string(),
+        ));
+    }
+    let metadata = fs::symlink_metadata(directory).map_err(|error| {
+        PluginPackageTrashError::UnsafeOwnership(format!("cannot inspect purge directory: {error}"))
+    })?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() || is_reparse(&metadata) {
+        return Err(PluginPackageTrashError::UnsafeOwnership(
+            "purge target must remain a real directory".to_string(),
+        ));
+    }
+    let mut entries = fs::read_dir(directory)
+        .map_err(|error| PluginPackageTrashError::DeleteFailed(error.to_string()))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| PluginPackageTrashError::DeleteFailed(error.to_string()))?;
+    entries.sort_by_key(|entry| entry.file_name());
+    for entry in entries {
+        *count = count.checked_add(1).ok_or_else(|| {
+            PluginPackageTrashError::UnsafeOwnership("purge entry count overflow".to_string())
+        })?;
+        if *count > MAX_PURGE_ENTRIES {
+            return Err(PluginPackageTrashError::UnsafeOwnership(
+                "purge tree exceeds its entry budget".to_string(),
+            ));
+        }
+        let path = entry.path();
+        let metadata = fs::symlink_metadata(&path).map_err(|error| {
+            PluginPackageTrashError::UnsafeOwnership(format!("cannot inspect purge entry: {error}"))
+        })?;
+        if metadata.file_type().is_symlink() || is_reparse(&metadata) {
+            return Err(PluginPackageTrashError::UnsafeOwnership(
+                "purge tree contains a link or reparse point".to_string(),
+            ));
+        }
+        if metadata.is_dir() {
+            validate_bounded_purge_tree(&path, depth + 1, count)?;
+        } else if !metadata.is_file() {
+            return Err(PluginPackageTrashError::UnsafeOwnership(
+                "purge tree contains a non-file entry".to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn remove_bounded_purge_tree(
+    directory: &Path,
+    depth: usize,
+    removed: &mut usize,
+    inject_mid: bool,
+) -> Result<(), PluginPackageTrashError> {
+    if depth > MAX_PURGE_DEPTH {
+        return Err(PluginPackageTrashError::UnsafeOwnership(
+            "purge deletion exceeds its depth budget".to_string(),
+        ));
+    }
+    let directory_metadata = fs::symlink_metadata(directory).map_err(|error| {
+        PluginPackageTrashError::UnsafeOwnership(format!(
+            "cannot revalidate purge directory: {error}"
+        ))
+    })?;
+    if directory_metadata.file_type().is_symlink()
+        || !directory_metadata.is_dir()
+        || is_reparse(&directory_metadata)
+    {
+        return Err(PluginPackageTrashError::UnsafeOwnership(
+            "purge deletion target is not a real directory".to_string(),
+        ));
+    }
+    let mut entries = fs::read_dir(directory)
+        .map_err(|error| PluginPackageTrashError::DeleteFailed(error.to_string()))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| PluginPackageTrashError::DeleteFailed(error.to_string()))?;
+    entries.sort_by_key(|entry| entry.file_name());
+    for entry in entries {
+        let path = entry.path();
+        let metadata = fs::symlink_metadata(&path).map_err(|error| {
+            PluginPackageTrashError::UnsafeOwnership(format!(
+                "cannot revalidate purge entry: {error}"
+            ))
+        })?;
+        if metadata.file_type().is_symlink() || is_reparse(&metadata) {
+            return Err(PluginPackageTrashError::UnsafeOwnership(
+                "purge deletion encountered a link or reparse point".to_string(),
+            ));
+        }
+        if metadata.is_dir() {
+            remove_bounded_purge_tree(&path, depth + 1, removed, inject_mid)?;
+        } else if metadata.is_file() {
+            fs::remove_file(&path)
+                .map_err(|error| PluginPackageTrashError::DeleteFailed(error.to_string()))?;
+        } else {
+            return Err(PluginPackageTrashError::UnsafeOwnership(
+                "purge deletion encountered a non-file entry".to_string(),
+            ));
+        }
+        *removed += 1;
+        if inject_mid && *removed == 1 {
+            #[cfg(test)]
+            return Err(PluginPackageTrashError::Injected(
+                TrashFailurePoint::MidPurgeDelete,
+            ));
+            #[cfg(not(test))]
+            unreachable!();
+        }
+    }
+    fs::remove_dir(directory)
+        .map_err(|error| PluginPackageTrashError::DeleteFailed(error.to_string()))?;
     Ok(())
 }
 
@@ -421,6 +768,12 @@ mod tests {
             gate: Arc::new(Mutex::new(())),
             failure: Some(point),
         }
+    }
+
+    fn move_for_purge(project: &Path, digest: &str, trash_key: &str) {
+        PluginPackageTrash::new()
+            .move_exact(project, "example", "org.example.plugin", digest, trash_key)
+            .unwrap();
     }
 
     #[test]
@@ -607,6 +960,230 @@ mod tests {
                     "org.example.plugin",
                     &digest,
                     "trash.restore"
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn exact_purge_is_bounded_idempotent_and_preserves_siblings() {
+        let (_temporary, project, digest) = fixture();
+        move_for_purge(&project, &digest, "trash.purge");
+        fs::write(
+            project.join(PLUGIN_TRASH_DIRECTORY).join("keep.txt"),
+            b"keep",
+        )
+        .unwrap();
+        let trash = PluginPackageTrash::new();
+        let purged = trash
+            .purge_exact(
+                &project,
+                "example",
+                "org.example.plugin",
+                &digest,
+                "trash.purge",
+            )
+            .unwrap();
+        assert_eq!(purged.outcome, PluginPackageOwnershipOutcome::Purged);
+        assert!(
+            project
+                .join(PLUGIN_TRASH_DIRECTORY)
+                .join("keep.txt")
+                .is_file()
+        );
+        assert!(!project.join(".rho/plugins/example").exists());
+        assert_eq!(
+            trash
+                .purge_exact(
+                    &project,
+                    "example",
+                    "org.example.plugin",
+                    &digest,
+                    "trash.purge",
+                )
+                .unwrap()
+                .outcome,
+            PluginPackageOwnershipOutcome::AlreadyPurged
+        );
+    }
+
+    #[test]
+    fn purge_interruptions_recover_from_exact_marker_and_ownership() {
+        for point in [
+            TrashFailurePoint::BeforePurgeRename,
+            TrashFailurePoint::AfterPurgeRename,
+            TrashFailurePoint::MidPurgeDelete,
+            TrashFailurePoint::AfterPurgeDelete,
+        ] {
+            let (_temporary, project, digest) = fixture();
+            move_for_purge(&project, &digest, "trash.interrupted");
+            assert!(matches!(
+                with_failure(point).purge_exact(
+                    &project,
+                    "example",
+                    "org.example.plugin",
+                    &digest,
+                    "trash.interrupted",
+                ),
+                Err(PluginPackageTrashError::Injected(actual)) if actual == point
+            ));
+            let recovered = PluginPackageTrash::new()
+                .purge_exact(
+                    &project,
+                    "example",
+                    "org.example.plugin",
+                    &digest,
+                    "trash.interrupted",
+                )
+                .unwrap();
+            assert_eq!(
+                recovered.outcome,
+                if point == TrashFailurePoint::AfterPurgeDelete {
+                    PluginPackageOwnershipOutcome::AlreadyPurged
+                } else {
+                    PluginPackageOwnershipOutcome::Purged
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn purge_rejects_discovery_collision_wrong_identity_and_foreign_project() {
+        let (_temporary, project, digest) = fixture();
+        move_for_purge(&project, &digest, "trash.identity");
+        assert!(
+            PluginPackageTrash::new()
+                .purge_exact(
+                    &project,
+                    "example",
+                    "org.example.plugin",
+                    &"f".repeat(64),
+                    "trash.identity",
+                )
+                .is_err()
+        );
+        PluginPackageTrash::new()
+            .restore_exact(
+                &project,
+                "example",
+                "org.example.plugin",
+                &digest,
+                "trash.identity",
+            )
+            .unwrap();
+        assert!(
+            PluginPackageTrash::new()
+                .purge_exact(
+                    &project,
+                    "example",
+                    "org.example.plugin",
+                    &digest,
+                    "trash.identity",
+                )
+                .is_err()
+        );
+
+        let other = tempfile::tempdir().unwrap();
+        fs::create_dir_all(other.path().join(".rho/plugins")).unwrap();
+        fs::create_dir_all(other.path().join(PLUGIN_TRASH_DIRECTORY)).unwrap();
+        assert!(
+            PluginPackageTrash::new()
+                .purge_exact(
+                    other.path(),
+                    "example",
+                    "org.example.plugin",
+                    &digest,
+                    "trash.identity",
+                )
+                .is_err()
+        );
+        assert!(project.join(".rho/plugins/example").is_dir());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn purge_rejects_link_marker_tampering_and_overdeep_partial_tree() {
+        let (_temporary, project, digest) = fixture();
+        move_for_purge(&project, &digest, "trash.tamper");
+        let target = project.join(PLUGIN_TRASH_DIRECTORY).join("trash.tamper");
+        std::os::unix::fs::symlink("rho-plugin.json", target.join("linked.json")).unwrap();
+        assert!(
+            PluginPackageTrash::new()
+                .purge_exact(
+                    &project,
+                    "example",
+                    "org.example.plugin",
+                    &digest,
+                    "trash.tamper",
+                )
+                .is_err()
+        );
+        fs::remove_file(target.join("linked.json")).unwrap();
+        assert!(matches!(
+            with_failure(TrashFailurePoint::AfterPurgeRename).purge_exact(
+                &project,
+                "example",
+                "org.example.plugin",
+                &digest,
+                "trash.tamper",
+            ),
+            Err(PluginPackageTrashError::Injected(
+                TrashFailurePoint::AfterPurgeRename
+            ))
+        ));
+        let trash_root = project.join(PLUGIN_TRASH_DIRECTORY);
+        let marker = fs::read_dir(&trash_root)
+            .unwrap()
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .find(|path| path.extension().is_some_and(|value| value == "json"))
+            .unwrap();
+        fs::write(&marker, b"{}").unwrap();
+        assert!(
+            PluginPackageTrash::new()
+                .purge_exact(
+                    &project,
+                    "example",
+                    "org.example.plugin",
+                    &digest,
+                    "trash.tamper",
+                )
+                .is_err()
+        );
+
+        let (_temporary, project, digest) = fixture();
+        move_for_purge(&project, &digest, "trash.deep");
+        assert!(matches!(
+            with_failure(TrashFailurePoint::AfterPurgeRename).purge_exact(
+                &project,
+                "example",
+                "org.example.plugin",
+                &digest,
+                "trash.deep",
+            ),
+            Err(PluginPackageTrashError::Injected(
+                TrashFailurePoint::AfterPurgeRename
+            ))
+        ));
+        let purging = fs::read_dir(project.join(PLUGIN_TRASH_DIRECTORY))
+            .unwrap()
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .find(|path| path.is_dir())
+            .unwrap();
+        let mut nested = purging;
+        for index in 0..=MAX_PURGE_DEPTH {
+            nested = nested.join(format!("depth-{index}"));
+            fs::create_dir(&nested).unwrap();
+        }
+        assert!(
+            PluginPackageTrash::new()
+                .purge_exact(
+                    &project,
+                    "example",
+                    "org.example.plugin",
+                    &digest,
+                    "trash.deep",
                 )
                 .is_err()
         );
