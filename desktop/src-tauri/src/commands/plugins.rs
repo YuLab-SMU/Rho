@@ -1,6 +1,9 @@
 use anyhow::{Context, Result, ensure};
 use rho_extension_runtime::WorkspaceGrantIdentity;
-use rho_store::{PluginPermissionQueryService, PluginPermissionRequest};
+use rho_store::{
+    PluginLifecycleQueryService, PluginPermissionQueryService, PluginPermissionRequest,
+    WorkspacePluginTransition,
+};
 use serde_json::Value;
 use tauri::State;
 
@@ -45,6 +48,18 @@ pub(crate) async fn list_workspace_plugins(
     state
         .plugin_permissions
         .list(&context, &mut store)
+        .map_err(display_error)
+}
+
+#[tauri::command]
+pub(crate) async fn get_workspace_plugin_transition(
+    transition_id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<WorkspacePluginTransition>, String> {
+    let context = runtime_context(&state).await.map_err(display_error)?;
+    let store = read_store(&state).map_err(display_error)?;
+    PluginLifecycleQueryService::new(&store)
+        .get_transition(&context.project_root, &transition_id)
         .map_err(display_error)
 }
 

@@ -45,9 +45,9 @@ export function validateP24TrustedRollback(value) {
     "Historical grants, handles, hosts, and generations are never restored",
     "does not rewrite the newer project package",
   ]) assert.ok(value.html.includes(marker), `E3 fixed review lost ${marker}`);
-  assert.match(value.workspace, /version = "0\.4\.1-dev\.10"/);
-  assert.equal(JSON.parse(value.tauri).version, "0.4.1-dev.10");
-  assert.equal(JSON.parse(value.packageJson).version, "0.4.1-dev.10");
+  assert.match(value.workspace, /version = "0\.4\.1-dev\.11"/);
+  assert.equal(JSON.parse(value.tauri).version, "0.4.1-dev.11");
+  assert.equal(JSON.parse(value.packageJson).version, "0.4.1-dev.11");
   assert.match(value.news, /## 0\.4\.1-dev\.10[\s\S]*Exact cached workspace-plugin Rollback/);
   for (const marker of [
     'report["rollback_exact_cache_only"] = json!(true)',
@@ -66,9 +66,9 @@ function fixture() {
     commands: "pub(crate) async fn rollback_workspace_plugin\nproject_transition_gate.lock().await\n.request_rollback(",
     frontend: "command === \"rollback_workspace_plugin\"\nreviewWorkspacePluginRollback(pluginId)\nconfirmWorkspacePluginRollback()\ndata-plugin-rollback\nexpectedCurrentDigest\nrollbackDigest",
     html: 'id="pluginRollbackView"\nid="pluginRollbackIdentity"\nid="pluginRollbackConfirm"\nHistorical grants, handles, hosts, and generations are never restored\ndoes not rewrite the newer project package',
-    workspace: 'version = "0.4.1-dev.10"',
-    tauri: '{"version":"0.4.1-dev.10"}',
-    packageJson: '{"version":"0.4.1-dev.10"}',
+    workspace: 'version = "0.4.1-dev.11"',
+    tauri: '{"version":"0.4.1-dev.11"}',
+    packageJson: '{"version":"0.4.1-dev.11"}',
     news: "## 0.4.1-dev.10\n### Exact cached workspace-plugin Rollback",
     installed: 'report["rollback_exact_cache_only"] = json!(true)\nreport["rollback_fresh_authority"] = json!(true)\nreport["rollback_pointer_reversed"] = json!(true)\nreport["rollback_source_unchanged"] = json!(true)\nreport["rollback_restart_cached"] = json!(true)',
     spec: "P2-4E3 — trusted Rollback and restart truth (locally complete)",
@@ -84,7 +84,7 @@ if (process.argv.includes("--test")) {
     ["command gate", (value) => { value.commands = value.commands.replace("project_transition_gate.lock().await", ""); }],
     ["UI", (value) => { value.frontend = value.frontend.replace("data-plugin-rollback", ""); }],
     ["installed", (value) => { value.installed = value.installed.replace('report["rollback_restart_cached"] = json!(true)', ""); }],
-    ["version", (value) => { value.workspace = 'version = "0.4.1-dev.9"'; }],
+    ["version", (value) => { value.workspace = 'version = "0.4.1-dev.10"'; }],
     ["install", (value) => { value.commands += "\ninstall_workspace_plugin"; }],
   ]) {
     const value = fixture();

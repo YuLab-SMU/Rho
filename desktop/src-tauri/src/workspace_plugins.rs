@@ -38,7 +38,8 @@ use rho_server::plugin_network::{
     network_request_authorization,
 };
 use rho_server::plugin_package_cache::{CachedPluginPackage, PluginPackageCache};
-use rho_server::plugin_package_trash::PluginPackageTrash;
+use rho_server::plugin_package_trash::{PluginPackageOwnershipOutcome, PluginPackageTrash};
+use rho_server::plugin_retention::PluginTrashRetentionService;
 use rho_server::plugin_workspace::{
     PreparedWorkspaceInspection, WorkspaceInspectErrorCode, WorkspaceInspectOperation,
     WorkspaceInspectRequest, WorkspaceInspectionContext, WorkspaceObjectReferenceRegistry,
@@ -266,6 +267,11 @@ pub(crate) struct WorkspacePluginReconciliationReport {
     pub update_pending: usize,
     pub blocked: usize,
     pub skipped: usize,
+    pub recovered_uninstalls: usize,
+    pub recovered_purges: usize,
+    pub recovered_replacements: usize,
+    pub recovery_required: usize,
+    pub project_files_changed: bool,
     pub entries: Vec<WorkspacePluginReconciliationEntry>,
     pub truncated: bool,
 }
@@ -514,8 +520,18 @@ impl PendingPluginPermissionRegistry {
             .into_iter()
             .map(|state| (state.plugin_id.clone(), state))
             .collect::<BTreeMap<_, _>>();
-        let recoverable_tombstones = PluginLifecycleQueryService::new(store)
-            .list_tombstones(&context.project_root, Some(100))?
+        let tombstones = PluginLifecycleQueryService::new(store)
+            .list_tombstones(&context.project_root, Some(100))?;
+        let purge_recovery_required = tombstones
+            .iter()
+            .filter(|tombstone| {
+                tombstone.retention_class == "purge_pending"
+                    && tombstone.deleted_at.is_none()
+                    && tombstone.restored_at.is_none()
+            })
+            .map(|tombstone| tombstone.plugin_id.clone())
+            .collect::<BTreeSet<_>>();
+        let recoverable_tombstones = tombstones
             .into_iter()
             .filter(|tombstone| {
                 tombstone.retention_class == "recoverable"
@@ -555,6 +571,7 @@ impl PendingPluginPermissionRegistry {
                     recoverable_tombstones
                         .get(plugin.manifest.id.as_str())
                         .map(String::as_str),
+                    purge_recovery_required.contains(plugin.manifest.id.as_str()),
                     &state,
                 )
             })
@@ -582,6 +599,7 @@ impl PendingPluginPermissionRegistry {
                         recoverable_tombstones
                             .get(&lifecycle.plugin_id)
                             .map(String::as_str),
+                        purge_recovery_required.contains(&lifecycle.plugin_id),
                     )
                 }),
         );
@@ -620,9 +638,15 @@ impl PendingPluginPermissionRegistry {
             update_pending: 0,
             blocked: 0,
             skipped: 0,
+            recovered_uninstalls: 0,
+            recovered_purges: 0,
+            recovered_replacements: 0,
+            recovery_required: 0,
+            project_files_changed: false,
             entries: Vec::new(),
             truncated: false,
         };
+        recover_project_plugin_files(context, store, &mut report);
         let durable_states = match PluginLifecycleQueryService::new(store)
             .list_states(&context.project_root, Some(256))
         {
@@ -4775,6 +4799,208 @@ fn bounded_reconciliation_reason(message: &str) -> String {
     .to_string()
 }
 
+fn recover_project_plugin_files(
+    context: &PluginRuntimeContext,
+    store: &mut Store,
+    report: &mut WorkspacePluginReconciliationReport,
+) {
+    let transitions = match PluginLifecycleQueryService::new(store)
+        .list_nonterminal_transitions(&context.project_root, Some(256))
+    {
+        Ok(transitions) => transitions,
+        Err(error) => {
+            report.recovery_required += 1;
+            push_reconciliation_entry(
+                report,
+                WorkspacePluginReconciliationEntry {
+                    plugin_id: None,
+                    status: "recovery_required".to_string(),
+                    reason_code: bounded_reconciliation_reason(&error.to_string()),
+                },
+            );
+            return;
+        }
+    };
+    for transition in transitions {
+        if transition.kind == "uninstall" {
+            let recovered = (|| -> Result<PluginPackageOwnershipOutcome> {
+                let lifecycle = PluginLifecycleQueryService::new(store)
+                    .get_state(&context.project_root, &transition.plugin_id)?
+                    .context("Uninstall recovery lifecycle state is missing")?;
+                let digest = transition
+                    .expected_old_digest
+                    .as_deref()
+                    .context("Uninstall recovery expected digest is missing")?;
+                let trash_key = transition
+                    .backup_path_key
+                    .as_deref()
+                    .context("Uninstall recovery trash key is missing")?;
+                ensure!(
+                    lifecycle.desired_state == "uninstalled"
+                        && lifecycle.accepted_digest.as_deref() == Some(digest)
+                        && lifecycle.transition_id.as_deref()
+                            == Some(transition.transition_id.as_str()),
+                    "Uninstall recovery durable identity is stale"
+                );
+                let moved = PluginPackageTrash::new().move_exact(
+                    Path::new(&context.project_root),
+                    &lifecycle.directory_name,
+                    &transition.plugin_id,
+                    digest,
+                    trash_key,
+                )?;
+                if transition.phase != "package_moved" {
+                    record_disable_phase(
+                        store,
+                        context,
+                        &transition.transition_id,
+                        &transition.phase,
+                        "package_moved",
+                        "running",
+                        "disposing",
+                        "recovery",
+                        "completed",
+                        None,
+                        serde_json::json!({"package_ownership":"trash","recovered":true}),
+                    )?;
+                }
+                let mut hasher = Sha256::new();
+                hasher.update(transition.transition_id.as_bytes());
+                let tombstone_id = format!("tombstone.recovery.{:x}", hasher.finalize());
+                let completed = PluginLifecycleMutationService::new(store).complete_uninstall(
+                    &context.project_root,
+                    &transition.transition_id,
+                    &WorkspacePluginTombstoneDraft {
+                        tombstone_id,
+                        project_root: context.project_root.clone(),
+                        plugin_id: transition.plugin_id.clone(),
+                        package_digest: digest.to_string(),
+                        backup_path_key: trash_key.to_string(),
+                        original_directory_name: lifecycle.directory_name,
+                        retention_class: "recoverable".to_string(),
+                        reason_code: "user_uninstall".to_string(),
+                    },
+                )?;
+                ensure!(
+                    matches!(
+                        completed.outcome,
+                        PluginLifecycleMutationOutcome::Applied
+                            | PluginLifecycleMutationOutcome::Unchanged
+                    ),
+                    "Uninstall recovery terminal completion was stale"
+                );
+                Ok(moved.outcome)
+            })();
+            match recovered {
+                Ok(outcome) => {
+                    report.recovered_uninstalls += 1;
+                    report.project_files_changed |= outcome == PluginPackageOwnershipOutcome::Moved;
+                    push_reconciliation_entry(
+                        report,
+                        WorkspacePluginReconciliationEntry {
+                            plugin_id: Some(transition.plugin_id),
+                            status: "recovered".to_string(),
+                            reason_code: "uninstall_completed".to_string(),
+                        },
+                    );
+                }
+                Err(error) => {
+                    report.recovery_required += 1;
+                    let reason = bounded_reconciliation_reason(&error.to_string());
+                    let _ = PluginLifecycleMutationService::new(store).record_recovery_required(
+                        &context.project_root,
+                        &transition.plugin_id,
+                        Some(&transition.transition_id),
+                        &reason,
+                    );
+                    push_reconciliation_entry(
+                        report,
+                        WorkspacePluginReconciliationEntry {
+                            plugin_id: Some(transition.plugin_id),
+                            status: "recovery_required".to_string(),
+                            reason_code: reason,
+                        },
+                    );
+                }
+            }
+        } else if matches!(transition.kind.as_str(), "upgrade" | "rollback") {
+            match fail_enable_transition(
+                store,
+                context,
+                &transition.transition_id,
+                "broker_restart_reconciled",
+                "disabled",
+            ) {
+                Ok(()) => report.recovered_replacements += 1,
+                Err(error) => {
+                    report.recovery_required += 1;
+                    push_reconciliation_entry(
+                        report,
+                        WorkspacePluginReconciliationEntry {
+                            plugin_id: Some(transition.plugin_id),
+                            status: "recovery_required".to_string(),
+                            reason_code: bounded_reconciliation_reason(&error.to_string()),
+                        },
+                    );
+                }
+            }
+        }
+    }
+
+    let pending_purges = PluginLifecycleQueryService::new(store)
+        .list_tombstones(&context.project_root, Some(200))
+        .map(|tombstones| {
+            tombstones
+                .into_iter()
+                .filter(|tombstone| {
+                    tombstone.retention_class == "purge_pending"
+                        && tombstone.deleted_at.is_none()
+                        && tombstone.restored_at.is_none()
+                })
+                .collect::<Vec<_>>()
+        });
+    match pending_purges {
+        Ok(tombstones) => {
+            let retention = PluginTrashRetentionService::new();
+            for tombstone in tombstones {
+                match retention.purge_exact_tombstone(
+                    store,
+                    &context.project_root,
+                    &tombstone.tombstone_id,
+                ) {
+                    Ok(purged) => {
+                        report.recovered_purges += 1;
+                        report.project_files_changed |=
+                            purged.file_outcome == PluginPackageOwnershipOutcome::Purged;
+                    }
+                    Err(error) => {
+                        report.recovery_required += 1;
+                        push_reconciliation_entry(
+                            report,
+                            WorkspacePluginReconciliationEntry {
+                                plugin_id: Some(tombstone.plugin_id),
+                                status: "recovery_required".to_string(),
+                                reason_code: bounded_reconciliation_reason(&error.to_string()),
+                            },
+                        );
+                    }
+                }
+            }
+        }
+        Err(error) => {
+            report.recovery_required += 1;
+            push_reconciliation_entry(
+                report,
+                WorkspacePluginReconciliationEntry {
+                    plugin_id: None,
+                    status: "recovery_required".to_string(),
+                    reason_code: bounded_reconciliation_reason(&error.to_string()),
+                },
+            );
+        }
+    }
+}
+
 fn reconcile_discovered_plugin(
     registry: &mut RegistryState,
     context: &PluginRuntimeContext,
@@ -4847,9 +5073,18 @@ fn reconcile_discovered_plugin(
     let mut recovery_plugin = plugin.clone();
     let mut recovery_cache = None;
     let mut rollback_cache_pair = false;
+    let interrupted_replacement = last_transition.as_ref().is_some_and(|transition| {
+        matches!(transition.kind.as_str(), "upgrade" | "rollback")
+            && transition.status == "failed"
+            && transition.reason_code.as_deref() == Some("broker_restart_reconciled")
+            && transition.expected_old_digest == lifecycle.accepted_digest
+            && transition.candidate_digest.as_deref() == Some(plugin.digest.as_str())
+    });
     let target_digest = if let Some(accepted) = lifecycle.accepted_digest.as_deref() {
         if accepted != plugin.digest.as_str() {
-            if lifecycle.rollback_digest.as_deref() == Some(plugin.digest.as_str()) {
+            if lifecycle.rollback_digest.as_deref() == Some(plugin.digest.as_str())
+                || interrupted_replacement
+            {
                 let cached = PluginPackageCache::new(&context.app_data_dir)
                     .load_exact(&context.project_root, plugin.manifest.id.as_str(), accepted)
                     .context("accepted Rollback cache is unavailable during restart")?;
@@ -5344,6 +5579,7 @@ fn plugin_view(
     grants: &[PluginPermissionGrant],
     lifecycle: Option<&WorkspacePluginState>,
     recoverable_tombstone_id: Option<&str>,
+    purge_recovery_required: bool,
     state: &RegistryState,
 ) -> WorkspacePluginView {
     let plugin_id = plugin.manifest.id.to_string();
@@ -5376,7 +5612,17 @@ fn plugin_view(
             && lifecycle.observed_state == "active"
             && lifecycle.accepted_digest.as_deref() == Some(plugin.digest.as_str())
     });
-    let status = if active.is_some() && durable_active {
+    let recovery_required = purge_recovery_required
+        || lifecycle.is_some_and(|lifecycle| {
+            lifecycle.observed_state == "blocked"
+                && lifecycle
+                    .last_error_code
+                    .as_deref()
+                    .is_some_and(|code| code.contains("recovery"))
+        });
+    let status = if recovery_required {
+        "recovery_required"
+    } else if active.is_some() && durable_active {
         "enabled"
     } else if pending_request_count > 0 {
         "permission_required"
@@ -5453,6 +5699,10 @@ fn plugin_view(
                     "The plugin crashed and remains non-routable. Use trusted Retry to create fresh authority."
                         .to_string(),
                 ),
+                "recovery_required" => Some(
+                    "Rho could not prove one exact lifecycle recovery step. The plugin remains non-routable and no completion is claimed."
+                        .to_string(),
+                ),
                 _ => None,
             }
         },
@@ -5464,6 +5714,7 @@ fn missing_workspace_plugin_view(
     requests: &[PluginPermissionRequest],
     grants: &[PluginPermissionGrant],
     recoverable_tombstone_id: Option<&str>,
+    purge_recovery_required: bool,
 ) -> WorkspacePluginView {
     let package_digest = lifecycle
         .pending_digest
@@ -5490,11 +5741,21 @@ fn missing_workspace_plugin_view(
         permission_count: 0,
         pending_request_count,
         active_grant_count,
-        status: match lifecycle.observed_state.as_str() {
-            "crashed" => "crashed",
-            "update_pending" => "update_pending",
-            "uninstalled" => "uninstalled",
-            _ => "blocked",
+        status: if purge_recovery_required
+            || (lifecycle.observed_state == "blocked"
+                && lifecycle
+                    .last_error_code
+                    .as_deref()
+                    .is_some_and(|code| code.contains("recovery")))
+        {
+            "recovery_required"
+        } else {
+            match lifecycle.observed_state.as_str() {
+                "crashed" => "crashed",
+                "update_pending" => "update_pending",
+                "uninstalled" => "uninstalled",
+                _ => "blocked",
+            }
         }
         .to_string(),
         desired_state: lifecycle.desired_state.clone(),
@@ -5503,13 +5764,23 @@ fn missing_workspace_plugin_view(
         rollback_digest: lifecycle.rollback_digest.clone(),
         transition_id: lifecycle.transition_id.clone(),
         recoverable_tombstone_id: recoverable_tombstone_id.map(str::to_string),
-        message: Some(if lifecycle.observed_state == "uninstalled" {
-            "The exact package is in recoverable Rho trash. Restore returns it disabled and grants no authority."
+        message: Some(
+            if purge_recovery_required
+                || lifecycle
+                    .last_error_code
+                    .as_deref()
+                    .is_some_and(|code| code.contains("recovery"))
+            {
+                "Rho could not prove one exact lifecycle recovery step. The plugin remains non-routable and no completion is claimed."
                 .to_string()
-        } else {
-            "The durable plugin identity is unavailable from the current discovery root and remains non-routable."
+            } else if lifecycle.observed_state == "uninstalled" {
+                "The exact package is in recoverable Rho trash. Restore returns it disabled and grants no authority."
                 .to_string()
-        }),
+            } else {
+                "The durable plugin identity is unavailable from the current discovery root and remains non-routable."
+                .to_string()
+            },
+        ),
     }
 }
 
@@ -10736,6 +11007,260 @@ mod tests {
                 .unwrap()
                 .package_digest,
             v2.digest.as_str()
+        );
+    }
+
+    #[test]
+    fn reconciliation_finishes_incomplete_uninstall_and_moves_files_once() {
+        let directory = tempdir().unwrap();
+        write_plugin(directory.path(), serde_json::json!([]));
+        let context = context(directory.path());
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let registry = PendingPluginPermissionRegistry::default();
+        registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        registry
+            .disable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        let lifecycle = PluginLifecycleQueryService::new(&store)
+            .get_state(&context.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        let transition_id = "transition.uninstall.recovery-pass";
+        PluginLifecycleMutationService::new(&mut store)
+            .request_transition(
+                &context.project_root,
+                &WorkspacePluginTransitionDraft {
+                    transition_id: transition_id.to_string(),
+                    project_root: context.project_root.clone(),
+                    plugin_id: "org.example.plugin".to_string(),
+                    kind: "uninstall".to_string(),
+                    request_event_type: "user_requested".to_string(),
+                    desired_state: "uninstalled".to_string(),
+                    expected_old_digest: lifecycle.accepted_digest,
+                    candidate_digest: None,
+                    rollback_digest: None,
+                    backup_path_key: Some("trash.recovery-pass".to_string()),
+                },
+            )
+            .unwrap();
+        let recovered = registry.reconcile_project(&context, &mut store);
+        assert_eq!(recovered.recovered_uninstalls, 1, "{recovered:?}");
+        assert!(recovered.project_files_changed);
+        assert_eq!(recovered.recovery_required, 0);
+        assert!(!directory.path().join(".rho/plugins/example").exists());
+        let state = PluginLifecycleQueryService::new(&store)
+            .get_state(&context.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        assert_eq!(state.desired_state, "uninstalled");
+        assert_eq!(state.observed_state, "uninstalled");
+        let replay = registry.reconcile_project(&context, &mut store);
+        assert_eq!(replay.recovered_uninstalls, 0);
+        assert!(!replay.project_files_changed);
+    }
+
+    #[test]
+    fn reconciliation_replays_purge_pending_and_preserves_terminal_tombstone() {
+        let directory = tempdir().unwrap();
+        write_plugin(directory.path(), serde_json::json!([]));
+        let context = context(directory.path());
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let registry = PendingPluginPermissionRegistry::default();
+        registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        let state = PluginLifecycleQueryService::new(&store)
+            .get_state(&context.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        let uninstalled = registry
+            .uninstall(
+                &context,
+                &WorkspacePluginUninstallInput {
+                    plugin_id: "org.example.plugin".to_string(),
+                    directory_name: "example".to_string(),
+                    package_digest: state.accepted_digest.unwrap(),
+                    expected_project_revision: context.project_revision,
+                    confirmed: true,
+                },
+                &mut store,
+            )
+            .unwrap();
+        let tombstone = PluginLifecycleQueryService::new(&store)
+            .get_tombstone(&context.project_root, &uninstalled.tombstone_id)
+            .unwrap()
+            .unwrap();
+        PluginLifecycleMutationService::new(&mut store)
+            .expire_tombstones(&context.project_root, &tombstone.moved_at, 1)
+            .unwrap();
+        PluginLifecycleMutationService::new(&mut store)
+            .request_purge(
+                &context.project_root,
+                &rho_store::WorkspacePluginPurgeDraft {
+                    project_root: context.project_root.clone(),
+                    tombstone_id: tombstone.tombstone_id.clone(),
+                    plugin_id: tombstone.plugin_id.clone(),
+                    package_digest: tombstone.package_digest.clone(),
+                    backup_path_key: tombstone.backup_path_key.clone(),
+                    original_directory_name: tombstone.original_directory_name.clone(),
+                },
+            )
+            .unwrap();
+        let recovered = registry.reconcile_project(&context, &mut store);
+        assert_eq!(recovered.recovered_purges, 1, "{recovered:?}");
+        assert!(recovered.project_files_changed);
+        let terminal = PluginLifecycleQueryService::new(&store)
+            .get_tombstone(&context.project_root, &tombstone.tombstone_id)
+            .unwrap()
+            .unwrap();
+        assert!(terminal.deleted_at.is_some());
+        assert_eq!(terminal.retention_class, "expired");
+    }
+
+    #[test]
+    fn reconciliation_closes_interrupted_replacement_and_reconstructs_accepted_old_cache() {
+        let directory = tempdir().unwrap();
+        let database = directory.path().join("rho.sqlite");
+        let context = context(directory.path());
+        let mut store = Store::open(&database).unwrap();
+        let registry = deterministic_registry();
+        let transition_id = "transition.upgrade.recovery-pass";
+        let (candidate, cached, old_digest, _) = prepare_runtime_replacement(
+            directory.path(),
+            &context,
+            &registry,
+            &mut store,
+            transition_id,
+            false,
+        );
+        let injection = rusqlite::Connection::open(&database).unwrap();
+        injection
+            .execute_batch(
+                "CREATE TRIGGER fail_recovery_replacement_terminal
+                 BEFORE INSERT ON workspace_plugin_lifecycle_events
+                 WHEN NEW.event_type = 'transition_completed'
+                   AND NEW.transition_id = 'transition.upgrade.recovery-pass'
+                 BEGIN SELECT RAISE(FAIL, 'injected recovery replacement failure'); END;",
+            )
+            .unwrap();
+        {
+            let mut state = registry
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            assert!(
+                activate_plugin_replacement_durable(
+                    &mut state,
+                    &context,
+                    &candidate,
+                    &cached,
+                    transition_id,
+                    &old_digest,
+                    std::iter::empty(),
+                    &mut store,
+                )
+                .is_err()
+            );
+        }
+        injection
+            .execute_batch("DROP TRIGGER fail_recovery_replacement_terminal;")
+            .unwrap();
+        let restarted = PendingPluginPermissionRegistry::default();
+        let report = restarted.reconcile_project(&context, &mut store);
+        assert_eq!(report.recovered_replacements, 1, "{report:?}");
+        assert_eq!(report.reactivated, 1, "{report:?}");
+        let state = restarted
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(
+            state
+                .active
+                .get(&registry_key(&context.project_root, "org.example.plugin"))
+                .unwrap()
+                .package_digest,
+            old_digest
+        );
+        drop(state);
+        assert_eq!(
+            restarted
+                .list(&context, &mut store)
+                .unwrap()
+                .plugins
+                .into_iter()
+                .find(|plugin| plugin.plugin_id == "org.example.plugin")
+                .unwrap()
+                .status,
+            "update_pending"
+        );
+    }
+
+    #[test]
+    fn unprovable_dual_ownership_projects_recovery_required_without_action() {
+        let directory = tempdir().unwrap();
+        write_plugin(directory.path(), serde_json::json!([]));
+        let context = context(directory.path());
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let registry = PendingPluginPermissionRegistry::default();
+        registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        registry
+            .disable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        let lifecycle = PluginLifecycleQueryService::new(&store)
+            .get_state(&context.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        let transition_id = "transition.uninstall.dual-ownership";
+        PluginLifecycleMutationService::new(&mut store)
+            .request_transition(
+                &context.project_root,
+                &WorkspacePluginTransitionDraft {
+                    transition_id: transition_id.to_string(),
+                    project_root: context.project_root.clone(),
+                    plugin_id: "org.example.plugin".to_string(),
+                    kind: "uninstall".to_string(),
+                    request_event_type: "user_requested".to_string(),
+                    desired_state: "uninstalled".to_string(),
+                    expected_old_digest: lifecycle.accepted_digest,
+                    candidate_digest: None,
+                    rollback_digest: None,
+                    backup_path_key: Some("trash.dual-ownership".to_string()),
+                },
+            )
+            .unwrap();
+        fs::create_dir_all(
+            directory
+                .path()
+                .join(".rho/plugin-trash/trash.dual-ownership"),
+        )
+        .unwrap();
+        let report = registry.reconcile_project(&context, &mut store);
+        assert_eq!(report.recovery_required, 1, "{report:?}");
+        assert_eq!(report.recovered_uninstalls, 0);
+        assert!(!report.project_files_changed);
+        let listed = registry.list(&context, &mut store).unwrap();
+        let plugin = listed
+            .plugins
+            .iter()
+            .find(|plugin| plugin.plugin_id == "org.example.plugin")
+            .unwrap();
+        assert_eq!(plugin.status, "recovery_required");
+        assert!(
+            plugin
+                .message
+                .as_deref()
+                .unwrap()
+                .contains("no completion is claimed")
+        );
+        assert!(
+            PluginLifecycleQueryService::new(&store)
+                .get_transition(&context.project_root, transition_id)
+                .unwrap()
+                .is_some()
         );
     }
 

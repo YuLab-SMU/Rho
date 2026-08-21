@@ -2258,7 +2258,7 @@ async function mockInvoke(command, args) {
   await new Promise((resolve) => setTimeout(resolve, command === "run_agent" ? 800 : 300));
   if (command === "app_info") {
     return {
-      version: "0.4.1-dev.10",
+      version: "0.4.1-dev.11",
       channel: "stable",
       commit: "4090cf725c53ab657ba9dfc9743ec6159f27dcf9",
       platform: mockPlatformFixture.platform,
@@ -2276,7 +2276,7 @@ async function mockInvoke(command, args) {
     return {
       status: "up_to_date",
       channel: "stable",
-      installed_version: "0.4.1-dev.10",
+      installed_version: "0.4.1-dev.11",
       available_version: null,
       published_at: null,
       summary: null,
@@ -2319,6 +2319,26 @@ async function mockInvoke(command, args) {
       failures: previewParams.get("state") === "discovery-error"
         ? [{ path: `${mockLastProject}/.rho/plugins/broken`, reason: "Manifest contains an unsupported security field." }]
         : [],
+    };
+  }
+  if (command === "get_workspace_plugin_transition") {
+    const plugin = mockWorkspacePlugins.find((item) => item.transition_id === args.transitionId);
+    if (!plugin) return null;
+    return {
+      transition_id: plugin.transition_id,
+      project_root: mockLastProject,
+      plugin_id: plugin.plugin_id,
+      kind: plugin.desired_state === "uninstalled" ? "uninstall" : "enable",
+      expected_old_digest: plugin.accepted_digest,
+      candidate_digest: plugin.package_digest,
+      rollback_digest: plugin.rollback_digest,
+      phase: plugin.status === "recovery_required" ? "package_moved" : "completed",
+      status: plugin.status === "recovery_required" ? "completion_uncertain" : "completed",
+      requested_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      completed_at: plugin.status === "recovery_required" ? null : new Date().toISOString(),
+      reason_code: plugin.status === "recovery_required" ? "package_recovery_failed" : null,
+      backup_path_key: null,
     };
   }
   if (command === "request_workspace_plugin_enable") {
@@ -6692,6 +6712,7 @@ function prettyStatus(status) {
     interrupted: "Interrupted",
     crashed: "Crashed",
     uninstalled: "Uninstalled",
+    recovery_required: "Recovery required",
     uninstalled: "Uninstalled",
   }[status] || status || "Unknown";
 }
@@ -15602,7 +15623,7 @@ async function maybeApplyPreviewScenario() {
   if (scenario === "workspace-plugins") {
     const pluginState = previewParams.get("state") || "default";
     if (pluginState === "empty") mockWorkspacePlugins.splice(0);
-    if (["enabling", "update-pending", "update-confirm", "blocked", "crashed"].includes(pluginState) && mockWorkspacePlugins[0]) {
+    if (["enabling", "update-pending", "update-confirm", "blocked", "crashed", "recovery-required"].includes(pluginState) && mockWorkspacePlugins[0]) {
       const status = pluginState === "update-confirm" ? "update_pending" : pluginState.replace("-", "_");
       mockWorkspacePlugins[0].status = status;
       mockWorkspacePlugins[0].desired_state = "enabled";
@@ -15615,6 +15636,8 @@ async function maybeApplyPreviewScenario() {
           ? "The plugin is blocked and remains non-routable pending trusted recovery."
           : status === "crashed"
             ? "The plugin crashed and remains non-routable. Use trusted Retry to create fresh authority."
+          : status === "recovery_required"
+            ? "Rho could not prove one exact lifecycle recovery step. The plugin remains non-routable and no completion is claimed."
           : "The durable enable transition has not completed; no enabled result is claimed.";
     }
     if (pluginState === "rollback-confirm" && mockWorkspacePlugins[0]) {

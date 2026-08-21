@@ -6124,11 +6124,38 @@ async fn reconcile_workspace_plugins_for_boundary(
             let report = state
                 .plugin_permissions
                 .reconcile_project(&plugin_context, &mut context.store);
+            let post_revision_report = if report.project_files_changed {
+                context.broker.project_changed();
+                let identity = context.broker.identity().clone();
+                if let Err(error) = context.store.save_identity(&identity) {
+                    write_startup_event(json!({
+                        "kind": "workspace_plugin_recovery_revision_failed",
+                        "trigger": trigger,
+                        "message": bounded_diagnostic(&error.to_string()),
+                    }));
+                    None
+                } else {
+                    workspace_plugin_runtime_context(
+                        plugin_context.app_data_dir.clone(),
+                        project_root.to_string(),
+                        &identity,
+                    )
+                    .ok()
+                    .map(|fresh_context| {
+                        state
+                            .plugin_permissions
+                            .reconcile_project(&fresh_context, &mut context.store)
+                    })
+                }
+            } else {
+                None
+            };
             drop(context);
             write_startup_event(json!({
                 "kind": "workspace_plugin_reconciliation",
                 "trigger": trigger,
                 "report": report,
+                "post_revision_report": post_revision_report,
             }));
         }
         Err(error) => {
@@ -6283,10 +6310,27 @@ async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus> {
             let plugin_reconciliation = state
                 .plugin_permissions
                 .reconcile_project(&plugin_context, &mut store);
+            let post_revision_reconciliation = if plugin_reconciliation.project_files_changed {
+                broker.project_changed();
+                store.save_identity(broker.identity())?;
+                let fresh_context = workspace_plugin_runtime_context(
+                    config.data_dir.clone(),
+                    normalized_project_root.clone(),
+                    broker.identity(),
+                )?;
+                Some(
+                    state
+                        .plugin_permissions
+                        .reconcile_project(&fresh_context, &mut store),
+                )
+            } else {
+                None
+            };
             write_startup_event(json!({
                 "kind": "workspace_plugin_reconciliation",
                 "trigger": "workspace_start",
                 "report": plugin_reconciliation,
+                "post_revision_report": post_revision_reconciliation,
             }));
         }
         Err(error) => write_startup_event(json!({
@@ -14924,6 +14968,87 @@ fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Valu
                 .any(|plugin| plugin.status == "update_pending"),
         "installed P2-4 Rollback restart lost accepted cache or Update-pending source truth"
     );
+    let p24_recovery_project = p24_root.path().join("recovery-project");
+    let p24_recovery_plugin = p24_recovery_project.join(".rho/plugins/recovery-smoke");
+    std::fs::create_dir_all(p24_recovery_plugin.join("dist"))?;
+    std::fs::write(
+        p24_recovery_plugin.join("dist/plugin.wasm"),
+        P2_1_SMOKE_WASM,
+    )?;
+    std::fs::write(
+        p24_recovery_plugin.join("rho-plugin.json"),
+        serde_json::to_vec(&json!({
+            "schemaVersion": 1,
+            "id": "org.yulab.rho.phase2-recovery-smoke",
+            "name": "Recovery smoke",
+            "version": "1.0.0",
+            "apiVersion": "^1.0",
+            "runtime": {"kind": "wasm", "entry": "dist/plugin.wasm", "scope": "project"}
+        }))?,
+    )?;
+    let p24_recovery_root = normalize_project_root(
+        p24_recovery_project
+            .canonicalize()?
+            .to_string_lossy()
+            .as_ref(),
+    );
+    let p24_recovery_context = crate::workspace_plugins::PluginRuntimeContext {
+        app_data_dir: p24_data.clone(),
+        project_root: p24_recovery_root.clone(),
+        project_revision: 0,
+        project_scope_id: ScopeId::new("project.installed-recovery-smoke")?,
+        workspace: None,
+    };
+    let p24_recovery_registry =
+        crate::workspace_plugins::PendingPluginPermissionRegistry::default();
+    p24_recovery_registry.request_enable(
+        &p24_recovery_context,
+        "org.yulab.rho.phase2-recovery-smoke",
+        &mut p24_store,
+    )?;
+    p24_recovery_registry.disable(
+        &p24_recovery_context,
+        "org.yulab.rho.phase2-recovery-smoke",
+        &mut p24_store,
+    )?;
+    let p24_recovery_state = PluginLifecycleQueryService::new(&p24_store)
+        .get_state(&p24_recovery_root, "org.yulab.rho.phase2-recovery-smoke")?
+        .context("installed P2-4 recovery state is missing")?;
+    PluginLifecycleMutationService::new(&mut p24_store).request_transition(
+        &p24_recovery_root,
+        &rho_store::WorkspacePluginTransitionDraft {
+            transition_id: "transition.uninstall.installed-recovery".to_string(),
+            project_root: p24_recovery_root.clone(),
+            plugin_id: "org.yulab.rho.phase2-recovery-smoke".to_string(),
+            kind: "uninstall".to_string(),
+            request_event_type: "user_requested".to_string(),
+            desired_state: "uninstalled".to_string(),
+            expected_old_digest: p24_recovery_state.accepted_digest,
+            candidate_digest: None,
+            rollback_digest: None,
+            backup_path_key: Some("trash.installed-recovery".to_string()),
+        },
+    )?;
+    let first_recovery =
+        p24_recovery_registry.reconcile_project(&p24_recovery_context, &mut p24_store);
+    let mut recovery_revision = BrokerState::new("plugin_recovery_smoke");
+    if first_recovery.project_files_changed {
+        recovery_revision.project_changed();
+    }
+    let second_recovery =
+        p24_recovery_registry.reconcile_project(&p24_recovery_context, &mut p24_store);
+    if second_recovery.project_files_changed {
+        recovery_revision.project_changed();
+    }
+    ensure!(
+        first_recovery.recovered_uninstalls == 1
+            && first_recovery.project_files_changed
+            && second_recovery.recovered_uninstalls == 0
+            && !second_recovery.project_files_changed
+            && recovery_revision.identity().project_revision == 1
+            && !p24_recovery_plugin.exists(),
+        "installed P2-4 Uninstall recovery or once-only revision diverged"
+    );
     let p24_retention_project = p24_root.path().join("retention-project");
     let p24_retention_plugin = p24_retention_project.join(".rho/plugins/retention-smoke");
     std::fs::create_dir_all(p24_retention_plugin.join("dist"))?;
@@ -15018,14 +15143,16 @@ fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Valu
             == "purge_pending",
         "installed P2-4 purge-pending truth was not durable before deletion"
     );
-    let p24_purged = retention_service.purge_exact_tombstone(
-        &mut p24_store,
-        &p24_retention_root,
-        &p24_retention_tombstone.tombstone_id,
-    )?;
+    let p24_purge_recovery =
+        p24_retention_registry.reconcile_project(&p24_retention_context, &mut p24_store);
+    let p24_purged = PluginLifecycleQueryService::new(&p24_store)
+        .get_tombstone(&p24_retention_root, &p24_retention_tombstone.tombstone_id)?
+        .context("installed P2-4 recovered purge tombstone is missing")?;
     ensure!(
-        p24_purged.tombstone.deleted_at.is_some()
-            && p24_purged.tombstone.retention_class == "expired"
+        p24_purge_recovery.recovered_purges == 1
+            && p24_purge_recovery.project_files_changed
+            && p24_purged.deleted_at.is_some()
+            && p24_purged.retention_class == "expired"
             && !p24_retention_plugin.exists()
             && p24_sibling.join("sentinel.txt").is_file(),
         "installed P2-4 exact purge damaged sibling truth or missed terminal tombstone"
@@ -15102,6 +15229,9 @@ fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Valu
     report["rollback_pointer_reversed"] = json!(true);
     report["rollback_source_unchanged"] = json!(true);
     report["rollback_restart_cached"] = json!(true);
+    report["recovery_purge_pending"] = json!(true);
+    report["recovery_incomplete_uninstall"] = json!(true);
+    report["recovery_project_revision_once"] = json!(true);
     Ok(report)
 }
 
@@ -15451,6 +15581,7 @@ fn main() {
             list_installed_packages,
             list_lockfile_packages,
             commands::plugins::list_workspace_plugins,
+            commands::plugins::get_workspace_plugin_transition,
             commands::plugins::request_workspace_plugin_enable,
             commands::plugins::disable_workspace_plugin,
             commands::plugins::retry_workspace_plugin,

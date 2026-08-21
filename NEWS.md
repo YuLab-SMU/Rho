@@ -4,6 +4,22 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.1-dev.11 - 2026-08-21
+
+### Workspace-plugin crash-point recovery truth
+
+- Startup, Workspace restart, project switch, and failed-switch restoration now
+  reconcile incomplete plugin Uninstall moves, purge-pending trash, and
+  interrupted Update/Rollback transitions before ordinary activation. Exact
+  source/trash/cache evidence is replayed idempotently; ambiguous ownership
+  remains non-routable.
+- File-moving recovery advances and persists project revision exactly once, then
+  repeats reconciliation against the fresh identity. One failed plugin cannot
+  block Workspace R, another plugin, or another project.
+- Unprovable lifecycle state is shown as Recovery required with no unsafe action
+  and no completion claim. A read-only transition inspection command exposes
+  only bounded stable IDs, phases, digests, timestamps, and reason codes.
+
 ## 0.4.1-dev.10 - 2026-08-21
 
 ### Exact cached workspace-plugin Rollback

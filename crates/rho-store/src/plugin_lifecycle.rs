@@ -1231,6 +1231,79 @@ impl Store {
         })
     }
 
+    pub fn record_workspace_plugin_recovery_required(
+        &mut self,
+        project_root: &str,
+        plugin_id: &str,
+        transition_id: Option<&str>,
+        reason_code: &str,
+    ) -> Result<PluginLifecycleMutationOutcome, StoreError> {
+        let project_root = required_project_root(project_root)?;
+        let plugin_id = validate_identifier(plugin_id, "plugin id")?;
+        let transition_id = transition_id
+            .map(|value| validate_identifier(value, "transition id"))
+            .transpose()?;
+        let reason_code = validate_identifier(reason_code, "recovery reason code")?;
+        let now = Utc::now().to_rfc3339();
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let state = get_state_on(&transaction, &project_root, &plugin_id)?.ok_or_else(|| {
+            StoreError::Validation("recovery plugin state is missing".to_string())
+        })?;
+        if state.observed_state == "blocked"
+            && state.last_error_code.as_deref() == Some(reason_code.as_str())
+        {
+            transaction.commit()?;
+            return Ok(PluginLifecycleMutationOutcome::Unchanged);
+        }
+        if transition_id.is_some() && state.transition_id != transition_id {
+            transaction.commit()?;
+            return Ok(PluginLifecycleMutationOutcome::Stale);
+        }
+        let phase = if let Some(transition_id) = transition_id.as_deref() {
+            get_transition_on(&transaction, &project_root, transition_id)?
+                .filter(|transition| transition.plugin_id == plugin_id)
+                .map(|transition| transition.phase)
+                .ok_or_else(|| {
+                    StoreError::Validation("recovery transition is missing".to_string())
+                })?
+        } else {
+            "completed".to_string()
+        };
+        let changed = transaction.execute(
+            "UPDATE workspace_plugin_states
+             SET observed_state = 'blocked', last_error_code = ?3, updated_at = ?4
+             WHERE project_root = ?1 AND plugin_id = ?2",
+            params![project_root, plugin_id, reason_code, now],
+        )?;
+        if changed != 1 {
+            return Err(StoreError::Validation(
+                "recovery-required state update was stale".to_string(),
+            ));
+        }
+        insert_lifecycle_event(
+            &transaction,
+            LifecycleEventInsert {
+                project_root: &project_root,
+                plugin_id: &plugin_id,
+                transition_id: transition_id.as_deref(),
+                package_digest: state
+                    .pending_digest
+                    .as_deref()
+                    .or(state.accepted_digest.as_deref()),
+                event_type: "recovery",
+                status: "failed",
+                phase: &phase,
+                reason_code: Some(&reason_code),
+                details_json: r#"{"recovery_required":true}"#,
+                created_at: &now,
+            },
+        )?;
+        transaction.commit()?;
+        Ok(PluginLifecycleMutationOutcome::Applied)
+    }
+
     pub fn record_workspace_plugin_crash(
         &mut self,
         project_root: &str,
@@ -3350,6 +3423,87 @@ mod tests {
                 .filter(|outcome| **outcome == PluginLifecycleMutationOutcome::Unchanged)
                 .count(),
             1
+        );
+    }
+
+    #[test]
+    fn recovery_required_is_exact_idempotent_and_event_atomic() {
+        let directory = tempdir().unwrap();
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let project = "/project/a";
+        let transition_id = "transition.uninstall.recovery-required";
+        let _ = prepare_package_moved_uninstall(&mut store, project, transition_id);
+        assert_eq!(
+            store
+                .record_workspace_plugin_recovery_required(
+                    project,
+                    "org.example.plugin",
+                    Some(transition_id),
+                    "package_recovery_failed",
+                )
+                .unwrap(),
+            PluginLifecycleMutationOutcome::Applied
+        );
+        let blocked = store
+            .get_workspace_plugin_state(project, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        assert_eq!(blocked.observed_state, "blocked");
+        assert_eq!(
+            blocked.last_error_code.as_deref(),
+            Some("package_recovery_failed")
+        );
+        assert_eq!(
+            store
+                .record_workspace_plugin_recovery_required(
+                    project,
+                    "org.example.plugin",
+                    Some(transition_id),
+                    "package_recovery_failed",
+                )
+                .unwrap(),
+            PluginLifecycleMutationOutcome::Unchanged
+        );
+        assert!(
+            store
+                .record_workspace_plugin_recovery_required(
+                    "/project/b",
+                    "org.example.plugin",
+                    Some(transition_id),
+                    "package_recovery_failed",
+                )
+                .is_err()
+        );
+
+        let other = tempdir().unwrap();
+        let mut store = Store::open(other.path().join("rho.sqlite")).unwrap();
+        let _ = prepare_package_moved_uninstall(&mut store, project, transition_id);
+        store
+            .connection
+            .execute_batch(
+                "CREATE TRIGGER fail_recovery_required_event
+                 BEFORE INSERT ON workspace_plugin_lifecycle_events
+                 WHEN NEW.reason_code = 'package_recovery_failed'
+                 BEGIN SELECT RAISE(ABORT, 'injected recovery event failure'); END;",
+            )
+            .unwrap();
+        assert!(
+            store
+                .record_workspace_plugin_recovery_required(
+                    project,
+                    "org.example.plugin",
+                    Some(transition_id),
+                    "package_recovery_failed",
+                )
+                .is_err()
+        );
+        assert_ne!(
+            store
+                .get_workspace_plugin_state(project, "org.example.plugin")
+                .unwrap()
+                .unwrap()
+                .observed_state,
+            "blocked"
         );
     }
 

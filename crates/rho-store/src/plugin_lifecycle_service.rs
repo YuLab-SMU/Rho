@@ -250,6 +250,21 @@ impl<'a> PluginLifecycleMutationService<'a> {
         )
     }
 
+    pub fn record_recovery_required(
+        &mut self,
+        project_root: &str,
+        plugin_id: &str,
+        transition_id: Option<&str>,
+        reason_code: &str,
+    ) -> Result<PluginLifecycleMutationOutcome, StoreError> {
+        self.store.record_workspace_plugin_recovery_required(
+            &required_project_root(project_root)?,
+            plugin_id,
+            transition_id,
+            reason_code,
+        )
+    }
+
     pub fn record_crash(
         &mut self,
         project_root: &str,

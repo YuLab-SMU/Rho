@@ -67,6 +67,7 @@ on:
       - "scripts/test-extension-p2-4-replacement-foundation-contract.mjs"
       - "scripts/test-extension-p2-4-trusted-update-contract.mjs"
       - "scripts/test-extension-p2-4-trusted-rollback-contract.mjs"
+      - "scripts/test-extension-p2-4-recovery-closeout-contract.mjs"
       - "scripts/test-workspace-plugin-ui.mjs"
       - "scripts/test-installed-license-surface.mjs"
       - "scripts/test-signpath-readiness.mjs"
@@ -166,6 +167,7 @@ on:
       - "scripts/test-extension-p2-4-replacement-foundation-contract.mjs"
       - "scripts/test-extension-p2-4-trusted-update-contract.mjs"
       - "scripts/test-extension-p2-4-trusted-rollback-contract.mjs"
+      - "scripts/test-extension-p2-4-recovery-closeout-contract.mjs"
       - "scripts/test-workspace-plugin-ui.mjs"
       - "scripts/test-installed-license-surface.mjs"
       - "scripts/test-signpath-readiness.mjs"
@@ -439,6 +441,8 @@ jobs:
           node scripts/test-extension-p2-4-trusted-update-contract.mjs
           node scripts/test-extension-p2-4-trusted-rollback-contract.mjs --test
           node scripts/test-extension-p2-4-trusted-rollback-contract.mjs
+          node scripts/test-extension-p2-4-recovery-closeout-contract.mjs --test
+          node scripts/test-extension-p2-4-recovery-closeout-contract.mjs
           node scripts/test-workspace-plugin-ui.mjs
           cargo check --workspace --all-targets --locked
           cargo test --workspace --locked --no-fail-fast

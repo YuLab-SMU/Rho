@@ -1,14 +1,13 @@
 # P2-4 Plugin Lifecycle, Recovery, Uninstall And Upgrade
 
 Status: active under the owner-approved local-first exception; P2-4A through
-P2-4E3 local packaged checkpoints are complete;
+P2-4F local packaged checkpoints are complete;
 D2 Browser visual review was blocked by the Browser local-file URL policy and
 remains open; hosted and cross-platform installed gates remain mandatory before
 final Phase 2 acceptance
 
-Active work package: P2-4F only — exhaustive durable/file crash recovery,
-recovery-required projection, transition inspection and UI/mock truth. P2-4G
-remains inactive. No install or new plugin authority is active.
+Active work package: none at the P2-4F stop. P2-4G remains inactive until its
+explicit activation. No install or new plugin authority is active.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -1016,6 +1015,54 @@ one-plugin failure isolation, project revision once-only, malicious rows/text,
 and packaged candidate/legacy smoke. Because recovery status is visible, F must
 bump the next development version after `0.4.1-dev.10`, update NEWS/cache keys/
 contracts, attempt Browser evidence, and stop at a local commit before G.
+
+### P2-4F local checkpoint — 2026-08-21
+
+Exhaustive recovery ordering and recovery-required product truth are locally
+complete at application `0.4.1-dev.11`:
+
+- every reconciliation pass now begins with bounded nonterminal/tombstone file
+  recovery. Incomplete Uninstall deterministically replays source/trash
+  ownership and atomic tombstone completion; purge-pending replays the retained
+  exact marker; interrupted Update/Rollback is closed and only accepted-old
+  cache can reconstruct. The pass runs before ordinary discovery activation and
+  failures remain isolated per plugin/project.
+- report fields separately count recovered Uninstall, purge, replacement,
+  recovery-required and project-file changes. Actual move/purge advances and
+  persists project revision once, then wrappers immediately rerun reconciliation
+  with the fresh identity. Idempotent replay has no second revision.
+- Store recovery-required state/event is exact, idempotent and atomic. Dual or
+  neither ownership, missing identity/cache/root and persistence failure remain
+  non-routable. UI projects Recovery required with no action/no completion
+  claim. `get_workspace_plugin_transition` is project-scoped and read-only; mock
+  and command inventory contain exactly one handler among 136 commands.
+- Tests cover incomplete source-owned and already-moved Uninstall, purge pending,
+  interrupted replacement accepted-cache reconstruction, Store event rollback,
+  dual ownership UI state, idempotent replay and exact Update/Rollback recovery.
+  Full Rust workspace passed: desktop 270/one opt-in Keychain ignored, Store
+  163, Server 101 plus one binary, extension-runtime 126 unit/26 contract/13
+  discovery/34 lifecycle and all remaining suites. Stable and exact Rust 1.88
+  all-target checks, every P2-4 contract, Phase-1/MAC4/version/command contracts,
+  JS syntax, formatting and diff checks passed.
+- Source, unpacked App candidate/legacy and read-only mounted DMG
+  candidate/legacy smoke passed all prior fields plus
+  `recovery_incomplete_uninstall`, `recovery_project_revision_once` and
+  `recovery_purge_pending`.
+
+Exact unsigned local rehearsal artifacts:
+
+- arm64 executable: 48,449,072 bytes, SHA-256
+  `f8d949ba2c383f65165dbb696d71dbbd1b63207732148793326de4d534ca62b7`;
+- DMG: 26,495,483 bytes, SHA-256
+  `ee47d4a8112beee4242b7d8a0721f00e0ac7d860da0968d1118875781be48a8d`;
+- updater archive: 27,257,004 bytes, SHA-256
+  `9bdaf4975d8354df4783cab32f5b30c1eb59a8f86f34d82a450928c91eb7362e`.
+
+Updater signing remains ephemeral and not production valid. Browser visual
+review remains blocked by the selected Browser's local-file URL policy, and no
+prohibited retry/workaround/alternate browser was used. Deterministic preview/
+mock evidence is not claimed as visual acceptance. Browser, hosted,
+cross-platform installed and final Phase 2 gates remain open for G.
 
 ### P2-4A local checkpoint — 2026-08-20
 
