@@ -25,13 +25,15 @@ Dependencies and precedence:
   before the Phase A prototype begins.
 
 2026-08-21 cross-review note: the proposed Plugin-Native Surface Runtime
-introduces Surface and user-owned Scene as a possible successor composition
-model. If separately authorized, existing Human/Agent posture and Code/Analyze/
-Agent presets would migrate first as compatibility Scenes and Agent would
-become an ordinary Surface; Ask/Plan/Act policy and every context-preservation
-invariant in this document would remain authoritative. Until that cutover is
-specified and authorized, this document continues to own the current posture
-presentation model and the Surface proposal owns no implementation behavior.
+introduces shared Surfaces under two possible successor composition grammars:
+customizable Studio Scenes and systematic document-flow Vibe Pages. If
+separately authorized, existing Human/Agent posture and Code/Analyze/Agent
+presets would migrate first as Studio compatibility Scenes and Agent would
+become an ordinary Surface available in both modes; Ask/Plan/Act policy and
+every context-preservation invariant in this document would remain
+authoritative. Until that cutover is specified and authorized, this document
+continues to own the current posture presentation model and the Surface
+proposal owns no implementation behavior.
 
 ## Summary
 

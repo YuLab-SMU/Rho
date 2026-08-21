@@ -137,10 +137,11 @@ browser/mock evidence does not close it.
 - Human-first, Git, Environment, execution, approval, persistence, and release
   documents retain their current authority.
 - The proposed Plugin-Native Surface Runtime may later host this Task/context
-  behavior inside registered Surfaces and compatibility Scenes. It cannot
-  remove the current work-surface state, take focus authority, or replace this
-  presentation contract until a bounded migration slice is explicitly
-  authorized and proves draft/document/review preservation.
+  behavior inside registered Surfaces, Studio compatibility Scenes, and
+  ordered Vibe task blocks. It cannot remove the current work-surface state,
+  take focus authority, or replace this presentation contract until a bounded
+  migration slice is explicitly authorized and proves draft/document/review
+  preservation.
 
 No schema, persistence, approval, execution, credential, project identity, or
 release conflict was found. The only intentional presentation correction is
