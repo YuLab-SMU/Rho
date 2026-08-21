@@ -1,14 +1,13 @@
 # P2-4 Plugin Lifecycle, Recovery, Uninstall And Upgrade
 
 Status: active under the owner-approved local-first exception; P2-4A through
-P2-4D3 packaged checkpoints and P2-4E1 source checkpoint are complete;
+P2-4D3 and P2-4E2 local packaged checkpoints are complete;
 D2 Browser visual review was blocked by the Browser local-file URL policy and
 remains open; hosted and cross-platform installed gates remain mandatory before
 final Phase 2 acceptance
 
-Active work package: P2-4E2 only — trusted exact Update command, fresh candidate
-permission continuation, fixed review UI/mock and packaged smoke. E3 Rollback
-and P2-4F/G remain inactive. No install or Rollback action is active.
+Active work package: none at the P2-4E2 stop. E3 Rollback and P2-4F/G remain
+inactive until explicit activation. No install or Rollback action is active.
 
 Change class: D3 schema, project switching, destructive file mutation,
 execution lifecycle, crash recovery, upgrade and rollback. Risk: R3.
@@ -645,7 +644,7 @@ E is split into three mandatory local stops:
    snapshot, stages host/handles/contributions hidden, and publishes through
    `ContributionStore::publish(candidate, Some(expected_old_identity))`. No
    command or UI is added.
-2. **P2-4E2 — trusted Update (active).** The current discovered changed digest
+2. **P2-4E2 — trusted Update (locally complete).** The current discovered changed digest
    is the only candidate. The command confirms current project revision and
    exact expected-old/candidate digests, creates/caches the candidate, obtains
    fresh candidate-digest grants, prepares hidden authority, quiesces/cancels
@@ -739,6 +738,58 @@ changed digest during review, candidate failure, terminal persistence failure,
 concurrency, two projects/A-B-A and packaged candidate/legacy smoke. Browser
 visual evidence must be attempted and any tool-policy block reported truthfully.
 E2 stops at its own local commit before E3 activation.
+
+### P2-4E2 local checkpoint — 2026-08-21
+
+Trusted exact local Update is locally complete at application `0.4.1-dev.9`:
+
+- `accept_workspace_plugin_update` is deny-unknown-fields, project-transition
+  gated and exact revision/old/candidate bound. The only candidate is the
+  currently discovered changed local package; it is revalidated into immutable
+  cache before permission or host work. Update pending is also inferred
+  truthfully in the list when discovery changed before lifecycle reconciliation.
+- Candidate permissions are planned for the new digest. Permission continuation
+  retains Upgrade kind, transition, candidate, expected-old and revision. Old
+  digest grants/handles cannot authorize the candidate; after terminal pointer
+  commit, every active durable old-digest grant is revoked. Denial or candidate
+  mutation during review preserves old accepted pointer and route.
+- E1 hidden activation and expected-old contribution CAS now back the product
+  path. Success commits candidate accepted, old rollback, clears pending and
+  uses fresh generation/host/handles. Candidate failure leaves old route;
+  terminal persistence failure closes both and retains `pointer_swapped` truth.
+- The fixed trusted review surface renders exact full old/new digests, project
+  and escaped plugin identity, and explicitly disclaims marketplace, publisher,
+  signature, download and automatic-update trust. Mock has one exact command
+  handler and fresh candidate permission flow; command inventory is 134.
+- Tests cover permission success/deny, changed candidate during review, stale
+  revision/old/candidate, old-grant revoke/non-reuse, hidden candidate failure,
+  terminal persistence failure, atomic/concurrent Store pointers and exact
+  installed Update. Full Rust workspace passed: desktop 263/one opt-in Keychain
+  ignored, Store 162, Server 101 plus one binary, extension-runtime 126 unit/26
+  contract/13 discovery/34 lifecycle and all other suites. Stable and exact
+  Rust `1.88.0` all-target checks, every P2-4 positive/negative contract,
+  Phase-1/MAC4/version/command contracts, JS syntax, formatting and diff checks
+  passed.
+- Source, unpacked App candidate/legacy, and read-only mounted DMG
+  candidate/legacy smoke passed all prior fields plus
+  `update_local_candidate_only`, `update_expected_old_cas`,
+  `update_pointer_durable` and `update_generation_fresh`.
+
+Exact unsigned local rehearsal artifacts:
+
+- arm64 executable: 48,182,272 bytes, SHA-256
+  `2cf5700932eca4e60f186735b33c880fbd457f0ded6cabe2ffd4f44d85fb074f`;
+- DMG: 26,425,295 bytes, SHA-256
+  `f2567807c523cfe8c5e2bf0df9e2f1870ca4df24d76b91c973a5deea80ad2951`;
+- updater archive: 27,177,029 bytes, SHA-256
+  `10c430fc1e435843c1ca19a7acc3206a099440a116581c418e4112ab133f22ac`.
+
+The updater signature is again an ephemeral rehearsal key and not production
+valid. Browser visual review could not be run because the already-selected
+Browser blocks this local `file://` preview; policy forbids retrying through a
+workaround or another browser surface. Deterministic preview evidence/mock
+parity exists but is not claimed as visual acceptance. D2/E2 Browser, hosted,
+cross-platform installed and final Phase 2 gates remain open.
 
 ## Rollback
 

@@ -53,9 +53,9 @@ export function validateP24UninstallRestoreContract(value) {
     'id="pluginUninstallConfirm"',
     "It will not permanently delete it",
   ]) assert.ok(value.html.includes(marker), `trusted confirmation surface lost ${marker}`);
-  assert.match(value.workspace, /version = "0\.4\.1-dev\.8"/);
-  assert.equal(JSON.parse(value.tauri).version, "0.4.1-dev.8");
-  assert.equal(JSON.parse(value.packageJson).version, "0.4.1-dev.8");
+  assert.match(value.workspace, /version = "0\.4\.1-dev\.9"/);
+  assert.equal(JSON.parse(value.tauri).version, "0.4.1-dev.9");
+  assert.equal(JSON.parse(value.packageJson).version, "0.4.1-dev.9");
   assert.match(value.news, /## 0\.4\.1-dev\.8[\s\S]*Workspace-plugin recoverable Uninstall/);
   for (const marker of [
     'report["recoverable_uninstall"] = json!(true)',
@@ -66,7 +66,7 @@ export function validateP24UninstallRestoreContract(value) {
   assert.match(value.spec, /P2-4D2[\s\S]*trusted Uninstall\/Restore commands/);
   assert.doesNotMatch(
     value.commands,
-    /accept_workspace_plugin_update|rollback_workspace_plugin|purge_workspace_plugin/,
+    /rollback_workspace_plugin|purge_workspace_plugin/,
     "D2 prematurely added Update, Rollback, or permanent purge",
   );
 }
@@ -78,9 +78,9 @@ function fixture() {
     commands: "pub(crate) async fn uninstall_workspace_plugin\npub(crate) async fn restore_workspace_plugin\npersist_plugin_project_change\nproject_transition_gate.lock().await\nsave_identity",
     frontend: "command === \"uninstall_workspace_plugin\"\ncommand === \"restore_workspace_plugin\"\nreviewWorkspacePluginUninstall(pluginId)\nconfirmWorkspacePluginUninstall()\nrestoreWorkspacePlugin(tombstoneId)\ndata-plugin-uninstall\ndata-plugin-restore\nrecoverable Rho trash",
     html: 'id="pluginUninstallView"\nid="pluginUninstallIdentity"\nid="pluginUninstallConfirm"\nIt will not permanently delete it',
-    workspace: 'version = "0.4.1-dev.8"',
-    tauri: '{"version":"0.4.1-dev.8"}',
-    packageJson: '{"version":"0.4.1-dev.8"}',
+    workspace: 'version = "0.4.1-dev.9"',
+    tauri: '{"version":"0.4.1-dev.9"}',
+    packageJson: '{"version":"0.4.1-dev.9"}',
     news: "## 0.4.1-dev.8\n### Workspace-plugin recoverable Uninstall",
     installed: 'report["recoverable_uninstall"] = json!(true)\nreport["uninstall_tombstone_atomic"] = json!(true)\nreport["uninstall_package_in_trash"] = json!(true)\nreport["restore_disabled_no_authority"] = json!(true)',
     spec: "P2-4D2 — trusted Uninstall/Restore commands",
@@ -95,7 +95,7 @@ if (process.argv.includes("--test")) {
     ["trash move", (value) => { value.desktop = value.desktop.replace(".move_exact(", ""); }],
     ["restore disabled", (value) => { value.installed = value.installed.replace('report["restore_disabled_no_authority"] = json!(true)', ""); }],
     ["mock", (value) => { value.frontend = value.frontend.replace('command === "restore_workspace_plugin"', ""); }],
-    ["version", (value) => { value.workspace = 'version = "0.4.1-dev.7"'; }],
+    ["version", (value) => { value.workspace = 'version = "0.4.1-dev.8"'; }],
     ["premature purge", (value) => { value.commands += "\npurge_workspace_plugin"; }],
   ]) {
     const value = fixture();

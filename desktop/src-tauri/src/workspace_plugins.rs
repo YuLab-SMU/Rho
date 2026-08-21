@@ -134,6 +134,7 @@ pub(crate) struct WorkspacePluginView {
     pub desired_state: String,
     pub observed_state: String,
     pub accepted_digest: Option<String>,
+    pub rollback_digest: Option<String>,
     pub transition_id: Option<String>,
     pub recoverable_tombstone_id: Option<String>,
     pub message: Option<String>,
@@ -207,6 +208,15 @@ pub(crate) struct WorkspacePluginRestoreResult {
     pub tombstone_id: String,
     pub project_revision: i64,
     pub message: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct WorkspacePluginUpdateInput {
+    pub plugin_id: String,
+    pub expected_old_digest: String,
+    pub candidate_digest: String,
+    pub expected_project_revision: i64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -371,12 +381,20 @@ impl WorkspacePluginDispatcher for CoordinatorWorkspacePluginDispatcher {
 
 #[derive(Clone)]
 struct PendingEnable {
+    kind: PendingActivationKind,
     plugin_id: String,
     plugin_version: String,
     package_digest: String,
     transition_id: String,
     request_ids: Vec<String>,
     expected_project_revision: i64,
+}
+
+#[derive(Clone)]
+enum PendingActivationKind {
+    Enable,
+    Retry,
+    Upgrade { expected_old_digest: String },
 }
 
 struct ActivePlugin {
@@ -1245,6 +1263,7 @@ impl PendingPluginPermissionRegistry {
             state.pending.insert(
                 key,
                 PendingEnable {
+                    kind: PendingActivationKind::Enable,
                     plugin_id: plugin_id.to_string(),
                     plugin_version: plugin.manifest.version.to_string(),
                     package_digest: plugin.digest.to_string(),
@@ -1355,6 +1374,7 @@ impl PendingPluginPermissionRegistry {
             state.pending.insert(
                 key,
                 PendingEnable {
+                    kind: PendingActivationKind::Retry,
                     plugin_id: plugin_id.to_string(),
                     plugin_version: plugin.manifest.version.to_string(),
                     package_digest: plugin.digest.to_string(),
@@ -1382,6 +1402,200 @@ impl PendingPluginPermissionRegistry {
             reusable_grants.values(),
             store,
         )
+    }
+
+    pub(crate) fn request_update(
+        &self,
+        context: &PluginRuntimeContext,
+        input: &WorkspacePluginUpdateInput,
+        store: &mut Store,
+    ) -> Result<WorkspacePluginEnableResult> {
+        ensure!(
+            input.expected_project_revision == context.project_revision,
+            "workspace plugin Update is stale after a project change"
+        );
+        PluginId::new(input.plugin_id.clone()).context("validating workspace plugin id")?;
+        ensure!(
+            input.expected_old_digest != input.candidate_digest,
+            "workspace plugin Update candidate must differ from accepted digest"
+        );
+        let plugin = discover_exact_plugin(Path::new(&context.project_root), &input.plugin_id)?;
+        ensure!(
+            plugin.digest.as_str() == input.candidate_digest,
+            "workspace plugin Update candidate changed before review"
+        );
+        PluginLifecycleMutationService::new(store).discover(
+            &context.project_root,
+            &WorkspacePluginDiscoveredDraft {
+                project_root: context.project_root.clone(),
+                plugin_id: plugin.manifest.id.to_string(),
+                directory_name: plugin.directory.clone(),
+                plugin_version: plugin.manifest.version.to_string(),
+                runtime_kind: plugin.manifest.runtime.kind.to_string(),
+                discovered_digest: plugin.digest.to_string(),
+            },
+        )?;
+        let lifecycle = PluginLifecycleQueryService::new(store)
+            .get_state(&context.project_root, &input.plugin_id)?
+            .context("workspace plugin has no durable lifecycle state")?;
+        ensure!(
+            lifecycle.desired_state == "enabled"
+                && lifecycle.observed_state == "update_pending"
+                && lifecycle.accepted_digest.as_deref() == Some(input.expected_old_digest.as_str())
+                && lifecycle.pending_digest.as_deref() == Some(input.candidate_digest.as_str()),
+            "workspace plugin Update pointers are stale"
+        );
+        let key = registry_key(&context.project_root, &input.plugin_id);
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let active = state
+            .active
+            .get(&key)
+            .context("workspace plugin Update requires the accepted runtime to be active")?;
+        ensure!(
+            active.package_digest == input.expected_old_digest,
+            "workspace plugin Update expected-old runtime is stale"
+        );
+        ensure!(
+            !state.pending.contains_key(&key),
+            "workspace plugin Update already has pending permission review"
+        );
+        let transition_id = format!("transition.upgrade.{}", uuid::Uuid::new_v4().simple());
+        let requested = PluginLifecycleMutationService::new(store).request_transition(
+            &context.project_root,
+            &WorkspacePluginTransitionDraft {
+                transition_id: transition_id.clone(),
+                project_root: context.project_root.clone(),
+                plugin_id: input.plugin_id.clone(),
+                kind: "upgrade".to_string(),
+                request_event_type: "user_requested".to_string(),
+                desired_state: "enabled".to_string(),
+                expected_old_digest: Some(input.expected_old_digest.clone()),
+                candidate_digest: Some(input.candidate_digest.clone()),
+                rollback_digest: None,
+                backup_path_key: None,
+            },
+        )?;
+        ensure!(
+            matches!(
+                requested.outcome,
+                PluginLifecycleMutationOutcome::Applied | PluginLifecycleMutationOutcome::Unchanged
+            ),
+            "workspace plugin Update conflicts with another lifecycle transition"
+        );
+        advance_enable_transition(
+            store,
+            context,
+            &transition_id,
+            "requested",
+            "preflight",
+            "running",
+            "resolving",
+            None,
+            false,
+            None,
+            "preflight",
+            "completed",
+            None,
+        )?;
+        let cached = match PluginPackageCache::new(&context.app_data_dir).prepare_exact(
+            Path::new(&context.project_root),
+            &input.plugin_id,
+            &input.candidate_digest,
+        ) {
+            Ok(cached) => cached,
+            Err(error) => {
+                let _ = fail_enable_transition(
+                    store,
+                    context,
+                    &transition_id,
+                    "update_package_cache_failed",
+                    "update_pending",
+                );
+                return Err(error.into());
+            }
+        };
+        advance_enable_transition(
+            store,
+            context,
+            &transition_id,
+            "preflight",
+            "backup_prepared",
+            "running",
+            "resolving",
+            None,
+            false,
+            None,
+            "package_backed_up",
+            "completed",
+            None,
+        )?;
+        let (reusable_grants, requests) = plan_plugin_permissions(store, context, &plugin)?;
+        if !requests.is_empty() {
+            let created = match PluginPermissionMutationService::new(store)
+                .create_requests(&context.project_root, &requests)
+            {
+                Ok(created) => created,
+                Err(error) => {
+                    let _ = fail_enable_transition(
+                        store,
+                        context,
+                        &transition_id,
+                        "update_permission_request_failed",
+                        "update_pending",
+                    );
+                    return Err(error.into());
+                }
+            };
+            let request_ids = created
+                .into_iter()
+                .map(|request| request.request_id)
+                .collect::<Vec<_>>();
+            state.pending.insert(
+                key,
+                PendingEnable {
+                    kind: PendingActivationKind::Upgrade {
+                        expected_old_digest: input.expected_old_digest.clone(),
+                    },
+                    plugin_id: input.plugin_id.clone(),
+                    plugin_version: plugin.manifest.version.to_string(),
+                    package_digest: input.candidate_digest.clone(),
+                    transition_id: transition_id.clone(),
+                    request_ids: request_ids.clone(),
+                    expected_project_revision: context.project_revision,
+                },
+            );
+            return Ok(WorkspacePluginEnableResult {
+                status: "permission_required".to_string(),
+                plugin_id: input.plugin_id.clone(),
+                request_ids,
+                active_grant_count: reusable_grants.len(),
+                transition_id: Some(transition_id),
+                message: "Review fresh permissions for the exact local Update candidate. The accepted old route remains active until CAS."
+                    .to_string(),
+            });
+        }
+        let result = activate_plugin_replacement_durable(
+            &mut state,
+            context,
+            &plugin,
+            &cached,
+            &transition_id,
+            &input.expected_old_digest,
+            reusable_grants.values(),
+            store,
+        )?;
+        revoke_exact_durable_grants(
+            &mut state,
+            store,
+            context,
+            &input.plugin_id,
+            &input.expected_old_digest,
+            "plugin_updated",
+        )?;
+        Ok(result)
     }
 
     pub(crate) fn disable(
@@ -4516,6 +4730,7 @@ fn reconcile_discovered_plugin(
         registry.pending.insert(
             key,
             PendingEnable {
+                kind: PendingActivationKind::Enable,
                 plugin_id: plugin.manifest.id.to_string(),
                 plugin_version: plugin.manifest.version.to_string(),
                 package_digest: plugin.digest.to_string(),
@@ -4938,6 +5153,12 @@ fn plugin_view(
         "permission_required"
     } else if lifecycle.is_some_and(|lifecycle| {
         lifecycle.desired_state == "enabled"
+            && lifecycle.accepted_digest.is_some()
+            && lifecycle.accepted_digest.as_deref() != Some(plugin.digest.as_str())
+    }) {
+        "update_pending"
+    } else if lifecycle.is_some_and(|lifecycle| {
+        lifecycle.desired_state == "enabled"
             && matches!(
                 lifecycle.observed_state.as_str(),
                 "resolving" | "activating"
@@ -4980,6 +5201,7 @@ fn plugin_view(
         desired_state,
         observed_state,
         accepted_digest: lifecycle.and_then(|lifecycle| lifecycle.accepted_digest.clone()),
+        rollback_digest: lifecycle.and_then(|lifecycle| lifecycle.rollback_digest.clone()),
         transition_id: lifecycle.and_then(|lifecycle| lifecycle.transition_id.clone()),
         recoverable_tombstone_id: recoverable_tombstone_id.map(str::to_string),
         message: if plugin.manifest.runtime.kind != RuntimeKind::Wasm {
@@ -5049,6 +5271,7 @@ fn missing_workspace_plugin_view(
         desired_state: lifecycle.desired_state.clone(),
         observed_state: lifecycle.observed_state.clone(),
         accepted_digest: lifecycle.accepted_digest.clone(),
+        rollback_digest: lifecycle.rollback_digest.clone(),
         transition_id: lifecycle.transition_id.clone(),
         recoverable_tombstone_id: recoverable_tombstone_id.map(str::to_string),
         message: Some(if lifecycle.observed_state == "uninstalled" {
@@ -5272,6 +5495,38 @@ fn remove_active_plugin(state: &mut RegistryState, key: &str) -> Option<ActivePl
     }
     state.grants.invalidate_host(&active.host_instance_id);
     Some(active)
+}
+
+fn revoke_exact_durable_grants(
+    state: &mut RegistryState,
+    store: &mut Store,
+    context: &PluginRuntimeContext,
+    plugin_id: &str,
+    package_digest: &str,
+    reason_code: &str,
+) -> Result<usize> {
+    let grants = PluginPermissionQueryService::new(store)
+        .list_grants(&context.project_root, Some(200), Some("active"))?
+        .into_iter()
+        .filter(|grant| grant.plugin_id == plugin_id && grant.package_digest == package_digest)
+        .collect::<Vec<_>>();
+    for grant in &grants {
+        let outcome = PluginPermissionMutationService::new(store).revoke_grant(
+            &context.project_root,
+            &grant.grant_id,
+            reason_code,
+        )?;
+        ensure!(
+            matches!(
+                outcome,
+                PluginPermissionMutationOutcome::Applied
+                    | PluginPermissionMutationOutcome::Unchanged
+            ),
+            "exact old plugin grant revocation was stale"
+        );
+        state.grants.revoke_durable_grant(&grant.grant_id);
+    }
+    Ok(grants.len())
 }
 
 fn matching_project_grants(
@@ -5514,13 +5769,18 @@ fn try_activate_pending(
     if requests.iter().any(|request| request.status == "pending") {
         return Ok(("permission_required".to_string(), 0));
     }
+    let failure_observed_state = match &pending.kind {
+        PendingActivationKind::Enable => "disabled",
+        PendingActivationKind::Retry => "crashed",
+        PendingActivationKind::Upgrade { .. } => "update_pending",
+    };
     if requests.iter().any(|request| request.status != "granted") {
         let _ = fail_enable_transition(
             store,
             context,
             &pending.transition_id,
             "permission_denied",
-            "disabled",
+            failure_observed_state,
         );
         state.pending.remove(&key);
         return Ok(("denied".to_string(), 0));
@@ -5555,29 +5815,58 @@ fn try_activate_pending(
                 context,
                 &pending.transition_id,
                 "package_cache_failed",
-                "disabled",
+                failure_observed_state,
             );
             return Err(error.into());
         }
     };
     let durable_grants = PluginPermissionQueryService::new(store).list_grants(
         &context.project_root,
-        Some(100),
+        Some(200),
         Some("active"),
     )?;
-    let result = activate_plugin_durable(
-        state,
-        context,
-        &plugin,
-        &cached,
-        &pending.transition_id,
-        durable_grants.iter().filter(|grant| {
+    let candidate_grants = durable_grants
+        .iter()
+        .filter(|grant| {
             grant.plugin_id == plugin_id
                 && grant.plugin_version == pending.plugin_version
                 && grant.package_digest == pending.package_digest
-        }),
-        store,
-    )?;
+        })
+        .collect::<Vec<_>>();
+    let result = match &pending.kind {
+        PendingActivationKind::Upgrade {
+            expected_old_digest,
+        } => {
+            let result = activate_plugin_replacement_durable(
+                state,
+                context,
+                &plugin,
+                &cached,
+                &pending.transition_id,
+                expected_old_digest,
+                candidate_grants.iter().copied(),
+                store,
+            )?;
+            revoke_exact_durable_grants(
+                state,
+                store,
+                context,
+                plugin_id,
+                expected_old_digest,
+                "plugin_updated",
+            )?;
+            result
+        }
+        PendingActivationKind::Enable | PendingActivationKind::Retry => activate_plugin_durable(
+            state,
+            context,
+            &plugin,
+            &cached,
+            &pending.transition_id,
+            candidate_grants.iter().copied(),
+            store,
+        )?,
+    };
     state.pending.remove(&key);
     Ok((result.status, result.active_grant_count))
 }
@@ -5730,7 +6019,6 @@ fn activate_plugin_durable<'a>(
     })
 }
 
-#[allow(dead_code)] // Activated by the next E2 command slice after the E1 stop.
 fn activate_plugin_replacement_durable<'a>(
     state: &mut RegistryState,
     context: &PluginRuntimeContext,
@@ -9450,6 +9738,365 @@ mod tests {
                 .unwrap()
                 .phase,
             "pointer_swapped"
+        );
+    }
+
+    #[test]
+    fn trusted_update_accepts_only_current_candidate_and_revokes_old_digest_grants() {
+        let directory = tempdir().unwrap();
+        write_plugin(
+            directory.path(),
+            serde_json::json!([{
+                "name": "project.fs.read",
+                "purpose": "Read bounded CSV inputs",
+                "paths": ["data/**/*.csv"],
+                "maxBytes": 1024
+            }]),
+        );
+        let context = context(directory.path());
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let registry = PendingPluginPermissionRegistry::default();
+        let first = registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        registry
+            .respond(
+                &context,
+                PluginPermissionDecisionInput {
+                    request_id: first.request_ids[0].clone(),
+                    decision: "allow_project".to_string(),
+                    expected_project_revision: context.project_revision,
+                },
+                &mut store,
+            )
+            .unwrap();
+        let old_state = PluginLifecycleQueryService::new(&store)
+            .get_state(&context.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        let old_digest = old_state.accepted_digest.unwrap();
+        let manifest_path = directory
+            .path()
+            .join(".rho/plugins/example/rho-plugin.json");
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+        manifest["version"] = serde_json::json!("2.0.0");
+        fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        let candidate = discover_exact_plugin(directory.path(), "org.example.plugin").unwrap();
+        let pending = registry
+            .request_update(
+                &context,
+                &WorkspacePluginUpdateInput {
+                    plugin_id: "org.example.plugin".to_string(),
+                    expected_old_digest: old_digest.clone(),
+                    candidate_digest: candidate.digest.to_string(),
+                    expected_project_revision: context.project_revision,
+                },
+                &mut store,
+            )
+            .unwrap();
+        assert_eq!(pending.status, "permission_required");
+        assert_eq!(pending.request_ids.len(), 1);
+        {
+            let state = registry
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            assert_eq!(
+                state
+                    .active
+                    .get(&registry_key(&context.project_root, "org.example.plugin"))
+                    .unwrap()
+                    .package_digest,
+                old_digest
+            );
+        }
+        let completed = registry
+            .respond(
+                &context,
+                PluginPermissionDecisionInput {
+                    request_id: pending.request_ids[0].clone(),
+                    decision: "allow_project".to_string(),
+                    expected_project_revision: context.project_revision,
+                },
+                &mut store,
+            )
+            .unwrap();
+        assert_eq!(completed.plugin_status, "enabled", "{completed:?}");
+        let lifecycle = PluginLifecycleQueryService::new(&store)
+            .get_state(&context.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            lifecycle.accepted_digest,
+            Some(candidate.digest.to_string())
+        );
+        assert_eq!(lifecycle.rollback_digest, Some(old_digest.clone()));
+        let grants = PluginPermissionQueryService::new(&store)
+            .list_grants(&context.project_root, Some(100), None)
+            .unwrap();
+        assert!(
+            grants
+                .iter()
+                .any(|grant| { grant.package_digest == old_digest && grant.status == "revoked" })
+        );
+        assert!(grants.iter().any(|grant| {
+            grant.package_digest == candidate.digest.as_str() && grant.status == "active"
+        }));
+        let state = registry
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert!(
+            grants
+                .iter()
+                .filter(|grant| grant.package_digest == old_digest)
+                .all(|grant| !state.grants.has_live_durable_grant(&grant.grant_id))
+        );
+    }
+
+    #[test]
+    fn update_denial_or_changed_candidate_preserves_old_route_and_pointer() {
+        for change_after_review in [false, true] {
+            let directory = tempdir().unwrap();
+            write_plugin(
+                directory.path(),
+                serde_json::json!([{
+                    "name": "project.fs.read",
+                    "purpose": "Read bounded CSV inputs",
+                    "paths": ["data/**/*.csv"],
+                    "maxBytes": 1024
+                }]),
+            );
+            let context = context(directory.path());
+            let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+            let registry = PendingPluginPermissionRegistry::default();
+            let first = registry
+                .request_enable(&context, "org.example.plugin", &mut store)
+                .unwrap();
+            registry
+                .respond(
+                    &context,
+                    PluginPermissionDecisionInput {
+                        request_id: first.request_ids[0].clone(),
+                        decision: "allow_project".to_string(),
+                        expected_project_revision: context.project_revision,
+                    },
+                    &mut store,
+                )
+                .unwrap();
+            let old = PluginLifecycleQueryService::new(&store)
+                .get_state(&context.project_root, "org.example.plugin")
+                .unwrap()
+                .unwrap();
+            let old_digest = old.accepted_digest.unwrap();
+            let manifest_path = directory
+                .path()
+                .join(".rho/plugins/example/rho-plugin.json");
+            let mut manifest: serde_json::Value =
+                serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+            manifest["version"] = serde_json::json!("2.0.0");
+            fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+            let candidate = discover_exact_plugin(directory.path(), "org.example.plugin").unwrap();
+            let pending = registry
+                .request_update(
+                    &context,
+                    &WorkspacePluginUpdateInput {
+                        plugin_id: "org.example.plugin".to_string(),
+                        expected_old_digest: old_digest.clone(),
+                        candidate_digest: candidate.digest.to_string(),
+                        expected_project_revision: context.project_revision,
+                    },
+                    &mut store,
+                )
+                .unwrap();
+            if change_after_review {
+                let entry = directory
+                    .path()
+                    .join(".rho/plugins/example/dist/plugin.wasm");
+                let mut bytes = fs::read(&entry).unwrap();
+                bytes.push(0);
+                fs::write(entry, bytes).unwrap();
+            }
+            let decision = registry
+                .respond(
+                    &context,
+                    PluginPermissionDecisionInput {
+                        request_id: pending.request_ids[0].clone(),
+                        decision: if change_after_review {
+                            "allow_project"
+                        } else {
+                            "deny"
+                        }
+                        .to_string(),
+                        expected_project_revision: context.project_revision,
+                    },
+                    &mut store,
+                )
+                .unwrap();
+            assert_eq!(
+                decision.plugin_status,
+                if change_after_review {
+                    "stale_digest"
+                } else {
+                    "denied"
+                }
+            );
+            let state = registry
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            assert_eq!(
+                state
+                    .active
+                    .get(&registry_key(&context.project_root, "org.example.plugin"))
+                    .unwrap()
+                    .package_digest,
+                old_digest
+            );
+            drop(state);
+            let lifecycle = PluginLifecycleQueryService::new(&store)
+                .get_state(&context.project_root, "org.example.plugin")
+                .unwrap()
+                .unwrap();
+            assert_eq!(lifecycle.accepted_digest, Some(old_digest));
+            assert_eq!(lifecycle.observed_state, "update_pending");
+        }
+    }
+
+    #[test]
+    fn update_rejects_stale_revision_digest_and_foreign_project_before_cas() {
+        let directory = tempdir().unwrap();
+        write_contributing_plugin(
+            directory.path(),
+            "1.0.0",
+            "tool.fixture.update-stale",
+            false,
+        );
+        let context = context(directory.path());
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let registry = deterministic_registry();
+        registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        let old_digest = PluginLifecycleQueryService::new(&store)
+            .get_state(&context.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap()
+            .accepted_digest
+            .unwrap();
+        write_contributing_plugin(
+            directory.path(),
+            "2.0.0",
+            "tool.fixture.update-stale",
+            false,
+        );
+        let candidate = discover_exact_plugin(directory.path(), "org.example.plugin").unwrap();
+        let base = WorkspacePluginUpdateInput {
+            plugin_id: "org.example.plugin".to_string(),
+            expected_old_digest: old_digest.clone(),
+            candidate_digest: candidate.digest.to_string(),
+            expected_project_revision: context.project_revision,
+        };
+        let mut stale_revision = base.clone();
+        stale_revision.expected_project_revision += 1;
+        assert!(
+            registry
+                .request_update(&context, &stale_revision, &mut store)
+                .is_err()
+        );
+        let mut wrong_old = base.clone();
+        wrong_old.expected_old_digest = "f".repeat(64);
+        assert!(
+            registry
+                .request_update(&context, &wrong_old, &mut store)
+                .is_err()
+        );
+        let mut wrong_candidate = base;
+        wrong_candidate.candidate_digest = "e".repeat(64);
+        assert!(
+            registry
+                .request_update(&context, &wrong_candidate, &mut store)
+                .is_err()
+        );
+        let lifecycle = PluginLifecycleQueryService::new(&store)
+            .get_state(&context.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        assert_eq!(lifecycle.accepted_digest, Some(old_digest));
+    }
+
+    #[test]
+    fn exact_update_isolates_two_projects_with_same_plugin_id() {
+        let project_a = tempdir().unwrap();
+        let project_b = tempdir().unwrap();
+        write_plugin(project_a.path(), serde_json::json!([]));
+        write_plugin(project_b.path(), serde_json::json!([]));
+        let context_a = context(project_a.path());
+        let context_b = context(project_b.path());
+        let mut store = Store::open(project_a.path().join("rho.sqlite")).unwrap();
+        let registry = PendingPluginPermissionRegistry::default();
+        registry
+            .request_enable(&context_a, "org.example.plugin", &mut store)
+            .unwrap();
+        registry
+            .request_enable(&context_b, "org.example.plugin", &mut store)
+            .unwrap();
+        let old_a = PluginLifecycleQueryService::new(&store)
+            .get_state(&context_a.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap()
+            .accepted_digest
+            .unwrap();
+        let old_b = PluginLifecycleQueryService::new(&store)
+            .get_state(&context_b.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        let old_b_digest = old_b.accepted_digest.clone().unwrap();
+        let manifest_path = project_a
+            .path()
+            .join(".rho/plugins/example/rho-plugin.json");
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+        manifest["version"] = serde_json::json!("2.0.0");
+        fs::write(manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        let candidate_a = discover_exact_plugin(project_a.path(), "org.example.plugin").unwrap();
+        assert_eq!(
+            registry
+                .request_update(
+                    &context_a,
+                    &WorkspacePluginUpdateInput {
+                        plugin_id: "org.example.plugin".to_string(),
+                        expected_old_digest: old_a,
+                        candidate_digest: candidate_a.digest.to_string(),
+                        expected_project_revision: context_a.project_revision,
+                    },
+                    &mut store,
+                )
+                .unwrap()
+                .status,
+            "enabled"
+        );
+        let after_b = PluginLifecycleQueryService::new(&store)
+            .get_state(&context_b.project_root, "org.example.plugin")
+            .unwrap()
+            .unwrap();
+        assert_eq!(after_b.accepted_digest, Some(old_b_digest.clone()));
+        assert_eq!(
+            after_b.last_activation_generation,
+            old_b.last_activation_generation
+        );
+        assert_eq!(after_b.observed_state, "active");
+        assert_eq!(
+            registry
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .active
+                .get(&registry_key(&context_b.project_root, "org.example.plugin"))
+                .unwrap()
+                .package_digest,
+            old_b_digest
         );
     }
 

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Rho</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="styles.css?v=0.4.1-dev.8&rev=m3-scientific-review-v3&agent=output-review-v3&issue4=provider-first-v1&issue5=conversation-session-v2&issue6=repair-r5&issue9=task-rail-v1&viewer=row-shape-r1&references=envelope-r1&plugins=p2-4d2-v1" />
+    <link rel="stylesheet" href="styles.css?v=0.4.1-dev.9&rev=m3-scientific-review-v3&agent=output-review-v3&issue4=provider-first-v1&issue5=conversation-session-v2&issue6=repair-r5&issue9=task-rail-v1&viewer=row-shape-r1&references=envelope-r1&plugins=p2-4e2-v1" />
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true">
@@ -1284,6 +1284,22 @@ plot(
             <button id="pluginUninstallConfirm" type="button" class="danger">Move to recoverable trash</button>
           </div>
         </section>
+        <section id="pluginUpdateView" class="hidden">
+          <div class="plugin-trust-banner">
+            <strong>Review exact local package Update</strong>
+            <span>Rho will validate and cache the changed project package, request fresh permissions for its new digest, and replace the active runtime only through expected-old CAS.</span>
+          </div>
+          <dl id="pluginUpdateIdentity" class="plugin-permission-identity"></dl>
+          <div class="plugin-permission-section">
+            <strong>Trust boundary</strong>
+            <p>This is not a marketplace, publisher, signature, download, or automatic update. The candidate already exists in this project and receives no authority from the previously accepted digest.</p>
+          </div>
+          <p class="plugin-upgrade-note">The accepted old route remains authoritative until the new cached candidate, fresh grants, hidden host, contribution CAS, and durable pointer commit all succeed.</p>
+          <div class="product-dialog-actions plugin-permission-actions">
+            <button id="pluginUpdateCancel" type="button">Cancel</button>
+            <button id="pluginUpdateConfirm" type="button" class="primary">Review local Update</button>
+          </div>
+        </section>
       </section>
     </div>
     <div id="pluginCommandPalette" class="product-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="pluginCommandPaletteTitle">
@@ -1472,6 +1488,6 @@ plot(
     <script src="vendor/viewer/katex.min.js"></script>
     <script src="vendor/viewer/katex-auto-render.min.js"></script>
     <script src="vendor/viewer/papaparse.min.js"></script>
-    <script src="app.js?v=0.4.1-dev.8&rev=m3-scientific-review-v3&projection=wp4&help=console-v3&afo=act-output-v1&issue4=provider-first-v1&issue5=conversation-session-v2&issue6=repair-r5&issue9=task-rail-v1&issue33=focus-stability-v1&viewer=row-shape-r1&references=envelope-r1&outputs=image-artifact-r1&plugins=p2-4d2-v1"></script>
+    <script src="app.js?v=0.4.1-dev.9&rev=m3-scientific-review-v3&projection=wp4&help=console-v3&afo=act-output-v1&issue4=provider-first-v1&issue5=conversation-session-v2&issue6=repair-r5&issue9=task-rail-v1&issue33=focus-stability-v1&viewer=row-shape-r1&references=envelope-r1&outputs=image-artifact-r1&plugins=p2-4e2-v1"></script>
   </body>
 </html>

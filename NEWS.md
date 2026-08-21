@@ -4,6 +4,23 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.1-dev.9 - 2026-08-21
+
+### Exact local workspace-plugin Update
+
+- Update pending plugins now expose a trusted review action bound to the
+  current project revision, accepted digest, and changed local candidate digest.
+  This action does not download code or claim marketplace, publisher, signature,
+  or automatic-update trust.
+- Rho validates and caches the complete candidate, obtains fresh permissions
+  for its new digest, creates a hidden fresh host/generation/handles, and swaps
+  contribution routing only through expected-old CAS. Candidate failure or
+  denial preserves the accepted old route when safe.
+- Durable completion atomically advances accepted and rollback pointers before
+  old-digest grants are revoked. A post-CAS persistence failure closes both old
+  and candidate authority and leaves recoverable transition truth instead of
+  reporting a successful Update.
+
 ## 0.4.1-dev.8 - 2026-08-21
 
 ### Workspace-plugin recoverable Uninstall

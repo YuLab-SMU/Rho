@@ -9,7 +9,7 @@ use crate::workspace_plugins::{
     PluginPermissionDecisionInput, PluginPermissionDecisionResult, PluginRuntimeContext,
     PluginViewerDocumentView, WorkspacePluginDisableResult, WorkspacePluginEnableResult,
     WorkspacePluginList, WorkspacePluginRestoreInput, WorkspacePluginRestoreResult,
-    WorkspacePluginUninstallInput, WorkspacePluginUninstallResult,
+    WorkspacePluginUninstallInput, WorkspacePluginUninstallResult, WorkspacePluginUpdateInput,
 };
 use crate::{AppState, active_context, display_error, extension_project_scope_id, read_store};
 
@@ -97,6 +97,20 @@ pub(crate) async fn retry_workspace_plugin(
     state
         .plugin_permissions
         .retry(&context, &plugin_id, &mut store)
+        .map_err(display_error)
+}
+
+#[tauri::command]
+pub(crate) async fn accept_workspace_plugin_update(
+    input: WorkspacePluginUpdateInput,
+    state: State<'_, AppState>,
+) -> Result<WorkspacePluginEnableResult, String> {
+    let _project_transition = state.project_transition_gate.lock().await;
+    let context = runtime_context(&state).await.map_err(display_error)?;
+    let mut store = read_store(&state).map_err(display_error)?;
+    state
+        .plugin_permissions
+        .request_update(&context, &input, &mut store)
         .map_err(display_error)
 }
 

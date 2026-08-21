@@ -58,7 +58,7 @@ export function validateP24DisableContract(value) {
   assert.match(value.spec, /P2-4C1 local checkpoint — 2026-08-20/);
   assert.doesNotMatch(
     value.commands,
-    /accept_workspace_plugin_update|rollback_workspace_plugin/,
+    /rollback_workspace_plugin/,
     "C1 prematurely added a later lifecycle command",
   );
 }
@@ -86,7 +86,7 @@ if (process.argv.includes("--test")) {
     ["uncertainty", (value) => { value.desktop = value.desktop.replace('"completion_uncertain"', ""); }],
     ["stale command", (value) => { value.commands = value.commands.replace("expected_project_revision", ""); }],
     ["mock", (value) => { value.frontend = value.frontend.replace('command === "disable_workspace_plugin"', ""); }],
-    ["later command", (value) => { value.commands += "\naccept_workspace_plugin_update"; }],
+    ["later command", (value) => { value.commands += "\nrollback_workspace_plugin"; }],
   ]) {
     const value = fixture();
     mutate(value);

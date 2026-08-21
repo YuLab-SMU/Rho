@@ -47,12 +47,12 @@ export function validateP24RetentionPurgeContract(value) {
     'report["purge_sibling_project_preserved"] = json!(true)',
     'report["purge_replay_idempotent"] = json!(true)',
   ]) assert.ok(value.installed.includes(marker), `installed D3 smoke lost ${marker}`);
-  assert.match(value.workspace, /version = "0\.4\.1-dev\.8"/);
-  assert.equal(JSON.parse(value.tauri).version, "0.4.1-dev.8");
+  assert.match(value.workspace, /version = "0\.4\.1-dev\.9"/);
+  assert.equal(JSON.parse(value.tauri).version, "0.4.1-dev.9");
   assert.match(value.spec, /Activated P2-4D3 contract — 2026-08-21/);
   assert.doesNotMatch(
     value.commands,
-    /purge_workspace_plugin|expire_workspace_plugin|accept_workspace_plugin_update|rollback_workspace_plugin/,
+    /purge_workspace_plugin|expire_workspace_plugin|rollback_workspace_plugin/,
     "D3 added a user purge, automatic expiry, Update, or Rollback command",
   );
   assert.doesNotMatch(value.frontend, /data-plugin-purge|Purge plugin trash/, "D3 added purge UI");
@@ -64,8 +64,8 @@ function fixture() {
     trash: "pub fn purge_exact(\nBeforePurgeRename\nAfterPurgeRename\nMidPurgeDelete\nAfterPurgeDelete\nPurgeMarker\nensure_purge_marker\nvalidate_bounded_purge_tree\nremove_bounded_purge_tree\nMAX_PURGE_ENTRIES\npurge_interruptions_recover_from_exact_marker_and_ownership\npurge_rejects_link_marker_tampering_and_overdeep_partial_tree",
     service: "PluginTrashRetentionService\npub fn expire(\npub fn purge_exact_tombstone(\n.request_purge(\n.purge_exact(\n.complete_purge(\nservice_orders_expiry_filesystem_purge_and_terminal_truth\nservice_rejects_foreign_project_without_touching_exact_trash",
     installed: 'report["retention_expired"] = json!(true)\nreport["purge_pending_durable"] = json!(true)\nreport["exact_trash_purged"] = json!(true)\nreport["purge_tombstone_terminal"] = json!(true)\nreport["purge_sibling_project_preserved"] = json!(true)\nreport["purge_replay_idempotent"] = json!(true)',
-    workspace: 'version = "0.4.1-dev.8"',
-    tauri: '{"version":"0.4.1-dev.8"}',
+    workspace: 'version = "0.4.1-dev.9"',
+    tauri: '{"version":"0.4.1-dev.9"}',
     spec: "Activated P2-4D3 contract — 2026-08-21",
     commands: "list_workspace_plugins",
     frontend: "Workspace Plugins",
@@ -80,7 +80,7 @@ if (process.argv.includes("--test")) {
     ["mid delete recovery", (value) => { value.trash = value.trash.replace("MidPurgeDelete", ""); }],
     ["ordering", (value) => { value.service = value.service.replace(".complete_purge(", ""); }],
     ["sibling isolation", (value) => { value.installed = value.installed.replace('report["purge_sibling_project_preserved"] = json!(true)', ""); }],
-    ["version", (value) => { value.workspace = 'version = "0.4.1-dev.9"'; }],
+    ["version", (value) => { value.workspace = 'version = "0.4.1-dev.8"'; }],
     ["purge UI", (value) => { value.frontend += "\ndata-plugin-purge"; }],
   ]) {
     const value = fixture();

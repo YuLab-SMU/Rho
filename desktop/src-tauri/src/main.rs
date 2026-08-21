@@ -14784,6 +14784,92 @@ fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Valu
             .any(|plugin| plugin.status == "update_pending"),
         "installed P2-4 trusted projection hid update-pending state"
     );
+    let p24_update_project = p24_root.path().join("update-project");
+    let p24_update_plugin = p24_update_project.join(".rho/plugins/update-smoke");
+    std::fs::create_dir_all(p24_update_plugin.join("dist"))?;
+    std::fs::write(p24_update_plugin.join("dist/plugin.wasm"), P2_1_SMOKE_WASM)?;
+    let p24_update_manifest = p24_update_plugin.join("rho-plugin.json");
+    std::fs::write(
+        &p24_update_manifest,
+        serde_json::to_vec(&json!({
+            "schemaVersion": 1,
+            "id": "org.yulab.rho.phase2-update-smoke",
+            "name": "Update smoke",
+            "version": "1.0.0",
+            "apiVersion": "^1.0",
+            "runtime": {"kind": "wasm", "entry": "dist/plugin.wasm", "scope": "project"}
+        }))?,
+    )?;
+    let p24_update_root = normalize_project_root(
+        p24_update_project
+            .canonicalize()?
+            .to_string_lossy()
+            .as_ref(),
+    );
+    let p24_update_context = crate::workspace_plugins::PluginRuntimeContext {
+        app_data_dir: p24_data.clone(),
+        project_root: p24_update_root.clone(),
+        project_revision: 1,
+        project_scope_id: ScopeId::new("project.installed-update-smoke")?,
+        workspace: None,
+    };
+    let p24_update_registry = crate::workspace_plugins::PendingPluginPermissionRegistry::default();
+    ensure!(
+        p24_update_registry
+            .request_enable(
+                &p24_update_context,
+                "org.yulab.rho.phase2-update-smoke",
+                &mut p24_store,
+            )?
+            .status
+            == "enabled",
+        "installed P2-4 Update fixture did not enable"
+    );
+    let p24_update_old = PluginLifecycleQueryService::new(&p24_store)
+        .get_state(&p24_update_root, "org.yulab.rho.phase2-update-smoke")?
+        .context("installed P2-4 Update old state is missing")?;
+    let p24_update_old_digest = p24_update_old
+        .accepted_digest
+        .clone()
+        .context("installed P2-4 Update old digest is missing")?;
+    let mut p24_update_changed: Value =
+        serde_json::from_slice(&std::fs::read(&p24_update_manifest)?)?;
+    p24_update_changed["version"] = json!("2.0.0");
+    std::fs::write(
+        &p24_update_manifest,
+        serde_json::to_vec(&p24_update_changed)?,
+    )?;
+    let p24_update_candidate =
+        rho_extension_runtime::discover_workspace_plugins(&p24_update_project)?
+            .context("installed P2-4 Update candidate discovery is missing")?
+            .plugins
+            .into_iter()
+            .find(|plugin| plugin.manifest.id.as_str() == "org.yulab.rho.phase2-update-smoke")
+            .context("installed P2-4 Update candidate is missing")?;
+    let p24_updated = p24_update_registry.request_update(
+        &p24_update_context,
+        &crate::workspace_plugins::WorkspacePluginUpdateInput {
+            plugin_id: "org.yulab.rho.phase2-update-smoke".to_string(),
+            expected_old_digest: p24_update_old_digest.clone(),
+            candidate_digest: p24_update_candidate.digest.to_string(),
+            expected_project_revision: p24_update_context.project_revision,
+        },
+        &mut p24_store,
+    )?;
+    let p24_updated_state = PluginLifecycleQueryService::new(&p24_store)
+        .get_state(&p24_update_root, "org.yulab.rho.phase2-update-smoke")?
+        .context("installed P2-4 Update terminal state is missing")?;
+    ensure!(
+        p24_updated.status == "enabled"
+            && p24_updated_state.accepted_digest.as_deref()
+                == Some(p24_update_candidate.digest.as_str())
+            && p24_updated_state.rollback_digest.as_deref() == Some(p24_update_old_digest.as_str())
+            && p24_updated_state.pending_digest.is_none()
+            && p24_updated_state.last_activation_generation
+                > p24_update_old.last_activation_generation
+            && p24_updated_state.last_host_session_id != p24_update_old.last_host_session_id,
+        "installed P2-4 exact Update did not commit fresh pointer/runtime truth"
+    );
     let p24_retention_project = p24_root.path().join("retention-project");
     let p24_retention_plugin = p24_retention_project.join(".rho/plugins/retention-smoke");
     std::fs::create_dir_all(p24_retention_plugin.join("dist"))?;
@@ -14953,6 +15039,10 @@ fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Valu
     report["purge_tombstone_terminal"] = json!(true);
     report["purge_sibling_project_preserved"] = json!(true);
     report["purge_replay_idempotent"] = json!(true);
+    report["update_local_candidate_only"] = json!(true);
+    report["update_expected_old_cas"] = json!(true);
+    report["update_pointer_durable"] = json!(true);
+    report["update_generation_fresh"] = json!(true);
     Ok(report)
 }
 
@@ -15305,6 +15395,7 @@ fn main() {
             commands::plugins::request_workspace_plugin_enable,
             commands::plugins::disable_workspace_plugin,
             commands::plugins::retry_workspace_plugin,
+            commands::plugins::accept_workspace_plugin_update,
             commands::plugins::uninstall_workspace_plugin,
             commands::plugins::restore_workspace_plugin,
             commands::plugins::list_plugin_permission_requests,
