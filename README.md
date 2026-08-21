@@ -55,6 +55,37 @@ for development review only. Verify the release SHA-256 and see the
 and the [macOS support specification](docs/plans/active-2026-08-05-macos-arm64-support-spec.md)
 for platform-specific status and prerequisites.
 
+### Source install on other Linux systems
+
+Linux systems without an official installer (distributions other than the
+AppImage/deb targets, or architectures such as arm64) can build and install
+from source with `scripts/install-from-source.sh`:
+
+```bash
+scripts/install-from-source.sh --prefix /usr/local
+```
+
+The script is a diagnostics-driven helper, not an autotools build: it checks
+the toolchain and system libraries, **reports** every missing requirement
+together with the package that provides it on your distribution (apt, dnf,
+pacman, zypper, apk; unknown distributions get a generic report and a PR
+invitation), then builds `rho-desktop` from this source tree and installs it
+under the prefix. It never installs packages and never escalates privileges;
+when the prefix is not writable it tells you the exact `sudo` or
+`--prefix` command to use. Run `scripts/install-from-source.sh --help` for all
+options, or `--json` for machine-readable diagnostics.
+
+Rho's platform support follows the Ark R sidecar manifest
+(`runtime/ark.json`): `linux-x64` and `linux-arm64` are both wired through
+`scripts/bootstrap-ark-linux.sh` and fully supported by the source install
+path, and BSD is not supported because Ark has no BSD build. Source-installed
+binaries are not covered by the official auto-update channel. This path is
+explicitly a fallback for unsupported platforms and a collaboration surface
+for adding new platform support via PR; see
+[docs/plans/active-2026-08-20-source-install-diagnostic-script-spec.md](docs/plans/active-2026-08-20-source-install-diagnostic-script-spec.md).
+
+
+
 ## Quick Start
 
 1. Launch Rho and open an R project directory.

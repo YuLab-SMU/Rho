@@ -86,6 +86,10 @@ jobs:
           scripts/bootstrap-ark-linux.sh
           scripts/test-bootstrap-ark-linux.sh
 
+      - name: Run source-install diagnostics fixtures (S1)
+        shell: bash
+        run: scripts/test-install-from-source.sh
+
       - name: Build the AppImage (LIN2)
         id: build
         shell: bash

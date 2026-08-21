@@ -89,6 +89,47 @@ Stop and amend/review the contract before continuing when:
 - For project skill discovery, validate the `.rho/skills` root itself, not just manifest and referenced files.
   Checking only `manifest.json` and relative entries still leaves a hole if `.rho` or `.rho/skills` is a symlink into content outside the project root.
 
+## Building Rho from source (source install)
+
+Rho ships official installers for Windows (NSIS), macOS arm64 (DMG) and
+Linux x86-64 (AppImage + deb). For Linux systems without an official
+installer, use `scripts/install-from-source.sh` — a diagnostics-driven
+build-and-install helper. Platform support follows the Ark R sidecar manifest
+`runtime/ark.json`: `linux-x64` and `linux-arm64` are both fully wired
+(`scripts/bootstrap-ark-linux.sh` stages `binaries/ark-x86_64-unknown-linux-gnu`
+or `binaries/ark-aarch64-unknown-linux-gnu`); BSD is unsupported because Ark
+has no BSD build.
+
+When asked to compile/install Rho from source on an unfamiliar machine, the
+AI workflow is:
+
+1. Run `scripts/install-from-source.sh --json` first. The script detects the
+   distro (`/etc/os-release`), checks toolchain commands (cargo/rustup, node,
+   curl, unzip, file, Rscript) and system libraries via `pkg-config`
+   (`webkit2gtk-4.1`, `gtk+-3.0`), and reports every missing requirement with
+   the distro-specific package command.
+2. NEVER auto-install packages or escalate privileges on the user's behalf.
+   Present the reported `suggest` commands and let the user (or their chosen
+   package manager invocation) install them. The script deliberately has no
+   `--install-deps`; this is a hard boundary.
+3. Re-run after dependencies are installed. Then the script bootstraps Ark,
+   runs `cargo build --release -p rho-desktop`, and installs the binary under
+   the prefix (`/usr/local` by default; `--prefix` overrides, `--build-only`
+   skips install). Exit codes: 0 ok; 1 usage/unsupported system; 2 missing
+   deps; 3 build failed; 4 install failed (prefix not writable).
+4. On an unknown distribution, the report prints a "no package-name map
+   yet ... open a PR" invitation. Adding a distro map means extending the
+   `RHO_PKG_*` case in `scripts/install-from-source.sh`; adding a platform
+   means wiring a new `runtime/ark.json` entry through
+   `scripts/bootstrap-ark-linux.sh` (arch detection, sidecar name, ELF check)
+   and `scripts/prepare-runtime-resources.sh` — both already handle
+   x86-64/aarch64 and are the template.
+5. `--skip-ark` opts out of the Ark bootstrap (R sessions will not work).
+   Linux is supported on exactly `x86_64` and `arm64`; BSD and any other
+   architecture are rejected with exit 1.
+
+Authoritative contract: `docs/plans/active-2026-08-20-source-install-diagnostic-script-spec.md`.
+
 ## Windows installer packaging
 
 Trigger phrases: "打包一下安装包", "打包安装包", "build installer", "package the installer"
