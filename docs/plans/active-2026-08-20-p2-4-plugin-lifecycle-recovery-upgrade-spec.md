@@ -1186,16 +1186,23 @@ uses the same GNU Rust host, Rtools45 path, R 4.6.1/jsonlite setup, ephemeral
 updater key, checksum output and cleanup assertions. It has no `needs` edge to
 the source lane; the workflow succeeds only when both independent lanes pass.
 
-Cache ownership becomes lane-specific under a v2 key. Source and installed
+The first v2 migration run then showed that restoring the historical 1.99 GB
+full-target Windows cache took more than nine minutes in all three Windows
+lanes. That bridge is therefore rejected rather than normalized as a permanent
+cost. Non-Windows caching remains unchanged. Windows cache ownership moves to
+fresh lane-specific v3 keys: source stores only Cargo inputs plus
+`target/debug/`, installed stores only Cargo inputs plus `target/release/`, and
+neither restores the rejected v1/v2 full-target archive. Source and installed
 lanes cannot race to publish incompatible debug/release contents under one
-immutable key, while a bounded v1 same-OS/same-toolchain/Cargo.lock restore
-bridge reuses the already reviewed cache during migration. Permissions remain
-`contents: read`; no secret, artifact upload, signing service, release,
-publication or deployment authority is added. The repair changes CI topology
-and deterministic contracts only, with no runtime, schema, command, version or
-`NEWS.md` impact. Acceptance requires positive/negative workflow-contract
-tests and a fresh exact-head Ready run whose seven required lanes pass; measured
-critical-path improvement is recorded without weakening any gate.
+immutable key.
+
+Permissions remain `contents: read`; no secret, artifact upload, signing
+service, release, publication or deployment authority is added. The repair
+changes CI topology and deterministic contracts only, with no runtime, schema,
+command, version or `NEWS.md` impact. Acceptance requires positive/negative
+workflow-contract tests and a fresh exact-head Ready run whose seven required
+lanes pass; measured critical-path improvement is recorded without weakening
+any gate.
 
 ### P2-4A local checkpoint — 2026-08-20
 

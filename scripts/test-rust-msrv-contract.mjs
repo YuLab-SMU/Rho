@@ -25,35 +25,54 @@ const REQUIRED_CACHE_PATHS = [
   "target/",
 ];
 
-function validateCargoCache(workflow, { laneSeparated = false } = {}) {
+function validateCargoCache(workflow) {
   if (!workflow.includes("uses: actions/cache@v4")) {
     fail("Rust CI must use the reviewed official actions/cache major");
   }
   for (const cachePath of REQUIRED_CACHE_PATHS) {
     if (!workflow.includes(cachePath)) fail(`Rust CI cache is missing ${cachePath}`);
   }
-  const cacheKey = laneSeparated
-    ? "rho-rust-v2-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ matrix.lane }}-${{ hashFiles('Cargo.lock') }}"
-    : "rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ hashFiles('Cargo.lock') }}";
+  const cacheKey = "rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ hashFiles('Cargo.lock') }}";
   if (!workflow.includes(cacheKey)) {
     fail("Rust CI cache key must isolate schema, OS, explicit toolchain, and Cargo.lock");
   }
-  const restoreKey = laneSeparated
-    ? "rho-rust-v2-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ matrix.lane }}-"
-    : "rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-";
+  const restoreKey = "rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-";
   if (!workflow.includes(restoreKey)) {
     fail("Rust CI restore key must remain inside the same OS and toolchain");
   }
-  if (laneSeparated) {
-    for (const bridge of [
-      "rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ hashFiles('Cargo.lock') }}",
-      "rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-",
-    ]) {
-      if (!workflow.includes(bridge)) fail(`Lane-separated cache lost v1 migration bridge: ${bridge}`);
-    }
-  }
   if (!/^      CARGO_INCREMENTAL: "0"$/m.test(workflow)) {
     fail("Rust CI must disable incremental compilation for the shared build cache");
+  }
+}
+
+function validateCompatibilityCargoCaches(workflow) {
+  validateCargoCache(workflow);
+  for (const marker of [
+    "Restore non-Windows Cargo dependency and build cache",
+    "if: runner.os != 'Windows'",
+    "Restore Windows source build cache",
+    "if: runner.os == 'Windows' && matrix.lane == 'source'",
+    "target/debug/",
+    "rho-rust-v3-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-source-${{ hashFiles('Cargo.lock') }}",
+    "Restore Windows installed build cache",
+    "if: runner.os == 'Windows' && matrix.lane == 'installed'",
+    "target/release/",
+    "rho-rust-v3-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-installed-${{ hashFiles('Cargo.lock') }}",
+  ]) {
+    if (!workflow.includes(marker)) fail(`Rust compatibility cache topology lost ${marker}`);
+  }
+  if (/rho-rust-v2-/.test(workflow)) {
+    fail("Windows compatibility must not restore the rejected full-target v2 cache");
+  }
+  const sourceStart = workflow.indexOf("- name: Restore Windows source build cache");
+  const installedStart = workflow.indexOf("- name: Restore Windows installed build cache");
+  const cacheEnd = workflow.indexOf("- name: Stage pinned macOS Ark sidecar", installedStart);
+  const sourceCache = workflow.slice(sourceStart, installedStart);
+  const installedCache = workflow.slice(installedStart, cacheEnd);
+  for (const [lane, cache] of [["source", sourceCache], ["installed", installedCache]]) {
+    if (/^\s+target\/$/m.test(cache) || /rho-rust-v[12]-/.test(cache)) {
+      fail(`Windows ${lane} cache regressed to a full or historical target archive`);
+    }
   }
 }
 
@@ -234,7 +253,7 @@ export function validateCompatibilityWorkflow(text) {
       || !/rm -rf -- "\$key_dir" "\$extract_dir"/.test(workflow)) {
     fail("Installed-app acceptance must prove Windows, macOS, and Linux cleanup");
   }
-  validateCargoCache(workflow, { laneSeparated: true });
+  validateCompatibilityCargoCaches(workflow);
 }
 
 export function validateFastWorkflow(text) {
@@ -458,18 +477,42 @@ ${entries}
       RUSTUP_TOOLCHAIN: \${{ matrix.rustup_toolchain }}
       CARGO_INCREMENTAL: "0"
     steps:
-      - uses: actions/cache@v4
+      - name: Restore non-Windows Cargo dependency and build cache
+        if: runner.os != 'Windows'
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: rho-rust-v2-\${{ runner.os }}-\${{ env.RUSTUP_TOOLCHAIN }}-\${{ matrix.lane }}-\${{ hashFiles('Cargo.lock') }}
+          key: rho-rust-v1-\${{ runner.os }}-\${{ env.RUSTUP_TOOLCHAIN }}-\${{ hashFiles('Cargo.lock') }}
           restore-keys: |
-            rho-rust-v2-\${{ runner.os }}-\${{ env.RUSTUP_TOOLCHAIN }}-\${{ matrix.lane }}-
-            rho-rust-v1-\${{ runner.os }}-\${{ env.RUSTUP_TOOLCHAIN }}-\${{ hashFiles('Cargo.lock') }}
             rho-rust-v1-\${{ runner.os }}-\${{ env.RUSTUP_TOOLCHAIN }}-
+      - name: Restore Windows source build cache
+        if: runner.os == 'Windows' && matrix.lane == 'source'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/debug/
+          key: rho-rust-v3-\${{ runner.os }}-\${{ env.RUSTUP_TOOLCHAIN }}-source-\${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            rho-rust-v3-\${{ runner.os }}-\${{ env.RUSTUP_TOOLCHAIN }}-source-
+      - name: Restore Windows installed build cache
+        if: runner.os == 'Windows' && matrix.lane == 'installed'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/release/
+          key: rho-rust-v3-\${{ runner.os }}-\${{ env.RUSTUP_TOOLCHAIN }}-installed-\${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            rho-rust-v3-\${{ runner.os }}-\${{ env.RUSTUP_TOOLCHAIN }}-installed-
       - if: runner.os == 'Windows'
         run: echo "RHO_RTOOLS_BIN=C:\\rtools45\\x86_64-w64-mingw32.static.posix\\bin"
       - if: runner.os == 'macOS'
@@ -621,11 +664,11 @@ function runSelfTests() {
   assert.throws(() => validateCompatibilityWorkflow(workflow.replace("ready_for_review", "converted_to_draft")), /Ready transition/);
   assert.throws(() => validateCompatibilityWorkflow(workflow.replace("  workflow_dispatch:\n", "")), /manual dispatch/);
   assert.throws(() => validateCompatibilityWorkflow(workflow.replace("draft == false", "draft == true")), /gated/);
-  assert.throws(() => validateCompatibilityWorkflow(workflow.replace("actions/cache@v4", "actions/cache@v3")), /cache/);
+  assert.throws(() => validateCompatibilityWorkflow(workflow.replaceAll("actions/cache@v4", "actions/cache@v3")), /cache/);
   assert.throws(() => validateCompatibilityWorkflow(workflow.replace("hashFiles('Cargo.lock')", "github.sha")), /cache key/);
   assert.throws(
     () => validateCompatibilityWorkflow(workflow.replace("matrix.lane == 'installed'", "matrix.lane == 'source'")),
-    /Windows installed acceptance/,
+    /installed/,
   );
   assert.throws(
     () => validateCompatibilityWorkflow(workflow.replace(
@@ -636,10 +679,10 @@ function runSelfTests() {
   );
   assert.throws(
     () => validateCompatibilityWorkflow(workflow.replace(
-      "rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ hashFiles('Cargo.lock') }}",
-      "rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-stale",
+      "target/release/",
+      "target/full-release/",
     )),
-    /migration bridge/,
+    /cache topology/,
   );
 
   const fastWorkflow = fixtureFastWorkflow();

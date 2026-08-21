@@ -36,7 +36,8 @@ export function validatePhase2FinalContract(value) {
     "Build, extract and smoke unsigned Linux AppImage",
     "lane: installed",
     "matrix.lane == 'installed'",
-    "rho-rust-v2-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ matrix.lane }}",
+    "rho-rust-v3-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-source",
+    "rho-rust-v3-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-installed",
     "RHO_INTERNAL_EXTENSION_RUNTIME=legacy",
     "--smoke-test",
   ]) assert.ok(value.compatibility.includes(marker), `Phase 2 installed gate lost ${marker}`);
@@ -96,7 +97,8 @@ jobs:
         if: matrix.lane == 'installed'
       - name: Build, mount and smoke unsigned macOS app
       - name: Build, extract and smoke unsigned Linux AppImage
-      - run: echo 'rho-rust-v2-\${{ runner.os }}-\${{ env.RUSTUP_TOOLCHAIN }}-\${{ matrix.lane }}'
+      - run: echo 'rho-rust-v3-\${{ runner.os }}-\${{ env.RUSTUP_TOOLCHAIN }}-source'
+      - run: echo 'rho-rust-v3-\${{ runner.os }}-\${{ env.RUSTUP_TOOLCHAIN }}-installed'
       - run: RHO_INTERNAL_EXTENSION_RUNTIME=legacy rho-desktop --smoke-test`,
     installed: '"durable_first_enable": true\nreport["recoverable_uninstall"] = json!(true)\nreport["exact_trash_purged"] = json!(true)\nreport["update_expected_old_cas"] = json!(true)\nreport["rollback_restart_cached"] = json!(true)\nreport["recovery_project_revision_once"] = json!(true)',
     workspace: 'version = "0.4.1-dev.11"',

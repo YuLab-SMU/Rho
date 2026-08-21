@@ -376,7 +376,8 @@ jobs:
           }
           cargo -vV
 
-      - name: Restore Cargo dependency and build cache
+      - name: Restore non-Windows Cargo dependency and build cache
+        if: runner.os != 'Windows'
         uses: actions/cache@v4
         with:
           path: |
@@ -384,11 +385,35 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: rho-rust-v2-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ matrix.lane }}-${{ hashFiles('Cargo.lock') }}
+          key: rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
-            rho-rust-v2-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ matrix.lane }}-
-            rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-${{ hashFiles('Cargo.lock') }}
             rho-rust-v1-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-
+
+      - name: Restore Windows source build cache
+        if: runner.os == 'Windows' && matrix.lane == 'source'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/debug/
+          key: rho-rust-v3-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-source-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            rho-rust-v3-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-source-
+
+      - name: Restore Windows installed build cache
+        if: runner.os == 'Windows' && matrix.lane == 'installed'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/release/
+          key: rho-rust-v3-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-installed-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            rho-rust-v3-${{ runner.os }}-${{ env.RUSTUP_TOOLCHAIN }}-installed-
 
       - name: Stage pinned macOS Ark sidecar for Tauri compilation
         if: runner.os == 'macOS'
