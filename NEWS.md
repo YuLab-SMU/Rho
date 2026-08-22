@@ -4,6 +4,27 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.1-dev.13 - 2026-08-22
+
+### Surface scaling and accessibility hardening
+
+- Studio Stacks now keep only the selected Surface renderer mounted, while
+  retaining an arbitrary number of tabs and the same durable bindings. Vibe
+  live Surfaces use focus-safe viewport leases so large documents release
+  offscreen Monaco/plugin projections and restore them from current state.
+- Surface instances have explicit Pause/Resume controls and truthful paused,
+  failed, and unavailable projections. Pausing keeps the Resource/Runtime/view
+  binding but releases that instance's derived plugin document and queued UI
+  events. Plugin document caches are exact-route LRU with entry and byte
+  budgets; event admission remains bounded and fair across repeated instances.
+- Resize boundaries are keyboard-operable ARIA separators with Arrow, Page,
+  Home, and End controls. The shell now strengthens visible focus, reduced
+  motion, forced-colour, high-zoom, logical-direction, natural RTL/Unicode, and
+  long-text behavior without introducing a fixed grid or instance limit.
+- The checked-in stress baseline exercises more than 100 repeatable Surface
+  instances, a 96-view Stack, 184+ multilingual Vibe blocks, coalesced
+  background invalidations, cache eviction, and a full 64-event plugin queue.
+
 ## 0.4.1-dev.12 - 2026-08-22
 
 ### Rho Surface Runtime production cutover

@@ -1,7 +1,8 @@
 # Rho Surface Runtime Full Construction Plan
 
-Status: active complete construction program; Wave 12 passed its continuous
-gate and Wave 13 is the current integration package
+Status: implemented complete construction program; Waves 0-13 passed their
+local continuous gates and the `0.4.1-dev.13` local candidate received an
+explicit release decision
 
 Date: 2026-08-21
 
@@ -13,16 +14,17 @@ own focused evidence, contract review, documentation reconciliation, and
 scoped commit. After a wave passes its continuous gate, the next dependency is
 activated automatically under the same explicit authorization.
 
-Current integration package: **Wave 13 — hardening and release handoff**.
+Final integration package: **Wave 13 — hardening and release handoff**, locally
+accepted 2026-08-22.
 
-Wave 13 acceptance owner: this active contract together with the Surface,
+Wave 13 acceptance owner: this implemented contract together with the Surface,
 Studio, Vibe, payload-lease, broker-event, accessibility, installed-candidate,
 release and application-version contracts. Hardening may optimize or suspend
 new-shell projections, but it cannot discard durable bindings, infer execution
 authority from visibility, or reintroduce fixed-layout compatibility code.
 
 Owning design:
-`docs/design/proposed-2026-08-21-plugin-native-surface-runtime-design.md`
+`docs/design/accepted-2026-08-21-plugin-native-surface-runtime-design.md`
 
 Change class: D3 shared UI/runtime/plugin architecture. Implementation risk is
 R3 because layout persistence, project identity, plugin lifecycle, runtime
@@ -1266,8 +1268,92 @@ Deliver:
 - run candidate-specific installed acceptance and release governance only after
   local product acceptance.
 
+Implementation contract:
+
+- Stack mounts only its active instance. Vibe live-Surface NodeViews use a
+  focus-safe viewport lease: an offscreen projection releases its React/Monaco/
+  plugin-document payload after a grace period and restores from the same
+  durable Surface binding when it returns. This presentation lease never writes
+  lifecycle, layout, Page or execution state and never suspends a focused view;
+- explicit Pause/Resume remains a user-owned Surface lifecycle transaction.
+  Pausing removes the heavy renderer and releases the exact instance's cached
+  plugin document and queued events; resuming re-renders from the unchanged
+  binding and current exact plugin route. Failed and placeholder instances show
+  distinct non-executing degraded states rather than mounting stale content;
+- plugin declarative-document cache is exact-route LRU, bounded by both encoded
+  bytes and entry count. Eviction drops only derived payload/provenance, never
+  durable plugin, project, Page, Scene, Resource or Runtime truth. The next
+  visible read revalidates the current route and reconstructs the document;
+- background invalidations remain coalesced per external store and plugin event
+  admission retains the bounded fair per-plugin/per-instance queue. Stress
+  fixtures exercise the full Surface instance budget, large Stack/Page shapes,
+  eviction, event floods and viewport reclamation without imposing a geometric
+  grid maximum;
+- every resize boundary is a named separator with orientation and current
+  logical value. Arrow/Page/Home/End keyboard edits use the same single durable
+  transaction as pointer release. DOM and CSS preserve document order at high
+  zoom, use logical-direction properties, reject explicit bidi controls at
+  contracts, expose live status text, and suppress nonessential motion under
+  the platform preference.
+
+Acceptance budgets are measured from the checked-in stress fixture on the
+local release machine, then stored with the evidence. They guard relative
+regression and bounded mounting/cache counts; they are not a product-visible
+limit on Scene geometry, Page composition or repeatable instances.
+
 This wave does not reintroduce compatibility code. Defects are repaired in the
 new contracts or adapters.
+
+Wave 13 completed locally on 2026-08-22:
+
+- Studio Stacks now mount only their active Surface while retaining arbitrary
+  tabs and durable bindings. Vibe live-Surface NodeViews use focus-safe
+  800-logical-pixel viewport leases and a 12-second release grace; returning
+  views reconstruct from the same current binding without writing lifecycle,
+  Scene or Page state;
+- revisioned Pause/Resume exposes distinct suspended, failed and placeholder
+  projections. Successful Pause/Close releases only that instance's derived
+  plugin document and queued UI events. The exact-route declarative-document
+  cache is bounded to 16 entries and 8 MiB with LRU reclamation; plugin event
+  admission remains a fair 64-event plugin/8-event instance queue;
+- resize boundaries expose ARIA separator orientation/value and Arrow, Page,
+  Home and End editing through the existing single Studio CAS. Visible focus,
+  reduced motion, forced colours, high zoom, long-text wrapping, logical CSS
+  direction and natural Arabic/Hebrew/Chinese text are supported; explicit
+  bidi override controls remain rejected at the Rust contract boundary;
+- the deterministic stress fixture contains more than 100 Surface instances,
+  one 96-instance Stack and at least 184 multilingual Vibe blocks. Only one
+  Stack renderer mounts; at 200% device scale the real-Chrome Page baseline
+  reached ready in 1,905 ms with 24 viewport projections released. A 128-event
+  invalidation flood produces one trailing Surface refresh, and the full
+  64-event plugin queue remains bounded and round-robin;
+- `npm --prefix desktop run rsr:check` passed strict TypeScript/ESLint, exact
+  generated contracts/assets, 41 Vitest cases, production build, cutover
+  inventory and standard plus high-zoom stress browser smoke. All 30 remaining
+  Node source-contract scripts passed. `cargo test --workspace --locked`
+  passed the complete workspace; Desktop ran 322 tests with 321 passing and
+  the opt-in macOS Keychain test ignored. `cargo fmt --all -- --check` and
+  strict Clippy for the changed `rho-ui-contract`/`rho-extension-runtime`
+  crates passed. Broad Desktop Clippy still reports its pre-existing 24
+  production/28 test style findings and is not claimed;
+- application metadata and `NEWS.md` are synchronized at `0.4.1-dev.13`; R
+  package contracts and versions are unchanged. The exact executable is
+  `/Users/xiayh/Projects/Rho/target/debug/rho-desktop`, 152,096,272 bytes,
+  SHA-256 `061a86974bc25c350f5a85a37da59174dc5dd4e543d7125c7699c047709c9b91`,
+  embedding `assets/index-kEuWcdi4.js`;
+- a fresh local-only macOS `Rho.app` was built with updater-artifact creation
+  explicitly disabled, because no release private key was supplied. Its arm64
+  executable has the exact same SHA-256 as the owner-named debug binary and
+  reports version `0.4.1-dev.13`. The real bundled window restored
+  `workspace-plugin-minimal`, showed Workspace R ready, exercised Studio
+  Console/Agent, Pause/Resume payload release and the revisioned Vibe Page;
+- contract review found no ownership, schema, approval, persistence, project
+  isolation or authority deviation. The local development candidate is
+  accepted for continued product work. Public release is **NO-GO**: it is a
+  debug, linker-ad-hoc-signed bundle whose strict code-signature verification
+  fails, with no notarization, signed updater artifacts, cross-platform exact
+  candidate or human public-release acceptance. No tag, Draft, installer,
+  update manifest or publication was created.
 
 ## Dependency Graph
 

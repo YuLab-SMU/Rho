@@ -813,6 +813,46 @@ describe("UI Kernel transport and external store", () => {
     stop();
   });
 
+  it("coalesces a Surface invalidation flood into one trailing refresh", async () => {
+    const base = createMockUiKernelTransport();
+    const first = generatedSurfaces();
+    const second = generatedSurfaces();
+    (first as { snapshot_revision: number }).snapshot_revision = 40;
+    (second as { snapshot_revision: number }).snapshot_revision = 41;
+
+    let resolveFirst: ((snapshot: SurfaceRuntimeSnapshot) => void) | undefined;
+    const firstLoad = new Promise<SurfaceRuntimeSnapshot>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const loadSurfaces = vi
+      .fn<() => Promise<SurfaceRuntimeSnapshot>>()
+      .mockImplementationOnce(() => firstLoad)
+      .mockResolvedValueOnce(second);
+    let invalidate: () => void = () => undefined;
+    const transport = {
+      ...base,
+      loadSurfaces,
+      subscribeSurfacesInvalidated(listener: () => void) {
+        invalidate = listener;
+        return () => undefined;
+      },
+    };
+    const store = new SurfaceExternalStore(transport);
+    const stop = store.subscribe(() => undefined);
+
+    await vi.waitFor(() => expect(loadSurfaces).toHaveBeenCalledTimes(1));
+    for (let index = 0; index < 128; index += 1) invalidate();
+    resolveFirst?.(first);
+    await vi.waitFor(() => expect(loadSurfaces).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => {
+      const state = store.getSnapshot();
+      expect(state.status).toBe("ready");
+      if (state.status === "ready") expect(state.snapshot.snapshot_revision).toBe(41);
+    });
+    expect(loadSurfaces).toHaveBeenCalledTimes(2);
+    stop();
+  });
+
   it("keeps Studio edits stale-safe, undoable, and reconciled with Surface availability", async () => {
     const transport = createMockUiKernelTransport();
     const store = new StudioExternalStore(transport);

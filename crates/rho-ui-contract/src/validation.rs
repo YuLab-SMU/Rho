@@ -328,6 +328,13 @@ mod tests {
     }
 
     #[test]
+    fn labels_accept_natural_rtl_and_multilingual_text_without_direction_overrides() {
+        for value in ["مرحبا بالعالم", "שלום עולם", "分析结果 🧬"] {
+            assert!(validate_label(value, "label").is_ok(), "{value:?}");
+        }
+    }
+
+    #[test]
     fn bounded_json_rejects_depth_and_byte_overflow() {
         let mut deep = Value::Null;
         for _ in 0..=MAX_BOUNDED_JSON_DEPTH {

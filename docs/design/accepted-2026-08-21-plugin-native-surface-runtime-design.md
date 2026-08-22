@@ -1,7 +1,8 @@
 # Plugin-Native Surface Runtime
 
-Status: proposed durable architecture; implementation authority exists only
-through `docs/plans/active-2026-08-21-rsr-full-construction-plan.md`
+Status: accepted durable architecture; the complete local implementation and
+evidence are recorded in
+`docs/plans/implemented-2026-08-21-rsr-full-construction-plan.md`
 
 Date: 2026-08-21
 
@@ -9,9 +10,8 @@ Change class: D3 because this introduces a shared UI contribution protocol,
 command-routing boundary, focus model, and durable layout schema. Future
 implementation risk is R3 because plugin lifecycle, project switching,
 revisioned persistence, focus authority, and trusted security surfaces meet at
-this boundary. This document remains the architecture source; the active
-construction contract records implementation authorization, sequencing, and
-accepted evidence.
+this boundary. This document remains the adopted architecture source; the
+implemented construction contract records sequencing and accepted evidence.
 
 Working name: **Rho Surface Runtime (RSR)**.
 
@@ -766,9 +766,9 @@ The first component remains **Check project**, because its rule engine and
 result UI have clear typed boundaries and low ambient authority. RSR should be
 proven with one real vertical component rather than an empty framework rewrite.
 
-The complete continuous program is implemented through the owner-authorized
-active contract
-`docs/plans/active-2026-08-21-rsr-full-construction-plan.md`. Its dependency
+The complete continuous program was implemented through the owner-authorized
+contract
+`docs/plans/implemented-2026-08-21-rsr-full-construction-plan.md`. Its dependency
 order is new React/Vite shell, pure RSR contracts, Command/Context kernel,
 Surface instances, Studio container, Runtime/Resource registries, durable UI
 profile, workspace-plugin Surfaces, Check project, ProseMirror Vibe, remaining

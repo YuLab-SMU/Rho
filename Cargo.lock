@@ -4054,7 +4054,7 @@ dependencies = [
 
 [[package]]
 name = "rho-agent-transport"
-version = "0.4.1-dev.12"
+version = "0.4.1-dev.13"
 dependencies = [
  "rand 0.9.5",
  "rho-protocol",
@@ -4065,7 +4065,7 @@ dependencies = [
 
 [[package]]
 name = "rho-cli"
-version = "0.4.1-dev.12"
+version = "0.4.1-dev.13"
 dependencies = [
  "anyhow",
  "clap",
@@ -4080,7 +4080,7 @@ dependencies = [
 
 [[package]]
 name = "rho-core"
-version = "0.4.1-dev.12"
+version = "0.4.1-dev.13"
 dependencies = [
  "rho-protocol",
  "serde",
@@ -4089,7 +4089,7 @@ dependencies = [
 
 [[package]]
 name = "rho-desktop"
-version = "0.4.1-dev.12"
+version = "0.4.1-dev.13"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -4125,7 +4125,7 @@ dependencies = [
 
 [[package]]
 name = "rho-extension-runtime"
-version = "0.4.1-dev.12"
+version = "0.4.1-dev.13"
 dependencies = [
  "arc-swap",
  "petgraph",
@@ -4146,7 +4146,7 @@ dependencies = [
 
 [[package]]
 name = "rho-kernel"
-version = "0.4.1-dev.12"
+version = "0.4.1-dev.13"
 dependencies = [
  "anyhow",
  "jet_core",
@@ -4158,7 +4158,7 @@ dependencies = [
 
 [[package]]
 name = "rho-mcp"
-version = "0.4.1-dev.12"
+version = "0.4.1-dev.13"
 dependencies = [
  "anyhow",
  "clap",
@@ -4171,7 +4171,7 @@ dependencies = [
 
 [[package]]
 name = "rho-plugin-dev"
-version = "0.4.1-dev.12"
+version = "0.4.1-dev.13"
 dependencies = [
  "rho-extension-runtime",
  "rho-server",
@@ -4184,7 +4184,7 @@ dependencies = [
 
 [[package]]
 name = "rho-protocol"
-version = "0.4.1-dev.12"
+version = "0.4.1-dev.13"
 dependencies = [
  "chrono",
  "serde",
@@ -4195,7 +4195,7 @@ dependencies = [
 
 [[package]]
 name = "rho-server"
-version = "0.4.1-dev.12"
+version = "0.4.1-dev.13"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -4220,7 +4220,7 @@ dependencies = [
 
 [[package]]
 name = "rho-store"
-version = "0.4.1-dev.12"
+version = "0.4.1-dev.13"
 dependencies = [
  "chrono",
  "rho-protocol",
@@ -4236,7 +4236,7 @@ dependencies = [
 
 [[package]]
 name = "rho-ui-contract"
-version = "0.4.1-dev.12"
+version = "0.4.1-dev.13"
 dependencies = [
  "proptest",
  "serde",
@@ -4246,7 +4246,7 @@ dependencies = [
 
 [[package]]
 name = "rho-updater-verifier"
-version = "0.4.1-dev.12"
+version = "0.4.1-dev.13"
 dependencies = [
  "anyhow",
  "base64 0.22.1",

@@ -373,6 +373,35 @@ mod tests {
     }
 
     #[test]
+    fn bounds_a_full_many_instance_plugin_flood() {
+        let mut queue = SurfaceEventQueueV1::new(route()).unwrap();
+        queue.submit(event("active", "instance.active")).unwrap();
+        for instance in 0..(MAX_SURFACE_EVENTS_PER_PLUGIN / MAX_SURFACE_EVENTS_PER_INSTANCE) {
+            for offset in 0..MAX_SURFACE_EVENTS_PER_INSTANCE {
+                queue
+                    .submit(event(
+                        &format!("queued-{instance}-{offset}"),
+                        &format!("instance.{instance}"),
+                    ))
+                    .unwrap();
+            }
+        }
+        assert_eq!(queue.queued_len(), MAX_SURFACE_EVENTS_PER_PLUGIN);
+        assert_eq!(
+            queue.submit(event("overflow-plugin", "instance.overflow")),
+            Err(SurfaceEventQueueError::PluginQueueFull)
+        );
+        for index in 0..8 {
+            let active = queue.active().unwrap().event_id.clone();
+            queue.finish_active(&active).unwrap();
+            assert_eq!(
+                queue.active().unwrap().event.instance_id.as_str(),
+                format!("instance.{index}")
+            );
+        }
+    }
+
+    #[test]
     fn cancellation_and_revoke_recover_the_single_guest_lane() {
         let mut queue = SurfaceEventQueueV1::new(route()).unwrap();
         queue.submit(event("a1", "instance.a")).unwrap();

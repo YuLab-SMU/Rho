@@ -59,6 +59,17 @@ describe("Studio foundation app", () => {
     expect(document.documentElement.dataset.rsrReady).toBe("true");
   });
 
+  it("keeps a large repeatable-instance Stack bounded to one mounted renderer", async () => {
+    const { container } = await renderApp(createMockUiKernelTransport("?stress=large"));
+    const stack = container.querySelector<HTMLElement>("[data-node-id='node:stress-stack']")!;
+    expect(stack.querySelectorAll("[role='tab']")).toHaveLength(96);
+    expect(stack.querySelectorAll("[data-surface-id='rho.surface-playground']")).toHaveLength(1);
+    const evidence = JSON.parse(
+      container.querySelector("#rsrPreviewEvidence")?.textContent ?? "{}",
+    ) as { surfaceInstanceCount?: number };
+    expect(evidence.surfaceInstanceCount).toBeGreaterThanOrEqual(100);
+  });
+
   it("switches to a document-composed Vibe Page without carrying the inspector chrome", async () => {
     const { container } = await renderApp();
     const vibe = [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
@@ -200,6 +211,11 @@ describe("Studio foundation app", () => {
     });
     vi.spyOn(before, "getBoundingClientRect").mockReturnValue(rect(0, 700));
     vi.spyOn(after, "getBoundingClientRect").mockReturnValue(rect(700, 300));
+    await act(async () => handle.focus());
+    expect(handle.getAttribute("role")).toBe("separator");
+    expect(handle.getAttribute("aria-orientation")).toBe("vertical");
+    expect(handle.getAttribute("aria-valuemax")).toBe("944");
+    expect(handle.getAttribute("aria-valuenow")).toBe("700");
     const pointer = (type: string, clientX: number) => {
       const event = new MouseEvent(type, { bubbles: true, clientX });
       Object.defineProperty(event, "pointerId", { value: 7 });
@@ -223,14 +239,24 @@ describe("Studio foundation app", () => {
       await settle();
     });
     expect(apply).toHaveBeenCalledOnce();
+    apply.mockClear();
+    await act(async () => {
+      handle.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Home" }));
+      await settle();
+    });
+    expect(apply).toHaveBeenCalledOnce();
+    expect(apply.mock.calls[0]?.[0].edit).toMatchObject({
+      kind: "resize_boundary",
+      before_basis: { kind: "fixed", logical_pixels: 56 },
+    });
   });
 
   it("keeps Console drafts, histories, and output origins instance-local on a shared Runtime", async () => {
     const { container } = await renderApp();
-    const consoles = [...container.querySelectorAll<HTMLElement>("[data-surface-id='rho.console']")];
-    expect(consoles).toHaveLength(2);
-    const first = consoles[0]!;
-    const second = consoles[1]!;
+    expect(container.querySelectorAll("[data-surface-id='rho.console']")).toHaveLength(1);
+    const tabs = [...container.querySelectorAll<HTMLButtonElement>(".rho-stack-tabs [role='tab']")];
+    expect(tabs).toHaveLength(2);
+    const first = container.querySelector<HTMLElement>("[data-surface-id='rho.console']")!;
     const firstComposer = first.querySelector<HTMLTextAreaElement>("textarea")!;
     const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
     await act(async () => {
@@ -242,8 +268,14 @@ describe("Studio foundation app", () => {
     expect(first.querySelectorAll(".rho-console-entry")).toHaveLength(1);
     expect(first.textContent).toContain("runtime:workspace-r");
     expect(first.textContent).toContain("instance:console-a");
-    expect(second.querySelectorAll(".rho-console-entry")).toHaveLength(0);
 
+    await act(async () => {
+      tabs[1]!.click();
+      await settle();
+    });
+    const second = container.querySelector<HTMLElement>("[data-surface-id='rho.console']")!;
+    expect(second.dataset.instanceId).toBe("instance:console-b");
+    expect(second.querySelectorAll(".rho-console-entry")).toHaveLength(0);
     const secondComposer = second.querySelector<HTMLTextAreaElement>("textarea")!;
     await act(async () => {
       setValue.call(secondComposer, "2 + 2");
@@ -251,9 +283,43 @@ describe("Studio foundation app", () => {
       secondComposer.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
       for (let index = 0; index < 8; index += 1) await Promise.resolve();
     });
-    expect(first.querySelectorAll(".rho-console-entry")).toHaveLength(1);
     expect(second.querySelectorAll(".rho-console-entry")).toHaveLength(1);
     expect(second.textContent).toContain("instance:console-b");
+    await act(async () => {
+      tabs[0]!.click();
+      await settle();
+    });
+    const restoredFirst = container.querySelector<HTMLElement>("[data-surface-id='rho.console']")!;
+    expect(restoredFirst.dataset.instanceId).toBe("instance:console-a");
+    expect(restoredFirst.querySelectorAll(".rho-console-entry")).toHaveLength(1);
+  });
+
+  it("releases and resumes one Surface renderer without changing its binding", async () => {
+    const transport = createMockUiKernelTransport();
+    const suspend = vi.spyOn(transport, "suspendSurface");
+    const resume = vi.spyOn(transport, "resumeSurface");
+    const { container } = await renderApp(transport);
+    const source = container.querySelector<HTMLElement>("[data-surface-id='rho.file-source']")!;
+    const instanceId = source.dataset.instanceId;
+    const pause = [...source.querySelectorAll<HTMLButtonElement>(".rho-surface-actions button")]
+      .find((button) => button.textContent === "Pause")!;
+    await act(async () => {
+      pause.click();
+      await settle();
+    });
+    const paused = container.querySelector<HTMLElement>(`[data-instance-id='${instanceId}']`)!;
+    expect(paused.textContent).toContain("Surface paused");
+    expect(paused.querySelector(".rho-source-editor-shell")).toBeNull();
+    expect(suspend).toHaveBeenCalledOnce();
+    await act(async () => {
+      [...paused.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "Resume Surface")!
+        .click();
+      await settle();
+    });
+    const restored = container.querySelector<HTMLElement>(`[data-instance-id='${instanceId}']`)!;
+    expect(restored.querySelector(".rho-source-editor-shell")).not.toBeNull();
+    expect(resume).toHaveBeenCalledOnce();
   });
 
   it("shares durable Agent conversation truth while keeping repeated composers instance-local", async () => {
@@ -269,7 +335,9 @@ describe("Studio foundation app", () => {
     const { container } = await renderApp(transport);
     const original = container.querySelector<HTMLElement>("[data-surface-id='rho.agent']")!;
     await act(async () => {
-      original.querySelector<HTMLButtonElement>(".rho-surface-actions button")!.click();
+      [...original.querySelectorAll<HTMLButtonElement>(".rho-surface-actions button")]
+        .find((button) => button.textContent === "Duplicate")!
+        .click();
       for (let index = 0; index < 8; index += 1) await Promise.resolve();
     });
     const agents = [...container.querySelectorAll<HTMLElement>("[data-surface-id='rho.agent']")];
@@ -421,7 +489,9 @@ describe("Studio foundation app", () => {
     });
 
     await act(async () => {
-      plugin!.querySelector<HTMLButtonElement>(".rho-surface-actions button")!.click();
+      [...plugin!.querySelectorAll<HTMLButtonElement>(".rho-surface-actions button")]
+        .find((button) => button.textContent === "Duplicate")!
+        .click();
       for (let index = 0; index < 12; index += 1) await Promise.resolve();
     });
     const repeated = container.querySelectorAll(

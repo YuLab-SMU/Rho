@@ -5,6 +5,7 @@
   html, body, #root { min-width: 320px; min-height: 100%; margin: 0; }
   body { min-height: 100vh; }
   button, input, textarea { font: inherit; }
+  :where(button, input, textarea, select, summary, [tabindex]):focus-visible { outline: 2px solid var(--rho-accent); outline-offset: 2px; }
 }
 
 @layer tokens {
@@ -416,6 +417,11 @@
   .rho-surface-strip .rho-surface-chrome { display: none; }
   .rho-surface-failed, .rho-surface-placeholder { border-color: rgb(202 125 41 / 40%); background: #fff6e9; }
   .rho-surface-suspended { opacity: 0.68; }
+  .rho-surface-lifecycle-state { display: grid; align-content: center; justify-items: start; gap: 0.5rem; min-height: 10rem; padding: 1rem; color: var(--rho-muted); background: color-mix(in srgb, var(--rho-panel) 90%, var(--rho-canvas)); }
+  .rho-surface-lifecycle-state p { max-width: 42rem; margin: 0; line-height: 1.5; }
+  .rho-surface-lifecycle-failed, .rho-surface-lifecycle-placeholder { color: #784a18; background: #fff6e9; }
+  .rho-surface-viewport { width: 100%; min-width: 0; min-height: 20rem; }
+  .rho-surface-viewport-placeholder { display: grid; min-height: 20rem; place-content: center; justify-items: center; gap: 0.65rem; padding-inline: 1rem; border: 1px dashed var(--rho-line-strong); border-radius: 0.75rem; color: var(--rho-muted); background: #f1f4f1; text-align: center; }
 
   .rho-plugin-surface-document { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 0.75rem; overflow: auto; padding: 0.8rem; background: color-mix(in srgb, var(--rho-panel) 94%, var(--rho-accent) 6%); }
   .rho-plugin-surface-document > header { display: grid; grid-template-columns: 1fr auto; gap: 0.1rem 0.75rem; align-items: baseline; padding-bottom: 0.6rem; border-bottom: 1px solid var(--rho-line); }
@@ -495,7 +501,18 @@
     .rho-vibe-page { padding-inline: 1rem; }
     .rho-vibe-section[data-layout="grid"] .rho-vibe-block { grid-column: 1 / -1 !important; grid-row: auto !important; }
   }
+  @media (min-width: 761px) and (max-width: 1100px) {
+    .rho-command-projection, .rho-foundation-status { display: none; }
+    .rho-studio-bar { grid-template-columns: auto minmax(6rem, 0.8fr) auto auto minmax(8rem, 1fr) auto; }
+  }
+  @media (forced-colors: active) {
+    .rho-surface, .rho-stack, .rho-resize-handle::before, .rho-action-error { forced-color-adjust: auto; border-color: CanvasText; }
+    .rho-status-dot { border: 1px solid CanvasText; }
+  }
+  html[dir="rtl"] :where(.rho-studio-shell, .rho-vibe-page, .rho-surface, .rho-studio-inspector) { text-align: start; }
+  html[dir="rtl"] .rho-check-finding, html[dir="rtl"] .rho-vibe-callout { border-inline-start: 4px solid var(--rho-accent); border-left: 1px solid var(--rho-line); }
+  :where(.rho-surface, .rho-vibe-page, .rho-studio-inspector, .rho-command-results) :where(p, span, strong, small, code, pre, td, th) { overflow-wrap: anywhere; }
   @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+    *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; }
   }
 }

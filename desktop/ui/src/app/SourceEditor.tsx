@@ -33,9 +33,11 @@ export function SourceEditor({ ariaLabel, value, viewState, onChange, onBlur }: 
 
     void import("./monacoRuntime").then(({ monaco }) => {
       if (!active) return;
+      const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
       const createdModel = monaco.editor.createModel(value, "r");
       const createdEditor = monaco.editor.create(mount, {
         model: createdModel,
+        accessibilitySupport: "auto",
         ariaLabel,
         automaticLayout: true,
         bracketPairColorization: { enabled: true },
@@ -46,7 +48,7 @@ export function SourceEditor({ ariaLabel, value, viewState, onChange, onBlur }: 
         padding: { top: 10, bottom: 10 },
         renderWhitespace: "selection",
         scrollBeyondLastLine: false,
-        smoothScrolling: true,
+        smoothScrolling: !reducedMotion,
         tabSize: 2,
         theme: "vs",
       });

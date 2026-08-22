@@ -65,6 +65,7 @@ import type {
   VibePageExportRequest,
   VibePageMutationRequest,
   VibePage,
+  VibeSection,
   Unsubscribe,
 } from "./types";
 
@@ -291,6 +292,97 @@ export function createMockUiKernelTransport(
         collapse_priority: 30,
         child: { kind: "surface", node_id: "node:plugin-analysis", instance_id: pluginInstance.instance_id },
       });
+    }
+  }
+  if (search.get("stress") === "large") {
+    const stressFactory = surfaces.catalog.factories.find(
+      (factory) => factory.definition.surface_id === "rho.surface-playground",
+    );
+    if (stressFactory == null) throw new Error("Stress fixture requires the playground Surface factory.");
+    const stressInstances: SurfaceInstance[] = Array.from({ length: 96 }, (_, index) => ({
+      instance_id: `surface-instance:stress-${String(index).padStart(3, "0")}`,
+      surface_id: stressFactory.definition.surface_id,
+      project_id: surfaces.project_id,
+      origin: stressFactory.definition.origin,
+      activation_generation: stressFactory.activation_generation,
+      surface_revision: 1,
+      mode_id: stressFactory.definition.modes[0]?.mode_id ?? null,
+      resource_binding: null,
+      runtime_binding: null,
+      view_group_id: null,
+      view_state: { draft: `stress-${index}` },
+      lifecycle_state: "active",
+    }));
+    (surfaces.catalog.instances as unknown as SurfaceInstance[]).push(...stressInstances);
+    (profile.profile.surface_instance_specs as unknown as SurfaceInstanceSpec[]).push(
+      ...stressInstances.map((instance) => ({
+        instance_id: instance.instance_id,
+        surface_id: instance.surface_id,
+        origin: instance.origin,
+        mode_id: instance.mode_id,
+        resource_binding: null,
+        runtime_attachment_intent: null,
+        view_group_id: null,
+        view_state: instance.view_state,
+      })),
+    );
+    const originalRoot = structuredClone(studio.scene.root);
+    const stressRoot: SceneState["root"] = {
+      kind: "container",
+      node_id: "node:stress-root",
+      axis: "horizontal",
+      children: [{
+        child: originalRoot,
+        basis: { kind: "fraction", weight: 3 },
+        resizable: true,
+        collapse_priority: null,
+      }, {
+        child: {
+          kind: "stack",
+          node_id: "node:stress-stack",
+          active_instance_id: stressInstances[0]!.instance_id,
+          instances: stressInstances.map((instance) => instance.instance_id),
+        },
+        basis: { kind: "fraction", weight: 2 },
+        resizable: true,
+        collapse_priority: 40,
+      }],
+    };
+    (studio.scene as { root: SceneState["root"] }).root = stressRoot;
+    const stressScene = profile.profile.studio_scenes.find(
+      (scene) => scene.scene_id === profile.profile.active_studio_scene_id,
+    );
+    if (stressScene != null) (stressScene as { root: SceneState["root"] }).root = structuredClone(stressRoot);
+    const page = profile.profile.vibe_pages.find(
+      (candidate) => candidate.page_id === profile.profile.active_vibe_page_id,
+    );
+    if (page != null) {
+      const textBlocks = Array.from({ length: 160 }, (_, index) => ({
+        block_id: `vibe-block:stress-text-${String(index).padStart(3, "0")}`,
+        content: {
+          kind: "rich_text" as const,
+          document: {
+            blocks: [{
+              kind: "paragraph" as const,
+              content: [{
+                text: `分析 ${index} · مرحبا بالعالم · שלום עולם · 🧬`,
+                marks: [],
+              }],
+            }],
+          },
+        },
+      }));
+      const surfaceBlocks = stressInstances.slice(0, 24).map((instance, index) => ({
+        block_id: `vibe-block:stress-surface-${String(index).padStart(3, "0")}`,
+        content: { kind: "surface_ref" as const, instance_id: instance.instance_id, live: true },
+      }));
+      const section: VibeSection = {
+        section_id: "vibe-section:stress-large",
+        heading: "Large multilingual Surface document",
+        layout: { kind: "flow" },
+        blocks: [...textBlocks, ...surfaceBlocks],
+      };
+      (page.sections as unknown as VibeSection[]).push(section);
     }
   }
   const persistedContent = new Map<string, string>([
@@ -1825,7 +1917,7 @@ export function createMockUiKernelTransport(
     async loadDomainSurface(surfaceId) {
       const fixtures: Readonly<Record<string, DomainSurfaceData["items"]>> = {
         "rho.environment": [
-          { id: "package:rho", title: "rho", subtitle: "0.4.1-dev.12", status: "installed", detail: "Project library" },
+          { id: "package:rho", title: "rho", subtitle: "0.4.1-dev.13", status: "installed", detail: "Project library" },
           { id: "package:aisdk", title: "aisdk", subtitle: "required >= 1.5.0", status: "incompatible", detail: "Installed 1.4.12 in Agent R" },
         ],
         "rho.evidence": [{ id: "claim:1", title: "Analysis uses a fixed seed", subtitle: "analysis.R:1-2", status: "current", detail: "Source-backed evidence claim" }],

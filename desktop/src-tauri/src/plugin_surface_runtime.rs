@@ -23,6 +23,8 @@ use crate::workspace_plugins::{
 use crate::{AppState, display_error, read_store};
 
 pub(crate) const PLUGIN_SURFACE_CHANGED_EVENT: &str = "rho://plugin-surface-changed";
+const MAX_CACHED_SURFACE_DOCUMENTS: usize = 16;
+const MAX_CACHED_SURFACE_PAYLOAD_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct PluginSurfaceDocumentRequest {
@@ -77,12 +79,44 @@ struct CachedSurfaceDocument {
     page_revision: Option<u64>,
     document: SurfaceDocumentV1,
     provenance: Value,
+    encoded_bytes: usize,
+    last_access: u64,
 }
 
 #[derive(Default)]
 struct PluginSurfaceInner {
     documents: BTreeMap<SurfaceInstanceId, CachedSurfaceDocument>,
     queues: BTreeMap<String, SurfaceEventQueueV1>,
+    access_clock: u64,
+}
+
+impl PluginSurfaceInner {
+    fn next_access(&mut self) -> u64 {
+        self.access_clock = self.access_clock.saturating_add(1);
+        self.access_clock
+    }
+
+    fn cached_payload_bytes(&self) -> usize {
+        self.documents
+            .values()
+            .map(|cached| cached.encoded_bytes)
+            .sum()
+    }
+
+    fn reclaim_cached_payloads(&mut self, preserve: Option<&SurfaceInstanceId>) {
+        while self.documents.len() > MAX_CACHED_SURFACE_DOCUMENTS
+            || self.cached_payload_bytes() > MAX_CACHED_SURFACE_PAYLOAD_BYTES
+        {
+            let candidate = self
+                .documents
+                .iter()
+                .filter(|(instance_id, _)| preserve != Some(*instance_id))
+                .min_by_key(|(_, cached)| cached.last_access)
+                .map(|(instance_id, _)| instance_id.clone());
+            let Some(candidate) = candidate else { break };
+            self.documents.remove(&candidate);
+        }
+    }
 }
 
 #[derive(Default)]
@@ -105,6 +139,17 @@ impl PluginSurfaceRuntimeState {
         inner
             .queues
             .retain(|_, queue| &queue.route().project_id == project_id);
+    }
+
+    pub(crate) fn release_instance_payload(&self, instance_id: &SurfaceInstanceId) {
+        let mut inner = self.inner();
+        inner.documents.remove(instance_id);
+        for queue in inner.queues.values_mut() {
+            queue.cancel_instance(instance_id);
+        }
+        inner
+            .queues
+            .retain(|_, queue| queue.active().is_some() || queue.queued_len() > 0);
     }
 
     fn retain_exact_plugin_route(&self, route: &SurfacePluginRouteV1) {
@@ -352,36 +397,42 @@ pub(crate) async fn plugin_surface_document(
         .plugin_surface_runtime
         .retain_exact_plugin_route(&route);
 
-    if let Some(cached) = state
-        .plugin_surface_runtime
-        .inner()
-        .documents
-        .get(&instance.instance_id)
-        .cloned()
-    {
-        if validate_cached_request(
-            &cached,
-            &route,
-            &request.target,
-            request.expected_layout_revision,
-            request.expected_page_revision,
-        )
-        .is_ok()
-        {
-            return Ok(PluginSurfaceDocumentView {
-                project_id: instance.project_id,
-                instance_id: instance.instance_id,
-                surface_id: instance.surface_id,
-                surface_revision: instance.surface_revision,
-                document: cached.document,
-                provenance: cached.provenance,
-            });
+    let cached = {
+        let mut inner = state.plugin_surface_runtime.inner();
+        let next_access = inner.next_access();
+        let cached = inner.documents.get(&instance.instance_id).cloned();
+        match cached {
+            Some(cached)
+                if validate_cached_request(
+                    &cached,
+                    &route,
+                    &request.target,
+                    request.expected_layout_revision,
+                    request.expected_page_revision,
+                )
+                .is_ok() =>
+            {
+                if let Some(entry) = inner.documents.get_mut(&instance.instance_id) {
+                    entry.last_access = next_access;
+                }
+                Some(cached)
+            }
+            Some(_) => {
+                inner.documents.remove(&instance.instance_id);
+                None
+            }
+            None => None,
         }
-        state
-            .plugin_surface_runtime
-            .inner()
-            .documents
-            .remove(&instance.instance_id);
+    };
+    if let Some(cached) = cached {
+        return Ok(PluginSurfaceDocumentView {
+            project_id: instance.project_id,
+            instance_id: instance.instance_id,
+            surface_id: instance.surface_id,
+            surface_revision: instance.surface_revision,
+            document: cached.document,
+            provenance: cached.provenance,
+        });
     }
 
     let mut store = read_store(&state).map_err(display_error)?;
@@ -397,18 +448,28 @@ pub(crate) async fn plugin_surface_document(
     let (result, provenance) = completed_payload(&outcome).map_err(display_error)?;
     let document = SurfaceDocumentV1::parse(result.clone()).map_err(display_error)?;
     validate_surface_artifacts(&store, &context, &document).map_err(display_error)?;
-    state.plugin_surface_runtime.inner().documents.insert(
-        instance.instance_id.clone(),
-        CachedSurfaceDocument {
-            route,
-            surface_revision: instance.surface_revision,
-            project_revision: request.target.expected_project_revision,
-            layout_revision: request.expected_layout_revision,
-            page_revision: request.expected_page_revision,
-            document: document.clone(),
-            provenance: provenance.clone(),
-        },
-    );
+    let encoded_bytes = serde_json::to_vec(&(&document, &provenance))
+        .map_err(display_error)?
+        .len();
+    {
+        let mut inner = state.plugin_surface_runtime.inner();
+        let last_access = inner.next_access();
+        inner.documents.insert(
+            instance.instance_id.clone(),
+            CachedSurfaceDocument {
+                route,
+                surface_revision: instance.surface_revision,
+                project_revision: request.target.expected_project_revision,
+                layout_revision: request.expected_layout_revision,
+                page_revision: request.expected_page_revision,
+                document: document.clone(),
+                provenance: provenance.clone(),
+                encoded_bytes,
+                last_access,
+            },
+        );
+        inner.reclaim_cached_payloads(Some(&instance.instance_id));
+    }
     let _ = app.emit(PLUGIN_SURFACE_CHANGED_EVENT, &instance.instance_id);
     Ok(PluginSurfaceDocumentView {
         project_id: instance.project_id,
@@ -567,14 +628,21 @@ pub(crate) async fn plugin_surface_event(
         let result = execute_event(&state, &context, &active);
         if let Ok((document, command_result, provenance)) = &result {
             if let Some(document) = document {
+                let encoded_bytes = serde_json::to_vec(&(document, provenance))
+                    .map_err(display_error)?
+                    .len();
                 let mut inner = state.plugin_surface_runtime.inner();
+                let last_access = inner.next_access();
                 if let Some(cached) = inner.documents.get_mut(&active.event.instance_id)
                     && cached.route.matches(&active.event)
                     && cached.document.revision == active.event.expected_document_revision
                 {
                     cached.document = document.clone();
                     cached.provenance = provenance.clone();
+                    cached.encoded_bytes = encoded_bytes;
+                    cached.last_access = last_access;
                 }
+                inner.reclaim_cached_payloads(Some(&active.event.instance_id));
             }
             if active.event_id == event_id {
                 first_result = Some((document.clone(), command_result.clone(), provenance.clone()));
@@ -587,8 +655,10 @@ pub(crate) async fn plugin_surface_event(
             }
         }
         let _ = app.emit(PLUGIN_SURFACE_CHANGED_EVENT, &active.event.instance_id);
-        if result.is_err() && active.event_id == event_id {
-            return Err(display_error(result.unwrap_err()));
+        if active.event_id == event_id
+            && let Err(error) = result
+        {
+            return Err(display_error(error));
         }
     }
     let (document, command_result, provenance) = first_result
@@ -606,6 +676,60 @@ pub(crate) async fn plugin_surface_event(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn cached_document(
+        route: SurfacePluginRouteV1,
+        access: u64,
+        encoded_bytes: usize,
+    ) -> CachedSurfaceDocument {
+        CachedSurfaceDocument {
+            route,
+            surface_revision: 1,
+            project_revision: 1,
+            layout_revision: Some(1),
+            page_revision: None,
+            document: SurfaceDocumentV1::parse(json!({
+                "contract": "rho.plugin_surface_document.v1",
+                "revision": 1,
+                "title": "cached",
+                "blocks": []
+            }))
+            .unwrap(),
+            provenance: Value::Null,
+            encoded_bytes,
+            last_access: access,
+        }
+    }
+
+    fn queued_event(
+        event_id: &str,
+        instance_id: SurfaceInstanceId,
+        route: &SurfacePluginRouteV1,
+    ) -> QueuedSurfaceEventV1 {
+        QueuedSurfaceEventV1 {
+            event_id: event_id.to_string(),
+            event: SurfaceEventV1 {
+                contract: PLUGIN_SURFACE_EVENT_CONTRACT.to_string(),
+                project_id: route.project_id.clone(),
+                plugin_id: route.plugin_id.clone(),
+                package_digest: route.package_digest.clone(),
+                activation_generation: route.activation_generation,
+                host_instance_id: route.host_instance_id.clone(),
+                surface_id: rho_ui_contract::SurfaceId::new("ui.surface.analysis").unwrap(),
+                instance_id,
+                expected_project_revision: 1,
+                expected_surface_revision: 1,
+                expected_document_revision: 1,
+                expected_resource_revision: None,
+                expected_runtime_generation: None,
+                expected_page_revision: None,
+                expected_layout_revision: Some(1),
+                control_id: "refresh".to_string(),
+                event_kind: SurfaceEventKindV1::Activate,
+                value: Value::Null,
+            },
+        }
+    }
 
     fn test_route(
         project_id: &str,
@@ -656,5 +780,91 @@ mod tests {
         assert!(!inner.queues.contains_key(&route_key(&stale)));
         assert!(inner.queues.contains_key(&route_key(&other_plugin)));
         assert!(inner.queues.contains_key(&route_key(&other_project)));
+    }
+
+    #[test]
+    fn cached_documents_reclaim_lru_by_entry_and_byte_budget() {
+        let route = test_route("project.a", "org.example.surface", 'a', 2);
+        let mut inner = PluginSurfaceInner::default();
+        for index in 0..(MAX_CACHED_SURFACE_DOCUMENTS + 4) {
+            let id = SurfaceInstanceId::new(format!("surface-instance:cache-{index}")).unwrap();
+            inner
+                .documents
+                .insert(id, cached_document(route.clone(), index as u64 + 1, 64));
+        }
+        let preserved = SurfaceInstanceId::new(format!(
+            "surface-instance:cache-{}",
+            MAX_CACHED_SURFACE_DOCUMENTS + 3
+        ))
+        .unwrap();
+        inner.reclaim_cached_payloads(Some(&preserved));
+        assert_eq!(inner.documents.len(), MAX_CACHED_SURFACE_DOCUMENTS);
+        assert!(
+            !inner
+                .documents
+                .contains_key(&SurfaceInstanceId::new("surface-instance:cache-0").unwrap())
+        );
+        assert!(inner.documents.contains_key(&preserved));
+
+        inner.documents.clear();
+        for index in 0..3 {
+            inner.documents.insert(
+                SurfaceInstanceId::new(format!("surface-instance:bytes-{index}")).unwrap(),
+                cached_document(
+                    route.clone(),
+                    index as u64 + 1,
+                    MAX_CACHED_SURFACE_PAYLOAD_BYTES / 2,
+                ),
+            );
+        }
+        let preserved = SurfaceInstanceId::new("surface-instance:bytes-2").unwrap();
+        inner.reclaim_cached_payloads(Some(&preserved));
+        assert_eq!(inner.documents.len(), 2);
+        assert!(inner.cached_payload_bytes() <= MAX_CACHED_SURFACE_PAYLOAD_BYTES);
+        assert!(inner.documents.contains_key(&preserved));
+    }
+
+    #[test]
+    fn releasing_one_instance_drops_only_its_derived_payload() {
+        let state = PluginSurfaceRuntimeState::default();
+        let route = test_route("project.a", "org.example.surface", 'a', 2);
+        let key = route_key(&route);
+        let released = SurfaceInstanceId::new("surface-instance:released").unwrap();
+        let retained = SurfaceInstanceId::new("surface-instance:retained").unwrap();
+        {
+            let mut inner = state.inner();
+            inner
+                .documents
+                .insert(released.clone(), cached_document(route.clone(), 1, 64));
+            inner
+                .documents
+                .insert(retained.clone(), cached_document(route.clone(), 2, 64));
+            let mut queue = SurfaceEventQueueV1::new(route).unwrap();
+            queue
+                .submit(queued_event(
+                    "event:released",
+                    released.clone(),
+                    queue.route(),
+                ))
+                .unwrap();
+            queue
+                .submit(queued_event(
+                    "event:retained",
+                    retained.clone(),
+                    queue.route(),
+                ))
+                .unwrap();
+            inner.queues.insert(key.clone(), queue);
+        }
+        state.release_instance_payload(&released);
+        let inner = state.inner();
+        assert!(!inner.documents.contains_key(&released));
+        assert!(inner.documents.contains_key(&retained));
+        assert_eq!(
+            inner.queues[&key]
+                .active()
+                .map(|event| &event.event.instance_id),
+            Some(&retained)
+        );
     }
 }

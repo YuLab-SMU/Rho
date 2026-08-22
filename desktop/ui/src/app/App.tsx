@@ -244,6 +244,9 @@ interface ResizeHandleProps {
 }
 
 function ResizeHandle({ axis, containerId, beforeIndex, commit }: ResizeHandleProps) {
+  const handle = useRef<HTMLButtonElement>(null);
+  const [logicalValue, setLogicalValue] = useState<number | null>(null);
+  const [logicalMaximum, setLogicalMaximum] = useState<number | null>(null);
   const drag = useRef<{
     start: number;
     before: number;
@@ -277,9 +280,26 @@ function ResizeHandle({ axis, containerId, beforeIndex, commit }: ResizeHandlePr
 
   return (
     <button
+      ref={handle}
       className={`rho-resize-handle rho-resize-${axis}`}
       type="button"
+      role="separator"
+      aria-orientation={axis === "horizontal" ? "vertical" : "horizontal"}
+      aria-valuemin={56}
+      aria-valuemax={logicalMaximum == null ? undefined : Math.round(logicalMaximum)}
+      aria-valuenow={logicalValue == null ? undefined : Math.round(logicalValue)}
+      aria-valuetext={logicalValue == null ? "Focus to measure this boundary" : `${Math.round(logicalValue)} logical pixels before the boundary`}
       aria-label={`Resize boundary ${beforeIndex + 1}`}
+      onFocus={() => {
+        const beforeElement = handle.current?.previousElementSibling as HTMLElement | null;
+        const afterElement = handle.current?.nextElementSibling as HTMLElement | null;
+        if (beforeElement != null && afterElement != null) {
+          const before = extentOf(beforeElement);
+          const after = extentOf(afterElement);
+          setLogicalValue(before);
+          setLogicalMaximum(Math.max(56, before + after - 56));
+        }
+      }}
       onPointerDown={(event: ReactPointerEvent<HTMLButtonElement>) => {
         const beforeElement = event.currentTarget.previousElementSibling as HTMLElement | null;
         const afterElement = event.currentTarget.nextElementSibling as HTMLElement | null;
@@ -310,7 +330,11 @@ function ResizeHandle({ axis, containerId, beforeIndex, commit }: ResizeHandlePr
         if (event.currentTarget.hasPointerCapture(event.pointerId)) {
           event.currentTarget.releasePointerCapture(event.pointerId);
         }
-        commit(boundaryEdit(extentOf(current.beforeElement), extentOf(current.afterElement)));
+        const before = extentOf(current.beforeElement);
+        const after = extentOf(current.afterElement);
+        setLogicalValue(before);
+        setLogicalMaximum(Math.max(56, before + after - 56));
+        commit(boundaryEdit(before, after));
       }}
       onPointerCancel={(event) => {
         const current = drag.current;
@@ -322,18 +346,26 @@ function ResizeHandle({ axis, containerId, beforeIndex, commit }: ResizeHandlePr
         }
       }}
       onKeyDown={(event) => {
-        const delta = axis === "horizontal"
-          ? event.key === "ArrowLeft" ? -16 : event.key === "ArrowRight" ? 16 : 0
-          : event.key === "ArrowUp" ? -16 : event.key === "ArrowDown" ? 16 : 0;
-        if (delta === 0) return;
         const beforeElement = event.currentTarget.previousElementSibling as HTMLElement | null;
         const afterElement = event.currentTarget.nextElementSibling as HTMLElement | null;
         if (beforeElement == null || afterElement == null) return;
-        event.preventDefault();
         const before = extentOf(beforeElement);
         const after = extentOf(afterElement);
+        const step = event.shiftKey ? 64 : 16;
+        const delta = event.key === "Home" ? -before + 56
+          : event.key === "End" ? after - 56
+          : event.key === "PageUp" ? -64
+          : event.key === "PageDown" ? 64
+          : axis === "horizontal"
+            ? event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0
+            : event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0;
+        if (delta === 0) return;
+        event.preventDefault();
         const clamped = Math.max(-before + 56, Math.min(after - 56, delta));
-        commit(boundaryEdit(before + clamped, after - clamped));
+        const nextBefore = before + clamped;
+        setLogicalValue(nextBefore);
+        setLogicalMaximum(Math.max(56, before + after - 56));
+        commit(boundaryEdit(nextBefore, after - clamped));
       }}
     ><span aria-hidden="true" /></button>
   );
@@ -345,6 +377,8 @@ interface SurfaceViewProps {
   readonly setFocus: () => void;
   readonly remove: () => void;
   readonly duplicate: () => void;
+  readonly suspend: () => Promise<void>;
+  readonly resume: () => Promise<void>;
   readonly persistDraft: (draft: string) => void;
   readonly draftCache: Map<string, string>;
   readonly runtimes: RuntimeRegistrySnapshot | null;
@@ -677,9 +711,9 @@ function PluginSurfaceBlocks({
       }
       case "group":
         return <section className="rho-plugin-group" key={key}>{block.label != null && <h4>{block.label}</h4>}<PluginSurfaceBlocks blocks={block.blocks} dispatch={dispatch} path={key} /></section>;
-      case "text": return <p className="rho-plugin-text" key={key}>{block.text}</p>;
-      case "code": return <pre className="rho-plugin-code" data-language={block.language ?? undefined} key={key}><code>{block.code}</code></pre>;
-      case "key_value": return <dl className="rho-plugin-key-value" key={key}>{block.items.map((item, itemIndex) => <div key={`${key}:${itemIndex}`}><dt>{item.key}</dt><dd>{item.value}</dd></div>)}</dl>;
+      case "text": return <p className="rho-plugin-text" dir="auto" key={key}>{block.text}</p>;
+      case "code": return <pre className="rho-plugin-code" dir="auto" data-language={block.language ?? undefined} key={key}><code>{block.code}</code></pre>;
+      case "key_value": return <dl className="rho-plugin-key-value" key={key}>{block.items.map((item, itemIndex) => <div dir="auto" key={`${key}:${itemIndex}`}><dt>{item.key}</dt><dd>{item.value}</dd></div>)}</dl>;
       case "table": return <div className="rho-plugin-table-wrap" key={key}><table><thead><tr>{block.columns.map((column) => <th key={column}>{column}</th>)}</tr></thead><tbody>{block.rows.map((row, rowIndex) => <tr key={`${key}:${rowIndex}`}>{row.map((cell, cellIndex) => <td key={`${key}:${rowIndex}:${cellIndex}`}>{cell}</td>)}</tr>)}</tbody></table></div>;
       case "notice": return <div className={`rho-plugin-notice rho-plugin-notice-${block.tone}`} role="status" key={key}>{block.text}</div>;
       case "artifact_image_ref": return <figure className="rho-plugin-artifact" key={key}><div aria-hidden="true">Artifact image</div><figcaption>{block.alt} · <code>{block.artifact_id}</code></figcaption></figure>;
@@ -1331,7 +1365,7 @@ function DomainSurfaceView({
 }
 
 function SurfaceView({
-  instance, focused, setFocus, remove, duplicate, persistDraft, draftCache,
+  instance, focused, setFocus, remove, duplicate, suspend, resume, persistDraft, draftCache,
   runtimes, attachRuntime, detachRuntime, executeRuntime, interruptRuntime,
   restartRuntime, persistConsole, resources, readResource, updateResourceDraft,
   saveResource, reloadResource, renameResource, deleteResource,
@@ -1400,10 +1434,32 @@ function SurfaceView({
       <header className="rho-surface-chrome">
         <div><span className="rho-eyebrow">{instance.surface_id}</span><strong>{title}</strong></div>
         {!embedded && <div className="rho-surface-actions" onPointerDown={(event) => event.stopPropagation()}>
+          {instance.lifecycle_state === "active" || instance.lifecycle_state === "hidden"
+            ? <button type="button" onClick={() => void suspend().catch(reportError)}>Pause</button>
+            : instance.lifecycle_state === "suspended"
+              ? <button type="button" onClick={() => void resume().catch(reportError)}>Resume</button>
+              : null}
           <button type="button" onClick={duplicate}>Duplicate</button>
           <button type="button" onClick={remove} aria-label={`Remove ${instance.instance_id} from layout`}>×</button>
         </div>}
       </header>
+      {instance.lifecycle_state === "suspended" ? (
+        <section className="rho-surface-lifecycle-state" role="status">
+          <strong>Surface paused</strong>
+          <p>Its durable binding is preserved; heavy renderer and derived plugin payloads were released.</p>
+          <button type="button" onClick={() => void resume().catch(reportError)}>Resume Surface</button>
+        </section>
+      ) : instance.lifecycle_state === "failed" ? (
+        <section className="rho-surface-lifecycle-state rho-surface-lifecycle-failed" role="alert">
+          <strong>Surface failed</strong>
+          <p>The failed projection is isolated. Its project, Resource, Runtime, and sibling Surfaces remain available.</p>
+        </section>
+      ) : instance.lifecycle_state === "placeholder" ? (
+        <section className="rho-surface-lifecycle-state rho-surface-lifecycle-placeholder" role="status">
+          <strong>Surface provider unavailable</strong>
+          <p>The exact placement and binding are preserved without rendering stale plugin or Runtime content.</p>
+        </section>
+      ) : <>
       {instance.surface_id === "rho.console" && (
         <div className="rho-console-surface">
           <div className="rho-console-runtime-bar">
@@ -1577,6 +1633,7 @@ function SurfaceView({
         />
       )}
       {!isStrip && <footer className="rho-surface-meta"><span>{instance.mode_id ?? "default"}</span><span>rev {instance.surface_revision}</span><span>{runtime == null ? "unbound" : runtime.runtime_instance_id}</span></footer>}
+      </>}
     </article>
   );
 }
@@ -1600,17 +1657,44 @@ function LayoutTree({ node, instances, studio, commit, surfaceView }: TreeProps)
         <div className="rho-stack-tabs" role="tablist" aria-label="Surface stack">
           {node.instances.map((id) => (
             <button
-              type="button" role="tab" aria-selected={id === node.active_instance_id} key={id}
+              id={`${node.node_id}:${id}:tab`}
+              type="button"
+              role="tab"
+              aria-controls={`${node.node_id}:${id}:panel`}
+              aria-selected={id === node.active_instance_id}
+              tabIndex={id === node.active_instance_id ? 0 : -1}
+              key={id}
               onClick={() => commit({ kind: "set_stack_active", stack_node_id: node.node_id, instance_id: id })}
+              onKeyDown={(event) => {
+                const current = node.instances.indexOf(id);
+                const next = event.key === "Home" ? 0
+                  : event.key === "End" ? node.instances.length - 1
+                  : event.key === "ArrowLeft" ? (current - 1 + node.instances.length) % node.instances.length
+                  : event.key === "ArrowRight" ? (current + 1) % node.instances.length
+                  : current;
+                if (next === current) return;
+                event.preventDefault();
+                const instanceId = node.instances[next];
+                if (instanceId == null) return;
+                commit({ kind: "set_stack_active", stack_node_id: node.node_id, instance_id: instanceId });
+                event.currentTarget.parentElement
+                  ?.querySelectorAll<HTMLButtonElement>("[role='tab']")[next]
+                  ?.focus();
+              }}
             >{instances.get(id)?.surface_id.replace("rho.", "") ?? id}</button>
           ))}
         </div>
         <div className="rho-stack-panes">
-          {node.instances.map((id) => (
-            <div className="rho-stack-pane" key={id} hidden={id !== node.active_instance_id}>
-              {instances.get(id) == null ? <div>Unavailable Surface {id}</div> : surfaceView(instances.get(id)!)}
-            </div>
-          ))}
+          <div
+            id={`${node.node_id}:${node.active_instance_id}:panel`}
+            className="rho-stack-pane"
+            role="tabpanel"
+            aria-labelledby={`${node.node_id}:${node.active_instance_id}:tab`}
+          >
+            {instances.get(node.active_instance_id) == null
+              ? <div>Unavailable Surface {node.active_instance_id}</div>
+              : surfaceView(instances.get(node.active_instance_id)!)}
+          </div>
         </div>
       </section>
     );
@@ -2217,6 +2301,14 @@ function WorkbenchApp({ transport }: AppProps) {
       }}
       remove={() => commit({ kind: "close_surface_placement", instance_id: instance.instance_id })}
       duplicate={() => run(duplicate(instance))}
+      suspend={async () => {
+        if (surfaces == null) throw new Error("Surface Runtime is not ready.");
+        await surfaceStore.suspend(instanceRequest(instance, surfaces.project_revision));
+      }}
+      resume={async () => {
+        if (surfaces == null) throw new Error("Surface Runtime is not ready.");
+        await surfaceStore.resume(instanceRequest(instance, surfaces.project_revision));
+      }}
       draftCache={draftCache}
       persistDraft={(draft) => {
         if (surfaces == null) return;
@@ -2442,6 +2534,7 @@ function WorkbenchApp({ transport }: AppProps) {
     source: state.status === "ready" ? state.source : null,
     project: snapshot?.project.display_path ?? null,
     layoutRevision: studio?.scene.layout_revision ?? null,
+    surfaceInstanceCount: surfaces?.catalog.instances.length ?? 0,
     studioInstances: studio == null ? [] : [...instances.keys()],
     unplaced: studio?.unplaced_instance_ids ?? [],
     recursiveLayout: studio?.scene.root.kind ?? null,
@@ -2459,8 +2552,12 @@ function WorkbenchApp({ transport }: AppProps) {
     activeMode: profile?.active_mode ?? null,
     activeScene: profile?.active_studio_scene_id ?? null,
     activePage: profile?.active_vibe_page_id ?? null,
+    activePageBlockCount: activeVibePage?.sections.reduce(
+      (total, section) => total + section.blocks.length,
+      0,
+    ) ?? 0,
     profileLoadStatus: profileSnapshot?.load_status ?? null,
-  }), [instances, profile, profileSnapshot, resources, runtimes, snapshot, state, studio, surfaces]);
+  }), [activeVibePage, instances, profile, profileSnapshot, resources, runtimes, snapshot, state, studio, surfaces]);
   useEffect(() => {
     document.documentElement.dataset.rsrReady = String(evidence.ready);
   }, [evidence.ready]);

@@ -1141,14 +1141,14 @@ pub(crate) async fn surface_update(
 async fn mutate_target(
     request: SurfaceInstanceRequestV1,
     app: AppHandle,
-    state: State<'_, AppState>,
+    state: &State<'_, AppState>,
     mutation: impl FnOnce(&SurfaceRuntimeState, SurfaceInstanceRequestV1) -> Result<SurfaceTransition>,
 ) -> Result<SurfaceRuntimeSnapshotV1, String> {
     let _project_transition = state.project_transition_gate.lock().await;
-    let reconciled = reconcile_for_state(&state).await.map_err(display_error)?;
+    let reconciled = reconcile_for_state(state).await.map_err(display_error)?;
     emit_transition(&app, &reconciled);
     let studio =
-        crate::studio_runtime::reconcile_with_surface_snapshot(&state, &reconciled.snapshot)
+        crate::studio_runtime::reconcile_with_surface_snapshot(state, &reconciled.snapshot)
             .map_err(display_error)?;
     crate::studio_runtime::emit_transition(&app, &studio);
     let surface_checkpoint = state.surface_runtime.checkpoint();
@@ -1156,7 +1156,7 @@ async fn mutate_target(
     let transition = mutation(&state.surface_runtime, request).map_err(display_error)?;
     let studio = persist_surface_state(
         &app,
-        &state,
+        state,
         surface_checkpoint,
         studio_checkpoint,
         &transition,
@@ -1172,7 +1172,12 @@ pub(crate) async fn surface_close(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<SurfaceRuntimeSnapshotV1, String> {
-    mutate_target(request, app, state, SurfaceRuntimeState::close).await
+    let instance_id = request.instance_id.clone();
+    let snapshot = mutate_target(request, app, &state, SurfaceRuntimeState::close).await?;
+    state
+        .plugin_surface_runtime
+        .release_instance_payload(&instance_id);
+    Ok(snapshot)
 }
 
 #[tauri::command]
@@ -1181,10 +1186,15 @@ pub(crate) async fn surface_suspend(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<SurfaceRuntimeSnapshotV1, String> {
-    mutate_target(request, app, state, |runtime, request| {
+    let instance_id = request.instance_id.clone();
+    let snapshot = mutate_target(request, app, &state, |runtime, request| {
         runtime.set_suspension(request, true)
     })
-    .await
+    .await?;
+    state
+        .plugin_surface_runtime
+        .release_instance_payload(&instance_id);
+    Ok(snapshot)
 }
 
 #[tauri::command]
@@ -1193,7 +1203,7 @@ pub(crate) async fn surface_resume(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<SurfaceRuntimeSnapshotV1, String> {
-    mutate_target(request, app, state, |runtime, request| {
+    mutate_target(request, app, &state, |runtime, request| {
         runtime.set_suspension(request, false)
     })
     .await

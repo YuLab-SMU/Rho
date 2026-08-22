@@ -24,6 +24,7 @@ import type {
   VibeRichTextMark,
   VibeSection,
 } from "../transport";
+import { SurfaceViewport } from "./SurfaceViewport";
 
 const ATOM_KINDS = [
   "callout",
@@ -121,6 +122,7 @@ function blockDomAttrs(node: ProseMirrorNode, className: string): Record<string,
   const placement = placementValue(node.attrs.placement);
   return {
     class: className,
+    dir: "auto",
     "data-block-id": node.attrs.block_id as string,
     "data-vibe-kind": node.type.name,
     ...(placement == null ? {} : {
@@ -469,7 +471,9 @@ export function VibePageEditor({
         const instance = handlers.current.instances.get(content.instance_id);
         return instance == null || !content.live
           ? <div className="rho-vibe-missing">Surface {content.instance_id} is unavailable. Its exact place is preserved.</div>
-          : <div className="rho-vibe-live-surface">{handlers.current.renderSurface(instance)}</div>;
+          : <SurfaceViewport label={`${instance.surface_id} ${instance.instance_id}`}>
+              <div className="rho-vibe-live-surface">{handlers.current.renderSurface(instance)}</div>
+            </SurfaceViewport>;
       }
       if (content.kind === "command_ref") {
         return <button className="rho-vibe-command" type="button" onClick={() => void handlers.current.invokeCommand(content.command_id).catch(reportError)}><span>Command</span><strong>{content.label}</strong><code>{content.command_id}</code></button>;
