@@ -1,6 +1,7 @@
 import fixture from "../contracts/generated/rsr-contract-fixtures.json";
 import { projectLabel } from "./normalize";
 import { applySceneEdit, collectSceneInstances, reconcileStudio } from "./studio-model";
+import { applyVibePageMutation, exportVibePage } from "./vibe-model";
 import type {
   CheckResult,
   CheckResultRequest,
@@ -52,6 +53,9 @@ import type {
   UiProfileSelectPageRequest,
   UiProfileSelectSceneRequest,
   UiProfileSetModeRequest,
+  VibePageExportRequest,
+  VibePageMutationRequest,
+  VibePage,
   Unsubscribe,
 } from "./types";
 
@@ -949,6 +953,29 @@ export function createMockUiKernelTransport(
         (next.profile as { active_vibe_page_id: string | null }).active_vibe_page_id =
           request.page_id;
       });
+    },
+    async applyVibePage(request: VibePageMutationRequest) {
+      validateProfileTarget(request.target);
+      const current = profile.profile.vibe_pages.find((page) => page.page_id === request.page_id);
+      if (current == null) throw new Error("Mock Vibe Page was not found.");
+      const page = applyVibePageMutation(current, request.expected_page_revision, request.mutation);
+      return installProfile((next) => {
+        (next.profile as { vibe_pages: readonly VibePage[] }).vibe_pages =
+          next.profile.vibe_pages.map((candidate) =>
+            candidate.page_id === page.page_id ? page : candidate
+          );
+      });
+    },
+    async exportVibePage(request: VibePageExportRequest) {
+      if (
+        request.project_id !== profile.profile.project_id ||
+        request.expected_profile_revision !== profile.profile.revision
+      ) throw new Error("Mock Vibe Page export has a stale Profile target.");
+      const page = profile.profile.vibe_pages.find((candidate) => candidate.page_id === request.page_id);
+      if (page == null || page.page_revision !== request.expected_page_revision) {
+        throw new Error("Mock Vibe Page export has a stale Page target.");
+      }
+      return exportVibePage(page);
     },
     async duplicateUiProfileScene(request: UiProfileSceneLabelRequest) {
       validateProfileTarget(request.target);

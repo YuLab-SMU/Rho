@@ -68,6 +68,36 @@ describe("Studio foundation app", () => {
       .toBe("Compose");
   });
 
+  it("commits Vibe composition through exact Page transactions", async () => {
+    const transport = createMockUiKernelTransport();
+    const apply = vi.spyOn(transport, "applyVibePage");
+    const { container } = await renderApp(transport);
+    const vibe = [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
+      .find((button) => button.textContent === "Vibe")!;
+    await act(async () => {
+      vibe.click();
+      await settle();
+    });
+    const before = container.querySelectorAll(".rho-vibe-block-rich_text").length;
+    const text = [...container.querySelectorAll<HTMLButtonElement>(".rho-vibe-toolbar button")]
+      .find((button) => button.textContent === "+ Text")!;
+    const save = [...container.querySelectorAll<HTMLButtonElement>(".rho-vibe-toolbar button")]
+      .find((button) => button.textContent === "Save now")!;
+    await act(async () => {
+      text.click();
+      save.click();
+      for (let index = 0; index < 8; index += 1) await Promise.resolve();
+    });
+    expect(apply).toHaveBeenCalledOnce();
+    expect(apply.mock.calls[0]?.[0]).toMatchObject({
+      page_id: "page:project-review",
+      expected_page_revision: 1,
+      mutation: { kind: "replace_sections" },
+    });
+    expect(container.querySelectorAll(".rho-vibe-block-rich_text")).toHaveLength(before + 1);
+    expect(container.querySelector(".rho-vibe-save-state")?.textContent).toBe("Saved");
+  });
+
   it("runs repeatable Check commands into independent typed result Surfaces", async () => {
     const { container } = await renderApp();
     const check = container.querySelector<HTMLButtonElement>(".rho-command-projection button");

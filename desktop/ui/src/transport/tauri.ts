@@ -39,6 +39,9 @@ import type {
   UiProfileSelectPageRequest,
   UiProfileSelectSceneRequest,
   UiProfileSetModeRequest,
+  VibePageExport,
+  VibePageExportRequest,
+  VibePageMutationRequest,
 } from "./types";
 
 export type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
@@ -150,6 +153,10 @@ export function createTauriUiKernelTransport(
       invoke<ProjectUiProfileSnapshot>("ui_profile_select_scene", { request }),
     selectUiProfilePage: (request: UiProfileSelectPageRequest) =>
       invoke<ProjectUiProfileSnapshot>("ui_profile_select_page", { request }),
+    applyVibePage: (request: VibePageMutationRequest) =>
+      invoke<ProjectUiProfileSnapshot>("ui_profile_page_apply", { request }),
+    exportVibePage: (request: VibePageExportRequest) =>
+      invoke<VibePageExport>("ui_profile_page_export", { request }),
     duplicateUiProfileScene: (request: UiProfileSceneLabelRequest) =>
       invoke<ProjectUiProfileSnapshot>("ui_profile_scene_duplicate", { request }),
     saveUiProfileScene: (request: UiProfileSceneTargetRequest) =>

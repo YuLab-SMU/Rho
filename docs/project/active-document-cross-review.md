@@ -1024,6 +1024,31 @@ is a deferred catalog. Every external repository change requires a newly
 demonstrated gap and separate approval; `aisdk.bioc` remains deferred beyond
 `0.3.x`.
 
+### RSR Wave 10 Vibe Page cross-review
+
+The active RSR construction plan owns Page identity, order, focus, layout and
+presentation persistence. ProseMirror owns only editing mechanics and history;
+it does not become a project, Surface, plugin, Runtime, Resource, Check result,
+Agent, approval or scientific-state owner. Rust `VibePageV1` remains the sole
+durable Page contract and every edit crosses exact Profile/Page CAS validation.
+
+The Surface Registry retains instance/factory/lifecycle/view-state truth. A
+Vibe `surface_ref` owns placement only, and the trusted React NodeView projects
+the exact existing instance without copying plugin DOM or allowing guest code
+to write editor state. Check result retention remains process-local; Vibe and
+export placeholders cannot promote an evicted result into durable evidence.
+Resource/source modes and Console Runtime attachments remain independent
+instance bindings and are not inferred from document position.
+
+Project UI Profile schema 2 is an unshipped presentation-contract replacement,
+not a scientific data migration. Exact older owned profiles are archived then
+reseeded; future/foreign/malformed profiles still fail closed. Store, project,
+plugin, Agent conversation, approval and credential schemas are untouched.
+Mock/Tauri Page operations share the same exact identities and transaction
+shape. The review found no unresolved state, persistence, policy, authority,
+sequencing or project-isolation conflict. Wave 11 may project existing Agent
+truth through Surfaces but may not copy ownership or broaden Page mutation.
+
 ## Remaining Open Gates
 
 All installed-app/UI items below are intentionally consolidated under the

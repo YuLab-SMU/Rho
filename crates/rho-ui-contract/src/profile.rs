@@ -11,7 +11,7 @@ use crate::{
     validate_json_value, validate_label, validate_text, validate_unique,
 };
 
-pub const PROJECT_UI_PROFILE_SCHEMA_VERSION: u16 = 1;
+pub const PROJECT_UI_PROFILE_SCHEMA_VERSION: u16 = 2;
 pub const PROJECT_UI_PROFILE_SNAPSHOT_CONTRACT: &str = "rho.ui.project-profile.snapshot.v1";
 pub const MAX_UI_PROFILE_BYTES: usize = 4 * 1024 * 1024;
 pub const MAX_UI_PROFILE_SCENES: usize = 32;
@@ -402,6 +402,9 @@ pub enum UiProfileMutationV1 {
     ReplaceScene {
         scene: SceneStateV1,
     },
+    ReplacePage {
+        page: VibePageV1,
+    },
     DuplicateScene {
         source_scene_id: SceneId,
         scene: SceneStateV1,
@@ -455,6 +458,17 @@ pub fn apply_ui_profile_mutation(
                     value: scene.scene_id.to_string(),
                 })?;
             *target = scene;
+        }
+        UiProfileMutationV1::ReplacePage { page } => {
+            let target = next
+                .vibe_pages
+                .iter_mut()
+                .find(|candidate| candidate.page_id == page.page_id)
+                .ok_or_else(|| ContractError::MissingReference {
+                    path: "ui_profile_mutation.page_id".to_string(),
+                    value: page.page_id.to_string(),
+                })?;
+            *target = page;
         }
         UiProfileMutationV1::DuplicateScene {
             source_scene_id,

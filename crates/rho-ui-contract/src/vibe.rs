@@ -15,6 +15,9 @@ pub const MAX_VIBE_LIVE_SURFACES: usize = 24;
 pub const MAX_VIBE_TEXT_BYTES: usize = 64 * 1024;
 pub const MAX_VIBE_GRID_COLUMNS: u8 = 12;
 pub const MAX_VIBE_GRID_ROWS: u16 = 256;
+pub const MAX_VIBE_RICH_TEXT_NODES: usize = 512;
+pub const MAX_VIBE_INLINE_MARKS: usize = 4;
+pub const VIBE_PAGE_EXPORT_CONTRACT: &str = "rho.ui.vibe-page.export.v1";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -26,11 +29,139 @@ pub enum VibeCalloutToneV1 {
     Danger,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum VibeRichTextMarkV1 {
+    Strong,
+    Emphasis,
+    Code,
+    Link { href: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct VibeRichTextInlineV1 {
+    pub text: String,
+    pub marks: Vec<VibeRichTextMarkV1>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum VibeRichTextBlockV1 {
+    Paragraph {
+        content: Vec<VibeRichTextInlineV1>,
+    },
+    Heading {
+        level: u8,
+        content: Vec<VibeRichTextInlineV1>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct VibeRichTextDocumentV1 {
+    pub blocks: Vec<VibeRichTextBlockV1>,
+}
+
+impl VibeRichTextDocumentV1 {
+    pub fn plain_text(text: impl Into<String>) -> Self {
+        Self {
+            blocks: vec![VibeRichTextBlockV1::Paragraph {
+                content: vec![VibeRichTextInlineV1 {
+                    text: text.into(),
+                    marks: Vec::new(),
+                }],
+            }],
+        }
+    }
+
+    fn validate(&self) -> Result<(), ContractError> {
+        if self.blocks.is_empty() || self.blocks.len() > MAX_VIBE_RICH_TEXT_NODES {
+            return Err(ContractError::InvalidValue {
+                path: "vibe_rich_text.blocks".to_string(),
+                reason: "rich text requires a bounded non-empty block list".to_string(),
+            });
+        }
+        let mut nodes = self.blocks.len();
+        let mut text_bytes = 0usize;
+        for block in &self.blocks {
+            let content = match block {
+                VibeRichTextBlockV1::Paragraph { content } => content,
+                VibeRichTextBlockV1::Heading { level, content } => {
+                    if !(1..=3).contains(level) {
+                        return Err(ContractError::InvalidValue {
+                            path: "vibe_rich_text.heading.level".to_string(),
+                            reason: "heading level must be 1, 2, or 3".to_string(),
+                        });
+                    }
+                    content
+                }
+            };
+            nodes = nodes.saturating_add(content.len());
+            if nodes > MAX_VIBE_RICH_TEXT_NODES {
+                return Err(ContractError::LimitExceeded {
+                    path: "vibe_rich_text.nodes".to_string(),
+                    limit: MAX_VIBE_RICH_TEXT_NODES,
+                    actual: nodes,
+                });
+            }
+            for inline in content {
+                crate::validate_text(
+                    &inline.text,
+                    "vibe_rich_text.inline.text",
+                    MAX_VIBE_TEXT_BYTES,
+                    true,
+                    false,
+                )?;
+                text_bytes = text_bytes.saturating_add(inline.text.len());
+                if inline.marks.len() > MAX_VIBE_INLINE_MARKS {
+                    return Err(ContractError::LimitExceeded {
+                        path: "vibe_rich_text.inline.marks".to_string(),
+                        limit: MAX_VIBE_INLINE_MARKS,
+                        actual: inline.marks.len(),
+                    });
+                }
+                let marks = inline.marks.iter().collect::<BTreeSet<_>>();
+                if marks.len() != inline.marks.len() {
+                    return Err(ContractError::Duplicate {
+                        path: "vibe_rich_text.inline.marks".to_string(),
+                        value: "duplicate mark".to_string(),
+                    });
+                }
+                for mark in &inline.marks {
+                    if let VibeRichTextMarkV1::Link { href } = mark {
+                        crate::validate_text(
+                            href,
+                            "vibe_rich_text.link.href",
+                            2_048,
+                            false,
+                            false,
+                        )?;
+                        if !(href.starts_with("https://") || href.starts_with('#')) {
+                            return Err(ContractError::InvalidValue {
+                                path: "vibe_rich_text.link.href".to_string(),
+                                reason: "rich-text links must be HTTPS or local anchors"
+                                    .to_string(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        if text_bytes > MAX_VIBE_TEXT_BYTES {
+            return Err(ContractError::LimitExceeded {
+                path: "vibe_rich_text.text".to_string(),
+                limit: MAX_VIBE_TEXT_BYTES,
+                actual: text_bytes,
+            });
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum VibeBlockContentV1 {
     RichText {
-        text: String,
+        document: VibeRichTextDocumentV1,
     },
     Callout {
         tone: VibeCalloutToneV1,
@@ -73,7 +204,8 @@ pub struct VibeBlockV1 {
 impl Validate for VibeBlockV1 {
     fn validate(&self) -> Result<(), ContractError> {
         match &self.content {
-            VibeBlockContentV1::RichText { text } | VibeBlockContentV1::Callout { text, .. } => {
+            VibeBlockContentV1::RichText { document } => document.validate(),
+            VibeBlockContentV1::Callout { text, .. } => {
                 crate::validate_text(text, "vibe_block.text", MAX_VIBE_TEXT_BYTES, false, true)
             }
             VibeBlockContentV1::Divider | VibeBlockContentV1::SurfaceRef { .. } => Ok(()),
@@ -318,6 +450,7 @@ impl Validate for VibePageV1 {
 pub enum VibePageMutationV1 {
     ReplaceSections {
         sections: Vec<VibeSectionV1>,
+        focused_block_id: Option<BlockId>,
     },
     SetFocus {
         block_id: Option<BlockId>,
@@ -325,6 +458,32 @@ pub enum VibePageMutationV1 {
     UpdateBlock {
         block_id: BlockId,
         replacement: VibeBlockV1,
+    },
+    InsertSection {
+        index: usize,
+        section: VibeSectionV1,
+    },
+    RemoveSection {
+        section_id: SectionId,
+    },
+    InsertBlock {
+        section_id: SectionId,
+        index: usize,
+        block: VibeBlockV1,
+        grid_placement: Option<VibeGridPlacementV1>,
+    },
+    MoveBlock {
+        block_id: BlockId,
+        target_section_id: SectionId,
+        target_index: usize,
+        grid_placement: Option<VibeGridPlacementV1>,
+    },
+    RemoveBlock {
+        block_id: BlockId,
+    },
+    SetSectionLayout {
+        section_id: SectionId,
+        layout: VibeSectionLayoutV1,
     },
 }
 
@@ -340,7 +499,13 @@ pub fn apply_vibe_page_mutation(
     )?;
     let mut next = page.clone();
     match mutation {
-        VibePageMutationV1::ReplaceSections { sections } => next.sections = sections,
+        VibePageMutationV1::ReplaceSections {
+            sections,
+            focused_block_id,
+        } => {
+            next.sections = sections;
+            next.focused_block_id = focused_block_id;
+        }
         VibePageMutationV1::SetFocus { block_id } => next.focused_block_id = block_id,
         VibePageMutationV1::UpdateBlock {
             block_id,
@@ -371,10 +536,237 @@ pub fn apply_vibe_page_mutation(
                 });
             }
         }
+        VibePageMutationV1::InsertSection { index, section } => {
+            if index > next.sections.len() {
+                return Err(ContractError::InvalidValue {
+                    path: "vibe_page_mutation.section_index".to_string(),
+                    reason: "section insertion index is out of bounds".to_string(),
+                });
+            }
+            next.sections.insert(index, section);
+        }
+        VibePageMutationV1::RemoveSection { section_id } => {
+            let before = next.sections.len();
+            next.sections
+                .retain(|section| section.section_id != section_id);
+            if before == next.sections.len() {
+                return Err(ContractError::MissingReference {
+                    path: "vibe_page_mutation.section_id".to_string(),
+                    value: section_id.to_string(),
+                });
+            }
+            next.focused_block_id = next.focused_block_id.clone().filter(|focused| {
+                next.sections.iter().any(|section| {
+                    section
+                        .blocks
+                        .iter()
+                        .any(|block| block.block_id == *focused)
+                })
+            });
+        }
+        VibePageMutationV1::InsertBlock {
+            section_id,
+            index,
+            block,
+            grid_placement,
+        } => {
+            let section = section_mut(&mut next, &section_id)?;
+            if index > section.blocks.len() {
+                return Err(ContractError::InvalidValue {
+                    path: "vibe_page_mutation.block_index".to_string(),
+                    reason: "block insertion index is out of bounds".to_string(),
+                });
+            }
+            reconcile_inserted_grid_placement(section, &block.block_id, grid_placement)?;
+            section.blocks.insert(index, block);
+        }
+        VibePageMutationV1::MoveBlock {
+            block_id,
+            target_section_id,
+            target_index,
+            grid_placement,
+        } => {
+            let block = remove_block(&mut next, &block_id)?;
+            let section = section_mut(&mut next, &target_section_id)?;
+            if target_index > section.blocks.len() {
+                return Err(ContractError::InvalidValue {
+                    path: "vibe_page_mutation.target_index".to_string(),
+                    reason: "block target index is out of bounds".to_string(),
+                });
+            }
+            reconcile_inserted_grid_placement(section, &block.block_id, grid_placement)?;
+            section.blocks.insert(target_index, block);
+        }
+        VibePageMutationV1::RemoveBlock { block_id } => {
+            remove_block(&mut next, &block_id)?;
+            if next.focused_block_id.as_ref() == Some(&block_id) {
+                next.focused_block_id = None;
+            }
+        }
+        VibePageMutationV1::SetSectionLayout { section_id, layout } => {
+            section_mut(&mut next, &section_id)?.layout = layout;
+        }
     }
     next.page_revision = next_revision("vibe_page.page_revision", expected_revision)?;
     next.validate()?;
     Ok(next)
+}
+
+fn section_mut<'a>(
+    page: &'a mut VibePageV1,
+    section_id: &SectionId,
+) -> Result<&'a mut VibeSectionV1, ContractError> {
+    page.sections
+        .iter_mut()
+        .find(|section| section.section_id == *section_id)
+        .ok_or_else(|| ContractError::MissingReference {
+            path: "vibe_page_mutation.section_id".to_string(),
+            value: section_id.to_string(),
+        })
+}
+
+fn remove_block(page: &mut VibePageV1, block_id: &BlockId) -> Result<VibeBlockV1, ContractError> {
+    for section in &mut page.sections {
+        if let Some(index) = section
+            .blocks
+            .iter()
+            .position(|block| block.block_id == *block_id)
+        {
+            if let VibeSectionLayoutV1::Grid { placements } = &mut section.layout {
+                placements.retain(|placement| placement.block_id != *block_id);
+            }
+            return Ok(section.blocks.remove(index));
+        }
+    }
+    Err(ContractError::MissingReference {
+        path: "vibe_page_mutation.block_id".to_string(),
+        value: block_id.to_string(),
+    })
+}
+
+fn reconcile_inserted_grid_placement(
+    section: &mut VibeSectionV1,
+    block_id: &BlockId,
+    placement: Option<VibeGridPlacementV1>,
+) -> Result<(), ContractError> {
+    match (&mut section.layout, placement) {
+        (VibeSectionLayoutV1::Flow, None) => Ok(()),
+        (VibeSectionLayoutV1::Grid { placements }, Some(placement)) => {
+            if placement.block_id != *block_id {
+                return Err(ContractError::InvalidValue {
+                    path: "vibe_page_mutation.grid_placement.block_id".to_string(),
+                    reason: "grid placement must retain inserted block identity".to_string(),
+                });
+            }
+            placements.push(placement);
+            Ok(())
+        }
+        _ => Err(ContractError::InvalidValue {
+            path: "vibe_page_mutation.grid_placement".to_string(),
+            reason: "Flow blocks omit placement and Grid blocks require one".to_string(),
+        }),
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct VibePageExportV1 {
+    pub contract: String,
+    pub project_id: ProjectId,
+    pub page_id: PageId,
+    pub page_revision: u64,
+    pub label: String,
+    pub markdown: String,
+}
+
+pub fn export_vibe_page(page: &VibePageV1) -> Result<VibePageExportV1, ContractError> {
+    page.validate()?;
+    let mut markdown = format!("# {}\n", page.label);
+    for section in &page.sections {
+        if let Some(heading) = &section.heading {
+            markdown.push_str(&format!("\n## {heading}\n"));
+        }
+        for block in &section.blocks {
+            markdown.push('\n');
+            markdown.push_str(&export_block(&block.content));
+            markdown.push('\n');
+        }
+    }
+    crate::validate_text(
+        &markdown,
+        "vibe_page_export.markdown",
+        MAX_VIBE_PAGE_JSON_BYTES,
+        false,
+        true,
+    )?;
+    Ok(VibePageExportV1 {
+        contract: VIBE_PAGE_EXPORT_CONTRACT.to_string(),
+        project_id: page.project_id.clone(),
+        page_id: page.page_id.clone(),
+        page_revision: page.page_revision,
+        label: page.label.clone(),
+        markdown,
+    })
+}
+
+fn export_block(content: &VibeBlockContentV1) -> String {
+    match content {
+        VibeBlockContentV1::RichText { document } => document
+            .blocks
+            .iter()
+            .map(|block| match block {
+                VibeRichTextBlockV1::Paragraph { content } => export_inlines(content),
+                VibeRichTextBlockV1::Heading { level, content } => {
+                    format!(
+                        "{} {}",
+                        "#".repeat(*level as usize + 2),
+                        export_inlines(content)
+                    )
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n"),
+        VibeBlockContentV1::Callout { tone, text } => {
+            let tone = match tone {
+                VibeCalloutToneV1::Neutral => "neutral",
+                VibeCalloutToneV1::Info => "info",
+                VibeCalloutToneV1::Success => "success",
+                VibeCalloutToneV1::Warning => "warning",
+                VibeCalloutToneV1::Danger => "danger",
+            };
+            format!("> [{tone}] {text}")
+        }
+        VibeBlockContentV1::Divider => "---".to_string(),
+        VibeBlockContentV1::FileExcerpt {
+            resource,
+            start_line,
+            end_line,
+        } => format!(
+            "[File excerpt: {} lines {}-{}]",
+            resource.resource_id, start_line, end_line
+        ),
+        VibeBlockContentV1::ArtifactRef { artifact_id, label } => {
+            format!("[Artifact: {label} · {artifact_id}]")
+        }
+        VibeBlockContentV1::FindingRef { finding_id, label } => {
+            format!("[Finding: {label} · {finding_id}]")
+        }
+        VibeBlockContentV1::TaskRef { task_id, label } => {
+            format!("[Task: {label} · {task_id}]")
+        }
+        VibeBlockContentV1::SurfaceRef { instance_id, live } => {
+            format!("[Surface: {instance_id} · live={live}]")
+        }
+        VibeBlockContentV1::CommandRef { command_id, label } => {
+            format!("[Command: {label} · {command_id}]")
+        }
+    }
+}
+
+fn export_inlines(content: &[VibeRichTextInlineV1]) -> String {
+    content
+        .iter()
+        .map(|inline| inline.text.as_str())
+        .collect::<String>()
 }
 
 #[cfg(test)]
@@ -385,7 +777,7 @@ mod tests {
         VibeBlockV1 {
             block_id: BlockId::new(id).unwrap(),
             content: VibeBlockContentV1::RichText {
-                text: text.to_string(),
+                document: VibeRichTextDocumentV1::plain_text(text),
             },
         }
     }
@@ -534,5 +926,125 @@ mod tests {
             page.validate(),
             Err(ContractError::LimitExceeded { path, .. }) if path == "vibe_page.encoded_bytes"
         ));
+    }
+
+    #[test]
+    fn insert_move_resize_and_remove_preserve_exact_order() {
+        let page = page();
+        let inserted = block("block:inserted", "Inserted");
+        let page = apply_vibe_page_mutation(
+            &page,
+            3,
+            VibePageMutationV1::InsertBlock {
+                section_id: SectionId::new("section:summary").unwrap(),
+                index: 1,
+                block: inserted,
+                grid_placement: Some(VibeGridPlacementV1 {
+                    block_id: BlockId::new("block:inserted").unwrap(),
+                    row_start: 2,
+                    column_start: 1,
+                    column_span: 12,
+                }),
+            },
+        )
+        .unwrap();
+        assert_eq!(page.page_revision, 4);
+        assert_eq!(
+            page.sections[0].blocks[1].block_id.as_str(),
+            "block:inserted"
+        );
+
+        let page = apply_vibe_page_mutation(
+            &page,
+            4,
+            VibePageMutationV1::MoveBlock {
+                block_id: BlockId::new("block:inserted").unwrap(),
+                target_section_id: SectionId::new("section:summary").unwrap(),
+                target_index: 0,
+                grid_placement: Some(VibeGridPlacementV1 {
+                    block_id: BlockId::new("block:inserted").unwrap(),
+                    row_start: 2,
+                    column_start: 1,
+                    column_span: 6,
+                }),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            page.sections[0].blocks[0].block_id.as_str(),
+            "block:inserted"
+        );
+
+        let page = apply_vibe_page_mutation(
+            &page,
+            5,
+            VibePageMutationV1::RemoveBlock {
+                block_id: BlockId::new("block:inserted").unwrap(),
+            },
+        )
+        .unwrap();
+        assert!(
+            !page.sections[0]
+                .blocks
+                .iter()
+                .any(|block| block.block_id.as_str() == "block:inserted")
+        );
+    }
+
+    #[test]
+    fn rejected_grid_candidate_leaves_original_unchanged() {
+        let page = page();
+        let result = apply_vibe_page_mutation(
+            &page,
+            3,
+            VibePageMutationV1::InsertBlock {
+                section_id: SectionId::new("section:summary").unwrap(),
+                index: 1,
+                block: block("block:overlap", "Overlap"),
+                grid_placement: Some(VibeGridPlacementV1 {
+                    block_id: BlockId::new("block:overlap").unwrap(),
+                    row_start: 1,
+                    column_start: 1,
+                    column_span: 2,
+                }),
+            },
+        );
+        assert!(result.is_err());
+        assert_eq!(page.page_revision, 3);
+        assert_eq!(page.sections[0].blocks.len(), 2);
+    }
+
+    #[test]
+    fn export_is_deterministic_and_contains_only_surface_placeholders() {
+        let page = page();
+        let first = export_vibe_page(&page).unwrap();
+        let second = export_vibe_page(&page).unwrap();
+        assert_eq!(first, second);
+        assert_eq!(first.contract, VIBE_PAGE_EXPORT_CONTRACT);
+        assert!(first.markdown.contains("Review notes"));
+        assert!(
+            first
+                .markdown
+                .contains("[Surface: instance:check · live=true]")
+        );
+        assert!(!first.markdown.contains('<'));
+    }
+
+    #[test]
+    fn rich_text_rejects_unsafe_links_and_excessive_nodes() {
+        let mut page = page();
+        page.sections[0].blocks[0].content = VibeBlockContentV1::RichText {
+            document: VibeRichTextDocumentV1 {
+                blocks: vec![VibeRichTextBlockV1::Paragraph {
+                    content: vec![VibeRichTextInlineV1 {
+                        text: "unsafe".to_string(),
+                        marks: vec![VibeRichTextMarkV1::Link {
+                            href: "javascript:alert(1)".to_string(),
+                        }],
+                    }],
+                }],
+            },
+        };
+        assert!(page.validate().is_err());
     }
 }

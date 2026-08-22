@@ -41,9 +41,8 @@ import type {
   SurfaceInstance,
   SurfaceInstanceRequest,
   UiKernelTransport,
-  VibeBlockContent,
-  VibePage,
 } from "../transport";
+import { VibePageEditor } from "./VibePageEditor";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 
@@ -280,6 +279,7 @@ interface SurfaceViewProps {
   readonly pluginDocumentRequest: PluginSurfaceDocumentRequest | null;
   readonly projectRevision: number;
   readonly openCheckEvidence: (path: string) => Promise<void>;
+  readonly embedded: boolean;
 }
 
 interface ConsoleOutputRecord {
@@ -765,6 +765,7 @@ function SurfaceView({
   saveResource, reloadResource, renameResource, deleteResource,
   refreshResourceBinding, setViewGroup, persistFileViewState, reportError,
   pluginTransport, pluginDocumentRequest, projectRevision, openCheckEvidence,
+  embedded,
 }: SurfaceViewProps) {
   const [draft, setDraft] = useState(() => initialDraft(instance, draftCache));
   const [consoleState, setConsoleState] = useState(() => initialConsoleState(instance));
@@ -817,14 +818,14 @@ function SurfaceView({
       className={`rho-surface rho-surface-${instance.lifecycle_state} ${focused ? "rho-surface-focused" : ""} ${isStrip ? "rho-surface-strip" : ""}`}
       data-instance-id={instance.instance_id}
       data-surface-id={instance.surface_id}
-      onPointerDown={setFocus}
+      onPointerDown={embedded ? undefined : setFocus}
     >
       <header className="rho-surface-chrome">
         <div><span className="rho-eyebrow">{instance.surface_id}</span><strong>{title}</strong></div>
-        <div className="rho-surface-actions" onPointerDown={(event) => event.stopPropagation()}>
+        {!embedded && <div className="rho-surface-actions" onPointerDown={(event) => event.stopPropagation()}>
           <button type="button" onClick={duplicate}>Duplicate</button>
           <button type="button" onClick={remove} aria-label={`Remove ${instance.instance_id} from layout`}>×</button>
-        </div>
+        </div>}
       </header>
       {instance.surface_id === "rho.console" && (
         <div className="rho-console-surface">
@@ -1113,76 +1114,6 @@ function NodeOutline({ node, commit }: { readonly node: LayoutNode; readonly com
   );
 }
 
-function VibeBlock({
-  content,
-  instances,
-  surfaceView,
-}: {
-  readonly content: VibeBlockContent;
-  readonly instances: ReadonlyMap<string, SurfaceInstance>;
-  readonly surfaceView: (instance: SurfaceInstance) => ReactNode;
-}) {
-  switch (content.kind) {
-    case "rich_text":
-      return <div className="rho-vibe-prose">{content.text}</div>;
-    case "callout":
-      return <aside className={`rho-vibe-callout rho-vibe-callout-${content.tone}`}>{content.text}</aside>;
-    case "divider":
-      return <hr className="rho-vibe-divider" />;
-    case "file_excerpt":
-      return <div className="rho-vibe-reference"><span>File excerpt</span><code>{content.resource.resource_id}:{content.start_line}–{content.end_line}</code></div>;
-    case "artifact_ref":
-      return <div className="rho-vibe-reference"><span>Artifact</span><strong>{content.label}</strong><code>{content.artifact_id}</code></div>;
-    case "finding_ref":
-      return <div className="rho-vibe-reference"><span>Finding</span><strong>{content.label}</strong><code>{content.finding_id}</code></div>;
-    case "task_ref":
-      return <div className="rho-vibe-reference"><span>Task</span><strong>{content.label}</strong><code>{content.task_id}</code></div>;
-    case "command_ref":
-      return <button className="rho-vibe-command" type="button"><span>Command</span><strong>{content.label}</strong><code>{content.command_id}</code></button>;
-    case "surface_ref": {
-      const instance = instances.get(content.instance_id);
-      if (instance == null) {
-        return <div className="rho-vibe-missing">Surface {content.instance_id} is unavailable. Its place in the Page is preserved.</div>;
-      }
-      return content.live
-        ? <div className="rho-vibe-live-surface">{surfaceView(instance)}</div>
-        : <div className="rho-vibe-reference"><span>Surface snapshot</span><code>{content.instance_id}</code></div>;
-    }
-  }
-}
-
-function VibeCanvas({
-  page,
-  instances,
-  surfaceView,
-}: {
-  readonly page: VibePage;
-  readonly instances: ReadonlyMap<string, SurfaceInstance>;
-  readonly surfaceView: (instance: SurfaceInstance) => ReactNode;
-}) {
-  return (
-    <article className="rho-vibe-page" data-page-id={page.page_id}>
-      <header className="rho-vibe-page-header">
-        <span className="rho-eyebrow">Vibe page</span>
-        <h1>{page.label}</h1>
-        <p>A persistent composition of narrative, evidence, commands, and live Surfaces.</p>
-      </header>
-      {page.sections.map((section) => (
-        <section className="rho-vibe-section" data-layout={String(section.layout.kind ?? "flow")} key={section.section_id}>
-          {section.heading != null && <h2>{section.heading}</h2>}
-          <div className="rho-vibe-blocks">
-            {section.blocks.map((block) => (
-              <div className={`rho-vibe-block rho-vibe-block-${block.content.kind}`} key={block.block_id}>
-                <VibeBlock content={block.content} instances={instances} surfaceView={surfaceView} />
-              </div>
-            ))}
-          </div>
-        </section>
-      ))}
-    </article>
-  );
-}
-
 export function App({ transport }: AppProps) {
   const [actionError, setActionError] = useState<string | null>(null);
   const [resourcePath, setResourcePath] = useState("analysis.R");
@@ -1405,10 +1336,62 @@ export function App({ transport }: AppProps) {
           basis: { kind: "minmax", min_logical_pixels: 280, max_logical_pixels: 900, weight: 1 },
         },
       });
+    } else if (profile?.active_mode === "vibe") {
+      await profileStore.refresh();
+      const latest = profileStore.getSnapshot();
+      if (latest.status !== "ready") throw new Error("Vibe Page Profile is unavailable after Check.");
+      const activePage = latest.snapshot.profile.vibe_pages.find(
+        (page) => page.page_id === latest.snapshot.profile.active_vibe_page_id,
+      );
+      if (activePage == null) throw new Error("The active Vibe Page is unavailable after Check.");
+      const block = {
+        block_id: `vibe-block:${crypto.randomUUID().replaceAll("-", "")}`,
+        content: { kind: "surface_ref" as const, instance_id: created.instance_id, live: true },
+      };
+      const sections = activePage.sections.length === 0
+        ? [{
+            section_id: `vibe-section:${crypto.randomUUID().replaceAll("-", "")}`,
+            heading: "Check results",
+            layout: { kind: "flow" as const },
+            blocks: [block],
+          }]
+        : activePage.sections.map((section, index) => {
+            if (index !== activePage.sections.length - 1) return section;
+            if (section.layout.kind === "flow") {
+              return { ...section, blocks: [...section.blocks, block] };
+            }
+            const nextRow = Math.max(0, ...section.layout.placements.map((placement) => placement.row_start)) + 1;
+            return {
+              ...section,
+              blocks: [...section.blocks, block],
+              layout: {
+                kind: "grid" as const,
+                placements: [...section.layout.placements, {
+                  block_id: block.block_id,
+                  row_start: nextRow,
+                  column_start: 1,
+                  column_span: 12,
+                }],
+              },
+            };
+          });
+      await profileStore.applyPage({
+        target: {
+          project_id: latest.snapshot.profile.project_id,
+          expected_profile_revision: latest.snapshot.profile.revision,
+        },
+        page_id: activePage.page_id,
+        expected_page_revision: activePage.page_revision,
+        mutation: {
+          kind: "replace_sections",
+          sections,
+          focused_block_id: activePage.focused_block_id,
+        },
+      });
     }
     setCommandSearchOpen(false);
   };
-  const surfaceView = (instance: SurfaceInstance) => {
+  const surfaceView = (instance: SurfaceInstance, embedded = false) => {
     const boundDescriptor = resources?.resources.find((descriptor) =>
       descriptor.resource_provider_id === instance.resource_binding?.resource_provider_id &&
       descriptor.resource_kind === instance.resource_binding?.resource_kind &&
@@ -1432,9 +1415,9 @@ export function App({ transport }: AppProps) {
     return <SurfaceView
       key={instance.instance_id}
       instance={instance}
-      focused={studio?.scene.focused_surface_instance_id === instance.instance_id}
+      focused={!embedded && studio?.scene.focused_surface_instance_id === instance.instance_id}
       setFocus={() => {
-        if (studio?.scene.focused_surface_instance_id !== instance.instance_id) {
+        if (!embedded && studio?.scene.focused_surface_instance_id !== instance.instance_id) {
           commit({ kind: "set_focus", instance_id: instance.instance_id });
         }
       }}
@@ -1586,6 +1569,7 @@ export function App({ transport }: AppProps) {
         if (descriptor == null) throw new Error(`Check evidence Resource ${path} is unavailable.`);
         await openResource(descriptor, "rho.file-source", "source");
       }}
+      embedded={embedded}
     />;
   };
   const activeVibePage = profile?.vibe_pages.find(
@@ -1863,7 +1847,20 @@ export function App({ transport }: AppProps) {
             : profile.active_mode === "vibe"
               ? activeVibePage == null
                 ? <div className="rho-studio-loading">The active Vibe Page is unavailable.</div>
-                : <VibeCanvas page={activeVibePage} instances={instances} surfaceView={surfaceView} />
+                : <VibePageEditor
+                    page={activeVibePage}
+                    profileRevision={profile.revision}
+                    instances={instances}
+                    renderSurface={(instance) => surfaceView(instance, true)}
+                    invokeCommand={invokeCommand}
+                    commit={(request) => profileStore.applyPage(request)}
+                    exportPage={(request) => profileStore.exportPage(request)}
+                    reportError={(error) => setActionError(
+                      error instanceof Error && error.message.trim()
+                        ? error.message.slice(0, 512)
+                        : "Vibe Page operation failed.",
+                    )}
+                  />
               : <LayoutTree node={studio.scene.root} instances={instances} studio={studio} commit={commit} surfaceView={surfaceView} />}
         </section>
       </div>

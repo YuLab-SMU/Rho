@@ -481,6 +481,20 @@ describe("UI Kernel transport and external store", () => {
     await transport.setUiProfileMode({ target: profileTarget, mode: "vibe" });
     await transport.selectUiProfileScene({ target: profileTarget, scene_id: "scene:rho-studio" });
     await transport.selectUiProfilePage({ target: profileTarget, page_id: "page:project-review" });
+    const pageMutation = {
+      target: profileTarget,
+      page_id: "page:project-review",
+      expected_page_revision: 2,
+      mutation: { kind: "set_focus" as const, block_id: null },
+    };
+    const pageExport = {
+      project_id: "project:fixture",
+      expected_profile_revision: 5,
+      page_id: "page:project-review",
+      expected_page_revision: 2,
+    };
+    await transport.applyVibePage(pageMutation);
+    await transport.exportVibePage(pageExport);
     await transport.duplicateUiProfileScene({ target: profileTarget, scene_id: "scene:rho-studio", label: "Copy" });
     await transport.saveUiProfileScene({ target: profileTarget, scene_id: "scene:rho-studio" });
     await transport.renameUiProfileScene({ target: profileTarget, scene_id: "scene:rho-studio", label: "Renamed" });
@@ -625,6 +639,8 @@ describe("UI Kernel transport and external store", () => {
       { command: "ui_profile_set_mode", args: { request: { target: profileTarget, mode: "vibe" } } },
       { command: "ui_profile_select_scene", args: { request: { target: profileTarget, scene_id: "scene:rho-studio" } } },
       { command: "ui_profile_select_page", args: { request: { target: profileTarget, page_id: "page:project-review" } } },
+      { command: "ui_profile_page_apply", args: { request: pageMutation } },
+      { command: "ui_profile_page_export", args: { request: pageExport } },
       { command: "ui_profile_scene_duplicate", args: { request: { target: profileTarget, scene_id: "scene:rho-studio", label: "Copy" } } },
       { command: "ui_profile_scene_save", args: { request: { target: profileTarget, scene_id: "scene:rho-studio" } } },
       { command: "ui_profile_scene_rename", args: { request: { target: profileTarget, scene_id: "scene:rho-studio", label: "Renamed" } } },

@@ -30,6 +30,8 @@ import type {
   UiProfileSelectPageRequest,
   UiProfileSelectSceneRequest,
   UiProfileSetModeRequest,
+  VibePageExportRequest,
+  VibePageMutationRequest,
 } from "./types";
 
 export type UiStoreSnapshot =
@@ -497,6 +499,14 @@ export class UiProfileExternalStore {
 
   selectPage(request: UiProfileSelectPageRequest) {
     return this.#mutate(() => this.#transport.selectUiProfilePage(request));
+  }
+
+  applyPage(request: VibePageMutationRequest) {
+    return this.#mutate(() => this.#transport.applyVibePage(request));
+  }
+
+  exportPage(request: VibePageExportRequest) {
+    return this.#transport.exportVibePage(request);
   }
 
   duplicateScene(request: UiProfileSceneLabelRequest) {

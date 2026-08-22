@@ -1,6 +1,6 @@
 # Rho Surface Runtime Full Construction Plan
 
-Status: active complete construction program; Wave 10 is the current integration
+Status: active complete construction program; Wave 11 is the current integration
 package
 
 Date: 2026-08-21
@@ -13,16 +13,14 @@ own focused evidence, contract review, documentation reconciliation, and
 scoped commit. After a wave passes its continuous gate, the next dependency is
 activated automatically under the same explicit authorization.
 
-Current integration package: **Wave 10 — Vibe Page engine**.
+Current integration package: **Wave 11 — Agent and remaining first-party Surfaces**.
 
-Wave 10 acceptance owner: this active contract together with the pure Vibe
-Page contracts and Project UI Profile store activated in Wave 7. Acceptance
-requires exact revisioned Page transactions, deterministic ordered/grid
-composition, trusted React NodeViews for live Surface references, history,
-keyboard/accessibility behavior, read-only export projection, and project/
-plugin isolation. ProseMirror owns editing mechanics only; it gains no Surface,
-plugin, Resource, Runtime, Check-result, project-file, execution, or approval
-authority.
+Wave 11 acceptance owner: this active contract together with the existing
+project-scoped Agent conversation/turn/event and command-admission contracts.
+The Agent Surface may project and operate that truth, but it cannot copy
+conversation ownership into Surface view state, bypass turn concurrency or
+approval policy, or let a NodeView/plugin mutate a Vibe Page. Frontend build
+and HMR changes remain presentation/build authority only.
 
 Owning design:
 `docs/design/proposed-2026-08-21-plugin-native-surface-runtime-design.md`
@@ -1060,7 +1058,69 @@ Continuous gate:
   narrow viewport, accessibility and project isolation;
 - Agent/plugin proposals cannot mutate a Page without exact user review.
 
+Wave 10 completed locally on 2026-08-22:
+
+- `VibePageV1` now owns a bounded rich-text JSON tree, typed atomic references,
+  exact focus, Section/Block insert/move/remove/layout transitions and a
+  deterministic Markdown projection. Invalid/stale candidates, unsafe links,
+  overlapping 12-column placements and duplicate live mounts fail without
+  changing the accepted Page;
+- Project UI Profile schema 2 adds exact Page replacement. The desktop exposes
+  `ui_profile_page_apply` and `ui_profile_page_export`, requiring matching
+  project, Profile, Page and Page revisions before persistent mutation or
+  read-only export. Store reopen, stale rejection, injected write failure,
+  recovery and project A/B/A isolation passed. Unshipped schema-1 presentation
+  assets are archived and rebuilt instead of gaining a migration layer;
+- the React shell uses ProseMirror only for editing transactions. Its schema
+  round-trips Section identity/order, bounded rich text, grid placement and
+  typed atoms; history/keymaps, formatting, block/Section insertion,
+  cross-Section ordering, spans, Flow/Grid conversion and removal persist one
+  complete validated candidate. Rejection restores accepted durable state;
+- trusted React NodeViews mount one existing Surface instance, refresh on
+  lifecycle changes, stop plugin DOM/events at the NodeView boundary and
+  unmount on teardown. Missing/evicted instances remain explicit placeholders.
+  Narrow presentation reflows visually to one column without rewriting Page
+  order, spans or rows;
+- Check project review is the first Page template. Its typed Command opens a
+  distinct process-local Check-result Surface and an ordinary exact Vibe
+  transaction places that instance. Export contains only accepted authored
+  text and typed placeholders, never React/plugin DOM or runtime handles;
+- exact dependency pins are ProseMirror model 1.25.11, state 1.4.4, view
+  1.42.2, history 1.5.0, keymap 1.2.3 and commands 1.7.2. `npm run rsr:check`
+  passed 31 Vitest cases, strict TypeScript/ESLint, exact fixtures, production
+  assets and real Chrome smoke. The Tauri inventory passed with 179 commands
+  across 19 Rust files;
+- `cargo test --workspace --locked` passed; Desktop ran 320 tests with 319
+  passing and its opt-in Keychain smoke ignored. Focused `rho-ui-contract`
+  Clippy passed with `-D warnings`; broad Desktop Clippy remains blocked by the
+  recorded pre-existing 28-source/32-test warning backlog and is not claimed;
+- 1800×1100 and 640×1000 local browser captures verified ordered asymmetric
+  Grid composition, live Surface embedding, compact editing controls and
+  presentation-only narrow reflow. Tauri still loads the frozen old shell, so
+  no installed-app/release acceptance or application/R-package version and
+  `NEWS.md` change is claimed before Wave 12 cutover.
+
 ### Wave 11 — Agent and remaining first-party Surfaces
+
+Implementation contract activated 2026-08-22:
+
+- Agent conversations, turns, events, approvals and activity remain owned by
+  their existing project-scoped backend/store contracts. A repeatable Agent
+  Surface binds a conversation identity and local view state; two instances
+  may show the same conversation without duplicating or forking its truth;
+- new Agent task, timeline and composer Surfaces use the ordinary application
+  Surface Factory/Instance lifecycle and exact project/generation/revision
+  requests. Agent health failure degrades only those Surfaces and never marks a
+  healthy editor, Console, Resource, Workspace or Vibe Page as failed;
+- Vibe Agent blocks are typed references/projections. Agent/plugin output may
+  propose content, but only an exact user Page transaction may persist or move
+  a block. Surface view state contains no credential, raw approval handle or
+  copied durable conversation transcript;
+- Vite HMR continues against browser/mock transport. Deterministic checked-in
+  build inputs and the lockfile remain authoritative; no CDN/runtime asset
+  fetch or second frontend is introduced. `desktop/dist` becomes generated
+  output only at the Wave 12 startup cutover, when the old shell is deleted in
+  the same buildable package.
 
 Deliver:
 

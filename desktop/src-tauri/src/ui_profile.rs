@@ -5,13 +5,15 @@ use std::sync::{Arc, Mutex as StdMutex, MutexGuard};
 use anyhow::anyhow;
 use anyhow::{Context, Result, ensure};
 use rho_ui_contract::{
-    LayoutAxisV1, LayoutBasisV1, LayoutChildV1, LayoutNodeId, LayoutNodeV1,
+    BlockId, LayoutAxisV1, LayoutBasisV1, LayoutChildV1, LayoutNodeId, LayoutNodeV1,
     PROJECT_UI_PROFILE_SCHEMA_VERSION, PROJECT_UI_PROFILE_SNAPSHOT_CONTRACT, PageId, ProjectId,
     ProjectUiProfileSnapshotV1, ProjectUiProfileV1, RSR_CONTRACT_MAJOR, RuntimeAttachmentIntentV1,
-    RuntimeRegistrySnapshotV1, SceneId, ScenePresetId, SceneStateV1, StudioScenePresetV1,
-    SurfaceFactoryRegistrationV1, SurfaceInstanceSpecV1, SurfaceLifecycleStateV1,
-    SurfaceRuntimeSnapshotV1, UiProfileLoadStatusV1, UiProfileModeV1, UiProfileMutationV1,
-    UiProfileRevisionRequestV1, Validate, VibePageV1, apply_ui_profile_mutation,
+    RuntimeRegistrySnapshotV1, SceneId, ScenePresetId, SceneStateV1, SectionId,
+    StudioScenePresetV1, SurfaceFactoryRegistrationV1, SurfaceInstanceSpecV1,
+    SurfaceLifecycleStateV1, SurfaceRuntimeSnapshotV1, UiProfileLoadStatusV1, UiProfileModeV1,
+    UiProfileMutationV1, UiProfileRevisionRequestV1, Validate, VibeBlockContentV1, VibeBlockV1,
+    VibePageExportV1, VibePageMutationV1, VibePageV1, VibeRichTextDocumentV1, VibeSectionLayoutV1,
+    VibeSectionV1, apply_ui_profile_mutation, apply_vibe_page_mutation, export_vibe_page,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -80,6 +82,13 @@ impl ProjectUiProfileStore {
             .join(format!("{}.backup.json", stable_project_key(root)))
     }
 
+    fn obsolete_path(&self, root: &Path, schema_version: u64) -> PathBuf {
+        self.profiles_dir.join(format!(
+            "{}.schema-{schema_version}.obsolete.json",
+            stable_project_key(root)
+        ))
+    }
+
     fn normalized_root(root: &Path) -> String {
         display_path(root)
     }
@@ -121,6 +130,18 @@ impl ProjectUiProfileStore {
         Ok(bytes)
     }
 
+    fn obsolete_owned_schema(bytes: &[u8], root: &Path, project_id: &ProjectId) -> Option<u64> {
+        let value = serde_json::from_slice::<serde_json::Value>(bytes).ok()?;
+        let stored_root = value.get("normalized_project_root")?.as_str()?;
+        let profile = value.get("profile")?;
+        let stored_project = profile.get("project_id")?.as_str()?;
+        let schema_version = profile.get("schema_version")?.as_u64()?;
+        (stored_root == Self::normalized_root(root)
+            && stored_project == project_id.as_str()
+            && schema_version < u64::from(PROJECT_UI_PROFILE_SCHEMA_VERSION))
+        .then_some(schema_version)
+    }
+
     fn load_or_create(
         &self,
         root: &Path,
@@ -131,7 +152,31 @@ impl ProjectUiProfileStore {
         let path = self.path(root);
         let backup = self.backup_path(root);
         if path.is_file() {
-            match Self::read_bytes(&path).and_then(|bytes| Self::decode(&bytes, root, project_id)) {
+            let main_bytes = Self::read_bytes(&path)?;
+            if let Some(schema_version) = Self::obsolete_owned_schema(&main_bytes, root, project_id)
+            {
+                let profile = create()?;
+                ensure!(
+                    &profile.project_id == project_id,
+                    "Replacement Project UI Profile belongs to another project"
+                );
+                let bytes = Self::encode(root, &profile)?;
+                atomic_write(&self.obsolete_path(root, schema_version), &main_bytes)
+                    .context("archiving the obsolete unshipped Project UI Profile")?;
+                atomic_write(&backup, &bytes)
+                    .context("seeding the replacement Project UI Profile backup")?;
+                atomic_write(&path, &bytes)
+                    .context("replacing the obsolete unshipped Project UI Profile")?;
+                return Ok(LoadedProfile {
+                    profile,
+                    status: UiProfileLoadStatusV1::Created,
+                    recovery_detail: Some(format!(
+                        "Rebuilt the unshipped UI Profile schema {schema_version} as schema {}. The obsolete file was archived locally.",
+                        PROJECT_UI_PROFILE_SCHEMA_VERSION
+                    )),
+                });
+            }
+            match Self::decode(&main_bytes, root, project_id) {
                 Ok(profile) => {
                     return Ok(LoadedProfile {
                         profile,
@@ -398,6 +443,16 @@ fn next_page_id() -> PageId {
         .expect("host-generated Page ID must be valid")
 }
 
+fn next_section_id() -> SectionId {
+    SectionId::new(format!("vibe-section:{}", Uuid::new_v4().simple()))
+        .expect("host-generated Section ID must be valid")
+}
+
+fn next_block_id() -> BlockId {
+    BlockId::new(format!("vibe-block:{}", Uuid::new_v4().simple()))
+        .expect("host-generated Block ID must be valid")
+}
+
 fn default_surface_specs(
     factories: &[SurfaceFactoryRegistrationV1],
     runtimes: &RuntimeRegistrySnapshotV1,
@@ -533,9 +588,30 @@ fn default_profile_seed(
     let page = VibePageV1 {
         page_id: next_page_id(),
         project_id: project_id.clone(),
-        label: "Research canvas".to_string(),
+        label: "Project review".to_string(),
         page_revision: 1,
-        sections: Vec::new(),
+        sections: vec![VibeSectionV1 {
+            section_id: next_section_id(),
+            heading: Some("Start with evidence".to_string()),
+            layout: VibeSectionLayoutV1::Flow,
+            blocks: vec![
+                VibeBlockV1 {
+                    block_id: next_block_id(),
+                    content: VibeBlockContentV1::RichText {
+                        document: VibeRichTextDocumentV1::plain_text(
+                            "Review this project as a living document. Add narrative, commands, references, and independently placed live Surfaces in any order.",
+                        ),
+                    },
+                },
+                VibeBlockV1 {
+                    block_id: next_block_id(),
+                    content: VibeBlockContentV1::CommandRef {
+                        command_id: rho_ui_contract::CommandId::new("rho.check.run").unwrap(),
+                        label: "Check project".to_string(),
+                    },
+                },
+            ],
+        }],
         focused_block_id: None,
     };
     let profile = ProjectUiProfileV1 {
@@ -665,6 +741,22 @@ pub(crate) struct SceneTargetRequest {
     scene_id: SceneId,
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct PageMutationRequest {
+    target: UiProfileRevisionRequestV1,
+    page_id: PageId,
+    expected_page_revision: u64,
+    mutation: VibePageMutationV1,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct PageExportRequest {
+    project_id: ProjectId,
+    expected_profile_revision: u64,
+    page_id: PageId,
+    expected_page_revision: u64,
+}
+
 #[tauri::command]
 pub(crate) async fn ui_profile_snapshot(
     app: AppHandle,
@@ -765,6 +857,60 @@ pub(crate) async fn ui_profile_select_page(
         .await
         .map_err(display_error)?;
     Ok(snapshot)
+}
+
+#[tauri::command]
+pub(crate) async fn ui_profile_page_apply(
+    request: PageMutationRequest,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<ProjectUiProfileSnapshotV1, String> {
+    let _project = state.project_transition_gate.lock().await;
+    let snapshot = state.ui_profile.snapshot().map_err(display_error)?;
+    if snapshot.profile.project_id != request.target.project_id {
+        return Err("Vibe Page request belongs to another project".to_string());
+    }
+    let page = snapshot
+        .profile
+        .vibe_pages
+        .iter()
+        .find(|page| page.page_id == request.page_id)
+        .ok_or_else(|| "Vibe Page was not found".to_string())?;
+    let candidate =
+        apply_vibe_page_mutation(page, request.expected_page_revision, request.mutation)
+            .map_err(display_error)?;
+    mutate_and_emit(
+        &app,
+        &state,
+        &request.target,
+        UiProfileMutationV1::ReplacePage { page: candidate },
+    )
+    .map_err(display_error)
+}
+
+#[tauri::command]
+pub(crate) async fn ui_profile_page_export(
+    request: PageExportRequest,
+    state: State<'_, AppState>,
+) -> Result<VibePageExportV1, String> {
+    let _project = state.project_transition_gate.lock().await;
+    let snapshot = state.ui_profile.snapshot().map_err(display_error)?;
+    if snapshot.profile.project_id != request.project_id {
+        return Err("Vibe Page export belongs to another project".to_string());
+    }
+    if snapshot.profile.revision != request.expected_profile_revision {
+        return Err("Vibe Page export has a stale Profile revision".to_string());
+    }
+    let page = snapshot
+        .profile
+        .vibe_pages
+        .iter()
+        .find(|page| page.page_id == request.page_id)
+        .ok_or_else(|| "Vibe Page was not found".to_string())?;
+    if page.page_revision != request.expected_page_revision {
+        return Err("Vibe Page export has a stale Page revision".to_string());
+    }
+    export_vibe_page(page).map_err(display_error)
 }
 
 #[tauri::command]
@@ -1018,6 +1164,50 @@ mod tests {
     }
 
     #[test]
+    fn obsolete_unshipped_profile_is_archived_and_rebuilt_without_migration() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("Rapid profile");
+        std::fs::create_dir_all(&root).unwrap();
+        let root = root.canonicalize().unwrap();
+        let store = ProjectUiProfileStore::new(temp.path().join("app-data")).unwrap();
+        let project = ProjectId::new("project:rapid-profile").unwrap();
+        let factories = vec![factory("rho.status")];
+        let seed = default_profile_seed(&project, &factories, &runtimes(&project)).unwrap();
+        let mut obsolete = serde_json::to_value(StoredProjectUiProfileV1 {
+            normalized_project_root: ProjectUiProfileStore::normalized_root(&root),
+            profile: seed,
+        })
+        .unwrap();
+        obsolete["profile"]["schema_version"] = json!(1);
+        let obsolete_bytes = serde_json::to_vec_pretty(&obsolete).unwrap();
+        std::fs::write(store.path(&root), &obsolete_bytes).unwrap();
+
+        let loaded = store
+            .load_or_create(&root, &project, || {
+                default_profile_seed(&project, &factories, &runtimes(&project))
+            })
+            .unwrap();
+        assert_eq!(
+            loaded.profile.schema_version,
+            PROJECT_UI_PROFILE_SCHEMA_VERSION
+        );
+        assert_eq!(loaded.status, UiProfileLoadStatusV1::Created);
+        assert!(loaded.recovery_detail.unwrap().contains("Rebuilt"));
+        assert_eq!(
+            std::fs::read(store.obsolete_path(&root, 1)).unwrap(),
+            obsolete_bytes
+        );
+        assert!(
+            ProjectUiProfileStore::decode(
+                &std::fs::read(store.path(&root)).unwrap(),
+                &root,
+                &project,
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
     fn cas_serializes_concurrent_writers_and_failure_preserves_durable_main() {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path().join("Project");
@@ -1184,6 +1374,131 @@ mod tests {
             .load_or_create(&root_a, &project_a, || unreachable!())
             .unwrap();
         assert_eq!(durable.profile, before.profile);
+    }
+
+    #[test]
+    fn page_transaction_is_durable_stale_safe_recoverable_and_project_isolated() {
+        let temp = tempfile::tempdir().unwrap();
+        let root_a = temp.path().join("Vibe A");
+        let root_b = temp.path().join("Vibe B");
+        std::fs::create_dir_all(&root_a).unwrap();
+        std::fs::create_dir_all(&root_b).unwrap();
+        let root_a = root_a.canonicalize().unwrap();
+        let root_b = root_b.canonicalize().unwrap();
+        let state = ProjectUiProfileState::new(temp.path().join("app-data")).unwrap();
+        let project_a = ProjectId::new("project:vibe-a").unwrap();
+        let project_b = ProjectId::new("project:vibe-b").unwrap();
+        let factories = vec![factory("rho.status")];
+        let initial_a = state
+            .reconcile(
+                root_a.clone(),
+                project_a.clone(),
+                &factories,
+                &runtimes(&project_a),
+            )
+            .unwrap();
+        let page = initial_a.profile.vibe_pages[0].clone();
+        let inserted_id = next_block_id();
+        let edited_page = apply_vibe_page_mutation(
+            &page,
+            page.page_revision,
+            VibePageMutationV1::InsertBlock {
+                section_id: page.sections[0].section_id.clone(),
+                index: page.sections[0].blocks.len(),
+                block: VibeBlockV1 {
+                    block_id: inserted_id.clone(),
+                    content: VibeBlockContentV1::RichText {
+                        document: VibeRichTextDocumentV1::plain_text("Durable evidence"),
+                    },
+                },
+                grid_placement: None,
+            },
+        )
+        .unwrap();
+        let saved = state
+            .mutate(
+                &UiProfileRevisionRequestV1 {
+                    project_id: project_a.clone(),
+                    expected_profile_revision: initial_a.profile.revision,
+                },
+                UiProfileMutationV1::ReplacePage {
+                    page: edited_page.clone(),
+                },
+            )
+            .unwrap();
+        assert_eq!(saved.profile.vibe_pages[0], edited_page);
+        assert!(
+            export_vibe_page(&edited_page)
+                .unwrap()
+                .markdown
+                .contains("Durable evidence")
+        );
+
+        let before_stale = state.snapshot().unwrap();
+        assert!(
+            state
+                .mutate(
+                    &UiProfileRevisionRequestV1 {
+                        project_id: project_a.clone(),
+                        expected_profile_revision: initial_a.profile.revision,
+                    },
+                    UiProfileMutationV1::ReplacePage { page: edited_page },
+                )
+                .is_err()
+        );
+        assert_eq!(state.snapshot().unwrap(), before_stale);
+
+        let project_b_snapshot = state
+            .reconcile(root_b, project_b.clone(), &factories, &runtimes(&project_b))
+            .unwrap();
+        assert!(
+            !project_b_snapshot.profile.vibe_pages[0]
+                .sections
+                .iter()
+                .flat_map(|section| &section.blocks)
+                .any(|block| block.block_id == inserted_id)
+        );
+
+        let reopened = state
+            .reconcile(
+                root_a.clone(),
+                project_a.clone(),
+                &factories,
+                &runtimes(&project_a),
+            )
+            .unwrap();
+        assert!(
+            reopened.profile.vibe_pages[0]
+                .sections
+                .iter()
+                .flat_map(|section| &section.blocks)
+                .any(|block| block.block_id == inserted_id)
+        );
+
+        let before_failure = state.snapshot().unwrap();
+        let mut failed_page = before_failure.profile.vibe_pages[0].clone();
+        failed_page.page_revision += 1;
+        failed_page.label = "Must not look saved".to_string();
+        state
+            .store
+            .inject_failure(ProfileStoreFailurePoint::BeforeMainReplace);
+        assert!(
+            state
+                .mutate(
+                    &UiProfileRevisionRequestV1 {
+                        project_id: project_a.clone(),
+                        expected_profile_revision: before_failure.profile.revision,
+                    },
+                    UiProfileMutationV1::ReplacePage { page: failed_page },
+                )
+                .is_err()
+        );
+        assert_eq!(state.snapshot().unwrap(), before_failure);
+        let durable = ProjectUiProfileStore::new(temp.path().join("app-data"))
+            .unwrap()
+            .load_or_create(&root_a, &project_a, || unreachable!())
+            .unwrap();
+        assert_eq!(durable.profile, before_failure.profile);
     }
 
     #[test]

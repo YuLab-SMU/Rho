@@ -16860,6 +16860,8 @@ fn main() {
             ui_profile::ui_profile_set_mode,
             ui_profile::ui_profile_select_scene,
             ui_profile::ui_profile_select_page,
+            ui_profile::ui_profile_page_apply,
+            ui_profile::ui_profile_page_export,
             ui_profile::ui_profile_scene_duplicate,
             ui_profile::ui_profile_scene_save,
             ui_profile::ui_profile_scene_rename,

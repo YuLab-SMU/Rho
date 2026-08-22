@@ -525,7 +525,9 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
                 VibeBlockV1 {
                     block_id: BlockId::new("block:narrative").unwrap(),
                     content: VibeBlockContentV1::RichText {
-                        text: "Review the project against explicit checks.".to_string(),
+                        document: VibeRichTextDocumentV1::plain_text(
+                            "Review the project against explicit checks.",
+                        ),
                     },
                 },
                 VibeBlockV1 {
