@@ -13,9 +13,10 @@
     "rsr:typecheck": "tsc --noEmit --project ui/tsconfig.app.json --pretty false && tsc --noEmit --project ui/tsconfig.node.json --pretty false",
     "rsr:lint": "eslint ui/src ui/*.mts",
     "rsr:test": "vitest run --config ui/vitest.config.mts",
+    "rsr:test:contract": "node ../scripts/test-rsr-contract.mjs",
     "rsr:test:assets": "node ../scripts/test-rsr-generated-assets.mjs",
     "rsr:test:browser": "node ../scripts/test-rsr-browser-smoke.mjs",
-    "rsr:check": "npm run rsr:typecheck && npm run rsr:lint && npm run rsr:test && npm run rsr:build && npm run rsr:test:assets && npm run rsr:test:browser"
+    "rsr:check": "npm run rsr:typecheck && npm run rsr:lint && npm run rsr:test:contract && npm run rsr:test && npm run rsr:build && npm run rsr:test:assets && npm run rsr:test:browser"
   },
   "dependencies": {
     "dompurify": "3.4.13",

@@ -1,6 +1,6 @@
 # Rho Surface Runtime Full Construction Plan
 
-Status: active complete construction program; Wave 1 is the current integration
+Status: active complete construction program; Wave 2 is the current integration
 package
 
 Date: 2026-08-21
@@ -13,12 +13,12 @@ own focused evidence, contract review, documentation reconciliation, and
 scoped commit. After a wave passes its continuous gate, the next dependency is
 activated automatically under the same explicit authorization.
 
-Current integration package: **Wave 1 — Pure RSR contracts**.
+Current integration package: **Wave 2 — Command, Context, and snapshot kernel**.
 
-Wave 1 acceptance owner: this active contract. Acceptance requires the pure
-Rust contract crate, generated TypeScript fixtures, validators, reducers, and
-all normal/boundary/negative contract gates without Tauri, Store, filesystem,
-runtime, plugin execution, or UI authority.
+Wave 2 acceptance owner: this active contract. Acceptance requires one
+broker-owned bounded UI Context snapshot and Command Registry, stable cached
+React subscription, stale/project-isolation tests, and exact real/mock
+transport parity. Command presentation may never become execution admission.
 
 Owning design:
 `docs/design/proposed-2026-08-21-plugin-native-surface-runtime-design.md`
@@ -152,6 +152,7 @@ crates/rho-ui-contract/
   src/
     command.rs
     context.rs
+    fixture.rs
     layout.rs
     resource.rs
     runtime.rs
@@ -191,6 +192,7 @@ desktop/src-tauri/src/
   runtime_registry.rs
 
 scripts/
+  generate-rsr-contract-fixtures.mjs
   test-rsr-contract.mjs
   test-rsr-mock-parity.mjs
   test-rsr-generated-assets.mjs
@@ -356,6 +358,37 @@ Continuous gate:
 - recursion and encoded-byte budgets;
 - arbitrary asymmetric/nested layout fixtures including small intrinsic strips;
 - no Tauri, Store, filesystem, runtime, plugin execution, or UI behavior.
+
+Wave 1 completed locally on 2026-08-21:
+
+- added the pure `rho-ui-contract` workspace crate with bounded typed IDs,
+  Surface factories/instances/events, explicit Resource and Runtime bindings,
+  Commands, UI Context, recursive Studio Containers/Stacks, Vibe Pages/grids,
+  structured errors, validators, and stale-safe pure reducers;
+- validators cover normal, empty, exact boundary, just-over-limit, malformed,
+  duplicate, missing-reference, stale revision, project mismatch, bidi/control
+  spoofing, depth, node, placement, JSON, Scene, Page, view-state, and event
+  payload cases; empty Studio and Vibe authoring states remain representable;
+- the golden fixture proves two Consoles sharing one exact runtime, repeated
+  file/resource instances in independent Source/Preview modes, asymmetric
+  fractional/minmax layout, an intrinsic status strip, and ordered Vibe grid;
+- Rust emits the checked-in fixture and `test-rsr-contract.mjs` rejects any
+  byte drift; nine frontend tests consume the generated JSON rather than
+  copying Rust authority rules;
+- `cargo test -p rho-ui-contract --locked` passed 24 tests including one
+  property test, `cargo clippy -p rho-ui-contract --all-targets --locked -- -D
+  warnings` passed, and `cargo test --workspace --locked` passed the complete
+  local Rust workspace matrix with only the existing opt-in Keychain smoke
+  ignored;
+- `npm run rsr:check` passed strict TypeScript, ESLint, contract parity, nine
+  Vitest cases, deterministic production assets, and real Chromium smoke;
+- normal dependencies remain only `serde`, `serde_json`, and `thiserror`;
+  `proptest 1.11.0` is test-only under MIT OR Apache-2.0;
+- separate contract review added explicit grid `row_start` for deterministic
+  overlap rejection and repaired missing empty Studio/Vibe states;
+- no application/R-package version or `NEWS.md` change is required because
+  this pure internal crate is not shipped as a public/plugin ABI and the active
+  Tauri frontend remains unchanged.
 
 ### Wave 2 — Command, Context, and snapshot kernel
 

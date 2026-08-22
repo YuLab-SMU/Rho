@@ -532,6 +532,7 @@ VibeBlockV1 =
 
 VibeGridPlacementV1 {
   block_id
+  row_start                 // 1..256; explicit for deterministic overlap checks
   column_start              // 1..12
   column_span               // 1..12
 }
@@ -549,7 +550,8 @@ Rules:
   placement. Repeating a view creates another instance; a repeated read-only
   mirror is an explicit bounded snapshot block, not a second DOM mount;
 - plugins may provide Surface content and optional block-size hints, but the
-  host validates the 12-column placement and owns responsive collapse;
+  host validates explicit row plus 12-column placement, rejects overlap, and
+  owns responsive collapse;
 - text and plugin blocks share one baseline grid, spacing scale, typography,
   origin treatment, and action budget;
 - Vibe Pages cannot host trusted approvals, credentials, permission grants,

@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+  "crates/rho-ui-contract",
   "crates/rho-extension-runtime",
   "crates/rho-plugin-dev",
   "crates/rho-protocol",
