@@ -51,7 +51,7 @@
   .rho-foundation-bar {
     z-index: 2;
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
     align-items: center;
     gap: 2rem;
     min-height: 4.25rem;
@@ -110,6 +110,27 @@
     white-space: nowrap;
   }
 
+  .rho-command-projection {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    color: var(--rho-muted);
+    font-size: 0.75rem;
+  }
+
+  .rho-primary-command,
+  .rho-command-count {
+    padding: 0.38rem 0.58rem;
+    border: 1px solid var(--rho-line);
+    border-radius: 0.55rem;
+    background: rgb(255 255 255 / 58%);
+  }
+
+  .rho-primary-command {
+    color: var(--rho-ink);
+    font-weight: 680;
+  }
+
   .rho-status-dot {
     width: 0.52rem;
     aspect-ratio: 1;
@@ -124,9 +145,34 @@
   }
 
   .rho-status-needs_attention,
+  .rho-status-degraded,
   .rho-status-failed {
     background: #d18428;
     box-shadow: 0 0 0 0.25rem rgb(209 132 40 / 13%);
+  }
+
+  .rho-status-restarting {
+    background: #397b9a;
+    box-shadow: 0 0 0 0.25rem rgb(57 123 154 / 13%);
+  }
+
+  .rho-health-card {
+    margin-top: 1.2rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--rho-line);
+    border-radius: 0.8rem;
+    background: rgb(255 255 255 / 54%);
+  }
+
+  .rho-health-card p {
+    margin: 0.35rem 0 0;
+    color: var(--rho-muted);
+    font-size: 0.88rem;
+  }
+
+  .rho-health-degraded {
+    border-color: rgb(209 132 40 / 30%);
+    background: rgb(255 247 231 / 68%);
   }
 
   .rho-foundation-stage {

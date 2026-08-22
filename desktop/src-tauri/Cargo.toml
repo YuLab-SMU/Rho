@@ -22,6 +22,7 @@ rho-kernel = { path = "../../crates/rho-kernel" }
 rho-protocol = { path = "../../crates/rho-protocol" }
 rho-server = { path = "../../crates/rho-server" }
 rho-store = { path = "../../crates/rho-store" }
+rho-ui-contract = { path = "../../crates/rho-ui-contract" }
 rfd = "0.15"
 serde.workspace = true
 serde_json.workspace = true

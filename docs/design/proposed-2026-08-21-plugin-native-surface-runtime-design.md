@@ -626,6 +626,12 @@ CommandDefinitionV1 {
   placement_tags[]          // palette, surface-local, primary-candidate
   origin
 }
+
+CommandRegistrationV1 {
+  definition
+  activation_generation
+  availability              // presentation state, never execution admission
+}
 ```
 
 Placement tags are host-reviewed hints, not authority. The UI Kernel evaluates
@@ -636,6 +642,23 @@ confirmation contracts.
 
 No plugin command gets a top-level button, default status, global shortcut, or
 automatic invocation merely by declaring a tag.
+
+The Wave 2 registry is bounded by both command count and encoded bytes. One
+invalid, duplicate, or over-budget workspace-plugin command is omitted without
+making first-party commands or the UI snapshot unavailable. Application and
+workspace-plugin registrations are sorted by exact command identity; plugin
+registrations retain package digest and activation generation. Menus, keyboard
+gestures, command search, top chrome, and Surface-local actions only filter this
+one registry. The Wave 2 transport exposes no generic execution endpoint.
+
+The broker-facing UI snapshot has its own process-local monotonic revision.
+Identical semantic snapshots reuse one immutable cached object; project A/B/A
+never reuses an earlier snapshot revision. Snapshot construction is serialized
+against the project transition gate and includes only bounded project identity,
+Context, split Workspace/Agent health, active operation summaries, selection,
+and command registrations. Selection is ephemeral until the project UI profile
+owner lands and is accepted only with exact project, project revision, and
+snapshot revision. It is never an execution grant.
 
 An instance-local invocation binds `command_id`, optional `instance_id`, exact
 resource and Surface revisions, project revision, and layout/Page revision.

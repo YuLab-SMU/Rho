@@ -7,6 +7,7 @@ describe("Rust-generated RSR contract fixture", () => {
     expect(fixture.contract).toBe("rho.ui.contract.fixture.v1");
     expect(fixture.contract_major).toBe(1);
     expect(fixture.limits.max_layout_depth).toBeGreaterThan(1);
+    expect(fixture.limits.max_command_registry_bytes).toBe(1024 * 1024);
     expect(fixture.limits.max_surface_placements).toBeGreaterThan(
       fixture.limits.max_vibe_live_surfaces,
     );
@@ -40,5 +41,22 @@ describe("Rust-generated RSR contract fixture", () => {
       "block:narrative",
       "block:check",
     ]);
+  });
+
+  it("contains one bounded command/context snapshot with exact plugin origin", () => {
+    const snapshot = fixture.kernel_snapshot;
+    expect(snapshot.contract).toBe("rho.ui.kernel.snapshot.v1");
+    expect(snapshot.project.project_id).toBe(snapshot.context.project_id);
+    expect(snapshot.health.agent.state).toBe(snapshot.context.agent_health);
+    expect(snapshot.context.active_operations).toHaveLength(1);
+    const plugin = snapshot.command_registry.registrations.find(
+      (registration) => registration.definition.command_id === "ui.command.fixture-inspect",
+    );
+    expect(plugin?.activation_generation).toBe(3);
+    expect(plugin?.definition.origin.kind).toBe("workspace_plugin");
+    expect(plugin?.availability).toEqual({
+      state: "unavailable",
+      reason: "The fixture plugin host is unavailable.",
+    });
   });
 });

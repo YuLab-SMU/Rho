@@ -9,6 +9,14 @@ use crate::{
 
 pub const MAX_COMMAND_SCHEMA_BYTES: usize = 64 * 1024;
 pub const MAX_COMMAND_PLACEMENT_TAGS: usize = 8;
+pub const MAX_REGISTERED_COMMANDS: usize = 512;
+pub const MAX_COMMAND_REGISTRY_BYTES: usize = 1024 * 1024;
+
+pub const PREDICATE_ALWAYS: &str = "rho.predicate.always";
+pub const PREDICATE_WORKSPACE_PRESENT: &str = "rho.predicate.workspace-present";
+pub const PREDICATE_ACTIVE_OPERATION: &str = "rho.predicate.active-operation";
+pub const PREDICATE_AGENT_READY: &str = "rho.predicate.agent-ready";
+pub const PREDICATE_PLUGIN_READY: &str = "rho.predicate.plugin-ready";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -93,6 +101,203 @@ impl Validate for CommandAvailabilityV1 {
     }
 }
 
+/// One exact command registration. Availability is presentation state only:
+/// execution must still pass the owning broker command's admission checks.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CommandRegistrationV1 {
+    pub definition: CommandDefinitionV1,
+    pub activation_generation: u64,
+    pub availability: CommandAvailabilityV1,
+}
+
+impl Validate for CommandRegistrationV1 {
+    fn validate(&self) -> Result<(), ContractError> {
+        if self.activation_generation == 0 {
+            return Err(ContractError::InvalidValue {
+                path: "command_registration.activation_generation".to_string(),
+                reason: "activation generation must be positive".to_string(),
+            });
+        }
+        self.definition.validate()?;
+        self.availability.validate()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CommandRegistryV1 {
+    pub registrations: Vec<CommandRegistrationV1>,
+}
+
+impl CommandRegistryV1 {
+    pub fn for_placement(
+        &self,
+        placement: CommandPlacementTagV1,
+    ) -> impl Iterator<Item = &CommandRegistrationV1> {
+        self.registrations
+            .iter()
+            .filter(move |registration| registration.definition.placement_tags.contains(&placement))
+    }
+}
+
+impl Validate for CommandRegistryV1 {
+    fn validate(&self) -> Result<(), ContractError> {
+        if self.registrations.len() > MAX_REGISTERED_COMMANDS {
+            return Err(ContractError::LimitExceeded {
+                path: "command_registry.registrations".to_string(),
+                limit: MAX_REGISTERED_COMMANDS,
+                actual: self.registrations.len(),
+            });
+        }
+        validate_unique(
+            "command_registry.registrations",
+            self.registrations
+                .iter()
+                .map(|registration| registration.definition.command_id.as_ref()),
+        )?;
+        for registration in &self.registrations {
+            registration.validate()?;
+        }
+        let encoded = crate::encoded_json_len("command_registry", self)?;
+        if encoded > MAX_COMMAND_REGISTRY_BYTES {
+            return Err(ContractError::LimitExceeded {
+                path: "command_registry".to_string(),
+                limit: MAX_COMMAND_REGISTRY_BYTES,
+                actual: encoded,
+            });
+        }
+        Ok(())
+    }
+}
+
+fn application_origin(component_id: &str) -> Result<SurfaceOriginV1, ContractError> {
+    Ok(SurfaceOriginV1::Application {
+        component_id: crate::ApplicationComponentId::new(component_id)?,
+    })
+}
+
+fn application_command(
+    command_id: &str,
+    label: &str,
+    purpose: &str,
+    consequence: &str,
+    predicate: &str,
+    placements: Vec<CommandPlacementTagV1>,
+    component_id: &str,
+) -> Result<CommandDefinitionV1, ContractError> {
+    Ok(CommandDefinitionV1 {
+        command_id: CommandId::new(command_id)?,
+        label: label.to_string(),
+        purpose: purpose.to_string(),
+        input_schema: serde_json::json!({"type": "object", "properties": {}}),
+        consequence: consequence.to_string(),
+        availability_predicate_id: PredicateId::new(predicate)?,
+        placement_tags: placements,
+        origin: application_origin(component_id)?,
+    })
+}
+
+pub fn application_command_definitions_v1() -> Result<Vec<CommandDefinitionV1>, ContractError> {
+    use CommandPlacementTagV1::{Keyboard, Menu, Palette, PrimaryCandidate, SurfaceLocal};
+
+    Ok(vec![
+        application_command(
+            "rho.command.search",
+            "Search commands",
+            "Find every command registered for the current project and context.",
+            "Opens command search without executing a command.",
+            PREDICATE_ALWAYS,
+            vec![Palette, Menu, Keyboard],
+            "rho.shell",
+        )?,
+        application_command(
+            "rho.project.open",
+            "Open project",
+            "Choose and activate a local Rho project.",
+            "Requests a project switch through the existing project transition gate.",
+            PREDICATE_ALWAYS,
+            vec![Palette, Menu, PrimaryCandidate],
+            "rho.project",
+        )?,
+        application_command(
+            "rho.workspace.restart",
+            "Restart Workspace R",
+            "Recover or replace the authoritative Workspace R process.",
+            "Requests a supervised Workspace R restart; open Surfaces do not restart it implicitly.",
+            PREDICATE_WORKSPACE_PRESENT,
+            vec![Palette, Menu, SurfaceLocal],
+            "rho.workspace",
+        )?,
+        application_command(
+            "rho.workspace.interrupt",
+            "Interrupt active operation",
+            "Interrupt a running scientific operation in the active project.",
+            "Requests cancellation through the operation's existing broker-owned lane.",
+            PREDICATE_ACTIVE_OPERATION,
+            vec![Palette, Menu, Keyboard, SurfaceLocal],
+            "rho.workspace",
+        )?,
+        application_command(
+            "rho.agent.new-conversation",
+            "New Agent conversation",
+            "Start an independent Agent conversation for the active project.",
+            "Creates conversation state only after Agent runtime admission succeeds.",
+            PREDICATE_AGENT_READY,
+            vec![Palette, PrimaryCandidate, SurfaceLocal],
+            "rho.agent",
+        )?,
+    ])
+}
+
+pub fn evaluate_application_command_availability_v1(
+    definition: &CommandDefinitionV1,
+    context: &crate::UiContextV1,
+) -> CommandAvailabilityV1 {
+    match definition.availability_predicate_id.as_str() {
+        PREDICATE_ALWAYS => CommandAvailabilityV1::Available,
+        PREDICATE_WORKSPACE_PRESENT
+            if context.workspace_health == crate::HealthStateV1::Unavailable =>
+        {
+            CommandAvailabilityV1::Unavailable {
+                reason: "Workspace R is unavailable.".to_string(),
+            }
+        }
+        PREDICATE_WORKSPACE_PRESENT => CommandAvailabilityV1::Available,
+        PREDICATE_ACTIVE_OPERATION if context.active_operations.is_empty() => {
+            CommandAvailabilityV1::Unavailable {
+                reason: "No active operation can be interrupted.".to_string(),
+            }
+        }
+        PREDICATE_ACTIVE_OPERATION => CommandAvailabilityV1::Available,
+        PREDICATE_AGENT_READY if context.agent_health != crate::HealthStateV1::Ready => {
+            CommandAvailabilityV1::Unavailable {
+                reason: "The Agent runtime is not ready.".to_string(),
+            }
+        }
+        PREDICATE_AGENT_READY => CommandAvailabilityV1::Available,
+        _ => CommandAvailabilityV1::Unavailable {
+            reason: "The command availability predicate is not registered.".to_string(),
+        },
+    }
+}
+
+pub fn application_command_registry_v1(
+    context: &crate::UiContextV1,
+) -> Result<CommandRegistryV1, ContractError> {
+    let mut registrations = application_command_definitions_v1()?
+        .into_iter()
+        .map(|definition| CommandRegistrationV1 {
+            availability: evaluate_application_command_availability_v1(&definition, context),
+            definition,
+            activation_generation: 1,
+        })
+        .collect::<Vec<_>>();
+    registrations
+        .sort_by(|left, right| left.definition.command_id.cmp(&right.definition.command_id));
+    let registry = CommandRegistryV1 { registrations };
+    registry.validate()?;
+    Ok(registry)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CommandInvocationV1 {
     pub command_id: CommandId,
@@ -151,5 +356,135 @@ impl Validate for CommandInvocationV1 {
             &self.input,
             MAX_COMMAND_SCHEMA_BYTES,
         )
+    }
+}
+
+/// Checks the project-bound portion of an invocation before an owning service
+/// performs its stricter Surface/layout/resource admission. This function does
+/// not execute a command and placement tags are deliberately absent.
+pub fn validate_command_invocation_context_v1(
+    invocation: &CommandInvocationV1,
+    context: &crate::UiContextV1,
+) -> Result<(), ContractError> {
+    invocation.validate()?;
+    if invocation.project_id != context.project_id {
+        return Err(ContractError::InvalidValue {
+            path: "command_invocation.project_id".to_string(),
+            reason: "invocation belongs to a different project".to_string(),
+        });
+    }
+    crate::ensure_revision(
+        "command_invocation.project_revision",
+        invocation.expected_project_revision,
+        context.project_revision,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{HealthStateV1, UiContextV1};
+
+    fn context() -> UiContextV1 {
+        UiContextV1 {
+            project_id: ProjectId::new("project:a").unwrap(),
+            project_revision: 8,
+            scene_id: None,
+            page_id: None,
+            focused_surface_instance_id: None,
+            selection: None,
+            workspace_health: HealthStateV1::Ready,
+            agent_health: HealthStateV1::Degraded,
+            active_operations: vec![],
+        }
+    }
+
+    #[test]
+    fn registry_has_exact_identity_and_truthful_unavailable_reasons() {
+        let registry = application_command_registry_v1(&context()).unwrap();
+        registry.validate().unwrap();
+        let agent = registry
+            .registrations
+            .iter()
+            .find(|registration| {
+                registration.definition.command_id.as_str() == "rho.agent.new-conversation"
+            })
+            .unwrap();
+        assert_eq!(
+            agent.availability,
+            CommandAvailabilityV1::Unavailable {
+                reason: "The Agent runtime is not ready.".to_string()
+            }
+        );
+        let interrupt = registry
+            .registrations
+            .iter()
+            .find(|registration| {
+                registration.definition.command_id.as_str() == "rho.workspace.interrupt"
+            })
+            .unwrap();
+        assert_eq!(
+            interrupt.availability,
+            CommandAvailabilityV1::Unavailable {
+                reason: "No active operation can be interrupted.".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn stale_and_cross_project_invocations_are_rejected_independent_of_placement() {
+        let invocation = CommandInvocationV1 {
+            command_id: CommandId::new("rho.project.open").unwrap(),
+            project_id: ProjectId::new("project:a").unwrap(),
+            expected_project_revision: 7,
+            instance_id: None,
+            expected_surface_revision: None,
+            resource_binding: None,
+            scene_id: None,
+            expected_layout_revision: None,
+            page_id: None,
+            expected_page_revision: None,
+            block_id: None,
+            input: serde_json::json!({}),
+        };
+        assert!(matches!(
+            validate_command_invocation_context_v1(&invocation, &context()),
+            Err(ContractError::StaleRevision { .. })
+        ));
+        let mut cross_project = invocation;
+        cross_project.expected_project_revision = 8;
+        cross_project.project_id = ProjectId::new("project:b").unwrap();
+        assert!(matches!(
+            validate_command_invocation_context_v1(&cross_project, &context()),
+            Err(ContractError::InvalidValue { .. })
+        ));
+    }
+
+    #[test]
+    fn registry_enforces_an_encoded_snapshot_budget() {
+        let template = application_command_definitions_v1().unwrap().remove(0);
+        let registrations = (0..20)
+            .map(|index| {
+                let mut definition = template.clone();
+                definition.command_id = CommandId::new(format!("rho.large.{index}")).unwrap();
+                definition.input_schema = serde_json::json!({
+                    "type": "object",
+                    "description": "x".repeat(60_000)
+                });
+                CommandRegistrationV1 {
+                    definition,
+                    activation_generation: 1,
+                    availability: CommandAvailabilityV1::Available,
+                }
+            })
+            .collect();
+        assert!(matches!(
+            (CommandRegistryV1 { registrations }).validate(),
+            Err(ContractError::LimitExceeded {
+                path,
+                limit: MAX_COMMAND_REGISTRY_BYTES,
+                ..
+            }) if path == "command_registry"
+        ));
     }
 }

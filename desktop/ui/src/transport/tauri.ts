@@ -1,24 +1,44 @@
-import { normalizeProjectState, normalizeStartupView } from "./normalize";
 import type {
-  BootstrapSnapshot,
-  BootstrapTransport,
-  RawProjectState,
-  RawStartupView,
+  UiKernelSnapshot,
+  UiKernelTransport,
+  Unsubscribe,
 } from "./types";
 
-type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
+export type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
+export type Listen = <T>(
+  event: string,
+  handler: (event: { readonly payload: T }) => void,
+) => Promise<Unsubscribe>;
 
-export function createTauriBootstrapTransport(invoke: Invoke): BootstrapTransport {
+const INVALIDATION_EVENTS = [
+  "rho://ui-snapshot-invalidated",
+  "project://files-changed",
+  "rho://agent-turn-updated",
+] as const;
+
+export function createTauriUiKernelTransport(
+  invoke: Invoke,
+  listen: Listen,
+): UiKernelTransport {
   return {
-    async loadBootstrap(): Promise<BootstrapSnapshot> {
-      const [startup, project] = await Promise.all([
-        invoke<RawStartupView>("startup_status"),
-        invoke<RawProjectState>("project_state"),
-      ]);
-      return {
-        source: "tauri",
-        project: normalizeProjectState(project),
-        startup: normalizeStartupView(startup),
+    source: "tauri",
+    loadSnapshot: () => invoke<UiKernelSnapshot>("ui_kernel_snapshot"),
+    setSelection: (request) =>
+      invoke<UiKernelSnapshot>("ui_set_selection", { request }),
+    subscribeInvalidated(listener): Unsubscribe {
+      let active = true;
+      const unlisteners: Unsubscribe[] = [];
+      for (const eventName of INVALIDATION_EVENTS) {
+        void listen(eventName, listener)
+          .then((unlisten) => {
+            if (active) unlisteners.push(unlisten);
+            else unlisten();
+          })
+          .catch(() => undefined);
+      }
+      return () => {
+        active = false;
+        for (const unlisten of unlisteners.splice(0)) unlisten();
       };
     },
   };

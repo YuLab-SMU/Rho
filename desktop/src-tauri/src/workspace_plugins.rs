@@ -86,10 +86,12 @@ pub(crate) struct PluginContributionView {
     pub contract_major: u64,
     pub plugin_id: String,
     pub package_digest: String,
+    pub activation_generation: u64,
     pub short_digest: String,
     pub status: String,
     pub available: bool,
     pub accepts_empty_input: bool,
+    pub input_schema: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -995,10 +997,16 @@ impl PendingPluginPermissionRegistry {
                     contract_major: record.contribution.contract_major,
                     plugin_id: record.plugin_id.to_string(),
                     package_digest: record.package_digest.to_string(),
+                    activation_generation: record.activation_generation.get(),
                     short_digest: record.package_digest.as_str()[..12].to_string(),
                     status: status.to_string(),
                     available,
                     accepts_empty_input,
+                    input_schema: record
+                        .contribution
+                        .input_schema
+                        .as_ref()
+                        .map(|schema| schema.value().clone()),
                 }
             })
             .collect();

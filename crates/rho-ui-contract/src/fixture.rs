@@ -10,6 +10,7 @@ pub const RSR_FIXTURE_CONTRACT: &str = "rho.ui.contract.fixture.v1";
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ContractLimitsV1 {
     pub max_id_bytes: usize,
+    pub max_command_registry_bytes: usize,
     pub max_surface_view_state_bytes: usize,
     pub max_scene_json_bytes: usize,
     pub max_layout_depth: usize,
@@ -26,6 +27,7 @@ impl Default for ContractLimitsV1 {
     fn default() -> Self {
         Self {
             max_id_bytes: MAX_ID_BYTES,
+            max_command_registry_bytes: MAX_COMMAND_REGISTRY_BYTES,
             max_surface_view_state_bytes: MAX_SURFACE_VIEW_STATE_BYTES,
             max_scene_json_bytes: MAX_SCENE_JSON_BYTES,
             max_layout_depth: MAX_LAYOUT_DEPTH,
@@ -51,6 +53,7 @@ pub struct ContractFixtureV1 {
     pub commands: Vec<CommandDefinitionV1>,
     pub scenes: Vec<SceneStateV1>,
     pub pages: Vec<VibePageV1>,
+    pub kernel_snapshot: UiKernelSnapshotV1,
 }
 
 impl Validate for ContractFixtureV1 {
@@ -116,6 +119,7 @@ impl Validate for ContractFixtureV1 {
         for page in &self.pages {
             page.validate()?;
         }
+        self.kernel_snapshot.validate()?;
         let surfaces = self
             .surfaces
             .iter()
@@ -453,6 +457,80 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
         ],
         origin: application_origin("rho.surface-runtime"),
     };
+    let context = UiContextV1 {
+        project_id: project_id.clone(),
+        project_revision: 7,
+        scene_id: Some(SceneId::new("scene:rho-studio").unwrap()),
+        page_id: None,
+        focused_surface_instance_id: Some(SurfaceInstanceId::new("instance:file-source").unwrap()),
+        selection: Some(UiSelectionV1::Resource {
+            binding: ResourceBindingV1 {
+                resource_kind: ResourceKindId::new("project_file").unwrap(),
+                resource_id: "analysis.R".to_string(),
+                resource_revision: Some(4),
+            },
+        }),
+        workspace_health: HealthStateV1::Ready,
+        agent_health: HealthStateV1::Degraded,
+        active_operations: vec![ActiveOperationV1 {
+            operation_id: OperationId::new("render:fixture").unwrap(),
+            label: "Render analysis.qmd".to_string(),
+            state: ActiveOperationStateV1::Running,
+        }],
+    };
+    let mut command_registry = application_command_registry_v1(&context).unwrap();
+    command_registry.registrations.push(CommandRegistrationV1 {
+        definition: CommandDefinitionV1 {
+            command_id: CommandId::new("ui.command.fixture-inspect").unwrap(),
+            label: "Inspect fixture".to_string(),
+            purpose: "Inspect the selected fixture through a workspace plugin.".to_string(),
+            input_schema: json!({"type": "object", "properties": {}}),
+            consequence: "Runs this workspace plugin command through broker admission.".to_string(),
+            availability_predicate_id: PredicateId::new(PREDICATE_PLUGIN_READY).unwrap(),
+            placement_tags: vec![
+                CommandPlacementTagV1::Palette,
+                CommandPlacementTagV1::SurfaceLocal,
+            ],
+            origin: SurfaceOriginV1::WorkspacePlugin {
+                plugin_id: PluginId::new("fixture-plugin").unwrap(),
+                package_digest: PackageDigest::new("a".repeat(64)).unwrap(),
+            },
+        },
+        activation_generation: 3,
+        availability: CommandAvailabilityV1::Unavailable {
+            reason: "The fixture plugin host is unavailable.".to_string(),
+        },
+    });
+    command_registry
+        .registrations
+        .sort_by(|left, right| left.definition.command_id.cmp(&right.definition.command_id));
+    let kernel_snapshot = UiKernelSnapshotV1 {
+        contract: UI_KERNEL_SNAPSHOT_CONTRACT.to_string(),
+        contract_major: RSR_CONTRACT_MAJOR,
+        snapshot_revision: 9,
+        project: UiProjectV1 {
+            project_id: project_id.clone(),
+            display_label: "Surface Playground".to_string(),
+            display_path: "/Users/rho/Projects/Surface Playground".to_string(),
+        },
+        context,
+        health: UiHealthSnapshotV1 {
+            workspace: UiHealthDetailV1 {
+                state: HealthStateV1::Ready,
+                label: "Workspace R ready".to_string(),
+                detail: None,
+            },
+            agent: UiHealthDetailV1 {
+                state: HealthStateV1::Degraded,
+                label: "Agent runtime needs attention".to_string(),
+                detail: Some(
+                    "The scientific workbench remains available while Agent dependencies are repaired."
+                        .to_string(),
+                ),
+            },
+        },
+        command_registry,
+    };
     let fixture = ContractFixtureV1 {
         contract: RSR_FIXTURE_CONTRACT.to_string(),
         contract_major: RSR_CONTRACT_MAJOR,
@@ -473,6 +551,7 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
         commands: vec![command],
         scenes: vec![scene],
         pages: vec![page],
+        kernel_snapshot,
     };
     fixture.validate().expect("golden fixture remains valid");
     fixture

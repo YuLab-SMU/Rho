@@ -1,19 +1,26 @@
-import { createMockBootstrapTransport } from "./mock";
-import { createTauriBootstrapTransport } from "./tauri";
-import type { BootstrapTransport } from "./types";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
-export function createBootstrapTransport(): BootstrapTransport {
-  const tauriCore = window.__TAURI__?.core;
-  if (tauriCore != null && typeof tauriCore.invoke === "function") {
-    return createTauriBootstrapTransport(tauriCore.invoke.bind(tauriCore));
+import { createMockUiKernelTransport } from "./mock";
+import { createTauriUiKernelTransport } from "./tauri";
+import type { UiKernelTransport } from "./types";
+
+export function createUiKernelTransport(): UiKernelTransport {
+  if (window.__TAURI__?.core?.invoke != null) {
+    return createTauriUiKernelTransport(invoke, listen);
   }
-  return createMockBootstrapTransport(window.location.search);
+  return createMockUiKernelTransport(window.location.search);
 }
 
+export { commandsForPlacement, UiExternalStore } from "./store";
+export type { UiStoreSnapshot } from "./store";
 export type {
-  BootstrapSnapshot,
-  BootstrapTransport,
-  ProjectBootstrapView,
-  StartupHealthState,
-  StartupHealthView,
+  CommandAvailability,
+  CommandPlacementTag,
+  CommandRegistration,
+  HealthState,
+  SetUiSelectionRequest,
+  UiKernelSnapshot,
+  UiKernelTransport,
+  UiSelection,
 } from "./types";

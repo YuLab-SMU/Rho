@@ -3,6 +3,7 @@
   "contract_major": 1,
   "limits": {
     "max_id_bytes": 128,
+    "max_command_registry_bytes": 1048576,
     "max_surface_view_state_bytes": 65536,
     "max_scene_json_bytes": 1048576,
     "max_layout_depth": 32,
@@ -457,5 +458,214 @@
       ],
       "focused_block_id": "block:narrative"
     }
-  ]
+  ],
+  "kernel_snapshot": {
+    "contract": "rho.ui.kernel.snapshot.v1",
+    "contract_major": 1,
+    "snapshot_revision": 9,
+    "project": {
+      "project_id": "project:fixture",
+      "display_label": "Surface Playground",
+      "display_path": "/Users/rho/Projects/Surface Playground"
+    },
+    "context": {
+      "project_id": "project:fixture",
+      "project_revision": 7,
+      "scene_id": "scene:rho-studio",
+      "page_id": null,
+      "focused_surface_instance_id": "instance:file-source",
+      "selection": {
+        "kind": "resource",
+        "binding": {
+          "resource_kind": "project_file",
+          "resource_id": "analysis.R",
+          "resource_revision": 4
+        }
+      },
+      "workspace_health": "ready",
+      "agent_health": "degraded",
+      "active_operations": [
+        {
+          "operation_id": "render:fixture",
+          "label": "Render analysis.qmd",
+          "state": "running"
+        }
+      ]
+    },
+    "health": {
+      "workspace": {
+        "state": "ready",
+        "label": "Workspace R ready",
+        "detail": null
+      },
+      "agent": {
+        "state": "degraded",
+        "label": "Agent runtime needs attention",
+        "detail": "The scientific workbench remains available while Agent dependencies are repaired."
+      }
+    },
+    "command_registry": {
+      "registrations": [
+        {
+          "definition": {
+            "command_id": "rho.agent.new-conversation",
+            "label": "New Agent conversation",
+            "purpose": "Start an independent Agent conversation for the active project.",
+            "input_schema": {
+              "properties": {},
+              "type": "object"
+            },
+            "consequence": "Creates conversation state only after Agent runtime admission succeeds.",
+            "availability_predicate_id": "rho.predicate.agent-ready",
+            "placement_tags": [
+              "palette",
+              "primary_candidate",
+              "surface_local"
+            ],
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.agent"
+            }
+          },
+          "activation_generation": 1,
+          "availability": {
+            "state": "unavailable",
+            "reason": "The Agent runtime is not ready."
+          }
+        },
+        {
+          "definition": {
+            "command_id": "rho.command.search",
+            "label": "Search commands",
+            "purpose": "Find every command registered for the current project and context.",
+            "input_schema": {
+              "properties": {},
+              "type": "object"
+            },
+            "consequence": "Opens command search without executing a command.",
+            "availability_predicate_id": "rho.predicate.always",
+            "placement_tags": [
+              "palette",
+              "menu",
+              "keyboard"
+            ],
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.shell"
+            }
+          },
+          "activation_generation": 1,
+          "availability": {
+            "state": "available"
+          }
+        },
+        {
+          "definition": {
+            "command_id": "rho.project.open",
+            "label": "Open project",
+            "purpose": "Choose and activate a local Rho project.",
+            "input_schema": {
+              "properties": {},
+              "type": "object"
+            },
+            "consequence": "Requests a project switch through the existing project transition gate.",
+            "availability_predicate_id": "rho.predicate.always",
+            "placement_tags": [
+              "palette",
+              "menu",
+              "primary_candidate"
+            ],
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.project"
+            }
+          },
+          "activation_generation": 1,
+          "availability": {
+            "state": "available"
+          }
+        },
+        {
+          "definition": {
+            "command_id": "rho.workspace.interrupt",
+            "label": "Interrupt active operation",
+            "purpose": "Interrupt a running scientific operation in the active project.",
+            "input_schema": {
+              "properties": {},
+              "type": "object"
+            },
+            "consequence": "Requests cancellation through the operation's existing broker-owned lane.",
+            "availability_predicate_id": "rho.predicate.active-operation",
+            "placement_tags": [
+              "palette",
+              "menu",
+              "keyboard",
+              "surface_local"
+            ],
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.workspace"
+            }
+          },
+          "activation_generation": 1,
+          "availability": {
+            "state": "available"
+          }
+        },
+        {
+          "definition": {
+            "command_id": "rho.workspace.restart",
+            "label": "Restart Workspace R",
+            "purpose": "Recover or replace the authoritative Workspace R process.",
+            "input_schema": {
+              "properties": {},
+              "type": "object"
+            },
+            "consequence": "Requests a supervised Workspace R restart; open Surfaces do not restart it implicitly.",
+            "availability_predicate_id": "rho.predicate.workspace-present",
+            "placement_tags": [
+              "palette",
+              "menu",
+              "surface_local"
+            ],
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.workspace"
+            }
+          },
+          "activation_generation": 1,
+          "availability": {
+            "state": "available"
+          }
+        },
+        {
+          "definition": {
+            "command_id": "ui.command.fixture-inspect",
+            "label": "Inspect fixture",
+            "purpose": "Inspect the selected fixture through a workspace plugin.",
+            "input_schema": {
+              "properties": {},
+              "type": "object"
+            },
+            "consequence": "Runs this workspace plugin command through broker admission.",
+            "availability_predicate_id": "rho.predicate.plugin-ready",
+            "placement_tags": [
+              "palette",
+              "surface_local"
+            ],
+            "origin": {
+              "kind": "workspace_plugin",
+              "plugin_id": "fixture-plugin",
+              "package_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          },
+          "activation_generation": 3,
+          "availability": {
+            "state": "unavailable",
+            "reason": "The fixture plugin host is unavailable."
+          }
+        }
+      ]
+    }
+  }
 }

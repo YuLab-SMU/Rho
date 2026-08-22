@@ -6,6 +6,7 @@ mod git;
 mod git_review;
 mod platform;
 mod project;
+mod ui_runtime;
 mod update;
 mod workspace_plugins;
 
@@ -343,6 +344,7 @@ struct AppState {
     shutdown_started: AtomicBool,
     render_jobs: Arc<Mutex<HashMap<String, RenderJobState>>>,
     render_tasks: Arc<Mutex<HashMap<String, tauri::async_runtime::JoinHandle<()>>>>,
+    ui_runtime: ui_runtime::UiRuntimeState,
 }
 
 const MAX_CONCURRENT_AGENT_TURNS: usize = 2;
@@ -476,6 +478,20 @@ impl AgentFileMutationRegistry {
         let representative = matching.next()?.clone();
         let count = 1 + matching.count();
         Some((count, representative))
+    }
+
+    fn snapshot(&self, project_root: &str) -> Vec<(String, AgentFileMutationClaim)> {
+        let claims = self
+            .claims
+            .lock()
+            .expect("Agent file mutation registry poisoned");
+        let mut matching = claims
+            .iter()
+            .filter(|(_, claim)| claim.project_root == project_root)
+            .map(|(claim_id, claim)| (claim_id.clone(), claim.clone()))
+            .collect::<Vec<_>>();
+        matching.sort_by(|left, right| left.0.cmp(&right.0));
+        matching
     }
 
     fn has_any_turn(&self, turn_ids: &[String]) -> bool {
@@ -7040,10 +7056,17 @@ async fn switch_project(
     app: AppHandle,
     state: &AppState,
 ) -> Result<ProjectRestoreResponse> {
-    switch_project_with_watcher_factory(root, session_snapshot, state, |watch_root| {
+    let result = switch_project_with_watcher_factory(root, session_snapshot, state, |watch_root| {
         start_project_watcher(app.clone(), watch_root.to_path_buf())
     })
-    .await
+    .await;
+    if result
+        .as_ref()
+        .is_ok_and(|response| response.status == "ready")
+    {
+        ui_runtime::emit_snapshot_invalidated(&app, "project_switched");
+    }
+    result
 }
 
 async fn switch_project_with_watcher_factory<F>(
@@ -10144,6 +10167,7 @@ mod tests {
             shutdown_started: AtomicBool::new(false),
             render_jobs: Arc::new(Mutex::new(HashMap::new())),
             render_tasks: Arc::new(Mutex::new(HashMap::new())),
+            ui_runtime: crate::ui_runtime::UiRuntimeState::default(),
         }
     }
 
@@ -16141,6 +16165,7 @@ fn main() {
                 shutdown_started: AtomicBool::new(false),
                 render_jobs: Arc::new(Mutex::new(HashMap::new())),
                 render_tasks: Arc::new(Mutex::new(HashMap::new())),
+                ui_runtime: ui_runtime::UiRuntimeState::default(),
             });
             app.manage(NativeUpdaterState {
                 operation_gate: Mutex::new(()),
@@ -16164,6 +16189,8 @@ fn main() {
             startup_diagnostics,
             startup_open_log_directory,
             agent_runtime_retry,
+            ui_runtime::ui_kernel_snapshot,
+            ui_runtime::ui_set_selection,
             workspace_start,
             workspace_status,
             project_state,

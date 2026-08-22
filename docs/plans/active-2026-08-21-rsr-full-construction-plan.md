@@ -1,6 +1,6 @@
 # Rho Surface Runtime Full Construction Plan
 
-Status: active complete construction program; Wave 2 is the current integration
+Status: active complete construction program; Wave 3 is the current integration
 package
 
 Date: 2026-08-21
@@ -13,12 +13,13 @@ own focused evidence, contract review, documentation reconciliation, and
 scoped commit. After a wave passes its continuous gate, the next dependency is
 activated automatically under the same explicit authorization.
 
-Current integration package: **Wave 2 — Command, Context, and snapshot kernel**.
+Current integration package: **Wave 3 — Surface Factory/Instance runtime**.
 
-Wave 2 acceptance owner: this active contract. Acceptance requires one
-broker-owned bounded UI Context snapshot and Command Registry, stable cached
-React subscription, stale/project-isolation tests, and exact real/mock
-transport parity. Command presentation may never become execution admission.
+Wave 3 acceptance owner: this active contract. Acceptance requires one
+generation-bound Surface Factory/Instance service, explicit allocation versus
+exact reuse, independent repeated instances, complete lifecycle transitions,
+late-result rejection, and stable keyed React projection. Opening or placing a
+Surface may never invent resource, runtime, plugin, or execution authority.
 
 Owning design:
 `docs/design/proposed-2026-08-21-plugin-native-surface-runtime-design.md`
@@ -409,6 +410,55 @@ Continuous gate:
 - exact command identity, unavailable reasons, stale context, project A/B/A,
   snapshot caching, no tearing, and real/mock parity;
 - no command gets authority from button placement or keyboard presence.
+
+Wave 2 completed locally on 2026-08-21:
+
+- added the bounded `UiKernelSnapshotV1`, project/health detail, exact command
+  registration, registry byte budget, application command inventory, typed
+  availability evaluation, and project-bound invocation-context validation to
+  `rho-ui-contract`;
+- added a desktop UI Kernel service that derives opaque project identity and
+  broker revision, separately projects Workspace and Agent health, collects
+  bounded scientific Run/render/Agent/file-change/approval operations, and
+  projects exact workspace-plugin command origin, package digest, activation
+  generation, input schema, status, and unavailable reason without exporting
+  `Store`, coordinator, Tauri, or authority handles;
+- the cache structurally reuses identical `Arc` snapshots, advances a
+  process-local monotonic snapshot revision for semantic changes and A/B/A
+  project sequences, clears cross-project ephemeral selection, and admits
+  selection updates only against exact project, project revision, and snapshot
+  revision;
+- React now consumes one frozen external store through
+  `useSyncExternalStore`; real Tauri and browser/mock transports implement the
+  same interface, and mock state consumes the Rust-generated kernel fixture.
+  Top-chrome, menu, keyboard, Surface-local, primary, and search projections
+  filter this one registry; Wave 2 deliberately adds no generic command
+  execution endpoint;
+- invalid, unsupported-contract, schema-less, or over-budget plugin commands
+  are omitted without breaking application commands, snapshot reads serialize
+  against the project transition gate, failed selection projection restores
+  the exact previous ephemeral selection, event-listener setup failures are
+  isolated, and Agent dependency degradation remains independent from healthy
+  Workspace/editor state;
+- `cargo test -p rho-ui-contract --locked` passed 28 tests,
+  `cargo test -p rho-desktop --locked` passed 280 tests with the existing
+  opt-in macOS Keychain smoke ignored, and `cargo test --workspace --locked`
+  passed the complete local Rust matrix;
+- focused `rho-ui-contract` Clippy with `-D warnings` passed. The repository-
+  wide Rust 1.97 Clippy run still encounters existing lints in untouched
+  crates; a desktop `--no-deps` run with only those enumerated baseline lint
+  classes allowed passed with `-D warnings`, leaving no new Wave 2 warning;
+- `npm ci --ignore-scripts`, zero-finding `npm audit`, and
+  `npm run rsr:check` passed strict typecheck, ESLint, Rust/TypeScript fixture
+  parity, nine Vitest cases, deterministic assets, no network assets, and real
+  local Chromium smoke. The frozen legacy `desktop/dist/app.js` syntax check
+  also passed;
+- separate review repaired project-switch snapshot tearing, quadratic and
+  unbounded plugin command aggregation, plugin-caused shell failure,
+  unsupported/missing plugin contracts, non-transactional selection failure,
+  and unhandled listener setup rejection. No application/R-package version or
+  `NEWS.md` change is required because Tauri still ships the frozen old
+  frontend and the new kernel contract remains internal until cutover.
 
 ### Wave 3 — Surface Factory/Instance runtime
 

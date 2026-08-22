@@ -19,6 +19,7 @@
     "rsr:check": "npm run rsr:typecheck && npm run rsr:lint && npm run rsr:test:contract && npm run rsr:test && npm run rsr:build && npm run rsr:test:assets && npm run rsr:test:browser"
   },
   "dependencies": {
+    "@tauri-apps/api": "2.11.1",
     "dompurify": "3.4.13",
     "katex": "0.16.22",
     "marked": "18.0.9",

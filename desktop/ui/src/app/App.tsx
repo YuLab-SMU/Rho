@@ -1,51 +1,43 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 
-import { createBootstrapTransport } from "../transport";
-import type { BootstrapSnapshot, BootstrapTransport } from "../transport";
+import {
+  UiExternalStore,
+  commandsForPlacement,
+  createUiKernelTransport,
+} from "../transport";
+import type { UiKernelTransport } from "../transport";
 
 interface AppProps {
-  readonly transport?: BootstrapTransport;
+  readonly transport?: UiKernelTransport;
 }
 
-const defaultBootstrapTransport = createBootstrapTransport();
-
-type BootstrapState =
-  | { readonly kind: "loading" }
-  | { readonly kind: "ready"; readonly snapshot: BootstrapSnapshot }
-  | { readonly kind: "failed"; readonly message: string };
-
-function displayError(error: unknown): string {
-  if (error instanceof Error && error.message.trim()) return error.message.slice(0, 512);
-  return "Rho could not load the startup snapshot.";
-}
+const defaultTransport = createUiKernelTransport();
+const defaultStore = new UiExternalStore(defaultTransport);
 
 export function App({ transport }: AppProps) {
-  const resolvedTransport = transport ?? defaultBootstrapTransport;
-  const [state, setState] = useState<BootstrapState>({ kind: "loading" });
-
-  useEffect(() => {
-    let current = true;
-    void resolvedTransport.loadBootstrap().then(
-      (snapshot) => {
-        if (current) setState({ kind: "ready", snapshot });
-      },
-      (error: unknown) => {
-        if (current) setState({ kind: "failed", message: displayError(error) });
-      },
-    );
-    return () => {
-      current = false;
-    };
-  }, [resolvedTransport]);
-
+  const store = useMemo(
+    () => (transport == null ? defaultStore : new UiExternalStore(transport)),
+    [transport],
+  );
+  const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+  const snapshot = state.status === "ready" ? state.snapshot : null;
+  const primaryCommands = useMemo(
+    () => (snapshot == null ? [] : commandsForPlacement(snapshot, "primary_candidate")),
+    [snapshot],
+  );
+  const commandCount = snapshot?.command_registry.registrations.length ?? 0;
   const evidence = useMemo(() => {
-    if (state.kind === "loading") return { ready: false, state: "loading" };
-    if (state.kind === "failed") return { ready: false, state: "failed" };
+    if (state.status !== "ready") return { ready: false, state: state.status };
     return {
       ready: true,
-      state: state.snapshot.startup.state,
-      project: state.snapshot.project.root,
-      source: state.snapshot.source,
+      source: state.source,
+      snapshotRevision: state.snapshot.snapshot_revision,
+      project: state.snapshot.project.display_path,
+      workspaceHealth: state.snapshot.context.workspace_health,
+      agentHealth: state.snapshot.context.agent_health,
+      commands: state.snapshot.command_registry.registrations.map(
+        (registration) => registration.definition.command_id,
+      ),
     };
   }, [state]);
 
@@ -62,21 +54,29 @@ export function App({ transport }: AppProps) {
         </div>
         <div className="rho-project-identity">
           <span className="rho-eyebrow">Project</span>
-          <strong>{state.kind === "ready" ? state.snapshot.project.label : "Loading…"}</strong>
+          <strong>{snapshot?.project.display_label ?? "Loading…"}</strong>
+        </div>
+        <div className="rho-command-projection" aria-label="Contextual commands">
+          {primaryCommands
+            .filter((registration) => registration.availability.state === "available")
+            .slice(0, 1)
+            .map((registration) => (
+              <span className="rho-primary-command" key={registration.definition.command_id}>
+                {registration.definition.label}
+              </span>
+            ))}
+          <span className="rho-command-count">{commandCount} commands</span>
         </div>
         <div className="rho-foundation-status" aria-live="polite">
           <span
             className={`rho-status-dot rho-status-${
-              state.kind === "ready" ? state.snapshot.startup.state : state.kind
+              snapshot?.context.workspace_health ?? state.status
             }`}
             aria-hidden="true"
           />
           <span>
-            {state.kind === "ready"
-              ? state.snapshot.startup.title
-              : state.kind === "failed"
-                ? "Startup snapshot unavailable"
-                : "Connecting to local Rho"}
+            {snapshot?.health.workspace.label ??
+              (state.status === "failed" ? "UI Kernel unavailable" : "Connecting to local Rho")}
           </span>
         </div>
       </header>
@@ -84,29 +84,37 @@ export function App({ transport }: AppProps) {
       <section className="rho-foundation-stage" aria-labelledby="foundation-title">
         <div className="rho-foundation-orbit" aria-hidden="true" />
         <div className="rho-foundation-copy">
-          <span className="rho-eyebrow">New frontend workspace</span>
+          <span className="rho-eyebrow">Composition kernel</span>
           <h1 id="foundation-title">Rho Surface Runtime</h1>
-          {state.kind === "loading" && <p>Reading project and startup health…</p>}
-          {state.kind === "failed" && <p role="alert">{state.message}</p>}
-          {state.kind === "ready" && (
+          {state.status === "loading" && <p>Reading the broker-owned UI snapshot…</p>}
+          {state.status === "failed" && <p role="alert">{state.message}</p>}
+          {snapshot != null && (
             <>
               <p>
-                The new composition kernel has a clean renderer boundary. Surfaces arrive in
-                the next integration wave.
+                Project context, command availability, health, and active work now cross one
+                bounded immutable snapshot.
               </p>
               <dl className="rho-bootstrap-facts">
                 <div>
                   <dt>Project root</dt>
-                  <dd title={state.snapshot.project.root}>{state.snapshot.project.root}</dd>
+                  <dd title={snapshot.project.display_path}>{snapshot.project.display_path}</dd>
                 </div>
                 <div>
-                  <dt>Startup phase</dt>
-                  <dd>{state.snapshot.startup.phase}</dd>
+                  <dt>Snapshot revision</dt>
+                  <dd>{snapshot.snapshot_revision}</dd>
+                </div>
+                <div>
+                  <dt>Active operations</dt>
+                  <dd>{snapshot.context.active_operations.length}</dd>
                 </div>
               </dl>
-              {state.snapshot.startup.detail != null && (
-                <p className="rho-foundation-notice">{state.snapshot.startup.detail}</p>
-              )}
+              <aside
+                className={`rho-health-card rho-health-${snapshot.health.agent.state}`}
+                aria-label="Agent runtime health"
+              >
+                <strong>{snapshot.health.agent.label}</strong>
+                {snapshot.health.agent.detail != null && <p>{snapshot.health.agent.detail}</p>}
+              </aside>
             </>
           )}
         </div>

@@ -1,52 +1,65 @@
-import { normalizeProjectState } from "./normalize";
+import fixture from "../contracts/generated/rsr-contract-fixtures.json";
+import { projectLabel } from "./normalize";
 import type {
-  BootstrapSnapshot,
-  BootstrapTransport,
-  StartupHealthState,
-  StartupHealthView,
+  SetUiSelectionRequest,
+  UiKernelSnapshot,
+  UiKernelTransport,
+  Unsubscribe,
 } from "./types";
 
-const MOCK_PROJECT_ROOT = "/Users/rho/Projects/Surface Playground";
-const VALID_HEALTH = new Set<StartupHealthState>([
-  "checking",
-  "ready",
-  "needs_attention",
-  "unavailable",
-]);
+const generatedSnapshot = fixture.kernel_snapshot as unknown as UiKernelSnapshot;
 
-function mockHealth(search: URLSearchParams): StartupHealthView {
-  const requested = search.get("health") as StartupHealthState | null;
-  const state = requested != null && VALID_HEALTH.has(requested) ? requested : "ready";
-  switch (state) {
-    case "checking":
-      return { state, phase: "probing_runtime", title: "Preparing local runtime" };
-    case "needs_attention":
-      return {
-        state,
-        phase: "needs_attention",
-        title: "Agent runtime needs attention",
-        detail: "The scientific workbench remains available.",
-      };
-    case "unavailable":
-      return { state, phase: "unknown", title: "Startup state unavailable" };
-    case "ready":
-      return { state, phase: "runtime_ready", title: "Local runtime ready" };
-  }
+function copySnapshot(snapshot: UiKernelSnapshot): UiKernelSnapshot {
+  return structuredClone(snapshot);
 }
 
-export function createMockBootstrapTransport(
+export interface MockUiKernelTransport extends UiKernelTransport {
+  publish(snapshot: UiKernelSnapshot): void;
+}
+
+export function createMockUiKernelTransport(
   searchInput: string | URLSearchParams = "",
-): BootstrapTransport {
+): MockUiKernelTransport {
   const search =
     typeof searchInput === "string" ? new URLSearchParams(searchInput) : searchInput;
+  const snapshot = copySnapshot(generatedSnapshot);
+  const requestedProject = search.get("project");
+  if (requestedProject != null && requestedProject.length > 0) {
+    const project = snapshot.project as {
+      display_path: string;
+      display_label: string;
+    };
+    project.display_path = requestedProject;
+    project.display_label = projectLabel(requestedProject);
+  }
+  let current = snapshot;
+  const listeners = new Set<() => void>();
   return {
-    async loadBootstrap(): Promise<BootstrapSnapshot> {
-      const root = search.get("project") ?? MOCK_PROJECT_ROOT;
-      return {
-        source: "mock",
-        project: normalizeProjectState({ root }),
-        startup: mockHealth(search),
-      };
+    source: "mock",
+    async loadSnapshot() {
+      return copySnapshot(current);
+    },
+    async setSelection(request: SetUiSelectionRequest) {
+      if (
+        request.project_id !== current.project.project_id ||
+        request.expected_project_revision !== current.context.project_revision ||
+        request.expected_snapshot_revision !== current.snapshot_revision
+      ) {
+        throw new Error("Mock UI selection request is stale.");
+      }
+      current = copySnapshot(current);
+      (current.context as { selection: typeof request.selection }).selection = request.selection;
+      (current as { snapshot_revision: number }).snapshot_revision += 1;
+      for (const listener of listeners) listener();
+      return copySnapshot(current);
+    },
+    subscribeInvalidated(listener: () => void): Unsubscribe {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    publish(next: UiKernelSnapshot) {
+      current = copySnapshot(next);
+      for (const listener of listeners) listener();
     },
   };
 }
