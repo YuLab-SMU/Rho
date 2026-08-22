@@ -3,6 +3,13 @@ import { projectLabel } from "./normalize";
 import { applySceneEdit, collectSceneInstances, reconcileStudio } from "./studio-model";
 import { applyVibePageMutation, exportVibePage } from "./vibe-model";
 import type {
+  AgentApprovalDecisionRequest,
+  AgentConversationSummary,
+  AgentMode,
+  AgentTurnDetail,
+  AgentTurnEvent,
+  AgentTurnSummary,
+  DomainSurfaceData,
   CheckResult,
   CheckResultRequest,
   CheckRunRequest,
@@ -37,6 +44,7 @@ import type {
   RuntimeRegistrySnapshot,
   SetUiSelectionRequest,
   SurfaceInstance,
+  SurfaceFactoryRegistration,
   SurfaceInstanceRequest,
   SurfaceRuntimeSnapshot,
   SurfaceInstanceSpec,
@@ -125,6 +133,98 @@ export function createMockUiKernelTransport(
   let runtimes = copyRuntimes(generatedRuntimes);
   let resources = copyResources(generatedResources);
   let profile = copyProfile(generatedProfile);
+  const firstPartyFactorySpecs = [
+    ["rho.agent", "Agent", [["conversation", "Conversation"], ["activity", "Activity"], ["composer", "Composer"]], false],
+    ["rho.environment", "Environment", [["packages", "Packages"], ["requests", "Requests"]], false],
+    ["rho.evidence", "Evidence", [["claims", "Claims"]], false],
+    ["rho.git", "Git", [["changes", "Changes"], ["history", "History"]], false],
+    ["rho.runs", "Runs", [["history", "History"]], false],
+    ["rho.artifacts", "Artifacts", [["gallery", "Gallery"], ["list", "List"]], false],
+    ["rho.problems", "Problems", [["list", "List"]], true],
+    ["rho.plots", "Plots", [["gallery", "Gallery"], ["single", "Single"]], false],
+    ["rho.logs", "Logs", [["stream", "Stream"]], true],
+    ["rho.render-jobs", "Render jobs", [["queue", "Queue"]], false],
+    ["rho.help", "Help", [["context", "Context"], ["search", "Search"]], false],
+  ] as const;
+  for (const [surfaceId, label, modes, strip] of firstPartyFactorySpecs) {
+    if (surfaces.catalog.factories.some((factory) => factory.definition.surface_id === surfaceId)) continue;
+    const factory: SurfaceFactoryRegistration = {
+      definition: {
+        surface_id: surfaceId,
+        contract_major: 1,
+        label,
+        purpose: `Render ${label} as an independently placeable project Surface.`,
+        renderer_kind: "trusted_host",
+        scope: "project",
+        instance_policy: "multi_instance",
+        instance_quota_class: strip ? "strip" : "standard",
+        resource_kinds: [],
+        modes: modes.map(([modeId, modeLabel]) => ({
+          mode_id: modeId,
+          label: modeLabel,
+          interaction_kind: modeId === "history" || modeId === "claims" || modeId === "gallery" || modeId === "stream" || modeId === "activity" ? "read_only" as const : "interactive" as const,
+        })),
+        sizing_hints: {
+          min_inline: strip ? 120 : 220,
+          min_block: strip ? 28 : 120,
+          ideal_inline: strip ? 320 : 560,
+          ideal_block: strip ? 40 : 420,
+          max_inline: null,
+          max_block: strip ? 72 : null,
+          stretch_inline: true,
+          stretch_block: !strip,
+          presentation_classes: strip ? ["strip"] : ["full", "compact"],
+        },
+        accepted_contexts: ["project", "selection", "vibe"],
+        commands: [],
+        origin: { kind: "application", component_id: surfaceId },
+      },
+      activation_generation: 1,
+    };
+    (surfaces.catalog.factories as unknown as SurfaceFactoryRegistration[]).push(factory);
+  }
+  const mockAgentInstance: SurfaceInstance = {
+    instance_id: "instance:agent-shared",
+    surface_id: "rho.agent",
+    project_id: surfaces.project_id,
+    origin: { kind: "application", component_id: "rho.agent" },
+    activation_generation: 1,
+    surface_revision: 1,
+    mode_id: "conversation",
+    resource_binding: null,
+    runtime_binding: null,
+    view_group_id: null,
+    view_state: { conversation_id: "agent-conversation:mock-shared", mode: "ask", composer: "", auto_approve: false },
+    lifecycle_state: "active",
+  };
+  (surfaces.catalog.instances as unknown as SurfaceInstance[]).push(mockAgentInstance);
+  (profile.profile.surface_instance_specs as unknown as SurfaceInstanceSpec[]).push({
+    instance_id: mockAgentInstance.instance_id,
+    surface_id: mockAgentInstance.surface_id,
+    origin: mockAgentInstance.origin,
+    mode_id: mockAgentInstance.mode_id,
+    resource_binding: null,
+    runtime_attachment_intent: null,
+    view_group_id: null,
+    view_state: mockAgentInstance.view_state,
+  });
+  const activeMockScene = profile.profile.studio_scenes.find(
+    (scene) => scene.scene_id === profile.profile.active_studio_scene_id,
+  );
+  const rightNode = studio.scene.root.kind === "container"
+    ? studio.scene.root.children.find((child) => child.child.kind === "container")?.child
+    : null;
+  if (rightNode?.kind === "container") {
+    (rightNode.children as unknown as LayoutChild[]).splice(Math.max(0, rightNode.children.length - 1), 0, {
+      child: { kind: "surface", node_id: "node:agent-shared", instance_id: mockAgentInstance.instance_id },
+      basis: { kind: "minmax", min_logical_pixels: 180, max_logical_pixels: 900, weight: 2 },
+      resizable: true,
+      collapse_priority: 20,
+    });
+  }
+  if (activeMockScene != null) {
+    (activeMockScene as { root: SceneState["root"] }).root = structuredClone(studio.scene.root);
+  }
   if (search.get("mode") === "vibe") {
     (profile.profile as { active_mode: "studio" | "vibe" }).active_mode = "vibe";
   }
@@ -218,6 +318,99 @@ export function createMockUiKernelTransport(
   const studioListeners = new Set<() => void>();
   const runtimeListeners = new Set<() => void>();
   const resourceListeners = new Set<() => void>();
+  const agentListeners = new Set<() => void>();
+  const agentNow = "2026-08-22T12:00:00Z";
+  const agentProjectRoot = current.project.display_path;
+  let nextConversation = 2;
+  let nextTurn = 2;
+  const agentConversations: AgentConversationSummary[] = [{
+    conversation_id: "agent-conversation:mock-shared",
+    project_root: agentProjectRoot,
+    title: "Project direction",
+    created_at: agentNow,
+    updated_at: agentNow,
+    archived_at: null,
+    legacy_unthreaded: false,
+    turn_count: 1,
+    status: "completed",
+    latest_turn_id: "agent-turn:mock-1",
+    latest_mode: "ask",
+    latest_prompt_preview: "What should we inspect first?",
+    terminal_reason: "completed",
+    pending_request_id: null,
+  }];
+  const agentTurns: AgentTurnSummary[] = [{
+    turn_id: "agent-turn:mock-1",
+    conversation_id: "agent-conversation:mock-shared",
+    project_root: agentProjectRoot,
+    mode: "ask",
+    status: "completed",
+    started_at: agentNow,
+    finished_at: agentNow,
+    prompt_preview: "What should we inspect first?",
+    model: "mock/provider-model",
+    workspace_id_before: "workspace:mock",
+    state_revision_before: 4,
+    project_revision_before: current.context.project_revision,
+    workspace_id_after: "workspace:mock",
+    state_revision_after: 4,
+    project_revision_after: current.context.project_revision,
+    final_message: "Start with the project structure and runtime health.",
+    error_message: null,
+    pending_request_id: null,
+    retry_of_turn_id: null,
+    terminal_reason: "completed",
+  }];
+  const agentDetails = new Map<string, AgentTurnDetail>([["agent-turn:mock-1", {
+    turn: agentTurns[0]!,
+    events: [{
+      id: 1,
+      turn_id: "agent-turn:mock-1",
+      timestamp: agentNow,
+      event_type: "agent.user_prompt",
+      title: "You",
+      body: "What should we inspect first?",
+      status: "completed",
+      tool: null,
+      request_id: null,
+      code: null,
+      details_json: "{}",
+    }, {
+      id: 2,
+      turn_id: "agent-turn:mock-1",
+      timestamp: agentNow,
+      event_type: "agent.final_message",
+      title: "Rho",
+      body: "Start with the project structure and runtime health.",
+      status: "completed",
+      tool: null,
+      request_id: null,
+      code: null,
+      details_json: "{}",
+    }, {
+      id: 3,
+      turn_id: "agent-turn:mock-1",
+      timestamp: agentNow,
+      event_type: "tool.call_completed",
+      title: "Proposed file edit",
+      body: JSON.stringify({
+        kind: "rho.file_edit_proposal",
+        operation: "append",
+        path: "analysis.R",
+        content: "\n# Reviewed by Agent\n",
+      }),
+      status: "completed",
+      tool: "propose_file_edit",
+      request_id: null,
+      code: null,
+      details_json: JSON.stringify({ success: true }),
+    }],
+    approvals: [],
+  }]]);
+  const notifyAgent = () => {
+    for (const listener of agentListeners) listener();
+    for (const listener of listeners) listener();
+  };
   const profileListeners = new Set<() => void>();
   const notifySurfaces = () => {
     for (const listener of surfaceListeners) listener();
@@ -1429,6 +1622,211 @@ export function createMockUiKernelTransport(
     subscribeResourcesInvalidated(listener: () => void): Unsubscribe {
       resourceListeners.add(listener);
       return () => resourceListeners.delete(listener);
+    },
+    async listAgentConversations(limit = 50) {
+      return structuredClone(agentConversations.slice(0, limit));
+    },
+    async createAgentConversation() {
+      const conversation: AgentConversationSummary = {
+        conversation_id: `agent-conversation:mock-${nextConversation++}`,
+        project_root: agentProjectRoot,
+        title: "New conversation",
+        created_at: agentNow,
+        updated_at: agentNow,
+        archived_at: null,
+        legacy_unthreaded: false,
+        turn_count: 0,
+        status: "empty",
+        latest_turn_id: null,
+        latest_mode: null,
+        latest_prompt_preview: null,
+        terminal_reason: null,
+        pending_request_id: null,
+      };
+      agentConversations.unshift(conversation);
+      notifyAgent();
+      return structuredClone(conversation);
+    },
+    async listAgentTurns(conversationId, limit = 50) {
+      return structuredClone(agentTurns
+        .filter((turn) => conversationId == null || turn.conversation_id === conversationId)
+        .slice(0, limit));
+    },
+    async getAgentTurnDetail(turnId) {
+      return structuredClone(agentDetails.get(turnId) ?? null);
+    },
+    async runAgent(request) {
+      let conversation = agentConversations.find(
+        (candidate) => candidate.conversation_id === request.conversation_id,
+      );
+      if (conversation == null) {
+        conversation = await this.createAgentConversation();
+      }
+      const turnId = `agent-turn:mock-${nextTurn++}`;
+      const startedAt = new Date().toISOString();
+      const turn: AgentTurnSummary = {
+        turn_id: turnId,
+        conversation_id: conversation.conversation_id,
+        project_root: agentProjectRoot,
+        mode: request.mode,
+        status: "completed",
+        started_at: startedAt,
+        finished_at: startedAt,
+        prompt_preview: request.prompt,
+        model: "mock/provider-model",
+        workspace_id_before: "workspace:mock",
+        state_revision_before: 4,
+        project_revision_before: current.context.project_revision,
+        workspace_id_after: "workspace:mock",
+        state_revision_after: 4,
+        project_revision_after: current.context.project_revision,
+        final_message: `Mock ${request.mode} response for: ${request.prompt}`,
+        error_message: null,
+        pending_request_id: null,
+        retry_of_turn_id: null,
+        terminal_reason: "completed",
+      };
+      const events: AgentTurnEvent[] = [{
+        id: 1, turn_id: turnId, timestamp: startedAt,
+        event_type: "agent.user_prompt", title: "You", body: request.prompt,
+        status: "completed", tool: null, request_id: null, code: null,
+        details_json: "{}",
+      }, {
+        id: 2, turn_id: turnId, timestamp: startedAt,
+        event_type: "agent.final_message", title: "Rho", body: turn.final_message,
+        status: "completed", tool: null, request_id: null, code: null,
+        details_json: "{}",
+      }];
+      agentTurns.unshift(turn);
+      agentDetails.set(turnId, { turn, events, approvals: [] });
+      const conversationIndex = agentConversations.findIndex(
+        (candidate) => candidate.conversation_id === conversation!.conversation_id,
+      );
+      agentConversations[conversationIndex] = {
+        ...conversation,
+        updated_at: startedAt,
+        turn_count: conversation.turn_count + 1,
+        status: "completed",
+        latest_turn_id: turnId,
+        latest_mode: request.mode,
+        latest_prompt_preview: request.prompt,
+        terminal_reason: "completed",
+      };
+      notifyAgent();
+      return {
+        status: "started" as const,
+        turn_id: turnId,
+        conversation_id: conversation.conversation_id,
+        retry_of_turn_id: null,
+        auto_approve: request.auto_approve,
+        task_kind: request.task_kind,
+      };
+    },
+    async retryAgentTurn(turnId) {
+      const source = agentTurns.find((turn) => turn.turn_id === turnId);
+      if (source == null) throw new Error("Mock Agent turn is unavailable.");
+      const response = await this.runAgent({
+        prompt: source.prompt_preview,
+        mode: source.mode as AgentMode,
+        task_kind: "agent_turn",
+        model_id: null,
+        auto_approve: false,
+        editor_context: null,
+        conversation_id: source.conversation_id,
+      });
+      const created = agentTurns.find((turn) => turn.turn_id === response.turn_id)!;
+      agentTurns[agentTurns.indexOf(created)] = { ...created, retry_of_turn_id: turnId };
+      return { ...response, retry_of_turn_id: turnId };
+    },
+    async cancelAgentTurn(turnId) {
+      const index = agentTurns.findIndex((turn) => turn.turn_id === turnId);
+      if (index < 0) throw new Error("Mock Agent turn is unavailable.");
+      agentTurns[index] = {
+        ...agentTurns[index]!,
+        status: "cancelled",
+        finished_at: new Date().toISOString(),
+        terminal_reason: "user_cancelled",
+      };
+      notifyAgent();
+      return { status: "cancelled", turn_id: turnId };
+    },
+    async respondAgentApproval(request: AgentApprovalDecisionRequest) {
+      for (const [turnId, detail] of agentDetails) {
+        const index = detail.approvals.findIndex(
+          (approval) => approval.request_id === request.request_id,
+        );
+        if (index < 0) continue;
+        const approvals = [...detail.approvals];
+        approvals[index] = {
+          ...approvals[index]!,
+          decision: request.decision,
+          reason: request.reason,
+          status: request.decision === "approve" ? "approved" : "rejected",
+          responded_at: new Date().toISOString(),
+        };
+        agentDetails.set(turnId, { ...detail, approvals });
+        notifyAgent();
+        return { status: "delivered", request_id: request.request_id };
+      }
+      throw new Error("Mock Agent approval is unavailable.");
+    },
+    async retryAgentRuntime() {
+      notifyAgent();
+      return { status: "ready" };
+    },
+    subscribeAgentInvalidated(listener: () => void): Unsubscribe {
+      agentListeners.add(listener);
+      return () => agentListeners.delete(listener);
+    },
+    async loadDomainSurface(surfaceId) {
+      const fixtures: Readonly<Record<string, DomainSurfaceData["items"]>> = {
+        "rho.environment": [
+          { id: "package:rho", title: "rho", subtitle: "0.4.1-dev.11", status: "installed", detail: "Project library" },
+          { id: "package:aisdk", title: "aisdk", subtitle: "required >= 1.5.0", status: "incompatible", detail: "Installed 1.4.12 in Agent R" },
+        ],
+        "rho.evidence": [{ id: "claim:1", title: "Analysis uses a fixed seed", subtitle: "analysis.R:1-2", status: "current", detail: "Source-backed evidence claim" }],
+        "rho.git": [{ id: "git:main", title: "main", subtitle: "2 modified · 1 staged", status: "dirty", detail: "Local project repository" }],
+        "rho.runs": [{ id: "run:mock-1", title: "workspace.execute", subtitle: "analysis.R", status: "completed", detail: "Workspace R execution" }],
+        "rho.artifacts": [{ id: "artifact:plot-1", title: "plots/qc.png", subtitle: "image/png", status: "available", detail: "Produced by run:mock-1" }],
+        "rho.problems": [{ id: "problem:seed", title: "Random result may change", subtitle: "analysis.R:2", status: "warning", detail: "Set a deliberate seed." }],
+        "rho.plots": [{ id: "plot:mock-1", title: "QC plot", subtitle: "image/png", status: "ready", detail: "Runtime plot artifact" }],
+        "rho.logs": [{ id: "log:startup", title: "Desktop shell ready", subtitle: agentNow, status: "info", detail: "Surface Runtime initialized." }],
+        "rho.render-jobs": [{ id: "render:mock-1", title: "analysis.qmd → html", subtitle: "Quarto", status: "completed", detail: "Output analysis.html" }],
+        "rho.help": [{ id: "rho.command.search", title: "Search commands", subtitle: "Command Registry", status: "available", detail: "Find every contextual command." }],
+      };
+      const items = fixtures[surfaceId] ?? [];
+      return {
+        surface_id: surfaceId,
+        loaded_at: agentNow,
+        summary: `${items.length} ${items.length === 1 ? "record" : "records"}`,
+        items: structuredClone(items),
+      };
+    },
+    async retryRun(runId) {
+      notifyAgent();
+      return { status: "started", parent_run_id: runId };
+    },
+    async applyAgentFileEdit(request) {
+      notifyAgent();
+      return {
+        status: "applied",
+        path: request.path,
+        content: request.before_content,
+        start: 0,
+        end: request.before_content.length,
+        after_sha256: "a".repeat(64),
+      };
+    },
+    async undoAgentFileEdit(request) {
+      notifyAgent();
+      return {
+        status: "undone",
+        path: request.path,
+        content: request.created ? null : request.before_content,
+        start: 0,
+        end: 0,
+        after_sha256: request.created ? null : "b".repeat(64),
+      };
     },
     publishResources(next: ResourceRegistrySnapshot) {
       resources = copyResources(next);

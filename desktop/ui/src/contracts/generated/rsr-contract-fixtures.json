@@ -887,6 +887,306 @@
         },
         {
           "definition": {
+            "command_id": "rho.surface.open.agent",
+            "label": "Open Agent",
+            "purpose": "Open another independently bound Agent conversation view.",
+            "input_schema": {
+              "properties": {},
+              "type": "object"
+            },
+            "consequence": "Creates one new Surface instance and places it in the active Studio Scene or Vibe Page.",
+            "availability_predicate_id": "rho.predicate.project-ready",
+            "placement_tags": [
+              "palette",
+              "surface_local"
+            ],
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.agent"
+            }
+          },
+          "activation_generation": 1,
+          "availability": {
+            "state": "available"
+          }
+        },
+        {
+          "definition": {
+            "command_id": "rho.surface.open.artifacts",
+            "label": "Open Artifacts",
+            "purpose": "Open durable project outputs.",
+            "input_schema": {
+              "properties": {},
+              "type": "object"
+            },
+            "consequence": "Creates one new Surface instance and places it in the active Studio Scene or Vibe Page.",
+            "availability_predicate_id": "rho.predicate.project-ready",
+            "placement_tags": [
+              "palette",
+              "surface_local"
+            ],
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.artifacts"
+            }
+          },
+          "activation_generation": 1,
+          "availability": {
+            "state": "available"
+          }
+        },
+        {
+          "definition": {
+            "command_id": "rho.surface.open.console",
+            "label": "Open Console",
+            "purpose": "Open another Console attached explicitly to a scientific runtime.",
+            "input_schema": {
+              "properties": {},
+              "type": "object"
+            },
+            "consequence": "Creates one new Surface instance and places it in the active Studio Scene or Vibe Page.",
+            "availability_predicate_id": "rho.predicate.project-ready",
+            "placement_tags": [
+              "palette",
+              "surface_local"
+            ],
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.console"
+            }
+          },
+          "activation_generation": 1,
+          "availability": {
+            "state": "available"
+          }
+        },
+        {
+          "definition": {
+            "command_id": "rho.surface.open.environment",
+            "label": "Open Environment",
+            "purpose": "Open the scientific environment broker view.",
+            "input_schema": {
+              "properties": {},
+              "type": "object"
+            },
+            "consequence": "Creates one new Surface instance and places it in the active Studio Scene or Vibe Page.",
+            "availability_predicate_id": "rho.predicate.project-ready",
+            "placement_tags": [
+              "palette",
+              "surface_local"
+            ],
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.environment"
+            }
+          },
+          "activation_generation": 1,
+          "availability": {
+            "state": "available"
+          }
+        },
+        {
+          "definition": {
+            "command_id": "rho.surface.open.evidence",
+            "label": "Open Evidence",
+            "purpose": "Open durable evidence and provenance.",
+            "input_schema": {
+              "properties": {},
+              "type": "object"
+            },
+            "consequence": "Creates one new Surface instance and places it in the active Studio Scene or Vibe Page.",
+            "availability_predicate_id": "rho.predicate.project-ready",
+            "placement_tags": [
+              "palette",
+              "surface_local"
+            ],
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.evidence"
+            }
+          },
+          "activation_generation": 1,
+          "availability": {
+            "state": "available"
+          }
+        },
+        {
+          "definition": {
+            "command_id": "rho.surface.open.git",
+            "label": "Open Git",
+            "purpose": "Open project source-control state.",
+            "input_schema": {
+              "properties": {},
+              "type": "object"
+            },
+            "consequence": "Creates one new Surface instance and places it in the active Studio Scene or Vibe Page.",
+            "availability_predicate_id": "rho.predicate.project-ready",
+            "placement_tags": [
+              "palette",
+              "surface_local"
+            ],
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.git"
+            }
+          },
+          "activation_generation": 1,
+          "availability": {
+            "state": "available"
+          }
+        },
+        {
+          "definition": {
+            "command_id": "rho.surface.open.help",
+            "label": "Open Help",
+            "purpose": "Open contextual project guidance.",
+            "input_schema": {
+              "properties": {},
+              "type": "object"
+            },
+            "consequence": "Creates one new Surface instance and places it in the active Studio Scene or Vibe Page.",
+            "availability_predicate_id": "rho.predicate.project-ready",
+            "placement_tags": [
+              "palette",
+              "surface_local"
+            ],
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.help"
+            }
+          },
+          "activation_generation": 1,
+          "availability": {
+            "state": "available"
+          }
+        },
+        {
+          "definition": {
+            "command_id": "rho.surface.open.logs",
+            "label": "Open Logs",
+            "purpose": "Open bounded application and runtime diagnostics.",
+            "input_schema": {
+              "properties": {},
+              "type": "object"
+            },
+            "consequence": "Creates one new Surface instance and places it in the active Studio Scene or Vibe Page.",
+            "availability_predicate_id": "rho.predicate.project-ready",
+            "placement_tags": [
+              "palette",
+              "surface_local"
+            ],
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.logs"
+            }
+          },
+          "activation_generation": 1,
+          "availability": {
+            "state": "available"
+          }
+        },
+        {
+          "definition": {
+            "command_id": "rho.surface.open.plots",
+            "label": "Open Plots",
+            "purpose": "Open plot artifacts in an independent view.",
+            "input_schema": {
+              "properties": {},
+              "type": "object"
+            },
+            "consequence": "Creates one new Surface instance and places it in the active Studio Scene or Vibe Page.",
+            "availability_predicate_id": "rho.predicate.project-ready",
+            "placement_tags": [
+              "palette",
+              "surface_local"
+            ],
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.plots"
+            }
+          },
+          "activation_generation": 1,
+          "availability": {
+            "state": "available"
+          }
+        },
+        {
+          "definition": {
+            "command_id": "rho.surface.open.problems",
+            "label": "Open Problems",
+            "purpose": "Open actionable project diagnostics.",
+            "input_schema": {
+              "properties": {},
+              "type": "object"
+            },
+            "consequence": "Creates one new Surface instance and places it in the active Studio Scene or Vibe Page.",
+            "availability_predicate_id": "rho.predicate.project-ready",
+            "placement_tags": [
+              "palette",
+              "surface_local"
+            ],
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.problems"
+            }
+          },
+          "activation_generation": 1,
+          "availability": {
+            "state": "available"
+          }
+        },
+        {
+          "definition": {
+            "command_id": "rho.surface.open.render-jobs",
+            "label": "Open Render jobs",
+            "purpose": "Open document rendering activity.",
+            "input_schema": {
+              "properties": {},
+              "type": "object"
+            },
+            "consequence": "Creates one new Surface instance and places it in the active Studio Scene or Vibe Page.",
+            "availability_predicate_id": "rho.predicate.project-ready",
+            "placement_tags": [
+              "palette",
+              "surface_local"
+            ],
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.render-jobs"
+            }
+          },
+          "activation_generation": 1,
+          "availability": {
+            "state": "available"
+          }
+        },
+        {
+          "definition": {
+            "command_id": "rho.surface.open.runs",
+            "label": "Open Runs",
+            "purpose": "Open scientific run history and recovery actions.",
+            "input_schema": {
+              "properties": {},
+              "type": "object"
+            },
+            "consequence": "Creates one new Surface instance and places it in the active Studio Scene or Vibe Page.",
+            "availability_predicate_id": "rho.predicate.project-ready",
+            "placement_tags": [
+              "palette",
+              "surface_local"
+            ],
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.runs"
+            }
+          },
+          "activation_generation": 1,
+          "availability": {
+            "state": "available"
+          }
+        },
+        {
+          "definition": {
             "command_id": "rho.workspace.interrupt",
             "label": "Interrupt active operation",
             "purpose": "Interrupt a running scientific operation in the active project.",
@@ -1510,7 +1810,7 @@
     "contract": "rho.ui.project-profile.snapshot.v1",
     "contract_major": 1,
     "profile": {
-      "schema_version": 2,
+      "schema_version": 3,
       "project_id": "project:fixture",
       "revision": 5,
       "active_mode": "studio",

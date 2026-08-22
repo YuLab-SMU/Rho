@@ -42,12 +42,13 @@ describe("Studio foundation app", () => {
     expect(container.textContent).toContain("Rho Lab");
     expect(container.textContent).toContain("Workspace R ready");
     expect(container.textContent).toContain("Agent runtime needs attention");
-    expect(container.textContent).toContain("7 commands");
+    expect(container.textContent).toContain("19 commands");
     expect(container.textContent).toContain("Source editor");
     expect(container.textContent).toContain("2 tabs");
     expect(container.querySelectorAll(".rho-layout-container")).toHaveLength(2);
-    expect(container.querySelectorAll(".rho-resize-handle")).toHaveLength(1);
+    expect(container.querySelectorAll(".rho-resize-handle")).toHaveLength(2);
     expect(container.querySelectorAll(".rho-inventory-item")).toHaveLength(4);
+    expect(container.querySelector("[data-surface-id='rho.agent']")?.textContent).toContain("Project direction");
     expect(document.documentElement.dataset.rsrReady).toBe("true");
   });
 
@@ -246,6 +247,86 @@ describe("Studio foundation app", () => {
     expect(first.querySelectorAll(".rho-console-entry")).toHaveLength(1);
     expect(second.querySelectorAll(".rho-console-entry")).toHaveLength(1);
     expect(second.textContent).toContain("instance:console-b");
+  });
+
+  it("shares durable Agent conversation truth while keeping repeated composers instance-local", async () => {
+    const transport = createMockUiKernelTransport();
+    const ready = structuredClone(await transport.loadSnapshot());
+    (ready.health as { agent: typeof ready.health.agent }).agent = {
+      state: "ready",
+      label: "Agent runtime ready",
+      detail: null,
+    };
+    (ready.context as { agent_health: "ready" }).agent_health = "ready";
+    transport.publish(ready);
+    const { container } = await renderApp(transport);
+    const original = container.querySelector<HTMLElement>("[data-surface-id='rho.agent']")!;
+    await act(async () => {
+      original.querySelector<HTMLButtonElement>(".rho-surface-actions button")!.click();
+      for (let index = 0; index < 8; index += 1) await Promise.resolve();
+    });
+    const agents = [...container.querySelectorAll<HTMLElement>("[data-surface-id='rho.agent']")];
+    expect(agents).toHaveLength(2);
+    const firstComposer = agents[0]!.querySelector<HTMLTextAreaElement>(".rho-agent-composer textarea")!;
+    const secondComposer = agents[1]!.querySelector<HTMLTextAreaElement>(".rho-agent-composer textarea")!;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+    await act(async () => {
+      setValue.call(firstComposer, "Compare both views");
+      firstComposer.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(firstComposer.value).toBe("Compare both views");
+    expect(secondComposer.value).toBe("");
+    await act(async () => {
+      firstComposer.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+      for (let index = 0; index < 16; index += 1) await Promise.resolve();
+    });
+    for (const agent of agents) {
+      expect(agent.textContent).toContain("Compare both views");
+      expect(agent.textContent).toContain("Mock ask response");
+    }
+  });
+
+  it("creates intrinsic and full domain Surfaces from the shared factory catalog", async () => {
+    const { container } = await renderApp();
+    const open = async (surfaceId: string) => {
+      const factory = container.querySelector<HTMLElement>(
+        `[data-surface-factory='${surfaceId}']`,
+      );
+      if (factory == null) throw new Error(`Factory ${surfaceId} is missing`);
+      await act(async () => {
+        factory.querySelector<HTMLButtonElement>("button")!.click();
+        for (let index = 0; index < 8; index += 1) await Promise.resolve();
+      });
+    };
+    await open("rho.problems");
+    await open("rho.environment");
+    expect(container.querySelector("[data-surface-id='rho.problems']")?.classList)
+      .toContain("rho-surface-strip");
+    expect(container.querySelector("[data-surface-id='rho.environment']")).not.toBeNull();
+  });
+
+  it("reviews Agent file proposals through the shared Resource document and broker mutation", async () => {
+    const transport = createMockUiKernelTransport();
+    const apply = vi.spyOn(transport, "applyAgentFileEdit");
+    const { container } = await renderApp(transport);
+    const proposal = container.querySelector<HTMLElement>(".rho-agent-file-proposal");
+    if (proposal == null) throw new Error("Agent file proposal is missing");
+    expect(proposal?.textContent).toContain("analysis.R");
+    expect(proposal?.textContent).toContain("Reviewed by Agent");
+    const applyButton = [...proposal.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent === "Apply")!;
+    await act(async () => {
+      applyButton.click();
+      for (let index = 0; index < 12; index += 1) await Promise.resolve();
+    });
+    expect(apply).toHaveBeenCalledOnce();
+    expect(apply.mock.calls[0]?.[0]).toMatchObject({
+      turn_id: "agent-turn:mock-1",
+      proposal_event_id: 3,
+      path: "analysis.R",
+      before_content: "library(ggplot2)\nplot(mtcars$wt, mtcars$mpg)\n",
+    });
+    expect(proposal.textContent).toContain("Undo applied edit");
   });
 
   it("opens repeated file modes and makes immutable previews visibly stale after save", async () => {

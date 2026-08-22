@@ -810,7 +810,7 @@ export interface VibePage {
 }
 
 export interface ProjectUiProfile {
-  readonly schema_version: 2;
+  readonly schema_version: 3;
   readonly project_id: string;
   readonly revision: number;
   readonly active_mode: UiProfileMode;
@@ -904,6 +904,153 @@ export interface VibePageExport {
   readonly markdown: string;
 }
 
+export type AgentMode = "ask" | "plan" | "act";
+
+export interface AgentConversationSummary {
+  readonly conversation_id: string;
+  readonly project_root: string;
+  readonly title: string;
+  readonly created_at: string;
+  readonly updated_at: string;
+  readonly archived_at: string | null;
+  readonly legacy_unthreaded: boolean;
+  readonly turn_count: number;
+  readonly status: string;
+  readonly latest_turn_id: string | null;
+  readonly latest_mode: string | null;
+  readonly latest_prompt_preview: string | null;
+  readonly terminal_reason: string | null;
+  readonly pending_request_id: string | null;
+}
+
+export interface AgentTurnSummary {
+  readonly turn_id: string;
+  readonly conversation_id: string;
+  readonly project_root: string;
+  readonly mode: AgentMode;
+  readonly status: string;
+  readonly started_at: string;
+  readonly finished_at: string | null;
+  readonly prompt_preview: string;
+  readonly model: string;
+  readonly workspace_id_before: string | null;
+  readonly state_revision_before: number | null;
+  readonly project_revision_before: number | null;
+  readonly workspace_id_after: string | null;
+  readonly state_revision_after: number | null;
+  readonly project_revision_after: number | null;
+  readonly final_message: string | null;
+  readonly error_message: string | null;
+  readonly pending_request_id: string | null;
+  readonly retry_of_turn_id: string | null;
+  readonly terminal_reason: string | null;
+}
+
+export interface AgentTurnEvent {
+  readonly id: number;
+  readonly turn_id: string;
+  readonly timestamp: string;
+  readonly event_type: string;
+  readonly title: string;
+  readonly body: string | null;
+  readonly status: string;
+  readonly tool: string | null;
+  readonly request_id: string | null;
+  readonly code: string | null;
+  readonly details_json: string;
+}
+
+export interface AgentApprovalRequest {
+  readonly request_id: string;
+  readonly turn_id: string;
+  readonly project_root: string;
+  readonly tool: string;
+  readonly policy: string;
+  readonly status: string;
+  readonly decision: string | null;
+  readonly reason: string | null;
+  readonly arguments_json: string;
+  readonly code: string | null;
+  readonly workspace_id: string | null;
+  readonly state_revision: number | null;
+  readonly project_revision: number | null;
+  readonly requested_at: string;
+  readonly responded_at: string | null;
+  readonly continuation_outcome: string | null;
+}
+
+export interface AgentTurnDetail {
+  readonly turn: AgentTurnSummary;
+  readonly events: readonly AgentTurnEvent[];
+  readonly approvals: readonly AgentApprovalRequest[];
+}
+
+export interface RunAgentRequest {
+  readonly prompt: string;
+  readonly mode: AgentMode;
+  readonly task_kind: "agent_turn" | "problem_repair";
+  readonly model_id: string | null;
+  readonly auto_approve: boolean;
+  readonly editor_context: unknown | null;
+  readonly conversation_id: string | null;
+}
+
+export interface RunAgentResponse {
+  readonly status: "started";
+  readonly turn_id: string;
+  readonly conversation_id: string;
+  readonly retry_of_turn_id: string | null;
+  readonly auto_approve: boolean;
+  readonly task_kind: string;
+}
+
+export interface AgentApprovalDecisionRequest {
+  readonly request_id: string;
+  readonly decision: "approve" | "reject" | "cancel";
+  readonly reason: string | null;
+}
+
+export interface AgentFileApplyRequest {
+  readonly turn_id: string;
+  readonly proposal_event_id: number;
+  readonly path: string;
+  readonly expected_disk_sha256: string | null;
+  readonly before_content: string;
+}
+
+export interface AgentFileUndoRequest {
+  readonly turn_id: string;
+  readonly proposal_event_id: number;
+  readonly path: string;
+  readonly expected_after_sha256: string;
+  readonly before_content: string;
+  readonly created: boolean;
+}
+
+export interface AgentFileMutationResponse {
+  readonly status: string;
+  readonly path: string;
+  readonly content: string | null;
+  readonly start: number;
+  readonly end: number;
+  readonly after_sha256: string | null;
+}
+
+export interface DomainSurfaceItem {
+  readonly id: string;
+  readonly title: string;
+  readonly subtitle: string | null;
+  readonly status: string | null;
+  readonly detail: string | null;
+}
+
+export interface DomainSurfaceData {
+  readonly surface_id: string;
+  readonly loaded_at: string;
+  readonly summary: string;
+  readonly items: readonly DomainSurfaceItem[];
+}
+
 export type Unsubscribe = () => void;
 
 export interface UiKernelTransport {
@@ -959,4 +1106,18 @@ export interface UiKernelTransport {
   renameResource(request: ResourceRenameRequest): Promise<ResourceRegistrySnapshot>;
   deleteResource(request: ResourceDeleteRequest): Promise<ResourceRegistrySnapshot>;
   subscribeResourcesInvalidated(listener: () => void): Unsubscribe;
+  listAgentConversations(limit?: number): Promise<readonly AgentConversationSummary[]>;
+  createAgentConversation(): Promise<AgentConversationSummary>;
+  listAgentTurns(conversationId: string | null, limit?: number): Promise<readonly AgentTurnSummary[]>;
+  getAgentTurnDetail(turnId: string): Promise<AgentTurnDetail | null>;
+  runAgent(request: RunAgentRequest): Promise<RunAgentResponse>;
+  retryAgentTurn(turnId: string): Promise<RunAgentResponse>;
+  cancelAgentTurn(turnId: string): Promise<unknown>;
+  respondAgentApproval(request: AgentApprovalDecisionRequest): Promise<unknown>;
+  retryAgentRuntime(): Promise<unknown>;
+  subscribeAgentInvalidated(listener: () => void): Unsubscribe;
+  loadDomainSurface(surfaceId: string): Promise<DomainSurfaceData>;
+  retryRun(runId: string): Promise<unknown>;
+  applyAgentFileEdit(request: AgentFileApplyRequest): Promise<AgentFileMutationResponse>;
+  undoAgentFileEdit(request: AgentFileUndoRequest): Promise<AgentFileMutationResponse>;
 }

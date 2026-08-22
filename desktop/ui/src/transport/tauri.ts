@@ -1,8 +1,14 @@
 import type {
+  AgentConversationSummary,
+  AgentFileMutationResponse,
+  AgentTurnDetail,
+  AgentTurnSummary,
   CheckResult,
   CheckResultRequest,
   CheckRunRequest,
   CheckRunResponse,
+  DomainSurfaceData,
+  DomainSurfaceItem,
   OpenSurfaceRequest,
   PluginSurfaceDocumentRequest,
   PluginSurfaceDocumentView,
@@ -18,6 +24,7 @@ import type {
   ResourceRenameRequest,
   ResourceResolveRequest,
   ResourceSaveRequest,
+  RunAgentResponse,
   RuntimeAttachmentRequest,
   RuntimeCreateRequest,
   RuntimeDetachRequest,
@@ -55,6 +62,67 @@ const INVALIDATION_EVENTS = [
   "project://files-changed",
   "rho://agent-turn-updated",
 ] as const;
+
+function boundedJson(value: unknown): string | null {
+  if (value == null) return null;
+  try {
+    const encoded = JSON.stringify(value, null, 2);
+    return encoded.length > 4_000 ? `${encoded.slice(0, 4_000)}\n…` : encoded;
+  } catch {
+    return String(value).slice(0, 4_000);
+  }
+}
+
+function recordValue(record: Readonly<Record<string, unknown>>, keys: readonly string[]) {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value;
+    if (typeof value === "number") return String(value);
+  }
+  return null;
+}
+
+function collectDomainRecords(value: unknown, output: Readonly<Record<string, unknown>>[]) {
+  if (Array.isArray(value)) {
+    for (const item of value) collectDomainRecords(item, output);
+    return;
+  }
+  if (typeof value !== "object" || value == null) return;
+  const record = value as Readonly<Record<string, unknown>>;
+  const identity = recordValue(record, [
+    "run_id", "problem_id", "claim_id", "artifact_id", "plot_id", "request_id", "hash", "id",
+  ]);
+  if (identity != null) output.push(record);
+  for (const nested of Object.values(record)) {
+    if (Array.isArray(nested)) collectDomainRecords(nested, output);
+  }
+  if (identity == null && output.length === 0) output.push(record);
+}
+
+function domainData(surfaceId: string, payload: unknown): DomainSurfaceData {
+  const records: Readonly<Record<string, unknown>>[] = [];
+  collectDomainRecords(payload, records);
+  const items: DomainSurfaceItem[] = records.slice(0, 100).map((record, index) => {
+    const id = recordValue(record, [
+      "run_id", "problem_id", "claim_id", "artifact_id", "plot_id", "request_id", "hash", "id",
+    ]) ?? `${surfaceId}:${index + 1}`;
+    return {
+      id,
+      title: recordValue(record, [
+        "title", "message", "summary", "package", "name", "output_path", "path", "request_type", "artifact_kind", "branch",
+      ]) ?? id,
+      subtitle: recordValue(record, ["source_path", "kind", "version", "author", "date", "mode", "tool"]),
+      status: recordValue(record, ["status", "severity", "state"]),
+      detail: boundedJson(record),
+    };
+  });
+  return {
+    surface_id: surfaceId,
+    loaded_at: new Date().toISOString(),
+    summary: `${items.length} ${items.length === 1 ? "record" : "records"}`,
+    items,
+  };
+}
 
 function subscribeEvents(
   listen: Listen,
@@ -215,5 +283,92 @@ export function createTauriUiKernelTransport(
         ["rho://resource-registry-changed", "rho://ui-snapshot-invalidated"],
         listener,
       ),
+    listAgentConversations: (limit = 50) =>
+      invoke<readonly AgentConversationSummary[]>("list_agent_conversations", { limit }),
+    createAgentConversation: () =>
+      invoke<AgentConversationSummary>("create_agent_conversation"),
+    listAgentTurns: (conversationId, limit = 50) =>
+      invoke<readonly AgentTurnSummary[]>("list_agent_turns", { conversationId, limit }),
+    getAgentTurnDetail: (turnId) =>
+      invoke<AgentTurnDetail | null>("get_agent_turn_detail", { turnId }),
+    runAgent: (request) => invoke<RunAgentResponse>("run_agent", {
+      prompt: request.prompt,
+      mode: request.mode,
+      taskKind: request.task_kind,
+      modelId: request.model_id,
+      autoApprove: request.auto_approve,
+      editorContext: request.editor_context,
+      conversationId: request.conversation_id,
+    }),
+    retryAgentTurn: (turnId) =>
+      invoke<RunAgentResponse>("retry_agent_turn", { turnId }),
+    cancelAgentTurn: (turnId) => invoke("cancel_agent_turn", { turnId }),
+    respondAgentApproval: (request) => invoke("respond_approval", { request }),
+    retryAgentRuntime: () => invoke("agent_runtime_retry"),
+    subscribeAgentInvalidated: (listener) =>
+      subscribeEvents(
+        listen,
+        ["rho://agent-turn-updated", "rho://ui-snapshot-invalidated"],
+        listener,
+      ),
+    loadDomainSurface: async (surfaceId) => {
+      let payload: unknown;
+      switch (surfaceId) {
+        case "rho.environment": payload = {
+          installed: await invoke<unknown>("list_installed_packages", { limit: 200 }),
+          requests: await invoke<unknown>("list_environment_operation_requests", { limit: 50, status: null }),
+        }; break;
+        case "rho.evidence": payload = await invoke<unknown>("list_evidence_claims", { limit: 100 }); break;
+        case "rho.git": payload = {
+          status: await invoke<unknown>("git_status"),
+          history: await invoke<unknown>("git_log", { limit: 30 }),
+        }; break;
+        case "rho.runs": payload = await invoke<unknown>("list_runs", { limit: 100 }); break;
+        case "rho.artifacts": payload = await invoke<unknown>("list_artifact_records", { limit: 100, sessionOnly: false }); break;
+        case "rho.problems": payload = await invoke<unknown>("list_problems", { limit: 100 }); break;
+        case "rho.plots": payload = await invoke<unknown>("list_plot_artifacts", { limit: 100, sessionOnly: true }); break;
+        case "rho.logs": payload = { id: "startup-diagnostics", title: "Startup diagnostics", status: "current", detail: await invoke<string>("startup_diagnostics") }; break;
+        case "rho.render-jobs": {
+          const runs = await invoke<unknown>("list_runs", { limit: 100 });
+          payload = Array.isArray(runs) ? runs.filter((run) => {
+            const encoded = boundedJson(run)?.toLowerCase() ?? "";
+            return encoded.includes("render");
+          }) : runs;
+          break;
+        }
+        case "rho.help": {
+          const snapshot = await invoke<UiKernelSnapshot>("ui_kernel_snapshot");
+          payload = snapshot.command_registry.registrations.map((registration) => ({
+            id: registration.definition.command_id,
+            title: registration.definition.label,
+            status: registration.availability.state,
+            summary: registration.definition.purpose,
+          }));
+          break;
+        }
+        default: payload = [];
+      }
+      return domainData(surfaceId, payload);
+    },
+    retryRun: (runId) => invoke("retry_run", { runId }),
+    applyAgentFileEdit: (request) => invoke<AgentFileMutationResponse>("apply_agent_file_edit", {
+      request: {
+        turnId: request.turn_id,
+        proposalEventId: request.proposal_event_id,
+        path: request.path,
+        expectedDiskSha256: request.expected_disk_sha256,
+        beforeContent: request.before_content,
+      },
+    }),
+    undoAgentFileEdit: (request) => invoke<AgentFileMutationResponse>("undo_agent_file_edit", {
+      request: {
+        turnId: request.turn_id,
+        proposalEventId: request.proposal_event_id,
+        path: request.path,
+        expectedAfterSha256: request.expected_after_sha256,
+        beforeContent: request.before_content,
+        created: request.created,
+      },
+    }),
   };
 }

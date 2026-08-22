@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -18,8 +19,14 @@ import {
   createUiKernelTransport,
 } from "../transport";
 import type {
+  AgentConversationSummary,
+  AgentFileMutationResponse,
+  AgentMode,
+  AgentTurnDetail,
+  AgentTurnSummary,
   CheckEvidence,
   CheckResult,
+  DomainSurfaceData,
   LayoutAxis,
   LayoutBasis,
   LayoutChild,
@@ -39,6 +46,7 @@ import type {
   SceneEdit,
   StudioRuntimeSnapshot,
   SurfaceInstance,
+  SurfaceFactoryRegistration,
   SurfaceInstanceRequest,
   UiKernelTransport,
 } from "../transport";
@@ -279,6 +287,16 @@ interface SurfaceViewProps {
   readonly pluginDocumentRequest: PluginSurfaceDocumentRequest | null;
   readonly projectRevision: number;
   readonly openCheckEvidence: (path: string) => Promise<void>;
+  readonly agentHealth: { readonly state: string; readonly label: string; readonly detail: string | null } | null;
+  readonly persistAgentViewState: (viewState: AgentSurfaceViewState) => Promise<void>;
+  readonly persistSurfaceViewState: (viewState: unknown) => Promise<void>;
+  readonly pinAgentTask: (turn: AgentTurnSummary) => Promise<void>;
+  readonly applyAgentFileProposal: (
+    turn: AgentTurnSummary,
+    eventId: number,
+    proposal: AgentFileProposal,
+  ) => Promise<{ readonly response: AgentFileMutationResponse; readonly beforeContent: string }>;
+  readonly undoAgentFileProposal: (request: AgentFileUndoState) => Promise<void>;
   readonly embedded: boolean;
 }
 
@@ -758,6 +776,444 @@ function CheckResultView({
   );
 }
 
+interface AgentSurfaceViewState {
+  readonly conversation_id: string | null;
+  readonly mode: AgentMode;
+  readonly composer: string;
+  readonly auto_approve: boolean;
+  readonly file_decisions: Readonly<Record<string, "rejected">>;
+}
+
+interface AgentFileProposal {
+  readonly path: string;
+  readonly operation: "replace_selection" | "insert_at_cursor" | "append" | "create";
+  readonly content: string;
+}
+
+interface AgentFileUndoState {
+  readonly turn_id: string;
+  readonly proposal_event_id: number;
+  readonly path: string;
+  readonly expected_after_sha256: string;
+  readonly before_content: string;
+  readonly created: boolean;
+}
+
+function parseAgentFileProposal(event: AgentTurnDetail["events"][number]): AgentFileProposal | null {
+  if (event.event_type !== "tool.call_completed" || event.tool !== "propose_file_edit") return null;
+  const parse = (value: string | null) => {
+    if (value == null) return null;
+    try {
+      const parsed: unknown = JSON.parse(value);
+      return typeof parsed === "object" && parsed != null ? parsed as Record<string, unknown> : null;
+    } catch { return null; }
+  };
+  let proposal = parse(event.body);
+  if (proposal?.kind !== "rho.file_edit_proposal") {
+    const details = parse(event.details_json);
+    const argumentsValue = details?.success === true && typeof details.arguments === "object" && details.arguments != null
+      ? details.arguments as Record<string, unknown>
+      : null;
+    proposal = argumentsValue == null ? null : { kind: "rho.file_edit_proposal", ...argumentsValue };
+  }
+  const operation = proposal?.operation;
+  if (
+    typeof proposal?.path !== "string" || typeof proposal.content !== "string" ||
+    (operation !== "replace_selection" && operation !== "insert_at_cursor" && operation !== "append" && operation !== "create")
+  ) return null;
+  return { path: proposal.path, operation, content: proposal.content };
+}
+
+function agentFileProposalOutcome(detail: AgentTurnDetail, proposalEventId: number) {
+  for (const event of detail.events) {
+    if (!event.event_type.startsWith("file_edit.")) continue;
+    try {
+      const envelope = JSON.parse(event.details_json) as Record<string, unknown>;
+      if (Number(envelope.proposal_event_id) !== proposalEventId) continue;
+      if (event.event_type === "file_edit.applied") return "applied";
+      if (event.event_type === "file_edit.undone") return "undone";
+      if (event.event_type.includes("stale")) return "stale";
+      if (event.event_type.includes("failed") || event.event_type.includes("cancelled")) return "not applied";
+    } catch { /* malformed diagnostics stay visible as raw events */ }
+  }
+  return null;
+}
+
+function initialAgentSurfaceState(instance: SurfaceInstance): AgentSurfaceViewState {
+  const candidate = typeof instance.view_state === "object" && instance.view_state != null
+    ? instance.view_state as Record<string, unknown>
+    : {};
+  const mode = candidate.mode;
+  return {
+    conversation_id: typeof candidate.conversation_id === "string"
+      ? candidate.conversation_id
+      : null,
+    mode: mode === "plan" || mode === "act" ? mode : "ask",
+    composer: typeof candidate.composer === "string" ? candidate.composer : "",
+    auto_approve: candidate.auto_approve === true,
+    file_decisions: typeof candidate.file_decisions === "object" && candidate.file_decisions != null
+      ? candidate.file_decisions as Readonly<Record<string, "rejected">>
+      : {},
+  };
+}
+
+function AgentSurfaceView({
+  instance,
+  transport,
+  health,
+  persist,
+  pinTask,
+  applyFileProposal,
+  undoFileProposal,
+  reportError,
+}: {
+  readonly instance: SurfaceInstance;
+  readonly transport: UiKernelTransport;
+  readonly health: SurfaceViewProps["agentHealth"];
+  readonly persist: (viewState: AgentSurfaceViewState) => Promise<void>;
+  readonly pinTask: (turn: AgentTurnSummary) => Promise<void>;
+  readonly applyFileProposal: SurfaceViewProps["applyAgentFileProposal"];
+  readonly undoFileProposal: SurfaceViewProps["undoAgentFileProposal"];
+  readonly reportError: (error: unknown) => void;
+}) {
+  const [view, setView] = useState(() => initialAgentSurfaceState(instance));
+  const viewRef = useRef(view);
+  const [conversations, setConversations] = useState<readonly AgentConversationSummary[]>([]);
+  const [turns, setTurns] = useState<readonly AgentTurnSummary[]>([]);
+  const [details, setDetails] = useState<ReadonlyMap<string, AgentTurnDetail>>(() => new Map());
+  const [busy, setBusy] = useState(false);
+  const [fileUndo, setFileUndo] = useState<AgentFileUndoState | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const refresh = useCallback(async (preferredConversationId = viewRef.current.conversation_id) => {
+    const nextConversations = await transport.listAgentConversations(50);
+    const selected = nextConversations.some(
+      (conversation) => conversation.conversation_id === preferredConversationId,
+    ) ? preferredConversationId : nextConversations[0]?.conversation_id ?? null;
+    const nextTurns = selected == null ? [] : await transport.listAgentTurns(selected, 50);
+    const loadedDetails = await Promise.all(nextTurns.slice(0, 20).map(async (turn) => [
+      turn.turn_id,
+      await transport.getAgentTurnDetail(turn.turn_id),
+    ] as const));
+    setConversations(nextConversations);
+    setTurns(nextTurns);
+    setDetails(new Map(loadedDetails.flatMap(([turnId, detail]) =>
+      detail == null ? [] : [[turnId, detail] as const]
+    )));
+    if (selected !== viewRef.current.conversation_id) {
+      const next = { ...viewRef.current, conversation_id: selected };
+      viewRef.current = next;
+      setView(next);
+      if (selected != null) await persist(next);
+    }
+    setLoading(false);
+  }, [persist, transport]);
+
+  useEffect(() => {
+    const next = initialAgentSurfaceState(instance);
+    viewRef.current = next;
+    setView(next);
+  }, [instance.instance_id]);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      try {
+        await refresh();
+      } catch (error: unknown) {
+        if (active) reportError(error);
+      }
+    };
+    void load();
+    const unsubscribe = transport.subscribeAgentInvalidated(() => void load());
+    return () => { active = false; unsubscribe(); };
+  }, [refresh, reportError, transport]);
+
+  const commitView = (next: AgentSurfaceViewState, durable = true) => {
+    viewRef.current = next;
+    setView(next);
+    if (durable) void persist(next).catch(reportError);
+  };
+  const selectConversation = async (conversationId: string) => {
+    const next = { ...view, conversation_id: conversationId };
+    viewRef.current = next;
+    setView(next);
+    await persist(next);
+    await refresh(conversationId);
+  };
+  const newConversation = async () => {
+    setBusy(true);
+    try {
+      const conversation = await transport.createAgentConversation();
+      await selectConversation(conversation.conversation_id);
+    } catch (error: unknown) {
+      reportError(error);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const submit = async () => {
+    const prompt = view.composer.trim();
+    if (!prompt || busy || health?.state !== "ready") return;
+    setBusy(true);
+    try {
+      const response = await transport.runAgent({
+        prompt,
+        mode: view.mode,
+        task_kind: "agent_turn",
+        model_id: null,
+        auto_approve: view.auto_approve,
+        editor_context: null,
+        conversation_id: view.conversation_id,
+      });
+      const next = { ...view, conversation_id: response.conversation_id, composer: "" };
+      viewRef.current = next;
+      setView(next);
+      await persist(next);
+      await refresh(response.conversation_id);
+    } catch (error: unknown) {
+      reportError(error);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const displayMode = instance.mode_id ?? "conversation";
+  const activeTurn = turns.find((turn) => turn.status === "running" || turn.status === "waiting");
+
+  return (
+    <section className={`rho-agent-surface rho-agent-${displayMode}`}>
+      {health?.state !== "ready" && (
+        <div className="rho-agent-degraded" role="status">
+          <strong>{health?.label ?? "Agent runtime unavailable"}</strong>
+          {health?.detail != null && <p>{health.detail}</p>}
+          <button type="button" disabled={busy} onClick={() => {
+            setBusy(true);
+            void transport.retryAgentRuntime()
+              .then(() => refresh())
+              .catch(reportError)
+              .finally(() => setBusy(false));
+          }}>Retry Agent runtime</button>
+        </div>
+      )}
+      <header className="rho-agent-toolbar">
+        <select
+          aria-label={`Conversation for ${instance.instance_id}`}
+          value={view.conversation_id ?? ""}
+          disabled={busy}
+          onChange={(event) => void selectConversation(event.target.value).catch(reportError)}
+        >
+          <option value="">No conversation</option>
+          {conversations.map((conversation) => (
+            <option value={conversation.conversation_id} key={conversation.conversation_id}>
+              {conversation.title} · {conversation.turn_count}
+            </option>
+          ))}
+        </select>
+        <button type="button" disabled={busy} onClick={() => void newConversation()}>New</button>
+        {activeTurn != null && (
+          <button type="button" disabled={busy} onClick={() => {
+            setBusy(true);
+            void transport.cancelAgentTurn(activeTurn.turn_id)
+              .then(() => refresh())
+              .catch(reportError)
+              .finally(() => setBusy(false));
+          }}>Cancel</button>
+        )}
+      </header>
+      {displayMode !== "composer" && (
+        <div className="rho-agent-timeline" aria-busy={loading}>
+          {loading && <p>Loading conversation…</p>}
+          {!loading && turns.length === 0 && <p className="rho-agent-empty">This conversation is ready for its first turn.</p>}
+          {turns.map((turn) => {
+            const detail = details.get(turn.turn_id);
+            const proposals = detail?.events.flatMap((event) => {
+              const proposal = parseAgentFileProposal(event);
+              return proposal == null ? [] : [{ event, proposal }];
+            }) ?? [];
+            return (
+              <article className={`rho-agent-turn rho-agent-turn-${turn.status}`} data-turn-id={turn.turn_id} key={turn.turn_id}>
+                <header><strong>{turn.mode.toUpperCase()}</strong><span>{turn.status}</span><code>{turn.model}</code></header>
+                <p className="rho-agent-prompt">{turn.prompt_preview}</p>
+                {turn.final_message != null && <p className="rho-agent-answer">{turn.final_message}</p>}
+                {turn.error_message != null && <p className="rho-agent-turn-error">{turn.error_message}</p>}
+                {detail?.events.filter((event) => event.code != null).map((event) => (
+                  <details className="rho-agent-code-review" key={event.id}>
+                    <summary>{event.title}</summary><pre>{event.code}</pre>
+                  </details>
+                ))}
+                {proposals.map(({ event, proposal }) => {
+                  const key = `${turn.turn_id}:${event.id}`;
+                  const outcome = detail == null ? null : agentFileProposalOutcome(detail, event.id);
+                  const rejected = view.file_decisions[key] === "rejected";
+                  return (
+                    <section className="rho-agent-file-proposal" data-proposal-key={key} key={key}>
+                      <header><strong>{proposal.operation.replaceAll("_", " ")}</strong><code>{proposal.path}</code></header>
+                      <pre>{proposal.content}</pre>
+                      {outcome != null && <span className="rho-agent-file-outcome">{outcome}</span>}
+                      {rejected && outcome == null && <span className="rho-agent-file-outcome">rejected in this view</span>}
+                      {outcome == null && !rejected && (
+                        <div>
+                          <button type="button" disabled={busy || turn.status === "running" || turn.status === "waiting"} onClick={() => {
+                            setBusy(true);
+                            void applyFileProposal(turn, event.id, proposal)
+                              .then(({ response, beforeContent }) => {
+                                if (response.after_sha256 != null) {
+                                  setFileUndo({
+                                    turn_id: turn.turn_id,
+                                    proposal_event_id: event.id,
+                                    path: proposal.path,
+                                    expected_after_sha256: response.after_sha256,
+                                    before_content: beforeContent,
+                                    created: proposal.operation === "create",
+                                  });
+                                }
+                                return refresh();
+                              })
+                              .catch(reportError)
+                              .finally(() => setBusy(false));
+                          }}>Apply</button>
+                          <button type="button" onClick={() => commitView({
+                            ...view,
+                            file_decisions: { ...view.file_decisions, [key]: "rejected" },
+                          })}>Reject</button>
+                        </div>
+                      )}
+                      {fileUndo?.turn_id === turn.turn_id && fileUndo.proposal_event_id === event.id && (
+                        <button type="button" disabled={busy} onClick={() => {
+                          setBusy(true);
+                          void undoFileProposal(fileUndo)
+                            .then(() => { setFileUndo(null); return refresh(); })
+                            .catch(reportError)
+                            .finally(() => setBusy(false));
+                        }}>Undo applied edit</button>
+                      )}
+                    </section>
+                  );
+                })}
+                {detail?.approvals.filter((approval) => approval.status === "waiting").map((approval) => (
+                  <div className="rho-agent-approval" key={approval.request_id}>
+                    <strong>{approval.tool}</strong><pre>{approval.code ?? approval.arguments_json}</pre>
+                    <button type="button" onClick={() => void transport.respondAgentApproval({ request_id: approval.request_id, decision: "approve", reason: null }).then(() => refresh()).catch(reportError)}>Approve</button>
+                    <button type="button" onClick={() => void transport.respondAgentApproval({ request_id: approval.request_id, decision: "reject", reason: "Rejected in Agent Surface" }).then(() => refresh()).catch(reportError)}>Reject</button>
+                  </div>
+                ))}
+                <footer>
+                  <button type="button" onClick={() => void pinTask(turn).catch(reportError)}>Pin to Vibe</button>
+                  {(turn.status === "failed" || turn.status === "cancelled") && <button type="button" onClick={() => void transport.retryAgentTurn(turn.turn_id).then(() => refresh()).catch(reportError)}>Retry</button>}
+                </footer>
+              </article>
+            );
+          })}
+        </div>
+      )}
+      {displayMode !== "activity" && (
+        <div className="rho-agent-composer">
+          <div className="rho-agent-mode" role="group" aria-label="Agent mode">
+            {(["ask", "plan", "act"] as const).map((mode) => (
+              <button type="button" aria-pressed={view.mode === mode} key={mode} onClick={() => commitView({ ...view, mode })}>{mode}</button>
+            ))}
+          </div>
+          <textarea
+            aria-label={`Agent prompt ${instance.instance_id}`}
+            value={view.composer}
+            disabled={busy}
+            onChange={(event) => commitView({ ...view, composer: event.target.value }, false)}
+            onBlur={() => void persist(view).catch(reportError)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                void submit();
+              }
+            }}
+            placeholder="Ask Rho about this project…"
+          />
+          <label className="rho-agent-auto-approve">
+            <input type="checkbox" checked={view.auto_approve} disabled={view.mode !== "act"} onChange={(event) => commitView({ ...view, auto_approve: event.target.checked })} />
+            Auto-approve Act tools
+          </label>
+          <button type="button" disabled={busy || health?.state !== "ready" || !view.composer.trim()} onClick={() => void submit()}>{busy ? "Working…" : "Send"}</button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+const DOMAIN_SURFACE_IDS = new Set([
+  "rho.environment", "rho.evidence", "rho.git", "rho.runs", "rho.artifacts",
+  "rho.problems", "rho.plots", "rho.logs", "rho.render-jobs", "rho.help",
+]);
+
+function DomainSurfaceView({
+  instance,
+  transport,
+  persist,
+  reportError,
+}: {
+  readonly instance: SurfaceInstance;
+  readonly transport: UiKernelTransport;
+  readonly persist: (viewState: unknown) => Promise<void>;
+  readonly reportError: (error: unknown) => void;
+}) {
+  const initialFilter = typeof instance.view_state === "object" && instance.view_state != null &&
+      "filter" in instance.view_state && typeof instance.view_state.filter === "string"
+    ? instance.view_state.filter
+    : "";
+  const [filter, setFilter] = useState(initialFilter);
+  const [data, setData] = useState<DomainSurfaceData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    try {
+      setData(await transport.loadDomainSurface(instance.surface_id));
+      setError(null);
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : "Domain Surface could not load.");
+    }
+  }, [instance.surface_id, transport]);
+  useEffect(() => {
+    void load();
+    return transport.subscribeInvalidated(() => void load());
+  }, [load, transport]);
+  const items = data?.items.filter((item) => {
+    const query = filter.trim().toLowerCase();
+    return !query || `${item.title} ${item.subtitle ?? ""} ${item.status ?? ""}`.toLowerCase().includes(query);
+  }) ?? [];
+  const strip = instance.surface_id === "rho.logs" || instance.surface_id === "rho.problems";
+  return (
+    <section className={`rho-domain-surface ${strip ? "rho-domain-strip" : ""}`}>
+      <header>
+        <div><strong>{data?.summary ?? "Loading…"}</strong><small>{instance.mode_id ?? "default"}</small></div>
+        {!strip && <input
+          aria-label={`Filter ${instance.surface_id}`}
+          value={filter}
+          onChange={(event) => setFilter(event.target.value)}
+          onBlur={() => void persist({ filter }).catch(reportError)}
+          placeholder="Filter this view…"
+        />}
+        <button type="button" onClick={() => void load()}>Refresh</button>
+      </header>
+      {error != null && <p className="rho-domain-error" role="alert">{error}</p>}
+      <div className="rho-domain-records">
+        {items.length === 0 && error == null && <p>No records in this view.</p>}
+        {items.map((item) => (
+          <article data-domain-id={item.id} key={item.id}>
+            <span className={`rho-domain-state rho-domain-${item.status ?? "neutral"}`}>{item.status ?? "record"}</span>
+            <strong>{item.title}</strong>
+            {item.subtitle != null && <small>{item.subtitle}</small>}
+            {!strip && item.detail != null && <details><summary>Details</summary><pre>{item.detail}</pre></details>}
+            {!strip && instance.surface_id === "rho.runs" && (item.status === "failed" || item.status === "cancelled") && (
+              <button type="button" disabled={busyId === item.id} onClick={() => {
+                setBusyId(item.id);
+                void transport.retryRun(item.id).then(load).catch(reportError).finally(() => setBusyId(null));
+              }}>Retry run</button>
+            )}
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function SurfaceView({
   instance, focused, setFocus, remove, duplicate, persistDraft, draftCache,
   runtimes, attachRuntime, detachRuntime, executeRuntime, interruptRuntime,
@@ -765,18 +1221,23 @@ function SurfaceView({
   saveResource, reloadResource, renameResource, deleteResource,
   refreshResourceBinding, setViewGroup, persistFileViewState, reportError,
   pluginTransport, pluginDocumentRequest, projectRevision, openCheckEvidence,
+  agentHealth, persistAgentViewState, persistSurfaceViewState, pinAgentTask,
+  applyAgentFileProposal, undoAgentFileProposal,
   embedded,
 }: SurfaceViewProps) {
   const [draft, setDraft] = useState(() => initialDraft(instance, draftCache));
   const [consoleState, setConsoleState] = useState(() => initialConsoleState(instance));
   const [consoleRunning, setConsoleRunning] = useState(false);
   const runtime = instance.runtime_binding;
-  const isStrip = instance.surface_id === "rho.status";
+  const isStrip = instance.surface_id === "rho.status" || instance.surface_id === "rho.logs" || instance.surface_id === "rho.problems";
   const title = instance.surface_id === "rho.console" ? "R Console"
     : instance.surface_id === "rho.file-preview" ? "File preview"
     : instance.surface_id === "rho.file-source" ? "Source editor"
     : instance.surface_id === "rho.status" ? "Runtime status"
-    : instance.surface_id === "rho.check-result" ? "Check result" : "Surface Playground";
+    : instance.surface_id === "rho.check-result" ? "Check result"
+    : instance.surface_id === "rho.agent" ? "Agent"
+    : instance.surface_id === "rho.surface-playground" ? "Surface Playground"
+    : instance.surface_id.replace("rho.", "").replaceAll("-", " ");
   const attached = runtimes?.instances.find((candidate) =>
     candidate.runtime_instance_id === runtime?.runtime_instance_id &&
     candidate.activation_generation === runtime.activation_generation
@@ -954,6 +1415,26 @@ function SurfaceView({
           projectRevision={projectRevision}
           transport={pluginTransport}
           openEvidence={openCheckEvidence}
+          reportError={reportError}
+        />
+      )}
+      {instance.surface_id === "rho.agent" && (
+        <AgentSurfaceView
+          instance={instance}
+          transport={pluginTransport}
+          health={agentHealth}
+          persist={persistAgentViewState}
+          pinTask={pinAgentTask}
+          applyFileProposal={applyAgentFileProposal}
+          undoFileProposal={undoAgentFileProposal}
+          reportError={reportError}
+        />
+      )}
+      {DOMAIN_SURFACE_IDS.has(instance.surface_id) && (
+        <DomainSurfaceView
+          instance={instance}
+          transport={pluginTransport}
+          persist={persistSurfaceViewState}
           reportError={reportError}
         />
       )}
@@ -1296,7 +1777,143 @@ export function App({ transport }: AppProps) {
       },
     });
   };
+  const openFactory = async (
+    factory: SurfaceFactoryRegistration,
+    viewStateOverride?: unknown,
+  ) => {
+    if (surfaces == null || studio == null) {
+      throw new Error("Surface Runtime is not ready.");
+    }
+    const definition = factory.definition;
+    const before = new Set(surfaces.catalog.instances.map((candidate) => candidate.instance_id));
+    const primaryRuntime = runtimes?.instances.find((runtime) => runtime.primary_scientific_runtime);
+    const consoleBinding = definition.surface_id === "rho.console" && primaryRuntime != null
+      ? {
+          runtime_provider_id: primaryRuntime.runtime_provider_id,
+          runtime_instance_id: primaryRuntime.runtime_instance_id,
+          runtime_kind: primaryRuntime.runtime_kind,
+          project_id: primaryRuntime.project_id,
+          activation_generation: primaryRuntime.activation_generation,
+          state_revision: primaryRuntime.state_revision,
+          attach_capabilities: primaryRuntime.attach_capabilities,
+        }
+      : null;
+    const defaultViewState = definition.surface_id === "rho.agent"
+      ? { conversation_id: null, mode: "ask", composer: "", auto_approve: false }
+      : definition.surface_id === "rho.console"
+        ? { draft: "", history: [], history_cursor: null, filter: "", scroll_top: 0, outputs: [] }
+        : {};
+    const opened = await surfaceStore.open({
+      surface_id: definition.surface_id,
+      project_id: surfaces.project_id,
+      mode_id: definition.modes[0]?.mode_id ?? null,
+      resource_binding: null,
+      runtime_binding: consoleBinding,
+      view_group_id: null,
+      view_state: viewStateOverride ?? defaultViewState,
+      instance_disposition: "new_instance",
+      placement_intent: "current",
+      expected_project_revision: surfaces.project_revision,
+      expected_layout_revision: studio.scene.layout_revision,
+    });
+    const created = opened.catalog.instances.find((candidate) => !before.has(candidate.instance_id));
+    if (created == null) throw new Error(`${definition.label} did not create a Surface instance.`);
+    if (profile?.active_mode === "studio" && studio.scene.root.kind === "container") {
+      await studioStore.apply({
+        project_id: studio.project_id,
+        expected_project_revision: studio.project_revision,
+        expected_layout_revision: studio.scene.layout_revision,
+        edit: {
+          kind: "insert_surface",
+          target_container_node_id: studio.scene.root.node_id,
+          child_index: studio.scene.root.children.length,
+          instance_id: created.instance_id,
+          basis: definition.instance_quota_class === "strip"
+            ? { kind: "intrinsic" }
+            : { kind: "minmax", min_logical_pixels: 220, max_logical_pixels: 1_200, weight: 1 },
+        },
+      });
+      return created;
+    }
+    await profileStore.refresh();
+    const latest = profileStore.getSnapshot();
+    if (latest.status !== "ready") throw new Error("Vibe Page Profile is unavailable.");
+    const latestProfile = latest.snapshot.profile;
+    const page = latestProfile.vibe_pages.find(
+      (candidate) => candidate.page_id === latestProfile.active_vibe_page_id,
+    );
+    if (page == null) throw new Error("The active Vibe Page is unavailable.");
+    const block = {
+      block_id: `vibe-block:${crypto.randomUUID().replaceAll("-", "")}`,
+      content: { kind: "surface_ref" as const, instance_id: created.instance_id, live: true },
+    };
+    const sections = page.sections.length === 0
+      ? [{
+          section_id: `vibe-section:${crypto.randomUUID().replaceAll("-", "")}`,
+          heading: definition.label,
+          layout: { kind: "flow" as const },
+          blocks: [block],
+        }]
+      : page.sections.map((section, index) => {
+          if (index !== page.sections.length - 1) return section;
+          if (section.layout.kind === "flow") {
+            return { ...section, blocks: [...section.blocks, block] };
+          }
+          const nextRow = section.layout.placements.reduce(
+            (maximum, placement) => Math.max(maximum, placement.row_start),
+            0,
+          ) + 1;
+          return {
+            ...section,
+            blocks: [...section.blocks, block],
+            layout: {
+              ...section.layout,
+              placements: [...section.layout.placements, {
+                block_id: block.block_id,
+                row_start: nextRow,
+                column_start: 1,
+                column_span: 12,
+              }],
+            },
+          };
+        });
+    await profileStore.applyPage({
+      target: {
+        project_id: latestProfile.project_id,
+        expected_profile_revision: latestProfile.revision,
+      },
+      page_id: page.page_id,
+      expected_page_revision: page.page_revision,
+      mutation: { kind: "replace_sections", sections, focused_block_id: block.block_id },
+    });
+    return created;
+  };
   const invokeCommand = async (commandId: string) => {
+    if (commandId === "rho.agent.new-conversation") {
+      const factory = surfaces?.catalog.factories.find(
+        (candidate) => candidate.definition.surface_id === "rho.agent",
+      );
+      if (factory == null) throw new Error("Agent Surface factory is unavailable.");
+      const conversation = await pluginTransport.createAgentConversation();
+      await openFactory(factory, {
+        conversation_id: conversation.conversation_id,
+        mode: "ask",
+        composer: "",
+        auto_approve: false,
+      });
+      setCommandSearchOpen(false);
+      return;
+    }
+    if (commandId.startsWith("rho.surface.open.")) {
+      const surfaceId = `rho.${commandId.slice("rho.surface.open.".length)}`;
+      const factory = surfaces?.catalog.factories.find(
+        (candidate) => candidate.definition.surface_id === surfaceId,
+      );
+      if (factory == null) throw new Error(`Surface factory ${surfaceId} is unavailable.`);
+      await openFactory(factory);
+      setCommandSearchOpen(false);
+      return;
+    }
     if (commandId !== "rho.check.run") {
       throw new Error(`Command ${commandId} has no RSR frontend handler yet.`);
     }
@@ -1390,6 +2007,67 @@ export function App({ transport }: AppProps) {
       });
     }
     setCommandSearchOpen(false);
+  };
+  const pinAgentTask = async (turn: AgentTurnSummary) => {
+    await profileStore.refresh();
+    const latest = profileStore.getSnapshot();
+    if (latest.status !== "ready") throw new Error("The Project UI Profile is unavailable.");
+    const latestProfile = latest.snapshot.profile;
+    const activePage = latestProfile.vibe_pages.find(
+      (page) => page.page_id === latestProfile.active_vibe_page_id,
+    );
+    if (activePage == null) throw new Error("The active Vibe Page is unavailable.");
+    const block = {
+      block_id: `vibe-block:${crypto.randomUUID().replaceAll("-", "")}`,
+      content: {
+        kind: "task_ref" as const,
+        task_id: turn.turn_id,
+        label: `${turn.mode.toUpperCase()} · ${turn.prompt_preview.slice(0, 96)}`,
+      },
+    };
+    const sections = activePage.sections.length === 0
+      ? [{
+          section_id: `vibe-section:${crypto.randomUUID().replaceAll("-", "")}`,
+          heading: "Agent tasks",
+          layout: { kind: "flow" as const },
+          blocks: [block],
+        }]
+      : activePage.sections.map((section, index) => {
+          if (index !== activePage.sections.length - 1) return section;
+          if (section.layout.kind === "flow") {
+            return { ...section, blocks: [...section.blocks, block] };
+          }
+          const nextRow = section.layout.placements.reduce(
+            (maximum, placement) => Math.max(maximum, placement.row_start),
+            0,
+          ) + 1;
+          return {
+            ...section,
+            blocks: [...section.blocks, block],
+            layout: {
+              ...section.layout,
+              placements: [...section.layout.placements, {
+                block_id: block.block_id,
+                row_start: nextRow,
+                column_start: 1,
+                column_span: 12,
+              }],
+            },
+          };
+        });
+    await profileStore.applyPage({
+      target: {
+        project_id: latestProfile.project_id,
+        expected_profile_revision: latestProfile.revision,
+      },
+      page_id: activePage.page_id,
+      expected_page_revision: activePage.page_revision,
+      mutation: {
+        kind: "replace_sections",
+        sections,
+        focused_block_id: block.block_id,
+      },
+    });
   };
   const surfaceView = (instance: SurfaceInstance, embedded = false) => {
     const boundDescriptor = resources?.resources.find((descriptor) =>
@@ -1569,6 +2247,74 @@ export function App({ transport }: AppProps) {
         if (descriptor == null) throw new Error(`Check evidence Resource ${path} is unavailable.`);
         await openResource(descriptor, "rho.file-source", "source");
       }}
+      agentHealth={snapshot?.health.agent ?? null}
+      persistAgentViewState={async (viewState) => {
+        if (surfaces == null) throw new Error("Surface Runtime is not ready.");
+        await surfaceStore.update({
+          target: instanceRequest(instance, surfaces.project_revision),
+          mutation: { kind: "set_view_state", view_state: viewState },
+        });
+      }}
+      persistSurfaceViewState={async (viewState) => {
+        if (surfaces == null) throw new Error("Surface Runtime is not ready.");
+        await surfaceStore.update({
+          target: instanceRequest(instance, surfaces.project_revision),
+          mutation: { kind: "set_view_state", view_state: viewState },
+        });
+      }}
+      pinAgentTask={pinAgentTask}
+      applyAgentFileProposal={async (turn, eventId, proposal) => {
+        let beforeContent = "";
+        let expectedDiskSha256: string | null = null;
+        if (proposal.operation !== "create") {
+          if (resources == null) throw new Error("Resource Registry is not ready.");
+          let descriptor = resources.resources.find((candidate) =>
+            candidate.resource_provider_id === "rho.project-files" &&
+            candidate.resource_kind === "project_file" &&
+            candidate.resource_id === proposal.path
+          );
+          if (descriptor == null) {
+            const resolved = await resourceStore.resolve({
+              project_id: resources.project_id,
+              resource_provider_id: "rho.project-files",
+              resource_kind: "project_file",
+              resource_id: proposal.path,
+              expected_project_revision: resources.project_revision,
+              expected_snapshot_revision: resources.snapshot_revision,
+            });
+            descriptor = resolved.resources.find((candidate) =>
+              candidate.resource_provider_id === "rho.project-files" &&
+              candidate.resource_kind === "project_file" &&
+              candidate.resource_id === proposal.path
+            );
+          }
+          if (descriptor == null || descriptor.status !== "ready") {
+            throw new Error(`Agent proposal target ${proposal.path} is unavailable.`);
+          }
+          const content = await resourceStore.read({
+            target: resourceTarget(descriptor, resources.project_revision),
+            consistency: "shared_document",
+          });
+          beforeContent = content.content;
+          expectedDiskSha256 = descriptor.content_sha256;
+          if (expectedDiskSha256 == null) {
+            throw new Error(`Agent proposal target ${proposal.path} has no disk digest.`);
+          }
+        }
+        const response = await pluginTransport.applyAgentFileEdit({
+          turn_id: turn.turn_id,
+          proposal_event_id: eventId,
+          path: proposal.path,
+          expected_disk_sha256: expectedDiskSha256,
+          before_content: beforeContent,
+        });
+        await Promise.all([resourceStore.refresh(), surfaceStore.refresh()]);
+        return { response, beforeContent };
+      }}
+      undoAgentFileProposal={async (request) => {
+        await pluginTransport.undoAgentFileEdit(request);
+        await Promise.all([resourceStore.refresh(), surfaceStore.refresh()]);
+      }}
       embedded={embedded}
     />;
   };
@@ -1691,7 +2437,7 @@ export function App({ transport }: AppProps) {
           {commandSearchOpen && (
             <div className="rho-command-results" role="listbox">
               {paletteCommands.slice(0, 8).map((command) => (
-                <button type="button" role="option" disabled={command.availability.state !== "available"} onClick={command.definition.command_id === "rho.check.run" ? () => run(invokeCommand(command.definition.command_id)) : undefined} key={command.definition.command_id}>
+                <button type="button" role="option" disabled={command.availability.state !== "available"} onClick={() => run(invokeCommand(command.definition.command_id))} key={command.definition.command_id}>
                   <strong>{command.definition.label}</strong><code>{command.definition.command_id}</code>
                 </button>
               ))}
@@ -1721,6 +2467,23 @@ export function App({ transport }: AppProps) {
                 {studio.scene.root.kind === "container" && <button type="button" onClick={() => commit({ kind: "distribute_container", container_node_id: studio.scene.root.node_id })}>Distribute root</button>}
               </div>
               <ol className="rho-layout-outline"><li><NodeOutline node={studio.scene.root} commit={commit} /></li></ol>
+              {surfaces != null && (
+                <section className="rho-surface-catalog">
+                  <div className="rho-surface-catalog-heading">
+                    <span className="rho-eyebrow">Surface catalog</span>
+                    <span>{surfaces.catalog.factories.length} factories</span>
+                  </div>
+                  {surfaces.catalog.factories.map((factory) => (
+                    <article className="rho-surface-factory" data-surface-factory={factory.definition.surface_id} key={`${factory.definition.surface_id}:${factory.activation_generation}`}>
+                      <div>
+                        <strong>{factory.definition.label}</strong>
+                        <small>{factory.definition.purpose}</small>
+                      </div>
+                      <button type="button" onClick={() => run(openFactory(factory))}>Open</button>
+                    </article>
+                  ))}
+                </section>
+              )}
               <section className="rho-inventory">
                 <span className="rho-eyebrow">Unplaced instances</span>
                 {studio.unplaced_instance_ids.length === 0 && <p>Every live Surface is placed.</p>}

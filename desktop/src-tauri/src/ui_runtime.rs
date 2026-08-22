@@ -725,6 +725,7 @@ mod tests {
     fn malformed_or_oversized_plugin_commands_cannot_break_application_commands() {
         let context = snapshot("project:a", 1).context;
         let mut registry = application_command_registry_v1(&context).unwrap();
+        let application_command_count = registry.registrations.len();
         let mut unsupported = plugin_contribution(
             "ui.command.unsupported",
             json!({"type": "object", "properties": {}}),
@@ -774,6 +775,6 @@ mod tests {
                     .all(|registration| { registration.definition.command_id.as_str() != omitted })
             );
         }
-        assert!(registry.registrations.len() < 25);
+        assert!(registry.registrations.len() < application_command_count + 20);
     }
 }

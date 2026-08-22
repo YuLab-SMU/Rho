@@ -200,7 +200,7 @@ fn application_command(
 pub fn application_command_definitions_v1() -> Result<Vec<CommandDefinitionV1>, ContractError> {
     use CommandPlacementTagV1::{Keyboard, Menu, Palette, PrimaryCandidate, SurfaceLocal};
 
-    Ok(vec![
+    let mut definitions = vec![
         application_command(
             "rho.command.search",
             "Search commands",
@@ -255,7 +255,72 @@ pub fn application_command_definitions_v1() -> Result<Vec<CommandDefinitionV1>, 
             vec![Palette, PrimaryCandidate, SurfaceLocal],
             "rho.agent",
         )?,
-    ])
+    ];
+    for (suffix, label, purpose) in [
+        (
+            "agent",
+            "Open Agent",
+            "Open another independently bound Agent conversation view.",
+        ),
+        (
+            "console",
+            "Open Console",
+            "Open another Console attached explicitly to a scientific runtime.",
+        ),
+        (
+            "environment",
+            "Open Environment",
+            "Open the scientific environment broker view.",
+        ),
+        (
+            "evidence",
+            "Open Evidence",
+            "Open durable evidence and provenance.",
+        ),
+        ("git", "Open Git", "Open project source-control state."),
+        (
+            "runs",
+            "Open Runs",
+            "Open scientific run history and recovery actions.",
+        ),
+        (
+            "artifacts",
+            "Open Artifacts",
+            "Open durable project outputs.",
+        ),
+        (
+            "problems",
+            "Open Problems",
+            "Open actionable project diagnostics.",
+        ),
+        (
+            "plots",
+            "Open Plots",
+            "Open plot artifacts in an independent view.",
+        ),
+        (
+            "logs",
+            "Open Logs",
+            "Open bounded application and runtime diagnostics.",
+        ),
+        (
+            "render-jobs",
+            "Open Render jobs",
+            "Open document rendering activity.",
+        ),
+        ("help", "Open Help", "Open contextual project guidance."),
+    ] {
+        definitions.push(application_command(
+            &format!("rho.surface.open.{suffix}"),
+            label,
+            purpose,
+            "Creates one new Surface instance and places it in the active Studio Scene or Vibe Page.",
+            PREDICATE_PROJECT_READY,
+            vec![Palette, SurfaceLocal],
+            &format!("rho.{suffix}"),
+        )?);
+    }
+    Ok(definitions)
 }
 
 pub fn evaluate_application_command_availability_v1(

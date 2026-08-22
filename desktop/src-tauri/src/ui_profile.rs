@@ -504,6 +504,26 @@ fn default_surface_specs(
             }),
         });
     }
+    if let Some(factory) = factories
+        .iter()
+        .find(|factory| factory.definition.surface_id.as_str() == "rho.agent")
+    {
+        specs.push(SurfaceInstanceSpecV1 {
+            instance_id: next_instance_id(),
+            surface_id: factory.definition.surface_id.clone(),
+            origin: factory.definition.origin.clone(),
+            mode_id: Some(rho_ui_contract::SurfaceModeId::new("conversation").unwrap()),
+            resource_binding: None,
+            runtime_attachment_intent: None,
+            view_group_id: None,
+            view_state: json!({
+                "conversation_id": null,
+                "mode": "ask",
+                "composer": "",
+                "auto_approve": false
+            }),
+        });
+    }
     specs.sort_by(|left, right| left.instance_id.cmp(&right.instance_id));
     specs
 }
@@ -520,12 +540,39 @@ fn rho_studio_scene(
     let status = specs
         .iter()
         .find(|spec| spec.surface_id.as_str() == "rho.status");
+    let agent = specs
+        .iter()
+        .find(|spec| spec.surface_id.as_str() == "rho.agent");
     let mut children = Vec::new();
+    let mut primary_children = Vec::new();
     if let Some(console) = console {
-        children.push(LayoutChildV1 {
+        primary_children.push(LayoutChildV1 {
             child: LayoutNodeV1::Surface {
                 node_id: next_node_id(),
                 instance_id: console.instance_id.clone(),
+            },
+            basis: LayoutBasisV1::Fraction { weight: 3 },
+            resizable: true,
+            collapse_priority: None,
+        });
+    }
+    if let Some(agent) = agent {
+        primary_children.push(LayoutChildV1 {
+            child: LayoutNodeV1::Surface {
+                node_id: next_node_id(),
+                instance_id: agent.instance_id.clone(),
+            },
+            basis: LayoutBasisV1::Fraction { weight: 2 },
+            resizable: true,
+            collapse_priority: Some(20),
+        });
+    }
+    if !primary_children.is_empty() {
+        children.push(LayoutChildV1 {
+            child: LayoutNodeV1::Container {
+                node_id: next_node_id(),
+                axis: LayoutAxisV1::Horizontal,
+                children: primary_children,
             },
             basis: LayoutBasisV1::Fraction { weight: 1 },
             resizable: true,
@@ -553,7 +600,7 @@ fn rho_studio_scene(
             axis: LayoutAxisV1::Vertical,
             children,
         },
-        focused_surface_instance_id: console.map(|spec| spec.instance_id.clone()),
+        focused_surface_instance_id: agent.or(console).map(|spec| spec.instance_id.clone()),
         utility_tray: None,
     }
 }

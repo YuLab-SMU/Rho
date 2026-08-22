@@ -1,6 +1,6 @@
 # Rho Surface Runtime Full Construction Plan
 
-Status: active complete construction program; Wave 11 is the current integration
+Status: active complete construction program; Wave 12 is the current integration
 package
 
 Date: 2026-08-21
@@ -13,14 +13,13 @@ own focused evidence, contract review, documentation reconciliation, and
 scoped commit. After a wave passes its continuous gate, the next dependency is
 activated automatically under the same explicit authorization.
 
-Current integration package: **Wave 11 — Agent and remaining first-party Surfaces**.
+Current integration package: **Wave 12 — cutover and legacy deletion**.
 
-Wave 11 acceptance owner: this active contract together with the existing
-project-scoped Agent conversation/turn/event and command-admission contracts.
-The Agent Surface may project and operate that truth, but it cannot copy
-conversation ownership into Surface view state, bypass turn concurrency or
-approval policy, or let a NodeView/plugin mutate a Vibe Page. Frontend build
-and HMR changes remain presentation/build authority only.
+Wave 12 acceptance owner: this active contract together with Tauri build,
+packaging, source-artifact, CSP, generated-asset and application-version
+contracts. Cutover may replace the frozen fixed shell and its disposable
+presentation assets, but it cannot replace Store, project/session, Runtime,
+Resource, Agent, approval, plugin or scientific-domain authority.
 
 Owning design:
 `docs/design/proposed-2026-08-21-plugin-native-surface-runtime-design.md`
@@ -1142,6 +1141,55 @@ Continuous gate:
   binding, focus stability, background refresh, project switch, unavailable,
   and narrow-layout behavior;
 - no domain migration creates a second data/persistence/execution authority.
+
+Wave 11 completed locally on 2026-08-22:
+
+- the application registry now exposes Agent plus Environment, Evidence, Git,
+  Runs, Artifacts, Problems, Plots, Logs, render jobs and Help as ordinary
+  multi-instance trusted-host factories. The shared Surface catalog creates
+  and places any factory in the active Studio Scene or Vibe Page; Problems and
+  Logs declare strip quota/sizing and place with intrinsic basis rather than a
+  fixed workbench region;
+- a repeatable Agent Surface binds only `conversation_id`, Ask/Plan/Act and
+  instance-local composer/review preferences. Conversations, turns, events and
+  approvals are reloaded from existing project-scoped commands. Two instances
+  bound to one conversation observe the same durable turn while keeping
+  independent composers. Agent dependency failure renders an actionable local
+  degraded card and does not change editor, Console, Resource or Workspace
+  health;
+- cancellation, retry, approval decisions, runtime retry and model routing use
+  the existing Agent admission commands. File proposals are decoded only from
+  the persisted `propose_file_edit` event, reviewed explicitly, read through
+  the shared Resource document and applied/undone through the existing guarded
+  Agent file-mutation lane. No transcript, credential, approval handle or file
+  mutation truth is copied into Surface state;
+- explicit `Pin to Vibe` is a user Page CAS transaction producing a typed
+  `task_ref`; Agent refreshes cannot write or reorder Page state. Opening a
+  Surface in Vibe likewise creates an ordinary typed `surface_ref` transaction;
+- domain Surfaces adapt existing Tauri commands and stores instead of creating
+  parallel data services. Runs retains guarded retry; Environment retains its
+  dedicated request lane; Git, Evidence, Artifacts, Plots, Problems and render
+  views remain projections of their current authorities. The Command Registry
+  adds factory-opening actions and the palette uses the shared dispatcher,
+  removing the need for permanent domain tabs;
+- unshipped Project UI Profile schema 3 seeds an asymmetric nested
+  Console/Agent Studio scene. Exact older owned presentation files are archived
+  and rebuilt; no old pane/posture compatibility mapping was added. Browser/mock
+  mode registers the same new application factories and deterministic domain,
+  Agent and file-review behavior;
+- `npm run rsr:check` passed strict TypeScript/ESLint, exact Rust/TypeScript
+  fixtures, 34 Vitest cases, Vite production build, generated-asset validation
+  and real Chrome smoke. Wide and narrow local captures verified repeatable
+  Agent composition, explicit Console binding, intrinsic status composition and
+  isolated Agent degradation;
+- `cargo test --workspace --locked` passed after updating exact application
+  Surface/Command registry assertions; Desktop ran 320 tests with 319 passing
+  and its opt-in Keychain smoke ignored. `cargo fmt --all -- --check`, strict
+  `rho-ui-contract` Clippy and `git diff --check` also passed. Contract review
+  found no deviation from the accepted ownership or mutation boundaries. No
+  version or `NEWS.md` change is claimed because Tauri still starts the frozen
+  old shell until Wave 12; installed-app and release acceptance are likewise
+  not claimed.
 
 ### Wave 12 — Cutover and legacy deletion
 

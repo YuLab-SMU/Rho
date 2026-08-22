@@ -6598,6 +6598,89 @@ fn check_result_surface_capability_id() -> CapabilityId {
         .expect("built-in Check result capability must be valid")
 }
 
+fn first_party_surface_capability_id(surface_id: &str) -> CapabilityId {
+    CapabilityId::new(format!("ui.surface.{surface_id}"))
+        .expect("built-in first-party Surface capability must be valid")
+}
+
+fn first_party_surface_definition(
+    surface_id: &str,
+    label: &str,
+    purpose: &str,
+    modes: &[(&str, &str, rho_ui_contract::SurfaceInteractionKindV1)],
+    strip: bool,
+) -> rho_ui_contract::SurfaceDefinitionV1 {
+    rho_ui_contract::SurfaceDefinitionV1 {
+        surface_id: rho_ui_contract::SurfaceId::new(surface_id)
+            .expect("built-in first-party Surface ID must be valid"),
+        contract_major: rho_ui_contract::RSR_CONTRACT_MAJOR,
+        label: label.to_string(),
+        purpose: purpose.to_string(),
+        renderer_kind: rho_ui_contract::SurfaceRendererKindV1::TrustedHost,
+        scope: rho_ui_contract::SurfaceScopeV1::Project,
+        instance_policy: rho_ui_contract::SurfaceInstancePolicyV1::MultiInstance,
+        instance_quota_class: if strip {
+            rho_ui_contract::SurfaceInstanceQuotaClassV1::Strip
+        } else {
+            rho_ui_contract::SurfaceInstanceQuotaClassV1::Standard
+        },
+        resource_kinds: vec![],
+        modes: modes
+            .iter()
+            .map(
+                |(mode_id, mode_label, interaction_kind)| rho_ui_contract::SurfaceModeV1 {
+                    mode_id: rho_ui_contract::SurfaceModeId::new(*mode_id)
+                        .expect("built-in first-party Surface mode must be valid"),
+                    label: (*mode_label).to_string(),
+                    interaction_kind: *interaction_kind,
+                },
+            )
+            .collect(),
+        sizing_hints: rho_ui_contract::SurfaceSizingHintsV1 {
+            min_inline: if strip { 120 } else { 220 },
+            min_block: if strip { 28 } else { 120 },
+            ideal_inline: Some(if strip { 320 } else { 560 }),
+            ideal_block: Some(if strip { 40 } else { 420 }),
+            max_inline: None,
+            max_block: strip.then_some(72),
+            stretch_inline: true,
+            stretch_block: !strip,
+            presentation_classes: if strip {
+                vec![rho_ui_contract::SurfacePresentationClassV1::Strip]
+            } else {
+                vec![
+                    rho_ui_contract::SurfacePresentationClassV1::Full,
+                    rho_ui_contract::SurfacePresentationClassV1::Compact,
+                ]
+            },
+        },
+        accepted_contexts: vec![
+            "project".to_string(),
+            "selection".to_string(),
+            "vibe".to_string(),
+        ],
+        commands: vec![],
+        origin: rho_ui_contract::SurfaceOriginV1::Application {
+            component_id: rho_ui_contract::ApplicationComponentId::new(surface_id)
+                .expect("built-in first-party Surface component ID must be valid"),
+        },
+    }
+}
+
+const FIRST_PARTY_SURFACE_IDS: &[&str] = &[
+    "rho.agent",
+    "rho.environment",
+    "rho.evidence",
+    "rho.git",
+    "rho.runs",
+    "rho.artifacts",
+    "rho.problems",
+    "rho.plots",
+    "rho.logs",
+    "rho.render-jobs",
+    "rho.help",
+];
+
 fn ark_runtime_provider_capability_id() -> CapabilityId {
     CapabilityId::new("runtime.provider.ark-r")
         .expect("built-in Ark Runtime Provider capability must be valid")
@@ -6628,6 +6711,11 @@ impl SurfacePlaygroundPlugin {
             CapabilityDeclaration::new(ark_runtime_provider_capability_id(), 1),
             CapabilityDeclaration::new(project_file_resource_provider_capability_id(), 1),
         ];
+        descriptor
+            .provides
+            .extend(FIRST_PARTY_SURFACE_IDS.iter().map(|surface_id| {
+                CapabilityDeclaration::new(first_party_surface_capability_id(surface_id), 1)
+            }));
         Self { descriptor }
     }
 }
@@ -6788,6 +6876,113 @@ impl InternalPlugin for SurfacePlaygroundPlugin {
                 .map_err(|error| {
                     ActivationError::new("check_result_surface_registration", error.to_string())
                 })?;
+            let interactive = rho_ui_contract::SurfaceInteractionKindV1::Interactive;
+            let read_only = rho_ui_contract::SurfaceInteractionKindV1::ReadOnly;
+            for definition in [
+                first_party_surface_definition(
+                    "rho.agent",
+                    "Agent",
+                    "Bind an independent Agent view to one durable project conversation; repeated views may share the same conversation without sharing composer state.",
+                    &[
+                        ("conversation", "Conversation", interactive),
+                        ("activity", "Activity", read_only),
+                        ("composer", "Composer", interactive),
+                    ],
+                    false,
+                ),
+                first_party_surface_definition(
+                    "rho.environment",
+                    "Environment",
+                    "Inspect and operate the project scientific environment through its dedicated broker lane.",
+                    &[
+                        ("packages", "Packages", interactive),
+                        ("requests", "Requests", interactive),
+                    ],
+                    false,
+                ),
+                first_party_surface_definition(
+                    "rho.evidence",
+                    "Evidence",
+                    "Review durable project evidence and provenance without coupling it to a fixed workbench region.",
+                    &[("claims", "Claims", read_only)],
+                    false,
+                ),
+                first_party_surface_definition(
+                    "rho.git",
+                    "Git",
+                    "Inspect project source-control state as an independently placeable view.",
+                    &[
+                        ("changes", "Changes", interactive),
+                        ("history", "History", read_only),
+                    ],
+                    false,
+                ),
+                first_party_surface_definition(
+                    "rho.runs",
+                    "Runs",
+                    "Review broker-owned scientific executions and their recovery state.",
+                    &[("history", "History", interactive)],
+                    false,
+                ),
+                first_party_surface_definition(
+                    "rho.artifacts",
+                    "Artifacts",
+                    "Browse durable outputs produced by project runs.",
+                    &[
+                        ("gallery", "Gallery", read_only),
+                        ("list", "List", read_only),
+                    ],
+                    false,
+                ),
+                first_party_surface_definition(
+                    "rho.problems",
+                    "Problems",
+                    "Review actionable project diagnostics as a compact or full Surface.",
+                    &[("list", "List", interactive)],
+                    true,
+                ),
+                first_party_surface_definition(
+                    "rho.plots",
+                    "Plots",
+                    "Review plot artifacts independently from source files and runtimes.",
+                    &[
+                        ("gallery", "Gallery", read_only),
+                        ("single", "Single", read_only),
+                    ],
+                    false,
+                ),
+                first_party_surface_definition(
+                    "rho.logs",
+                    "Logs",
+                    "Stream bounded application and runtime diagnostics in an intrinsic strip or expanded view.",
+                    &[("stream", "Stream", read_only)],
+                    true,
+                ),
+                first_party_surface_definition(
+                    "rho.render-jobs",
+                    "Render jobs",
+                    "Track document render jobs and their durable outputs.",
+                    &[("queue", "Queue", interactive)],
+                    false,
+                ),
+                first_party_surface_definition(
+                    "rho.help",
+                    "Help",
+                    "Open contextual project and command guidance without a permanent top-level tab.",
+                    &[
+                        ("context", "Context", read_only),
+                        ("search", "Search", interactive),
+                    ],
+                    false,
+                ),
+            ] {
+                context
+                    .effects
+                    .register_application_surface(context.registry, definition)
+                    .map_err(|error| {
+                        ActivationError::new("first_party_surface_registration", error.to_string())
+                    })?;
+            }
             context
                 .effects
                 .register_application_runtime_provider(
@@ -12946,7 +13141,7 @@ mod tests {
                 .registry()
                 .resolve_application_surfaces()
                 .unwrap();
-            assert_eq!(surfaces.factories().len(), 5);
+            assert_eq!(surfaces.factories().len(), 16);
             assert_eq!(
                 surfaces
                     .factories()
@@ -12959,6 +13154,17 @@ mod tests {
                     "rho.file-preview",
                     "rho.file-source",
                     "rho.surface-playground",
+                    "rho.agent",
+                    "rho.environment",
+                    "rho.evidence",
+                    "rho.git",
+                    "rho.runs",
+                    "rho.artifacts",
+                    "rho.problems",
+                    "rho.plots",
+                    "rho.logs",
+                    "rho.render-jobs",
+                    "rho.help",
                 ])
             );
             let surface = surfaces
@@ -13098,7 +13304,7 @@ mod tests {
                     .unwrap()
                     .factories()
                     .len(),
-                5
+                16
             );
             assert_eq!(
                 candidate
