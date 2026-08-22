@@ -56,14 +56,14 @@ struct DocumentState {
     dirty: bool,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct ProjectResources {
     root: PathBuf,
     entries: BTreeMap<String, ResourceEntry>,
     documents: BTreeMap<String, DocumentState>,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct ResourceRegistryInner {
     snapshot_revision: u64,
     current: Option<ProjectCursor>,
@@ -76,6 +76,9 @@ pub(crate) struct ResourceRegistryState {
     inner: StdMutex<ResourceRegistryInner>,
     operation_gate: Mutex<()>,
 }
+
+#[derive(Clone)]
+struct ResourceRegistryCheckpoint(ResourceRegistryInner);
 
 #[derive(Clone)]
 pub(crate) struct ResourceTransition {
@@ -305,6 +308,14 @@ impl ResourceRegistryState {
         self.inner
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    fn checkpoint(&self) -> ResourceRegistryCheckpoint {
+        ResourceRegistryCheckpoint(self.inner().clone())
+    }
+
+    fn restore_checkpoint(&self, checkpoint: ResourceRegistryCheckpoint) {
+        *self.inner() = checkpoint.0;
     }
 
     fn bump(inner: &mut ResourceRegistryInner) -> Result<()> {
@@ -1149,6 +1160,7 @@ pub(crate) async fn resource_rename(
         .resource_registry
         .rename_admission(&request)
         .map_err(display_error)?;
+    let registry_checkpoint = state.resource_registry.checkpoint();
     let old_id = entry.descriptor.resource_id.clone();
     let new_id = normalized_resource_id(&request.new_resource_id).map_err(display_error)?;
     let root = cursor.root;
@@ -1186,27 +1198,31 @@ pub(crate) async fn resource_rename(
         Err(error) => {
             let recovery = std::fs::rename(&new_path, &old_path)
                 .map_err(anyhow::Error::from)
-                .and_then(|()| {
-                    state.resource_registry.reconcile(
-                        request.target.project_id.clone(),
-                        project_revision,
-                        root,
-                        providers,
-                    )?;
-                    Ok(())
+                .map(|()| {
+                    state
+                        .resource_registry
+                        .restore_checkpoint(registry_checkpoint)
                 });
             return Err(mutation_recovery_error(error, recovery));
         }
     };
-    emit_transition(&app, &transition);
-    crate::surface_runtime::rename_resource_bindings(
+    if let Err(error) = crate::surface_runtime::rename_resource_bindings(
         &app,
         &state,
         &old_id,
         &new_id,
         &transition.snapshot,
-    )
-    .map_err(display_error)?;
+    ) {
+        let recovery = std::fs::rename(&new_path, &old_path)
+            .map_err(anyhow::Error::from)
+            .map(|()| {
+                state
+                    .resource_registry
+                    .restore_checkpoint(registry_checkpoint)
+            });
+        return Err(mutation_recovery_error(error, recovery));
+    }
+    emit_transition(&app, &transition);
     Ok(transition.snapshot)
 }
 

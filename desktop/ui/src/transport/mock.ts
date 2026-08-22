@@ -3,6 +3,7 @@ import { projectLabel } from "./normalize";
 import { applySceneEdit, collectSceneInstances, reconcileStudio } from "./studio-model";
 import type {
   OpenSurfaceRequest,
+  ProjectUiProfileSnapshot,
   ResourceBinding,
   ResourceContent,
   ResourceDeleteRequest,
@@ -28,6 +29,7 @@ import type {
   SurfaceInstance,
   SurfaceInstanceRequest,
   SurfaceRuntimeSnapshot,
+  SurfaceInstanceSpec,
   SceneEditRequest,
   SceneState,
   StudioRevisionRequest,
@@ -35,6 +37,12 @@ import type {
   UpdateSurfaceRequest,
   UiKernelSnapshot,
   UiKernelTransport,
+  UiProfileRevisionRequest,
+  UiProfileSceneLabelRequest,
+  UiProfileSceneTargetRequest,
+  UiProfileSelectPageRequest,
+  UiProfileSelectSceneRequest,
+  UiProfileSetModeRequest,
   Unsubscribe,
 } from "./types";
 
@@ -47,6 +55,8 @@ const generatedRuntimes =
   fixture.runtime_registry_snapshot as unknown as RuntimeRegistrySnapshot;
 const generatedResources =
   fixture.resource_registry_snapshot as unknown as ResourceRegistrySnapshot;
+const generatedProfile =
+  fixture.project_ui_profile_snapshot as unknown as ProjectUiProfileSnapshot;
 
 function copySnapshot(snapshot: UiKernelSnapshot): UiKernelSnapshot {
   return structuredClone(snapshot);
@@ -68,12 +78,17 @@ function copyResources(snapshot: ResourceRegistrySnapshot): ResourceRegistrySnap
   return structuredClone(snapshot);
 }
 
+function copyProfile(snapshot: ProjectUiProfileSnapshot): ProjectUiProfileSnapshot {
+  return structuredClone(snapshot);
+}
+
 export interface MockUiKernelTransport extends UiKernelTransport {
   publish(snapshot: UiKernelSnapshot): void;
   publishSurfaces(snapshot: SurfaceRuntimeSnapshot): void;
   publishStudio(snapshot: StudioRuntimeSnapshot): void;
   publishRuntimes(snapshot: RuntimeRegistrySnapshot): void;
   publishResources(snapshot: ResourceRegistrySnapshot): void;
+  publishUiProfile(snapshot: ProjectUiProfileSnapshot): void;
 }
 
 export function createMockUiKernelTransport(
@@ -96,6 +111,10 @@ export function createMockUiKernelTransport(
   let studio = copyStudio(generatedStudio);
   let runtimes = copyRuntimes(generatedRuntimes);
   let resources = copyResources(generatedResources);
+  let profile = copyProfile(generatedProfile);
+  if (search.get("mode") === "vibe") {
+    (profile.profile as { active_mode: "studio" | "vibe" }).active_mode = "vibe";
+  }
   const persistedContent = new Map<string, string>([
     ["analysis.R", "library(ggplot2)\nplot(mtcars$wt, mtcars$mpg)\n"],
   ]);
@@ -110,6 +129,7 @@ export function createMockUiKernelTransport(
   let nextNode = 1;
   let nextRuntime = 1;
   let nextExecution = 1;
+  let nextScene = 1;
   const allocateNode = () => `node:mock-${nextNode++}`;
   const undo: SceneState[] = [];
   const redo: SceneState[] = [];
@@ -118,6 +138,7 @@ export function createMockUiKernelTransport(
   const studioListeners = new Set<() => void>();
   const runtimeListeners = new Set<() => void>();
   const resourceListeners = new Set<() => void>();
+  const profileListeners = new Set<() => void>();
   const notifySurfaces = () => {
     for (const listener of surfaceListeners) listener();
   };
@@ -129,6 +150,62 @@ export function createMockUiKernelTransport(
   };
   const notifyResources = () => {
     for (const listener of resourceListeners) listener();
+  };
+  const notifyProfile = () => {
+    for (const listener of profileListeners) listener();
+  };
+  const validateProfileTarget = (target: UiProfileRevisionRequest) => {
+    if (
+      target.project_id !== profile.profile.project_id ||
+      target.expected_profile_revision !== profile.profile.revision
+    ) throw new Error("Mock UI Profile request is stale or belongs to another project.");
+  };
+  const surfaceSpec = (instance: SurfaceInstance): SurfaceInstanceSpec => ({
+    instance_id: instance.instance_id,
+    surface_id: instance.surface_id,
+    origin: instance.origin,
+    mode_id: instance.mode_id,
+    resource_binding: instance.resource_binding,
+    runtime_attachment_intent: instance.runtime_binding == null
+      ? profile.profile.surface_instance_specs.find(
+          (spec) => spec.instance_id === instance.instance_id,
+        )?.runtime_attachment_intent ?? null
+      : {
+          runtime_provider_id: instance.runtime_binding.runtime_provider_id,
+          runtime_instance_id: instance.runtime_binding.runtime_instance_id,
+          runtime_kind: instance.runtime_binding.runtime_kind,
+        },
+    view_group_id: instance.view_group_id,
+    view_state: instance.view_state,
+  });
+  const installProfile = (
+    mutate: (draft: ProjectUiProfileSnapshot) => void,
+  ): ProjectUiProfileSnapshot => {
+    const next = copyProfile(profile) as ProjectUiProfileSnapshot & {
+      profile: ProjectUiProfileSnapshot["profile"] & { revision: number };
+      load_status: ProjectUiProfileSnapshot["load_status"];
+      recovery_detail: string | null;
+    };
+    mutate(next);
+    next.profile.revision += 1;
+    next.load_status = "clean";
+    next.recovery_detail = null;
+    profile = next;
+    notifyProfile();
+    return copyProfile(profile);
+  };
+  const syncRuntimeProfile = () => {
+    installProfile((next) => {
+      const activeId = next.profile.active_studio_scene_id;
+      const scenes = next.profile.studio_scenes.map((scene) =>
+        scene.scene_id === activeId ? structuredClone(studio.scene) : scene
+      );
+      (next.profile as { studio_scenes: readonly SceneState[] }).studio_scenes = scenes;
+      (next.profile as { surface_instance_specs: readonly SurfaceInstanceSpec[] })
+        .surface_instance_specs = surfaces.catalog.instances.map(surfaceSpec);
+      (next.profile as { last_focused_surface_instance_id: string | null })
+        .last_focused_surface_instance_id = studio.scene.focused_surface_instance_id;
+    });
   };
   const availableIds = () => surfaces.catalog.instances.map((instance) => instance.instance_id);
   const reconcileCurrentStudio = () => {
@@ -164,13 +241,17 @@ export function createMockUiKernelTransport(
     }
     return index;
   };
-  const installSurfaces = (instances: readonly SurfaceInstance[]) => {
+  const installSurfaces = (
+    instances: readonly SurfaceInstance[],
+    persistProfile = true,
+  ) => {
     const next = copySurfaces(surfaces);
     (next as { snapshot_revision: number }).snapshot_revision += 1;
     (next.catalog as unknown as { instances: SurfaceInstance[] }).instances = [...instances];
     surfaces = next;
     notifySurfaces();
     reconcileCurrentStudio();
+    if (persistProfile) syncRuntimeProfile();
     return copySurfaces(surfaces);
   };
   const bindingFor = (runtime: RuntimeDescriptor): RuntimeBinding => ({
@@ -308,7 +389,7 @@ export function createMockUiKernelTransport(
       throw new Error("Mock Studio request is stale or belongs to another project.");
     }
   };
-  const installScene = (scene: SceneState): StudioRuntimeSnapshot => {
+  const installScene = (scene: SceneState, persistProfile = true): StudioRuntimeSnapshot => {
     const placed = collectSceneInstances(scene);
     const missing = [...placed].find((id) => !availableIds().includes(id));
     if (missing != null) throw new Error(`Mock Studio instance ${missing} is unavailable.`);
@@ -321,6 +402,7 @@ export function createMockUiKernelTransport(
       can_redo: redo.length > 0,
     };
     notifyStudio();
+    if (persistProfile) syncRuntimeProfile();
     return copyStudio(studio);
   };
   const validateSceneAvailability = (scene: SceneState) => {
@@ -569,6 +651,162 @@ export function createMockUiKernelTransport(
       undo.splice(0);
       redo.splice(0);
       notifyStudio();
+    },
+    async loadUiProfile() {
+      return copyProfile(profile);
+    },
+    async setUiProfileMode(request: UiProfileSetModeRequest) {
+      validateProfileTarget(request.target);
+      return installProfile((next) => {
+        (next.profile as { active_mode: typeof request.mode }).active_mode = request.mode;
+      });
+    },
+    async selectUiProfileScene(request: UiProfileSelectSceneRequest) {
+      validateProfileTarget(request.target);
+      const scene = profile.profile.studio_scenes.find(
+        (candidate) => candidate.scene_id === request.scene_id,
+      );
+      if (scene == null) throw new Error("Mock Studio Scene was not found.");
+      const snapshot = installProfile((next) => {
+        (next.profile as { active_studio_scene_id: string | null }).active_studio_scene_id =
+          request.scene_id;
+      });
+      undo.splice(0);
+      redo.splice(0);
+      installScene(structuredClone(scene), false);
+      return snapshot;
+    },
+    async selectUiProfilePage(request: UiProfileSelectPageRequest) {
+      validateProfileTarget(request.target);
+      if (!profile.profile.vibe_pages.some((page) => page.page_id === request.page_id)) {
+        throw new Error("Mock Vibe Page was not found.");
+      }
+      return installProfile((next) => {
+        (next.profile as { active_vibe_page_id: string | null }).active_vibe_page_id =
+          request.page_id;
+      });
+    },
+    async duplicateUiProfileScene(request: UiProfileSceneLabelRequest) {
+      validateProfileTarget(request.target);
+      const source = profile.profile.studio_scenes.find(
+        (candidate) => candidate.scene_id === request.scene_id,
+      );
+      if (source == null) throw new Error("Mock Studio Scene was not found.");
+      const scene = structuredClone(source) as SceneState & {
+        scene_id: string;
+        label: string;
+        layout_revision: number;
+      };
+      scene.scene_id = `scene:mock-${nextScene++}`;
+      scene.label = request.label;
+      scene.layout_revision = 1;
+      const snapshot = installProfile((next) => {
+        (next.profile as { active_studio_scene_id: string | null }).active_studio_scene_id =
+          scene.scene_id;
+        (next.profile as { studio_scenes: readonly SceneState[] }).studio_scenes = [
+          ...next.profile.studio_scenes,
+          scene,
+        ];
+      });
+      undo.splice(0);
+      redo.splice(0);
+      installScene(scene, false);
+      return snapshot;
+    },
+    async saveUiProfileScene(request: UiProfileSceneTargetRequest) {
+      validateProfileTarget(request.target);
+      if (studio.scene.scene_id !== request.scene_id) {
+        throw new Error("Only the active Mock Studio Scene can be saved.");
+      }
+      return installProfile((next) => {
+        const scenes = next.profile.studio_scenes.map((scene) =>
+          scene.scene_id === request.scene_id ? structuredClone(studio.scene) : scene
+        );
+        (next.profile as { studio_scenes: readonly SceneState[] }).studio_scenes = scenes;
+      });
+    },
+    async renameUiProfileScene(request: UiProfileSceneLabelRequest) {
+      validateProfileTarget(request.target);
+      if (!request.label.trim()) throw new Error("Mock Studio Scene label is empty.");
+      let found = false;
+      const snapshot = installProfile((next) => {
+        const scenes = next.profile.studio_scenes.map((scene) => {
+          if (scene.scene_id !== request.scene_id) return scene;
+          found = true;
+          return { ...scene, label: request.label };
+        });
+        if (!found) throw new Error("Mock Studio Scene was not found.");
+        (next.profile as { studio_scenes: readonly SceneState[] }).studio_scenes = scenes;
+      });
+      if (studio.scene.scene_id === request.scene_id) {
+        installScene({ ...studio.scene, label: request.label }, false);
+      }
+      return snapshot;
+    },
+    async deleteUiProfileScene(request: UiProfileSceneTargetRequest) {
+      validateProfileTarget(request.target);
+      const remaining = profile.profile.studio_scenes.filter(
+        (scene) => scene.scene_id !== request.scene_id,
+      );
+      if (remaining.length === profile.profile.studio_scenes.length) {
+        throw new Error("Mock Studio Scene was not found.");
+      }
+      const nextScene = remaining[0];
+      if (nextScene == null) {
+        throw new Error("The last Mock Studio Scene cannot be deleted; reset it instead.");
+      }
+      const snapshot = installProfile((next) => {
+        (next.profile as { studio_scenes: readonly SceneState[] }).studio_scenes = remaining;
+        (next.profile as { active_studio_scene_id: string | null }).active_studio_scene_id =
+          nextScene.scene_id;
+      });
+      undo.splice(0);
+      redo.splice(0);
+      installScene(structuredClone(nextScene), false);
+      return snapshot;
+    },
+    async resetUiProfileScene(request: UiProfileSceneTargetRequest) {
+      validateProfileTarget(request.target);
+      const currentScene = profile.profile.studio_scenes.find(
+        (scene) => scene.scene_id === request.scene_id,
+      );
+      const preset = profile.immutable_scene_presets[0];
+      if (currentScene == null || preset == null) {
+        throw new Error("Mock Rho Studio preset or Scene was not found.");
+      }
+      const replacement = {
+        ...structuredClone(preset.scene),
+        scene_id: currentScene.scene_id,
+        project_id: currentScene.project_id,
+        label: currentScene.label,
+        layout_revision: currentScene.layout_revision + 1,
+      };
+      const snapshot = installProfile((next) => {
+        (next.profile as { studio_scenes: readonly SceneState[] }).studio_scenes =
+          next.profile.studio_scenes.map((scene) =>
+            scene.scene_id === request.scene_id ? replacement : scene
+          );
+        const specs = [...next.profile.surface_instance_specs];
+        for (const restored of preset.surface_instance_specs) {
+          const index = specs.findIndex((spec) => spec.instance_id === restored.instance_id);
+          if (index < 0) specs.push(restored);
+          else specs[index] = restored;
+        }
+        (next.profile as { surface_instance_specs: readonly SurfaceInstanceSpec[] })
+          .surface_instance_specs = specs;
+      });
+      undo.splice(0);
+      redo.splice(0);
+      installScene(replacement, false);
+      return snapshot;
+    },
+    subscribeUiProfileInvalidated(listener: () => void): Unsubscribe {
+      profileListeners.add(listener);
+      return () => profileListeners.delete(listener);
+    },
+    publishUiProfile(next: ProjectUiProfileSnapshot) {
+      profile = copyProfile(next);
+      notifyProfile();
     },
     async loadRuntimes() {
       return copyRuntimes(runtimes);

@@ -51,6 +51,23 @@ describe("Studio foundation app", () => {
     expect(document.documentElement.dataset.rsrReady).toBe("true");
   });
 
+  it("switches to a document-composed Vibe Page without carrying the inspector chrome", async () => {
+    const { container } = await renderApp();
+    const vibe = [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
+      .find((button) => button.textContent === "Vibe");
+    if (vibe == null) throw new Error("Vibe mode control is missing");
+    await act(async () => {
+      vibe.click();
+      await settle();
+    });
+    expect(container.querySelector(".rho-vibe-page")?.textContent).toContain("Project review");
+    expect(container.querySelector(".rho-vibe-live-surface [data-surface-id='rho.check']"))
+      .not.toBeNull();
+    expect(container.querySelector(".rho-studio-inspector")).toBeNull();
+    expect(container.querySelector<HTMLButtonElement>(".rho-primary-action")?.textContent)
+      .toBe("Compose");
+  });
+
   it("keeps instance-local state when a sibling placement closes", async () => {
     const { container } = await renderApp();
     for (let index = 0; index < 2; index += 1) {

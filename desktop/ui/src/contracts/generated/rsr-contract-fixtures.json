@@ -13,6 +13,10 @@
     "max_resource_instances": 2000,
     "max_resource_content_bytes": 8388608,
     "max_resource_documents": 128,
+    "max_ui_profile_bytes": 4194304,
+    "max_ui_profile_scenes": 32,
+    "max_ui_profile_pages": 32,
+    "max_ui_profile_surface_specs": 256,
     "max_vibe_page_json_bytes": 1048576,
     "max_vibe_sections": 64,
     "max_vibe_blocks": 256,
@@ -1463,5 +1467,494 @@
     ],
     "can_undo": true,
     "can_redo": false
+  },
+  "project_ui_profile_snapshot": {
+    "contract": "rho.ui.project-profile.snapshot.v1",
+    "contract_major": 1,
+    "profile": {
+      "schema_version": 1,
+      "project_id": "project:fixture",
+      "revision": 5,
+      "active_mode": "studio",
+      "active_studio_scene_id": "scene:rho-studio",
+      "active_vibe_page_id": "page:project-review",
+      "studio_scenes": [
+        {
+          "scene_id": "scene:rho-studio",
+          "project_id": "project:fixture",
+          "label": "Rho Studio",
+          "layout_revision": 1,
+          "root": {
+            "kind": "container",
+            "node_id": "node:root",
+            "axis": "horizontal",
+            "children": [
+              {
+                "child": {
+                  "kind": "surface",
+                  "node_id": "node:file",
+                  "instance_id": "instance:file-source"
+                },
+                "basis": {
+                  "kind": "fraction",
+                  "weight": 7
+                },
+                "resizable": true,
+                "collapse_priority": null
+              },
+              {
+                "child": {
+                  "kind": "container",
+                  "node_id": "node:right",
+                  "axis": "vertical",
+                  "children": [
+                    {
+                      "child": {
+                        "kind": "stack",
+                        "node_id": "node:consoles",
+                        "active_instance_id": "instance:console-a",
+                        "instances": [
+                          "instance:console-a",
+                          "instance:console-b"
+                        ]
+                      },
+                      "basis": {
+                        "kind": "minmax",
+                        "min_logical_pixels": 160,
+                        "max_logical_pixels": 1400,
+                        "weight": 3
+                      },
+                      "resizable": true,
+                      "collapse_priority": null
+                    },
+                    {
+                      "child": {
+                        "kind": "surface",
+                        "node_id": "node:status",
+                        "instance_id": "instance:status"
+                      },
+                      "basis": {
+                        "kind": "intrinsic"
+                      },
+                      "resizable": false,
+                      "collapse_priority": 1
+                    }
+                  ]
+                },
+                "basis": {
+                  "kind": "fraction",
+                  "weight": 3
+                },
+                "resizable": true,
+                "collapse_priority": null
+              }
+            ]
+          },
+          "focused_surface_instance_id": "instance:file-source",
+          "utility_tray": null
+        }
+      ],
+      "vibe_pages": [
+        {
+          "page_id": "page:project-review",
+          "project_id": "project:fixture",
+          "label": "Project review",
+          "page_revision": 1,
+          "sections": [
+            {
+              "section_id": "section:review",
+              "heading": "Review",
+              "layout": {
+                "kind": "grid",
+                "placements": [
+                  {
+                    "block_id": "block:narrative",
+                    "row_start": 1,
+                    "column_start": 1,
+                    "column_span": 5
+                  },
+                  {
+                    "block_id": "block:check",
+                    "row_start": 1,
+                    "column_start": 6,
+                    "column_span": 7
+                  }
+                ]
+              },
+              "blocks": [
+                {
+                  "block_id": "block:narrative",
+                  "content": {
+                    "kind": "rich_text",
+                    "text": "Review the project against explicit checks."
+                  }
+                },
+                {
+                  "block_id": "block:check",
+                  "content": {
+                    "kind": "surface_ref",
+                    "instance_id": "instance:check",
+                    "live": true
+                  }
+                }
+              ]
+            }
+          ],
+          "focused_block_id": "block:narrative"
+        }
+      ],
+      "surface_instance_specs": [
+        {
+          "instance_id": "instance:file-source",
+          "surface_id": "rho.file-source",
+          "origin": {
+            "kind": "application",
+            "component_id": "rho.file-source"
+          },
+          "mode_id": "source",
+          "resource_binding": {
+            "resource_provider_id": "rho.project-files",
+            "resource_kind": "project_file",
+            "resource_id": "analysis.R",
+            "resource_revision": 4
+          },
+          "runtime_attachment_intent": null,
+          "view_group_id": null,
+          "view_state": {}
+        },
+        {
+          "instance_id": "instance:file-preview",
+          "surface_id": "rho.file-preview",
+          "origin": {
+            "kind": "application",
+            "component_id": "rho.file-preview"
+          },
+          "mode_id": "preview",
+          "resource_binding": {
+            "resource_provider_id": "rho.project-files",
+            "resource_kind": "project_file",
+            "resource_id": "analysis.R",
+            "resource_revision": 4
+          },
+          "runtime_attachment_intent": null,
+          "view_group_id": null,
+          "view_state": {}
+        },
+        {
+          "instance_id": "instance:playground-a",
+          "surface_id": "rho.surface-playground",
+          "origin": {
+            "kind": "application",
+            "component_id": "rho.surface-playground"
+          },
+          "mode_id": "notes",
+          "resource_binding": {
+            "resource_provider_id": "rho.project-files",
+            "resource_kind": "project_file",
+            "resource_id": "analysis.R",
+            "resource_revision": 4
+          },
+          "runtime_attachment_intent": null,
+          "view_group_id": null,
+          "view_state": {}
+        },
+        {
+          "instance_id": "instance:playground-b",
+          "surface_id": "rho.surface-playground",
+          "origin": {
+            "kind": "application",
+            "component_id": "rho.surface-playground"
+          },
+          "mode_id": "notes",
+          "resource_binding": {
+            "resource_provider_id": "rho.project-files",
+            "resource_kind": "project_file",
+            "resource_id": "analysis.R",
+            "resource_revision": 4
+          },
+          "runtime_attachment_intent": null,
+          "view_group_id": null,
+          "view_state": {}
+        },
+        {
+          "instance_id": "instance:console-a",
+          "surface_id": "rho.console",
+          "origin": {
+            "kind": "application",
+            "component_id": "rho.console"
+          },
+          "mode_id": null,
+          "resource_binding": null,
+          "runtime_attachment_intent": {
+            "runtime_provider_id": "rho.ark-r",
+            "runtime_instance_id": "runtime:workspace-r",
+            "runtime_kind": "r"
+          },
+          "view_group_id": null,
+          "view_state": {}
+        },
+        {
+          "instance_id": "instance:console-b",
+          "surface_id": "rho.console",
+          "origin": {
+            "kind": "application",
+            "component_id": "rho.console"
+          },
+          "mode_id": null,
+          "resource_binding": null,
+          "runtime_attachment_intent": {
+            "runtime_provider_id": "rho.ark-r",
+            "runtime_instance_id": "runtime:workspace-r",
+            "runtime_kind": "r"
+          },
+          "view_group_id": null,
+          "view_state": {}
+        },
+        {
+          "instance_id": "instance:status",
+          "surface_id": "rho.status",
+          "origin": {
+            "kind": "application",
+            "component_id": "rho.status"
+          },
+          "mode_id": null,
+          "resource_binding": null,
+          "runtime_attachment_intent": null,
+          "view_group_id": null,
+          "view_state": {}
+        },
+        {
+          "instance_id": "instance:check",
+          "surface_id": "rho.check",
+          "origin": {
+            "kind": "application",
+            "component_id": "rho.check"
+          },
+          "mode_id": null,
+          "resource_binding": null,
+          "runtime_attachment_intent": null,
+          "view_group_id": null,
+          "view_state": {}
+        }
+      ],
+      "last_focused_surface_instance_id": "instance:file-source"
+    },
+    "immutable_scene_presets": [
+      {
+        "preset_id": "rho.studio",
+        "label": "Rho Studio",
+        "description": "Fixture projection of the immutable recursive Studio preset.",
+        "scene": {
+          "scene_id": "scene:rho-studio",
+          "project_id": "project:fixture",
+          "label": "Rho Studio",
+          "layout_revision": 1,
+          "root": {
+            "kind": "container",
+            "node_id": "node:root",
+            "axis": "horizontal",
+            "children": [
+              {
+                "child": {
+                  "kind": "surface",
+                  "node_id": "node:file",
+                  "instance_id": "instance:file-source"
+                },
+                "basis": {
+                  "kind": "fraction",
+                  "weight": 7
+                },
+                "resizable": true,
+                "collapse_priority": null
+              },
+              {
+                "child": {
+                  "kind": "container",
+                  "node_id": "node:right",
+                  "axis": "vertical",
+                  "children": [
+                    {
+                      "child": {
+                        "kind": "stack",
+                        "node_id": "node:consoles",
+                        "active_instance_id": "instance:console-a",
+                        "instances": [
+                          "instance:console-a",
+                          "instance:console-b"
+                        ]
+                      },
+                      "basis": {
+                        "kind": "minmax",
+                        "min_logical_pixels": 160,
+                        "max_logical_pixels": 1400,
+                        "weight": 3
+                      },
+                      "resizable": true,
+                      "collapse_priority": null
+                    },
+                    {
+                      "child": {
+                        "kind": "surface",
+                        "node_id": "node:status",
+                        "instance_id": "instance:status"
+                      },
+                      "basis": {
+                        "kind": "intrinsic"
+                      },
+                      "resizable": false,
+                      "collapse_priority": 1
+                    }
+                  ]
+                },
+                "basis": {
+                  "kind": "fraction",
+                  "weight": 3
+                },
+                "resizable": true,
+                "collapse_priority": null
+              }
+            ]
+          },
+          "focused_surface_instance_id": "instance:file-source",
+          "utility_tray": null
+        },
+        "surface_instance_specs": [
+          {
+            "instance_id": "instance:file-source",
+            "surface_id": "rho.file-source",
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.file-source"
+            },
+            "mode_id": "source",
+            "resource_binding": {
+              "resource_provider_id": "rho.project-files",
+              "resource_kind": "project_file",
+              "resource_id": "analysis.R",
+              "resource_revision": 4
+            },
+            "runtime_attachment_intent": null,
+            "view_group_id": null,
+            "view_state": {}
+          },
+          {
+            "instance_id": "instance:file-preview",
+            "surface_id": "rho.file-preview",
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.file-preview"
+            },
+            "mode_id": "preview",
+            "resource_binding": {
+              "resource_provider_id": "rho.project-files",
+              "resource_kind": "project_file",
+              "resource_id": "analysis.R",
+              "resource_revision": 4
+            },
+            "runtime_attachment_intent": null,
+            "view_group_id": null,
+            "view_state": {}
+          },
+          {
+            "instance_id": "instance:playground-a",
+            "surface_id": "rho.surface-playground",
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.surface-playground"
+            },
+            "mode_id": "notes",
+            "resource_binding": {
+              "resource_provider_id": "rho.project-files",
+              "resource_kind": "project_file",
+              "resource_id": "analysis.R",
+              "resource_revision": 4
+            },
+            "runtime_attachment_intent": null,
+            "view_group_id": null,
+            "view_state": {}
+          },
+          {
+            "instance_id": "instance:playground-b",
+            "surface_id": "rho.surface-playground",
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.surface-playground"
+            },
+            "mode_id": "notes",
+            "resource_binding": {
+              "resource_provider_id": "rho.project-files",
+              "resource_kind": "project_file",
+              "resource_id": "analysis.R",
+              "resource_revision": 4
+            },
+            "runtime_attachment_intent": null,
+            "view_group_id": null,
+            "view_state": {}
+          },
+          {
+            "instance_id": "instance:console-a",
+            "surface_id": "rho.console",
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.console"
+            },
+            "mode_id": null,
+            "resource_binding": null,
+            "runtime_attachment_intent": {
+              "runtime_provider_id": "rho.ark-r",
+              "runtime_instance_id": "runtime:workspace-r",
+              "runtime_kind": "r"
+            },
+            "view_group_id": null,
+            "view_state": {}
+          },
+          {
+            "instance_id": "instance:console-b",
+            "surface_id": "rho.console",
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.console"
+            },
+            "mode_id": null,
+            "resource_binding": null,
+            "runtime_attachment_intent": {
+              "runtime_provider_id": "rho.ark-r",
+              "runtime_instance_id": "runtime:workspace-r",
+              "runtime_kind": "r"
+            },
+            "view_group_id": null,
+            "view_state": {}
+          },
+          {
+            "instance_id": "instance:status",
+            "surface_id": "rho.status",
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.status"
+            },
+            "mode_id": null,
+            "resource_binding": null,
+            "runtime_attachment_intent": null,
+            "view_group_id": null,
+            "view_state": {}
+          },
+          {
+            "instance_id": "instance:check",
+            "surface_id": "rho.check",
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.check"
+            },
+            "mode_id": null,
+            "resource_binding": null,
+            "runtime_attachment_intent": null,
+            "view_group_id": null,
+            "view_state": {}
+          }
+        ]
+      }
+    ],
+    "load_status": "clean",
+    "recovery_detail": null
   }
 }

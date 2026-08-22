@@ -1,6 +1,7 @@
 import type {
   CommandPlacementTag,
   OpenSurfaceRequest,
+  ProjectUiProfileSnapshot,
   ResourceDeleteRequest,
   ResourceDraftRequest,
   ResourceReadRequest,
@@ -24,6 +25,11 @@ import type {
   UiKernelTransport,
   Unsubscribe,
   UpdateSurfaceRequest,
+  UiProfileSceneLabelRequest,
+  UiProfileSceneTargetRequest,
+  UiProfileSelectPageRequest,
+  UiProfileSelectSceneRequest,
+  UiProfileSetModeRequest,
 } from "./types";
 
 export type UiStoreSnapshot =
@@ -71,11 +77,21 @@ export type ResourceStoreSnapshot =
       readonly snapshot: ResourceRegistrySnapshot;
     };
 
+export type UiProfileStoreSnapshot =
+  | { readonly status: "loading" }
+  | { readonly status: "failed"; readonly message: string }
+  | {
+      readonly status: "ready";
+      readonly source: UiKernelTransport["source"];
+      readonly snapshot: ProjectUiProfileSnapshot;
+    };
+
 const LOADING: UiStoreSnapshot = Object.freeze({ status: "loading" });
 const SURFACE_LOADING: SurfaceStoreSnapshot = Object.freeze({ status: "loading" });
 const STUDIO_LOADING: StudioStoreSnapshot = Object.freeze({ status: "loading" });
 const RUNTIME_LOADING: RuntimeStoreSnapshot = Object.freeze({ status: "loading" });
 const RESOURCE_LOADING: ResourceStoreSnapshot = Object.freeze({ status: "loading" });
+const UI_PROFILE_LOADING: UiProfileStoreSnapshot = Object.freeze({ status: "loading" });
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) return error.message.slice(0, 512);
@@ -380,6 +396,127 @@ export class StudioExternalStore {
 
   redo(request: StudioRevisionRequest) {
     return this.#mutate(() => this.#transport.redoStudio(request));
+  }
+}
+
+export class UiProfileExternalStore {
+  readonly #transport: UiKernelTransport;
+  readonly #listeners = new Set<() => void>();
+  #state: UiProfileStoreSnapshot = UI_PROFILE_LOADING;
+  #stopTransport: Unsubscribe | undefined;
+  #refreshing: Promise<void> | undefined;
+  #refreshQueued = false;
+
+  constructor(transport: UiKernelTransport) {
+    this.#transport = transport;
+  }
+
+  readonly getSnapshot = (): UiProfileStoreSnapshot => this.#state;
+
+  readonly subscribe = (listener: () => void): Unsubscribe => {
+    this.#listeners.add(listener);
+    if (this.#listeners.size === 1) {
+      this.#stopTransport = this.#transport.subscribeUiProfileInvalidated(() => {
+        void this.refresh();
+      });
+      void this.refresh();
+    }
+    return () => {
+      this.#listeners.delete(listener);
+      if (this.#listeners.size === 0) {
+        this.#stopTransport?.();
+        this.#stopTransport = undefined;
+      }
+    };
+  };
+
+  #publish(state: UiProfileStoreSnapshot): void {
+    if (state === this.#state) return;
+    this.#state = state;
+    for (const listener of this.#listeners) listener();
+  }
+
+  #install(snapshot: ProjectUiProfileSnapshot): void {
+    const current = this.#state;
+    if (current.status === "ready") {
+      const revision = current.snapshot.profile.revision;
+      if (snapshot.profile.project_id === current.snapshot.profile.project_id) {
+        if (snapshot.profile.revision < revision) return;
+        if (snapshot.profile.revision === revision) {
+          if (JSON.stringify(snapshot) === JSON.stringify(current.snapshot)) return;
+          this.#publish({
+            status: "failed",
+            message: "UI Profile returned different data for one profile revision.",
+          });
+          return;
+        }
+      }
+    }
+    this.#publish(
+      deepFreeze({ status: "ready", source: this.#transport.source, snapshot } as const),
+    );
+  }
+
+  async #runRefreshLoop(): Promise<void> {
+    do {
+      this.#refreshQueued = false;
+      try {
+        this.#install(await this.#transport.loadUiProfile());
+      } catch (error: unknown) {
+        if (this.#state.status !== "ready") {
+          this.#publish({ status: "failed", message: errorMessage(error) });
+        }
+      }
+    } while (this.#refreshQueued);
+  }
+
+  refresh(): Promise<void> {
+    if (this.#refreshing != null) {
+      this.#refreshQueued = true;
+      return this.#refreshing;
+    }
+    this.#refreshing = this.#runRefreshLoop().finally(() => {
+      this.#refreshing = undefined;
+    });
+    return this.#refreshing;
+  }
+
+  async #mutate(operation: () => Promise<ProjectUiProfileSnapshot>) {
+    const snapshot = await operation();
+    this.#install(snapshot);
+    return snapshot;
+  }
+
+  setMode(request: UiProfileSetModeRequest) {
+    return this.#mutate(() => this.#transport.setUiProfileMode(request));
+  }
+
+  selectScene(request: UiProfileSelectSceneRequest) {
+    return this.#mutate(() => this.#transport.selectUiProfileScene(request));
+  }
+
+  selectPage(request: UiProfileSelectPageRequest) {
+    return this.#mutate(() => this.#transport.selectUiProfilePage(request));
+  }
+
+  duplicateScene(request: UiProfileSceneLabelRequest) {
+    return this.#mutate(() => this.#transport.duplicateUiProfileScene(request));
+  }
+
+  saveScene(request: UiProfileSceneTargetRequest) {
+    return this.#mutate(() => this.#transport.saveUiProfileScene(request));
+  }
+
+  renameScene(request: UiProfileSceneLabelRequest) {
+    return this.#mutate(() => this.#transport.renameUiProfileScene(request));
+  }
+
+  deleteScene(request: UiProfileSceneTargetRequest) {
+    return this.#mutate(() => this.#transport.deleteUiProfileScene(request));
+  }
+
+  resetScene(request: UiProfileSceneTargetRequest) {
+    return this.#mutate(() => this.#transport.resetUiProfileScene(request));
   }
 }
 

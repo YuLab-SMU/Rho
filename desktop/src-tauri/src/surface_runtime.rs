@@ -8,9 +8,9 @@ use rho_ui_contract::{
     RSR_CONTRACT_MAJOR, SURFACE_RUNTIME_SNAPSHOT_CONTRACT, SurfaceCatalogV1, SurfaceDefinitionV1,
     SurfaceFactoryRegistrationV1, SurfaceInstanceDispositionV1, SurfaceInstanceMutationV1,
     SurfaceInstancePolicyV1, SurfaceInstanceQuotaClassV1, SurfaceInstanceRequestV1,
-    SurfaceInstanceV1, SurfaceLifecycleStateV1, SurfaceRuntimeEventKindV1, SurfaceRuntimeEventV1,
-    SurfaceRuntimeSnapshotV1, UpdateSurfaceRequestV1, Validate, apply_surface_instance_mutation,
-    next_revision,
+    SurfaceInstanceSpecV1, SurfaceInstanceV1, SurfaceLifecycleStateV1, SurfaceRuntimeEventKindV1,
+    SurfaceRuntimeEventV1, SurfaceRuntimeSnapshotV1, UpdateSurfaceRequestV1, Validate,
+    apply_surface_instance_mutation, next_revision,
 };
 #[cfg(test)]
 use rho_ui_contract::{SurfaceEventKindV1, SurfaceEventV1};
@@ -29,7 +29,7 @@ struct ProjectCursor {
     project_revision: u64,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct SurfaceRuntimeInner {
     snapshot_revision: u64,
     event_revision: u64,
@@ -42,6 +42,9 @@ struct SurfaceRuntimeInner {
 pub(crate) struct SurfaceRuntimeState {
     inner: StdMutex<SurfaceRuntimeInner>,
 }
+
+#[derive(Clone)]
+pub(crate) struct SurfaceRuntimeCheckpoint(SurfaceRuntimeInner);
 
 #[derive(Debug, Clone)]
 pub(crate) struct SurfaceTransition {
@@ -115,6 +118,14 @@ impl SurfaceRuntimeState {
         self.inner
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    pub(crate) fn checkpoint(&self) -> SurfaceRuntimeCheckpoint {
+        SurfaceRuntimeCheckpoint(self.inner().clone())
+    }
+
+    pub(crate) fn restore_checkpoint(&self, checkpoint: SurfaceRuntimeCheckpoint) {
+        *self.inner() = checkpoint.0;
     }
 
     fn next_event(
@@ -251,6 +262,75 @@ impl SurfaceRuntimeState {
             .find(|factory| &factory.definition.surface_id == surface_id)
             .cloned()
             .ok_or_else(|| anyhow!("Surface factory {surface_id} is unavailable"))
+    }
+
+    fn restore_specs(
+        &self,
+        specs: &[SurfaceInstanceSpecV1],
+        runtimes: &rho_ui_contract::RuntimeRegistrySnapshotV1,
+    ) -> Result<SurfaceTransition> {
+        let mut inner = self.inner();
+        let project = inner
+            .project
+            .clone()
+            .context("Surface Runtime has no project context")?;
+        let mut instances = inner.instances.clone();
+        let mut changed = false;
+        for spec in specs {
+            spec.validate()?;
+            if instances.contains_key(&spec.instance_id) {
+                continue;
+            }
+            let factory = inner
+                .factories
+                .iter()
+                .find(|factory| factory.definition.surface_id == spec.surface_id);
+            let resolved_runtime = spec.runtime_attachment_intent.as_ref().and_then(|intent| {
+                runtimes.instances.iter().find(|runtime| {
+                    runtime.project_id == project.project_id
+                        && runtime.runtime_provider_id == intent.runtime_provider_id
+                        && runtime.runtime_instance_id == intent.runtime_instance_id
+                        && runtime.runtime_kind == intent.runtime_kind
+                })
+            });
+            let unavailable_factory =
+                factory.is_none_or(|factory| factory.definition.origin != spec.origin);
+            let unavailable_runtime =
+                spec.runtime_attachment_intent.is_some() && resolved_runtime.is_none();
+            let instance = SurfaceInstanceV1 {
+                instance_id: spec.instance_id.clone(),
+                surface_id: spec.surface_id.clone(),
+                project_id: project.project_id.clone(),
+                origin: spec.origin.clone(),
+                activation_generation: factory.map_or(1, |factory| factory.activation_generation),
+                surface_revision: 1,
+                mode_id: spec.mode_id.clone(),
+                resource_binding: spec.resource_binding.clone(),
+                runtime_binding: resolved_runtime.map(|runtime| runtime.binding()),
+                view_group_id: spec.view_group_id.clone(),
+                view_state: spec.view_state.clone(),
+                lifecycle_state: if unavailable_factory || unavailable_runtime {
+                    SurfaceLifecycleStateV1::Placeholder
+                } else {
+                    SurfaceLifecycleStateV1::Active
+                },
+            };
+            instance.validate()?;
+            instances.insert(instance.instance_id.clone(), instance);
+            changed = true;
+        }
+        if !changed {
+            return Ok(SurfaceTransition {
+                snapshot: Self::current_snapshot(&inner)?,
+                event: None,
+            });
+        }
+        Self::commit_instances(
+            &mut inner,
+            instances,
+            SurfaceRuntimeEventKindV1::Reconciled,
+            None,
+        )
     }
 
     fn ensure_project(
@@ -813,7 +893,7 @@ impl SurfaceRuntimeState {
     }
 }
 
-fn application_factories(state: &AppState) -> Result<Vec<SurfaceFactoryRegistrationV1>> {
+pub(crate) fn application_factories(state: &AppState) -> Result<Vec<SurfaceFactoryRegistrationV1>> {
     let application = state.extension_host.scopes().application();
     let resolution = application
         .registry()
@@ -824,11 +904,26 @@ fn application_factories(state: &AppState) -> Result<Vec<SurfaceFactoryRegistrat
 
 pub(crate) async fn reconcile_for_state(state: &AppState) -> Result<SurfaceTransition> {
     let kernel = crate::ui_runtime::snapshot_for_state(state).await?;
-    state.surface_runtime.reconcile(
+    let factories = application_factories(state)?;
+    let base = state.surface_runtime.reconcile(
         kernel.project.project_id.clone(),
         kernel.context.project_revision,
-        application_factories(state)?,
-    )
+        factories.clone(),
+    )?;
+    let runtimes = crate::runtime_registry::reconcile_for_state(state).await?;
+    let profile =
+        crate::ui_profile::reconcile_for_state(state, &factories, &runtimes.snapshot).await?;
+    let restored = state
+        .surface_runtime
+        .restore_specs(&profile.profile.surface_instance_specs, &runtimes.snapshot)?;
+    if restored.event.is_some() {
+        Ok(restored)
+    } else {
+        Ok(SurfaceTransition {
+            snapshot: restored.snapshot,
+            event: base.event,
+        })
+    }
 }
 
 pub(crate) fn emit_transition(app: &AppHandle, transition: &SurfaceTransition) {
@@ -859,11 +954,54 @@ pub(crate) fn rename_resource_bindings(
         .iter()
         .find(|resource| resource.resource_id == new_resource_id)
         .ok_or_else(|| anyhow!("Renamed Resource was not resolved"))?;
+    let surface_checkpoint = state.surface_runtime.checkpoint();
+    let studio_checkpoint = state.studio_runtime.checkpoint();
     let transition = state
         .surface_runtime
         .rename_resource_bindings(old_resource_id, descriptor)?;
+    let studio = persist_surface_state(
+        app,
+        state,
+        surface_checkpoint,
+        studio_checkpoint,
+        &transition,
+    )
+    .map_err(anyhow::Error::msg)?;
     emit_transition(app, &transition);
+    crate::studio_runtime::emit_transition(app, &studio);
     Ok(())
+}
+
+pub(crate) fn persist_surface_state(
+    app: &AppHandle,
+    state: &AppState,
+    surface_checkpoint: SurfaceRuntimeCheckpoint,
+    studio_checkpoint: crate::studio_runtime::StudioRuntimeCheckpoint,
+    transition: &SurfaceTransition,
+) -> Result<crate::studio_runtime::StudioTransition, String> {
+    let studio =
+        match crate::studio_runtime::reconcile_with_surface_snapshot(state, &transition.snapshot) {
+            Ok(studio) => studio,
+            Err(error) => {
+                state.surface_runtime.restore_checkpoint(surface_checkpoint);
+                state.studio_runtime.restore_checkpoint(studio_checkpoint);
+                return Err(display_error(error));
+            }
+        };
+    let profile = match crate::ui_profile::commit_runtime_state(
+        state,
+        Some(studio.snapshot.scene.clone()),
+        &transition.snapshot,
+    ) {
+        Ok(profile) => profile,
+        Err(error) => {
+            state.surface_runtime.restore_checkpoint(surface_checkpoint);
+            state.studio_runtime.restore_checkpoint(studio_checkpoint);
+            return Err(display_error(error));
+        }
+    };
+    crate::ui_profile::emit_snapshot(app, &profile);
+    Ok(studio)
 }
 
 #[tauri::command]
@@ -904,14 +1042,20 @@ pub(crate) async fn surface_open(
         crate::studio_runtime::reconcile_with_surface_snapshot(&state, &reconciled.snapshot)
             .map_err(display_error)?;
     crate::studio_runtime::emit_transition(&app, &studio);
+    let surface_checkpoint = state.surface_runtime.checkpoint();
+    let studio_checkpoint = state.studio_runtime.checkpoint();
     let transition = state
         .surface_runtime
         .open(request, studio.snapshot.scene.layout_revision)
         .map_err(display_error)?;
+    let studio = persist_surface_state(
+        &app,
+        &state,
+        surface_checkpoint,
+        studio_checkpoint,
+        &transition,
+    )?;
     emit_transition(&app, &transition);
-    let studio =
-        crate::studio_runtime::reconcile_with_surface_snapshot(&state, &transition.snapshot)
-            .map_err(display_error)?;
     crate::studio_runtime::emit_transition(&app, &studio);
     Ok(transition.snapshot)
 }
@@ -938,14 +1082,24 @@ pub(crate) async fn surface_update(
     }
     let reconciled = reconcile_for_state(&state).await.map_err(display_error)?;
     emit_transition(&app, &reconciled);
+    let studio =
+        crate::studio_runtime::reconcile_with_surface_snapshot(&state, &reconciled.snapshot)
+            .map_err(display_error)?;
+    crate::studio_runtime::emit_transition(&app, &studio);
+    let surface_checkpoint = state.surface_runtime.checkpoint();
+    let studio_checkpoint = state.studio_runtime.checkpoint();
     let transition = state
         .surface_runtime
         .update(request)
         .map_err(display_error)?;
+    let studio = persist_surface_state(
+        &app,
+        &state,
+        surface_checkpoint,
+        studio_checkpoint,
+        &transition,
+    )?;
     emit_transition(&app, &transition);
-    let studio =
-        crate::studio_runtime::reconcile_with_surface_snapshot(&state, &transition.snapshot)
-            .map_err(display_error)?;
     crate::studio_runtime::emit_transition(&app, &studio);
     Ok(transition.snapshot)
 }
@@ -959,11 +1113,21 @@ async fn mutate_target(
     let _project_transition = state.project_transition_gate.lock().await;
     let reconciled = reconcile_for_state(&state).await.map_err(display_error)?;
     emit_transition(&app, &reconciled);
-    let transition = mutation(&state.surface_runtime, request).map_err(display_error)?;
-    emit_transition(&app, &transition);
     let studio =
-        crate::studio_runtime::reconcile_with_surface_snapshot(&state, &transition.snapshot)
+        crate::studio_runtime::reconcile_with_surface_snapshot(&state, &reconciled.snapshot)
             .map_err(display_error)?;
+    crate::studio_runtime::emit_transition(&app, &studio);
+    let surface_checkpoint = state.surface_runtime.checkpoint();
+    let studio_checkpoint = state.studio_runtime.checkpoint();
+    let transition = mutation(&state.surface_runtime, request).map_err(display_error)?;
+    let studio = persist_surface_state(
+        &app,
+        &state,
+        surface_checkpoint,
+        studio_checkpoint,
+        &transition,
+    )?;
+    emit_transition(&app, &transition);
     crate::studio_runtime::emit_transition(&app, &studio);
     Ok(transition.snapshot)
 }
@@ -1140,6 +1304,100 @@ mod tests {
             second.catalog.instances[1].instance_id
         );
         assert!(first.snapshot_revision < closed.snapshot_revision);
+    }
+
+    #[test]
+    fn persisted_specs_restore_exact_instances_and_truthful_placeholders() {
+        let runtime = SurfaceRuntimeState::default();
+        let project_id = project("project:restore");
+        let registration = factory("rho.fixture", 3, SurfaceInstancePolicyV1::MultiInstance);
+        let origin = registration.definition.origin.clone();
+        runtime
+            .reconcile(project_id.clone(), 7, vec![registration])
+            .unwrap();
+        let spec = |instance_id: &str,
+                    surface_id: &str,
+                    origin: SurfaceOriginV1,
+                    runtime_attachment_intent| SurfaceInstanceSpecV1 {
+            instance_id: rho_ui_contract::SurfaceInstanceId::new(instance_id).unwrap(),
+            surface_id: SurfaceId::new(surface_id).unwrap(),
+            origin,
+            mode_id: Some(SurfaceModeId::new("preview").unwrap()),
+            resource_binding: None,
+            runtime_attachment_intent,
+            view_group_id: None,
+            view_state: json!({"restored": true}),
+        };
+        let specs = vec![
+            spec("instance:restored", "rho.fixture", origin.clone(), None),
+            spec(
+                "instance:missing-plugin",
+                "rho.missing",
+                SurfaceOriginV1::Application {
+                    component_id: ApplicationComponentId::new("rho.missing").unwrap(),
+                },
+                None,
+            ),
+            spec(
+                "instance:missing-runtime",
+                "rho.fixture",
+                origin,
+                Some(rho_ui_contract::RuntimeAttachmentIntentV1 {
+                    runtime_provider_id: rho_ui_contract::RuntimeProviderId::new("rho.ark-r")
+                        .unwrap(),
+                    runtime_instance_id: rho_ui_contract::RuntimeInstanceId::new("runtime:gone")
+                        .unwrap(),
+                    runtime_kind: rho_ui_contract::RuntimeKindId::new("r").unwrap(),
+                }),
+            ),
+        ];
+        let mut runtimes = rho_ui_contract::golden_contract_fixture().runtime_registry_snapshot;
+        runtimes.project_id = project_id.clone();
+        for descriptor in &mut runtimes.instances {
+            descriptor.project_id = project_id.clone();
+        }
+        let restored = runtime.restore_specs(&specs, &runtimes).unwrap();
+        assert!(restored.event.is_some());
+        assert_eq!(restored.snapshot.catalog.instances.len(), 3);
+        let state = |id: &str| {
+            restored
+                .snapshot
+                .catalog
+                .instances
+                .iter()
+                .find(|instance| instance.instance_id.as_str() == id)
+                .unwrap()
+        };
+        assert_eq!(
+            state("instance:restored").lifecycle_state,
+            SurfaceLifecycleStateV1::Active
+        );
+        assert_eq!(state("instance:restored").activation_generation, 3);
+        assert_eq!(
+            state("instance:missing-plugin").lifecycle_state,
+            SurfaceLifecycleStateV1::Placeholder
+        );
+        assert_eq!(
+            state("instance:missing-runtime").lifecycle_state,
+            SurfaceLifecycleStateV1::Placeholder
+        );
+        let idempotent = runtime.restore_specs(&specs, &runtimes).unwrap();
+        assert!(idempotent.event.is_none());
+        assert_eq!(idempotent.snapshot, restored.snapshot);
+
+        let project_b = project("project:restore-b");
+        let switched = runtime
+            .reconcile(
+                project_b,
+                1,
+                vec![factory(
+                    "rho.fixture",
+                    1,
+                    SurfaceInstancePolicyV1::MultiInstance,
+                )],
+            )
+            .unwrap();
+        assert!(switched.snapshot.catalog.instances.is_empty());
     }
 
     #[test]

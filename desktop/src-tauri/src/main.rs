@@ -10,6 +10,7 @@ mod resource_registry;
 mod runtime_registry;
 mod studio_runtime;
 mod surface_runtime;
+mod ui_profile;
 mod ui_runtime;
 mod update;
 mod workspace_plugins;
@@ -352,6 +353,7 @@ struct AppState {
     studio_runtime: studio_runtime::StudioRuntimeState,
     runtime_registry: runtime_registry::RuntimeRegistryState,
     resource_registry: resource_registry::ResourceRegistryState,
+    ui_profile: ui_profile::ProjectUiProfileState,
     ui_runtime: ui_runtime::UiRuntimeState,
 }
 
@@ -10577,6 +10579,8 @@ mod tests {
             studio_runtime: crate::studio_runtime::StudioRuntimeState::default(),
             runtime_registry: crate::runtime_registry::RuntimeRegistryState::default(),
             resource_registry: crate::resource_registry::ResourceRegistryState::default(),
+            ui_profile: crate::ui_profile::ProjectUiProfileState::new(data_dir.to_path_buf())
+                .unwrap(),
             ui_runtime: crate::ui_runtime::UiRuntimeState::default(),
         }
     }
@@ -16704,6 +16708,11 @@ fn main() {
                 write_startup_log(&format!("Rho project session setup failed: {error:#}"));
                 error
             })?;
+            let ui_profile =
+                ui_profile::ProjectUiProfileState::new(data_dir.clone()).map_err(|error| {
+                    write_startup_log(&format!("Rho UI Profile setup failed: {error:#}"));
+                    error
+                })?;
             let selected_rscript = load_selected_rscript(&data_dir);
             let extension_host =
                 tauri::async_runtime::block_on(desktop_extension_host()).map_err(|error| {
@@ -16746,6 +16755,7 @@ fn main() {
                 studio_runtime: studio_runtime::StudioRuntimeState::default(),
                 runtime_registry: runtime_registry::RuntimeRegistryState::default(),
                 resource_registry: resource_registry::ResourceRegistryState::default(),
+                ui_profile,
                 ui_runtime: ui_runtime::UiRuntimeState::default(),
             });
             app.manage(NativeUpdaterState {
@@ -16782,6 +16792,15 @@ fn main() {
             studio_runtime::studio_apply,
             studio_runtime::studio_undo,
             studio_runtime::studio_redo,
+            ui_profile::ui_profile_snapshot,
+            ui_profile::ui_profile_set_mode,
+            ui_profile::ui_profile_select_scene,
+            ui_profile::ui_profile_select_page,
+            ui_profile::ui_profile_scene_duplicate,
+            ui_profile::ui_profile_scene_save,
+            ui_profile::ui_profile_scene_rename,
+            ui_profile::ui_profile_scene_delete,
+            ui_profile::ui_profile_scene_reset,
             runtime_registry::runtime_list,
             runtime_registry::runtime_create,
             runtime_registry::runtime_attach,

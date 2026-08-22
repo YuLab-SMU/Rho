@@ -18,7 +18,6 @@ use tauri::{AppHandle, Emitter, State};
 use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 
-use crate::surface_runtime::SurfaceTransition;
 use crate::{AppState, display_error};
 
 pub(crate) const RUNTIME_REGISTRY_CHANGED_EVENT: &str = "rho://runtime-registry-changed";
@@ -689,14 +688,6 @@ pub(crate) async fn runtime_create(
     }
 }
 
-fn surface_transition_result(
-    app: &AppHandle,
-    transition: SurfaceTransition,
-) -> rho_ui_contract::SurfaceRuntimeSnapshotV1 {
-    crate::surface_runtime::emit_transition(app, &transition);
-    transition.snapshot
-}
-
 fn rebind_restarted_runtime(
     app: &AppHandle,
     state: &AppState,
@@ -741,6 +732,12 @@ pub(crate) async fn runtime_attach(
         .await
         .map_err(display_error)?;
     crate::surface_runtime::emit_transition(&app, &reconciled);
+    let studio =
+        crate::studio_runtime::reconcile_with_surface_snapshot(&state, &reconciled.snapshot)
+            .map_err(display_error)?;
+    crate::studio_runtime::emit_transition(&app, &studio);
+    let surface_checkpoint = state.surface_runtime.checkpoint();
+    let studio_checkpoint = state.studio_runtime.checkpoint();
     let transition = state
         .surface_runtime
         .update(UpdateSurfaceRequestV1 {
@@ -750,7 +747,16 @@ pub(crate) async fn runtime_attach(
             },
         })
         .map_err(display_error)?;
-    Ok(surface_transition_result(&app, transition))
+    let studio = crate::surface_runtime::persist_surface_state(
+        &app,
+        &state,
+        surface_checkpoint,
+        studio_checkpoint,
+        &transition,
+    )?;
+    crate::surface_runtime::emit_transition(&app, &transition);
+    crate::studio_runtime::emit_transition(&app, &studio);
+    Ok(transition.snapshot)
 }
 
 #[tauri::command]
@@ -765,6 +771,12 @@ pub(crate) async fn runtime_detach(
         .await
         .map_err(display_error)?;
     crate::surface_runtime::emit_transition(&app, &reconciled);
+    let studio =
+        crate::studio_runtime::reconcile_with_surface_snapshot(&state, &reconciled.snapshot)
+            .map_err(display_error)?;
+    crate::studio_runtime::emit_transition(&app, &studio);
+    let surface_checkpoint = state.surface_runtime.checkpoint();
+    let studio_checkpoint = state.studio_runtime.checkpoint();
     let transition = state
         .surface_runtime
         .update(UpdateSurfaceRequestV1 {
@@ -772,7 +784,16 @@ pub(crate) async fn runtime_detach(
             mutation: SurfaceInstanceMutationV1::BindRuntime { binding: None },
         })
         .map_err(display_error)?;
-    Ok(surface_transition_result(&app, transition))
+    let studio = crate::surface_runtime::persist_surface_state(
+        &app,
+        &state,
+        surface_checkpoint,
+        studio_checkpoint,
+        &transition,
+    )?;
+    crate::surface_runtime::emit_transition(&app, &transition);
+    crate::studio_runtime::emit_transition(&app, &studio);
+    Ok(transition.snapshot)
 }
 
 async fn target_and_mark(

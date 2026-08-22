@@ -13,6 +13,7 @@ import {
   SurfaceExternalStore,
   RuntimeExternalStore,
   UiExternalStore,
+  UiProfileExternalStore,
   commandsForPlacement,
   createUiKernelTransport,
 } from "../transport";
@@ -35,6 +36,8 @@ import type {
   SurfaceInstance,
   SurfaceInstanceRequest,
   UiKernelTransport,
+  VibeBlockContent,
+  VibePage,
 } from "../transport";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
@@ -49,6 +52,7 @@ const defaultSurfaceStore = new SurfaceExternalStore(defaultTransport);
 const defaultStudioStore = new StudioExternalStore(defaultTransport);
 const defaultRuntimeStore = new RuntimeExternalStore(defaultTransport);
 const defaultResourceStore = new ResourceExternalStore(defaultTransport);
+const defaultProfileStore = new UiProfileExternalStore(defaultTransport);
 
 function instanceRequest(
   instance: SurfaceInstance,
@@ -853,27 +857,112 @@ function NodeOutline({ node, commit }: { readonly node: LayoutNode; readonly com
   );
 }
 
+function VibeBlock({
+  content,
+  instances,
+  surfaceView,
+}: {
+  readonly content: VibeBlockContent;
+  readonly instances: ReadonlyMap<string, SurfaceInstance>;
+  readonly surfaceView: (instance: SurfaceInstance) => ReactNode;
+}) {
+  switch (content.kind) {
+    case "rich_text":
+      return <div className="rho-vibe-prose">{content.text}</div>;
+    case "callout":
+      return <aside className={`rho-vibe-callout rho-vibe-callout-${content.tone}`}>{content.text}</aside>;
+    case "divider":
+      return <hr className="rho-vibe-divider" />;
+    case "file_excerpt":
+      return <div className="rho-vibe-reference"><span>File excerpt</span><code>{content.resource.resource_id}:{content.start_line}–{content.end_line}</code></div>;
+    case "artifact_ref":
+      return <div className="rho-vibe-reference"><span>Artifact</span><strong>{content.label}</strong><code>{content.artifact_id}</code></div>;
+    case "finding_ref":
+      return <div className="rho-vibe-reference"><span>Finding</span><strong>{content.label}</strong><code>{content.finding_id}</code></div>;
+    case "task_ref":
+      return <div className="rho-vibe-reference"><span>Task</span><strong>{content.label}</strong><code>{content.task_id}</code></div>;
+    case "command_ref":
+      return <button className="rho-vibe-command" type="button"><span>Command</span><strong>{content.label}</strong><code>{content.command_id}</code></button>;
+    case "surface_ref": {
+      const instance = instances.get(content.instance_id);
+      if (instance == null) {
+        return <div className="rho-vibe-missing">Surface {content.instance_id} is unavailable. Its place in the Page is preserved.</div>;
+      }
+      return content.live
+        ? <div className="rho-vibe-live-surface">{surfaceView(instance)}</div>
+        : <div className="rho-vibe-reference"><span>Surface snapshot</span><code>{content.instance_id}</code></div>;
+    }
+  }
+}
+
+function VibeCanvas({
+  page,
+  instances,
+  surfaceView,
+}: {
+  readonly page: VibePage;
+  readonly instances: ReadonlyMap<string, SurfaceInstance>;
+  readonly surfaceView: (instance: SurfaceInstance) => ReactNode;
+}) {
+  return (
+    <article className="rho-vibe-page" data-page-id={page.page_id}>
+      <header className="rho-vibe-page-header">
+        <span className="rho-eyebrow">Vibe page</span>
+        <h1>{page.label}</h1>
+        <p>A persistent composition of narrative, evidence, commands, and live Surfaces.</p>
+      </header>
+      {page.sections.map((section) => (
+        <section className="rho-vibe-section" data-layout={String(section.layout.kind ?? "flow")} key={section.section_id}>
+          {section.heading != null && <h2>{section.heading}</h2>}
+          <div className="rho-vibe-blocks">
+            {section.blocks.map((block) => (
+              <div className={`rho-vibe-block rho-vibe-block-${block.content.kind}`} key={block.block_id}>
+                <VibeBlock content={block.content} instances={instances} surfaceView={surfaceView} />
+              </div>
+            ))}
+          </div>
+        </section>
+      ))}
+    </article>
+  );
+}
+
 export function App({ transport }: AppProps) {
   const [actionError, setActionError] = useState<string | null>(null);
   const [resourcePath, setResourcePath] = useState("analysis.R");
+  const [commandQuery, setCommandQuery] = useState("");
+  const [commandSearchOpen, setCommandSearchOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
   const draftCache = useRef(new Map<string, string>()).current;
   const store = useMemo(() => transport == null ? defaultStore : new UiExternalStore(transport), [transport]);
   const surfaceStore = useMemo(() => transport == null ? defaultSurfaceStore : new SurfaceExternalStore(transport), [transport]);
   const studioStore = useMemo(() => transport == null ? defaultStudioStore : new StudioExternalStore(transport), [transport]);
   const runtimeStore = useMemo(() => transport == null ? defaultRuntimeStore : new RuntimeExternalStore(transport), [transport]);
   const resourceStore = useMemo(() => transport == null ? defaultResourceStore : new ResourceExternalStore(transport), [transport]);
+  const profileStore = useMemo(() => transport == null ? defaultProfileStore : new UiProfileExternalStore(transport), [transport]);
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const surfaceState = useSyncExternalStore(surfaceStore.subscribe, surfaceStore.getSnapshot, surfaceStore.getSnapshot);
   const studioState = useSyncExternalStore(studioStore.subscribe, studioStore.getSnapshot, studioStore.getSnapshot);
   const runtimeState = useSyncExternalStore(runtimeStore.subscribe, runtimeStore.getSnapshot, runtimeStore.getSnapshot);
   const resourceState = useSyncExternalStore(resourceStore.subscribe, resourceStore.getSnapshot, resourceStore.getSnapshot);
+  const profileState = useSyncExternalStore(profileStore.subscribe, profileStore.getSnapshot, profileStore.getSnapshot);
   const snapshot = state.status === "ready" ? state.snapshot : null;
   const surfaces = surfaceState.status === "ready" ? surfaceState.snapshot : null;
   const studio = studioState.status === "ready" ? studioState.snapshot : null;
   const runtimes = runtimeState.status === "ready" ? runtimeState.snapshot : null;
   const resources = resourceState.status === "ready" ? resourceState.snapshot : null;
+  const profileSnapshot = profileState.status === "ready" ? profileState.snapshot : null;
+  const profile = profileSnapshot?.profile ?? null;
+  useEffect(() => {
+    if (profile?.active_mode === "vibe") setInspectorOpen(false);
+  }, [profile?.active_mode]);
   const instances = useMemo(() => new Map(surfaces?.catalog.instances.map((instance) => [instance.instance_id, instance]) ?? []), [surfaces]);
   const primaryCommands = useMemo(() => snapshot == null ? [] : commandsForPlacement(snapshot, "primary_candidate"), [snapshot]);
+  const paletteCommands = useMemo(() => snapshot == null ? [] : commandsForPlacement(snapshot, "palette").filter((command) => {
+    const query = commandQuery.trim().toLocaleLowerCase();
+    return query.length === 0 || command.definition.label.toLocaleLowerCase().includes(query) ||
+      command.definition.command_id.toLocaleLowerCase().includes(query);
+  }), [commandQuery, snapshot]);
   const run = (operation: Promise<unknown>) => {
     setActionError(null);
     void operation.catch((error: unknown) => setActionError(error instanceof Error && error.message.trim() ? error.message.slice(0, 512) : "Studio operation failed."));
@@ -891,6 +980,10 @@ export function App({ transport }: AppProps) {
     project_id: studio.project_id,
     expected_project_revision: studio.project_revision,
     expected_layout_revision: studio.scene.layout_revision,
+  };
+  const profileRevisionRequest = () => profile == null ? null : {
+    project_id: profile.project_id,
+    expected_profile_revision: profile.revision,
   };
   const duplicate = async (instance: SurfaceInstance) => {
     if (surfaces == null || studio == null) return;
@@ -1168,8 +1261,11 @@ export function App({ transport }: AppProps) {
       )}
     />;
   };
+  const activeVibePage = profile?.vibe_pages.find(
+    (page) => page.page_id === profile.active_vibe_page_id,
+  ) ?? null;
   const evidence = useMemo(() => ({
-    ready: snapshot != null && surfaces != null && studio != null && runtimes != null && resources != null,
+    ready: snapshot != null && surfaces != null && studio != null && runtimes != null && resources != null && profile != null,
     source: state.status === "ready" ? state.source : null,
     project: snapshot?.project.display_path ?? null,
     layoutRevision: studio?.scene.layout_revision ?? null,
@@ -1186,7 +1282,12 @@ export function App({ transport }: AppProps) {
       revision: resource.resource_revision,
       status: resource.status,
     })) ?? [],
-  }), [instances, resources, runtimes, snapshot, state, studio, surfaces]);
+    profileRevision: profile?.revision ?? null,
+    activeMode: profile?.active_mode ?? null,
+    activeScene: profile?.active_studio_scene_id ?? null,
+    activePage: profile?.active_vibe_page_id ?? null,
+    profileLoadStatus: profileSnapshot?.load_status ?? null,
+  }), [instances, profile, profileSnapshot, resources, runtimes, snapshot, state, studio, surfaces]);
   useEffect(() => {
     document.documentElement.dataset.rsrReady = String(evidence.ready);
   }, [evidence.ready]);
@@ -1195,19 +1296,106 @@ export function App({ transport }: AppProps) {
     <main className="rho-studio-shell">
       <header className="rho-studio-bar">
         <div className="rho-mark" aria-label="Rho"><span className="rho-mark-glyph">R</span><span>Rho</span></div>
-        <div className="rho-project-identity"><span className="rho-eyebrow">Studio scene</span><strong>{snapshot?.project.display_label ?? "Loading…"}</strong></div>
-        <div className="rho-command-projection" aria-label="Contextual commands">
-          {primaryCommands.filter((command) => command.availability.state === "available").slice(0, 1).map((command) => <span className="rho-primary-command" key={command.definition.command_id}>{command.definition.label}</span>)}
-          <span className="rho-command-count">{snapshot?.command_registry.registrations.length ?? 0} commands</span>
+        <div className="rho-project-identity"><span className="rho-eyebrow">Project</span><strong>{snapshot?.project.display_label ?? "Loading…"}</strong></div>
+        <div className="rho-mode-switch" aria-label="Workspace mode">
+          {(["studio", "vibe"] as const).map((mode) => (
+            <button
+              type="button"
+              aria-pressed={profile?.active_mode === mode}
+              disabled={profile == null}
+              key={mode}
+              onClick={() => {
+                const target = profileRevisionRequest();
+                if (target != null && profile?.active_mode !== mode) {
+                  run(profileStore.setMode({ target, mode }));
+                }
+              }}
+            >{mode === "studio" ? "Studio" : "Vibe"}</button>
+          ))}
         </div>
-        <div className="rho-studio-history">
-          <button type="button" disabled={!studio?.can_undo} onClick={() => { const request = revisionRequest(); if (request != null) run(studioStore.undo(request)); }}>Undo</button>
-          <button type="button" disabled={!studio?.can_redo} onClick={() => { const request = revisionRequest(); if (request != null) run(studioStore.redo(request)); }}>Redo</button>
+        <div className="rho-profile-context">
+          {profile?.active_mode === "vibe" ? (
+            <select
+              aria-label="Active Vibe Page"
+              value={profile.active_vibe_page_id ?? ""}
+              onChange={(event) => {
+                const target = profileRevisionRequest();
+                if (target != null) run(profileStore.selectPage({ target, page_id: event.target.value }));
+              }}
+            >{profile.vibe_pages.map((page) => <option value={page.page_id} key={page.page_id}>{page.label}</option>)}</select>
+          ) : (
+            <select
+              aria-label="Active Studio Scene"
+              value={profile?.active_studio_scene_id ?? ""}
+              onChange={(event) => {
+                const target = profileRevisionRequest();
+                if (target != null) run(profileStore.selectScene({ target, scene_id: event.target.value }));
+              }}
+            >{profile?.studio_scenes.map((scene) => <option value={scene.scene_id} key={scene.scene_id}>{scene.label}</option>)}</select>
+          )}
+          {profile?.active_mode !== "vibe" && (
+            <details className="rho-scene-menu">
+              <summary aria-label="Scene actions">•••</summary>
+              <div>
+                <button type="button" disabled={profile == null || studio == null} onClick={() => {
+                  const target = profileRevisionRequest();
+                  const scene = profile?.studio_scenes.find((candidate) => candidate.scene_id === profile.active_studio_scene_id);
+                  if (target != null && scene != null) run(profileStore.duplicateScene({ target, scene_id: scene.scene_id, label: `${scene.label} copy` }));
+                }}>Duplicate</button>
+                <button type="button" disabled={profile == null || studio == null} onClick={() => {
+                  const target = profileRevisionRequest();
+                  if (target != null && profile?.active_studio_scene_id != null) run(profileStore.saveScene({ target, scene_id: profile.active_studio_scene_id }));
+                }}>Save</button>
+                <button type="button" disabled={profile == null} onClick={() => {
+                  const target = profileRevisionRequest();
+                  const scene = profile?.studio_scenes.find((candidate) => candidate.scene_id === profile.active_studio_scene_id);
+                  const label = scene == null ? null : window.prompt("Scene name", scene.label)?.trim();
+                  if (target != null && scene != null && label) run(profileStore.renameScene({ target, scene_id: scene.scene_id, label }));
+                }}>Rename</button>
+                <button type="button" disabled={(profile?.studio_scenes.length ?? 0) < 2} onClick={() => {
+                  const target = profileRevisionRequest();
+                  if (target != null && profile?.active_studio_scene_id != null) run(profileStore.deleteScene({ target, scene_id: profile.active_studio_scene_id }));
+                }}>Delete</button>
+                <button type="button" disabled={profile == null} onClick={() => {
+                  const target = profileRevisionRequest();
+                  if (target != null && profile?.active_studio_scene_id != null) run(profileStore.resetScene({ target, scene_id: profile.active_studio_scene_id }));
+                }}>Reset to Rho Studio</button>
+                <span className="rho-menu-separator" />
+                <button type="button" disabled={!studio?.can_undo} onClick={() => { const request = revisionRequest(); if (request != null) run(studioStore.undo(request)); }}>Undo</button>
+                <button type="button" disabled={!studio?.can_redo} onClick={() => { const request = revisionRequest(); if (request != null) run(studioStore.redo(request)); }}>Redo</button>
+              </div>
+            </details>
+          )}
+        </div>
+        <div className="rho-command-search">
+          <input
+            aria-label="Search commands"
+            placeholder="Search commands…"
+            value={commandQuery}
+            onChange={(event) => setCommandQuery(event.target.value)}
+            onFocus={() => setCommandSearchOpen(true)}
+            onBlur={() => window.setTimeout(() => setCommandSearchOpen(false), 120)}
+          />
+          <span className="rho-command-count">{snapshot?.command_registry.registrations.length ?? 0} commands</span>
+          {commandSearchOpen && (
+            <div className="rho-command-results" role="listbox">
+              {paletteCommands.slice(0, 8).map((command) => (
+                <button type="button" role="option" disabled={command.availability.state !== "available"} key={command.definition.command_id}>
+                  <strong>{command.definition.label}</strong><code>{command.definition.command_id}</code>
+                </button>
+              ))}
+              {paletteCommands.length === 0 && <p>No matching command</p>}
+            </div>
+          )}
+        </div>
+        <div className="rho-command-projection" aria-label="Primary contextual command">
+          {primaryCommands.filter((command) => command.availability.state === "available").slice(0, 1).map((command) => <span key={command.definition.command_id}>{command.definition.label}</span>)}
         </div>
         <div className="rho-foundation-status"><span className={`rho-status-dot rho-status-${snapshot?.context.workspace_health ?? state.status}`} /><span>{snapshot?.health.workspace.label ?? "Connecting"}</span></div>
+        <button className="rho-primary-action" type="button" aria-pressed={inspectorOpen} onClick={() => setInspectorOpen((open) => !open)}>{inspectorOpen ? "Done" : "Compose"}</button>
       </header>
-      <div className="rho-studio-workspace">
-        <aside className="rho-studio-inspector">
+      <div className={`rho-studio-workspace ${inspectorOpen ? "rho-inspector-open" : "rho-inspector-closed"}`}>
+        {inspectorOpen && <aside className="rho-studio-inspector">
           <header><span className="rho-eyebrow">Composition</span><strong>Layout inspector</strong></header>
           {snapshot?.health.agent.state !== "ready" && snapshot?.health.agent.label != null && (
             <div className="rho-agent-health" role="status">
@@ -1328,17 +1516,28 @@ export function App({ transport }: AppProps) {
               ))}
             </section>
           )}
-        </aside>
-        <section className="rho-studio-canvas" aria-label="Studio layout canvas">
+        </aside>}
+        <section className={`rho-studio-canvas rho-canvas-${profile?.active_mode ?? "loading"}`} aria-label={profile?.active_mode === "vibe" ? "Vibe page canvas" : "Studio layout canvas"}>
           {state.status === "failed" && <p role="alert">{state.message}</p>}
           {surfaceState.status === "failed" && <p role="alert">{surfaceState.message}</p>}
           {studioState.status === "failed" && <p role="alert">{studioState.message}</p>}
           {runtimeState.status === "failed" && <p role="alert">{runtimeState.message}</p>}
           {resourceState.status === "failed" && <p role="alert">{resourceState.message}</p>}
+          {profileState.status === "failed" && <p role="alert">{profileState.message}</p>}
+          {profileSnapshot?.recovery_detail != null && (
+            <div className="rho-profile-recovery" role="status">
+              <div><strong>UI Profile recovered from backup</strong><code>{profileSnapshot.recovery_detail}</code></div>
+              <button type="button" onClick={() => void navigator.clipboard?.writeText(profileSnapshot.recovery_detail ?? "")}>Copy diagnostics</button>
+            </div>
+          )}
           {actionError != null && <p className="rho-action-error" role="alert">{actionError}</p>}
-          {studio == null || surfaces == null
-            ? <div className="rho-studio-loading">Loading the broker-owned Studio scene…</div>
-            : <LayoutTree node={studio.scene.root} instances={instances} studio={studio} commit={commit} surfaceView={surfaceView} />}
+          {profile == null || surfaces == null || studio == null
+            ? <div className="rho-studio-loading">Loading the project UI Profile…</div>
+            : profile.active_mode === "vibe"
+              ? activeVibePage == null
+                ? <div className="rho-studio-loading">The active Vibe Page is unavailable.</div>
+                : <VibeCanvas page={activeVibePage} instances={instances} surfaceView={surfaceView} />
+              : <LayoutTree node={studio.scene.root} instances={instances} studio={studio} commit={commit} surfaceView={surfaceView} />}
         </section>
       </div>
       <pre id="rsrPreviewEvidence" hidden>{JSON.stringify(evidence)}</pre>

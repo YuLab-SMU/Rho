@@ -1,5 +1,6 @@
 import type {
   OpenSurfaceRequest,
+  ProjectUiProfileSnapshot,
   ResourceContent,
   ResourceDeleteRequest,
   ResourceDraftRequest,
@@ -25,6 +26,11 @@ import type {
   UiKernelSnapshot,
   UiKernelTransport,
   Unsubscribe,
+  UiProfileSceneLabelRequest,
+  UiProfileSceneTargetRequest,
+  UiProfileSelectPageRequest,
+  UiProfileSelectSceneRequest,
+  UiProfileSetModeRequest,
 } from "./types";
 
 export type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
@@ -103,6 +109,29 @@ export function createTauriUiKernelTransport(
           "rho://surface-runtime-changed",
           "rho://ui-snapshot-invalidated",
         ],
+        listener,
+      ),
+    loadUiProfile: () => invoke<ProjectUiProfileSnapshot>("ui_profile_snapshot"),
+    setUiProfileMode: (request: UiProfileSetModeRequest) =>
+      invoke<ProjectUiProfileSnapshot>("ui_profile_set_mode", { request }),
+    selectUiProfileScene: (request: UiProfileSelectSceneRequest) =>
+      invoke<ProjectUiProfileSnapshot>("ui_profile_select_scene", { request }),
+    selectUiProfilePage: (request: UiProfileSelectPageRequest) =>
+      invoke<ProjectUiProfileSnapshot>("ui_profile_select_page", { request }),
+    duplicateUiProfileScene: (request: UiProfileSceneLabelRequest) =>
+      invoke<ProjectUiProfileSnapshot>("ui_profile_scene_duplicate", { request }),
+    saveUiProfileScene: (request: UiProfileSceneTargetRequest) =>
+      invoke<ProjectUiProfileSnapshot>("ui_profile_scene_save", { request }),
+    renameUiProfileScene: (request: UiProfileSceneLabelRequest) =>
+      invoke<ProjectUiProfileSnapshot>("ui_profile_scene_rename", { request }),
+    deleteUiProfileScene: (request: UiProfileSceneTargetRequest) =>
+      invoke<ProjectUiProfileSnapshot>("ui_profile_scene_delete", { request }),
+    resetUiProfileScene: (request: UiProfileSceneTargetRequest) =>
+      invoke<ProjectUiProfileSnapshot>("ui_profile_scene_reset", { request }),
+    subscribeUiProfileInvalidated: (listener) =>
+      subscribeEvents(
+        listen,
+        ["rho://ui-profile-changed", "rho://ui-snapshot-invalidated"],
         listener,
       ),
     loadRuntimes: () => invoke<RuntimeRegistrySnapshot>("runtime_list"),

@@ -15,12 +15,13 @@ export function createUiKernelTransport(): UiKernelTransport {
 export {
   commandsForPlacement,
   StudioExternalStore,
+  UiProfileExternalStore,
   SurfaceExternalStore,
   RuntimeExternalStore,
   ResourceExternalStore,
   UiExternalStore,
 } from "./store";
-export type { ResourceStoreSnapshot, RuntimeStoreSnapshot, StudioStoreSnapshot, SurfaceStoreSnapshot, UiStoreSnapshot } from "./store";
+export type { ResourceStoreSnapshot, RuntimeStoreSnapshot, StudioStoreSnapshot, SurfaceStoreSnapshot, UiProfileStoreSnapshot, UiStoreSnapshot } from "./store";
 export type {
   CommandAvailability,
   CommandPlacementTag,
@@ -40,6 +41,19 @@ export type {
   SceneState,
   StudioRevisionRequest,
   StudioRuntimeSnapshot,
+  ProjectUiProfile,
+  ProjectUiProfileSnapshot,
+  StudioScenePreset,
+  SurfaceInstanceSpec,
+  UiProfileMode,
+  UiProfileRevisionRequest,
+  UiProfileSceneLabelRequest,
+  UiProfileSceneTargetRequest,
+  UiProfileSelectPageRequest,
+  UiProfileSelectSceneRequest,
+  UiProfileSetModeRequest,
+  VibeBlockContent,
+  VibePage,
   RuntimeAttachmentRequest,
   RuntimeBinding,
   RuntimeCreateRequest,

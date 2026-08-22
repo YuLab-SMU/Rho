@@ -20,6 +20,10 @@ pub struct ContractLimitsV1 {
     pub max_resource_instances: usize,
     pub max_resource_content_bytes: usize,
     pub max_resource_documents: usize,
+    pub max_ui_profile_bytes: usize,
+    pub max_ui_profile_scenes: usize,
+    pub max_ui_profile_pages: usize,
+    pub max_ui_profile_surface_specs: usize,
     pub max_vibe_page_json_bytes: usize,
     pub max_vibe_sections: usize,
     pub max_vibe_blocks: usize,
@@ -41,6 +45,10 @@ impl Default for ContractLimitsV1 {
             max_resource_instances: MAX_RESOURCE_INSTANCES,
             max_resource_content_bytes: MAX_RESOURCE_CONTENT_BYTES,
             max_resource_documents: MAX_RESOURCE_DOCUMENTS,
+            max_ui_profile_bytes: MAX_UI_PROFILE_BYTES,
+            max_ui_profile_scenes: MAX_UI_PROFILE_SCENES,
+            max_ui_profile_pages: MAX_UI_PROFILE_PAGES,
+            max_ui_profile_surface_specs: MAX_UI_PROFILE_SURFACE_SPECS,
             max_vibe_page_json_bytes: MAX_VIBE_PAGE_JSON_BYTES,
             max_vibe_sections: MAX_VIBE_SECTIONS,
             max_vibe_blocks: MAX_VIBE_BLOCKS,
@@ -67,6 +75,7 @@ pub struct ContractFixtureV1 {
     pub kernel_snapshot: UiKernelSnapshotV1,
     pub surface_runtime_snapshot: SurfaceRuntimeSnapshotV1,
     pub studio_runtime_snapshot: StudioRuntimeSnapshotV1,
+    pub project_ui_profile_snapshot: ProjectUiProfileSnapshotV1,
 }
 
 impl Validate for ContractFixtureV1 {
@@ -154,6 +163,7 @@ impl Validate for ContractFixtureV1 {
         self.kernel_snapshot.validate()?;
         self.surface_runtime_snapshot.validate()?;
         self.studio_runtime_snapshot.validate()?;
+        self.project_ui_profile_snapshot.validate()?;
         let surfaces = self
             .surfaces
             .iter()
@@ -529,6 +539,25 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
         }],
         focused_block_id: Some(BlockId::new("block:narrative").unwrap()),
     };
+    let surface_specs = instances
+        .iter()
+        .map(|instance| SurfaceInstanceSpecV1 {
+            instance_id: instance.instance_id.clone(),
+            surface_id: instance.surface_id.clone(),
+            origin: instance.origin.clone(),
+            mode_id: instance.mode_id.clone(),
+            resource_binding: instance.resource_binding.clone(),
+            runtime_attachment_intent: instance.runtime_binding.as_ref().map(|binding| {
+                RuntimeAttachmentIntentV1 {
+                    runtime_provider_id: binding.runtime_provider_id.clone(),
+                    runtime_instance_id: binding.runtime_instance_id.clone(),
+                    runtime_kind: binding.runtime_kind.clone(),
+                }
+            }),
+            view_group_id: instance.view_group_id.clone(),
+            view_state: instance.view_state.clone(),
+        })
+        .collect::<Vec<_>>();
     let command = CommandDefinitionV1 {
         command_id: CommandId::new("rho.surface.duplicate").unwrap(),
         label: "Duplicate view".to_string(),
@@ -685,7 +714,7 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
         instances: instances.clone(),
         commands: vec![command],
         scenes: vec![scene.clone()],
-        pages: vec![page],
+        pages: vec![page.clone()],
         kernel_snapshot,
         surface_runtime_snapshot: SurfaceRuntimeSnapshotV1 {
             contract: SURFACE_RUNTIME_SNAPSHOT_CONTRACT.to_string(),
@@ -745,6 +774,32 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
             ],
             can_undo: true,
             can_redo: false,
+        },
+        project_ui_profile_snapshot: ProjectUiProfileSnapshotV1 {
+            contract: PROJECT_UI_PROFILE_SNAPSHOT_CONTRACT.to_string(),
+            contract_major: RSR_CONTRACT_MAJOR,
+            profile: ProjectUiProfileV1 {
+                schema_version: PROJECT_UI_PROFILE_SCHEMA_VERSION,
+                project_id: project_id.clone(),
+                revision: 5,
+                active_mode: UiProfileModeV1::Studio,
+                active_studio_scene_id: Some(scene.scene_id.clone()),
+                active_vibe_page_id: Some(page.page_id.clone()),
+                studio_scenes: vec![scene.clone()],
+                vibe_pages: vec![page],
+                surface_instance_specs: surface_specs.clone(),
+                last_focused_surface_instance_id: scene.focused_surface_instance_id.clone(),
+            },
+            immutable_scene_presets: vec![StudioScenePresetV1 {
+                preset_id: ScenePresetId::new("rho.studio").unwrap(),
+                label: "Rho Studio".to_string(),
+                description: "Fixture projection of the immutable recursive Studio preset."
+                    .to_string(),
+                scene,
+                surface_instance_specs: surface_specs,
+            }],
+            load_status: UiProfileLoadStatusV1::Clean,
+            recovery_detail: None,
         },
     };
     fixture.validate().expect("golden fixture remains valid");

@@ -1,6 +1,6 @@
 # Rho Surface Runtime Full Construction Plan
 
-Status: active complete construction program; Wave 7 is the current integration
+Status: active complete construction program; Wave 8 is the current integration
 package
 
 Date: 2026-08-21
@@ -13,13 +13,15 @@ own focused evidence, contract review, documentation reconciliation, and
 scoped commit. After a wave passes its continuous gate, the next dependency is
 activated automatically under the same explicit authorization.
 
-Current integration package: **Wave 7 — Durable UI Profile and Studio product shell**.
+Current integration package: **Wave 8 — Workspace-plugin Surface contract**.
 
-Wave 7 acceptance owner: this active contract. Acceptance requires project-
-bound durable Studio/Vibe/instance presentation truth, CAS and atomic recovery,
-immutable preset semantics, and a minimal product shell with no imported old-
-layout authority. Scientific, document, Resource, Runtime, plugin, and Agent
-truth remain in their existing owners.
+Wave 8 acceptance owner: this active contract together with the existing Phase
+2 workspace-plugin identity, lifecycle, permission, Guest ABI, and package-
+digest contracts. Acceptance requires a new manifest schema version, bounded
+declarative Surface documents, exact generation-bound events, fair bounded
+guest scheduling, and hostile-fixture evidence. It adds no plugin marketplace,
+signature, author, runtime-provider, process, credential, or trusted-dialog
+authority.
 
 Owning design:
 `docs/design/proposed-2026-08-21-plugin-native-surface-runtime-design.md`
@@ -771,6 +773,58 @@ Continuous gate:
   serialization failure, partial file, corrupt file, backup recovery, reopen,
   missing Surface/runtime/resource placeholders, and no false saved state;
 - exact default/reset behavior and no hidden old-layout authority.
+
+Wave 7 completed locally on 2026-08-22:
+
+- `rho-ui-contract` now owns schema-v1 project UI Profiles, durable Surface
+  instance specifications, runtime attachment intent without live generation,
+  active Studio/Vibe identity, immutable Scene presets, and stale-safe pure
+  mode/select/replace/duplicate/rename/delete/reset/runtime-commit mutations.
+  Profiles validate exact project/reference ownership and encoded budgets;
+- the desktop `ProjectUiProfileStore` writes one normalized-project-root-bound
+  atomic JSON file with CAS revision and a same-directory recovery backup.
+  Clean reopen, missing/corrupt-main recovery, corrupt-without-backup failure,
+  spaces/Unicode roots, two-project isolation, A/B/A return, concurrent writers,
+  injected pre-replace failure, and oversized serialization all have local
+  regression coverage. Memory and durable state stay unchanged after a failed
+  write, so the UI never reports a false save;
+- Surface, Studio, Runtime attachment/detachment, and Resource rename completion
+  now checkpoint in-memory state and commit one UI Profile transaction before
+  publishing success. A persistence failure restores Surface/Studio/Resource
+  truth. Reopen restores exact instance identities and current factory/runtime
+  generations; missing factories, changed origins, and unresolved runtime
+  intents become truthful placeholders while another project starts empty;
+- the immutable `Rho Studio` preset seeds a recursive resizable Scene with an
+  intrinsic health strip. User Scenes expose Duplicate, Save, Rename, Delete,
+  and Reset without importing `PanelSizes`, posture, fixed-grid dimensions, or
+  old DOM identity. Repeated file modes and Console runtime intent remain
+  independent instance specifications;
+- the React shell now projects Project, Studio/Vibe, Scene/Page, command search,
+  one contextual command, health, and one Compose action. Secondary Scene and
+  history operations are grouped. Studio renders arbitrary recursive geometry;
+  Vibe renders persisted ordered narrative/reference blocks and live Surface
+  references on a document canvas, with its composition inspector collapsed by
+  default. Recovery diagnostics are bounded, visible, and copyable;
+- Tauri and browser/mock transports expose the same nine Profile commands and
+  invalidation event. Mock mutations implement CAS, Scene library semantics,
+  runtime/Profile synchronization, and an explicit Vibe preview fixture. The
+  Tauri command inventory now passes with 173 commands across 17 Rust files;
+- `cargo test --workspace --locked` passed the complete local matrix: Desktop
+  ran 310 tests with 309 passing and the existing opt-in macOS Keychain smoke
+  ignored. Focused `rho-ui-contract` and `rho-extension-runtime` Clippy passed
+  with `-D warnings`; repository-wide Desktop/Store Clippy remains blocked by
+  pre-existing lint debt and is not claimed as a Wave 7 pass;
+- `npm run rsr:check` passed strict TypeScript, ESLint, exact generated fixture
+  parity, 23 Vitest cases after the final Vibe interaction test, production
+  build, generated-asset checks, and real local Chrome smoke. Separate 1800 x
+  1100 Studio and Vibe captures verified the compact top chrome, recursive
+  Studio, document composition, and live Surface rendering;
+- cross-review found no state-owner conflict: the Profile owns only durable
+  presentation intent, Studio owns placement, Surface owns local view state,
+  Runtime/Resource registries resolve current truth, and plugin/Agent/scientific
+  authorities remain separate. Tauri still ships frozen `desktop/dist`, so no
+  application/R-package version or `NEWS.md` change is required and installed-
+  app/release acceptance is neither run nor claimed.
 
 ### Wave 8 — Workspace-plugin Surface contract
 

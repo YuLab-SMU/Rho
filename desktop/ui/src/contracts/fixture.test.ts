@@ -91,4 +91,15 @@ describe("Rust-generated RSR contract fixture", () => {
     ]);
     expect(JSON.stringify(registry).toLowerCase()).not.toContain("agent r");
   });
+
+  it("contains a project-owned UI Profile with an immutable Studio preset", () => {
+    const snapshot = fixture.project_ui_profile_snapshot;
+    expect(snapshot.contract).toBe("rho.ui.project-profile.snapshot.v1");
+    expect(snapshot.profile.project_id).toBe(fixture.kernel_snapshot.project.project_id);
+    expect(snapshot.profile.active_mode).toBe("studio");
+    expect(snapshot.profile.studio_scenes[0]?.root.kind).toBe("container");
+    expect(snapshot.profile.vibe_pages[0]?.sections[0]?.blocks).toHaveLength(2);
+    expect(snapshot.immutable_scene_presets[0]?.label).toBe("Rho Studio");
+    expect(snapshot.immutable_scene_presets[0]?.surface_instance_specs.length).toBeGreaterThan(1);
+  });
 });

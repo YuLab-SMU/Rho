@@ -25,7 +25,7 @@ struct ProjectCursor {
     project_revision: u64,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct StudioRuntimeInner {
     snapshot_revision: u64,
     project: Option<ProjectCursor>,
@@ -39,6 +39,9 @@ struct StudioRuntimeInner {
 pub(crate) struct StudioRuntimeState {
     inner: StdMutex<StudioRuntimeInner>,
 }
+
+#[derive(Clone)]
+pub(crate) struct StudioRuntimeCheckpoint(StudioRuntimeInner);
 
 #[derive(Debug, Clone)]
 pub(crate) struct StudioTransition {
@@ -158,6 +161,7 @@ impl StudioRuntimeState {
         project_id: ProjectId,
         project_revision: u64,
         available: &BTreeSet<String>,
+        desired_scene: Option<&SceneStateV1>,
     ) -> Result<StudioTransition> {
         let mut inner = self.inner();
         let next_project = ProjectCursor {
@@ -180,9 +184,30 @@ impl StudioRuntimeState {
         };
 
         if project_changed {
-            inner.scene = Some(empty_scene(project_id));
+            let scene = desired_scene
+                .cloned()
+                .unwrap_or_else(|| empty_scene(project_id.clone()));
+            ensure!(
+                scene.project_id == project_id,
+                "Persisted Studio Scene belongs to another project"
+            );
+            scene.validate()?;
+            inner.scene = Some(scene);
             inner.undo.clear();
             inner.redo.clear();
+        } else if let Some(desired) = desired_scene
+            && inner.scene.as_ref() != Some(desired)
+        {
+            ensure!(
+                desired.project_id == project_id,
+                "Persisted Studio Scene belongs to another project"
+            );
+            desired.validate()?;
+            inner.scene = Some(desired.clone());
+            inner.undo.clear();
+            inner.redo.clear();
+            changed = true;
+            reason = "profile_scene_reconciled";
         } else if let Some(scene) = inner.scene.as_ref() {
             let mut allocate = next_node_id;
             if let Some(pruned) = reconcile_scene_instances(scene, available, &mut allocate)? {
@@ -204,6 +229,14 @@ impl StudioRuntimeState {
             reason,
             changed,
         })
+    }
+
+    pub(crate) fn checkpoint(&self) -> StudioRuntimeCheckpoint {
+        StudioRuntimeCheckpoint(self.inner().clone())
+    }
+
+    pub(crate) fn restore_checkpoint(&self, checkpoint: StudioRuntimeCheckpoint) {
+        *self.inner() = checkpoint.0;
     }
 
     fn ensure_request(inner: &StudioRuntimeInner, request: &StudioRevisionRequestV1) -> Result<()> {
@@ -327,10 +360,12 @@ pub(crate) fn reconcile_with_surface_snapshot(
     state: &AppState,
     surface: &SurfaceRuntimeSnapshotV1,
 ) -> Result<StudioTransition> {
+    let profile = state.ui_profile.snapshot()?;
     state.studio_runtime.reconcile(
         surface.project_id.clone(),
         surface.project_revision,
         &available_instance_ids(surface),
+        profile.profile.active_scene(),
     )
 }
 
@@ -382,10 +417,23 @@ pub(crate) async fn studio_apply(
 ) -> Result<StudioRuntimeSnapshotV1, String> {
     let _project_transition = state.project_transition_gate.lock().await;
     let (surface, _) = prepare(&app, &state).await.map_err(display_error)?;
+    let checkpoint = state.studio_runtime.checkpoint();
     let transition = state
         .studio_runtime
         .apply(request, &available_instance_ids(&surface.snapshot))
         .map_err(display_error)?;
+    let profile = match crate::ui_profile::commit_runtime_state(
+        &state,
+        Some(transition.snapshot.scene.clone()),
+        &surface.snapshot,
+    ) {
+        Ok(profile) => profile,
+        Err(error) => {
+            state.studio_runtime.restore_checkpoint(checkpoint);
+            return Err(display_error(error));
+        }
+    };
+    crate::ui_profile::emit_snapshot(&app, &profile);
     emit_transition(&app, &transition);
     Ok(transition.snapshot)
 }
@@ -399,12 +447,25 @@ async fn mutate_history(
     let _project_transition = state.project_transition_gate.lock().await;
     let (surface, _) = prepare(&app, &state).await.map_err(display_error)?;
     let available = available_instance_ids(&surface.snapshot);
+    let checkpoint = state.studio_runtime.checkpoint();
     let transition = if undo {
         state.studio_runtime.undo(request, &available)
     } else {
         state.studio_runtime.redo(request, &available)
     }
     .map_err(display_error)?;
+    let profile = match crate::ui_profile::commit_runtime_state(
+        &state,
+        Some(transition.snapshot.scene.clone()),
+        &surface.snapshot,
+    ) {
+        Ok(profile) => profile,
+        Err(error) => {
+            state.studio_runtime.restore_checkpoint(checkpoint);
+            return Err(display_error(error));
+        }
+    };
+    crate::ui_profile::emit_snapshot(&app, &profile);
     emit_transition(&app, &transition);
     Ok(transition.snapshot)
 }
@@ -451,7 +512,7 @@ mod tests {
         let project_id = ProjectId::new("project:a").unwrap();
         let available = BTreeSet::from([instance("instance:a"), instance("instance:b")]);
         let initial = runtime
-            .reconcile(project_id, 3, &available)
+            .reconcile(project_id, 3, &available, None)
             .unwrap()
             .snapshot;
         let root_id = initial.scene.root.node_id().clone();
@@ -522,7 +583,7 @@ mod tests {
         let project_a = ProjectId::new("project:a").unwrap();
         let available = BTreeSet::from([instance("instance:a")]);
         let initial = runtime
-            .reconcile(project_a, 1, &available)
+            .reconcile(project_a, 1, &available, None)
             .unwrap()
             .snapshot;
         let placed = runtime
@@ -541,7 +602,7 @@ mod tests {
             .unwrap()
             .snapshot;
         let pruned = runtime
-            .reconcile(placed.project_id.clone(), 2, &BTreeSet::new())
+            .reconcile(placed.project_id.clone(), 2, &BTreeSet::new(), None)
             .unwrap()
             .snapshot;
         assert!(pruned.unplaced_instance_ids.is_empty());
@@ -552,6 +613,7 @@ mod tests {
                 ProjectId::new("project:b").unwrap(),
                 1,
                 &BTreeSet::from([instance("instance:b")]),
+                None,
             )
             .unwrap()
             .snapshot;

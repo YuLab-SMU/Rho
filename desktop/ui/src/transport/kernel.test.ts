@@ -2,10 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import fixture from "../contracts/generated/rsr-contract-fixtures.json";
 import { createMockUiKernelTransport } from "./mock";
-import { ResourceExternalStore, RuntimeExternalStore, StudioExternalStore, SurfaceExternalStore, UiExternalStore } from "./store";
+import { ResourceExternalStore, RuntimeExternalStore, StudioExternalStore, SurfaceExternalStore, UiExternalStore, UiProfileExternalStore } from "./store";
 import { createTauriUiKernelTransport } from "./tauri";
 import type {
   OpenSurfaceRequest,
+  ProjectUiProfileSnapshot,
   ResourceRegistrySnapshot,
   RuntimeRegistrySnapshot,
   SurfaceInstanceRequest,
@@ -40,6 +41,12 @@ function generatedResources(): ResourceRegistrySnapshot {
   return structuredClone(
     fixture.resource_registry_snapshot,
   ) as unknown as ResourceRegistrySnapshot;
+}
+
+function generatedProfile(): ProjectUiProfileSnapshot {
+  return structuredClone(
+    fixture.project_ui_profile_snapshot,
+  ) as unknown as ProjectUiProfileSnapshot;
 }
 
 describe("UI Kernel transport and external store", () => {
@@ -116,6 +123,67 @@ describe("UI Kernel transport and external store", () => {
     if (final.status !== "ready") throw new Error("final snapshot is unavailable");
     expect(final.snapshot.snapshot_revision).toBe(12);
     unsubscribe();
+  });
+
+  it("keeps Project UI Profile mode and Scene mutations CAS-safe", async () => {
+    const transport = createMockUiKernelTransport();
+    const store = new UiProfileExternalStore(transport);
+    const stop = store.subscribe(() => undefined);
+    await store.refresh();
+    const state = store.getSnapshot();
+    if (state.status !== "ready") throw new Error("UI Profile fixture did not load");
+    const base = state.snapshot.profile;
+    await expect(store.setMode({
+      target: {
+        project_id: base.project_id,
+        expected_profile_revision: base.revision - 1,
+      },
+      mode: "vibe",
+    })).rejects.toThrow(/stale/i);
+    let snapshot = await store.setMode({
+      target: { project_id: base.project_id, expected_profile_revision: base.revision },
+      mode: "vibe",
+    });
+    expect(snapshot.profile.active_mode).toBe("vibe");
+    snapshot = await store.duplicateScene({
+      target: {
+        project_id: snapshot.profile.project_id,
+        expected_profile_revision: snapshot.profile.revision,
+      },
+      scene_id: snapshot.profile.active_studio_scene_id!,
+      label: "科学布局副本",
+    });
+    const duplicateId = snapshot.profile.active_studio_scene_id!;
+    expect(snapshot.profile.studio_scenes.find((scene) => scene.scene_id === duplicateId)?.label)
+      .toBe("科学布局副本");
+    snapshot = await store.renameScene({
+      target: {
+        project_id: snapshot.profile.project_id,
+        expected_profile_revision: snapshot.profile.revision,
+      },
+      scene_id: duplicateId,
+      label: "自由布局",
+    });
+    snapshot = await store.resetScene({
+      target: {
+        project_id: snapshot.profile.project_id,
+        expected_profile_revision: snapshot.profile.revision,
+      },
+      scene_id: duplicateId,
+    });
+    expect(snapshot.profile.studio_scenes.find((scene) => scene.scene_id === duplicateId)?.label)
+      .toBe("自由布局");
+    snapshot = await store.deleteScene({
+      target: {
+        project_id: snapshot.profile.project_id,
+        expected_profile_revision: snapshot.profile.revision,
+      },
+      scene_id: duplicateId,
+    });
+    expect(snapshot.profile.studio_scenes).toHaveLength(1);
+    expect(snapshot.profile.active_studio_scene_id).toBe(base.active_studio_scene_id);
+    expect(Object.isFrozen(store.getSnapshot())).toBe(true);
+    stop();
   });
 
   it("separates shared documents from immutable previews across repeated file views", async () => {
@@ -269,7 +337,9 @@ describe("UI Kernel transport and external store", () => {
     const handlers = new Map<string, () => void>();
     const invoke = async <T,>(command: string, args?: Record<string, unknown>) => {
       calls.push(args == null ? { command } : { command, args });
-      return (command.startsWith("resource_")
+      return (command.startsWith("ui_profile")
+        ? generatedProfile()
+        : command.startsWith("resource_")
         ? ["resource_read", "resource_update_draft", "resource_save", "resource_reload"].includes(command)
           ? {
               contract: "rho.ui.resource-content.v1",
@@ -355,6 +425,19 @@ describe("UI Kernel transport and external store", () => {
     });
     await transport.undoStudio(studioRequest);
     await transport.redoStudio(studioRequest);
+    const profileTarget = {
+      project_id: "project:fixture",
+      expected_profile_revision: 5,
+    } as const;
+    await transport.loadUiProfile();
+    await transport.setUiProfileMode({ target: profileTarget, mode: "vibe" });
+    await transport.selectUiProfileScene({ target: profileTarget, scene_id: "scene:rho-studio" });
+    await transport.selectUiProfilePage({ target: profileTarget, page_id: "page:project-review" });
+    await transport.duplicateUiProfileScene({ target: profileTarget, scene_id: "scene:rho-studio", label: "Copy" });
+    await transport.saveUiProfileScene({ target: profileTarget, scene_id: "scene:rho-studio" });
+    await transport.renameUiProfileScene({ target: profileTarget, scene_id: "scene:rho-studio", label: "Renamed" });
+    await transport.deleteUiProfileScene({ target: profileTarget, scene_id: "scene:rho-studio" });
+    await transport.resetUiProfileScene({ target: profileTarget, scene_id: "scene:rho-studio" });
     const runtimeTarget = {
       project_id: "project:fixture",
       runtime_provider_id: "rho.ark-r",
@@ -469,6 +552,15 @@ describe("UI Kernel transport and external store", () => {
       },
       { command: "studio_undo", args: { request: studioRequest } },
       { command: "studio_redo", args: { request: studioRequest } },
+      { command: "ui_profile_snapshot" },
+      { command: "ui_profile_set_mode", args: { request: { target: profileTarget, mode: "vibe" } } },
+      { command: "ui_profile_select_scene", args: { request: { target: profileTarget, scene_id: "scene:rho-studio" } } },
+      { command: "ui_profile_select_page", args: { request: { target: profileTarget, page_id: "page:project-review" } } },
+      { command: "ui_profile_scene_duplicate", args: { request: { target: profileTarget, scene_id: "scene:rho-studio", label: "Copy" } } },
+      { command: "ui_profile_scene_save", args: { request: { target: profileTarget, scene_id: "scene:rho-studio" } } },
+      { command: "ui_profile_scene_rename", args: { request: { target: profileTarget, scene_id: "scene:rho-studio", label: "Renamed" } } },
+      { command: "ui_profile_scene_delete", args: { request: { target: profileTarget, scene_id: "scene:rho-studio" } } },
+      { command: "ui_profile_scene_reset", args: { request: { target: profileTarget, scene_id: "scene:rho-studio" } } },
       { command: "runtime_list" },
       { command: "runtime_create", args: { request: createRuntime } },
       { command: "runtime_attach", args: { request: attachment } },

@@ -291,6 +291,7 @@ bounded_id!(CommandId, "command_id");
 bounded_id!(PredicateId, "predicate_id");
 bounded_id!(OperationId, "operation_id");
 bounded_id!(SceneId, "scene_id");
+bounded_id!(ScenePresetId, "scene_preset_id");
 bounded_id!(LayoutNodeId, "layout_node_id");
 bounded_id!(PageId, "page_id");
 bounded_id!(SectionId, "section_id");

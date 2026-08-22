@@ -549,6 +549,115 @@ export interface StudioRuntimeSnapshot {
   readonly can_redo: boolean;
 }
 
+export type UiProfileMode = "studio" | "vibe";
+export type UiProfileLoadStatus = "created" | "clean" | "recovered_backup";
+
+export interface RuntimeAttachmentIntent {
+  readonly runtime_provider_id: string;
+  readonly runtime_instance_id: string;
+  readonly runtime_kind: string;
+}
+
+export interface SurfaceInstanceSpec {
+  readonly instance_id: string;
+  readonly surface_id: string;
+  readonly origin: SurfaceOrigin;
+  readonly mode_id: string | null;
+  readonly resource_binding: ResourceBinding | null;
+  readonly runtime_attachment_intent: RuntimeAttachmentIntent | null;
+  readonly view_group_id: string | null;
+  readonly view_state: unknown;
+}
+
+export type VibeBlockContent =
+  | { readonly kind: "rich_text"; readonly text: string }
+  | { readonly kind: "callout"; readonly tone: string; readonly text: string }
+  | { readonly kind: "divider" }
+  | { readonly kind: "file_excerpt"; readonly resource: ResourceBinding; readonly start_line: number; readonly end_line: number }
+  | { readonly kind: "artifact_ref"; readonly artifact_id: string; readonly label: string }
+  | { readonly kind: "finding_ref"; readonly finding_id: string; readonly label: string }
+  | { readonly kind: "task_ref"; readonly task_id: string; readonly label: string }
+  | { readonly kind: "surface_ref"; readonly instance_id: string; readonly live: boolean }
+  | { readonly kind: "command_ref"; readonly command_id: string; readonly label: string };
+
+export interface VibePage {
+  readonly page_id: string;
+  readonly project_id: string;
+  readonly label: string;
+  readonly page_revision: number;
+  readonly sections: readonly {
+    readonly section_id: string;
+    readonly heading: string | null;
+    readonly layout: Readonly<Record<string, unknown>>;
+    readonly blocks: readonly {
+      readonly block_id: string;
+      readonly content: VibeBlockContent;
+    }[];
+  }[];
+  readonly focused_block_id: string | null;
+}
+
+export interface ProjectUiProfile {
+  readonly schema_version: 1;
+  readonly project_id: string;
+  readonly revision: number;
+  readonly active_mode: UiProfileMode;
+  readonly active_studio_scene_id: string | null;
+  readonly active_vibe_page_id: string | null;
+  readonly studio_scenes: readonly SceneState[];
+  readonly vibe_pages: readonly VibePage[];
+  readonly surface_instance_specs: readonly SurfaceInstanceSpec[];
+  readonly last_focused_surface_instance_id: string | null;
+}
+
+export interface StudioScenePreset {
+  readonly preset_id: string;
+  readonly label: string;
+  readonly description: string;
+  readonly scene: SceneState;
+  readonly surface_instance_specs: readonly SurfaceInstanceSpec[];
+}
+
+export interface ProjectUiProfileSnapshot {
+  readonly contract: "rho.ui.project-profile.snapshot.v1";
+  readonly contract_major: 1;
+  readonly profile: ProjectUiProfile;
+  readonly immutable_scene_presets: readonly StudioScenePreset[];
+  readonly load_status: UiProfileLoadStatus;
+  readonly recovery_detail: string | null;
+}
+
+export interface UiProfileRevisionRequest {
+  readonly project_id: string;
+  readonly expected_profile_revision: number;
+}
+
+export interface UiProfileSetModeRequest {
+  readonly target: UiProfileRevisionRequest;
+  readonly mode: UiProfileMode;
+}
+
+export interface UiProfileSelectSceneRequest {
+  readonly target: UiProfileRevisionRequest;
+  readonly scene_id: string;
+}
+
+export interface UiProfileSelectPageRequest {
+  readonly target: UiProfileRevisionRequest;
+  readonly page_id: string;
+}
+
+export interface UiProfileSceneLabelRequest {
+  readonly target: UiProfileRevisionRequest;
+  readonly scene_id: string;
+  readonly label: string;
+}
+
+export interface UiProfileSceneTargetRequest {
+  readonly target: UiProfileRevisionRequest;
+  readonly scene_id: string;
+}
+
 export type Unsubscribe = () => void;
 
 export interface UiKernelTransport {
@@ -568,6 +677,16 @@ export interface UiKernelTransport {
   undoStudio(request: StudioRevisionRequest): Promise<StudioRuntimeSnapshot>;
   redoStudio(request: StudioRevisionRequest): Promise<StudioRuntimeSnapshot>;
   subscribeStudioInvalidated(listener: () => void): Unsubscribe;
+  loadUiProfile(): Promise<ProjectUiProfileSnapshot>;
+  setUiProfileMode(request: UiProfileSetModeRequest): Promise<ProjectUiProfileSnapshot>;
+  selectUiProfileScene(request: UiProfileSelectSceneRequest): Promise<ProjectUiProfileSnapshot>;
+  selectUiProfilePage(request: UiProfileSelectPageRequest): Promise<ProjectUiProfileSnapshot>;
+  duplicateUiProfileScene(request: UiProfileSceneLabelRequest): Promise<ProjectUiProfileSnapshot>;
+  saveUiProfileScene(request: UiProfileSceneTargetRequest): Promise<ProjectUiProfileSnapshot>;
+  renameUiProfileScene(request: UiProfileSceneLabelRequest): Promise<ProjectUiProfileSnapshot>;
+  deleteUiProfileScene(request: UiProfileSceneTargetRequest): Promise<ProjectUiProfileSnapshot>;
+  resetUiProfileScene(request: UiProfileSceneTargetRequest): Promise<ProjectUiProfileSnapshot>;
+  subscribeUiProfileInvalidated(listener: () => void): Unsubscribe;
   loadRuntimes(): Promise<RuntimeRegistrySnapshot>;
   createRuntime(request: RuntimeCreateRequest): Promise<RuntimeRegistrySnapshot>;
   attachRuntime(request: RuntimeAttachmentRequest): Promise<SurfaceRuntimeSnapshot>;
