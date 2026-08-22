@@ -1,6 +1,6 @@
 # Rho Surface Runtime Full Construction Plan
 
-Status: active complete construction program; Wave 0 is the current integration
+Status: active complete construction program; Wave 1 is the current integration
 package
 
 Date: 2026-08-21
@@ -13,13 +13,12 @@ own focused evidence, contract review, documentation reconciliation, and
 scoped commit. After a wave passes its continuous gate, the next dependency is
 activated automatically under the same explicit authorization.
 
-Current integration package: **Wave 0 — New frontend workspace and
-deterministic harness**.
+Current integration package: **Wave 1 — Pure RSR contracts**.
 
-Wave 0 acceptance owner: this active contract. Acceptance requires every Wave
-0 continuous-gate item to pass while the existing desktop remains unchanged
-and buildable. React/Vite dependencies are implementation-only and create no
-plugin ABI or new execution authority.
+Wave 1 acceptance owner: this active contract. Acceptance requires the pure
+Rust contract crate, generated TypeScript fixtures, validators, reducers, and
+all normal/boundary/negative contract gates without Tauri, Store, filesystem,
+runtime, plugin execution, or UI authority.
 
 Owning design:
 `docs/design/proposed-2026-08-21-plugin-native-surface-runtime-design.md`
@@ -105,7 +104,13 @@ Current documentation was checked through Context7 on 2026-08-21.
   plugin, and durable layout truth remains broker-owned;
 - concurrent rendering never becomes permission or execution authority.
 
-### Vite 8.0.10
+### Vite 8.2.2
+
+The original plan selected 8.0.10. Wave 0 advanced the exact pin to 8.2.2
+before integration because the npm advisory database reports a Windows
+development-server path-disclosure vulnerability through 8.0.15. The selected
+minor release preserves the reviewed Vite 8 configuration contract and removes
+the newly introduced high-severity dependency finding.
 
 - source lives under `desktop/ui/`;
 - development uses Vite HMR against browser/mock transport and the exact Tauri
@@ -297,7 +302,7 @@ branch runnable.
 
 Deliver:
 
-- add `desktop/ui` with React 19.2.7, TypeScript strict mode, Vite 8.0.10,
+- add `desktop/ui` with React 19.2.7, TypeScript strict mode, Vite 8.2.2,
   browser/mock transport, and deterministic test bootstrap;
 - preserve the current Tauri `frontendDist` until cutover;
 - add a separate new-shell development command and exact build output staging
@@ -312,6 +317,26 @@ Continuous gate:
 - `npm ci`, typecheck, unit test, production build, deterministic asset
   inventory, no network-loaded assets, and browser smoke;
 - existing desktop remains unchanged and buildable.
+
+Wave 0 completed locally on 2026-08-21:
+
+- `desktop/ui` now owns the React 19.2.7/TypeScript/Vite 8.2.2 source and emits
+  only to ignored `desktop/rsr-dist`; Tauri still ships `desktop/dist`;
+- real and mock bootstrap transports share one typed boundary over the existing
+  `startup_status` and `project_state` commands;
+- strict typecheck, ESLint, six Vitest cases, production build, two-build
+  byte-for-byte asset comparison, no-network asset validation, and real local
+  Chromium DOM smoke pass through `npm run rsr:check`;
+- `npm ci --ignore-scripts`, full `npm audit` with zero findings,
+  `node --check desktop/dist/app.js`, and
+  `cargo check -p rho-desktop --locked` pass;
+- separate contract review found and repaired unstable default-transport
+  identity, project-path whitespace loss, a package-level ESM collision with
+  the frozen old shell, and cross-platform harness path handling;
+- no application/R-package version or `NEWS.md` change is required because the
+  new shell is not shipped and no public or plugin contract changed;
+- hosted, multi-platform, installed-candidate, and release checks remain
+  intentionally outside the rapid local loop and are not claimed.
 
 ### Wave 1 — Pure RSR contracts
 

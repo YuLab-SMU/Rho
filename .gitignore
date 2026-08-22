@@ -2,12 +2,15 @@
 /work/
 /node_modules/
 /desktop/node_modules/
+/desktop/ui/node_modules/
+/desktop/rsr-dist/
 /.rho/
 /.Rproj.user/
 .Rhistory
 .RData
 .DS_Store
 *.log
+*.tsbuildinfo
 /desktop/resources/runtime/ark.exe
 /desktop/resources/runtime/ark
 /desktop/resources/runtime/LICENSE

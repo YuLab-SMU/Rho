@@ -2,17 +2,47 @@
   "name": "rho-desktop-frontend",
   "private": true,
   "version": "0.4.1-dev.11",
-  "description": "Static frontend asset tooling for Rho desktop",
+  "description": "Frontend tooling for the current Rho shell and the Rho Surface Runtime",
   "license": "AGPL-3.0-only",
   "scripts": {
     "sync-monaco": "node ../scripts/sync-monaco-assets.mjs",
-    "sync-viewer": "node ../scripts/sync-viewer-assets.mjs"
+    "sync-viewer": "node ../scripts/sync-viewer-assets.mjs",
+    "rsr:dev": "vite --config ui/vite.config.mts",
+    "rsr:build": "vite build --config ui/vite.config.mts",
+    "rsr:preview": "vite preview --config ui/vite.config.mts",
+    "rsr:typecheck": "tsc --noEmit --project ui/tsconfig.app.json --pretty false && tsc --noEmit --project ui/tsconfig.node.json --pretty false",
+    "rsr:lint": "eslint ui/src ui/*.mts",
+    "rsr:test": "vitest run --config ui/vitest.config.mts",
+    "rsr:test:assets": "node ../scripts/test-rsr-generated-assets.mjs",
+    "rsr:test:browser": "node ../scripts/test-rsr-browser-smoke.mjs",
+    "rsr:check": "npm run rsr:typecheck && npm run rsr:lint && npm run rsr:test && npm run rsr:build && npm run rsr:test:assets && npm run rsr:test:browser"
   },
   "dependencies": {
     "dompurify": "3.4.13",
     "katex": "0.16.22",
     "marked": "18.0.9",
     "monaco-editor": "0.55.1",
-    "papaparse": "5.5.4"
+    "papaparse": "5.5.4",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "22.19.15",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "@vitejs/plugin-react": "6.1.0",
+    "eslint": "10.9.0",
+    "globals": "17.11.0",
+    "jsdom": "30.0.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.67.0",
+    "vite": "8.2.2",
+    "vitest": "4.1.11"
+  },
+  "overrides": {
+    "monaco-editor": {
+      "dompurify": "3.4.13"
+    }
   }
 }

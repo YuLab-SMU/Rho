@@ -852,7 +852,7 @@ This proposal does not authorize:
 - version, NEWS, installed-app, release, CI, or multi-platform claims from this
   proposal alone.
 
-The host implementation uses React 19.2.7, TypeScript, Vite 8.0.10, and
+The host implementation uses React 19.2.7, TypeScript, Vite 8.2.2, and
 ProseMirror as recorded in the full construction plan. Surface, Command,
 Resource, Runtime, Scene, and Page wire contracts remain implementation-library
 independent.

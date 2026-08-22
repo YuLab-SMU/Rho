@@ -1,0 +1,237 @@
+@layer reset, tokens, shell;
+
+@layer reset {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    min-width: 320px;
+    min-height: 100%;
+    margin: 0;
+  }
+
+  body {
+    min-height: 100vh;
+  }
+}
+
+@layer tokens {
+  :root {
+    color-scheme: light;
+    font-family:
+      Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: #17211d;
+    background: #f2f5f1;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    --rho-ink: #17211d;
+    --rho-muted: #60706a;
+    --rho-line: color-mix(in srgb, #204838 14%, transparent);
+    --rho-accent: #0d7d67;
+    --rho-panel: color-mix(in srgb, white 82%, #dcebe4);
+  }
+}
+
+@layer shell {
+  .rho-foundation-shell {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    min-height: 100vh;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 78% 18%, rgb(44 177 142 / 12%), transparent 28rem),
+      linear-gradient(145deg, #f8faf7 0%, #edf3ef 62%, #e6efea 100%);
+  }
+
+  .rho-foundation-bar {
+    z-index: 2;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 2rem;
+    min-height: 4.25rem;
+    padding: 0.75rem 1.25rem;
+    border-bottom: 1px solid var(--rho-line);
+    background: rgb(250 252 249 / 82%);
+    backdrop-filter: blur(18px);
+  }
+
+  .rho-mark {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    font-weight: 750;
+    letter-spacing: -0.02em;
+  }
+
+  .rho-mark-glyph {
+    display: grid;
+    width: 2rem;
+    aspect-ratio: 1;
+    place-items: center;
+    border-radius: 0.58rem;
+    color: white;
+    background: var(--rho-accent);
+    box-shadow: 0 0.5rem 1.4rem rgb(13 125 103 / 20%);
+  }
+
+  .rho-project-identity {
+    min-width: 0;
+  }
+
+  .rho-project-identity strong {
+    display: block;
+    overflow: hidden;
+    font-size: 0.93rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .rho-eyebrow {
+    display: block;
+    color: var(--rho-muted);
+    font-size: 0.68rem;
+    font-weight: 720;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .rho-foundation-status {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    color: var(--rho-muted);
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+
+  .rho-status-dot {
+    width: 0.52rem;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: #8b9993;
+    box-shadow: 0 0 0 0.25rem rgb(91 112 104 / 10%);
+  }
+
+  .rho-status-ready {
+    background: #0b9b76;
+    box-shadow: 0 0 0 0.25rem rgb(11 155 118 / 12%);
+  }
+
+  .rho-status-needs_attention,
+  .rho-status-failed {
+    background: #d18428;
+    box-shadow: 0 0 0 0.25rem rgb(209 132 40 / 13%);
+  }
+
+  .rho-foundation-stage {
+    position: relative;
+    display: grid;
+    min-height: 0;
+    place-items: center;
+    padding: clamp(2rem, 6vw, 6rem);
+    overflow: hidden;
+  }
+
+  .rho-foundation-copy {
+    z-index: 1;
+    width: min(47rem, 100%);
+  }
+
+  .rho-foundation-copy h1 {
+    max-width: 10ch;
+    margin: 0.35rem 0 1.2rem;
+    font-family: Iowan Old Style, Palatino Linotype, Georgia, serif;
+    font-size: clamp(3rem, 7vw, 6.8rem);
+    font-weight: 520;
+    letter-spacing: -0.065em;
+    line-height: 0.9;
+  }
+
+  .rho-foundation-copy > p {
+    max-width: 44rem;
+    margin: 0;
+    color: var(--rho-muted);
+    font-size: clamp(1rem, 1.5vw, 1.22rem);
+    line-height: 1.65;
+  }
+
+  .rho-bootstrap-facts {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(10rem, 1fr);
+    gap: 0.7rem;
+    margin: 2rem 0 0;
+  }
+
+  .rho-bootstrap-facts > div {
+    min-width: 0;
+    padding: 1rem 1.1rem;
+    border: 1px solid var(--rho-line);
+    border-radius: 1rem;
+    background: var(--rho-panel);
+    box-shadow: 0 1rem 3rem rgb(28 59 46 / 7%);
+  }
+
+  .rho-bootstrap-facts dt {
+    margin-bottom: 0.38rem;
+    color: var(--rho-muted);
+    font-size: 0.72rem;
+  }
+
+  .rho-bootstrap-facts dd {
+    margin: 0;
+    overflow: hidden;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .rho-foundation-notice {
+    margin-top: 0.8rem !important;
+    padding-left: 1rem;
+    border-left: 2px solid #d18428;
+    font-size: 0.86rem !important;
+  }
+
+  .rho-foundation-orbit {
+    position: absolute;
+    right: -9rem;
+    bottom: -15rem;
+    width: min(55vw, 42rem);
+    aspect-ratio: 1;
+    border: 1px solid rgb(13 125 103 / 15%);
+    border-radius: 50%;
+    box-shadow:
+      inset 0 0 0 5rem rgb(13 125 103 / 2%),
+      inset 0 0 0 10rem rgb(13 125 103 / 2%);
+  }
+
+  @media (max-width: 700px) {
+    .rho-foundation-bar {
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 1rem;
+    }
+
+    .rho-foundation-status {
+      display: none;
+    }
+
+    .rho-bootstrap-facts {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      scroll-behavior: auto !important;
+    }
+  }
+}
