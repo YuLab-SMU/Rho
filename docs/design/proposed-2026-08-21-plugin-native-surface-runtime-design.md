@@ -738,8 +738,9 @@ The first component remains **Check project**, because its rule engine and
 result UI have clear typed boundaries and low ambient authority. RSR should be
 proven with one real vertical component rather than an empty framework rewrite.
 
-The complete continuous program is owned by
-`docs/plans/proposed-2026-08-21-rsr-full-construction-plan.md`. Its dependency
+The complete continuous program is implemented through the owner-authorized
+active contract
+`docs/plans/active-2026-08-21-rsr-full-construction-plan.md`. Its dependency
 order is new React/Vite shell, pure RSR contracts, Command/Context kernel,
 Surface instances, Studio container, Runtime/Resource registries, durable UI
 profile, workspace-plugin Surfaces, Check project, ProseMirror Vibe, remaining
@@ -883,9 +884,9 @@ independent.
     from visual instance count, with every Console binding an exact attachable
     runtime.
 
-Implementation begins only after the owner approves one bounded work package,
-the proposal is renamed or handed off to an active contract, and cross-review
-conflicts are resolved at that exact slice.
+Implementation is now authorized through the active construction contract.
+Each wave remains one bounded integration package; passing its continuous gate
+activates the next dependency without another product-decision pause.
 
 ## Version, NEWS, And Release
 

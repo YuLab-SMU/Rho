@@ -1,9 +1,25 @@
 # Rho Surface Runtime Full Construction Plan
 
-Status: proposed complete construction program; implementation is not yet
-activated
+Status: active complete construction program; Wave 0 is the current integration
+package
 
 Date: 2026-08-21
+
+Authorization: the owner explicitly authorized autonomous execution of the
+complete plan on 2026-08-21, with no repeated product-decision pauses between
+waves. This authorization does not collapse the waves into one unreviewable
+change: each wave remains a bounded, buildable integration package with its
+own focused evidence, contract review, documentation reconciliation, and
+scoped commit. After a wave passes its continuous gate, the next dependency is
+activated automatically under the same explicit authorization.
+
+Current integration package: **Wave 0 — New frontend workspace and
+deterministic harness**.
+
+Wave 0 acceptance owner: this active contract. Acceptance requires every Wave
+0 continuous-gate item to pass while the existing desktop remains unchanged
+and buildable. React/Vite dependencies are implementation-only and create no
+plugin ABI or new execution authority.
 
 Owning design:
 `docs/design/proposed-2026-08-21-plugin-native-surface-runtime-design.md`
@@ -709,7 +725,7 @@ they do not justify a compatibility layer around the defect.
 
 ## Version, NEWS, And Release
 
-This proposed plan changes no application/R-package version or `NEWS.md`.
+Activating this plan changes no application/R-package version or `NEWS.md`.
 
 During implementation:
 
