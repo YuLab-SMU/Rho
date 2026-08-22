@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-const EXPECTED_HANDLER_DIGEST = "df1650aec356ba80a57a7a43ee1e6566a5916dfa21cf151871d16135bd9bce50";
+const EXPECTED_HANDLER_DIGEST = "ec4792529802953dadf8e4ae84849c93c6dce100f45670c51acefddcb3de3d0a";
 
 const RUN_COMMANDS = [
   "audit_reproducibility",
@@ -87,8 +87,9 @@ function difference(left, right) {
   return [...new Set(left)].filter((value) => !rightSet.has(value)).sort();
 }
 
-function occurrences(value, pattern) {
-  return value.match(pattern)?.length ?? 0;
+function frontendCommands(frontend) {
+  return [...frontend.matchAll(/\binvoke(?:<[^>]+>)?\(\s*["']([A-Za-z_][A-Za-z0-9_]*)["']/g)]
+    .map((match) => match[1]);
 }
 
 export function validateCommandInventory({ sources, main, frontend, expectedHandlerDigest }) {
@@ -123,6 +124,11 @@ export function validateCommandInventory({ sources, main, frontend, expectedHand
       "Tauri command registration identity or order changed",
     );
   }
+  assert.deepEqual(
+    difference(frontendCommands(frontend), handlers),
+    [],
+    "Every command used by the module transport must be registered by Tauri",
+  );
 
   const runSource = sources.find(({ name }) => name.endsWith("commands/runs.rs"));
   assert.ok(runSource, "Runs command module is missing");
@@ -131,13 +137,6 @@ export function validateCommandInventory({ sources, main, frontend, expectedHand
     RUN_COMMANDS,
     "Runs command module ownership changed",
   );
-  for (const command of RUN_COMMANDS) {
-    assert.equal(
-      occurrences(frontend, new RegExp(`command === ["']${command}["']`, "g")),
-      1,
-      `browser mock must define exactly one ${command} handler`,
-    );
-  }
 
   const pluginSource = sources.find(({ name }) => name.endsWith("commands/plugins.rs"));
   assert.ok(pluginSource, "Workspace Plugins command module is missing");
@@ -146,13 +145,6 @@ export function validateCommandInventory({ sources, main, frontend, expectedHand
     PLUGIN_COMMANDS,
     "Workspace Plugins command module ownership changed",
   );
-  for (const command of PLUGIN_COMMANDS) {
-    assert.equal(
-      occurrences(frontend, new RegExp(`command === ["']${command}["']`, "g")),
-      1,
-      `browser mock must define exactly one ${command} handler`,
-    );
-  }
 
   return { commands: definitionNames.length, sources: sources.length };
 }
@@ -186,9 +178,9 @@ ${pluginHandlers}
     ],
     main,
     frontend: RUN_COMMANDS.map(
-      (command) => `if (command === "${command}") return {};`,
+      (command) => `invoke("${command}");`,
     ).concat(PLUGIN_COMMANDS.map(
-      (command) => `if (command === "${command}") return {};`,
+      (command) => `invoke("${command}");`,
     )).join("\n"),
   };
 }
@@ -218,13 +210,10 @@ function runSelfTests() {
   );
 
   const missingMock = fixtures();
-  missingMock.frontend = missingMock.frontend.replace(
-    'if (command === "compare_runs") return {};',
-    "",
-  );
+  missingMock.frontend += '\ninvoke("unknown_command");';
   assert.throws(
     () => validateCommandInventory(missingMock),
-    /browser mock must define exactly one compare_runs handler/,
+    /module transport must be registered by Tauri/,
   );
 
   const reordered = fixtures();
@@ -247,7 +236,7 @@ if (process.argv.includes("--test")) {
   const files = rustFiles(sourceRoot);
   const sources = files.map((name) => ({ name, text: fs.readFileSync(name, "utf8") }));
   const main = fs.readFileSync(path.join(sourceRoot, "main.rs"), "utf8");
-  const frontend = fs.readFileSync(path.join("desktop", "dist", "app.js"), "utf8");
+  const frontend = fs.readFileSync(path.join("desktop", "ui", "src", "transport", "tauri.ts"), "utf8");
   const result = validateCommandInventory({
     sources,
     main,

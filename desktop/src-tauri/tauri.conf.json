@@ -1,13 +1,14 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Rho",
-  "version": "0.4.1-dev.11",
+  "version": "0.4.1-dev.12",
   "identifier": "org.yulab.rho",
   "build": {
+    "beforeBuildCommand": "npm run rsr:build",
     "frontendDist": "../dist"
   },
   "app": {
-    "withGlobalTauri": true,
+    "withGlobalTauri": false,
     "windows": [
       {
         "title": "Rho",
@@ -20,7 +21,19 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": {
+        "default-src": "'self' customprotocol: asset:",
+        "base-uri": "'none'",
+        "connect-src": "ipc: http://ipc.localhost",
+        "font-src": "'self' data:",
+        "form-action": "'none'",
+        "frame-src": "'none'",
+        "img-src": "'self' asset: http://asset.localhost blob: data:",
+        "object-src": "'none'",
+        "script-src": "'self'",
+        "style-src": "'self' 'unsafe-inline'",
+        "worker-src": "'self' blob:"
+      }
     }
   },
   "bundle": {

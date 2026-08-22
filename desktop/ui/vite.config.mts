@@ -20,10 +20,11 @@ export default defineConfig({
     strictPort: false,
   },
   build: {
-    outDir: fileURLToPath(new URL("../rsr-dist", import.meta.url)),
+    outDir: fileURLToPath(new URL("../dist", import.meta.url)),
     emptyOutDir: true,
     sourcemap: false,
     manifest: "asset-manifest.json",
     target: "es2022",
   },
+  publicDir: fileURLToPath(new URL("../legal", import.meta.url)),
 });

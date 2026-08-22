@@ -265,7 +265,7 @@ The current common validation baseline is:
 $env:PATH="C:\rtools45\x86_64-w64-mingw32.static.posix\bin;$env:PATH"
 cargo +stable-x86_64-pc-windows-gnu fmt --all -- --check
 cargo +stable-x86_64-pc-windows-gnu test --workspace --locked
-node --check desktop/dist/app.js
+npm --prefix desktop run rsr:check
 Rscript -e "testthat::test_local('r/rho.bridge')"
 Rscript -e "testthat::test_local('r/rho.agent')"
 git diff --check

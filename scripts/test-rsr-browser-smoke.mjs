@@ -6,7 +6,7 @@ import { dirname, extname, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const outputRoot = join(repositoryRoot, "desktop", "rsr-dist");
+const outputRoot = join(repositoryRoot, "desktop", "dist");
 const browsers = [
   process.env.RHO_RSR_BROWSER,
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -127,6 +127,9 @@ try {
   }
   if (!stdout.includes("Differential expression explorer") || !stdout.includes("Workspace plugin")) {
     throw new Error("RSR browser smoke did not render the declarative workspace-plugin Surface");
+  }
+  if (!stdout.includes('data-editor-ready="true"')) {
+    throw new Error("RSR browser smoke did not activate the lazy Monaco source editor");
   }
   if (!stdout.includes('id="rsrPreviewEvidence"')) throw new Error("RSR browser preview evidence hook is missing");
   process.stdout.write(`RSR browser smoke passed in ${browser}\n`);

@@ -6,9 +6,8 @@ const read = (file) => normalizeLineEndings(fs.readFileSync(file, "utf8"));
 const count = (text, pattern) => [...text.matchAll(pattern)].length;
 const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-const expectedVersion = "0.4.1-dev.11";
+const expectedVersion = "0.4.1-dev.12";
 const normalPublishVersion = "0.4.0";
-const expectedVersionPattern = escapeRegExp(expectedVersion);
 const normalPublishVersionPattern = escapeRegExp(normalPublishVersion);
 const cargo = read("Cargo.toml");
 const cargoVersion = cargo.match(/^version = "([^"]+)"/m)?.[1];
@@ -18,12 +17,10 @@ assert.equal(JSON.parse(read("desktop/package.json")).version, expectedVersion);
 const packageLock = JSON.parse(read("desktop/package-lock.json"));
 assert.equal(packageLock.version, expectedVersion);
 assert.equal(packageLock.packages[""].version, expectedVersion);
-assert.match(read("desktop/dist/index.html"), new RegExp(`styles\\.css\\?v=${expectedVersionPattern}`));
-assert.match(read("desktop/dist/index.html"), new RegExp(`app\\.js\\?v=${expectedVersionPattern}`));
-assert.ok(
-  count(read("desktop/dist/app.js"), new RegExp(expectedVersionPattern, "g")) >= 2,
-  "Mock identity must be synchronized",
-);
+const assetManifest = JSON.parse(read("desktop/dist/asset-manifest.json"));
+assert.equal(assetManifest["index.html"].isEntry, true);
+assert.match(assetManifest["index.html"].file, /^assets\/index-[A-Za-z0-9_-]+\.js$/);
+assert.equal(fs.existsSync(`desktop/dist/${assetManifest["index.html"].file}`), true);
 
 const localPackagePattern = /name = "rho-[^"]+"\r?\nversion = "([^"]+)"/g;
 assert.deepEqual(
@@ -342,7 +339,6 @@ assert.match(update, /native_updater_supported_for\(os: &str, arch: &str\)/);
 assert.match(update, /\("macos", "aarch64"\)/);
 assert.match(update, /\("linux", "x86_64"\)/);
 assert.match(update, /UPDATE_INVALID: native update notes/);
-assert.match(read("desktop/dist/app.js"), /Native updates are unavailable for this operating-system architecture\./);
 const generator = read("scripts/generate-update-site.mjs");
 assert.match(generator, /validateAggregateEvidence/);
 assert.match(generator, /Download for macOS \(Apple Silicon\)/);

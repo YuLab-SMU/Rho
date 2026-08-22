@@ -1,7 +1,7 @@
 # Rho Surface Runtime Full Construction Plan
 
-Status: active complete construction program; Wave 12 is the current integration
-package
+Status: active complete construction program; Wave 12 passed its continuous
+gate and Wave 13 is the current integration package
 
 Date: 2026-08-21
 
@@ -13,13 +13,13 @@ own focused evidence, contract review, documentation reconciliation, and
 scoped commit. After a wave passes its continuous gate, the next dependency is
 activated automatically under the same explicit authorization.
 
-Current integration package: **Wave 12 — cutover and legacy deletion**.
+Current integration package: **Wave 13 — hardening and release handoff**.
 
-Wave 12 acceptance owner: this active contract together with Tauri build,
-packaging, source-artifact, CSP, generated-asset and application-version
-contracts. Cutover may replace the frozen fixed shell and its disposable
-presentation assets, but it cannot replace Store, project/session, Runtime,
-Resource, Agent, approval, plugin or scientific-domain authority.
+Wave 13 acceptance owner: this active contract together with the Surface,
+Studio, Vibe, payload-lease, broker-event, accessibility, installed-candidate,
+release and application-version contracts. Hardening may optimize or suspend
+new-shell projections, but it cannot discard durable bindings, infer execution
+authority from visibility, or reintroduce fixed-layout compatibility code.
 
 Owning design:
 `docs/design/proposed-2026-08-21-plugin-native-surface-runtime-design.md`
@@ -1215,6 +1215,43 @@ Continuous gate:
   multi-runtime Console, repeated file views, plugin Surface, Check project,
   Agent, project switch, restart, and recovery workflows;
 - only after local acceptance, construct a fresh named application candidate.
+
+Accepted evidence (2026-08-22):
+
+- Tauri now builds and ships only deterministic Vite output from
+  `desktop/dist`; the global bridge, old `app.js`/`styles.css`, fixed shell,
+  copied vendor runtime and obsolete UI/source-contract tests were deleted.
+  Legal source assets remain reviewed under `desktop/legal` and are copied into
+  the generated distribution by the production build;
+- startup now formally sequences R bootstrap, Workspace R start and saved
+  project restoration before mounting the UI Kernel. Agent dependency probing
+  runs afterward as an independent fault domain and emits snapshot invalidation
+  when its health changes. Missing R/Workspace/project preparation failures
+  retain actionable Retry/Choose Rscript diagnostics instead of mounting a
+  half-prepared workbench;
+- Issue #100 dependency projection distinguishes missing, too old, namespace or
+  load failure, incompatible API, missing provider adapters and provider health;
+  it reports resolved R/package versions and paths, CRAN-minimum mismatch,
+  remediation and one copyable diagnostic without degrading a healthy Console,
+  editor or Workspace R;
+- the exact owner-named `/Users/xiayh/Projects/Rho/target/debug/rho-desktop`
+  restored `workspace-plugin-minimal`, showed Workspace R ready, switched
+  between the Studio Console/Agent scene and revisioned Vibe page, and completed
+  the background Agent probe. A checked-in exact-app acceptance script rejects
+  a foreign macOS `rho-desktop`, verifies the binary embeds the current generated
+  entry and records its absolute path, byte size and SHA-256;
+- `npm run rsr:check` passed strict TypeScript/ESLint, 36 Vitest cases, exact
+  Rust/TypeScript fixtures, deterministic production assets, cutover inventory
+  and real Chrome smoke. Every remaining `.mjs` source/release contract passed,
+  including the 180-command Tauri inventory. `cargo test --workspace --locked`
+  passed the complete workspace (Desktop: 319 passed plus one opt-in Keychain
+  smoke ignored), and `cargo fmt --all -- --check` plus `git diff --check`
+  passed. The R package matrix had already passed in this integration package
+  and no R source changed afterward;
+- contract review found no deviation from Store, project/session, Runtime,
+  Resource, Agent, approval, plugin or domain ownership. User-visible cutover is
+  recorded as `0.4.1-dev.12` in synchronized application metadata and `NEWS.md`.
+  Hosted CI, packaging publication and release readiness were not claimed.
 
 ### Wave 13 — Hardening and release handoff
 

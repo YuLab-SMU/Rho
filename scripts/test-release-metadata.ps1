@@ -60,8 +60,9 @@ $requiredFiles = @(
     "desktop\resources\runtime\NOTICE",
     "desktop\resources\WebView2Loader.dll",
     "desktop\dist\index.html",
-    "desktop\dist\app.js",
-    "desktop\dist\styles.css",
+    "desktop\dist\asset-manifest.json",
+    "desktop\dist\licenses\monaco\LICENSE",
+    "desktop\dist\licenses\dompurify\LICENSE",
     ".github\workflows\update-site-publish.yml",
     ".github\workflows\candidate-build-draft.yml",
     ".github\workflows\candidate-publish.yml",
@@ -83,15 +84,20 @@ if ($missingFiles.Count -gt 0) {
 }
 
 $updateSource = Get-Content -LiteralPath (Join-Path $repo "desktop\src-tauri\src\update.rs") -Raw
-$desktopHtml = Get-Content -LiteralPath (Join-Path $repo "desktop\dist\index.html") -Raw
+$assetManifestPath = Join-Path $repo "desktop\dist\asset-manifest.json"
+$assetManifest = Get-Content -LiteralPath $assetManifestPath -Raw | ConvertFrom-Json
 $publishWorkflow = Get-Content -LiteralPath (Join-Path $repo ".github\workflows\windows-manual-publish.yml") -Raw
 $updateSiteWorkflowPath = Join-Path $repo ".github\workflows\update-site-publish.yml"
 $updateSiteWorkflow = Get-Content -LiteralPath $updateSiteWorkflowPath -Raw
 if (-not $updateSource.Contains('https://yulab-smu.top/Rho/')) {
     throw "Desktop update source does not contain the required Rho update endpoint."
 }
-if (-not $desktopHtml.Contains('data-menu-command="check-updates"') -or -not $desktopHtml.Contains('data-menu-command="about-rho"')) {
-    throw "Desktop Help menu is missing About or Check for Updates."
+if (-not $assetManifest.'index.html'.isEntry -or -not $assetManifest.'index.html'.file) {
+    throw "Generated Surface Runtime asset manifest has no production entry."
+}
+$generatedEntry = Join-Path $repo ("desktop\dist\" + $assetManifest.'index.html'.file.Replace('/', '\'))
+if (-not (Test-Path -LiteralPath $generatedEntry -PathType Leaf)) {
+    throw "Generated Surface Runtime entry is missing: $generatedEntry"
 }
 if ($publishWorkflow.Contains('publish_branch: gh-pages') -or $publishWorkflow.Contains('generate-update-site.mjs')) {
     throw "Windows publish workflow must not publish the update site."

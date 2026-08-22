@@ -8,7 +8,7 @@
 }
 
 @layer tokens {
-  :root {
+:root {
     color-scheme: light;
     font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     color: #14201b;
@@ -23,6 +23,49 @@
     --rho-panel: #f8faf8;
     --rho-canvas: #dfe7e2;
   }
+}
+
+.rho-preparation-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  color: var(--rho-ink);
+  background:
+    radial-gradient(circle at 50% 32%, color-mix(in srgb, var(--rho-accent) 9%, transparent), transparent 38%),
+    var(--rho-canvas);
+}
+
+.rho-preparation-card {
+  width: min(620px, 100%);
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 20px;
+  align-items: center;
+  padding: 26px;
+  border: 1px solid var(--rho-line);
+  border-radius: 22px;
+  background: var(--rho-panel);
+  box-shadow: 0 28px 70px rgb(25 48 40 / 12%);
+}
+
+.rho-preparation-card p { margin: 6px 0 0; color: var(--rho-muted); }
+.rho-preparation-spinner {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--rho-line-strong);
+  border-top-color: var(--rho-accent);
+  border-radius: 50%;
+  animation: rho-preparation-spin 800ms linear infinite;
+}
+.rho-preparation-issue { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
+.rho-preparation-issue h1 { margin: 6px 0; font-size: 24px; }
+.rho-preparation-issue pre { max-height: 180px; overflow: auto; white-space: pre-wrap; }
+.rho-preparation-actions { display: flex; gap: 10px; margin-top: 18px; }
+.rho-preparation-actions button:first-child { background: var(--rho-accent); color: white; border-color: var(--rho-accent); }
+@keyframes rho-preparation-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .rho-preparation-spinner { animation: none; border-top-color: var(--rho-line-strong); }
 }
 
 @layer studio {
@@ -283,6 +326,9 @@
   .rho-agent-toolbar select { min-width: 0; flex: 1 1 auto; padding: 0.34rem; border: 1px solid var(--rho-line); border-radius: 0.4rem; color: var(--rho-ink); background: white; font-size: 0.62rem; }
   .rho-agent-degraded { padding: 0.65rem; border-bottom: 1px solid #d9a064; color: #784a18; background: #fff6e9; }
   .rho-agent-degraded strong, .rho-agent-degraded p { display: block; margin: 0 0 0.35rem; font-size: 0.64rem; line-height: 1.4; }
+  .rho-agent-runtime-diagnostics { margin: 0.42rem 0; font-size: 0.58rem; }
+  .rho-agent-runtime-diagnostics summary { cursor: pointer; font-weight: 720; }
+  .rho-agent-runtime-diagnostics pre { max-height: 14rem; padding: 0.48rem; overflow: auto; border: 1px solid rgb(112 69 22 / 16%); border-radius: 0.4rem; color: #3e3528; background: rgb(255 255 255 / 55%); font: 0.55rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
   .rho-agent-timeline { min-width: 0; min-height: 0; flex: 1 1 auto; padding: 0.55rem; overflow: auto; }
   .rho-agent-empty { color: var(--rho-muted); font: 0.78rem/1.5 Georgia, serif; }
   .rho-agent-turn { margin-bottom: 0.65rem; padding: 0.62rem; border: 1px solid var(--rho-line); border-radius: 0.58rem; background: white; }
@@ -349,7 +395,9 @@
   .rho-resource-state.rho-resource-unsupported, .rho-resource-dirty { color: #784a18; background: #fff0d8; }
   .rho-resource-linking label { display: flex; flex: 1 1 8rem; align-items: center; gap: 0.25rem; }
   .rho-resource-linking input { flex: 1 1 auto; }
-  .rho-source-editor { width: 100%; height: 100%; min-width: 0; min-height: 0; padding: 0.8rem; resize: none; border: 0; outline: none; color: #18332c; background: #fbfcfb; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.72rem; line-height: 1.55; tab-size: 2; }
+  .rho-source-editor-shell { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: #fbfcfb; }
+  .rho-source-monaco { position: absolute; inset: 0; }
+  .rho-source-editor { position: absolute; inset: 0; width: 100%; height: 100%; min-width: 0; min-height: 0; padding: 0.8rem; resize: none; border: 0; outline: none; color: #18332c; background: #fbfcfb; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.72rem; line-height: 1.55; tab-size: 2; }
   .rho-file-preview-body, .rho-file-analysis, .rho-file-outline { min-width: 0; min-height: 0; margin: 0; padding: clamp(0.7rem, 3cqw, 1.4rem); overflow: auto; }
   .rho-file-preview-body pre, .rho-file-analysis pre { overflow-wrap: anywhere; font: 0.68rem/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
   .rho-file-preview-body img { display: block; max-width: 100%; max-height: 100%; margin: auto; object-fit: contain; }

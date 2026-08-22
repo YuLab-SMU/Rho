@@ -4,6 +4,34 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.1-dev.12 - 2026-08-22
+
+### Rho Surface Runtime production cutover
+
+- Rho now starts directly in the plugin-oriented Surface Runtime. Studio uses
+  arbitrary recursive, asymmetric, resizable containers and Stack composition;
+  Vibe uses revisioned document layout with embedded live Surfaces. Console,
+  files, Agent, Check project, workspace plugins, and project domains are
+  independently repeatable views rather than fixed IDE panes.
+- Console instances bind explicitly to a Runtime. File source, preview, diff,
+  and outline instances bind independently to shared provider-qualified
+  Resources, so duplicate views and mixed modes do not imply hidden pairing.
+- Agent dependency failures now stay inside the Agent Surface and expose the
+  resolved R executable/version plus package status, installed and required
+  versions, library path, remediation, Provider-adapter state, and a copyable
+  diagnostic report. A CRAN version below Rho's minimum is called out instead
+  of producing a CRAN-only fix. Healthy editor, Console, Workspace R, and other
+  Surfaces continue to operate.
+- The desktop now ships only deterministic Vite assets behind the module Tauri
+  API and a restrictive local CSP. Monaco loads on demand for source views.
+  The hand-edited `app.js`/`styles.css` shell, global Tauri bridge, fixed-layout
+  controls, old browser mock, and runtime fallback were removed.
+- Startup now prepares R, starts Workspace R, and restores the saved project
+  before mounting the workbench; Agent package verification follows in its own
+  fault domain. The exact debug-app acceptance records the executable path,
+  generated frontend entry, and binary digest so another registered Rho build
+  cannot be mistaken for the current checkout.
+
 ## 0.4.1-dev.11 - 2026-08-21
 
 ### Workspace-plugin crash-point recovery truth

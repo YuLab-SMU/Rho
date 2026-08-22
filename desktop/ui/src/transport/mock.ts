@@ -6,6 +6,7 @@ import type {
   AgentApprovalDecisionRequest,
   AgentConversationSummary,
   AgentMode,
+  AgentRuntimeDiagnostics,
   AgentTurnDetail,
   AgentTurnEvent,
   AgentTurnSummary,
@@ -321,6 +322,33 @@ export function createMockUiKernelTransport(
   const agentListeners = new Set<() => void>();
   const agentNow = "2026-08-22T12:00:00Z";
   const agentProjectRoot = current.project.display_path;
+  let agentRuntimeDiagnostics: AgentRuntimeDiagnostics = {
+    available: false,
+    status: "needs_attention",
+    rscript: "/opt/R/4.6.1/bin/Rscript",
+    r_version: "4.6.1",
+    aisdk_version: "1.4.12",
+    provider_adapters_available: false,
+    provider_health: "not_checked",
+    dependencies: [{
+      package: "aisdk",
+      status: "incompatible_version",
+      installed_version: "1.4.12",
+      required_version: "1.5.0",
+      resolved_path: "/project/renv/library/R-4.6/aarch64-apple-darwin/aisdk",
+      detail: "The installed namespace is older than Rho's Agent API contract.",
+      remediation: "CRAN currently provides 1.4.12; install the reviewed >= 1.5.0 source instead of using a CRAN-only command.",
+    }, {
+      package: "aisdk.providers",
+      status: "missing",
+      installed_version: null,
+      required_version: "0.1.0",
+      resolved_path: null,
+      detail: "Registered Provider adapters are unavailable.",
+      remediation: "Install aisdk.providers in the isolated Agent dependency environment.",
+    }],
+    error: "Agent dependencies need attention. Workspace R remains available.",
+  };
   let nextConversation = 2;
   let nextTurn = 2;
   const agentConversations: AgentConversationSummary[] = [{
@@ -720,6 +748,15 @@ export function createMockUiKernelTransport(
   };
   return {
     source: "mock",
+    async prepareWorkspace() {
+      return {
+        status: "ready",
+        phase: "project_ready",
+        workspace_ready: true,
+        restored_project_status: "ready",
+        issue: null,
+      } as const;
+    },
     async loadSnapshot() {
       return copySnapshot(current);
     },
@@ -1770,9 +1807,16 @@ export function createMockUiKernelTransport(
       }
       throw new Error("Mock Agent approval is unavailable.");
     },
+    async getAgentRuntimeDiagnostics() {
+      return structuredClone(agentRuntimeDiagnostics);
+    },
     async retryAgentRuntime() {
+      agentRuntimeDiagnostics = {
+        ...agentRuntimeDiagnostics,
+        status: agentRuntimeDiagnostics.available ? "ready" : "needs_attention",
+      };
       notifyAgent();
-      return { status: "ready" };
+      return structuredClone(agentRuntimeDiagnostics);
     },
     subscribeAgentInvalidated(listener: () => void): Unsubscribe {
       agentListeners.add(listener);
@@ -1781,7 +1825,7 @@ export function createMockUiKernelTransport(
     async loadDomainSurface(surfaceId) {
       const fixtures: Readonly<Record<string, DomainSurfaceData["items"]>> = {
         "rho.environment": [
-          { id: "package:rho", title: "rho", subtitle: "0.4.1-dev.11", status: "installed", detail: "Project library" },
+          { id: "package:rho", title: "rho", subtitle: "0.4.1-dev.12", status: "installed", detail: "Project library" },
           { id: "package:aisdk", title: "aisdk", subtitle: "required >= 1.5.0", status: "incompatible", detail: "Installed 1.4.12 in Agent R" },
         ],
         "rho.evidence": [{ id: "claim:1", title: "Analysis uses a fixed seed", subtitle: "analysis.R:1-2", status: "current", detail: "Source-backed evidence claim" }],

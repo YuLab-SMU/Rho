@@ -906,6 +906,28 @@ export interface VibePageExport {
 
 export type AgentMode = "ask" | "plan" | "act";
 
+export interface AgentDependencyDiagnostics {
+  readonly package: string;
+  readonly status: "ready" | "checking" | "missing" | "incompatible_version" | "namespace_load_failed" | "incompatible_api" | "probe_failed" | string;
+  readonly installed_version: string | null;
+  readonly required_version: string;
+  readonly resolved_path: string | null;
+  readonly detail: string | null;
+  readonly remediation: string | null;
+}
+
+export interface AgentRuntimeDiagnostics {
+  readonly available: boolean;
+  readonly status: string;
+  readonly rscript: string | null;
+  readonly r_version: string | null;
+  readonly aisdk_version: string | null;
+  readonly provider_adapters_available: boolean;
+  readonly provider_health: string;
+  readonly dependencies: readonly AgentDependencyDiagnostics[];
+  readonly error: string | null;
+}
+
 export interface AgentConversationSummary {
   readonly conversation_id: string;
   readonly project_root: string;
@@ -1053,8 +1075,24 @@ export interface DomainSurfaceData {
 
 export type Unsubscribe = () => void;
 
+export interface WorkspacePreparationIssue {
+  readonly code: string;
+  readonly title: string;
+  readonly message: string;
+  readonly technical_detail: string | null;
+}
+
+export interface WorkspacePreparation {
+  readonly status: "ready" | "needs_attention";
+  readonly phase: string;
+  readonly workspace_ready: boolean;
+  readonly restored_project_status: string | null;
+  readonly issue: WorkspacePreparationIssue | null;
+}
+
 export interface UiKernelTransport {
   readonly source: UiSnapshotSource;
+  prepareWorkspace(chooseRscript?: boolean): Promise<WorkspacePreparation>;
   loadSnapshot(): Promise<UiKernelSnapshot>;
   setSelection(request: SetUiSelectionRequest): Promise<UiKernelSnapshot>;
   subscribeInvalidated(listener: () => void): Unsubscribe;
@@ -1114,7 +1152,8 @@ export interface UiKernelTransport {
   retryAgentTurn(turnId: string): Promise<RunAgentResponse>;
   cancelAgentTurn(turnId: string): Promise<unknown>;
   respondAgentApproval(request: AgentApprovalDecisionRequest): Promise<unknown>;
-  retryAgentRuntime(): Promise<unknown>;
+  getAgentRuntimeDiagnostics(): Promise<AgentRuntimeDiagnostics>;
+  retryAgentRuntime(): Promise<AgentRuntimeDiagnostics>;
   subscribeAgentInvalidated(listener: () => void): Unsubscribe;
   loadDomainSurface(surfaceId: string): Promise<DomainSurfaceData>;
   retryRun(runId: string): Promise<unknown>;

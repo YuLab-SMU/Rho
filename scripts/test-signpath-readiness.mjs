@@ -14,8 +14,6 @@ function snapshot() {
     security: read("SECURITY.md"),
     owners: read(".github/CODEOWNERS"),
     readme: read("README.md"),
-    frontend: read("desktop/dist/app.js"),
-    html: read("desktop/dist/index.html"),
     updateBackend: read("desktop/src-tauri/src/update.rs"),
     desktopBackend: read("desktop/src-tauri/src/main.rs"),
     tauriConfig: read("desktop/src-tauri/tauri.conf.json"),
@@ -97,22 +95,6 @@ function validate(value) {
   assert.match(value.readme, /move \*\*Rho\.app\*\* from \*\*Applications\*\* to the\s+Trash/i);
   assert.match(value.readme, /Uninstalling the application does not automatically delete project files/i);
 
-  assert.match(value.html, /data-menu-command="check-updates"/);
-  assert.match(value.html, /id="updateInstall"[^>]*>Install and Restart/);
-  assert.match(value.frontend, /"check-updates": \(\) => openUpdateDialog\(\)/);
-  assert.match(value.frontend, /function openUpdateDialog\(\) \{\s*(?:void )?checkForUpdates\(\);\s*\}/);
-  assert.match(value.frontend, /\$\("#updateRetry"\)\.addEventListener\("click", \(\) => checkForUpdates\(\)\)/);
-  assert.match(value.frontend, /function installNativeUpdate\(\)/);
-  assert.match(value.frontend, /invoke\("install_native_update", \{ expectedVersion \}\)/);
-  assert.match(value.frontend, /Browser preview cannot install updates/);
-  assert.match(value.frontend, /UPDATE_STALE/);
-  assert.doesNotMatch(value.frontend, /updateView/);
-  assert.equal(occurrences(value.frontend, /invoke\("check_for_updates"\)/g), 2, "manual retry and readiness-bound automatic update paths are required");
-  assert.match(value.frontend, /runAutomaticUpdateAfterStartup/);
-  assert.doesNotMatch(value.frontend, /setInterval[\s\S]{0,120}checkForUpdates/);
-  assert.doesNotMatch(value.frontend, /checkForUpdates\(\{\s*background\s*:/);
-  assert.doesNotMatch(value.frontend, /rho\.update\.(?:lastCheck|dismissed)/);
-  assert.doesNotMatch(value.frontend, /async function checkForUpdates\([^)]*background/);
   assert.match(value.updateBackend, /pub const WEBSITE_URL: &str = "https:\/\/yulab-smu\.top\/Rho\/"/);
   assert.match(value.updateBackend, /NATIVE_UPDATE_STABLE_ENDPOINT/);
   assert.match(value.updateBackend, /NATIVE_UPDATE_DEVELOPMENT_ENDPOINT/);
@@ -196,12 +178,6 @@ if (process.argv.includes("--self-test")) {
   expectRejected(current, "missing attribution", (value) => {
     value.signing = value.signing.replace("Free code signing provided by [SignPath.io](https://about.signpath.io)", "Signing provider attribution unavailable");
   }, /Free code signing/);
-  expectRejected(current, "periodic update scheduler", (value) => {
-    value.frontend += "\nsetInterval(() => checkForUpdates(), 1000);\n";
-  }, /setInterval/);
-  expectRejected(current, "missing manual update entry", (value) => {
-    value.frontend = value.frontend.replace('"check-updates": () => openUpdateDialog()', '"check-updates": () => {}');
-  }, /check-updates/);
   expectRejected(current, "missing policy owner", (value) => {
     value.owners = value.owners.replaceAll("@xiayh17", "");
   }, /xiayh17/);

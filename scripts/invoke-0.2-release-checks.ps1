@@ -179,7 +179,7 @@ try {
 
     Invoke-RecordedCheck "Rust formatting" "cargo.exe" @("fmt", "--all", "--", "--check")
     Invoke-RecordedCheck "Rust workspace tests" "cargo.exe" @("test", "--workspace")
-    Invoke-RecordedCheck "frontend JavaScript syntax" "node.exe" @("--check", "desktop/dist/app.js")
+    Invoke-RecordedCheck "Surface Runtime frontend" "npm.cmd" @("--prefix", "desktop", "run", "rsr:check")
     Invoke-RecordedCheck "rho.bridge tests" "Rscript.exe" @("-e", "testthat::test_local('r/rho.bridge', reporter = 'summary')")
     Invoke-RecordedCheck "rho.agent tests" "Rscript.exe" @("-e", "testthat::test_local('r/rho.agent', reporter = 'summary')")
 

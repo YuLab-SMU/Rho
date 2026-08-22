@@ -718,6 +718,58 @@ describe("UI Kernel transport and external store", () => {
     stop();
   });
 
+  it("prepares the Tauri workspace before any Surface snapshot is requested", async () => {
+    const calls: string[] = [];
+    const transport = createTauriUiKernelTransport(async <T,>(command: string) => {
+      calls.push(command);
+      if (command === "startup_bootstrap") {
+        return { phase: "runtime_ready", issue: null } as T;
+      }
+      if (command === "workspace_start") return { status: "idle" } as T;
+      if (command === "agent_runtime_retry") return { available: false } as T;
+      if (command === "project_restore_session") return { status: "ready" } as T;
+      throw new Error(`unexpected command ${command}`);
+    }, async () => () => undefined);
+
+    await expect(transport.prepareWorkspace()).resolves.toEqual({
+      status: "ready",
+      phase: "project_ready",
+      workspace_ready: true,
+      restored_project_status: "ready",
+      issue: null,
+    });
+    expect(calls).toEqual([
+      "startup_bootstrap",
+      "workspace_start",
+      "agent_runtime_retry",
+      "project_restore_session",
+    ]);
+  });
+
+  it("keeps startup recovery actionable and never enters an unreconciled workspace", async () => {
+    const calls: string[] = [];
+    const transport = createTauriUiKernelTransport(async <T,>(command: string) => {
+      calls.push(command);
+      if (command === "startup_choose_rscript") {
+        return {
+          phase: "needs_attention",
+          issue: {
+            code: "R_NOT_FOUND",
+            title: "R was not found",
+            message: "Choose Rscript manually.",
+            technical_detail: "No compatible executable was resolved.",
+          },
+        } as T;
+      }
+      throw new Error(`unexpected command ${command}`);
+    }, async () => () => undefined);
+
+    const result = await transport.prepareWorkspace(true);
+    expect(result.status).toBe("needs_attention");
+    expect(result.issue?.code).toBe("R_NOT_FOUND");
+    expect(calls).toEqual(["startup_choose_rscript"]);
+  });
+
   it("keeps the mock Surface command lane in lockstep with instance semantics", async () => {
     const transport = createMockUiKernelTransport();
     const store = new SurfaceExternalStore(transport);

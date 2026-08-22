@@ -3,7 +3,6 @@
 /node_modules/
 /desktop/node_modules/
 /desktop/ui/node_modules/
-/desktop/rsr-dist/
 /.rho/
 /.Rproj.user/
 .Rhistory

@@ -62,12 +62,11 @@ function validateContract(snapshot) {
 
   for (const marker of [
     "vendor/jet/LICENSE",
-    "desktop/dist/vendor/lucide/LICENSE",
-    "desktop/dist/vendor/monaco/LICENSE",
-    "LICENSE.dompurify.txt",
-    "LICENSE.marked.txt",
-    "LICENSE.papaparse.txt",
-    "LICENSE.katex.txt",
+    "desktop/legal/licenses/monaco/LICENSE",
+    "desktop/legal/licenses/dompurify/LICENSE",
+    "desktop/legal/licenses/marked/LICENSE",
+    "desktop/legal/licenses/papaparse/LICENSE",
+    "desktop/legal/licenses/katex/LICENSE",
     "runtime/ark.json",
     "Wasmtime / Cranelift",
     "WAT parser",
@@ -97,8 +96,6 @@ function validateContract(snapshot) {
   assert.match(snapshot.contract, /does not revoke[\s\S]*MIT/u);
 
   assert.deepEqual(snapshot.missingVendorNotices, [], "every checked-in vendor payload must carry its reviewed notice");
-  assert.match(snapshot.monacoSync, /monaco-editor", "LICENSE/u);
-  assert.match(snapshot.viewerSync, /katex\/LICENSE/u);
 }
 
 function clone(value) {
@@ -117,13 +114,11 @@ function runNegativeSelfTests() {
     packageLocalLicenses: [],
     readme: "GNU Affero General Public License version 3 only. Commercial use is permitted. historical Rho copies remain valid. third-party components retain their own licenses. Rho does not offer a proprietary dual license.",
     contributing: "the same `AGPL-3.0-only` terms; you have the right to provide it; does not transfer your copyright without a written assignment",
-    licensing: "Third-party work is not relicensed. historical Rho versions are not revoked. vendor/jet/LICENSE desktop/dist/vendor/lucide/LICENSE desktop/dist/vendor/monaco/LICENSE LICENSE.dompurify.txt LICENSE.marked.txt LICENSE.papaparse.txt LICENSE.katex.txt runtime/ark.json Wasmtime / Cranelift wasmtime 38.0.4 Apache-2.0 WITH LLVM-exception WAT parser test-only `wat 1.257.1` excluded from production dependencies",
+    licensing: "Third-party work is not relicensed. historical Rho versions are not revoked. vendor/jet/LICENSE desktop/legal/licenses/monaco/LICENSE desktop/legal/licenses/dompurify/LICENSE desktop/legal/licenses/marked/LICENSE desktop/legal/licenses/papaparse/LICENSE desktop/legal/licenses/katex/LICENSE runtime/ark.json Wasmtime / Cranelift wasmtime 38.0.4 Apache-2.0 WITH LLVM-exception WAT parser test-only `wat 1.257.1` excluded from production dependencies",
     cargoManifest: 'wasmtime = { version = "=38.0.4", default-features = false, features = ["cranelift", "runtime", "std"] }\nwat = { version = "=1.257.1", default-features = false }',
     cargoLock: 'name = "wasmtime"\nversion = "38.0.4"\nname = "wat"\nversion = "1.257.1"',
     contract: "Both named contributors Emberwhirl and xuzhougeng supplied the required grants, satisfying this external merge gate; this does not revoke MIT",
     missingVendorNotices: [],
-    monacoSync: 'monaco-editor", "LICENSE',
-    viewerSync: "katex/LICENSE",
   };
   validateContract(fixture);
 
@@ -138,7 +133,7 @@ function runNegativeSelfTests() {
     ["widened Wasmtime features", (value) => { value.cargoManifest = value.cargoManifest.replace('"std"]', '"std", "component-model"]'); }],
     ["missing contribution permission", (value) => { value.contributing = value.contributing.replace("right to provide it", ""); }],
     ["missing contributor gate evidence", (value) => { value.contract = value.contract.replace("satisfying this external merge gate", "review pending"); }],
-    ["missing vendored notice", (value) => { value.missingVendorNotices.push("desktop/dist/vendor/monaco/LICENSE"); }],
+    ["missing vendored notice", (value) => { value.missingVendorNotices.push("desktop/legal/licenses/monaco/LICENSE"); }],
   ];
 
   for (const [name, mutate] of cases) {
@@ -184,12 +179,11 @@ async function loadRepositorySnapshot() {
   const packageLocalLicenseCandidates = ["r/rho.bridge/LICENSE", "r/rho.agent/LICENSE"];
   const vendorNoticePaths = [
     "vendor/jet/LICENSE",
-    "desktop/dist/vendor/lucide/LICENSE",
-    "desktop/dist/vendor/monaco/LICENSE",
-    "desktop/dist/vendor/viewer/LICENSE.dompurify.txt",
-    "desktop/dist/vendor/viewer/LICENSE.marked.txt",
-    "desktop/dist/vendor/viewer/LICENSE.papaparse.txt",
-    "desktop/dist/vendor/viewer/LICENSE.katex.txt",
+    "desktop/legal/licenses/monaco/LICENSE",
+    "desktop/legal/licenses/dompurify/LICENSE",
+    "desktop/legal/licenses/marked/LICENSE",
+    "desktop/legal/licenses/papaparse/LICENSE",
+    "desktop/legal/licenses/katex/LICENSE",
   ];
 
   return {
@@ -215,8 +209,6 @@ async function loadRepositorySnapshot() {
     missingVendorNotices: (await Promise.all(vendorNoticePaths.map(async (entry) => [entry, await exists(entry)])))
       .filter(([, present]) => !present)
       .map(([entry]) => entry),
-    monacoSync: await read("scripts/sync-monaco-assets.mjs"),
-    viewerSync: await read("scripts/sync-viewer-assets.mjs"),
   };
 }
 

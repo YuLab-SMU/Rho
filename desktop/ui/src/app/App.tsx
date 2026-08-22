@@ -22,6 +22,7 @@ import type {
   AgentConversationSummary,
   AgentFileMutationResponse,
   AgentMode,
+  AgentRuntimeDiagnostics,
   AgentTurnDetail,
   AgentTurnSummary,
   CheckEvidence,
@@ -49,8 +50,10 @@ import type {
   SurfaceFactoryRegistration,
   SurfaceInstanceRequest,
   UiKernelTransport,
+  WorkspacePreparation,
 } from "../transport";
 import { VibePageEditor } from "./VibePageEditor";
+import { SourceEditor } from "./SourceEditor";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 
@@ -65,6 +68,88 @@ const defaultStudioStore = new StudioExternalStore(defaultTransport);
 const defaultRuntimeStore = new RuntimeExternalStore(defaultTransport);
 const defaultResourceStore = new ResourceExternalStore(defaultTransport);
 const defaultProfileStore = new UiProfileExternalStore(defaultTransport);
+
+type PreparationState =
+  | { readonly status: "preparing" }
+  | { readonly status: "ready"; readonly result: WorkspacePreparation }
+  | { readonly status: "needs_attention"; readonly result: WorkspacePreparation };
+
+export function App({ transport }: AppProps) {
+  const resolvedTransport = transport ?? defaultTransport;
+  const [preparation, setPreparation] = useState<PreparationState>({ status: "preparing" });
+  const generation = useRef(0);
+  const prepare = useCallback((chooseRscript = false) => {
+    const currentGeneration = generation.current + 1;
+    generation.current = currentGeneration;
+    setPreparation({ status: "preparing" });
+    void resolvedTransport.prepareWorkspace(chooseRscript).then((result) => {
+      if (generation.current !== currentGeneration) return;
+      setPreparation(result.status === "ready"
+        ? { status: "ready", result }
+        : { status: "needs_attention", result });
+    }).catch((error: unknown) => {
+      if (generation.current !== currentGeneration) return;
+      const detail = error instanceof Error ? error.message : String(error);
+      setPreparation({
+        status: "needs_attention",
+        result: {
+          status: "needs_attention",
+          phase: "preparation_failed",
+          workspace_ready: false,
+          restored_project_status: null,
+          issue: {
+            code: "PREPARATION_FAILED",
+            title: "Rho could not prepare the workspace",
+            message: "Retry startup or select a valid Rscript executable.",
+            technical_detail: detail.slice(0, 2_048),
+          },
+        },
+      });
+    });
+  }, [resolvedTransport]);
+  useEffect(() => {
+    prepare();
+    return () => { generation.current += 1; };
+  }, [prepare]);
+  useEffect(() => {
+    if (preparation.status !== "ready") {
+      document.documentElement.dataset.rsrReady = "false";
+    }
+  }, [preparation.status]);
+
+  if (preparation.status === "preparing") {
+    return (
+      <main className="rho-preparation-shell" aria-busy="true">
+        <section className="rho-preparation-card">
+          <div className="rho-mark" aria-label="Rho"><span className="rho-mark-glyph">R</span><span>Rho</span></div>
+          <span className="rho-preparation-spinner" aria-hidden="true" />
+          <div><strong>Preparing the project runtime</strong><p>Starting Workspace R, restoring the project, and reconciling its Surfaces…</p></div>
+        </section>
+      </main>
+    );
+  }
+  if (preparation.status === "needs_attention") {
+    const issue = preparation.result.issue;
+    return (
+      <main className="rho-preparation-shell">
+        <section className="rho-preparation-card rho-preparation-issue" role="alert">
+          <div className="rho-mark" aria-label="Rho"><span className="rho-mark-glyph">R</span><span>Rho</span></div>
+          <div>
+            <span className="rho-eyebrow">{issue?.code ?? preparation.result.phase}</span>
+            <h1>{issue?.title ?? "The project runtime needs attention"}</h1>
+            <p>{issue?.message ?? "Retry startup to continue."}</p>
+            {issue?.technical_detail != null && <details><summary>Technical details</summary><pre>{issue.technical_detail}</pre></details>}
+            <div className="rho-preparation-actions">
+              <button type="button" onClick={() => prepare()}>Retry</button>
+              <button type="button" onClick={() => prepare(true)}>Choose Rscript</button>
+            </div>
+          </div>
+        </section>
+      </main>
+    );
+  }
+  return <WorkbenchApp transport={resolvedTransport} />;
+}
 
 function instanceRequest(
   instance: SurfaceInstance,
@@ -499,24 +584,19 @@ function FileResourceView({
       {descriptor?.status === "unsupported" && <div className="rho-resource-placeholder">No compatible provider claims this Resource.</div>}
       {error != null && <p className="rho-resource-error" role="alert">{error}</p>}
       {source && mode === "source" && descriptor?.status === "ready" && (
-        <textarea
-          className="rho-source-editor"
-          aria-label={`Source ${binding?.resource_id ?? instance.instance_id}`}
+        <SourceEditor
+          ariaLabel={`Source ${binding?.resource_id ?? instance.instance_id}`}
           value={editorValue}
-          onChange={(event) => { setEditorValue(event.target.value); setLocalDirty(true); }}
-          onBlur={(event) => {
+          viewState={{
+            cursor_start: view.cursorStart,
+            cursor_end: view.cursorEnd,
+            scroll_top: view.scrollTop,
+          }}
+          onChange={(value) => { setEditorValue(value); setLocalDirty(true); }}
+          onBlur={(nextView) => {
             void commitDraft();
-            void persistViewState({
-              cursor_start: event.currentTarget.selectionStart,
-              cursor_end: event.currentTarget.selectionEnd,
-              scroll_top: event.currentTarget.scrollTop,
-            }).catch(reportError);
+            void persistViewState(nextView).catch(reportError);
           }}
-          ref={(element) => {
-            if (element == null || document.activeElement === element) return;
-            if (Math.abs(element.scrollTop - view.scrollTop) > 1) element.scrollTop = view.scrollTop;
-          }}
-          spellCheck={false}
         />
       )}
       {source && mode === "diff" && (
@@ -884,6 +964,7 @@ function AgentSurfaceView({
   const [busy, setBusy] = useState(false);
   const [fileUndo, setFileUndo] = useState<AgentFileUndoState | null>(null);
   const [loading, setLoading] = useState(true);
+  const [runtimeDiagnostics, setRuntimeDiagnostics] = useState<AgentRuntimeDiagnostics | null>(null);
 
   const refresh = useCallback(async (preferredConversationId = viewRef.current.conversation_id) => {
     const nextConversations = await transport.listAgentConversations(50);
@@ -928,6 +1009,14 @@ function AgentSurfaceView({
     const unsubscribe = transport.subscribeAgentInvalidated(() => void load());
     return () => { active = false; unsubscribe(); };
   }, [refresh, reportError, transport]);
+
+  useEffect(() => {
+    let active = true;
+    void transport.getAgentRuntimeDiagnostics()
+      .then((diagnostics) => { if (active) setRuntimeDiagnostics(diagnostics); })
+      .catch((error: unknown) => { if (active) reportError(error); });
+    return () => { active = false; };
+  }, [health?.state, reportError, transport]);
 
   const commitView = (next: AgentSurfaceViewState, durable = true) => {
     viewRef.current = next;
@@ -979,6 +1068,26 @@ function AgentSurfaceView({
   };
   const displayMode = instance.mode_id ?? "conversation";
   const activeTurn = turns.find((turn) => turn.status === "running" || turn.status === "waiting");
+  const diagnosticsText = runtimeDiagnostics == null ? "Agent runtime diagnostics are loading." : [
+    "R",
+    `  executable: ${runtimeDiagnostics.rscript ?? "not resolved"}`,
+    `  version:    ${runtimeDiagnostics.r_version ?? "unknown"}`,
+    "",
+    "Agent runtime",
+    ...runtimeDiagnostics.dependencies.flatMap((dependency) => [
+      `  ${dependency.package}:`,
+      `    installed: ${dependency.installed_version ?? "missing"}`,
+      `    required:  >= ${dependency.required_version}`,
+      `    status:    ${dependency.status}`,
+      `    path:      ${dependency.resolved_path ?? "not resolved"}`,
+      ...(dependency.detail == null ? [] : [`    detail:    ${dependency.detail}`]),
+      ...(dependency.remediation == null ? [] : [`    fix:       ${dependency.remediation}`]),
+    ]),
+    "",
+    `Provider adapters: ${runtimeDiagnostics.provider_adapters_available ? "ready" : "unavailable"}`,
+    `Provider health:   ${runtimeDiagnostics.provider_health}`,
+    "Workspace R remains independent and available when healthy.",
+  ].join("\n");
 
   return (
     <section className={`rho-agent-surface rho-agent-${displayMode}`}>
@@ -986,10 +1095,17 @@ function AgentSurfaceView({
         <div className="rho-agent-degraded" role="status">
           <strong>{health?.label ?? "Agent runtime unavailable"}</strong>
           {health?.detail != null && <p>{health.detail}</p>}
+          <details className="rho-agent-runtime-diagnostics">
+            <summary>Dependency details</summary>
+            <pre>{diagnosticsText}</pre>
+            <button type="button" onClick={() => {
+              void navigator.clipboard.writeText(diagnosticsText).catch(reportError);
+            }}>Copy diagnostics</button>
+          </details>
           <button type="button" disabled={busy} onClick={() => {
             setBusy(true);
             void transport.retryAgentRuntime()
-              .then(() => refresh())
+              .then((diagnostics) => { setRuntimeDiagnostics(diagnostics); return refresh(); })
               .catch(reportError)
               .finally(() => setBusy(false));
           }}>Retry Agent runtime</button>
@@ -1595,7 +1711,7 @@ function NodeOutline({ node, commit }: { readonly node: LayoutNode; readonly com
   );
 }
 
-export function App({ transport }: AppProps) {
+function WorkbenchApp({ transport }: AppProps) {
   const [actionError, setActionError] = useState<string | null>(null);
   const [resourcePath, setResourcePath] = useState("analysis.R");
   const [commandQuery, setCommandQuery] = useState("");

@@ -140,7 +140,7 @@ pub enum StoreError {
     #[error("migration rejected: {message}")]
     MigrationRejected {
         message: String,
-        outcome: MigrationOutcome,
+        outcome: Box<MigrationOutcome>,
     },
 }
 
@@ -223,8 +223,8 @@ impl MigrationOutcome {
         backup_path: Option<String>,
         counts: MigrationRecordCounts,
         reason_code: &'static str,
-    ) -> Self {
-        Self {
+    ) -> Box<Self> {
+        Box::new(Self {
             status: MigrationStatus::Rejected,
             from_schema_version,
             to_schema_version: None,
@@ -233,7 +233,7 @@ impl MigrationOutcome {
             legacy_unscoped_count: counts.legacy_unscoped,
             rejected_count: counts.rejected,
             reason_code: Some(reason_code.to_string()),
-        }
+        })
     }
 }
 

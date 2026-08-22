@@ -157,12 +157,11 @@ export function validateCompatibilityWorkflow(text) {
     '"scripts/test-tauri-command-inventory.mjs"',
     '"scripts/test-extension-run-history-contract.mjs"',
     '"scripts/test-extension-p1-3-contract.mjs"',
-    '"scripts/test-extension-phase-1-acceptance.mjs"',
     '"scripts/test-extension-phase-2-host-contract.mjs"',
     '"scripts/test-extension-p2-2-broker-contract.mjs"',
-    '"scripts/test-workspace-plugin-ui.mjs"',
-    '"desktop/dist/app.js"',
-    '"desktop/dist/index.html"',
+    '"scripts/test-rsr-*.mjs"',
+    '"desktop/ui/**"',
+    '"desktop/dist/**"',
     '"desktop/package.json"',
     '"desktop/package-lock.json"',
     '"NEWS.md"',
@@ -201,13 +200,11 @@ export function validateCompatibilityWorkflow(text) {
     "node scripts/test-rust-msrv-contract.mjs",
     "node scripts/test-tauri-command-inventory.mjs --test",
     "node scripts/test-tauri-command-inventory.mjs",
-    "node scripts/test-extension-phase-1-acceptance.mjs --test",
-    "node scripts/test-extension-phase-1-acceptance.mjs",
     "node scripts/test-extension-phase-2-host-contract.mjs --test",
     "node scripts/test-extension-phase-2-host-contract.mjs",
     "node scripts/test-extension-p2-2-broker-contract.mjs --test",
     "node scripts/test-extension-p2-2-broker-contract.mjs",
-    "node scripts/test-workspace-plugin-ui.mjs",
+    "npm --prefix desktop run rsr:check",
     "cargo check --workspace --all-targets --locked",
     "cargo test --workspace --locked --no-fail-fast",
   ]) {
@@ -300,12 +297,11 @@ export function validateFastWorkflow(text) {
     '"scripts/test-tauri-command-inventory.mjs"',
     '"scripts/test-extension-run-history-contract.mjs"',
     '"scripts/test-extension-p1-3-contract.mjs"',
-    '"scripts/test-extension-phase-1-acceptance.mjs"',
     '"scripts/test-extension-phase-2-host-contract.mjs"',
     '"scripts/test-extension-p2-2-broker-contract.mjs"',
-    '"scripts/test-workspace-plugin-ui.mjs"',
-    '"desktop/dist/app.js"',
-    '"desktop/dist/index.html"',
+    '"scripts/test-rsr-*.mjs"',
+    '"desktop/ui/**"',
+    '"desktop/dist/**"',
     '"desktop/package.json"',
     '"desktop/package-lock.json"',
     '"NEWS.md"',
@@ -325,13 +321,11 @@ export function validateFastWorkflow(text) {
     "node scripts/test-extension-run-history-contract.mjs",
     "node scripts/test-extension-p1-3-contract.mjs --test",
     "node scripts/test-extension-p1-3-contract.mjs",
-    "node scripts/test-extension-phase-1-acceptance.mjs --test",
-    "node scripts/test-extension-phase-1-acceptance.mjs",
     "node scripts/test-extension-phase-2-host-contract.mjs --test",
     "node scripts/test-extension-phase-2-host-contract.mjs",
     "node scripts/test-extension-p2-2-broker-contract.mjs --test",
     "node scripts/test-extension-p2-2-broker-contract.mjs",
-    "node scripts/test-workspace-plugin-ui.mjs",
+    "npm --prefix desktop run rsr:check",
     "cargo fmt --all -- --check",
     "cargo check --workspace --all-targets --locked",
     "cargo test --workspace --locked --no-fail-fast",
@@ -405,8 +399,8 @@ on:
       - ".cargo/**"
       - "crates/**/*.rs"
       - "desktop/src-tauri/**"
-      - "desktop/dist/app.js"
-      - "desktop/dist/index.html"
+      - "desktop/ui/**"
+      - "desktop/dist/**"
       - "desktop/package.json"
       - "desktop/package-lock.json"
       - "NEWS.md"
@@ -422,10 +416,9 @@ on:
       - "scripts/test-tauri-command-inventory.mjs"
       - "scripts/test-extension-run-history-contract.mjs"
       - "scripts/test-extension-p1-3-contract.mjs"
-      - "scripts/test-extension-phase-1-acceptance.mjs"
       - "scripts/test-extension-phase-2-host-contract.mjs"
       - "scripts/test-extension-p2-2-broker-contract.mjs"
-      - "scripts/test-workspace-plugin-ui.mjs"
+      - "scripts/test-rsr-*.mjs"
   pull_request:
     branches: [main]
     types: [opened, reopened, synchronize, ready_for_review]
@@ -436,8 +429,8 @@ on:
       - ".cargo/**"
       - "crates/**/*.rs"
       - "desktop/src-tauri/**"
-      - "desktop/dist/app.js"
-      - "desktop/dist/index.html"
+      - "desktop/ui/**"
+      - "desktop/dist/**"
       - "desktop/package.json"
       - "desktop/package-lock.json"
       - "NEWS.md"
@@ -453,10 +446,9 @@ on:
       - "scripts/test-tauri-command-inventory.mjs"
       - "scripts/test-extension-run-history-contract.mjs"
       - "scripts/test-extension-p1-3-contract.mjs"
-      - "scripts/test-extension-phase-1-acceptance.mjs"
       - "scripts/test-extension-phase-2-host-contract.mjs"
       - "scripts/test-extension-p2-2-broker-contract.mjs"
-      - "scripts/test-workspace-plugin-ui.mjs"
+      - "scripts/test-rsr-*.mjs"
   workflow_dispatch:
 permissions:
   contents: read
@@ -525,13 +517,11 @@ ${entries}
           node scripts/test-rust-msrv-contract.mjs
           node scripts/test-tauri-command-inventory.mjs --test
           node scripts/test-tauri-command-inventory.mjs
-          node scripts/test-extension-phase-1-acceptance.mjs --test
-          node scripts/test-extension-phase-1-acceptance.mjs
           node scripts/test-extension-phase-2-host-contract.mjs --test
           node scripts/test-extension-phase-2-host-contract.mjs
           node scripts/test-extension-p2-2-broker-contract.mjs --test
           node scripts/test-extension-p2-2-broker-contract.mjs
-          node scripts/test-workspace-plugin-ui.mjs
+          npm --prefix desktop run rsr:check
           cargo check --workspace --all-targets --locked
           cargo test --workspace --locked --no-fail-fast
       - name: Build, install, smoke and remove unsigned Windows app
@@ -568,8 +558,8 @@ on:
       - ".cargo/**"
       - "crates/**/*.rs"
       - "desktop/src-tauri/**"
-      - "desktop/dist/app.js"
-      - "desktop/dist/index.html"
+      - "desktop/ui/**"
+      - "desktop/dist/**"
       - "desktop/package.json"
       - "desktop/package-lock.json"
       - "NEWS.md"
@@ -584,10 +574,9 @@ on:
       - "scripts/test-tauri-command-inventory.mjs"
       - "scripts/test-extension-run-history-contract.mjs"
       - "scripts/test-extension-p1-3-contract.mjs"
-      - "scripts/test-extension-phase-1-acceptance.mjs"
       - "scripts/test-extension-phase-2-host-contract.mjs"
       - "scripts/test-extension-p2-2-broker-contract.mjs"
-      - "scripts/test-workspace-plugin-ui.mjs"
+      - "scripts/test-rsr-*.mjs"
 permissions:
   contents: read
 concurrency:
@@ -626,13 +615,11 @@ jobs:
           node scripts/test-extension-run-history-contract.mjs
           node scripts/test-extension-p1-3-contract.mjs --test
           node scripts/test-extension-p1-3-contract.mjs
-          node scripts/test-extension-phase-1-acceptance.mjs --test
-          node scripts/test-extension-phase-1-acceptance.mjs
           node scripts/test-extension-phase-2-host-contract.mjs --test
           node scripts/test-extension-phase-2-host-contract.mjs
           node scripts/test-extension-p2-2-broker-contract.mjs --test
           node scripts/test-extension-p2-2-broker-contract.mjs
-          node scripts/test-workspace-plugin-ui.mjs
+          npm --prefix desktop run rsr:check
           cargo fmt --all -- --check
           cargo check --workspace --all-targets --locked
           cargo test --workspace --locked --no-fail-fast

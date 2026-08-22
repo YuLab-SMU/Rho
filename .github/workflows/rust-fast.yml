@@ -11,8 +11,9 @@ on:
       - ".cargo/**"
       - "crates/**/*.rs"
       - "desktop/src-tauri/**"
-      - "desktop/dist/app.js"
-      - "desktop/dist/index.html"
+      - "desktop/ui/**"
+      - "desktop/dist/**"
+      - "desktop/legal/**"
       - "desktop/package.json"
       - "desktop/package-lock.json"
       - "NEWS.md"
@@ -29,7 +30,6 @@ on:
       - "scripts/test-license-contract.mjs"
       - "scripts/test-extension-run-history-contract.mjs"
       - "scripts/test-extension-p1-3-contract.mjs"
-      - "scripts/test-extension-phase-1-acceptance.mjs"
       - "scripts/test-extension-phase-2-host-contract.mjs"
       - "scripts/test-extension-p2-2-broker-contract.mjs"
       - "scripts/test-extension-p2-3-contribution-contract.mjs"
@@ -48,7 +48,7 @@ on:
       - "scripts/test-extension-p2-4-trusted-rollback-contract.mjs"
       - "scripts/test-extension-p2-4-recovery-closeout-contract.mjs"
       - "scripts/test-extension-phase-2-final-contract.mjs"
-      - "scripts/test-workspace-plugin-ui.mjs"
+      - "scripts/test-rsr-*.mjs"
       - "LICENSE"
       - "LICENSES.md"
 
@@ -79,6 +79,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      - name: Install locked frontend dependencies
+        run: npm ci --prefix desktop
 
       - name: Install Linux desktop build dependencies
         shell: bash
@@ -129,8 +132,6 @@ jobs:
           node scripts/test-extension-run-history-contract.mjs
           node scripts/test-extension-p1-3-contract.mjs --test
           node scripts/test-extension-p1-3-contract.mjs
-          node scripts/test-extension-phase-1-acceptance.mjs --test
-          node scripts/test-extension-phase-1-acceptance.mjs
           node scripts/test-extension-phase-2-host-contract.mjs --test
           node scripts/test-extension-phase-2-host-contract.mjs
           node scripts/test-extension-p2-2-broker-contract.mjs --test
@@ -167,7 +168,7 @@ jobs:
           node scripts/test-extension-p2-4-recovery-closeout-contract.mjs
           node scripts/test-extension-phase-2-final-contract.mjs --test
           node scripts/test-extension-phase-2-final-contract.mjs
-          node scripts/test-workspace-plugin-ui.mjs
+          npm --prefix desktop run rsr:check
 
       - name: Check formatting
         run: cargo fmt --all -- --check

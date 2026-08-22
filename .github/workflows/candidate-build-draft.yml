@@ -160,7 +160,8 @@ jobs:
           cargo test --workspace --locked --no-fail-fast
           Rscript -e "testthat::test_local('r/rho.bridge', reporter = 'summary')"
           Rscript -e "testthat::test_local('r/rho.agent', reporter = 'summary')"
-          node --check desktop/dist/app.js
+          npm ci --prefix desktop
+          npm --prefix desktop run rsr:check
           Get-ChildItem -LiteralPath scripts -Filter "test-*.mjs" | Sort-Object Name | ForEach-Object {
             & node $_.FullName
             if ($LASTEXITCODE -ne 0) { throw "Failed deterministic test: $($_.Name)" }
@@ -984,7 +985,8 @@ jobs:
           cargo test --workspace --locked --no-fail-fast
           Rscript -e "testthat::test_local('r/rho.bridge', reporter = 'summary')"
           Rscript -e "testthat::test_local('r/rho.agent', reporter = 'summary')"
-          node --check desktop/dist/app.js
+          npm ci --prefix desktop
+          npm --prefix desktop run rsr:check
           for test_script in scripts/test-*.mjs; do node "$test_script"; done
 
       - name: Import temporary Developer ID credentials
@@ -1508,7 +1510,8 @@ jobs:
           cargo test --workspace --locked --no-fail-fast
           Rscript -e "testthat::test_local('r/rho.bridge', reporter = 'summary')"
           Rscript -e "testthat::test_local('r/rho.agent', reporter = 'summary')"
-          node --check desktop/dist/app.js
+          npm ci --prefix desktop
+          npm --prefix desktop run rsr:check
           for test_script in scripts/test-*.mjs; do node "$test_script"; done
 
       - name: Build AppRun-patched and final-signed Linux AppImage

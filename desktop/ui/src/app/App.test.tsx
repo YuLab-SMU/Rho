@@ -49,6 +49,13 @@ describe("Studio foundation app", () => {
     expect(container.querySelectorAll(".rho-resize-handle")).toHaveLength(2);
     expect(container.querySelectorAll(".rho-inventory-item")).toHaveLength(4);
     expect(container.querySelector("[data-surface-id='rho.agent']")?.textContent).toContain("Project direction");
+    const agent = container.querySelector("[data-surface-id='rho.agent']");
+    expect(agent?.textContent).toContain("aisdk");
+    expect(agent?.textContent).toContain("1.4.12");
+    expect(agent?.textContent).toContain("required:  >= 1.5.0");
+    expect(agent?.textContent).toContain("CRAN currently provides 1.4.12");
+    expect(agent?.textContent).toContain("/project/renv/library/R-4.6/aarch64-apple-darwin/aisdk");
+    expect(agent?.textContent).toContain("Copy diagnostics");
     expect(document.documentElement.dataset.rsrReady).toBe("true");
   });
 

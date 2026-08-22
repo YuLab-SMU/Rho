@@ -1,12 +1,10 @@
 {
   "name": "rho-desktop-frontend",
   "private": true,
-  "version": "0.4.1-dev.11",
-  "description": "Frontend tooling for the current Rho shell and the Rho Surface Runtime",
+  "version": "0.4.1-dev.12",
+  "description": "Frontend tooling for the Rho Surface Runtime",
   "license": "AGPL-3.0-only",
   "scripts": {
-    "sync-monaco": "node ../scripts/sync-monaco-assets.mjs",
-    "sync-viewer": "node ../scripts/sync-viewer-assets.mjs",
     "rsr:dev": "vite --config ui/vite.config.mts",
     "rsr:build": "vite build --config ui/vite.config.mts",
     "rsr:preview": "vite preview --config ui/vite.config.mts",
@@ -16,7 +14,9 @@
     "rsr:test:contract": "node ../scripts/test-rsr-contract.mjs",
     "rsr:test:assets": "node ../scripts/test-rsr-generated-assets.mjs",
     "rsr:test:browser": "node ../scripts/test-rsr-browser-smoke.mjs",
-    "rsr:check": "npm run rsr:typecheck && npm run rsr:lint && npm run rsr:test:contract && npm run rsr:test && npm run rsr:build && npm run rsr:test:assets && npm run rsr:test:browser"
+    "rsr:test:cutover": "node ../scripts/test-rsr-cutover.mjs",
+    "rsr:accept:exact": "node ../scripts/accept-rsr-exact-app.mjs",
+    "rsr:check": "npm run rsr:typecheck && npm run rsr:lint && npm run rsr:test:contract && npm run rsr:test && npm run rsr:build && npm run rsr:test:assets && npm run rsr:test:cutover && npm run rsr:test:browser"
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1",

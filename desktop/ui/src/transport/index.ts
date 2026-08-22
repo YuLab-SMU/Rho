@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
 import { createMockUiKernelTransport } from "./mock";
@@ -6,7 +6,7 @@ import { createTauriUiKernelTransport } from "./tauri";
 import type { UiKernelTransport } from "./types";
 
 export function createUiKernelTransport(): UiKernelTransport {
-  if (window.__TAURI__?.core?.invoke != null) {
+  if (isTauri()) {
     return createTauriUiKernelTransport(invoke, listen);
   }
   return createMockUiKernelTransport(window.location.search);
@@ -34,6 +34,8 @@ export type {
   AgentFileMutationResponse,
   AgentFileUndoRequest,
   AgentConversationSummary,
+  AgentDependencyDiagnostics,
+  AgentRuntimeDiagnostics,
   AgentMode,
   AgentTurnDetail,
   AgentTurnEvent,
@@ -121,4 +123,6 @@ export type {
   UiKernelSnapshot,
   UiKernelTransport,
   UiSelection,
+  WorkspacePreparation,
+  WorkspacePreparationIssue,
 } from "./types";

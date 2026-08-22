@@ -12,11 +12,11 @@ on:
       - "desktop/src-tauri/**"
       - "r/rho.agent/R/aisdk_adapter.R"
       - "r/rho.bridge/**"
-      - "desktop/dist/app.js"
-      - "desktop/dist/index.html"
+      - "desktop/ui/**"
+      - "desktop/dist/**"
+      - "desktop/legal/**"
       - "desktop/package.json"
       - "desktop/package-lock.json"
-      - "desktop/dist/styles.css"
       - "LICENSE"
       - "LICENSES.md"
       - "PRIVACY.md"
@@ -50,7 +50,6 @@ on:
       - "scripts/test-tauri-command-inventory.mjs"
       - "scripts/test-extension-run-history-contract.mjs"
       - "scripts/test-extension-p1-3-contract.mjs"
-      - "scripts/test-extension-phase-1-acceptance.mjs"
       - "scripts/test-extension-phase-2-host-contract.mjs"
       - "scripts/test-extension-p2-2-broker-contract.mjs"
       - "scripts/test-extension-p2-3-contribution-contract.mjs"
@@ -69,8 +68,7 @@ on:
       - "scripts/test-extension-p2-4-trusted-rollback-contract.mjs"
       - "scripts/test-extension-p2-4-recovery-closeout-contract.mjs"
       - "scripts/test-extension-phase-2-final-contract.mjs"
-      - "scripts/test-workspace-plugin-ui.mjs"
-      - "scripts/test-installed-license-surface.mjs"
+      - "scripts/test-rsr-*.mjs"
       - "scripts/test-signpath-readiness.mjs"
       - "scripts/test-signpath-free-trial-smoke.mjs"
       - "scripts/test-signpath-candidate-workflow.mjs"
@@ -113,11 +111,11 @@ on:
       - "desktop/src-tauri/**"
       - "r/rho.agent/R/aisdk_adapter.R"
       - "r/rho.bridge/**"
-      - "desktop/dist/app.js"
-      - "desktop/dist/index.html"
+      - "desktop/ui/**"
+      - "desktop/dist/**"
+      - "desktop/legal/**"
       - "desktop/package.json"
       - "desktop/package-lock.json"
-      - "desktop/dist/styles.css"
       - "LICENSE"
       - "LICENSES.md"
       - "PRIVACY.md"
@@ -151,7 +149,6 @@ on:
       - "scripts/test-tauri-command-inventory.mjs"
       - "scripts/test-extension-run-history-contract.mjs"
       - "scripts/test-extension-p1-3-contract.mjs"
-      - "scripts/test-extension-phase-1-acceptance.mjs"
       - "scripts/test-extension-phase-2-host-contract.mjs"
       - "scripts/test-extension-p2-2-broker-contract.mjs"
       - "scripts/test-extension-p2-3-contribution-contract.mjs"
@@ -170,8 +167,7 @@ on:
       - "scripts/test-extension-p2-4-trusted-rollback-contract.mjs"
       - "scripts/test-extension-p2-4-recovery-closeout-contract.mjs"
       - "scripts/test-extension-phase-2-final-contract.mjs"
-      - "scripts/test-workspace-plugin-ui.mjs"
-      - "scripts/test-installed-license-surface.mjs"
+      - "scripts/test-rsr-*.mjs"
       - "scripts/test-signpath-readiness.mjs"
       - "scripts/test-signpath-free-trial-smoke.mjs"
       - "scripts/test-signpath-candidate-workflow.mjs"
@@ -278,6 +274,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      - name: Install locked frontend dependencies
+        run: npm ci --prefix desktop
 
       - name: Set up Windows Rtools
         if: runner.os == 'Windows'
@@ -431,10 +430,11 @@ jobs:
         if: matrix.lane == 'source' && matrix.toolchain == 'stable'
         run: cargo fmt --all -- --check
 
-      - name: Verify installed license surface
+      - name: Verify source, generated frontend, licenses and release contracts
         if: matrix.lane == 'source' && matrix.toolchain == 'stable'
         run: |
-          node scripts/test-installed-license-surface.mjs
+          npm --prefix desktop run rsr:check
+          node scripts/test-license-contract.mjs
           node scripts/generate-update-site.mjs --test true
           node scripts/test-signpath-readiness.mjs --self-test
           node scripts/test-signpath-readiness.mjs
@@ -444,7 +444,6 @@ jobs:
           node scripts/test-signpath-candidate-workflow.mjs --self-test
           node scripts/test-signpath-candidate-workflow.mjs
           node scripts/test-conditional-prerelease-policy.mjs
-          node --check desktop/dist/app.js
           node scripts/test-macos-notary.mjs
           node scripts/test-mac4-release-contract.mjs
           node scripts/test-tauri-native-updater-contract.mjs
@@ -457,8 +456,6 @@ jobs:
           node scripts/test-rust-msrv-contract.mjs
           node scripts/test-tauri-command-inventory.mjs --test
           node scripts/test-tauri-command-inventory.mjs
-          node scripts/test-extension-phase-1-acceptance.mjs --test
-          node scripts/test-extension-phase-1-acceptance.mjs
           node scripts/test-extension-phase-2-host-contract.mjs --test
           node scripts/test-extension-phase-2-host-contract.mjs
           node scripts/test-extension-p2-2-broker-contract.mjs --test
@@ -495,7 +492,6 @@ jobs:
           node scripts/test-extension-p2-4-recovery-closeout-contract.mjs
           node scripts/test-extension-phase-2-final-contract.mjs --test
           node scripts/test-extension-phase-2-final-contract.mjs
-          node scripts/test-workspace-plugin-ui.mjs
           cargo check --workspace --all-targets --locked
           cargo test --workspace --locked --no-fail-fast
 

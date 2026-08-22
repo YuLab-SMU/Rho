@@ -1,5 +1,6 @@
 import type {
   AgentConversationSummary,
+  AgentRuntimeDiagnostics,
   AgentFileMutationResponse,
   AgentTurnDetail,
   AgentTurnSummary,
@@ -49,6 +50,7 @@ import type {
   VibePageExport,
   VibePageExportRequest,
   VibePageMutationRequest,
+  WorkspacePreparation,
 } from "./types";
 
 export type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
@@ -151,6 +153,93 @@ export function createTauriUiKernelTransport(
 ): UiKernelTransport {
   return {
     source: "tauri",
+    async prepareWorkspace(chooseRscript = false): Promise<WorkspacePreparation> {
+      const startup = await invoke<{
+        readonly phase: string;
+        readonly issue: {
+          readonly code: string;
+          readonly title: string;
+          readonly message: string;
+          readonly technical_detail?: string;
+        } | null;
+      }>(chooseRscript ? "startup_choose_rscript" : "startup_bootstrap");
+      if (startup.phase !== "runtime_ready" || startup.issue != null) {
+        return {
+          status: "needs_attention",
+          phase: startup.phase,
+          workspace_ready: false,
+          restored_project_status: null,
+          issue: startup.issue == null ? {
+            code: "STARTUP_NOT_READY",
+            title: "Rho could not prepare the R runtime",
+            message: "Retry startup or select a valid Rscript executable.",
+            technical_detail: null,
+          } : {
+            code: startup.issue.code,
+            title: startup.issue.title,
+            message: startup.issue.message,
+            technical_detail: startup.issue.technical_detail ?? null,
+          },
+        };
+      }
+      try {
+        await invoke<unknown>("workspace_start");
+      } catch (error: unknown) {
+        const detail = error instanceof Error ? error.message : String(error);
+        return {
+          status: "needs_attention",
+          phase: "workspace_start_failed",
+          workspace_ready: false,
+          restored_project_status: null,
+          issue: {
+            code: "WORKSPACE_START_FAILED",
+            title: "Workspace R could not start",
+            message: "Retry startup. The Agent runtime remains an independent fault domain.",
+            technical_detail: detail.slice(0, 2_048),
+          },
+        };
+      }
+      void invoke<AgentRuntimeDiagnostics>("agent_runtime_retry").catch(() => undefined);
+      try {
+        const restored = await invoke<{ readonly status?: string }>("project_restore_session");
+        const restoredStatus = restored.status ?? "unknown";
+        if (restoredStatus === "ready") {
+          return {
+            status: "ready",
+            phase: "project_ready",
+            workspace_ready: true,
+            restored_project_status: restoredStatus,
+            issue: null,
+          };
+        }
+        return {
+          status: "needs_attention",
+          phase: "project_restore_incomplete",
+          workspace_ready: true,
+          restored_project_status: restoredStatus,
+          issue: {
+            code: "PROJECT_RESTORE_INCOMPLETE",
+            title: "The saved project could not be restored",
+            message: "Workspace R is available. Choose or reopen a project to continue.",
+            technical_detail: `project_restore_session returned ${restoredStatus}`,
+          },
+        };
+      } catch (error: unknown) {
+        const detail = error instanceof Error ? error.message : String(error);
+        return {
+          status: "needs_attention",
+          phase: "project_restore_failed",
+          workspace_ready: true,
+          restored_project_status: null,
+          issue: {
+            code: "PROJECT_RESTORE_FAILED",
+            title: "The saved project could not be restored",
+            message: "Workspace R is available. Retry startup or choose another project.",
+            technical_detail: detail.slice(0, 2_048),
+          },
+        };
+      }
+    },
     loadSnapshot: () => invoke<UiKernelSnapshot>("ui_kernel_snapshot"),
     setSelection: (request) =>
       invoke<UiKernelSnapshot>("ui_set_selection", { request }),
@@ -304,7 +393,10 @@ export function createTauriUiKernelTransport(
       invoke<RunAgentResponse>("retry_agent_turn", { turnId }),
     cancelAgentTurn: (turnId) => invoke("cancel_agent_turn", { turnId }),
     respondAgentApproval: (request) => invoke("respond_approval", { request }),
-    retryAgentRuntime: () => invoke("agent_runtime_retry"),
+    getAgentRuntimeDiagnostics: () =>
+      invoke<AgentRuntimeDiagnostics>("agent_runtime_status"),
+    retryAgentRuntime: () =>
+      invoke<AgentRuntimeDiagnostics>("agent_runtime_retry"),
     subscribeAgentInvalidated: (listener) =>
       subscribeEvents(
         listen,
@@ -337,13 +429,28 @@ export function createTauriUiKernelTransport(
           break;
         }
         case "rho.help": {
-          const snapshot = await invoke<UiKernelSnapshot>("ui_kernel_snapshot");
-          payload = snapshot.command_registry.registrations.map((registration) => ({
+          const [snapshot, app] = await Promise.all([
+            invoke<UiKernelSnapshot>("ui_kernel_snapshot"),
+            invoke<{
+              readonly version: string;
+              readonly commit: string;
+              readonly platform: string;
+              readonly executable_path: string;
+              readonly frontend_entry: string;
+            }>("app_info"),
+          ]);
+          payload = [{
+            id: "rho.build-identity",
+            title: `Rho ${app.version}`,
+            summary: "Exact desktop build identity",
+            status: "current",
+            detail: `Executable: ${app.executable_path}\nFrontend: ${app.frontend_entry}\nCommit: ${app.commit}\nPlatform: ${app.platform}`,
+          }, ...snapshot.command_registry.registrations.map((registration) => ({
             id: registration.definition.command_id,
             title: registration.definition.label,
             status: registration.availability.state,
             summary: registration.definition.purpose,
-          }));
+          }))];
           break;
         }
         default: payload = [];

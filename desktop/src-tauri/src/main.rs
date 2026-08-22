@@ -238,6 +238,8 @@ struct AppInfo {
     channel: ReleaseChannel,
     commit: String,
     platform: String,
+    executable_path: String,
+    frontend_entry: String,
     website_url: &'static str,
     source_url: &'static str,
     runtime: AppRuntimeInfo,
@@ -958,6 +960,10 @@ async fn app_info(state: State<'_, AppState>) -> Result<AppInfo, String> {
         channel,
         commit: env!("RHO_BUILD_COMMIT").to_string(),
         platform: format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH),
+        executable_path: std::env::current_exe()
+            .map(|path| normalized_display_path(&path))
+            .unwrap_or_else(|_| "unavailable".to_string()),
+        frontend_entry: env!("RHO_FRONTEND_ENTRY").to_string(),
         website_url: WEBSITE_URL,
         source_url: SOURCE_URL,
         runtime: AppRuntimeInfo {
@@ -1290,7 +1296,17 @@ async fn startup_open_log_directory() -> Result<Value, String> {
 }
 
 #[tauri::command]
-async fn agent_runtime_retry(state: State<'_, AppState>) -> Result<AgentRuntimeStatus, String> {
+fn agent_runtime_status(state: State<'_, AppState>) -> Result<AgentRuntimeStatus, String> {
+    runtime_config(&state)
+        .map(|config| config.agent_runtime)
+        .map_err(display_error)
+}
+
+#[tauri::command]
+async fn agent_runtime_retry(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<AgentRuntimeStatus, String> {
     let config = runtime_config(&state).map_err(display_error)?;
     let rscript = config.rscript.clone();
     let r_version = config.r_version.clone();
@@ -1321,6 +1337,7 @@ async fn agent_runtime_retry(state: State<'_, AppState>) -> Result<AgentRuntimeS
     } else {
         "Agent runtime retry remains unavailable"
     });
+    ui_runtime::emit_snapshot_invalidated(&app, "agent_runtime_status_changed");
     Ok(status)
 }
 
@@ -17045,6 +17062,7 @@ fn main() {
             startup_choose_rscript,
             startup_diagnostics,
             startup_open_log_directory,
+            agent_runtime_status,
             agent_runtime_retry,
             ui_runtime::ui_kernel_snapshot,
             ui_runtime::ui_set_selection,
