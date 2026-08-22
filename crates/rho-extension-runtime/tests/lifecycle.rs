@@ -21,7 +21,9 @@ use rho_extension_runtime::{
     TaskAdmissionError, WORKSPACE_SNAPSHOT_RESPONSE_BYTES, WorkspaceToolCallError,
     WorkspaceToolHandler, build_scope_candidate,
 };
-use rho_ui_contract::{RuntimeProviderDefinitionV1, SurfaceDefinitionV1};
+use rho_ui_contract::{
+    ResourceProviderDefinitionV1, RuntimeProviderDefinitionV1, SurfaceDefinitionV1,
+};
 use serde_json::{Value, json};
 use tokio_util::task::TaskTracker;
 
@@ -292,6 +294,32 @@ struct SurfacePlugin {
 struct RuntimeProviderPlugin {
     descriptor: PluginDescriptor,
     definition: RuntimeProviderDefinitionV1,
+}
+
+struct ResourceProviderPlugin {
+    descriptor: PluginDescriptor,
+    definition: ResourceProviderDefinitionV1,
+}
+
+impl InternalPlugin for ResourceProviderPlugin {
+    fn descriptor(&self) -> &PluginDescriptor {
+        &self.descriptor
+    }
+
+    fn activate<'a>(
+        &'a self,
+        context: PluginContext<'a>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), ActivationError>> + Send + 'a>> {
+        Box::pin(async move {
+            context
+                .effects
+                .register_application_resource_provider(context.registry, self.definition.clone())
+                .map_err(|error| {
+                    ActivationError::new("resource_provider_registration", error.to_string())
+                })?;
+            Ok(())
+        })
+    }
 }
 
 impl InternalPlugin for RuntimeProviderPlugin {
@@ -1336,6 +1364,85 @@ async fn duplicate_application_runtime_provider_registration_rolls_back_candidat
         InternalExtensionRuntimeMode::Candidate,
         Vec::new(),
         vec![plugin("plugin.runtime-a"), plugin("plugin.runtime-b")],
+        Arc::new(RejectingBrokerFacade),
+        sink,
+        deadlines(),
+    )
+    .await;
+    assert!(matches!(
+        result,
+        Err(rho_extension_runtime::ExtensionHostError::ApplicationBuild(
+            _
+        ))
+    ));
+}
+
+#[tokio::test]
+async fn application_resource_provider_is_generation_bound_routable_and_reversibly_disposed() {
+    let definition = rho_ui_contract::golden_contract_fixture()
+        .resource_registry_snapshot
+        .providers
+        .into_iter()
+        .next()
+        .unwrap()
+        .definition;
+    let plugin: Arc<dyn InternalPlugin> = Arc::new(ResourceProviderPlugin {
+        descriptor: descriptor("plugin.resource-provider", ScopePolicy::application_kind()),
+        definition: definition.clone(),
+    });
+    let (_, sink) = diagnostics();
+    let host = ExtensionHost::new_with_application_plugins(
+        InternalExtensionRuntimeMode::Candidate,
+        Vec::new(),
+        vec![plugin],
+        Arc::new(RejectingBrokerFacade),
+        sink,
+        deadlines(),
+    )
+    .await
+    .unwrap();
+    let application = host.scopes().application();
+    let resolution = application
+        .registry()
+        .resolve_application_resource_providers()
+        .unwrap();
+    assert_eq!(resolution.scope(), application.identity());
+    assert_eq!(resolution.providers().len(), 1);
+    assert_eq!(resolution.providers()[0].definition, definition);
+    assert_eq!(
+        resolution.providers()[0].activation_generation,
+        application.identity().generation.get()
+    );
+    drop(resolution);
+
+    let report = host.shutdown().await;
+    assert_eq!(report.outcome, DisposeOutcome::Disposed);
+    assert!(matches!(
+        application
+            .registry()
+            .resolve_application_resource_providers(),
+        Err(RoutingError::Closed)
+    ));
+}
+
+#[tokio::test]
+async fn duplicate_application_resource_provider_registration_rolls_back_candidate() {
+    let definition = rho_ui_contract::golden_contract_fixture()
+        .resource_registry_snapshot
+        .providers[0]
+        .definition
+        .clone();
+    let plugin = |id: &str| -> Arc<dyn InternalPlugin> {
+        Arc::new(ResourceProviderPlugin {
+            descriptor: descriptor(id, ScopePolicy::application_kind()),
+            definition: definition.clone(),
+        })
+    };
+    let (_, sink) = diagnostics();
+    let result = ExtensionHost::new_with_application_plugins(
+        InternalExtensionRuntimeMode::Candidate,
+        Vec::new(),
+        vec![plugin("plugin.resource-a"), plugin("plugin.resource-b")],
         Arc::new(RejectingBrokerFacade),
         sink,
         deadlines(),

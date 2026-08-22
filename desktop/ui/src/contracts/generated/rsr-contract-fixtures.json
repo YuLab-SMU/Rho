@@ -9,6 +9,10 @@
     "max_layout_depth": 32,
     "max_layout_nodes": 256,
     "max_surface_placements": 128,
+    "max_resource_providers": 16,
+    "max_resource_instances": 2000,
+    "max_resource_content_bytes": 8388608,
+    "max_resource_documents": 128,
     "max_vibe_page_json_bytes": 1048576,
     "max_vibe_sections": 64,
     "max_vibe_blocks": 256,
@@ -17,10 +21,10 @@
   },
   "surfaces": [
     {
-      "surface_id": "rho.file",
+      "surface_id": "rho.file-source",
       "contract_major": 1,
-      "label": "File",
-      "purpose": "Render the File capability as an independent Rho Surface.",
+      "label": "File Source",
+      "purpose": "Render the File Source capability as an independent Rho Surface.",
       "renderer_kind": "trusted_host",
       "scope": "project",
       "instance_policy": "multi_instance",
@@ -34,6 +38,53 @@
           "label": "Source",
           "interaction_kind": "interactive"
         },
+        {
+          "mode_id": "diff",
+          "label": "Diff",
+          "interaction_kind": "interactive"
+        },
+        {
+          "mode_id": "outline",
+          "label": "Outline",
+          "interaction_kind": "interactive"
+        }
+      ],
+      "sizing_hints": {
+        "min_inline": 240,
+        "min_block": 120,
+        "ideal_inline": 640,
+        "ideal_block": 420,
+        "max_inline": null,
+        "max_block": null,
+        "stretch_inline": true,
+        "stretch_block": true,
+        "presentation_classes": [
+          "full",
+          "compact"
+        ]
+      },
+      "accepted_contexts": [
+        "project"
+      ],
+      "commands": [],
+      "origin": {
+        "kind": "application",
+        "component_id": "rho.file-source"
+      }
+    },
+    {
+      "surface_id": "rho.file-preview",
+      "contract_major": 1,
+      "label": "File Preview",
+      "purpose": "Render the File Preview capability as an independent Rho Surface.",
+      "renderer_kind": "trusted_host",
+      "scope": "project",
+      "instance_policy": "multi_instance",
+      "instance_quota_class": "standard",
+      "resource_kinds": [
+        "project_file"
+      ],
+      "modes": [
         {
           "mode_id": "preview",
           "label": "Preview",
@@ -60,7 +111,7 @@
       "commands": [],
       "origin": {
         "kind": "application",
-        "component_id": "rho.file"
+        "component_id": "rho.file-preview"
       }
     },
     {
@@ -269,19 +320,92 @@
       }
     ]
   },
+  "resources": [
+    {
+      "resource_provider_id": "rho.project-files",
+      "project_id": "project:fixture",
+      "resource_kind": "project_file",
+      "resource_id": "analysis.R",
+      "resource_revision": 4,
+      "label": "analysis.R",
+      "capabilities": [
+        "resource.delete",
+        "resource.preview",
+        "resource.read.document",
+        "resource.read.snapshot",
+        "resource.rename",
+        "resource.write"
+      ],
+      "status": "ready",
+      "media_type": "text/x-r",
+      "size_bytes": 43,
+      "content_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ],
+  "resource_registry_snapshot": {
+    "contract": "rho.ui.resource-registry.snapshot.v1",
+    "contract_major": 1,
+    "snapshot_revision": 3,
+    "project_id": "project:fixture",
+    "project_revision": 7,
+    "providers": [
+      {
+        "definition": {
+          "resource_provider_id": "rho.project-files",
+          "resource_kinds": [
+            "project_file"
+          ],
+          "display_label": "Project files",
+          "capabilities": [
+            "resource.delete",
+            "resource.preview",
+            "resource.read.document",
+            "resource.read.snapshot",
+            "resource.rename",
+            "resource.write"
+          ],
+          "application_component_id": "rho.resource.project-files"
+        },
+        "activation_generation": 1
+      }
+    ],
+    "resources": [
+      {
+        "resource_provider_id": "rho.project-files",
+        "project_id": "project:fixture",
+        "resource_kind": "project_file",
+        "resource_id": "analysis.R",
+        "resource_revision": 4,
+        "label": "analysis.R",
+        "capabilities": [
+          "resource.delete",
+          "resource.preview",
+          "resource.read.document",
+          "resource.read.snapshot",
+          "resource.rename",
+          "resource.write"
+        ],
+        "status": "ready",
+        "media_type": "text/x-r",
+        "size_bytes": 43,
+        "content_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    ]
+  },
   "instances": [
     {
       "instance_id": "instance:file-source",
-      "surface_id": "rho.file",
+      "surface_id": "rho.file-source",
       "project_id": "project:fixture",
       "origin": {
         "kind": "application",
-        "component_id": "rho.file"
+        "component_id": "rho.file-source"
       },
       "activation_generation": 1,
       "surface_revision": 1,
       "mode_id": "source",
       "resource_binding": {
+        "resource_provider_id": "rho.project-files",
         "resource_kind": "project_file",
         "resource_id": "analysis.R",
         "resource_revision": 4
@@ -293,16 +417,17 @@
     },
     {
       "instance_id": "instance:file-preview",
-      "surface_id": "rho.file",
+      "surface_id": "rho.file-preview",
       "project_id": "project:fixture",
       "origin": {
         "kind": "application",
-        "component_id": "rho.file"
+        "component_id": "rho.file-preview"
       },
       "activation_generation": 1,
       "surface_revision": 1,
       "mode_id": "preview",
       "resource_binding": {
+        "resource_provider_id": "rho.project-files",
         "resource_kind": "project_file",
         "resource_id": "analysis.R",
         "resource_revision": 4
@@ -324,6 +449,7 @@
       "surface_revision": 1,
       "mode_id": "notes",
       "resource_binding": {
+        "resource_provider_id": "rho.project-files",
         "resource_kind": "project_file",
         "resource_id": "analysis.R",
         "resource_revision": 4
@@ -345,6 +471,7 @@
       "surface_revision": 1,
       "mode_id": "notes",
       "resource_binding": {
+        "resource_provider_id": "rho.project-files",
         "resource_kind": "project_file",
         "resource_id": "analysis.R",
         "resource_revision": 4
@@ -607,6 +734,7 @@
       "selection": {
         "kind": "resource",
         "binding": {
+          "resource_provider_id": "rho.project-files",
           "resource_kind": "project_file",
           "resource_id": "analysis.R",
           "resource_revision": 4
@@ -808,10 +936,10 @@
       "factories": [
         {
           "definition": {
-            "surface_id": "rho.file",
+            "surface_id": "rho.file-source",
             "contract_major": 1,
-            "label": "File",
-            "purpose": "Render the File capability as an independent Rho Surface.",
+            "label": "File Source",
+            "purpose": "Render the File Source capability as an independent Rho Surface.",
             "renderer_kind": "trusted_host",
             "scope": "project",
             "instance_policy": "multi_instance",
@@ -825,6 +953,56 @@
                 "label": "Source",
                 "interaction_kind": "interactive"
               },
+              {
+                "mode_id": "diff",
+                "label": "Diff",
+                "interaction_kind": "interactive"
+              },
+              {
+                "mode_id": "outline",
+                "label": "Outline",
+                "interaction_kind": "interactive"
+              }
+            ],
+            "sizing_hints": {
+              "min_inline": 240,
+              "min_block": 120,
+              "ideal_inline": 640,
+              "ideal_block": 420,
+              "max_inline": null,
+              "max_block": null,
+              "stretch_inline": true,
+              "stretch_block": true,
+              "presentation_classes": [
+                "full",
+                "compact"
+              ]
+            },
+            "accepted_contexts": [
+              "project"
+            ],
+            "commands": [],
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.file-source"
+            }
+          },
+          "activation_generation": 1
+        },
+        {
+          "definition": {
+            "surface_id": "rho.file-preview",
+            "contract_major": 1,
+            "label": "File Preview",
+            "purpose": "Render the File Preview capability as an independent Rho Surface.",
+            "renderer_kind": "trusted_host",
+            "scope": "project",
+            "instance_policy": "multi_instance",
+            "instance_quota_class": "standard",
+            "resource_kinds": [
+              "project_file"
+            ],
+            "modes": [
               {
                 "mode_id": "preview",
                 "label": "Preview",
@@ -851,7 +1029,7 @@
             "commands": [],
             "origin": {
               "kind": "application",
-              "component_id": "rho.file"
+              "component_id": "rho.file-preview"
             }
           },
           "activation_generation": 1
@@ -1020,16 +1198,17 @@
       "instances": [
         {
           "instance_id": "instance:file-source",
-          "surface_id": "rho.file",
+          "surface_id": "rho.file-source",
           "project_id": "project:fixture",
           "origin": {
             "kind": "application",
-            "component_id": "rho.file"
+            "component_id": "rho.file-source"
           },
           "activation_generation": 1,
           "surface_revision": 1,
           "mode_id": "source",
           "resource_binding": {
+            "resource_provider_id": "rho.project-files",
             "resource_kind": "project_file",
             "resource_id": "analysis.R",
             "resource_revision": 4
@@ -1041,16 +1220,17 @@
         },
         {
           "instance_id": "instance:file-preview",
-          "surface_id": "rho.file",
+          "surface_id": "rho.file-preview",
           "project_id": "project:fixture",
           "origin": {
             "kind": "application",
-            "component_id": "rho.file"
+            "component_id": "rho.file-preview"
           },
           "activation_generation": 1,
           "surface_revision": 1,
           "mode_id": "preview",
           "resource_binding": {
+            "resource_provider_id": "rho.project-files",
             "resource_kind": "project_file",
             "resource_id": "analysis.R",
             "resource_revision": 4
@@ -1072,6 +1252,7 @@
           "surface_revision": 1,
           "mode_id": "notes",
           "resource_binding": {
+            "resource_provider_id": "rho.project-files",
             "resource_kind": "project_file",
             "resource_id": "analysis.R",
             "resource_revision": 4
@@ -1093,6 +1274,7 @@
           "surface_revision": 1,
           "mode_id": "notes",
           "resource_binding": {
+            "resource_provider_id": "rho.project-files",
             "resource_kind": "project_file",
             "resource_id": "analysis.R",
             "resource_revision": 4

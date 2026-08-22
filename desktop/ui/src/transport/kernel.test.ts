@@ -2,10 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import fixture from "../contracts/generated/rsr-contract-fixtures.json";
 import { createMockUiKernelTransport } from "./mock";
-import { RuntimeExternalStore, StudioExternalStore, SurfaceExternalStore, UiExternalStore } from "./store";
+import { ResourceExternalStore, RuntimeExternalStore, StudioExternalStore, SurfaceExternalStore, UiExternalStore } from "./store";
 import { createTauriUiKernelTransport } from "./tauri";
 import type {
   OpenSurfaceRequest,
+  ResourceRegistrySnapshot,
   RuntimeRegistrySnapshot,
   SurfaceInstanceRequest,
   SurfaceRuntimeSnapshot,
@@ -33,6 +34,12 @@ function generatedRuntimes(): RuntimeRegistrySnapshot {
   return structuredClone(
     fixture.runtime_registry_snapshot,
   ) as unknown as RuntimeRegistrySnapshot;
+}
+
+function generatedResources(): ResourceRegistrySnapshot {
+  return structuredClone(
+    fixture.resource_registry_snapshot,
+  ) as unknown as ResourceRegistrySnapshot;
 }
 
 describe("UI Kernel transport and external store", () => {
@@ -111,12 +118,172 @@ describe("UI Kernel transport and external store", () => {
     unsubscribe();
   });
 
+  it("separates shared documents from immutable previews across repeated file views", async () => {
+    const transport = createMockUiKernelTransport();
+    const store = new ResourceExternalStore(transport);
+    const stop = store.subscribe(() => undefined);
+    await store.refresh();
+    const state = store.getSnapshot();
+    if (state.status !== "ready") throw new Error("Resource fixture did not load");
+    const descriptor = state.snapshot.resources[0]!;
+    const target = {
+      project_id: descriptor.project_id,
+      resource_provider_id: descriptor.resource_provider_id,
+      resource_kind: descriptor.resource_kind,
+      resource_id: descriptor.resource_id,
+      expected_project_revision: state.snapshot.project_revision,
+      expected_resource_revision: descriptor.resource_revision,
+    };
+    const sharedA = await store.read({ target, consistency: "shared_document" });
+    const sharedB = await store.read({ target, consistency: "shared_document" });
+    expect(sharedA.document_revision).toBe(sharedB.document_revision);
+    const preview = await store.read({ target, consistency: "immutable_snapshot" });
+    const draft = await store.updateDraft({
+      target,
+      expected_document_revision: sharedA.document_revision,
+      content: "draft <- TRUE\n",
+    });
+    const sharedFromSibling = await store.read({ target, consistency: "shared_document" });
+    expect(sharedFromSibling.content).toBe("draft <- TRUE\n");
+    expect(sharedFromSibling.document_revision).toBe(draft.document_revision);
+    const saved = await store.save({
+      target,
+      expected_document_revision: draft.document_revision,
+    });
+    expect(saved.descriptor.resource_revision).toBe(descriptor.resource_revision + 1);
+    expect(preview.content).not.toBe(saved.content);
+    const surfaces = await transport.loadSurfaces();
+    expect(
+      surfaces.catalog.instances.find((surface) => surface.instance_id === "instance:file-source")
+        ?.resource_binding?.resource_revision,
+    ).toBe(saved.descriptor.resource_revision);
+    expect(
+      surfaces.catalog.instances.find((surface) => surface.instance_id === "instance:file-preview")
+        ?.resource_binding?.resource_revision,
+    ).toBe(descriptor.resource_revision);
+    await expect(store.read({ target, consistency: "immutable_snapshot" })).rejects.toThrow(/stale/i);
+    stop();
+  });
+
+  it("keeps duplicate source view state independent while rename and delete preserve Resource truth", async () => {
+    const transport = createMockUiKernelTransport();
+    let surfaces = await transport.loadSurfaces();
+    const studio = await transport.loadStudio();
+    const source = surfaces.catalog.instances.find((surface) =>
+      surface.instance_id === "instance:file-source"
+    )!;
+    const request: OpenSurfaceRequest = {
+      surface_id: "rho.file-source",
+      project_id: surfaces.project_id,
+      mode_id: "source",
+      resource_binding: source.resource_binding,
+      runtime_binding: null,
+      view_group_id: null,
+      view_state: { cursor_start: 90, cursor_end: 90, scroll_top: 120 },
+      instance_disposition: "new_instance",
+      placement_intent: "beside",
+      expected_project_revision: surfaces.project_revision,
+      expected_layout_revision: studio.scene.layout_revision,
+    };
+    surfaces = await transport.openSurface(request);
+    const duplicate = surfaces.catalog.instances.at(-1)!;
+    expect(duplicate.surface_id).toBe("rho.file-source");
+    expect(duplicate.resource_binding).toEqual(source.resource_binding);
+    expect(duplicate.view_state).not.toEqual(source.view_state);
+    const targetSurface = (surface: typeof source) => ({
+      project_id: surface.project_id,
+      instance_id: surface.instance_id,
+      activation_generation: surface.activation_generation,
+      expected_project_revision: surfaces.project_revision,
+      expected_surface_revision: surface.surface_revision,
+    });
+    surfaces = await transport.updateSurface({
+      target: targetSurface(source),
+      mutation: { kind: "set_view_group", view_group_id: "analysis-sync" },
+    });
+    const groupedSource = surfaces.catalog.instances.find((surface) =>
+      surface.instance_id === source.instance_id
+    )!;
+    const ungroupedDuplicate = surfaces.catalog.instances.find((surface) =>
+      surface.instance_id === duplicate.instance_id
+    )!;
+    surfaces = await transport.updateSurface({
+      target: targetSurface(ungroupedDuplicate),
+      mutation: { kind: "set_view_group", view_group_id: "analysis-sync" },
+    });
+    const currentSource = surfaces.catalog.instances.find((surface) =>
+      surface.instance_id === source.instance_id
+    )!;
+    surfaces = await transport.updateSurface({
+      target: targetSurface(currentSource),
+      mutation: {
+        kind: "set_view_state",
+        view_state: { cursor_start: 12, cursor_end: 12, scroll_top: 240 },
+      },
+    });
+    expect(
+      surfaces.catalog.instances.filter((surface) =>
+        surface.instance_id === source.instance_id || surface.instance_id === duplicate.instance_id
+      ).map((surface) => surface.view_state),
+    ).toEqual([
+      { cursor_start: 12, cursor_end: 12, scroll_top: 240 },
+      { cursor_start: 12, cursor_end: 12, scroll_top: 240 },
+    ]);
+    expect(groupedSource.view_state).not.toEqual(ungroupedDuplicate.view_state);
+
+    let resources = await transport.loadResources();
+    const descriptor = resources.resources[0]!;
+    const target = {
+      project_id: descriptor.project_id,
+      resource_provider_id: descriptor.resource_provider_id,
+      resource_kind: descriptor.resource_kind,
+      resource_id: descriptor.resource_id,
+      expected_project_revision: resources.project_revision,
+      expected_resource_revision: descriptor.resource_revision,
+    };
+    const renamed = await transport.renameResource({
+      target,
+      expected_document_revision: null,
+      new_resource_id: "R/renamed.R",
+    });
+    expect(renamed.resources.map((resource) => resource.resource_id)).toEqual(["R/renamed.R"]);
+    surfaces = await transport.loadSurfaces();
+    expect(surfaces.catalog.instances.filter((surface) =>
+      surface.resource_binding?.resource_id === "R/renamed.R"
+    ).length).toBeGreaterThanOrEqual(3);
+    resources = await transport.deleteResource({
+      target: {
+        ...target,
+        resource_id: "R/renamed.R",
+        expected_resource_revision: 1,
+      },
+      expected_document_revision: null,
+      discard_dirty: false,
+    });
+    expect(resources.resources[0]?.status).toBe("missing");
+    expect((await transport.loadStudio()).scene.root).toEqual(studio.scene.root);
+  });
+
   it("uses Tauri snapshot and event APIs behind the same interface", async () => {
     const calls: Array<{ command: string; args?: Record<string, unknown> }> = [];
     const handlers = new Map<string, () => void>();
     const invoke = async <T,>(command: string, args?: Record<string, unknown>) => {
       calls.push(args == null ? { command } : { command, args });
-      return (command.startsWith("runtime_")
+      return (command.startsWith("resource_")
+        ? ["resource_read", "resource_update_draft", "resource_save", "resource_reload"].includes(command)
+          ? {
+              contract: "rho.ui.resource-content.v1",
+              descriptor: generatedResources().resources[0],
+              consistency: "shared_document",
+              document_revision: 1,
+              base_resource_revision: 4,
+              dirty: false,
+              stale: false,
+              content_encoding: "utf-8",
+              content: "1 + 1\n",
+            }
+          : generatedResources()
+        : command.startsWith("runtime_")
         ? command === "runtime_attach" || command === "runtime_detach"
           ? generatedSurfaces()
           : command === "runtime_execute"
@@ -217,6 +384,47 @@ describe("UI Kernel transport and external store", () => {
       expected_console_revision: 1,
       code: "1 + 1",
     });
+    const resourceDescriptor = generatedResources().resources[0]!;
+    const resourceTarget = {
+      project_id: resourceDescriptor.project_id,
+      resource_provider_id: resourceDescriptor.resource_provider_id,
+      resource_kind: resourceDescriptor.resource_kind,
+      resource_id: resourceDescriptor.resource_id,
+      expected_project_revision: 7,
+      expected_resource_revision: 4,
+    } as const;
+    const resourceResolve = {
+      project_id: resourceDescriptor.project_id,
+      resource_provider_id: resourceDescriptor.resource_provider_id,
+      resource_kind: resourceDescriptor.resource_kind,
+      resource_id: resourceDescriptor.resource_id,
+      expected_project_revision: 7,
+      expected_snapshot_revision: 3,
+    } as const;
+    await transport.loadResources();
+    await transport.resolveResource(resourceResolve);
+    await transport.readResource({ target: resourceTarget, consistency: "shared_document" });
+    await transport.updateResourceDraft({
+      target: resourceTarget,
+      expected_document_revision: 1,
+      content: "draft\n",
+    });
+    await transport.saveResource({ target: resourceTarget, expected_document_revision: 1 });
+    await transport.reloadResource({
+      target: resourceTarget,
+      expected_document_revision: 1,
+      discard_dirty: false,
+    });
+    await transport.renameResource({
+      target: resourceTarget,
+      expected_document_revision: 1,
+      new_resource_id: "renamed.R",
+    });
+    await transport.deleteResource({
+      target: resourceTarget,
+      expected_document_revision: 1,
+      discard_dirty: false,
+    });
     const invalidated = vi.fn();
     const stop = transport.subscribeInvalidated(invalidated);
     await Promise.resolve();
@@ -276,6 +484,56 @@ describe("UI Kernel transport and external store", () => {
             console_instance_id: "instance:console-a",
             expected_console_revision: 1,
             code: "1 + 1",
+          },
+        },
+      },
+      { command: "resource_list" },
+      { command: "resource_resolve", args: { request: resourceResolve } },
+      {
+        command: "resource_read",
+        args: { request: { target: resourceTarget, consistency: "shared_document" } },
+      },
+      {
+        command: "resource_update_draft",
+        args: {
+          request: {
+            target: resourceTarget,
+            expected_document_revision: 1,
+            content: "draft\n",
+          },
+        },
+      },
+      {
+        command: "resource_save",
+        args: { request: { target: resourceTarget, expected_document_revision: 1 } },
+      },
+      {
+        command: "resource_reload",
+        args: {
+          request: {
+            target: resourceTarget,
+            expected_document_revision: 1,
+            discard_dirty: false,
+          },
+        },
+      },
+      {
+        command: "resource_rename",
+        args: {
+          request: {
+            target: resourceTarget,
+            expected_document_revision: 1,
+            new_resource_id: "renamed.R",
+          },
+        },
+      },
+      {
+        command: "resource_delete",
+        args: {
+          request: {
+            target: resourceTarget,
+            expected_document_revision: 1,
+            discard_dirty: false,
           },
         },
       },

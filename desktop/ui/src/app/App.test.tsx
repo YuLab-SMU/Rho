@@ -162,4 +162,45 @@ describe("Studio foundation app", () => {
     expect(second.querySelectorAll(".rho-console-entry")).toHaveLength(1);
     expect(second.textContent).toContain("instance:console-b");
   });
+
+  it("opens repeated file modes and makes immutable previews visibly stale after save", async () => {
+    const { container } = await renderApp();
+    expect(container.querySelectorAll("[data-surface-id='rho.file-source']")).toHaveLength(1);
+    const sourceButton = [...container.querySelectorAll<HTMLButtonElement>(".rho-resource-open-actions button")]
+      .find((button) => button.textContent === "Source")!;
+    await act(async () => {
+      sourceButton.click();
+      for (let index = 0; index < 8; index += 1) await Promise.resolve();
+    });
+    expect(container.querySelectorAll("[data-surface-id='rho.file-source']")).toHaveLength(2);
+    const sourceViews = [...container.querySelectorAll<HTMLElement>("[data-surface-id='rho.file-source']")];
+    const firstEditor = sourceViews[0]!.querySelector<HTMLTextAreaElement>(".rho-source-editor")!;
+    const secondEditor = sourceViews[1]!.querySelector<HTMLTextAreaElement>(".rho-source-editor")!;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+    await act(async () => {
+      setValue.call(firstEditor, "shared <- TRUE\n");
+      firstEditor.dispatchEvent(new Event("input", { bubbles: true }));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      firstEditor.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+      for (let index = 0; index < 12; index += 1) await Promise.resolve();
+    });
+    expect(secondEditor.value).toBe("shared <- TRUE\n");
+
+    const previewItem = [...container.querySelectorAll<HTMLElement>(".rho-inventory-item")]
+      .find((item) => item.textContent?.includes("rho.file-preview"))!;
+    await act(async () => {
+      previewItem.querySelector<HTMLButtonElement>("button")!.click();
+      for (let index = 0; index < 8; index += 1) await Promise.resolve();
+    });
+    const save = sourceViews[0]!.querySelector<HTMLButtonElement>(".rho-resource-actions button")!;
+    await act(async () => {
+      save.click();
+      for (let index = 0; index < 12; index += 1) await Promise.resolve();
+    });
+    const preview = container.querySelector<HTMLElement>("[data-surface-id='rho.file-preview']")!;
+    expect(preview.textContent).toContain("stale");
+    expect(preview.textContent).toContain("Refresh view");
+  });
 });

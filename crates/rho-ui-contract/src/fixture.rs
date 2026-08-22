@@ -16,6 +16,10 @@ pub struct ContractLimitsV1 {
     pub max_layout_depth: usize,
     pub max_layout_nodes: usize,
     pub max_surface_placements: usize,
+    pub max_resource_providers: usize,
+    pub max_resource_instances: usize,
+    pub max_resource_content_bytes: usize,
+    pub max_resource_documents: usize,
     pub max_vibe_page_json_bytes: usize,
     pub max_vibe_sections: usize,
     pub max_vibe_blocks: usize,
@@ -33,6 +37,10 @@ impl Default for ContractLimitsV1 {
             max_layout_depth: MAX_LAYOUT_DEPTH,
             max_layout_nodes: MAX_LAYOUT_NODES,
             max_surface_placements: MAX_SURFACE_PLACEMENTS,
+            max_resource_providers: MAX_RESOURCE_PROVIDERS,
+            max_resource_instances: MAX_RESOURCE_INSTANCES,
+            max_resource_content_bytes: MAX_RESOURCE_CONTENT_BYTES,
+            max_resource_documents: MAX_RESOURCE_DOCUMENTS,
             max_vibe_page_json_bytes: MAX_VIBE_PAGE_JSON_BYTES,
             max_vibe_sections: MAX_VIBE_SECTIONS,
             max_vibe_blocks: MAX_VIBE_BLOCKS,
@@ -50,6 +58,8 @@ pub struct ContractFixtureV1 {
     pub surfaces: Vec<SurfaceDefinitionV1>,
     pub runtimes: Vec<RuntimeDescriptorV1>,
     pub runtime_registry_snapshot: RuntimeRegistrySnapshotV1,
+    pub resources: Vec<ResourceDescriptorV1>,
+    pub resource_registry_snapshot: ResourceRegistrySnapshotV1,
     pub instances: Vec<SurfaceInstanceV1>,
     pub commands: Vec<CommandDefinitionV1>,
     pub scenes: Vec<SceneStateV1>,
@@ -106,6 +116,16 @@ impl Validate for ContractFixtureV1 {
             runtime.validate()?;
         }
         self.runtime_registry_snapshot.validate()?;
+        validate_unique(
+            "fixture.resources",
+            self.resources
+                .iter()
+                .map(|resource| resource.resource_id.as_str()),
+        )?;
+        for resource in &self.resources {
+            resource.validate()?;
+        }
+        self.resource_registry_snapshot.validate()?;
         for instance in &self.instances {
             instance.validate()?;
         }
@@ -256,7 +276,10 @@ fn definition(
         } else {
             SurfaceInstanceQuotaClassV1::Standard
         },
-        resource_kinds: if matches!(surface_id, "rho.file" | "rho.surface-playground") {
+        resource_kinds: if matches!(
+            surface_id,
+            "rho.file-source" | "rho.file-preview" | "rho.surface-playground"
+        ) {
             vec![ResourceKindId::new("project_file").unwrap()]
         } else {
             vec![]
@@ -322,21 +345,56 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
         primary_scientific_runtime: true,
     };
     let file_binding = ResourceBindingV1 {
+        resource_provider_id: ResourceProviderId::new("rho.project-files").unwrap(),
         resource_kind: ResourceKindId::new("project_file").unwrap(),
         resource_id: "analysis.R".to_string(),
         resource_revision: Some(4),
     };
+    let project_file_provider = ResourceProviderRegistrationV1 {
+        definition: ResourceProviderDefinitionV1 {
+            resource_provider_id: ResourceProviderId::new("rho.project-files").unwrap(),
+            resource_kinds: vec![ResourceKindId::new("project_file").unwrap()],
+            display_label: "Project files".to_string(),
+            capabilities: [
+                "resource.delete",
+                "resource.preview",
+                "resource.read.document",
+                "resource.read.snapshot",
+                "resource.rename",
+                "resource.write",
+            ]
+            .into_iter()
+            .map(|value| ResourceCapabilityId::new(value).unwrap())
+            .collect(),
+            application_component_id: ApplicationComponentId::new("rho.resource.project-files")
+                .unwrap(),
+        },
+        activation_generation: 1,
+    };
+    let file_resource = ResourceDescriptorV1 {
+        resource_provider_id: ResourceProviderId::new("rho.project-files").unwrap(),
+        project_id: project_id.clone(),
+        resource_kind: ResourceKindId::new("project_file").unwrap(),
+        resource_id: "analysis.R".to_string(),
+        resource_revision: 4,
+        label: "analysis.R".to_string(),
+        capabilities: project_file_provider.definition.capabilities.clone(),
+        status: ResourceStatusV1::Ready,
+        media_type: Some("text/x-r".to_string()),
+        size_bytes: Some(43),
+        content_sha256: Some("b".repeat(64)),
+    };
     let instances = vec![
         instance(
             "instance:file-source",
-            "rho.file",
+            "rho.file-source",
             Some("source"),
             None,
             Some(file_binding.clone()),
         ),
         instance(
             "instance:file-preview",
-            "rho.file",
+            "rho.file-preview",
             Some("preview"),
             None,
             Some(file_binding.clone()),
@@ -494,6 +552,7 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
         focused_surface_instance_id: Some(SurfaceInstanceId::new("instance:file-source").unwrap()),
         selection: Some(UiSelectionV1::Resource {
             binding: ResourceBindingV1 {
+                resource_provider_id: ResourceProviderId::new("rho.project-files").unwrap(),
                 resource_kind: ResourceKindId::new("project_file").unwrap(),
                 resource_id: "analysis.R".to_string(),
                 resource_revision: Some(4),
@@ -566,9 +625,19 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
         limits: ContractLimitsV1::default(),
         surfaces: vec![
             definition(
-                "rho.file",
-                "File",
-                &[("source", "Source"), ("preview", "Preview")],
+                "rho.file-source",
+                "File Source",
+                &[
+                    ("source", "Source"),
+                    ("diff", "Diff"),
+                    ("outline", "Outline"),
+                ],
+                false,
+            ),
+            definition(
+                "rho.file-preview",
+                "File Preview",
+                &[("preview", "Preview")],
                 false,
             ),
             definition("rho.console", "Console", &[], false),
@@ -603,6 +672,16 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
             }],
             instances: vec![runtime],
         },
+        resources: vec![file_resource.clone()],
+        resource_registry_snapshot: ResourceRegistrySnapshotV1 {
+            contract: RESOURCE_REGISTRY_SNAPSHOT_CONTRACT.to_string(),
+            contract_major: RSR_CONTRACT_MAJOR,
+            snapshot_revision: 3,
+            project_id: project_id.clone(),
+            project_revision: 7,
+            providers: vec![project_file_provider],
+            resources: vec![file_resource],
+        },
         instances: instances.clone(),
         commands: vec![command],
         scenes: vec![scene.clone()],
@@ -617,9 +696,19 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
             catalog: SurfaceCatalogV1 {
                 factories: vec![
                     definition(
-                        "rho.file",
-                        "File",
-                        &[("source", "Source"), ("preview", "Preview")],
+                        "rho.file-source",
+                        "File Source",
+                        &[
+                            ("source", "Source"),
+                            ("diff", "Diff"),
+                            ("outline", "Outline"),
+                        ],
+                        false,
+                    ),
+                    definition(
+                        "rho.file-preview",
+                        "File Preview",
+                        &[("preview", "Preview")],
                         false,
                     ),
                     definition("rho.console", "Console", &[], false),
@@ -698,9 +787,15 @@ mod tests {
         let files = fixture
             .instances
             .iter()
-            .filter(|instance| instance.surface_id.as_str() == "rho.file")
+            .filter(|instance| {
+                matches!(
+                    instance.surface_id.as_str(),
+                    "rho.file-source" | "rho.file-preview"
+                )
+            })
             .collect::<Vec<_>>();
         assert_eq!(files[0].resource_binding, files[1].resource_binding);
         assert_ne!(files[0].mode_id, files[1].mode_id);
+        assert_ne!(files[0].surface_id, files[1].surface_id);
     }
 }

@@ -4,7 +4,7 @@
   *, *::before, *::after { box-sizing: border-box; }
   html, body, #root { min-width: 320px; min-height: 100%; margin: 0; }
   body { min-height: 100vh; }
-  button, input { font: inherit; }
+  button, input, textarea { font: inherit; }
 }
 
 @layer tokens {
@@ -112,6 +112,21 @@
   .rho-inventory-item strong, .rho-inventory-item small { display: block; overflow: hidden; font-size: 0.62rem; text-overflow: ellipsis; white-space: nowrap; }
   .rho-inventory-item small { margin-top: 0.15rem; color: var(--rho-muted); }
 
+  .rho-resource-inventory { margin-top: 1.2rem; padding-top: 0.8rem; border-top: 1px solid var(--rho-line); }
+  .rho-resource-inventory-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem; color: var(--rho-muted); font-size: 0.56rem; }
+  .rho-resource-inventory form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.25rem; margin-top: 0.45rem; }
+  .rho-resource-inventory input, .rho-resource-linking input { min-width: 0; padding: 0.3rem; border: 1px solid var(--rho-line); border-radius: 0.35rem; background: white; font-size: 0.6rem; }
+  .rho-resource-card { margin-top: 0.45rem; padding: 0.5rem; border: 1px solid var(--rho-line); border-radius: 0.55rem; background: white; }
+  .rho-resource-card > div:first-child { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 0.2rem 0.38rem; }
+  .rho-resource-card strong { overflow: hidden; font-size: 0.64rem; text-overflow: ellipsis; white-space: nowrap; }
+  .rho-resource-card small { grid-column: 2; overflow: hidden; color: var(--rho-muted); font-size: 0.53rem; text-overflow: ellipsis; white-space: nowrap; }
+  .rho-resource-dot { grid-row: 1 / span 2; display: inline-block; width: 0.48rem; aspect-ratio: 1; border-radius: 50%; background: #82908a; }
+  .rho-resource-ready { background: #079976; }
+  .rho-resource-missing { background: #c34c42; }
+  .rho-resource-unsupported { background: #d18428; }
+  .rho-resource-open-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.2rem; margin-top: 0.4rem; }
+  .rho-resource-open-actions button { padding: 0.2rem; font-size: 0.52rem; }
+
   .rho-runtime-inventory { margin-top: 1.2rem; padding-top: 0.8rem; border-top: 1px solid var(--rho-line); }
   .rho-runtime-inventory-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem; }
   .rho-runtime-card { margin-top: 0.5rem; padding: 0.52rem; border: 1px solid var(--rho-line); border-radius: 0.55rem; background: white; }
@@ -193,6 +208,25 @@
   .rho-file-surface code { display: block; margin-top: 0.6rem; overflow-wrap: anywhere; font-size: 0.7rem; }
   .rho-file-surface p { color: var(--rho-muted); font-family: Georgia, serif; font-size: 0.84rem; }
   .rho-file-mode { color: var(--rho-accent); font-size: 0.62rem; font-weight: 750; text-transform: uppercase; }
+  .rho-file-resource { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; min-width: 0; min-height: 0; overflow: hidden; background: #fbfcfb; }
+  .rho-resource-toolbar, .rho-resource-linking, .rho-resource-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 0.32rem; padding: 0.36rem 0.5rem; border-bottom: 1px solid var(--rho-line); color: var(--rho-muted); font-size: 0.55rem; }
+  .rho-resource-toolbar code { min-width: 0; margin-right: auto; overflow: hidden; color: var(--rho-ink); text-overflow: ellipsis; white-space: nowrap; }
+  .rho-resource-state, .rho-resource-dirty, .rho-resource-stale { padding: 0.16rem 0.3rem; border-radius: 999px; color: #3d554c; background: #e4ece8; font-size: 0.5rem; font-weight: 760; text-transform: uppercase; }
+  .rho-resource-state.rho-resource-missing, .rho-resource-stale { color: #7c2e27; background: #fde8e5; }
+  .rho-resource-state.rho-resource-unsupported, .rho-resource-dirty { color: #784a18; background: #fff0d8; }
+  .rho-resource-linking label { display: flex; flex: 1 1 8rem; align-items: center; gap: 0.25rem; }
+  .rho-resource-linking input { flex: 1 1 auto; }
+  .rho-source-editor { width: 100%; height: 100%; min-width: 0; min-height: 0; padding: 0.8rem; resize: none; border: 0; outline: none; color: #18332c; background: #fbfcfb; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.72rem; line-height: 1.55; tab-size: 2; }
+  .rho-file-preview-body, .rho-file-analysis, .rho-file-outline { min-width: 0; min-height: 0; margin: 0; padding: clamp(0.7rem, 3cqw, 1.4rem); overflow: auto; }
+  .rho-file-preview-body pre, .rho-file-analysis pre { overflow-wrap: anywhere; font: 0.68rem/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
+  .rho-file-preview-body img { display: block; max-width: 100%; max-height: 100%; margin: auto; object-fit: contain; }
+  .rho-rendered-document { max-width: 54rem; margin: auto; color: #26352f; font: 0.84rem/1.58 Georgia, serif; }
+  .rho-rendered-document pre, .rho-rendered-document code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .rho-file-outline { padding-left: 2.4rem; color: #26352f; font-size: 0.7rem; }
+  .rho-file-outline span { display: inline-block; width: 2.5rem; color: var(--rho-muted); font-family: ui-monospace, monospace; }
+  .rho-resource-placeholder, .rho-resource-error { align-self: center; margin: 1rem; padding: 0.8rem; border: 1px dashed var(--rho-line-strong); border-radius: 0.55rem; color: var(--rho-muted); font-size: 0.68rem; }
+  .rho-resource-error { border-color: #d69b5b; color: #784a18; background: #fff6e9; }
+  .rho-resource-actions { justify-content: flex-end; border-top: 1px solid var(--rho-line); border-bottom: 0; }
   .rho-playground-draft { display: grid; gap: 0.45rem; color: var(--rho-muted); font-size: 0.68rem; }
   .rho-playground-draft input { min-width: 0; padding: 0.55rem; border: 1px solid var(--rho-line); border-radius: 0.5rem; color: var(--rho-ink); background: white; }
   .rho-status-surface { display: flex; align-items: center; gap: 0.45rem; min-width: 0; padding: 0.55rem 0.7rem; font-size: 0.65rem; }

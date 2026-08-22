@@ -6,6 +6,7 @@ mod git;
 mod git_review;
 mod platform;
 mod project;
+mod resource_registry;
 mod runtime_registry;
 mod studio_runtime;
 mod surface_runtime;
@@ -350,6 +351,7 @@ struct AppState {
     surface_runtime: surface_runtime::SurfaceRuntimeState,
     studio_runtime: studio_runtime::StudioRuntimeState,
     runtime_registry: runtime_registry::RuntimeRegistryState,
+    resource_registry: resource_registry::ResourceRegistryState,
     ui_runtime: ui_runtime::UiRuntimeState,
 }
 
@@ -6590,6 +6592,11 @@ fn ark_runtime_provider_capability_id() -> CapabilityId {
         .expect("built-in Ark Runtime Provider capability must be valid")
 }
 
+fn project_file_resource_provider_capability_id() -> CapabilityId {
+    CapabilityId::new("resource.provider.project-files")
+        .expect("built-in project file Resource Provider capability must be valid")
+}
+
 struct SurfacePlaygroundPlugin {
     descriptor: PluginDescriptor,
 }
@@ -6607,6 +6614,7 @@ impl SurfacePlaygroundPlugin {
             CapabilityDeclaration::new(surface_playground_capability_id(), 1),
             CapabilityDeclaration::new(console_surface_capability_id(), 1),
             CapabilityDeclaration::new(ark_runtime_provider_capability_id(), 1),
+            CapabilityDeclaration::new(project_file_resource_provider_capability_id(), 1),
         ];
         Self { descriptor }
     }
@@ -6749,6 +6757,161 @@ impl InternalPlugin for SurfacePlaygroundPlugin {
                 )
                 .map_err(|error| {
                     ActivationError::new("ark_runtime_provider_registration", error.to_string())
+                })?;
+            for definition in [
+                rho_ui_contract::SurfaceDefinitionV1 {
+                    surface_id: rho_ui_contract::SurfaceId::new("rho.file-source")
+                        .expect("built-in File Source Surface ID must be valid"),
+                    contract_major: rho_ui_contract::RSR_CONTRACT_MAJOR,
+                    label: "File Source".to_string(),
+                    purpose: "Edit one shared project-file document through an independent view."
+                        .to_string(),
+                    renderer_kind: rho_ui_contract::SurfaceRendererKindV1::TrustedHost,
+                    scope: rho_ui_contract::SurfaceScopeV1::Project,
+                    instance_policy: rho_ui_contract::SurfaceInstancePolicyV1::MultiInstance,
+                    instance_quota_class: rho_ui_contract::SurfaceInstanceQuotaClassV1::Heavy,
+                    resource_kinds: vec![
+                        rho_ui_contract::ResourceKindId::new("project_file")
+                            .expect("built-in project file Resource kind must be valid"),
+                    ],
+                    modes: [
+                        (
+                            "source",
+                            "Source",
+                            rho_ui_contract::SurfaceInteractionKindV1::Interactive,
+                        ),
+                        (
+                            "diff",
+                            "Diff",
+                            rho_ui_contract::SurfaceInteractionKindV1::ReadOnly,
+                        ),
+                        (
+                            "outline",
+                            "Outline",
+                            rho_ui_contract::SurfaceInteractionKindV1::ReadOnly,
+                        ),
+                    ]
+                    .into_iter()
+                    .map(
+                        |(mode_id, label, interaction_kind)| rho_ui_contract::SurfaceModeV1 {
+                            mode_id: rho_ui_contract::SurfaceModeId::new(mode_id)
+                                .expect("built-in File Source mode must be valid"),
+                            label: label.to_string(),
+                            interaction_kind,
+                        },
+                    )
+                    .collect(),
+                    sizing_hints: rho_ui_contract::SurfaceSizingHintsV1 {
+                        min_inline: 220,
+                        min_block: 120,
+                        ideal_inline: Some(720),
+                        ideal_block: Some(520),
+                        max_inline: None,
+                        max_block: None,
+                        stretch_inline: true,
+                        stretch_block: true,
+                        presentation_classes: vec![
+                            rho_ui_contract::SurfacePresentationClassV1::Full,
+                            rho_ui_contract::SurfacePresentationClassV1::Compact,
+                        ],
+                    },
+                    accepted_contexts: vec!["project".to_string(), "selection".to_string()],
+                    commands: vec![],
+                    origin: rho_ui_contract::SurfaceOriginV1::Application {
+                        component_id: rho_ui_contract::ApplicationComponentId::new(
+                            "rho.file-source",
+                        )
+                        .expect("built-in File Source component ID must be valid"),
+                    },
+                },
+                rho_ui_contract::SurfaceDefinitionV1 {
+                    surface_id: rho_ui_contract::SurfaceId::new("rho.file-preview")
+                        .expect("built-in File Preview Surface ID must be valid"),
+                    contract_major: rho_ui_contract::RSR_CONTRACT_MAJOR,
+                    label: "File Preview".to_string(),
+                    purpose: "Render one immutable project-file revision in an independent view."
+                        .to_string(),
+                    renderer_kind: rho_ui_contract::SurfaceRendererKindV1::TrustedHost,
+                    scope: rho_ui_contract::SurfaceScopeV1::Project,
+                    instance_policy: rho_ui_contract::SurfaceInstancePolicyV1::MultiInstance,
+                    instance_quota_class: rho_ui_contract::SurfaceInstanceQuotaClassV1::Standard,
+                    resource_kinds: vec![
+                        rho_ui_contract::ResourceKindId::new("project_file")
+                            .expect("built-in project file Resource kind must be valid"),
+                    ],
+                    modes: vec![rho_ui_contract::SurfaceModeV1 {
+                        mode_id: rho_ui_contract::SurfaceModeId::new("preview")
+                            .expect("built-in File Preview mode must be valid"),
+                        label: "Preview".to_string(),
+                        interaction_kind: rho_ui_contract::SurfaceInteractionKindV1::ReadOnly,
+                    }],
+                    sizing_hints: rho_ui_contract::SurfaceSizingHintsV1 {
+                        min_inline: 180,
+                        min_block: 96,
+                        ideal_inline: Some(640),
+                        ideal_block: Some(480),
+                        max_inline: None,
+                        max_block: None,
+                        stretch_inline: true,
+                        stretch_block: true,
+                        presentation_classes: vec![
+                            rho_ui_contract::SurfacePresentationClassV1::Full,
+                            rho_ui_contract::SurfacePresentationClassV1::Compact,
+                        ],
+                    },
+                    accepted_contexts: vec!["project".to_string(), "selection".to_string()],
+                    commands: vec![],
+                    origin: rho_ui_contract::SurfaceOriginV1::Application {
+                        component_id: rho_ui_contract::ApplicationComponentId::new(
+                            "rho.file-preview",
+                        )
+                        .expect("built-in File Preview component ID must be valid"),
+                    },
+                },
+            ] {
+                context
+                    .effects
+                    .register_application_surface(context.registry, definition)
+                    .map_err(|error| {
+                        ActivationError::new("file_surface_registration", error.to_string())
+                    })?;
+            }
+            context
+                .effects
+                .register_application_resource_provider(
+                    context.registry,
+                    rho_ui_contract::ResourceProviderDefinitionV1 {
+                        resource_provider_id: rho_ui_contract::ResourceProviderId::new(
+                            "rho.project-files",
+                        )
+                        .expect("built-in Resource Provider ID must be valid"),
+                        resource_kinds: vec![
+                            rho_ui_contract::ResourceKindId::new("project_file")
+                                .expect("built-in project file Resource kind must be valid"),
+                        ],
+                        display_label: "Project files".to_string(),
+                        capabilities: [
+                            "resource.delete",
+                            "resource.preview",
+                            "resource.read.document",
+                            "resource.read.snapshot",
+                            "resource.rename",
+                            "resource.write",
+                        ]
+                        .into_iter()
+                        .map(|value| {
+                            rho_ui_contract::ResourceCapabilityId::new(value)
+                                .expect("built-in Resource capability must be valid")
+                        })
+                        .collect(),
+                        application_component_id: rho_ui_contract::ApplicationComponentId::new(
+                            "rho.resource.project-files",
+                        )
+                        .expect("built-in Resource Provider component ID must be valid"),
+                    },
+                )
+                .map_err(|error| {
+                    ActivationError::new("project_file_resource_registration", error.to_string())
                 })?;
             Ok(())
         })
@@ -10413,6 +10576,7 @@ mod tests {
             surface_runtime: crate::surface_runtime::SurfaceRuntimeState::default(),
             studio_runtime: crate::studio_runtime::StudioRuntimeState::default(),
             runtime_registry: crate::runtime_registry::RuntimeRegistryState::default(),
+            resource_registry: crate::resource_registry::ResourceRegistryState::default(),
             ui_runtime: crate::ui_runtime::UiRuntimeState::default(),
         }
     }
@@ -12722,7 +12886,20 @@ mod tests {
                 .registry()
                 .resolve_application_surfaces()
                 .unwrap();
-            assert_eq!(surfaces.factories().len(), 2);
+            assert_eq!(surfaces.factories().len(), 4);
+            assert_eq!(
+                surfaces
+                    .factories()
+                    .iter()
+                    .map(|factory| factory.definition.surface_id.as_str())
+                    .collect::<std::collections::BTreeSet<_>>(),
+                std::collections::BTreeSet::from([
+                    "rho.console",
+                    "rho.file-preview",
+                    "rho.file-source",
+                    "rho.surface-playground",
+                ])
+            );
             let surface = surfaces
                 .factories()
                 .iter()
@@ -12746,6 +12923,26 @@ mod tests {
                 console.definition.instance_policy,
                 rho_ui_contract::SurfaceInstancePolicyV1::MultiInstance
             );
+            let source = surfaces
+                .factories()
+                .iter()
+                .find(|factory| factory.definition.surface_id.as_str() == "rho.file-source")
+                .unwrap();
+            assert_eq!(
+                source
+                    .definition
+                    .modes
+                    .iter()
+                    .map(|mode| mode.mode_id.as_str())
+                    .collect::<std::collections::BTreeSet<_>>(),
+                std::collections::BTreeSet::from(["diff", "outline", "source"])
+            );
+            let preview = surfaces
+                .factories()
+                .iter()
+                .find(|factory| factory.definition.surface_id.as_str() == "rho.file-preview")
+                .unwrap();
+            assert_eq!(preview.definition.modes[0].mode_id.as_str(), "preview");
             let providers = application
                 .registry()
                 .resolve_application_runtime_providers()
@@ -12757,6 +12954,18 @@ mod tests {
                     .runtime_provider_id
                     .as_str(),
                 "rho.ark-r"
+            );
+            let resources = application
+                .registry()
+                .resolve_application_resource_providers()
+                .unwrap();
+            assert_eq!(resources.providers().len(), 1);
+            assert_eq!(
+                resources.providers()[0]
+                    .definition
+                    .resource_provider_id
+                    .as_str(),
+                "rho.project-files"
             );
         });
     }
@@ -12793,6 +13002,16 @@ mod tests {
                     .scopes()
                     .application()
                     .registry()
+                    .resolve_application_resource_providers()
+                    .unwrap()
+                    .providers()
+                    .is_empty()
+            );
+            assert!(
+                legacy
+                    .scopes()
+                    .application()
+                    .registry()
                     .resolve_application_runtime_providers()
                     .unwrap()
                     .providers()
@@ -12818,7 +13037,7 @@ mod tests {
                     .unwrap()
                     .factories()
                     .len(),
-                2
+                4
             );
             assert_eq!(
                 candidate
@@ -12826,6 +13045,17 @@ mod tests {
                     .application()
                     .registry()
                     .resolve_application_runtime_providers()
+                    .unwrap()
+                    .providers()
+                    .len(),
+                1
+            );
+            assert_eq!(
+                candidate
+                    .scopes()
+                    .application()
+                    .registry()
+                    .resolve_application_resource_providers()
                     .unwrap()
                     .providers()
                     .len(),
@@ -16515,6 +16745,7 @@ fn main() {
                 surface_runtime: surface_runtime::SurfaceRuntimeState::default(),
                 studio_runtime: studio_runtime::StudioRuntimeState::default(),
                 runtime_registry: runtime_registry::RuntimeRegistryState::default(),
+                resource_registry: resource_registry::ResourceRegistryState::default(),
                 ui_runtime: ui_runtime::UiRuntimeState::default(),
             });
             app.manage(NativeUpdaterState {
@@ -16559,6 +16790,14 @@ fn main() {
             runtime_registry::runtime_restart,
             runtime_registry::runtime_stop,
             runtime_registry::runtime_execute,
+            resource_registry::resource_list,
+            resource_registry::resource_resolve,
+            resource_registry::resource_read,
+            resource_registry::resource_update_draft,
+            resource_registry::resource_save,
+            resource_registry::resource_reload,
+            resource_registry::resource_rename,
+            resource_registry::resource_delete,
             workspace_start,
             workspace_status,
             project_state,

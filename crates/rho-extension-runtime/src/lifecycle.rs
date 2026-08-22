@@ -15,6 +15,7 @@ use std::{
 
 use arc_swap::ArcSwapOption;
 use rho_ui_contract::{
+    ResourceProviderDefinitionV1, ResourceProviderId, ResourceProviderRegistrationV1,
     RuntimeProviderDefinitionV1, RuntimeProviderId, RuntimeProviderRegistrationV1,
     SurfaceDefinitionV1, SurfaceFactoryRegistrationV1, SurfaceId, SurfaceOriginV1, Validate,
 };
@@ -439,6 +440,16 @@ impl EffectSink {
         Ok(self.push(Box::new(registration)))
     }
 
+    pub fn register_application_resource_provider(
+        &mut self,
+        registry: &RegistryHub,
+        definition: ResourceProviderDefinitionV1,
+    ) -> Result<u64, RegistryError> {
+        let registration =
+            registry.register_application_resource_provider(self.instance.clone(), definition)?;
+        Ok(self.push(Box::new(registration)))
+    }
+
     fn into_stack(self, diagnostics: Arc<dyn DiagnosticSink>) -> Arc<EffectStack> {
         Arc::new(EffectStack {
             inner: Mutex::new(EffectStackInner {
@@ -588,6 +599,12 @@ pub enum RegistryError {
     },
     #[error("application Runtime Provider is invalid: {reason}")]
     InvalidApplicationRuntimeProvider { reason: String },
+    #[error("application Resource Provider already exists: {resource_provider_id}")]
+    DuplicateApplicationResourceProvider {
+        resource_provider_id: ResourceProviderId,
+    },
+    #[error("application Resource Provider is invalid: {reason}")]
+    InvalidApplicationResourceProvider { reason: String },
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -608,6 +625,8 @@ struct RegistryInner {
     application_surfaces: StdMutex<BTreeMap<SurfaceId, ApplicationSurfaceEntry>>,
     application_runtime_providers:
         StdMutex<BTreeMap<RuntimeProviderId, ApplicationRuntimeProviderEntry>>,
+    application_resource_providers:
+        StdMutex<BTreeMap<ResourceProviderId, ApplicationResourceProviderEntry>>,
 }
 
 #[derive(Clone)]
@@ -641,6 +660,12 @@ struct ApplicationRuntimeProviderEntry {
 }
 
 #[derive(Clone)]
+struct ApplicationResourceProviderEntry {
+    owner: PluginInstanceIdentity,
+    definition: ResourceProviderDefinitionV1,
+}
+
+#[derive(Clone)]
 pub struct RegistryHub {
     inner: Arc<RegistryInner>,
 }
@@ -659,6 +684,7 @@ impl RegistryHub {
                 project_file_viewers: StdMutex::new(BTreeMap::new()),
                 application_surfaces: StdMutex::new(BTreeMap::new()),
                 application_runtime_providers: StdMutex::new(BTreeMap::new()),
+                application_resource_providers: StdMutex::new(BTreeMap::new()),
             }),
         }
     }
@@ -851,6 +877,28 @@ impl RegistryHub {
         })
     }
 
+    pub fn resolve_application_resource_providers(
+        &self,
+    ) -> Result<ApplicationResourceProviderResolution, RoutingError> {
+        let lease = self.lease()?;
+        let providers = self
+            .inner
+            .application_resource_providers
+            .lock()
+            .unwrap()
+            .values()
+            .map(|entry| ResourceProviderRegistrationV1 {
+                definition: entry.definition.clone(),
+                activation_generation: entry.owner.scope.generation.get(),
+            })
+            .collect();
+        Ok(ApplicationResourceProviderResolution {
+            scope: self.inner.scope.clone(),
+            providers,
+            _lease: lease,
+        })
+    }
+
     fn register_marker(
         &self,
         instance: PluginInstanceIdentity,
@@ -1011,6 +1059,38 @@ impl RegistryHub {
         })
     }
 
+    fn register_application_resource_provider(
+        &self,
+        instance: PluginInstanceIdentity,
+        definition: ResourceProviderDefinitionV1,
+    ) -> Result<ApplicationResourceProviderRegistration, RegistryError> {
+        definition.validate().map_err(|error| {
+            RegistryError::InvalidApplicationResourceProvider {
+                reason: error.to_string(),
+            }
+        })?;
+        let resource_provider_id = definition.resource_provider_id.clone();
+        let mut providers = self.inner.application_resource_providers.lock().unwrap();
+        if providers.contains_key(&resource_provider_id) {
+            return Err(RegistryError::DuplicateApplicationResourceProvider {
+                resource_provider_id,
+            });
+        }
+        providers.insert(
+            resource_provider_id.clone(),
+            ApplicationResourceProviderEntry {
+                owner: instance.clone(),
+                definition,
+            },
+        );
+        Ok(ApplicationResourceProviderRegistration {
+            registry: Arc::downgrade(&self.inner),
+            resource_provider_id,
+            instance,
+            disposed: false,
+        })
+    }
+
     async fn wait_for_idle(&self) {
         loop {
             if self.inner.leases.load(Ordering::Acquire) == 0 {
@@ -1079,6 +1159,12 @@ pub struct ApplicationRuntimeProviderResolution {
     _lease: RegistryLease,
 }
 
+pub struct ApplicationResourceProviderResolution {
+    scope: ScopeIdentity,
+    providers: Vec<ResourceProviderRegistrationV1>,
+    _lease: RegistryLease,
+}
+
 impl ApplicationSurfaceResolution {
     pub fn scope(&self) -> &ScopeIdentity {
         &self.scope
@@ -1095,6 +1181,16 @@ impl ApplicationRuntimeProviderResolution {
     }
 
     pub fn providers(&self) -> &[RuntimeProviderRegistrationV1] {
+        &self.providers
+    }
+}
+
+impl ApplicationResourceProviderResolution {
+    pub fn scope(&self) -> &ScopeIdentity {
+        &self.scope
+    }
+
+    pub fn providers(&self) -> &[ResourceProviderRegistrationV1] {
         &self.providers
     }
 }
@@ -1241,6 +1337,36 @@ struct ApplicationRuntimeProviderRegistration {
     runtime_provider_id: RuntimeProviderId,
     instance: PluginInstanceIdentity,
     disposed: bool,
+}
+
+struct ApplicationResourceProviderRegistration {
+    registry: Weak<RegistryInner>,
+    resource_provider_id: ResourceProviderId,
+    instance: PluginInstanceIdentity,
+    disposed: bool,
+}
+
+impl Disposable for ApplicationResourceProviderRegistration {
+    fn dispose<'a>(
+        &'a mut self,
+    ) -> Pin<Box<dyn Future<Output = Result<(), DisposeError>> + Send + 'a>> {
+        Box::pin(async move {
+            if self.disposed {
+                return Ok(());
+            }
+            if let Some(registry) = self.registry.upgrade() {
+                let mut providers = registry.application_resource_providers.lock().unwrap();
+                if providers
+                    .get(&self.resource_provider_id)
+                    .is_some_and(|entry| entry.owner == self.instance)
+                {
+                    providers.remove(&self.resource_provider_id);
+                }
+            }
+            self.disposed = true;
+            Ok(())
+        })
+    }
 }
 
 impl Disposable for ApplicationRuntimeProviderRegistration {

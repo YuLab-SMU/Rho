@@ -3,6 +3,18 @@ import { projectLabel } from "./normalize";
 import { applySceneEdit, collectSceneInstances, reconcileStudio } from "./studio-model";
 import type {
   OpenSurfaceRequest,
+  ResourceBinding,
+  ResourceContent,
+  ResourceDeleteRequest,
+  ResourceDescriptor,
+  ResourceDraftRequest,
+  ResourceReadRequest,
+  ResourceRegistrySnapshot,
+  ResourceReloadRequest,
+  ResourceRenameRequest,
+  ResourceResolveRequest,
+  ResourceSaveRequest,
+  ResourceTarget,
   RuntimeAttachmentRequest,
   RuntimeBinding,
   RuntimeCreateRequest,
@@ -33,6 +45,8 @@ const generatedStudio =
   fixture.studio_runtime_snapshot as unknown as StudioRuntimeSnapshot;
 const generatedRuntimes =
   fixture.runtime_registry_snapshot as unknown as RuntimeRegistrySnapshot;
+const generatedResources =
+  fixture.resource_registry_snapshot as unknown as ResourceRegistrySnapshot;
 
 function copySnapshot(snapshot: UiKernelSnapshot): UiKernelSnapshot {
   return structuredClone(snapshot);
@@ -50,11 +64,16 @@ function copyRuntimes(snapshot: RuntimeRegistrySnapshot): RuntimeRegistrySnapsho
   return structuredClone(snapshot);
 }
 
+function copyResources(snapshot: ResourceRegistrySnapshot): ResourceRegistrySnapshot {
+  return structuredClone(snapshot);
+}
+
 export interface MockUiKernelTransport extends UiKernelTransport {
   publish(snapshot: UiKernelSnapshot): void;
   publishSurfaces(snapshot: SurfaceRuntimeSnapshot): void;
   publishStudio(snapshot: StudioRuntimeSnapshot): void;
   publishRuntimes(snapshot: RuntimeRegistrySnapshot): void;
+  publishResources(snapshot: ResourceRegistrySnapshot): void;
 }
 
 export function createMockUiKernelTransport(
@@ -76,6 +95,17 @@ export function createMockUiKernelTransport(
   let surfaces = copySurfaces(generatedSurfaces);
   let studio = copyStudio(generatedStudio);
   let runtimes = copyRuntimes(generatedRuntimes);
+  let resources = copyResources(generatedResources);
+  const persistedContent = new Map<string, string>([
+    ["analysis.R", "library(ggplot2)\nplot(mtcars$wt, mtcars$mpg)\n"],
+  ]);
+  const documents = new Map<string, {
+    content: string;
+    baseContent: string;
+    documentRevision: number;
+    baseResourceRevision: number;
+    dirty: boolean;
+  }>();
   let nextInstance = 1;
   let nextNode = 1;
   let nextRuntime = 1;
@@ -87,6 +117,7 @@ export function createMockUiKernelTransport(
   const surfaceListeners = new Set<() => void>();
   const studioListeners = new Set<() => void>();
   const runtimeListeners = new Set<() => void>();
+  const resourceListeners = new Set<() => void>();
   const notifySurfaces = () => {
     for (const listener of surfaceListeners) listener();
   };
@@ -95,6 +126,9 @@ export function createMockUiKernelTransport(
   };
   const notifyRuntimes = () => {
     for (const listener of runtimeListeners) listener();
+  };
+  const notifyResources = () => {
+    for (const listener of resourceListeners) listener();
   };
   const availableIds = () => surfaces.catalog.instances.map((instance) => instance.instance_id);
   const reconcileCurrentStudio = () => {
@@ -156,6 +190,68 @@ export function createMockUiKernelTransport(
     };
     notifyRuntimes();
     return copyRuntimes(runtimes);
+  };
+  const installResources = (nextResources: readonly ResourceDescriptor[]) => {
+    resources = {
+      ...copyResources(resources),
+      snapshot_revision: resources.snapshot_revision + 1,
+      resources: [...nextResources],
+    };
+    notifyResources();
+    return copyResources(resources);
+  };
+  const validateResource = (target: ResourceTarget, exact: boolean): ResourceDescriptor => {
+    if (
+      target.project_id !== resources.project_id ||
+      target.expected_project_revision !== resources.project_revision
+    ) throw new Error("Mock Resource belongs to another project or revision.");
+    const descriptor = resources.resources.find((resource) =>
+      resource.resource_provider_id === target.resource_provider_id &&
+      resource.resource_kind === target.resource_kind &&
+      resource.resource_id === target.resource_id
+    );
+    if (descriptor == null) throw new Error("Mock Resource was not resolved.");
+    if (exact && descriptor.resource_revision !== target.expected_resource_revision) {
+      throw new Error("Mock Resource revision is stale.");
+    }
+    return descriptor;
+  };
+  const contentShape = (
+    descriptor: ResourceDescriptor,
+    document: NonNullable<ReturnType<typeof documents.get>>,
+  ): ResourceContent => ({
+    contract: "rho.ui.resource-content.v1",
+    descriptor,
+    consistency: "shared_document",
+    document_revision: document.documentRevision,
+    base_resource_revision: document.baseResourceRevision,
+    dirty: document.dirty,
+    stale: descriptor.status !== "ready" ||
+      descriptor.resource_revision !== document.baseResourceRevision,
+    content_encoding: "utf-8",
+    content: document.content,
+  });
+  const rebindSourceSurfaces = (descriptor: ResourceDescriptor) => {
+    const instances = surfaces.catalog.instances.map((instance) =>
+      instance.surface_id === "rho.file-source" &&
+      instance.resource_binding?.resource_provider_id === descriptor.resource_provider_id &&
+      instance.resource_binding.resource_kind === descriptor.resource_kind &&
+      instance.resource_binding.resource_id === descriptor.resource_id
+        ? {
+            ...instance,
+            surface_revision: instance.surface_revision + 1,
+            resource_binding: {
+              resource_provider_id: descriptor.resource_provider_id,
+              resource_kind: descriptor.resource_kind,
+              resource_id: descriptor.resource_id,
+              resource_revision: descriptor.resource_revision,
+            } satisfies ResourceBinding,
+          }
+        : instance
+    );
+    if (JSON.stringify(instances) !== JSON.stringify(surfaces.catalog.instances)) {
+      installSurfaces(instances);
+    }
   };
   const validateRuntime = (request: RuntimeInstanceRequest): number => {
     if (
@@ -274,6 +370,17 @@ export function createMockUiKernelTransport(
         (candidate) => candidate.definition.surface_id === request.surface_id,
       );
       if (factory == null) throw new Error("Mock Surface factory is unavailable.");
+      if (request.resource_binding != null) {
+        const resource = resources.resources.find((candidate) =>
+          candidate.resource_provider_id === request.resource_binding?.resource_provider_id &&
+          candidate.resource_kind === request.resource_binding.resource_kind &&
+          candidate.resource_id === request.resource_binding.resource_id
+        );
+        if (
+          resource == null || resource.status !== "ready" ||
+          request.resource_binding.resource_revision !== resource.resource_revision
+        ) throw new Error("Mock bound Resource is stale or unavailable.");
+      }
       const exact = surfaces.catalog.instances.find(
         (instance) =>
           instance.lifecycle_state !== "placeholder" &&
@@ -334,12 +441,48 @@ export function createMockUiKernelTransport(
         case "set_mode": mutable.mode_id = request.mutation.mode_id; break;
         case "set_view_state": mutable.view_state = request.mutation.view_state; break;
         case "set_lifecycle": mutable.lifecycle_state = request.mutation.state; break;
-        case "bind_resource": mutable.resource_binding = request.mutation.binding; break;
+        case "bind_resource": {
+          const binding = request.mutation.binding;
+          if (binding != null) {
+            const resource = resources.resources.find((candidate) =>
+              candidate.resource_provider_id === binding.resource_provider_id &&
+              candidate.resource_kind === binding.resource_kind &&
+              candidate.resource_id === binding.resource_id
+            );
+            if (
+              resource == null || resource.status !== "ready" ||
+              binding.resource_revision !== resource.resource_revision
+            ) throw new Error("Mock bound Resource is stale or unavailable.");
+          }
+          mutable.resource_binding = binding;
+          break;
+        }
         case "bind_runtime": mutable.runtime_binding = request.mutation.binding; break;
         case "set_view_group": mutable.view_group_id = request.mutation.view_group_id; break;
       }
       mutable.surface_revision += 1;
       instances[index] = mutable as SurfaceInstance;
+      if (
+        request.mutation.kind === "set_view_state" &&
+        current.view_group_id != null && current.resource_binding != null
+      ) {
+        for (let siblingIndex = 0; siblingIndex < instances.length; siblingIndex += 1) {
+          if (siblingIndex === index) continue;
+          const sibling = instances[siblingIndex];
+          if (
+            sibling == null || sibling.lifecycle_state === "placeholder" ||
+            sibling.view_group_id !== current.view_group_id ||
+            sibling.resource_binding?.resource_provider_id !== current.resource_binding.resource_provider_id ||
+            sibling.resource_binding.resource_kind !== current.resource_binding.resource_kind ||
+            sibling.resource_binding.resource_id !== current.resource_binding.resource_id
+          ) continue;
+          instances[siblingIndex] = {
+            ...sibling,
+            view_state: request.mutation.view_state,
+            surface_revision: sibling.surface_revision + 1,
+          };
+        }
+      }
       return installSurfaces(instances);
     },
     async closeSurface(request: SurfaceInstanceRequest) {
@@ -551,6 +694,216 @@ export function createMockUiKernelTransport(
     publishRuntimes(next: RuntimeRegistrySnapshot) {
       runtimes = copyRuntimes(next);
       notifyRuntimes();
+    },
+    async loadResources() {
+      return copyResources(resources);
+    },
+    async resolveResource(request: ResourceResolveRequest) {
+      if (
+        request.project_id !== resources.project_id ||
+        request.expected_project_revision !== resources.project_revision ||
+        request.expected_snapshot_revision !== resources.snapshot_revision
+      ) throw new Error("Mock Resource resolve request is stale.");
+      const normalized = request.resource_id.replaceAll("\\", "/");
+      if (
+        !normalized || normalized.startsWith("/") ||
+        normalized.split("/").some((part) => !part || part === "." || part === "..")
+      ) throw new Error("Mock Resource path must be normalized.");
+      if (resources.resources.some((resource) => resource.resource_id === normalized)) {
+        return copyResources(resources);
+      }
+      const exists = persistedContent.has(normalized);
+      const supported = /\.(r|rmd|qmd|md|txt|json|csv|tsv|html|png|jpe?g|gif|webp)$/iu.test(normalized);
+      const descriptor: ResourceDescriptor = {
+        resource_provider_id: request.resource_provider_id,
+        project_id: request.project_id,
+        resource_kind: request.resource_kind,
+        resource_id: normalized,
+        resource_revision: 1,
+        label: normalized.split("/").at(-1) ?? normalized,
+        capabilities: exists && supported
+          ? ["resource.delete", "resource.preview", "resource.read.document", "resource.read.snapshot", "resource.rename", "resource.write"]
+          : ["resource.read.snapshot"],
+        status: exists ? supported ? "ready" : "unsupported" : "missing",
+        media_type: exists && supported ? "text/plain" : null,
+        size_bytes: exists && supported ? (persistedContent.get(normalized)?.length ?? 0) : null,
+        content_sha256: null,
+      };
+      return installResources([...resources.resources, descriptor]);
+    },
+    async readResource(request: ResourceReadRequest): Promise<ResourceContent> {
+      const descriptor = validateResource(
+        request.target,
+        request.consistency === "immutable_snapshot",
+      );
+      if (descriptor.status !== "ready") throw new Error("Mock Resource is unavailable.");
+      if (request.consistency === "immutable_snapshot") {
+        if (!descriptor.capabilities.includes("resource.preview")) {
+          throw new Error("Mock Resource preview is unsupported.");
+        }
+        return {
+          contract: "rho.ui.resource-content.v1",
+          descriptor,
+          consistency: "immutable_snapshot",
+          document_revision: 1,
+          base_resource_revision: descriptor.resource_revision,
+          dirty: false,
+          stale: false,
+          content_encoding: "utf-8",
+          content: persistedContent.get(descriptor.resource_id) ?? "",
+        };
+      }
+      let document = documents.get(descriptor.resource_id);
+      if (document == null) {
+        const content = persistedContent.get(descriptor.resource_id) ?? "";
+        document = {
+          content,
+          baseContent: content,
+          documentRevision: 1,
+          baseResourceRevision: descriptor.resource_revision,
+          dirty: false,
+        };
+        documents.set(descriptor.resource_id, document);
+        resources = { ...resources, snapshot_revision: resources.snapshot_revision + 1 };
+        notifyResources();
+      }
+      return contentShape(descriptor, document);
+    },
+    async updateResourceDraft(request: ResourceDraftRequest) {
+      const descriptor = validateResource(request.target, false);
+      const document = documents.get(descriptor.resource_id);
+      if (document == null) throw new Error("Mock shared Resource document is not open.");
+      if (document.documentRevision !== request.expected_document_revision) {
+        throw new Error("Mock Resource document revision is stale.");
+      }
+      document.content = request.content;
+      document.documentRevision += 1;
+      document.dirty = document.content !== document.baseContent;
+      resources = { ...resources, snapshot_revision: resources.snapshot_revision + 1 };
+      notifyResources();
+      return contentShape(descriptor, document);
+    },
+    async saveResource(request: ResourceSaveRequest) {
+      const descriptor = validateResource(request.target, false);
+      const document = documents.get(descriptor.resource_id);
+      if (document == null) throw new Error("Mock shared Resource document is not open.");
+      if (
+        document.documentRevision !== request.expected_document_revision ||
+        document.baseResourceRevision !== descriptor.resource_revision
+      ) throw new Error("Mock Resource save request is stale.");
+      persistedContent.set(descriptor.resource_id, document.content);
+      const saved: ResourceDescriptor = {
+        ...descriptor,
+        resource_revision: descriptor.resource_revision + 1,
+        size_bytes: document.content.length,
+      };
+      document.baseContent = document.content;
+      document.baseResourceRevision = saved.resource_revision;
+      document.documentRevision += 1;
+      document.dirty = false;
+      installResources(resources.resources.map((resource) =>
+        resource.resource_id === saved.resource_id ? saved : resource
+      ));
+      rebindSourceSurfaces(saved);
+      return contentShape(saved, document);
+    },
+    async reloadResource(request: ResourceReloadRequest) {
+      const descriptor = validateResource(request.target, false);
+      const document = documents.get(descriptor.resource_id);
+      if (document == null) throw new Error("Mock shared Resource document is not open.");
+      if (document.documentRevision !== request.expected_document_revision) {
+        throw new Error("Mock Resource document revision is stale.");
+      }
+      if (document.dirty && !request.discard_dirty) {
+        throw new Error("Mock Resource has an unsaved draft; explicit discard is required.");
+      }
+      const content = persistedContent.get(descriptor.resource_id) ?? "";
+      document.content = content;
+      document.baseContent = content;
+      document.baseResourceRevision = descriptor.resource_revision;
+      document.documentRevision += 1;
+      document.dirty = false;
+      resources = { ...resources, snapshot_revision: resources.snapshot_revision + 1 };
+      notifyResources();
+      rebindSourceSurfaces(descriptor);
+      return contentShape(descriptor, document);
+    },
+    async renameResource(request: ResourceRenameRequest) {
+      const descriptor = validateResource(request.target, true);
+      const document = documents.get(descriptor.resource_id);
+      if ((document?.documentRevision ?? null) !== request.expected_document_revision) {
+        throw new Error("Mock Resource document revision is stale.");
+      }
+      if (resources.resources.some((resource) => resource.resource_id === request.new_resource_id)) {
+        throw new Error("Mock Resource rename target already exists.");
+      }
+      const renamed: ResourceDescriptor = {
+        ...descriptor,
+        resource_id: request.new_resource_id,
+        label: request.new_resource_id.split("/").at(-1) ?? request.new_resource_id,
+        resource_revision: 1,
+      };
+      const persisted = persistedContent.get(descriptor.resource_id);
+      persistedContent.delete(descriptor.resource_id);
+      if (persisted != null) persistedContent.set(renamed.resource_id, persisted);
+      if (document != null) {
+        documents.delete(descriptor.resource_id);
+        document.baseResourceRevision = renamed.resource_revision;
+        document.documentRevision += 1;
+        documents.set(renamed.resource_id, document);
+      }
+      const snapshot = installResources([
+        ...resources.resources.filter((resource) => resource.resource_id !== descriptor.resource_id),
+        renamed,
+      ]);
+      const binding: ResourceBinding = {
+        resource_provider_id: renamed.resource_provider_id,
+        resource_kind: renamed.resource_kind,
+        resource_id: renamed.resource_id,
+        resource_revision: renamed.resource_revision,
+      };
+      const rebound = surfaces.catalog.instances.map((surface) =>
+        surface.resource_binding?.resource_provider_id === descriptor.resource_provider_id &&
+        surface.resource_binding.resource_kind === descriptor.resource_kind &&
+        surface.resource_binding.resource_id === descriptor.resource_id
+          ? { ...surface, surface_revision: surface.surface_revision + 1, resource_binding: binding }
+          : surface
+      );
+      installSurfaces(rebound);
+      return snapshot;
+    },
+    async deleteResource(request: ResourceDeleteRequest) {
+      const descriptor = validateResource(request.target, true);
+      const document = documents.get(descriptor.resource_id);
+      if (document != null) {
+        if (request.expected_document_revision !== document.documentRevision) {
+          throw new Error("Mock Resource document revision is stale.");
+        }
+        if (document.dirty && !request.discard_dirty) {
+          throw new Error("Mock Resource has an unsaved draft; explicit discard is required.");
+        }
+        if (request.discard_dirty) documents.delete(descriptor.resource_id);
+      }
+      persistedContent.delete(descriptor.resource_id);
+      const missing: ResourceDescriptor = {
+        ...descriptor,
+        resource_revision: descriptor.resource_revision + 1,
+        status: "missing",
+        media_type: null,
+        size_bytes: null,
+        content_sha256: null,
+      };
+      return installResources(resources.resources.map((resource) =>
+        resource.resource_id === missing.resource_id ? missing : resource
+      ));
+    },
+    subscribeResourcesInvalidated(listener: () => void): Unsubscribe {
+      resourceListeners.add(listener);
+      return () => resourceListeners.delete(listener);
+    },
+    publishResources(next: ResourceRegistrySnapshot) {
+      resources = copyResources(next);
+      notifyResources();
     },
   };
 }

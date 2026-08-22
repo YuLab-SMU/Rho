@@ -1,6 +1,6 @@
 # Rho Surface Runtime Full Construction Plan
 
-Status: active complete construction program; Wave 6 is the current integration
+Status: active complete construction program; Wave 7 is the current integration
 package
 
 Date: 2026-08-21
@@ -13,13 +13,13 @@ own focused evidence, contract review, documentation reconciliation, and
 scoped commit. After a wave passes its continuous gate, the next dependency is
 activated automatically under the same explicit authorization.
 
-Current integration package: **Wave 6 — Resource Registry and unconstrained file views**.
+Current integration package: **Wave 7 — Durable UI Profile and Studio product shell**.
 
-Wave 6 acceptance owner: this active contract. Acceptance requires normalized,
-project-bound resource identity and revision truth, unconstrained repeated file
-views and modes, explicit optional view grouping, dirty-draft preservation, and
-truthful stale/missing/unsupported states. Layout and Surface instances may not
-become file-content authority.
+Wave 7 acceptance owner: this active contract. Acceptance requires project-
+bound durable Studio/Vibe/instance presentation truth, CAS and atomic recovery,
+immutable preset semantics, and a minimal product shell with no imported old-
+layout authority. Scientific, document, Resource, Runtime, plugin, and Agent
+truth remain in their existing owners.
 
 Owning design:
 `docs/design/proposed-2026-08-21-plugin-native-surface-runtime-design.md`
@@ -694,6 +694,61 @@ Continuous gate:
 - independent cursor/viewport/focus, dirty draft preservation, external reload,
   stale preview, rename/delete, project switch, and unsupported resource;
 - no layout node or plugin instance becomes file-content authority.
+
+Completion evidence (2026-08-22):
+
+- `rho-ui-contract` now owns bounded Resource Provider registrations,
+  provider-qualified project Resource identity, normalized target/revision
+  admission, ready/missing/unsupported truth, shared-document versus immutable-
+  snapshot reads, content/draft/save/reload/rename/delete requests, and exact
+  encoded/content budgets. The generated fixture proves independent Source,
+  Diff, Outline, and Preview modes and repeated bindings without implying
+  uniqueness;
+- application plugin lifecycle registration now treats Resource Providers as
+  generation-bound reversible effects with duplicate-candidate rollback. The
+  project-file provider is a separate registered authority from the Source and
+  Preview Surface factories, so a Resource kind and a rendering factory are
+  never assumed to share an owner;
+- the desktop Resource Registry owns one normalized project-file projection and
+  per-project shared document caches. Dirty A/B/A documents survive project
+  switching; external edits and deletion produce stale recovery content;
+  unsupported and explicitly missing resources remain truthful. Save, rename,
+  and delete use exact revisions and recover the original file plus registry
+  projection when project identity or later completion fails;
+- Tauri and browser/mock transports implement list/resolve/read/draft/save/
+  reload/rename/delete in lockstep. Source views share one document model while
+  Preview views retain immutable exact-revision snapshots until explicit
+  refresh. Rename rebinds every matching view without moving layout; delete
+  preserves Surface placement as an unavailable Resource;
+- Source and Preview are repeatable independent factories. The new shell can
+  open different files, identical Source or Preview instances, and any Source/
+  Diff/Outline/Preview combination. Cursor, viewport, focus, mode, and local
+  state stay instance-local by default; only an explicit matching
+  `view_group_id` propagates cursor/scroll view state among views of the exact
+  same provider-qualified Resource;
+- frontend behavior tests cover shared sibling drafts, immutable stale Preview,
+  repeated identical views, explicit view-group linking, save/reload, rename,
+  deletion, and unchanged Studio layout. Rust tests cover provider lifecycle,
+  exact byte boundaries, provider/project/identity rejection, A/B/A recovery,
+  external conflicts, unsupported/missing resolution, dirty deletion recovery,
+  linked view state, Source-only revision advance, Preview staleness, and
+  rename rebinding;
+- `cargo test --workspace --locked` passed the complete local matrix: Desktop
+  ran 304 tests with 303 passing and the existing opt-in macOS Keychain smoke
+  ignored. Focused `rho-ui-contract` and `rho-extension-runtime` Clippy passed
+  with `-D warnings`; `cargo check -p rho-desktop` passed after the final linked-
+  view change;
+- `npm run rsr:check` passed strict TypeScript, ESLint, exact generated fixture
+  parity, 20 Vitest cases, deterministic production assets, no-network asset
+  checks, and real local Chrome smoke. An 1800 x 1100 local capture verified a
+  real Source editor, Resource inventory, explicit status/revisions and the
+  recursive Studio scene;
+- cross-review found one resolved ownership boundary: Resource Provider owns
+  identity/content/revision, shared documents own drafts, immutable consumers
+  own only their snapshot, Surface instances own view state, and Studio owns
+  placement only. No application/R-package version or `NEWS.md` change is
+  required because Tauri still ships frozen `desktop/dist`; installed-app and
+  release acceptance are neither run nor claimed.
 
 ### Wave 7 — Durable UI Profile and Studio product shell
 

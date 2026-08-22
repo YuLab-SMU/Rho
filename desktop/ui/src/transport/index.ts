@@ -17,9 +17,10 @@ export {
   StudioExternalStore,
   SurfaceExternalStore,
   RuntimeExternalStore,
+  ResourceExternalStore,
   UiExternalStore,
 } from "./store";
-export type { RuntimeStoreSnapshot, StudioStoreSnapshot, SurfaceStoreSnapshot, UiStoreSnapshot } from "./store";
+export type { ResourceStoreSnapshot, RuntimeStoreSnapshot, StudioStoreSnapshot, SurfaceStoreSnapshot, UiStoreSnapshot } from "./store";
 export type {
   CommandAvailability,
   CommandPlacementTag,
@@ -48,6 +49,20 @@ export type {
   RuntimeExecutionResult,
   RuntimeInstanceRequest,
   RuntimeRegistrySnapshot,
+  ResourceBinding,
+  ResourceContent,
+  ResourceDeleteRequest,
+  ResourceDescriptor,
+  ResourceDraftRequest,
+  ResourceReadConsistency,
+  ResourceReadRequest,
+  ResourceRegistrySnapshot,
+  ResourceReloadRequest,
+  ResourceRenameRequest,
+  ResourceResolveRequest,
+  ResourceSaveRequest,
+  ResourceStatus,
+  ResourceTarget,
   UiKernelSnapshot,
   UiKernelTransport,
   UiSelection,

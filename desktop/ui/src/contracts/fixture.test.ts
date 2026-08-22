@@ -22,10 +22,13 @@ describe("Rust-generated RSR contract fixture", () => {
       consoles[1]?.runtime_binding?.runtime_instance_id,
     );
 
-    const files = fixture.instances.filter((instance) => instance.surface_id === "rho.file");
+    const files = fixture.instances.filter((instance) =>
+      instance.surface_id === "rho.file-source" || instance.surface_id === "rho.file-preview"
+    );
     expect(files).toHaveLength(2);
     expect(files[0]?.resource_binding).toEqual(files[1]?.resource_binding);
     expect(files[0]?.mode_id).not.toBe(files[1]?.mode_id);
+    expect(files[0]?.surface_id).not.toBe(files[1]?.surface_id);
   });
 
   it("contains asymmetric Studio and ordered Vibe examples", () => {

@@ -583,6 +583,10 @@ mod tests {
             expected_snapshot_revision: snapshot.snapshot_revision,
             selection: Some(UiSelectionV1::Resource {
                 binding: ResourceBindingV1 {
+                    resource_provider_id: rho_ui_contract::ResourceProviderId::new(
+                        "rho.project-files",
+                    )
+                    .unwrap(),
                     resource_kind: ResourceKindId::new("project_file").unwrap(),
                     resource_id: "analysis.R".to_string(),
                     resource_revision: Some(8),

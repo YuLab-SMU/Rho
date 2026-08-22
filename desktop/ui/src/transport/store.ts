@@ -1,6 +1,14 @@
 import type {
   CommandPlacementTag,
   OpenSurfaceRequest,
+  ResourceDeleteRequest,
+  ResourceDraftRequest,
+  ResourceReadRequest,
+  ResourceRegistrySnapshot,
+  ResourceReloadRequest,
+  ResourceRenameRequest,
+  ResourceResolveRequest,
+  ResourceSaveRequest,
   RuntimeAttachmentRequest,
   RuntimeCreateRequest,
   RuntimeDetachRequest,
@@ -54,10 +62,20 @@ export type RuntimeStoreSnapshot =
       readonly snapshot: RuntimeRegistrySnapshot;
     };
 
+export type ResourceStoreSnapshot =
+  | { readonly status: "loading" }
+  | { readonly status: "failed"; readonly message: string }
+  | {
+      readonly status: "ready";
+      readonly source: UiKernelTransport["source"];
+      readonly snapshot: ResourceRegistrySnapshot;
+    };
+
 const LOADING: UiStoreSnapshot = Object.freeze({ status: "loading" });
 const SURFACE_LOADING: SurfaceStoreSnapshot = Object.freeze({ status: "loading" });
 const STUDIO_LOADING: StudioStoreSnapshot = Object.freeze({ status: "loading" });
 const RUNTIME_LOADING: RuntimeStoreSnapshot = Object.freeze({ status: "loading" });
+const RESOURCE_LOADING: ResourceStoreSnapshot = Object.freeze({ status: "loading" });
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) return error.message.slice(0, 512);
@@ -477,6 +495,121 @@ export class RuntimeExternalStore {
 
   execute(request: RuntimeExecuteRequest) {
     return this.#transport.executeRuntime(request);
+  }
+}
+
+export class ResourceExternalStore {
+  readonly #transport: UiKernelTransport;
+  readonly #listeners = new Set<() => void>();
+  #state: ResourceStoreSnapshot = RESOURCE_LOADING;
+  #stopTransport: Unsubscribe | undefined;
+  #refreshing: Promise<void> | undefined;
+  #refreshQueued = false;
+
+  constructor(transport: UiKernelTransport) {
+    this.#transport = transport;
+  }
+
+  readonly getSnapshot = (): ResourceStoreSnapshot => this.#state;
+
+  readonly subscribe = (listener: () => void): Unsubscribe => {
+    this.#listeners.add(listener);
+    if (this.#listeners.size === 1) {
+      this.#stopTransport = this.#transport.subscribeResourcesInvalidated(() => {
+        void this.refresh();
+      });
+      void this.refresh();
+    }
+    return () => {
+      this.#listeners.delete(listener);
+      if (this.#listeners.size === 0) {
+        this.#stopTransport?.();
+        this.#stopTransport = undefined;
+      }
+    };
+  };
+
+  #publish(state: ResourceStoreSnapshot): void {
+    if (state === this.#state) return;
+    this.#state = state;
+    for (const listener of this.#listeners) listener();
+  }
+
+  #install(snapshot: ResourceRegistrySnapshot): void {
+    const current = this.#state;
+    if (current.status === "ready") {
+      const revision = current.snapshot.snapshot_revision;
+      if (snapshot.snapshot_revision < revision) return;
+      if (snapshot.snapshot_revision === revision) {
+        if (JSON.stringify(snapshot) === JSON.stringify(current.snapshot)) return;
+        this.#publish({
+          status: "failed",
+          message: "Resource Registry returned different data for one snapshot revision.",
+        });
+        return;
+      }
+    }
+    this.#publish(
+      deepFreeze({ status: "ready", source: this.#transport.source, snapshot } as const),
+    );
+  }
+
+  async #runRefreshLoop(): Promise<void> {
+    do {
+      this.#refreshQueued = false;
+      try {
+        this.#install(await this.#transport.loadResources());
+      } catch (error: unknown) {
+        if (this.#state.status !== "ready") {
+          this.#publish({ status: "failed", message: errorMessage(error) });
+        }
+      }
+    } while (this.#refreshQueued);
+  }
+
+  refresh(): Promise<void> {
+    if (this.#refreshing != null) {
+      this.#refreshQueued = true;
+      return this.#refreshing;
+    }
+    this.#refreshing = this.#runRefreshLoop().finally(() => {
+      this.#refreshing = undefined;
+    });
+    return this.#refreshing;
+  }
+
+  async #mutate(operation: () => Promise<ResourceRegistrySnapshot>) {
+    const snapshot = await operation();
+    this.#install(snapshot);
+    return snapshot;
+  }
+
+  resolve(request: ResourceResolveRequest) {
+    return this.#mutate(() => this.#transport.resolveResource(request));
+  }
+
+  read(request: ResourceReadRequest) {
+    return this.#transport.readResource(request);
+  }
+
+  updateDraft(request: ResourceDraftRequest) {
+    return this.#transport.updateResourceDraft(request);
+  }
+
+  save(request: ResourceSaveRequest) {
+    return this.#transport.saveResource(request);
+  }
+
+  reload(request: ResourceReloadRequest) {
+    return this.#transport.reloadResource(request);
+  }
+
+  rename(request: ResourceRenameRequest) {
+    return this.#mutate(() => this.#transport.renameResource(request));
+  }
+
+  delete(request: ResourceDeleteRequest) {
+    return this.#mutate(() => this.#transport.deleteResource(request));
   }
 }
 

@@ -8,6 +8,7 @@ import {
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 
 import {
+  ResourceExternalStore,
   StudioExternalStore,
   SurfaceExternalStore,
   RuntimeExternalStore,
@@ -20,6 +21,11 @@ import type {
   LayoutBasis,
   LayoutChild,
   LayoutNode,
+  ResourceContent,
+  ResourceDescriptor,
+  ResourceReadConsistency,
+  ResourceRegistrySnapshot,
+  ResourceTarget,
   RuntimeDescriptor,
   RuntimeExecutionResult,
   RuntimeInstanceRequest,
@@ -30,6 +36,8 @@ import type {
   SurfaceInstanceRequest,
   UiKernelTransport,
 } from "../transport";
+import DOMPurify from "dompurify";
+import { marked } from "marked";
 
 interface AppProps {
   readonly transport?: UiKernelTransport;
@@ -40,6 +48,7 @@ const defaultStore = new UiExternalStore(defaultTransport);
 const defaultSurfaceStore = new SurfaceExternalStore(defaultTransport);
 const defaultStudioStore = new StudioExternalStore(defaultTransport);
 const defaultRuntimeStore = new RuntimeExternalStore(defaultTransport);
+const defaultResourceStore = new ResourceExternalStore(defaultTransport);
 
 function instanceRequest(
   instance: SurfaceInstance,
@@ -65,6 +74,21 @@ function runtimeRequest(
     activation_generation: runtime.activation_generation,
     expected_project_revision: projectRevision,
     expected_state_revision: runtime.state_revision,
+  };
+}
+
+function resourceTarget(
+  descriptor: ResourceDescriptor,
+  projectRevision: number,
+  resourceRevision = descriptor.resource_revision,
+): ResourceTarget {
+  return {
+    project_id: descriptor.project_id,
+    resource_provider_id: descriptor.resource_provider_id,
+    resource_kind: descriptor.resource_kind,
+    resource_id: descriptor.resource_id,
+    expected_project_revision: projectRevision,
+    expected_resource_revision: resourceRevision,
   };
 }
 
@@ -232,6 +256,16 @@ interface SurfaceViewProps {
   readonly interruptRuntime: (runtime: RuntimeDescriptor) => Promise<void>;
   readonly restartRuntime: (runtime: RuntimeDescriptor) => Promise<void>;
   readonly persistConsole: (viewState: ConsoleViewState) => Promise<void>;
+  readonly resources: ResourceRegistrySnapshot | null;
+  readonly readResource: FileResourceViewProps["read"];
+  readonly updateResourceDraft: FileResourceViewProps["updateDraft"];
+  readonly saveResource: FileResourceViewProps["save"];
+  readonly reloadResource: FileResourceViewProps["reload"];
+  readonly renameResource: FileResourceViewProps["rename"];
+  readonly deleteResource: FileResourceViewProps["removeResource"];
+  readonly refreshResourceBinding: FileResourceViewProps["refreshBinding"];
+  readonly setViewGroup: FileResourceViewProps["setViewGroup"];
+  readonly persistFileViewState: FileResourceViewProps["persistViewState"];
   readonly reportError: (error: unknown) => void;
 }
 
@@ -285,19 +319,217 @@ function initialDraft(instance: SurfaceInstance, cache: Map<string, string>): st
   return "";
 }
 
+interface FileResourceViewProps {
+  readonly instance: SurfaceInstance;
+  readonly registry: ResourceRegistrySnapshot | null;
+  readonly read: (
+    descriptor: ResourceDescriptor,
+    consistency: ResourceReadConsistency,
+    resourceRevision: number,
+  ) => Promise<ResourceContent>;
+  readonly updateDraft: (content: ResourceContent, value: string) => Promise<ResourceContent>;
+  readonly save: (content: ResourceContent) => Promise<ResourceContent>;
+  readonly reload: (content: ResourceContent, discardDirty: boolean) => Promise<ResourceContent>;
+  readonly rename: (content: ResourceContent | null, nextId: string) => Promise<void>;
+  readonly removeResource: (
+    content: ResourceContent | null,
+    discardDirty: boolean,
+  ) => Promise<void>;
+  readonly refreshBinding: (descriptor: ResourceDescriptor) => Promise<void>;
+  readonly setViewGroup: (viewGroupId: string | null) => Promise<void>;
+  readonly persistViewState: (viewState: unknown) => Promise<void>;
+  readonly reportError: (error: unknown) => void;
+}
+
+function fileViewState(instance: SurfaceInstance) {
+  const candidate = typeof instance.view_state === "object" && instance.view_state != null
+    ? instance.view_state as Record<string, unknown>
+    : {};
+  return {
+    cursorStart: typeof candidate.cursor_start === "number" ? candidate.cursor_start : 0,
+    cursorEnd: typeof candidate.cursor_end === "number" ? candidate.cursor_end : 0,
+    scrollTop: typeof candidate.scroll_top === "number" ? candidate.scroll_top : 0,
+  };
+}
+
+function resourceMarkup(content: ResourceContent): { html?: string; text?: string; image?: string } {
+  const mediaType = content.descriptor.media_type ?? "text/plain";
+  if (content.content_encoding === "base64" && mediaType.startsWith("image/")) {
+    return { image: `data:${mediaType};base64,${content.content}` };
+  }
+  if (mediaType === "text/markdown" || mediaType === "text/x-r-markdown") {
+    const rendered = marked.parse(content.content, { async: false }) as string;
+    return { html: DOMPurify.sanitize(rendered) };
+  }
+  if (mediaType === "text/html") {
+    return { html: DOMPurify.sanitize(content.content) };
+  }
+  return { text: content.content };
+}
+
+function FileResourceView({
+  instance, registry, read, updateDraft, save, reload, rename, removeResource,
+  refreshBinding, setViewGroup, persistViewState, reportError,
+}: FileResourceViewProps) {
+  const binding = instance.resource_binding;
+  const descriptor = registry?.resources.find((candidate) =>
+    candidate.resource_provider_id === binding?.resource_provider_id &&
+    candidate.resource_kind === binding?.resource_kind &&
+    candidate.resource_id === binding.resource_id
+  ) ?? null;
+  const source = instance.surface_id === "rho.file-source";
+  const [content, setContent] = useState<ResourceContent | null>(null);
+  const [editorValue, setEditorValue] = useState("");
+  const [localDirty, setLocalDirty] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [viewGroup, setViewGroupInput] = useState(instance.view_group_id ?? "");
+  const [renamePath, setRenamePath] = useState(binding?.resource_id ?? "");
+  const view = fileViewState(instance);
+  const bindingRevision = binding?.resource_revision ?? descriptor?.resource_revision ?? 0;
+  const staleBinding = descriptor != null && bindingRevision !== descriptor.resource_revision;
+  const sourceRefreshRevision = source ? registry?.snapshot_revision ?? 0 : 0;
+
+  useEffect(() => {
+    if (descriptor == null || binding == null || descriptor.status !== "ready") return;
+    let active = true;
+    setError(null);
+    void read(
+      descriptor,
+      source ? "shared_document" : "immutable_snapshot",
+      bindingRevision,
+    ).then((next) => {
+      if (!active) return;
+      setContent(next);
+      if (!localDirty) setEditorValue(next.content);
+    }).catch((cause: unknown) => {
+      if (!active) return;
+      setError(cause instanceof Error ? cause.message : "Resource read failed.");
+    });
+    return () => { active = false; };
+  }, [binding?.resource_id, bindingRevision, descriptor?.status, read, source, sourceRefreshRevision]);
+
+  useEffect(() => {
+    setViewGroupInput(instance.view_group_id ?? "");
+  }, [instance.view_group_id]);
+  useEffect(() => {
+    setRenamePath(binding?.resource_id ?? "");
+  }, [binding?.resource_id]);
+
+  const commitDraft = async () => {
+    if (!source || content == null || !localDirty) return;
+    try {
+      const next = await updateDraft(content, editorValue);
+      setContent(next);
+      setEditorValue(next.content);
+      setLocalDirty(false);
+    } catch (cause: unknown) {
+      reportError(cause);
+    }
+  };
+  const mode = instance.mode_id ?? (source ? "source" : "preview");
+  const outline = editorValue.split("\n").flatMap((line, index) => {
+    const match = line.match(/^\s*(?:#+\s+(.+)|([A-Za-z.][\w.]*)\s*<-\s*function\b)/u);
+    return match == null ? [] : [{ line: index + 1, label: match[1] ?? match[2] ?? line.trim() }];
+  });
+  const markup = !source && content != null ? resourceMarkup(content) : null;
+
+  return (
+    <div className="rho-file-resource">
+      <div className="rho-resource-toolbar">
+        <span className={`rho-resource-state rho-resource-${descriptor?.status ?? "missing"}`}>
+          {descriptor?.status ?? "unresolved"}
+        </span>
+        <code>{binding?.resource_id ?? "No Resource bound"}</code>
+        {content?.dirty && <span className="rho-resource-dirty">unsaved</span>}
+        {(content?.stale || staleBinding) && <span className="rho-resource-stale">stale</span>}
+        <span>resource r{descriptor?.resource_revision ?? "—"}</span>
+        {content != null && <span>document r{content.document_revision}</span>}
+        {staleBinding && descriptor != null && (
+          <button type="button" onClick={() => void refreshBinding(descriptor).catch(reportError)}>
+            Refresh view
+          </button>
+        )}
+      </div>
+      <div className="rho-resource-linking">
+        <label>View group <input value={viewGroup} onChange={(event) => setViewGroupInput(event.target.value)} placeholder="independent" /></label>
+        <button type="button" onClick={() => void setViewGroup(viewGroup.trim() || null).catch(reportError)}>Apply</button>
+        <label>Path <input value={renamePath} onChange={(event) => setRenamePath(event.target.value)} /></label>
+        <button type="button" disabled={binding == null || renamePath === binding.resource_id} onClick={() => {
+          void rename(content, renamePath).catch(reportError);
+        }}>Rename</button>
+        <button type="button" disabled={binding == null} onClick={() => {
+          void removeResource(content, false).catch(reportError);
+        }}>Delete</button>
+        {content?.dirty && <button type="button" onClick={() => {
+          void removeResource(content, true).catch(reportError);
+        }}>Discard &amp; delete</button>}
+      </div>
+      {descriptor?.status === "missing" && <div className="rho-resource-placeholder">This Resource no longer exists. Its Surface placement remains.</div>}
+      {descriptor?.status === "unsupported" && <div className="rho-resource-placeholder">No compatible provider claims this Resource.</div>}
+      {error != null && <p className="rho-resource-error" role="alert">{error}</p>}
+      {source && mode === "source" && descriptor?.status === "ready" && (
+        <textarea
+          className="rho-source-editor"
+          aria-label={`Source ${binding?.resource_id ?? instance.instance_id}`}
+          value={editorValue}
+          onChange={(event) => { setEditorValue(event.target.value); setLocalDirty(true); }}
+          onBlur={(event) => {
+            void commitDraft();
+            void persistViewState({
+              cursor_start: event.currentTarget.selectionStart,
+              cursor_end: event.currentTarget.selectionEnd,
+              scroll_top: event.currentTarget.scrollTop,
+            }).catch(reportError);
+          }}
+          ref={(element) => {
+            if (element == null || document.activeElement === element) return;
+            if (Math.abs(element.scrollTop - view.scrollTop) > 1) element.scrollTop = view.scrollTop;
+          }}
+          spellCheck={false}
+        />
+      )}
+      {source && mode === "diff" && (
+        <div className="rho-file-analysis"><strong>Working document</strong><p>{content?.dirty ? "The shared document differs from its disk revision." : "No unsaved difference."}</p><pre>{editorValue}</pre></div>
+      )}
+      {source && mode === "outline" && (
+        <ol className="rho-file-outline">{outline.length === 0 ? <li>No structural symbols found.</li> : outline.map((item) => <li key={`${item.line}:${item.label}`}><span>{item.line}</span>{item.label}</li>)}</ol>
+      )}
+      {!source && content != null && (
+        <div className="rho-file-preview-body">
+          {markup?.image != null && <img src={markup.image} alt={content.descriptor.label} />}
+          {markup?.html != null && <div className="rho-rendered-document" dangerouslySetInnerHTML={{ __html: markup.html }} />}
+          {markup?.text != null && <pre>{markup.text}</pre>}
+        </div>
+      )}
+      {source && content != null && (
+        <div className="rho-resource-actions">
+          <button type="button" disabled={!content.dirty || localDirty} onClick={() => {
+            void save(content).then((next) => { setContent(next); setEditorValue(next.content); }).catch(reportError);
+          }}>Save</button>
+          <button type="button" onClick={() => {
+            void reload(content, content.dirty).then((next) => { setContent(next); setEditorValue(next.content); setLocalDirty(false); }).catch(reportError);
+          }}>{content.dirty ? "Discard & reload" : "Reload"}</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SurfaceView({
   instance, focused, setFocus, remove, duplicate, persistDraft, draftCache,
   runtimes, attachRuntime, detachRuntime, executeRuntime, interruptRuntime,
-  restartRuntime, persistConsole, reportError,
+  restartRuntime, persistConsole, resources, readResource, updateResourceDraft,
+  saveResource, reloadResource, renameResource, deleteResource,
+  refreshResourceBinding, setViewGroup, persistFileViewState, reportError,
 }: SurfaceViewProps) {
   const [draft, setDraft] = useState(() => initialDraft(instance, draftCache));
   const [consoleState, setConsoleState] = useState(() => initialConsoleState(instance));
   const [consoleRunning, setConsoleRunning] = useState(false);
   const runtime = instance.runtime_binding;
-  const resource = instance.resource_binding;
   const isStrip = instance.surface_id === "rho.status";
   const title = instance.surface_id === "rho.console" ? "R Console"
-    : instance.surface_id === "rho.file" ? (instance.mode_id === "preview" ? "File preview" : "Source editor")
+    : instance.surface_id === "rho.file-preview" ? "File preview"
+    : instance.surface_id === "rho.file-source" ? "Source editor"
     : instance.surface_id === "rho.status" ? "Runtime status"
     : instance.surface_id === "rho.check" ? "Project checks" : "Surface Playground";
   const attached = runtimes?.instances.find((candidate) =>
@@ -452,8 +684,21 @@ function SurfaceView({
           </div>
         </div>
       )}
-      {instance.surface_id === "rho.file" && (
-        <div className="rho-file-surface"><span className="rho-file-mode">{instance.mode_id ?? "default"}</span><code>{resource?.resource_id ?? "No resource bound"}</code><p>{instance.mode_id === "preview" ? "Rendered output evolves independently." : "Source buffer evolves independently."}</p></div>
+      {(instance.surface_id === "rho.file-source" || instance.surface_id === "rho.file-preview") && (
+        <FileResourceView
+          instance={instance}
+          registry={resources}
+          read={readResource}
+          updateDraft={updateResourceDraft}
+          save={saveResource}
+          reload={reloadResource}
+          rename={renameResource}
+          removeResource={deleteResource}
+          refreshBinding={refreshResourceBinding}
+          setViewGroup={setViewGroup}
+          persistViewState={persistFileViewState}
+          reportError={reportError}
+        />
       )}
       {instance.surface_id === "rho.status" && (
         <div className="rho-status-surface"><span className="rho-status-dot rho-status-ready" /> Workspace runtime ready <code>{runtime?.runtime_instance_id ?? "workspace"}</code></div>
@@ -610,19 +855,23 @@ function NodeOutline({ node, commit }: { readonly node: LayoutNode; readonly com
 
 export function App({ transport }: AppProps) {
   const [actionError, setActionError] = useState<string | null>(null);
+  const [resourcePath, setResourcePath] = useState("analysis.R");
   const draftCache = useRef(new Map<string, string>()).current;
   const store = useMemo(() => transport == null ? defaultStore : new UiExternalStore(transport), [transport]);
   const surfaceStore = useMemo(() => transport == null ? defaultSurfaceStore : new SurfaceExternalStore(transport), [transport]);
   const studioStore = useMemo(() => transport == null ? defaultStudioStore : new StudioExternalStore(transport), [transport]);
   const runtimeStore = useMemo(() => transport == null ? defaultRuntimeStore : new RuntimeExternalStore(transport), [transport]);
+  const resourceStore = useMemo(() => transport == null ? defaultResourceStore : new ResourceExternalStore(transport), [transport]);
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const surfaceState = useSyncExternalStore(surfaceStore.subscribe, surfaceStore.getSnapshot, surfaceStore.getSnapshot);
   const studioState = useSyncExternalStore(studioStore.subscribe, studioStore.getSnapshot, studioStore.getSnapshot);
   const runtimeState = useSyncExternalStore(runtimeStore.subscribe, runtimeStore.getSnapshot, runtimeStore.getSnapshot);
+  const resourceState = useSyncExternalStore(resourceStore.subscribe, resourceStore.getSnapshot, resourceStore.getSnapshot);
   const snapshot = state.status === "ready" ? state.snapshot : null;
   const surfaces = surfaceState.status === "ready" ? surfaceState.snapshot : null;
   const studio = studioState.status === "ready" ? studioState.snapshot : null;
   const runtimes = runtimeState.status === "ready" ? runtimeState.snapshot : null;
+  const resources = resourceState.status === "ready" ? resourceState.snapshot : null;
   const instances = useMemo(() => new Map(surfaces?.catalog.instances.map((instance) => [instance.instance_id, instance]) ?? []), [surfaces]);
   const primaryCommands = useMemo(() => snapshot == null ? [] : commandsForPlacement(snapshot, "primary_candidate"), [snapshot]);
   const run = (operation: Promise<unknown>) => {
@@ -722,8 +971,57 @@ export function App({ transport }: AppProps) {
       },
     });
   };
-  const surfaceView = (instance: SurfaceInstance) => (
-    <SurfaceView
+  const openResource = async (
+    descriptor: ResourceDescriptor,
+    surfaceId: "rho.file-source" | "rho.file-preview",
+    modeId: "source" | "preview" | "diff" | "outline",
+  ) => {
+    if (surfaces == null || studio == null) return;
+    if (descriptor.status !== "ready") {
+      throw new Error(`Resource ${descriptor.resource_id} is ${descriptor.status}.`);
+    }
+    const before = new Set(surfaces.catalog.instances.map((candidate) => candidate.instance_id));
+    const opened = await surfaceStore.open({
+      surface_id: surfaceId,
+      project_id: surfaces.project_id,
+      mode_id: modeId,
+      resource_binding: {
+        resource_provider_id: descriptor.resource_provider_id,
+        resource_kind: descriptor.resource_kind,
+        resource_id: descriptor.resource_id,
+        resource_revision: descriptor.resource_revision,
+      },
+      runtime_binding: null,
+      view_group_id: null,
+      view_state: { cursor_start: 0, cursor_end: 0, scroll_top: 0 },
+      instance_disposition: "new_instance",
+      placement_intent: "beside",
+      expected_project_revision: surfaces.project_revision,
+      expected_layout_revision: studio.scene.layout_revision,
+    });
+    const created = opened.catalog.instances.find((candidate) => !before.has(candidate.instance_id));
+    if (created == null) throw new Error("Surface Runtime did not return the new file view.");
+    if (studio.scene.root.kind !== "container") return;
+    await studioStore.apply({
+      project_id: studio.project_id,
+      expected_project_revision: studio.project_revision,
+      expected_layout_revision: studio.scene.layout_revision,
+      edit: {
+        kind: "insert_surface",
+        target_container_node_id: studio.scene.root.node_id,
+        child_index: studio.scene.root.children.length,
+        instance_id: created.instance_id,
+        basis: { kind: "fraction", weight: 1 },
+      },
+    });
+  };
+  const surfaceView = (instance: SurfaceInstance) => {
+    const boundDescriptor = resources?.resources.find((descriptor) =>
+      descriptor.resource_provider_id === instance.resource_binding?.resource_provider_id &&
+      descriptor.resource_kind === instance.resource_binding?.resource_kind &&
+      descriptor.resource_id === instance.resource_binding.resource_id
+    ) ?? null;
+    return <SurfaceView
       key={instance.instance_id}
       instance={instance}
       focused={studio?.scene.focused_surface_instance_id === instance.instance_id}
@@ -782,15 +1080,96 @@ export function App({ transport }: AppProps) {
           mutation: { kind: "set_view_state", view_state: viewState },
         });
       }}
+      resources={resources}
+      readResource={async (descriptor, consistency, resourceRevision) => {
+        if (resources == null) throw new Error("Resource Registry is not ready.");
+        return resourceStore.read({
+          target: resourceTarget(descriptor, resources.project_revision, resourceRevision),
+          consistency,
+        });
+      }}
+      updateResourceDraft={async (content, value) => {
+        if (resources == null) throw new Error("Resource Registry is not ready.");
+        return resourceStore.updateDraft({
+          target: resourceTarget(content.descriptor, resources.project_revision),
+          expected_document_revision: content.document_revision,
+          content: value,
+        });
+      }}
+      saveResource={async (content) => {
+        if (resources == null) throw new Error("Resource Registry is not ready.");
+        return resourceStore.save({
+          target: resourceTarget(content.descriptor, resources.project_revision),
+          expected_document_revision: content.document_revision,
+        });
+      }}
+      reloadResource={async (content, discardDirty) => {
+        if (resources == null) throw new Error("Resource Registry is not ready.");
+        return resourceStore.reload({
+          target: resourceTarget(content.descriptor, resources.project_revision),
+          expected_document_revision: content.document_revision,
+          discard_dirty: discardDirty,
+        });
+      }}
+      renameResource={async (content, nextId) => {
+        if (resources == null || boundDescriptor == null) {
+          throw new Error("Bound Resource is unavailable.");
+        }
+        await resourceStore.rename({
+          target: resourceTarget(boundDescriptor, resources.project_revision),
+          expected_document_revision: content?.document_revision ?? null,
+          new_resource_id: nextId,
+        });
+        await surfaceStore.refresh();
+      }}
+      deleteResource={async (content, discardDirty) => {
+        if (resources == null || boundDescriptor == null) {
+          throw new Error("Bound Resource is unavailable.");
+        }
+        await resourceStore.delete({
+          target: resourceTarget(boundDescriptor, resources.project_revision),
+          expected_document_revision: content?.document_revision ?? null,
+          discard_dirty: discardDirty,
+        });
+      }}
+      refreshResourceBinding={async (descriptor) => {
+        if (surfaces == null) throw new Error("Surface Runtime is not ready.");
+        await surfaceStore.update({
+          target: instanceRequest(instance, surfaces.project_revision),
+          mutation: {
+            kind: "bind_resource",
+            binding: {
+              resource_provider_id: descriptor.resource_provider_id,
+              resource_kind: descriptor.resource_kind,
+              resource_id: descriptor.resource_id,
+              resource_revision: descriptor.resource_revision,
+            },
+          },
+        });
+      }}
+      setViewGroup={async (viewGroupId) => {
+        if (surfaces == null) throw new Error("Surface Runtime is not ready.");
+        await surfaceStore.update({
+          target: instanceRequest(instance, surfaces.project_revision),
+          mutation: { kind: "set_view_group", view_group_id: viewGroupId },
+        });
+      }}
+      persistFileViewState={async (viewState) => {
+        if (surfaces == null) throw new Error("Surface Runtime is not ready.");
+        await surfaceStore.update({
+          target: instanceRequest(instance, surfaces.project_revision),
+          mutation: { kind: "set_view_state", view_state: viewState },
+        });
+      }}
       reportError={(error) => setActionError(
         error instanceof Error && error.message.trim()
           ? error.message.slice(0, 512)
           : "Runtime operation failed.",
       )}
-    />
-  );
+    />;
+  };
   const evidence = useMemo(() => ({
-    ready: snapshot != null && surfaces != null && studio != null && runtimes != null,
+    ready: snapshot != null && surfaces != null && studio != null && runtimes != null && resources != null,
     source: state.status === "ready" ? state.source : null,
     project: snapshot?.project.display_path ?? null,
     layoutRevision: studio?.scene.layout_revision ?? null,
@@ -802,7 +1181,12 @@ export function App({ transport }: AppProps) {
       generation: runtime.activation_generation,
       status: runtime.status,
     })) ?? [],
-  }), [instances, runtimes, snapshot, state, studio, surfaces]);
+    resourceInstances: resources?.resources.map((resource) => ({
+      id: resource.resource_id,
+      revision: resource.resource_revision,
+      status: resource.status,
+    })) ?? [],
+  }), [instances, resources, runtimes, snapshot, state, studio, surfaces]);
   useEffect(() => {
     document.documentElement.dataset.rsrReady = String(evidence.ready);
   }, [evidence.ready]);
@@ -866,6 +1250,47 @@ export function App({ transport }: AppProps) {
               </section>
             </>
           )}
+          {resources != null && (
+            <section className="rho-resource-inventory">
+              <div className="rho-resource-inventory-heading">
+                <span className="rho-eyebrow">Resource registry</span>
+                <span>{resources.resources.length} resolved</span>
+              </div>
+              <form onSubmit={(event) => {
+                event.preventDefault();
+                const provider = resources.providers.find((candidate) =>
+                  candidate.definition.resource_kinds.includes("project_file")
+                );
+                if (provider == null) return;
+                run(resourceStore.resolve({
+                  project_id: resources.project_id,
+                  resource_provider_id: provider.definition.resource_provider_id,
+                  resource_kind: "project_file",
+                  resource_id: resourcePath,
+                  expected_project_revision: resources.project_revision,
+                  expected_snapshot_revision: resources.snapshot_revision,
+                }));
+              }}>
+                <input aria-label="Resolve project Resource" value={resourcePath} onChange={(event) => setResourcePath(event.target.value)} />
+                <button type="submit">Resolve</button>
+              </form>
+              {resources.resources.map((resource) => (
+                <article className="rho-resource-card" data-resource-id={resource.resource_id} key={`${resource.resource_provider_id}:${resource.resource_id}`}>
+                  <div>
+                    <span className={`rho-resource-dot rho-resource-${resource.status}`} />
+                    <strong>{resource.label}</strong>
+                    <small>{resource.resource_id} · r{resource.resource_revision}</small>
+                  </div>
+                  <div className="rho-resource-open-actions">
+                    <button type="button" disabled={resource.status !== "ready" || !resource.capabilities.includes("resource.read.document")} onClick={() => run(openResource(resource, "rho.file-source", "source"))}>Source</button>
+                    <button type="button" disabled={resource.status !== "ready" || !resource.capabilities.includes("resource.preview")} onClick={() => run(openResource(resource, "rho.file-preview", "preview"))}>Preview</button>
+                    <button type="button" disabled={resource.status !== "ready" || !resource.capabilities.includes("resource.read.document")} onClick={() => run(openResource(resource, "rho.file-source", "diff"))}>Diff</button>
+                    <button type="button" disabled={resource.status !== "ready" || !resource.capabilities.includes("resource.read.document")} onClick={() => run(openResource(resource, "rho.file-source", "outline"))}>Outline</button>
+                  </div>
+                </article>
+              ))}
+            </section>
+          )}
           {runtimes != null && (
             <section className="rho-runtime-inventory">
               <div className="rho-runtime-inventory-heading">
@@ -909,6 +1334,7 @@ export function App({ transport }: AppProps) {
           {surfaceState.status === "failed" && <p role="alert">{surfaceState.message}</p>}
           {studioState.status === "failed" && <p role="alert">{studioState.message}</p>}
           {runtimeState.status === "failed" && <p role="alert">{runtimeState.message}</p>}
+          {resourceState.status === "failed" && <p role="alert">{resourceState.message}</p>}
           {actionError != null && <p className="rho-action-error" role="alert">{actionError}</p>}
           {studio == null || surfaces == null
             ? <div className="rho-studio-loading">Loading the broker-owned Studio scene…</div>

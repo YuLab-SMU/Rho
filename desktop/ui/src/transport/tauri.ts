@@ -1,5 +1,14 @@
 import type {
   OpenSurfaceRequest,
+  ResourceContent,
+  ResourceDeleteRequest,
+  ResourceDraftRequest,
+  ResourceReadRequest,
+  ResourceRegistrySnapshot,
+  ResourceReloadRequest,
+  ResourceRenameRequest,
+  ResourceResolveRequest,
+  ResourceSaveRequest,
   RuntimeAttachmentRequest,
   RuntimeCreateRequest,
   RuntimeDetachRequest,
@@ -115,6 +124,27 @@ export function createTauriUiKernelTransport(
       subscribeEvents(
         listen,
         ["rho://runtime-registry-changed", "rho://ui-snapshot-invalidated"],
+        listener,
+      ),
+    loadResources: () => invoke<ResourceRegistrySnapshot>("resource_list"),
+    resolveResource: (request: ResourceResolveRequest) =>
+      invoke<ResourceRegistrySnapshot>("resource_resolve", { request }),
+    readResource: (request: ResourceReadRequest) =>
+      invoke<ResourceContent>("resource_read", { request }),
+    updateResourceDraft: (request: ResourceDraftRequest) =>
+      invoke<ResourceContent>("resource_update_draft", { request }),
+    saveResource: (request: ResourceSaveRequest) =>
+      invoke<ResourceContent>("resource_save", { request }),
+    reloadResource: (request: ResourceReloadRequest) =>
+      invoke<ResourceContent>("resource_reload", { request }),
+    renameResource: (request: ResourceRenameRequest) =>
+      invoke<ResourceRegistrySnapshot>("resource_rename", { request }),
+    deleteResource: (request: ResourceDeleteRequest) =>
+      invoke<ResourceRegistrySnapshot>("resource_delete", { request }),
+    subscribeResourcesInvalidated: (listener) =>
+      subscribeEvents(
+        listen,
+        ["rho://resource-registry-changed", "rho://ui-snapshot-invalidated"],
         listener,
       ),
   };

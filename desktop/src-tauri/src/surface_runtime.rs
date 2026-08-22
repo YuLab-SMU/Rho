@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::{Mutex as StdMutex, MutexGuard};
 
-use anyhow::{Result, anyhow, bail, ensure};
+use anyhow::{Context, Result, anyhow, bail, ensure};
 use rho_ui_contract::{
     ContractError, MAX_HEAVY_SURFACE_INSTANCES, MAX_STANDARD_SURFACE_INSTANCES,
     MAX_STRIP_SURFACE_INSTANCES, MAX_SURFACE_INSTANCES, OpenSurfaceRequestV1, ProjectId,
@@ -466,12 +466,69 @@ impl SurfaceRuntimeState {
                 SurfaceRuntimeEventKindV1::Updated,
             );
         }
+        if let SurfaceInstanceMutationV1::SetViewState { view_state } = &request.mutation
+            && current.view_group_id.is_some()
+            && current.resource_binding.is_some()
+        {
+            return self.update_linked_resource_view_state_locked(
+                &mut inner,
+                current,
+                view_state.clone(),
+            );
+        }
         self.update_instance_locked(
             &mut inner,
             current,
             request.target.expected_surface_revision,
             request.mutation,
             SurfaceRuntimeEventKindV1::Updated,
+        )
+    }
+
+    fn update_linked_resource_view_state_locked(
+        &self,
+        inner: &mut SurfaceRuntimeInner,
+        current: SurfaceInstanceV1,
+        view_state: serde_json::Value,
+    ) -> Result<SurfaceTransition> {
+        let group = current
+            .view_group_id
+            .as_ref()
+            .context("Linked Resource view has no group")?;
+        let binding = current
+            .resource_binding
+            .as_ref()
+            .context("Linked Resource view has no binding")?;
+        let mut instances = inner.instances.clone();
+        for instance in instances.values_mut() {
+            let same_resource = instance.resource_binding.as_ref().is_some_and(|candidate| {
+                candidate.resource_provider_id == binding.resource_provider_id
+                    && candidate.resource_kind == binding.resource_kind
+                    && candidate.resource_id == binding.resource_id
+            });
+            if instance.view_group_id.as_ref() != Some(group)
+                || !same_resource
+                || instance.lifecycle_state == SurfaceLifecycleStateV1::Placeholder
+            {
+                continue;
+            }
+            *instance = apply_surface_instance_mutation(
+                instance,
+                instance.surface_revision,
+                SurfaceInstanceMutationV1::SetViewState {
+                    view_state: view_state.clone(),
+                },
+            )?;
+        }
+        let event_instance = instances
+            .get(&current.instance_id)
+            .cloned()
+            .context("Linked Resource view disappeared")?;
+        Self::commit_instances(
+            inner,
+            instances,
+            SurfaceRuntimeEventKindV1::Updated,
+            Some(&event_instance),
         )
     }
 
@@ -497,6 +554,100 @@ impl SurfaceRuntimeState {
                 current.runtime_instance_id == descriptor.runtime_instance_id && current != &binding
             }) {
                 instance.runtime_binding = Some(binding.clone());
+                instance.surface_revision = next_revision(
+                    "surface_instance.surface_revision",
+                    instance.surface_revision,
+                )?;
+                changed = true;
+            }
+        }
+        if !changed {
+            return Ok(SurfaceTransition {
+                snapshot: Self::current_snapshot(&inner)?,
+                event: None,
+            });
+        }
+        Self::commit_instances(
+            &mut inner,
+            instances,
+            SurfaceRuntimeEventKindV1::Reconciled,
+            None,
+        )
+    }
+
+    fn rebind_shared_resource(
+        &self,
+        descriptor: &rho_ui_contract::ResourceDescriptorV1,
+    ) -> Result<SurfaceTransition> {
+        descriptor.validate()?;
+        let mut inner = self.inner();
+        let project = inner
+            .project
+            .as_ref()
+            .ok_or_else(|| anyhow!("Surface Runtime has no project context"))?;
+        ensure!(
+            descriptor.project_id == project.project_id,
+            "Resource rebind belongs to another project"
+        );
+        let binding = descriptor.binding();
+        let mut instances = inner.instances.clone();
+        let mut changed = false;
+        for instance in instances.values_mut() {
+            if instance.surface_id.as_str() == "rho.file-source"
+                && instance.resource_binding.as_ref().is_some_and(|current| {
+                    current.resource_provider_id == descriptor.resource_provider_id
+                        && current.resource_kind == descriptor.resource_kind
+                        && current.resource_id == descriptor.resource_id
+                        && current != &binding
+                })
+            {
+                instance.resource_binding = Some(binding.clone());
+                instance.surface_revision = next_revision(
+                    "surface_instance.surface_revision",
+                    instance.surface_revision,
+                )?;
+                changed = true;
+            }
+        }
+        if !changed {
+            return Ok(SurfaceTransition {
+                snapshot: Self::current_snapshot(&inner)?,
+                event: None,
+            });
+        }
+        Self::commit_instances(
+            &mut inner,
+            instances,
+            SurfaceRuntimeEventKindV1::Reconciled,
+            None,
+        )
+    }
+
+    fn rename_resource_bindings(
+        &self,
+        old_resource_id: &str,
+        descriptor: &rho_ui_contract::ResourceDescriptorV1,
+    ) -> Result<SurfaceTransition> {
+        descriptor.validate()?;
+        let mut inner = self.inner();
+        let project = inner
+            .project
+            .as_ref()
+            .ok_or_else(|| anyhow!("Surface Runtime has no project context"))?;
+        ensure!(
+            descriptor.project_id == project.project_id,
+            "Resource rename belongs to another project"
+        );
+        let binding = descriptor.binding();
+        let mut instances = inner.instances.clone();
+        let mut changed = false;
+        for instance in instances.values_mut() {
+            if instance.resource_binding.as_ref().is_some_and(|current| {
+                current.resource_provider_id == descriptor.resource_provider_id
+                    && current.resource_kind == descriptor.resource_kind
+                    && current.resource_id == old_resource_id
+            }) {
+                instance.resource_binding = Some(binding.clone());
                 instance.surface_revision = next_revision(
                     "surface_instance.surface_revision",
                     instance.surface_revision,
@@ -686,6 +837,35 @@ pub(crate) fn emit_transition(app: &AppHandle, transition: &SurfaceTransition) {
     }
 }
 
+pub(crate) fn rebind_shared_resource(
+    app: &AppHandle,
+    state: &AppState,
+    descriptor: &rho_ui_contract::ResourceDescriptorV1,
+) -> Result<()> {
+    let transition = state.surface_runtime.rebind_shared_resource(descriptor)?;
+    emit_transition(app, &transition);
+    Ok(())
+}
+
+pub(crate) fn rename_resource_bindings(
+    app: &AppHandle,
+    state: &AppState,
+    old_resource_id: &str,
+    new_resource_id: &str,
+    resources: &rho_ui_contract::ResourceRegistrySnapshotV1,
+) -> Result<()> {
+    let descriptor = resources
+        .resources
+        .iter()
+        .find(|resource| resource.resource_id == new_resource_id)
+        .ok_or_else(|| anyhow!("Renamed Resource was not resolved"))?;
+    let transition = state
+        .surface_runtime
+        .rename_resource_bindings(old_resource_id, descriptor)?;
+    emit_transition(app, &transition);
+    Ok(())
+}
+
 #[tauri::command]
 pub(crate) async fn surface_list(
     app: AppHandle,
@@ -708,6 +888,16 @@ pub(crate) async fn surface_open(
     state: State<'_, AppState>,
 ) -> Result<SurfaceRuntimeSnapshotV1, String> {
     let _project_transition = state.project_transition_gate.lock().await;
+    if let Some(binding) = &request.resource_binding {
+        let resources = crate::resource_registry::reconcile_for_state(&state)
+            .await
+            .map_err(display_error)?;
+        crate::resource_registry::emit_transition(&app, &resources);
+        state
+            .resource_registry
+            .validate_surface_binding(&request.project_id, binding)
+            .map_err(display_error)?;
+    }
     let reconciled = reconcile_for_state(&state).await.map_err(display_error)?;
     emit_transition(&app, &reconciled);
     let studio =
@@ -733,6 +923,19 @@ pub(crate) async fn surface_update(
     state: State<'_, AppState>,
 ) -> Result<SurfaceRuntimeSnapshotV1, String> {
     let _project_transition = state.project_transition_gate.lock().await;
+    if let SurfaceInstanceMutationV1::BindResource {
+        binding: Some(binding),
+    } = &request.mutation
+    {
+        let resources = crate::resource_registry::reconcile_for_state(&state)
+            .await
+            .map_err(display_error)?;
+        crate::resource_registry::emit_transition(&app, &resources);
+        state
+            .resource_registry
+            .validate_surface_binding(&request.target.project_id, binding)
+            .map_err(display_error)?;
+    }
     let reconciled = reconcile_for_state(&state).await.map_err(display_error)?;
     emit_transition(&app, &reconciled);
     let transition = state
@@ -861,6 +1064,8 @@ mod tests {
             project_id: project_id.clone(),
             mode_id: Some(SurfaceModeId::new("preview").unwrap()),
             resource_binding: Some(ResourceBindingV1 {
+                resource_provider_id: rho_ui_contract::ResourceProviderId::new("rho.project-files")
+                    .unwrap(),
                 resource_kind: ResourceKindId::new("project_file").unwrap(),
                 resource_id: "analysis.R".to_string(),
                 resource_revision: Some(4),
@@ -935,6 +1140,109 @@ mod tests {
             second.catalog.instances[1].instance_id
         );
         assert!(first.snapshot_revision < closed.snapshot_revision);
+    }
+
+    #[test]
+    fn shared_resource_rebind_advances_sources_but_preserves_immutable_previews() {
+        let fixture = rho_ui_contract::golden_contract_fixture();
+        let project_id = fixture.kernel_snapshot.project.project_id;
+        let factories = fixture
+            .surfaces
+            .into_iter()
+            .filter(|definition| {
+                matches!(
+                    definition.surface_id.as_str(),
+                    "rho.file-source" | "rho.file-preview"
+                )
+            })
+            .map(|definition| SurfaceFactoryRegistrationV1 {
+                definition,
+                activation_generation: 1,
+            })
+            .collect();
+        let runtime = SurfaceRuntimeState::default();
+        runtime.reconcile(project_id.clone(), 7, factories).unwrap();
+        let request = |surface_id: &str, mode_id: &str| OpenSurfaceRequestV1 {
+            surface_id: SurfaceId::new(surface_id).unwrap(),
+            project_id: project_id.clone(),
+            mode_id: Some(SurfaceModeId::new(mode_id).unwrap()),
+            resource_binding: Some(ResourceBindingV1 {
+                resource_provider_id: rho_ui_contract::ResourceProviderId::new("rho.project-files")
+                    .unwrap(),
+                resource_kind: ResourceKindId::new("project_file").unwrap(),
+                resource_id: "analysis.R".to_string(),
+                resource_revision: Some(4),
+            }),
+            runtime_binding: None,
+            view_group_id: Some(rho_ui_contract::ViewGroupId::new("analysis-sync").unwrap()),
+            view_state: json!({}),
+            instance_disposition: SurfaceInstanceDispositionV1::NewInstance,
+            placement_intent: SurfacePlacementIntentV1::Current,
+            expected_project_revision: 7,
+            expected_layout_revision: 0,
+        };
+        runtime
+            .open(request("rho.file-source", "source"), 0)
+            .unwrap();
+        let opened = runtime
+            .open(request("rho.file-preview", "preview"), 0)
+            .unwrap()
+            .snapshot;
+        let source_index = opened
+            .catalog
+            .instances
+            .iter()
+            .position(|instance| instance.surface_id.as_str() == "rho.file-source")
+            .unwrap();
+        let linked = runtime
+            .update(UpdateSurfaceRequestV1 {
+                target: target(&opened, source_index),
+                mutation: SurfaceInstanceMutationV1::SetViewState {
+                    view_state: json!({"cursor_start": 9, "cursor_end": 9, "scroll_top": 120}),
+                },
+            })
+            .unwrap()
+            .snapshot;
+        assert!(linked.catalog.instances.iter().all(|instance| {
+            instance.view_state == json!({"cursor_start": 9, "cursor_end": 9, "scroll_top": 120})
+        }));
+        let mut descriptor = rho_ui_contract::golden_contract_fixture().resources[0].clone();
+        descriptor.resource_revision = 5;
+        let rebound = runtime
+            .rebind_shared_resource(&descriptor)
+            .unwrap()
+            .snapshot;
+        let source = rebound
+            .catalog
+            .instances
+            .iter()
+            .find(|instance| instance.surface_id.as_str() == "rho.file-source")
+            .unwrap();
+        let preview = rebound
+            .catalog
+            .instances
+            .iter()
+            .find(|instance| instance.surface_id.as_str() == "rho.file-preview")
+            .unwrap();
+        assert_eq!(
+            source.resource_binding.as_ref().unwrap().resource_revision,
+            Some(5)
+        );
+        assert_eq!(
+            preview.resource_binding.as_ref().unwrap().resource_revision,
+            Some(4)
+        );
+
+        descriptor.resource_id = "R/renamed.R".to_string();
+        descriptor.label = "renamed.R".to_string();
+        descriptor.resource_revision = 1;
+        let renamed = runtime
+            .rename_resource_bindings("analysis.R", &descriptor)
+            .unwrap()
+            .snapshot;
+        assert!(renamed.catalog.instances.iter().all(|instance| {
+            instance.resource_binding.as_ref().unwrap().resource_id == "R/renamed.R"
+        }));
     }
 
     #[test]
