@@ -3,8 +3,8 @@ use std::path::Path;
 use std::process::ExitCode;
 
 use rho_plugin_dev::{
-    build_project, check_project, compare_component, smoke_command, smoke_tool, smoke_viewer,
-    snapshot_component,
+    build_project, check_project, compare_component, smoke_command, smoke_surface, smoke_tool,
+    smoke_viewer, snapshot_component,
 };
 
 fn main() -> ExitCode {
@@ -53,6 +53,26 @@ fn run(arguments: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
             let report = smoke_viewer(Path::new(project_root), plugin_id, contribution_id)?;
             print_smoke(report);
         }
+        [command, project_root, plugin_id, contribution_id] if command == "smoke-surface" => {
+            let report = smoke_surface(Path::new(project_root), plugin_id, contribution_id)?;
+            println!(
+                "surface_smoke_ok plugin={} contribution={} digest={} abi={} instances={}",
+                report.plugin_id,
+                report.contribution_id,
+                report.digest,
+                report.guest_abi,
+                report.instances.len()
+            );
+            for instance in report.instances {
+                println!(
+                    "surface_instance_ok instance={} document_revision={} blocks={} controls={}",
+                    instance.instance_id,
+                    instance.document_revision,
+                    instance.block_count,
+                    instance.control_count
+                );
+            }
+        }
         [command, project_root, plugin_id, cache_root] if command == "snapshot" => {
             let report =
                 snapshot_component(Path::new(project_root), plugin_id, Path::new(cache_root))?;
@@ -84,7 +104,7 @@ fn run(arguments: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
         }
         _ => {
             return Err(
-                "usage: rho-plugin-dev <build|check> <project-root> | rho-plugin-dev <smoke-command|smoke-tool|smoke-viewer> <project-root> <plugin-id> <contribution-id> | rho-plugin-dev snapshot <project-root> <plugin-id> <cache-root> | rho-plugin-dev compare <project-root> <plugin-id> <cache-root> <baseline-digest>"
+                "usage: rho-plugin-dev <build|check> <project-root> | rho-plugin-dev <smoke-command|smoke-tool|smoke-viewer|smoke-surface> <project-root> <plugin-id> <contribution-id> | rho-plugin-dev snapshot <project-root> <plugin-id> <cache-root> | rho-plugin-dev compare <project-root> <plugin-id> <cache-root> <baseline-digest>"
                     .into(),
             );
         }

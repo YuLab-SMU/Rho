@@ -30,6 +30,9 @@ mod manifest;
 mod model;
 mod observation;
 mod resolver;
+mod surface_contribution;
+mod surface_document;
+mod surface_event_queue;
 mod viewer_document;
 mod wasm_host;
 
@@ -137,6 +140,24 @@ pub use observation::{
     self_grant_attempt_rejected,
 };
 pub use resolver::resolve_activation_plan;
+pub use surface_contribution::{
+    MAX_WORKSPACE_SURFACE_RESOURCE_KINDS, WORKSPACE_SURFACE_CONTRACT_MAJOR,
+    WorkspaceSurfaceDeclarationV1, WorkspaceSurfaceProjectionV1,
+};
+pub use surface_document::{
+    MAX_SURFACE_DOCUMENT_BLOCKS, MAX_SURFACE_DOCUMENT_BYTES, MAX_SURFACE_DOCUMENT_CONTROLS,
+    MAX_SURFACE_DOCUMENT_DEPTH, MAX_SURFACE_DOCUMENT_TABLE_COLUMNS,
+    MAX_SURFACE_DOCUMENT_TABLE_ROWS, MAX_SURFACE_DOCUMENT_TEXT_BYTES,
+    MAX_SURFACE_EVENT_VALUE_BYTES, MAX_SURFACE_SELECT_OPTIONS, PLUGIN_SURFACE_DOCUMENT_CONTRACT,
+    PLUGIN_SURFACE_EVENT_CONTRACT, SurfaceBlockV1, SurfaceControlDescriptorV1,
+    SurfaceControlKindV1, SurfaceDocumentError, SurfaceDocumentV1, SurfaceEventKindV1,
+    SurfaceEventV1, SurfaceGridItemV1, SurfaceKeyValueItemV1, SurfaceNoticeToneV1,
+    SurfaceSelectOptionV1, SurfaceTabV1,
+};
+pub use surface_event_queue::{
+    MAX_SURFACE_EVENTS_PER_INSTANCE, MAX_SURFACE_EVENTS_PER_PLUGIN, QueuedSurfaceEventV1,
+    SurfaceEventAdmissionV1, SurfaceEventQueueError, SurfaceEventQueueV1, SurfacePluginRouteV1,
+};
 pub use viewer_document::{
     MAX_VIEWER_BLOCKS, MAX_VIEWER_DOCUMENT_JSON_BYTES, MAX_VIEWER_KEY_VALUE_ITEMS,
     MAX_VIEWER_TABLE_COLUMNS, MAX_VIEWER_TABLE_ROWS, MAX_VIEWER_TEXT_BYTES,

@@ -1,0 +1,190 @@
+{
+  "schemaVersion": 3,
+  "id": "org.yulab.rho.local-surface",
+  "name": "Local Surface",
+  "version": "0.1.0",
+  "apiVersion": "^1.0",
+  "runtime": {
+    "kind": "wasm",
+    "entry": "dist/plugin.wasm",
+    "scope": "project"
+  },
+  "provides": [
+    {
+      "capability": "ui.surface.local_notes",
+      "contract_major": 1
+    }
+  ],
+  "permissions": [],
+  "contributions": [
+    {
+      "id": "ui.surface.local_notes",
+      "kind": "surface",
+      "contractMajor": 1,
+      "label": "Local notes",
+      "purpose": "Exercise independent multi-instance declarative Surfaces",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": ["render", "event"]
+          },
+          "project_id": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "instance_id": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "surface_id": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "surface_revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "activation_generation": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "mode_id": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "view_state": {
+            "type": "object",
+            "properties": {}
+          },
+          "event": {
+            "type": "object",
+            "properties": {
+              "contract": {"type": "string", "maxLength": 128},
+              "project_id": {"type": "string", "maxLength": 256},
+              "plugin_id": {"type": "string", "maxLength": 256},
+              "package_digest": {"type": "string", "maxLength": 64},
+              "activation_generation": {"type": "integer", "minimum": 1},
+              "host_instance_id": {"type": "string", "maxLength": 256},
+              "surface_id": {"type": "string", "maxLength": 256},
+              "instance_id": {"type": "string", "maxLength": 256},
+              "expected_project_revision": {"type": "integer", "minimum": 1},
+              "expected_surface_revision": {"type": "integer", "minimum": 1},
+              "expected_document_revision": {"type": "integer", "minimum": 1},
+              "expected_resource_revision": {"type": "integer", "minimum": 1},
+              "expected_runtime_generation": {"type": "integer", "minimum": 1},
+              "expected_page_revision": {"type": "integer", "minimum": 1},
+              "expected_layout_revision": {"type": "integer", "minimum": 1},
+              "control_id": {"type": "string", "maxLength": 128},
+              "event_kind": {
+                "type": "string",
+                "enum": ["input", "change", "submit", "activate"]
+              },
+              "value": {"type": "string", "maxLength": 65536}
+            },
+            "required": [
+              "contract",
+              "project_id",
+              "plugin_id",
+              "package_digest",
+              "activation_generation",
+              "host_instance_id",
+              "surface_id",
+              "instance_id",
+              "expected_project_revision",
+              "expected_surface_revision",
+              "expected_document_revision",
+              "control_id",
+              "event_kind",
+              "value"
+            ]
+          }
+        },
+        "required": ["operation"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "contract": {
+            "type": "string",
+            "enum": ["rho.plugin_surface_document.v1"]
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "blocks": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {"type": "string", "enum": ["column"]},
+                "blocks": {
+                  "type": "array",
+                  "maxItems": 256,
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {"type": "string", "maxLength": 64},
+                      "text": {"type": "string", "maxLength": 65536},
+                      "control_id": {"type": "string", "maxLength": 128},
+                      "label": {"type": "string", "maxLength": 128},
+                      "value": {"type": "string", "maxLength": 65536},
+                      "placeholder": {"type": "string", "maxLength": 1024},
+                      "command_id": {"type": "string", "maxLength": 128},
+                      "disabled": {"type": "boolean"},
+                      "busy": {"type": "boolean"}
+                    },
+                    "required": ["kind"]
+                  }
+                }
+              },
+              "required": ["kind", "blocks"]
+            }
+          }
+        },
+        "required": ["contract", "revision", "title", "blocks"]
+      },
+      "surface": {
+        "instancePolicy": "multi_instance",
+        "resourceKinds": [],
+        "modes": [
+          {
+            "mode_id": "notes",
+            "label": "Notes",
+            "interaction_kind": "interactive"
+          }
+        ],
+        "sizingHints": {
+          "min_inline": 160,
+          "min_block": 96,
+          "ideal_inline": 380,
+          "ideal_block": 260,
+          "max_inline": null,
+          "max_block": null,
+          "stretch_inline": true,
+          "stretch_block": true,
+          "presentation_classes": ["compact", "full"]
+        },
+        "eventSchema": {
+          "type": "object",
+          "properties": {
+            "control_id": {"type": "string", "maxLength": 128},
+            "event_kind": {
+              "type": "string",
+              "enum": ["input", "change", "submit", "activate"]
+            },
+            "value": {"type": "string", "maxLength": 65536}
+          },
+          "required": ["control_id", "event_kind", "value"]
+        }
+      }
+    }
+  ]
+}

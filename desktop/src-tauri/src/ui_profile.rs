@@ -674,7 +674,9 @@ pub(crate) async fn ui_profile_snapshot(
     let runtimes = crate::runtime_registry::reconcile_for_state(&state)
         .await
         .map_err(display_error)?;
-    let factories = crate::surface_runtime::application_factories(&state).map_err(display_error)?;
+    let factories = crate::surface_runtime::available_factories(&state)
+        .await
+        .map_err(display_error)?;
     let snapshot = reconcile_for_state(&state, &factories, &runtimes.snapshot)
         .await
         .map_err(display_error)?;

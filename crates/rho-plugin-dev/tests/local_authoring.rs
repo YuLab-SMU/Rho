@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use rho_plugin_dev::{
-    build_project, check_project, compare_component, smoke_command, smoke_tool, smoke_viewer,
-    snapshot_component,
+    build_project, check_project, compare_component, smoke_command, smoke_surface, smoke_tool,
+    smoke_viewer, snapshot_component,
 };
 use rho_server::plugin_package_cache::PluginPackageCache;
 
@@ -13,6 +13,8 @@ const PLUGIN_ID: &str = "org.yulab.rho.local-hello";
 const COMMAND_ID: &str = "ui.command.local_hello";
 const TOOL_ID: &str = "tool.local_status";
 const VIEWER_ID: &str = "ui.viewer.local_status";
+const SURFACE_PLUGIN_ID: &str = "org.yulab.rho.local-surface";
+const SURFACE_ID: &str = "ui.surface.local_notes";
 
 fn example_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -26,8 +28,24 @@ fn copied_example() -> tempfile::TempDir {
     directory
 }
 
+fn surface_example_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join("examples/workspace-plugin-surface")
+}
+
+fn copied_surface_example() -> tempfile::TempDir {
+    let directory = tempfile::tempdir().unwrap();
+    copy_tree(&surface_example_root(), directory.path());
+    directory
+}
+
 fn plugin_path(project: &Path, relative: &str) -> PathBuf {
     project.join(".rho/plugins/local-hello").join(relative)
+}
+
+fn surface_plugin_path(project: &Path, relative: &str) -> PathBuf {
+    project.join(".rho/plugins/local-surface").join(relative)
 }
 
 fn copy_tree(source: &Path, target: &Path) {
@@ -231,6 +249,65 @@ fn cli_reports_the_same_checked_and_smoked_package() {
     assert!(compare_stdout.contains(&format!("baseline_digest={baseline_digest}")));
     assert!(!compare_stdout.contains("Rho local"));
     assert!(!compare_stdout.contains("handle."));
+}
+
+#[test]
+fn manifest_v3_surface_build_check_and_two_instance_smoke_form_one_local_loop() {
+    let project = copied_surface_example();
+    let built = build_project(project.path()).unwrap();
+    assert_eq!(built.built_plugins, vec![SURFACE_PLUGIN_ID]);
+    assert_eq!(built.check.plugins.len(), 1);
+    assert_eq!(built.check.plugins[0].contribution_count, 1);
+
+    let checked = check_project(project.path()).unwrap();
+    assert_eq!(checked.plugins[0].plugin_id, SURFACE_PLUGIN_ID);
+    let smoke = smoke_surface(project.path(), SURFACE_PLUGIN_ID, SURFACE_ID).unwrap();
+    assert_eq!(smoke.guest_abi, 2);
+    assert_eq!(smoke.instances.len(), 2);
+    assert_ne!(
+        smoke.instances[0].instance_id,
+        smoke.instances[1].instance_id
+    );
+    assert!(
+        smoke
+            .instances
+            .iter()
+            .all(|instance| instance.document_revision == 1
+                && instance.block_count == 1
+                && instance.control_count == 2)
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_rho-plugin-dev"))
+        .args([
+            "smoke-surface",
+            project.path().to_str().unwrap(),
+            SURFACE_PLUGIN_ID,
+            SURFACE_ID,
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("surface_smoke_ok"));
+    assert!(stdout.contains("instances=2"));
+    assert_eq!(stdout.matches("surface_instance_ok").count(), 2);
+    assert!(!stdout.contains("Independent plugin Surface instance"));
+}
+
+#[test]
+fn surface_smoke_rejects_a_hostile_raw_html_document() {
+    let project = copied_surface_example();
+    let source_path = surface_plugin_path(project.path(), "src/plugin.wat");
+    let source = fs::read_to_string(&source_path).unwrap();
+    let hostile = source
+        .replacen("\\22text\\22", "\\22raw_html\\22", 1)
+        .replacen("i32.const 471", "i32.const 475", 1)
+        .replacen("i64.const 522", "i64.const 526", 1);
+    fs::write(source_path, hostile).unwrap();
+    build_project(project.path()).unwrap();
+
+    let error = smoke_surface(project.path(), SURFACE_PLUGIN_ID, SURFACE_ID).unwrap_err();
+    assert_eq!(error.code(), "surface_document_rejected");
 }
 
 #[test]

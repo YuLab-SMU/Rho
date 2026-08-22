@@ -5,6 +5,7 @@ mod commands;
 mod git;
 mod git_review;
 mod platform;
+mod plugin_surface_runtime;
 mod project;
 mod resource_registry;
 mod runtime_registry;
@@ -350,6 +351,7 @@ struct AppState {
     render_jobs: Arc<Mutex<HashMap<String, RenderJobState>>>,
     render_tasks: Arc<Mutex<HashMap<String, tauri::async_runtime::JoinHandle<()>>>>,
     surface_runtime: surface_runtime::SurfaceRuntimeState,
+    plugin_surface_runtime: plugin_surface_runtime::PluginSurfaceRuntimeState,
     studio_runtime: studio_runtime::StudioRuntimeState,
     runtime_registry: runtime_registry::RuntimeRegistryState,
     resource_registry: resource_registry::ResourceRegistryState,
@@ -10576,6 +10578,8 @@ mod tests {
             render_jobs: Arc::new(Mutex::new(HashMap::new())),
             render_tasks: Arc::new(Mutex::new(HashMap::new())),
             surface_runtime: crate::surface_runtime::SurfaceRuntimeState::default(),
+            plugin_surface_runtime:
+                crate::plugin_surface_runtime::PluginSurfaceRuntimeState::default(),
             studio_runtime: crate::studio_runtime::StudioRuntimeState::default(),
             runtime_registry: crate::runtime_registry::RuntimeRegistryState::default(),
             resource_registry: crate::resource_registry::ResourceRegistryState::default(),
@@ -16752,6 +16756,8 @@ fn main() {
                 render_jobs: Arc::new(Mutex::new(HashMap::new())),
                 render_tasks: Arc::new(Mutex::new(HashMap::new())),
                 surface_runtime: surface_runtime::SurfaceRuntimeState::default(),
+                plugin_surface_runtime: plugin_surface_runtime::PluginSurfaceRuntimeState::default(
+                ),
                 studio_runtime: studio_runtime::StudioRuntimeState::default(),
                 runtime_registry: runtime_registry::RuntimeRegistryState::default(),
                 resource_registry: resource_registry::ResourceRegistryState::default(),
@@ -16788,6 +16794,8 @@ fn main() {
             surface_runtime::surface_close,
             surface_runtime::surface_suspend,
             surface_runtime::surface_resume,
+            plugin_surface_runtime::plugin_surface_document,
+            plugin_surface_runtime::plugin_surface_event,
             studio_runtime::studio_scene,
             studio_runtime::studio_apply,
             studio_runtime::studio_undo,

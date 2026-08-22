@@ -15,7 +15,7 @@ use rho_extension_runtime::{
     ActivationGeneration, ContributionKind, GuestStep, HOST_PROTOCOL_VERSION, HostFrame,
     HostInstanceId, HostMessage, HostRequestId, HostResponse, MANIFEST_NAME, MAX_MANIFEST_BYTES,
     MAX_PACKAGE_FILE_BYTES, PLUGINS_DIR, PluginCommandResultV1, RuntimeKind, ScopeId,
-    ViewerDocumentV1, WasmHostIdentity, WasmPluginHost, WorkspacePluginManifest,
+    SurfaceDocumentV1, ViewerDocumentV1, WasmHostIdentity, WasmPluginHost, WorkspacePluginManifest,
     WorkspacePluginPackageSnapshot, discover_workspace_plugins, snapshot_workspace_plugin_package,
 };
 use rho_server::plugin_package_cache::PluginPackageCache;
@@ -89,6 +89,23 @@ pub struct ContributionSmokeReport {
 }
 
 pub type CommandSmokeReport = ContributionSmokeReport;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SurfaceInstanceSmokeItem {
+    pub instance_id: String,
+    pub document_revision: u64,
+    pub block_count: usize,
+    pub control_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SurfaceSmokeReport {
+    pub plugin_id: String,
+    pub contribution_id: String,
+    pub digest: String,
+    pub guest_abi: u64,
+    pub instances: Vec<SurfaceInstanceSmokeItem>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ComponentSnapshotReport {
@@ -268,6 +285,94 @@ pub fn smoke_viewer(
     )
 }
 
+pub fn smoke_surface(
+    project_root: &Path,
+    plugin_id: &str,
+    contribution_id: &str,
+) -> Result<SurfaceSmokeReport, PluginDevError> {
+    let project_root = checked_project_root(project_root)?;
+    let snapshot = current_snapshot(&project_root, plugin_id)?;
+    smoke_surface_snapshot(&snapshot, contribution_id)
+}
+
+fn smoke_surface_snapshot(
+    snapshot: &WorkspacePluginPackageSnapshot,
+    contribution_id: &str,
+) -> Result<SurfaceSmokeReport, PluginDevError> {
+    let contribution = snapshot
+        .manifest
+        .contributions
+        .iter()
+        .find(|contribution| contribution.id.as_str() == contribution_id)
+        .ok_or_else(|| {
+            PluginDevError::new(
+                "contribution_not_found",
+                format!("unknown contribution {contribution_id}"),
+            )
+        })?;
+    if contribution.kind != ContributionKind::Surface {
+        return Err(PluginDevError::new(
+            "contribution_not_surface",
+            format!("{contribution_id} is not a Surface contribution"),
+        ));
+    }
+    let surface = contribution
+        .surface
+        .as_ref()
+        .ok_or_else(|| PluginDevError::new("surface_metadata_missing", contribution_id))?;
+    let mode_id = surface
+        .modes
+        .first()
+        .map(|mode| mode.mode_id.to_string())
+        .ok_or_else(|| PluginDevError::new("surface_mode_missing", contribution_id))?;
+    let instance_ids = match surface.instance_policy {
+        rho_ui_contract::SurfaceInstancePolicyV1::Singleton => vec!["plugin-dev.surface-a"],
+        rho_ui_contract::SurfaceInstancePolicyV1::MultiInstance => {
+            vec!["plugin-dev.surface-a", "plugin-dev.surface-b"]
+        }
+    };
+    let mut items = Vec::with_capacity(instance_ids.len());
+    let mut digest = None;
+    let mut guest_abi = 0;
+    for instance_id in instance_ids {
+        let report = smoke_snapshot_with_input(
+            snapshot,
+            contribution_id,
+            ContributionKind::Surface,
+            "trusted_surface",
+            json!({
+                "operation": "render",
+                "project_id": "plugin-dev.local",
+                "instance_id": instance_id,
+                "surface_id": contribution_id,
+                "surface_revision": 1,
+                "activation_generation": 1,
+                "mode_id": mode_id,
+                "view_state": {}
+            }),
+        )?;
+        let document = SurfaceDocumentV1::parse(report.result.clone())
+            .map_err(|error| PluginDevError::new("surface_document_rejected", error.to_string()))?;
+        digest = Some(report.digest);
+        guest_abi = report.guest_abi;
+        items.push(SurfaceInstanceSmokeItem {
+            instance_id: instance_id.to_string(),
+            document_revision: document.revision,
+            block_count: document.blocks.len(),
+            control_count: document.controls().len(),
+        });
+    }
+    Ok(SurfaceSmokeReport {
+        plugin_id: snapshot.manifest.id.to_string(),
+        contribution_id: contribution_id.to_string(),
+        digest: digest.ok_or_else(|| {
+            PluginDevError::new("surface_smoke_empty", "surface smoke produced no instances")
+        })?,
+        guest_abi,
+        instances: items,
+    })
+}
+
 fn smoke_contribution(
     project_root: &Path,
     plugin_id: &str,
@@ -326,19 +431,24 @@ pub fn compare_component(
     if baseline_surfaces.is_empty() {
         return Err(PluginDevError::new(
             "no_evolution_surfaces",
-            "baseline has no Command, Tool, or Viewer contribution",
+            "baseline has no callable contribution",
         ));
     }
     if baseline_surfaces != candidate_surfaces {
         return Err(PluginDevError::new(
             "surface_drift",
-            "candidate Command, Tool, and Viewer identities or kinds differ from baseline",
+            "candidate callable contribution identities or kinds differ from baseline",
         ));
     }
     for (contribution_id, kind) in &baseline_surfaces {
-        let origin = origin_for_kind(*kind);
-        smoke_snapshot(&baseline.snapshot, contribution_id, *kind, origin)?;
-        smoke_snapshot(&candidate, contribution_id, *kind, origin)?;
+        if *kind == ContributionKind::Surface {
+            smoke_surface_snapshot(&baseline.snapshot, contribution_id)?;
+            smoke_surface_snapshot(&candidate, contribution_id)?;
+        } else {
+            let origin = origin_for_kind(*kind);
+            smoke_snapshot(&baseline.snapshot, contribution_id, *kind, origin)?;
+            smoke_snapshot(&candidate, contribution_id, *kind, origin)?;
+        }
     }
     Ok(EvolutionComparisonReport {
         plugin_id: plugin_id.to_string(),
@@ -380,6 +490,16 @@ fn smoke_snapshot(
     expected_kind: ContributionKind,
     origin: &'static str,
 ) -> Result<ContributionSmokeReport, PluginDevError> {
+    smoke_snapshot_with_input(snapshot, contribution_id, expected_kind, origin, json!({}))
+}
+
+fn smoke_snapshot_with_input(
+    snapshot: &WorkspacePluginPackageSnapshot,
+    contribution_id: &str,
+    expected_kind: ContributionKind,
+    origin: &'static str,
+    input: serde_json::Value,
+) -> Result<ContributionSmokeReport, PluginDevError> {
     if !snapshot.manifest.permissions.is_empty() {
         return Err(PluginDevError::new(
             "permissions_not_supported",
@@ -402,6 +522,7 @@ fn smoke_snapshot(
             ContributionKind::Command => "contribution_not_command",
             ContributionKind::Tool => "contribution_not_tool",
             ContributionKind::Viewer => "contribution_not_viewer",
+            ContributionKind::Surface => "contribution_not_surface",
             _ => "contribution_kind_mismatch",
         };
         return Err(PluginDevError::new(
@@ -412,7 +533,6 @@ fn smoke_snapshot(
             ),
         ));
     }
-    let input = json!({});
     contribution
         .input_schema
         .as_ref()
@@ -523,7 +643,13 @@ fn smoke_snapshot(
                 })?;
                 document.contract
             }
-            _ => unreachable!("only Command, Tool and Viewer are admitted"),
+            ContributionKind::Surface => {
+                let document = SurfaceDocumentV1::parse(result.clone()).map_err(|error| {
+                    PluginDevError::new("surface_document_rejected", error.to_string())
+                })?;
+                document.contract
+            }
+            _ => unreachable!("only callable smoke contribution kinds are admitted"),
         };
         Ok((result, result_contract))
     })();
@@ -549,7 +675,10 @@ fn evolution_surfaces(
     for contribution in &snapshot.manifest.contributions {
         if !matches!(
             contribution.kind,
-            ContributionKind::Command | ContributionKind::Tool | ContributionKind::Viewer
+            ContributionKind::Command
+                | ContributionKind::Tool
+                | ContributionKind::Viewer
+                | ContributionKind::Surface
         ) {
             return Err(PluginDevError::new(
                 "unsupported_evolution_surface",
@@ -570,6 +699,7 @@ fn origin_for_kind(kind: ContributionKind) -> &'static str {
         ContributionKind::Command => "user_command",
         ContributionKind::Tool => "agent_tool",
         ContributionKind::Viewer => "trusted_viewer",
+        ContributionKind::Surface => "trusted_surface",
         _ => unreachable!("only evolution surfaces are admitted"),
     }
 }
@@ -582,6 +712,7 @@ fn kind_name(kind: ContributionKind) -> &'static str {
         ContributionKind::Source => "source",
         ContributionKind::Skill => "skill",
         ContributionKind::Panel => "panel",
+        ContributionKind::Surface => "surface",
     }
 }
 

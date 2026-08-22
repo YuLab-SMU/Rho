@@ -1,5 +1,9 @@
 import type {
   OpenSurfaceRequest,
+  PluginSurfaceDocumentRequest,
+  PluginSurfaceDocumentView,
+  PluginSurfaceEventRequest,
+  PluginSurfaceEventResult,
   ProjectUiProfileSnapshot,
   ResourceContent,
   ResourceDeleteRequest,
@@ -92,6 +96,20 @@ export function createTauriUiKernelTransport(
       subscribeEvents(
         listen,
         ["rho://surface-runtime-changed", "rho://ui-snapshot-invalidated"],
+        listener,
+      ),
+    loadPluginSurfaceDocument: (request: PluginSurfaceDocumentRequest) =>
+      invoke<PluginSurfaceDocumentView>("plugin_surface_document", { request }),
+    dispatchPluginSurfaceEvent: (request: PluginSurfaceEventRequest) =>
+      invoke<PluginSurfaceEventResult>("plugin_surface_event", { request }),
+    subscribePluginSurfacesInvalidated: (listener) =>
+      subscribeEvents(
+        listen,
+        [
+          "rho://plugin-surface-changed",
+          "rho://surface-runtime-changed",
+          "rho://ui-snapshot-invalidated",
+        ],
         listener,
       ),
     loadStudio: () => invoke<StudioRuntimeSnapshot>("studio_scene"),

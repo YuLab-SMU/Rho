@@ -62,7 +62,7 @@ const address = server.address();
 if (address == null || typeof address === "string") throw new Error("RSR smoke server did not expose a local port");
 const profile = mkdtempSync(join(tmpdir(), "rho-rsr-browser-"));
 const project = encodeURIComponent("/tmp/Rho 科学 Project");
-const url = `http://127.0.0.1:${address.port}/?preview=bootstrap&project=${project}&health=ready`;
+const url = `http://127.0.0.1:${address.port}/?preview=bootstrap&project=${project}&health=ready&plugin=surface`;
 
 let stdout = "";
 let stderr = "";
@@ -124,6 +124,9 @@ try {
   if (!stdout.includes('data-rsr-ready="true"')) throw new Error("RSR browser did not reach the ready state");
   if (!stdout.includes("Rho Surface Runtime") || !stdout.includes("Rho 科学 Project")) {
     throw new Error("RSR browser smoke did not render project identity and foundation shell");
+  }
+  if (!stdout.includes("Differential expression explorer") || !stdout.includes("Workspace plugin")) {
+    throw new Error("RSR browser smoke did not render the declarative workspace-plugin Surface");
   }
   if (!stdout.includes('id="rsrPreviewEvidence"')) throw new Error("RSR browser preview evidence hook is missing");
   process.stdout.write(`RSR browser smoke passed in ${browser}\n`);

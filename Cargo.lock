@@ -4175,6 +4175,7 @@ version = "0.4.1-dev.11"
 dependencies = [
  "rho-extension-runtime",
  "rho-server",
+ "rho-ui-contract",
  "serde",
  "serde_json",
  "tempfile",

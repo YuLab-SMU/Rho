@@ -522,6 +522,13 @@ impl SurfaceRuntimeState {
         Ok(instance)
     }
 
+    pub(crate) fn exact_instance(
+        &self,
+        request: &SurfaceInstanceRequestV1,
+    ) -> Result<SurfaceInstanceV1> {
+        Self::validated_target(&self.inner(), request)
+    }
+
     pub(crate) fn update(&self, request: UpdateSurfaceRequestV1) -> Result<SurfaceTransition> {
         request.validate()?;
         let mut inner = self.inner();
@@ -902,9 +909,36 @@ pub(crate) fn application_factories(state: &AppState) -> Result<Vec<SurfaceFacto
     Ok(resolution.factories().to_vec())
 }
 
+pub(crate) async fn available_factories(
+    state: &AppState,
+) -> Result<Vec<SurfaceFactoryRegistrationV1>> {
+    let mut factories = application_factories(state)?;
+    let context_handle = state.context.lock().await.clone();
+    if let Some(context_handle) = context_handle {
+        let identity = context_handle.lock().await.broker.identity().clone();
+        let root = state.project_root.read().await.clone();
+        let normalized_root = crate::normalize_project_root(root.to_string_lossy().as_ref());
+        let plugin_context = crate::workspace_plugin_runtime_context(
+            state.data_dir.clone(),
+            normalized_root,
+            &identity,
+        )?;
+        factories.extend(
+            state
+                .plugin_permissions
+                .surface_factories(&plugin_context)?,
+        );
+    }
+    factories.sort_by(|left, right| left.definition.surface_id.cmp(&right.definition.surface_id));
+    Ok(factories)
+}
+
 pub(crate) async fn reconcile_for_state(state: &AppState) -> Result<SurfaceTransition> {
     let kernel = crate::ui_runtime::snapshot_for_state(state).await?;
-    let factories = application_factories(state)?;
+    state
+        .plugin_surface_runtime
+        .retain_project(&kernel.project.project_id);
+    let factories = available_factories(state).await?;
     let base = state.surface_runtime.reconcile(
         kernel.project.project_id.clone(),
         kernel.context.project_revision,

@@ -41,9 +41,10 @@ pub const MAX_PACKAGE_FILES: usize = 4096;
 /// Maximum bytes of a single relative path component or full relative path.
 pub const MAX_RELATIVE_PATH_BYTES: usize = 1024;
 
-/// The newest schema version this manifest parser accepts. Manifest V1 remains
-/// supported for disabled discovery and permission-only P2-2 packages.
-pub const MANIFEST_SCHEMA_VERSION: u64 = 2;
+/// The newest schema version this manifest parser accepts. Manifest V1 and V2
+/// retain their exact existing meaning; V3 adds declarative `ui.surface.*`
+/// factories without reinterpreting Viewer or Panel contributions.
+pub const MANIFEST_SCHEMA_VERSION: u64 = 3;
 pub const MIN_MANIFEST_SCHEMA_VERSION: u64 = 1;
 
 /// Runtime kind declared by a plugin manifest.
@@ -146,7 +147,7 @@ pub struct UiDeclaration {
     pub viewers: Vec<String>,
 }
 
-/// A fully validated Manifest V1 or V2.
+/// A fully validated Manifest V1, V2, or V3.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WorkspacePluginManifest {
@@ -169,8 +170,8 @@ pub struct WorkspacePluginManifest {
     pub optional: Vec<ManifestRequire>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub permissions: Vec<PermissionRequest>,
-    /// Manifest V2 only. Manifest V1 `ui` strings remain discovery metadata and
-    /// never become live contributions.
+    /// Manifest V2/V3 only. Manifest V1 `ui` strings remain discovery metadata
+    /// and never become live contributions.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub contributions: Vec<ContributionDeclaration>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -206,6 +207,16 @@ impl WorkspacePluginManifest {
         if self.schema_version == MIN_MANIFEST_SCHEMA_VERSION && !self.contributions.is_empty() {
             return Err(ExtensionError::ManifestValidation {
                 reason: "Manifest V1 cannot declare live contributions".to_string(),
+            });
+        }
+        if self.schema_version < MANIFEST_SCHEMA_VERSION
+            && self
+                .contributions
+                .iter()
+                .any(|contribution| contribution.kind == crate::ContributionKind::Surface)
+        {
+            return Err(ExtensionError::ManifestValidation {
+                reason: "ui.surface contributions require Manifest V3".to_string(),
             });
         }
 
@@ -691,6 +702,55 @@ mod tests {
         })
     }
 
+    fn minimal_manifest_v3_surface() -> serde_json::Value {
+        let object_schema = serde_json::json!({"type": "object", "properties": {}});
+        serde_json::json!({
+            "schemaVersion": 3,
+            "id": "org.example.surface",
+            "name": "Surface fixture",
+            "version": "1.0.0",
+            "apiVersion": "^1.0",
+            "runtime": { "kind": "wasm", "entry": "dist/plugin.wasm", "scope": "project" },
+            "provides": [
+                { "capability": "ui.surface.analysis", "contract_major": 1 }
+            ],
+            "contributions": [{
+                "id": "ui.surface.analysis",
+                "kind": "surface",
+                "contractMajor": 1,
+                "label": "Analysis",
+                "purpose": "Explore a bounded analysis result",
+                "inputSchema": object_schema,
+                "outputSchema": object_schema,
+                "surface": {
+                    "instancePolicy": "multi_instance",
+                    "resourceKinds": ["project_file"],
+                    "modes": [{
+                        "mode_id": "preview",
+                        "label": "Preview",
+                        "interaction_kind": "interactive"
+                    }],
+                    "sizingHints": {
+                        "min_inline": 180,
+                        "min_block": 120,
+                        "ideal_inline": 520,
+                        "ideal_block": 360,
+                        "max_inline": null,
+                        "max_block": null,
+                        "stretch_inline": true,
+                        "stretch_block": true,
+                        "presentation_classes": ["full"]
+                    },
+                    "eventSchema": {
+                        "type": "object",
+                        "properties": {"control_id": {"type": "string", "maxLength": 128}},
+                        "required": ["control_id"]
+                    }
+                }
+            }]
+        })
+    }
+
     fn parse_json(value: &serde_json::Value) -> Result<WorkspacePluginManifest, ExtensionError> {
         WorkspacePluginManifest::parse(&serde_json::to_vec(value).unwrap())
     }
@@ -720,6 +780,22 @@ mod tests {
         let mut value = minimal_manifest_v2();
         value["schemaVersion"] = serde_json::json!(1);
         assert!(parse_json(&value).is_err());
+    }
+
+    #[test]
+    fn manifest_v3_adds_surface_without_reinterpreting_v2() {
+        let v3 = parse_json(&minimal_manifest_v3_surface()).unwrap();
+        let surface = &v3.contributions[0];
+        assert_eq!(surface.kind, crate::ContributionKind::Surface);
+        assert!(surface.surface.is_some());
+
+        let mut v2 = minimal_manifest_v3_surface();
+        v2["schemaVersion"] = serde_json::json!(2);
+        assert!(parse_json(&v2).is_err());
+
+        let mut unknown = minimal_manifest_v3_surface();
+        unknown["contributions"][0]["surface"]["rawHtml"] = serde_json::json!(true);
+        assert!(parse_json(&unknown).is_err());
     }
 
     #[test]
@@ -917,7 +993,7 @@ mod tests {
 
     #[test]
     fn rejects_unsupported_schema() {
-        let json = minimal_manifest_json().replace("\"schemaVersion\": 1", "\"schemaVersion\": 3");
+        let json = minimal_manifest_json().replace("\"schemaVersion\": 1", "\"schemaVersion\": 4");
         assert!(WorkspacePluginManifest::parse(json.as_bytes()).is_err());
     }
 

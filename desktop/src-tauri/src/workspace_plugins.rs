@@ -349,6 +349,15 @@ pub(crate) struct PluginRuntimeContext {
     pub workspace: Option<WorkspaceGrantIdentity>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WorkspaceSurfaceInvocationRoute {
+    pub contribution_id: String,
+    pub plugin_id: String,
+    pub package_digest: String,
+    pub activation_generation: u64,
+    pub host_instance_id: String,
+}
+
 pub(crate) struct WorkspaceDispatchResult {
     pub response: serde_json::Value,
     pub current_workspace: rho_protocol::WorkspaceIdentity,
@@ -939,7 +948,10 @@ impl PendingPluginPermissionRegistry {
                         },
                     )?;
                 }
-                ContributionKind::Command | ContributionKind::Viewer | ContributionKind::Panel => {}
+                ContributionKind::Command
+                | ContributionKind::Viewer
+                | ContributionKind::Panel
+                | ContributionKind::Surface => {}
             }
         }
         Ok(WorkspacePluginAgentProjection {
@@ -1015,6 +1027,137 @@ impl PendingPluginPermissionRegistry {
             project_revision: context.project_revision,
             contributions,
         }
+    }
+
+    pub(crate) fn surface_factories(
+        &self,
+        context: &PluginRuntimeContext,
+    ) -> Result<Vec<rho_ui_contract::SurfaceFactoryRegistrationV1>> {
+        let state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut factories = Vec::new();
+        for record in state.contributions.list(&context.project_scope_id) {
+            if record.contribution.kind != ContributionKind::Surface {
+                continue;
+            }
+            let key = registry_key(&context.project_root, record.plugin_id.as_str());
+            let Some(active) = state.active.get(&key) else {
+                continue;
+            };
+            let exact_ready = active.host.state() == HostInstanceState::Active
+                && active.host.identity().project_id() == &record.project_id
+                && active.host.identity().plugin_id() == &record.plugin_id
+                && active.host.identity().package_digest() == &record.package_digest
+                && active.host.identity().activation_generation() == record.activation_generation
+                && active.host.identity().host_instance_id() == &record.host_instance_id
+                && (active.permission_count == 0
+                    || active.handles.len() == active.permission_count);
+            if !exact_ready {
+                continue;
+            }
+            let projection =
+                rho_extension_runtime::WorkspaceSurfaceProjectionV1::from_contribution(
+                    &record.contribution,
+                    &record.plugin_id,
+                    &record.package_digest,
+                )
+                .map_err(|error| anyhow!(error))?;
+            factories.push(rho_ui_contract::SurfaceFactoryRegistrationV1 {
+                definition: projection.definition,
+                activation_generation: record.activation_generation.get(),
+            });
+        }
+        factories
+            .sort_by(|left, right| left.definition.surface_id.cmp(&right.definition.surface_id));
+        Ok(factories)
+    }
+
+    pub(crate) fn invoke_surface_contribution(
+        &self,
+        context: &PluginRuntimeContext,
+        contribution_id: &str,
+        input: serde_json::Value,
+        store: &mut Store,
+    ) -> Result<serde_json::Value> {
+        self.invoke_file_contribution(
+            context,
+            contribution_id,
+            ContributionInvocationOrigin::TrustedSurface,
+            input,
+            store,
+        )
+    }
+
+    pub(crate) fn surface_route(
+        &self,
+        context: &PluginRuntimeContext,
+        surface_id: &str,
+    ) -> Result<WorkspaceSurfaceInvocationRoute> {
+        let capability = rho_extension_runtime::CapabilityId::new(surface_id.to_string())?;
+        let state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let record = state
+            .contributions
+            .get(&context.project_scope_id, &capability)
+            .context("workspace Surface is not published for this project")?;
+        ensure!(
+            record.contribution.kind == ContributionKind::Surface,
+            "contribution is not a workspace Surface"
+        );
+        let key = registry_key(&context.project_root, record.plugin_id.as_str());
+        let active = state
+            .active
+            .get(&key)
+            .context("workspace Surface plugin host is unavailable")?;
+        ensure!(
+            active.host.state() == HostInstanceState::Active
+                && active.host.identity().project_id() == &record.project_id
+                && active.host.identity().plugin_id() == &record.plugin_id
+                && active.host.identity().package_digest() == &record.package_digest
+                && active.host.identity().activation_generation() == record.activation_generation
+                && active.host.identity().host_instance_id() == &record.host_instance_id,
+            "workspace Surface plugin route is stale"
+        );
+        Ok(WorkspaceSurfaceInvocationRoute {
+            contribution_id: record.contribution.capability.to_string(),
+            plugin_id: record.plugin_id.to_string(),
+            package_digest: record.package_digest.to_string(),
+            activation_generation: record.activation_generation.get(),
+            host_instance_id: record.host_instance_id.as_str().to_string(),
+        })
+    }
+
+    pub(crate) fn validate_surface_event(
+        &self,
+        context: &PluginRuntimeContext,
+        surface_id: &str,
+        event: &serde_json::Value,
+    ) -> Result<()> {
+        let capability = rho_extension_runtime::CapabilityId::new(surface_id.to_string())?;
+        let state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let record = state
+            .contributions
+            .get(&context.project_scope_id, &capability)
+            .context("workspace Surface is not published for this project")?;
+        ensure!(
+            record.contribution.kind == ContributionKind::Surface,
+            "contribution is not a workspace Surface"
+        );
+        record
+            .contribution
+            .surface
+            .as_ref()
+            .context("workspace Surface event schema is missing")?
+            .event_schema
+            .validate_instance(event)
+            .context("workspace Surface event does not match its declared schema")
     }
 
     pub(crate) fn invoke_command_contribution(
@@ -4215,6 +4358,9 @@ impl PendingPluginPermissionRegistry {
                     ) | (
                         ContributionInvocationOrigin::TrustedPanel,
                         ContributionKind::Panel
+                    ) | (
+                        ContributionInvocationOrigin::TrustedSurface,
+                        ContributionKind::Surface
                     )
                 ),
                 "contribution kind does not match its trusted invocation origin"
@@ -5815,6 +5961,7 @@ fn contribution_kind_name(kind: ContributionKind) -> &'static str {
         ContributionKind::Tool => "tool",
         ContributionKind::Skill => "skill",
         ContributionKind::Panel => "panel",
+        ContributionKind::Surface => "surface",
     }
 }
 
@@ -5843,6 +5990,25 @@ fn validate_viewer_artifacts(
         validate_same_project_artifact(store, context, artifact_id, Some(media_type))?;
     }
     Ok(())
+}
+
+pub(crate) fn validate_surface_artifacts(
+    store: &Store,
+    context: &PluginRuntimeContext,
+    document: &rho_extension_runtime::SurfaceDocumentV1,
+) -> Result<()> {
+    for (artifact_id, media_type) in document.artifact_image_refs() {
+        validate_same_project_artifact(store, context, artifact_id, Some(media_type))?;
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_surface_command_result(
+    store: &Store,
+    context: &PluginRuntimeContext,
+    result: &PluginCommandResultV1,
+) -> Result<()> {
+    validate_command_result_artifacts(store, context, result)
 }
 
 fn validate_same_project_artifact(
@@ -7746,6 +7912,183 @@ mod tests {
                 }]
             }))
             .unwrap(),
+        )
+        .unwrap();
+    }
+
+    fn write_surface_fixture_plugin(project: &Path) {
+        let directory = project.join(".rho/plugins/example/dist");
+        fs::create_dir_all(&directory).unwrap();
+        let document = serde_json::json!({
+            "contract": rho_extension_runtime::PLUGIN_SURFACE_DOCUMENT_CONTRACT,
+            "revision": 1,
+            "title": "CSV explorer",
+            "blocks": [{
+                "kind": "column",
+                "blocks": [
+                    {"kind": "text", "text": "Two rows are ready <script>text only</script>"},
+                    {
+                        "kind": "field", "control_id": "filter", "label": "Filter",
+                        "value": "", "placeholder": "Type a value", "disabled": false,
+                        "busy": false
+                    },
+                    {
+                        "kind": "command_button", "control_id": "apply", "label": "Apply",
+                        "command_id": "analysis.apply", "disabled": false, "busy": false
+                    }
+                ]
+            }]
+        });
+        install_immediate_contribution_module(project, document);
+        let resource_binding_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "resource_provider_id": {"type": "string", "maxLength": 128},
+                "resource_kind": {"type": "string", "maxLength": 128},
+                "resource_id": {"type": "string", "maxLength": 1024},
+                "resource_revision": {"type": "integer", "minimum": 1}
+            }
+        });
+        let runtime_binding_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "runtime_provider_id": {"type": "string", "maxLength": 128},
+                "runtime_instance_id": {"type": "string", "maxLength": 128},
+                "runtime_kind": {"type": "string", "maxLength": 128},
+                "project_id": {"type": "string", "maxLength": 128},
+                "activation_generation": {"type": "integer", "minimum": 1},
+                "state_revision": {"type": "integer", "minimum": 1},
+                "attach_capabilities": {
+                    "type": "array", "maxItems": 32,
+                    "items": {"type": "string", "maxLength": 128}
+                }
+            }
+        });
+        let event_input_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "contract": {"type": "string", "maxLength": 128},
+                "project_id": {"type": "string", "maxLength": 128},
+                "plugin_id": {"type": "string", "maxLength": 128},
+                "package_digest": {"type": "string", "maxLength": 128},
+                "activation_generation": {"type": "integer", "minimum": 1},
+                "host_instance_id": {"type": "string", "maxLength": 128},
+                "surface_id": {"type": "string", "maxLength": 128},
+                "instance_id": {"type": "string", "maxLength": 128},
+                "expected_project_revision": {"type": "integer", "minimum": 1},
+                "expected_surface_revision": {"type": "integer", "minimum": 1},
+                "expected_document_revision": {"type": "integer", "minimum": 1},
+                "expected_resource_revision": {"type": "integer", "minimum": 1},
+                "expected_runtime_generation": {"type": "integer", "minimum": 1},
+                "expected_page_revision": {"type": "integer", "minimum": 1},
+                "expected_layout_revision": {"type": "integer", "minimum": 1},
+                "control_id": {"type": "string", "maxLength": 128},
+                "event_kind": {"type": "string", "enum": ["input", "change", "submit", "activate"]},
+                "value": {"type": "string", "maxLength": 65536}
+            }
+        });
+        let input_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "operation": {"type": "string", "enum": ["render", "event"]},
+                "project_id": {"type": "string", "maxLength": 128},
+                "instance_id": {"type": "string", "maxLength": 128},
+                "surface_id": {"type": "string", "maxLength": 128},
+                "surface_revision": {"type": "integer", "minimum": 1},
+                "activation_generation": {"type": "integer", "minimum": 1},
+                "mode_id": {"type": "string", "maxLength": 128},
+                "view_state": {"type": "object", "properties": {}},
+                "resource_binding": resource_binding_schema,
+                "runtime_binding": runtime_binding_schema,
+                "event": event_input_schema
+            },
+            "required": ["operation"]
+        });
+        let child_block_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "kind": {"type": "string", "maxLength": 64},
+                "text": {"type": "string", "maxLength": 65536},
+                "control_id": {"type": "string", "maxLength": 128},
+                "label": {"type": "string", "maxLength": 128},
+                "value": {"type": "string", "maxLength": 65536},
+                "placeholder": {"type": "string", "maxLength": 1024},
+                "disabled": {"type": "boolean"},
+                "busy": {"type": "boolean"},
+                "command_id": {"type": "string", "maxLength": 128}
+            },
+            "required": ["kind"]
+        });
+        let root_block_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "kind": {"type": "string", "maxLength": 64},
+                "blocks": {
+                    "type": "array", "maxItems": 256,
+                    "items": child_block_schema
+                }
+            },
+            "required": ["kind", "blocks"]
+        });
+        let output_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "contract": {"type": "string", "enum": [rho_extension_runtime::PLUGIN_SURFACE_DOCUMENT_CONTRACT]},
+                "revision": {"type": "integer", "minimum": 1},
+                "title": {"type": "string", "maxLength": 128},
+                "blocks": {
+                    "type": "array", "maxItems": 256,
+                    "items": root_block_schema
+                }
+            },
+            "required": ["contract", "revision", "title", "blocks"]
+        });
+        let surface = serde_json::json!({
+            "instancePolicy": "multi_instance",
+            "resourceKinds": ["project_file"],
+            "modes": [{
+                "mode_id": "explore", "label": "Explore",
+                "interaction_kind": "interactive"
+            }],
+            "sizingHints": {
+                "min_inline": 180, "min_block": 96,
+                "ideal_inline": 520, "ideal_block": 360,
+                "max_inline": null, "max_block": null,
+                "stretch_inline": true, "stretch_block": true,
+                "presentation_classes": ["full", "compact"]
+            },
+            "eventSchema": {
+                "type": "object",
+                "properties": {
+                    "control_id": {"type": "string", "maxLength": 128},
+                    "event_kind": {"type": "string", "enum": ["input", "change", "submit", "activate"]},
+                    "value": {"type": "string", "maxLength": 65536}
+                },
+                "required": ["control_id", "event_kind", "value"]
+            }
+        });
+        let manifest = serde_json::json!({
+            "schemaVersion": 3,
+            "id": "org.example.plugin",
+            "name": "Surface fixture",
+            "version": "1.0.0",
+            "apiVersion": "^1.0",
+            "runtime": { "kind": "wasm", "entry": "dist/plugin.wasm", "scope": "project" },
+            "provides": [{"capability": "ui.surface.csv_explorer", "contract_major": 1}],
+            "contributions": [{
+                "id": "ui.surface.csv_explorer",
+                "kind": "surface",
+                "contractMajor": 1,
+                "label": "CSV explorer",
+                "purpose": "Explore bounded CSV metadata",
+                "inputSchema": input_schema,
+                "outputSchema": output_schema,
+                "surface": surface
+            }]
+        });
+        fs::write(
+            project.join(".rho/plugins/example/rho-plugin.json"),
+            serde_json::to_vec(&manifest).unwrap(),
         )
         .unwrap();
     }
@@ -11805,6 +12148,249 @@ mod tests {
                 )
                 .is_err()
         );
+    }
+
+    #[test]
+    fn manifest_v3_surface_projects_exact_factory_and_invokes_only_trusted_surface_lane() {
+        let directory = tempdir().unwrap();
+        write_surface_fixture_plugin(directory.path());
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let registry = deterministic_registry();
+        let context = context(directory.path());
+        let discovery = discover_workspace_plugins(directory.path())
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            discovery.plugins.len(),
+            1,
+            "surface fixture discovery failed: {:?}",
+            discovery.failures
+        );
+        registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+
+        let factories = registry.surface_factories(&context).unwrap();
+        assert_eq!(factories.len(), 1);
+        let factory = &factories[0];
+        assert_eq!(
+            factory.definition.surface_id.as_str(),
+            "ui.surface.csv_explorer"
+        );
+        assert_eq!(
+            factory.definition.instance_policy,
+            rho_ui_contract::SurfaceInstancePolicyV1::MultiInstance
+        );
+        assert_eq!(
+            factory.definition.renderer_kind,
+            rho_ui_contract::SurfaceRendererKindV1::DeclarativeDocument
+        );
+        assert!(matches!(
+            &factory.definition.origin,
+            rho_ui_contract::SurfaceOriginV1::WorkspacePlugin { plugin_id, .. }
+                if plugin_id.as_str() == "org.example.plugin"
+        ));
+
+        let route = registry
+            .surface_route(&context, "ui.surface.csv_explorer")
+            .unwrap();
+        assert_eq!(route.activation_generation, factory.activation_generation);
+        assert_eq!(route.plugin_id, "org.example.plugin");
+        assert!(
+            registry
+                .surface_route(&context, "ui.command.csv_explorer")
+                .is_err()
+        );
+
+        let outcome = registry
+            .invoke_surface_contribution(
+                &context,
+                "ui.surface.csv_explorer",
+                serde_json::json!({"operation": "render"}),
+                &mut store,
+            )
+            .unwrap();
+        let document =
+            rho_extension_runtime::SurfaceDocumentV1::parse(outcome["result"].clone()).unwrap();
+        assert_eq!(document.title, "CSV explorer");
+        assert_eq!(document.controls().len(), 2);
+        assert!(
+            registry
+                .invoke_file_contribution(
+                    &context,
+                    "ui.surface.csv_explorer",
+                    ContributionInvocationOrigin::TrustedPanel,
+                    serde_json::json!({}),
+                    &mut store,
+                )
+                .is_err()
+        );
+        assert!(
+            registry
+                .validate_surface_event(
+                    &context,
+                    "ui.surface.csv_explorer",
+                    &serde_json::json!({
+                        "control_id": "apply", "event_kind": "activate", "value": ""
+                    }),
+                )
+                .is_ok()
+        );
+        assert!(
+            registry
+                .validate_surface_event(
+                    &context,
+                    "ui.surface.csv_explorer",
+                    &serde_json::json!({"wrong": true}),
+                )
+                .is_err()
+        );
+
+        registry
+            .disable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        assert!(registry.surface_factories(&context).unwrap().is_empty());
+        assert!(
+            registry
+                .invoke_surface_contribution(
+                    &context,
+                    "ui.surface.csv_explorer",
+                    serde_json::json!({}),
+                    &mut store,
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn manifest_v3_surface_factories_remain_isolated_across_project_a_b_a() {
+        let project_a = tempdir().unwrap();
+        let project_b = tempdir().unwrap();
+        write_surface_fixture_plugin(project_a.path());
+        write_surface_fixture_plugin(project_b.path());
+        let mut store_a = Store::open(project_a.path().join("rho.sqlite")).unwrap();
+        let mut store_b = Store::open(project_b.path().join("rho.sqlite")).unwrap();
+        let registry = deterministic_registry();
+        let mut context_a = context(project_a.path());
+        context_a.project_scope_id = ScopeId::new("project.surface.a").unwrap();
+        let mut context_b = context(project_b.path());
+        context_b.project_scope_id = ScopeId::new("project.surface.b").unwrap();
+
+        registry
+            .request_enable(&context_a, "org.example.plugin", &mut store_a)
+            .unwrap();
+        registry
+            .request_enable(&context_b, "org.example.plugin", &mut store_b)
+            .unwrap();
+        let factory_a = registry.surface_factories(&context_a).unwrap().remove(0);
+        let factory_b = registry.surface_factories(&context_b).unwrap().remove(0);
+        assert_eq!(
+            factory_a.definition.surface_id,
+            factory_b.definition.surface_id
+        );
+        let route_a = registry
+            .surface_route(&context_a, "ui.surface.csv_explorer")
+            .unwrap();
+        let route_b = registry
+            .surface_route(&context_b, "ui.surface.csv_explorer")
+            .unwrap();
+        assert_ne!(route_a.host_instance_id, route_b.host_instance_id);
+
+        registry
+            .disable(&context_a, "org.example.plugin", &mut store_a)
+            .unwrap();
+        assert!(registry.surface_factories(&context_a).unwrap().is_empty());
+        assert_eq!(registry.surface_factories(&context_b).unwrap().len(), 1);
+        assert!(
+            registry
+                .surface_route(&context_a, "ui.surface.csv_explorer")
+                .is_err()
+        );
+        assert!(
+            registry
+                .surface_route(&context_b, "ui.surface.csv_explorer")
+                .is_ok()
+        );
+
+        registry
+            .request_enable(&context_a, "org.example.plugin", &mut store_a)
+            .unwrap();
+        assert_eq!(registry.surface_factories(&context_a).unwrap().len(), 1);
+        assert_eq!(registry.surface_factories(&context_b).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn manifest_v3_surface_route_advances_exactly_across_update_and_rollback() {
+        let directory = tempdir().unwrap();
+        write_surface_fixture_plugin(directory.path());
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let registry = deterministic_registry();
+        let context = context(directory.path());
+        registry
+            .request_enable(&context, "org.example.plugin", &mut store)
+            .unwrap();
+        let baseline = registry.surface_factories(&context).unwrap().remove(0);
+        let rho_ui_contract::SurfaceOriginV1::WorkspacePlugin {
+            package_digest: baseline_digest,
+            ..
+        } = baseline.definition.origin
+        else {
+            panic!("fixture Surface must retain workspace-plugin provenance");
+        };
+
+        let manifest_path = directory
+            .path()
+            .join(".rho/plugins/example/rho-plugin.json");
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+        manifest["version"] = serde_json::json!("2.0.0");
+        fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        let candidate = discover_exact_plugin(directory.path(), "org.example.plugin").unwrap();
+        registry
+            .request_update(
+                &context,
+                &WorkspacePluginUpdateInput {
+                    plugin_id: "org.example.plugin".to_string(),
+                    expected_old_digest: baseline_digest.to_string(),
+                    candidate_digest: candidate.digest.to_string(),
+                    expected_project_revision: context.project_revision,
+                },
+                &mut store,
+            )
+            .unwrap();
+        let updated = registry.surface_factories(&context).unwrap().remove(0);
+        let rho_ui_contract::SurfaceOriginV1::WorkspacePlugin {
+            package_digest: updated_digest,
+            ..
+        } = updated.definition.origin
+        else {
+            panic!("updated Surface must retain workspace-plugin provenance");
+        };
+        assert_eq!(updated_digest.as_str(), candidate.digest.as_str());
+        assert!(updated.activation_generation > baseline.activation_generation);
+
+        registry
+            .request_rollback(
+                &context,
+                &WorkspacePluginRollbackInput {
+                    plugin_id: "org.example.plugin".to_string(),
+                    expected_current_digest: updated_digest.to_string(),
+                    rollback_digest: baseline_digest.to_string(),
+                    expected_project_revision: context.project_revision,
+                },
+                &mut store,
+            )
+            .unwrap();
+        let rolled_back = registry.surface_factories(&context).unwrap().remove(0);
+        let rho_ui_contract::SurfaceOriginV1::WorkspacePlugin {
+            package_digest: rollback_digest,
+            ..
+        } = rolled_back.definition.origin
+        else {
+            panic!("rolled-back Surface must retain workspace-plugin provenance");
+        };
+        assert_eq!(rollback_digest, baseline_digest);
+        assert!(rolled_back.activation_generation > updated.activation_generation);
     }
 
     #[test]

@@ -220,4 +220,59 @@ describe("Studio foundation app", () => {
     expect(preview.textContent).toContain("stale");
     expect(preview.textContent).toContain("Refresh view");
   });
+
+  it("renders repeated workspace-plugin Surfaces through trusted React blocks and routes controls per instance", async () => {
+    const transport = createMockUiKernelTransport("?plugin=surface");
+    const originalLoad = transport.loadPluginSurfaceDocument.bind(transport);
+    transport.loadPluginSurfaceDocument = async (request) => {
+      const view = await originalLoad(request);
+      return {
+        ...view,
+        document: {
+          ...view.document,
+          blocks: [{
+            kind: "column" as const,
+            blocks: [
+              { kind: "text" as const, text: "<script>window.__TAURI__.invoke()</script> is literal text" },
+              ...view.document.blocks,
+            ],
+          }],
+        },
+      };
+    };
+    const originalDispatch = transport.dispatchPluginSurfaceEvent.bind(transport);
+    const dispatch = vi.fn(originalDispatch);
+    transport.dispatchPluginSurfaceEvent = dispatch;
+    const { container } = await renderApp(transport);
+    const plugin = container.querySelector<HTMLElement>(
+      "[data-surface-id='ui.surface.differential-expression']",
+    );
+    expect(plugin).not.toBeNull();
+    expect(plugin?.textContent).toContain("Differential expression explorer");
+    expect(plugin?.textContent).toContain("<script>window.__TAURI__.invoke()</script> is literal text");
+    expect(plugin?.querySelector("script")).toBeNull();
+
+    await act(async () => {
+      [...plugin!.querySelectorAll<HTMLButtonElement>(".rho-plugin-command")][0]!.click();
+      for (let index = 0; index < 8; index += 1) await Promise.resolve();
+    });
+    expect(dispatch).toHaveBeenCalledOnce();
+    expect(dispatch.mock.calls[0]?.[0]).toMatchObject({
+      control_id: "apply",
+      event_kind: "activate",
+      value: "",
+      target: { instance_id: "surface-instance:plugin-analysis" },
+    });
+
+    await act(async () => {
+      plugin!.querySelector<HTMLButtonElement>(".rho-surface-actions button")!.click();
+      for (let index = 0; index < 12; index += 1) await Promise.resolve();
+    });
+    const repeated = container.querySelectorAll(
+      "[data-surface-id='ui.surface.differential-expression']",
+    );
+    expect(repeated).toHaveLength(2);
+    expect(repeated[0]?.getAttribute("data-instance-id"))
+      .not.toBe(repeated[1]?.getAttribute("data-instance-id"));
+  });
 });

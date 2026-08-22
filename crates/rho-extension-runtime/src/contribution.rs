@@ -12,6 +12,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+use crate::WorkspaceSurfaceDeclarationV1;
 use crate::digest::PackageDigest;
 use crate::host::HostInstanceId;
 use crate::{ActivationGeneration, BoundedJsonSchema, CapabilityId, PluginId, ScopeId};
@@ -40,6 +41,8 @@ pub enum ContributionKind {
     Skill,
     /// `ui.panel.*` — a document in the one named untrusted-content slot.
     Panel,
+    /// `ui.surface.*` — a repeatable declarative Surface factory.
+    Surface,
 }
 
 impl ContributionKind {
@@ -62,11 +65,14 @@ impl ContributionKind {
         if let Some(rest) = value.strip_prefix("ui.panel.") {
             return (!rest.is_empty()).then_some(Self::Panel);
         }
+        if let Some(rest) = value.strip_prefix("ui.surface.") {
+            return (!rest.is_empty()).then_some(Self::Surface);
+        }
         None
     }
 }
 
-/// One exact Manifest V2 declaration. Schemas are validated during
+/// One exact Manifest V2/V3 declaration. Schemas are validated during
 /// deserialization and again when the full declaration is checked against its
 /// matching `provides` entry.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -88,6 +94,8 @@ pub struct ContributionDeclaration {
     pub skill_path: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub panel_slot: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub surface: Option<WorkspaceSurfaceDeclarationV1>,
 }
 
 impl ContributionDeclaration {
@@ -119,7 +127,8 @@ impl ContributionDeclaration {
                 if !has_call_schemas {
                     return Err(format!("contribution {} requires call schemas", self.id));
                 }
-                if self.skill_path.is_some() || self.panel_slot.is_some() {
+                if self.skill_path.is_some() || self.panel_slot.is_some() || self.surface.is_some()
+                {
                     return Err(format!(
                         "contribution {} declares fields owned by another kind",
                         self.id
@@ -136,6 +145,7 @@ impl ContributionDeclaration {
                 if !has_call_schemas
                     || self.panel_slot.as_deref() != Some(PLUGIN_DETAILS_PANEL_SLOT)
                     || self.skill_path.is_some()
+                    || self.surface.is_some()
                     || !self.media_types.is_empty()
                 {
                     return Err(format!(
@@ -148,6 +158,7 @@ impl ContributionDeclaration {
                 if self.skill_path.is_none()
                     || has_call_schemas
                     || self.panel_slot.is_some()
+                    || self.surface.is_some()
                     || !self.media_types.is_empty()
                 {
                     return Err(format!(
@@ -155,6 +166,24 @@ impl ContributionDeclaration {
                         self.id
                     ));
                 }
+            }
+            ContributionKind::Surface => {
+                if !has_call_schemas
+                    || self.surface.is_none()
+                    || self.skill_path.is_some()
+                    || self.panel_slot.is_some()
+                    || !self.media_types.is_empty()
+                {
+                    return Err(format!(
+                        "surface {} requires call schemas and Surface metadata only",
+                        self.id
+                    ));
+                }
+                self.surface
+                    .as_ref()
+                    .expect("checked above")
+                    .validate()
+                    .map_err(|error| format!("surface {} is invalid: {error}", self.id))?;
             }
         }
         Ok(())
@@ -176,6 +205,7 @@ pub struct Contribution {
     pub media_types: Vec<String>,
     pub skill_path: Option<String>,
     pub panel_slot: Option<String>,
+    pub surface: Option<WorkspaceSurfaceDeclarationV1>,
 }
 
 impl Contribution {
@@ -201,6 +231,7 @@ impl Contribution {
             skill_path: None,
             panel_slot: (kind == ContributionKind::Panel)
                 .then(|| PLUGIN_DETAILS_PANEL_SLOT.to_string()),
+            surface: None,
         }
     }
 
@@ -221,6 +252,7 @@ impl Contribution {
             media_types: declaration.media_types,
             skill_path: declaration.skill_path,
             panel_slot: declaration.panel_slot,
+            surface: declaration.surface,
         })
     }
 
@@ -236,6 +268,7 @@ impl Contribution {
             media_types: self.media_types.clone(),
             skill_path: self.skill_path.clone(),
             panel_slot: self.panel_slot.clone(),
+            surface: self.surface.clone(),
         }
         .validate_shape()
         .is_ok()
@@ -698,6 +731,7 @@ mod tests {
             skill_path: None,
             panel_slot: (kind == ContributionKind::Panel)
                 .then(|| PLUGIN_DETAILS_PANEL_SLOT.to_string()),
+            surface: None,
         }
     }
 

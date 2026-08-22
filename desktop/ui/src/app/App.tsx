@@ -22,6 +22,9 @@ import type {
   LayoutBasis,
   LayoutChild,
   LayoutNode,
+  PluginSurfaceBlock,
+  PluginSurfaceDocumentRequest,
+  PluginSurfaceEventKind,
   ResourceContent,
   ResourceDescriptor,
   ResourceReadConsistency,
@@ -271,6 +274,8 @@ interface SurfaceViewProps {
   readonly setViewGroup: FileResourceViewProps["setViewGroup"];
   readonly persistFileViewState: FileResourceViewProps["persistViewState"];
   readonly reportError: (error: unknown) => void;
+  readonly pluginTransport: UiKernelTransport;
+  readonly pluginDocumentRequest: PluginSurfaceDocumentRequest | null;
 }
 
 interface ConsoleOutputRecord {
@@ -519,12 +524,135 @@ function FileResourceView({
   );
 }
 
+function PluginField({
+  block,
+  dispatch,
+}: {
+  readonly block: Extract<PluginSurfaceBlock, { kind: "field" }>;
+  readonly dispatch: (controlId: string, kind: PluginSurfaceEventKind, value: string) => void;
+}) {
+  const [value, setValue] = useState(block.value);
+  useEffect(() => setValue(block.value), [block.value]);
+  return (
+    <label className="rho-plugin-field">
+      <span>{block.label}</span>
+      <input
+        value={value}
+        placeholder={block.placeholder ?? ""}
+        disabled={block.disabled || block.busy}
+        onChange={(event) => setValue(event.target.value)}
+        onBlur={() => {
+          if (value !== block.value) dispatch(block.control_id, "change", value);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") dispatch(block.control_id, "submit", value);
+        }}
+      />
+    </label>
+  );
+}
+
+function PluginSurfaceBlocks({
+  blocks,
+  dispatch,
+  path = "root",
+}: {
+  readonly blocks: readonly PluginSurfaceBlock[];
+  readonly dispatch: (controlId: string, kind: PluginSurfaceEventKind, value: string) => void;
+  readonly path?: string;
+}) {
+  return <>{blocks.map((block, index) => {
+    const key = `${path}:${index}:${block.kind}`;
+    switch (block.kind) {
+      case "row":
+      case "column":
+        return <div className={`rho-plugin-${block.kind}`} key={key}><PluginSurfaceBlocks blocks={block.blocks} dispatch={dispatch} path={key} /></div>;
+      case "grid":
+        return <div className="rho-plugin-grid" style={{ gridTemplateColumns: `repeat(${block.columns}, minmax(0, 1fr))` }} key={key}>{block.blocks.map((item, itemIndex) => <div style={{ gridColumn: `span ${item.column_span}` }} key={`${key}:${itemIndex}`}><PluginSurfaceBlocks blocks={[item.block]} dispatch={dispatch} path={`${key}:${itemIndex}`} /></div>)}</div>;
+      case "tabs": {
+        const active = block.tabs.find((tab) => tab.tab_id === block.active_tab_id) ?? block.tabs[0];
+        return <section className="rho-plugin-tabs" key={key}><div role="tablist">{block.tabs.map((tab) => <span role="tab" aria-selected={tab.tab_id === active?.tab_id} key={tab.tab_id}>{tab.label}</span>)}</div>{active != null && <PluginSurfaceBlocks blocks={active.blocks} dispatch={dispatch} path={`${key}:${active.tab_id}`} />}</section>;
+      }
+      case "group":
+        return <section className="rho-plugin-group" key={key}>{block.label != null && <h4>{block.label}</h4>}<PluginSurfaceBlocks blocks={block.blocks} dispatch={dispatch} path={key} /></section>;
+      case "text": return <p className="rho-plugin-text" key={key}>{block.text}</p>;
+      case "code": return <pre className="rho-plugin-code" data-language={block.language ?? undefined} key={key}><code>{block.code}</code></pre>;
+      case "key_value": return <dl className="rho-plugin-key-value" key={key}>{block.items.map((item, itemIndex) => <div key={`${key}:${itemIndex}`}><dt>{item.key}</dt><dd>{item.value}</dd></div>)}</dl>;
+      case "table": return <div className="rho-plugin-table-wrap" key={key}><table><thead><tr>{block.columns.map((column) => <th key={column}>{column}</th>)}</tr></thead><tbody>{block.rows.map((row, rowIndex) => <tr key={`${key}:${rowIndex}`}>{row.map((cell, cellIndex) => <td key={`${key}:${rowIndex}:${cellIndex}`}>{cell}</td>)}</tr>)}</tbody></table></div>;
+      case "notice": return <div className={`rho-plugin-notice rho-plugin-notice-${block.tone}`} role="status" key={key}>{block.text}</div>;
+      case "artifact_image_ref": return <figure className="rho-plugin-artifact" key={key}><div aria-hidden="true">Artifact image</div><figcaption>{block.alt} · <code>{block.artifact_id}</code></figcaption></figure>;
+      case "field": return <PluginField block={block} dispatch={dispatch} key={key} />;
+      case "select": return <label className="rho-plugin-field" key={key}><span>{block.label}</span><select value={block.value} disabled={block.disabled || block.busy} onChange={(event) => dispatch(block.control_id, "change", event.target.value)}>{block.options.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>;
+      case "command_button": return <button className="rho-plugin-command" type="button" disabled={block.disabled || block.busy} onClick={() => dispatch(block.control_id, "activate", "")} key={key}>{block.label}</button>;
+    }
+  })}</>;
+}
+
+function PluginSurfaceView({
+  request,
+  transport,
+  reportError,
+}: {
+  readonly request: PluginSurfaceDocumentRequest;
+  readonly transport: UiKernelTransport;
+  readonly reportError: (error: unknown) => void;
+}) {
+  const [document, setDocument] = useState<Awaited<ReturnType<UiKernelTransport["loadPluginSurfaceDocument"]>>["document"] | null>(null);
+  const [status, setStatus] = useState<"loading" | "ready" | "busy" | "failed">("loading");
+  const load = () => {
+    setStatus((current) => current === "busy" ? current : "loading");
+    void transport.loadPluginSurfaceDocument(request).then((view) => {
+      setDocument(view.document);
+      setStatus("ready");
+    }).catch((error: unknown) => {
+      setStatus("failed");
+      reportError(error);
+    });
+  };
+  useEffect(() => {
+    let active = true;
+    const refresh = () => {
+      if (active) load();
+    };
+    refresh();
+    const unsubscribe = transport.subscribePluginSurfacesInvalidated(refresh);
+    return () => { active = false; unsubscribe(); };
+  }, [
+    request.target.instance_id,
+    request.target.expected_project_revision,
+    request.target.expected_surface_revision,
+    request.expected_layout_revision,
+    request.expected_page_revision,
+    transport,
+  ]);
+  const dispatch = (controlId: string, eventKind: PluginSurfaceEventKind, value: string) => {
+    if (document == null || status === "busy") return;
+    setStatus("busy");
+    void transport.dispatchPluginSurfaceEvent({
+      ...request,
+      expected_document_revision: document.revision,
+      control_id: controlId,
+      event_kind: eventKind,
+      value,
+    }).then((result) => {
+      if (result.document != null) setDocument(result.document);
+      setStatus(result.status === "queued" ? "loading" : "ready");
+    }).catch((error: unknown) => {
+      setStatus("failed");
+      reportError(error);
+    });
+  };
+  if (document == null) return <div className={`rho-plugin-surface-state rho-plugin-surface-${status}`}>{status === "failed" ? "Plugin Surface unavailable" : "Loading plugin Surface…"}</div>;
+  return <section className={`rho-plugin-surface-document rho-plugin-surface-${status}`} aria-busy={status === "busy"}><header><span>Workspace plugin</span><strong>{document.title}</strong><small>document r{document.revision}</small></header><PluginSurfaceBlocks blocks={document.blocks} dispatch={dispatch} /></section>;
+}
+
 function SurfaceView({
   instance, focused, setFocus, remove, duplicate, persistDraft, draftCache,
   runtimes, attachRuntime, detachRuntime, executeRuntime, interruptRuntime,
   restartRuntime, persistConsole, resources, readResource, updateResourceDraft,
   saveResource, reloadResource, renameResource, deleteResource,
   refreshResourceBinding, setViewGroup, persistFileViewState, reportError,
+  pluginTransport, pluginDocumentRequest,
 }: SurfaceViewProps) {
   const [draft, setDraft] = useState(() => initialDraft(instance, draftCache));
   const [consoleState, setConsoleState] = useState(() => initialConsoleState(instance));
@@ -721,6 +849,13 @@ function SurfaceView({
             placeholder="This view owns its state…"
           />
         </label>
+      )}
+      {instance.origin.kind === "workspace_plugin" && pluginDocumentRequest != null && (
+        <PluginSurfaceView
+          request={pluginDocumentRequest}
+          transport={pluginTransport}
+          reportError={reportError}
+        />
       )}
       {!isStrip && <footer className="rho-surface-meta"><span>{instance.mode_id ?? "default"}</span><span>rev {instance.surface_revision}</span><span>{runtime == null ? "unbound" : runtime.runtime_instance_id}</span></footer>}
     </article>
@@ -934,6 +1069,7 @@ export function App({ transport }: AppProps) {
   const [commandSearchOpen, setCommandSearchOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const draftCache = useRef(new Map<string, string>()).current;
+  const pluginTransport = transport ?? defaultTransport;
   const store = useMemo(() => transport == null ? defaultStore : new UiExternalStore(transport), [transport]);
   const surfaceStore = useMemo(() => transport == null ? defaultSurfaceStore : new SurfaceExternalStore(transport), [transport]);
   const studioStore = useMemo(() => transport == null ? defaultStudioStore : new StudioExternalStore(transport), [transport]);
@@ -1114,6 +1250,21 @@ export function App({ transport }: AppProps) {
       descriptor.resource_kind === instance.resource_binding?.resource_kind &&
       descriptor.resource_id === instance.resource_binding.resource_id
     ) ?? null;
+    const activePage = profile?.vibe_pages.find(
+      (page) => page.page_id === profile.active_vibe_page_id,
+    ) ?? null;
+    const pluginDocumentRequest: PluginSurfaceDocumentRequest | null =
+      surfaces == null || studio == null || instance.origin.kind !== "workspace_plugin"
+        ? null
+        : {
+            target: instanceRequest(instance, surfaces.project_revision),
+            expected_layout_revision: profile?.active_mode === "studio"
+              ? studio.scene.layout_revision
+              : null,
+            expected_page_revision: profile?.active_mode === "vibe"
+              ? activePage?.page_revision ?? null
+              : null,
+          };
     return <SurfaceView
       key={instance.instance_id}
       instance={instance}
@@ -1259,6 +1410,8 @@ export function App({ transport }: AppProps) {
           ? error.message.slice(0, 512)
           : "Runtime operation failed.",
       )}
+      pluginTransport={pluginTransport}
+      pluginDocumentRequest={pluginDocumentRequest}
     />;
   };
   const activeVibePage = profile?.vibe_pages.find(

@@ -10,6 +10,7 @@ publish = false
 [dependencies]
 rho-extension-runtime = { path = "../rho-extension-runtime" }
 rho-server = { path = "../rho-server" }
+rho-ui-contract = { path = "../rho-ui-contract" }
 serde.workspace = true
 serde_json.workspace = true
 wat.workspace = true

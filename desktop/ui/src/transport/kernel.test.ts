@@ -367,6 +367,28 @@ describe("UI Kernel transport and external store", () => {
                 events: [],
               }
             : generatedRuntimes()
+        : command === "plugin_surface_document"
+        ? {
+            project_id: "project:fixture",
+            instance_id: "instance:playground-a",
+            surface_id: "ui.surface.fixture",
+            surface_revision: 1,
+            document: {
+              contract: "rho.plugin_surface_document.v1",
+              revision: 1,
+              title: "Fixture",
+              blocks: [],
+            },
+            provenance: {},
+          }
+        : command === "plugin_surface_event"
+        ? {
+            event_id: "surface-event:fixture",
+            status: "completed",
+            document: null,
+            command_result: null,
+            provenance: {},
+          }
         : command.startsWith("surface_")
         ? generatedSurfaces()
         : command.startsWith("studio_")
@@ -413,6 +435,19 @@ describe("UI Kernel transport and external store", () => {
     await transport.closeSurface(target);
     await transport.suspendSurface(target);
     await transport.resumeSurface(target);
+    const pluginDocumentRequest = {
+      target,
+      expected_layout_revision: 1,
+      expected_page_revision: null,
+    } as const;
+    await transport.loadPluginSurfaceDocument(pluginDocumentRequest);
+    await transport.dispatchPluginSurfaceEvent({
+      ...pluginDocumentRequest,
+      expected_document_revision: 1,
+      control_id: "apply",
+      event_kind: "activate",
+      value: "",
+    });
     const studioRequest = {
       project_id: "project:fixture",
       expected_project_revision: 7,
@@ -540,6 +575,22 @@ describe("UI Kernel transport and external store", () => {
       { command: "surface_close", args: { request: target } },
       { command: "surface_suspend", args: { request: target } },
       { command: "surface_resume", args: { request: target } },
+      {
+        command: "plugin_surface_document",
+        args: { request: pluginDocumentRequest },
+      },
+      {
+        command: "plugin_surface_event",
+        args: {
+          request: {
+            ...pluginDocumentRequest,
+            expected_document_revision: 1,
+            control_id: "apply",
+            event_kind: "activate",
+            value: "",
+          },
+        },
+      },
       { command: "studio_scene" },
       {
         command: "studio_apply",

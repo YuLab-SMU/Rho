@@ -1,6 +1,6 @@
 # Rho Surface Runtime Full Construction Plan
 
-Status: active complete construction program; Wave 8 is the current integration
+Status: active complete construction program; Wave 9 is the current integration
 package
 
 Date: 2026-08-21
@@ -13,14 +13,17 @@ own focused evidence, contract review, documentation reconciliation, and
 scoped commit. After a wave passes its continuous gate, the next dependency is
 activated automatically under the same explicit authorization.
 
-Current integration package: **Wave 8 — Workspace-plugin Surface contract**.
+Current integration package: **Wave 9 — Check project as the first pluginized
+core component**.
 
-Wave 8 acceptance owner: this active contract together with the existing Phase
-2 workspace-plugin identity, lifecycle, permission, Guest ABI, and package-
-digest contracts. Acceptance requires a new manifest schema version, bounded
-declarative Surface documents, exact generation-bound events, fair bounded
-guest scheduling, and hostile-fixture evidence. It adds no plugin marketplace,
-signature, author, runtime-provider, process, credential, or trusted-dialog
+Wave 9 acceptance owner: this active contract together with the existing Check
+project command/backend truth, Surface/Command registries, Resource evidence,
+workspace-plugin identity, and Project UI Profile contracts. Acceptance
+requires immutable project snapshots, typed rule/result provenance, repeatable
+Check result Surfaces in Studio and Vibe, project/plugin isolation, and removal
+of the permanent top-bar Check action from the new shell. A rule reports
+evidence and remediation only; it gains no trusted claim, project mutation,
+Agent explanation, credential, runtime-provider, or ambient execution
 authority.
 
 Owning design:
@@ -851,6 +854,60 @@ Continuous gate:
   A/B/A;
 - plugin sizing remains a hint, never placement or trusted-dialog authority;
 - no workspace-plugin runtime provider/process/credential authority is added.
+
+Wave 8 completed locally on 2026-08-22:
+
+- Manifest V3 adds only declarative `ui.surface.*` contributions. V1/V2 retain
+  their exact discovery and contribution meaning, and a V2 package cannot
+  smuggle a Surface. Surface declarations validate multi/singleton instance
+  policy, independent modes/resource kinds, bounded sizing hints, closed
+  input/output/event schemas, and host-owned effective quota projection;
+- `SurfaceDocumentV1` provides bounded row/column/grid/tab/group containers,
+  literal text/code/data/table/notice/artifact content, and fixed
+  field/select/command controls. Encoded bytes, depth, blocks, controls, text,
+  table and option counts are bounded. Unknown/raw markup, CSS/DOM/Tauri
+  shapes, bidi spoofing, invalid controls, stale identity, and oversized events
+  fail closed;
+- Surface events carry exact project, plugin, digest, activation generation,
+  host, Surface, instance, project/Surface/document, Resource/Runtime, and
+  Studio-layout-or-Vibe-Page revisions. One host-owned queue per exact project
+  plugin route preserves the one-active-guest-call invariant, bounds both
+  plugin and instance floods, and round-robins repeated instances. Cancellation,
+  revoke, stale routes and duplicate event IDs have regression coverage;
+- the desktop projects factories only from exact active ready plugin packages,
+  invokes them only through the `trusted_surface` lane, validates declared
+  events and same-project artifacts, verifies one current Studio or live Vibe
+  placement, caches documents by exact route/revision, and drops stale caches
+  and queues on update, rollback or project transition. Surface factories pass
+  disable, exact update/rollback generation, and project A/B/A isolation tests;
+- the React renderer maps the closed document union to trusted components and
+  never uses plugin HTML or a plugin DOM root. Typed controls dispatch exact
+  events per placement. Mock and Tauri transports expose the same document,
+  event and invalidation contracts; two repeated instances keep independent
+  IDs and literal `<script>` remains visible text rather than executable DOM;
+- `rho-plugin-dev smoke-surface` now opens two logical instances for a
+  multi-instance declaration, invokes the exact snapshotted no-import Guest ABI
+  V2 component for each, and validates both documents. The checked-in
+  `examples/workspace-plugin-surface` fixture supplies a complete local
+  build/check/smoke loop; a hostile `raw_html` variant is rejected;
+- `cargo test --workspace --locked` passed the complete local matrix. The
+  additional final Surface update/rollback regression passed focused Desktop
+  testing; Desktop now contains 315 tests including the existing opt-in macOS
+  Keychain smoke. `rho-extension-runtime` ran 215 unit/integration tests and
+  `rho-plugin-dev` ran 13 unit/integration tests with no failures. Focused
+  Clippy for both affected crates passed with `--no-deps -D warnings`;
+- `npm run rsr:check` passed strict TypeScript, ESLint, exact Rust/TypeScript
+  fixtures, 24 Vitest cases, deterministic production assets, and real Chrome
+  smoke. The Tauri command inventory passes with 175 commands across 18 Rust
+  files. A separate 1600 x 1000 local capture verified the plugin Surface as an
+  ordinary asymmetric Studio placement with text, field and command controls;
+- cross-review found no authority conflict: plugin lifecycle owns exact
+  executable identity, the Surface Registry owns instance truth, Studio/Vibe
+  own placement only, the Project UI Profile owns durable presentation intent,
+  and the declarative renderer owns no filesystem/runtime/credential power.
+  Tauri still ships frozen `desktop/dist`, so no application/R-package version
+  or `NEWS.md` change is required; installed-app, CI, candidate and release
+  acceptance are neither run nor claimed.
 
 ### Wave 9 — Check project as the first pluginized core component
 

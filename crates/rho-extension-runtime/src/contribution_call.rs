@@ -31,6 +31,7 @@ pub enum ContributionInvocationOrigin {
     TrustedSource,
     TrustedViewer,
     TrustedPanel,
+    TrustedSurface,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -566,7 +567,10 @@ fn validate_terminal_result(
 }
 
 fn call_byte_limit(kind: ContributionKind) -> usize {
-    if matches!(kind, ContributionKind::Viewer | ContributionKind::Panel) {
+    if matches!(
+        kind,
+        ContributionKind::Viewer | ContributionKind::Panel | ContributionKind::Surface
+    ) {
         MAX_VIEWER_DOCUMENT_BYTES
     } else {
         MAX_CONTRIBUTION_CALL_BYTES
@@ -662,6 +666,7 @@ mod tests {
             media_types: Vec::new(),
             skill_path: None,
             panel_slot: None,
+            surface: None,
         }
     }
 
@@ -876,6 +881,7 @@ mod tests {
         for (kind, limit) in [
             (ContributionKind::Tool, MAX_CONTRIBUTION_CALL_BYTES),
             (ContributionKind::Viewer, MAX_VIEWER_DOCUMENT_BYTES),
+            (ContributionKind::Surface, MAX_VIEWER_DOCUMENT_BYTES),
         ] {
             let exact = json!({"payload": "x".repeat(limit - overhead)});
             assert_eq!(serde_json::to_vec(&exact).unwrap().len(), limit);

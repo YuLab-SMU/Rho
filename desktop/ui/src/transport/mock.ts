@@ -2,7 +2,13 @@ import fixture from "../contracts/generated/rsr-contract-fixtures.json";
 import { projectLabel } from "./normalize";
 import { applySceneEdit, collectSceneInstances, reconcileStudio } from "./studio-model";
 import type {
+  LayoutChild,
   OpenSurfaceRequest,
+  PluginSurfaceDocument,
+  PluginSurfaceDocumentRequest,
+  PluginSurfaceDocumentView,
+  PluginSurfaceEventRequest,
+  PluginSurfaceEventResult,
   ProjectUiProfileSnapshot,
   ResourceBinding,
   ResourceContent,
@@ -115,6 +121,70 @@ export function createMockUiKernelTransport(
   if (search.get("mode") === "vibe") {
     (profile.profile as { active_mode: "studio" | "vibe" }).active_mode = "vibe";
   }
+  if (search.get("plugin") === "surface") {
+    const pluginOrigin = {
+      kind: "workspace_plugin" as const,
+      plugin_id: "org.example.analysis",
+      package_digest: `sha256:${"a".repeat(64)}`,
+    };
+    const pluginFactory = {
+      definition: {
+        surface_id: "ui.surface.differential-expression",
+        contract_major: 1,
+        label: "Differential expression",
+        purpose: "Explore one bounded differential-expression result.",
+        renderer_kind: "declarative_document" as const,
+        scope: "project" as const,
+        instance_policy: "multi_instance" as const,
+        instance_quota_class: "standard" as const,
+        resource_kinds: ["project_file"],
+        modes: [{ mode_id: "explore", label: "Explore", interaction_kind: "interactive" as const }],
+        sizing_hints: {
+          min_inline: 180, min_block: 96, ideal_inline: 520, ideal_block: 360,
+          max_inline: null, max_block: null, stretch_inline: true, stretch_block: true,
+          presentation_classes: ["full", "compact"],
+        },
+        accepted_contexts: ["project"],
+        commands: [],
+        origin: pluginOrigin,
+      },
+      activation_generation: 1,
+    };
+    const pluginInstance: SurfaceInstance = {
+      instance_id: "surface-instance:plugin-analysis",
+      surface_id: pluginFactory.definition.surface_id,
+      project_id: surfaces.project_id,
+      origin: pluginOrigin,
+      activation_generation: 1,
+      surface_revision: 1,
+      mode_id: "explore",
+      resource_binding: null,
+      runtime_binding: null,
+      view_group_id: null,
+      view_state: {},
+      lifecycle_state: "active",
+    };
+    (surfaces.catalog.factories as unknown as typeof pluginFactory[]).push(pluginFactory);
+    (surfaces.catalog.instances as unknown as SurfaceInstance[]).push(pluginInstance);
+    (profile.profile.surface_instance_specs as unknown as SurfaceInstanceSpec[]).push({
+      instance_id: pluginInstance.instance_id,
+      surface_id: pluginInstance.surface_id,
+      origin: pluginOrigin,
+      mode_id: pluginInstance.mode_id,
+      resource_binding: null,
+      runtime_attachment_intent: null,
+      view_group_id: null,
+      view_state: {},
+    });
+    if (studio.scene.root.kind === "container") {
+      (studio.scene.root.children as unknown as LayoutChild[]).push({
+        basis: { kind: "minmax", min_logical_pixels: 240, max_logical_pixels: 720, weight: 1 },
+        resizable: true,
+        collapse_priority: 30,
+        child: { kind: "surface", node_id: "node:plugin-analysis", instance_id: pluginInstance.instance_id },
+      });
+    }
+  }
   const persistedContent = new Map<string, string>([
     ["analysis.R", "library(ggplot2)\nplot(mtcars$wt, mtcars$mpg)\n"],
   ]);
@@ -135,12 +205,47 @@ export function createMockUiKernelTransport(
   const redo: SceneState[] = [];
   const listeners = new Set<() => void>();
   const surfaceListeners = new Set<() => void>();
+  const pluginSurfaceListeners = new Set<() => void>();
   const studioListeners = new Set<() => void>();
   const runtimeListeners = new Set<() => void>();
   const resourceListeners = new Set<() => void>();
   const profileListeners = new Set<() => void>();
   const notifySurfaces = () => {
     for (const listener of surfaceListeners) listener();
+  };
+  const notifyPluginSurfaces = () => {
+    for (const listener of pluginSurfaceListeners) listener();
+  };
+  const pluginDocuments = new Map<string, PluginSurfaceDocument>();
+  const pluginDocument = (instanceId: string): PluginSurfaceDocument => {
+    const existing = pluginDocuments.get(instanceId);
+    if (existing != null) return existing;
+    const created: PluginSurfaceDocument = {
+      contract: "rho.plugin_surface_document.v1",
+      revision: 1,
+      title: "Differential expression explorer",
+      blocks: [{
+        kind: "column",
+        blocks: [
+          { kind: "notice", tone: "info", text: "Workspace plugin · declarative trusted rendering" },
+          { kind: "text", text: "Compare a selected contrast without coupling this view to another instance." },
+          {
+            kind: "key_value",
+            items: [{ key: "Genes", value: "18,442" }, { key: "Significant", value: "612" }],
+          },
+          {
+            kind: "field", control_id: "contrast", label: "Contrast", value: "treated-control",
+            placeholder: "group-a/group-b", disabled: false, busy: false,
+          },
+          {
+            kind: "command_button", control_id: "apply", label: "Apply filter",
+            command_id: "analysis.apply", disabled: false, busy: false,
+          },
+        ],
+      }],
+    };
+    pluginDocuments.set(instanceId, created);
+    return created;
   };
   const notifyStudio = () => {
     for (const listener of studioListeners) listener();
@@ -604,6 +709,61 @@ export function createMockUiKernelTransport(
     subscribeSurfacesInvalidated(listener: () => void): Unsubscribe {
       surfaceListeners.add(listener);
       return () => surfaceListeners.delete(listener);
+    },
+    async loadPluginSurfaceDocument(
+      request: PluginSurfaceDocumentRequest,
+    ): Promise<PluginSurfaceDocumentView> {
+      const index = validateTarget(request.target);
+      const instance = surfaces.catalog.instances[index];
+      if (instance == null || instance.origin.kind !== "workspace_plugin") {
+        throw new Error("Mock workspace Surface route is unavailable.");
+      }
+      if (
+        request.expected_layout_revision !== studio.scene.layout_revision ||
+        request.expected_page_revision != null
+      ) throw new Error("Mock workspace Surface placement is stale.");
+      return {
+        project_id: instance.project_id,
+        instance_id: instance.instance_id,
+        surface_id: instance.surface_id,
+        surface_revision: instance.surface_revision,
+        document: structuredClone(pluginDocument(instance.instance_id)),
+        provenance: { origin: "trusted_surface", source: "mock" },
+      };
+    },
+    async dispatchPluginSurfaceEvent(
+      request: PluginSurfaceEventRequest,
+    ): Promise<PluginSurfaceEventResult> {
+      const loaded = await this.loadPluginSurfaceDocument(request);
+      if (loaded.document.revision !== request.expected_document_revision) {
+        throw new Error("Mock workspace Surface document is stale.");
+      }
+      const next = structuredClone(loaded.document) as PluginSurfaceDocument & { revision: number };
+      next.revision += 1;
+      if (request.control_id === "contrast" && typeof request.value === "string") {
+        const column = next.blocks[0];
+        if (column?.kind === "column") {
+          const field = column.blocks.find((block) =>
+            block.kind === "field" && block.control_id === "contrast"
+          );
+          if (field?.kind === "field") {
+            (field as { value: string }).value = request.value;
+          }
+        }
+      }
+      pluginDocuments.set(request.target.instance_id, next);
+      notifyPluginSurfaces();
+      return {
+        event_id: `mock-surface-event:${next.revision}`,
+        status: "completed",
+        document: structuredClone(next),
+        command_result: null,
+        provenance: { origin: "trusted_surface", source: "mock" },
+      };
+    },
+    subscribePluginSurfacesInvalidated(listener: () => void): Unsubscribe {
+      pluginSurfaceListeners.add(listener);
+      return () => pluginSurfaceListeners.delete(listener);
     },
     publishSurfaces(next: SurfaceRuntimeSnapshot) {
       surfaces = copySurfaces(next);
