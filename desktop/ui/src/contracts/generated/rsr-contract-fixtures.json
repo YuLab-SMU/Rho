@@ -214,7 +214,7 @@
   ],
   "runtimes": [
     {
-      "runtime_provider_id": "rho.workspace-r",
+      "runtime_provider_id": "rho.ark-r",
       "runtime_instance_id": "runtime:workspace-r",
       "runtime_kind": "r",
       "project_id": "project:fixture",
@@ -229,6 +229,46 @@
       "primary_scientific_runtime": true
     }
   ],
+  "runtime_registry_snapshot": {
+    "contract": "rho.ui.runtime-registry.snapshot.v1",
+    "contract_major": 1,
+    "snapshot_revision": 4,
+    "project_id": "project:fixture",
+    "project_revision": 7,
+    "providers": [
+      {
+        "definition": {
+          "runtime_provider_id": "rho.ark-r",
+          "runtime_kind": "r",
+          "display_label": "Ark R",
+          "create_supported": true,
+          "max_instances": 8,
+          "attach_capabilities": [
+            "console.attach"
+          ],
+          "application_component_id": "rho.runtime.ark-r"
+        },
+        "activation_generation": 1
+      }
+    ],
+    "instances": [
+      {
+        "runtime_provider_id": "rho.ark-r",
+        "runtime_instance_id": "runtime:workspace-r",
+        "runtime_kind": "r",
+        "project_id": "project:fixture",
+        "activation_generation": 1,
+        "state_revision": 12,
+        "status": "ready",
+        "attach_capabilities": [
+          "console.attach"
+        ],
+        "persistence_class": "project_persistent",
+        "display_label": "Workspace R",
+        "primary_scientific_runtime": true
+      }
+    ]
+  },
   "instances": [
     {
       "instance_id": "instance:file-source",
@@ -327,7 +367,7 @@
       "mode_id": null,
       "resource_binding": null,
       "runtime_binding": {
-        "runtime_provider_id": "rho.workspace-r",
+        "runtime_provider_id": "rho.ark-r",
         "runtime_instance_id": "runtime:workspace-r",
         "runtime_kind": "r",
         "project_id": "project:fixture",
@@ -354,7 +394,7 @@
       "mode_id": null,
       "resource_binding": null,
       "runtime_binding": {
-        "runtime_provider_id": "rho.workspace-r",
+        "runtime_provider_id": "rho.ark-r",
         "runtime_instance_id": "runtime:workspace-r",
         "runtime_kind": "r",
         "project_id": "project:fixture",
@@ -1075,7 +1115,7 @@
           "mode_id": null,
           "resource_binding": null,
           "runtime_binding": {
-            "runtime_provider_id": "rho.workspace-r",
+            "runtime_provider_id": "rho.ark-r",
             "runtime_instance_id": "runtime:workspace-r",
             "runtime_kind": "r",
             "project_id": "project:fixture",
@@ -1102,7 +1142,7 @@
           "mode_id": null,
           "resource_binding": null,
           "runtime_binding": {
-            "runtime_provider_id": "rho.workspace-r",
+            "runtime_provider_id": "rho.ark-r",
             "runtime_instance_id": "runtime:workspace-r",
             "runtime_kind": "r",
             "project_id": "project:fixture",

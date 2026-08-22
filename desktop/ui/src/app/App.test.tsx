@@ -131,4 +131,35 @@ describe("Studio foundation app", () => {
     });
     expect(apply).toHaveBeenCalledOnce();
   });
+
+  it("keeps Console drafts, histories, and output origins instance-local on a shared Runtime", async () => {
+    const { container } = await renderApp();
+    const consoles = [...container.querySelectorAll<HTMLElement>("[data-surface-id='rho.console']")];
+    expect(consoles).toHaveLength(2);
+    const first = consoles[0]!;
+    const second = consoles[1]!;
+    const firstComposer = first.querySelector<HTMLTextAreaElement>("textarea")!;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+    await act(async () => {
+      setValue.call(firstComposer, "1 + 1");
+      firstComposer.dispatchEvent(new Event("input", { bubbles: true }));
+      firstComposer.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+      for (let index = 0; index < 8; index += 1) await Promise.resolve();
+    });
+    expect(first.querySelectorAll(".rho-console-entry")).toHaveLength(1);
+    expect(first.textContent).toContain("runtime:workspace-r");
+    expect(first.textContent).toContain("instance:console-a");
+    expect(second.querySelectorAll(".rho-console-entry")).toHaveLength(0);
+
+    const secondComposer = second.querySelector<HTMLTextAreaElement>("textarea")!;
+    await act(async () => {
+      setValue.call(secondComposer, "2 + 2");
+      secondComposer.dispatchEvent(new Event("input", { bubbles: true }));
+      secondComposer.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+      for (let index = 0; index < 8; index += 1) await Promise.resolve();
+    });
+    expect(first.querySelectorAll(".rho-console-entry")).toHaveLength(1);
+    expect(second.querySelectorAll(".rho-console-entry")).toHaveLength(1);
+    expect(second.textContent).toContain("instance:console-b");
+  });
 });

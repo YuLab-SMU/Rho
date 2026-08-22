@@ -112,6 +112,19 @@
   .rho-inventory-item strong, .rho-inventory-item small { display: block; overflow: hidden; font-size: 0.62rem; text-overflow: ellipsis; white-space: nowrap; }
   .rho-inventory-item small { margin-top: 0.15rem; color: var(--rho-muted); }
 
+  .rho-runtime-inventory { margin-top: 1.2rem; padding-top: 0.8rem; border-top: 1px solid var(--rho-line); }
+  .rho-runtime-inventory-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem; }
+  .rho-runtime-card { margin-top: 0.5rem; padding: 0.52rem; border: 1px solid var(--rho-line); border-radius: 0.55rem; background: white; }
+  .rho-runtime-card > div:first-child { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 0.22rem 0.4rem; }
+  .rho-runtime-card strong { overflow: hidden; font-size: 0.65rem; text-overflow: ellipsis; white-space: nowrap; }
+  .rho-runtime-card small { grid-column: 2; overflow: hidden; color: var(--rho-muted); font-size: 0.54rem; text-overflow: ellipsis; white-space: nowrap; }
+  .rho-runtime-dot { grid-row: 1 / span 2; display: inline-block; width: 0.5rem; aspect-ratio: 1; border-radius: 50%; background: #85928c; }
+  .rho-runtime-ready { background: #079976; }
+  .rho-runtime-busy, .rho-runtime-interrupting, .rho-runtime-restarting, .rho-runtime-starting { background: #d18428; }
+  .rho-runtime-failed, .rho-runtime-stopped { background: #c34c42; }
+  .rho-runtime-actions { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.45rem; }
+  .rho-runtime-actions button { flex: 1 1 auto; padding: 0.22rem 0.3rem; font-size: 0.55rem; }
+
   .rho-studio-canvas { position: relative; min-width: 0; min-height: 0; padding: 0.5rem; overflow: hidden; }
   .rho-studio-loading { display: grid; height: 100%; place-items: center; color: var(--rho-muted); }
   .rho-action-error { position: absolute; z-index: 20; top: 0.75rem; right: 0.75rem; max-width: min(30rem, 70%); margin: 0; padding: 0.65rem; border: 1px solid #c77a28; border-radius: 0.6rem; color: #75430d; background: #fff4e4; box-shadow: 0 0.5rem 2rem rgb(70 35 0 / 12%); font-size: 0.72rem; }
@@ -159,9 +172,23 @@
   .rho-surface-actions { display: flex; gap: 0.25rem; }
   .rho-surface-actions button { padding: 0.24rem 0.38rem; }
   .rho-surface-meta { display: flex; justify-content: space-between; gap: 0.4rem; padding: 0.4rem 0.6rem; border-top: 1px solid var(--rho-line); color: var(--rho-muted); font-size: 0.56rem; }
-  .rho-console-surface, .rho-file-surface, .rho-playground-draft { align-content: center; min-height: 0; padding: clamp(0.7rem, 3cqw, 1.5rem); }
-  .rho-console-surface { display: grid; grid-template-columns: auto 1fr; gap: 0.5rem; color: #d2eee5; background: #132a25; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.72rem; }
-  .rho-console-surface strong, .rho-console-surface small { grid-column: 2; }
+  .rho-file-surface, .rho-playground-draft { align-content: center; min-height: 0; padding: clamp(0.7rem, 3cqw, 1.5rem); }
+  .rho-console-surface { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; color: #d2eee5; background: #132a25; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.68rem; }
+  .rho-console-runtime-bar { display: flex; align-items: center; gap: 0.3rem; min-width: 0; padding: 0.38rem; border-bottom: 1px solid rgb(218 244 235 / 12%); background: #18332c; }
+  .rho-console-runtime-bar select { min-width: 0; flex: 1 1 auto; padding: 0.32rem; border: 1px solid rgb(218 244 235 / 18%); border-radius: 0.35rem; color: #d2eee5; background: #10261f; font: inherit; }
+  .rho-console-runtime-bar button { flex: 0 0 auto; border-color: rgb(218 244 235 / 15%); color: #d2eee5; background: rgb(255 255 255 / 4%); }
+  .rho-runtime-state { padding: 0.2rem 0.32rem; border-radius: 999px; color: #b8c9c3; background: rgb(255 255 255 / 7%); font-size: 0.54rem; text-transform: uppercase; }
+  .rho-console-output { min-width: 0; min-height: 0; padding: 0.55rem; overflow: auto; outline: none; }
+  .rho-console-empty { color: #779087; }
+  .rho-console-entry { margin-bottom: 0.72rem; padding-bottom: 0.65rem; border-bottom: 1px solid rgb(218 244 235 / 9%); }
+  .rho-console-entry header { display: flex; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.35rem; color: #78958b; font-size: 0.52rem; }
+  .rho-console-entry code { display: block; color: #89dec4; white-space: pre-wrap; }
+  .rho-console-entry pre { margin: 0.35rem 0 0; overflow-wrap: anywhere; color: #d2eee5; font: inherit; white-space: pre-wrap; }
+  .rho-console-composer { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.3rem; padding: 0.4rem; border-top: 1px solid rgb(218 244 235 / 12%); background: #10261f; }
+  .rho-console-composer input, .rho-console-composer textarea { min-width: 0; padding: 0.4rem; border: 1px solid rgb(218 244 235 / 17%); border-radius: 0.35rem; color: #d2eee5; background: #0c201a; font: inherit; }
+  .rho-console-filter { grid-column: 1 / -1; }
+  .rho-console-composer textarea { min-height: 2.6rem; resize: vertical; }
+  .rho-console-composer button { align-self: stretch; border-color: rgb(75 201 162 / 36%); color: #c8f4e6; background: rgb(8 126 100 / 26%); }
   .rho-file-surface { background: linear-gradient(140deg, #fff, #f1f5f2); }
   .rho-file-surface code { display: block; margin-top: 0.6rem; overflow-wrap: anywhere; font-size: 0.7rem; }
   .rho-file-surface p { color: var(--rho-muted); font-family: Georgia, serif; font-size: 0.84rem; }
@@ -178,8 +205,8 @@
   @container (max-width: 260px) {
     .rho-surface-chrome .rho-eyebrow, .rho-surface-actions button:first-child, .rho-surface-meta { display: none; }
     .rho-surface-chrome { padding: 0.38rem 0.45rem; }
-    .rho-console-surface { grid-template-columns: 1fr; }
-    .rho-console-surface code, .rho-console-surface strong, .rho-console-surface small { grid-column: 1; }
+    .rho-console-runtime-bar button, .rho-runtime-state { display: none; }
+    .rho-console-entry header span:last-child { display: none; }
   }
   @container (max-width: 150px) {
     .rho-surface-chrome strong { font-size: 0.64rem; }

@@ -2,10 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import fixture from "../contracts/generated/rsr-contract-fixtures.json";
 import { createMockUiKernelTransport } from "./mock";
-import { StudioExternalStore, SurfaceExternalStore, UiExternalStore } from "./store";
+import { RuntimeExternalStore, StudioExternalStore, SurfaceExternalStore, UiExternalStore } from "./store";
 import { createTauriUiKernelTransport } from "./tauri";
 import type {
   OpenSurfaceRequest,
+  RuntimeRegistrySnapshot,
   SurfaceInstanceRequest,
   SurfaceRuntimeSnapshot,
   StudioRuntimeSnapshot,
@@ -26,6 +27,12 @@ function generatedStudio(): StudioRuntimeSnapshot {
   return structuredClone(
     fixture.studio_runtime_snapshot,
   ) as unknown as StudioRuntimeSnapshot;
+}
+
+function generatedRuntimes(): RuntimeRegistrySnapshot {
+  return structuredClone(
+    fixture.runtime_registry_snapshot,
+  ) as unknown as RuntimeRegistrySnapshot;
 }
 
 describe("UI Kernel transport and external store", () => {
@@ -109,7 +116,21 @@ describe("UI Kernel transport and external store", () => {
     const handlers = new Map<string, () => void>();
     const invoke = async <T,>(command: string, args?: Record<string, unknown>) => {
       calls.push(args == null ? { command } : { command, args });
-      return (command.startsWith("surface_")
+      return (command.startsWith("runtime_")
+        ? command === "runtime_attach" || command === "runtime_detach"
+          ? generatedSurfaces()
+          : command === "runtime_execute"
+            ? {
+                execution_id: "runtime-execution:test",
+                runtime_instance_id: "runtime:workspace-r",
+                runtime_activation_generation: 1,
+                console_instance_id: "instance:console-a",
+                state_revision_after: 13,
+                status: "completed",
+                events: [],
+              }
+            : generatedRuntimes()
+        : command.startsWith("surface_")
         ? generatedSurfaces()
         : command.startsWith("studio_")
           ? generatedStudio()
@@ -167,6 +188,35 @@ describe("UI Kernel transport and external store", () => {
     });
     await transport.undoStudio(studioRequest);
     await transport.redoStudio(studioRequest);
+    const runtimeTarget = {
+      project_id: "project:fixture",
+      runtime_provider_id: "rho.ark-r",
+      runtime_instance_id: "runtime:workspace-r",
+      activation_generation: 1,
+      expected_project_revision: 7,
+      expected_state_revision: 12,
+    } as const;
+    const attachment = { runtime: runtimeTarget, surface: target } as const;
+    const createRuntime = {
+      project_id: "project:fixture",
+      runtime_provider_id: "rho.ark-r",
+      expected_project_revision: 7,
+      expected_snapshot_revision: 4,
+      display_label: null,
+    } as const;
+    await transport.loadRuntimes();
+    await transport.createRuntime(createRuntime);
+    await transport.attachRuntime(attachment);
+    await transport.detachRuntime({ surface: target });
+    await transport.interruptRuntime(runtimeTarget);
+    await transport.restartRuntime(runtimeTarget);
+    await transport.stopRuntime(runtimeTarget);
+    await transport.executeRuntime({
+      runtime: runtimeTarget,
+      console_instance_id: "instance:console-a",
+      expected_console_revision: 1,
+      code: "1 + 1",
+    });
     const invalidated = vi.fn();
     const stop = transport.subscribeInvalidated(invalidated);
     await Promise.resolve();
@@ -211,6 +261,24 @@ describe("UI Kernel transport and external store", () => {
       },
       { command: "studio_undo", args: { request: studioRequest } },
       { command: "studio_redo", args: { request: studioRequest } },
+      { command: "runtime_list" },
+      { command: "runtime_create", args: { request: createRuntime } },
+      { command: "runtime_attach", args: { request: attachment } },
+      { command: "runtime_detach", args: { request: { surface: target } } },
+      { command: "runtime_interrupt", args: { request: runtimeTarget } },
+      { command: "runtime_restart", args: { request: runtimeTarget } },
+      { command: "runtime_stop", args: { request: runtimeTarget } },
+      {
+        command: "runtime_execute",
+        args: {
+          request: {
+            runtime: runtimeTarget,
+            console_instance_id: "instance:console-a",
+            expected_console_revision: 1,
+            code: "1 + 1",
+          },
+        },
+      },
     ]);
     stop();
   });
@@ -293,6 +361,127 @@ describe("UI Kernel transport and external store", () => {
     });
     expect(undone.unplaced_instance_ids).toContain("instance:playground-a");
     expect(undone.scene.layout_revision).toBeGreaterThan(placed.scene.layout_revision);
+    stop();
+  });
+
+  it("supports shared and split runtimes without coupling Console or layout lifetime", async () => {
+    const transport = createMockUiKernelTransport();
+    const runtimeStore = new RuntimeExternalStore(transport);
+    const stop = runtimeStore.subscribe(() => undefined);
+    await runtimeStore.refresh();
+    let runtimeState = runtimeStore.getSnapshot();
+    if (runtimeState.status !== "ready") throw new Error("Runtime fixture did not load");
+    const workspace = runtimeState.snapshot.instances[0]!;
+    const runtimeTarget = (runtime = workspace) => ({
+      project_id: runtime.project_id,
+      runtime_provider_id: runtime.runtime_provider_id,
+      runtime_instance_id: runtime.runtime_instance_id,
+      activation_generation: runtime.activation_generation,
+      expected_project_revision: runtimeState.status === "ready"
+        ? runtimeState.snapshot.project_revision
+        : 0,
+      expected_state_revision: runtime.state_revision,
+    });
+    let surfaces = await transport.loadSurfaces();
+    const consoleA = surfaces.catalog.instances.find((surface) =>
+      surface.instance_id === "instance:console-a"
+    )!;
+    const consoleB = surfaces.catalog.instances.find((surface) =>
+      surface.instance_id === "instance:console-b"
+    )!;
+    const first = await runtimeStore.execute({
+      runtime: runtimeTarget(),
+      console_instance_id: consoleA.instance_id,
+      expected_console_revision: consoleA.surface_revision,
+      code: "1 + 1",
+    });
+    expect(first.events[0]).toMatchObject({
+      runtime_instance_id: workspace.runtime_instance_id,
+      console_instance_id: consoleA.instance_id,
+    });
+    await runtimeStore.refresh();
+    runtimeState = runtimeStore.getSnapshot();
+    if (runtimeState.status !== "ready") throw new Error("Runtime refresh failed");
+    const currentWorkspace = runtimeState.snapshot.instances[0]!;
+    const second = await runtimeStore.execute({
+      runtime: runtimeTarget(currentWorkspace),
+      console_instance_id: consoleB.instance_id,
+      expected_console_revision: consoleB.surface_revision,
+      code: "2 + 2",
+    });
+    expect(second.console_instance_id).toBe(consoleB.instance_id);
+    await runtimeStore.refresh();
+    runtimeState = runtimeStore.getSnapshot();
+    if (runtimeState.status !== "ready") throw new Error("Runtime refresh failed");
+    await transport.closeSurface({
+      project_id: consoleA.project_id,
+      instance_id: consoleA.instance_id,
+      activation_generation: consoleA.activation_generation,
+      expected_project_revision: surfaces.project_revision,
+      expected_surface_revision: consoleA.surface_revision,
+    });
+    expect((await transport.loadRuntimes()).instances.some((runtime) =>
+      runtime.runtime_instance_id === workspace.runtime_instance_id
+    )).toBe(true);
+
+    const created = await runtimeStore.create({
+      project_id: runtimeState.snapshot.project_id,
+      runtime_provider_id: "rho.ark-r",
+      expected_project_revision: runtimeState.snapshot.project_revision,
+      expected_snapshot_revision: runtimeState.snapshot.snapshot_revision,
+      display_label: "Split R",
+    });
+    const auxiliary = created.instances.find((runtime) => !runtime.primary_scientific_runtime)!;
+    surfaces = await transport.loadSurfaces();
+    const latestConsoleB = surfaces.catalog.instances.find((surface) =>
+      surface.instance_id === consoleB.instance_id
+    )!;
+    await runtimeStore.attach({
+      runtime: {
+        project_id: auxiliary.project_id,
+        runtime_provider_id: auxiliary.runtime_provider_id,
+        runtime_instance_id: auxiliary.runtime_instance_id,
+        activation_generation: auxiliary.activation_generation,
+        expected_project_revision: created.project_revision,
+        expected_state_revision: auxiliary.state_revision,
+      },
+      surface: {
+        project_id: latestConsoleB.project_id,
+        instance_id: latestConsoleB.instance_id,
+        activation_generation: latestConsoleB.activation_generation,
+        expected_project_revision: surfaces.project_revision,
+        expected_surface_revision: latestConsoleB.surface_revision,
+      },
+    });
+    const restarted = await runtimeStore.restart({
+      project_id: auxiliary.project_id,
+      runtime_provider_id: auxiliary.runtime_provider_id,
+      runtime_instance_id: auxiliary.runtime_instance_id,
+      activation_generation: auxiliary.activation_generation,
+      expected_project_revision: created.project_revision,
+      expected_state_revision: auxiliary.state_revision,
+    });
+    const restartedAux = restarted.instances.find((runtime) =>
+      runtime.runtime_instance_id === auxiliary.runtime_instance_id
+    )!;
+    expect(restartedAux.activation_generation).toBe(auxiliary.activation_generation + 1);
+    const rebound = (await transport.loadSurfaces()).catalog.instances.find((surface) =>
+      surface.instance_id === consoleB.instance_id
+    )!;
+    expect(rebound.runtime_binding?.activation_generation).toBe(
+      restartedAux.activation_generation,
+    );
+    const sceneBeforeStop = await transport.loadStudio();
+    await runtimeStore.stop({
+      project_id: restartedAux.project_id,
+      runtime_provider_id: restartedAux.runtime_provider_id,
+      runtime_instance_id: restartedAux.runtime_instance_id,
+      activation_generation: restartedAux.activation_generation,
+      expected_project_revision: restarted.project_revision,
+      expected_state_revision: restartedAux.state_revision,
+    });
+    expect((await transport.loadSurfaces()).catalog.instances).toContainEqual(rebound);
+    expect((await transport.loadStudio()).scene).toEqual(sceneBeforeStop.scene);
     stop();
   });
 });

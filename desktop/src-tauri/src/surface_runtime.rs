@@ -442,7 +442,7 @@ impl SurfaceRuntimeState {
         Ok(instance)
     }
 
-    fn update(&self, request: UpdateSurfaceRequestV1) -> Result<SurfaceTransition> {
+    pub(crate) fn update(&self, request: UpdateSurfaceRequestV1) -> Result<SurfaceTransition> {
         request.validate()?;
         let mut inner = self.inner();
         let current = Self::validated_target(&inner, &request.target)?;
@@ -472,6 +472,49 @@ impl SurfaceRuntimeState {
             request.target.expected_surface_revision,
             request.mutation,
             SurfaceRuntimeEventKindV1::Updated,
+        )
+    }
+
+    pub(crate) fn rebind_runtime_generation(
+        &self,
+        descriptor: &rho_ui_contract::RuntimeDescriptorV1,
+    ) -> Result<SurfaceTransition> {
+        descriptor.validate()?;
+        let mut inner = self.inner();
+        let project = inner
+            .project
+            .as_ref()
+            .ok_or_else(|| anyhow!("Surface Runtime has no project context"))?;
+        ensure!(
+            descriptor.project_id == project.project_id,
+            "Runtime rebind belongs to another project"
+        );
+        let binding = descriptor.binding();
+        let mut instances = inner.instances.clone();
+        let mut changed = false;
+        for instance in instances.values_mut() {
+            if instance.runtime_binding.as_ref().is_some_and(|current| {
+                current.runtime_instance_id == descriptor.runtime_instance_id && current != &binding
+            }) {
+                instance.runtime_binding = Some(binding.clone());
+                instance.surface_revision = next_revision(
+                    "surface_instance.surface_revision",
+                    instance.surface_revision,
+                )?;
+                changed = true;
+            }
+        }
+        if !changed {
+            return Ok(SurfaceTransition {
+                snapshot: Self::current_snapshot(&inner)?,
+                event: None,
+            });
+        }
+        Self::commit_instances(
+            &mut inner,
+            instances,
+            SurfaceRuntimeEventKindV1::Reconciled,
+            None,
         )
     }
 
@@ -892,6 +935,65 @@ mod tests {
             second.catalog.instances[1].instance_id
         );
         assert!(first.snapshot_revision < closed.snapshot_revision);
+    }
+
+    #[test]
+    fn runtime_restart_rebinds_every_matching_surface_without_changing_layout_identity() {
+        let runtime = SurfaceRuntimeState::default();
+        let project_id = project("project:a");
+        runtime
+            .reconcile(
+                project_id.clone(),
+                7,
+                vec![factory(
+                    "rho.fixture",
+                    1,
+                    SurfaceInstancePolicyV1::MultiInstance,
+                )],
+            )
+            .unwrap();
+        let descriptor = rho_ui_contract::RuntimeDescriptorV1 {
+            runtime_provider_id: rho_ui_contract::RuntimeProviderId::new("rho.ark-r").unwrap(),
+            runtime_instance_id: rho_ui_contract::RuntimeInstanceId::new("runtime:one").unwrap(),
+            runtime_kind: rho_ui_contract::RuntimeKindId::new("r").unwrap(),
+            project_id: project_id.clone(),
+            activation_generation: 1,
+            state_revision: 2,
+            status: rho_ui_contract::RuntimeStatusV1::Ready,
+            attach_capabilities: vec![
+                rho_ui_contract::RuntimeCapabilityId::new("console.attach").unwrap(),
+            ],
+            persistence_class: rho_ui_contract::RuntimePersistenceClassV1::ExplicitLease,
+            display_label: "Auxiliary R".to_string(),
+            primary_scientific_runtime: false,
+        };
+        let mut request = open_request(&project_id);
+        request.runtime_binding = Some(descriptor.binding());
+        let opened = runtime.open(request, 0).unwrap();
+        let instance_id = opened.snapshot.catalog.instances[0].instance_id.clone();
+        let restarted = rho_ui_contract::RuntimeDescriptorV1 {
+            activation_generation: 2,
+            state_revision: 4,
+            ..descriptor
+        };
+        let rebound = runtime.rebind_runtime_generation(&restarted).unwrap();
+        let instance = rebound
+            .snapshot
+            .catalog
+            .instances
+            .iter()
+            .find(|instance| instance.instance_id == instance_id)
+            .unwrap();
+        assert_eq!(instance.runtime_binding, Some(restarted.binding()));
+        assert_eq!(instance.surface_revision, 2);
+        assert!(rebound.event.is_some());
+        assert!(
+            runtime
+                .rebind_runtime_generation(&restarted)
+                .unwrap()
+                .event
+                .is_none()
+        );
     }
 
     #[test]

@@ -1,6 +1,6 @@
 # Rho Surface Runtime Full Construction Plan
 
-Status: active complete construction program; Wave 5 is the current integration
+Status: active complete construction program; Wave 6 is the current integration
 package
 
 Date: 2026-08-21
@@ -13,13 +13,13 @@ own focused evidence, contract review, documentation reconciliation, and
 scoped commit. After a wave passes its continuous gate, the next dependency is
 activated automatically under the same explicit authorization.
 
-Current integration package: **Wave 5 — Runtime Registry and multi-runtime Console**.
+Current integration package: **Wave 6 — Resource Registry and unconstrained file views**.
 
-Wave 5 acceptance owner: this active contract. Acceptance requires an explicit,
-broker-owned Runtime Registry, Workspace R plus supervised auxiliary runtimes,
-Console instances bound to exact runtime identities, independent Console view
-state, and truthful fault isolation. Opening or closing a Console may never
-implicitly create, stop, or restart a runtime, and Agent R remains non-attachable.
+Wave 6 acceptance owner: this active contract. Acceptance requires normalized,
+project-bound resource identity and revision truth, unconstrained repeated file
+views and modes, explicit optional view grouping, dirty-draft preservation, and
+truthful stale/missing/unsupported states. Layout and Surface instances may not
+become file-content authority.
 
 Owning design:
 `docs/design/proposed-2026-08-21-plugin-native-surface-runtime-design.md`
@@ -627,6 +627,51 @@ Continuous gate:
 - project A/B isolation, runtime restart generation, queued execution,
   cancellation, crash/recovery, and no Agent R attachment;
 - Issue #93 supervisor/recovery contracts remain authoritative.
+
+Completion evidence (2026-08-21):
+
+- `rho-ui-contract` now defines bounded Runtime Provider, Registry, lifecycle,
+  attachment, execution and output-origin contracts. The trusted application
+  plugin registers `rho.ark-r`; Workspace R is the project-persistent primary,
+  auxiliary Ark R sessions use explicit leases, and Agent R exposes no
+  attachable descriptor;
+- Tauri exposes list/create/attach/detach/interrupt/restart/stop/execute with
+  exact project, provider, instance, generation and revision admission.
+  Workspace restart delegates to the existing supervisor, auxiliary sessions
+  are retired only after a committed project switch or during shutdown, and an
+  old-generation late completion cannot overwrite recovered truth;
+- Console is a real multi-instance Surface with an explicit runtime selector.
+  Each instance owns draft, bounded history, output filter, scroll state and
+  origin-labelled output. Runtime busy/order/interrupt/restart remain shared by
+  the bound Runtime. Restart advances generation and atomically rebinds every
+  matching Console; closing a Console does not stop a Runtime and stopping an
+  auxiliary Runtime leaves the Surface and Studio layout intact;
+- execution queues are per Runtime. Explicit execution leases keep project
+  switching blocked while running or queued without holding the project gate
+  during kernel work, so Interrupt can enter. Cancellation returns a truthful
+  cancelled result, crashes mark only the exact Runtime failed, and delayed old
+  generations are withheld;
+- Rust/TypeScript mock parity covers the eight Runtime commands. Frontend tests
+  cover shared and split runtimes, independent Console state/output, restart
+  rebinding, Runtime stop versus layout lifetime, Console close versus Runtime
+  lifetime, and exact runtime/Console output origin. Provider lifecycle tests
+  cover generation binding, reversible disposal and duplicate rollback;
+- `cargo test --workspace --locked` passed the complete local matrix: Desktop
+  ran 296 tests with 295 passing and the existing opt-in macOS Keychain smoke
+  ignored. Focused `rho-ui-contract` and `rho-extension-runtime` Clippy passed
+  with `-D warnings`; full Desktop Clippy completed with only the recorded
+  pre-existing repository categories after Wave 5 warnings were removed;
+- `npm run rsr:check` passed strict TypeScript, ESLint, exact generated fixture
+  parity, 17 Vitest cases, deterministic production assets, no-network asset
+  checks and real local Chrome smoke. An 1800 x 1100 capture verified the
+  Runtime inventory, explicit Console selector, bound status/actions and
+  instance-local composer in the recursive Studio scene;
+- cross-review found no ownership conflict: Issue #93 still owns Workspace R
+  supervision, Registry state is a projection plus auxiliary-provider lane,
+  Surface placement grants no process authority, and Wave 6 alone introduces
+  canonical Resource resolution. No application/R-package version or
+  `NEWS.md` change is required because Tauri still ships frozen `desktop/dist`;
+  installed-app and release acceptance are neither run nor claimed.
 
 ### Wave 6 — Resource Registry and unconstrained file views
 

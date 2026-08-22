@@ -6,6 +6,7 @@ mod git;
 mod git_review;
 mod platform;
 mod project;
+mod runtime_registry;
 mod studio_runtime;
 mod surface_runtime;
 mod ui_runtime;
@@ -348,6 +349,7 @@ struct AppState {
     render_tasks: Arc<Mutex<HashMap<String, tauri::async_runtime::JoinHandle<()>>>>,
     surface_runtime: surface_runtime::SurfaceRuntimeState,
     studio_runtime: studio_runtime::StudioRuntimeState,
+    runtime_registry: runtime_registry::RuntimeRegistryState,
     ui_runtime: ui_runtime::UiRuntimeState,
 }
 
@@ -3027,6 +3029,33 @@ async fn execute_r(request: ExecuteRequest, state: State<'_, AppState>) -> Resul
     .map_err(display_error)
 }
 
+pub(crate) async fn execute_workspace_console(code: String, state: &AppState) -> Result<Value> {
+    ensure!(!code.trim().is_empty(), "R code is empty");
+    let session = active_session(state).await?;
+    let context = active_context(state).await?;
+    let mut context = context.lock().await;
+    let CoordinatorRuntime { broker, store } = &mut *context;
+    let payload = json!({
+        "arguments": {
+            "code": code,
+            "source_path": "<console>",
+            "execution_mode": "console",
+            "document_version": Value::Null,
+            "source_range": Value::Null
+        },
+        "expected_workspace": broker.identity()
+    });
+    dispatch_workspace_request(
+        "workspace.execute",
+        &payload,
+        ExecutionOrigin::User,
+        session.as_ref(),
+        broker,
+        store,
+    )
+    .await
+}
+
 async fn validate_execute_source_range(request: &ExecuteRequest, state: &AppState) -> Result<()> {
     validate_execute_source_range_shape(request)?;
     if request.source_range.is_none() {
@@ -5652,11 +5681,15 @@ async fn interrupt_all_agent_tasks(
 #[tauri::command]
 async fn restart_workspace(state: State<'_, AppState>) -> Result<WorkspaceStatus, String> {
     let _project_transition = state.project_transition_gate.lock().await;
+    restart_workspace_locked(&state).await
+}
+
+pub(crate) async fn restart_workspace_locked(state: &AppState) -> Result<WorkspaceStatus, String> {
     if state.shutdown_started.load(Ordering::SeqCst) {
         return Err("Rho is closing; Workspace R cannot restart".to_string());
     }
     interrupt_all_agent_tasks(
-        &state,
+        state,
         "desktop_restart",
         "Agent turn interrupted because Workspace R is restarting.",
     )
@@ -5668,7 +5701,7 @@ async fn restart_workspace(state: State<'_, AppState>) -> Result<WorkspaceStatus
         normalize_project_root(root.to_string_lossy().as_ref())
     };
     teardown_workspace_plugins_for_boundary(
-        &state,
+        state,
         &current_project_root,
         "project_teardown",
         "workspace_restarted",
@@ -5695,7 +5728,7 @@ async fn restart_workspace(state: State<'_, AppState>) -> Result<WorkspaceStatus
     };
 
     let active_run_id = {
-        let mut store = read_store(&state).map_err(display_error)?;
+        let mut store = read_store(state).map_err(display_error)?;
         let run_id = store
             .latest_active_run_id(&current_project_root)
             .map_err(display_error)?;
@@ -5749,13 +5782,13 @@ async fn restart_workspace(state: State<'_, AppState>) -> Result<WorkspaceStatus
     }
     drop(old_session);
     drop(old_context);
-    start_workspace(&state).await.map_err(display_error)?;
-    let status = finalize_workspace_start(&state, true)
+    start_workspace(state).await.map_err(display_error)?;
+    let status = finalize_workspace_start(state, true)
         .await
         .map_err(display_error)?;
     if !render_job_ids.is_empty() {
         let reconciled = {
-            let store = read_store(&state).map_err(display_error)?;
+            let store = read_store(state).map_err(display_error)?;
             let mut reconciled = Vec::with_capacity(render_job_ids.len());
             for job_id in &render_job_ids {
                 let run = store
@@ -5998,6 +6031,11 @@ async fn shutdown_application(state: &AppState) -> Result<(), String> {
         "broker_shutdown",
     )
     .await;
+    if let Err(error) = runtime_registry::teardown_auxiliary_runtimes(None, state).await {
+        write_startup_log(&format!(
+            "Auxiliary Runtime shutdown teardown failed: {error:#}"
+        ));
+    }
 
     if let Some(watcher) = state.project_watcher.lock().await.take() {
         watcher.stop();
@@ -6543,6 +6581,15 @@ fn surface_playground_capability_id() -> CapabilityId {
         .expect("built-in Surface Playground capability must be valid")
 }
 
+fn console_surface_capability_id() -> CapabilityId {
+    CapabilityId::new("ui.surface.console").expect("built-in Console capability must be valid")
+}
+
+fn ark_runtime_provider_capability_id() -> CapabilityId {
+    CapabilityId::new("runtime.provider.ark-r")
+        .expect("built-in Ark Runtime Provider capability must be valid")
+}
+
 struct SurfacePlaygroundPlugin {
     descriptor: PluginDescriptor,
 }
@@ -6556,10 +6603,11 @@ impl SurfacePlaygroundPlugin {
                 .expect("built-in Surface Playground version must be valid"),
             vec![rho_extension_runtime::ScopePolicy::application_kind()],
         );
-        descriptor.provides = vec![CapabilityDeclaration::new(
-            surface_playground_capability_id(),
-            1,
-        )];
+        descriptor.provides = vec![
+            CapabilityDeclaration::new(surface_playground_capability_id(), 1),
+            CapabilityDeclaration::new(console_surface_capability_id(), 1),
+            CapabilityDeclaration::new(ark_runtime_provider_capability_id(), 1),
+        ];
         Self { descriptor }
     }
 }
@@ -6631,6 +6679,76 @@ impl InternalPlugin for SurfacePlaygroundPlugin {
                 .register_application_surface(context.registry, definition)
                 .map_err(|error| {
                     ActivationError::new("surface_playground_registration", error.to_string())
+                })?;
+            context
+                .effects
+                .register_application_surface(
+                    context.registry,
+                    rho_ui_contract::SurfaceDefinitionV1 {
+                        surface_id: rho_ui_contract::SurfaceId::new("rho.console")
+                            .expect("built-in Console Surface ID must be valid"),
+                        contract_major: rho_ui_contract::RSR_CONTRACT_MAJOR,
+                        label: "Console".to_string(),
+                        purpose: "Attach an independent Console view to one explicit runtime."
+                            .to_string(),
+                        renderer_kind: rho_ui_contract::SurfaceRendererKindV1::TrustedHost,
+                        scope: rho_ui_contract::SurfaceScopeV1::Project,
+                        instance_policy: rho_ui_contract::SurfaceInstancePolicyV1::MultiInstance,
+                        instance_quota_class:
+                            rho_ui_contract::SurfaceInstanceQuotaClassV1::Standard,
+                        resource_kinds: vec![],
+                        modes: vec![],
+                        sizing_hints: rho_ui_contract::SurfaceSizingHintsV1 {
+                            min_inline: 240,
+                            min_block: 120,
+                            ideal_inline: Some(640),
+                            ideal_block: Some(420),
+                            max_inline: None,
+                            max_block: None,
+                            stretch_inline: true,
+                            stretch_block: true,
+                            presentation_classes: vec![
+                                rho_ui_contract::SurfacePresentationClassV1::Full,
+                                rho_ui_contract::SurfacePresentationClassV1::Compact,
+                            ],
+                        },
+                        accepted_contexts: vec!["project".to_string()],
+                        commands: vec![],
+                        origin: rho_ui_contract::SurfaceOriginV1::Application {
+                            component_id: rho_ui_contract::ApplicationComponentId::new(
+                                "rho.console",
+                            )
+                            .expect("built-in Console component ID must be valid"),
+                        },
+                    },
+                )
+                .map_err(|error| {
+                    ActivationError::new("console_surface_registration", error.to_string())
+                })?;
+            context
+                .effects
+                .register_application_runtime_provider(
+                    context.registry,
+                    rho_ui_contract::RuntimeProviderDefinitionV1 {
+                        runtime_provider_id: rho_ui_contract::RuntimeProviderId::new("rho.ark-r")
+                            .expect("built-in Runtime Provider ID must be valid"),
+                        runtime_kind: rho_ui_contract::RuntimeKindId::new("r")
+                            .expect("built-in Runtime kind must be valid"),
+                        display_label: "Ark R".to_string(),
+                        create_supported: true,
+                        max_instances: rho_ui_contract::MAX_AUXILIARY_RUNTIMES,
+                        attach_capabilities: vec![
+                            rho_ui_contract::RuntimeCapabilityId::new("console.attach")
+                                .expect("built-in Runtime capability must be valid"),
+                        ],
+                        application_component_id: rho_ui_contract::ApplicationComponentId::new(
+                            "rho.runtime.ark-r",
+                        )
+                        .expect("built-in Runtime component ID must be valid"),
+                    },
+                )
+                .map_err(|error| {
+                    ActivationError::new("ark_runtime_provider_registration", error.to_string())
                 })?;
             Ok(())
         })
@@ -7385,6 +7503,13 @@ where
     }
 
     reconcile_workspace_plugins_for_boundary(state, &normalized_root, "project_switch").await;
+    if previous_normalized_root != normalized_root
+        && let Err(error) = runtime_registry::teardown_auxiliary_runtimes(None, state).await
+    {
+        write_startup_log(&format!(
+            "Auxiliary Runtime project-switch teardown failed: {error:#}"
+        ));
+    }
 
     write_project_switch_event(
         "project_switch_succeeded",
@@ -7479,6 +7604,20 @@ async fn project_switch_blocker(state: &AppState) -> Result<Option<ProjectSwitch
     let environment_approval_count = state.environment_approvals.count().await;
     let store = read_store(state)?;
     let current_root = store.active_project_root()?.unwrap_or(fallback_root);
+
+    let runtime_execution_count = state.runtime_registry.active_execution_count();
+    if runtime_execution_count > 0 {
+        return Ok(Some(ProjectSwitchBlocker {
+            kind: ProjectSwitchBlockerKind::ActiveRun,
+            message: "Finish or interrupt active Console execution before switching projects."
+                .to_string(),
+            pending_count: runtime_execution_count,
+            run_id: None,
+            turn_id: None,
+            request_id: None,
+            operation_status: Some("runtime_execution".to_string()),
+        }));
+    }
 
     if let Some(run_id) = store.latest_active_run_id(&current_root)? {
         return Ok(Some(ProjectSwitchBlocker {
@@ -10273,6 +10412,7 @@ mod tests {
             render_tasks: Arc::new(Mutex::new(HashMap::new())),
             surface_runtime: crate::surface_runtime::SurfaceRuntimeState::default(),
             studio_runtime: crate::studio_runtime::StudioRuntimeState::default(),
+            runtime_registry: crate::runtime_registry::RuntimeRegistryState::default(),
             ui_runtime: crate::ui_runtime::UiRuntimeState::default(),
         }
     }
@@ -12582,8 +12722,12 @@ mod tests {
                 .registry()
                 .resolve_application_surfaces()
                 .unwrap();
-            assert_eq!(surfaces.factories().len(), 1);
-            let surface = &surfaces.factories()[0];
+            assert_eq!(surfaces.factories().len(), 2);
+            let surface = surfaces
+                .factories()
+                .iter()
+                .find(|factory| factory.definition.surface_id.as_str() == "rho.surface-playground")
+                .unwrap();
             assert_eq!(
                 surface.definition.surface_id.as_str(),
                 "rho.surface-playground"
@@ -12592,6 +12736,27 @@ mod tests {
             assert_eq!(
                 surface.definition.instance_policy,
                 rho_ui_contract::SurfaceInstancePolicyV1::MultiInstance
+            );
+            let console = surfaces
+                .factories()
+                .iter()
+                .find(|factory| factory.definition.surface_id.as_str() == "rho.console")
+                .unwrap();
+            assert_eq!(
+                console.definition.instance_policy,
+                rho_ui_contract::SurfaceInstancePolicyV1::MultiInstance
+            );
+            let providers = application
+                .registry()
+                .resolve_application_runtime_providers()
+                .unwrap();
+            assert_eq!(providers.providers().len(), 1);
+            assert_eq!(
+                providers.providers()[0]
+                    .definition
+                    .runtime_provider_id
+                    .as_str(),
+                "rho.ark-r"
             );
         });
     }
@@ -12623,6 +12788,16 @@ mod tests {
                     .factories()
                     .is_empty()
             );
+            assert!(
+                legacy
+                    .scopes()
+                    .application()
+                    .registry()
+                    .resolve_application_runtime_providers()
+                    .unwrap()
+                    .providers()
+                    .is_empty()
+            );
             let candidate = super::build_extension_host(Some("candidate"), diagnostics())
                 .await
                 .unwrap();
@@ -12642,6 +12817,17 @@ mod tests {
                     .resolve_application_surfaces()
                     .unwrap()
                     .factories()
+                    .len(),
+                2
+            );
+            assert_eq!(
+                candidate
+                    .scopes()
+                    .application()
+                    .registry()
+                    .resolve_application_runtime_providers()
+                    .unwrap()
+                    .providers()
                     .len(),
                 1
             );
@@ -16328,6 +16514,7 @@ fn main() {
                 render_tasks: Arc::new(Mutex::new(HashMap::new())),
                 surface_runtime: surface_runtime::SurfaceRuntimeState::default(),
                 studio_runtime: studio_runtime::StudioRuntimeState::default(),
+                runtime_registry: runtime_registry::RuntimeRegistryState::default(),
                 ui_runtime: ui_runtime::UiRuntimeState::default(),
             });
             app.manage(NativeUpdaterState {
@@ -16364,6 +16551,14 @@ fn main() {
             studio_runtime::studio_apply,
             studio_runtime::studio_undo,
             studio_runtime::studio_redo,
+            runtime_registry::runtime_list,
+            runtime_registry::runtime_create,
+            runtime_registry::runtime_attach,
+            runtime_registry::runtime_detach,
+            runtime_registry::runtime_interrupt,
+            runtime_registry::runtime_restart,
+            runtime_registry::runtime_stop,
+            runtime_registry::runtime_execute,
             workspace_start,
             workspace_status,
             project_state,

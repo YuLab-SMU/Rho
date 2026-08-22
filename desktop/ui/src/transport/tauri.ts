@@ -1,5 +1,12 @@
 import type {
   OpenSurfaceRequest,
+  RuntimeAttachmentRequest,
+  RuntimeCreateRequest,
+  RuntimeDetachRequest,
+  RuntimeExecuteRequest,
+  RuntimeExecutionResult,
+  RuntimeInstanceRequest,
+  RuntimeRegistrySnapshot,
   SceneEditRequest,
   StudioRevisionRequest,
   StudioRuntimeSnapshot,
@@ -87,6 +94,27 @@ export function createTauriUiKernelTransport(
           "rho://surface-runtime-changed",
           "rho://ui-snapshot-invalidated",
         ],
+        listener,
+      ),
+    loadRuntimes: () => invoke<RuntimeRegistrySnapshot>("runtime_list"),
+    createRuntime: (request: RuntimeCreateRequest) =>
+      invoke<RuntimeRegistrySnapshot>("runtime_create", { request }),
+    attachRuntime: (request: RuntimeAttachmentRequest) =>
+      invoke<SurfaceRuntimeSnapshot>("runtime_attach", { request }),
+    detachRuntime: (request: RuntimeDetachRequest) =>
+      invoke<SurfaceRuntimeSnapshot>("runtime_detach", { request }),
+    interruptRuntime: (request: RuntimeInstanceRequest) =>
+      invoke<RuntimeRegistrySnapshot>("runtime_interrupt", { request }),
+    restartRuntime: (request: RuntimeInstanceRequest) =>
+      invoke<RuntimeRegistrySnapshot>("runtime_restart", { request }),
+    stopRuntime: (request: RuntimeInstanceRequest) =>
+      invoke<RuntimeRegistrySnapshot>("runtime_stop", { request }),
+    executeRuntime: (request: RuntimeExecuteRequest) =>
+      invoke<RuntimeExecutionResult>("runtime_execute", { request }),
+    subscribeRuntimesInvalidated: (listener) =>
+      subscribeEvents(
+        listen,
+        ["rho://runtime-registry-changed", "rho://ui-snapshot-invalidated"],
         listener,
       ),
   };

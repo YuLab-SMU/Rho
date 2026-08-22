@@ -3,6 +3,15 @@ import { projectLabel } from "./normalize";
 import { applySceneEdit, collectSceneInstances, reconcileStudio } from "./studio-model";
 import type {
   OpenSurfaceRequest,
+  RuntimeAttachmentRequest,
+  RuntimeBinding,
+  RuntimeCreateRequest,
+  RuntimeDescriptor,
+  RuntimeDetachRequest,
+  RuntimeExecuteRequest,
+  RuntimeExecutionResult,
+  RuntimeInstanceRequest,
+  RuntimeRegistrySnapshot,
   SetUiSelectionRequest,
   SurfaceInstance,
   SurfaceInstanceRequest,
@@ -22,6 +31,8 @@ const generatedSurfaces =
   fixture.surface_runtime_snapshot as unknown as SurfaceRuntimeSnapshot;
 const generatedStudio =
   fixture.studio_runtime_snapshot as unknown as StudioRuntimeSnapshot;
+const generatedRuntimes =
+  fixture.runtime_registry_snapshot as unknown as RuntimeRegistrySnapshot;
 
 function copySnapshot(snapshot: UiKernelSnapshot): UiKernelSnapshot {
   return structuredClone(snapshot);
@@ -35,10 +46,15 @@ function copyStudio(snapshot: StudioRuntimeSnapshot): StudioRuntimeSnapshot {
   return structuredClone(snapshot);
 }
 
+function copyRuntimes(snapshot: RuntimeRegistrySnapshot): RuntimeRegistrySnapshot {
+  return structuredClone(snapshot);
+}
+
 export interface MockUiKernelTransport extends UiKernelTransport {
   publish(snapshot: UiKernelSnapshot): void;
   publishSurfaces(snapshot: SurfaceRuntimeSnapshot): void;
   publishStudio(snapshot: StudioRuntimeSnapshot): void;
+  publishRuntimes(snapshot: RuntimeRegistrySnapshot): void;
 }
 
 export function createMockUiKernelTransport(
@@ -59,19 +75,26 @@ export function createMockUiKernelTransport(
   let current = snapshot;
   let surfaces = copySurfaces(generatedSurfaces);
   let studio = copyStudio(generatedStudio);
+  let runtimes = copyRuntimes(generatedRuntimes);
   let nextInstance = 1;
   let nextNode = 1;
+  let nextRuntime = 1;
+  let nextExecution = 1;
   const allocateNode = () => `node:mock-${nextNode++}`;
   const undo: SceneState[] = [];
   const redo: SceneState[] = [];
   const listeners = new Set<() => void>();
   const surfaceListeners = new Set<() => void>();
   const studioListeners = new Set<() => void>();
+  const runtimeListeners = new Set<() => void>();
   const notifySurfaces = () => {
     for (const listener of surfaceListeners) listener();
   };
   const notifyStudio = () => {
     for (const listener of studioListeners) listener();
+  };
+  const notifyRuntimes = () => {
+    for (const listener of runtimeListeners) listener();
   };
   const availableIds = () => surfaces.catalog.instances.map((instance) => instance.instance_id);
   const reconcileCurrentStudio = () => {
@@ -115,6 +138,69 @@ export function createMockUiKernelTransport(
     notifySurfaces();
     reconcileCurrentStudio();
     return copySurfaces(surfaces);
+  };
+  const bindingFor = (runtime: RuntimeDescriptor): RuntimeBinding => ({
+    runtime_provider_id: runtime.runtime_provider_id,
+    runtime_instance_id: runtime.runtime_instance_id,
+    runtime_kind: runtime.runtime_kind,
+    project_id: runtime.project_id,
+    activation_generation: runtime.activation_generation,
+    state_revision: runtime.state_revision,
+    attach_capabilities: runtime.attach_capabilities,
+  });
+  const installRuntimes = (instances: readonly RuntimeDescriptor[]) => {
+    runtimes = {
+      ...copyRuntimes(runtimes),
+      snapshot_revision: runtimes.snapshot_revision + 1,
+      instances: [...instances],
+    };
+    notifyRuntimes();
+    return copyRuntimes(runtimes);
+  };
+  const validateRuntime = (request: RuntimeInstanceRequest): number => {
+    if (
+      request.project_id !== runtimes.project_id ||
+      request.expected_project_revision !== runtimes.project_revision
+    ) throw new Error("Mock Runtime request belongs to another project or revision.");
+    const index = runtimes.instances.findIndex(
+      (runtime) => runtime.runtime_instance_id === request.runtime_instance_id,
+    );
+    const runtime = runtimes.instances[index];
+    if (
+      runtime == null || runtime.runtime_provider_id !== request.runtime_provider_id ||
+      runtime.activation_generation !== request.activation_generation ||
+      runtime.state_revision !== request.expected_state_revision
+    ) throw new Error("Mock Runtime request is stale or unavailable.");
+    return index;
+  };
+  const attachRuntime = (request: RuntimeAttachmentRequest) => {
+    const runtimeIndex = validateRuntime(request.runtime);
+    const surfaceIndex = validateTarget(request.surface);
+    const runtime = runtimes.instances[runtimeIndex];
+    const surface = surfaces.catalog.instances[surfaceIndex];
+    if (runtime == null || surface == null) throw new Error("Mock attachment target vanished.");
+    if (!runtime.attach_capabilities.includes("console.attach")) {
+      throw new Error("Mock Runtime cannot attach a Console.");
+    }
+    const instances = [...surfaces.catalog.instances];
+    instances[surfaceIndex] = {
+      ...surface,
+      surface_revision: surface.surface_revision + 1,
+      runtime_binding: bindingFor(runtime),
+    };
+    return installSurfaces(instances);
+  };
+  const detachRuntime = (request: RuntimeDetachRequest) => {
+    const surfaceIndex = validateTarget(request.surface);
+    const surface = surfaces.catalog.instances[surfaceIndex];
+    if (surface == null) throw new Error("Mock attachment target vanished.");
+    const instances = [...surfaces.catalog.instances];
+    instances[surfaceIndex] = {
+      ...surface,
+      surface_revision: surface.surface_revision + 1,
+      runtime_binding: null,
+    };
+    return installSurfaces(instances);
   };
   const validateStudio = (request: StudioRevisionRequest) => {
     reconcileCurrentStudio();
@@ -340,6 +426,131 @@ export function createMockUiKernelTransport(
       undo.splice(0);
       redo.splice(0);
       notifyStudio();
+    },
+    async loadRuntimes() {
+      return copyRuntimes(runtimes);
+    },
+    async createRuntime(request: RuntimeCreateRequest) {
+      if (
+        request.project_id !== runtimes.project_id ||
+        request.expected_project_revision !== runtimes.project_revision ||
+        request.expected_snapshot_revision !== runtimes.snapshot_revision
+      ) throw new Error("Mock Runtime create request is stale.");
+      const provider = runtimes.providers.find(
+        (candidate) => candidate.definition.runtime_provider_id === request.runtime_provider_id,
+      );
+      if (provider == null || !provider.definition.create_supported) {
+        throw new Error("Mock Runtime Provider cannot create an instance.");
+      }
+      const auxiliaryCount = runtimes.instances.filter(
+        (runtime) => runtime.runtime_provider_id === request.runtime_provider_id &&
+          !runtime.primary_scientific_runtime,
+      ).length;
+      if (auxiliaryCount >= provider.definition.max_instances) {
+        throw new Error("Mock Runtime Provider instance budget is exhausted.");
+      }
+      const runtime: RuntimeDescriptor = {
+        runtime_provider_id: provider.definition.runtime_provider_id,
+        runtime_instance_id: `runtime:mock-r-${nextRuntime++}`,
+        runtime_kind: provider.definition.runtime_kind,
+        project_id: runtimes.project_id,
+        activation_generation: 1,
+        state_revision: 2,
+        status: "ready",
+        attach_capabilities: provider.definition.attach_capabilities,
+        persistence_class: "explicit_lease",
+        display_label: request.display_label ?? `Auxiliary R ${auxiliaryCount + 1}`,
+        primary_scientific_runtime: false,
+      };
+      return installRuntimes([...runtimes.instances, runtime]);
+    },
+    async attachRuntime(request: RuntimeAttachmentRequest) {
+      return attachRuntime(request);
+    },
+    async detachRuntime(request: RuntimeDetachRequest) {
+      return detachRuntime(request);
+    },
+    async interruptRuntime(request: RuntimeInstanceRequest) {
+      const index = validateRuntime(request);
+      const runtime = runtimes.instances[index]!;
+      const instances = [...runtimes.instances];
+      instances[index] = { ...runtime, state_revision: runtime.state_revision + 2, status: "ready" };
+      return installRuntimes(instances);
+    },
+    async restartRuntime(request: RuntimeInstanceRequest) {
+      const index = validateRuntime(request);
+      const runtime = runtimes.instances[index]!;
+      const restarted: RuntimeDescriptor = {
+        ...runtime,
+        activation_generation: runtime.activation_generation + 1,
+        state_revision: runtime.state_revision + 2,
+        status: "ready",
+      };
+      const instances = [...runtimes.instances];
+      instances[index] = restarted;
+      const snapshot = installRuntimes(instances);
+      const rebound = surfaces.catalog.instances.map((surface) =>
+        surface.runtime_binding?.runtime_instance_id === restarted.runtime_instance_id
+          ? {
+              ...surface,
+              surface_revision: surface.surface_revision + 1,
+              runtime_binding: bindingFor(restarted),
+            }
+          : surface,
+      );
+      if (rebound.some((surface, at) => surface !== surfaces.catalog.instances[at])) {
+        installSurfaces(rebound);
+      }
+      return snapshot;
+    },
+    async stopRuntime(request: RuntimeInstanceRequest) {
+      const index = validateRuntime(request);
+      const runtime = runtimes.instances[index]!;
+      if (runtime.primary_scientific_runtime) {
+        throw new Error("Mock Workspace R is project-owned and cannot be stopped.");
+      }
+      return installRuntimes(runtimes.instances.filter((_, at) => at !== index));
+    },
+    async executeRuntime(request: RuntimeExecuteRequest): Promise<RuntimeExecutionResult> {
+      const index = validateRuntime(request.runtime);
+      const runtime = runtimes.instances[index]!;
+      const console = surfaces.catalog.instances.find(
+        (surface) => surface.instance_id === request.console_instance_id,
+      );
+      if (
+        console == null || console.surface_id !== "rho.console" ||
+        console.surface_revision !== request.expected_console_revision ||
+        console.runtime_binding?.runtime_instance_id !== runtime.runtime_instance_id ||
+        console.runtime_binding.activation_generation !== runtime.activation_generation
+      ) throw new Error("Mock Console attachment is stale or unavailable.");
+      if (!request.code.trim()) throw new Error("Mock Runtime code must not be empty.");
+      const instances = [...runtimes.instances];
+      const finished = { ...runtime, state_revision: runtime.state_revision + 2, status: "ready" as const };
+      instances[index] = finished;
+      installRuntimes(instances);
+      return {
+        execution_id: `runtime-execution:mock-${nextExecution++}`,
+        runtime_instance_id: runtime.runtime_instance_id,
+        runtime_activation_generation: runtime.activation_generation,
+        console_instance_id: console.instance_id,
+        state_revision_after: finished.state_revision,
+        status: "completed",
+        events: [{
+          sequence: 1,
+          runtime_instance_id: runtime.runtime_instance_id,
+          console_instance_id: console.instance_id,
+          kind: "mock_result",
+          payload: { text: `Mock evaluation: ${request.code}` },
+        }],
+      };
+    },
+    subscribeRuntimesInvalidated(listener: () => void): Unsubscribe {
+      runtimeListeners.add(listener);
+      return () => runtimeListeners.delete(listener);
+    },
+    publishRuntimes(next: RuntimeRegistrySnapshot) {
+      runtimes = copyRuntimes(next);
+      notifyRuntimes();
     },
   };
 }

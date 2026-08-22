@@ -10,6 +10,7 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from
 import {
   StudioExternalStore,
   SurfaceExternalStore,
+  RuntimeExternalStore,
   UiExternalStore,
   commandsForPlacement,
   createUiKernelTransport,
@@ -19,6 +20,10 @@ import type {
   LayoutBasis,
   LayoutChild,
   LayoutNode,
+  RuntimeDescriptor,
+  RuntimeExecutionResult,
+  RuntimeInstanceRequest,
+  RuntimeRegistrySnapshot,
   SceneEdit,
   StudioRuntimeSnapshot,
   SurfaceInstance,
@@ -34,6 +39,7 @@ const defaultTransport = createUiKernelTransport();
 const defaultStore = new UiExternalStore(defaultTransport);
 const defaultSurfaceStore = new SurfaceExternalStore(defaultTransport);
 const defaultStudioStore = new StudioExternalStore(defaultTransport);
+const defaultRuntimeStore = new RuntimeExternalStore(defaultTransport);
 
 function instanceRequest(
   instance: SurfaceInstance,
@@ -45,6 +51,20 @@ function instanceRequest(
     activation_generation: instance.activation_generation,
     expected_project_revision: projectRevision,
     expected_surface_revision: instance.surface_revision,
+  };
+}
+
+function runtimeRequest(
+  runtime: RuntimeDescriptor,
+  projectRevision: number,
+): RuntimeInstanceRequest {
+  return {
+    project_id: runtime.project_id,
+    runtime_provider_id: runtime.runtime_provider_id,
+    runtime_instance_id: runtime.runtime_instance_id,
+    activation_generation: runtime.activation_generation,
+    expected_project_revision: projectRevision,
+    expected_state_revision: runtime.state_revision,
   };
 }
 
@@ -202,6 +222,57 @@ interface SurfaceViewProps {
   readonly duplicate: () => void;
   readonly persistDraft: (draft: string) => void;
   readonly draftCache: Map<string, string>;
+  readonly runtimes: RuntimeRegistrySnapshot | null;
+  readonly attachRuntime: (runtime: RuntimeDescriptor) => Promise<void>;
+  readonly detachRuntime: () => Promise<void>;
+  readonly executeRuntime: (
+    runtime: RuntimeDescriptor,
+    code: string,
+  ) => Promise<RuntimeExecutionResult>;
+  readonly interruptRuntime: (runtime: RuntimeDescriptor) => Promise<void>;
+  readonly restartRuntime: (runtime: RuntimeDescriptor) => Promise<void>;
+  readonly persistConsole: (viewState: ConsoleViewState) => Promise<void>;
+  readonly reportError: (error: unknown) => void;
+}
+
+interface ConsoleOutputRecord {
+  readonly execution_id: string;
+  readonly runtime_instance_id: string;
+  readonly code: string;
+  readonly events: RuntimeExecutionResult["events"];
+}
+
+interface ConsoleViewState {
+  readonly draft: string;
+  readonly history: readonly string[];
+  readonly history_cursor: number | null;
+  readonly filter: string;
+  readonly scroll_top: number;
+  readonly outputs: readonly ConsoleOutputRecord[];
+}
+
+function initialConsoleState(instance: SurfaceInstance): ConsoleViewState {
+  const candidate = instance.view_state;
+  if (typeof candidate !== "object" || candidate == null) {
+    return { draft: "", history: [], history_cursor: null, filter: "", scroll_top: 0, outputs: [] };
+  }
+  const value = candidate as Partial<ConsoleViewState>;
+  return {
+    draft: typeof value.draft === "string" ? value.draft : "",
+    history: Array.isArray(value.history)
+      ? value.history.filter((item): item is string => typeof item === "string").slice(-100)
+      : [],
+    history_cursor: typeof value.history_cursor === "number" ? value.history_cursor : null,
+    filter: typeof value.filter === "string" ? value.filter : "",
+    scroll_top: typeof value.scroll_top === "number" ? value.scroll_top : 0,
+    outputs: Array.isArray(value.outputs) ? value.outputs.slice(-100) as ConsoleOutputRecord[] : [],
+  };
+}
+
+function outputText(output: ConsoleOutputRecord): string {
+  return `${output.code}\n${output.events.map((event) =>
+    typeof event.payload === "string" ? event.payload : JSON.stringify(event.payload)
+  ).join("\n")}`;
 }
 
 function initialDraft(instance: SurfaceInstance, cache: Map<string, string>): string {
@@ -216,8 +287,12 @@ function initialDraft(instance: SurfaceInstance, cache: Map<string, string>): st
 
 function SurfaceView({
   instance, focused, setFocus, remove, duplicate, persistDraft, draftCache,
+  runtimes, attachRuntime, detachRuntime, executeRuntime, interruptRuntime,
+  restartRuntime, persistConsole, reportError,
 }: SurfaceViewProps) {
   const [draft, setDraft] = useState(() => initialDraft(instance, draftCache));
+  const [consoleState, setConsoleState] = useState(() => initialConsoleState(instance));
+  const [consoleRunning, setConsoleRunning] = useState(false);
   const runtime = instance.runtime_binding;
   const resource = instance.resource_binding;
   const isStrip = instance.surface_id === "rho.status";
@@ -225,6 +300,42 @@ function SurfaceView({
     : instance.surface_id === "rho.file" ? (instance.mode_id === "preview" ? "File preview" : "Source editor")
     : instance.surface_id === "rho.status" ? "Runtime status"
     : instance.surface_id === "rho.check" ? "Project checks" : "Surface Playground";
+  const attached = runtimes?.instances.find((candidate) =>
+    candidate.runtime_instance_id === runtime?.runtime_instance_id &&
+    candidate.activation_generation === runtime.activation_generation
+  ) ?? null;
+  const filteredOutputs = consoleState.outputs.filter((output) =>
+    !consoleState.filter.trim() || outputText(output).toLowerCase().includes(consoleState.filter.trim().toLowerCase())
+  );
+  const commitConsole = (next: ConsoleViewState) => {
+    setConsoleState(next);
+    void persistConsole(next).catch(reportError);
+  };
+  const submitConsole = async () => {
+    const code = consoleState.draft.trim();
+    if (attached == null || !code || consoleRunning) return;
+    setConsoleRunning(true);
+    try {
+      const result = await executeRuntime(attached, code);
+      const next: ConsoleViewState = {
+        ...consoleState,
+        draft: "",
+        history: [...consoleState.history, code].slice(-100),
+        history_cursor: null,
+        outputs: [...consoleState.outputs, {
+          execution_id: result.execution_id,
+          runtime_instance_id: result.runtime_instance_id,
+          code,
+          events: result.events,
+        }].slice(-100),
+      };
+      commitConsole(next);
+    } catch (error: unknown) {
+      reportError(error);
+    } finally {
+      setConsoleRunning(false);
+    }
+  };
   return (
     <article
       className={`rho-surface rho-surface-${instance.lifecycle_state} ${focused ? "rho-surface-focused" : ""} ${isStrip ? "rho-surface-strip" : ""}`}
@@ -240,7 +351,106 @@ function SurfaceView({
         </div>
       </header>
       {instance.surface_id === "rho.console" && (
-        <div className="rho-console-surface"><code>&gt; </code><span>Console attached to</span><strong>{runtime?.runtime_instance_id ?? "no runtime"}</strong><small>{runtime?.runtime_kind ?? "runtime binding required"}</small></div>
+        <div className="rho-console-surface">
+          <div className="rho-console-runtime-bar">
+            <select
+              aria-label={`Runtime for ${instance.instance_id}`}
+              value={attached?.runtime_instance_id ?? ""}
+              disabled={consoleRunning}
+              onChange={(event) => {
+                const selected = runtimes?.instances.find((candidate) =>
+                  candidate.runtime_instance_id === event.target.value
+                );
+                const operation = selected == null ? detachRuntime() : attachRuntime(selected);
+                void operation.catch(reportError);
+              }}
+            >
+              <option value="">Attach runtime…</option>
+              {runtimes?.instances.filter((candidate) =>
+                candidate.attach_capabilities.includes("console.attach")
+              ).map((candidate) => (
+                <option value={candidate.runtime_instance_id} key={candidate.runtime_instance_id}>
+                  {candidate.display_label} · {candidate.status}
+                </option>
+              ))}
+            </select>
+            <span className={`rho-runtime-state rho-runtime-${attached?.status ?? "unbound"}`}>
+              {attached?.status ?? "unbound"}
+            </span>
+            <button type="button" disabled={attached == null || consoleRunning} onClick={() => {
+              if (attached != null) void interruptRuntime(attached).catch(reportError);
+            }}>Interrupt</button>
+            <button type="button" disabled={attached == null || consoleRunning} onClick={() => {
+              if (attached != null) void restartRuntime(attached).catch(reportError);
+            }}>Restart</button>
+          </div>
+          <div
+            className="rho-console-output"
+            ref={(element) => {
+              if (element != null && Math.abs(element.scrollTop - consoleState.scroll_top) > 1) {
+                element.scrollTop = consoleState.scroll_top;
+              }
+            }}
+            onBlur={(event) => {
+              const scrollTop = event.currentTarget.scrollTop;
+              if (scrollTop !== consoleState.scroll_top) {
+                commitConsole({ ...consoleState, scroll_top: scrollTop });
+              }
+            }}
+            tabIndex={0}
+          >
+            {filteredOutputs.length === 0 && <p className="rho-console-empty">No output in this Console.</p>}
+            {filteredOutputs.map((output) => (
+              <section className="rho-console-entry" key={output.execution_id}>
+                <header><span>{output.runtime_instance_id}</span><span>{instance.instance_id}</span></header>
+                <code>&gt; {output.code}</code>
+                {output.events.map((event) => <pre key={event.sequence}>{
+                  typeof event.payload === "string" ? event.payload : JSON.stringify(event.payload, null, 2)
+                }</pre>)}
+              </section>
+            ))}
+          </div>
+          <div className="rho-console-composer">
+            <input
+              aria-label={`Filter output ${instance.instance_id}`}
+              className="rho-console-filter"
+              value={consoleState.filter}
+              onChange={(event) => setConsoleState({ ...consoleState, filter: event.target.value })}
+              onBlur={() => void persistConsole(consoleState).catch(reportError)}
+              placeholder="Filter this Console"
+            />
+            <textarea
+              aria-label={`Code for ${instance.instance_id}`}
+              value={consoleState.draft}
+              disabled={attached == null || consoleRunning}
+              onChange={(event) => setConsoleState({ ...consoleState, draft: event.target.value, history_cursor: null })}
+              onBlur={() => void persistConsole(consoleState).catch(reportError)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  void submitConsole();
+                  return;
+                }
+                if ((event.key === "ArrowUp" || event.key === "ArrowDown") && consoleState.history.length > 0) {
+                  event.preventDefault();
+                  const current = consoleState.history_cursor ?? consoleState.history.length;
+                  const cursor = event.key === "ArrowUp"
+                    ? Math.max(0, current - 1)
+                    : Math.min(consoleState.history.length, current + 1);
+                  setConsoleState({
+                    ...consoleState,
+                    history_cursor: cursor === consoleState.history.length ? null : cursor,
+                    draft: cursor === consoleState.history.length ? "" : consoleState.history[cursor] ?? "",
+                  });
+                }
+              }}
+              placeholder={attached == null ? "Attach this Console to a Runtime" : "R code…"}
+            />
+            <button type="button" disabled={attached == null || !consoleState.draft.trim() || consoleRunning} onClick={() => void submitConsole()}>
+              {consoleRunning ? "Running…" : "Run"}
+            </button>
+          </div>
+        </div>
       )}
       {instance.surface_id === "rho.file" && (
         <div className="rho-file-surface"><span className="rho-file-mode">{instance.mode_id ?? "default"}</span><code>{resource?.resource_id ?? "No resource bound"}</code><p>{instance.mode_id === "preview" ? "Rendered output evolves independently." : "Source buffer evolves independently."}</p></div>
@@ -404,12 +614,15 @@ export function App({ transport }: AppProps) {
   const store = useMemo(() => transport == null ? defaultStore : new UiExternalStore(transport), [transport]);
   const surfaceStore = useMemo(() => transport == null ? defaultSurfaceStore : new SurfaceExternalStore(transport), [transport]);
   const studioStore = useMemo(() => transport == null ? defaultStudioStore : new StudioExternalStore(transport), [transport]);
+  const runtimeStore = useMemo(() => transport == null ? defaultRuntimeStore : new RuntimeExternalStore(transport), [transport]);
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const surfaceState = useSyncExternalStore(surfaceStore.subscribe, surfaceStore.getSnapshot, surfaceStore.getSnapshot);
   const studioState = useSyncExternalStore(studioStore.subscribe, studioStore.getSnapshot, studioStore.getSnapshot);
+  const runtimeState = useSyncExternalStore(runtimeStore.subscribe, runtimeStore.getSnapshot, runtimeStore.getSnapshot);
   const snapshot = state.status === "ready" ? state.snapshot : null;
   const surfaces = surfaceState.status === "ready" ? surfaceState.snapshot : null;
   const studio = studioState.status === "ready" ? studioState.snapshot : null;
+  const runtimes = runtimeState.status === "ready" ? runtimeState.snapshot : null;
   const instances = useMemo(() => new Map(surfaces?.catalog.instances.map((instance) => [instance.instance_id, instance]) ?? []), [surfaces]);
   const primaryCommands = useMemo(() => snapshot == null ? [] : commandsForPlacement(snapshot, "primary_candidate"), [snapshot]);
   const run = (operation: Promise<unknown>) => {
@@ -462,6 +675,53 @@ export function App({ transport }: AppProps) {
       },
     });
   };
+  const openConsole = async (runtime: RuntimeDescriptor) => {
+    if (surfaces == null || studio == null) return;
+    const before = new Set(surfaces.catalog.instances.map((candidate) => candidate.instance_id));
+    const opened = await surfaceStore.open({
+      surface_id: "rho.console",
+      project_id: surfaces.project_id,
+      mode_id: null,
+      resource_binding: null,
+      runtime_binding: {
+        runtime_provider_id: runtime.runtime_provider_id,
+        runtime_instance_id: runtime.runtime_instance_id,
+        runtime_kind: runtime.runtime_kind,
+        project_id: runtime.project_id,
+        activation_generation: runtime.activation_generation,
+        state_revision: runtime.state_revision,
+        attach_capabilities: runtime.attach_capabilities,
+      },
+      view_group_id: null,
+      view_state: {
+        draft: "",
+        history: [],
+        history_cursor: null,
+        filter: "",
+        scroll_top: 0,
+        outputs: [],
+      },
+      instance_disposition: "new_instance",
+      placement_intent: "beside",
+      expected_project_revision: surfaces.project_revision,
+      expected_layout_revision: studio.scene.layout_revision,
+    });
+    const created = opened.catalog.instances.find((candidate) => !before.has(candidate.instance_id));
+    if (created == null) throw new Error("Surface Runtime did not return the new Console.");
+    if (studio.scene.root.kind !== "container") return;
+    await studioStore.apply({
+      project_id: studio.project_id,
+      expected_project_revision: studio.project_revision,
+      expected_layout_revision: studio.scene.layout_revision,
+      edit: {
+        kind: "insert_surface",
+        target_container_node_id: studio.scene.root.node_id,
+        child_index: studio.scene.root.children.length,
+        instance_id: created.instance_id,
+        basis: { kind: "fraction", weight: 1 },
+      },
+    });
+  };
   const surfaceView = (instance: SurfaceInstance) => (
     <SurfaceView
       key={instance.instance_id}
@@ -479,17 +739,70 @@ export function App({ transport }: AppProps) {
         if (surfaces == null) return;
         run(surfaceStore.update({ target: instanceRequest(instance, surfaces.project_revision), mutation: { kind: "set_view_state", view_state: { draft } } }));
       }}
+      runtimes={runtimes}
+      attachRuntime={async (runtime) => {
+        if (surfaces == null || runtimes == null) return;
+        await runtimeStore.attach({
+          runtime: runtimeRequest(runtime, runtimes.project_revision),
+          surface: instanceRequest(instance, surfaces.project_revision),
+        });
+        await surfaceStore.refresh();
+      }}
+      detachRuntime={async () => {
+        if (surfaces == null) return;
+        await runtimeStore.detach({
+          surface: instanceRequest(instance, surfaces.project_revision),
+        });
+        await surfaceStore.refresh();
+      }}
+      executeRuntime={async (runtime, code) => {
+        if (runtimes == null) throw new Error("Runtime Registry is not ready.");
+        const result = await runtimeStore.execute({
+          runtime: runtimeRequest(runtime, runtimes.project_revision),
+          console_instance_id: instance.instance_id,
+          expected_console_revision: instance.surface_revision,
+          code,
+        });
+        await runtimeStore.refresh();
+        return result;
+      }}
+      interruptRuntime={async (runtime) => {
+        if (runtimes == null) return;
+        await runtimeStore.interrupt(runtimeRequest(runtime, runtimes.project_revision));
+      }}
+      restartRuntime={async (runtime) => {
+        if (runtimes == null) return;
+        await runtimeStore.restart(runtimeRequest(runtime, runtimes.project_revision));
+        await surfaceStore.refresh();
+      }}
+      persistConsole={async (viewState) => {
+        if (surfaces == null) return;
+        await surfaceStore.update({
+          target: instanceRequest(instance, surfaces.project_revision),
+          mutation: { kind: "set_view_state", view_state: viewState },
+        });
+      }}
+      reportError={(error) => setActionError(
+        error instanceof Error && error.message.trim()
+          ? error.message.slice(0, 512)
+          : "Runtime operation failed.",
+      )}
     />
   );
   const evidence = useMemo(() => ({
-    ready: snapshot != null && surfaces != null && studio != null,
+    ready: snapshot != null && surfaces != null && studio != null && runtimes != null,
     source: state.status === "ready" ? state.source : null,
     project: snapshot?.project.display_path ?? null,
     layoutRevision: studio?.scene.layout_revision ?? null,
     studioInstances: studio == null ? [] : [...instances.keys()],
     unplaced: studio?.unplaced_instance_ids ?? [],
     recursiveLayout: studio?.scene.root.kind ?? null,
-  }), [instances, snapshot, state, studio, surfaces]);
+    runtimeInstances: runtimes?.instances.map((runtime) => ({
+      id: runtime.runtime_instance_id,
+      generation: runtime.activation_generation,
+      status: runtime.status,
+    })) ?? [],
+  }), [instances, runtimes, snapshot, state, studio, surfaces]);
   useEffect(() => {
     document.documentElement.dataset.rsrReady = String(evidence.ready);
   }, [evidence.ready]);
@@ -553,11 +866,49 @@ export function App({ transport }: AppProps) {
               </section>
             </>
           )}
+          {runtimes != null && (
+            <section className="rho-runtime-inventory">
+              <div className="rho-runtime-inventory-heading">
+                <span className="rho-eyebrow">Runtime registry</span>
+                {runtimes.providers.some((provider) => provider.definition.create_supported) && (
+                  <button type="button" onClick={() => {
+                    const provider = runtimes.providers.find((candidate) => candidate.definition.create_supported);
+                    if (provider == null) return;
+                    run(runtimeStore.create({
+                      project_id: runtimes.project_id,
+                      runtime_provider_id: provider.definition.runtime_provider_id,
+                      expected_project_revision: runtimes.project_revision,
+                      expected_snapshot_revision: runtimes.snapshot_revision,
+                      display_label: null,
+                    }));
+                  }}>+ Runtime</button>
+                )}
+              </div>
+              {runtimes.instances.map((runtime) => (
+                <article className="rho-runtime-card" data-runtime-id={runtime.runtime_instance_id} key={runtime.runtime_instance_id}>
+                  <div>
+                    <span className={`rho-runtime-dot rho-runtime-${runtime.status}`} />
+                    <strong>{runtime.display_label}</strong>
+                    <small>{runtime.runtime_instance_id} · gen {runtime.activation_generation}</small>
+                  </div>
+                  <div className="rho-runtime-actions">
+                    <button type="button" onClick={() => run(openConsole(runtime))}>Console</button>
+                    <button type="button" onClick={() => run(runtimeStore.interrupt(runtimeRequest(runtime, runtimes.project_revision)))}>Interrupt</button>
+                    <button type="button" onClick={() => run(runtimeStore.restart(runtimeRequest(runtime, runtimes.project_revision)))}>Restart</button>
+                    {!runtime.primary_scientific_runtime && (
+                      <button type="button" onClick={() => run(runtimeStore.stop(runtimeRequest(runtime, runtimes.project_revision)))}>Stop</button>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </section>
+          )}
         </aside>
         <section className="rho-studio-canvas" aria-label="Studio layout canvas">
           {state.status === "failed" && <p role="alert">{state.message}</p>}
           {surfaceState.status === "failed" && <p role="alert">{surfaceState.message}</p>}
           {studioState.status === "failed" && <p role="alert">{studioState.message}</p>}
+          {runtimeState.status === "failed" && <p role="alert">{runtimeState.message}</p>}
           {actionError != null && <p className="rho-action-error" role="alert">{actionError}</p>}
           {studio == null || surfaces == null
             ? <div className="rho-studio-loading">Loading the broker-owned Studio scene…</div>

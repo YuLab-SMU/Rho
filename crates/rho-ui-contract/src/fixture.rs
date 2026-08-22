@@ -49,6 +49,7 @@ pub struct ContractFixtureV1 {
     pub limits: ContractLimitsV1,
     pub surfaces: Vec<SurfaceDefinitionV1>,
     pub runtimes: Vec<RuntimeDescriptorV1>,
+    pub runtime_registry_snapshot: RuntimeRegistrySnapshotV1,
     pub instances: Vec<SurfaceInstanceV1>,
     pub commands: Vec<CommandDefinitionV1>,
     pub scenes: Vec<SceneStateV1>,
@@ -104,6 +105,7 @@ impl Validate for ContractFixtureV1 {
         for runtime in &self.runtimes {
             runtime.validate()?;
         }
+        self.runtime_registry_snapshot.validate()?;
         for instance in &self.instances {
             instance.validate()?;
         }
@@ -307,7 +309,7 @@ fn scene_surface(node: &str, instance: &str) -> LayoutNodeV1 {
 pub fn golden_contract_fixture() -> ContractFixtureV1 {
     let project_id = ProjectId::new("project:fixture").unwrap();
     let runtime = RuntimeDescriptorV1 {
-        runtime_provider_id: RuntimeProviderId::new("rho.workspace-r").unwrap(),
+        runtime_provider_id: RuntimeProviderId::new("rho.ark-r").unwrap(),
         runtime_instance_id: RuntimeInstanceId::new("runtime:workspace-r").unwrap(),
         runtime_kind: RuntimeKindId::new("r").unwrap(),
         project_id: project_id.clone(),
@@ -579,7 +581,28 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
                 false,
             ),
         ],
-        runtimes: vec![runtime],
+        runtimes: vec![runtime.clone()],
+        runtime_registry_snapshot: RuntimeRegistrySnapshotV1 {
+            contract: RUNTIME_REGISTRY_SNAPSHOT_CONTRACT.to_string(),
+            contract_major: RSR_CONTRACT_MAJOR,
+            snapshot_revision: 4,
+            project_id: project_id.clone(),
+            project_revision: 7,
+            providers: vec![RuntimeProviderRegistrationV1 {
+                definition: RuntimeProviderDefinitionV1 {
+                    runtime_provider_id: RuntimeProviderId::new("rho.ark-r").unwrap(),
+                    runtime_kind: RuntimeKindId::new("r").unwrap(),
+                    display_label: "Ark R".to_string(),
+                    create_supported: true,
+                    max_instances: MAX_AUXILIARY_RUNTIMES,
+                    attach_capabilities: vec![RuntimeCapabilityId::new("console.attach").unwrap()],
+                    application_component_id: ApplicationComponentId::new("rho.runtime.ark-r")
+                        .unwrap(),
+                },
+                activation_generation: 1,
+            }],
+            instances: vec![runtime],
+        },
         instances: instances.clone(),
         commands: vec![command],
         scenes: vec![scene.clone()],

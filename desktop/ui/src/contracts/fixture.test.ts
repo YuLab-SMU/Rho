@@ -76,4 +76,16 @@ describe("Rust-generated RSR contract fixture", () => {
     expect(instances[0]?.resource_binding).toEqual(instances[1]?.resource_binding);
     expect(instances[0]?.instance_id).not.toBe(instances[1]?.instance_id);
   });
+
+  it("contains an attachable Runtime Registry without exposing Agent R", () => {
+    const registry = fixture.runtime_registry_snapshot;
+    expect(registry.contract).toBe("rho.ui.runtime-registry.snapshot.v1");
+    expect(registry.project_id).toBe(fixture.kernel_snapshot.project.project_id);
+    expect(registry.providers[0]?.definition.runtime_provider_id).toBe("rho.ark-r");
+    expect(registry.providers[0]?.definition.create_supported).toBe(true);
+    expect(registry.instances.map((runtime) => runtime.runtime_instance_id)).toEqual([
+      "runtime:workspace-r",
+    ]);
+    expect(JSON.stringify(registry).toLowerCase()).not.toContain("agent r");
+  });
 });
