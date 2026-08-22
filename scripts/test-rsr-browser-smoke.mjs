@@ -84,9 +84,14 @@ try {
   ], { stdio: ["ignore", "pipe", "pipe"] });
   child.stdout.setEncoding("utf8");
   child.stderr.setEncoding("utf8");
-  child.stdout.on("data", (chunk) => { stdout += chunk; });
+  let resolveDomComplete;
+  const domComplete = new Promise((resolveReady) => { resolveDomComplete = resolveReady; });
+  child.stdout.on("data", (chunk) => {
+    stdout += chunk;
+    if (stdout.includes("</html>")) resolveDomComplete();
+  });
   child.stderr.on("data", (chunk) => { stderr += chunk; });
-  const exitCode = await new Promise((resolveExit, rejectExit) => {
+  const exitResult = new Promise((resolveExit, rejectExit) => {
     const timeout = setTimeout(() => {
       child.kill("SIGKILL");
       rejectExit(new Error(`RSR browser smoke timed out: ${stderr.slice(-2000)}`));
@@ -97,7 +102,25 @@ try {
       resolveExit(code);
     });
   });
-  if (exitCode !== 0) throw new Error(`Chromium exited with ${exitCode}: ${stderr.slice(-2000)}`);
+  const result = await Promise.race([
+    exitResult.then((exitCode) => ({ kind: "exit", exitCode })),
+    domComplete.then(() => ({ kind: "dom", exitCode: null })),
+  ]);
+  if (result.kind === "dom") {
+    // Chrome 151 on macOS can finish --dump-dom but keep its allocator process alive.
+    // A complete closing tag is deterministic evidence that dump-dom finished; terminate
+    // the now-idle browser so this local gate does not turn into a 45-second false failure.
+    child.kill("SIGTERM");
+    await Promise.race([
+      exitResult.catch(() => null),
+      new Promise((resolveKill) => setTimeout(() => {
+        child.kill("SIGKILL");
+        resolveKill(null);
+      }, 2_000)),
+    ]);
+  } else if (result.exitCode !== 0) {
+    throw new Error(`Chromium exited with ${result.exitCode}: ${stderr.slice(-2000)}`);
+  }
   if (!stdout.includes('data-rsr-ready="true"')) throw new Error("RSR browser did not reach the ready state");
   if (!stdout.includes("Rho Surface Runtime") || !stdout.includes("Rho 科学 Project")) {
     throw new Error("RSR browser smoke did not render project identity and foundation shell");

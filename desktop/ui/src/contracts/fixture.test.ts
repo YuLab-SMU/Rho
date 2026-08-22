@@ -59,4 +59,21 @@ describe("Rust-generated RSR contract fixture", () => {
       reason: "The fixture plugin host is unavailable.",
     });
   });
+
+  it("contains a generation-bound multi-instance Surface Runtime snapshot", () => {
+    const snapshot = fixture.surface_runtime_snapshot;
+    expect(snapshot.contract).toBe("rho.ui.surface-runtime.snapshot.v1");
+    expect(snapshot.project_id).toBe(fixture.kernel_snapshot.project.project_id);
+    const factory = snapshot.catalog.factories.find(
+      (candidate) => candidate.definition.surface_id === "rho.surface-playground",
+    );
+    expect(factory?.activation_generation).toBe(1);
+    expect(factory?.definition.instance_policy).toBe("multi_instance");
+    const instances = snapshot.catalog.instances.filter(
+      (instance) => instance.surface_id === "rho.surface-playground",
+    );
+    expect(instances).toHaveLength(2);
+    expect(instances[0]?.resource_binding).toEqual(instances[1]?.resource_binding);
+    expect(instances[0]?.instance_id).not.toBe(instances[1]?.instance_id);
+  });
 });

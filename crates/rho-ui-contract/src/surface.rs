@@ -18,6 +18,13 @@ pub const MAX_SURFACE_PRESENTATION_CLASSES: usize = 3;
 pub const MAX_SURFACE_VIEW_STATE_BYTES: usize = 64 * 1024;
 pub const MAX_SURFACE_EVENT_PAYLOAD_BYTES: usize = 64 * 1024;
 pub const MAX_LOGICAL_SURFACE_SIZE: u32 = 100_000;
+pub const MAX_SURFACE_FACTORIES: usize = 256;
+pub const MAX_SURFACE_INSTANCES: usize = 256;
+pub const MAX_STRIP_SURFACE_INSTANCES: usize = 128;
+pub const MAX_STANDARD_SURFACE_INSTANCES: usize = 128;
+pub const MAX_HEAVY_SURFACE_INSTANCES: usize = 32;
+pub const MAX_SURFACE_RUNTIME_SNAPSHOT_BYTES: usize = 2 * 1024 * 1024;
+pub const SURFACE_RUNTIME_SNAPSHOT_CONTRACT: &str = "rho.ui.surface-runtime.snapshot.v1";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -58,7 +65,7 @@ pub enum SurfaceInstancePolicyV1 {
     MultiInstance,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum SurfaceInstanceQuotaClassV1 {
     Strip,
@@ -313,17 +320,35 @@ impl Validate for SurfaceInstanceV1 {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SurfaceCatalogV1 {
-    pub definitions: Vec<SurfaceDefinitionV1>,
+    pub factories: Vec<SurfaceFactoryRegistrationV1>,
     pub instances: Vec<SurfaceInstanceV1>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SurfaceFactoryRegistrationV1 {
+    pub definition: SurfaceDefinitionV1,
+    pub activation_generation: u64,
+}
+
+impl Validate for SurfaceFactoryRegistrationV1 {
+    fn validate(&self) -> Result<(), ContractError> {
+        if self.activation_generation == 0 {
+            return Err(ContractError::InvalidValue {
+                path: "surface_factory.activation_generation".to_string(),
+                reason: "activation generation must be positive".to_string(),
+            });
+        }
+        self.definition.validate()
+    }
 }
 
 impl Validate for SurfaceCatalogV1 {
     fn validate(&self) -> Result<(), ContractError> {
         validate_unique(
-            "surface_catalog.definitions",
-            self.definitions
+            "surface_catalog.factories",
+            self.factories
                 .iter()
-                .map(|definition| definition.surface_id.as_ref()),
+                .map(|factory| factory.definition.surface_id.as_ref()),
         )?;
         validate_unique(
             "surface_catalog.instances",
@@ -331,27 +356,61 @@ impl Validate for SurfaceCatalogV1 {
                 .iter()
                 .map(|instance| instance.instance_id.as_ref()),
         )?;
-        let definitions = self
-            .definitions
+        if self.factories.len() > MAX_SURFACE_FACTORIES {
+            return Err(ContractError::LimitExceeded {
+                path: "surface_catalog.factories".to_string(),
+                limit: MAX_SURFACE_FACTORIES,
+                actual: self.factories.len(),
+            });
+        }
+        if self.instances.len() > MAX_SURFACE_INSTANCES {
+            return Err(ContractError::LimitExceeded {
+                path: "surface_catalog.instances".to_string(),
+                limit: MAX_SURFACE_INSTANCES,
+                actual: self.instances.len(),
+            });
+        }
+        let factories = self
+            .factories
             .iter()
-            .map(|definition| (definition.surface_id.as_str(), definition))
+            .map(|factory| (factory.definition.surface_id.as_str(), factory))
             .collect::<BTreeMap<_, _>>();
         let mut singletons = BTreeSet::new();
-        for definition in &self.definitions {
-            definition.validate()?;
+        let mut quota_counts = BTreeMap::new();
+        for factory in &self.factories {
+            factory.validate()?;
         }
         for instance in &self.instances {
             instance.validate()?;
-            let definition = definitions
-                .get(instance.surface_id.as_str())
-                .ok_or_else(|| ContractError::MissingReference {
+            let Some(factory) = factories.get(instance.surface_id.as_str()) else {
+                if instance.lifecycle_state == SurfaceLifecycleStateV1::Placeholder {
+                    continue;
+                }
+                return Err(ContractError::MissingReference {
                     path: "surface_catalog.instances.surface_id".to_string(),
                     value: instance.surface_id.to_string(),
-                })?;
+                });
+            };
+            let definition = &factory.definition;
+            if instance.lifecycle_state == SurfaceLifecycleStateV1::Placeholder
+                && (instance.activation_generation != factory.activation_generation
+                    || instance.origin != definition.origin)
+            {
+                continue;
+            }
             if instance.origin != definition.origin {
                 return Err(ContractError::InvalidValue {
                     path: "surface_catalog.instances.origin".to_string(),
                     reason: "instance origin does not match its factory".to_string(),
+                });
+            }
+            if instance.activation_generation != factory.activation_generation
+                && instance.lifecycle_state != SurfaceLifecycleStateV1::Placeholder
+            {
+                return Err(ContractError::StaleRevision {
+                    path: "surface_catalog.instances.activation_generation".to_string(),
+                    expected: instance.activation_generation,
+                    actual: factory.activation_generation,
                 });
             }
             if let Some(mode_id) = &instance.mode_id
@@ -374,11 +433,38 @@ impl Validate for SurfaceCatalogV1 {
                 });
             }
             if definition.instance_policy == SurfaceInstancePolicyV1::Singleton
+                && instance.lifecycle_state != SurfaceLifecycleStateV1::Placeholder
                 && !singletons.insert((instance.project_id.as_str(), instance.surface_id.as_str()))
             {
                 return Err(ContractError::Duplicate {
                     path: "surface_catalog.instances.singleton".to_string(),
                     value: format!("{}:{}", instance.project_id, instance.surface_id),
+                });
+            }
+            *quota_counts
+                .entry(definition.instance_quota_class)
+                .or_insert(0_usize) += 1;
+        }
+        for (class, limit) in [
+            (
+                SurfaceInstanceQuotaClassV1::Strip,
+                MAX_STRIP_SURFACE_INSTANCES,
+            ),
+            (
+                SurfaceInstanceQuotaClassV1::Standard,
+                MAX_STANDARD_SURFACE_INSTANCES,
+            ),
+            (
+                SurfaceInstanceQuotaClassV1::Heavy,
+                MAX_HEAVY_SURFACE_INSTANCES,
+            ),
+        ] {
+            let actual = quota_counts.get(&class).copied().unwrap_or_default();
+            if actual > limit {
+                return Err(ContractError::LimitExceeded {
+                    path: format!("surface_catalog.instances.{class:?}"),
+                    limit,
+                    actual,
                 });
             }
         }
@@ -409,6 +495,8 @@ pub struct OpenSurfaceRequestV1 {
     pub mode_id: Option<SurfaceModeId>,
     pub resource_binding: Option<ResourceBindingV1>,
     pub runtime_binding: Option<RuntimeBindingV1>,
+    pub view_group_id: Option<ViewGroupId>,
+    pub view_state: Value,
     pub instance_disposition: SurfaceInstanceDispositionV1,
     pub placement_intent: SurfacePlacementIntentV1,
     pub expected_project_revision: u64,
@@ -429,7 +517,58 @@ impl Validate for OpenSurfaceRequestV1 {
                 });
             }
         }
+        validate_json_value(
+            "open_surface.view_state",
+            &self.view_state,
+            MAX_SURFACE_VIEW_STATE_BYTES,
+        )
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SurfaceInstanceRequestV1 {
+    pub project_id: ProjectId,
+    pub instance_id: SurfaceInstanceId,
+    pub activation_generation: u64,
+    pub expected_project_revision: u64,
+    pub expected_surface_revision: u64,
+}
+
+impl Validate for SurfaceInstanceRequestV1 {
+    fn validate(&self) -> Result<(), ContractError> {
+        if self.activation_generation == 0 {
+            return Err(ContractError::InvalidValue {
+                path: "surface_instance_request.activation_generation".to_string(),
+                reason: "activation generation must be positive".to_string(),
+            });
+        }
         Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct UpdateSurfaceRequestV1 {
+    pub target: SurfaceInstanceRequestV1,
+    pub mutation: SurfaceInstanceMutationV1,
+}
+
+impl Validate for UpdateSurfaceRequestV1 {
+    fn validate(&self) -> Result<(), ContractError> {
+        self.target.validate()?;
+        match &self.mutation {
+            SurfaceInstanceMutationV1::SetViewState { view_state } => validate_json_value(
+                "update_surface.view_state",
+                view_state,
+                MAX_SURFACE_VIEW_STATE_BYTES,
+            ),
+            SurfaceInstanceMutationV1::BindResource {
+                binding: Some(binding),
+            } => binding.validate(),
+            SurfaceInstanceMutationV1::BindRuntime {
+                binding: Some(binding),
+            } => binding.validate(),
+            _ => Ok(()),
+        }
     }
 }
 
@@ -477,6 +616,102 @@ pub enum SurfaceEventKindV1 {
     Changed,
     Attention,
     Failed,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SurfaceRuntimeEventKindV1 {
+    Opened,
+    Updated,
+    Closed,
+    Suspended,
+    Resumed,
+    Reconciled,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SurfaceRuntimeEventV1 {
+    pub event_revision: u64,
+    pub project_id: ProjectId,
+    pub project_revision: u64,
+    pub instance_id: Option<SurfaceInstanceId>,
+    pub surface_revision: Option<u64>,
+    pub activation_generation: Option<u64>,
+    pub kind: SurfaceRuntimeEventKindV1,
+}
+
+impl Validate for SurfaceRuntimeEventV1 {
+    fn validate(&self) -> Result<(), ContractError> {
+        if self.event_revision == 0 {
+            return Err(ContractError::InvalidValue {
+                path: "surface_runtime_event.event_revision".to_string(),
+                reason: "event revision must be positive".to_string(),
+            });
+        }
+        if self.instance_id.is_some()
+            != (self.surface_revision.is_some() && self.activation_generation.is_some())
+        {
+            return Err(ContractError::InvalidValue {
+                path: "surface_runtime_event.instance".to_string(),
+                reason: "instance identity, revision, and generation must appear together"
+                    .to_string(),
+            });
+        }
+        if self.activation_generation == Some(0) {
+            return Err(ContractError::InvalidValue {
+                path: "surface_runtime_event.activation_generation".to_string(),
+                reason: "activation generation must be positive".to_string(),
+            });
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SurfaceRuntimeSnapshotV1 {
+    pub contract: String,
+    pub contract_major: u16,
+    pub snapshot_revision: u64,
+    pub project_id: ProjectId,
+    pub project_revision: u64,
+    pub catalog: SurfaceCatalogV1,
+}
+
+impl Validate for SurfaceRuntimeSnapshotV1 {
+    fn validate(&self) -> Result<(), ContractError> {
+        if self.contract != SURFACE_RUNTIME_SNAPSHOT_CONTRACT
+            || self.contract_major != crate::RSR_CONTRACT_MAJOR
+        {
+            return Err(ContractError::InvalidValue {
+                path: "surface_runtime_snapshot.contract".to_string(),
+                reason: "unsupported Surface Runtime snapshot contract".to_string(),
+            });
+        }
+        if self.snapshot_revision == 0 {
+            return Err(ContractError::InvalidValue {
+                path: "surface_runtime_snapshot.snapshot_revision".to_string(),
+                reason: "snapshot revision must be positive".to_string(),
+            });
+        }
+        self.catalog.validate()?;
+        for instance in &self.catalog.instances {
+            if instance.project_id != self.project_id {
+                return Err(ContractError::InvalidValue {
+                    path: "surface_runtime_snapshot.instances.project_id".to_string(),
+                    reason: "surface instance belongs to another project".to_string(),
+                });
+            }
+        }
+        let encoded = crate::encoded_json_len("surface_runtime_snapshot", self)?;
+        if encoded > MAX_SURFACE_RUNTIME_SNAPSHOT_BYTES {
+            return Err(ContractError::LimitExceeded {
+                path: "surface_runtime_snapshot".to_string(),
+                limit: MAX_SURFACE_RUNTIME_SNAPSHOT_BYTES,
+                actual: encoded,
+            });
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -635,18 +870,56 @@ mod tests {
         let mut second = first.clone();
         second.instance_id = SurfaceInstanceId::new("instance:b").unwrap();
         SurfaceCatalogV1 {
-            definitions: vec![definition(SurfaceInstancePolicyV1::MultiInstance)],
+            factories: vec![SurfaceFactoryRegistrationV1 {
+                definition: definition(SurfaceInstancePolicyV1::MultiInstance),
+                activation_generation: 1,
+            }],
             instances: vec![first.clone(), second.clone()],
         }
         .validate()
         .unwrap();
         assert!(matches!(
             SurfaceCatalogV1 {
-                definitions: vec![definition(SurfaceInstancePolicyV1::Singleton)],
+                factories: vec![SurfaceFactoryRegistrationV1 {
+                    definition: definition(SurfaceInstancePolicyV1::Singleton),
+                    activation_generation: 1,
+                }],
                 instances: vec![first, second],
             }
             .validate(),
             Err(ContractError::Duplicate { .. })
         ));
+    }
+
+    #[test]
+    fn replacement_placeholders_may_retain_exact_old_generation_and_origin() {
+        let mut stale = instance();
+        stale.lifecycle_state = SurfaceLifecycleStateV1::Placeholder;
+        let mut replacement = definition(SurfaceInstancePolicyV1::MultiInstance);
+        replacement.origin = SurfaceOriginV1::Application {
+            component_id: ApplicationComponentId::new("rho.console-next").unwrap(),
+        };
+        SurfaceCatalogV1 {
+            factories: vec![SurfaceFactoryRegistrationV1 {
+                definition: replacement.clone(),
+                activation_generation: 2,
+            }],
+            instances: vec![stale.clone()],
+        }
+        .validate()
+        .unwrap();
+
+        stale.lifecycle_state = SurfaceLifecycleStateV1::Active;
+        assert!(
+            SurfaceCatalogV1 {
+                factories: vec![SurfaceFactoryRegistrationV1 {
+                    definition: replacement,
+                    activation_generation: 2,
+                }],
+                instances: vec![stale],
+            }
+            .validate()
+            .is_err()
+        );
     }
 }

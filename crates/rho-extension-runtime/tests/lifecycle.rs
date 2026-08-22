@@ -21,6 +21,7 @@ use rho_extension_runtime::{
     TaskAdmissionError, WORKSPACE_SNAPSHOT_RESPONSE_BYTES, WorkspaceToolCallError,
     WorkspaceToolHandler, build_scope_candidate,
 };
+use rho_ui_contract::SurfaceDefinitionV1;
 use serde_json::{Value, json};
 use tokio_util::task::TaskTracker;
 
@@ -281,6 +282,30 @@ impl InternalPlugin for WorkspaceToolPlugin {
 struct ViewerPlugin {
     descriptor: PluginDescriptor,
     capability_id: CapabilityId,
+}
+
+struct SurfacePlugin {
+    descriptor: PluginDescriptor,
+    definition: SurfaceDefinitionV1,
+}
+
+impl InternalPlugin for SurfacePlugin {
+    fn descriptor(&self) -> &PluginDescriptor {
+        &self.descriptor
+    }
+
+    fn activate<'a>(
+        &'a self,
+        context: PluginContext<'a>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), ActivationError>> + Send + 'a>> {
+        Box::pin(async move {
+            context
+                .effects
+                .register_application_surface(context.registry, self.definition.clone())
+                .map_err(|error| ActivationError::new("surface_registration", error.to_string()))?;
+            Ok(())
+        })
+    }
 }
 
 impl InternalPlugin for ViewerPlugin {
@@ -1172,6 +1197,50 @@ async fn application_viewer_contribution_is_path_free_routable_and_disposed() {
             .registry()
             .resolve_project_file_viewer(&capability),
         Err(ProjectFileViewerResolveError::Routing(RoutingError::Closed))
+    ));
+}
+
+#[tokio::test]
+async fn application_surface_is_generation_bound_routable_and_reversibly_disposed() {
+    let definition = rho_ui_contract::golden_contract_fixture()
+        .surfaces
+        .into_iter()
+        .find(|definition| definition.surface_id.as_str() == "rho.surface-playground")
+        .unwrap();
+    let plugin: Arc<dyn InternalPlugin> = Arc::new(SurfacePlugin {
+        descriptor: descriptor("plugin.surface", ScopePolicy::application_kind()),
+        definition: definition.clone(),
+    });
+    let (_, sink) = diagnostics();
+    let host = ExtensionHost::new_with_application_plugins(
+        InternalExtensionRuntimeMode::Candidate,
+        Vec::new(),
+        vec![plugin],
+        Arc::new(RejectingBrokerFacade),
+        sink,
+        deadlines(),
+    )
+    .await
+    .unwrap();
+    let application = host.scopes().application();
+    let resolution = application
+        .registry()
+        .resolve_application_surfaces()
+        .unwrap();
+    assert_eq!(resolution.scope(), application.identity());
+    assert_eq!(resolution.factories().len(), 1);
+    assert_eq!(resolution.factories()[0].definition, definition);
+    assert_eq!(
+        resolution.factories()[0].activation_generation,
+        application.identity().generation.get()
+    );
+    drop(resolution);
+
+    let report = host.shutdown().await;
+    assert_eq!(report.outcome, DisposeOutcome::Disposed);
+    assert!(matches!(
+        application.registry().resolve_application_surfaces(),
+        Err(RoutingError::Closed)
     ));
 }
 

@@ -1,6 +1,7 @@
 # Plugin-Native Surface Runtime
 
-Status: proposed architecture; implementation is not authorized
+Status: proposed durable architecture; implementation authority exists only
+through `docs/plans/active-2026-08-21-rsr-full-construction-plan.md`
 
 Date: 2026-08-21
 
@@ -8,7 +9,9 @@ Change class: D3 because this introduces a shared UI contribution protocol,
 command-routing boundary, focus model, and durable layout schema. Future
 implementation risk is R3 because plugin lifecycle, project switching,
 revisioned persistence, focus authority, and trusted security surfaces meet at
-this boundary. This proposal itself changes documentation only.
+this boundary. This document remains the architecture source; the active
+construction contract records implementation authorization, sequencing, and
+accepted evidence.
 
 Working name: **Rho Surface Runtime (RSR)**.
 

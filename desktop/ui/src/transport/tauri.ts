@@ -1,4 +1,8 @@
 import type {
+  OpenSurfaceRequest,
+  SurfaceInstanceRequest,
+  SurfaceRuntimeSnapshot,
+  UpdateSurfaceRequest,
   UiKernelSnapshot,
   UiKernelTransport,
   Unsubscribe,
@@ -16,6 +20,27 @@ const INVALIDATION_EVENTS = [
   "rho://agent-turn-updated",
 ] as const;
 
+function subscribeEvents(
+  listen: Listen,
+  eventNames: readonly string[],
+  listener: () => void,
+): Unsubscribe {
+  let active = true;
+  const unlisteners: Unsubscribe[] = [];
+  for (const eventName of eventNames) {
+    void listen(eventName, listener)
+      .then((unlisten) => {
+        if (active) unlisteners.push(unlisten);
+        else unlisten();
+      })
+      .catch(() => undefined);
+  }
+  return () => {
+    active = false;
+    for (const unlisten of unlisteners.splice(0)) unlisten();
+  };
+}
+
 export function createTauriUiKernelTransport(
   invoke: Invoke,
   listen: Listen,
@@ -25,21 +50,24 @@ export function createTauriUiKernelTransport(
     loadSnapshot: () => invoke<UiKernelSnapshot>("ui_kernel_snapshot"),
     setSelection: (request) =>
       invoke<UiKernelSnapshot>("ui_set_selection", { request }),
-    subscribeInvalidated(listener): Unsubscribe {
-      let active = true;
-      const unlisteners: Unsubscribe[] = [];
-      for (const eventName of INVALIDATION_EVENTS) {
-        void listen(eventName, listener)
-          .then((unlisten) => {
-            if (active) unlisteners.push(unlisten);
-            else unlisten();
-          })
-          .catch(() => undefined);
-      }
-      return () => {
-        active = false;
-        for (const unlisten of unlisteners.splice(0)) unlisten();
-      };
-    },
+    subscribeInvalidated: (listener) =>
+      subscribeEvents(listen, INVALIDATION_EVENTS, listener),
+    loadSurfaces: () => invoke<SurfaceRuntimeSnapshot>("surface_list"),
+    openSurface: (request: OpenSurfaceRequest) =>
+      invoke<SurfaceRuntimeSnapshot>("surface_open", { request }),
+    updateSurface: (request: UpdateSurfaceRequest) =>
+      invoke<SurfaceRuntimeSnapshot>("surface_update", { request }),
+    closeSurface: (request: SurfaceInstanceRequest) =>
+      invoke<SurfaceRuntimeSnapshot>("surface_close", { request }),
+    suspendSurface: (request: SurfaceInstanceRequest) =>
+      invoke<SurfaceRuntimeSnapshot>("surface_suspend", { request }),
+    resumeSurface: (request: SurfaceInstanceRequest) =>
+      invoke<SurfaceRuntimeSnapshot>("surface_resume", { request }),
+    subscribeSurfacesInvalidated: (listener) =>
+      subscribeEvents(
+        listen,
+        ["rho://surface-runtime-changed", "rho://ui-snapshot-invalidated"],
+        listener,
+      ),
   };
 }

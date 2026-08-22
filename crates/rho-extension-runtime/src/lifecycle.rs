@@ -14,6 +14,9 @@ use std::{
 };
 
 use arc_swap::ArcSwapOption;
+use rho_ui_contract::{
+    SurfaceDefinitionV1, SurfaceFactoryRegistrationV1, SurfaceId, SurfaceOriginV1, Validate,
+};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::{
@@ -415,6 +418,16 @@ impl EffectSink {
         Ok(self.push(Box::new(registration)))
     }
 
+    pub fn register_application_surface(
+        &mut self,
+        registry: &RegistryHub,
+        definition: SurfaceDefinitionV1,
+    ) -> Result<u64, RegistryError> {
+        let registration =
+            registry.register_application_surface(self.instance.clone(), definition)?;
+        Ok(self.push(Box::new(registration)))
+    }
+
     fn into_stack(self, diagnostics: Arc<dyn DiagnosticSink>) -> Arc<EffectStack> {
         Arc::new(EffectStack {
             inner: Mutex::new(EffectStackInner {
@@ -554,6 +567,10 @@ pub enum RegistryError {
     DuplicateWorkspaceTool { capability_id: CapabilityId },
     #[error("project file viewer contribution already exists: {capability_id}")]
     DuplicateProjectFileViewer { capability_id: CapabilityId },
+    #[error("application Surface contribution already exists: {surface_id}")]
+    DuplicateApplicationSurface { surface_id: SurfaceId },
+    #[error("application Surface contribution is invalid: {reason}")]
+    InvalidApplicationSurface { reason: String },
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -571,6 +588,7 @@ struct RegistryInner {
     sources: StdMutex<BTreeMap<CapabilityId, SourceEntry>>,
     workspace_tools: StdMutex<BTreeMap<CapabilityId, WorkspaceToolEntry>>,
     project_file_viewers: StdMutex<BTreeMap<CapabilityId, ProjectFileViewerEntry>>,
+    application_surfaces: StdMutex<BTreeMap<SurfaceId, ApplicationSurfaceEntry>>,
 }
 
 #[derive(Clone)]
@@ -592,6 +610,12 @@ struct ProjectFileViewerEntry {
 }
 
 #[derive(Clone)]
+struct ApplicationSurfaceEntry {
+    owner: PluginInstanceIdentity,
+    definition: SurfaceDefinitionV1,
+}
+
+#[derive(Clone)]
 pub struct RegistryHub {
     inner: Arc<RegistryInner>,
 }
@@ -608,6 +632,7 @@ impl RegistryHub {
                 sources: StdMutex::new(BTreeMap::new()),
                 workspace_tools: StdMutex::new(BTreeMap::new()),
                 project_file_viewers: StdMutex::new(BTreeMap::new()),
+                application_surfaces: StdMutex::new(BTreeMap::new()),
             }),
         }
     }
@@ -756,6 +781,28 @@ impl RegistryHub {
         })
     }
 
+    pub fn resolve_application_surfaces(
+        &self,
+    ) -> Result<ApplicationSurfaceResolution, RoutingError> {
+        let lease = self.lease()?;
+        let factories = self
+            .inner
+            .application_surfaces
+            .lock()
+            .unwrap()
+            .values()
+            .map(|entry| SurfaceFactoryRegistrationV1 {
+                definition: entry.definition.clone(),
+                activation_generation: entry.owner.scope.generation.get(),
+            })
+            .collect();
+        Ok(ApplicationSurfaceResolution {
+            scope: self.inner.scope.clone(),
+            factories,
+            _lease: lease,
+        })
+    }
+
     fn register_marker(
         &self,
         instance: PluginInstanceIdentity,
@@ -849,6 +896,41 @@ impl RegistryHub {
         })
     }
 
+    fn register_application_surface(
+        &self,
+        instance: PluginInstanceIdentity,
+        definition: SurfaceDefinitionV1,
+    ) -> Result<ApplicationSurfaceRegistration, RegistryError> {
+        definition
+            .validate()
+            .map_err(|error| RegistryError::InvalidApplicationSurface {
+                reason: error.to_string(),
+            })?;
+        if !matches!(definition.origin, SurfaceOriginV1::Application { .. }) {
+            return Err(RegistryError::InvalidApplicationSurface {
+                reason: "internal lifecycle accepts only application-owned Surfaces".to_string(),
+            });
+        }
+        let surface_id = definition.surface_id.clone();
+        let mut surfaces = self.inner.application_surfaces.lock().unwrap();
+        if surfaces.contains_key(&surface_id) {
+            return Err(RegistryError::DuplicateApplicationSurface { surface_id });
+        }
+        surfaces.insert(
+            surface_id.clone(),
+            ApplicationSurfaceEntry {
+                owner: instance.clone(),
+                definition,
+            },
+        );
+        Ok(ApplicationSurfaceRegistration {
+            registry: Arc::downgrade(&self.inner),
+            surface_id,
+            instance,
+            disposed: false,
+        })
+    }
+
     async fn wait_for_idle(&self) {
         loop {
             if self.inner.leases.load(Ordering::Acquire) == 0 {
@@ -903,6 +985,22 @@ pub struct ProjectFileViewerResolution {
     scope: ScopeIdentity,
     contribution: ProjectFileViewerContribution,
     _lease: RegistryLease,
+}
+
+pub struct ApplicationSurfaceResolution {
+    scope: ScopeIdentity,
+    factories: Vec<SurfaceFactoryRegistrationV1>,
+    _lease: RegistryLease,
+}
+
+impl ApplicationSurfaceResolution {
+    pub fn scope(&self) -> &ScopeIdentity {
+        &self.scope
+    }
+
+    pub fn factories(&self) -> &[SurfaceFactoryRegistrationV1] {
+        &self.factories
+    }
 }
 
 impl ProjectFileViewerResolution {
@@ -1033,6 +1131,36 @@ struct ProjectFileViewerRegistration {
     capability_id: CapabilityId,
     instance: PluginInstanceIdentity,
     disposed: bool,
+}
+
+struct ApplicationSurfaceRegistration {
+    registry: Weak<RegistryInner>,
+    surface_id: SurfaceId,
+    instance: PluginInstanceIdentity,
+    disposed: bool,
+}
+
+impl Disposable for ApplicationSurfaceRegistration {
+    fn dispose<'a>(
+        &'a mut self,
+    ) -> Pin<Box<dyn Future<Output = Result<(), DisposeError>> + Send + 'a>> {
+        Box::pin(async move {
+            if self.disposed {
+                return Ok(());
+            }
+            if let Some(registry) = self.registry.upgrade() {
+                let mut surfaces = registry.application_surfaces.lock().unwrap();
+                if surfaces
+                    .get(&self.surface_id)
+                    .is_some_and(|entry| entry.owner == self.instance)
+                {
+                    surfaces.remove(&self.surface_id);
+                }
+            }
+            self.disposed = true;
+            Ok(())
+        })
+    }
 }
 
 impl Disposable for ProjectFileViewerRegistration {

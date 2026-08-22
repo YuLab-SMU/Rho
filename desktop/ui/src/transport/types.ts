@@ -109,6 +109,111 @@ export interface SetUiSelectionRequest {
   readonly selection: UiSelection | null;
 }
 
+export type SurfaceLifecycleState =
+  | "active"
+  | "hidden"
+  | "suspended"
+  | "failed"
+  | "placeholder";
+
+export interface RuntimeBinding {
+  readonly runtime_provider_id: string;
+  readonly runtime_instance_id: string;
+  readonly runtime_kind: string;
+  readonly project_id: string;
+  readonly activation_generation: number;
+  readonly state_revision: number;
+  readonly attach_capabilities: readonly string[];
+}
+
+export interface SurfaceDefinition {
+  readonly surface_id: string;
+  readonly contract_major: number;
+  readonly label: string;
+  readonly purpose: string;
+  readonly renderer_kind: "trusted_host" | "declarative_document";
+  readonly scope: "application" | "project";
+  readonly instance_policy: "singleton" | "multi_instance";
+  readonly instance_quota_class: "strip" | "standard" | "heavy";
+  readonly resource_kinds: readonly string[];
+  readonly modes: readonly {
+    readonly mode_id: string;
+    readonly label: string;
+    readonly interaction_kind: "read_only" | "interactive";
+  }[];
+  readonly sizing_hints: Readonly<Record<string, unknown>>;
+  readonly accepted_contexts: readonly string[];
+  readonly commands: readonly string[];
+  readonly origin: SurfaceOrigin;
+}
+
+export interface SurfaceFactoryRegistration {
+  readonly definition: SurfaceDefinition;
+  readonly activation_generation: number;
+}
+
+export interface SurfaceInstance {
+  readonly instance_id: string;
+  readonly surface_id: string;
+  readonly project_id: string;
+  readonly origin: SurfaceOrigin;
+  readonly activation_generation: number;
+  readonly surface_revision: number;
+  readonly mode_id: string | null;
+  readonly resource_binding: ResourceBinding | null;
+  readonly runtime_binding: RuntimeBinding | null;
+  readonly view_group_id: string | null;
+  readonly view_state: unknown;
+  readonly lifecycle_state: SurfaceLifecycleState;
+}
+
+export interface SurfaceRuntimeSnapshot {
+  readonly contract: "rho.ui.surface-runtime.snapshot.v1";
+  readonly contract_major: 1;
+  readonly snapshot_revision: number;
+  readonly project_id: string;
+  readonly project_revision: number;
+  readonly catalog: {
+    readonly factories: readonly SurfaceFactoryRegistration[];
+    readonly instances: readonly SurfaceInstance[];
+  };
+}
+
+export interface OpenSurfaceRequest {
+  readonly surface_id: string;
+  readonly project_id: string;
+  readonly mode_id: string | null;
+  readonly resource_binding: ResourceBinding | null;
+  readonly runtime_binding: RuntimeBinding | null;
+  readonly view_group_id: string | null;
+  readonly view_state: unknown;
+  readonly instance_disposition: "reuse_exact" | "new_instance";
+  readonly placement_intent: "current" | "beside" | "stack" | "container";
+  readonly expected_project_revision: number;
+  readonly expected_layout_revision: number;
+}
+
+export interface SurfaceInstanceRequest {
+  readonly project_id: string;
+  readonly instance_id: string;
+  readonly activation_generation: number;
+  readonly expected_project_revision: number;
+  readonly expected_surface_revision: number;
+}
+
+export type SurfaceInstanceMutation =
+  | { readonly kind: "set_mode"; readonly mode_id: string | null }
+  | { readonly kind: "set_view_state"; readonly view_state: unknown }
+  | { readonly kind: "set_lifecycle"; readonly state: SurfaceLifecycleState }
+  | { readonly kind: "bind_resource"; readonly binding: ResourceBinding | null }
+  | { readonly kind: "bind_runtime"; readonly binding: RuntimeBinding | null }
+  | { readonly kind: "set_view_group"; readonly view_group_id: string | null };
+
+export interface UpdateSurfaceRequest {
+  readonly target: SurfaceInstanceRequest;
+  readonly mutation: SurfaceInstanceMutation;
+}
+
 export type Unsubscribe = () => void;
 
 export interface UiKernelTransport {
@@ -116,4 +221,11 @@ export interface UiKernelTransport {
   loadSnapshot(): Promise<UiKernelSnapshot>;
   setSelection(request: SetUiSelectionRequest): Promise<UiKernelSnapshot>;
   subscribeInvalidated(listener: () => void): Unsubscribe;
+  loadSurfaces(): Promise<SurfaceRuntimeSnapshot>;
+  openSurface(request: OpenSurfaceRequest): Promise<SurfaceRuntimeSnapshot>;
+  updateSurface(request: UpdateSurfaceRequest): Promise<SurfaceRuntimeSnapshot>;
+  closeSurface(request: SurfaceInstanceRequest): Promise<SurfaceRuntimeSnapshot>;
+  suspendSurface(request: SurfaceInstanceRequest): Promise<SurfaceRuntimeSnapshot>;
+  resumeSurface(request: SurfaceInstanceRequest): Promise<SurfaceRuntimeSnapshot>;
+  subscribeSurfacesInvalidated(listener: () => void): Unsubscribe;
 }

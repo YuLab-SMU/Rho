@@ -54,6 +54,7 @@ pub struct ContractFixtureV1 {
     pub scenes: Vec<SceneStateV1>,
     pub pages: Vec<VibePageV1>,
     pub kernel_snapshot: UiKernelSnapshotV1,
+    pub surface_runtime_snapshot: SurfaceRuntimeSnapshotV1,
 }
 
 impl Validate for ContractFixtureV1 {
@@ -106,7 +107,15 @@ impl Validate for ContractFixtureV1 {
             instance.validate()?;
         }
         SurfaceCatalogV1 {
-            definitions: self.surfaces.clone(),
+            factories: self
+                .surfaces
+                .iter()
+                .cloned()
+                .map(|definition| SurfaceFactoryRegistrationV1 {
+                    definition,
+                    activation_generation: 1,
+                })
+                .collect(),
             instances: self.instances.clone(),
         }
         .validate()?;
@@ -120,6 +129,7 @@ impl Validate for ContractFixtureV1 {
             page.validate()?;
         }
         self.kernel_snapshot.validate()?;
+        self.surface_runtime_snapshot.validate()?;
         let surfaces = self
             .surfaces
             .iter()
@@ -242,7 +252,7 @@ fn definition(
         } else {
             SurfaceInstanceQuotaClassV1::Standard
         },
-        resource_kinds: if surface_id == "rho.file" {
+        resource_kinds: if matches!(surface_id, "rho.file" | "rho.surface-playground") {
             vec![ResourceKindId::new("project_file").unwrap()]
         } else {
             vec![]
@@ -324,6 +334,20 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
             "instance:file-preview",
             "rho.file",
             Some("preview"),
+            None,
+            Some(file_binding.clone()),
+        ),
+        instance(
+            "instance:playground-a",
+            "rho.surface-playground",
+            Some("notes"),
+            None,
+            Some(file_binding.clone()),
+        ),
+        instance(
+            "instance:playground-b",
+            "rho.surface-playground",
+            Some("notes"),
             None,
             Some(file_binding),
         ),
@@ -545,13 +569,52 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
             definition("rho.console", "Console", &[], false),
             definition("rho.status", "Runtime status", &[], true),
             definition("rho.check", "Check project", &[], false),
+            definition(
+                "rho.surface-playground",
+                "Surface Playground",
+                &[("notes", "Notes"), ("inspect", "Inspect")],
+                false,
+            ),
         ],
         runtimes: vec![runtime],
-        instances,
+        instances: instances.clone(),
         commands: vec![command],
         scenes: vec![scene],
         pages: vec![page],
         kernel_snapshot,
+        surface_runtime_snapshot: SurfaceRuntimeSnapshotV1 {
+            contract: SURFACE_RUNTIME_SNAPSHOT_CONTRACT.to_string(),
+            contract_major: RSR_CONTRACT_MAJOR,
+            snapshot_revision: 6,
+            project_id: project_id.clone(),
+            project_revision: 7,
+            catalog: SurfaceCatalogV1 {
+                factories: vec![
+                    definition(
+                        "rho.file",
+                        "File",
+                        &[("source", "Source"), ("preview", "Preview")],
+                        false,
+                    ),
+                    definition("rho.console", "Console", &[], false),
+                    definition("rho.status", "Runtime status", &[], true),
+                    definition("rho.check", "Check project", &[], false),
+                    definition(
+                        "rho.surface-playground",
+                        "Surface Playground",
+                        &[("notes", "Notes"), ("inspect", "Inspect")],
+                        false,
+                    ),
+                ]
+                .into_iter()
+                .map(|definition| SurfaceFactoryRegistrationV1 {
+                    definition,
+                    activation_generation: 1,
+                })
+                .collect(),
+                instances: instances.clone(),
+            },
+        },
     };
     fixture.validate().expect("golden fixture remains valid");
     fixture

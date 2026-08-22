@@ -6,6 +6,7 @@ mod git;
 mod git_review;
 mod platform;
 mod project;
+mod surface_runtime;
 mod ui_runtime;
 mod update;
 mod workspace_plugins;
@@ -344,6 +345,7 @@ struct AppState {
     shutdown_started: AtomicBool,
     render_jobs: Arc<Mutex<HashMap<String, RenderJobState>>>,
     render_tasks: Arc<Mutex<HashMap<String, tauri::async_runtime::JoinHandle<()>>>>,
+    surface_runtime: surface_runtime::SurfaceRuntimeState,
     ui_runtime: ui_runtime::UiRuntimeState,
 }
 
@@ -6534,6 +6536,105 @@ fn project_file_viewer_capability_id() -> CapabilityId {
         .expect("built-in project file viewer capability must be valid")
 }
 
+fn surface_playground_capability_id() -> CapabilityId {
+    CapabilityId::new("ui.surface.surface-playground")
+        .expect("built-in Surface Playground capability must be valid")
+}
+
+struct SurfacePlaygroundPlugin {
+    descriptor: PluginDescriptor,
+}
+
+impl SurfacePlaygroundPlugin {
+    fn new() -> Self {
+        let mut descriptor = PluginDescriptor::new(
+            rho_extension_runtime::PluginId::new("org.yulab.rho.surface-playground")
+                .expect("built-in Surface Playground plugin ID must be valid"),
+            PluginVersion::parse("1.0.0")
+                .expect("built-in Surface Playground version must be valid"),
+            vec![rho_extension_runtime::ScopePolicy::application_kind()],
+        );
+        descriptor.provides = vec![CapabilityDeclaration::new(
+            surface_playground_capability_id(),
+            1,
+        )];
+        Self { descriptor }
+    }
+}
+
+impl InternalPlugin for SurfacePlaygroundPlugin {
+    fn descriptor(&self) -> &PluginDescriptor {
+        &self.descriptor
+    }
+
+    fn activate<'a>(
+        &'a self,
+        context: PluginContext<'a>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), ActivationError>> + Send + 'a>> {
+        Box::pin(async move {
+            let definition = rho_ui_contract::SurfaceDefinitionV1 {
+                surface_id: rho_ui_contract::SurfaceId::new("rho.surface-playground")
+                    .expect("built-in Surface ID must be valid"),
+                contract_major: rho_ui_contract::RSR_CONTRACT_MAJOR,
+                label: "Surface Playground".to_string(),
+                purpose: "Exercise independent application Surface instances and local view state."
+                    .to_string(),
+                renderer_kind: rho_ui_contract::SurfaceRendererKindV1::TrustedHost,
+                scope: rho_ui_contract::SurfaceScopeV1::Project,
+                instance_policy: rho_ui_contract::SurfaceInstancePolicyV1::MultiInstance,
+                instance_quota_class: rho_ui_contract::SurfaceInstanceQuotaClassV1::Standard,
+                resource_kinds: vec![
+                    rho_ui_contract::ResourceKindId::new("project_file")
+                        .expect("built-in resource kind must be valid"),
+                ],
+                modes: vec![
+                    rho_ui_contract::SurfaceModeV1 {
+                        mode_id: rho_ui_contract::SurfaceModeId::new("notes")
+                            .expect("built-in mode must be valid"),
+                        label: "Notes".to_string(),
+                        interaction_kind: rho_ui_contract::SurfaceInteractionKindV1::Interactive,
+                    },
+                    rho_ui_contract::SurfaceModeV1 {
+                        mode_id: rho_ui_contract::SurfaceModeId::new("inspect")
+                            .expect("built-in mode must be valid"),
+                        label: "Inspect".to_string(),
+                        interaction_kind: rho_ui_contract::SurfaceInteractionKindV1::ReadOnly,
+                    },
+                ],
+                sizing_hints: rho_ui_contract::SurfaceSizingHintsV1 {
+                    min_inline: 180,
+                    min_block: 96,
+                    ideal_inline: Some(440),
+                    ideal_block: Some(280),
+                    max_inline: None,
+                    max_block: None,
+                    stretch_inline: true,
+                    stretch_block: true,
+                    presentation_classes: vec![
+                        rho_ui_contract::SurfacePresentationClassV1::Full,
+                        rho_ui_contract::SurfacePresentationClassV1::Compact,
+                    ],
+                },
+                accepted_contexts: vec!["project".to_string(), "selection".to_string()],
+                commands: vec![],
+                origin: rho_ui_contract::SurfaceOriginV1::Application {
+                    component_id: rho_ui_contract::ApplicationComponentId::new(
+                        "rho.surface-playground",
+                    )
+                    .expect("built-in component ID must be valid"),
+                },
+            };
+            context
+                .effects
+                .register_application_surface(context.registry, definition)
+                .map_err(|error| {
+                    ActivationError::new("surface_playground_registration", error.to_string())
+                })?;
+            Ok(())
+        })
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
 enum WorkspaceOperation {
@@ -6891,6 +6992,7 @@ fn extension_workspace_scope_id(
 
 fn internal_plugin_inventory() -> Vec<Arc<dyn InternalPlugin>> {
     vec![
+        Arc::new(SurfacePlaygroundPlugin::new()),
         Arc::new(ProjectFileViewerPlugin::new()),
         Arc::new(RunHistoryPlugin::new()),
         Arc::new(WorkspaceSnapshotPlugin::new()),
@@ -10167,6 +10269,7 @@ mod tests {
             shutdown_started: AtomicBool::new(false),
             render_jobs: Arc::new(Mutex::new(HashMap::new())),
             render_tasks: Arc::new(Mutex::new(HashMap::new())),
+            surface_runtime: crate::surface_runtime::SurfaceRuntimeState::default(),
             ui_runtime: crate::ui_runtime::UiRuntimeState::default(),
         }
     }
@@ -12472,6 +12575,21 @@ mod tests {
                 resolution.contribution().html_maximum_bytes(),
                 super::MAX_VIEWER_HTML_BYTES as usize
             );
+            let surfaces = application
+                .registry()
+                .resolve_application_surfaces()
+                .unwrap();
+            assert_eq!(surfaces.factories().len(), 1);
+            let surface = &surfaces.factories()[0];
+            assert_eq!(
+                surface.definition.surface_id.as_str(),
+                "rho.surface-playground"
+            );
+            assert_eq!(surface.activation_generation, 1);
+            assert_eq!(
+                surface.definition.instance_policy,
+                rho_ui_contract::SurfaceInstancePolicyV1::MultiInstance
+            );
         });
     }
 
@@ -12492,6 +12610,16 @@ mod tests {
                     .resolve_project_file_viewer(&super::project_file_viewer_capability_id())
                     .is_err()
             );
+            assert!(
+                legacy
+                    .scopes()
+                    .application()
+                    .registry()
+                    .resolve_application_surfaces()
+                    .unwrap()
+                    .factories()
+                    .is_empty()
+            );
             let candidate = super::build_extension_host(Some("candidate"), diagnostics())
                 .await
                 .unwrap();
@@ -12502,6 +12630,17 @@ mod tests {
                     .registry()
                     .resolve_project_file_viewer(&super::project_file_viewer_capability_id())
                     .is_ok()
+            );
+            assert_eq!(
+                candidate
+                    .scopes()
+                    .application()
+                    .registry()
+                    .resolve_application_surfaces()
+                    .unwrap()
+                    .factories()
+                    .len(),
+                1
             );
             let default = super::build_extension_host(None, diagnostics())
                 .await
@@ -15916,6 +16055,15 @@ async fn smoke_extension_runtime(
                 .is_err(),
             "legacy smoke unexpectedly activated the project file viewer plugin"
         );
+        ensure!(
+            host.scopes()
+                .application()
+                .registry()
+                .resolve_application_surfaces()?
+                .factories()
+                .is_empty(),
+            "legacy smoke unexpectedly activated an application Surface"
+        );
         let shutdown = host.shutdown().await;
         ensure!(
             shutdown.outcome == DisposeOutcome::Disposed,
@@ -15942,6 +16090,15 @@ async fn smoke_extension_runtime(
         .await?,
     );
     let application = host.scopes().application();
+    let surfaces = application.registry().resolve_application_surfaces()?;
+    ensure!(
+        surfaces.factories().iter().any(|factory| {
+            factory.definition.surface_id.as_str() == "rho.surface-playground"
+                && factory.activation_generation == 1
+        }),
+        "candidate application Surface contribution is missing"
+    );
+    drop(surfaces);
     let viewer = application
         .registry()
         .resolve_project_file_viewer(&project_file_viewer_capability_id())?;
@@ -16056,6 +16213,7 @@ async fn smoke_extension_runtime(
         "run_history_parity": true,
         "workspace_snapshot_typed": true,
         "viewer_host_injected": true,
+        "application_surface_registered": true,
         "old_workspace_rejected": true,
         "clean_shutdown": true,
     }))
@@ -16165,6 +16323,7 @@ fn main() {
                 shutdown_started: AtomicBool::new(false),
                 render_jobs: Arc::new(Mutex::new(HashMap::new())),
                 render_tasks: Arc::new(Mutex::new(HashMap::new())),
+                surface_runtime: surface_runtime::SurfaceRuntimeState::default(),
                 ui_runtime: ui_runtime::UiRuntimeState::default(),
             });
             app.manage(NativeUpdaterState {
@@ -16191,6 +16350,12 @@ fn main() {
             agent_runtime_retry,
             ui_runtime::ui_kernel_snapshot,
             ui_runtime::ui_set_selection,
+            surface_runtime::surface_list,
+            surface_runtime::surface_open,
+            surface_runtime::surface_update,
+            surface_runtime::surface_close,
+            surface_runtime::surface_suspend,
+            surface_runtime::surface_resume,
             workspace_start,
             workspace_status,
             project_state,

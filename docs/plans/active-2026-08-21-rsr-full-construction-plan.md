@@ -1,6 +1,6 @@
 # Rho Surface Runtime Full Construction Plan
 
-Status: active complete construction program; Wave 3 is the current integration
+Status: active complete construction program; Wave 4 is the current integration
 package
 
 Date: 2026-08-21
@@ -13,13 +13,14 @@ own focused evidence, contract review, documentation reconciliation, and
 scoped commit. After a wave passes its continuous gate, the next dependency is
 activated automatically under the same explicit authorization.
 
-Current integration package: **Wave 3 — Surface Factory/Instance runtime**.
+Current integration package: **Wave 4 — Recursive Studio layout container**.
 
-Wave 3 acceptance owner: this active contract. Acceptance requires one
-generation-bound Surface Factory/Instance service, explicit allocation versus
-exact reuse, independent repeated instances, complete lifecycle transitions,
-late-result rejection, and stable keyed React projection. Opening or placing a
-Surface may never invent resource, runtime, plugin, or execution authority.
+Wave 4 acceptance owner: this active contract. Acceptance requires a recursive,
+user-authored, revisioned Studio container over the Wave 3 Surface instances,
+with arbitrary asymmetry, intrinsic strips, nesting, Stack composition,
+pointer/keyboard resize, transactional edits, undo/redo, and no visible grid
+shape cap. Placement may never become resource, runtime, plugin, or execution
+admission.
 
 Owning design:
 `docs/design/proposed-2026-08-21-plugin-native-surface-runtime-design.md`
@@ -479,6 +480,51 @@ Continuous gate:
 - repeated identical bindings, close-one/keep-siblings, generation replacement,
   crash, project switch, late event, suspension, and reopen;
 - stable React keys preserve intended local state and never cross instances.
+
+Wave 3 implementation evidence (completed 2026-08-21):
+
+- `rho-ui-contract` now owns generation-bound factory registrations, bounded
+  Surface Runtime snapshots and lifecycle events, explicit open/update/target
+  requests, host-owned view state, technical quota classes, and placeholder
+  validation. The 256-instance/2 MiB and per-cost-class limits are resource
+  budgets only; no row, column, symmetry, or grid-shape rule exists;
+- application Surface registration is a reversible `EffectSink` contribution
+  in the existing internal extension Registry. The built-in synthetic Surface
+  Playground activates in the application scope, receives the exact scope
+  generation, is hidden in legacy mode, and loses routing during scope
+  disposal; no parallel static factory lifecycle was introduced;
+- the desktop Surface Runtime allocates opaque instance IDs and atomically
+  reconciles exact project/factory generations before every operation. It
+  exposes `list/open/update/close/suspend/resume`, distinguishes all five
+  lifecycle states, rejects stale revisions/events, turns replaced or removed
+  instances into truthful placeholders, keeps repeated identical bindings
+  independent, and closes one instance without touching siblings;
+- React and real/mock transports consume the same Surface command lane. The
+  playground renders repeated instances with `instance_id` keys; a regression
+  test proves closing one card preserves its sibling's component-local draft.
+  Browser mock handlers cover all six Tauri commands;
+- focused contract/runtime/desktop tests passed, including singleton and
+  multi-instance resource budgets, repeated exact bindings, explicit reuse,
+  generation replacement, close-event identity, crash/failure/reopen,
+  hidden/suspend/resume, project A/B/A isolation, late-event rejection, and
+  transactional sibling-local view-state mutation. The complete
+  `cargo test --workspace --locked` matrix passed: desktop ran 287 tests with
+  286 passing and the existing opt-in macOS Keychain smoke ignored;
+- focused `rho-ui-contract` and `rho-extension-runtime` Clippy passed with
+  `-D warnings`. Desktop `--no-deps` Clippy also passed with only the same
+  enumerated pre-existing lint classes allowed. `npm run rsr:check` passed
+  strict typecheck, lint, Rust/TypeScript fixture parity, 12 Vitest cases,
+  deterministic production assets, and the local Chrome smoke; frozen
+  `desktop/dist/app.js` syntax remains valid;
+- separate review repaired replacement placeholders that were still coupled
+  to a new factory origin/mode, close events that omitted the removed instance
+  identity, unhandled React mutation rejection, and Chrome 151 completing
+  `--dump-dom` without exiting. The browser gate now accepts only a complete
+  DOM plus the existing readiness/evidence markers, then reclaims the idle
+  process;
+- no application/R-package version or `NEWS.md` change is required: Tauri
+  still ships the frozen `desktop/dist` frontend, while Wave 3 remains an
+  internal foundation for the one-way cutover.
 
 ### Wave 4 — Recursive Studio layout container
 

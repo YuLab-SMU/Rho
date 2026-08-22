@@ -2,12 +2,23 @@ import { describe, expect, it, vi } from "vitest";
 
 import fixture from "../contracts/generated/rsr-contract-fixtures.json";
 import { createMockUiKernelTransport } from "./mock";
-import { UiExternalStore } from "./store";
+import { SurfaceExternalStore, UiExternalStore } from "./store";
 import { createTauriUiKernelTransport } from "./tauri";
-import type { UiKernelSnapshot } from "./types";
+import type {
+  OpenSurfaceRequest,
+  SurfaceInstanceRequest,
+  SurfaceRuntimeSnapshot,
+  UiKernelSnapshot,
+} from "./types";
 
 function generated(): UiKernelSnapshot {
   return structuredClone(fixture.kernel_snapshot) as unknown as UiKernelSnapshot;
+}
+
+function generatedSurfaces(): SurfaceRuntimeSnapshot {
+  return structuredClone(
+    fixture.surface_runtime_snapshot,
+  ) as unknown as SurfaceRuntimeSnapshot;
 }
 
 describe("UI Kernel transport and external store", () => {
@@ -91,7 +102,7 @@ describe("UI Kernel transport and external store", () => {
     const handlers = new Map<string, () => void>();
     const invoke = async <T,>(command: string, args?: Record<string, unknown>) => {
       calls.push(args == null ? { command } : { command, args });
-      return generated() as T;
+      return (command.startsWith("surface_") ? generatedSurfaces() : generated()) as T;
     };
     const transport = createTauriUiKernelTransport(invoke, async (event, handler) => {
       handlers.set(event, () => handler({ payload: undefined as never }));
@@ -104,6 +115,35 @@ describe("UI Kernel transport and external store", () => {
       expected_snapshot_revision: 9,
       selection: null,
     });
+    const open: OpenSurfaceRequest = {
+      surface_id: "rho.surface-playground",
+      project_id: "project:fixture",
+      mode_id: "notes",
+      resource_binding: null,
+      runtime_binding: null,
+      view_group_id: null,
+      view_state: {},
+      instance_disposition: "new_instance",
+      placement_intent: "current",
+      expected_project_revision: 7,
+      expected_layout_revision: 0,
+    };
+    const target: SurfaceInstanceRequest = {
+      project_id: "project:fixture",
+      instance_id: "instance:playground-a",
+      activation_generation: 1,
+      expected_project_revision: 7,
+      expected_surface_revision: 1,
+    };
+    await transport.loadSurfaces();
+    await transport.openSurface(open);
+    await transport.updateSurface({
+      target,
+      mutation: { kind: "set_view_state", view_state: { draft: "changed" } },
+    });
+    await transport.closeSurface(target);
+    await transport.suspendSurface(target);
+    await transport.resumeSurface(target);
     const invalidated = vi.fn();
     const stop = transport.subscribeInvalidated(invalidated);
     await Promise.resolve();
@@ -122,7 +162,64 @@ describe("UI Kernel transport and external store", () => {
           },
         },
       },
+      { command: "surface_list" },
+      { command: "surface_open", args: { request: open } },
+      {
+        command: "surface_update",
+        args: {
+          request: {
+            target,
+            mutation: { kind: "set_view_state", view_state: { draft: "changed" } },
+          },
+        },
+      },
+      { command: "surface_close", args: { request: target } },
+      { command: "surface_suspend", args: { request: target } },
+      { command: "surface_resume", args: { request: target } },
     ]);
+    stop();
+  });
+
+  it("keeps the mock Surface command lane in lockstep with instance semantics", async () => {
+    const transport = createMockUiKernelTransport();
+    const store = new SurfaceExternalStore(transport);
+    const stop = store.subscribe(() => undefined);
+    await store.refresh();
+    const state = store.getSnapshot();
+    if (state.status !== "ready") throw new Error("Surface fixture did not load");
+    const initial = state.snapshot.catalog.instances.length;
+    const request: OpenSurfaceRequest = {
+      surface_id: "rho.surface-playground",
+      project_id: state.snapshot.project_id,
+      mode_id: "notes",
+      resource_binding: null,
+      runtime_binding: null,
+      view_group_id: null,
+      view_state: { fixture: true },
+      instance_disposition: "new_instance",
+      placement_intent: "beside",
+      expected_project_revision: state.snapshot.project_revision,
+      expected_layout_revision: 0,
+    };
+    const opened = await store.open(request);
+    expect(opened.catalog.instances).toHaveLength(initial + 1);
+    const second = await store.open(request);
+    expect(second.catalog.instances).toHaveLength(initial + 2);
+    const reuse = await store.open({ ...request, instance_disposition: "reuse_exact" });
+    expect(reuse.snapshot_revision).toBe(second.snapshot_revision);
+    const created = reuse.catalog.instances.find(
+      (instance) => instance.instance_id === "surface-instance:mock-1",
+    );
+    if (created == null) throw new Error("mock host did not allocate an instance ID");
+    const closed = await store.close({
+      project_id: reuse.project_id,
+      instance_id: created.instance_id,
+      activation_generation: created.activation_generation,
+      expected_project_revision: reuse.project_revision,
+      expected_surface_revision: created.surface_revision,
+    });
+    expect(closed.catalog.instances).toHaveLength(initial + 1);
+    expect(Object.isFrozen(store.getSnapshot())).toBe(true);
     stop();
   });
 });

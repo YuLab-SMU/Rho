@@ -104,16 +104,17 @@ pub use json_schema::{
     MAX_CONTRIBUTION_SCHEMA_PROPERTIES,
 };
 pub use lifecycle::{
-    ActivationError, CandidateBuildError, CandidatePublishError, CollectingDiagnosticSink,
-    DiagnosticSink, Disposable, DisposeError, DisposeOutcome, EffectDisposeReport, EffectRecord,
-    EffectSink, EffectStatus, ExtensionHost, ExtensionHostError, InternalExtensionRuntimeMode,
-    InternalPlugin, LifecycleDeadlines, NoopDiagnosticSink, PluginContext, PluginInstanceIdentity,
-    ProjectFileViewerContribution, ProjectFileViewerResolution, ProjectFileViewerResolveError,
-    ProjectTreePublishError, ProjectTreePublishReport, PublishReport, RegistryError, RegistryHub,
-    RegistryLease, RoutingError, ScopeDisposeReport, ScopeLifecycleState, ScopeManager, ScopeSlot,
-    ScopeSnapshot, ScopeStateError, ScopedTaskTracker, SourceCallError, SourceCallResult,
-    SourceHandler, StaleGenerationContext, StaleGenerationError, TaskAdmissionError,
-    WorkspaceToolCallError, WorkspaceToolCallResult, WorkspaceToolHandler, build_scope_candidate,
+    ActivationError, ApplicationSurfaceResolution, CandidateBuildError, CandidatePublishError,
+    CollectingDiagnosticSink, DiagnosticSink, Disposable, DisposeError, DisposeOutcome,
+    EffectDisposeReport, EffectRecord, EffectSink, EffectStatus, ExtensionHost, ExtensionHostError,
+    InternalExtensionRuntimeMode, InternalPlugin, LifecycleDeadlines, NoopDiagnosticSink,
+    PluginContext, PluginInstanceIdentity, ProjectFileViewerContribution,
+    ProjectFileViewerResolution, ProjectFileViewerResolveError, ProjectTreePublishError,
+    ProjectTreePublishReport, PublishReport, RegistryError, RegistryHub, RegistryLease,
+    RoutingError, ScopeDisposeReport, ScopeLifecycleState, ScopeManager, ScopeSlot, ScopeSnapshot,
+    ScopeStateError, ScopedTaskTracker, SourceCallError, SourceCallResult, SourceHandler,
+    StaleGenerationContext, StaleGenerationError, TaskAdmissionError, WorkspaceToolCallError,
+    WorkspaceToolCallResult, WorkspaceToolHandler, build_scope_candidate,
 };
 pub use manifest::{
     MANIFEST_SCHEMA_VERSION, MAX_MANIFEST_BYTES, MAX_MANIFEST_OPTIONAL, MAX_MANIFEST_PERMISSIONS,

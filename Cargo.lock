@@ -4130,6 +4130,7 @@ dependencies = [
  "arc-swap",
  "petgraph",
  "rand 0.9.5",
+ "rho-ui-contract",
  "semver",
  "serde",
  "serde_json",

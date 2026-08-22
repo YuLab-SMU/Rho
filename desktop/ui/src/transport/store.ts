@@ -1,8 +1,12 @@
 import type {
   CommandPlacementTag,
+  OpenSurfaceRequest,
+  SurfaceInstanceRequest,
+  SurfaceRuntimeSnapshot,
   UiKernelSnapshot,
   UiKernelTransport,
   Unsubscribe,
+  UpdateSurfaceRequest,
 } from "./types";
 
 export type UiStoreSnapshot =
@@ -14,7 +18,17 @@ export type UiStoreSnapshot =
       readonly snapshot: UiKernelSnapshot;
     };
 
+export type SurfaceStoreSnapshot =
+  | { readonly status: "loading" }
+  | { readonly status: "failed"; readonly message: string }
+  | {
+      readonly status: "ready";
+      readonly source: UiKernelTransport["source"];
+      readonly snapshot: SurfaceRuntimeSnapshot;
+    };
+
 const LOADING: UiStoreSnapshot = Object.freeze({ status: "loading" });
+const SURFACE_LOADING: SurfaceStoreSnapshot = Object.freeze({ status: "loading" });
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) return error.message.slice(0, 512);
@@ -111,6 +125,115 @@ export class UiExternalStore {
       this.#refreshing = undefined;
     });
     return this.#refreshing;
+  }
+}
+
+export class SurfaceExternalStore {
+  readonly #transport: UiKernelTransport;
+  readonly #listeners = new Set<() => void>();
+  #state: SurfaceStoreSnapshot = SURFACE_LOADING;
+  #stopTransport: Unsubscribe | undefined;
+  #refreshing: Promise<void> | undefined;
+  #refreshQueued = false;
+
+  constructor(transport: UiKernelTransport) {
+    this.#transport = transport;
+  }
+
+  readonly getSnapshot = (): SurfaceStoreSnapshot => this.#state;
+
+  readonly subscribe = (listener: () => void): Unsubscribe => {
+    this.#listeners.add(listener);
+    if (this.#listeners.size === 1) {
+      this.#stopTransport = this.#transport.subscribeSurfacesInvalidated(() => {
+        void this.refresh();
+      });
+      void this.refresh();
+    }
+    return () => {
+      this.#listeners.delete(listener);
+      if (this.#listeners.size === 0) {
+        this.#stopTransport?.();
+        this.#stopTransport = undefined;
+      }
+    };
+  };
+
+  #publish(state: SurfaceStoreSnapshot): void {
+    if (state === this.#state) return;
+    this.#state = state;
+    for (const listener of this.#listeners) listener();
+  }
+
+  #install(snapshot: SurfaceRuntimeSnapshot): void {
+    const current = this.#state;
+    if (current.status === "ready") {
+      const revision = current.snapshot.snapshot_revision;
+      if (snapshot.snapshot_revision < revision) return;
+      if (snapshot.snapshot_revision === revision) {
+        if (JSON.stringify(snapshot) === JSON.stringify(current.snapshot)) return;
+        this.#publish({
+          status: "failed",
+          message: "Surface Runtime returned different data for one snapshot revision.",
+        });
+        return;
+      }
+    }
+    this.#publish(
+      deepFreeze({ status: "ready", source: this.#transport.source, snapshot } as const),
+    );
+  }
+
+  async #runRefreshLoop(): Promise<void> {
+    do {
+      this.#refreshQueued = false;
+      try {
+        this.#install(await this.#transport.loadSurfaces());
+      } catch (error: unknown) {
+        if (this.#state.status !== "ready") {
+          this.#publish({ status: "failed", message: errorMessage(error) });
+        }
+      }
+    } while (this.#refreshQueued);
+  }
+
+  refresh(): Promise<void> {
+    if (this.#refreshing != null) {
+      this.#refreshQueued = true;
+      return this.#refreshing;
+    }
+    this.#refreshing = this.#runRefreshLoop().finally(() => {
+      this.#refreshing = undefined;
+    });
+    return this.#refreshing;
+  }
+
+  async #mutate(
+    operation: () => Promise<SurfaceRuntimeSnapshot>,
+  ): Promise<SurfaceRuntimeSnapshot> {
+    const snapshot = await operation();
+    this.#install(snapshot);
+    return snapshot;
+  }
+
+  open(request: OpenSurfaceRequest) {
+    return this.#mutate(() => this.#transport.openSurface(request));
+  }
+
+  update(request: UpdateSurfaceRequest) {
+    return this.#mutate(() => this.#transport.updateSurface(request));
+  }
+
+  close(request: SurfaceInstanceRequest) {
+    return this.#mutate(() => this.#transport.closeSurface(request));
+  }
+
+  suspend(request: SurfaceInstanceRequest) {
+    return this.#mutate(() => this.#transport.suspendSurface(request));
+  }
+
+  resume(request: SurfaceInstanceRequest) {
+    return this.#mutate(() => this.#transport.resumeSurface(request));
   }
 }
 

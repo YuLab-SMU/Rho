@@ -186,7 +186,7 @@
 
   .rho-foundation-copy {
     z-index: 1;
-    width: min(47rem, 100%);
+    width: min(64rem, 100%);
   }
 
   .rho-foundation-copy h1 {
@@ -256,6 +256,101 @@
     box-shadow:
       inset 0 0 0 5rem rgb(13 125 103 / 2%),
       inset 0 0 0 10rem rgb(13 125 103 / 2%);
+  }
+
+  .rho-surface-lab {
+    margin-top: 1.2rem;
+    padding: 1rem;
+    border: 1px solid var(--rho-line);
+    border-radius: 1rem;
+    background: rgb(255 255 255 / 45%);
+  }
+
+  .rho-surface-lab > header,
+  .rho-synthetic-surface > header,
+  .rho-synthetic-surface > footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .rho-surface-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+    gap: 0.75rem;
+    margin-top: 0.9rem;
+  }
+
+  .rho-add-surface,
+  .rho-synthetic-surface button {
+    padding: 0.48rem 0.68rem;
+    border: 1px solid var(--rho-line);
+    border-radius: 0.62rem;
+    color: var(--rho-ink);
+    font: inherit;
+    font-size: 0.76rem;
+    font-weight: 680;
+    background: rgb(255 255 255 / 72%);
+    cursor: pointer;
+  }
+
+  .rho-add-surface:hover,
+  .rho-synthetic-surface button:hover {
+    border-color: color-mix(in srgb, var(--rho-accent) 42%, transparent);
+  }
+
+  .rho-synthetic-surface {
+    min-width: 0;
+    padding: 0.85rem;
+    border: 1px solid color-mix(in srgb, var(--rho-accent) 18%, transparent);
+    border-radius: 0.85rem;
+    background: rgb(250 253 251 / 84%);
+    box-shadow: 0 0.8rem 2rem rgb(28 59 46 / 6%);
+  }
+
+  .rho-synthetic-surface > p {
+    margin: 0.7rem 0;
+    color: var(--rho-muted);
+    font-size: 0.76rem;
+  }
+
+  .rho-synthetic-surface code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  .rho-synthetic-surface label {
+    display: grid;
+    gap: 0.35rem;
+    color: var(--rho-muted);
+    font-size: 0.72rem;
+  }
+
+  .rho-synthetic-surface input {
+    width: 100%;
+    min-width: 0;
+    padding: 0.58rem 0.65rem;
+    border: 1px solid var(--rho-line);
+    border-radius: 0.55rem;
+    color: var(--rho-ink);
+    font: inherit;
+    background: white;
+  }
+
+  .rho-synthetic-surface > footer {
+    margin-top: 0.7rem;
+    color: var(--rho-muted);
+    font-size: 0.66rem;
+  }
+
+  .rho-surface-failed,
+  .rho-surface-placeholder {
+    border-color: rgb(209 132 40 / 32%);
+    background: rgb(255 247 231 / 75%);
+  }
+
+  .rho-surface-suspended {
+    opacity: 0.72;
   }
 
   @media (max-width: 700px) {
