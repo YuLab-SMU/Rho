@@ -2,12 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 
 import fixture from "../contracts/generated/rsr-contract-fixtures.json";
 import { createMockUiKernelTransport } from "./mock";
-import { SurfaceExternalStore, UiExternalStore } from "./store";
+import { StudioExternalStore, SurfaceExternalStore, UiExternalStore } from "./store";
 import { createTauriUiKernelTransport } from "./tauri";
 import type {
   OpenSurfaceRequest,
   SurfaceInstanceRequest,
   SurfaceRuntimeSnapshot,
+  StudioRuntimeSnapshot,
   UiKernelSnapshot,
 } from "./types";
 
@@ -19,6 +20,12 @@ function generatedSurfaces(): SurfaceRuntimeSnapshot {
   return structuredClone(
     fixture.surface_runtime_snapshot,
   ) as unknown as SurfaceRuntimeSnapshot;
+}
+
+function generatedStudio(): StudioRuntimeSnapshot {
+  return structuredClone(
+    fixture.studio_runtime_snapshot,
+  ) as unknown as StudioRuntimeSnapshot;
 }
 
 describe("UI Kernel transport and external store", () => {
@@ -102,7 +109,11 @@ describe("UI Kernel transport and external store", () => {
     const handlers = new Map<string, () => void>();
     const invoke = async <T,>(command: string, args?: Record<string, unknown>) => {
       calls.push(args == null ? { command } : { command, args });
-      return (command.startsWith("surface_") ? generatedSurfaces() : generated()) as T;
+      return (command.startsWith("surface_")
+        ? generatedSurfaces()
+        : command.startsWith("studio_")
+          ? generatedStudio()
+          : generated()) as T;
     };
     const transport = createTauriUiKernelTransport(invoke, async (event, handler) => {
       handlers.set(event, () => handler({ payload: undefined as never }));
@@ -126,7 +137,7 @@ describe("UI Kernel transport and external store", () => {
       instance_disposition: "new_instance",
       placement_intent: "current",
       expected_project_revision: 7,
-      expected_layout_revision: 0,
+      expected_layout_revision: 1,
     };
     const target: SurfaceInstanceRequest = {
       project_id: "project:fixture",
@@ -144,6 +155,18 @@ describe("UI Kernel transport and external store", () => {
     await transport.closeSurface(target);
     await transport.suspendSurface(target);
     await transport.resumeSurface(target);
+    const studioRequest = {
+      project_id: "project:fixture",
+      expected_project_revision: 7,
+      expected_layout_revision: 1,
+    } as const;
+    await transport.loadStudio();
+    await transport.applyStudio({
+      ...studioRequest,
+      edit: { kind: "set_focus", instance_id: "instance:file-source" },
+    });
+    await transport.undoStudio(studioRequest);
+    await transport.redoStudio(studioRequest);
     const invalidated = vi.fn();
     const stop = transport.subscribeInvalidated(invalidated);
     await Promise.resolve();
@@ -176,6 +199,18 @@ describe("UI Kernel transport and external store", () => {
       { command: "surface_close", args: { request: target } },
       { command: "surface_suspend", args: { request: target } },
       { command: "surface_resume", args: { request: target } },
+      { command: "studio_scene" },
+      {
+        command: "studio_apply",
+        args: {
+          request: {
+            ...studioRequest,
+            edit: { kind: "set_focus", instance_id: "instance:file-source" },
+          },
+        },
+      },
+      { command: "studio_undo", args: { request: studioRequest } },
+      { command: "studio_redo", args: { request: studioRequest } },
     ]);
     stop();
   });
@@ -199,7 +234,7 @@ describe("UI Kernel transport and external store", () => {
       instance_disposition: "new_instance",
       placement_intent: "beside",
       expected_project_revision: state.snapshot.project_revision,
-      expected_layout_revision: 0,
+      expected_layout_revision: (await transport.loadStudio()).scene.layout_revision,
     };
     const opened = await store.open(request);
     expect(opened.catalog.instances).toHaveLength(initial + 1);
@@ -220,6 +255,44 @@ describe("UI Kernel transport and external store", () => {
     });
     expect(closed.catalog.instances).toHaveLength(initial + 1);
     expect(Object.isFrozen(store.getSnapshot())).toBe(true);
+    stop();
+  });
+
+  it("keeps Studio edits stale-safe, undoable, and reconciled with Surface availability", async () => {
+    const transport = createMockUiKernelTransport();
+    const store = new StudioExternalStore(transport);
+    const stop = store.subscribe(() => undefined);
+    await store.refresh();
+    const state = store.getSnapshot();
+    if (state.status !== "ready") throw new Error("Studio fixture did not load");
+    const initial = state.snapshot;
+    const placed = await store.apply({
+      project_id: initial.project_id,
+      expected_project_revision: initial.project_revision,
+      expected_layout_revision: initial.scene.layout_revision,
+      edit: {
+        kind: "insert_surface",
+        target_container_node_id: initial.scene.root.node_id,
+        child_index: initial.scene.root.kind === "container" ? initial.scene.root.children.length : 0,
+        instance_id: "instance:playground-a",
+        basis: { kind: "fraction", weight: 1 },
+      },
+    });
+    expect(placed.unplaced_instance_ids).not.toContain("instance:playground-a");
+    expect(placed.can_undo).toBe(true);
+    await expect(store.apply({
+      project_id: initial.project_id,
+      expected_project_revision: initial.project_revision,
+      expected_layout_revision: initial.scene.layout_revision,
+      edit: { kind: "normalize" },
+    })).rejects.toThrow(/stale/i);
+    const undone = await store.undo({
+      project_id: placed.project_id,
+      expected_project_revision: placed.project_revision,
+      expected_layout_revision: placed.scene.layout_revision,
+    });
+    expect(undone.unplaced_instance_ids).toContain("instance:playground-a");
+    expect(undone.scene.layout_revision).toBeGreaterThan(placed.scene.layout_revision);
     stop();
   });
 });

@@ -1,6 +1,6 @@
 # Rho Surface Runtime Full Construction Plan
 
-Status: active complete construction program; Wave 4 is the current integration
+Status: active complete construction program; Wave 5 is the current integration
 package
 
 Date: 2026-08-21
@@ -13,14 +13,13 @@ own focused evidence, contract review, documentation reconciliation, and
 scoped commit. After a wave passes its continuous gate, the next dependency is
 activated automatically under the same explicit authorization.
 
-Current integration package: **Wave 4 — Recursive Studio layout container**.
+Current integration package: **Wave 5 — Runtime Registry and multi-runtime Console**.
 
-Wave 4 acceptance owner: this active contract. Acceptance requires a recursive,
-user-authored, revisioned Studio container over the Wave 3 Surface instances,
-with arbitrary asymmetry, intrinsic strips, nesting, Stack composition,
-pointer/keyboard resize, transactional edits, undo/redo, and no visible grid
-shape cap. Placement may never become resource, runtime, plugin, or execution
-admission.
+Wave 5 acceptance owner: this active contract. Acceptance requires an explicit,
+broker-owned Runtime Registry, Workspace R plus supervised auxiliary runtimes,
+Console instances bound to exact runtime identities, independent Console view
+state, and truthful fault isolation. Opening or closing a Console may never
+implicitly create, stop, or restart a runtime, and Agent R remains non-attachable.
 
 Owning design:
 `docs/design/proposed-2026-08-21-plugin-native-surface-runtime-design.md`
@@ -547,6 +546,60 @@ Continuous gate:
 - drag preview remains frame-paced; one durable mutation occurs on release;
 - no visible grid-shape cap. Only encoded/depth/node/instance resource budgets
   apply.
+
+Wave 4 implementation evidence (completed 2026-08-21):
+
+- `rho-ui-contract` now owns project-bound Studio Runtime snapshots and typed
+  insert/move/stack/unstack/close, boundary resize, basis, collapse-priority,
+  axis, focus, normalize, distribute, and root edits. Pure reducers preserve
+  stale-safe transactional input, arbitrary recursive/asymmetric composition,
+  `auto`/`intrinsic`/`fixed`/`fraction`/`minmax` bases, host-allocated node
+  identity, normalization, missing-instance pruning, and the existing encoded,
+  depth, node, and placement budgets without a grid-shape limit;
+- the desktop Studio Runtime owns one exact project Scene, monotonic snapshot
+  and layout revisions, a bounded 64-entry undo/redo history, unplaced live
+  instance inventory, project A/B isolation, and Surface availability
+  reconciliation. Surface open now checks the real Studio layout revision;
+  open/close/update/lifecycle commands reconcile Studio without deriving
+  resource, runtime, plugin, or execution authority from placement;
+- Tauri exposes `studio_scene/apply/undo/redo` and one invalidation event. The
+  React and browser/mock transports remain lockstep with those commands and
+  reject cross-project/stale edits before mutation. The Rust-generated golden
+  fixture supplies the same Studio snapshot to both sides;
+- React recursively renders Containers, Stacks, and Surface leaves with stable
+  instance keys. It provides explicit unplaced inventory, independent repeated
+  views, Stack tab activation without sibling destruction, tree inspector,
+  axis/normalize/distribute controls, user-authored collapse priorities,
+  adaptive recoverable collapse rails, CSS container-query full/compact/strip
+  projection, and undo/redo. Console leaves display their exact runtime binding
+  and file Source/Preview remain independent Surface modes;
+- pointer resize mutates only ephemeral DOM geometry once per animation frame
+  and commits one atomic two-child basis edit on release; pointer cancellation
+  commits nothing. The same handle provides clamped directional-key resize.
+  Tests prove pointer movement causes zero durable calls, release causes exactly
+  one, keyboard causes exactly one, and closing one repeated playground
+  placement preserves its sibling draft;
+- pure layout tests cover asymmetry, intrinsic strips, deep nesting, exact
+  node/placement budgets, composite insert/move/stack/unstack, atomic resize,
+  non-resizable rejection, pruning, normalization, stale failure, and duplicate
+  rejection. Desktop tests cover transactional edit/undo/redo, availability
+  pruning, and project isolation;
+- `cargo test --workspace --locked` passed the complete local matrix: Desktop
+  ran 289 tests with 288 passing and the existing opt-in macOS Keychain smoke
+  ignored. Focused `rho-ui-contract` and `rho-extension-runtime` Clippy passed
+  with `-D warnings`; full desktop Clippy completed with no new Wave 4 warning
+  and only the recorded pre-existing repository categories;
+- `npm run rsr:check` passed strict TypeScript, ESLint, exact Rust/TypeScript
+  fixture parity, 14 Vitest cases, deterministic production assets, no-network
+  asset validation, and real local Chrome smoke. A 1600 x 1000 local capture
+  verified the 7:3 asymmetric root, nested Console Stack, exact runtime label,
+  independent Source view, intrinsic status strip, inspector, and inventory;
+- cross-review found no competing persistence or authority owner: durable
+  profile persistence remains Wave 7, Runtime attachment remains Wave 5,
+  Resource contents remain Wave 6, and plugin rendering remains Wave 8. No
+  application/R-package version or `NEWS.md` change is required because Tauri
+  still ships frozen `desktop/dist`; installed-app and release acceptance are
+  neither run nor claimed.
 
 ### Wave 5 — Runtime Registry and multi-runtime Console
 

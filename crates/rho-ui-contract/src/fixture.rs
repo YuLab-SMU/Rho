@@ -55,6 +55,7 @@ pub struct ContractFixtureV1 {
     pub pages: Vec<VibePageV1>,
     pub kernel_snapshot: UiKernelSnapshotV1,
     pub surface_runtime_snapshot: SurfaceRuntimeSnapshotV1,
+    pub studio_runtime_snapshot: StudioRuntimeSnapshotV1,
 }
 
 impl Validate for ContractFixtureV1 {
@@ -130,6 +131,7 @@ impl Validate for ContractFixtureV1 {
         }
         self.kernel_snapshot.validate()?;
         self.surface_runtime_snapshot.validate()?;
+        self.studio_runtime_snapshot.validate()?;
         let surfaces = self
             .surfaces
             .iter()
@@ -370,6 +372,7 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
     ];
     let scene = SceneStateV1 {
         scene_id: SceneId::new("scene:rho-studio").unwrap(),
+        project_id: project_id.clone(),
         label: "Rho Studio".to_string(),
         layout_revision: 1,
         root: LayoutNodeV1::Container {
@@ -579,7 +582,7 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
         runtimes: vec![runtime],
         instances: instances.clone(),
         commands: vec![command],
-        scenes: vec![scene],
+        scenes: vec![scene.clone()],
         pages: vec![page],
         kernel_snapshot,
         surface_runtime_snapshot: SurfaceRuntimeSnapshotV1 {
@@ -614,6 +617,22 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
                 .collect(),
                 instances: instances.clone(),
             },
+        },
+        studio_runtime_snapshot: StudioRuntimeSnapshotV1 {
+            contract: STUDIO_RUNTIME_SNAPSHOT_CONTRACT.to_string(),
+            contract_major: RSR_CONTRACT_MAJOR,
+            snapshot_revision: 4,
+            project_id: project_id.clone(),
+            project_revision: 7,
+            scene: scene.clone(),
+            unplaced_instance_ids: vec![
+                SurfaceInstanceId::new("instance:check").unwrap(),
+                SurfaceInstanceId::new("instance:file-preview").unwrap(),
+                SurfaceInstanceId::new("instance:playground-a").unwrap(),
+                SurfaceInstanceId::new("instance:playground-b").unwrap(),
+            ],
+            can_undo: true,
+            can_redo: false,
         },
     };
     fixture.validate().expect("golden fixture remains valid");

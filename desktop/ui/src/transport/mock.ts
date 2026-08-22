@@ -1,11 +1,16 @@
 import fixture from "../contracts/generated/rsr-contract-fixtures.json";
 import { projectLabel } from "./normalize";
+import { applySceneEdit, collectSceneInstances, reconcileStudio } from "./studio-model";
 import type {
   OpenSurfaceRequest,
   SetUiSelectionRequest,
   SurfaceInstance,
   SurfaceInstanceRequest,
   SurfaceRuntimeSnapshot,
+  SceneEditRequest,
+  SceneState,
+  StudioRevisionRequest,
+  StudioRuntimeSnapshot,
   UpdateSurfaceRequest,
   UiKernelSnapshot,
   UiKernelTransport,
@@ -15,6 +20,8 @@ import type {
 const generatedSnapshot = fixture.kernel_snapshot as unknown as UiKernelSnapshot;
 const generatedSurfaces =
   fixture.surface_runtime_snapshot as unknown as SurfaceRuntimeSnapshot;
+const generatedStudio =
+  fixture.studio_runtime_snapshot as unknown as StudioRuntimeSnapshot;
 
 function copySnapshot(snapshot: UiKernelSnapshot): UiKernelSnapshot {
   return structuredClone(snapshot);
@@ -24,9 +31,14 @@ function copySurfaces(snapshot: SurfaceRuntimeSnapshot): SurfaceRuntimeSnapshot 
   return structuredClone(snapshot);
 }
 
+function copyStudio(snapshot: StudioRuntimeSnapshot): StudioRuntimeSnapshot {
+  return structuredClone(snapshot);
+}
+
 export interface MockUiKernelTransport extends UiKernelTransport {
   publish(snapshot: UiKernelSnapshot): void;
   publishSurfaces(snapshot: SurfaceRuntimeSnapshot): void;
+  publishStudio(snapshot: StudioRuntimeSnapshot): void;
 }
 
 export function createMockUiKernelTransport(
@@ -46,11 +58,33 @@ export function createMockUiKernelTransport(
   }
   let current = snapshot;
   let surfaces = copySurfaces(generatedSurfaces);
+  let studio = copyStudio(generatedStudio);
   let nextInstance = 1;
+  let nextNode = 1;
+  const allocateNode = () => `node:mock-${nextNode++}`;
+  const undo: SceneState[] = [];
+  const redo: SceneState[] = [];
   const listeners = new Set<() => void>();
   const surfaceListeners = new Set<() => void>();
+  const studioListeners = new Set<() => void>();
   const notifySurfaces = () => {
     for (const listener of surfaceListeners) listener();
+  };
+  const notifyStudio = () => {
+    for (const listener of studioListeners) listener();
+  };
+  const availableIds = () => surfaces.catalog.instances.map((instance) => instance.instance_id);
+  const reconcileCurrentStudio = () => {
+    const next = reconcileStudio(studio, availableIds(), allocateNode);
+    if (next.snapshot_revision !== studio.snapshot_revision) {
+      const sceneChanged = JSON.stringify(next.scene) !== JSON.stringify(studio.scene);
+      studio = next;
+      if (sceneChanged) {
+        undo.splice(0);
+        redo.splice(0);
+      }
+      notifyStudio();
+    }
   };
   const validateTarget = (request: SurfaceInstanceRequest): number => {
     if (
@@ -79,7 +113,38 @@ export function createMockUiKernelTransport(
     (next.catalog as unknown as { instances: SurfaceInstance[] }).instances = [...instances];
     surfaces = next;
     notifySurfaces();
+    reconcileCurrentStudio();
     return copySurfaces(surfaces);
+  };
+  const validateStudio = (request: StudioRevisionRequest) => {
+    reconcileCurrentStudio();
+    if (
+      request.project_id !== studio.project_id ||
+      request.expected_project_revision !== studio.project_revision ||
+      request.expected_layout_revision !== studio.scene.layout_revision
+    ) {
+      throw new Error("Mock Studio request is stale or belongs to another project.");
+    }
+  };
+  const installScene = (scene: SceneState): StudioRuntimeSnapshot => {
+    const placed = collectSceneInstances(scene);
+    const missing = [...placed].find((id) => !availableIds().includes(id));
+    if (missing != null) throw new Error(`Mock Studio instance ${missing} is unavailable.`);
+    studio = {
+      ...studio,
+      snapshot_revision: studio.snapshot_revision + 1,
+      scene,
+      unplaced_instance_ids: availableIds().filter((id) => !placed.has(id)).sort(),
+      can_undo: undo.length > 0,
+      can_redo: redo.length > 0,
+    };
+    notifyStudio();
+    return copyStudio(studio);
+  };
+  const validateSceneAvailability = (scene: SceneState) => {
+    const placed = collectSceneInstances(scene);
+    const missing = [...placed].find((id) => !availableIds().includes(id));
+    if (missing != null) throw new Error(`Mock Studio instance ${missing} is unavailable.`);
   };
   return {
     source: "mock",
@@ -115,7 +180,7 @@ export function createMockUiKernelTransport(
       if (
         request.project_id !== surfaces.project_id ||
         request.expected_project_revision !== surfaces.project_revision ||
-        request.expected_layout_revision !== 0
+        request.expected_layout_revision !== studio.scene.layout_revision
       ) {
         throw new Error("Mock Surface open request is stale.");
       }
@@ -232,6 +297,49 @@ export function createMockUiKernelTransport(
     publishSurfaces(next: SurfaceRuntimeSnapshot) {
       surfaces = copySurfaces(next);
       notifySurfaces();
+      reconcileCurrentStudio();
+    },
+    async loadStudio() {
+      reconcileCurrentStudio();
+      return copyStudio(studio);
+    },
+    async applyStudio(request: SceneEditRequest) {
+      validateStudio(request);
+      const previous = copyStudio(studio).scene;
+      const candidate = applySceneEdit(studio.scene, request.edit, allocateNode);
+      validateSceneAvailability(candidate);
+      undo.push(previous);
+      if (undo.length > 64) undo.shift();
+      redo.splice(0);
+      return installScene(candidate);
+    },
+    async undoStudio(request: StudioRevisionRequest) {
+      validateStudio(request);
+      const target = undo.pop();
+      if (target == null) throw new Error("Mock Studio undo history is empty.");
+      redo.push(copyStudio(studio).scene);
+      const restored = structuredClone(target) as SceneState & { layout_revision: number };
+      restored.layout_revision = studio.scene.layout_revision + 1;
+      return installScene(restored);
+    },
+    async redoStudio(request: StudioRevisionRequest) {
+      validateStudio(request);
+      const target = redo.pop();
+      if (target == null) throw new Error("Mock Studio redo history is empty.");
+      undo.push(copyStudio(studio).scene);
+      const restored = structuredClone(target) as SceneState & { layout_revision: number };
+      restored.layout_revision = studio.scene.layout_revision + 1;
+      return installScene(restored);
+    },
+    subscribeStudioInvalidated(listener: () => void): Unsubscribe {
+      studioListeners.add(listener);
+      return () => studioListeners.delete(listener);
+    },
+    publishStudio(next: StudioRuntimeSnapshot) {
+      studio = copyStudio(next);
+      undo.splice(0);
+      redo.splice(0);
+      notifyStudio();
     },
   };
 }

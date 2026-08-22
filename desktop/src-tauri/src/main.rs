@@ -6,6 +6,7 @@ mod git;
 mod git_review;
 mod platform;
 mod project;
+mod studio_runtime;
 mod surface_runtime;
 mod ui_runtime;
 mod update;
@@ -346,6 +347,7 @@ struct AppState {
     render_jobs: Arc<Mutex<HashMap<String, RenderJobState>>>,
     render_tasks: Arc<Mutex<HashMap<String, tauri::async_runtime::JoinHandle<()>>>>,
     surface_runtime: surface_runtime::SurfaceRuntimeState,
+    studio_runtime: studio_runtime::StudioRuntimeState,
     ui_runtime: ui_runtime::UiRuntimeState,
 }
 
@@ -10270,6 +10272,7 @@ mod tests {
             render_jobs: Arc::new(Mutex::new(HashMap::new())),
             render_tasks: Arc::new(Mutex::new(HashMap::new())),
             surface_runtime: crate::surface_runtime::SurfaceRuntimeState::default(),
+            studio_runtime: crate::studio_runtime::StudioRuntimeState::default(),
             ui_runtime: crate::ui_runtime::UiRuntimeState::default(),
         }
     }
@@ -16324,6 +16327,7 @@ fn main() {
                 render_jobs: Arc::new(Mutex::new(HashMap::new())),
                 render_tasks: Arc::new(Mutex::new(HashMap::new())),
                 surface_runtime: surface_runtime::SurfaceRuntimeState::default(),
+                studio_runtime: studio_runtime::StudioRuntimeState::default(),
                 ui_runtime: ui_runtime::UiRuntimeState::default(),
             });
             app.manage(NativeUpdaterState {
@@ -16356,6 +16360,10 @@ fn main() {
             surface_runtime::surface_close,
             surface_runtime::surface_suspend,
             surface_runtime::surface_resume,
+            studio_runtime::studio_scene,
+            studio_runtime::studio_apply,
+            studio_runtime::studio_undo,
+            studio_runtime::studio_redo,
             workspace_start,
             workspace_status,
             project_state,

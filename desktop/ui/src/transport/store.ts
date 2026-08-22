@@ -1,6 +1,9 @@
 import type {
   CommandPlacementTag,
   OpenSurfaceRequest,
+  SceneEditRequest,
+  StudioRevisionRequest,
+  StudioRuntimeSnapshot,
   SurfaceInstanceRequest,
   SurfaceRuntimeSnapshot,
   UiKernelSnapshot,
@@ -27,8 +30,18 @@ export type SurfaceStoreSnapshot =
       readonly snapshot: SurfaceRuntimeSnapshot;
     };
 
+export type StudioStoreSnapshot =
+  | { readonly status: "loading" }
+  | { readonly status: "failed"; readonly message: string }
+  | {
+      readonly status: "ready";
+      readonly source: UiKernelTransport["source"];
+      readonly snapshot: StudioRuntimeSnapshot;
+    };
+
 const LOADING: UiStoreSnapshot = Object.freeze({ status: "loading" });
 const SURFACE_LOADING: SurfaceStoreSnapshot = Object.freeze({ status: "loading" });
+const STUDIO_LOADING: StudioStoreSnapshot = Object.freeze({ status: "loading" });
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) return error.message.slice(0, 512);
@@ -234,6 +247,105 @@ export class SurfaceExternalStore {
 
   resume(request: SurfaceInstanceRequest) {
     return this.#mutate(() => this.#transport.resumeSurface(request));
+  }
+}
+
+export class StudioExternalStore {
+  readonly #transport: UiKernelTransport;
+  readonly #listeners = new Set<() => void>();
+  #state: StudioStoreSnapshot = STUDIO_LOADING;
+  #stopTransport: Unsubscribe | undefined;
+  #refreshing: Promise<void> | undefined;
+  #refreshQueued = false;
+
+  constructor(transport: UiKernelTransport) {
+    this.#transport = transport;
+  }
+
+  readonly getSnapshot = (): StudioStoreSnapshot => this.#state;
+
+  readonly subscribe = (listener: () => void): Unsubscribe => {
+    this.#listeners.add(listener);
+    if (this.#listeners.size === 1) {
+      this.#stopTransport = this.#transport.subscribeStudioInvalidated(() => {
+        void this.refresh();
+      });
+      void this.refresh();
+    }
+    return () => {
+      this.#listeners.delete(listener);
+      if (this.#listeners.size === 0) {
+        this.#stopTransport?.();
+        this.#stopTransport = undefined;
+      }
+    };
+  };
+
+  #publish(state: StudioStoreSnapshot): void {
+    if (state === this.#state) return;
+    this.#state = state;
+    for (const listener of this.#listeners) listener();
+  }
+
+  #install(snapshot: StudioRuntimeSnapshot): void {
+    const current = this.#state;
+    if (current.status === "ready") {
+      const revision = current.snapshot.snapshot_revision;
+      if (snapshot.snapshot_revision < revision) return;
+      if (snapshot.snapshot_revision === revision) {
+        if (JSON.stringify(snapshot) === JSON.stringify(current.snapshot)) return;
+        this.#publish({
+          status: "failed",
+          message: "Studio Runtime returned different data for one snapshot revision.",
+        });
+        return;
+      }
+    }
+    this.#publish(
+      deepFreeze({ status: "ready", source: this.#transport.source, snapshot } as const),
+    );
+  }
+
+  async #runRefreshLoop(): Promise<void> {
+    do {
+      this.#refreshQueued = false;
+      try {
+        this.#install(await this.#transport.loadStudio());
+      } catch (error: unknown) {
+        if (this.#state.status !== "ready") {
+          this.#publish({ status: "failed", message: errorMessage(error) });
+        }
+      }
+    } while (this.#refreshQueued);
+  }
+
+  refresh(): Promise<void> {
+    if (this.#refreshing != null) {
+      this.#refreshQueued = true;
+      return this.#refreshing;
+    }
+    this.#refreshing = this.#runRefreshLoop().finally(() => {
+      this.#refreshing = undefined;
+    });
+    return this.#refreshing;
+  }
+
+  async #mutate(operation: () => Promise<StudioRuntimeSnapshot>) {
+    const snapshot = await operation();
+    this.#install(snapshot);
+    return snapshot;
+  }
+
+  apply(request: SceneEditRequest) {
+    return this.#mutate(() => this.#transport.applyStudio(request));
+  }
+
+  undo(request: StudioRevisionRequest) {
+    return this.#mutate(() => this.#transport.undoStudio(request));
+  }
+
+  redo(request: StudioRevisionRequest) {
+    return this.#mutate(() => this.#transport.redoStudio(request));
   }
 }
 

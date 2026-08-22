@@ -12,8 +12,13 @@ export function createUiKernelTransport(): UiKernelTransport {
   return createMockUiKernelTransport(window.location.search);
 }
 
-export { commandsForPlacement, SurfaceExternalStore, UiExternalStore } from "./store";
-export type { SurfaceStoreSnapshot, UiStoreSnapshot } from "./store";
+export {
+  commandsForPlacement,
+  StudioExternalStore,
+  SurfaceExternalStore,
+  UiExternalStore,
+} from "./store";
+export type { StudioStoreSnapshot, SurfaceStoreSnapshot, UiStoreSnapshot } from "./store";
 export type {
   CommandAvailability,
   CommandPlacementTag,
@@ -24,6 +29,15 @@ export type {
   SurfaceInstance,
   SurfaceInstanceRequest,
   SurfaceRuntimeSnapshot,
+  LayoutAxis,
+  LayoutBasis,
+  LayoutChild,
+  LayoutNode,
+  SceneEdit,
+  SceneEditRequest,
+  SceneState,
+  StudioRevisionRequest,
+  StudioRuntimeSnapshot,
   UiKernelSnapshot,
   UiKernelTransport,
   UiSelection,

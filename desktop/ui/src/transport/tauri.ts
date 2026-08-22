@@ -1,5 +1,8 @@
 import type {
   OpenSurfaceRequest,
+  SceneEditRequest,
+  StudioRevisionRequest,
+  StudioRuntimeSnapshot,
   SurfaceInstanceRequest,
   SurfaceRuntimeSnapshot,
   UpdateSurfaceRequest,
@@ -67,6 +70,23 @@ export function createTauriUiKernelTransport(
       subscribeEvents(
         listen,
         ["rho://surface-runtime-changed", "rho://ui-snapshot-invalidated"],
+        listener,
+      ),
+    loadStudio: () => invoke<StudioRuntimeSnapshot>("studio_scene"),
+    applyStudio: (request: SceneEditRequest) =>
+      invoke<StudioRuntimeSnapshot>("studio_apply", { request }),
+    undoStudio: (request: StudioRevisionRequest) =>
+      invoke<StudioRuntimeSnapshot>("studio_undo", { request }),
+    redoStudio: (request: StudioRevisionRequest) =>
+      invoke<StudioRuntimeSnapshot>("studio_redo", { request }),
+    subscribeStudioInvalidated: (listener) =>
+      subscribeEvents(
+        listen,
+        [
+          "rho://studio-runtime-changed",
+          "rho://surface-runtime-changed",
+          "rho://ui-snapshot-invalidated",
+        ],
         listener,
       ),
   };

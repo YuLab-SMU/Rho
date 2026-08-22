@@ -427,6 +427,7 @@
   "scenes": [
     {
       "scene_id": "scene:rho-studio",
+      "project_id": "project:fixture",
       "label": "Rho Studio",
       "layout_revision": 1,
       "root": {
@@ -1151,5 +1152,94 @@
         }
       ]
     }
+  },
+  "studio_runtime_snapshot": {
+    "contract": "rho.ui.studio-runtime.snapshot.v1",
+    "contract_major": 1,
+    "snapshot_revision": 4,
+    "project_id": "project:fixture",
+    "project_revision": 7,
+    "scene": {
+      "scene_id": "scene:rho-studio",
+      "project_id": "project:fixture",
+      "label": "Rho Studio",
+      "layout_revision": 1,
+      "root": {
+        "kind": "container",
+        "node_id": "node:root",
+        "axis": "horizontal",
+        "children": [
+          {
+            "child": {
+              "kind": "surface",
+              "node_id": "node:file",
+              "instance_id": "instance:file-source"
+            },
+            "basis": {
+              "kind": "fraction",
+              "weight": 7
+            },
+            "resizable": true,
+            "collapse_priority": null
+          },
+          {
+            "child": {
+              "kind": "container",
+              "node_id": "node:right",
+              "axis": "vertical",
+              "children": [
+                {
+                  "child": {
+                    "kind": "stack",
+                    "node_id": "node:consoles",
+                    "active_instance_id": "instance:console-a",
+                    "instances": [
+                      "instance:console-a",
+                      "instance:console-b"
+                    ]
+                  },
+                  "basis": {
+                    "kind": "minmax",
+                    "min_logical_pixels": 160,
+                    "max_logical_pixels": 1400,
+                    "weight": 3
+                  },
+                  "resizable": true,
+                  "collapse_priority": null
+                },
+                {
+                  "child": {
+                    "kind": "surface",
+                    "node_id": "node:status",
+                    "instance_id": "instance:status"
+                  },
+                  "basis": {
+                    "kind": "intrinsic"
+                  },
+                  "resizable": false,
+                  "collapse_priority": 1
+                }
+              ]
+            },
+            "basis": {
+              "kind": "fraction",
+              "weight": 3
+            },
+            "resizable": true,
+            "collapse_priority": null
+          }
+        ]
+      },
+      "focused_surface_instance_id": "instance:file-source",
+      "utility_tray": null
+    },
+    "unplaced_instance_ids": [
+      "instance:check",
+      "instance:file-preview",
+      "instance:playground-a",
+      "instance:playground-b"
+    ],
+    "can_undo": true,
+    "can_redo": false
   }
 }

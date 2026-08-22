@@ -44,9 +44,9 @@ pub(crate) struct SurfaceRuntimeState {
 }
 
 #[derive(Debug, Clone)]
-struct SurfaceTransition {
-    snapshot: SurfaceRuntimeSnapshotV1,
-    event: Option<SurfaceRuntimeEventV1>,
+pub(crate) struct SurfaceTransition {
+    pub(crate) snapshot: SurfaceRuntimeSnapshotV1,
+    pub(crate) event: Option<SurfaceRuntimeEventV1>,
 }
 
 fn snapshot_from_parts(
@@ -304,11 +304,15 @@ impl SurfaceRuntimeState {
         })
     }
 
-    fn open(&self, request: OpenSurfaceRequestV1) -> Result<SurfaceTransition> {
+    fn open(
+        &self,
+        request: OpenSurfaceRequestV1,
+        current_layout_revision: u64,
+    ) -> Result<SurfaceTransition> {
         request.validate()?;
         ensure!(
-            request.expected_layout_revision == 0,
-            "Studio layout revision is unavailable before Wave 4"
+            request.expected_layout_revision == current_layout_revision,
+            "Surface open request layout revision is stale"
         );
         let mut inner = self.inner();
         Self::ensure_project(
@@ -624,7 +628,7 @@ fn application_factories(state: &AppState) -> Result<Vec<SurfaceFactoryRegistrat
     Ok(resolution.factories().to_vec())
 }
 
-async fn reconcile_for_state(state: &AppState) -> Result<SurfaceTransition> {
+pub(crate) async fn reconcile_for_state(state: &AppState) -> Result<SurfaceTransition> {
     let kernel = crate::ui_runtime::snapshot_for_state(state).await?;
     state.surface_runtime.reconcile(
         kernel.project.project_id.clone(),
@@ -633,7 +637,7 @@ async fn reconcile_for_state(state: &AppState) -> Result<SurfaceTransition> {
     )
 }
 
-fn emit_transition(app: &AppHandle, transition: &SurfaceTransition) {
+pub(crate) fn emit_transition(app: &AppHandle, transition: &SurfaceTransition) {
     if let Some(event) = &transition.event {
         let _ = app.emit(SURFACE_RUNTIME_CHANGED_EVENT, event);
     }
@@ -647,6 +651,10 @@ pub(crate) async fn surface_list(
     let _project_transition = state.project_transition_gate.lock().await;
     let transition = reconcile_for_state(&state).await.map_err(display_error)?;
     emit_transition(&app, &transition);
+    let studio =
+        crate::studio_runtime::reconcile_with_surface_snapshot(&state, &transition.snapshot)
+            .map_err(display_error)?;
+    crate::studio_runtime::emit_transition(&app, &studio);
     Ok(transition.snapshot)
 }
 
@@ -659,8 +667,19 @@ pub(crate) async fn surface_open(
     let _project_transition = state.project_transition_gate.lock().await;
     let reconciled = reconcile_for_state(&state).await.map_err(display_error)?;
     emit_transition(&app, &reconciled);
-    let transition = state.surface_runtime.open(request).map_err(display_error)?;
+    let studio =
+        crate::studio_runtime::reconcile_with_surface_snapshot(&state, &reconciled.snapshot)
+            .map_err(display_error)?;
+    crate::studio_runtime::emit_transition(&app, &studio);
+    let transition = state
+        .surface_runtime
+        .open(request, studio.snapshot.scene.layout_revision)
+        .map_err(display_error)?;
     emit_transition(&app, &transition);
+    let studio =
+        crate::studio_runtime::reconcile_with_surface_snapshot(&state, &transition.snapshot)
+            .map_err(display_error)?;
+    crate::studio_runtime::emit_transition(&app, &studio);
     Ok(transition.snapshot)
 }
 
@@ -678,6 +697,10 @@ pub(crate) async fn surface_update(
         .update(request)
         .map_err(display_error)?;
     emit_transition(&app, &transition);
+    let studio =
+        crate::studio_runtime::reconcile_with_surface_snapshot(&state, &transition.snapshot)
+            .map_err(display_error)?;
+    crate::studio_runtime::emit_transition(&app, &studio);
     Ok(transition.snapshot)
 }
 
@@ -692,6 +715,10 @@ async fn mutate_target(
     emit_transition(&app, &reconciled);
     let transition = mutation(&state.surface_runtime, request).map_err(display_error)?;
     emit_transition(&app, &transition);
+    let studio =
+        crate::studio_runtime::reconcile_with_surface_snapshot(&state, &transition.snapshot)
+            .map_err(display_error)?;
+    crate::studio_runtime::emit_transition(&app, &studio);
     Ok(transition.snapshot)
 }
 
@@ -831,8 +858,8 @@ mod tests {
                 )],
             )
             .unwrap();
-        let first = runtime.open(open_request(&project_id)).unwrap().snapshot;
-        let second = runtime.open(open_request(&project_id)).unwrap().snapshot;
+        let first = runtime.open(open_request(&project_id), 0).unwrap().snapshot;
+        let second = runtime.open(open_request(&project_id), 0).unwrap().snapshot;
         assert_eq!(second.catalog.instances.len(), 2);
         assert_ne!(
             second.catalog.instances[0].instance_id,
@@ -845,7 +872,7 @@ mod tests {
 
         let mut reuse = open_request(&project_id);
         reuse.instance_disposition = SurfaceInstanceDispositionV1::ReuseExact;
-        let reused = runtime.open(reuse).unwrap().snapshot;
+        let reused = runtime.open(reuse, 0).unwrap().snapshot;
         assert_eq!(reused.snapshot_revision, second.snapshot_revision);
         assert_eq!(reused.catalog.instances.len(), 2);
 
@@ -882,8 +909,8 @@ mod tests {
                 )],
             )
             .unwrap();
-        runtime.open(open_request(&project_id)).unwrap();
-        assert!(runtime.open(open_request(&project_id)).is_err());
+        runtime.open(open_request(&project_id), 0).unwrap();
+        assert!(runtime.open(open_request(&project_id), 0).is_err());
 
         let scalable = SurfaceRuntimeState::default();
         scalable
@@ -898,9 +925,9 @@ mod tests {
             )
             .unwrap();
         for _ in 0..MAX_STANDARD_SURFACE_INSTANCES {
-            scalable.open(open_request(&project_id)).unwrap();
+            scalable.open(open_request(&project_id), 0).unwrap();
         }
-        assert!(scalable.open(open_request(&project_id)).is_err());
+        assert!(scalable.open(open_request(&project_id), 0).is_err());
     }
 
     #[test]
@@ -918,7 +945,7 @@ mod tests {
                 )],
             )
             .unwrap();
-        let opened = runtime.open(open_request(&project_id)).unwrap().snapshot;
+        let opened = runtime.open(open_request(&project_id), 0).unwrap().snapshot;
         let hidden = runtime
             .update(UpdateSurfaceRequestV1 {
                 target: target(&opened, 0),
@@ -962,7 +989,7 @@ mod tests {
             failed.catalog.instances[0].lifecycle_state,
             SurfaceLifecycleStateV1::Failed
         );
-        let reopened = runtime.open(open_request(&project_id)).unwrap().snapshot;
+        let reopened = runtime.open(open_request(&project_id), 0).unwrap().snapshot;
         assert_eq!(reopened.catalog.instances.len(), 2);
         assert!(
             reopened
@@ -995,8 +1022,8 @@ mod tests {
                 )],
             )
             .unwrap();
-        runtime.open(open_request(&project_id)).unwrap();
-        let opened = runtime.open(open_request(&project_id)).unwrap().snapshot;
+        runtime.open(open_request(&project_id), 0).unwrap();
+        let opened = runtime.open(open_request(&project_id), 0).unwrap().snapshot;
         let first_id = opened.catalog.instances[0].instance_id.clone();
         let second_before = opened.catalog.instances[1].clone();
         let updated = runtime
@@ -1055,7 +1082,7 @@ mod tests {
                 )],
             )
             .unwrap();
-        let opened = runtime.open(open_request(&project_id)).unwrap().snapshot;
+        let opened = runtime.open(open_request(&project_id), 0).unwrap().snapshot;
         let old = opened.catalog.instances[0].clone();
         let replaced = runtime
             .reconcile(
@@ -1092,7 +1119,7 @@ mod tests {
                 })
                 .is_err()
         );
-        let reopened = runtime.open(open_request(&project_id)).unwrap().snapshot;
+        let reopened = runtime.open(open_request(&project_id), 0).unwrap().snapshot;
         assert_eq!(reopened.catalog.instances.len(), 2);
         assert!(
             reopened
@@ -1120,7 +1147,7 @@ mod tests {
                 )],
             )
             .unwrap();
-        let a = runtime.open(open_request(&project_a)).unwrap().snapshot;
+        let a = runtime.open(open_request(&project_a), 0).unwrap().snapshot;
         let b = runtime
             .reconcile(
                 project_b.clone(),
