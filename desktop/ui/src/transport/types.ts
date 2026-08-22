@@ -510,6 +510,89 @@ export interface PluginSurfaceEventResult {
   readonly provenance: unknown | null;
 }
 
+export type CheckSeverity = "info" | "warning" | "error";
+export type CheckResultStatus = "clean" | "findings" | "incomplete" | "failed";
+
+export type CheckEvidence =
+  | {
+      readonly kind: "source_range";
+      readonly path: string;
+      readonly line: number;
+      readonly column: number | null;
+      readonly excerpt: string | null;
+    }
+  | { readonly kind: "project_file"; readonly path: string }
+  | { readonly kind: "run_ref"; readonly run_id: string }
+  | { readonly kind: "environment_ref"; readonly snapshot_id: string }
+  | { readonly kind: "note"; readonly text: string };
+
+export interface CheckFinding {
+  readonly rule_id: string;
+  readonly rule_version: number;
+  readonly origin: SurfaceOrigin;
+  readonly activation_generation: number;
+  readonly severity: CheckSeverity;
+  readonly category: string;
+  readonly title: string;
+  readonly summary: string;
+  readonly remediation: string;
+  readonly evidence: readonly CheckEvidence[];
+  readonly limitations: readonly string[];
+}
+
+export interface CheckProjectSnapshot {
+  readonly contract: "rho.ui.check-project.snapshot.v1";
+  readonly snapshot_id: string;
+  readonly project_id: string;
+  readonly project_revision: number;
+  readonly captured_at: string;
+  readonly files: readonly {
+    readonly path: string;
+    readonly size_bytes: number;
+    readonly content_sha256: string;
+    readonly skipped: boolean;
+    readonly skip_reason: string | null;
+  }[];
+  readonly source_bytes: number;
+  readonly renv_lock_sha256: string | null;
+  readonly truncated: boolean;
+  readonly limitations: readonly string[];
+}
+
+export interface CheckResult {
+  readonly contract: "rho.ui.check-result.v1";
+  readonly result_id: string;
+  readonly project_id: string;
+  readonly project_revision: number;
+  readonly snapshot: CheckProjectSnapshot;
+  readonly ruleset_digest: string;
+  readonly generated_at: string;
+  readonly status: CheckResultStatus;
+  readonly findings: readonly CheckFinding[];
+  readonly coverage: {
+    readonly files_scanned: number;
+    readonly files_skipped: number;
+    readonly core_rules: number;
+    readonly plugin_rule_packs: number;
+    readonly plugin_rule_failures: number;
+  };
+  readonly truncated: boolean;
+  readonly limitations: readonly string[];
+}
+
+export interface CheckRunRequest {
+  readonly project_id: string;
+  readonly expected_project_revision: number;
+}
+
+export interface CheckResultRequest extends CheckRunRequest {
+  readonly result_id: string;
+}
+
+export interface CheckRunResponse {
+  readonly result: CheckResult;
+}
+
 export type LayoutAxis = "horizontal" | "vertical";
 
 export type LayoutBasis =
@@ -770,6 +853,9 @@ export interface UiKernelTransport {
   loadPluginSurfaceDocument(request: PluginSurfaceDocumentRequest): Promise<PluginSurfaceDocumentView>;
   dispatchPluginSurfaceEvent(request: PluginSurfaceEventRequest): Promise<PluginSurfaceEventResult>;
   subscribePluginSurfacesInvalidated(listener: () => void): Unsubscribe;
+  runCheckProject(request: CheckRunRequest): Promise<CheckRunResponse>;
+  loadCheckResult(request: CheckResultRequest): Promise<CheckResult>;
+  subscribeCheckResultsInvalidated(listener: () => void): Unsubscribe;
   loadStudio(): Promise<StudioRuntimeSnapshot>;
   applyStudio(request: SceneEditRequest): Promise<StudioRuntimeSnapshot>;
   undoStudio(request: StudioRevisionRequest): Promise<StudioRuntimeSnapshot>;

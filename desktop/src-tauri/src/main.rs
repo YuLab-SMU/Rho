@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod agent_llm;
+mod check_runtime;
 mod commands;
 mod git;
 mod git_review;
@@ -352,6 +353,7 @@ struct AppState {
     render_tasks: Arc<Mutex<HashMap<String, tauri::async_runtime::JoinHandle<()>>>>,
     surface_runtime: surface_runtime::SurfaceRuntimeState,
     plugin_surface_runtime: plugin_surface_runtime::PluginSurfaceRuntimeState,
+    check_runtime: check_runtime::CheckRuntimeState,
     studio_runtime: studio_runtime::StudioRuntimeState,
     runtime_registry: runtime_registry::RuntimeRegistryState,
     resource_registry: resource_registry::ResourceRegistryState,
@@ -6591,6 +6593,11 @@ fn console_surface_capability_id() -> CapabilityId {
     CapabilityId::new("ui.surface.console").expect("built-in Console capability must be valid")
 }
 
+fn check_result_surface_capability_id() -> CapabilityId {
+    CapabilityId::new("ui.surface.check-result")
+        .expect("built-in Check result capability must be valid")
+}
+
 fn ark_runtime_provider_capability_id() -> CapabilityId {
     CapabilityId::new("runtime.provider.ark-r")
         .expect("built-in Ark Runtime Provider capability must be valid")
@@ -6617,6 +6624,7 @@ impl SurfacePlaygroundPlugin {
         descriptor.provides = vec![
             CapabilityDeclaration::new(surface_playground_capability_id(), 1),
             CapabilityDeclaration::new(console_surface_capability_id(), 1),
+            CapabilityDeclaration::new(check_result_surface_capability_id(), 1),
             CapabilityDeclaration::new(ark_runtime_provider_capability_id(), 1),
             CapabilityDeclaration::new(project_file_resource_provider_capability_id(), 1),
         ];
@@ -6736,6 +6744,49 @@ impl InternalPlugin for SurfacePlaygroundPlugin {
                 )
                 .map_err(|error| {
                     ActivationError::new("console_surface_registration", error.to_string())
+                })?;
+            context
+                .effects
+                .register_application_surface(
+                    context.registry,
+                    rho_ui_contract::SurfaceDefinitionV1 {
+                        surface_id: rho_ui_contract::SurfaceId::new("rho.check-result")
+                            .expect("built-in Check result Surface ID must be valid"),
+                        contract_major: rho_ui_contract::RSR_CONTRACT_MAJOR,
+                        label: "Check result".to_string(),
+                        purpose: "Review one immutable typed Check project result independently."
+                            .to_string(),
+                        renderer_kind: rho_ui_contract::SurfaceRendererKindV1::TrustedHost,
+                        scope: rho_ui_contract::SurfaceScopeV1::Project,
+                        instance_policy: rho_ui_contract::SurfaceInstancePolicyV1::MultiInstance,
+                        instance_quota_class:
+                            rho_ui_contract::SurfaceInstanceQuotaClassV1::Standard,
+                        resource_kinds: vec![],
+                        modes: vec![],
+                        sizing_hints: rho_ui_contract::SurfaceSizingHintsV1 {
+                            min_inline: 240,
+                            min_block: 140,
+                            ideal_inline: Some(620),
+                            ideal_block: Some(520),
+                            max_inline: None,
+                            max_block: None,
+                            stretch_inline: true,
+                            stretch_block: true,
+                            presentation_classes: vec![
+                                rho_ui_contract::SurfacePresentationClassV1::Full,
+                                rho_ui_contract::SurfacePresentationClassV1::Compact,
+                            ],
+                        },
+                        accepted_contexts: vec!["project".to_string(), "vibe".to_string()],
+                        commands: vec![],
+                        origin: rho_ui_contract::SurfaceOriginV1::Application {
+                            component_id: rho_ui_contract::ApplicationComponentId::new("rho.check")
+                                .expect("built-in Check component ID must be valid"),
+                        },
+                    },
+                )
+                .map_err(|error| {
+                    ActivationError::new("check_result_surface_registration", error.to_string())
                 })?;
             context
                 .effects
@@ -10580,6 +10631,7 @@ mod tests {
             surface_runtime: crate::surface_runtime::SurfaceRuntimeState::default(),
             plugin_surface_runtime:
                 crate::plugin_surface_runtime::PluginSurfaceRuntimeState::default(),
+            check_runtime: crate::check_runtime::CheckRuntimeState::default(),
             studio_runtime: crate::studio_runtime::StudioRuntimeState::default(),
             runtime_registry: crate::runtime_registry::RuntimeRegistryState::default(),
             resource_registry: crate::resource_registry::ResourceRegistryState::default(),
@@ -12894,7 +12946,7 @@ mod tests {
                 .registry()
                 .resolve_application_surfaces()
                 .unwrap();
-            assert_eq!(surfaces.factories().len(), 4);
+            assert_eq!(surfaces.factories().len(), 5);
             assert_eq!(
                 surfaces
                     .factories()
@@ -12903,6 +12955,7 @@ mod tests {
                     .collect::<std::collections::BTreeSet<_>>(),
                 std::collections::BTreeSet::from([
                     "rho.console",
+                    "rho.check-result",
                     "rho.file-preview",
                     "rho.file-source",
                     "rho.surface-playground",
@@ -13045,7 +13098,7 @@ mod tests {
                     .unwrap()
                     .factories()
                     .len(),
-                4
+                5
             );
             assert_eq!(
                 candidate
@@ -16758,6 +16811,7 @@ fn main() {
                 surface_runtime: surface_runtime::SurfaceRuntimeState::default(),
                 plugin_surface_runtime: plugin_surface_runtime::PluginSurfaceRuntimeState::default(
                 ),
+                check_runtime: check_runtime::CheckRuntimeState::default(),
                 studio_runtime: studio_runtime::StudioRuntimeState::default(),
                 runtime_registry: runtime_registry::RuntimeRegistryState::default(),
                 resource_registry: resource_registry::ResourceRegistryState::default(),
@@ -16796,6 +16850,8 @@ fn main() {
             surface_runtime::surface_resume,
             plugin_surface_runtime::plugin_surface_document,
             plugin_surface_runtime::plugin_surface_event,
+            check_runtime::check_project_run,
+            check_runtime::check_result,
             studio_runtime::studio_scene,
             studio_runtime::studio_apply,
             studio_runtime::studio_undo,

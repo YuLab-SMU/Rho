@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-const EXPECTED_HANDLER_DIGEST = "148e4cf12bc0ba7e8d258e15e60a2f634ad2a7bdad0a35565751298d62f8c26f";
+const EXPECTED_HANDLER_DIGEST = "7bcf55aaf5288d9dabce6282b29532cf35e3daafead633f809ac1ba0bc9946c4";
 
 const RUN_COMMANDS = [
   "audit_reproducibility",

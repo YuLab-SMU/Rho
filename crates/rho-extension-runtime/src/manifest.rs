@@ -210,13 +210,15 @@ impl WorkspacePluginManifest {
             });
         }
         if self.schema_version < MANIFEST_SCHEMA_VERSION
-            && self
-                .contributions
-                .iter()
-                .any(|contribution| contribution.kind == crate::ContributionKind::Surface)
+            && self.contributions.iter().any(|contribution| {
+                matches!(
+                    contribution.kind,
+                    crate::ContributionKind::Surface | crate::ContributionKind::CheckRule
+                )
+            })
         {
             return Err(ExtensionError::ManifestValidation {
-                reason: "ui.surface contributions require Manifest V3".to_string(),
+                reason: "ui.surface and check.rule contributions require Manifest V3".to_string(),
             });
         }
 
@@ -751,6 +753,30 @@ mod tests {
         })
     }
 
+    fn minimal_manifest_v3_check_rule() -> serde_json::Value {
+        let object_schema = serde_json::json!({"type": "object", "properties": {}});
+        serde_json::json!({
+            "schemaVersion": 3,
+            "id": "org.example.check",
+            "name": "Check fixture",
+            "version": "1.0.0",
+            "apiVersion": "^1.0",
+            "runtime": { "kind": "wasm", "entry": "dist/plugin.wasm", "scope": "project" },
+            "provides": [
+                { "capability": "check.rule.metadata", "contract_major": 1 }
+            ],
+            "contributions": [{
+                "id": "check.rule.metadata",
+                "kind": "check_rule",
+                "contractMajor": 1,
+                "label": "Metadata check",
+                "purpose": "Review immutable project descriptors",
+                "inputSchema": object_schema,
+                "outputSchema": object_schema
+            }]
+        })
+    }
+
     fn parse_json(value: &serde_json::Value) -> Result<WorkspacePluginManifest, ExtensionError> {
         WorkspacePluginManifest::parse(&serde_json::to_vec(value).unwrap())
     }
@@ -796,6 +822,22 @@ mod tests {
         let mut unknown = minimal_manifest_v3_surface();
         unknown["contributions"][0]["surface"]["rawHtml"] = serde_json::json!(true);
         assert!(parse_json(&unknown).is_err());
+    }
+
+    #[test]
+    fn manifest_v3_adds_check_rules_without_granting_v2_a_new_lane() {
+        let v3 = parse_json(&minimal_manifest_v3_check_rule()).unwrap();
+        assert_eq!(v3.contributions[0].kind, crate::ContributionKind::CheckRule);
+        assert_eq!(v3.contributions[0].id.as_str(), "check.rule.metadata");
+
+        let mut v2 = minimal_manifest_v3_check_rule();
+        v2["schemaVersion"] = serde_json::json!(2);
+        assert!(parse_json(&v2).is_err());
+
+        let mut smuggled_surface = minimal_manifest_v3_check_rule();
+        smuggled_surface["contributions"][0]["surface"] =
+            serde_json::json!({"instancePolicy": "multi_instance"});
+        assert!(parse_json(&smuggled_surface).is_err());
     }
 
     #[test]

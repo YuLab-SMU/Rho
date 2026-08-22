@@ -438,7 +438,7 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
             None,
         ),
         instance("instance:status", "rho.status", None, None, None),
-        instance("instance:check", "rho.check", None, None, None),
+        instance("instance:check", "rho.check-result", None, None, None),
     ];
     let scene = SceneStateV1 {
         scene_id: SceneId::new("scene:rho-studio").unwrap(),
@@ -671,7 +671,7 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
             ),
             definition("rho.console", "Console", &[], false),
             definition("rho.status", "Runtime status", &[], true),
-            definition("rho.check", "Check project", &[], false),
+            definition("rho.check-result", "Check result", &[], false),
             definition(
                 "rho.surface-playground",
                 "Surface Playground",
@@ -742,7 +742,7 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
                     ),
                     definition("rho.console", "Console", &[], false),
                     definition("rho.status", "Runtime status", &[], true),
-                    definition("rho.check", "Check project", &[], false),
+                    definition("rho.check-result", "Check result", &[], false),
                     definition(
                         "rho.surface-playground",
                         "Surface Playground",

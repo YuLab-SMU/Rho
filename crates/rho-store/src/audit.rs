@@ -129,13 +129,25 @@ pub struct AuditCoverage {
     pub snapshot_available: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct SourceFile {
     pub path: String,
     pub content: String,
     pub skipped: bool,
     pub skip_reason: Option<String>,
+}
+
+/// Process-local immutable input for the current-project rule set. The Check
+/// runtime projects only digest/size descriptors to UI and plugin rule packs;
+/// raw source bytes remain in this value until core rule execution completes.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CurrentProjectAuditSnapshot {
+    pub project_root: String,
+    pub captured_at: String,
+    pub source_files: Vec<SourceFile>,
+    pub renv_lock_present: bool,
+    pub renv_lock_content: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -189,6 +201,7 @@ pub fn scan_source_files(project_root: &str, limits: &AuditLimits) -> Vec<Source
     let mut paths = Vec::new();
 
     collect_source_paths(Path::new(project_root), &mut paths);
+    paths.sort();
 
     for path in &paths {
         if files.len() >= limits.max_source_files {
@@ -241,6 +254,24 @@ pub fn scan_source_files(project_root: &str, limits: &AuditLimits) -> Vec<Source
     }
 
     files
+}
+
+pub fn capture_current_project_audit_snapshot(
+    project_root: &str,
+    limits: &AuditLimits,
+) -> CurrentProjectAuditSnapshot {
+    let lock_path = Path::new(project_root).join("renv.lock");
+    let renv_lock_present = lock_path.is_file();
+    let renv_lock_content = fs::read_to_string(&lock_path)
+        .ok()
+        .filter(|content| content.len() <= limits.max_file_bytes);
+    CurrentProjectAuditSnapshot {
+        project_root: project_root.to_string(),
+        captured_at: Utc::now().to_rfc3339(),
+        source_files: scan_source_files(project_root, limits),
+        renv_lock_present,
+        renv_lock_content,
+    }
 }
 
 fn collect_source_paths(dir: &Path, paths: &mut Vec<PathBuf>) {
@@ -307,7 +338,11 @@ struct PkgInfo {
 fn parse_lockfile_packages(project_root: &str) -> Option<Vec<PkgInfo>> {
     let lock_path = Path::new(project_root).join("renv.lock");
     let content = fs::read_to_string(lock_path).ok()?;
-    let json: serde_json::Value = serde_json::from_str(&content).ok()?;
+    parse_lockfile_packages_content(&content)
+}
+
+fn parse_lockfile_packages_content(content: &str) -> Option<Vec<PkgInfo>> {
+    let json: serde_json::Value = serde_json::from_str(content).ok()?;
     let packages = json.get("Packages")?.as_object()?;
     let mut result = Vec::with_capacity(packages.len());
     for (name, pkg) in packages {
@@ -540,6 +575,7 @@ impl Store {
             &artifacts,
             project_root,
             &reference_snapshot,
+            Path::new(project_root).join("renv.lock").is_file(),
             limits,
             &mut findings,
             &mut truncation_reasons,
@@ -658,6 +694,138 @@ impl Store {
     }
 }
 
+/// Run the accepted current-project core rules against bytes captured before
+/// execution. No filesystem or Store read occurs after this function starts.
+pub fn audit_current_project_snapshot(
+    snapshot: &CurrentProjectAuditSnapshot,
+    limits: &AuditLimits,
+) -> AuditResponse {
+    let mut findings = Vec::new();
+    let mut truncation_reasons = Vec::new();
+    let mut truncated = false;
+    let runs: Vec<crate::run::RunSummary> = Vec::new();
+    let artifacts: Vec<crate::artifact::ArtifactRecordSummary> = Vec::new();
+    let reference_snapshot = None;
+    let lockfile_packages = snapshot
+        .renv_lock_content
+        .as_deref()
+        .and_then(parse_lockfile_packages_content);
+
+    check_evidence(
+        &runs,
+        &artifacts,
+        &snapshot.project_root,
+        &reference_snapshot,
+        snapshot.renv_lock_present,
+        limits,
+        &mut findings,
+        &mut truncation_reasons,
+        &mut truncated,
+    );
+    check_portability(
+        &snapshot.source_files,
+        limits,
+        &mut findings,
+        &mut truncation_reasons,
+        &mut truncated,
+    );
+    check_randomness(
+        &snapshot.source_files,
+        limits,
+        &mut findings,
+        &mut truncation_reasons,
+        &mut truncated,
+    );
+    check_packages(
+        &snapshot.source_files,
+        &None,
+        &lockfile_packages,
+        limits,
+        &mut findings,
+        &mut truncation_reasons,
+        &mut truncated,
+    );
+    check_runs(
+        &runs,
+        &artifacts,
+        limits,
+        &mut findings,
+        &mut truncation_reasons,
+        &mut truncated,
+    );
+
+    let mut info = 0usize;
+    let mut warning = 0usize;
+    let mut error = 0usize;
+    let mut by_category = HashMap::new();
+    for finding in &findings {
+        match finding.severity {
+            AuditSeverity::Info => info += 1,
+            AuditSeverity::Warning => warning += 1,
+            AuditSeverity::Error => error += 1,
+        }
+        *by_category.entry(finding.category.clone()).or_insert(0) += 1;
+    }
+    let files_scanned = snapshot
+        .source_files
+        .iter()
+        .filter(|file| !file.skipped)
+        .count();
+    let files_skipped = snapshot.source_files.len().saturating_sub(files_scanned);
+    let mut skipped_reasons = snapshot
+        .source_files
+        .iter()
+        .filter_map(|file| file.skip_reason.clone())
+        .collect::<Vec<_>>();
+    skipped_reasons.sort();
+    skipped_reasons.dedup();
+    let status = if truncation_reasons
+        .iter()
+        .any(|reason| reason.starts_with("error."))
+    {
+        AuditStatus::Error
+    } else if findings.is_empty() && !truncated {
+        AuditStatus::Complete
+    } else if error > 0 {
+        AuditStatus::Findings
+    } else if truncated {
+        AuditStatus::Incomplete
+    } else {
+        AuditStatus::Findings
+    };
+    findings.sort_by(|left, right| left.rule_id.cmp(&right.rule_id));
+    AuditResponse {
+        schema_version: SCHEMA_VERSION,
+        rule_profile: RULE_PROFILE.to_string(),
+        rule_profile_version: RULE_PROFILE_VERSION,
+        project_root: snapshot.project_root.clone(),
+        scope: "project_current".to_string(),
+        generated_at: snapshot.captured_at.clone(),
+        reference_snapshot_id: None,
+        status,
+        summary: AuditSummary {
+            total_findings: findings.len(),
+            info,
+            warning,
+            error,
+            by_category,
+            files_scanned,
+            runs_checked: 0,
+        },
+        coverage: AuditCoverage {
+            files_scanned,
+            files_skipped,
+            skipped_reasons,
+            runs_considered: 0,
+            artifacts_considered: 0,
+            snapshot_available: false,
+        },
+        findings,
+        truncated,
+        truncation_reasons,
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Rule-group helpers
 // ---------------------------------------------------------------------------
@@ -686,6 +854,7 @@ fn check_evidence(
     artifacts: &[crate::artifact::ArtifactRecordSummary],
     project_root: &str,
     reference_snapshot: &Option<crate::environment::EnvironmentSnapshotRecord>,
+    lockfile_present: bool,
     limits: &AuditLimits,
     findings: &mut Vec<AuditFinding>,
     truncation_reasons: &mut Vec<String>,
@@ -908,8 +1077,7 @@ fn check_evidence(
     }
 
     // evidence.env.lockfile_missing
-    let lock_path = Path::new(project_root).join("renv.lock");
-    if !lock_path.exists() {
+    if !lockfile_present {
         push_finding(
             findings,
             limits,
@@ -2569,5 +2737,52 @@ mod tests {
         assert!(!paths.contains(&"report.html"));
         assert!(!paths.contains(&"report.css"));
         assert!(!paths.contains(&"report.js"));
+    }
+
+    #[test]
+    fn captured_current_project_rules_never_reread_changed_disk_state() {
+        let dir = TempDir::new().unwrap();
+        let project_root = dir.path().to_str().unwrap();
+        std::fs::write(dir.path().join("analysis.R"), "setwd('/tmp/input')\n").unwrap();
+        std::fs::write(dir.path().join("renv.lock"), r#"{"Packages":{}}"#).unwrap();
+        let captured =
+            capture_current_project_audit_snapshot(project_root, &AuditLimits::default());
+
+        std::fs::write(dir.path().join("analysis.R"), "x <- 1\n").unwrap();
+        std::fs::remove_file(dir.path().join("renv.lock")).unwrap();
+        let first = audit_current_project_snapshot(&captured, &AuditLimits::default());
+        let second = audit_current_project_snapshot(&captured, &AuditLimits::default());
+
+        assert_eq!(
+            serde_json::to_value(&first).unwrap(),
+            serde_json::to_value(&second).unwrap()
+        );
+        assert!(
+            first
+                .findings
+                .iter()
+                .any(|finding| { finding.rule_id == "rho.repro.v1.portability.setwd.literal" })
+        );
+        assert!(
+            !first
+                .findings
+                .iter()
+                .any(|finding| { finding.rule_id == "rho.repro.v1.evidence.env.lockfile_missing" })
+        );
+
+        let live = capture_current_project_audit_snapshot(project_root, &AuditLimits::default());
+        let live_result = audit_current_project_snapshot(&live, &AuditLimits::default());
+        assert!(
+            !live_result
+                .findings
+                .iter()
+                .any(|finding| { finding.rule_id == "rho.repro.v1.portability.setwd.literal" })
+        );
+        assert!(
+            live_result
+                .findings
+                .iter()
+                .any(|finding| { finding.rule_id == "rho.repro.v1.evidence.env.lockfile_missing" })
+        );
     }
 }

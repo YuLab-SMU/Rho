@@ -6,6 +6,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod check;
 pub mod command;
 pub mod context;
 pub mod fixture;
@@ -18,6 +19,7 @@ pub mod surface;
 pub mod validation;
 pub mod vibe;
 
+pub use check::*;
 pub use command::*;
 pub use context::*;
 pub use fixture::*;

@@ -358,6 +358,14 @@ pub(crate) struct WorkspaceSurfaceInvocationRoute {
     pub host_instance_id: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WorkspaceCheckRuleRegistration {
+    pub contribution_id: String,
+    pub plugin_id: String,
+    pub package_digest: String,
+    pub activation_generation: u64,
+}
+
 pub(crate) struct WorkspaceDispatchResult {
     pub response: serde_json::Value,
     pub current_workspace: rho_protocol::WorkspaceIdentity,
@@ -951,7 +959,8 @@ impl PendingPluginPermissionRegistry {
                 ContributionKind::Command
                 | ContributionKind::Viewer
                 | ContributionKind::Panel
-                | ContributionKind::Surface => {}
+                | ContributionKind::Surface
+                | ContributionKind::CheckRule => {}
             }
         }
         Ok(WorkspacePluginAgentProjection {
@@ -1085,6 +1094,64 @@ impl PendingPluginPermissionRegistry {
             context,
             contribution_id,
             ContributionInvocationOrigin::TrustedSurface,
+            input,
+            store,
+        )
+    }
+
+    pub(crate) fn check_rule_registrations(
+        &self,
+        context: &PluginRuntimeContext,
+    ) -> Vec<WorkspaceCheckRuleRegistration> {
+        let state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut registrations = Vec::new();
+        for record in state.contributions.list(&context.project_scope_id) {
+            if record.contribution.kind != ContributionKind::CheckRule {
+                continue;
+            }
+            let key = registry_key(&context.project_root, record.plugin_id.as_str());
+            let Some(active) = state.active.get(&key) else {
+                continue;
+            };
+            let exact_ready = active.host.state() == HostInstanceState::Active
+                && active.host.identity().project_id() == &record.project_id
+                && active.host.identity().plugin_id() == &record.plugin_id
+                && active.host.identity().package_digest() == &record.package_digest
+                && active.host.identity().activation_generation() == record.activation_generation
+                && active.host.identity().host_instance_id() == &record.host_instance_id
+                && (active.permission_count == 0
+                    || active.handles.len() == active.permission_count);
+            if exact_ready {
+                registrations.push(WorkspaceCheckRuleRegistration {
+                    contribution_id: record.contribution.capability.to_string(),
+                    plugin_id: record.plugin_id.to_string(),
+                    package_digest: record.package_digest.to_string(),
+                    activation_generation: record.activation_generation.get(),
+                });
+            }
+        }
+        registrations.sort_by(|left, right| {
+            left.plugin_id
+                .cmp(&right.plugin_id)
+                .then_with(|| left.contribution_id.cmp(&right.contribution_id))
+        });
+        registrations
+    }
+
+    pub(crate) fn invoke_check_rule(
+        &self,
+        context: &PluginRuntimeContext,
+        contribution_id: &str,
+        input: serde_json::Value,
+        store: &mut Store,
+    ) -> Result<serde_json::Value> {
+        self.invoke_file_contribution(
+            context,
+            contribution_id,
+            ContributionInvocationOrigin::TrustedCheckRule,
             input,
             store,
         )
@@ -4154,16 +4221,20 @@ impl PendingPluginPermissionRegistry {
         let active = active
             .get_mut(&key)
             .context("contribution host is not active for the current project")?;
-        let handles = active
-            .handles
-            .values()
-            .map(|handle| {
-                (
-                    handle.permission.as_static_str().to_string(),
-                    handle.id.clone(),
-                )
-            })
-            .collect();
+        let handles = if origin == ContributionInvocationOrigin::TrustedCheckRule {
+            BTreeMap::new()
+        } else {
+            active
+                .handles
+                .values()
+                .map(|handle| {
+                    (
+                        handle.permission.as_static_str().to_string(),
+                        handle.id.clone(),
+                    )
+                })
+                .collect()
+        };
         ContributionCallSession::begin(
             contributions,
             ContributionCallRequest {
@@ -4361,6 +4432,9 @@ impl PendingPluginPermissionRegistry {
                     ) | (
                         ContributionInvocationOrigin::TrustedSurface,
                         ContributionKind::Surface
+                    ) | (
+                        ContributionInvocationOrigin::TrustedCheckRule,
+                        ContributionKind::CheckRule
                     )
                 ),
                 "contribution kind does not match its trusted invocation origin"
@@ -5962,6 +6036,7 @@ fn contribution_kind_name(kind: ContributionKind) -> &'static str {
         ContributionKind::Skill => "skill",
         ContributionKind::Panel => "panel",
         ContributionKind::Surface => "surface",
+        ContributionKind::CheckRule => "check_rule",
     }
 }
 
@@ -8091,6 +8166,68 @@ mod tests {
             serde_json::to_vec(&manifest).unwrap(),
         )
         .unwrap();
+    }
+
+    fn write_check_rule_fixture_plugin(project: &Path, requests_broker: bool) {
+        let permissions = if requests_broker {
+            serde_json::json!([{
+                "name": "project.fs.read",
+                "paths": ["data/**/*.csv"],
+                "maxBytes": 1024
+            }])
+        } else {
+            serde_json::json!([])
+        };
+        write_plugin(project, permissions);
+        if requests_broker {
+            install_file_broker_module(project);
+        } else {
+            install_immediate_contribution_module(
+                project,
+                serde_json::json!({
+                    "contract": rho_ui_contract::CHECK_RULE_PACK_OUTPUT_CONTRACT,
+                    "findings": [],
+                    "limitations": []
+                }),
+            );
+        }
+        let manifest_path = project.join(".rho/plugins/example/rho-plugin.json");
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+        manifest["schemaVersion"] = serde_json::json!(3);
+        manifest["provides"] = serde_json::json!([{
+            "capability": "check.rule.fixture",
+            "contract_major": 1
+        }]);
+        manifest["contributions"] = serde_json::json!([{
+            "id": "check.rule.fixture",
+            "kind": "check_rule",
+            "contractMajor": 1,
+            "label": "Fixture checks",
+            "purpose": "Review an immutable descriptor snapshot",
+            "inputSchema": {"type": "object", "properties": {}},
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "contract": {
+                        "type": "string",
+                        "enum": [rho_ui_contract::CHECK_RULE_PACK_OUTPUT_CONTRACT]
+                    },
+                    "findings": {
+                        "type": "array",
+                        "maxItems": 128,
+                        "items": {"type": "object", "properties": {}}
+                    },
+                    "limitations": {
+                        "type": "array",
+                        "maxItems": 64,
+                        "items": {"type": "string", "maxLength": 2048}
+                    }
+                },
+                "required": ["contract", "findings", "limitations"]
+            }
+        }]);
+        fs::write(manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
     }
 
     fn context(project: &Path) -> PluginRuntimeContext {
@@ -12259,6 +12396,93 @@ mod tests {
                     &mut store,
                 )
                 .is_err()
+        );
+    }
+
+    #[test]
+    fn manifest_v3_check_rule_lifecycle_is_exact_and_never_receives_broker_handles() {
+        let directory = tempdir().unwrap();
+        write_check_rule_fixture_plugin(directory.path(), false);
+        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let registry = deterministic_registry();
+        let plugin_context = context(directory.path());
+        registry
+            .request_enable(&plugin_context, "org.example.plugin", &mut store)
+            .unwrap();
+
+        let registrations = registry.check_rule_registrations(&plugin_context);
+        assert_eq!(registrations.len(), 1);
+        assert_eq!(registrations[0].contribution_id, "check.rule.fixture");
+        assert_eq!(registrations[0].plugin_id, "org.example.plugin");
+        let terminal = registry
+            .invoke_check_rule(
+                &plugin_context,
+                "check.rule.fixture",
+                serde_json::json!({}),
+                &mut store,
+            )
+            .unwrap();
+        let output = terminal["result"].clone();
+        let parsed = rho_ui_contract::CheckRulePackOutputV1::parse(output).unwrap();
+        assert!(parsed.findings.is_empty());
+        assert!(
+            registry
+                .invoke_file_contribution(
+                    &plugin_context,
+                    "check.rule.fixture",
+                    ContributionInvocationOrigin::TrustedSurface,
+                    serde_json::json!({}),
+                    &mut store,
+                )
+                .is_err()
+        );
+        registry
+            .disable(&plugin_context, "org.example.plugin", &mut store)
+            .unwrap();
+        assert!(
+            registry
+                .check_rule_registrations(&plugin_context)
+                .is_empty()
+        );
+
+        let broker_directory = tempdir().unwrap();
+        write_check_rule_fixture_plugin(broker_directory.path(), true);
+        fs::create_dir_all(broker_directory.path().join("data")).unwrap();
+        fs::write(broker_directory.path().join("data/input.csv"), b"a,b\n").unwrap();
+        let mut broker_store = Store::open(broker_directory.path().join("rho.sqlite")).unwrap();
+        let broker_registry = deterministic_registry();
+        let broker_context = context(broker_directory.path());
+        let requested = broker_registry
+            .request_enable(&broker_context, "org.example.plugin", &mut broker_store)
+            .unwrap();
+        broker_registry
+            .respond(
+                &broker_context,
+                PluginPermissionDecisionInput {
+                    request_id: requested.request_ids[0].clone(),
+                    decision: "allow_project".to_string(),
+                    expected_project_revision: broker_context.project_revision,
+                },
+                &mut broker_store,
+            )
+            .unwrap();
+        assert_eq!(
+            broker_registry
+                .check_rule_registrations(&broker_context)
+                .len(),
+            1
+        );
+        let error = broker_registry
+            .invoke_check_rule(
+                &broker_context,
+                "check.rule.fixture",
+                serde_json::json!({}),
+                &mut broker_store,
+            )
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("handle not supplied"),
+            "unexpected Check lane error: {error:#}"
         );
     }
 

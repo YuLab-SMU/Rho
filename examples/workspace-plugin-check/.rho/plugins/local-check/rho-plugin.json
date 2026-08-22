@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 3,
+  "id": "org.yulab.rho.local-check",
+  "name": "Local Check rules",
+  "version": "0.1.0",
+  "apiVersion": "^1.0",
+  "runtime": {
+    "kind": "wasm",
+    "entry": "dist/plugin.wasm",
+    "scope": "project"
+  },
+  "provides": [
+    {
+      "capability": "check.rule.local.structure",
+      "contract_major": 1
+    }
+  ],
+  "permissions": [],
+  "contributions": [
+    {
+      "id": "check.rule.local.structure",
+      "kind": "check_rule",
+      "contractMajor": 1,
+      "label": "Local structure rules",
+      "purpose": "Review an immutable project descriptor without source bytes",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "operation": { "type": "string", "enum": ["check"] },
+          "snapshot": {
+            "type": "object",
+            "properties": {
+              "contract": { "type": "string", "enum": ["rho.ui.check-project.snapshot.v1"] },
+              "snapshot_id": { "type": "string", "maxLength": 128 },
+              "project_id": { "type": "string", "maxLength": 128 },
+              "project_revision": { "type": "integer", "minimum": 1 },
+              "captured_at": { "type": "string", "maxLength": 128 },
+              "files": {
+                "type": "array",
+                "maxItems": 2000,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": { "type": "string", "maxLength": 2048 },
+                    "size_bytes": { "type": "integer", "minimum": 0 },
+                    "content_sha256": { "type": "string", "minLength": 64, "maxLength": 64 },
+                    "skipped": { "type": "boolean" },
+                    "skip_reason": { "type": "string", "maxLength": 128 }
+                  },
+                  "required": ["path", "size_bytes", "content_sha256", "skipped"]
+                }
+              },
+              "source_bytes": { "type": "integer", "minimum": 0 },
+              "renv_lock_sha256": { "type": "string", "minLength": 64, "maxLength": 64 },
+              "truncated": { "type": "boolean" },
+              "limitations": {
+                "type": "array",
+                "maxItems": 64,
+                "items": { "type": "string", "maxLength": 2048 }
+              }
+            },
+            "required": [
+              "contract", "snapshot_id", "project_id", "project_revision",
+              "captured_at", "files", "source_bytes", "truncated", "limitations"
+            ]
+          }
+        },
+        "required": ["operation", "snapshot"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "contract": { "type": "string", "enum": ["rho.ui.check-rule-pack.output.v1"] },
+          "findings": {
+            "type": "array",
+            "maxItems": 128,
+            "items": {
+              "type": "object",
+              "properties": {
+                "rule_id": { "type": "string", "maxLength": 128 },
+                "rule_version": { "type": "integer", "minimum": 1 },
+                "severity": { "type": "string", "enum": ["info", "warning", "error"] },
+                "category": { "type": "string", "maxLength": 128 },
+                "title": { "type": "string", "maxLength": 128 },
+                "summary": { "type": "string", "maxLength": 2048 },
+                "remediation": { "type": "string", "maxLength": 2048 },
+                "evidence": {
+                  "type": "array",
+                  "maxItems": 128,
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "kind": { "type": "string", "enum": ["note"] },
+                      "text": { "type": "string", "maxLength": 2048 }
+                    },
+                    "required": ["kind", "text"]
+                  }
+                },
+                "limitations": {
+                  "type": "array",
+                  "maxItems": 64,
+                  "items": { "type": "string", "maxLength": 2048 }
+                }
+              },
+              "required": [
+                "rule_id", "rule_version", "severity", "category", "title",
+                "summary", "remediation", "evidence", "limitations"
+              ]
+            }
+          },
+          "limitations": {
+            "type": "array",
+            "maxItems": 64,
+            "items": { "type": "string", "maxLength": 2048 }
+          }
+        },
+        "required": ["contract", "findings", "limitations"]
+      }
+    }
+  ]
+}

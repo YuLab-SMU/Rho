@@ -186,10 +186,10 @@
       }
     },
     {
-      "surface_id": "rho.check",
+      "surface_id": "rho.check-result",
       "contract_major": 1,
-      "label": "Check project",
-      "purpose": "Render the Check project capability as an independent Rho Surface.",
+      "label": "Check result",
+      "purpose": "Render the Check result capability as an independent Rho Surface.",
       "renderer_kind": "trusted_host",
       "scope": "project",
       "instance_policy": "multi_instance",
@@ -216,7 +216,7 @@
       "commands": [],
       "origin": {
         "kind": "application",
-        "component_id": "rho.check"
+        "component_id": "rho.check-result"
       }
     },
     {
@@ -558,11 +558,11 @@
     },
     {
       "instance_id": "instance:check",
-      "surface_id": "rho.check",
+      "surface_id": "rho.check-result",
       "project_id": "project:fixture",
       "origin": {
         "kind": "application",
-        "component_id": "rho.check"
+        "component_id": "rho.check-result"
       },
       "activation_generation": 1,
       "surface_revision": 1,
@@ -793,6 +793,32 @@
           "availability": {
             "state": "unavailable",
             "reason": "The Agent runtime is not ready."
+          }
+        },
+        {
+          "definition": {
+            "command_id": "rho.check.run",
+            "label": "Check project",
+            "purpose": "Review the current saved project snapshot for bounded reproducibility risks.",
+            "input_schema": {
+              "properties": {},
+              "type": "object"
+            },
+            "consequence": "Captures an immutable read-only project snapshot and opens a typed Check result.",
+            "availability_predicate_id": "rho.predicate.project-ready",
+            "placement_tags": [
+              "palette",
+              "primary_candidate",
+              "surface_local"
+            ],
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.check"
+            }
+          },
+          "activation_generation": 1,
+          "availability": {
+            "state": "available"
           }
         },
         {
@@ -1113,10 +1139,10 @@
         },
         {
           "definition": {
-            "surface_id": "rho.check",
+            "surface_id": "rho.check-result",
             "contract_major": 1,
-            "label": "Check project",
-            "purpose": "Render the Check project capability as an independent Rho Surface.",
+            "label": "Check result",
+            "purpose": "Render the Check result capability as an independent Rho Surface.",
             "renderer_kind": "trusted_host",
             "scope": "project",
             "instance_policy": "multi_instance",
@@ -1143,7 +1169,7 @@
             "commands": [],
             "origin": {
               "kind": "application",
-              "component_id": "rho.check"
+              "component_id": "rho.check-result"
             }
           },
           "activation_generation": 1
@@ -1361,11 +1387,11 @@
         },
         {
           "instance_id": "instance:check",
-          "surface_id": "rho.check",
+          "surface_id": "rho.check-result",
           "project_id": "project:fixture",
           "origin": {
             "kind": "application",
-            "component_id": "rho.check"
+            "component_id": "rho.check-result"
           },
           "activation_generation": 1,
           "surface_revision": 1,
@@ -1725,10 +1751,10 @@
         },
         {
           "instance_id": "instance:check",
-          "surface_id": "rho.check",
+          "surface_id": "rho.check-result",
           "origin": {
             "kind": "application",
-            "component_id": "rho.check"
+            "component_id": "rho.check-result"
           },
           "mode_id": null,
           "resource_binding": null,
@@ -1940,10 +1966,10 @@
           },
           {
             "instance_id": "instance:check",
-            "surface_id": "rho.check",
+            "surface_id": "rho.check-result",
             "origin": {
               "kind": "application",
-              "component_id": "rho.check"
+              "component_id": "rho.check-result"
             },
             "mode_id": null,
             "resource_binding": null,

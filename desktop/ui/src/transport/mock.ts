@@ -2,6 +2,9 @@ import fixture from "../contracts/generated/rsr-contract-fixtures.json";
 import { projectLabel } from "./normalize";
 import { applySceneEdit, collectSceneInstances, reconcileStudio } from "./studio-model";
 import type {
+  CheckResult,
+  CheckResultRequest,
+  CheckRunRequest,
   LayoutChild,
   OpenSurfaceRequest,
   PluginSurfaceDocument,
@@ -199,6 +202,7 @@ export function createMockUiKernelTransport(
   let nextNode = 1;
   let nextRuntime = 1;
   let nextExecution = 1;
+  let nextCheck = 1;
   let nextScene = 1;
   const allocateNode = () => `node:mock-${nextNode++}`;
   const undo: SceneState[] = [];
@@ -206,6 +210,7 @@ export function createMockUiKernelTransport(
   const listeners = new Set<() => void>();
   const surfaceListeners = new Set<() => void>();
   const pluginSurfaceListeners = new Set<() => void>();
+  const checkResultListeners = new Set<() => void>();
   const studioListeners = new Set<() => void>();
   const runtimeListeners = new Set<() => void>();
   const resourceListeners = new Set<() => void>();
@@ -217,6 +222,7 @@ export function createMockUiKernelTransport(
     for (const listener of pluginSurfaceListeners) listener();
   };
   const pluginDocuments = new Map<string, PluginSurfaceDocument>();
+  const checkResults = new Map<string, CheckResult>();
   const pluginDocument = (instanceId: string): PluginSurfaceDocument => {
     const existing = pluginDocuments.get(instanceId);
     if (existing != null) return existing;
@@ -764,6 +770,104 @@ export function createMockUiKernelTransport(
     subscribePluginSurfacesInvalidated(listener: () => void): Unsubscribe {
       pluginSurfaceListeners.add(listener);
       return () => pluginSurfaceListeners.delete(listener);
+    },
+    async runCheckProject(request: CheckRunRequest) {
+      if (
+        request.project_id !== current.project.project_id ||
+        request.expected_project_revision !== current.context.project_revision
+      ) throw new Error("Mock Check request is stale.");
+      if (search.get("check") === "dirty") {
+        throw new Error("Save modified source files before checking: analysis.R");
+      }
+      const suffix = nextCheck++;
+      const resultId = `check-result:mock-${suffix}`;
+      const result: CheckResult = {
+        contract: "rho.ui.check-result.v1",
+        result_id: resultId,
+        project_id: request.project_id,
+        project_revision: request.expected_project_revision,
+        snapshot: {
+          contract: "rho.ui.check-project.snapshot.v1",
+          snapshot_id: `check-snapshot:mock-${suffix}`,
+          project_id: request.project_id,
+          project_revision: request.expected_project_revision,
+          captured_at: "2026-08-22T12:00:00Z",
+          files: [{
+            path: "analysis.R",
+            size_bytes: 48,
+            content_sha256: "c".repeat(64),
+            skipped: false,
+            skip_reason: null,
+          }],
+          source_bytes: 48,
+          renv_lock_sha256: "d".repeat(64),
+          truncated: false,
+          limitations: [],
+        },
+        ruleset_digest: "e".repeat(64),
+        generated_at: "2026-08-22T12:00:01Z",
+        status: "findings",
+        findings: [{
+          rule_id: "rho.repro.v1.randomness.rng_without_seed",
+          rule_version: 1,
+          origin: { kind: "application", component_id: "rho.check.core" },
+          activation_generation: 1,
+          severity: "warning",
+          category: "randomness",
+          title: "Random result may change",
+          summary: "Random-number generation was found without a nearby fixed seed.",
+          remediation: "Set a deliberate seed before the random analysis.",
+          evidence: [{
+            kind: "source_range",
+            path: "analysis.R",
+            line: 2,
+            column: 1,
+            excerpt: "sample(mtcars$mpg)",
+          }],
+          limitations: [],
+        }, {
+          rule_id: "check.rule.local.metadata.naming",
+          rule_version: 1,
+          origin: {
+            kind: "workspace_plugin",
+            plugin_id: "org.example.project-checks",
+            package_digest: "f".repeat(64),
+          },
+          activation_generation: 3,
+          severity: "info",
+          category: "project structure",
+          title: "Project metadata can be clearer",
+          summary: "The workspace rule pack found a project-specific convention to review.",
+          remediation: "Review the project README before sharing this analysis.",
+          evidence: [{ kind: "note", text: "README metadata review" }],
+          limitations: [],
+        }],
+        coverage: {
+          files_scanned: 1,
+          files_skipped: 0,
+          core_rules: 22,
+          plugin_rule_packs: 1,
+          plugin_rule_failures: 0,
+        },
+        truncated: false,
+        limitations: [],
+      };
+      checkResults.set(resultId, result);
+      for (const listener of checkResultListeners) listener();
+      return { result: structuredClone(result) };
+    },
+    async loadCheckResult(request: CheckResultRequest) {
+      if (
+        request.project_id !== current.project.project_id ||
+        request.expected_project_revision !== current.context.project_revision
+      ) throw new Error("Mock Check result request is stale.");
+      const result = checkResults.get(request.result_id);
+      if (result == null) throw new Error("Check result is unavailable; run Check project again");
+      return structuredClone(result);
+    },
+    subscribeCheckResultsInvalidated(listener: () => void): Unsubscribe {
+      checkResultListeners.add(listener);
+      return () => checkResultListeners.delete(listener);
     },
     publishSurfaces(next: SurfaceRuntimeSnapshot) {
       surfaces = copySurfaces(next);

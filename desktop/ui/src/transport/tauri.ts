@@ -1,4 +1,8 @@
 import type {
+  CheckResult,
+  CheckResultRequest,
+  CheckRunRequest,
+  CheckRunResponse,
   OpenSurfaceRequest,
   PluginSurfaceDocumentRequest,
   PluginSurfaceDocumentView,
@@ -110,6 +114,16 @@ export function createTauriUiKernelTransport(
           "rho://surface-runtime-changed",
           "rho://ui-snapshot-invalidated",
         ],
+        listener,
+      ),
+    runCheckProject: (request: CheckRunRequest) =>
+      invoke<CheckRunResponse>("check_project_run", { request }),
+    loadCheckResult: (request: CheckResultRequest) =>
+      invoke<CheckResult>("check_result", { request }),
+    subscribeCheckResultsInvalidated: (listener) =>
+      subscribeEvents(
+        listen,
+        ["rho://check-results-changed", "rho://ui-snapshot-invalidated"],
         listener,
       ),
     loadStudio: () => invoke<StudioRuntimeSnapshot>("studio_scene"),

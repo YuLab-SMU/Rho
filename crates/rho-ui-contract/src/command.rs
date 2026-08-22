@@ -13,6 +13,7 @@ pub const MAX_REGISTERED_COMMANDS: usize = 512;
 pub const MAX_COMMAND_REGISTRY_BYTES: usize = 1024 * 1024;
 
 pub const PREDICATE_ALWAYS: &str = "rho.predicate.always";
+pub const PREDICATE_PROJECT_READY: &str = "rho.predicate.project-ready";
 pub const PREDICATE_WORKSPACE_PRESENT: &str = "rho.predicate.workspace-present";
 pub const PREDICATE_ACTIVE_OPERATION: &str = "rho.predicate.active-operation";
 pub const PREDICATE_AGENT_READY: &str = "rho.predicate.agent-ready";
@@ -237,6 +238,15 @@ pub fn application_command_definitions_v1() -> Result<Vec<CommandDefinitionV1>, 
             "rho.workspace",
         )?,
         application_command(
+            "rho.check.run",
+            "Check project",
+            "Review the current saved project snapshot for bounded reproducibility risks.",
+            "Captures an immutable read-only project snapshot and opens a typed Check result.",
+            PREDICATE_PROJECT_READY,
+            vec![Palette, PrimaryCandidate, SurfaceLocal],
+            "rho.check",
+        )?,
+        application_command(
             "rho.agent.new-conversation",
             "New Agent conversation",
             "Start an independent Agent conversation for the active project.",
@@ -254,6 +264,12 @@ pub fn evaluate_application_command_availability_v1(
 ) -> CommandAvailabilityV1 {
     match definition.availability_predicate_id.as_str() {
         PREDICATE_ALWAYS => CommandAvailabilityV1::Available,
+        PREDICATE_PROJECT_READY if context.project_revision == 0 => {
+            CommandAvailabilityV1::Unavailable {
+                reason: "The active project is still being prepared.".to_string(),
+            }
+        }
+        PREDICATE_PROJECT_READY => CommandAvailabilityV1::Available,
         PREDICATE_WORKSPACE_PRESENT
             if context.workspace_health == crate::HealthStateV1::Unavailable =>
         {

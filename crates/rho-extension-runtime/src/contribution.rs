@@ -43,6 +43,8 @@ pub enum ContributionKind {
     Panel,
     /// `ui.surface.*` — a repeatable declarative Surface factory.
     Surface,
+    /// `check.rule.*` — a bounded immutable-snapshot Check rule pack.
+    CheckRule,
 }
 
 impl ContributionKind {
@@ -67,6 +69,9 @@ impl ContributionKind {
         }
         if let Some(rest) = value.strip_prefix("ui.surface.") {
             return (!rest.is_empty()).then_some(Self::Surface);
+        }
+        if let Some(rest) = value.strip_prefix("check.rule.") {
+            return (!rest.is_empty()).then_some(Self::CheckRule);
         }
         None
     }
@@ -123,7 +128,8 @@ impl ContributionDeclaration {
             ContributionKind::Tool
             | ContributionKind::Source
             | ContributionKind::Command
-            | ContributionKind::Viewer => {
+            | ContributionKind::Viewer
+            | ContributionKind::CheckRule => {
                 if !has_call_schemas {
                     return Err(format!("contribution {} requires call schemas", self.id));
                 }

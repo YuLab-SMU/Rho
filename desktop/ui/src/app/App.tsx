@@ -18,6 +18,8 @@ import {
   createUiKernelTransport,
 } from "../transport";
 import type {
+  CheckEvidence,
+  CheckResult,
   LayoutAxis,
   LayoutBasis,
   LayoutChild,
@@ -276,6 +278,8 @@ interface SurfaceViewProps {
   readonly reportError: (error: unknown) => void;
   readonly pluginTransport: UiKernelTransport;
   readonly pluginDocumentRequest: PluginSurfaceDocumentRequest | null;
+  readonly projectRevision: number;
+  readonly openCheckEvidence: (path: string) => Promise<void>;
 }
 
 interface ConsoleOutputRecord {
@@ -646,13 +650,121 @@ function PluginSurfaceView({
   return <section className={`rho-plugin-surface-document rho-plugin-surface-${status}`} aria-busy={status === "busy"}><header><span>Workspace plugin</span><strong>{document.title}</strong><small>document r{document.revision}</small></header><PluginSurfaceBlocks blocks={document.blocks} dispatch={dispatch} /></section>;
 }
 
+function checkResultId(instance: SurfaceInstance): string | null {
+  if (typeof instance.view_state !== "object" || instance.view_state == null) return null;
+  const value = (instance.view_state as Record<string, unknown>).check_result_id;
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function checkOriginLabel(finding: CheckResult["findings"][number]): string {
+  if (finding.origin.kind === "application") return "Rho core";
+  return `Workspace rule pack · ${finding.origin.plugin_id} · g${finding.activation_generation}`;
+}
+
+function evidenceLabel(evidence: CheckEvidence): string {
+  switch (evidence.kind) {
+    case "source_range": return `${evidence.path}:${evidence.line}${evidence.column == null ? "" : `:${evidence.column}`}`;
+    case "project_file": return evidence.path;
+    case "run_ref": return `Run ${evidence.run_id}`;
+    case "environment_ref": return `Environment ${evidence.snapshot_id}`;
+    case "note": return evidence.text;
+  }
+}
+
+function CheckResultView({
+  instance,
+  projectRevision,
+  transport,
+  openEvidence,
+  reportError,
+}: {
+  readonly instance: SurfaceInstance;
+  readonly projectRevision: number;
+  readonly transport: UiKernelTransport;
+  readonly openEvidence: (path: string) => Promise<void>;
+  readonly reportError: (error: unknown) => void;
+}) {
+  const resultId = checkResultId(instance);
+  const [result, setResult] = useState<CheckResult | null>(null);
+  const [status, setStatus] = useState<"empty" | "loading" | "ready" | "failed">(
+    resultId == null ? "empty" : "loading",
+  );
+  useEffect(() => {
+    if (resultId == null) {
+      setResult(null);
+      setStatus("empty");
+      return;
+    }
+    let active = true;
+    const load = () => {
+      setStatus("loading");
+      void transport.loadCheckResult({
+        project_id: instance.project_id,
+        expected_project_revision: projectRevision,
+        result_id: resultId,
+      }).then((next) => {
+        if (!active) return;
+        setResult(next);
+        setStatus("ready");
+      }).catch((error: unknown) => {
+        if (!active) return;
+        setStatus("failed");
+        reportError(error);
+      });
+    };
+    load();
+    const unsubscribe = transport.subscribeCheckResultsInvalidated(load);
+    return () => { active = false; unsubscribe(); };
+  }, [instance.project_id, projectRevision, reportError, resultId, transport]);
+  if (status === "empty") {
+    return <div className="rho-check-empty">Run <strong>Check project</strong> to create an immutable result.</div>;
+  }
+  if (result == null) {
+    return <div className={`rho-check-empty rho-check-${status}`}>{status === "failed" ? "This Check result is no longer available. Run Check project again." : "Loading Check result…"}</div>;
+  }
+  return (
+    <section className="rho-check-result" data-result-id={result.result_id}>
+      <header className="rho-check-summary">
+        <div><span className={`rho-check-status rho-check-status-${result.status}`}>{result.status}</span><strong>{result.findings.length} findings</strong></div>
+        <dl>
+          <div><dt>Files</dt><dd>{result.coverage.files_scanned}</dd></div>
+          <div><dt>Core rules</dt><dd>{result.coverage.core_rules}</dd></div>
+          <div><dt>Rule packs</dt><dd>{result.coverage.plugin_rule_packs}</dd></div>
+        </dl>
+        <small>Snapshot <code>{result.snapshot.snapshot_id}</code> · {result.generated_at}</small>
+      </header>
+      {result.limitations.length > 0 && <div className="rho-check-limitations" role="status"><strong>Coverage limitations</strong>{result.limitations.map((item) => <p key={item}>{item}</p>)}</div>}
+      <div className="rho-check-findings">
+        {result.findings.map((finding, index) => (
+          <article className={`rho-check-finding rho-check-finding-${finding.severity}`} key={`${finding.rule_id}:${index}`}>
+            <header><span>{finding.category}</span><span>{checkOriginLabel(finding)}</span></header>
+            <h3>{finding.title}</h3>
+            <p>{finding.summary}</p>
+            <div className="rho-check-remediation"><strong>What to do</strong><span>{finding.remediation}</span></div>
+            <div className="rho-check-evidence">
+              {finding.evidence.map((evidence, evidenceIndex) => {
+                const path = evidence.kind === "source_range" || evidence.kind === "project_file" ? evidence.path : null;
+                return path == null
+                  ? <span key={evidenceIndex}>{evidenceLabel(evidence)}</span>
+                  : <button type="button" onClick={() => void openEvidence(path).catch(reportError)} key={evidenceIndex}>{evidenceLabel(evidence)}</button>;
+              })}
+            </div>
+            <footer><code>{finding.rule_id}</code><span>v{finding.rule_version}</span></footer>
+          </article>
+        ))}
+        {result.findings.length === 0 && <div className="rho-check-clean">No findings in this captured project revision.</div>}
+      </div>
+    </section>
+  );
+}
+
 function SurfaceView({
   instance, focused, setFocus, remove, duplicate, persistDraft, draftCache,
   runtimes, attachRuntime, detachRuntime, executeRuntime, interruptRuntime,
   restartRuntime, persistConsole, resources, readResource, updateResourceDraft,
   saveResource, reloadResource, renameResource, deleteResource,
   refreshResourceBinding, setViewGroup, persistFileViewState, reportError,
-  pluginTransport, pluginDocumentRequest,
+  pluginTransport, pluginDocumentRequest, projectRevision, openCheckEvidence,
 }: SurfaceViewProps) {
   const [draft, setDraft] = useState(() => initialDraft(instance, draftCache));
   const [consoleState, setConsoleState] = useState(() => initialConsoleState(instance));
@@ -663,7 +775,7 @@ function SurfaceView({
     : instance.surface_id === "rho.file-preview" ? "File preview"
     : instance.surface_id === "rho.file-source" ? "Source editor"
     : instance.surface_id === "rho.status" ? "Runtime status"
-    : instance.surface_id === "rho.check" ? "Project checks" : "Surface Playground";
+    : instance.surface_id === "rho.check-result" ? "Check result" : "Surface Playground";
   const attached = runtimes?.instances.find((candidate) =>
     candidate.runtime_instance_id === runtime?.runtime_instance_id &&
     candidate.activation_generation === runtime.activation_generation
@@ -834,6 +946,15 @@ function SurfaceView({
       )}
       {instance.surface_id === "rho.status" && (
         <div className="rho-status-surface"><span className="rho-status-dot rho-status-ready" /> Workspace runtime ready <code>{runtime?.runtime_instance_id ?? "workspace"}</code></div>
+      )}
+      {instance.surface_id === "rho.check-result" && (
+        <CheckResultView
+          instance={instance}
+          projectRevision={projectRevision}
+          transport={pluginTransport}
+          openEvidence={openCheckEvidence}
+          reportError={reportError}
+        />
       )}
       {instance.surface_id === "rho.surface-playground" && (
         <label className="rho-playground-draft">
@@ -1244,6 +1365,49 @@ export function App({ transport }: AppProps) {
       },
     });
   };
+  const invokeCommand = async (commandId: string) => {
+    if (commandId !== "rho.check.run") {
+      throw new Error(`Command ${commandId} has no RSR frontend handler yet.`);
+    }
+    if (snapshot == null || surfaces == null || studio == null) {
+      throw new Error("Check project is unavailable until the project Surface Runtime is ready.");
+    }
+    const before = new Set(surfaces.catalog.instances.map((candidate) => candidate.instance_id));
+    const response = await pluginTransport.runCheckProject({
+      project_id: snapshot.project.project_id,
+      expected_project_revision: snapshot.context.project_revision,
+    });
+    const opened = await surfaceStore.open({
+      surface_id: "rho.check-result",
+      project_id: surfaces.project_id,
+      mode_id: null,
+      resource_binding: null,
+      runtime_binding: null,
+      view_group_id: null,
+      view_state: { check_result_id: response.result.result_id },
+      instance_disposition: "new_instance",
+      placement_intent: "beside",
+      expected_project_revision: surfaces.project_revision,
+      expected_layout_revision: studio.scene.layout_revision,
+    });
+    const created = opened.catalog.instances.find((candidate) => !before.has(candidate.instance_id));
+    if (created == null) throw new Error("Check completed, but its result Surface was not created.");
+    if (profile?.active_mode === "studio" && studio.scene.root.kind === "container") {
+      await studioStore.apply({
+        project_id: studio.project_id,
+        expected_project_revision: studio.project_revision,
+        expected_layout_revision: studio.scene.layout_revision,
+        edit: {
+          kind: "insert_surface",
+          target_container_node_id: studio.scene.root.node_id,
+          child_index: studio.scene.root.children.length,
+          instance_id: created.instance_id,
+          basis: { kind: "minmax", min_logical_pixels: 280, max_logical_pixels: 900, weight: 1 },
+        },
+      });
+    }
+    setCommandSearchOpen(false);
+  };
   const surfaceView = (instance: SurfaceInstance) => {
     const boundDescriptor = resources?.resources.find((descriptor) =>
       descriptor.resource_provider_id === instance.resource_binding?.resource_provider_id &&
@@ -1412,6 +1576,16 @@ export function App({ transport }: AppProps) {
       )}
       pluginTransport={pluginTransport}
       pluginDocumentRequest={pluginDocumentRequest}
+      projectRevision={surfaces?.project_revision ?? 0}
+      openCheckEvidence={async (path) => {
+        const descriptor = resources?.resources.find((candidate) =>
+          candidate.resource_provider_id === "rho.project-files" &&
+          candidate.resource_kind === "project_file" &&
+          candidate.resource_id === path
+        );
+        if (descriptor == null) throw new Error(`Check evidence Resource ${path} is unavailable.`);
+        await openResource(descriptor, "rho.file-source", "source");
+      }}
     />;
   };
   const activeVibePage = profile?.vibe_pages.find(
@@ -1533,7 +1707,7 @@ export function App({ transport }: AppProps) {
           {commandSearchOpen && (
             <div className="rho-command-results" role="listbox">
               {paletteCommands.slice(0, 8).map((command) => (
-                <button type="button" role="option" disabled={command.availability.state !== "available"} key={command.definition.command_id}>
+                <button type="button" role="option" disabled={command.availability.state !== "available"} onClick={command.definition.command_id === "rho.check.run" ? () => run(invokeCommand(command.definition.command_id)) : undefined} key={command.definition.command_id}>
                   <strong>{command.definition.label}</strong><code>{command.definition.command_id}</code>
                 </button>
               ))}
@@ -1542,7 +1716,7 @@ export function App({ transport }: AppProps) {
           )}
         </div>
         <div className="rho-command-projection" aria-label="Primary contextual command">
-          {primaryCommands.filter((command) => command.availability.state === "available").slice(0, 1).map((command) => <span key={command.definition.command_id}>{command.definition.label}</span>)}
+          {primaryCommands.filter((command) => command.availability.state === "available" && command.definition.command_id === "rho.check.run").slice(0, 1).map((command) => <button type="button" onClick={() => run(invokeCommand(command.definition.command_id))} key={command.definition.command_id}>{command.definition.label}</button>)}
         </div>
         <div className="rho-foundation-status"><span className={`rho-status-dot rho-status-${snapshot?.context.workspace_health ?? state.status}`} /><span>{snapshot?.health.workspace.label ?? "Connecting"}</span></div>
         <button className="rho-primary-action" type="button" aria-pressed={inspectorOpen} onClick={() => setInspectorOpen((open) => !open)}>{inspectorOpen ? "Done" : "Compose"}</button>

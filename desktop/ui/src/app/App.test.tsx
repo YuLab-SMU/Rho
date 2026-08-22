@@ -42,7 +42,7 @@ describe("Studio foundation app", () => {
     expect(container.textContent).toContain("Rho Lab");
     expect(container.textContent).toContain("Workspace R ready");
     expect(container.textContent).toContain("Agent runtime needs attention");
-    expect(container.textContent).toContain("6 commands");
+    expect(container.textContent).toContain("7 commands");
     expect(container.textContent).toContain("Source editor");
     expect(container.textContent).toContain("2 tabs");
     expect(container.querySelectorAll(".rho-layout-container")).toHaveLength(2);
@@ -61,11 +61,49 @@ describe("Studio foundation app", () => {
       await settle();
     });
     expect(container.querySelector(".rho-vibe-page")?.textContent).toContain("Project review");
-    expect(container.querySelector(".rho-vibe-live-surface [data-surface-id='rho.check']"))
+    expect(container.querySelector(".rho-vibe-live-surface [data-surface-id='rho.check-result']"))
       .not.toBeNull();
     expect(container.querySelector(".rho-studio-inspector")).toBeNull();
     expect(container.querySelector<HTMLButtonElement>(".rho-primary-action")?.textContent)
       .toBe("Compose");
+  });
+
+  it("runs repeatable Check commands into independent typed result Surfaces", async () => {
+    const { container } = await renderApp();
+    const check = container.querySelector<HTMLButtonElement>(".rho-command-projection button");
+    expect(check?.textContent).toBe("Check project");
+    await act(async () => {
+      check!.click();
+      await settle();
+      await settle();
+    });
+    expect(container.querySelectorAll(".rho-check-result")).toHaveLength(1);
+    expect(container.textContent).toContain("Random result may change");
+    expect(container.textContent).toContain("Rho core");
+    expect(container.textContent).toContain("Workspace rule pack · org.example.project-checks · g3");
+    expect(container.querySelector(".rho-check-evidence button")?.textContent).toContain("analysis.R:2:1");
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".rho-command-projection button")!.click();
+      await settle();
+      await settle();
+    });
+    const results = [...container.querySelectorAll<HTMLElement>(".rho-check-result")];
+    expect(results).toHaveLength(2);
+    expect(new Set(results.map((result) => result.dataset.resultId)).size).toBe(2);
+  });
+
+  it("keeps dirty-source Check rejection actionable without breaking the workspace", async () => {
+    const { container } = await renderApp(createMockUiKernelTransport("?check=dirty"));
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".rho-command-projection button")!.click();
+      await settle();
+    });
+    expect(container.querySelector("[role='alert']")?.textContent).toContain(
+      "Save modified source files before checking: analysis.R",
+    );
+    expect(container.textContent).toContain("Workspace R ready");
+    expect(container.querySelector("[data-surface-id='rho.file-source']")).not.toBeNull();
   });
 
   it("keeps instance-local state when a sibling placement closes", async () => {

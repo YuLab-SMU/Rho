@@ -297,6 +297,9 @@ bounded_id!(PageId, "page_id");
 bounded_id!(SectionId, "section_id");
 bounded_id!(BlockId, "block_id");
 bounded_id!(ViewGroupId, "view_group_id");
+bounded_id!(CheckSnapshotId, "check_snapshot_id");
+bounded_id!(CheckResultId, "check_result_id");
+bounded_id!(CheckRuleId, "check_rule_id");
 
 #[cfg(test)]
 mod tests {

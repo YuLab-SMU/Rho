@@ -1,6 +1,6 @@
 # Rho Surface Runtime Full Construction Plan
 
-Status: active complete construction program; Wave 9 is the current integration
+Status: active complete construction program; Wave 10 is the current integration
 package
 
 Date: 2026-08-21
@@ -13,17 +13,15 @@ own focused evidence, contract review, documentation reconciliation, and
 scoped commit. After a wave passes its continuous gate, the next dependency is
 activated automatically under the same explicit authorization.
 
-Current integration package: **Wave 9 — Check project as the first pluginized
-core component**.
+Current integration package: **Wave 10 — Vibe Page engine**.
 
-Wave 9 acceptance owner: this active contract together with the existing Check
-project command/backend truth, Surface/Command registries, Resource evidence,
-workspace-plugin identity, and Project UI Profile contracts. Acceptance
-requires immutable project snapshots, typed rule/result provenance, repeatable
-Check result Surfaces in Studio and Vibe, project/plugin isolation, and removal
-of the permanent top-bar Check action from the new shell. A rule reports
-evidence and remediation only; it gains no trusted claim, project mutation,
-Agent explanation, credential, runtime-provider, or ambient execution
+Wave 10 acceptance owner: this active contract together with the pure Vibe
+Page contracts and Project UI Profile store activated in Wave 7. Acceptance
+requires exact revisioned Page transactions, deterministic ordered/grid
+composition, trusted React NodeViews for live Surface references, history,
+keyboard/accessibility behavior, read-only export projection, and project/
+plugin isolation. ProseMirror owns editing mechanics only; it gains no Surface,
+plugin, Resource, Runtime, Check-result, project-file, execution, or approval
 authority.
 
 Owning design:
@@ -911,6 +909,90 @@ Wave 8 completed locally on 2026-08-22:
 
 ### Wave 9 — Check project as the first pluginized core component
 
+Implementation contract activated 2026-08-22:
+
+- RA-RC2 remains the sole core rule/scanner truth. The new Check orchestrator
+  captures the admitted R-family source bytes and `renv.lock` state once, then
+  runs RA-RC2 current-project rules against those captured bytes. Later disk
+  edits cannot change an in-flight or completed result;
+- the public snapshot exposes only normalized relative paths, byte sizes,
+  content digests, capture/project revisions, truncation and limitations. Raw
+  source bytes remain process-local input to core rules and are never copied
+  into the UI Profile or workspace-plugin input;
+- `CheckResultV1` binds one result ID to one immutable snapshot, ruleset digest,
+  typed status, exact application/plugin rule origin and generation, severity,
+  category, human title/summary/remediation, typed evidence, coverage and
+  limitations. It is bounded to 1,000 findings/4,000 evidence records/2 MiB;
+- process-local Check result retention is project-scoped and bounded. A result
+  Surface persists only its result ID as view state; restart or eviction shows
+  an unavailable result and never reconstructs or claims the old snapshot;
+- Manifest V3 adds `check.rule.*` as an additive zero-ambient-authority rule-
+  pack contribution. The host supplies only the bounded public snapshot
+  descriptor, supplies no live permission handles in this lane, validates the
+  declared input/output schema, binds every finding to the exact accepted
+  plugin digest/generation, and treats failure/timeout/malformed output as a
+  typed limitation rather than core Check failure;
+- `rho.check.run` is the contextual application Command. Execution still uses
+  an exact Tauri admission request; Command Registry availability and placement
+  tags remain presentation only. It returns a typed result, opens a new
+  repeatable `rho.check-result` Surface, and ordinary Studio/Vibe placement
+  transactions decide where separate instances referencing that result appear;
+- the legacy `audit_reproducibility` command and frozen frontend keep their
+  accepted behavior until Wave 12 deletion. The new Check lane neither rewrites
+  historical audit scopes nor imports the permanent old top-bar action.
+
+Wave 9 completed locally on 2026-08-22:
+
+- RA-RC2 source and `renv.lock` inputs are captured once into a process-local
+  immutable snapshot. The accepted current-project rules now have a captured-
+  input entry point, sorted source discovery and a regression proving later
+  disk changes cannot alter an in-flight result. UI/plugin projections contain
+  only normalized paths, sizes, SHA-256 digests, revisions and limitations;
+  raw source bytes and nullable descriptor fields never enter plugin input;
+- `CheckResultV1` provides exact project/snapshot/ruleset identity, typed
+  status/severity/evidence/remediation, exact application or workspace-plugin
+  origin and generation, coverage and honest limitations. Snapshot/result/rule
+  IDs are bounded. Aggregate retention is 32 results per project, findings are
+  capped at 1,000, evidence at 4,000, encoded results at 2 MiB, and workspace
+  rule execution at eight packs per Check;
+- Manifest V3 adds `check.rule.*` without changing V1/V2. The trusted Check
+  lane publishes only exact active packages, supplies an empty handle map even
+  when the plugin owns live grants, validates declared schemas and rule-ID/
+  evidence ownership, and converts malformed/unavailable packs into result
+  limitations. Disable removes registration; a hostile broker request proves
+  this lane cannot consume a granted project handle;
+- `rho.check.run`, the repeatable `rho.check-result` Factory and two exact
+  Tauri commands are wired through the Command, Surface and Check registries.
+  Dirty R-family documents reject before capture with their paths. Each run
+  creates a distinct result ID and independent Surface view state; missing or
+  evicted results stay unavailable rather than being reconstructed;
+- the React result renderer shows coverage, core/plugin provenance, actionable
+  remediation and typed evidence controls. The permanent new-shell top-bar
+  Check button does not exist: the contextual Command projection runs Check,
+  opens a result Surface and places it through an ordinary Studio transaction.
+  The same renderer remains placement-agnostic for Vibe Surface references;
+- `rho-plugin-dev smoke-check` validates a zero-permission snapshotted Guest
+  ABI V2 rule pack against a realistic immutable descriptor and parses its
+  typed output. `examples/workspace-plugin-check` passed local build and smoke
+  with result contract `rho.ui.check-rule-pack.output.v1`;
+- `cargo test --workspace --locked` passed the full local Rust matrix;
+  Desktop passed 317 tests with one pre-existing opt-in Keychain smoke ignored.
+  Focused `rho-ui-contract`, `rho-extension-runtime`, and `rho-plugin-dev`
+  Clippy passed with `--no-deps -D warnings`. A broader Desktop/Store Clippy
+  invocation remains blocked by the repository's existing warning backlog and
+  is not claimed;
+- `npm run rsr:check` passed TypeScript, ESLint, exact generated fixtures, 26
+  Vitest cases, production build/assets and real Chrome smoke. The Tauri
+  inventory passes with 177 commands across 19 Rust files. Tauri still ships
+  frozen `desktop/dist`, so exact new-shell debug-app review belongs to Wave 12
+  cutover; no installed-app, CI, multi-platform or release acceptance is
+  claimed;
+- cross-review confirms RA-RC2 remains core rule truth, Check owns immutable
+  orchestration/result retention, plugin lifecycle owns executable origin,
+  Surface owns result view state, Studio/Vibe own placement only, and Agent
+  retains explanation only. No application/R-package version or `NEWS.md`
+  change is allocated before the user-visible cutover.
+
 Deliver:
 
 - extract the trusted Check orchestrator, immutable project snapshot, rule
@@ -931,6 +1013,32 @@ Continuous gate:
 - deterministic browser/mock and exact debug-app review.
 
 ### Wave 10 — Vibe Page engine
+
+Implementation contract activated 2026-08-22:
+
+- the existing `VibePageV1`/Section/block identity, ordering, 12-column grid,
+  byte/node limits, and no-double-mount rules remain the pure durable schema;
+  the Page engine maps those contracts to ProseMirror rather than creating a
+  competing document model;
+- Page edits are exact user transactions bound to project, profile, Page and
+  Page revision. Insert/move/resize/remove/history operations validate a
+  complete candidate before the Project UI Profile store commits it. Stale or
+  rejected transactions leave both durable and live state unchanged;
+- rich text is a bounded JSON tree, not raw persisted HTML. References,
+  Commands and Surface blocks are typed atoms. A Surface NodeView mounts one
+  trusted React renderer for one existing instance ID and never copies plugin
+  DOM, lets the plugin write ProseMirror state, or mounts one live instance
+  twice;
+- ordered flow remains the default. A Section may opt into the existing
+  validated 12-column layout with explicit spans/starts; narrow presentation
+  reflows visually without rewriting durable order or grid identity;
+- read-only export is a deterministic projection of accepted Page data and
+  bounded Surface placeholders/snapshots. Export never serializes live React
+  nodes, runtime handles, plugin DOM, credentials or hidden editor state;
+- Check project review is the first authored Page template and references the
+  same typed process-local Check result Surface contract. Evicted results stay
+  explicitly unavailable; Page persistence does not turn them into durable
+  scientific truth.
 
 Deliver:
 

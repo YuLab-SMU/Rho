@@ -310,6 +310,32 @@ impl ResourceRegistryState {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
+    pub(crate) fn dirty_check_source_paths(
+        &self,
+        project_id: &rho_ui_contract::ProjectId,
+    ) -> Vec<String> {
+        let inner = self.inner();
+        let mut paths = inner
+            .projects
+            .get(project_id)
+            .into_iter()
+            .flat_map(|project| &project.documents)
+            .filter_map(|(path, document)| {
+                let extension = Path::new(path)
+                    .extension()
+                    .and_then(|value| value.to_str())
+                    .unwrap_or_default();
+                (document.dirty
+                    && ["r", "rmd", "qmd", "rnw"]
+                        .iter()
+                        .any(|accepted| extension.eq_ignore_ascii_case(accepted)))
+                .then(|| path.clone())
+            })
+            .collect::<Vec<_>>();
+        paths.sort();
+        paths
+    }
+
     fn checkpoint(&self) -> ResourceRegistryCheckpoint {
         ResourceRegistryCheckpoint(self.inner().clone())
     }

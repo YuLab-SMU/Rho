@@ -19,6 +19,7 @@ use rho_extension_runtime::{
     WorkspacePluginPackageSnapshot, discover_workspace_plugins, snapshot_workspace_plugin_package,
 };
 use rho_server::plugin_package_cache::PluginPackageCache;
+use rho_ui_contract::{CHECK_PROJECT_SNAPSHOT_CONTRACT, CheckRulePackOutputV1};
 use serde::Serialize;
 use serde_json::json;
 
@@ -295,6 +296,54 @@ pub fn smoke_surface(
     smoke_surface_snapshot(&snapshot, contribution_id)
 }
 
+pub fn smoke_check_rule(
+    project_root: &Path,
+    plugin_id: &str,
+    contribution_id: &str,
+) -> Result<ContributionSmokeReport, PluginDevError> {
+    let project_root = checked_project_root(project_root)?;
+    let snapshot = current_snapshot(&project_root, plugin_id)?;
+    smoke_check_rule_snapshot(&snapshot, contribution_id)
+}
+
+fn check_rule_smoke_input() -> serde_json::Value {
+    json!({
+        "operation": "check",
+        "snapshot": {
+            "contract": CHECK_PROJECT_SNAPSHOT_CONTRACT,
+            "snapshot_id": "check-snapshot:plugin-dev",
+            "project_id": "plugin-dev.local",
+            "project_revision": 1,
+            "captured_at": "2026-08-22T00:00:00Z",
+            "files": [{
+                "path": "analysis.R",
+                "size_bytes": 16,
+                "content_sha256": "a".repeat(64),
+                "skipped": false
+            }],
+            "source_bytes": 16,
+            "truncated": false,
+            "limitations": []
+        }
+    })
+}
+
+fn smoke_check_rule_snapshot(
+    snapshot: &WorkspacePluginPackageSnapshot,
+    contribution_id: &str,
+) -> Result<ContributionSmokeReport, PluginDevError> {
+    let report = smoke_snapshot_with_input(
+        snapshot,
+        contribution_id,
+        ContributionKind::CheckRule,
+        "trusted_check_rule",
+        check_rule_smoke_input(),
+    )?;
+    CheckRulePackOutputV1::parse(report.result.clone())
+        .map_err(|error| PluginDevError::new("check_rule_result_rejected", error.to_string()))?;
+    Ok(report)
+}
+
 fn smoke_surface_snapshot(
     snapshot: &WorkspacePluginPackageSnapshot,
     contribution_id: &str,
@@ -441,13 +490,20 @@ pub fn compare_component(
         ));
     }
     for (contribution_id, kind) in &baseline_surfaces {
-        if *kind == ContributionKind::Surface {
-            smoke_surface_snapshot(&baseline.snapshot, contribution_id)?;
-            smoke_surface_snapshot(&candidate, contribution_id)?;
-        } else {
-            let origin = origin_for_kind(*kind);
-            smoke_snapshot(&baseline.snapshot, contribution_id, *kind, origin)?;
-            smoke_snapshot(&candidate, contribution_id, *kind, origin)?;
+        match kind {
+            ContributionKind::Surface => {
+                smoke_surface_snapshot(&baseline.snapshot, contribution_id)?;
+                smoke_surface_snapshot(&candidate, contribution_id)?;
+            }
+            ContributionKind::CheckRule => {
+                smoke_check_rule_snapshot(&baseline.snapshot, contribution_id)?;
+                smoke_check_rule_snapshot(&candidate, contribution_id)?;
+            }
+            _ => {
+                let origin = origin_for_kind(*kind);
+                smoke_snapshot(&baseline.snapshot, contribution_id, *kind, origin)?;
+                smoke_snapshot(&candidate, contribution_id, *kind, origin)?;
+            }
         }
     }
     Ok(EvolutionComparisonReport {
@@ -649,6 +705,12 @@ fn smoke_snapshot_with_input(
                 })?;
                 document.contract
             }
+            ContributionKind::CheckRule => {
+                let output = CheckRulePackOutputV1::parse(result.clone()).map_err(|error| {
+                    PluginDevError::new("check_rule_result_rejected", error.to_string())
+                })?;
+                output.contract
+            }
             _ => unreachable!("only callable smoke contribution kinds are admitted"),
         };
         Ok((result, result_contract))
@@ -679,6 +741,7 @@ fn evolution_surfaces(
                 | ContributionKind::Tool
                 | ContributionKind::Viewer
                 | ContributionKind::Surface
+                | ContributionKind::CheckRule
         ) {
             return Err(PluginDevError::new(
                 "unsupported_evolution_surface",
@@ -700,6 +763,7 @@ fn origin_for_kind(kind: ContributionKind) -> &'static str {
         ContributionKind::Tool => "agent_tool",
         ContributionKind::Viewer => "trusted_viewer",
         ContributionKind::Surface => "trusted_surface",
+        ContributionKind::CheckRule => "trusted_check_rule",
         _ => unreachable!("only evolution surfaces are admitted"),
     }
 }
@@ -713,6 +777,7 @@ fn kind_name(kind: ContributionKind) -> &'static str {
         ContributionKind::Skill => "skill",
         ContributionKind::Panel => "panel",
         ContributionKind::Surface => "surface",
+        ContributionKind::CheckRule => "check_rule",
     }
 }
 

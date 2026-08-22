@@ -389,6 +389,10 @@ describe("UI Kernel transport and external store", () => {
             command_result: null,
             provenance: {},
           }
+        : command === "check_project_run"
+        ? { result: {} }
+        : command === "check_result"
+        ? {}
         : command.startsWith("surface_")
         ? generatedSurfaces()
         : command.startsWith("studio_")
@@ -447,6 +451,15 @@ describe("UI Kernel transport and external store", () => {
       control_id: "apply",
       event_kind: "activate",
       value: "",
+    });
+    const checkRunRequest = {
+      project_id: "project:fixture",
+      expected_project_revision: 7,
+    } as const;
+    await transport.runCheckProject(checkRunRequest);
+    await transport.loadCheckResult({
+      ...checkRunRequest,
+      result_id: "check-result:fixture",
     });
     const studioRequest = {
       project_id: "project:fixture",
@@ -590,6 +603,11 @@ describe("UI Kernel transport and external store", () => {
             value: "",
           },
         },
+      },
+      { command: "check_project_run", args: { request: checkRunRequest } },
+      {
+        command: "check_result",
+        args: { request: { ...checkRunRequest, result_id: "check-result:fixture" } },
       },
       { command: "studio_scene" },
       {
