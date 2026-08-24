@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W1-11",
+  "active_work_packages": ["AM-W1-12"],
+  "integration_lane": "AM-W1-12",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -282,8 +282,9 @@ lifecycle (`bd6f3a9`/AM-E-0006), Surface/Studio (`00be5e3`/AM-E-0007), Resource
 conversation inventory (`5467db4`/AM-E-0010), Agent turn detail
 (`470a679`/AM-E-0011), and Agent context/turn control
 (`f46a283`/AM-E-0012), and Agent runtime diagnostics
-(`bb1b827`/AM-E-0013). Provider/model settings remain the next independent
-Agent contract facet.
+(`bb1b827`/AM-E-0013). Agent settings and capacity AM-W1-12 is active as the
+next independent contract facet; credential and Provider-network mutations
+remain separate.
 
 ## Version, NEWS, and release decision
 
