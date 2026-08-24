@@ -113,6 +113,7 @@ import type {
   ConsoleExecutionAdmission,
   ConsoleExecutionEndpoint,
 } from "./controllers/console-execution-router";
+import { useConsoleProjectActivation } from "./controllers/console-project-activation";
 import { ProjectSwitchController } from "./controllers/project-switch-controller";
 import { RuntimeHistory } from "./RuntimeHistory";
 import {
@@ -3083,7 +3084,7 @@ function WorkbenchApp({ transport }: AppProps) {
   const profileSnapshot = profileState.status === "ready" ? profileState.snapshot : null;
   const profile = profileSnapshot?.profile ?? null;
   const projectionProjectId = snapshot?.project.project_id ?? null;
-  consoleExecutionRouter.activateProject(projectionProjectId);
+  useConsoleProjectActivation(consoleExecutionRouter, projectionProjectId);
   useEffect(() => {
     if (projectionProjectId != null && traceProjectRef.current !== projectionProjectId) {
       workbenchOperationTrace.reset();
@@ -3093,7 +3094,6 @@ function WorkbenchApp({ transport }: AppProps) {
   useEffect(() => {
     setAgentRuntimeOutputContext(null);
   }, [projectionProjectId]);
-  useEffect(() => () => consoleExecutionRouter.dispose(), [consoleExecutionRouter]);
   const projectProjectionsCoherent = projectionProjectId != null &&
     surfaces?.project_id === projectionProjectId &&
     studio?.project_id === projectionProjectId &&
