@@ -138,6 +138,49 @@ fn assert_javascript_safe_numbers(value: &serde_json::Value) {
     }
 }
 
+fn agent_runtime_fixture() -> AgentRuntimeStatus {
+    AgentRuntimeStatus {
+        available: true,
+        status: "degraded".to_string(),
+        rscript: Some("/opt/R/4.6.1/bin/Rscript".to_string()),
+        r_version: Some("4.6.1".to_string()),
+        aisdk_version: Some("1.5.0".to_string()),
+        provider_adapters_available: false,
+        provider_health: "dependency_unavailable".to_string(),
+        dependencies: vec![AgentDependencyStatus {
+            package: "aisdk.providers".to_string(),
+            status: "missing".to_string(),
+            installed_version: None,
+            required_version: "0.1.0".to_string(),
+            resolved_path: None,
+            detail: Some("Registered Provider adapters are unavailable.".to_string()),
+            remediation: Some(
+                "Install the reviewed Agent dependency without changing Workspace R.".to_string(),
+            ),
+        }],
+        error: Some("Agent Provider adapters need attention.".to_string()),
+    }
+}
+
+#[test]
+fn agent_runtime_ipc_serialization_matches_generated_contract() {
+    let runtime =
+        serde_json::to_value(AgentRuntimeStatusView::from(agent_runtime_fixture())).unwrap();
+
+    assert_eq!(runtime["available"], true);
+    assert_eq!(runtime["status"], "degraded");
+    assert_eq!(runtime["rscript"], "/opt/R/4.6.1/bin/Rscript");
+    assert_eq!(runtime["provider_adapters_available"], false);
+    assert_eq!(runtime["provider_health"], "dependency_unavailable");
+    assert_eq!(runtime["dependencies"][0]["package"], "aisdk.providers");
+    assert!(runtime["dependencies"][0]["installed_version"].is_null());
+    assert!(runtime["dependencies"][0]["resolved_path"].is_null());
+    assert_eq!(
+        runtime["dependencies"][0]["remediation"],
+        "Install the reviewed Agent dependency without changing Workspace R."
+    );
+}
+
 #[test]
 fn agent_conversation_ipc_serialization_matches_generated_contract() {
     let conversations = serde_json::to_value(vec![conversation()]).unwrap();
@@ -291,4 +334,19 @@ fn agent_execution_typescript_export() {
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
         .export(specta_typescript::Typescript::default(), output_path)
         .expect("Agent execution TypeScript export must succeed");
+}
+
+#[test]
+#[ignore = "writes the requested generated TypeScript contract"]
+fn agent_diagnostics_typescript_export() {
+    let output_path = std::env::var_os("RHO_AGENT_RUNTIME_BINDINGS_PATH")
+        .expect("RHO_AGENT_RUNTIME_BINDINGS_PATH must name the generated file");
+    tauri_specta::Builder::<tauri::Wry>::new()
+        .commands(tauri_specta::collect_commands![
+            crate::agent_runtime_status,
+            crate::agent_runtime_retry,
+        ])
+        .error_handling(tauri_specta::ErrorHandlingMode::Throw)
+        .export(specta_typescript::Typescript::default(), output_path)
+        .expect("Agent runtime TypeScript export must succeed");
 }

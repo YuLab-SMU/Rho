@@ -38,6 +38,7 @@ import type {
   AgentTurnDetailTransport,
 } from "./agent-turn";
 import type { AgentExecutionTransport } from "./agent-execution";
+import type { AgentRuntimeTransport } from "./agent-runtime";
 
 export type {
   RuntimeExecution,
@@ -185,6 +186,12 @@ export type {
   RunAgentRequest,
   RunAgentResponse,
 } from "./agent-execution";
+
+export type {
+  AgentDependencyDiagnostics,
+  AgentRuntimeDiagnostics,
+  AgentRuntimeTransport,
+} from "./agent-runtime";
 
 export type UiSnapshotSource = "tauri" | "mock";
 export type HealthState = "ready" | "degraded" | "unavailable" | "restarting";
@@ -469,28 +476,6 @@ export interface CheckRunResponse {
   readonly result: CheckResult;
 }
 
-export interface AgentDependencyDiagnostics {
-  readonly package: string;
-  readonly status: "ready" | "checking" | "missing" | "incompatible_version" | "namespace_load_failed" | "incompatible_api" | "probe_failed" | string;
-  readonly installed_version: string | null;
-  readonly required_version: string;
-  readonly resolved_path: string | null;
-  readonly detail: string | null;
-  readonly remediation: string | null;
-}
-
-export interface AgentRuntimeDiagnostics {
-  readonly available: boolean;
-  readonly status: string;
-  readonly rscript: string | null;
-  readonly r_version: string | null;
-  readonly aisdk_version: string | null;
-  readonly provider_adapters_available: boolean;
-  readonly provider_health: string;
-  readonly dependencies: readonly AgentDependencyDiagnostics[];
-  readonly error: string | null;
-}
-
 export interface AgentModelContextCapacity {
   readonly id: string;
   readonly display_name: string;
@@ -605,7 +590,7 @@ export interface ProjectSwitchResponse {
   readonly restart_required: boolean;
 }
 
-export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTransport, ProfileTransport, AgentConversationTransport, AgentTurnDetailTransport, AgentExecutionTransport {
+export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTransport, ProfileTransport, AgentConversationTransport, AgentTurnDetailTransport, AgentExecutionTransport, AgentRuntimeTransport {
   readonly source: UiSnapshotSource;
   prepareWorkspace(chooseRscript?: boolean): Promise<WorkspacePreparation>;
   openProject(path: string): Promise<ProjectSwitchResponse>;
@@ -650,8 +635,6 @@ export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTrans
   subscribeResourcesInvalidated(listener: () => void): Unsubscribe;
   loadAgentLlmSettings(): Promise<AgentLlmSettingsView>;
   setAgentContextCapacity(request: AgentContextCapacityRequest): Promise<AgentLlmSettingsView>;
-  getAgentRuntimeDiagnostics(): Promise<AgentRuntimeDiagnostics>;
-  retryAgentRuntime(): Promise<AgentRuntimeDiagnostics>;
   subscribeAgentInvalidated(listener: () => void): Unsubscribe;
   loadDomainSurface(surfaceId: string): Promise<DomainSurfaceData>;
   readPlotArtifact(plotId: string): Promise<PlotImageView>;

@@ -1,7 +1,6 @@
 import type {
   AgentContextCapacityRequest,
   AgentLlmSettingsView,
-  AgentRuntimeDiagnostics,
   AgentFileMutationResponse,
   CheckResult,
   CheckResultRequest,
@@ -23,6 +22,7 @@ import type {
 import { invalidationEvents } from "./invalidation-contract";
 import { createTauriAgentConversationTransport } from "./agent-conversation";
 import { createTauriAgentExecutionTransport } from "./agent-execution";
+import { createTauriAgentRuntimeTransport } from "./agent-runtime";
 import { createTauriAgentTurnDetailTransport } from "./agent-turn";
 import { createTauriProfileTransport } from "./profile";
 import { createTauriResourceTransport } from "./resource";
@@ -122,6 +122,7 @@ export function createTauriUiKernelTransport(
   invoke: Invoke,
   listen: Listen,
 ): UiKernelTransport {
+  const agentRuntimeTransport = createTauriAgentRuntimeTransport(invoke);
   return {
     source: "tauri",
     async prepareWorkspace(chooseRscript = false): Promise<WorkspacePreparation> {
@@ -170,7 +171,7 @@ export function createTauriUiKernelTransport(
           },
         };
       }
-      void invoke<AgentRuntimeDiagnostics>("agent_runtime_retry").catch(() => undefined);
+      void agentRuntimeTransport.retryAgentRuntime().catch(() => undefined);
       try {
         const restored = await invoke<{ readonly status?: string }>("project_restore_session");
         const restoredStatus = restored.status ?? "unknown";
@@ -248,14 +249,11 @@ export function createTauriUiKernelTransport(
     ...createTauriAgentConversationTransport(invoke),
     ...createTauriAgentTurnDetailTransport(invoke),
     ...createTauriAgentExecutionTransport(invoke),
+    ...agentRuntimeTransport,
     loadAgentLlmSettings: () =>
       invoke<AgentLlmSettingsView>("agent_llm_settings"),
     setAgentContextCapacity: (request: AgentContextCapacityRequest) =>
       invoke<AgentLlmSettingsView>("agent_llm_set_context_capacity", { request }),
-    getAgentRuntimeDiagnostics: () =>
-      invoke<AgentRuntimeDiagnostics>("agent_runtime_status"),
-    retryAgentRuntime: () =>
-      invoke<AgentRuntimeDiagnostics>("agent_runtime_retry"),
     subscribeAgentInvalidated: (listener) =>
       subscribeEvents(listen, invalidationEvents("agent"), listener),
     loadDomainSurface: async (surfaceId) => {

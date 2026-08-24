@@ -147,7 +147,7 @@ struct StartupView {
     issue: Option<StartupIssue>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 struct AgentDependencyStatus {
     package: String,
     status: String,
@@ -175,6 +175,35 @@ struct AgentRuntimeStatus {
     #[serde(default)]
     dependencies: Vec<AgentDependencyStatus>,
     error: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, specta::Type)]
+struct AgentRuntimeStatusView {
+    available: bool,
+    status: String,
+    rscript: Option<String>,
+    r_version: Option<String>,
+    aisdk_version: Option<String>,
+    provider_adapters_available: bool,
+    provider_health: String,
+    dependencies: Vec<AgentDependencyStatus>,
+    error: Option<String>,
+}
+
+impl From<AgentRuntimeStatus> for AgentRuntimeStatusView {
+    fn from(status: AgentRuntimeStatus) -> Self {
+        Self {
+            available: status.available,
+            status: status.status,
+            rscript: status.rscript,
+            r_version: status.r_version,
+            aisdk_version: status.aisdk_version,
+            provider_adapters_available: status.provider_adapters_available,
+            provider_health: status.provider_health,
+            dependencies: status.dependencies,
+            error: status.error,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1297,18 +1326,21 @@ async fn startup_open_log_directory() -> Result<Value, String> {
     Ok(json!({"path": path}))
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
-fn agent_runtime_status(state: State<'_, AppState>) -> Result<AgentRuntimeStatus, String> {
+fn agent_runtime_status(state: State<'_, AppState>) -> Result<AgentRuntimeStatusView, String> {
     runtime_config(&state)
         .map(|config| config.agent_runtime)
+        .map(AgentRuntimeStatusView::from)
         .map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn agent_runtime_retry(
     app: AppHandle,
     state: State<'_, AppState>,
-) -> Result<AgentRuntimeStatus, String> {
+) -> Result<AgentRuntimeStatusView, String> {
     let config = runtime_config(&state).map_err(display_error)?;
     let rscript = config.rscript.clone();
     let r_version = config.r_version.clone();
@@ -1340,7 +1372,7 @@ async fn agent_runtime_retry(
         "Agent runtime retry remains unavailable"
     });
     ui_runtime::emit_snapshot_invalidated(&app, "agent_runtime_status_changed");
-    Ok(status)
+    Ok(status.into())
 }
 
 #[tauri::command]

@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const read = (path) => readFileSync(path, "utf8");
+const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const read = (path) => readFileSync(join(repositoryRoot, path), "utf8");
 
 export function validateAgentDependencyDiagnostics(value) {
   for (const marker of [
@@ -20,8 +23,9 @@ export function validateAgentDependencyDiagnostics(value) {
     "incompatible_version", "1.4.12", "1.5.0", "CRAN currently provides 1.4.12",
     "aisdk.providers", "missing", "/project/renv/library/R-4.6/aarch64-apple-darwin/aisdk",
   ]) assert.ok(value.mock.includes(marker), `browser diagnostics fixture lost ${marker}`);
-  assert.match(value.transport, /invoke<AgentRuntimeDiagnostics>\("agent_runtime_status"\)/u);
-  assert.match(value.transport, /invoke<AgentRuntimeDiagnostics>\("agent_runtime_retry"\)/u);
+  assert.match(value.transport, /createTauriAgentRuntimeTransport/u);
+  assert.match(value.transport, /"agent_runtime_status"/u);
+  assert.match(value.transport, /"agent_runtime_retry"/u);
   assert.match(value.contractTest, /CRAN currently provides 1\.4\.12/u);
   assert.match(value.contractTest, /required:  >= 1\.5\.0/u);
   assert.match(value.spec, /Issue #94 owns canonical Agent dependency manifests/u);
@@ -33,7 +37,7 @@ const fixture = () => ({
   probe: "tryCatch(loadNamespace(name), error = function(error) error)",
   frontend: "AgentRuntimeDiagnostics getAgentRuntimeDiagnostics Dependency details Copy diagnostics installed: required:  >= status: path: Provider adapters: Workspace R remains independent",
   mock: "incompatible_version 1.4.12 1.5.0 CRAN currently provides 1.4.12 aisdk.providers missing /project/renv/library/R-4.6/aarch64-apple-darwin/aisdk",
-  transport: 'invoke<AgentRuntimeDiagnostics>("agent_runtime_status")\ninvoke<AgentRuntimeDiagnostics>("agent_runtime_retry")',
+  transport: 'createTauriAgentRuntimeTransport "agent_runtime_status" "agent_runtime_retry"',
   contractTest: "CRAN currently provides 1.4.12 required:  >= 1.5.0",
   spec: "Issue #94 owns canonical Agent dependency manifests\nIssue #93 owns Workspace R/Ark supervision",
 });
@@ -57,7 +61,7 @@ if (process.argv.includes("--test")) {
     probe: rust.slice(rust.indexOf("fn agent_runtime_probe_expression"), rust.indexOf("fn agent_runtime_status_from_probe")),
     frontend: `${read("desktop/ui/src/app/App.tsx")}\n${read("desktop/ui/src/transport/types.ts")}`,
     mock: read("desktop/ui/src/transport/mock.ts"),
-    transport: read("desktop/ui/src/transport/tauri.ts"),
+    transport: `${read("desktop/ui/src/transport/tauri.ts")}\n${read("desktop/ui/src/transport/agent-runtime.ts")}\n${read("desktop/ui/src/transport/generated/agent-runtime.ts")}`,
     contractTest: read("desktop/ui/src/app/App.test.tsx"),
     spec: read("docs/plans/implemented-2026-08-21-agent-dependency-diagnostics-fault-isolation-spec.md"),
   });
