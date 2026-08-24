@@ -1,3 +1,42 @@
+import type {
+  RuntimeExecution,
+  RuntimeExecutionCursor,
+  RuntimeExecutionDeleteResult,
+  RuntimeOutputFollowFrame,
+  RuntimeOutputPage,
+  RuntimeOutputPageRequest,
+  RuntimeOutputPolicyUpdate,
+  RuntimeOutputPolicyView,
+  RuntimeOutputPruneResult,
+  RuntimeOutputReference,
+  RuntimeOutputSearchRequest,
+  RuntimeOutputSearchResult,
+} from "./runtime-output";
+
+export type {
+  RuntimeExecution,
+  RuntimeExecutionCursor,
+  RuntimeExecutionDeleteResult,
+  RuntimeExecutionStatus,
+  RuntimeOutputChunk,
+  RuntimeOutputFollowFrame,
+  RuntimeOutputPage,
+  RuntimeOutputPageRequest,
+  RuntimeOutputPolicy,
+  RuntimeOutputPolicyUpdate,
+  RuntimeOutputPolicyView,
+  RuntimeOutputPresentationKind,
+  RuntimeOutputPruneResult,
+  RuntimeOutputReference,
+  RuntimeOutputReferenceKind,
+  RuntimeOutputSearchHit,
+  RuntimeOutputSearchRequest,
+  RuntimeOutputSearchResult,
+  RuntimeOutputState,
+  RuntimeOutputStorageKind,
+  RuntimeOutputTransport,
+} from "./runtime-output";
+
 export type UiSnapshotSource = "tauri" | "mock";
 export type HealthState = "ready" | "degraded" | "unavailable" | "restarting";
 export type ActiveOperationState = "queued" | "running" | "waiting" | "cancelling";
@@ -230,193 +269,9 @@ export interface RuntimeOutputEvent {
   readonly payload: unknown;
 }
 
-export type RuntimeExecutionStatus = "admitted" | "running" | "completed" | "failed" | "interrupted";
-export type RuntimeOutputState = "collecting" | "complete" | "partial" | "unavailable" | "pruned";
-
-export interface RuntimeExecution {
-  readonly execution_id: string;
-  readonly project_root: string;
-  readonly run_id: string | null;
-  readonly runtime_provider_id: string;
-  readonly runtime_instance_id: string;
-  readonly runtime_activation_generation: number;
-  readonly console_instance_id: string;
-  readonly submitted_code: string;
-  readonly workspace_id: string | null;
-  readonly source_path: string | null;
-  readonly execution_mode: string | null;
-  readonly document_version: number | null;
-  readonly status: RuntimeExecutionStatus;
-  readonly terminal_reason: string | null;
-  readonly output_state: RuntimeOutputState;
-  readonly last_sequence: number;
-  readonly output_bytes: number;
-  readonly started_at: string;
-  readonly finished_at: string | null;
-}
-
-export interface RuntimeOutputChunk {
-  readonly execution_id: string;
-  readonly project_root: string;
-  readonly sequence: number;
-  readonly producer_sequence: number;
-  readonly projection_slot: number;
-  readonly source_kind: string;
-  readonly presentation_kind: "stdout" | "value" | "message" | "warning" | "error" | "status" | "display_ref";
-  readonly media_type: string | null;
-  readonly storage_kind: "inline_text" | "inline_json" | "record_ref" | "tombstone";
-  readonly text_payload: string | null;
-  readonly json_payload: string | null;
-  readonly reference_kind: "plot" | "artifact" | null;
-  readonly reference_id: string | null;
-  readonly payload_bytes: number;
-  readonly payload_sha256: string;
-  readonly created_at: string;
-}
-
 export interface RuntimeExecutionStartResponse {
   readonly execution: RuntimeExecution;
   readonly committed_through: number;
-}
-
-export interface RuntimeOutputPage {
-  readonly execution_id: string;
-  readonly project_root: string;
-  readonly status: RuntimeExecutionStatus;
-  readonly output_state: RuntimeOutputState;
-  readonly total_output_bytes: number;
-  readonly after_sequence: number;
-  readonly before_sequence: number | null;
-  readonly previous_sequence: number;
-  readonly next_sequence: number;
-  readonly has_older: boolean;
-  readonly has_more: boolean;
-  readonly chunks: readonly RuntimeOutputChunk[];
-}
-
-export type RuntimeOutputFollowFrame =
-  | {
-      readonly type: "admitted";
-      readonly project_id: string;
-      readonly execution_id: string;
-      readonly committed_through: number;
-      readonly execution: RuntimeExecution;
-    }
-  | {
-      readonly type: "chunks";
-      readonly project_id: string;
-      readonly execution_id: string;
-      readonly first_sequence: number;
-      readonly last_sequence: number;
-      readonly chunks: readonly RuntimeOutputChunk[];
-    }
-  | {
-      readonly type: "gap";
-      readonly project_id: string;
-      readonly execution_id: string;
-      readonly expected_sequence: number;
-      readonly committed_through: number;
-    }
-  | {
-      readonly type: "checkpoint";
-      readonly project_id: string;
-      readonly execution_id: string;
-      readonly committed_through: number;
-    }
-  | {
-      readonly type: "terminal";
-      readonly project_id: string;
-      readonly execution_id: string;
-      readonly committed_through: number;
-      readonly execution: RuntimeExecution;
-    };
-
-export interface RuntimeOutputPageRequest {
-  readonly execution_id: string;
-  readonly after_sequence?: number;
-  readonly before_sequence?: number;
-  readonly page_size?: number;
-  readonly byte_limit?: number;
-}
-
-export interface RuntimeExecutionCursor {
-  readonly started_at: string;
-  readonly execution_id: string;
-}
-
-export interface RuntimeOutputSearchRequest {
-  readonly query: string;
-  readonly console_instance_id?: string;
-  readonly started_after?: string;
-  readonly limit?: number;
-}
-
-export interface RuntimeOutputSearchHit {
-  readonly execution_id: string;
-  readonly sequence: number;
-  readonly presentation_kind: string;
-  readonly storage_kind: string;
-  readonly preview: string;
-  readonly reference_kind: "plot" | "artifact" | null;
-  readonly reference_id: string | null;
-  readonly payload_sha256: string;
-}
-
-export interface RuntimeOutputSearchResult {
-  readonly query: string;
-  readonly searched_execution_count: number;
-  readonly matched_execution_count: number;
-  readonly incomplete_execution_count: number;
-  readonly truncated: boolean;
-  readonly hits: readonly RuntimeOutputSearchHit[];
-}
-
-export interface RuntimeOutputPolicy {
-  readonly project_root: string;
-  readonly revision: number;
-  readonly max_runtime_output_bytes_per_execution: number | null;
-  readonly runtime_output_project_warning_bytes: number | null;
-  readonly max_runtime_execution_rows: number | null;
-  readonly auto_prune_enabled: false;
-  readonly updated_at: string;
-}
-
-export interface RuntimeOutputPolicyView {
-  readonly policy: RuntimeOutputPolicy;
-  readonly project_output_bytes: number;
-  readonly project_execution_count: number;
-  readonly warning_active: boolean;
-}
-
-export interface RuntimeOutputPolicyUpdate {
-  readonly expected_revision: number;
-  readonly max_runtime_output_bytes_per_execution: number | null;
-  readonly runtime_output_project_warning_bytes: number | null;
-  readonly max_runtime_execution_rows: number | null;
-  readonly auto_prune_enabled: false;
-}
-
-export interface RuntimeOutputPruneResult {
-  readonly outcome: "applied" | "unchanged" | "not_found" | "not_active";
-  readonly pruned_chunk_count: number;
-  readonly reclaimed_bytes: number;
-}
-
-export interface RuntimeOutputReference {
-  readonly project_id: string;
-  readonly execution_id: string;
-  readonly start_sequence: number;
-  readonly end_sequence: number;
-  readonly range_sha256: string;
-  readonly payload_bytes: number;
-  readonly chunk_count: number;
-  readonly status: RuntimeExecutionStatus;
-  readonly output_state: RuntimeOutputState;
-}
-
-export interface RuntimeExecutionDeleteResult {
-  readonly outcome: "applied" | "unchanged" | "not_found" | "not_active";
-  readonly deleted_output_chunk_count: number;
 }
 
 export type ResourceStatus = "ready" | "missing" | "unsupported";

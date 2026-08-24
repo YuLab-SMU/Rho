@@ -30,6 +30,7 @@ mod project;
 mod query;
 mod run;
 mod runtime_output;
+mod runtime_output_contract;
 mod workbench;
 
 pub use agent::{
@@ -84,6 +85,10 @@ pub use runtime_output::{
     RuntimeOutputDraft, RuntimeOutputPage, RuntimeOutputPayload, RuntimeOutputPolicy,
     RuntimeOutputPolicyUpdate, RuntimeOutputPruneResult, RuntimeOutputSearchHit,
     RuntimeOutputSearchResult,
+};
+pub use runtime_output_contract::{
+    RuntimeExecutionStatus, RuntimeOutputIpcNumber, RuntimeOutputPresentationKind,
+    RuntimeOutputReferenceKind, RuntimeOutputState, RuntimeOutputStorageKind,
 };
 
 pub fn normalize_project_root(root: &str) -> String {

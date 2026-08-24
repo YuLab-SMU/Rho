@@ -7,6 +7,7 @@ import type {
   RuntimeOutputPage,
   RuntimeOutputPolicyView,
   RuntimeOutputReference,
+  RuntimeOutputTransport,
   UiKernelTransport,
 } from "../transport";
 import { workbenchFailureMessage } from "./workbench-failure";
@@ -15,7 +16,10 @@ import { runtimeExecutionStateLabel, runtimeOutputChunkBlock } from "./runtime-o
 import { formatHistoryTime, shortenId } from "./time-format";
 
 interface RuntimeHistoryProps {
-  readonly transport: UiKernelTransport;
+  readonly transport: RuntimeOutputTransport & Pick<
+    UiKernelTransport,
+    "loadDomainSurface" | "subscribeInvalidated"
+  >;
   readonly initialFilter: string;
   readonly persistFilter: (filter: string) => Promise<void>;
   readonly reportError: (cause: unknown) => void;

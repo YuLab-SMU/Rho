@@ -99,68 +99,85 @@ pub(crate) struct RuntimeExecutionStartResponse {
     committed_through: i64,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub(crate) struct RuntimeExecutionIdentityRequest {
     execution_id: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub(crate) struct RuntimeExecutionListRequest {
+    #[specta(type = Option<rho_store::RuntimeOutputIpcNumber>)]
     limit: Option<usize>,
     before_started_at: Option<String>,
     before_execution_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub(crate) struct RuntimeOutputSearchRequest {
     query: String,
     console_instance_id: Option<String>,
     started_after: Option<String>,
+    #[specta(type = Option<rho_store::RuntimeOutputIpcNumber>)]
     limit: Option<usize>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub(crate) struct RuntimeOutputPolicyView {
     policy: RuntimeOutputPolicy,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
     project_output_bytes: i64,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
     project_execution_count: i64,
     warning_active: bool,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub(crate) struct RuntimeOutputPageRequest {
     execution_id: String,
     #[serde(default)]
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
     after_sequence: i64,
+    #[specta(type = Option<rho_store::RuntimeOutputIpcNumber>)]
     before_sequence: Option<i64>,
+    #[specta(type = Option<rho_store::RuntimeOutputIpcNumber>)]
     page_size: Option<usize>,
+    #[specta(type = Option<rho_store::RuntimeOutputIpcNumber>)]
     byte_limit: Option<usize>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub(crate) struct RuntimeOutputFollowRequest {
     execution_id: String,
     #[serde(default)]
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
     after_sequence: i64,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub(crate) struct RuntimeOutputReferenceRequest {
     pub(crate) execution_id: String,
+    #[specta(type = Option<rho_store::RuntimeOutputIpcNumber>)]
     pub(crate) start_sequence: Option<i64>,
+    #[specta(type = Option<rho_store::RuntimeOutputIpcNumber>)]
     pub(crate) end_sequence: Option<i64>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub(crate) struct RuntimeOutputReference {
     pub(crate) project_id: String,
     pub(crate) execution_id: String,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
     pub(crate) start_sequence: i64,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
     pub(crate) end_sequence: i64,
     pub(crate) range_sha256: String,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
     pub(crate) payload_bytes: i64,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
     pub(crate) chunk_count: i64,
+    #[specta(type = rho_store::RuntimeExecutionStatus)]
     pub(crate) status: String,
+    #[specta(type = rho_store::RuntimeOutputState)]
     pub(crate) output_state: String,
 }
 
@@ -170,36 +187,43 @@ pub(crate) struct ResolvedRuntimeOutputContext {
     pub(crate) content: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub(crate) enum RuntimeOutputFollowFrame {
     Admitted {
         project_id: String,
         execution_id: String,
+        #[specta(type = rho_store::RuntimeOutputIpcNumber)]
         committed_through: i64,
         execution: RuntimeExecution,
     },
     Chunks {
         project_id: String,
         execution_id: String,
+        #[specta(type = rho_store::RuntimeOutputIpcNumber)]
         first_sequence: i64,
+        #[specta(type = rho_store::RuntimeOutputIpcNumber)]
         last_sequence: i64,
         chunks: Vec<RuntimeOutputChunk>,
     },
     Gap {
         project_id: String,
         execution_id: String,
+        #[specta(type = rho_store::RuntimeOutputIpcNumber)]
         expected_sequence: i64,
+        #[specta(type = rho_store::RuntimeOutputIpcNumber)]
         committed_through: i64,
     },
     Checkpoint {
         project_id: String,
         execution_id: String,
+        #[specta(type = rho_store::RuntimeOutputIpcNumber)]
         committed_through: i64,
     },
     Terminal {
         project_id: String,
         execution_id: String,
+        #[specta(type = rho_store::RuntimeOutputIpcNumber)]
         committed_through: i64,
         execution: RuntimeExecution,
     },
@@ -1953,6 +1977,7 @@ pub(crate) async fn runtime_execution_start(
     })
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn runtime_execution_get(
     request: RuntimeExecutionIdentityRequest,
@@ -1968,6 +1993,7 @@ pub(crate) async fn runtime_execution_get(
         .map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn runtime_execution_list(
     request: RuntimeExecutionListRequest,
@@ -1993,6 +2019,7 @@ pub(crate) async fn runtime_execution_list(
         .map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn runtime_output_search(
     request: RuntimeOutputSearchRequest,
@@ -2037,6 +2064,7 @@ fn runtime_output_policy_view(
     })
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn runtime_output_policy_get(
     state: State<'_, AppState>,
@@ -2049,6 +2077,7 @@ pub(crate) async fn runtime_output_policy_get(
     .map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn runtime_output_policy_update(
     request: RuntimeOutputPolicyUpdate,
@@ -2062,6 +2091,7 @@ pub(crate) async fn runtime_output_policy_update(
     runtime_output_policy_view(&store, &project_root).map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn runtime_output_page(
     request: RuntimeOutputPageRequest,
@@ -2105,6 +2135,7 @@ pub(crate) async fn runtime_output_page(
     }
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn runtime_output_reference(
     request: RuntimeOutputReferenceRequest,
@@ -2116,6 +2147,7 @@ pub(crate) async fn runtime_output_reference(
         .map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn runtime_output_prune(
     request: RuntimeExecutionIdentityRequest,
@@ -2132,6 +2164,7 @@ pub(crate) async fn runtime_output_prune(
     Ok(result)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn runtime_execution_delete(
     request: RuntimeExecutionIdentityRequest,
@@ -2148,6 +2181,7 @@ pub(crate) async fn runtime_execution_delete(
     Ok(result)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn runtime_output_follow(
     request: RuntimeOutputFollowRequest,
@@ -2252,6 +2286,10 @@ pub(crate) async fn runtime_output_follow(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "runtime_registry/runtime_output_contract_tests.rs"]
+mod runtime_output_contract_tests;
 
 #[cfg(test)]
 mod tests {

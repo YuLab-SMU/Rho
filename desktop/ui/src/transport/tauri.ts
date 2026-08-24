@@ -36,19 +36,7 @@ import type {
   RuntimeCreateRequest,
   RuntimeDetachRequest,
   RuntimeExecuteRequest,
-  RuntimeExecution,
-  RuntimeExecutionCursor,
-  RuntimeExecutionDeleteResult,
   RuntimeExecutionStartResponse,
-  RuntimeOutputFollowFrame,
-  RuntimeOutputPage,
-  RuntimeOutputPageRequest,
-  RuntimeOutputPruneResult,
-  RuntimeOutputReference,
-  RuntimeOutputSearchRequest,
-  RuntimeOutputSearchResult,
-  RuntimeOutputPolicyUpdate,
-  RuntimeOutputPolicyView,
   RuntimeInstanceRequest,
   RuntimeRegistrySnapshot,
   SceneEditRequest,
@@ -70,8 +58,8 @@ import type {
   VibePageMutationRequest,
   WorkspacePreparation,
 } from "./types";
-import { Channel } from "@tauri-apps/api/core";
 import { invalidationEvents } from "./invalidation-contract";
+import { createTauriRuntimeOutputTransport } from "./runtime-output";
 
 export type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 export type Listen = <T>(
@@ -333,42 +321,7 @@ export function createTauriUiKernelTransport(
       invoke<RuntimeRegistrySnapshot>("runtime_stop", { request }),
     startRuntimeExecution: (request: RuntimeExecuteRequest) =>
       invoke<RuntimeExecutionStartResponse>("runtime_execution_start", { request }),
-    getRuntimeExecution: (executionId: string) =>
-      invoke<RuntimeExecution>("runtime_execution_get", { request: { execution_id: executionId } }),
-    listRuntimeExecutions: (limit = 50, before?: RuntimeExecutionCursor) =>
-      invoke<readonly RuntimeExecution[]>("runtime_execution_list", { request: {
-        limit,
-        before_started_at: before?.started_at,
-        before_execution_id: before?.execution_id,
-      } }),
-    loadRuntimeOutputPage: (request: RuntimeOutputPageRequest) =>
-      invoke<RuntimeOutputPage>("runtime_output_page", { request }),
-    searchRuntimeOutput: (request: RuntimeOutputSearchRequest) =>
-      invoke<RuntimeOutputSearchResult>("runtime_output_search", { request }),
-    getRuntimeOutputPolicy: () =>
-      invoke<RuntimeOutputPolicyView>("runtime_output_policy_get"),
-    updateRuntimeOutputPolicy: (request: RuntimeOutputPolicyUpdate) =>
-      invoke<RuntimeOutputPolicyView>("runtime_output_policy_update", { request }),
-    createRuntimeOutputReference: (executionId: string, startSequence?: number, endSequence?: number) =>
-      invoke<RuntimeOutputReference>("runtime_output_reference", {
-        request: {
-          execution_id: executionId,
-          start_sequence: startSequence,
-          end_sequence: endSequence,
-        },
-      }),
-    pruneRuntimeOutput: (executionId: string) =>
-      invoke<RuntimeOutputPruneResult>("runtime_output_prune", { request: { execution_id: executionId } }),
-    deleteRuntimeExecution: (executionId: string) =>
-      invoke<RuntimeExecutionDeleteResult>("runtime_execution_delete", { request: { execution_id: executionId } }),
-    followRuntimeOutput: async (executionId, afterSequence, listener) => {
-      const channel = new Channel<RuntimeOutputFollowFrame>();
-      channel.onmessage = listener;
-      await invoke<void>("runtime_output_follow", {
-        request: { execution_id: executionId, after_sequence: afterSequence },
-        channel,
-      });
-    },
+    ...createTauriRuntimeOutputTransport(invoke),
     subscribeRuntimesInvalidated: (listener) =>
       subscribeEvents(listen, invalidationEvents("runtimes"), listener),
     loadResources: () => invoke<ResourceRegistrySnapshot>("resource_list"),

@@ -126,6 +126,7 @@ export type {
   RuntimeOutputPolicy,
   RuntimeOutputPolicyUpdate,
   RuntimeOutputPolicyView,
+  RuntimeOutputTransport,
   RuntimeExecutionDeleteResult,
   RuntimeOutputPageRequest,
   RuntimeInstanceRequest,

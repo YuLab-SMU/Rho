@@ -34,24 +34,30 @@ pub struct RuntimeExecutionDraft {
     pub document_version: Option<i64>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct RuntimeExecution {
     pub execution_id: String,
     pub project_root: String,
     pub run_id: Option<String>,
     pub runtime_provider_id: String,
     pub runtime_instance_id: String,
+    #[specta(type = crate::RuntimeOutputIpcNumber)]
     pub runtime_activation_generation: i64,
     pub console_instance_id: String,
     pub submitted_code: String,
     pub workspace_id: Option<String>,
     pub source_path: Option<String>,
     pub execution_mode: Option<String>,
+    #[specta(type = Option<crate::RuntimeOutputIpcNumber>)]
     pub document_version: Option<i64>,
+    #[specta(type = crate::RuntimeExecutionStatus)]
     pub status: String,
     pub terminal_reason: Option<String>,
+    #[specta(type = crate::RuntimeOutputState)]
     pub output_state: String,
+    #[specta(type = crate::RuntimeOutputIpcNumber)]
     pub last_sequence: i64,
+    #[specta(type = crate::RuntimeOutputIpcNumber)]
     pub output_bytes: i64,
     pub started_at: String,
     pub finished_at: Option<String>,
@@ -64,7 +70,7 @@ pub struct RuntimeExecutionFinish {
     pub output_state: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum RuntimeExecutionMutationOutcome {
     Applied,
@@ -103,21 +109,28 @@ pub struct RuntimeOutputDraft {
     pub payload: RuntimeOutputPayload,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct RuntimeOutputChunk {
     pub execution_id: String,
     pub project_root: String,
+    #[specta(type = crate::RuntimeOutputIpcNumber)]
     pub sequence: i64,
+    #[specta(type = crate::RuntimeOutputIpcNumber)]
     pub producer_sequence: i64,
+    #[specta(type = crate::RuntimeOutputIpcNumber)]
     pub projection_slot: i64,
     pub source_kind: String,
+    #[specta(type = crate::RuntimeOutputPresentationKind)]
     pub presentation_kind: String,
     pub media_type: Option<String>,
+    #[specta(type = crate::RuntimeOutputStorageKind)]
     pub storage_kind: String,
     pub text_payload: Option<String>,
     pub json_payload: Option<String>,
+    #[specta(type = Option<crate::RuntimeOutputReferenceKind>)]
     pub reference_kind: Option<String>,
     pub reference_id: Option<String>,
+    #[specta(type = crate::RuntimeOutputIpcNumber)]
     pub payload_bytes: i64,
     pub payload_sha256: String,
     pub created_at: String,
@@ -130,74 +143,97 @@ pub struct RuntimeOutputAppendResult {
     pub capture_stopped: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct RuntimeOutputPage {
     pub execution_id: String,
     pub project_root: String,
+    #[specta(type = crate::RuntimeExecutionStatus)]
     pub status: String,
+    #[specta(type = crate::RuntimeOutputState)]
     pub output_state: String,
+    #[specta(type = crate::RuntimeOutputIpcNumber)]
     pub total_output_bytes: i64,
+    #[specta(type = crate::RuntimeOutputIpcNumber)]
     pub after_sequence: i64,
+    #[specta(type = Option<crate::RuntimeOutputIpcNumber>)]
     pub before_sequence: Option<i64>,
+    #[specta(type = crate::RuntimeOutputIpcNumber)]
     pub previous_sequence: i64,
+    #[specta(type = crate::RuntimeOutputIpcNumber)]
     pub next_sequence: i64,
     pub has_older: bool,
     pub has_more: bool,
     pub chunks: Vec<RuntimeOutputChunk>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct RuntimeOutputSearchHit {
     pub execution_id: String,
+    #[specta(type = crate::RuntimeOutputIpcNumber)]
     pub sequence: i64,
     pub presentation_kind: String,
     pub storage_kind: String,
     pub preview: String,
+    #[specta(type = Option<crate::RuntimeOutputReferenceKind>)]
     pub reference_kind: Option<String>,
     pub reference_id: Option<String>,
     pub payload_sha256: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct RuntimeOutputSearchResult {
     pub query: String,
+    #[specta(type = crate::RuntimeOutputIpcNumber)]
     pub searched_execution_count: i64,
+    #[specta(type = crate::RuntimeOutputIpcNumber)]
     pub matched_execution_count: i64,
+    #[specta(type = crate::RuntimeOutputIpcNumber)]
     pub incomplete_execution_count: i64,
     pub truncated: bool,
     pub hits: Vec<RuntimeOutputSearchHit>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct RuntimeOutputPolicy {
     pub project_root: String,
+    #[specta(type = crate::RuntimeOutputIpcNumber)]
     pub revision: i64,
+    #[specta(type = Option<crate::RuntimeOutputIpcNumber>)]
     pub max_runtime_output_bytes_per_execution: Option<i64>,
+    #[specta(type = Option<crate::RuntimeOutputIpcNumber>)]
     pub runtime_output_project_warning_bytes: Option<i64>,
+    #[specta(type = Option<crate::RuntimeOutputIpcNumber>)]
     pub max_runtime_execution_rows: Option<i64>,
     pub auto_prune_enabled: bool,
     pub updated_at: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct RuntimeOutputPolicyUpdate {
+    #[specta(type = crate::RuntimeOutputIpcNumber)]
     pub expected_revision: i64,
+    #[specta(type = Option<crate::RuntimeOutputIpcNumber>)]
     pub max_runtime_output_bytes_per_execution: Option<i64>,
+    #[specta(type = Option<crate::RuntimeOutputIpcNumber>)]
     pub runtime_output_project_warning_bytes: Option<i64>,
+    #[specta(type = Option<crate::RuntimeOutputIpcNumber>)]
     pub max_runtime_execution_rows: Option<i64>,
     pub auto_prune_enabled: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct RuntimeOutputPruneResult {
     pub outcome: RuntimeExecutionMutationOutcome,
+    #[specta(type = crate::RuntimeOutputIpcNumber)]
     pub pruned_chunk_count: i64,
+    #[specta(type = crate::RuntimeOutputIpcNumber)]
     pub reclaimed_bytes: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct RuntimeExecutionDeleteResult {
     pub outcome: RuntimeExecutionMutationOutcome,
+    #[specta(type = crate::RuntimeOutputIpcNumber)]
     pub deleted_output_chunk_count: i64,
 }
 
