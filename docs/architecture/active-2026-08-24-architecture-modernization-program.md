@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W1-03"],
+  "active_work_packages": ["AM-W1-02"],
   "integration_lane": "AM-W0-01",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -272,10 +272,11 @@ commands and the first truthful cwd failure are recorded in AM-E-0001 through
 AM-E-0003. The integration lane regenerated tracked `desktop/dist` from build
 identity `f07d05c35aa2`. No application/R version or NEWS change is required.
 
-Wave 1's umbrella remains proposed. Its first Runtime Output vertical is paused
-briefly while AM-W1-03 replaces the frozen Rust 1.88 compatibility veto with a
-rolling pinned-toolchain contract. Runtime Output resumes automatically after
-that local gate; execution admission remains a later Runtime-domain slice.
+Wave 1's umbrella remains proposed. AM-W1-03 replaced the frozen Rust 1.88 veto
+with a rolling exact 1.97.0 toolchain contract in `b4f25fb`; the same locked
+tauri-specta graph passes the complete local workspace matrix. Runtime Output
+AM-W1-02 is active again; execution admission remains a later Runtime-domain
+slice.
 
 ## Version, NEWS, and release decision
 
