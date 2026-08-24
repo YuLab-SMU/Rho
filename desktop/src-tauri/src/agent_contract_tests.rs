@@ -44,6 +44,63 @@ fn turn() -> AgentTurnSummary {
     }
 }
 
+fn turn_event() -> AgentTurnEvent {
+    AgentTurnEvent {
+        id: 42,
+        turn_id: "agent-turn:2".to_string(),
+        timestamp: "2026-08-24T12:00:30Z".to_string(),
+        event_type: "tool.call_completed".to_string(),
+        title: "Inspected model".to_string(),
+        body: Some("Model structure is consistent.".to_string()),
+        status: "completed".to_string(),
+        tool: Some("inspect_model".to_string()),
+        request_id: Some("agent-request:fixture".to_string()),
+        code: None,
+        details_json: "{\"success\":true}".to_string(),
+    }
+}
+
+fn approval() -> ApprovalRequestSummary {
+    ApprovalRequestSummary {
+        request_id: "agent-request:fixture".to_string(),
+        turn_id: "agent-turn:2".to_string(),
+        project_root: "/tmp/Project A".to_string(),
+        tool: "inspect_model".to_string(),
+        policy: "ask".to_string(),
+        status: "approved".to_string(),
+        decision: Some("approve".to_string()),
+        reason: None,
+        arguments_json: "{\"path\":\"model.R\"}".to_string(),
+        code: None,
+        workspace_id: Some("workspace:a".to_string()),
+        state_revision: Some(5),
+        project_revision: Some(7),
+        requested_at: "2026-08-24T12:00:20Z".to_string(),
+        responded_at: Some("2026-08-24T12:00:25Z".to_string()),
+        continuation_outcome: Some("resumed".to_string()),
+    }
+}
+
+fn context_item() -> AgentTurnContextItem {
+    AgentTurnContextItem {
+        context_item_id: "agent-context:fixture".to_string(),
+        turn_id: "agent-turn:2".to_string(),
+        project_root: "/tmp/Project A".to_string(),
+        ordinal: 1,
+        source_kind: "runtime_output".to_string(),
+        source_id: Some("runtime-output:fixture".to_string()),
+        source_revision: Some("3".to_string()),
+        source_sha256: "fixture-sha256".to_string(),
+        trust_class: "project_owned".to_string(),
+        capacity_source: "catalog".to_string(),
+        original_bytes: 4_096,
+        included_bytes: 2_048,
+        estimated_tokens: 512,
+        disposition: "included".to_string(),
+        reason_code: None,
+    }
+}
+
 fn assert_javascript_safe_numbers(value: &serde_json::Value) {
     match value {
         serde_json::Value::Number(number) => {
@@ -78,6 +135,29 @@ fn agent_conversation_ipc_serialization_matches_generated_contract() {
 }
 
 #[test]
+fn agent_turn_detail_ipc_serialization_matches_generated_contract() {
+    let detail = serde_json::to_value(AgentTurnDetailView {
+        turn: turn(),
+        events: vec![turn_event()],
+        approvals: vec![approval()],
+        context_items: vec![context_item()],
+    })
+    .unwrap();
+
+    assert_eq!(detail["turn"]["mode"], "ask");
+    assert_eq!(detail["events"][0]["id"], 42);
+    assert!(detail["events"][0]["code"].is_null());
+    assert_eq!(detail["approvals"][0]["state_revision"], 5);
+    assert!(detail["approvals"][0]["reason"].is_null());
+    assert_eq!(
+        detail["context_items"][0]["context_item_id"],
+        "agent-context:fixture"
+    );
+    assert_eq!(detail["context_items"][0]["included_bytes"], 2_048);
+    assert_javascript_safe_numbers(&detail);
+}
+
+#[test]
 #[ignore = "writes the requested generated TypeScript contract"]
 fn agent_conversation_typescript_export() {
     let output_path = std::env::var_os("RHO_AGENT_CONVERSATION_BINDINGS_PATH")
@@ -91,4 +171,18 @@ fn agent_conversation_typescript_export() {
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
         .export(specta_typescript::Typescript::default(), output_path)
         .expect("Agent conversation TypeScript export must succeed");
+}
+
+#[test]
+#[ignore = "writes the requested generated TypeScript contract"]
+fn agent_turn_typescript_export() {
+    let output_path = std::env::var_os("RHO_AGENT_TURN_BINDINGS_PATH")
+        .expect("RHO_AGENT_TURN_BINDINGS_PATH must name the generated file");
+    tauri_specta::Builder::<tauri::Wry>::new()
+        .commands(tauri_specta::collect_commands![
+            crate::get_agent_turn_detail
+        ])
+        .error_handling(tauri_specta::ErrorHandlingMode::Throw)
+        .export(specta_typescript::Typescript::default(), output_path)
+        .expect("Agent turn detail TypeScript export must succeed");
 }

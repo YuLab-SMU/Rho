@@ -104,8 +104,9 @@ pub struct AgentTurnEventDraft {
     pub details_json: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct AgentTurnEvent {
+    #[specta(type = crate::RuntimeOutputIpcNumber)]
     pub id: i64,
     pub turn_id: String,
     pub timestamp: String,
@@ -141,7 +142,7 @@ pub struct ApprovalDecisionRecord {
     pub continuation_outcome: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct ApprovalRequestSummary {
     pub request_id: String,
     pub turn_id: String,
@@ -154,7 +155,9 @@ pub struct ApprovalRequestSummary {
     pub arguments_json: String,
     pub code: Option<String>,
     pub workspace_id: Option<String>,
+    #[specta(type = Option<crate::RuntimeOutputIpcNumber>)]
     pub state_revision: Option<i64>,
+    #[specta(type = Option<crate::RuntimeOutputIpcNumber>)]
     pub project_revision: Option<i64>,
     pub requested_at: String,
     pub responded_at: Option<String>,

@@ -34,8 +34,11 @@ import type {
 import type {
   AgentConversationTransport,
   AgentMode,
-  AgentTurnSummary,
 } from "./agent-conversation";
+import type {
+  AgentContextPlanItem,
+  AgentTurnDetailTransport,
+} from "./agent-turn";
 
 export type {
   RuntimeExecution,
@@ -162,6 +165,14 @@ export type {
   AgentMode,
   AgentTurnSummary,
 } from "./agent-conversation";
+
+export type {
+  AgentApprovalRequest,
+  AgentContextPlanItem,
+  AgentTurnDetail,
+  AgentTurnDetailTransport,
+  AgentTurnEvent,
+} from "./agent-turn";
 
 export type UiSnapshotSource = "tauri" | "mock";
 export type HealthState = "ready" | "degraded" | "unavailable" | "restarting";
@@ -468,61 +479,6 @@ export interface AgentRuntimeDiagnostics {
   readonly error: string | null;
 }
 
-export interface AgentTurnEvent {
-  readonly id: number;
-  readonly turn_id: string;
-  readonly timestamp: string;
-  readonly event_type: string;
-  readonly title: string;
-  readonly body: string | null;
-  readonly status: string;
-  readonly tool: string | null;
-  readonly request_id: string | null;
-  readonly code: string | null;
-  readonly details_json: string;
-}
-
-export interface AgentApprovalRequest {
-  readonly request_id: string;
-  readonly turn_id: string;
-  readonly project_root: string;
-  readonly tool: string;
-  readonly policy: string;
-  readonly status: string;
-  readonly decision: string | null;
-  readonly reason: string | null;
-  readonly arguments_json: string;
-  readonly code: string | null;
-  readonly workspace_id: string | null;
-  readonly state_revision: number | null;
-  readonly project_revision: number | null;
-  readonly requested_at: string;
-  readonly responded_at: string | null;
-  readonly continuation_outcome: string | null;
-}
-
-export interface AgentTurnDetail {
-  readonly turn: AgentTurnSummary;
-  readonly events: readonly AgentTurnEvent[];
-  readonly approvals: readonly AgentApprovalRequest[];
-  readonly context_items?: readonly AgentContextPlanItem[];
-}
-
-export interface AgentContextPlanItem {
-  readonly ordinal: number;
-  readonly source_kind: string;
-  readonly source_id: string | null;
-  readonly source_revision: string | null;
-  readonly source_sha256: string;
-  readonly trust_class: string;
-  readonly capacity_source: string;
-  readonly original_bytes: number;
-  readonly included_bytes: number;
-  readonly estimated_tokens: number;
-  readonly disposition: string;
-  readonly reason_code: string | null;
-}
-
 export interface AgentContextPreviewRequest {
   readonly prompt: string;
   readonly mode: AgentMode;
@@ -688,7 +644,7 @@ export interface ProjectSwitchResponse {
   readonly restart_required: boolean;
 }
 
-export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTransport, ProfileTransport, AgentConversationTransport {
+export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTransport, ProfileTransport, AgentConversationTransport, AgentTurnDetailTransport {
   readonly source: UiSnapshotSource;
   prepareWorkspace(chooseRscript?: boolean): Promise<WorkspacePreparation>;
   openProject(path: string): Promise<ProjectSwitchResponse>;
@@ -731,7 +687,6 @@ export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTrans
   ): Promise<void>;
   subscribeRuntimesInvalidated(listener: () => void): Unsubscribe;
   subscribeResourcesInvalidated(listener: () => void): Unsubscribe;
-  getAgentTurnDetail(turnId: string): Promise<AgentTurnDetail | null>;
   loadAgentLlmSettings(): Promise<AgentLlmSettingsView>;
   setAgentContextCapacity(request: AgentContextCapacityRequest): Promise<AgentLlmSettingsView>;
   previewAgentContext(request: AgentContextPreviewRequest): Promise<AgentContextPlanPreview>;

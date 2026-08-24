@@ -5,7 +5,6 @@ import type {
   AgentLlmSettingsView,
   AgentRuntimeDiagnostics,
   AgentFileMutationResponse,
-  AgentTurnDetail,
   CheckResult,
   CheckResultRequest,
   CheckRunRequest,
@@ -26,6 +25,7 @@ import type {
 } from "./types";
 import { invalidationEvents } from "./invalidation-contract";
 import { createTauriAgentConversationTransport } from "./agent-conversation";
+import { createTauriAgentTurnDetailTransport } from "./agent-turn";
 import { createTauriProfileTransport } from "./profile";
 import { createTauriResourceTransport } from "./resource";
 import { createTauriRuntimeTransport } from "./runtime";
@@ -248,8 +248,7 @@ export function createTauriUiKernelTransport(
     subscribeResourcesInvalidated: (listener) =>
       subscribeEvents(listen, invalidationEvents("resources"), listener),
     ...createTauriAgentConversationTransport(invoke),
-    getAgentTurnDetail: (turnId) =>
-      invoke<AgentTurnDetail | null>("get_agent_turn_detail", { turnId }),
+    ...createTauriAgentTurnDetailTransport(invoke),
     loadAgentLlmSettings: () =>
       invoke<AgentLlmSettingsView>("agent_llm_settings"),
     setAgentContextCapacity: (request: AgentContextCapacityRequest) =>

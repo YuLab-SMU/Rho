@@ -66,12 +66,12 @@ use rho_server::coordinator::{
     request_environment_operation, run_agent_turn,
 };
 use rho_store::{
-    AgentConversationDraft, AgentConversationSummary, AgentTurnDraft, AgentTurnEventDraft,
-    AgentTurnFinish, AgentTurnSummary, ApprovalRequestSummary, ArtifactRecordDraft,
-    ArtifactRecordSummary, EnvironmentOperationRequestSummary, EvidenceClaim, EvidenceClaimDraft,
-    EvidenceClaimReview, EvidenceEntry, EvidenceEntryDraft, PlotArtifactSummary,
-    PlotPayloadPruneResult, ProjectMutationService, ProjectQueryService, ProjectRetentionSummary,
-    RetentionPolicy, RunDetail, RunSummary, Store, normalize_project_root,
+    AgentConversationDraft, AgentConversationSummary, AgentTurnContextItem, AgentTurnDraft,
+    AgentTurnEvent, AgentTurnEventDraft, AgentTurnFinish, AgentTurnSummary, ApprovalRequestSummary,
+    ArtifactRecordDraft, ArtifactRecordSummary, EnvironmentOperationRequestSummary, EvidenceClaim,
+    EvidenceClaimDraft, EvidenceClaimReview, EvidenceEntry, EvidenceEntryDraft,
+    PlotArtifactSummary, PlotPayloadPruneResult, ProjectMutationService, ProjectQueryService,
+    ProjectRetentionSummary, RetentionPolicy, RunDetail, RunSummary, Store, normalize_project_root,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -5859,11 +5859,20 @@ async fn list_approval_requests(
         .map_err(display_error)
 }
 
+#[derive(Debug, Clone, Serialize, specta::Type)]
+struct AgentTurnDetailView {
+    turn: AgentTurnSummary,
+    events: Vec<AgentTurnEvent>,
+    approvals: Vec<ApprovalRequestSummary>,
+    context_items: Vec<AgentTurnContextItem>,
+}
+
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn get_agent_turn_detail(
     turn_id: String,
     state: State<'_, AppState>,
-) -> Result<Option<Value>, String> {
+) -> Result<Option<AgentTurnDetailView>, String> {
     let root = state.project_root.read().await.clone();
     let project_root = root.to_string_lossy();
     let store = read_store(&state).map_err(display_error)?;
@@ -5876,13 +5885,12 @@ async fn get_agent_turn_detail(
     let context_items = store
         .list_agent_turn_context_items(project_root.as_ref(), &turn_id)
         .map_err(display_error)?;
-    let mut value = serde_json::to_value(detail).map_err(display_error)?;
-    value
-        .as_object_mut()
-        .context("Agent Turn detail did not serialize as an object")
-        .map_err(display_error)?
-        .insert("context_items".to_string(), json!(context_items));
-    Ok(Some(value))
+    Ok(Some(AgentTurnDetailView {
+        turn: detail.turn,
+        events: detail.events,
+        approvals: detail.approvals,
+        context_items,
+    }))
 }
 
 #[tauri::command]

@@ -28,7 +28,7 @@ export interface AgentConversationTransport {
   ): Promise<readonly AgentTurnSummary[]>;
 }
 
-function checkedTurnSummary(turn: AgentTurnSummaryWire): AgentTurnSummary {
+export function checkedAgentTurnSummary(turn: AgentTurnSummaryWire): AgentTurnSummary {
   if (turn.mode !== "ask" && turn.mode !== "plan" && turn.mode !== "act") {
     throw new Error(`Agent Turn returned an unsupported mode: ${turn.mode}`);
   }
@@ -44,6 +44,6 @@ export function createTauriAgentConversationTransport(
     createAgentConversation: () => commands.createAgentConversation(),
     listAgentTurns: (conversationId, limit = 50) => commands
       .listAgentTurns(conversationId, limit)
-      .then((turns) => turns.map(checkedTurnSummary)),
+      .then((turns) => turns.map(checkedAgentTurnSummary)),
   };
 }

@@ -254,11 +254,12 @@ pub struct AgentTurnContextItemDraft {
     pub reason_code: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct AgentTurnContextItem {
     pub context_item_id: String,
     pub turn_id: String,
     pub project_root: String,
+    #[specta(type = crate::RuntimeOutputIpcNumber)]
     pub ordinal: i64,
     pub source_kind: String,
     pub source_id: Option<String>,
@@ -266,8 +267,11 @@ pub struct AgentTurnContextItem {
     pub source_sha256: String,
     pub trust_class: String,
     pub capacity_source: String,
+    #[specta(type = crate::RuntimeOutputIpcNumber)]
     pub original_bytes: i64,
+    #[specta(type = crate::RuntimeOutputIpcNumber)]
     pub included_bytes: i64,
+    #[specta(type = crate::RuntimeOutputIpcNumber)]
     pub estimated_tokens: i64,
     pub disposition: String,
     pub reason_code: Option<String>,

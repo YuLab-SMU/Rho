@@ -654,6 +654,7 @@ export function createMockUiKernelTransport(
       details_json: JSON.stringify({ success: true }),
     }],
     approvals: [],
+    context_items: [],
   }]]);
   const notifyKernel = () => {
     emitInvalidation("kernel", () => {
