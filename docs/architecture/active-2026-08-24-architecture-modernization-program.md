@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
+  "active_work_packages": ["AM-W1-02"],
   "integration_lane": "AM-W0-01",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -268,8 +268,9 @@ commands and the first truthful cwd failure are recorded in AM-E-0001 through
 AM-E-0003. The integration lane regenerated tracked `desktop/dist` from build
 identity `f07d05c35aa2`. No application/R version or NEWS change is required.
 
-Wave 1's umbrella remains proposed and must be split into the first Runtime
-Output vertical contract/dependency spike before product code is activated.
+Wave 1's umbrella remains proposed. Its first Runtime Output vertical is active
+as AM-W1-02 with an exact dependency/determinism/MSRV/shape fallback gate;
+execution admission remains a later Runtime-domain slice.
 
 ## Version, NEWS, and release decision
 
