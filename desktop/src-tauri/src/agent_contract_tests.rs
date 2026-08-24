@@ -101,6 +101,24 @@ fn context_item() -> AgentTurnContextItem {
     }
 }
 
+fn context_item_draft() -> AgentTurnContextItemDraft {
+    AgentTurnContextItemDraft {
+        context_item_id: "agent-context-draft:fixture".to_string(),
+        ordinal: 0,
+        source_kind: "current_request".to_string(),
+        source_id: None,
+        source_revision: Some("1".to_string()),
+        source_sha256: "draft-sha256".to_string(),
+        trust_class: "user_instruction".to_string(),
+        capacity_source: "catalog".to_string(),
+        original_bytes: 256,
+        included_bytes: 256,
+        estimated_tokens: 64,
+        disposition: "complete".to_string(),
+        reason_code: None,
+    }
+}
+
 fn assert_javascript_safe_numbers(value: &serde_json::Value) {
     match value {
         serde_json::Value::Number(number) => {
@@ -158,6 +176,76 @@ fn agent_turn_detail_ipc_serialization_matches_generated_contract() {
 }
 
 #[test]
+fn agent_execution_ipc_serialization_matches_generated_contract() {
+    let preview = serde_json::to_value(AgentContextPlanPreviewView {
+        plan_digest: "plan-digest:fixture".to_string(),
+        context_window_tokens: 128_000,
+        reserved_output_tokens: 8_192,
+        estimated_input_tokens: 1_024,
+        capacity_source: "catalog".to_string(),
+        items: vec![context_item_draft()],
+        model_profile_id: "model-profile:fixture".to_string(),
+        model_display_name: "Fixture model".to_string(),
+        settings_revision: 9,
+        conversation_id: None,
+        runtime_output_context: Some(runtime_registry::RuntimeOutputReference {
+            project_id: "project:fixture".to_string(),
+            execution_id: "runtime-execution:fixture".to_string(),
+            start_sequence: 1,
+            end_sequence: 3,
+            range_sha256: "range-sha256:fixture".to_string(),
+            payload_bytes: 2_048,
+            chunk_count: 3,
+            status: "completed".to_string(),
+            output_state: "complete".to_string(),
+        }),
+    })
+    .unwrap();
+    let started = serde_json::to_value(AgentTurnStartResponse {
+        status: AgentTurnStartStatus::Started,
+        turn_id: "agent-turn:started".to_string(),
+        conversation_id: "agent-conversation:fixture".to_string(),
+        retry_of_turn_id: None,
+        auto_approve: false,
+        task_kind: "agent_turn".to_string(),
+    })
+    .unwrap();
+    let cancelled = serde_json::to_value(AgentTurnCancelResponse {
+        status: AgentTurnCancelStatus::Cancelled,
+        turn_id: "agent-turn:cancelled".to_string(),
+    })
+    .unwrap();
+    let delivered = serde_json::to_value(AgentApprovalDeliveryResponse {
+        status: AgentApprovalDeliveryStatus::NotDelivered,
+        request_id: "agent-request:fixture".to_string(),
+        turn_id: "agent-turn:started".to_string(),
+    })
+    .unwrap();
+    let decision: ApprovalDecisionRequest = serde_json::from_value(serde_json::json!({
+        "request_id": "agent-request:fixture",
+        "decision": "reject",
+        "reason": null
+    }))
+    .unwrap();
+
+    assert_eq!(preview["context_window_tokens"], 128_000);
+    assert_eq!(
+        preview["items"][0]["context_item_id"],
+        "agent-context-draft:fixture"
+    );
+    assert!(preview["conversation_id"].is_null());
+    assert_eq!(preview["runtime_output_context"]["end_sequence"], 3);
+    assert_eq!(started["status"], "started");
+    assert!(started["retry_of_turn_id"].is_null());
+    assert_eq!(cancelled["status"], "cancelled");
+    assert_eq!(delivered["status"], "not_delivered");
+    assert_eq!(decision.decision, "reject");
+    assert!(decision.reason.is_none());
+    assert_javascript_safe_numbers(&preview);
+    assert_javascript_safe_numbers(&started);
+}
+
+#[test]
 #[ignore = "writes the requested generated TypeScript contract"]
 fn agent_conversation_typescript_export() {
     let output_path = std::env::var_os("RHO_AGENT_CONVERSATION_BINDINGS_PATH")
@@ -185,4 +273,22 @@ fn agent_turn_typescript_export() {
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
         .export(specta_typescript::Typescript::default(), output_path)
         .expect("Agent turn detail TypeScript export must succeed");
+}
+
+#[test]
+#[ignore = "writes the requested generated TypeScript contract"]
+fn agent_execution_typescript_export() {
+    let output_path = std::env::var_os("RHO_AGENT_EXECUTION_BINDINGS_PATH")
+        .expect("RHO_AGENT_EXECUTION_BINDINGS_PATH must name the generated file");
+    tauri_specta::Builder::<tauri::Wry>::new()
+        .commands(tauri_specta::collect_commands![
+            crate::agent_context_preview,
+            crate::run_agent,
+            crate::retry_agent_turn,
+            crate::cancel_agent_turn,
+            crate::respond_approval,
+        ])
+        .error_handling(tauri_specta::ErrorHandlingMode::Throw)
+        .export(specta_typescript::Typescript::default(), output_path)
+        .expect("Agent execution TypeScript export must succeed");
 }

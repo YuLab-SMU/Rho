@@ -1,6 +1,4 @@
 import type {
-  AgentContextPlanPreview,
-  AgentContextPreviewRequest,
   AgentContextCapacityRequest,
   AgentLlmSettingsView,
   AgentRuntimeDiagnostics,
@@ -17,7 +15,6 @@ import type {
   PluginSurfaceEventResult,
   PlotImageView,
   ProjectSwitchResponse,
-  RunAgentResponse,
   UiKernelSnapshot,
   UiKernelTransport,
   Unsubscribe,
@@ -25,6 +22,7 @@ import type {
 } from "./types";
 import { invalidationEvents } from "./invalidation-contract";
 import { createTauriAgentConversationTransport } from "./agent-conversation";
+import { createTauriAgentExecutionTransport } from "./agent-execution";
 import { createTauriAgentTurnDetailTransport } from "./agent-turn";
 import { createTauriProfileTransport } from "./profile";
 import { createTauriResourceTransport } from "./resource";
@@ -249,35 +247,11 @@ export function createTauriUiKernelTransport(
       subscribeEvents(listen, invalidationEvents("resources"), listener),
     ...createTauriAgentConversationTransport(invoke),
     ...createTauriAgentTurnDetailTransport(invoke),
+    ...createTauriAgentExecutionTransport(invoke),
     loadAgentLlmSettings: () =>
       invoke<AgentLlmSettingsView>("agent_llm_settings"),
     setAgentContextCapacity: (request: AgentContextCapacityRequest) =>
       invoke<AgentLlmSettingsView>("agent_llm_set_context_capacity", { request }),
-    previewAgentContext: (request: AgentContextPreviewRequest) =>
-      invoke<AgentContextPlanPreview>("agent_context_preview", {
-        prompt: request.prompt,
-        mode: request.mode,
-        taskKind: request.task_kind,
-        modelId: request.model_id,
-        editorContext: request.editor_context,
-        conversationId: request.conversation_id,
-        runtimeOutputContext: request.runtime_output_context,
-      }),
-    runAgent: (request) => invoke<RunAgentResponse>("run_agent", {
-      prompt: request.prompt,
-      mode: request.mode,
-      taskKind: request.task_kind,
-      modelId: request.model_id,
-      autoApprove: request.auto_approve,
-      editorContext: request.editor_context,
-      conversationId: request.conversation_id,
-      runtimeOutputContext: request.runtime_output_context,
-      contextPlanDigest: request.context_plan_digest,
-    }),
-    retryAgentTurn: (turnId) =>
-      invoke<RunAgentResponse>("retry_agent_turn", { turnId }),
-    cancelAgentTurn: (turnId) => invoke("cancel_agent_turn", { turnId }),
-    respondAgentApproval: (request) => invoke("respond_approval", { request }),
     getAgentRuntimeDiagnostics: () =>
       invoke<AgentRuntimeDiagnostics>("agent_runtime_status"),
     retryAgentRuntime: () =>

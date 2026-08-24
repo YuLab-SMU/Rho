@@ -2461,6 +2461,7 @@ export function createMockUiKernelTransport(
         estimated_input_tokens: request.prompt.length + (reference?.payload_bytes ?? 0),
         capacity_source: selectedModel.context_capacity_source,
         items: [{
+          context_item_id: "agent-context:mock-current-request",
           ordinal: 0,
           source_kind: "current_request",
           source_id: null,
@@ -2474,6 +2475,7 @@ export function createMockUiKernelTransport(
           disposition: "complete",
           reason_code: null,
         }, ...(reference == null ? [] : [{
+          context_item_id: "agent-context:mock-runtime-output",
           ordinal: 1,
           source_kind: "runtime_output",
           source_id: `${reference.execution_id}:${reference.start_sequence}-${reference.end_sequence}`,
@@ -2629,7 +2631,7 @@ export function createMockUiKernelTransport(
         };
         agentDetails.set(turnId, { ...detail, approvals });
         notifyAgent();
-        return { status: "delivered", request_id: request.request_id };
+        return { status: "delivered", request_id: request.request_id, turn_id: turnId };
       }
       throw new Error("Mock Agent approval is unavailable.");
     },

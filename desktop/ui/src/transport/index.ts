@@ -11,6 +11,7 @@ export type { ResourceTransport } from "./resource";
 export type { ProfileTransport } from "./profile";
 export type { AgentConversationTransport } from "./agent-conversation";
 export type { AgentTurnDetailTransport } from "./agent-turn";
+export type { AgentExecutionTransport } from "./agent-execution";
 
 export function createUiKernelTransport(): UiKernelTransport {
   if (isTauri()) {

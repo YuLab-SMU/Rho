@@ -33,12 +33,11 @@ import type {
 } from "./profile";
 import type {
   AgentConversationTransport,
-  AgentMode,
 } from "./agent-conversation";
 import type {
-  AgentContextPlanItem,
   AgentTurnDetailTransport,
 } from "./agent-turn";
+import type { AgentExecutionTransport } from "./agent-execution";
 
 export type {
   RuntimeExecution,
@@ -173,6 +172,19 @@ export type {
   AgentTurnDetailTransport,
   AgentTurnEvent,
 } from "./agent-turn";
+
+export type {
+  AgentApprovalDecisionRequest,
+  AgentApprovalDeliveryResponse,
+  AgentContextPlanPreview,
+  AgentContextPreviewRequest,
+  AgentEditorContext,
+  AgentExecutionTransport,
+  AgentTaskKind,
+  AgentTurnCancelResponse,
+  RunAgentRequest,
+  RunAgentResponse,
+} from "./agent-execution";
 
 export type UiSnapshotSource = "tauri" | "mock";
 export type HealthState = "ready" | "degraded" | "unavailable" | "restarting";
@@ -479,30 +491,6 @@ export interface AgentRuntimeDiagnostics {
   readonly error: string | null;
 }
 
-export interface AgentContextPreviewRequest {
-  readonly prompt: string;
-  readonly mode: AgentMode;
-  readonly task_kind: "agent_turn" | "problem_repair";
-  readonly model_id: string | null;
-  readonly editor_context: unknown | null;
-  readonly conversation_id: string | null;
-  readonly runtime_output_context: RuntimeOutputReference | null;
-}
-
-export interface AgentContextPlanPreview {
-  readonly plan_digest: string;
-  readonly context_window_tokens: number;
-  readonly reserved_output_tokens: number;
-  readonly estimated_input_tokens: number;
-  readonly capacity_source: string;
-  readonly items: readonly AgentContextPlanItem[];
-  readonly model_profile_id: string;
-  readonly model_display_name: string;
-  readonly settings_revision: number;
-  readonly conversation_id: string | null;
-  readonly runtime_output_context: RuntimeOutputReference | null;
-}
-
 export interface AgentModelContextCapacity {
   readonly id: string;
   readonly display_name: string;
@@ -523,33 +511,6 @@ export interface AgentContextCapacityRequest {
   readonly expected_revision: number;
   readonly context_window_tokens: number;
   readonly reserved_output_tokens: number;
-}
-
-export interface RunAgentRequest {
-  readonly prompt: string;
-  readonly mode: AgentMode;
-  readonly task_kind: "agent_turn" | "problem_repair";
-  readonly model_id: string | null;
-  readonly auto_approve: boolean;
-  readonly editor_context: unknown | null;
-  readonly conversation_id: string | null;
-  readonly runtime_output_context: RuntimeOutputReference | null;
-  readonly context_plan_digest: string | null;
-}
-
-export interface RunAgentResponse {
-  readonly status: "started";
-  readonly turn_id: string;
-  readonly conversation_id: string;
-  readonly retry_of_turn_id: string | null;
-  readonly auto_approve: boolean;
-  readonly task_kind: string;
-}
-
-export interface AgentApprovalDecisionRequest {
-  readonly request_id: string;
-  readonly decision: "approve" | "reject" | "cancel";
-  readonly reason: string | null;
 }
 
 export interface AgentFileApplyRequest {
@@ -644,7 +605,7 @@ export interface ProjectSwitchResponse {
   readonly restart_required: boolean;
 }
 
-export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTransport, ProfileTransport, AgentConversationTransport, AgentTurnDetailTransport {
+export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTransport, ProfileTransport, AgentConversationTransport, AgentTurnDetailTransport, AgentExecutionTransport {
   readonly source: UiSnapshotSource;
   prepareWorkspace(chooseRscript?: boolean): Promise<WorkspacePreparation>;
   openProject(path: string): Promise<ProjectSwitchResponse>;
@@ -689,11 +650,6 @@ export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTrans
   subscribeResourcesInvalidated(listener: () => void): Unsubscribe;
   loadAgentLlmSettings(): Promise<AgentLlmSettingsView>;
   setAgentContextCapacity(request: AgentContextCapacityRequest): Promise<AgentLlmSettingsView>;
-  previewAgentContext(request: AgentContextPreviewRequest): Promise<AgentContextPlanPreview>;
-  runAgent(request: RunAgentRequest): Promise<RunAgentResponse>;
-  retryAgentTurn(turnId: string): Promise<RunAgentResponse>;
-  cancelAgentTurn(turnId: string): Promise<unknown>;
-  respondAgentApproval(request: AgentApprovalDecisionRequest): Promise<unknown>;
   getAgentRuntimeDiagnostics(): Promise<AgentRuntimeDiagnostics>;
   retryAgentRuntime(): Promise<AgentRuntimeDiagnostics>;
   subscribeAgentInvalidated(listener: () => void): Unsubscribe;

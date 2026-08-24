@@ -66,12 +66,13 @@ use rho_server::coordinator::{
     request_environment_operation, run_agent_turn,
 };
 use rho_store::{
-    AgentConversationDraft, AgentConversationSummary, AgentTurnContextItem, AgentTurnDraft,
-    AgentTurnEvent, AgentTurnEventDraft, AgentTurnFinish, AgentTurnSummary, ApprovalRequestSummary,
-    ArtifactRecordDraft, ArtifactRecordSummary, EnvironmentOperationRequestSummary, EvidenceClaim,
-    EvidenceClaimDraft, EvidenceClaimReview, EvidenceEntry, EvidenceEntryDraft,
-    PlotArtifactSummary, PlotPayloadPruneResult, ProjectMutationService, ProjectQueryService,
-    ProjectRetentionSummary, RetentionPolicy, RunDetail, RunSummary, Store, normalize_project_root,
+    AgentConversationDraft, AgentConversationSummary, AgentTurnContextItem,
+    AgentTurnContextItemDraft, AgentTurnDraft, AgentTurnEvent, AgentTurnEventDraft,
+    AgentTurnFinish, AgentTurnSummary, ApprovalRequestSummary, ArtifactRecordDraft,
+    ArtifactRecordSummary, EnvironmentOperationRequestSummary, EvidenceClaim, EvidenceClaimDraft,
+    EvidenceClaimReview, EvidenceEntry, EvidenceEntryDraft, PlotArtifactSummary,
+    PlotPayloadPruneResult, ProjectMutationService, ProjectQueryService, ProjectRetentionSummary,
+    RetentionPolicy, RunDetail, RunSummary, Store, normalize_project_root,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -4980,17 +4981,68 @@ async fn resolve_agent_explicit_context(
     }))
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(untagged)]
+enum AgentJsonValue {
+    Null(()),
+    Boolean(bool),
+    Number(f64),
+    String(String),
+    Array(Vec<AgentJsonValue>),
+    Object(BTreeMap<String, AgentJsonValue>),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(transparent)]
+struct AgentEditorContext(#[specta(type = AgentJsonValue)] Value);
+
+#[derive(Debug, Clone, Serialize, specta::Type)]
+struct AgentContextPlanPreviewView {
+    plan_digest: String,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
+    context_window_tokens: u64,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
+    reserved_output_tokens: u64,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
+    estimated_input_tokens: u64,
+    capacity_source: String,
+    items: Vec<AgentTurnContextItemDraft>,
+    model_profile_id: String,
+    model_display_name: String,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
+    settings_revision: u64,
+    conversation_id: Option<String>,
+    runtime_output_context: Option<runtime_registry::RuntimeOutputReference>,
+}
+
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+enum AgentTurnStartStatus {
+    Started,
+}
+
+#[derive(Debug, Clone, Serialize, specta::Type)]
+struct AgentTurnStartResponse {
+    status: AgentTurnStartStatus,
+    turn_id: String,
+    conversation_id: String,
+    retry_of_turn_id: Option<String>,
+    auto_approve: bool,
+    task_kind: String,
+}
+
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn agent_context_preview(
     prompt: String,
     mode: String,
     task_kind: Option<String>,
     model_id: Option<String>,
-    editor_context: Option<Value>,
+    editor_context: Option<AgentEditorContext>,
     conversation_id: Option<String>,
     runtime_output_context: Option<runtime_registry::RuntimeOutputReference>,
     state: State<'_, AppState>,
-) -> Result<Value, String> {
+) -> Result<AgentContextPlanPreviewView, String> {
     if prompt.trim().is_empty() {
         return Err("Agent prompt is empty".to_string());
     }
@@ -5081,7 +5133,7 @@ async fn agent_context_preview(
     let preview: AgentContextPlanPreview = preview_agent_context_plan(
         &prompt,
         &history,
-        editor_context.as_ref(),
+        editor_context.as_ref().map(|context| &context.0),
         Some(&project_root),
         &plugin_projection.context,
         explicit_context.as_ref(),
@@ -5089,21 +5141,22 @@ async fn agent_context_preview(
         conversation_digest_id,
     )
     .map_err(display_error)?;
-    Ok(json!({
-        "plan_digest": preview.plan_digest,
-        "context_window_tokens": preview.context_window_tokens,
-        "reserved_output_tokens": preview.reserved_output_tokens,
-        "estimated_input_tokens": preview.estimated_input_tokens,
-        "capacity_source": preview.capacity_source,
-        "items": preview.items,
-        "model_profile_id": runtime_profile.profile_id,
-        "model_display_name": runtime_profile.model_display_name,
-        "settings_revision": runtime_profile.settings_revision,
-        "conversation_id": requested_conversation_id,
-        "runtime_output_context": runtime_output_context,
-    }))
+    Ok(AgentContextPlanPreviewView {
+        plan_digest: preview.plan_digest,
+        context_window_tokens: preview.context_window_tokens,
+        reserved_output_tokens: preview.reserved_output_tokens,
+        estimated_input_tokens: preview.estimated_input_tokens,
+        capacity_source: preview.capacity_source,
+        items: preview.items,
+        model_profile_id: runtime_profile.profile_id,
+        model_display_name: runtime_profile.model_display_name,
+        settings_revision: runtime_profile.settings_revision,
+        conversation_id: requested_conversation_id,
+        runtime_output_context,
+    })
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn run_agent(
     prompt: String,
@@ -5111,25 +5164,25 @@ async fn run_agent(
     task_kind: Option<String>,
     model_id: Option<String>,
     auto_approve: Option<bool>,
-    editor_context: Option<Value>,
+    editor_context: Option<AgentEditorContext>,
     conversation_id: Option<String>,
     runtime_output_context: Option<runtime_registry::RuntimeOutputReference>,
     context_plan_digest: Option<String>,
     app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<Value, String> {
+) -> Result<AgentTurnStartResponse, String> {
+    let state = app.state::<AppState>();
     start_agent_turn(
         prompt,
         mode,
         task_kind,
         model_id,
         auto_approve,
-        editor_context,
+        editor_context.map(|context| context.0),
         conversation_id,
         runtime_output_context,
         context_plan_digest,
         None,
-        app,
+        app.clone(),
         &state,
     )
     .await
@@ -5149,7 +5202,7 @@ async fn start_agent_turn(
     retry_of_turn_id: Option<String>,
     app: AppHandle,
     state: &AppState,
-) -> Result<Value, String> {
+) -> Result<AgentTurnStartResponse, String> {
     if prompt.trim().is_empty() {
         return Err("Agent prompt is empty".to_string());
     }
@@ -5431,14 +5484,14 @@ async fn start_agent_turn(
     drop(tasks);
     drop(project_transition);
     let _ = registered_tx.send(());
-    Ok(json!({
-        "status": "started",
-        "turn_id": turn_id,
-        "conversation_id": conversation_id,
-        "retry_of_turn_id": retry_of_turn_id,
-        "auto_approve": auto_approve,
-        "task_kind": task_kind
-    }))
+    Ok(AgentTurnStartResponse {
+        status: AgentTurnStartStatus::Started,
+        turn_id,
+        conversation_id,
+        retry_of_turn_id,
+        auto_approve,
+        task_kind,
+    })
 }
 
 struct AgentRetrySource {
@@ -5496,12 +5549,13 @@ fn agent_retry_source(
     })
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn retry_agent_turn(
     turn_id: String,
     app: AppHandle,
     state: State<'_, AppState>,
-) -> Result<Value, String> {
+) -> Result<AgentTurnStartResponse, String> {
     let turn_id = turn_id.trim().to_string();
     if turn_id.is_empty() {
         return Err("Agent Retry source identity is required".to_string());
@@ -5743,11 +5797,25 @@ async fn agent_llm_discover_models(
     .map_err(display_error)
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Clone, Deserialize, specta::Type)]
 struct ApprovalDecisionRequest {
     request_id: String,
     decision: String,
     reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+enum AgentApprovalDeliveryStatus {
+    Delivered,
+    NotDelivered,
+}
+
+#[derive(Debug, Clone, Serialize, specta::Type)]
+struct AgentApprovalDeliveryResponse {
+    status: AgentApprovalDeliveryStatus,
+    request_id: String,
+    turn_id: String,
 }
 
 #[cfg_attr(test, specta::specta)]
@@ -5893,11 +5961,12 @@ async fn get_agent_turn_detail(
     }))
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn respond_approval(
     request: ApprovalDecisionRequest,
     state: State<'_, AppState>,
-) -> Result<Value, String> {
+) -> Result<AgentApprovalDeliveryResponse, String> {
     if !matches!(request.decision.as_str(), "approve" | "reject" | "cancel") {
         return Err(format!(
             "unsupported approval decision `{}`",
@@ -5941,11 +6010,15 @@ async fn respond_approval(
             )
             .map_err(display_error)?;
     }
-    Ok(json!({
-        "status": if delivered { "delivered" } else { "not_delivered" },
-        "request_id": request.request_id,
-        "turn_id": pending.turn_id
-    }))
+    Ok(AgentApprovalDeliveryResponse {
+        status: if delivered {
+            AgentApprovalDeliveryStatus::Delivered
+        } else {
+            AgentApprovalDeliveryStatus::NotDelivered
+        },
+        request_id: request.request_id,
+        turn_id: pending.turn_id,
+    })
 }
 
 #[tauri::command]
@@ -9742,7 +9815,22 @@ fn ensure_supported_r_architecture(r_arch: &str) -> Result<()> {
     Ok(())
 }
 
-async fn cancel_agent_turn_state(turn_id: String, state: &AppState) -> Result<Value, String> {
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+enum AgentTurnCancelStatus {
+    Cancelled,
+}
+
+#[derive(Debug, Clone, Serialize, specta::Type)]
+struct AgentTurnCancelResponse {
+    status: AgentTurnCancelStatus,
+    turn_id: String,
+}
+
+async fn cancel_agent_turn_state(
+    turn_id: String,
+    state: &AppState,
+) -> Result<AgentTurnCancelResponse, String> {
     let _project_transition = state.project_transition_gate.lock().await;
     let root = state.project_root.read().await.clone();
     let project_root = normalize_project_root(root.to_string_lossy().as_ref());
@@ -9855,15 +9943,19 @@ async fn cancel_agent_turn_state(turn_id: String, state: &AppState) -> Result<Va
             })
             .map_err(display_error)?;
     }
-    Ok(json!({ "status": "cancelled", "turn_id": turn_id }))
+    Ok(AgentTurnCancelResponse {
+        status: AgentTurnCancelStatus::Cancelled,
+        turn_id,
+    })
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn cancel_agent_turn(
     turn_id: String,
     app: AppHandle,
     state: State<'_, AppState>,
-) -> Result<Value, String> {
+) -> Result<AgentTurnCancelResponse, String> {
     let response = cancel_agent_turn_state(turn_id.clone(), &state).await?;
     let _ = app.emit("rho://agent-turn-updated", json!({ "turn_id": turn_id }));
     Ok(response)
@@ -12992,7 +13084,7 @@ mod tests {
             let response = cancel_agent_turn_state("turn-cancel-a".to_string(), &state)
                 .await
                 .unwrap();
-            assert_eq!(response["turn_id"], "turn-cancel-a");
+            assert_eq!(response.turn_id, "turn-cancel-a");
             assert_eq!(receiver_a.await.unwrap().decision, "cancel");
             assert!(state.agent_tasks.lock().await.contains_key("turn-cancel-b"));
             assert!(
