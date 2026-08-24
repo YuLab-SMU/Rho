@@ -7,6 +7,7 @@ import type { UiKernelTransport } from "./types";
 
 export type { RuntimeTransport } from "./runtime";
 export type { SurfaceStudioTransport } from "./surface-studio";
+export type { ResourceTransport } from "./resource";
 
 export function createUiKernelTransport(): UiKernelTransport {
   if (isTauri()) {

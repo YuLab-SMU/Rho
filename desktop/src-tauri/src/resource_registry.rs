@@ -973,6 +973,7 @@ fn mutation_recovery_error(operation: anyhow::Error, recovery: Result<()>) -> St
     }
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn resource_list(
     app: AppHandle,
@@ -985,6 +986,7 @@ pub(crate) async fn resource_list(
         .map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn resource_resolve(
     request: ResourceResolveRequestV1,
@@ -1001,6 +1003,7 @@ pub(crate) async fn resource_resolve(
     Ok(transition.snapshot)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn resource_read(
     request: ResourceReadRequestV1,
@@ -1060,6 +1063,7 @@ pub(crate) async fn resource_read(
     }
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn resource_update_draft(
     request: ResourceDraftRequestV1,
@@ -1080,6 +1084,7 @@ pub(crate) async fn resource_update_draft(
     Ok(content)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn resource_save(
     request: ResourceSaveRequestV1,
@@ -1146,6 +1151,7 @@ pub(crate) async fn resource_save(
     Ok(content)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn resource_reload(
     request: ResourceReloadRequestV1,
@@ -1172,6 +1178,7 @@ pub(crate) async fn resource_reload(
     Ok(content)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn resource_rename(
     request: ResourceRenameRequestV1,
@@ -1252,6 +1259,7 @@ pub(crate) async fn resource_rename(
     Ok(transition.snapshot)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn resource_delete(
     request: ResourceDeleteRequestV1,
@@ -1352,6 +1360,10 @@ pub(crate) async fn resource_delete(
     emit_transition(&app, &transition);
     Ok(transition.snapshot)
 }
+
+#[cfg(test)]
+#[path = "resource_registry/resource_contract_tests.rs"]
+mod resource_contract_tests;
 
 #[cfg(test)]
 mod tests {

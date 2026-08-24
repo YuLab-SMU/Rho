@@ -11,6 +11,7 @@ runTauriSpectaBindingGenerator({
   invokeTypeName: "SurfaceStudioInvoke",
   rustSources: "rho-ui-contract/surface+layout+resource+runtime + rho-desktop/surface_runtime+studio_runtime+runtime_registry",
   externalTypes: [
+    { name: "ResourceBindingV1", from: "./resource" },
     { name: "RuntimeBindingV1", from: "./runtime" },
     { name: "RuntimeInstanceRequestV1", from: "./runtime" },
   ],

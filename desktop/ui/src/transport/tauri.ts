@@ -21,15 +21,6 @@ import type {
   PlotImageView,
   ProjectSwitchResponse,
   ProjectUiProfileSnapshot,
-  ResourceContent,
-  ResourceDeleteRequest,
-  ResourceDraftRequest,
-  ResourceReadRequest,
-  ResourceRegistrySnapshot,
-  ResourceReloadRequest,
-  ResourceRenameRequest,
-  ResourceResolveRequest,
-  ResourceSaveRequest,
   RunAgentResponse,
   UiKernelSnapshot,
   UiKernelTransport,
@@ -45,6 +36,7 @@ import type {
   WorkspacePreparation,
 } from "./types";
 import { invalidationEvents } from "./invalidation-contract";
+import { createTauriResourceTransport } from "./resource";
 import { createTauriRuntimeTransport } from "./runtime";
 import { createTauriRuntimeOutputTransport } from "./runtime-output";
 import { createTauriSurfaceStudioTransport } from "./surface-studio";
@@ -281,21 +273,7 @@ export function createTauriUiKernelTransport(
     ...createTauriRuntimeOutputTransport(invoke),
     subscribeRuntimesInvalidated: (listener) =>
       subscribeEvents(listen, invalidationEvents("runtimes"), listener),
-    loadResources: () => invoke<ResourceRegistrySnapshot>("resource_list"),
-    resolveResource: (request: ResourceResolveRequest) =>
-      invoke<ResourceRegistrySnapshot>("resource_resolve", { request }),
-    readResource: (request: ResourceReadRequest) =>
-      invoke<ResourceContent>("resource_read", { request }),
-    updateResourceDraft: (request: ResourceDraftRequest) =>
-      invoke<ResourceContent>("resource_update_draft", { request }),
-    saveResource: (request: ResourceSaveRequest) =>
-      invoke<ResourceContent>("resource_save", { request }),
-    reloadResource: (request: ResourceReloadRequest) =>
-      invoke<ResourceContent>("resource_reload", { request }),
-    renameResource: (request: ResourceRenameRequest) =>
-      invoke<ResourceRegistrySnapshot>("resource_rename", { request }),
-    deleteResource: (request: ResourceDeleteRequest) =>
-      invoke<ResourceRegistrySnapshot>("resource_delete", { request }),
+    ...createTauriResourceTransport(invoke),
     subscribeResourcesInvalidated: (listener) =>
       subscribeEvents(listen, invalidationEvents("resources"), listener),
     listAgentConversations: (limit = 50) =>

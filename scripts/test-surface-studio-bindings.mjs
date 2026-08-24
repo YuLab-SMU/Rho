@@ -92,6 +92,8 @@ try {
     generated,
     /import type \{ RuntimeBindingV1, RuntimeInstanceRequestV1 \} from "\.\/runtime"/,
   );
+  assert.match(generated, /import type \{ ResourceBindingV1 \} from "\.\/resource"/);
+  assert.doesNotMatch(generated, /export type ResourceBindingV1 =/);
   assert.doesNotMatch(generated, /export type RuntimeBindingV1 =/);
   assert.doesNotMatch(generated, /export type RuntimeInstanceRequestV1 =/);
   assert.match(facet, /export interface SurfaceStudioTransport/);

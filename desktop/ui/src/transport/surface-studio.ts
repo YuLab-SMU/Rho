@@ -5,7 +5,6 @@ import {
   type LayoutChildV1,
   type LayoutNodeV1,
   type OpenSurfaceRequestV1,
-  type ResourceBindingV1,
   type RuntimeAttachmentRequestV1,
   type RuntimeDetachRequestV1,
   type SceneEditRequestV1,
@@ -25,6 +24,7 @@ import {
   type SurfaceStudioInvoke,
   type UpdateSurfaceRequestV1,
 } from "./generated/surface-studio";
+export type { ResourceBinding } from "./resource";
 
 type DeepReadonly<T> = T extends (...args: never[]) => unknown
   ? T
@@ -35,7 +35,6 @@ type DeepReadonly<T> = T extends (...args: never[]) => unknown
       : T;
 
 export type SurfaceOrigin = DeepReadonly<SurfaceOriginV1>;
-export type ResourceBinding = DeepReadonly<ResourceBindingV1>;
 export type SurfaceLifecycleState = SurfaceLifecycleStateV1;
 
 export type SurfaceDefinition = Omit<

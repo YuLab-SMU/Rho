@@ -20,12 +20,15 @@ import type {
   RuntimeRegistrySnapshot,
 } from "./runtime";
 import type {
-  ResourceBinding,
   SceneState,
   SurfaceInstanceRequest,
   SurfaceOrigin,
   SurfaceStudioTransport,
 } from "./surface-studio";
+import type {
+  ResourceBinding,
+  ResourceTransport,
+} from "./resource";
 
 export type {
   RuntimeExecution,
@@ -74,7 +77,6 @@ export type {
   LayoutChild,
   LayoutNode,
   OpenSurfaceRequest,
-  ResourceBinding,
   RuntimeAttachmentRequest,
   RuntimeDetachRequest,
   SceneEdit,
@@ -94,6 +96,26 @@ export type {
   SurfaceStudioTransport,
   UpdateSurfaceRequest,
 } from "./surface-studio";
+
+export type {
+  ResourceBinding,
+  ResourceContent,
+  ResourceDeleteRequest,
+  ResourceDescriptor,
+  ResourceDraftRequest,
+  ResourceProviderDefinition,
+  ResourceProviderRegistration,
+  ResourceReadConsistency,
+  ResourceReadRequest,
+  ResourceRegistrySnapshot,
+  ResourceReloadRequest,
+  ResourceRenameRequest,
+  ResourceResolveRequest,
+  ResourceSaveRequest,
+  ResourceStatus,
+  ResourceTarget,
+  ResourceTransport,
+} from "./resource";
 
 export type UiSnapshotSource = "tauri" | "mock";
 export type HealthState = "ready" | "degraded" | "unavailable" | "restarting";
@@ -198,106 +220,6 @@ export interface RuntimeOutputEvent {
   readonly console_instance_id: string;
   readonly kind: string;
   readonly payload: unknown;
-}
-
-export type ResourceStatus = "ready" | "missing" | "unsupported";
-export type ResourceReadConsistency = "shared_document" | "immutable_snapshot";
-
-export interface ResourceDescriptor {
-  readonly resource_provider_id: string;
-  readonly project_id: string;
-  readonly resource_kind: string;
-  readonly resource_id: string;
-  readonly resource_revision: number;
-  readonly label: string;
-  readonly capabilities: readonly string[];
-  readonly status: ResourceStatus;
-  readonly media_type: string | null;
-  readonly size_bytes: number | null;
-  readonly content_sha256: string | null;
-}
-
-export interface ResourceProviderRegistration {
-  readonly definition: {
-    readonly resource_provider_id: string;
-    readonly resource_kinds: readonly string[];
-    readonly display_label: string;
-    readonly capabilities: readonly string[];
-    readonly application_component_id: string;
-  };
-  readonly activation_generation: number;
-}
-
-export interface ResourceRegistrySnapshot {
-  readonly contract: "rho.ui.resource-registry.snapshot.v1";
-  readonly contract_major: 1;
-  readonly snapshot_revision: number;
-  readonly project_id: string;
-  readonly project_revision: number;
-  readonly providers: readonly ResourceProviderRegistration[];
-  readonly resources: readonly ResourceDescriptor[];
-}
-
-export interface ResourceTarget {
-  readonly project_id: string;
-  readonly resource_provider_id: string;
-  readonly resource_kind: string;
-  readonly resource_id: string;
-  readonly expected_project_revision: number;
-  readonly expected_resource_revision: number;
-}
-
-export interface ResourceResolveRequest {
-  readonly project_id: string;
-  readonly resource_provider_id: string;
-  readonly resource_kind: string;
-  readonly resource_id: string;
-  readonly expected_project_revision: number;
-  readonly expected_snapshot_revision: number;
-}
-
-export interface ResourceReadRequest {
-  readonly target: ResourceTarget;
-  readonly consistency: ResourceReadConsistency;
-}
-
-export interface ResourceContent {
-  readonly contract: "rho.ui.resource-content.v1";
-  readonly descriptor: ResourceDescriptor;
-  readonly consistency: ResourceReadConsistency;
-  readonly document_revision: number;
-  readonly base_resource_revision: number;
-  readonly dirty: boolean;
-  readonly stale: boolean;
-  readonly content_encoding: string;
-  readonly content: string;
-}
-
-export interface ResourceDraftRequest {
-  readonly target: ResourceTarget;
-  readonly expected_document_revision: number;
-  readonly content: string;
-}
-
-export interface ResourceSaveRequest {
-  readonly target: ResourceTarget;
-  readonly expected_document_revision: number;
-}
-
-export interface ResourceReloadRequest extends ResourceSaveRequest {
-  readonly discard_dirty: boolean;
-}
-
-export interface ResourceRenameRequest {
-  readonly target: ResourceTarget;
-  readonly expected_document_revision: number | null;
-  readonly new_resource_id: string;
-}
-
-export interface ResourceDeleteRequest {
-  readonly target: ResourceTarget;
-  readonly expected_document_revision: number | null;
-  readonly discard_dirty: boolean;
 }
 
 export type PluginSurfaceEventKind = "input" | "change" | "submit" | "activate";
@@ -939,7 +861,7 @@ export interface ProjectSwitchResponse {
   readonly restart_required: boolean;
 }
 
-export interface UiKernelTransport extends SurfaceStudioTransport {
+export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTransport {
   readonly source: UiSnapshotSource;
   prepareWorkspace(chooseRscript?: boolean): Promise<WorkspacePreparation>;
   openProject(path: string): Promise<ProjectSwitchResponse>;
@@ -992,14 +914,6 @@ export interface UiKernelTransport extends SurfaceStudioTransport {
     listener: (frame: RuntimeOutputFollowFrame) => void,
   ): Promise<void>;
   subscribeRuntimesInvalidated(listener: () => void): Unsubscribe;
-  loadResources(): Promise<ResourceRegistrySnapshot>;
-  resolveResource(request: ResourceResolveRequest): Promise<ResourceRegistrySnapshot>;
-  readResource(request: ResourceReadRequest): Promise<ResourceContent>;
-  updateResourceDraft(request: ResourceDraftRequest): Promise<ResourceContent>;
-  saveResource(request: ResourceSaveRequest): Promise<ResourceContent>;
-  reloadResource(request: ResourceReloadRequest): Promise<ResourceContent>;
-  renameResource(request: ResourceRenameRequest): Promise<ResourceRegistrySnapshot>;
-  deleteResource(request: ResourceDeleteRequest): Promise<ResourceRegistrySnapshot>;
   subscribeResourcesInvalidated(listener: () => void): Unsubscribe;
   listAgentConversations(limit?: number): Promise<readonly AgentConversationSummary[]>;
   createAgentConversation(): Promise<AgentConversationSummary>;

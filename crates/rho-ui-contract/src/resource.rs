@@ -40,7 +40,7 @@ impl Validate for ResourceBindingV1 {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ResourceStatusV1 {
     Ready,
@@ -48,17 +48,19 @@ pub enum ResourceStatusV1 {
     Unsupported,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct ResourceDescriptorV1 {
     pub resource_provider_id: ResourceProviderId,
     pub project_id: ProjectId,
     pub resource_kind: ResourceKindId,
     pub resource_id: String,
+    #[specta(type = crate::UiIpcNumber)]
     pub resource_revision: u64,
     pub label: String,
     pub capabilities: Vec<ResourceCapabilityId>,
     pub status: ResourceStatusV1,
     pub media_type: Option<String>,
+    #[specta(type = Option<crate::UiIpcNumber>)]
     pub size_bytes: Option<u64>,
     pub content_sha256: Option<String>,
 }
@@ -120,7 +122,7 @@ impl Validate for ResourceDescriptorV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct ResourceProviderDefinitionV1 {
     pub resource_provider_id: ResourceProviderId,
     pub resource_kinds: Vec<ResourceKindId>,
@@ -146,9 +148,10 @@ impl Validate for ResourceProviderDefinitionV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct ResourceProviderRegistrationV1 {
     pub definition: ResourceProviderDefinitionV1,
+    #[specta(type = crate::UiIpcNumber)]
     pub activation_generation: u64,
 }
 
@@ -164,12 +167,14 @@ impl Validate for ResourceProviderRegistrationV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct ResourceRegistrySnapshotV1 {
     pub contract: String,
     pub contract_major: u16,
+    #[specta(type = crate::UiIpcNumber)]
     pub snapshot_revision: u64,
     pub project_id: ProjectId,
+    #[specta(type = crate::UiIpcNumber)]
     pub project_revision: u64,
     pub providers: Vec<ResourceProviderRegistrationV1>,
     pub resources: Vec<ResourceDescriptorV1>,
@@ -266,13 +271,15 @@ impl Validate for ResourceRegistrySnapshotV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct ResourceTargetV1 {
     pub project_id: ProjectId,
     pub resource_provider_id: ResourceProviderId,
     pub resource_kind: ResourceKindId,
     pub resource_id: String,
+    #[specta(type = crate::UiIpcNumber)]
     pub expected_project_revision: u64,
+    #[specta(type = crate::UiIpcNumber)]
     pub expected_resource_revision: u64,
 }
 
@@ -289,26 +296,28 @@ impl Validate for ResourceTargetV1 {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ResourceReadConsistencyV1 {
     SharedDocument,
     ImmutableSnapshot,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct ResourceReadRequestV1 {
     pub target: ResourceTargetV1,
     pub consistency: ResourceReadConsistencyV1,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct ResourceResolveRequestV1 {
     pub project_id: ProjectId,
     pub resource_provider_id: ResourceProviderId,
     pub resource_kind: ResourceKindId,
     pub resource_id: String,
+    #[specta(type = crate::UiIpcNumber)]
     pub expected_project_revision: u64,
+    #[specta(type = crate::UiIpcNumber)]
     pub expected_snapshot_revision: u64,
 }
 
@@ -331,12 +340,14 @@ impl Validate for ResourceReadRequestV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct ResourceContentV1 {
     pub contract: String,
     pub descriptor: ResourceDescriptorV1,
     pub consistency: ResourceReadConsistencyV1,
+    #[specta(type = crate::UiIpcNumber)]
     pub document_revision: u64,
+    #[specta(type = crate::UiIpcNumber)]
     pub base_resource_revision: u64,
     pub dirty: bool,
     pub stale: bool,
@@ -364,9 +375,10 @@ impl Validate for ResourceContentV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct ResourceDraftRequestV1 {
     pub target: ResourceTargetV1,
+    #[specta(type = crate::UiIpcNumber)]
     pub expected_document_revision: u64,
     pub content: String,
 }
@@ -384,9 +396,10 @@ impl Validate for ResourceDraftRequestV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct ResourceSaveRequestV1 {
     pub target: ResourceTargetV1,
+    #[specta(type = crate::UiIpcNumber)]
     pub expected_document_revision: u64,
 }
 
@@ -403,16 +416,18 @@ impl Validate for ResourceSaveRequestV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct ResourceReloadRequestV1 {
     pub target: ResourceTargetV1,
+    #[specta(type = crate::UiIpcNumber)]
     pub expected_document_revision: u64,
     pub discard_dirty: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct ResourceRenameRequestV1 {
     pub target: ResourceTargetV1,
+    #[specta(type = Option<crate::UiIpcNumber>)]
     pub expected_document_revision: Option<u64>,
     pub new_resource_id: String,
 }
@@ -431,9 +446,10 @@ impl Validate for ResourceRenameRequestV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct ResourceDeleteRequestV1 {
     pub target: ResourceTargetV1,
+    #[specta(type = Option<crate::UiIpcNumber>)]
     pub expected_document_revision: Option<u64>,
     pub discard_dirty: bool,
 }

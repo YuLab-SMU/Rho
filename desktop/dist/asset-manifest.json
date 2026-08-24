@@ -10,7 +10,7 @@
     "isDynamicEntry": true
   },
   "index.html": {
-    "file": "assets/index-_oa8yWpD.js",
+    "file": "assets/index-Di0bFq1-.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
@@ -22,7 +22,7 @@
     ]
   },
   "src/app/monacoRuntime.ts": {
-    "file": "assets/monacoRuntime-CQixKtmp.js",
+    "file": "assets/monacoRuntime-mp6G5xdH.js",
     "name": "monacoRuntime",
     "src": "src/app/monacoRuntime.ts",
     "isDynamicEntry": true,

@@ -10,6 +10,7 @@ import type {
   ResourceRenameRequest,
   ResourceResolveRequest,
   ResourceSaveRequest,
+  ResourceTransport,
   RuntimeAttachmentRequest,
   RuntimeCreateRequest,
   RuntimeDetachRequest,
@@ -678,15 +679,20 @@ export class RuntimeExternalStore {
   }
 }
 
+type ResourceStoreTransport = ResourceTransport & Pick<
+  UiKernelTransport,
+  "source" | "subscribeResourcesInvalidated"
+>;
+
 export class ResourceExternalStore {
-  readonly #transport: UiKernelTransport;
+  readonly #transport: ResourceStoreTransport;
   readonly #listeners = new Set<() => void>();
   #state: ResourceStoreSnapshot = RESOURCE_LOADING;
   #stopTransport: Unsubscribe | undefined;
   #refreshing: Promise<void> | undefined;
   #refreshQueued = false;
 
-  constructor(transport: UiKernelTransport) {
+  constructor(transport: ResourceStoreTransport) {
     this.#transport = transport;
   }
 
