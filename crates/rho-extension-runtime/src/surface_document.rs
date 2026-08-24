@@ -22,21 +22,21 @@ pub const MAX_SURFACE_DOCUMENT_TABLE_COLUMNS: usize = 32;
 pub const MAX_SURFACE_SELECT_OPTIONS: usize = 128;
 pub const MAX_SURFACE_EVENT_VALUE_BYTES: usize = 64 * 1024;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(deny_unknown_fields)]
 pub struct SurfaceKeyValueItemV1 {
     pub key: String,
     pub value: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(deny_unknown_fields)]
 pub struct SurfaceSelectOptionV1 {
     pub value: String,
     pub label: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SurfaceBlockV1 {
     Row {
@@ -105,14 +105,14 @@ pub enum SurfaceBlockV1 {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(deny_unknown_fields)]
 pub struct SurfaceGridItemV1 {
     pub column_span: u8,
     pub block: Box<SurfaceBlockV1>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(deny_unknown_fields)]
 pub struct SurfaceTabV1 {
     pub tab_id: String,
@@ -120,7 +120,7 @@ pub struct SurfaceTabV1 {
     pub blocks: Vec<SurfaceBlockV1>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum SurfaceNoticeToneV1 {
     Info,
@@ -129,10 +129,11 @@ pub enum SurfaceNoticeToneV1 {
     Error,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(deny_unknown_fields)]
 pub struct SurfaceDocumentV1 {
     pub contract: String,
+    #[specta(type = rho_ui_contract::UiIpcNumber)]
     pub revision: u64,
     pub title: String,
     pub blocks: Vec<SurfaceBlockV1>,
@@ -154,7 +155,7 @@ pub struct SurfaceControlDescriptorV1 {
     pub busy: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum SurfaceEventKindV1 {
     Input,

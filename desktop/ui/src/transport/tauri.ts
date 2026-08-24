@@ -5,10 +5,6 @@ import type {
   CheckRunResponse,
   DomainSurfaceData,
   DomainSurfaceItem,
-  PluginSurfaceDocumentRequest,
-  PluginSurfaceDocumentView,
-  PluginSurfaceEventRequest,
-  PluginSurfaceEventResult,
   PlotImageView,
   ProjectSwitchResponse,
   UiKernelSnapshot,
@@ -22,6 +18,7 @@ import { createTauriAgentExecutionTransport } from "./agent-execution";
 import { createTauriAgentRuntimeTransport } from "./agent-runtime";
 import { createTauriAgentSettingsTransport } from "./agent-settings";
 import { createTauriAgentFileTransport } from "./agent-file";
+import { createTauriPluginSurfaceTransport } from "./plugin-surface";
 import { createTauriAgentTurnDetailTransport } from "./agent-turn";
 import { createTauriProfileTransport } from "./profile";
 import { createTauriResourceTransport } from "./resource";
@@ -221,10 +218,7 @@ export function createTauriUiKernelTransport(
     ...createTauriSurfaceStudioTransport(invoke),
     subscribeSurfacesInvalidated: (listener) =>
       subscribeEvents(listen, invalidationEvents("surfaces"), listener),
-    loadPluginSurfaceDocument: (request: PluginSurfaceDocumentRequest) =>
-      invoke<PluginSurfaceDocumentView>("plugin_surface_document", { request }),
-    dispatchPluginSurfaceEvent: (request: PluginSurfaceEventRequest) =>
-      invoke<PluginSurfaceEventResult>("plugin_surface_event", { request }),
+    ...createTauriPluginSurfaceTransport(invoke),
     subscribePluginSurfacesInvalidated: (listener) =>
       subscribeEvents(listen, invalidationEvents("plugin-surfaces"), listener),
     runCheckProject: (request: CheckRunRequest) =>

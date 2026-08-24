@@ -16,7 +16,7 @@ pub const MAX_VIEWER_TABLE_COLUMNS: usize = 100;
 pub const MAX_VIEWER_KEY_VALUE_ITEMS: usize = 128;
 pub const MAX_VIEWER_DOCUMENT_JSON_BYTES: usize = 1024 * 1024;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(deny_unknown_fields)]
 pub struct ViewerDocumentV1 {
     pub contract: String,
@@ -24,7 +24,7 @@ pub struct ViewerDocumentV1 {
     pub blocks: Vec<ViewerBlockV1>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ViewerBlockV1 {
     Text {
@@ -53,14 +53,14 @@ pub enum ViewerBlockV1 {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(deny_unknown_fields)]
 pub struct ViewerKeyValueItemV1 {
     pub key: String,
     pub value: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ViewerNoticeToneV1 {
     Info,
@@ -68,7 +68,7 @@ pub enum ViewerNoticeToneV1 {
     Error,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum PluginCommandResultV1 {
     Notification { message: String },

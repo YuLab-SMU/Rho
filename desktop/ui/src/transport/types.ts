@@ -20,7 +20,6 @@ import type {
   RuntimeRegistrySnapshot,
 } from "./runtime";
 import type {
-  SurfaceInstanceRequest,
   SurfaceOrigin,
   SurfaceStudioTransport,
 } from "./surface-studio";
@@ -41,6 +40,7 @@ import type { AgentExecutionTransport } from "./agent-execution";
 import type { AgentRuntimeTransport } from "./agent-runtime";
 import type { AgentSettingsTransport } from "./agent-settings";
 import type { AgentFileTransport } from "./agent-file";
+import type { PluginSurfaceTransport } from "./plugin-surface";
 
 export type {
   RuntimeExecution,
@@ -209,6 +209,20 @@ export type {
   AgentFileUndoRequest,
 } from "./agent-file";
 
+export type {
+  PluginSurfaceBlock,
+  PluginSurfaceCommandResult,
+  PluginSurfaceDocument,
+  PluginSurfaceDocumentRequest,
+  PluginSurfaceDocumentView,
+  PluginSurfaceEventKind,
+  PluginSurfaceEventRequest,
+  PluginSurfaceEventResult,
+  PluginSurfaceJsonValue,
+  PluginSurfaceNoticeTone,
+  PluginSurfaceTransport,
+} from "./plugin-surface";
+
 export type UiSnapshotSource = "tauri" | "mock";
 export type HealthState = "ready" | "degraded" | "unavailable" | "restarting";
 export type ActiveOperationState = "queued" | "running" | "waiting" | "cancelling";
@@ -312,101 +326,6 @@ export interface RuntimeOutputEvent {
   readonly console_instance_id: string;
   readonly kind: string;
   readonly payload: unknown;
-}
-
-export type PluginSurfaceEventKind = "input" | "change" | "submit" | "activate";
-
-export type PluginSurfaceNoticeTone = "info" | "success" | "warning" | "error";
-
-export type PluginSurfaceBlock =
-  | { readonly kind: "row"; readonly blocks: readonly PluginSurfaceBlock[] }
-  | { readonly kind: "column"; readonly blocks: readonly PluginSurfaceBlock[] }
-  | {
-      readonly kind: "grid";
-      readonly columns: number;
-      readonly blocks: readonly {
-        readonly column_span: number;
-        readonly block: PluginSurfaceBlock;
-      }[];
-    }
-  | {
-      readonly kind: "tabs";
-      readonly active_tab_id: string;
-      readonly tabs: readonly {
-        readonly tab_id: string;
-        readonly label: string;
-        readonly blocks: readonly PluginSurfaceBlock[];
-      }[];
-    }
-  | { readonly kind: "group"; readonly label: string | null; readonly blocks: readonly PluginSurfaceBlock[] }
-  | { readonly kind: "text"; readonly text: string }
-  | { readonly kind: "code"; readonly code: string; readonly language: string | null }
-  | { readonly kind: "key_value"; readonly items: readonly { readonly key: string; readonly value: string }[] }
-  | { readonly kind: "table"; readonly columns: readonly string[]; readonly rows: readonly (readonly string[])[] }
-  | { readonly kind: "notice"; readonly tone: PluginSurfaceNoticeTone; readonly text: string }
-  | { readonly kind: "artifact_image_ref"; readonly artifact_id: string; readonly media_type: string; readonly alt: string }
-  | {
-      readonly kind: "field";
-      readonly control_id: string;
-      readonly label: string;
-      readonly value: string;
-      readonly placeholder: string | null;
-      readonly disabled: boolean;
-      readonly busy: boolean;
-    }
-  | {
-      readonly kind: "select";
-      readonly control_id: string;
-      readonly label: string;
-      readonly value: string;
-      readonly options: readonly { readonly value: string; readonly label: string }[];
-      readonly disabled: boolean;
-      readonly busy: boolean;
-    }
-  | {
-      readonly kind: "command_button";
-      readonly control_id: string;
-      readonly label: string;
-      readonly command_id: string;
-      readonly disabled: boolean;
-      readonly busy: boolean;
-    };
-
-export interface PluginSurfaceDocument {
-  readonly contract: "rho.plugin_surface_document.v1";
-  readonly revision: number;
-  readonly title: string;
-  readonly blocks: readonly PluginSurfaceBlock[];
-}
-
-export interface PluginSurfaceDocumentRequest {
-  readonly target: SurfaceInstanceRequest;
-  readonly expected_layout_revision: number | null;
-  readonly expected_page_revision: number | null;
-}
-
-export interface PluginSurfaceEventRequest extends PluginSurfaceDocumentRequest {
-  readonly expected_document_revision: number;
-  readonly control_id: string;
-  readonly event_kind: PluginSurfaceEventKind;
-  readonly value: unknown;
-}
-
-export interface PluginSurfaceDocumentView {
-  readonly project_id: string;
-  readonly instance_id: string;
-  readonly surface_id: string;
-  readonly surface_revision: number;
-  readonly document: PluginSurfaceDocument;
-  readonly provenance: unknown;
-}
-
-export interface PluginSurfaceEventResult {
-  readonly event_id: string;
-  readonly status: "completed" | "queued";
-  readonly document: PluginSurfaceDocument | null;
-  readonly command_result: unknown | null;
-  readonly provenance: unknown | null;
 }
 
 export type CheckSeverity = "info" | "warning" | "error";
@@ -558,7 +477,7 @@ export interface ProjectSwitchResponse {
   readonly restart_required: boolean;
 }
 
-export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTransport, ProfileTransport, AgentConversationTransport, AgentTurnDetailTransport, AgentExecutionTransport, AgentRuntimeTransport, AgentSettingsTransport, AgentFileTransport {
+export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTransport, ProfileTransport, AgentConversationTransport, AgentTurnDetailTransport, AgentExecutionTransport, AgentRuntimeTransport, AgentSettingsTransport, AgentFileTransport, PluginSurfaceTransport {
   readonly source: UiSnapshotSource;
   prepareWorkspace(chooseRscript?: boolean): Promise<WorkspacePreparation>;
   openProject(path: string): Promise<ProjectSwitchResponse>;
@@ -567,8 +486,6 @@ export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTrans
   setSelection(request: SetUiSelectionRequest): Promise<UiKernelSnapshot>;
   subscribeInvalidated(listener: () => void): Unsubscribe;
   subscribeSurfacesInvalidated(listener: () => void): Unsubscribe;
-  loadPluginSurfaceDocument(request: PluginSurfaceDocumentRequest): Promise<PluginSurfaceDocumentView>;
-  dispatchPluginSurfaceEvent(request: PluginSurfaceEventRequest): Promise<PluginSurfaceEventResult>;
   subscribePluginSurfacesInvalidated(listener: () => void): Unsubscribe;
   runCheckProject(request: CheckRunRequest): Promise<CheckRunResponse>;
   loadCheckResult(request: CheckResultRequest): Promise<CheckResult>;

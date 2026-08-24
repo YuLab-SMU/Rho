@@ -26,47 +26,67 @@ pub(crate) const PLUGIN_SURFACE_CHANGED_EVENT: &str = "rho://plugin-surface-chan
 const MAX_CACHED_SURFACE_DOCUMENTS: usize = 16;
 const MAX_CACHED_SURFACE_PAYLOAD_BYTES: usize = 8 * 1024 * 1024;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub(crate) struct PluginSurfaceDocumentRequest {
     pub target: SurfaceInstanceRequestV1,
+    #[specta(type = Option<rho_ui_contract::UiIpcNumber>)]
     pub expected_layout_revision: Option<u64>,
+    #[specta(type = Option<rho_ui_contract::UiIpcNumber>)]
     pub expected_page_revision: Option<u64>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(untagged)]
+enum PluginSurfaceJsonValue {
+    Null(()),
+    Boolean(bool),
+    Number(f64),
+    String(String),
+    Array(Vec<PluginSurfaceJsonValue>),
+    Object(BTreeMap<String, PluginSurfaceJsonValue>),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub(crate) struct PluginSurfaceEventRequest {
     pub target: SurfaceInstanceRequestV1,
+    #[specta(type = rho_ui_contract::UiIpcNumber)]
     pub expected_document_revision: u64,
+    #[specta(type = Option<rho_ui_contract::UiIpcNumber>)]
     pub expected_layout_revision: Option<u64>,
+    #[specta(type = Option<rho_ui_contract::UiIpcNumber>)]
     pub expected_page_revision: Option<u64>,
     pub control_id: String,
     pub event_kind: SurfaceEventKindV1,
+    #[specta(type = PluginSurfaceJsonValue)]
     pub value: Value,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub(crate) struct PluginSurfaceDocumentView {
     pub project_id: rho_ui_contract::ProjectId,
     pub instance_id: SurfaceInstanceId,
     pub surface_id: rho_ui_contract::SurfaceId,
+    #[specta(type = rho_ui_contract::UiIpcNumber)]
     pub surface_revision: u64,
     pub document: SurfaceDocumentV1,
+    #[specta(type = PluginSurfaceJsonValue)]
     pub provenance: Value,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum PluginSurfaceEventStatus {
     Completed,
     Queued,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub(crate) struct PluginSurfaceEventResult {
     pub event_id: String,
     pub status: PluginSurfaceEventStatus,
     pub document: Option<SurfaceDocumentV1>,
     pub command_result: Option<PluginCommandResultV1>,
+    #[specta(type = Option<PluginSurfaceJsonValue>)]
     pub provenance: Option<Value>,
 }
 
@@ -367,6 +387,7 @@ fn parse_event_result(
     Ok((None, Some(PluginCommandResultV1::parse(result)?)))
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn plugin_surface_document(
     request: PluginSurfaceDocumentRequest,
@@ -508,6 +529,7 @@ fn execute_event(
     Ok((document, command_result, provenance))
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn plugin_surface_event(
     request: PluginSurfaceEventRequest,
@@ -866,5 +888,96 @@ mod tests {
                 .map(|event| &event.event.instance_id),
             Some(&retained)
         );
+    }
+
+    #[test]
+    fn plugin_surface_ipc_serialization_matches_generated_contract() {
+        let target = SurfaceInstanceRequestV1 {
+            project_id: rho_ui_contract::ProjectId::new("project:fixture").unwrap(),
+            instance_id: SurfaceInstanceId::new("surface-instance:fixture").unwrap(),
+            activation_generation: 3,
+            expected_project_revision: 5,
+            expected_surface_revision: 7,
+        };
+        let document = SurfaceDocumentV1 {
+            contract: rho_extension_runtime::PLUGIN_SURFACE_DOCUMENT_CONTRACT.to_string(),
+            revision: 11,
+            title: "Fixture Surface".to_string(),
+            blocks: vec![rho_extension_runtime::SurfaceBlockV1::Column {
+                blocks: vec![
+                    rho_extension_runtime::SurfaceBlockV1::Notice {
+                        tone: rho_extension_runtime::SurfaceNoticeToneV1::Info,
+                        text: "Bounded fixture".to_string(),
+                    },
+                    rho_extension_runtime::SurfaceBlockV1::CommandButton {
+                        control_id: "apply".to_string(),
+                        label: "Apply".to_string(),
+                        command_id: "analysis.apply".to_string(),
+                        disabled: false,
+                        busy: false,
+                    },
+                ],
+            }],
+        };
+        let document_request = PluginSurfaceDocumentRequest {
+            target: target.clone(),
+            expected_layout_revision: Some(13),
+            expected_page_revision: None,
+        };
+        let event_request = PluginSurfaceEventRequest {
+            target,
+            expected_document_revision: 11,
+            expected_layout_revision: Some(13),
+            expected_page_revision: None,
+            control_id: "apply".to_string(),
+            event_kind: SurfaceEventKindV1::Activate,
+            value: json!({"nested": [true, null, 3.5]}),
+        };
+        let view = PluginSurfaceDocumentView {
+            project_id: rho_ui_contract::ProjectId::new("project:fixture").unwrap(),
+            instance_id: SurfaceInstanceId::new("surface-instance:fixture").unwrap(),
+            surface_id: rho_ui_contract::SurfaceId::new("ui.surface.fixture").unwrap(),
+            surface_revision: 7,
+            document: document.clone(),
+            provenance: json!({"origin": "trusted_surface"}),
+        };
+        let result = PluginSurfaceEventResult {
+            event_id: "surface-event:fixture".to_string(),
+            status: PluginSurfaceEventStatus::Completed,
+            document: Some(document),
+            command_result: Some(PluginCommandResultV1::Notification {
+                message: "Applied".to_string(),
+            }),
+            provenance: Some(json!({"generation": 3})),
+        };
+
+        let document_request = serde_json::to_value(document_request).unwrap();
+        let event_request = serde_json::to_value(event_request).unwrap();
+        let view = serde_json::to_value(view).unwrap();
+        let result = serde_json::to_value(result).unwrap();
+        assert_eq!(document_request["expected_layout_revision"], 13);
+        assert!(document_request["expected_page_revision"].is_null());
+        assert_eq!(event_request["event_kind"], "activate");
+        assert_eq!(event_request["value"]["nested"][0], true);
+        assert_eq!(view["document"]["blocks"][0]["kind"], "column");
+        assert_eq!(view["document"]["blocks"][0]["blocks"][0]["tone"], "info");
+        assert_eq!(result["status"], "completed");
+        assert_eq!(result["command_result"]["kind"], "notification");
+        assert_eq!(result["provenance"]["generation"], 3);
+    }
+
+    #[test]
+    #[ignore = "writes the requested generated TypeScript contract"]
+    fn plugin_surface_typescript_export() {
+        let output_path = std::env::var_os("RHO_PLUGIN_SURFACE_BINDINGS_PATH")
+            .expect("RHO_PLUGIN_SURFACE_BINDINGS_PATH must name the generated file");
+        tauri_specta::Builder::<tauri::Wry>::new()
+            .commands(tauri_specta::collect_commands![
+                super::plugin_surface_document,
+                super::plugin_surface_event,
+            ])
+            .error_handling(tauri_specta::ErrorHandlingMode::Throw)
+            .export(specta_typescript::Typescript::default(), output_path)
+            .expect("Plugin Surface TypeScript export must succeed");
     }
 }
