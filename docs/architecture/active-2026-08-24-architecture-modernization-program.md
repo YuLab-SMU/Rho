@@ -6,7 +6,7 @@
   "record_type": "program",
   "program_id": "AM-2026",
   "status": "active",
-  "current_wave": 0,
+  "current_wave": 1,
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
@@ -247,6 +247,29 @@ open evidence. They are never represented as passed.
 The filename changes from `active-` to `implemented-` only after every program
 metric, full automated matrix, independent review, and required manual gate is
 true.
+
+## Wave 0 checkpoint (2026-08-24)
+
+Wave 0 is implemented in three reviewed packages:
+
+- AM-W0-01 established the strict JSON-in-Markdown records, adversarial
+  validator/status/next/overlap commands, deterministic generated dashboard,
+  and exact legacy LOC ratchet in `07b604b`;
+- AM-W0-02 repaired the 193-command handler digest, made repository resolution
+  cwd-independent, and added command plus architecture checks to `rsr:check` in
+  `392f114`;
+- AM-W0-03 moved Console project activation out of render into committed React
+  Effects and added discarded-render, A/B switch, and cleanup regression tests
+  in `2110050`.
+
+The complete local frontend gate passes 25 files/229 tests, production build,
+generated-asset identity, Chrome smoke, and real interactions. The exact
+commands and the first truthful cwd failure are recorded in AM-E-0001 through
+AM-E-0003. The integration lane regenerated tracked `desktop/dist` from build
+identity `f07d05c35aa2`. No application/R version or NEWS change is required.
+
+Wave 1's umbrella remains proposed and must be split into the first Runtime
+Output vertical contract/dependency spike before product code is activated.
 
 ## Version, NEWS, and release decision
 
