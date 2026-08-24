@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W1-02"],
+  "active_work_packages": ["AM-W1-03"],
   "integration_lane": "AM-W0-01",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -60,8 +60,8 @@ This program is subordinate to:
   for durable output and Agent-context ownership;
 - implemented Phase 2 plugin contracts for identity, digest, grants, quarantine,
   recovery, and the no-ambient-authority boundary;
-- `docs/plans/active-2026-08-10-rust-msrv-build-contract.md` for Rust 1.88 and
-  locked-build validation;
+- `docs/plans/active-2026-08-10-rust-msrv-build-contract.md` for the rolling
+  pinned Rust toolchain and locked-build validation;
 - active release and platform documents for candidate-specific evidence.
 
 The program owns implementation topology, generated IPC type ownership,
@@ -158,18 +158,22 @@ artifacts remain integration-lane single-write paths.
 `AM-W1-01` begins with the Runtime Output vertical domain. It evaluates locked
 `tauri-specta 2.0.0-rc.25`, preserves current command/serde identity, generates
 domain-specific command/type modules, and composes narrow transport facets.
-Fallback to locked `ts-rs 12.0.1` is mandatory if Rust 1.88 fails, two clean
-generations differ, shapes change, clean Rust check time grows over 20%, or the
-release binary grows over 10%.
+The generator is rejected only for correctness failures: non-deterministic
+generation, command/serde shape drift, unsupported Channel semantics, or a
+material regression that remains unacceptable after profiling. Compatibility
+with an older compiler than the repository's pinned toolchain is diagnostic
+evidence, not a fallback trigger.
 
 ### Wave 2 — backend modules and concurrency boundaries
 
 `AM-W2-01` separates the Tauri composition root and durable-domain services,
 replaces the global Coordinator mutex with a Workspace broker lane and a
 project-transition gate, and introduces one asynchronous SQLite execution lane.
-`tokio-rusqlite 0.7.0` is admissible only after the Rust 1.88 gate; otherwise a
-single Store executor backed by `spawn_blocking` is used. Mechanical extraction
-and behavior changes are separate review boundaries.
+`tokio-rusqlite 0.7.0` is evaluated on the repository's pinned Rust toolchain;
+the `spawn_blocking` Store executor remains a behavioral fallback only if the
+crate cannot preserve the required single-connection transaction and recovery
+semantics. Mechanical extraction and behavior changes are separate review
+boundaries.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
@@ -223,7 +227,7 @@ The program-level matrix includes:
   recovery, pointer, keyboard, zoom, and browser scenarios;
 - equivalent core-v2/component-v1 lifecycle and security/failure/isolation;
 - non-overlapping worktree merge and pre-start rejection of overlap;
-- stable/MSRV Rust, `npm --prefix desktop run rsr:check`, both R packages, and
+- pinned Rust, `npm --prefix desktop run rsr:check`, both R packages, and
   `git diff --check` before final program acceptance.
 
 Windows, installed-app, or owner-feel checks that have not run remain explicit
@@ -268,9 +272,10 @@ commands and the first truthful cwd failure are recorded in AM-E-0001 through
 AM-E-0003. The integration lane regenerated tracked `desktop/dist` from build
 identity `f07d05c35aa2`. No application/R version or NEWS change is required.
 
-Wave 1's umbrella remains proposed. Its first Runtime Output vertical is active
-as AM-W1-02 with an exact dependency/determinism/MSRV/shape fallback gate;
-execution admission remains a later Runtime-domain slice.
+Wave 1's umbrella remains proposed. Its first Runtime Output vertical is paused
+briefly while AM-W1-03 replaces the frozen Rust 1.88 compatibility veto with a
+rolling pinned-toolchain contract. Runtime Output resumes automatically after
+that local gate; execution admission remains a later Runtime-domain slice.
 
 ## Version, NEWS, and release decision
 

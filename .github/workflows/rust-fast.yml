@@ -62,11 +62,11 @@ concurrency:
 jobs:
   rust-fast:
     if: github.event.pull_request.draft == true
-    name: Ubuntu stable fast
+    name: Ubuntu pinned-toolchain fast
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     env:
-      RUSTUP_TOOLCHAIN: stable-x86_64-unknown-linux-gnu
+      RUSTUP_TOOLCHAIN: 1.97.0-x86_64-unknown-linux-gnu
       CARGO_INCREMENTAL: "0"
 
     steps:
@@ -89,7 +89,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev squashfs-tools pkg-config unzip zip
 
-      - name: Install and verify current stable Rust
+      - name: Install and verify pinned Rust
         shell: bash
         run: |
           set -euo pipefail
@@ -98,6 +98,7 @@ jobs:
           rustup component add rustfmt --toolchain "$RUSTUP_TOOLCHAIN"
           active="$(rustup show active-toolchain)"
           [[ "$active" == "$RUSTUP_TOOLCHAIN "* ]]
+          test "$(rustc -V | awk '{print $2}')" = "1.97.0"
           rustc -vV | grep -Fx "host: x86_64-unknown-linux-gnu"
           cargo -vV
 

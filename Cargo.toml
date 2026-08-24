@@ -20,7 +20,7 @@ exclude = ["vendor/jet"]
 [workspace.package]
 version = "0.4.1-dev.15"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.97"
 license = "AGPL-3.0-only"
 repository = "https://github.com/YuLab-SMU/Rho"
 
@@ -38,6 +38,9 @@ semver = { version = "1.0", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10"
+specta = { version = "=2.0.0-rc.25", features = ["derive"] }
+specta-typescript = "=0.0.12"
+tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
 tempfile = "3.20"
 thiserror = "2.0"
 tokio = { version = "1.0", features = ["full"] }

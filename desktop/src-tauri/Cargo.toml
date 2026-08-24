@@ -29,6 +29,7 @@ serde.workspace = true
 serde_json.workspace = true
 semver = "1.0"
 sha2 = "0.10"
+specta.workspace = true
 tauri = { version = "2", features = [] }
 tauri-plugin-updater = "2.10.1"
 tempfile.workspace = true
@@ -51,4 +52,6 @@ keyring = { version = "4.1.6", default-features = false, features = ["v1"] }
 
 [dev-dependencies]
 rusqlite.workspace = true
+specta-typescript.workspace = true
+tauri-specta.workspace = true
 wat.workspace = true

@@ -46,9 +46,9 @@ semantics.
 | `plans/active-2026-08-13-dev38-test-signed-prerelease-spec.md` | active immutable DEV38-SIGN1 NO-GO snapshot; source integration and exact candidate/audit pass, but its required human acceptance was not completed and its reviewed body/policy cannot be rewritten | exact unpublished `0.4.0-dev.38` Draft, candidate-only Free Trial request/evidence, and unresolved ordinary-MAC5 decision | preserve the seven candidate assets/body and do not publish, mutate, relabel, or compose them into CPREL1; Foundation/production authority remains in SP-READY1 |
 | `plans/implemented-2026-08-13-conditional-prerelease-policy-spec.md` | implemented CPREL1 contract; source policy, protected integration, exact candidate/audit, conditional publication, and live update verification complete | durable schema-v2 actor-bound `CONDITIONAL_GO` validation, exact dev39 two-limit waiver, public disclosure, and acceptance-aware update projection | preserve ordinary GO compatibility and every artifact/security gate; dev39 remains conditional/public-prerelease-only and neither human observation is passed |
 | `project/active-development-roadmap.md` | active | milestone order and acceptance gates | continuously maintained from accepted evidence |
-| `architecture/active-2026-08-24-architecture-modernization-program.md` | active D3/R3 continuous program; Wave 0 complete; Wave 1 Runtime Output generated-contract slice AM-W1-02 active 2026-08-24 with exact dependency/MSRV/determinism/shape fallback gates; detailed state is under `architecture/modernization/` | implementation topology, generated Rust-to-TypeScript IPC ownership, concurrency-lane decomposition, coherent Workbench projection, controlled layout adapter, additive WIT Component ABI, worktree/generated-artifact governance, and architecture ratchets | preserve accepted project/Scene/Runtime/Resource/Profile/plugin/Store/approval/release authorities; AM-W1-02 excludes Runtime execution admission and keeps existing handlers/names/JSON; each bounded package must pass its automated gate and contract review before the next activates; no schema, permission, credential, public protocol, package, signing, publication, or release authority is implied |
-| `plans/active-2026-08-10-rust-msrv-build-contract.md` | active integrated build contract; exact PR #29 head `f022d2c` and merge `9e0b36b` historical four-leg evidence passed; Issue #28 closed; CI-FAST1 Draft-feedback amendment authorized 2026-08-18 | Rust 1.88 workspace MSRV metadata, Resolver 3, fast Draft feedback, non-Draft/main stable/MSRV native CI, locked candidate Rust validation, and deterministic policy enforcement | CI-FAST1 may change trigger timing and add cache without changing the six identities, commands, permissions, candidate validation, or final integration requirement; no candidate or release authority |
-| `plans/implemented-2026-08-18-rust-fast-development-ci-spec.md` | implemented; deterministic negative tests, exact Draft Fast/cache evidence, Ready skip, and deferred six-leg run `32129767978` passed 2026-08-18 | read-only Ubuntu-stable Draft feedback, Cargo cache isolation, mutually exclusive Draft/Ready admission, and deterministic workflow enforcement | preserve the split: Draft uses Rust Fast; affected Ready/`main` integration uses all six stable/MSRV legs |
+| `architecture/active-2026-08-24-architecture-modernization-program.md` | active D3/R3 continuous program; Wave 0 complete; AM-W1-02 paused while AM-W1-03 replaces the obsolete compiler veto, then Runtime Output resumes automatically; detailed state is under `architecture/modernization/` | implementation topology, generated Rust-to-TypeScript IPC ownership, concurrency-lane decomposition, coherent Workbench projection, controlled layout adapter, additive WIT Component ABI, worktree/generated-artifact governance, and architecture ratchets | preserve accepted project/Scene/Runtime/Resource/Profile/plugin/Store/approval/release authorities; generator selection is governed by pinned-toolchain correctness and measured engineering judgment, not Rust 1.88; no schema, permission, credential, public protocol, package, signing, publication, or release authority is implied |
+| `plans/active-2026-08-10-rust-msrv-build-contract.md` | active rolling-toolchain contract; frozen Rust 1.88 policy superseded by owner authorization on 2026-08-24; historical filename retained for link stability | exact Rust 1.97.0 repository selection, aligned Rust 1.97 workspace metadata, Resolver 3, one pinned source leg per development OS, fast Draft feedback, locked source validation, and deterministic policy enforcement | older compiler compatibility and installed-package construction are not ordinary development gates; candidate documents retain release/platform acceptance authority |
+| `plans/implemented-2026-08-18-rust-fast-development-ci-spec.md` | implemented historical Draft Fast/cache evidence; its stable/six-leg compiler identities were superseded by the rolling-toolchain amendment on 2026-08-24 | read-only bounded Draft feedback, Cargo cache isolation, mutually exclusive Draft/Ready admission, and deterministic workflow enforcement | Draft uses one exact pinned Ubuntu toolchain; affected Ready/`main` integration uses one pinned source leg per development OS under the active toolchain contract |
 | `design/implemented-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md` | implemented; P1-0 through P1-4, final review, exact Ready matrix, and three-platform unsigned packaged acceptance passed 2026-08-18 | compiled-in first-party capability/scope/generation/effect/candidate lifecycle semantics above the Trusted Kernel | legacy deletion, third-party runtime, public SDK, target, compute, schema, permission, signing, publication, and release remain separately gated |
 | `plans/implemented-2026-08-18-p1-0-extension-runtime-contracts-spec.md` | implemented; `bb9f1e1`, focused determinism/dependency review, Draft Fast, and P1-4 six-leg acceptance passed | validated vocabulary, host-owned scope policy, deterministic capability graph/plan, structured errors/diagnostics, and dependency evidence | preserve capability/permission separation and internal-only API |
 | `plans/implemented-2026-08-18-p1-1-extension-runtime-lifecycle-spec.md` | implemented; lifecycle, local/fast evidence, final safety review, and six-leg acceptance passed | object-safe plugin/disposable API, bounded broker façade, effects/tasks/leases, scope generations, pointer CAS, and quiesce/dispose | preserve BH2/Agent authority, expected-old publication, non-routable failure, and legacy override |
@@ -682,20 +682,20 @@ the same proposal remain proposed.
 
 ### Rust toolchain compatibility boundaries
 
-The Issue #28 MSRV contract owns only the Rust compiler floor, Cargo resolver,
-locked workspace-test commands, and a read-only non-packaging compatibility
-workflow. `rust-toolchain.toml` remains the interactive development selection;
-`Cargo.lock` remains exact dependency identity; the Windows build environment
-retains Rtools/GNU linkage; and the macOS arm64 contract retains native runner,
-packaging, signing, notarization, and MAC5 authority.
+The rolling Rust toolchain contract owns the exact repository compiler pin,
+aligned workspace build-baseline metadata, Cargo resolver, locked workspace
+commands, and read-only source compatibility workflows. `Cargo.lock` remains
+exact dependency identity; the Windows build environment retains Rtools/GNU
+linkage; and platform/candidate contracts retain packaging, signing,
+notarization, installed acceptance, and release authority.
 
-The four compatibility legs cannot build or upload installers, mutate a GitHub
-Release, satisfy candidate evidence, or close installed acceptance. Candidate
-workflows consume only the additional `--locked` source invariant. Resolver 3
-may prefer an older MSRV-compatible dependency during a future intentional
-lock refresh, but Issue #28 adds no dependency update and permits no lockfile
-churn. No active product, schema, approval, environment, credential, Agent, or
-update contract overlaps this build-only authority.
+Ordinary Rust integration has one pinned source leg per development OS. It does
+not build or upload installers, mutate a GitHub Release, satisfy candidate
+evidence, or close installed acceptance. Rust 1.88 and other older compilers are
+not supported-development gates; advancing the exact repository pin is a normal
+atomic tooling/dependency change. No active product, schema, approval,
+environment, credential, Agent, or update contract overlaps this build-only
+authority.
 
 ### Release boundaries
 
@@ -1009,12 +1009,13 @@ authority; the Workspace broker/Ark and Agent lane remain Snapshot authorities;
 The public Workbench Protocol proposal cannot infer a new external contract
 from this internal crate.
 
-The Rust MSRV contract owns Rust 1.88, Resolver 3, the committed lockfile, and
-all six macOS/Windows/Linux stable/MSRV legs. Implemented CI-FAST1 owns only
-their timing: Rust Fast is the Draft signal and all six legs are the affected
-Ready/`main` integration signal. Exact Ready run `32129767978` passed all six
-legs plus unsigned packaged candidate/legacy smoke on each stable platform.
-The AGPL transition contract retains source and third-party licensing.
+The rolling Rust toolchain contract owns exact Rust 1.97.0 selection, aligned
+Rust 1.97 workspace metadata, Resolver 3, the committed lockfile, one pinned
+source leg per development OS, and the Draft fast signal. Older six-leg
+stable/MSRV and packaged-smoke runs remain historical evidence only; they no
+longer constrain dependency or architecture selection. Candidate contracts own
+package/installed acceptance. The AGPL transition contract retains source and
+third-party licensing.
 
 The reviewed dependency set is `petgraph 0.8` with only `std`, workspace
 `semver 1.x` with serde, `arc-swap 1.x`, direct `tokio-util 0.7` with only

@@ -550,11 +550,13 @@ content:
 - A new dependency requires a demonstrated need, maintenance/license/security
   review, platform/build impact, and focused tests.
 - Lockfile churn belongs only to the dependency change that caused it.
-- Workspace packages inherit one declared Rust MSRV. The native compatibility
-  workflow verifies the exact floor and current stable with the committed
-  lockfile; advancing the floor requires an active, reviewed build contract.
-- CI must select matrix toolchains explicitly. Changing the rustup default does
-  not override a repository `rust-toolchain.toml` and is not MSRV evidence.
+- Workspace packages inherit one Rust build baseline aligned with the exact
+  repository toolchain pin. Older-compiler compatibility is not a default
+  product gate; advancing the pin and baseline together is a normal reviewed
+  tooling/dependency change.
+- CI must select exact matrix toolchains explicitly. Changing the rustup default
+  does not override a repository `rust-toolchain.toml` and is not reproducible
+  toolchain evidence.
 - Do not introduce a frontend framework, second store, second runtime, or
   public transport as incidental implementation detail.
 - Toolchain or generated-file changes must be reproducible from documented
