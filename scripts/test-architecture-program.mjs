@@ -116,6 +116,10 @@ function decision(overrides = {}) {
       production_suggested_lines: 8,
       production_hard_lines: 10,
       test_hard_lines: 20,
+      legacy_review_growth_lines: 2,
+      legacy_review_growth_percent: 10,
+      legacy_hard_growth_lines: 4,
+      legacy_hard_growth_percent: 25,
       exceptions: [],
     },
     _file: "docs/architecture/modernization/decisions/AM-D-0001.md",
@@ -138,6 +142,13 @@ function runValidationFixtures() {
   const context = validateProgram(validRecords(), { root: process.cwd(), lineBudget: false });
   assert.equal(context.findings.length, 1);
   assert.equal(context.packages.length, 1);
+
+  expectInvalid([
+    program({ integration_lane: "AM-W9-99" }),
+    finding(),
+    workPackage(),
+    decision(),
+  ], /unknown integration_lane AM-W9-99/u);
 
   expectInvalid([
     program(),
@@ -302,12 +313,20 @@ function runLineBudgetFixtures() {
       production_suggested_lines: 8,
       production_hard_lines: 10,
       test_hard_lines: 20,
-      exceptions: [{ path: "src/legacy.ts", max_lines: 12 }],
+      legacy_review_growth_lines: 2,
+      legacy_review_growth_percent: 10,
+      legacy_hard_growth_lines: 4,
+      legacy_hard_growth_percent: 25,
+      exceptions: [{ path: "src/legacy.ts", baseline_lines: 8 }],
     };
     const result = checkLineBudget(temporary, config);
     assert.deepEqual(result.failures, [
-      "src/legacy.ts: 13 lines exceeds ratchet ceiling 12",
+      "src/legacy.ts: 13 lines exceeds legacy emergency ceiling 10 (baseline 8)",
       "src/new.ts: 11 lines exceeds hard limit 10 without an exception",
+    ]);
+    fs.writeFileSync(path.join(temporary, "src/legacy.ts"), repeatedLines(10));
+    assert.deepEqual(checkLineBudget(temporary, config).warnings, [
+      "src/legacy.ts: 10 lines exceeds legacy review threshold 9 (baseline 8)",
     ]);
   } finally {
     fs.rmSync(temporary, { recursive: true, force: true });

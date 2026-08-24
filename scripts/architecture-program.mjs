@@ -224,6 +224,13 @@ function checkReferences({ root, program, findings, packages, decisions, evidenc
   const findingIds = new Set(findings.map(({ id }) => id));
   const packageIds = new Set(packages.map(({ id }) => id));
   const evidenceIds = new Set(evidence.map(({ id }) => id));
+  const integrationLane = packages.find(({ id }) => id === program.integration_lane);
+  if (integrationLane == null) errors.push(`${program._file}: unknown integration_lane ${program.integration_lane}`);
+  else {
+    if (integrationLane.lane !== "integration") {
+      errors.push(`${program._file}: integration_lane ${integrationLane.id} is not an integration package`);
+    }
+  }
   for (const id of program.active_work_packages ?? []) {
     const workPackage = packages.find((candidate) => candidate.id === id);
     if (workPackage == null) errors.push(`${program._file}: unknown active work package ${id}`);
@@ -294,7 +301,15 @@ function validateRatchetReferences(decision, { program, findingIds, packageIds }
   for (const field of ["production_roots", "production_extensions", "generated_segments", "test_segments", "exceptions"]) {
     if (!Array.isArray(config[field])) errors.push(`${decision._file}: line_budget.${field} must be an array`);
   }
-  for (const field of ["production_suggested_lines", "production_hard_lines", "test_hard_lines"]) {
+  for (const field of [
+    "production_suggested_lines",
+    "production_hard_lines",
+    "test_hard_lines",
+    "legacy_review_growth_lines",
+    "legacy_review_growth_percent",
+    "legacy_hard_growth_lines",
+    "legacy_hard_growth_percent",
+  ]) {
     if (!Number.isInteger(config[field]) || config[field] <= 0) errors.push(`${decision._file}: line_budget.${field} must be positive`);
   }
   const paths = new Set();
@@ -303,8 +318,9 @@ function validateRatchetReferences(decision, { program, findingIds, packageIds }
     paths.add(exception.path);
     if (!findingIds.has(exception.finding)) errors.push(`${decision._file}: exception ${exception.path} has unknown finding ${exception.finding}`);
     if (!packageIds.has(exception.removal_work_package)) errors.push(`${decision._file}: exception ${exception.path} has unknown removal package ${exception.removal_work_package}`);
-    if (!Number.isInteger(exception.max_lines) || !Number.isInteger(exception.target_lines) || exception.target_lines >= exception.max_lines) {
-      errors.push(`${decision._file}: exception ${exception.path} requires integer target_lines below max_lines`);
+    const baselineLines = exception.baseline_lines ?? exception.max_lines;
+    if (!Number.isInteger(baselineLines) || !Number.isInteger(exception.target_lines) || exception.target_lines >= baselineLines) {
+      errors.push(`${decision._file}: exception ${exception.path} requires integer target_lines below baseline_lines`);
     }
     if (!Number.isInteger(exception.expires_wave) || exception.expires_wave < program.current_wave) {
       errors.push(`${decision._file}: exception ${exception.path} expired in wave ${exception.expires_wave}`);
@@ -456,7 +472,22 @@ export function checkLineBudget(root, config) {
     const hardLimit = isTest ? config.test_hard_lines : config.production_hard_lines;
     measurements.push({ path: file, lines, kind: isTest ? "test" : "production" });
     if (exception != null) {
-      if (lines > exception.max_lines) failures.push(`${file}: ${lines} lines exceeds ratchet ceiling ${exception.max_lines}`);
+      const baselineLines = exception.baseline_lines ?? exception.max_lines;
+      const reviewGrowth = Math.min(
+        config.legacy_review_growth_lines,
+        Math.ceil(baselineLines * config.legacy_review_growth_percent / 100),
+      );
+      const hardGrowth = Math.min(
+        config.legacy_hard_growth_lines,
+        Math.ceil(baselineLines * config.legacy_hard_growth_percent / 100),
+      );
+      const reviewCeiling = baselineLines + reviewGrowth;
+      const hardCeiling = baselineLines + hardGrowth;
+      if (lines > hardCeiling) {
+        failures.push(`${file}: ${lines} lines exceeds legacy emergency ceiling ${hardCeiling} (baseline ${baselineLines})`);
+      } else if (lines > reviewCeiling) {
+        warnings.push(`${file}: ${lines} lines exceeds legacy review threshold ${reviewCeiling} (baseline ${baselineLines})`);
+      }
       continue;
     }
     if (lines > hardLimit) failures.push(`${file}: ${lines} lines exceeds hard limit ${hardLimit} without an exception`);

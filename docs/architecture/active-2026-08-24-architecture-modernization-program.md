@@ -11,7 +11,7 @@
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
   "active_work_packages": ["AM-W1-02"],
-  "integration_lane": "AM-W0-01",
+  "integration_lane": "AM-W1-02",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -258,7 +258,8 @@ Wave 0 is implemented in three reviewed packages:
 
 - AM-W0-01 established the strict JSON-in-Markdown records, adversarial
   validator/status/next/overlap commands, deterministic generated dashboard,
-  and exact legacy LOC ratchet in `07b604b`;
+  and the initial legacy LOC ratchet in `07b604b` (later refined by AM-W1-02
+  into review bands plus emergency ceilings);
 - AM-W0-02 repaired the 193-command handler digest, made repository resolution
   cwd-independent, and added command plus architecture checks to `rsr:check` in
   `392f114`;
