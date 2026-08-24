@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W1-10",
+  "active_work_packages": ["AM-W1-11"],
+  "integration_lane": "AM-W1-11",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -281,8 +281,8 @@ lifecycle (`bd6f3a9`/AM-E-0006), Surface/Studio (`00be5e3`/AM-E-0007), Resource
 (`e169e9a`/AM-E-0008), Profile/Vibe (`90d67d9`/AM-E-0009), and Agent
 conversation inventory (`5467db4`/AM-E-0010), Agent turn detail
 (`470a679`/AM-E-0011), and Agent context/turn control
-(`f46a283`/AM-E-0012). Provider settings and runtime diagnostics remain the
-next independent Agent contract facet.
+(`f46a283`/AM-E-0012). Agent runtime diagnostics AM-W1-11 is active as the next
+independent contract facet; Provider/model settings remain separate.
 
 ## Version, NEWS, and release decision
 
