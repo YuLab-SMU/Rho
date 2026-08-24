@@ -84,6 +84,8 @@ function transform(raw, config) {
   }
   for (const omitted of config.omitTypes ?? []) {
     imported = removeTypeDeclaration(imported, omitted, config.domainLabel);
+  }
+  for (const omitted of config.omitTypes ?? []) {
     if (new RegExp(`\\b${omitted}\\b`, "u").test(imported)) {
       throw new Error(`${config.domainLabel} cannot omit still-referenced generated type ${omitted}`);
     }

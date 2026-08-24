@@ -8,6 +8,7 @@ import type { UiKernelTransport } from "./types";
 export type { RuntimeTransport } from "./runtime";
 export type { SurfaceStudioTransport } from "./surface-studio";
 export type { ResourceTransport } from "./resource";
+export type { ProfileTransport } from "./profile";
 
 export function createUiKernelTransport(): UiKernelTransport {
   if (isTauri()) {
@@ -97,6 +98,7 @@ export type {
   UiProfileSetModeRequest,
   VibeBlockContent,
   VibeBlock,
+  VibeCalloutTone,
   VibeGridPlacement,
   VibePage,
   VibePageExport,

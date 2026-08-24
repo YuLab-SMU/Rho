@@ -2,6 +2,7 @@ import type {
   CommandPlacementTag,
   OpenSurfaceRequest,
   ProjectUiProfileSnapshot,
+  ProfileTransport,
   ResourceDeleteRequest,
   ResourceDraftRequest,
   ResourceReadRequest,
@@ -405,15 +406,20 @@ export class StudioExternalStore {
   }
 }
 
+type ProfileStoreTransport = ProfileTransport & Pick<
+  UiKernelTransport,
+  "source" | "subscribeUiProfileInvalidated"
+>;
+
 export class UiProfileExternalStore {
-  readonly #transport: UiKernelTransport;
+  readonly #transport: ProfileStoreTransport;
   readonly #listeners = new Set<() => void>();
   #state: UiProfileStoreSnapshot = UI_PROFILE_LOADING;
   #stopTransport: Unsubscribe | undefined;
   #refreshing: Promise<void> | undefined;
   #refreshQueued = false;
 
-  constructor(transport: UiKernelTransport) {
+  constructor(transport: ProfileStoreTransport) {
     this.#transport = transport;
   }
 

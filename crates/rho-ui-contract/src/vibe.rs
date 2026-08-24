@@ -19,7 +19,7 @@ pub const MAX_VIBE_RICH_TEXT_NODES: usize = 512;
 pub const MAX_VIBE_INLINE_MARKS: usize = 4;
 pub const VIBE_PAGE_EXPORT_CONTRACT: &str = "rho.ui.vibe-page.export.v1";
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum VibeCalloutToneV1 {
     Neutral,
@@ -29,7 +29,7 @@ pub enum VibeCalloutToneV1 {
     Danger,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, specta::Type)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum VibeRichTextMarkV1 {
     Strong,
@@ -38,13 +38,13 @@ pub enum VibeRichTextMarkV1 {
     Link { href: String },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct VibeRichTextInlineV1 {
     pub text: String,
     pub marks: Vec<VibeRichTextMarkV1>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum VibeRichTextBlockV1 {
     Paragraph {
@@ -56,7 +56,7 @@ pub enum VibeRichTextBlockV1 {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct VibeRichTextDocumentV1 {
     pub blocks: Vec<VibeRichTextBlockV1>,
 }
@@ -157,7 +157,7 @@ impl VibeRichTextDocumentV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum VibeBlockContentV1 {
     RichText {
@@ -170,7 +170,9 @@ pub enum VibeBlockContentV1 {
     Divider,
     FileExcerpt {
         resource: ResourceBindingV1,
+        #[specta(type = crate::UiIpcNumber)]
         start_line: u64,
+        #[specta(type = crate::UiIpcNumber)]
         end_line: u64,
     },
     ArtifactRef {
@@ -195,7 +197,7 @@ pub enum VibeBlockContentV1 {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct VibeBlockV1 {
     pub block_id: BlockId,
     pub content: VibeBlockContentV1,
@@ -242,7 +244,7 @@ impl Validate for VibeBlockV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct VibeGridPlacementV1 {
     pub block_id: BlockId,
     pub row_start: u16,
@@ -250,7 +252,7 @@ pub struct VibeGridPlacementV1 {
     pub column_span: u8,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum VibeSectionLayoutV1 {
     Flow,
@@ -259,7 +261,7 @@ pub enum VibeSectionLayoutV1 {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct VibeSectionV1 {
     pub section_id: SectionId,
     pub heading: Option<String>,
@@ -353,11 +355,12 @@ fn validate_grid(
     Ok(())
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct VibePageV1 {
     pub page_id: PageId,
     pub project_id: ProjectId,
     pub label: String,
+    #[specta(type = crate::UiIpcNumber)]
     pub page_revision: u64,
     pub sections: Vec<VibeSectionV1>,
     pub focused_block_id: Option<BlockId>,
@@ -445,7 +448,7 @@ impl Validate for VibePageV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum VibePageMutationV1 {
     ReplaceSections {
@@ -460,6 +463,7 @@ pub enum VibePageMutationV1 {
         replacement: VibeBlockV1,
     },
     InsertSection {
+        #[specta(type = crate::UiIpcNumber)]
         index: usize,
         section: VibeSectionV1,
     },
@@ -468,6 +472,7 @@ pub enum VibePageMutationV1 {
     },
     InsertBlock {
         section_id: SectionId,
+        #[specta(type = crate::UiIpcNumber)]
         index: usize,
         block: VibeBlockV1,
         grid_placement: Option<VibeGridPlacementV1>,
@@ -475,6 +480,7 @@ pub enum VibePageMutationV1 {
     MoveBlock {
         block_id: BlockId,
         target_section_id: SectionId,
+        #[specta(type = crate::UiIpcNumber)]
         target_index: usize,
         grid_placement: Option<VibeGridPlacementV1>,
     },
@@ -668,11 +674,12 @@ fn reconcile_inserted_grid_placement(
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct VibePageExportV1 {
     pub contract: String,
     pub project_id: ProjectId,
     pub page_id: PageId,
+    #[specta(type = crate::UiIpcNumber)]
     pub page_revision: u64,
     pub label: String,
     pub markdown: String,

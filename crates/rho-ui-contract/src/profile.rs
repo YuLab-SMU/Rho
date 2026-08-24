@@ -20,14 +20,14 @@ pub const MAX_UI_PROFILE_SURFACE_SPECS: usize = 256;
 pub const MAX_UI_PROFILE_PRESETS: usize = 8;
 pub const MAX_UI_PROFILE_RECOVERY_DETAIL_BYTES: usize = 2 * 1024;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum UiProfileModeV1 {
     Studio,
     Vibe,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum UiProfileLoadStatusV1 {
     Created,
@@ -35,14 +35,14 @@ pub enum UiProfileLoadStatusV1 {
     RecoveredBackup,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct RuntimeAttachmentIntentV1 {
     pub runtime_provider_id: RuntimeProviderId,
     pub runtime_instance_id: RuntimeInstanceId,
     pub runtime_kind: RuntimeKindId,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct SurfaceInstanceSpecV1 {
     pub instance_id: SurfaceInstanceId,
     pub surface_id: SurfaceId,
@@ -51,6 +51,7 @@ pub struct SurfaceInstanceSpecV1 {
     pub resource_binding: Option<ResourceBindingV1>,
     pub runtime_attachment_intent: Option<RuntimeAttachmentIntentV1>,
     pub view_group_id: Option<ViewGroupId>,
+    #[specta(type = specta_typescript::Unknown)]
     pub view_state: Value,
 }
 
@@ -68,7 +69,7 @@ impl Validate for SurfaceInstanceSpecV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct StudioScenePresetV1 {
     pub preset_id: ScenePresetId,
     pub label: String,
@@ -117,10 +118,11 @@ impl Validate for StudioScenePresetV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct ProjectUiProfileV1 {
     pub schema_version: u16,
     pub project_id: ProjectId,
+    #[specta(type = crate::UiIpcNumber)]
     pub revision: u64,
     pub active_mode: UiProfileModeV1,
     pub active_studio_scene_id: Option<SceneId>,
@@ -312,7 +314,7 @@ impl Validate for ProjectUiProfileV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct ProjectUiProfileSnapshotV1 {
     pub contract: String,
     pub contract_major: u16,
@@ -369,9 +371,10 @@ impl Validate for ProjectUiProfileSnapshotV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct UiProfileRevisionRequestV1 {
     pub project_id: ProjectId,
+    #[specta(type = crate::UiIpcNumber)]
     pub expected_profile_revision: u64,
 }
 

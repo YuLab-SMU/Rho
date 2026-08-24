@@ -365,7 +365,16 @@ describe("UI Kernel transport and external store", () => {
     const handlers = new Map<string, () => void>();
     const invoke = async <T,>(command: string, args?: Record<string, unknown>) => {
       calls.push(args == null ? { command } : { command, args });
-      return (command.startsWith("ui_profile")
+      return (command === "ui_profile_page_export"
+        ? {
+            contract: "rho.ui.vibe-page.export.v1",
+            project_id: "project:fixture",
+            page_id: "page:project-review",
+            page_revision: 2,
+            label: "Project review",
+            markdown: "# Project review\n",
+          }
+        : command.startsWith("ui_profile")
         ? generatedProfile()
         : command.startsWith("resource_")
         ? ["resource_read", "resource_update_draft", "resource_save", "resource_reload"].includes(command)

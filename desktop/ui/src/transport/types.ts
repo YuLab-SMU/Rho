@@ -20,7 +20,6 @@ import type {
   RuntimeRegistrySnapshot,
 } from "./runtime";
 import type {
-  SceneState,
   SurfaceInstanceRequest,
   SurfaceOrigin,
   SurfaceStudioTransport,
@@ -29,6 +28,9 @@ import type {
   ResourceBinding,
   ResourceTransport,
 } from "./resource";
+import type {
+  ProfileTransport,
+} from "./profile";
 
 export type {
   RuntimeExecution,
@@ -116,6 +118,38 @@ export type {
   ResourceTarget,
   ResourceTransport,
 } from "./resource";
+
+export type {
+  ProfileTransport,
+  ProjectUiProfile,
+  ProjectUiProfileSnapshot,
+  RuntimeAttachmentIntent,
+  StudioScenePreset,
+  SurfaceInstanceSpec,
+  UiProfileLoadStatus,
+  UiProfileMode,
+  UiProfileRevisionRequest,
+  UiProfileSceneLabelRequest,
+  UiProfileSceneTargetRequest,
+  UiProfileSelectPageRequest,
+  UiProfileSelectSceneRequest,
+  UiProfileSetModeRequest,
+  VibeBlock,
+  VibeBlockContent,
+  VibeCalloutTone,
+  VibeGridPlacement,
+  VibePage,
+  VibePageExport,
+  VibePageExportRequest,
+  VibePageMutation,
+  VibePageMutationRequest,
+  VibeRichTextBlock,
+  VibeRichTextDocument,
+  VibeRichTextInline,
+  VibeRichTextMark,
+  VibeSection,
+  VibeSectionLayout,
+} from "./profile";
 
 export type UiSnapshotSource = "tauri" | "mock";
 export type HealthState = "ready" | "degraded" | "unavailable" | "restarting";
@@ -398,183 +432,6 @@ export interface CheckResultRequest extends CheckRunRequest {
 
 export interface CheckRunResponse {
   readonly result: CheckResult;
-}
-
-export type UiProfileMode = "studio" | "vibe";
-export type UiProfileLoadStatus = "created" | "clean" | "recovered_backup";
-
-export interface RuntimeAttachmentIntent {
-  readonly runtime_provider_id: string;
-  readonly runtime_instance_id: string;
-  readonly runtime_kind: string;
-}
-
-export interface SurfaceInstanceSpec {
-  readonly instance_id: string;
-  readonly surface_id: string;
-  readonly origin: SurfaceOrigin;
-  readonly mode_id: string | null;
-  readonly resource_binding: ResourceBinding | null;
-  readonly runtime_attachment_intent: RuntimeAttachmentIntent | null;
-  readonly view_group_id: string | null;
-  readonly view_state: unknown;
-}
-
-export type VibeRichTextMark =
-  | { readonly kind: "strong" }
-  | { readonly kind: "emphasis" }
-  | { readonly kind: "code" }
-  | { readonly kind: "link"; readonly href: string };
-
-export interface VibeRichTextInline {
-  readonly text: string;
-  readonly marks: readonly VibeRichTextMark[];
-}
-
-export type VibeRichTextBlock =
-  | { readonly kind: "paragraph"; readonly content: readonly VibeRichTextInline[] }
-  | { readonly kind: "heading"; readonly level: 1 | 2 | 3; readonly content: readonly VibeRichTextInline[] };
-
-export interface VibeRichTextDocument {
-  readonly blocks: readonly VibeRichTextBlock[];
-}
-
-export type VibeBlockContent =
-  | { readonly kind: "rich_text"; readonly document: VibeRichTextDocument }
-  | { readonly kind: "callout"; readonly tone: string; readonly text: string }
-  | { readonly kind: "divider" }
-  | { readonly kind: "file_excerpt"; readonly resource: ResourceBinding; readonly start_line: number; readonly end_line: number }
-  | { readonly kind: "artifact_ref"; readonly artifact_id: string; readonly label: string }
-  | { readonly kind: "finding_ref"; readonly finding_id: string; readonly label: string }
-  | { readonly kind: "task_ref"; readonly task_id: string; readonly label: string }
-  | { readonly kind: "surface_ref"; readonly instance_id: string; readonly live: boolean }
-  | { readonly kind: "command_ref"; readonly command_id: string; readonly label: string };
-
-export interface VibeBlock {
-  readonly block_id: string;
-  readonly content: VibeBlockContent;
-}
-
-export interface VibeGridPlacement {
-  readonly block_id: string;
-  readonly row_start: number;
-  readonly column_start: number;
-  readonly column_span: number;
-}
-
-export type VibeSectionLayout =
-  | { readonly kind: "flow" }
-  | { readonly kind: "grid"; readonly placements: readonly VibeGridPlacement[] };
-
-export interface VibeSection {
-  readonly section_id: string;
-  readonly heading: string | null;
-  readonly layout: VibeSectionLayout;
-  readonly blocks: readonly VibeBlock[];
-}
-
-export interface VibePage {
-  readonly page_id: string;
-  readonly project_id: string;
-  readonly label: string;
-  readonly page_revision: number;
-  readonly sections: readonly VibeSection[];
-  readonly focused_block_id: string | null;
-}
-
-export interface ProjectUiProfile {
-  readonly schema_version: 3;
-  readonly project_id: string;
-  readonly revision: number;
-  readonly active_mode: UiProfileMode;
-  readonly active_studio_scene_id: string | null;
-  readonly active_vibe_page_id: string | null;
-  readonly studio_scenes: readonly SceneState[];
-  readonly vibe_pages: readonly VibePage[];
-  readonly surface_instance_specs: readonly SurfaceInstanceSpec[];
-  readonly last_focused_surface_instance_id: string | null;
-}
-
-export interface StudioScenePreset {
-  readonly preset_id: string;
-  readonly label: string;
-  readonly description: string;
-  readonly scene: SceneState;
-  readonly surface_instance_specs: readonly SurfaceInstanceSpec[];
-}
-
-export interface ProjectUiProfileSnapshot {
-  readonly contract: "rho.ui.project-profile.snapshot.v1";
-  readonly contract_major: 1;
-  readonly profile: ProjectUiProfile;
-  readonly immutable_scene_presets: readonly StudioScenePreset[];
-  readonly load_status: UiProfileLoadStatus;
-  readonly recovery_detail: string | null;
-}
-
-export interface UiProfileRevisionRequest {
-  readonly project_id: string;
-  readonly expected_profile_revision: number;
-}
-
-export interface UiProfileSetModeRequest {
-  readonly target: UiProfileRevisionRequest;
-  readonly mode: UiProfileMode;
-}
-
-export interface UiProfileSelectSceneRequest {
-  readonly target: UiProfileRevisionRequest;
-  readonly scene_id: string;
-}
-
-export interface UiProfileSelectPageRequest {
-  readonly target: UiProfileRevisionRequest;
-  readonly page_id: string;
-}
-
-export interface UiProfileSceneLabelRequest {
-  readonly target: UiProfileRevisionRequest;
-  readonly scene_id: string;
-  readonly label: string;
-}
-
-export interface UiProfileSceneTargetRequest {
-  readonly target: UiProfileRevisionRequest;
-  readonly scene_id: string;
-}
-
-export type VibePageMutation =
-  | { readonly kind: "replace_sections"; readonly sections: readonly VibeSection[]; readonly focused_block_id: string | null }
-  | { readonly kind: "set_focus"; readonly block_id: string | null }
-  | { readonly kind: "update_block"; readonly block_id: string; readonly replacement: VibeBlock }
-  | { readonly kind: "insert_section"; readonly index: number; readonly section: VibeSection }
-  | { readonly kind: "remove_section"; readonly section_id: string }
-  | { readonly kind: "insert_block"; readonly section_id: string; readonly index: number; readonly block: VibeBlock; readonly grid_placement: VibeGridPlacement | null }
-  | { readonly kind: "move_block"; readonly block_id: string; readonly target_section_id: string; readonly target_index: number; readonly grid_placement: VibeGridPlacement | null }
-  | { readonly kind: "remove_block"; readonly block_id: string }
-  | { readonly kind: "set_section_layout"; readonly section_id: string; readonly layout: VibeSectionLayout };
-
-export interface VibePageMutationRequest {
-  readonly target: UiProfileRevisionRequest;
-  readonly page_id: string;
-  readonly expected_page_revision: number;
-  readonly mutation: VibePageMutation;
-}
-
-export interface VibePageExportRequest {
-  readonly project_id: string;
-  readonly expected_profile_revision: number;
-  readonly page_id: string;
-  readonly expected_page_revision: number;
-}
-
-export interface VibePageExport {
-  readonly contract: "rho.ui.vibe-page.export.v1";
-  readonly project_id: string;
-  readonly page_id: string;
-  readonly page_revision: number;
-  readonly label: string;
-  readonly markdown: string;
 }
 
 export type AgentMode = "ask" | "plan" | "act";
@@ -861,7 +718,7 @@ export interface ProjectSwitchResponse {
   readonly restart_required: boolean;
 }
 
-export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTransport {
+export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTransport, ProfileTransport {
   readonly source: UiSnapshotSource;
   prepareWorkspace(chooseRscript?: boolean): Promise<WorkspacePreparation>;
   openProject(path: string): Promise<ProjectSwitchResponse>;
@@ -877,17 +734,6 @@ export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTrans
   loadCheckResult(request: CheckResultRequest): Promise<CheckResult>;
   subscribeCheckResultsInvalidated(listener: () => void): Unsubscribe;
   subscribeStudioInvalidated(listener: () => void): Unsubscribe;
-  loadUiProfile(): Promise<ProjectUiProfileSnapshot>;
-  setUiProfileMode(request: UiProfileSetModeRequest): Promise<ProjectUiProfileSnapshot>;
-  selectUiProfileScene(request: UiProfileSelectSceneRequest): Promise<ProjectUiProfileSnapshot>;
-  selectUiProfilePage(request: UiProfileSelectPageRequest): Promise<ProjectUiProfileSnapshot>;
-  applyVibePage(request: VibePageMutationRequest): Promise<ProjectUiProfileSnapshot>;
-  exportVibePage(request: VibePageExportRequest): Promise<VibePageExport>;
-  duplicateUiProfileScene(request: UiProfileSceneLabelRequest): Promise<ProjectUiProfileSnapshot>;
-  saveUiProfileScene(request: UiProfileSceneTargetRequest): Promise<ProjectUiProfileSnapshot>;
-  renameUiProfileScene(request: UiProfileSceneLabelRequest): Promise<ProjectUiProfileSnapshot>;
-  deleteUiProfileScene(request: UiProfileSceneTargetRequest): Promise<ProjectUiProfileSnapshot>;
-  resetUiProfileScene(request: UiProfileSceneTargetRequest): Promise<ProjectUiProfileSnapshot>;
   subscribeUiProfileInvalidated(listener: () => void): Unsubscribe;
   loadRuntimes(): Promise<RuntimeRegistrySnapshot>;
   createRuntime(request: RuntimeCreateRequest): Promise<RuntimeRegistrySnapshot>;

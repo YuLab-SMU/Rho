@@ -20,22 +20,14 @@ import type {
   PluginSurfaceEventResult,
   PlotImageView,
   ProjectSwitchResponse,
-  ProjectUiProfileSnapshot,
   RunAgentResponse,
   UiKernelSnapshot,
   UiKernelTransport,
   Unsubscribe,
-  UiProfileSceneLabelRequest,
-  UiProfileSceneTargetRequest,
-  UiProfileSelectPageRequest,
-  UiProfileSelectSceneRequest,
-  UiProfileSetModeRequest,
-  VibePageExport,
-  VibePageExportRequest,
-  VibePageMutationRequest,
   WorkspacePreparation,
 } from "./types";
 import { invalidationEvents } from "./invalidation-contract";
+import { createTauriProfileTransport } from "./profile";
 import { createTauriResourceTransport } from "./resource";
 import { createTauriRuntimeTransport } from "./runtime";
 import { createTauriRuntimeOutputTransport } from "./runtime-output";
@@ -246,27 +238,7 @@ export function createTauriUiKernelTransport(
       subscribeEvents(listen, invalidationEvents("check-results"), listener),
     subscribeStudioInvalidated: (listener) =>
       subscribeEvents(listen, invalidationEvents("studio"), listener),
-    loadUiProfile: () => invoke<ProjectUiProfileSnapshot>("ui_profile_snapshot"),
-    setUiProfileMode: (request: UiProfileSetModeRequest) =>
-      invoke<ProjectUiProfileSnapshot>("ui_profile_set_mode", { request }),
-    selectUiProfileScene: (request: UiProfileSelectSceneRequest) =>
-      invoke<ProjectUiProfileSnapshot>("ui_profile_select_scene", { request }),
-    selectUiProfilePage: (request: UiProfileSelectPageRequest) =>
-      invoke<ProjectUiProfileSnapshot>("ui_profile_select_page", { request }),
-    applyVibePage: (request: VibePageMutationRequest) =>
-      invoke<ProjectUiProfileSnapshot>("ui_profile_page_apply", { request }),
-    exportVibePage: (request: VibePageExportRequest) =>
-      invoke<VibePageExport>("ui_profile_page_export", { request }),
-    duplicateUiProfileScene: (request: UiProfileSceneLabelRequest) =>
-      invoke<ProjectUiProfileSnapshot>("ui_profile_scene_duplicate", { request }),
-    saveUiProfileScene: (request: UiProfileSceneTargetRequest) =>
-      invoke<ProjectUiProfileSnapshot>("ui_profile_scene_save", { request }),
-    renameUiProfileScene: (request: UiProfileSceneLabelRequest) =>
-      invoke<ProjectUiProfileSnapshot>("ui_profile_scene_rename", { request }),
-    deleteUiProfileScene: (request: UiProfileSceneTargetRequest) =>
-      invoke<ProjectUiProfileSnapshot>("ui_profile_scene_delete", { request }),
-    resetUiProfileScene: (request: UiProfileSceneTargetRequest) =>
-      invoke<ProjectUiProfileSnapshot>("ui_profile_scene_reset", { request }),
+    ...createTauriProfileTransport(invoke),
     subscribeUiProfileInvalidated: (listener) =>
       subscribeEvents(listen, invalidationEvents("profile"), listener),
     ...createTauriRuntimeTransport(invoke),

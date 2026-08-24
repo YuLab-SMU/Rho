@@ -805,53 +805,57 @@ pub(crate) fn commit_runtime_state(
     state.ui_profile.commit_runtime_state(scene, surfaces)
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub(crate) struct SetModeRequest {
     target: UiProfileRevisionRequestV1,
     mode: UiProfileModeV1,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub(crate) struct SelectSceneRequest {
     target: UiProfileRevisionRequestV1,
     scene_id: SceneId,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub(crate) struct SelectPageRequest {
     target: UiProfileRevisionRequestV1,
     page_id: PageId,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub(crate) struct SceneLabelRequest {
     target: UiProfileRevisionRequestV1,
     scene_id: SceneId,
     label: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub(crate) struct SceneTargetRequest {
     target: UiProfileRevisionRequestV1,
     scene_id: SceneId,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub(crate) struct PageMutationRequest {
     target: UiProfileRevisionRequestV1,
     page_id: PageId,
+    #[specta(type = rho_ui_contract::UiIpcNumber)]
     expected_page_revision: u64,
     mutation: VibePageMutationV1,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub(crate) struct PageExportRequest {
     project_id: ProjectId,
+    #[specta(type = rho_ui_contract::UiIpcNumber)]
     expected_profile_revision: u64,
     page_id: PageId,
+    #[specta(type = rho_ui_contract::UiIpcNumber)]
     expected_page_revision: u64,
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn ui_profile_snapshot(
     app: AppHandle,
@@ -890,6 +894,7 @@ async fn reconcile_studio_after_profile(app: &AppHandle, state: &AppState) -> Re
     Ok(())
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn ui_profile_set_mode(
     request: SetModeRequest,
@@ -910,6 +915,7 @@ pub(crate) async fn ui_profile_set_mode(
     Ok(snapshot)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn ui_profile_select_scene(
     request: SelectSceneRequest,
@@ -932,6 +938,7 @@ pub(crate) async fn ui_profile_select_scene(
     Ok(snapshot)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn ui_profile_select_page(
     request: SelectPageRequest,
@@ -954,6 +961,7 @@ pub(crate) async fn ui_profile_select_page(
     Ok(snapshot)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn ui_profile_page_apply(
     request: PageMutationRequest,
@@ -983,6 +991,7 @@ pub(crate) async fn ui_profile_page_apply(
     .map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn ui_profile_page_export(
     request: PageExportRequest,
@@ -1008,6 +1017,7 @@ pub(crate) async fn ui_profile_page_export(
     export_vibe_page(page).map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn ui_profile_scene_duplicate(
     request: SceneLabelRequest,
@@ -1043,6 +1053,7 @@ pub(crate) async fn ui_profile_scene_duplicate(
     Ok(snapshot)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn ui_profile_scene_save(
     request: SceneTargetRequest,
@@ -1069,6 +1080,7 @@ pub(crate) async fn ui_profile_scene_save(
     .map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn ui_profile_scene_rename(
     request: SceneLabelRequest,
@@ -1092,6 +1104,7 @@ pub(crate) async fn ui_profile_scene_rename(
     Ok(snapshot)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn ui_profile_scene_delete(
     request: SceneTargetRequest,
@@ -1123,6 +1136,7 @@ pub(crate) async fn ui_profile_scene_delete(
     Ok(snapshot)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn ui_profile_scene_reset(
     request: SceneTargetRequest,
@@ -1167,6 +1181,10 @@ pub(crate) async fn ui_profile_scene_reset(
         .map_err(display_error)?;
     Ok(snapshot)
 }
+
+#[cfg(test)]
+#[path = "ui_profile/profile_contract_tests.rs"]
+mod profile_contract_tests;
 
 #[cfg(test)]
 mod tests {
