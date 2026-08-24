@@ -40,6 +40,7 @@ import type {
 import type { AgentExecutionTransport } from "./agent-execution";
 import type { AgentRuntimeTransport } from "./agent-runtime";
 import type { AgentSettingsTransport } from "./agent-settings";
+import type { AgentFileTransport } from "./agent-file";
 
 export type {
   RuntimeExecution,
@@ -200,6 +201,13 @@ export type {
   AgentModelContextCapacity,
   AgentSettingsTransport,
 } from "./agent-settings";
+
+export type {
+  AgentFileApplyRequest,
+  AgentFileMutationResponse,
+  AgentFileTransport,
+  AgentFileUndoRequest,
+} from "./agent-file";
 
 export type UiSnapshotSource = "tauri" | "mock";
 export type HealthState = "ready" | "degraded" | "unavailable" | "restarting";
@@ -484,32 +492,6 @@ export interface CheckRunResponse {
   readonly result: CheckResult;
 }
 
-export interface AgentFileApplyRequest {
-  readonly turn_id: string;
-  readonly proposal_event_id: number;
-  readonly path: string;
-  readonly expected_disk_sha256: string | null;
-  readonly before_content: string;
-}
-
-export interface AgentFileUndoRequest {
-  readonly turn_id: string;
-  readonly proposal_event_id: number;
-  readonly path: string;
-  readonly expected_after_sha256: string;
-  readonly before_content: string;
-  readonly created: boolean;
-}
-
-export interface AgentFileMutationResponse {
-  readonly status: string;
-  readonly path: string;
-  readonly content: string | null;
-  readonly start: number;
-  readonly end: number;
-  readonly after_sha256: string | null;
-}
-
 export interface DomainSurfaceItem {
   readonly id: string;
   readonly title: string;
@@ -576,7 +558,7 @@ export interface ProjectSwitchResponse {
   readonly restart_required: boolean;
 }
 
-export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTransport, ProfileTransport, AgentConversationTransport, AgentTurnDetailTransport, AgentExecutionTransport, AgentRuntimeTransport, AgentSettingsTransport {
+export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTransport, ProfileTransport, AgentConversationTransport, AgentTurnDetailTransport, AgentExecutionTransport, AgentRuntimeTransport, AgentSettingsTransport, AgentFileTransport {
   readonly source: UiSnapshotSource;
   prepareWorkspace(chooseRscript?: boolean): Promise<WorkspacePreparation>;
   openProject(path: string): Promise<ProjectSwitchResponse>;
@@ -623,6 +605,4 @@ export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTrans
   loadDomainSurface(surfaceId: string): Promise<DomainSurfaceData>;
   readPlotArtifact(plotId: string): Promise<PlotImageView>;
   retryRun(runId: string): Promise<unknown>;
-  applyAgentFileEdit(request: AgentFileApplyRequest): Promise<AgentFileMutationResponse>;
-  undoAgentFileEdit(request: AgentFileUndoRequest): Promise<AgentFileMutationResponse>;
 }

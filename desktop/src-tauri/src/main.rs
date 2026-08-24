@@ -799,20 +799,22 @@ struct EditorFormatRequest {
     document_version: i64,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 struct AgentFileApplyRequest {
     turn_id: String,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
     proposal_event_id: i64,
     path: String,
     expected_disk_sha256: Option<String>,
     before_content: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 struct AgentFileUndoRequest {
     turn_id: String,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
     proposal_event_id: i64,
     path: String,
     expected_after_sha256: String,
@@ -820,16 +822,51 @@ struct AgentFileUndoRequest {
     created: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[allow(dead_code)] // Code-generation mirror for ProjectState's serialized shape.
+#[derive(Debug, Clone, specta::Type)]
+struct AgentFileProjectFileWire {
+    path: String,
+    name: String,
+    kind: String,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
+    size_bytes: u64,
+}
+
+#[allow(dead_code)] // Code-generation mirror for ProjectState's serialized shape.
+#[derive(Debug, Clone, specta::Type)]
+struct AgentFileProjectStateWire {
+    root: String,
+    files: Vec<AgentFileProjectFileWire>,
+    truncated: bool,
+}
+
+#[allow(dead_code)] // Code-generation mirror avoids adding Specta to rho-protocol.
+#[derive(Debug, Clone, specta::Type)]
+struct AgentFileWorkspaceIdentityWire {
+    workspace_id: String,
+    kernel_instance_id: String,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
+    execution_seq: u64,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
+    state_revision: u64,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
+    project_revision: u64,
+}
+
+#[derive(Debug, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 struct AgentFileMutationResponse {
     status: String,
     path: String,
     content: Option<String>,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
     start: usize,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
     end: usize,
     after_sha256: Option<String>,
+    #[specta(type = AgentFileProjectStateWire)]
     project: ProjectState,
+    #[specta(type = AgentFileWorkspaceIdentityWire)]
     workspace: rho_protocol::WorkspaceIdentity,
 }
 
@@ -2853,6 +2890,7 @@ async fn undo_agent_file_edit_state(
     })
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn apply_agent_file_edit(
     request: AgentFileApplyRequest,
@@ -2863,6 +2901,7 @@ async fn apply_agent_file_edit(
         .map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn undo_agent_file_edit(
     request: AgentFileUndoRequest,

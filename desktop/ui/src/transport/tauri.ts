@@ -1,5 +1,4 @@
 import type {
-  AgentFileMutationResponse,
   CheckResult,
   CheckResultRequest,
   CheckRunRequest,
@@ -22,6 +21,7 @@ import { createTauriAgentConversationTransport } from "./agent-conversation";
 import { createTauriAgentExecutionTransport } from "./agent-execution";
 import { createTauriAgentRuntimeTransport } from "./agent-runtime";
 import { createTauriAgentSettingsTransport } from "./agent-settings";
+import { createTauriAgentFileTransport } from "./agent-file";
 import { createTauriAgentTurnDetailTransport } from "./agent-turn";
 import { createTauriProfileTransport } from "./profile";
 import { createTauriResourceTransport } from "./resource";
@@ -250,6 +250,7 @@ export function createTauriUiKernelTransport(
     ...createTauriAgentExecutionTransport(invoke),
     ...agentRuntimeTransport,
     ...createTauriAgentSettingsTransport(invoke),
+    ...createTauriAgentFileTransport(invoke),
     subscribeAgentInvalidated: (listener) =>
       subscribeEvents(listen, invalidationEvents("agent"), listener),
     loadDomainSurface: async (surfaceId) => {
@@ -308,24 +309,5 @@ export function createTauriUiKernelTransport(
     },
     readPlotArtifact: (plotId) => invoke<PlotImageView>("read_plot_artifact", { plotId }),
     retryRun: (runId) => invoke("retry_run", { runId }),
-    applyAgentFileEdit: (request) => invoke<AgentFileMutationResponse>("apply_agent_file_edit", {
-      request: {
-        turnId: request.turn_id,
-        proposalEventId: request.proposal_event_id,
-        path: request.path,
-        expectedDiskSha256: request.expected_disk_sha256,
-        beforeContent: request.before_content,
-      },
-    }),
-    undoAgentFileEdit: (request) => invoke<AgentFileMutationResponse>("undo_agent_file_edit", {
-      request: {
-        turnId: request.turn_id,
-        proposalEventId: request.proposal_event_id,
-        path: request.path,
-        expectedAfterSha256: request.expected_after_sha256,
-        beforeContent: request.before_content,
-        created: request.created,
-      },
-    }),
   };
 }

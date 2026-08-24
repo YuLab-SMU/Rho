@@ -482,3 +482,78 @@ fn agent_settings_typescript_export() {
         .export(specta_typescript::Typescript::default(), output_path)
         .expect("Agent settings TypeScript export must succeed");
 }
+
+#[test]
+fn agent_file_contract_serializes_exact_wire_casing() {
+    let apply = AgentFileApplyRequest {
+        turn_id: "agent-turn:fixture".to_string(),
+        proposal_event_id: 42,
+        path: "analysis.R".to_string(),
+        expected_disk_sha256: Some("a".repeat(64)),
+        before_content: "before <- TRUE\n".to_string(),
+    };
+    let undo = AgentFileUndoRequest {
+        turn_id: "agent-turn:fixture".to_string(),
+        proposal_event_id: 42,
+        path: "analysis.R".to_string(),
+        expected_after_sha256: "b".repeat(64),
+        before_content: "before <- TRUE\n".to_string(),
+        created: false,
+    };
+    let response = AgentFileMutationResponse {
+        status: "applied".to_string(),
+        path: "analysis.R".to_string(),
+        content: Some("after <- TRUE\n".to_string()),
+        start: 0,
+        end: 14,
+        after_sha256: Some("b".repeat(64)),
+        project: ProjectState {
+            root: "/tmp/Project A".to_string(),
+            files: vec![crate::project::ProjectFile {
+                path: "analysis.R".to_string(),
+                name: "analysis.R".to_string(),
+                kind: "file",
+                size_bytes: 14,
+            }],
+            truncated: false,
+        },
+        workspace: rho_protocol::WorkspaceIdentity {
+            workspace_id: "workspace:a".to_string(),
+            kernel_instance_id: "kernel:a".to_string(),
+            execution_seq: 3,
+            state_revision: 5,
+            project_revision: 7,
+        },
+    };
+
+    let apply = serde_json::to_value(apply).unwrap();
+    let undo = serde_json::to_value(undo).unwrap();
+    let response = serde_json::to_value(response).unwrap();
+    assert_eq!(apply["proposalEventId"], 42);
+    assert_eq!(apply["expectedDiskSha256"], "a".repeat(64));
+    assert!(apply.get("proposal_event_id").is_none());
+    assert_eq!(undo["expectedAfterSha256"], "b".repeat(64));
+    assert!(undo.get("expected_after_sha256").is_none());
+    assert_eq!(response["afterSha256"], "b".repeat(64));
+    assert!(response.get("after_sha256").is_none());
+    assert_eq!(response["project"]["files"][0]["size_bytes"], 14);
+    assert_eq!(response["workspace"]["project_revision"], 7);
+    assert_javascript_safe_numbers(&apply);
+    assert_javascript_safe_numbers(&undo);
+    assert_javascript_safe_numbers(&response);
+}
+
+#[test]
+#[ignore = "writes the requested generated TypeScript contract"]
+fn agent_file_typescript_export() {
+    let output_path = std::env::var_os("RHO_AGENT_FILE_BINDINGS_PATH")
+        .expect("RHO_AGENT_FILE_BINDINGS_PATH must name the generated file");
+    tauri_specta::Builder::<tauri::Wry>::new()
+        .commands(tauri_specta::collect_commands![
+            crate::apply_agent_file_edit,
+            crate::undo_agent_file_edit,
+        ])
+        .error_handling(tauri_specta::ErrorHandlingMode::Throw)
+        .export(specta_typescript::Typescript::default(), output_path)
+        .expect("Agent file mutation TypeScript export must succeed");
+}

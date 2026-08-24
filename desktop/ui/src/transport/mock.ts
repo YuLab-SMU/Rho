@@ -2748,6 +2748,23 @@ export function createMockUiKernelTransport(
         start: 0,
         end: request.before_content.length,
         after_sha256: "a".repeat(64),
+        project: {
+          root: activeProjectPath,
+          files: [{
+            path: request.path,
+            name: request.path.split("/").at(-1) ?? request.path,
+            kind: "file",
+            size_bytes: request.before_content.length,
+          }],
+          truncated: false,
+        },
+        workspace: {
+          workspace_id: `workspace:${current.project.project_id}`,
+          kernel_instance_id: "kernel:mock",
+          execution_seq: 0,
+          state_revision: 0,
+          project_revision: current.context.project_revision,
+        },
       };
     },
     async undoAgentFileEdit(request) {
@@ -2759,6 +2776,23 @@ export function createMockUiKernelTransport(
         start: 0,
         end: 0,
         after_sha256: request.created ? null : "b".repeat(64),
+        project: {
+          root: activeProjectPath,
+          files: request.created ? [] : [{
+            path: request.path,
+            name: request.path.split("/").at(-1) ?? request.path,
+            kind: "file",
+            size_bytes: request.before_content.length,
+          }],
+          truncated: false,
+        },
+        workspace: {
+          workspace_id: `workspace:${current.project.project_id}`,
+          kernel_instance_id: "kernel:mock",
+          execution_seq: 0,
+          state_revision: 0,
+          project_revision: current.context.project_revision,
+        },
       };
     },
     publishResources(next: ResourceRegistrySnapshot) {
