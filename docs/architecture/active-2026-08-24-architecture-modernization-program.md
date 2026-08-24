@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W1-07"],
+  "active_work_packages": [],
   "integration_lane": "AM-W1-07",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -275,9 +275,11 @@ identity `f07d05c35aa2`. No application/R version or NEWS change is required.
 
 Wave 1's umbrella remains proposed. AM-W1-03 replaced the frozen Rust 1.88 veto
 with a rolling exact 1.97.0 toolchain contract in `b4f25fb`; the same locked
-tauri-specta graph passes the complete local workspace matrix. Runtime Output
-AM-W1-02 is active again; execution admission remains a later Runtime-domain
-slice.
+tauri-specta graph passes the complete local workspace matrix. Generated
+verticals are implemented for Runtime Output (`24d1e62`/AM-E-0005), Runtime
+lifecycle (`bd6f3a9`/AM-E-0006), Surface/Studio (`00be5e3`/AM-E-0007), Resource
+(`e169e9a`/AM-E-0008), and Profile/Vibe (`90d67d9`/AM-E-0009). Agent remains
+the next independent contract vertical.
 
 ## Version, NEWS, and release decision
 
