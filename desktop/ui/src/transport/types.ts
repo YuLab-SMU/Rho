@@ -12,6 +12,14 @@ import type {
   RuntimeOutputSearchRequest,
   RuntimeOutputSearchResult,
 } from "./runtime-output";
+import type {
+  RuntimeBinding,
+  RuntimeCreateRequest,
+  RuntimeExecuteRequest,
+  RuntimeExecutionStartResponse,
+  RuntimeInstanceRequest,
+  RuntimeRegistrySnapshot,
+} from "./runtime";
 
 export type {
   RuntimeExecution,
@@ -36,6 +44,23 @@ export type {
   RuntimeOutputStorageKind,
   RuntimeOutputTransport,
 } from "./runtime-output";
+
+export type {
+  RuntimeBinding,
+  RuntimeCreateRequest,
+  RuntimeDescriptor,
+  RuntimeExecuteRequest,
+  RuntimeExecutionSourceContext,
+  RuntimeExecutionSourceRange,
+  RuntimeExecutionStartResponse,
+  RuntimeInstanceRequest,
+  RuntimePersistenceClass,
+  RuntimeProviderDefinition,
+  RuntimeProviderRegistration,
+  RuntimeRegistrySnapshot,
+  RuntimeStatus,
+  RuntimeTransport,
+} from "./runtime";
 
 export type UiSnapshotSource = "tauri" | "mock";
 export type HealthState = "ready" | "degraded" | "unavailable" | "restarting";
@@ -156,82 +181,6 @@ export type SurfaceLifecycleState =
   | "failed"
   | "placeholder";
 
-export interface RuntimeBinding {
-  readonly runtime_provider_id: string;
-  readonly runtime_instance_id: string;
-  readonly runtime_kind: string;
-  readonly project_id: string;
-  readonly activation_generation: number;
-  readonly state_revision: number;
-  readonly attach_capabilities: readonly string[];
-}
-
-export type RuntimeStatus =
-  | "starting"
-  | "ready"
-  | "busy"
-  | "interrupting"
-  | "restarting"
-  | "stopped"
-  | "failed";
-
-export interface RuntimeDescriptor {
-  readonly runtime_provider_id: string;
-  readonly runtime_instance_id: string;
-  readonly runtime_kind: string;
-  readonly project_id: string;
-  readonly activation_generation: number;
-  readonly state_revision: number;
-  readonly status: RuntimeStatus;
-  readonly attach_capabilities: readonly string[];
-  readonly persistence_class:
-    | "project_persistent"
-    | "application_persistent"
-    | "explicit_lease";
-  readonly display_label: string;
-  readonly primary_scientific_runtime: boolean;
-}
-
-export interface RuntimeProviderRegistration {
-  readonly definition: {
-    readonly runtime_provider_id: string;
-    readonly runtime_kind: string;
-    readonly display_label: string;
-    readonly create_supported: boolean;
-    readonly max_instances: number;
-    readonly attach_capabilities: readonly string[];
-    readonly application_component_id: string;
-  };
-  readonly activation_generation: number;
-}
-
-export interface RuntimeRegistrySnapshot {
-  readonly contract: "rho.ui.runtime-registry.snapshot.v1";
-  readonly contract_major: 1;
-  readonly snapshot_revision: number;
-  readonly project_id: string;
-  readonly project_revision: number;
-  readonly providers: readonly RuntimeProviderRegistration[];
-  readonly instances: readonly RuntimeDescriptor[];
-}
-
-export interface RuntimeCreateRequest {
-  readonly project_id: string;
-  readonly runtime_provider_id: string;
-  readonly expected_project_revision: number;
-  readonly expected_snapshot_revision: number;
-  readonly display_label: string | null;
-}
-
-export interface RuntimeInstanceRequest {
-  readonly project_id: string;
-  readonly runtime_provider_id: string;
-  readonly runtime_instance_id: string;
-  readonly activation_generation: number;
-  readonly expected_project_revision: number;
-  readonly expected_state_revision: number;
-}
-
 export interface RuntimeAttachmentRequest {
   readonly runtime: RuntimeInstanceRequest;
   readonly surface: SurfaceInstanceRequest;
@@ -241,37 +190,12 @@ export interface RuntimeDetachRequest {
   readonly surface: SurfaceInstanceRequest;
 }
 
-export interface RuntimeExecuteRequest {
-  readonly runtime: RuntimeInstanceRequest;
-  readonly console_instance_id: string;
-  readonly expected_console_revision: number;
-  readonly code: string;
-  readonly source_context?: RuntimeExecutionSourceContext | null;
-}
-
-export interface RuntimeExecutionSourceContext {
-  readonly source_path: string;
-  readonly execution_mode: "selection" | "expression";
-  readonly document_version: number | null;
-  readonly source_range: {
-    readonly start_line: number;
-    readonly start_column: number;
-    readonly end_line: number;
-    readonly end_column: number;
-  };
-}
-
 export interface RuntimeOutputEvent {
   readonly sequence: number;
   readonly runtime_instance_id: string;
   readonly console_instance_id: string;
   readonly kind: string;
   readonly payload: unknown;
-}
-
-export interface RuntimeExecutionStartResponse {
-  readonly execution: RuntimeExecution;
-  readonly committed_through: number;
 }
 
 export type ResourceStatus = "ready" | "missing" | "unsupported";

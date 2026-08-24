@@ -33,12 +33,7 @@ import type {
   ResourceSaveRequest,
   RunAgentResponse,
   RuntimeAttachmentRequest,
-  RuntimeCreateRequest,
   RuntimeDetachRequest,
-  RuntimeExecuteRequest,
-  RuntimeExecutionStartResponse,
-  RuntimeInstanceRequest,
-  RuntimeRegistrySnapshot,
   SceneEditRequest,
   StudioRevisionRequest,
   StudioRuntimeSnapshot,
@@ -59,6 +54,7 @@ import type {
   WorkspacePreparation,
 } from "./types";
 import { invalidationEvents } from "./invalidation-contract";
+import { createTauriRuntimeTransport } from "./runtime";
 import { createTauriRuntimeOutputTransport } from "./runtime-output";
 
 export type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
@@ -306,21 +302,11 @@ export function createTauriUiKernelTransport(
       invoke<ProjectUiProfileSnapshot>("ui_profile_scene_reset", { request }),
     subscribeUiProfileInvalidated: (listener) =>
       subscribeEvents(listen, invalidationEvents("profile"), listener),
-    loadRuntimes: () => invoke<RuntimeRegistrySnapshot>("runtime_list"),
-    createRuntime: (request: RuntimeCreateRequest) =>
-      invoke<RuntimeRegistrySnapshot>("runtime_create", { request }),
+    ...createTauriRuntimeTransport(invoke),
     attachRuntime: (request: RuntimeAttachmentRequest) =>
       invoke<SurfaceRuntimeSnapshot>("runtime_attach", { request }),
     detachRuntime: (request: RuntimeDetachRequest) =>
       invoke<SurfaceRuntimeSnapshot>("runtime_detach", { request }),
-    interruptRuntime: (request: RuntimeInstanceRequest) =>
-      invoke<RuntimeRegistrySnapshot>("runtime_interrupt", { request }),
-    restartRuntime: (request: RuntimeInstanceRequest) =>
-      invoke<RuntimeRegistrySnapshot>("runtime_restart", { request }),
-    stopRuntime: (request: RuntimeInstanceRequest) =>
-      invoke<RuntimeRegistrySnapshot>("runtime_stop", { request }),
-    startRuntimeExecution: (request: RuntimeExecuteRequest) =>
-      invoke<RuntimeExecutionStartResponse>("runtime_execution_start", { request }),
     ...createTauriRuntimeOutputTransport(invoke),
     subscribeRuntimesInvalidated: (listener) =>
       subscribeEvents(listen, invalidationEvents("runtimes"), listener),

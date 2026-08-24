@@ -5,6 +5,8 @@ import { createMockUiKernelTransport } from "./mock";
 import { createTauriUiKernelTransport } from "./tauri";
 import type { UiKernelTransport } from "./types";
 
+export type { RuntimeTransport } from "./runtime";
+
 export function createUiKernelTransport(): UiKernelTransport {
   if (isTauri()) {
     return createTauriUiKernelTransport(invoke, listen);

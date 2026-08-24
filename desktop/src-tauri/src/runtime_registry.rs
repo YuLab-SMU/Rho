@@ -93,9 +93,10 @@ struct RuntimeRegistryChangedEvent<'a> {
 const DEFAULT_RUNTIME_OUTPUT_PAGE_SIZE: usize = 100;
 const DEFAULT_RUNTIME_OUTPUT_PAGE_BYTES: usize = 512 * 1024;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub(crate) struct RuntimeExecutionStartResponse {
     execution: RuntimeExecution,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
     committed_through: i64,
 }
 
@@ -830,6 +831,7 @@ async fn launch_auxiliary(
     Ok(Arc::new(RwLock::new(session)))
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn runtime_list(
     app: AppHandle,
@@ -842,6 +844,7 @@ pub(crate) async fn runtime_list(
         .map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn runtime_create(
     request: RuntimeCreateRequestV1,
@@ -1002,6 +1005,7 @@ async fn target_and_mark(
     Ok(entry)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn runtime_interrupt(
     request: RuntimeInstanceRequestV1,
@@ -1052,6 +1056,7 @@ pub(crate) async fn runtime_interrupt(
     Ok(transition.snapshot)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn runtime_restart(
     request: RuntimeInstanceRequestV1,
@@ -1136,6 +1141,7 @@ pub(crate) async fn runtime_restart(
     }
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn runtime_stop(
     request: RuntimeInstanceRequestV1,
@@ -1914,6 +1920,7 @@ async fn run_supervised_execution(
         .notify_output(&project_root, &execution_id);
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn runtime_execution_start(
     request: RuntimeExecuteRequestV1,
@@ -2286,6 +2293,10 @@ pub(crate) async fn runtime_output_follow(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "runtime_registry/runtime_contract_tests.rs"]
+mod runtime_contract_tests;
 
 #[cfg(test)]
 #[path = "runtime_registry/runtime_output_contract_tests.rs"]

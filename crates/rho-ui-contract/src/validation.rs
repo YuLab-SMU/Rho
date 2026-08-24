@@ -5,6 +5,18 @@ use serde::{Deserialize, Deserializer, Serialize, de};
 use serde_json::Value;
 use thiserror::Error;
 
+/// Export a bounded Rust integer as Rho's existing JSON/TypeScript `number`.
+///
+/// This affects generated metadata only. Serde keeps the original integer and
+/// each transported field must independently preserve JavaScript's exact range.
+pub struct UiIpcNumber;
+
+impl specta::Type for UiIpcNumber {
+    fn definition(types: &mut specta::Types) -> specta::datatype::DataType {
+        <i32 as specta::Type>::definition(types)
+    }
+}
+
 pub const MAX_ID_BYTES: usize = 128;
 pub const MAX_LABEL_BYTES: usize = 512;
 pub const MAX_PURPOSE_BYTES: usize = 2 * 1024;
@@ -238,7 +250,7 @@ pub fn validate_json_value(
 
 macro_rules! bounded_id {
     ($name:ident, $path:literal) => {
-        #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+        #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, specta::Type)]
         #[serde(transparent)]
         pub struct $name(String);
 

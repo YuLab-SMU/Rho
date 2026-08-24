@@ -18,7 +18,7 @@ pub const MAX_RUNTIME_OUTPUT_BYTES: usize = 2 * 1024 * 1024;
 pub const MAX_RUNTIME_OUTPUT_EVENTS: usize = 2048;
 pub const RUNTIME_REGISTRY_SNAPSHOT_CONTRACT: &str = "rho.ui.runtime-registry.snapshot.v1";
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum RuntimeStatusV1 {
     Starting,
@@ -30,7 +30,7 @@ pub enum RuntimeStatusV1 {
     Failed,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum RuntimePersistenceClassV1 {
     ProjectPersistent,
@@ -38,13 +38,15 @@ pub enum RuntimePersistenceClassV1 {
     ExplicitLease,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct RuntimeBindingV1 {
     pub runtime_provider_id: RuntimeProviderId,
     pub runtime_instance_id: RuntimeInstanceId,
     pub runtime_kind: RuntimeKindId,
     pub project_id: ProjectId,
+    #[specta(type = crate::UiIpcNumber)]
     pub activation_generation: u64,
+    #[specta(type = crate::UiIpcNumber)]
     pub state_revision: u64,
     pub attach_capabilities: Vec<RuntimeCapabilityId>,
 }
@@ -67,13 +69,15 @@ impl Validate for RuntimeBindingV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct RuntimeDescriptorV1 {
     pub runtime_provider_id: RuntimeProviderId,
     pub runtime_instance_id: RuntimeInstanceId,
     pub runtime_kind: RuntimeKindId,
     pub project_id: ProjectId,
+    #[specta(type = crate::UiIpcNumber)]
     pub activation_generation: u64,
+    #[specta(type = crate::UiIpcNumber)]
     pub state_revision: u64,
     pub status: RuntimeStatusV1,
     pub attach_capabilities: Vec<RuntimeCapabilityId>,
@@ -115,7 +119,7 @@ impl Validate for RuntimeDescriptorV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct RuntimeProviderDefinitionV1 {
     pub runtime_provider_id: RuntimeProviderId,
     pub runtime_kind: RuntimeKindId,
@@ -139,9 +143,10 @@ impl Validate for RuntimeProviderDefinitionV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct RuntimeProviderRegistrationV1 {
     pub definition: RuntimeProviderDefinitionV1,
+    #[specta(type = crate::UiIpcNumber)]
     pub activation_generation: u64,
 }
 
@@ -157,12 +162,14 @@ impl Validate for RuntimeProviderRegistrationV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct RuntimeRegistrySnapshotV1 {
     pub contract: String,
     pub contract_major: u16,
+    #[specta(type = crate::UiIpcNumber)]
     pub snapshot_revision: u64,
     pub project_id: ProjectId,
+    #[specta(type = crate::UiIpcNumber)]
     pub project_revision: u64,
     pub providers: Vec<RuntimeProviderRegistrationV1>,
     pub instances: Vec<RuntimeDescriptorV1>,
@@ -248,11 +255,13 @@ impl Validate for RuntimeRegistrySnapshotV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct RuntimeCreateRequestV1 {
     pub project_id: ProjectId,
     pub runtime_provider_id: RuntimeProviderId,
+    #[specta(type = crate::UiIpcNumber)]
     pub expected_project_revision: u64,
+    #[specta(type = crate::UiIpcNumber)]
     pub expected_snapshot_revision: u64,
     pub display_label: Option<String>,
 }
@@ -272,13 +281,16 @@ impl Validate for RuntimeCreateRequestV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct RuntimeInstanceRequestV1 {
     pub project_id: ProjectId,
     pub runtime_provider_id: RuntimeProviderId,
     pub runtime_instance_id: RuntimeInstanceId,
+    #[specta(type = crate::UiIpcNumber)]
     pub activation_generation: u64,
+    #[specta(type = crate::UiIpcNumber)]
     pub expected_project_revision: u64,
+    #[specta(type = crate::UiIpcNumber)]
     pub expected_state_revision: u64,
 }
 
@@ -328,7 +340,7 @@ pub struct RuntimeDetachRequestV1 {
     pub surface: SurfaceInstanceRequestV1,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, specta::Type)]
 pub struct RuntimeExecutionSourceRangeV1 {
     pub start_line: u32,
     pub start_column: u32,
@@ -336,10 +348,11 @@ pub struct RuntimeExecutionSourceRangeV1 {
     pub end_column: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, specta::Type)]
 pub struct RuntimeExecutionSourceContextV1 {
     pub source_path: String,
     pub execution_mode: String,
+    #[specta(type = Option<crate::UiIpcNumber>)]
     pub document_version: Option<u64>,
     pub source_range: RuntimeExecutionSourceRangeV1,
 }
@@ -438,10 +451,11 @@ impl RuntimeExecutionSourceContextV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, specta::Type)]
 pub struct RuntimeExecuteRequestV1 {
     pub runtime: RuntimeInstanceRequestV1,
     pub console_instance_id: SurfaceInstanceId,
+    #[specta(type = crate::UiIpcNumber)]
     pub expected_console_revision: u64,
     pub code: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
