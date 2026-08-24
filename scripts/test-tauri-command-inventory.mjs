@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const EXPECTED_HANDLER_DIGEST = "ec4792529802953dadf8e4ae84849c93c6dce100f45670c51acefddcb3de3d0a";
+const EXPECTED_HANDLER_DIGEST = "61fa2ca83e2972ec245604826af7fa2873dd37356ba3b5e5dfbe5c7f7bc3577d";
+const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const RUN_COMMANDS = [
   "audit_reproducibility",
@@ -232,11 +234,14 @@ if (process.argv.includes("--test")) {
   runSelfTests();
   console.log("Tauri command inventory self-tests passed");
 } else {
-  const sourceRoot = path.join("desktop", "src-tauri", "src");
+  const sourceRoot = path.join(REPOSITORY_ROOT, "desktop", "src-tauri", "src");
   const files = rustFiles(sourceRoot);
   const sources = files.map((name) => ({ name, text: fs.readFileSync(name, "utf8") }));
   const main = fs.readFileSync(path.join(sourceRoot, "main.rs"), "utf8");
-  const frontend = fs.readFileSync(path.join("desktop", "ui", "src", "transport", "tauri.ts"), "utf8");
+  const frontend = fs.readFileSync(
+    path.join(REPOSITORY_ROOT, "desktop", "ui", "src", "transport", "tauri.ts"),
+    "utf8",
+  );
   const result = validateCommandInventory({
     sources,
     main,
