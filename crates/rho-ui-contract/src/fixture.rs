@@ -278,6 +278,7 @@ fn definition(
         contract_major: RSR_CONTRACT_MAJOR,
         label: label.to_string(),
         purpose: format!("Render the {label} capability as an independent Rho Surface."),
+        icon: None,
         renderer_kind: SurfaceRendererKindV1::TrustedHost,
         scope: SurfaceScopeV1::Project,
         instance_policy: SurfaceInstancePolicyV1::MultiInstance,
@@ -396,6 +397,13 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
     };
     let instances = vec![
         instance(
+            "instance:navigator",
+            "rho.navigator",
+            Some("files"),
+            None,
+            None,
+        ),
+        instance(
             "instance:file-source",
             "rho.file-source",
             Some("source"),
@@ -439,6 +447,13 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
         ),
         instance("instance:status", "rho.status", None, None, None),
         instance("instance:check", "rho.check-result", None, None, None),
+        instance(
+            "instance:environment",
+            "rho.environment",
+            Some("packages"),
+            None,
+            None,
+        ),
     ];
     let scene = SceneStateV1 {
         scene_id: SceneId::new("scene:rho-studio").unwrap(),
@@ -450,16 +465,26 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
             axis: LayoutAxisV1::Horizontal,
             children: vec![
                 LayoutChildV1 {
-                    child: scene_surface("node:file", "instance:file-source"),
-                    basis: LayoutBasisV1::Fraction { weight: 7 },
+                    child: scene_surface("node:navigator", "instance:navigator"),
+                    basis: LayoutBasisV1::Minmax {
+                        min_logical_pixels: 240,
+                        max_logical_pixels: 340,
+                        weight: 1,
+                    },
                     resizable: true,
-                    collapse_priority: None,
+                    collapse_priority: Some(30),
                 },
                 LayoutChildV1 {
                     child: LayoutNodeV1::Container {
-                        node_id: LayoutNodeId::new("node:right").unwrap(),
+                        node_id: LayoutNodeId::new("node:center").unwrap(),
                         axis: LayoutAxisV1::Vertical,
                         children: vec![
+                            LayoutChildV1 {
+                                child: scene_surface("node:file", "instance:file-source"),
+                                basis: LayoutBasisV1::Fraction { weight: 7 },
+                                resizable: true,
+                                collapse_priority: None,
+                            },
                             LayoutChildV1 {
                                 child: LayoutNodeV1::Stack(StackNodeV1 {
                                     node_id: LayoutNodeId::new("node:consoles").unwrap(),
@@ -480,17 +505,25 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
                                 resizable: true,
                                 collapse_priority: None,
                             },
-                            LayoutChildV1 {
-                                child: scene_surface("node:status", "instance:status"),
-                                basis: LayoutBasisV1::Intrinsic,
-                                resizable: false,
-                                collapse_priority: Some(1),
-                            },
                         ],
                     },
-                    basis: LayoutBasisV1::Fraction { weight: 3 },
+                    basis: LayoutBasisV1::Fraction { weight: 7 },
                     resizable: true,
                     collapse_priority: None,
+                },
+                LayoutChildV1 {
+                    child: LayoutNodeV1::Stack(StackNodeV1 {
+                        node_id: LayoutNodeId::new("node:context").unwrap(),
+                        active_instance_id: SurfaceInstanceId::new("instance:environment").unwrap(),
+                        instances: vec![SurfaceInstanceId::new("instance:environment").unwrap()],
+                    }),
+                    basis: LayoutBasisV1::Minmax {
+                        min_logical_pixels: 320,
+                        max_logical_pixels: 520,
+                        weight: 2,
+                    },
+                    resizable: true,
+                    collapse_priority: Some(20),
                 },
             ],
         },
@@ -675,6 +708,22 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
             definition("rho.status", "Runtime status", &[], true),
             definition("rho.check-result", "Check result", &[], false),
             definition(
+                "rho.navigator",
+                "Navigator",
+                &[
+                    ("files", "Files"),
+                    ("runs", "History"),
+                    ("artifacts", "Artifacts"),
+                ],
+                false,
+            ),
+            definition(
+                "rho.environment",
+                "Environment",
+                &[("packages", "Packages"), ("requests", "Requests")],
+                false,
+            ),
+            definition(
                 "rho.surface-playground",
                 "Surface Playground",
                 &[("notes", "Notes"), ("inspect", "Inspect")],
@@ -745,6 +794,22 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
                     definition("rho.console", "Console", &[], false),
                     definition("rho.status", "Runtime status", &[], true),
                     definition("rho.check-result", "Check result", &[], false),
+                    definition(
+                        "rho.navigator",
+                        "Navigator",
+                        &[
+                            ("files", "Files"),
+                            ("runs", "History"),
+                            ("artifacts", "Artifacts"),
+                        ],
+                        false,
+                    ),
+                    definition(
+                        "rho.environment",
+                        "Environment",
+                        &[("packages", "Packages"), ("requests", "Requests")],
+                        false,
+                    ),
                     definition(
                         "rho.surface-playground",
                         "Surface Playground",

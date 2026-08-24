@@ -15,7 +15,10 @@ use crate::project::atomic_write;
 
 const SETTINGS_FILE_NAME: &str = "llm-profiles.json";
 const SETTINGS_V1_BACKUP_FILE_NAME: &str = "llm-profiles.v1.backup.json";
-const SETTINGS_SCHEMA_VERSION: u32 = 2;
+const SETTINGS_V2_BACKUP_FILE_NAME: &str = "llm-profiles.v2.backup.json";
+const SETTINGS_SCHEMA_VERSION: u32 = 3;
+const CONSERVATIVE_CONTEXT_WINDOW_TOKENS: u64 = 32_768;
+const CONSERVATIVE_RESERVED_OUTPUT_TOKENS: u64 = 4_096;
 const MAX_SETTINGS_BYTES: usize = 256 * 1024;
 const MAX_ID_LENGTH: usize = 120;
 const MAX_NAME_LENGTH: usize = 160;
@@ -279,6 +282,16 @@ struct AgentLlmSettingsV1 {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+struct AgentLlmSettingsV2 {
+    schema_version: u32,
+    revision: u64,
+    providers: Vec<AgentProviderProfile>,
+    models: Vec<AgentModelProfileV2>,
+    capability_routes: Vec<AgentCapabilityRoute>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AgentProviderProfile {
     pub id: String,
     pub display_name: String,
@@ -302,7 +315,23 @@ pub struct AgentModelProfile {
     pub enabled: bool,
     pub model_type: AgentCapabilityValue,
     pub capabilities: BTreeMap<String, AgentCapabilityValue>,
+    pub context_window_tokens: u64,
+    pub reserved_output_tokens: u64,
+    pub context_capacity_source: String,
     pub last_test: Option<AgentModelTestResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AgentModelProfileV2 {
+    id: String,
+    provider_id: String,
+    display_name: String,
+    model_id: String,
+    enabled: bool,
+    model_type: AgentCapabilityValue,
+    capabilities: BTreeMap<String, AgentCapabilityValue>,
+    last_test: Option<AgentModelTestResult>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -494,6 +523,15 @@ pub struct DeleteProviderRequest {
     pub expected_revision: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentContextCapacityRequest {
+    pub model_id: String,
+    pub expected_revision: u64,
+    pub context_window_tokens: u64,
+    pub reserved_output_tokens: u64,
+}
+
 #[derive(Debug, Default)]
 pub struct AgentModelTestState {
     pub pid: Option<u32>,
@@ -508,6 +546,10 @@ pub fn settings_path(data_dir: &Path) -> PathBuf {
 
 pub fn settings_v1_backup_path(data_dir: &Path) -> PathBuf {
     data_dir.join(SETTINGS_V1_BACKUP_FILE_NAME)
+}
+
+pub fn settings_v2_backup_path(data_dir: &Path) -> PathBuf {
+    data_dir.join(SETTINGS_V2_BACKUP_FILE_NAME)
 }
 
 fn capability_value(value: &str, source: &str) -> AgentCapabilityValue {
@@ -605,6 +647,9 @@ pub fn default_settings() -> AgentLlmSettings {
             enabled: true,
             model_type: capability_value("language", "aisdk_catalog"),
             capabilities,
+            context_window_tokens: CONSERVATIVE_CONTEXT_WINDOW_TOKENS,
+            reserved_output_tokens: CONSERVATIVE_RESERVED_OUTPUT_TOKENS,
+            context_capacity_source: "conservative_default".to_string(),
             last_test: None,
         }],
         capability_routes: vec![AgentCapabilityRoute {
@@ -642,8 +687,13 @@ pub fn load_settings(data_dir: &Path) -> Result<AgentLlmSettings> {
             validate_settings_v1(&legacy)?;
             migrate_settings_v1(legacy)?
         }
-        2 => serde_json::from_value(envelope)
-            .with_context(|| format!("decoding V2 Agent LLM settings {}", path.display()))?,
+        2 => {
+            let legacy: AgentLlmSettingsV2 = serde_json::from_value(envelope)
+                .with_context(|| format!("decoding V2 Agent LLM settings {}", path.display()))?;
+            migrate_settings_v2(legacy)?
+        }
+        3 => serde_json::from_value(envelope)
+            .with_context(|| format!("decoding V3 Agent LLM settings {}", path.display()))?,
         _ => bail!("Unsupported Agent LLM schema version."),
     };
     validate_settings(&settings)?;
@@ -697,23 +747,30 @@ where
             .get("schema_version")
             .and_then(serde_json::Value::as_u64)
             .context("Agent LLM settings are missing a numeric schema_version.")?;
-        if version == 1 {
-            let backup_path = settings_v1_backup_path(data_dir);
+        if matches!(version, 1 | 2) {
+            let backup_path = if version == 1 {
+                settings_v1_backup_path(data_dir)
+            } else {
+                settings_v2_backup_path(data_dir)
+            };
             if backup_path.exists() {
                 let existing = std::fs::read(&backup_path).with_context(|| {
                     format!("reading Agent LLM V1 backup {}", backup_path.display())
                 })?;
                 ensure!(
                     existing == current,
-                    "The existing Agent LLM V1 backup does not match the migration source."
+                    "The existing Agent LLM migration backup does not match the source."
                 );
             } else {
                 write(&backup_path, &current).with_context(|| {
-                    format!("writing Agent LLM V1 backup {}", backup_path.display())
+                    format!(
+                        "writing Agent LLM migration backup {}",
+                        backup_path.display()
+                    )
                 })?;
             }
         } else {
-            ensure!(version == 2, "Unsupported Agent LLM schema version.");
+            ensure!(version == 3, "Unsupported Agent LLM schema version.");
         }
     }
 
@@ -753,6 +810,9 @@ fn migrate_settings_v1(legacy: AgentLlmSettingsV1) -> Result<AgentLlmSettings> {
                 enabled: model.enabled,
                 model_type: capability_value("unknown", "unknown"),
                 capabilities,
+                context_window_tokens: CONSERVATIVE_CONTEXT_WINDOW_TOKENS,
+                reserved_output_tokens: CONSERVATIVE_RESERVED_OUTPUT_TOKENS,
+                context_capacity_source: "conservative_default".to_string(),
                 last_test: model.last_test,
             }
         })
@@ -768,6 +828,35 @@ fn migrate_settings_v1(legacy: AgentLlmSettingsV1) -> Result<AgentLlmSettings> {
             model_type: "language".to_string(),
             required_model_capabilities: Vec::new(),
         }],
+    };
+    validate_settings(&settings)?;
+    Ok(settings)
+}
+
+fn migrate_settings_v2(legacy: AgentLlmSettingsV2) -> Result<AgentLlmSettings> {
+    ensure!(legacy.schema_version == 2, "Expected Agent LLM schema V2.");
+    let settings = AgentLlmSettings {
+        schema_version: SETTINGS_SCHEMA_VERSION,
+        revision: legacy.revision,
+        providers: legacy.providers,
+        models: legacy
+            .models
+            .into_iter()
+            .map(|model| AgentModelProfile {
+                id: model.id,
+                provider_id: model.provider_id,
+                display_name: model.display_name,
+                model_id: model.model_id,
+                enabled: model.enabled,
+                model_type: model.model_type,
+                capabilities: model.capabilities,
+                context_window_tokens: CONSERVATIVE_CONTEXT_WINDOW_TOKENS,
+                reserved_output_tokens: CONSERVATIVE_RESERVED_OUTPUT_TOKENS,
+                context_capacity_source: "conservative_default".to_string(),
+                last_test: model.last_test,
+            })
+            .collect(),
+        capability_routes: legacy.capability_routes,
     };
     validate_settings(&settings)?;
     Ok(settings)
@@ -945,6 +1034,42 @@ pub fn save_model(data_dir: &Path, model: AgentModelProfile) -> Result<AgentLlmS
     }
     increment_revision(&mut settings)?;
     save_settings(data_dir, &settings)?;
+    Ok(settings)
+}
+
+pub fn set_context_capacity(
+    data_dir: &Path,
+    request: &AgentContextCapacityRequest,
+) -> Result<AgentLlmSettings> {
+    let _guard = settings_mutation_guard();
+    set_context_capacity_with_save(data_dir, request, save_settings)
+}
+
+fn set_context_capacity_with_save<F>(
+    data_dir: &Path,
+    request: &AgentContextCapacityRequest,
+    save: F,
+) -> Result<AgentLlmSettings>
+where
+    F: FnOnce(&Path, &AgentLlmSettings) -> Result<()>,
+{
+    let mut settings = load_settings(data_dir)?;
+    ensure!(
+        settings.revision == request.expected_revision,
+        "Model settings changed while this context capacity editor was open. Reload and try again."
+    );
+    validate_bounded(&request.model_id, "Model ID", MAX_ID_LENGTH)?;
+    let model = settings
+        .models
+        .iter_mut()
+        .find(|model| model.id == request.model_id)
+        .with_context(|| format!("Unknown model: {}", request.model_id))?;
+    model.context_window_tokens = request.context_window_tokens;
+    model.reserved_output_tokens = request.reserved_output_tokens;
+    model.context_capacity_source = "user_declared".to_string();
+    validate_model(model)?;
+    increment_revision(&mut settings)?;
+    save(data_dir, &settings)?;
     Ok(settings)
 }
 
@@ -2469,6 +2594,9 @@ fn resolve_model_id_with_settings(
         tool_calling: model_function_call(model).to_string(),
         provider_display_name: provider.display_name.clone(),
         model_display_name: model.display_name.clone(),
+        context_window_tokens: model.context_window_tokens,
+        reserved_output_tokens: model.reserved_output_tokens,
+        context_capacity_source: model.context_capacity_source.clone(),
         capability_routes: vec![AgentRuntimeCapabilityRoute {
             capability: route_capability.to_string(),
             model: effective_model_ref.clone(),
@@ -2617,6 +2745,22 @@ fn validate_model(model: &AgentModelProfile) -> Result<()> {
         );
         validate_capability_value(value, false)?;
     }
+    ensure!(
+        model.context_window_tokens >= 4_096,
+        "Model context window must be at least 4,096 tokens."
+    );
+    ensure!(
+        model.reserved_output_tokens >= 256
+            && model.reserved_output_tokens < model.context_window_tokens,
+        "Reserved output tokens must be at least 256 and smaller than the context window."
+    );
+    ensure!(
+        matches!(
+            model.context_capacity_source.as_str(),
+            "catalog" | "user_declared" | "conservative_default"
+        ),
+        "Context capacity provenance is unsupported."
+    );
     Ok(())
 }
 
@@ -3191,6 +3335,93 @@ mod tests {
         settings
     }
 
+    #[test]
+    fn context_capacity_update_is_revision_safe_validated_and_recovers_after_save_failure() {
+        let directory = TempDir::new().unwrap();
+        let settings = default_settings();
+        let model_id = settings.models[0].id.clone();
+        save_settings(directory.path(), &settings).unwrap();
+
+        let updated = set_context_capacity(
+            directory.path(),
+            &AgentContextCapacityRequest {
+                model_id: model_id.clone(),
+                expected_revision: settings.revision,
+                context_window_tokens: 131_072,
+                reserved_output_tokens: 8_192,
+            },
+        )
+        .unwrap();
+        assert_eq!(updated.revision, settings.revision + 1);
+        assert_eq!(updated.models[0].context_window_tokens, 131_072);
+        assert_eq!(updated.models[0].reserved_output_tokens, 8_192);
+        assert_eq!(updated.models[0].context_capacity_source, "user_declared");
+
+        let stale = set_context_capacity(
+            directory.path(),
+            &AgentContextCapacityRequest {
+                model_id: model_id.clone(),
+                expected_revision: settings.revision,
+                context_window_tokens: 65_536,
+                reserved_output_tokens: 4_096,
+            },
+        )
+        .unwrap_err();
+        assert!(stale.to_string().contains("changed"));
+
+        let invalid = set_context_capacity(
+            directory.path(),
+            &AgentContextCapacityRequest {
+                model_id: model_id.clone(),
+                expected_revision: updated.revision,
+                context_window_tokens: 4_096,
+                reserved_output_tokens: 4_096,
+            },
+        )
+        .unwrap_err();
+        assert!(
+            invalid
+                .to_string()
+                .contains("smaller than the context window")
+        );
+
+        let before_failure = std::fs::read(settings_path(directory.path())).unwrap();
+        let failed = set_context_capacity_with_save(
+            directory.path(),
+            &AgentContextCapacityRequest {
+                model_id: model_id.clone(),
+                expected_revision: updated.revision,
+                context_window_tokens: 262_144,
+                reserved_output_tokens: 16_384,
+            },
+            |_path, _settings| anyhow::bail!("injected settings write failure"),
+        )
+        .unwrap_err();
+        assert!(
+            failed
+                .to_string()
+                .contains("injected settings write failure")
+        );
+        assert_eq!(
+            std::fs::read(settings_path(directory.path())).unwrap(),
+            before_failure
+        );
+
+        let recovered = set_context_capacity(
+            directory.path(),
+            &AgentContextCapacityRequest {
+                model_id,
+                expected_revision: updated.revision,
+                context_window_tokens: 262_144,
+                reserved_output_tokens: 16_384,
+            },
+        )
+        .unwrap();
+        assert_eq!(recovered.revision, updated.revision + 1);
+        assert_eq!(recovered.models[0].context_window_tokens, 262_144);
+        assert_eq!(recovered.models[0].reserved_output_tokens, 16_384);
+    }
+
     fn delete_provider_request(settings: &AgentLlmSettings) -> DeleteProviderRequest {
         DeleteProviderRequest {
             provider_id: "provider-deepseek-existing".to_string(),
@@ -3296,7 +3527,12 @@ mod tests {
     fn default_migration_preserves_deepseek_flash() {
         let settings = default_settings();
         assert_eq!(chat_model_id(&settings).unwrap(), "model-deepseek-v4-flash");
-        assert_eq!(settings.schema_version, 2);
+        assert_eq!(settings.schema_version, 3);
+        assert_eq!(settings.models[0].context_window_tokens, 32_768);
+        assert_eq!(
+            settings.models[0].context_capacity_source,
+            "conservative_default"
+        );
         assert_eq!(settings.models[0].model_id, "deepseek-v4-flash");
         assert_eq!(
             settings.providers[0].registered_provider_id.as_deref(),
@@ -3340,6 +3576,67 @@ mod tests {
         .unwrap()
     }
 
+    fn legacy_v2_settings_bytes() -> Vec<u8> {
+        let settings = default_settings();
+        serde_json::to_vec_pretty(&AgentLlmSettingsV2 {
+            schema_version: 2,
+            revision: settings.revision,
+            providers: settings.providers,
+            models: settings
+                .models
+                .into_iter()
+                .map(|model| AgentModelProfileV2 {
+                    id: model.id,
+                    provider_id: model.provider_id,
+                    display_name: model.display_name,
+                    model_id: model.model_id,
+                    enabled: model.enabled,
+                    model_type: model.model_type,
+                    capabilities: model.capabilities,
+                    last_test: model.last_test,
+                })
+                .collect(),
+            capability_routes: settings.capability_routes,
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn v2_capacity_migration_is_conservative_backed_up_and_recoverable() {
+        let directory = TempDir::new().unwrap();
+        let legacy = legacy_v2_settings_bytes();
+        let path = settings_path(directory.path());
+        std::fs::write(&path, &legacy).unwrap();
+
+        let projected = load_settings(directory.path()).unwrap();
+        assert_eq!(projected.schema_version, 3);
+        assert_eq!(projected.models[0].context_window_tokens, 32_768);
+        assert_eq!(projected.models[0].reserved_output_tokens, 4_096);
+        assert_eq!(
+            projected.models[0].context_capacity_source,
+            "conservative_default"
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), legacy);
+        assert!(!settings_v2_backup_path(directory.path()).exists());
+
+        let failure = save_settings_with(directory.path(), &projected, |target, bytes| {
+            if target == settings_v2_backup_path(directory.path()) {
+                atomic_write(target, bytes)
+            } else {
+                bail!("injected V3 settings write failure")
+            }
+        });
+        assert!(failure.is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), legacy);
+        assert_eq!(
+            std::fs::read(settings_v2_backup_path(directory.path())).unwrap(),
+            legacy
+        );
+
+        save_settings(directory.path(), &projected).unwrap();
+        assert_eq!(load_settings(directory.path()).unwrap().schema_version, 3);
+    }
+
     #[test]
     fn v1_read_projects_without_rewrite_then_first_mutation_backs_up_and_migrates() {
         let directory = TempDir::new().unwrap();
@@ -3347,7 +3644,7 @@ mod tests {
         std::fs::write(settings_path(directory.path()), &legacy).unwrap();
 
         let projected = load_settings(directory.path()).unwrap();
-        assert_eq!(projected.schema_version, 2);
+        assert_eq!(projected.schema_version, 3);
         assert_eq!(projected.revision, 0);
         assert_eq!(projected.models[0].model_type.value, "unknown");
         assert_eq!(
@@ -3376,13 +3673,13 @@ mod tests {
             legacy
         );
         let reopened = load_settings(directory.path()).unwrap();
-        assert_eq!(reopened.schema_version, 2);
+        assert_eq!(reopened.schema_version, 3);
         assert_eq!(reopened.revision, 1);
         assert_eq!(reopened.models[0].model_type.source, "user_declared");
     }
 
     #[test]
-    fn v1_migration_backup_and_v2_write_failures_leave_recoverable_source() {
+    fn v1_migration_backup_and_v3_write_failures_leave_recoverable_source() {
         let directory = TempDir::new().unwrap();
         let legacy = legacy_settings_bytes();
         let path = settings_path(directory.path());
@@ -3393,7 +3690,7 @@ mod tests {
             if target == settings_v1_backup_path(directory.path()) {
                 bail!("injected backup failure")
             }
-            unreachable!("V2 write must not run after backup failure")
+            unreachable!("V3 write must not run after backup failure")
         });
         assert!(result.is_err());
         assert_eq!(std::fs::read(&path).unwrap(), legacy);
@@ -3403,7 +3700,7 @@ mod tests {
             if target == settings_v1_backup_path(directory.path()) {
                 atomic_write(target, bytes)
             } else {
-                bail!("injected V2 write failure")
+                bail!("injected V3 write failure")
             }
         });
         assert!(result.is_err());
@@ -3412,7 +3709,7 @@ mod tests {
             std::fs::read(settings_v1_backup_path(directory.path())).unwrap(),
             legacy
         );
-        assert_eq!(load_settings(directory.path()).unwrap().schema_version, 2);
+        assert_eq!(load_settings(directory.path()).unwrap().schema_version, 3);
     }
 
     #[test]

@@ -10,7 +10,7 @@
     "isDynamicEntry": true
   },
   "index.html": {
-    "file": "assets/index-kEuWcdi4.js",
+    "file": "assets/index-DfYxywd4.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
@@ -18,11 +18,11 @@
       "src/app/monacoRuntime.ts"
     ],
     "css": [
-      "assets/index-Dg7aeGkG.css"
+      "assets/index-BoLC3QDL.css"
     ]
   },
   "src/app/monacoRuntime.ts": {
-    "file": "assets/monacoRuntime-BACOeArG.js",
+    "file": "assets/monacoRuntime-Dx3gs_Rg.js",
     "name": "monacoRuntime",
     "src": "src/app/monacoRuntime.ts",
     "isDynamicEntry": true,

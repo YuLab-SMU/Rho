@@ -43,6 +43,18 @@ This slice does not implement:
 5. The policy snapshot must be truthful about the current implementation:
    manual delete actions exist; automatic pruning and quota enforcement do not.
 
+## 2026-08-24 Runtime-output measurement amendment
+
+When the authorized
+[`Runtime output and Agent context closed-loop contract`](../plans/active-2026-08-24-runtime-output-agent-context-closed-loop-spec.md)
+cuts over, the same project-scoped summary additionally reports Runtime
+execution row count, inline output bytes, referenced Artifact bytes, and
+pruned/tombstoned output counts. Session scope remains the active
+`workspace_id`; project scope never aggregates another project. The read view
+must label unavailable legacy measurements rather than inferring them from
+generic events. Until schema v15 and its readers are integrated, the existing
+plot/artifact-only summary remains the truthful production snapshot.
+
 ## Verification
 
 - store tests prove project and session summaries stay isolated;

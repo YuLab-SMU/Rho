@@ -182,6 +182,41 @@ rho_create_workspace_tools <- function(plugin_tools = list()) {
       meta = list(validate_arguments = TRUE, rho_approval = "automatic")
     ),
     aisdk::tool(
+      name = "read_conversation_turn",
+      description = paste(
+        "Read one bounded terminal turn from this exact Agent Conversation.",
+        "The broker rejects turns from other conversations or projects."
+      ),
+      parameters = aisdk::z_object(
+        turn_id = aisdk::z_string("Exact older Agent turn identity", min_length = 1L),
+        .required = "turn_id"
+      ),
+      execute = function(args) rho_broker_tool_request("conversation.read_turn", args),
+      meta = list(validate_arguments = TRUE, rho_approval = "automatic")
+    ),
+    aisdk::tool(
+      name = "read_runtime_output",
+      description = paste(
+        "Read a bounded page from a Runtime output range explicitly admitted for this turn.",
+        "It cannot browse unselected History or another project."
+      ),
+      parameters = aisdk::z_object(
+        execution_id = aisdk::z_string("Exact admitted Runtime execution identity", min_length = 1L),
+        after_sequence = aisdk::z_integer(
+          description = "Read after this committed sequence",
+          minimum = 0L
+        ),
+        page_size = aisdk::z_integer(
+          description = "Maximum chunks to return",
+          minimum = 1L,
+          maximum = 50L
+        ),
+        .required = "execution_id"
+      ),
+      execute = function(args) rho_broker_tool_request("workspace.read_runtime_output", args),
+      meta = list(validate_arguments = TRUE, rho_approval = "automatic")
+    ),
+    aisdk::tool(
       name = "run_r",
       description = paste(
         "Execute R code in the authoritative persistent Ark workspace.",

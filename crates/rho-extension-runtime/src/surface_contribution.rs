@@ -76,6 +76,7 @@ impl WorkspaceSurfaceDeclarationV1 {
             contract_major,
             label: contribution.label.clone(),
             purpose: contribution.purpose.clone(),
+            icon: contribution.icon.clone(),
             renderer_kind: SurfaceRendererKindV1::DeclarativeDocument,
             scope: SurfaceScopeV1::Project,
             instance_policy: self.instance_policy,

@@ -110,6 +110,9 @@ changes.
 - Active `0.3.x` implementation handoff: [`plans/active-2026-07-25-0.3x-scientific-workflow-handoff.md`](plans/active-2026-07-25-0.3x-scientific-workflow-handoff.md)
 - Current `0.3.x` milestone verification: [`verification/0.3x-milestone/verification.md`](verification/0.3x-milestone/verification.md)
 - Implemented Agent work handoff: [`plans/implemented-0.2x-agent-handoff.md`](plans/implemented-0.2x-agent-handoff.md)
+- Accepted plugin-native Surface Runtime architecture: [`design/accepted-2026-08-21-plugin-native-surface-runtime-design.md`](design/accepted-2026-08-21-plugin-native-surface-runtime-design.md)
+- Active Studio design language and UX overhaul: [`design/active-2026-08-22-studio-design-language-and-ux-overhaul-design.md`](design/active-2026-08-22-studio-design-language-and-ux-overhaul-design.md)
+- Active Runtime output, Console, History, and Agent context closed loop: [`plans/active-2026-08-24-runtime-output-agent-context-closed-loop-spec.md`](plans/active-2026-08-24-runtime-output-agent-context-closed-loop-spec.md)
 
 Add new documents to the category that describes their purpose. Prefer a dated
 filename for time-bounded plans and keep durable decisions in ADRs.

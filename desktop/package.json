@@ -1,11 +1,12 @@
 {
   "name": "rho-desktop-frontend",
   "private": true,
-  "version": "0.4.1-dev.13",
+  "version": "0.4.1-dev.15",
   "description": "Frontend tooling for the Rho Surface Runtime",
   "license": "AGPL-3.0-only",
   "scripts": {
     "rsr:dev": "vite --config ui/vite.config.mts",
+    "rsr:dev:desktop": "node ../scripts/run-rsr-debug.mjs",
     "rsr:build": "vite build --config ui/vite.config.mts",
     "rsr:preview": "vite preview --config ui/vite.config.mts",
     "rsr:typecheck": "tsc --noEmit --project ui/tsconfig.app.json --pretty false && tsc --noEmit --project ui/tsconfig.node.json --pretty false",
@@ -14,9 +15,11 @@
     "rsr:test:contract": "node ../scripts/test-rsr-contract.mjs",
     "rsr:test:assets": "node ../scripts/test-rsr-generated-assets.mjs",
     "rsr:test:browser": "node ../scripts/test-rsr-browser-smoke.mjs",
+    "rsr:test:interactions": "node ../scripts/test-rsr-interactions.mjs",
+    "rsr:test:identity": "node ../scripts/test-rsr-build-identity.mjs && node ../scripts/test-rsr-process-identity.mjs",
     "rsr:test:cutover": "node ../scripts/test-rsr-cutover.mjs",
     "rsr:accept:exact": "node ../scripts/accept-rsr-exact-app.mjs",
-    "rsr:check": "npm run rsr:typecheck && npm run rsr:lint && npm run rsr:test:contract && npm run rsr:test && npm run rsr:build && npm run rsr:test:assets && npm run rsr:test:cutover && npm run rsr:test:browser"
+    "rsr:check": "npm run rsr:typecheck && npm run rsr:lint && npm run rsr:test:identity && npm run rsr:test:contract && npm run rsr:test && npm run rsr:build && npm run rsr:test:assets && npm run rsr:test:cutover && npm run rsr:test:browser && npm run rsr:test:interactions"
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1",
@@ -43,6 +46,7 @@
     "eslint": "10.9.0",
     "globals": "17.11.0",
     "jsdom": "30.0.1",
+    "playwright-core": "1.61.0",
     "typescript": "6.0.3",
     "typescript-eslint": "8.67.0",
     "vite": "8.2.2",

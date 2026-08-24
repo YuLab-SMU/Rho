@@ -4,7 +4,12 @@ import fs from "node:fs";
 const read = (path) => fs.readFileSync(path, "utf8");
 
 export function validateP24LifecycleContract(value) {
-  assert.match(value.store, /SCHEMA_VERSION: i64 = 14/);
+  const schemaVersion = value.store.match(/SCHEMA_VERSION: i64 = (\d+)/);
+  assert.ok(schemaVersion, "rho-store must declare an integer schema version");
+  assert.ok(
+    Number.parseInt(schemaVersion[1], 10) >= 14,
+    "the current store schema must include the v14 plugin lifecycle foundation",
+  );
   for (const marker of [
     "create_plugin_lifecycle_schema",
     "assert_plugin_lifecycle_schema",

@@ -125,6 +125,34 @@ describe("UI Kernel transport and external store", () => {
     unsubscribe();
   });
 
+  it("accepts lower snapshot revisions after every projection changes project", async () => {
+    const projectB = "/tmp/project-b";
+    const transport = createMockUiKernelTransport("?project=%2Ftmp%2Fproject-a");
+    const stores = [
+      new UiExternalStore(transport),
+      new SurfaceExternalStore(transport),
+      new StudioExternalStore(transport),
+      new RuntimeExternalStore(transport),
+      new ResourceExternalStore(transport),
+      new UiProfileExternalStore(transport),
+    ] as const;
+    const stops = stores.map((store) => store.subscribe(() => undefined));
+    await Promise.all(stores.map((store) => store.refresh()));
+
+    await transport.openProject(projectB);
+    await Promise.all(stores.map((store) => store.refresh()));
+
+    const projectIds = stores.map((store) => {
+      const state = store.getSnapshot();
+      if (state.status !== "ready") throw new Error("project projection did not reload");
+      if ("project" in state.snapshot) return state.snapshot.project.project_id;
+      if ("profile" in state.snapshot) return state.snapshot.profile.project_id;
+      return state.snapshot.project_id;
+    });
+    expect(new Set(projectIds)).toEqual(new Set([`project:mock:${encodeURIComponent(projectB)}`]));
+    for (const stop of stops) stop();
+  });
+
   it("keeps Project UI Profile mode and Scene mutations CAS-safe", async () => {
     const transport = createMockUiKernelTransport();
     const store = new UiProfileExternalStore(transport);
@@ -356,7 +384,7 @@ describe("UI Kernel transport and external store", () => {
         : command.startsWith("runtime_")
         ? command === "runtime_attach" || command === "runtime_detach"
           ? generatedSurfaces()
-          : command === "runtime_execute"
+          : command === "runtime_execution_start"
             ? {
                 execution_id: "runtime-execution:test",
                 runtime_instance_id: "runtime:workspace-r",
@@ -523,7 +551,7 @@ describe("UI Kernel transport and external store", () => {
     await transport.interruptRuntime(runtimeTarget);
     await transport.restartRuntime(runtimeTarget);
     await transport.stopRuntime(runtimeTarget);
-    await transport.executeRuntime({
+    await transport.startRuntimeExecution({
       runtime: runtimeTarget,
       console_instance_id: "instance:console-a",
       expected_console_revision: 1,
@@ -574,7 +602,8 @@ describe("UI Kernel transport and external store", () => {
     const stop = transport.subscribeInvalidated(invalidated);
     await Promise.resolve();
     handlers.get("rho://ui-snapshot-invalidated")?.();
-    expect(invalidated).toHaveBeenCalledOnce();
+    handlers.get("rho://runtime-registry-changed")?.();
+    expect(invalidated).toHaveBeenCalledTimes(2);
     expect(calls).toEqual([
       { command: "ui_kernel_snapshot" },
       {
@@ -654,7 +683,7 @@ describe("UI Kernel transport and external store", () => {
       { command: "runtime_restart", args: { request: runtimeTarget } },
       { command: "runtime_stop", args: { request: runtimeTarget } },
       {
-        command: "runtime_execute",
+        command: "runtime_execution_start",
         args: {
           request: {
             runtime: runtimeTarget,
@@ -743,6 +772,39 @@ describe("UI Kernel transport and external store", () => {
       "workspace_start",
       "agent_runtime_retry",
       "project_restore_session",
+    ]);
+  });
+
+  it("routes project paths and the native picker through the existing Tauri switch commands", async () => {
+    const calls: Array<{ command: string; args?: Record<string, unknown> }> = [];
+    const response = {
+      status: "cancelled" as const,
+      project: null,
+      session: {},
+      unavailable: null,
+      blocker: null,
+      reason_code: null,
+      message: null,
+      restored_root: null,
+      restart_required: false,
+    };
+    const transport = createTauriUiKernelTransport(async <T,>(
+      command: string,
+      args?: Record<string, unknown>,
+    ) => {
+      calls.push(args === undefined ? { command } : { command, args });
+      return response as T;
+    }, async () => () => undefined);
+
+    await expect(transport.openProject("/Users/example/Rho release 空格项目"))
+      .resolves.toEqual(response);
+    await expect(transport.pickProjectDirectory()).resolves.toEqual(response);
+    expect(calls).toEqual([
+      {
+        command: "project_open",
+        args: { path: "/Users/example/Rho release 空格项目" },
+      },
+      { command: "project_pick_directory", args: undefined },
     ]);
   });
 
@@ -891,6 +953,97 @@ describe("UI Kernel transport and external store", () => {
     stop();
   });
 
+  it("injects Runtime rejection before mutation and leaves History truthful", async () => {
+    const transport = createMockUiKernelTransport("?fault=runtime-execute");
+    const before = await transport.loadRuntimes();
+    const runtime = before.instances[0]!;
+    const console = (await transport.loadSurfaces()).catalog.instances.find(
+      (surface) => surface.instance_id === "instance:console-a",
+    )!;
+    const historyBefore = await transport.loadDomainSurface("rho.runs");
+    await expect(transport.startRuntimeExecution({
+      runtime: {
+        project_id: runtime.project_id,
+        runtime_provider_id: runtime.runtime_provider_id,
+        runtime_instance_id: runtime.runtime_instance_id,
+        activation_generation: runtime.activation_generation,
+        expected_project_revision: before.project_revision,
+        expected_state_revision: runtime.state_revision,
+      },
+      console_instance_id: console.instance_id,
+      expected_console_revision: console.surface_revision,
+      code: "1 + 1",
+    })).rejects.toThrow("Injected Runtime rejection");
+    expect(await transport.loadRuntimes()).toEqual(before);
+    expect(await transport.loadDomainSurface("rho.runs")).toEqual(historyBefore);
+  });
+
+  it("keeps the delayed Runtime scenario pending until its deterministic gate elapses", async () => {
+    vi.useFakeTimers();
+    try {
+      const transport = createMockUiKernelTransport("?delay=runtime-execute&delay_ms=250");
+      const before = await transport.loadRuntimes();
+      const runtime = before.instances[0]!;
+      const console = (await transport.loadSurfaces()).catalog.instances.find(
+        (surface) => surface.instance_id === "instance:console-a",
+      )!;
+      let settled = false;
+      const execution = transport.startRuntimeExecution({
+        runtime: {
+          project_id: runtime.project_id,
+          runtime_provider_id: runtime.runtime_provider_id,
+          runtime_instance_id: runtime.runtime_instance_id,
+          activation_generation: runtime.activation_generation,
+          expected_project_revision: before.project_revision,
+          expected_state_revision: runtime.state_revision,
+        },
+        console_instance_id: console.instance_id,
+        expected_console_revision: console.surface_revision,
+        code: "1 + 1",
+      }).finally(() => { settled = true; });
+      await vi.advanceTimersByTimeAsync(249);
+      expect(settled).toBe(false);
+      expect(await transport.loadRuntimes()).toEqual(before);
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(execution).resolves.toMatchObject({
+        committed_through: 0,
+        execution: { status: "admitted" },
+      });
+      expect(settled).toBe(true);
+      expect((await transport.loadDomainSurface("rho.runs")).items[0]?.title).toBe("Console command");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("can drop, duplicate, and reorder named invalidations without changing snapshots", async () => {
+    const dropped = createMockUiKernelTransport("?invalidation=drop:runtimes");
+    const droppedListener = vi.fn();
+    dropped.subscribeRuntimesInvalidated(droppedListener);
+    dropped.publishRuntimes(await dropped.loadRuntimes());
+    expect(droppedListener).not.toHaveBeenCalled();
+
+    const duplicated = createMockUiKernelTransport("?invalidation=duplicate:runtimes");
+    const duplicatedListener = vi.fn();
+    duplicated.subscribeRuntimesInvalidated(duplicatedListener);
+    duplicated.publishRuntimes(await duplicated.loadRuntimes());
+    await Promise.resolve();
+    expect(duplicatedListener).toHaveBeenCalledTimes(2);
+
+    const reordered = createMockUiKernelTransport("?invalidation=reorder:runtimes:studio");
+    const sequence: string[] = [];
+    const runtimeBefore = await reordered.loadRuntimes();
+    const studioBefore = await reordered.loadStudio();
+    reordered.subscribeRuntimesInvalidated(() => sequence.push("runtimes"));
+    reordered.subscribeStudioInvalidated(() => sequence.push("studio"));
+    reordered.publishRuntimes(runtimeBefore);
+    expect(sequence).toEqual([]);
+    reordered.publishStudio(studioBefore);
+    expect(sequence).toEqual(["studio", "runtimes"]);
+    expect(await reordered.loadRuntimes()).toEqual(runtimeBefore);
+    expect(await reordered.loadStudio()).toEqual(studioBefore);
+  });
+
   it("supports shared and split runtimes without coupling Console or layout lifetime", async () => {
     const transport = createMockUiKernelTransport();
     const runtimeStore = new RuntimeExternalStore(transport);
@@ -916,13 +1069,13 @@ describe("UI Kernel transport and external store", () => {
     const consoleB = surfaces.catalog.instances.find((surface) =>
       surface.instance_id === "instance:console-b"
     )!;
-    const first = await runtimeStore.execute({
+    const first = await runtimeStore.startExecution({
       runtime: runtimeTarget(),
       console_instance_id: consoleA.instance_id,
       expected_console_revision: consoleA.surface_revision,
       code: "1 + 1",
     });
-    expect(first.events[0]).toMatchObject({
+    expect(first.execution).toMatchObject({
       runtime_instance_id: workspace.runtime_instance_id,
       console_instance_id: consoleA.instance_id,
     });
@@ -930,13 +1083,13 @@ describe("UI Kernel transport and external store", () => {
     runtimeState = runtimeStore.getSnapshot();
     if (runtimeState.status !== "ready") throw new Error("Runtime refresh failed");
     const currentWorkspace = runtimeState.snapshot.instances[0]!;
-    const second = await runtimeStore.execute({
+    const second = await runtimeStore.startExecution({
       runtime: runtimeTarget(currentWorkspace),
       console_instance_id: consoleB.instance_id,
       expected_console_revision: consoleB.surface_revision,
       code: "2 + 2",
     });
-    expect(second.console_instance_id).toBe(consoleB.instance_id);
+    expect(second.execution.console_instance_id).toBe(consoleB.instance_id);
     await runtimeStore.refresh();
     runtimeState = runtimeStore.getSnapshot();
     if (runtimeState.status !== "ready") throw new Error("Runtime refresh failed");

@@ -33,6 +33,26 @@ it.
 - per-project configuration or persistence of policy overrides
 - schema changes or migration
 
+## 2026-08-24 Runtime-output extension
+
+The authorized
+[`Runtime output and Agent context closed-loop contract`](../plans/active-2026-08-24-runtime-output-agent-context-closed-loop-spec.md)
+adds Runtime-output retention fields without changing BH4 action semantics:
+
+- `max_runtime_output_bytes_per_execution`: 128 MiB;
+- `runtime_output_project_warning_bytes`: 1 GiB;
+- `max_runtime_execution_rows`: 5,000;
+- `auto_prune_enabled`: still `false` by default; and
+- each numeric field supports an explicit unlimited value through the same
+  optional-value convention.
+
+Reaching an execution capture limit creates a durable tombstone and truthful
+`partial` output state; it does not change successful scientific execution
+into failure and does not silently delete earlier payload. A project warning is
+non-blocking. `Start new transcript`, `Prune output payload`, and `Delete
+execution record` remain distinct actions. The accepted defaults above stay
+unchanged until schema v15 and all new readers/mutations land together.
+
 ## Verification
 
 - `cargo test -p rho-store summarizes_retention_by_project_and_session_scope`

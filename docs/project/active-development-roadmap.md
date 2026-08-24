@@ -18,6 +18,21 @@ exact Retry/Delete, and project-transition ordering. Upstream integration and
 replacement two-platform candidate run `31337666426` pass; owner-installed
 acceptance and Issue closure remain open.
 
+Active continuous construction authorized 2026-08-24: the complete Runtime
+output, Console, History and Agent-context loop is governed by
+`plans/active-2026-08-24-runtime-output-agent-context-closed-loop-spec.md`.
+It is one non-releasable D3/R3 program at synchronized source identity
+`0.4.1-dev.15`. Durable capture/replay, shared Console/Runtime History,
+capacity-planned explicit Agent context, v15 migration/recovery/isolation,
+legacy buffered-path removal, independent source review, and the complete
+current local affected matrix pass on 2026-08-24. Earlier exact-debug v15
+reopen/startup evidence remains bound to its recorded pre-visual-merge build;
+the current merged build still requires the uninterrupted owner interaction
+workflow and Windows Rust matrix. The formerly protected sidebar/icon/CSS
+construction has merged without becoming a second owner of Store, Runtime IPC,
+Agent context or retention. This work creates no `.app`, installer, signing,
+publication or public-release authority.
+
 Issue #25 advances the reviewed Model-settings Provider deletion and context
 repairs to the `0.4.0-dev.28` source identity. Provider removal is one guarded
 revision-bound action, Connections no longer projects a foreign Chat model,

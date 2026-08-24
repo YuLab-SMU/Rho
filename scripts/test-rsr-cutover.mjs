@@ -80,6 +80,21 @@ for (const obsoleteSymbol of [
 const transport = read("desktop/ui/src/transport/index.ts");
 assert.match(transport, /isTauri\(\)/u);
 assert.doesNotMatch(transport, /window\.__TAURI__/u);
+assert.doesNotMatch(
+  read("desktop/ui/src/transport/tauri.ts"),
+  /["']runtime_execute["']/u,
+  "the production frontend must use journal-backed runtime_execution_start/follow instead of buffered runtime_execute",
+);
+assert.doesNotMatch(
+  read("desktop/ui/src/transport/types.ts"),
+  /\bexecuteRuntime\s*\(/u,
+  "the frontend transport contract must not expose the buffered execution path",
+);
+assert.doesNotMatch(
+  read("desktop/src-tauri/src/main.rs"),
+  /runtime_registry::runtime_execute/u,
+  "the desktop invoke surface must not ship two Runtime output authorities",
+);
 assert.equal(statSync(distRoot).isDirectory(), true);
 
 console.log("RSR production cutover contract passed");

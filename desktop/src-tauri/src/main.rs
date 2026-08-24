@@ -32,9 +32,9 @@ use std::sync::{Arc, Mutex as StdMutex, OnceLock, RwLock as SyncRwLock};
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use agent_llm::{
-    AgentCapabilityRoute, AgentLlmSettingsView, AgentModelCapabilityPatch,
-    AgentModelDiscoveryResponse, AgentModelProfile, AgentModelTestControl, AgentProviderProfile,
-    DeleteModelRequest, DeleteProviderRequest,
+    AgentCapabilityRoute, AgentContextCapacityRequest, AgentLlmSettingsView,
+    AgentModelCapabilityPatch, AgentModelDiscoveryResponse, AgentModelProfile,
+    AgentModelTestControl, AgentProviderProfile, DeleteModelRequest, DeleteProviderRequest,
 };
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
@@ -57,20 +57,21 @@ use rho_extension_runtime::{
 };
 use rho_kernel::{ArkLaunchConfig, ArkSession, KernelEvent};
 use rho_server::coordinator::{
-    AgentPluginContributionAdapter, AgentRuntimeAdapters, AgentWorkspaceLane,
-    ApprovalResponseInput, CoordinatorRuntime, EnvironmentOperationArguments,
-    PendingApprovalRegistry, ProjectSkillDiscoverySummary, WorkspaceSnapshotAdapter,
-    bootstrap_bridge, decide_environment_operation, discover_project_skill_summaries,
-    dispatch_workspace_request, dispatch_workspace_request_with_execution_id,
+    AgentContextPlanPreview, AgentExplicitContextItem, AgentPluginContributionAdapter,
+    AgentRuntimeAdapters, AgentWorkspaceLane, ApprovalResponseInput, CoordinatorRuntime,
+    EnvironmentOperationArguments, PendingApprovalRegistry, ProjectSkillDiscoverySummary,
+    WorkspaceSnapshotAdapter, bootstrap_bridge, decide_environment_operation,
+    discover_project_skill_summaries, dispatch_workspace_request,
+    dispatch_workspace_request_with_execution_id, preview_agent_context_plan,
     request_environment_operation, run_agent_turn,
 };
 use rho_store::{
-    AgentConversationDraft, AgentConversationSummary, AgentTurnDetail, AgentTurnDraft,
-    AgentTurnEventDraft, AgentTurnFinish, AgentTurnSummary, ApprovalRequestSummary,
-    ArtifactRecordDraft, ArtifactRecordSummary, EnvironmentOperationRequestSummary, EvidenceClaim,
-    EvidenceClaimDraft, EvidenceClaimReview, EvidenceEntry, EvidenceEntryDraft,
-    PlotArtifactSummary, PlotPayloadPruneResult, ProjectMutationService, ProjectQueryService,
-    ProjectRetentionSummary, RetentionPolicy, RunDetail, RunSummary, Store, normalize_project_root,
+    AgentConversationDraft, AgentConversationSummary, AgentTurnDraft, AgentTurnEventDraft,
+    AgentTurnFinish, AgentTurnSummary, ApprovalRequestSummary, ArtifactRecordDraft,
+    ArtifactRecordSummary, EnvironmentOperationRequestSummary, EvidenceClaim, EvidenceClaimDraft,
+    EvidenceClaimReview, EvidenceEntry, EvidenceEntryDraft, PlotArtifactSummary,
+    PlotPayloadPruneResult, ProjectMutationService, ProjectQueryService, ProjectRetentionSummary,
+    RetentionPolicy, RunDetail, RunSummary, Store, normalize_project_root,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -1372,7 +1373,7 @@ async fn workspace_start(state: State<'_, AppState>) -> Result<WorkspaceStatus, 
                 "startup_phase=workspace_start outcome=failed elapsed_ms={} detail={error:#}",
                 started.elapsed().as_millis()
             ));
-            Err(display_error(error))
+            Err(display_error_chain(&error))
         }
     }
 }
@@ -3028,8 +3029,22 @@ async fn execute_r(request: ExecuteRequest, state: State<'_, AppState>) -> Resul
     validate_execute_source_range(&request, &state)
         .await
         .map_err(display_error)?;
-    let session = active_session(&state).await.map_err(display_error)?;
-    let context = active_context(&state).await.map_err(display_error)?;
+    dispatch_workspace_execution(request, &state)
+        .await
+        .map_err(display_error)
+}
+
+async fn dispatch_workspace_execution(request: ExecuteRequest, state: &AppState) -> Result<Value> {
+    dispatch_workspace_execution_with_id(request, state, None).await
+}
+
+async fn dispatch_workspace_execution_with_id(
+    request: ExecuteRequest,
+    state: &AppState,
+    execution_id: Option<&str>,
+) -> Result<Value> {
+    let session = active_session(state).await?;
+    let context = active_context(state).await?;
     let mut context = context.lock().await;
     let CoordinatorRuntime { broker, store } = &mut *context;
     let payload = json!({
@@ -3042,43 +3057,60 @@ async fn execute_r(request: ExecuteRequest, state: State<'_, AppState>) -> Resul
         },
         "expected_workspace": broker.identity()
     });
-    dispatch_workspace_request(
+    dispatch_workspace_request_with_execution_id(
         "workspace.execute",
         &payload,
         ExecutionOrigin::User,
         session.as_ref(),
         broker,
         store,
+        execution_id,
     )
     .await
-    .map_err(display_error)
 }
 
-pub(crate) async fn execute_workspace_console(code: String, state: &AppState) -> Result<Value> {
-    ensure!(!code.trim().is_empty(), "R code is empty");
-    let session = active_session(state).await?;
-    let context = active_context(state).await?;
-    let mut context = context.lock().await;
-    let CoordinatorRuntime { broker, store } = &mut *context;
-    let payload = json!({
-        "arguments": {
-            "code": code,
-            "source_path": "<console>",
-            "execution_mode": "console",
-            "document_version": Value::Null,
-            "source_range": Value::Null
-        },
-        "expected_workspace": broker.identity()
-    });
-    dispatch_workspace_request(
-        "workspace.execute",
-        &payload,
-        ExecutionOrigin::User,
-        session.as_ref(),
-        broker,
-        store,
-    )
-    .await
+fn runtime_workspace_execute_request(
+    request: &rho_ui_contract::RuntimeExecuteRequestV1,
+) -> Result<ExecuteRequest> {
+    let Some(context) = request.source_context.as_ref() else {
+        return Ok(ExecuteRequest {
+            code: request.code.clone(),
+            source_path: Some("<console>".to_string()),
+            execution_mode: Some("console".to_string()),
+            document_version: None,
+            source_range: None,
+        });
+    };
+    Ok(ExecuteRequest {
+        code: request.code.clone(),
+        source_path: Some(context.source_path.clone()),
+        execution_mode: Some(context.execution_mode.clone()),
+        document_version: context.document_version.map(i64::try_from).transpose()?,
+        source_range: Some(ExecuteSourceRange {
+            start_line: context.source_range.start_line,
+            start_column: context.source_range.start_column,
+            end_line: context.source_range.end_line,
+            end_column: context.source_range.end_column,
+        }),
+    })
+}
+
+pub(crate) async fn validate_runtime_execute_source(
+    request: &rho_ui_contract::RuntimeExecuteRequestV1,
+    state: &AppState,
+) -> Result<()> {
+    let execute = runtime_workspace_execute_request(request)?;
+    validate_execute_source_range(&execute, state).await
+}
+
+pub(crate) async fn execute_workspace_runtime(
+    request: &rho_ui_contract::RuntimeExecuteRequestV1,
+    state: &AppState,
+    execution_id: &str,
+) -> Result<Value> {
+    let execute = runtime_workspace_execute_request(request)?;
+    validate_execute_source_range(&execute, state).await?;
+    dispatch_workspace_execution_with_id(execute, state, Some(execution_id)).await
 }
 
 async fn validate_execute_source_range(request: &ExecuteRequest, state: &AppState) -> Result<()> {
@@ -4293,6 +4325,52 @@ async fn export_plot_artifact(
     })
 }
 
+/// Inline preview payload for one plot artifact. Capped so a runaway plot
+/// cannot flood the webview through a data URL.
+const MAX_PLOT_PREVIEW_BASE64_BYTES: usize = 16 * 1024 * 1024;
+
+#[derive(Debug, Clone, Serialize)]
+struct PlotImageView {
+    plot_id: String,
+    media_type: String,
+    data_base64: String,
+}
+
+#[tauri::command]
+async fn read_plot_artifact(
+    plot_id: String,
+    state: State<'_, AppState>,
+) -> Result<PlotImageView, String> {
+    let root = state.project_root.read().await.clone();
+    let project_root = root.to_string_lossy().replace('\\', "/");
+    let plot = read_store(&state)
+        .map_err(display_error)?
+        .get_plot_artifact(&project_root, &plot_id)
+        .map_err(display_error)?
+        .context(format!("Plot artifact not found: {plot_id}"))
+        .map_err(display_error)?;
+    if plot.media_type != "image/png" {
+        return Err(format!(
+            "Plot media type {} cannot be previewed inline",
+            plot.media_type
+        ));
+    }
+    let payload: Value = serde_json::from_str(&plot.payload_json).map_err(display_error)?;
+    let encoded = payload
+        .get("image/png")
+        .and_then(Value::as_str)
+        .context("PNG plot payload is unavailable")
+        .map_err(display_error)?;
+    if encoded.len() > MAX_PLOT_PREVIEW_BASE64_BYTES {
+        return Err("Plot image exceeds the inline preview budget".to_string());
+    }
+    Ok(PlotImageView {
+        plot_id,
+        media_type: plot.media_type,
+        data_base64: encoded.to_string(),
+    })
+}
+
 #[tauri::command]
 async fn export_data_view_artifact(
     request: ExportDataViewArtifactRequest,
@@ -4789,10 +4867,6 @@ async fn prune_plot_payloads(
         .map_err(display_error)
 }
 
-fn current_retention_policy_snapshot() -> RetentionPolicy {
-    RetentionPolicy::default()
-}
-
 #[tauri::command]
 async fn get_project_retention_summary(
     state: State<'_, AppState>,
@@ -4801,14 +4875,22 @@ async fn get_project_retention_summary(
     let project_root = durable_project_root(&root);
     let context = active_context(&state).await.map_err(display_error)?;
     let workspace_id = context.lock().await.broker.identity().workspace_id.clone();
-    let summary = read_store(&state)
-        .map_err(display_error)?
+    let store = read_store(&state).map_err(display_error)?;
+    let summary = store
         .project_retention_summary(&project_root, Some(&workspace_id))
         .map_err(display_error)?;
-    Ok(ProjectRetentionView {
-        summary,
-        policy: current_retention_policy_snapshot(),
-    })
+    let runtime_policy = store
+        .get_runtime_output_policy(&project_root)
+        .map_err(display_error)?;
+    let policy = RetentionPolicy {
+        max_runtime_output_bytes_per_execution: runtime_policy
+            .max_runtime_output_bytes_per_execution,
+        runtime_output_project_warning_bytes: runtime_policy.runtime_output_project_warning_bytes,
+        max_runtime_execution_rows: runtime_policy.max_runtime_execution_rows,
+        auto_prune_enabled: runtime_policy.auto_prune_enabled,
+        ..RetentionPolicy::default()
+    };
+    Ok(ProjectRetentionView { summary, policy })
 }
 
 #[tauri::command]
@@ -4865,6 +4947,163 @@ fn run_is_retryable(request_type: &str, origin: &str) -> bool {
     request_type == "workspace.execute" && matches!(origin, "user" | "agent")
 }
 
+async fn resolve_agent_explicit_context(
+    state: &AppState,
+    reference: Option<&runtime_registry::RuntimeOutputReference>,
+) -> Result<Option<AgentExplicitContextItem>> {
+    let Some(reference) = reference else {
+        return Ok(None);
+    };
+    let resolved = runtime_registry::resolve_runtime_output_context(
+        state,
+        &runtime_registry::RuntimeOutputReferenceRequest {
+            execution_id: reference.execution_id.clone(),
+            start_sequence: Some(reference.start_sequence),
+            end_sequence: Some(reference.end_sequence),
+        },
+        Some(&reference.project_id),
+        Some(&reference.range_sha256),
+    )
+    .await?;
+    let authoritative = &resolved.reference;
+    Ok(Some(AgentExplicitContextItem {
+        source_kind: "runtime_output".to_string(),
+        source_id: format!(
+            "{}:{}-{}",
+            authoritative.execution_id, authoritative.start_sequence, authoritative.end_sequence
+        ),
+        source_revision: format!("sequence:{}", authoritative.end_sequence),
+        source_sha256: authoritative.range_sha256.clone(),
+        trust_class: "explicit_project_data".to_string(),
+        original_bytes: authoritative.payload_bytes,
+        content: resolved.content,
+    }))
+}
+
+#[tauri::command]
+async fn agent_context_preview(
+    prompt: String,
+    mode: String,
+    task_kind: Option<String>,
+    model_id: Option<String>,
+    editor_context: Option<Value>,
+    conversation_id: Option<String>,
+    runtime_output_context: Option<runtime_registry::RuntimeOutputReference>,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    if prompt.trim().is_empty() {
+        return Err("Agent prompt is empty".to_string());
+    }
+    if !matches!(mode.as_str(), "ask" | "plan" | "act") {
+        return Err(format!("unsupported Agent mode `{mode}`"));
+    }
+    let task_kind = task_kind.unwrap_or_else(|| "agent_turn".to_string());
+    if !matches!(task_kind.as_str(), "agent_turn" | "problem_repair") {
+        return Err(format!("unsupported Agent task kind `{task_kind}`"));
+    }
+    if task_kind == "problem_repair" && mode != "ask" {
+        return Err("Problem repair must use read-only Ask mode.".to_string());
+    }
+    let config = runtime_config(&state).map_err(display_error)?;
+    if !config.agent_runtime.available {
+        return Err(config
+            .agent_runtime
+            .error
+            .clone()
+            .unwrap_or_else(|| "aisdk is unavailable in Agent R".to_string()));
+    }
+    let requested_conversation_id = conversation_id.map(|value| value.trim().to_string());
+    if requested_conversation_id.as_deref() == Some("") {
+        return Err("Agent Conversation identity cannot be empty".to_string());
+    }
+    let (resolved_model, _) = if task_kind == "problem_repair" {
+        agent_llm::resolve_model_and_credential_for_task(
+            &config.data_dir,
+            model_id.as_deref(),
+            &mode,
+            &task_kind,
+        )
+    } else {
+        agent_llm::resolve_model_and_credential_for_turn(
+            &config.data_dir,
+            model_id.as_deref(),
+            &mode,
+        )
+    }
+    .map_err(display_error)?;
+    let explicit_context = resolve_agent_explicit_context(&state, runtime_output_context.as_ref())
+        .await
+        .map_err(display_error)?;
+    let _project_transition = state.project_transition_gate.lock().await;
+    let context = active_context(&state).await.map_err(display_error)?;
+    let (project_root, history, plugin_projection) = {
+        let mut context_guard = context.lock().await;
+        let identity = context_guard.broker.identity().clone();
+        let project_root = context_guard
+            .store
+            .active_project_root()
+            .map_err(display_error)?
+            .context("Cannot preview Agent context without an active project identity")
+            .map_err(display_error)?;
+        let history = if let Some(conversation_id) = requested_conversation_id.as_deref() {
+            context_guard
+                .store
+                .recent_agent_conversation(&project_root, conversation_id, "preview", 100)
+                .map_err(display_error)?
+        } else {
+            Vec::new()
+        };
+        let plugin_runtime_context = workspace_plugins::PluginRuntimeContext {
+            app_data_dir: config.data_dir.clone(),
+            project_scope_id: extension_project_scope_id(&project_root).map_err(display_error)?,
+            project_root: project_root.clone(),
+            project_revision: i64::try_from(identity.project_revision)
+                .context("project revision exceeds the plugin contribution range")
+                .map_err(display_error)?,
+            workspace: Some(WorkspaceGrantIdentity {
+                workspace_id: identity.workspace_id.clone(),
+                kernel_instance_id: identity.kernel_instance_id.clone(),
+                state_revision: identity.state_revision,
+                project_revision: identity.project_revision,
+            }),
+        };
+        let plugin_projection = state
+            .plugin_permissions
+            .agent_projection(&plugin_runtime_context, &mut context_guard.store)
+            .map_err(display_error)?;
+        (project_root, history, plugin_projection)
+    };
+    let mut runtime_profile = resolved_model.runtime_profile.clone();
+    runtime_profile.plugin_tools = plugin_projection.tools.clone();
+    let conversation_digest_id = requested_conversation_id
+        .as_deref()
+        .unwrap_or("new_conversation");
+    let preview: AgentContextPlanPreview = preview_agent_context_plan(
+        &prompt,
+        &history,
+        editor_context.as_ref(),
+        Some(&project_root),
+        &plugin_projection.context,
+        explicit_context.as_ref(),
+        &runtime_profile,
+        conversation_digest_id,
+    )
+    .map_err(display_error)?;
+    Ok(json!({
+        "plan_digest": preview.plan_digest,
+        "context_window_tokens": preview.context_window_tokens,
+        "reserved_output_tokens": preview.reserved_output_tokens,
+        "estimated_input_tokens": preview.estimated_input_tokens,
+        "capacity_source": preview.capacity_source,
+        "items": preview.items,
+        "model_profile_id": runtime_profile.profile_id,
+        "model_display_name": runtime_profile.model_display_name,
+        "settings_revision": runtime_profile.settings_revision,
+        "conversation_id": requested_conversation_id,
+        "runtime_output_context": runtime_output_context,
+    }))
+}
+
 #[tauri::command]
 async fn run_agent(
     prompt: String,
@@ -4874,6 +5113,8 @@ async fn run_agent(
     auto_approve: Option<bool>,
     editor_context: Option<Value>,
     conversation_id: Option<String>,
+    runtime_output_context: Option<runtime_registry::RuntimeOutputReference>,
+    context_plan_digest: Option<String>,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
@@ -4885,6 +5126,8 @@ async fn run_agent(
         auto_approve,
         editor_context,
         conversation_id,
+        runtime_output_context,
+        context_plan_digest,
         None,
         app,
         &state,
@@ -4901,6 +5144,8 @@ async fn start_agent_turn(
     auto_approve: Option<bool>,
     editor_context: Option<Value>,
     conversation_id: Option<String>,
+    runtime_output_context: Option<runtime_registry::RuntimeOutputReference>,
+    context_plan_digest: Option<String>,
     retry_of_turn_id: Option<String>,
     app: AppHandle,
     state: &AppState,
@@ -4959,6 +5204,9 @@ async fn start_agent_turn(
     }
     .map_err(display_error)?;
     let auto_approve = task_kind == "agent_turn" && auto_approve.unwrap_or(false) && mode == "act";
+    let explicit_context = resolve_agent_explicit_context(state, runtime_output_context.as_ref())
+        .await
+        .map_err(display_error)?;
     let conversation_id;
     let plugin_runtime_context;
     let plugin_projection;
@@ -4991,6 +5239,39 @@ async fn start_agent_turn(
             .agent_projection(&plugin_runtime_context, &mut context_guard.store)
             .map_err(display_error)?;
         agent_runtime_profile.plugin_tools = plugin_projection.tools.clone();
+        if explicit_context.is_some() || context_plan_digest.is_some() {
+            let digest_conversation_id = requested_conversation_id
+                .as_deref()
+                .unwrap_or("new_conversation");
+            let history = if let Some(conversation_id) = requested_conversation_id.as_deref() {
+                context_guard
+                    .store
+                    .recent_agent_conversation(&project_root, conversation_id, "preview", 100)
+                    .map_err(display_error)?
+            } else {
+                Vec::new()
+            };
+            let current_plan = preview_agent_context_plan(
+                &prompt,
+                &history,
+                editor_context.as_ref(),
+                Some(&project_root),
+                &plugin_projection.context,
+                explicit_context.as_ref(),
+                &agent_runtime_profile,
+                digest_conversation_id,
+            )
+            .map_err(display_error)?;
+            let expected = context_plan_digest.as_deref().ok_or_else(|| {
+                "Explicit Agent context requires a reviewed context-plan digest".to_string()
+            })?;
+            if expected != current_plan.plan_digest {
+                return Err(
+                    "Agent context changed after review. Review the current context plan and send again."
+                        .to_string(),
+                );
+            }
+        }
         let turn_draft = AgentTurnDraft {
             turn_id: turn_id.clone(),
             project_root: project_root.clone(),
@@ -5046,6 +5327,8 @@ async fn start_agent_turn(
                     "retry_of_turn_id": retry_of_turn_id,
                     "auto_approve": auto_approve,
                     "editor_context": editor_context.clone(),
+                    "runtime_output_context": runtime_output_context,
+                    "context_plan_digest": context_plan_digest.clone(),
                     "model_profile_id": resolved_model.runtime_profile.profile_id,
                     "model_display_name": resolved_model.model_display_name,
                     "provider_display_name": resolved_model.provider_display_name,
@@ -5123,6 +5406,8 @@ async fn start_agent_turn(
             environment_approvals,
             auto_approve,
             editor_context,
+            explicit_context,
+            context_plan_digest,
             AgentRuntimeAdapters {
                 workspace_snapshot: workspace_snapshot_adapter,
                 plugin_contribution: plugin_contribution_adapter,
@@ -5235,6 +5520,8 @@ async fn retry_agent_turn(
         Some(false),
         source.editor_context,
         Some(source.conversation_id),
+        None,
+        None,
         Some(turn_id),
         app,
         &state,
@@ -5308,6 +5595,17 @@ async fn agent_llm_save_model(
 ) -> Result<AgentLlmSettingsView, String> {
     let config = runtime_config(&state).map_err(display_error)?;
     let settings = agent_llm::save_model(&config.data_dir, model).map_err(display_error)?;
+    agent_llm::settings_view_from_settings(settings).map_err(display_error)
+}
+
+#[tauri::command]
+async fn agent_llm_set_context_capacity(
+    request: AgentContextCapacityRequest,
+    state: State<'_, AppState>,
+) -> Result<AgentLlmSettingsView, String> {
+    let config = runtime_config(&state).map_err(display_error)?;
+    let settings =
+        agent_llm::set_context_capacity(&config.data_dir, &request).map_err(display_error)?;
     agent_llm::settings_view_from_settings(settings).map_err(display_error)
 }
 
@@ -5558,13 +5856,26 @@ async fn list_approval_requests(
 async fn get_agent_turn_detail(
     turn_id: String,
     state: State<'_, AppState>,
-) -> Result<Option<AgentTurnDetail>, String> {
+) -> Result<Option<Value>, String> {
     let root = state.project_root.read().await.clone();
     let project_root = root.to_string_lossy();
     let store = read_store(&state).map_err(display_error)?;
-    ProjectQueryService::new(&store)
+    let detail = ProjectQueryService::new(&store)
         .get_agent_turn_detail(project_root.as_ref(), &turn_id)
-        .map_err(display_error)
+        .map_err(display_error)?;
+    let Some(detail) = detail else {
+        return Ok(None);
+    };
+    let context_items = store
+        .list_agent_turn_context_items(project_root.as_ref(), &turn_id)
+        .map_err(display_error)?;
+    let mut value = serde_json::to_value(detail).map_err(display_error)?;
+    value
+        .as_object_mut()
+        .context("Agent Turn detail did not serialize as an object")
+        .map_err(display_error)?
+        .insert("context_items".to_string(), json!(context_items));
+    Ok(Some(value))
 }
 
 #[tauri::command]
@@ -6155,6 +6466,12 @@ async fn active_context(state: &AppState) -> Result<Arc<Mutex<CoordinatorRuntime
         .context("Workspace context is not ready")
 }
 
+pub(crate) async fn active_workspace_id(state: &AppState) -> Option<String> {
+    let context = state.context.lock().await.clone()?;
+    let context = context.lock().await;
+    Some(context.broker.identity().workspace_id.clone())
+}
+
 fn read_store(state: &AppState) -> Result<Store> {
     let config = runtime_config(state)?;
     Store::open(&config.store_path).context("opening Rho event store")
@@ -6633,6 +6950,7 @@ fn first_party_surface_definition(
         contract_major: rho_ui_contract::RSR_CONTRACT_MAJOR,
         label: label.to_string(),
         purpose: purpose.to_string(),
+        icon: None,
         renderer_kind: rho_ui_contract::SurfaceRendererKindV1::TrustedHost,
         scope: rho_ui_contract::SurfaceScopeV1::Project,
         instance_policy: rho_ui_contract::SurfaceInstancePolicyV1::MultiInstance,
@@ -6687,6 +7005,7 @@ fn first_party_surface_definition(
 const FIRST_PARTY_SURFACE_IDS: &[&str] = &[
     "rho.agent",
     "rho.environment",
+    "rho.navigator",
     "rho.evidence",
     "rho.git",
     "rho.runs",
@@ -6754,6 +7073,7 @@ impl InternalPlugin for SurfacePlaygroundPlugin {
                 label: "Surface Playground".to_string(),
                 purpose: "Exercise independent application Surface instances and local view state."
                     .to_string(),
+                icon: None,
                 renderer_kind: rho_ui_contract::SurfaceRendererKindV1::TrustedHost,
                 scope: rho_ui_contract::SurfaceScopeV1::Project,
                 instance_policy: rho_ui_contract::SurfaceInstancePolicyV1::MultiInstance,
@@ -6816,6 +7136,7 @@ impl InternalPlugin for SurfacePlaygroundPlugin {
                         label: "Console".to_string(),
                         purpose: "Attach an independent Console view to one explicit runtime."
                             .to_string(),
+                        icon: None,
                         renderer_kind: rho_ui_contract::SurfaceRendererKindV1::TrustedHost,
                         scope: rho_ui_contract::SurfaceScopeV1::Project,
                         instance_policy: rho_ui_contract::SurfaceInstancePolicyV1::MultiInstance,
@@ -6861,6 +7182,7 @@ impl InternalPlugin for SurfacePlaygroundPlugin {
                         label: "Check result".to_string(),
                         purpose: "Review one immutable typed Check project result independently."
                             .to_string(),
+                        icon: None,
                         renderer_kind: rho_ui_contract::SurfaceRendererKindV1::TrustedHost,
                         scope: rho_ui_contract::SurfaceScopeV1::Project,
                         instance_policy: rho_ui_contract::SurfaceInstancePolicyV1::MultiInstance,
@@ -6918,6 +7240,17 @@ impl InternalPlugin for SurfacePlaygroundPlugin {
                     false,
                 ),
                 first_party_surface_definition(
+                    "rho.navigator",
+                    "Navigator",
+                    "Browse project files, execution history, and artifacts as the workbench navigation column; opening a file creates an independent File Source or Preview view.",
+                    &[
+                        ("files", "Files", interactive),
+                        ("runs", "History", interactive),
+                        ("artifacts", "Artifacts", read_only),
+                    ],
+                    false,
+                ),
+                first_party_surface_definition(
                     "rho.evidence",
                     "Evidence",
                     "Review durable project evidence and provenance without coupling it to a fixed workbench region.",
@@ -6936,8 +7269,8 @@ impl InternalPlugin for SurfacePlaygroundPlugin {
                 ),
                 first_party_surface_definition(
                     "rho.runs",
-                    "Runs",
-                    "Review broker-owned scientific executions and their recovery state.",
+                    "History",
+                    "Review broker-owned scientific execution history and recovery state.",
                     &[("history", "History", interactive)],
                     false,
                 ),
@@ -7033,6 +7366,7 @@ impl InternalPlugin for SurfacePlaygroundPlugin {
                     label: "File Source".to_string(),
                     purpose: "Edit one shared project-file document through an independent view."
                         .to_string(),
+                    icon: None,
                     renderer_kind: rho_ui_contract::SurfaceRendererKindV1::TrustedHost,
                     scope: rho_ui_contract::SurfaceScopeV1::Project,
                     instance_policy: rho_ui_contract::SurfaceInstancePolicyV1::MultiInstance,
@@ -7098,6 +7432,7 @@ impl InternalPlugin for SurfacePlaygroundPlugin {
                     label: "File Preview".to_string(),
                     purpose: "Render one immutable project-file revision in an independent view."
                         .to_string(),
+                    icon: None,
                     renderer_kind: rho_ui_contract::SurfaceRendererKindV1::TrustedHost,
                     scope: rho_ui_contract::SurfaceScopeV1::Project,
                     instance_policy: rho_ui_contract::SurfaceInstancePolicyV1::MultiInstance,
@@ -9527,6 +9862,10 @@ fn display_error(error: impl std::fmt::Display) -> String {
     error.to_string()
 }
 
+fn display_error_chain(error: &anyhow::Error) -> String {
+    bounded_diagnostic(&format!("{error:#}"))
+}
+
 fn startup_log_path() -> PathBuf {
     STARTUP_LOG_PATH
         .get()
@@ -9784,11 +10123,12 @@ mod tests {
         ark_candidate_paths, attach_render_artifact, bounded_diagnostic, cancel_agent_turn_state,
         classify_startup_error, configure_user_startup, data_view_artifact_metadata,
         data_view_delimited_text, decode_plot_png_base64, deferred_agent_runtime_status,
-        delete_agent_conversation_state, durable_project_root, editor_format_result,
-        ensure_agent_file_proposal_turn_terminal, ensure_artifact_export_target,
-        ensure_bundled_license_file, ensure_supported_r_architecture, ensure_supported_r_version,
-        existing_startup_file, find_executable_on_path, finish_render_job, has_png_signature,
-        interrupt_all_agent_tasks, load_runtime_cache, locate_ark_from_candidates, locate_rscript,
+        delete_agent_conversation_state, display_error_chain, durable_project_root,
+        editor_format_result, ensure_agent_file_proposal_turn_terminal,
+        ensure_artifact_export_target, ensure_bundled_license_file,
+        ensure_supported_r_architecture, ensure_supported_r_version, existing_startup_file,
+        find_executable_on_path, finish_render_job, has_png_signature, interrupt_all_agent_tasks,
+        load_runtime_cache, locate_ark_from_candidates, locate_rscript,
         lockfile_inventory_arguments, parse_r_runtime_probe, pending_native_update_matches,
         project_switch_blocker, r_architecture_supported, reconcile_render_job,
         recover_incomplete_agent_file_mutations, render_job_is_terminal, retry_run_arguments,
@@ -13158,7 +13498,7 @@ mod tests {
                 .registry()
                 .resolve_application_surfaces()
                 .unwrap();
-            assert_eq!(surfaces.factories().len(), 16);
+            assert_eq!(surfaces.factories().len(), 17);
             assert_eq!(
                 surfaces
                     .factories()
@@ -13173,6 +13513,7 @@ mod tests {
                     "rho.surface-playground",
                     "rho.agent",
                     "rho.environment",
+                    "rho.navigator",
                     "rho.evidence",
                     "rho.git",
                     "rho.runs",
@@ -13321,7 +13662,7 @@ mod tests {
                     .unwrap()
                     .factories()
                     .len(),
-                16
+                17
             );
             assert_eq!(
                 candidate
@@ -14863,6 +15204,23 @@ mod tests {
     }
 
     #[test]
+    fn startup_error_display_preserves_bounded_redacted_context_chain() {
+        let error = anyhow::anyhow!("migration rejected: unsupported schema version 15")
+            .context("opening Rho event store")
+            .context("starting Workspace R");
+        let displayed = display_error_chain(&error);
+        assert_eq!(
+            displayed,
+            "starting Workspace R: opening Rho event store: migration rejected: unsupported schema version 15"
+        );
+
+        let secret = anyhow::anyhow!("token=private-value").context("opening Rho event store");
+        let displayed = display_error_chain(&secret);
+        assert!(!displayed.contains("private-value"));
+        assert!(displayed.contains("token=<redacted>"));
+    }
+
+    #[test]
     fn safe_delete_project_file_deletes_supported_project_file() {
         let directory = TempDir::new().unwrap();
         let root = directory.path().canonicalize().unwrap();
@@ -15506,6 +15864,8 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
             Arc::new(PendingApprovalRegistry::default()),
             Arc::new(PendingApprovalRegistry::default()),
             false,
+            None,
+            None,
             None,
             AgentRuntimeAdapters::default(),
             Vec::new(),
@@ -17098,7 +17458,17 @@ fn main() {
             runtime_registry::runtime_interrupt,
             runtime_registry::runtime_restart,
             runtime_registry::runtime_stop,
-            runtime_registry::runtime_execute,
+            runtime_registry::runtime_execution_start,
+            runtime_registry::runtime_execution_get,
+            runtime_registry::runtime_execution_list,
+            runtime_registry::runtime_output_search,
+            runtime_registry::runtime_output_policy_get,
+            runtime_registry::runtime_output_policy_update,
+            runtime_registry::runtime_output_page,
+            runtime_registry::runtime_output_reference,
+            runtime_registry::runtime_output_prune,
+            runtime_registry::runtime_execution_delete,
+            runtime_registry::runtime_output_follow,
             resource_registry::resource_list,
             resource_registry::resource_resolve,
             resource_registry::resource_read,
@@ -17157,6 +17527,7 @@ fn main() {
             commands::plugins::get_plugin_panel_document,
             commands::runs::list_runs,
             list_plot_artifacts,
+            read_plot_artifact,
             export_plot_artifact,
             export_data_view_artifact,
             list_artifact_records,
@@ -17180,12 +17551,14 @@ fn main() {
             editor_discover_chunks,
             retry_run,
             run_agent,
+            agent_context_preview,
             agent_llm_settings,
             agent_llm_save_provider,
             agent_llm_delete_provider,
             agent_llm_set_credential,
             agent_llm_delete_credential,
             agent_llm_save_model,
+            agent_llm_set_context_capacity,
             agent_llm_delete_model,
             agent_llm_select_model,
             agent_llm_save_capability_route,

@@ -1,3 +1,10 @@
+# rho.agent 0.1.7
+
+- `rho_create_workspace_tools()` now exposes broker-bound reads for an exact
+  admitted Conversation turn and an explicit project-scoped Runtime-output
+  range. The broker retains project, Conversation, range, and paging authority;
+  ordinary prompts do not gain ambient Console or History access.
+
 # rho.agent 0.1.6
 
 - `rho_create_workspace_tools()` now accepts exact-project Manifest V2 Tool

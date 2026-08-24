@@ -1,21 +1,28 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex as StdMutex, MutexGuard};
 
 use anyhow::{Context, Result, anyhow, ensure};
-use rho_kernel::{ArkLaunchConfig, ArkSession, CorrelatedKernelEvent};
+use rho_kernel::{ArkLaunchConfig, ArkSession, CorrelatedKernelEvent, KernelEvent};
+use rho_server::coordinator::redact_agent_context_text;
+use rho_store::{
+    RuntimeExecution, RuntimeExecutionDeleteResult, RuntimeExecutionDraft, RuntimeExecutionFinish,
+    RuntimeExecutionMutationOutcome, RuntimeOutputChunk, RuntimeOutputDraft, RuntimeOutputPage,
+    RuntimeOutputPayload, RuntimeOutputPolicy, RuntimeOutputPolicyUpdate, RuntimeOutputPruneResult,
+    RuntimeOutputSearchResult,
+};
 use rho_ui_contract::{
     RSR_CONTRACT_MAJOR, RUNTIME_REGISTRY_SNAPSHOT_CONTRACT, RuntimeAttachmentRequestV1,
     RuntimeCreateRequestV1, RuntimeDescriptorV1, RuntimeDetachRequestV1, RuntimeExecuteRequestV1,
-    RuntimeExecutionResultV1, RuntimeInstanceId, RuntimeInstanceRequestV1, RuntimeOutputEventV1,
-    RuntimePersistenceClassV1, RuntimeProviderId, RuntimeProviderRegistrationV1,
-    RuntimeRegistrySnapshotV1, RuntimeStatusV1, SurfaceInstanceMutationV1, UpdateSurfaceRequestV1,
-    Validate, next_revision,
+    RuntimeInstanceId, RuntimeInstanceRequestV1, RuntimePersistenceClassV1, RuntimeProviderId,
+    RuntimeProviderRegistrationV1, RuntimeRegistrySnapshotV1, RuntimeStatusV1,
+    SurfaceInstanceMutationV1, UpdateSurfaceRequestV1, Validate, next_revision,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tauri::{AppHandle, Emitter, State};
-use tokio::sync::{Mutex, RwLock};
+use sha2::{Digest, Sha256};
+use tauri::{AppHandle, Emitter, Manager, State, ipc::Channel};
+use tokio::sync::{Mutex, RwLock, broadcast};
 use uuid::Uuid;
 
 use crate::{AppState, display_error};
@@ -53,14 +60,16 @@ struct RuntimeRegistryInner {
 pub(crate) struct RuntimeRegistryState {
     inner: StdMutex<RuntimeRegistryInner>,
     operation_gate: Mutex<()>,
-    active_executions: AtomicUsize,
+    active_executions: Arc<AtomicUsize>,
+    output_notifications: StdMutex<BTreeMap<(String, String), broadcast::Sender<()>>>,
+    recovered_output_projects: StdMutex<BTreeSet<String>>,
 }
 
-struct RuntimeExecutionLease<'a> {
-    active_executions: &'a AtomicUsize,
+struct RuntimeExecutionLease {
+    active_executions: Arc<AtomicUsize>,
 }
 
-impl Drop for RuntimeExecutionLease<'_> {
+impl Drop for RuntimeExecutionLease {
     fn drop(&mut self) {
         self.active_executions.fetch_sub(1, Ordering::AcqRel);
     }
@@ -79,6 +88,127 @@ struct RuntimeRegistryChangedEvent<'a> {
     snapshot_revision: u64,
     project_id: &'a rho_ui_contract::ProjectId,
     project_revision: u64,
+}
+
+const DEFAULT_RUNTIME_OUTPUT_PAGE_SIZE: usize = 100;
+const DEFAULT_RUNTIME_OUTPUT_PAGE_BYTES: usize = 512 * 1024;
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct RuntimeExecutionStartResponse {
+    execution: RuntimeExecution,
+    committed_through: i64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct RuntimeExecutionIdentityRequest {
+    execution_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct RuntimeExecutionListRequest {
+    limit: Option<usize>,
+    before_started_at: Option<String>,
+    before_execution_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct RuntimeOutputSearchRequest {
+    query: String,
+    console_instance_id: Option<String>,
+    started_after: Option<String>,
+    limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct RuntimeOutputPolicyView {
+    policy: RuntimeOutputPolicy,
+    project_output_bytes: i64,
+    project_execution_count: i64,
+    warning_active: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct RuntimeOutputPageRequest {
+    execution_id: String,
+    #[serde(default)]
+    after_sequence: i64,
+    before_sequence: Option<i64>,
+    page_size: Option<usize>,
+    byte_limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct RuntimeOutputFollowRequest {
+    execution_id: String,
+    #[serde(default)]
+    after_sequence: i64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct RuntimeOutputReferenceRequest {
+    pub(crate) execution_id: String,
+    pub(crate) start_sequence: Option<i64>,
+    pub(crate) end_sequence: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct RuntimeOutputReference {
+    pub(crate) project_id: String,
+    pub(crate) execution_id: String,
+    pub(crate) start_sequence: i64,
+    pub(crate) end_sequence: i64,
+    pub(crate) range_sha256: String,
+    pub(crate) payload_bytes: i64,
+    pub(crate) chunk_count: i64,
+    pub(crate) status: String,
+    pub(crate) output_state: String,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ResolvedRuntimeOutputContext {
+    pub(crate) reference: RuntimeOutputReference,
+    pub(crate) content: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub(crate) enum RuntimeOutputFollowFrame {
+    Admitted {
+        project_id: String,
+        execution_id: String,
+        committed_through: i64,
+        execution: RuntimeExecution,
+    },
+    Chunks {
+        project_id: String,
+        execution_id: String,
+        first_sequence: i64,
+        last_sequence: i64,
+        chunks: Vec<RuntimeOutputChunk>,
+    },
+    Gap {
+        project_id: String,
+        execution_id: String,
+        expected_sequence: i64,
+        committed_through: i64,
+    },
+    Checkpoint {
+        project_id: String,
+        execution_id: String,
+        committed_through: i64,
+    },
+    Terminal {
+        project_id: String,
+        execution_id: String,
+        committed_through: i64,
+        execution: RuntimeExecution,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ProjectedOutput {
+    kind: &'static str,
+    text: String,
 }
 
 fn provider_for<'a>(
@@ -133,15 +263,53 @@ impl RuntimeRegistryState {
         Ok(())
     }
 
-    fn begin_execution(&self) -> RuntimeExecutionLease<'_> {
+    fn begin_execution(&self) -> RuntimeExecutionLease {
         self.active_executions.fetch_add(1, Ordering::AcqRel);
         RuntimeExecutionLease {
-            active_executions: &self.active_executions,
+            active_executions: Arc::clone(&self.active_executions),
         }
     }
 
     pub(crate) fn active_execution_count(&self) -> usize {
         self.active_executions.load(Ordering::Acquire)
+    }
+
+    fn output_sender(&self, project_root: &str, execution_id: &str) -> broadcast::Sender<()> {
+        let key = (project_root.to_string(), execution_id.to_string());
+        let mut notifications = self
+            .output_notifications
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        notifications
+            .entry(key)
+            .or_insert_with(|| broadcast::channel(32).0)
+            .clone()
+    }
+
+    fn notify_output(&self, project_root: &str, execution_id: &str) {
+        let _ = self.output_sender(project_root, execution_id).send(());
+    }
+
+    fn forget_output_sender(&self, project_root: &str, execution_id: &str) {
+        let mut notifications = self
+            .output_notifications
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        notifications.remove(&(project_root.to_string(), execution_id.to_string()));
+    }
+
+    fn claim_output_recovery(&self, project_root: &str) -> bool {
+        self.recovered_output_projects
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(project_root.to_string())
+    }
+
+    fn release_output_recovery(&self, project_root: &str) {
+        self.recovered_output_projects
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(project_root);
     }
 
     fn ensure_project(
@@ -966,213 +1134,1134 @@ pub(crate) async fn runtime_stop(
     Ok(transition.snapshot)
 }
 
-fn output_event(
-    sequence: u64,
+async fn admit_runtime_execution(
     request: &RuntimeExecuteRequestV1,
-    kind: &str,
-    payload: Value,
-) -> Result<RuntimeOutputEventV1> {
-    let event = RuntimeOutputEventV1 {
-        sequence,
-        runtime_instance_id: request.runtime.runtime_instance_id.clone(),
-        console_instance_id: request.console_instance_id.clone(),
-        kind: kind.to_string(),
-        payload,
+    app: &AppHandle,
+    state: &AppState,
+) -> Result<(RuntimeEntry, RuntimeExecutionLease)> {
+    request.validate()?;
+    let _project_transition = state.project_transition_gate.lock().await;
+    prepare(app, state).await?;
+    crate::validate_runtime_execute_source(request, state).await?;
+    let admitted = {
+        let inner = state.runtime_registry.inner();
+        RuntimeRegistryState::target(&inner, &request.runtime, true)?
     };
-    event.validate()?;
-    Ok(event)
+    let surfaces = crate::surface_runtime::reconcile_for_state(state).await?;
+    let console = surfaces
+        .snapshot
+        .catalog
+        .instances
+        .iter()
+        .find(|instance| instance.instance_id == request.console_instance_id)
+        .context("Console Surface instance was not found")?;
+    ensure!(
+        console.surface_id.as_str() == "rho.console"
+            && console.surface_revision == request.expected_console_revision,
+        "Console Surface request is stale or targets another Surface"
+    );
+    let binding = console
+        .runtime_binding
+        .as_ref()
+        .context("Console Surface is not attached to a runtime")?;
+    ensure!(
+        binding.runtime_instance_id == admitted.descriptor.runtime_instance_id
+            && binding.activation_generation == admitted.descriptor.activation_generation,
+        "Console Surface is attached to another Runtime generation"
+    );
+    Ok((admitted, state.runtime_registry.begin_execution()))
 }
 
-fn kernel_output(
-    event: CorrelatedKernelEvent,
-    request: &RuntimeExecuteRequestV1,
-    output: &mut Vec<RuntimeOutputEventV1>,
-) -> Result<()> {
+async fn active_project_scope(state: &AppState) -> Result<(String, String)> {
+    let project_root = state
+        .project_root
+        .read()
+        .await
+        .to_string_lossy()
+        .replace('\\', "/");
+    let project_id = {
+        let inner = state.runtime_registry.inner();
+        inner
+            .project
+            .as_ref()
+            .context("Runtime Registry has no project context")?
+            .project_id
+            .to_string()
+    };
+    Ok((project_root, project_id))
+}
+
+fn reconcile_persisted_output_once(state: &AppState, project_root: &str) -> Result<()> {
+    if !state.runtime_registry.claim_output_recovery(project_root) {
+        return Ok(());
+    }
+    let result = crate::read_store(state)?
+        .reconcile_interrupted_runtime_executions(project_root)
+        .context("reconciling interrupted Runtime executions");
+    if result.is_err() {
+        state.runtime_registry.release_output_recovery(project_root);
+    }
+    result.map(|_| ())
+}
+
+fn append_utf8_prefix(target: &mut String, value: &str, limit: usize) {
+    if target.len() >= limit {
+        return;
+    }
+    let remaining = limit - target.len();
+    let mut end = remaining.min(value.len());
+    while end > 0 && !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    target.push_str(&value[..end]);
+}
+
+fn keep_utf8_suffix(value: &mut String, limit: usize) {
+    if value.len() <= limit {
+        return;
+    }
+    let mut start = value.len() - limit;
+    while start < value.len() && !value.is_char_boundary(start) {
+        start += 1;
+    }
+    value.drain(..start);
+}
+
+fn context_chunk_text(chunk: &RuntimeOutputChunk) -> String {
+    match chunk.storage_kind.as_str() {
+        "inline_text" => chunk.text_payload.clone().unwrap_or_default(),
+        "inline_json" => chunk.json_payload.clone().unwrap_or_default(),
+        "record_ref" => format!(
+            "{} reference: {}",
+            chunk.reference_kind.as_deref().unwrap_or("output"),
+            chunk.reference_id.as_deref().unwrap_or("unavailable")
+        ),
+        "tombstone" => {
+            "[This output payload is unavailable or was omitted by retention policy.]".to_string()
+        }
+        _ => "[Unsupported output record.]".to_string(),
+    }
+}
+
+pub(crate) async fn resolve_runtime_output_context(
+    state: &AppState,
+    request: &RuntimeOutputReferenceRequest,
+    expected_project_id: Option<&str>,
+    expected_digest: Option<&str>,
+) -> Result<ResolvedRuntimeOutputContext> {
+    let (project_root, project_id) = active_project_scope(state).await?;
+    if let Some(expected_project_id) = expected_project_id {
+        ensure!(
+            expected_project_id == project_id,
+            "Runtime output reference belongs to another project"
+        );
+    }
+    reconcile_persisted_output_once(state, &project_root)?;
+    let store = crate::read_store(state)?;
+    let execution = store
+        .get_runtime_execution(&project_root, &request.execution_id)?
+        .context("Runtime execution is unavailable in the active project")?;
     ensure!(
-        output.len() < rho_ui_contract::MAX_RUNTIME_OUTPUT_EVENTS,
-        "Runtime output event budget exceeded"
+        execution.output_state != "pruned",
+        "The selected Runtime output was pruned and cannot be attached to Agent"
     );
-    output.push(output_event(
-        u64::try_from(output.len())? + 1,
-        request,
-        "kernel_event",
-        serde_json::to_value(event)?,
-    )?);
+    let start_sequence = request.start_sequence.unwrap_or(1);
+    let end_sequence = request.end_sequence.unwrap_or(execution.last_sequence);
+    ensure!(
+        start_sequence > 0 && end_sequence >= start_sequence,
+        "Runtime output reference range is invalid"
+    );
+    ensure!(
+        end_sequence <= execution.last_sequence,
+        "Runtime output reference exceeds the committed transcript"
+    );
+
+    let mut cursor = start_sequence - 1;
+    let mut expected_sequence = start_sequence;
+    let mut hasher = Sha256::new();
+    let mut head = String::new();
+    let mut tail = String::new();
+    let mut important = String::new();
+    let mut payload_bytes = 0i64;
+    let mut chunk_count = 0i64;
+    while cursor < end_sequence {
+        let page = store.runtime_output_page(
+            &project_root,
+            &request.execution_id,
+            cursor,
+            200,
+            1024 * 1024,
+        )?;
+        let selected = page
+            .chunks
+            .into_iter()
+            .filter(|chunk| chunk.sequence <= end_sequence)
+            .collect::<Vec<_>>();
+        ensure!(
+            !selected.is_empty(),
+            "Runtime output reference has a missing durable range"
+        );
+        for chunk in selected {
+            ensure!(
+                chunk.sequence == expected_sequence,
+                "Runtime output reference is missing sequence {expected_sequence}"
+            );
+            let canonical = serde_json::to_vec(&(
+                chunk.sequence,
+                &chunk.source_kind,
+                &chunk.presentation_kind,
+                &chunk.storage_kind,
+                &chunk.payload_sha256,
+                &chunk.reference_kind,
+                &chunk.reference_id,
+            ))?;
+            hasher.update((canonical.len() as u64).to_be_bytes());
+            hasher.update(canonical);
+            let rendered = format!(
+                "[{} · {}]\n{}\n",
+                chunk.sequence,
+                chunk.presentation_kind,
+                context_chunk_text(&chunk)
+            );
+            append_utf8_prefix(&mut head, &rendered, 24 * 1024);
+            tail.push_str(&rendered);
+            keep_utf8_suffix(&mut tail, 24 * 1024);
+            if matches!(chunk.presentation_kind.as_str(), "warning" | "error") {
+                append_utf8_prefix(&mut important, &rendered, 24 * 1024);
+            }
+            payload_bytes = payload_bytes.saturating_add(chunk.payload_bytes);
+            chunk_count += 1;
+            cursor = chunk.sequence;
+            expected_sequence += 1;
+        }
+    }
+    ensure!(
+        cursor == end_sequence,
+        "Runtime output reference range is incomplete"
+    );
+    let range_sha256 = format!("{:x}", hasher.finalize());
+    if let Some(expected_digest) = expected_digest {
+        ensure!(
+            expected_digest == range_sha256,
+            "Runtime output changed after it was selected; review Agent context again"
+        );
+    }
+    let content = if payload_bytes <= 24 * 1024 {
+        head
+    } else {
+        format!(
+            "Head of selected output:\n{head}\nImportant warnings and errors:\n{important}\nTail of selected output:\n{tail}\n[Projected {chunk_count} chunks from sequences {start_sequence}-{end_sequence}; exact range digest {range_sha256}.]"
+        )
+    };
+    let content = redact_agent_context_text(&content);
+    Ok(ResolvedRuntimeOutputContext {
+        reference: RuntimeOutputReference {
+            project_id,
+            execution_id: request.execution_id.clone(),
+            start_sequence,
+            end_sequence,
+            range_sha256,
+            payload_bytes,
+            chunk_count,
+            status: execution.status,
+            output_state: execution.output_state,
+        },
+        content,
+    })
+}
+
+fn normalize_console_text(value: &Value) -> Option<String> {
+    let direct = value.as_str().or_else(|| {
+        value
+            .as_object()
+            .and_then(|record| record.get("message").or_else(|| record.get("text")))
+            .and_then(Value::as_str)
+    })?;
+    let mut text = direct.replace("\r\n", "\n").replace('\r', "\n");
+    if text.starts_with('"')
+        && text.ends_with('"')
+        && let Ok(decoded) = serde_json::from_str::<String>(&text)
+    {
+        text = decoded;
+    }
+    let text = text.trim_matches('\n').to_string();
+    (!text.trim().is_empty()).then_some(text)
+}
+
+fn push_projected(output: &mut Vec<ProjectedOutput>, kind: &'static str, text: Option<String>) {
+    let Some(text) = text else {
+        return;
+    };
+    if output
+        .last()
+        .is_some_and(|previous| previous.kind == kind && previous.text == text)
+    {
+        return;
+    }
+    output.push(ProjectedOutput { kind, text });
+}
+
+fn workspace_projected_output(payload: &Value) -> Vec<ProjectedOutput> {
+    let Some(execution) = payload.get("execution").and_then(Value::as_object) else {
+        return vec![ProjectedOutput {
+            kind: "status",
+            text: "Runtime returned an unrecognized output.".to_string(),
+        }];
+    };
+    let mut projected = Vec::new();
+    let stdout = execution.get("stdout").and_then(normalize_console_text);
+    push_projected(&mut projected, "stdout", stdout.clone());
+    let value = execution.get("value").and_then(normalize_console_text);
+    if value != stdout {
+        push_projected(&mut projected, "value", value);
+    }
+    for (field, kind) in [("messages", "message"), ("warnings", "warning")] {
+        let Some(value) = execution.get(field) else {
+            continue;
+        };
+        if let Some(items) = value.as_array() {
+            for item in items {
+                push_projected(&mut projected, kind, normalize_console_text(item));
+            }
+        } else {
+            push_projected(&mut projected, kind, normalize_console_text(value));
+        }
+    }
+    if let Some(error) = execution.get("error")
+        && let Some(mut text) = normalize_console_text(error)
+    {
+        if let Some(call) = error
+            .as_object()
+            .and_then(|record| record.get("call"))
+            .and_then(normalize_console_text)
+        {
+            text.push_str("\nIn: ");
+            text.push_str(&call);
+        }
+        push_projected(&mut projected, "error", Some(text));
+    }
+    push_projected(
+        &mut projected,
+        "message",
+        execution.get("help").and_then(normalize_console_text),
+    );
+    if projected.is_empty() {
+        projected.push(ProjectedOutput {
+            kind: if execution.get("ok") == Some(&Value::Bool(false)) {
+                "error"
+            } else {
+                "status"
+            },
+            text: if execution.get("ok") == Some(&Value::Bool(false)) {
+                "Execution failed."
+            } else if execution.get("ok") == Some(&Value::Bool(true)) {
+                "Completed"
+            } else {
+                "Runtime returned an unrecognized output."
+            }
+            .to_string(),
+        });
+    }
+    projected
+}
+
+fn kernel_projected_output(event: &CorrelatedKernelEvent) -> Vec<ProjectedOutput> {
+    let projected = match &event.event {
+        KernelEvent::Stream { name, text } => Some((
+            if name == "stderr" {
+                "warning"
+            } else {
+                "stdout"
+            },
+            text.clone(),
+        )),
+        KernelEvent::DisplayData { data } => data
+            .get("text/plain")
+            .or_else(|| data.get("text/markdown"))
+            .and_then(normalize_console_text)
+            .map(|text| ("value", text))
+            .or_else(|| Some(("status", "Rich output produced.".to_string()))),
+        KernelEvent::Error { traceback } => Some(("error", traceback.clone())),
+        KernelEvent::Banner { text } => Some(("message", text.clone())),
+        KernelEvent::InputRequest { prompt, .. } => Some((
+            "warning",
+            if prompt.trim().is_empty() {
+                "The Runtime requested interactive input.".to_string()
+            } else {
+                prompt.clone()
+            },
+        )),
+        KernelEvent::InterruptRequested => Some(("status", "Interrupt requested".to_string())),
+        KernelEvent::KernelExited => {
+            Some(("error", "The Runtime stopped unexpectedly.".to_string()))
+        }
+        KernelEvent::Idle
+        | KernelEvent::Busy
+        | KernelEvent::ExecuteInput { .. }
+        | KernelEvent::ExecuteReply
+        | KernelEvent::Other => None,
+    };
+    projected
+        .and_then(|(kind, text)| {
+            let text = normalize_console_text(&Value::String(text))?;
+            Some(vec![ProjectedOutput { kind, text }])
+        })
+        .unwrap_or_default()
+}
+
+fn output_drafts(
+    producer_sequence: i64,
+    source_kind: &str,
+    projected: Vec<ProjectedOutput>,
+) -> Vec<RuntimeOutputDraft> {
+    projected
+        .into_iter()
+        .enumerate()
+        .map(|(slot, block)| RuntimeOutputDraft {
+            producer_sequence,
+            projection_slot: i64::try_from(slot).expect("projection slot must fit i64"),
+            source_kind: source_kind.to_string(),
+            presentation_kind: block.kind.to_string(),
+            media_type: Some("text/plain; charset=utf-8".to_string()),
+            payload: RuntimeOutputPayload::InlineText { text: block.text },
+        })
+        .collect()
+}
+
+fn workspace_output_drafts(producer_sequence: i64, payload: &Value) -> Vec<RuntimeOutputDraft> {
+    let mut drafts = output_drafts(
+        producer_sequence,
+        "workspace_result",
+        workspace_projected_output(payload),
+    );
+    let mut append_references = |items: Option<&Vec<Value>>, reference_kind: &str, id_key: &str| {
+        for item in items.into_iter().flatten() {
+            let Some(reference_id) = item.get(id_key).and_then(Value::as_str) else {
+                continue;
+            };
+            let Some(payload_bytes) = item.get("payload_bytes").and_then(Value::as_u64) else {
+                continue;
+            };
+            let Some(payload_sha256) = item.get("payload_sha256").and_then(Value::as_str) else {
+                continue;
+            };
+            let Ok(payload_bytes) = i64::try_from(payload_bytes) else {
+                continue;
+            };
+            drafts.push(RuntimeOutputDraft {
+                producer_sequence,
+                projection_slot: i64::try_from(drafts.len()).unwrap_or(i64::MAX),
+                source_kind: "workspace_result".to_string(),
+                presentation_kind: "display_ref".to_string(),
+                media_type: item
+                    .get("media_type")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
+                payload: RuntimeOutputPayload::RecordRef {
+                    reference_kind: reference_kind.to_string(),
+                    reference_id: reference_id.to_string(),
+                    payload_bytes,
+                    payload_sha256: payload_sha256.to_string(),
+                },
+            });
+        }
+    };
+    append_references(
+        payload.get("plot_references").and_then(Value::as_array),
+        "plot",
+        "plot_id",
+    );
+    append_references(
+        payload.get("artifact_references").and_then(Value::as_array),
+        "artifact",
+        "artifact_id",
+    );
+    drafts
+}
+
+fn runtime_output_capture_limit(
+    store: &rho_store::Store,
+    project_root: &str,
+) -> Result<Option<i64>> {
+    Ok(store
+        .get_runtime_output_policy(project_root)?
+        .max_runtime_output_bytes_per_execution)
+}
+
+fn append_projected_output(
+    state: &AppState,
+    store: &mut rho_store::Store,
+    project_root: &str,
+    execution_id: &str,
+    drafts: &[RuntimeOutputDraft],
+) -> Result<()> {
+    if drafts.is_empty() {
+        return Ok(());
+    }
+    let capture_limit = runtime_output_capture_limit(store, project_root)?;
+    let result = store.append_runtime_output(project_root, execution_id, drafts, capture_limit)?;
+    if !result.committed.is_empty() {
+        state
+            .runtime_registry
+            .notify_output(project_root, execution_id);
+    }
     Ok(())
 }
 
-#[tauri::command]
-pub(crate) async fn runtime_execute(
-    request: RuntimeExecuteRequestV1,
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<RuntimeExecutionResultV1, String> {
-    request.validate().map_err(display_error)?;
-    let (admitted, _execution_lease) = {
+async fn finish_runtime_descriptor(
+    app: &AppHandle,
+    state: &AppState,
+    request: &RuntimeExecuteRequestV1,
+    succeeded: bool,
+    cancelled: bool,
+) {
+    let transition = {
         let _project_transition = state.project_transition_gate.lock().await;
-        prepare(&app, &state).await.map_err(display_error)?;
-        let admitted = {
-            let inner = state.runtime_registry.inner();
-            RuntimeRegistryState::target(&inner, &request.runtime, true).map_err(display_error)?
-        };
-        let surfaces = crate::surface_runtime::reconcile_for_state(&state)
-            .await
-            .map_err(display_error)?;
-        let console = surfaces
-            .snapshot
-            .catalog
-            .instances
-            .iter()
-            .find(|instance| instance.instance_id == request.console_instance_id)
-            .context("Console Surface instance was not found")
-            .map_err(display_error)?;
-        if console.surface_id.as_str() != "rho.console"
-            || console.surface_revision != request.expected_console_revision
-        {
-            return Err("Console Surface request is stale or targets another Surface".to_string());
-        }
-        let binding = console
-            .runtime_binding
-            .as_ref()
-            .context("Console Surface is not attached to a runtime")
-            .map_err(display_error)?;
-        if binding.runtime_instance_id != admitted.descriptor.runtime_instance_id
-            || binding.activation_generation != admitted.descriptor.activation_generation
-        {
-            return Err("Console Surface is attached to another Runtime generation".to_string());
-        }
-        (admitted, state.runtime_registry.begin_execution())
+        state.runtime_registry.finish_execution(
+            &request.runtime.runtime_instance_id,
+            request.runtime.activation_generation,
+            if succeeded || cancelled {
+                RuntimeStatusV1::Ready
+            } else {
+                RuntimeStatusV1::Failed
+            },
+            if succeeded {
+                "runtime_ready"
+            } else if cancelled {
+                "runtime_execution_cancelled"
+            } else {
+                "runtime_execution_failed"
+            },
+        )
     };
+    match transition {
+        Ok((transition, _)) => emit_transition(app, &transition),
+        Err(error) => crate::write_startup_event(serde_json::json!({
+            "kind": "runtime_execution_descriptor_finish_failed",
+            "execution_runtime": request.runtime.runtime_instance_id.to_string(),
+            "message": error.to_string(),
+        })),
+    }
+}
+
+async fn run_supervised_execution(
+    app: AppHandle,
+    request: RuntimeExecuteRequestV1,
+    admitted: RuntimeEntry,
+    execution_lease: RuntimeExecutionLease,
+    execution_id: String,
+    project_root: String,
+) {
+    let state = app.state::<AppState>();
+    let _execution_lease = execution_lease;
     let _queue = admitted.execution_gate.lock().await;
+    let mut store = match crate::read_store(&state) {
+        Ok(store) => store,
+        Err(error) => {
+            finish_runtime_descriptor(&app, &state, &request, false, false).await;
+            crate::write_startup_event(serde_json::json!({
+                "kind": "runtime_execution_store_unavailable",
+                "execution_id": execution_id,
+                "message": error.to_string(),
+            }));
+            return;
+        }
+    };
+    if !matches!(
+        store.mark_runtime_execution_running(&project_root, &execution_id),
+        Ok(RuntimeExecutionMutationOutcome::Applied | RuntimeExecutionMutationOutcome::Unchanged)
+    ) {
+        let _ = store.finish_runtime_execution(
+            &project_root,
+            &execution_id,
+            &RuntimeExecutionFinish {
+                status: "failed".to_string(),
+                terminal_reason: Some("runtime_output_admission_lost".to_string()),
+                output_state: "unavailable".to_string(),
+            },
+        );
+        state
+            .runtime_registry
+            .notify_output(&project_root, &execution_id);
+        finish_runtime_descriptor(&app, &state, &request, false, false).await;
+        return;
+    }
+
     let running = {
         let _project_transition = state.project_transition_gate.lock().await;
-        {
+        let still_current = {
             let inner = state.runtime_registry.inner();
-            RuntimeRegistryState::target(&inner, &request.runtime, false).map_err(display_error)?;
+            RuntimeRegistryState::target(&inner, &request.runtime, false)
+        };
+        match still_current.and_then(|_| {
+            admitted
+                .cancellation_requested
+                .store(false, Ordering::Release);
+            state
+                .runtime_registry
+                .set_status(
+                    &request.runtime,
+                    RuntimeStatusV1::Busy,
+                    "runtime_busy",
+                    false,
+                )
+                .map(|(transition, running)| {
+                    emit_transition(&app, &transition);
+                    running
+                })
+        }) {
+            Ok(running) => running,
+            Err(error) => {
+                let _ = store.finish_runtime_execution(
+                    &project_root,
+                    &execution_id,
+                    &RuntimeExecutionFinish {
+                        status: "failed".to_string(),
+                        terminal_reason: Some(error.to_string()),
+                        output_state: "unavailable".to_string(),
+                    },
+                );
+                state
+                    .runtime_registry
+                    .notify_output(&project_root, &execution_id);
+                if let Ok((transition, _)) = state.runtime_registry.finish_execution(
+                    &request.runtime.runtime_instance_id,
+                    request.runtime.activation_generation,
+                    RuntimeStatusV1::Failed,
+                    "runtime_execution_admission_lost",
+                ) {
+                    emit_transition(&app, &transition);
+                }
+                return;
+            }
         }
-        admitted
-            .cancellation_requested
-            .store(false, Ordering::Release);
-        let (busy, running) = state
-            .runtime_registry
-            .set_status(
-                &request.runtime,
-                RuntimeStatusV1::Busy,
-                "runtime_busy",
-                false,
-            )
-            .map_err(display_error)?;
-        emit_transition(&app, &busy);
-        running
     };
-    let execution_id = format!("runtime-execution:{}", Uuid::new_v4().simple());
+
+    let mut output_failure: Option<String> = None;
     let execution = if running.descriptor.primary_scientific_runtime {
-        crate::execute_workspace_console(request.code.clone(), &state)
-            .await
-            .and_then(|payload| {
-                Ok(vec![output_event(
+        let result = crate::execute_workspace_runtime(&request, &state, &execution_id).await;
+        if result.is_ok()
+            && let Err(error) =
+                store.link_runtime_execution_run(&project_root, &execution_id, &execution_id)
+        {
+            output_failure = Some(error.to_string());
+        }
+        match &result {
+            Ok(payload) => {
+                let drafts = workspace_output_drafts(1, payload);
+                if let Err(error) = append_projected_output(
+                    &state,
+                    &mut store,
+                    &project_root,
+                    &execution_id,
+                    &drafts,
+                ) {
+                    output_failure.get_or_insert_with(|| error.to_string());
+                }
+            }
+            Err(error) => {
+                let drafts = output_drafts(
                     1,
-                    &request,
-                    "workspace_result",
-                    payload,
-                )?])
-            })
+                    "runtime_error",
+                    vec![ProjectedOutput {
+                        kind: "error",
+                        text: error.to_string(),
+                    }],
+                );
+                if let Err(append_error) = append_projected_output(
+                    &state,
+                    &mut store,
+                    &project_root,
+                    &execution_id,
+                    &drafts,
+                ) {
+                    output_failure.get_or_insert_with(|| append_error.to_string());
+                }
+            }
+        }
+        result.map(|_| ())
     } else {
         let session = running
             .session
+            .clone()
             .context("auxiliary Runtime session is unavailable");
         match session {
             Ok(session) => {
-                let mut output = Vec::new();
+                let mut producer_sequence = 0_i64;
                 session
                     .read()
                     .await
                     .execute(request.code.clone(), |event| {
-                        kernel_output(event, &request, &mut output)
+                        producer_sequence = producer_sequence.saturating_add(1);
+                        if output_failure.is_none() {
+                            let drafts = output_drafts(
+                                producer_sequence,
+                                "kernel_event",
+                                kernel_projected_output(&event),
+                            );
+                            if let Err(error) = append_projected_output(
+                                &state,
+                                &mut store,
+                                &project_root,
+                                &execution_id,
+                                &drafts,
+                            ) {
+                                output_failure = Some(error.to_string());
+                            }
+                        }
+                        Ok(())
                     })
                     .await
-                    .map(|_| output)
             }
             Err(error) => Err(error),
         }
     };
+
     let cancelled = running.cancellation_requested.load(Ordering::Acquire);
     let succeeded = execution.is_ok() && !cancelled;
-    let (finished, descriptor) = {
-        let _project_transition = state.project_transition_gate.lock().await;
-        state
-            .runtime_registry
-            .finish_execution(
-                &request.runtime.runtime_instance_id,
-                request.runtime.activation_generation,
-                if succeeded || cancelled {
-                    RuntimeStatusV1::Ready
-                } else {
-                    RuntimeStatusV1::Failed
-                },
-                if succeeded {
-                    "runtime_ready"
-                } else if cancelled {
-                    "runtime_execution_cancelled"
-                } else {
-                    "runtime_execution_failed"
-                },
-            )
-            .map_err(display_error)?
-    };
-    emit_transition(&app, &finished);
-    let mut events = match execution {
-        Ok(events) => events,
-        Err(error) if cancelled => vec![
-            output_event(
-                1,
-                &request,
-                "cancelled",
-                Value::String(error.to_string().chars().take(2_048).collect()),
-            )
-            .map_err(display_error)?,
-        ],
-        Err(error) => return Err(display_error(error)),
-    };
-    if cancelled
-        && !events.iter().any(|event| event.kind == "cancelled")
-        && events.len() < rho_ui_contract::MAX_RUNTIME_OUTPUT_EVENTS
-    {
-        events.push(
-            output_event(
-                u64::try_from(events.len()).map_err(display_error)? + 1,
-                &request,
-                "cancelled",
-                Value::String("Execution interrupted by the Runtime owner.".to_string()),
-            )
-            .map_err(display_error)?,
+    if cancelled && output_failure.is_none() {
+        let producer_sequence = store
+            .get_runtime_execution(&project_root, &execution_id)
+            .ok()
+            .flatten()
+            .map_or(1, |record| record.last_sequence.saturating_add(1));
+        let drafts = output_drafts(
+            producer_sequence,
+            "cancelled",
+            vec![ProjectedOutput {
+                kind: "status",
+                text: "Execution interrupted".to_string(),
+            }],
         );
+        if let Err(error) =
+            append_projected_output(&state, &mut store, &project_root, &execution_id, &drafts)
+        {
+            output_failure = Some(error.to_string());
+        }
     }
-    let state_revision_after = descriptor
+
+    finish_runtime_descriptor(&app, &state, &request, succeeded, cancelled).await;
+    let current_output = store
+        .get_runtime_execution(&project_root, &execution_id)
+        .ok()
+        .flatten();
+    let output_state = if output_failure.is_some() {
+        if current_output
+            .as_ref()
+            .is_some_and(|record| record.last_sequence > 0)
+        {
+            "partial"
+        } else {
+            "unavailable"
+        }
+    } else if current_output
         .as_ref()
-        .map_or(running.descriptor.state_revision, |value| {
-            value.state_revision
-        });
-    let result = RuntimeExecutionResultV1 {
-        execution_id,
-        runtime_instance_id: request.runtime.runtime_instance_id.clone(),
-        runtime_activation_generation: request.runtime.activation_generation,
-        console_instance_id: request.console_instance_id,
-        state_revision_after,
-        status: if cancelled { "cancelled" } else { "completed" }.to_string(),
-        events,
+        .is_some_and(|record| record.output_state == "partial")
+    {
+        "partial"
+    } else {
+        "complete"
     };
-    result.validate().map_err(display_error)?;
+    let terminal_reason = if cancelled {
+        Some("interrupted_by_owner".to_string())
+    } else if let Some(error) = output_failure {
+        Some(format!("runtime_output_incomplete: {error}"))
+    } else {
+        execution.as_ref().err().map(ToString::to_string)
+    };
+    let _ = store.finish_runtime_execution(
+        &project_root,
+        &execution_id,
+        &RuntimeExecutionFinish {
+            status: if cancelled {
+                "interrupted"
+            } else if succeeded {
+                "completed"
+            } else {
+                "failed"
+            }
+            .to_string(),
+            terminal_reason,
+            output_state: output_state.to_string(),
+        },
+    );
+    state
+        .runtime_registry
+        .notify_output(&project_root, &execution_id);
+}
+
+#[tauri::command]
+pub(crate) async fn runtime_execution_start(
+    request: RuntimeExecuteRequestV1,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<RuntimeExecutionStartResponse, String> {
+    let (admitted, execution_lease) = admit_runtime_execution(&request, &app, &state)
+        .await
+        .map_err(display_error)?;
+    let (project_root, _) = active_project_scope(&state).await.map_err(display_error)?;
+    reconcile_persisted_output_once(&state, &project_root).map_err(display_error)?;
+    let execution_id = format!("runtime-execution:{}", Uuid::new_v4().simple());
+    let mut store = crate::read_store(&state).map_err(display_error)?;
+    let execution = store
+        .create_runtime_execution(&RuntimeExecutionDraft {
+            execution_id: execution_id.clone(),
+            project_root: project_root.clone(),
+            run_id: None,
+            runtime_provider_id: request.runtime.runtime_provider_id.to_string(),
+            runtime_instance_id: request.runtime.runtime_instance_id.to_string(),
+            runtime_activation_generation: i64::try_from(request.runtime.activation_generation)
+                .map_err(display_error)?,
+            console_instance_id: request.console_instance_id.to_string(),
+            submitted_code: request.code.clone(),
+            workspace_id: crate::active_workspace_id(&state).await,
+            source_path: request
+                .source_context
+                .as_ref()
+                .map(|context| context.source_path.clone()),
+            execution_mode: request
+                .source_context
+                .as_ref()
+                .map(|context| context.execution_mode.clone()),
+            document_version: request
+                .source_context
+                .as_ref()
+                .and_then(|context| context.document_version)
+                .map(i64::try_from)
+                .transpose()
+                .map_err(display_error)?,
+        })
+        .map_err(display_error)?;
+    state
+        .runtime_registry
+        .notify_output(&project_root, &execution_id);
+    let task_app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        run_supervised_execution(
+            task_app,
+            request,
+            admitted,
+            execution_lease,
+            execution_id,
+            project_root,
+        )
+        .await;
+    });
+    Ok(RuntimeExecutionStartResponse {
+        execution,
+        committed_through: 0,
+    })
+}
+
+#[tauri::command]
+pub(crate) async fn runtime_execution_get(
+    request: RuntimeExecutionIdentityRequest,
+    state: State<'_, AppState>,
+) -> Result<RuntimeExecution, String> {
+    let (project_root, _) = active_project_scope(&state).await.map_err(display_error)?;
+    reconcile_persisted_output_once(&state, &project_root).map_err(display_error)?;
+    crate::read_store(&state)
+        .map_err(display_error)?
+        .get_runtime_execution(&project_root, &request.execution_id)
+        .map_err(display_error)?
+        .context("Runtime execution is unavailable in the active project")
+        .map_err(display_error)
+}
+
+#[tauri::command]
+pub(crate) async fn runtime_execution_list(
+    request: RuntimeExecutionListRequest,
+    state: State<'_, AppState>,
+) -> Result<Vec<RuntimeExecution>, String> {
+    let (project_root, _) = active_project_scope(&state).await.map_err(display_error)?;
+    reconcile_persisted_output_once(&state, &project_root).map_err(display_error)?;
+    let before = match (
+        request.before_started_at.as_deref(),
+        request.before_execution_id.as_deref(),
+    ) {
+        (Some(started_at), Some(execution_id)) => Some((started_at, execution_id)),
+        (None, None) => None,
+        _ => {
+            return Err(
+                "Runtime execution cursor requires both timestamp and execution ID.".to_string(),
+            );
+        }
+    };
+    crate::read_store(&state)
+        .map_err(display_error)?
+        .list_runtime_executions_before(&project_root, request.limit, before)
+        .map_err(display_error)
+}
+
+#[tauri::command]
+pub(crate) async fn runtime_output_search(
+    request: RuntimeOutputSearchRequest,
+    state: State<'_, AppState>,
+) -> Result<RuntimeOutputSearchResult, String> {
+    let (project_root, _) = active_project_scope(&state).await.map_err(display_error)?;
+    reconcile_persisted_output_once(&state, &project_root).map_err(display_error)?;
+    crate::read_store(&state)
+        .map_err(display_error)?
+        .search_runtime_output(
+            &project_root,
+            &request.query,
+            request.console_instance_id.as_deref(),
+            request.started_after.as_deref(),
+            request.limit.unwrap_or(100),
+        )
+        .map_err(display_error)
+}
+
+fn runtime_output_policy_view(
+    store: &rho_store::Store,
+    project_root: &str,
+) -> Result<RuntimeOutputPolicyView> {
+    let policy = store.get_runtime_output_policy(project_root)?;
+    let summary = store.project_retention_summary(project_root, None)?;
+    let project_output_bytes = summary
+        .project
+        .runtime_inline_output_bytes
+        .saturating_add(summary.project.runtime_referenced_artifact_bytes);
+    let project_execution_count = summary.project.runtime_execution_count;
+    let warning_active = policy
+        .runtime_output_project_warning_bytes
+        .is_some_and(|limit| project_output_bytes >= limit)
+        || policy
+            .max_runtime_execution_rows
+            .is_some_and(|limit| project_execution_count >= limit);
+    Ok(RuntimeOutputPolicyView {
+        policy,
+        project_output_bytes,
+        project_execution_count,
+        warning_active,
+    })
+}
+
+#[tauri::command]
+pub(crate) async fn runtime_output_policy_get(
+    state: State<'_, AppState>,
+) -> Result<RuntimeOutputPolicyView, String> {
+    let (project_root, _) = active_project_scope(&state).await.map_err(display_error)?;
+    runtime_output_policy_view(
+        &crate::read_store(&state).map_err(display_error)?,
+        &project_root,
+    )
+    .map_err(display_error)
+}
+
+#[tauri::command]
+pub(crate) async fn runtime_output_policy_update(
+    request: RuntimeOutputPolicyUpdate,
+    state: State<'_, AppState>,
+) -> Result<RuntimeOutputPolicyView, String> {
+    let (project_root, _) = active_project_scope(&state).await.map_err(display_error)?;
+    let mut store = crate::read_store(&state).map_err(display_error)?;
+    store
+        .update_runtime_output_policy(&project_root, &request)
+        .map_err(display_error)?;
+    runtime_output_policy_view(&store, &project_root).map_err(display_error)
+}
+
+#[tauri::command]
+pub(crate) async fn runtime_output_page(
+    request: RuntimeOutputPageRequest,
+    state: State<'_, AppState>,
+) -> Result<RuntimeOutputPage, String> {
+    let (project_root, _) = active_project_scope(&state).await.map_err(display_error)?;
+    reconcile_persisted_output_once(&state, &project_root).map_err(display_error)?;
+    let store = crate::read_store(&state).map_err(display_error)?;
+    let page_size = request
+        .page_size
+        .unwrap_or(DEFAULT_RUNTIME_OUTPUT_PAGE_SIZE);
+    let byte_limit = request
+        .byte_limit
+        .unwrap_or(DEFAULT_RUNTIME_OUTPUT_PAGE_BYTES);
+    if let Some(before_sequence) = request.before_sequence {
+        if request.after_sequence != 0 {
+            return Err(
+                "Runtime output page request cannot combine forward and reverse cursors."
+                    .to_string(),
+            );
+        }
+        store
+            .runtime_output_page_before(
+                &project_root,
+                &request.execution_id,
+                before_sequence,
+                page_size,
+                byte_limit,
+            )
+            .map_err(display_error)
+    } else {
+        store
+            .runtime_output_page(
+                &project_root,
+                &request.execution_id,
+                request.after_sequence,
+                page_size,
+                byte_limit,
+            )
+            .map_err(display_error)
+    }
+}
+
+#[tauri::command]
+pub(crate) async fn runtime_output_reference(
+    request: RuntimeOutputReferenceRequest,
+    state: State<'_, AppState>,
+) -> Result<RuntimeOutputReference, String> {
+    resolve_runtime_output_context(&state, &request, None, None)
+        .await
+        .map(|resolved| resolved.reference)
+        .map_err(display_error)
+}
+
+#[tauri::command]
+pub(crate) async fn runtime_output_prune(
+    request: RuntimeExecutionIdentityRequest,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<RuntimeOutputPruneResult, String> {
+    let (project_root, _) = active_project_scope(&state).await.map_err(display_error)?;
+    let result = crate::read_store(&state)
+        .map_err(display_error)?
+        .prune_runtime_output_payloads(&project_root, &request.execution_id)
+        .map_err(display_error)?;
+    app.emit(RUNTIME_REGISTRY_CHANGED_EVENT, "runtime_output_pruned")
+        .map_err(display_error)?;
     Ok(result)
+}
+
+#[tauri::command]
+pub(crate) async fn runtime_execution_delete(
+    request: RuntimeExecutionIdentityRequest,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<RuntimeExecutionDeleteResult, String> {
+    let (project_root, _) = active_project_scope(&state).await.map_err(display_error)?;
+    let result = crate::read_store(&state)
+        .map_err(display_error)?
+        .delete_runtime_execution_record(&project_root, &request.execution_id)
+        .map_err(display_error)?;
+    app.emit(RUNTIME_REGISTRY_CHANGED_EVENT, "runtime_execution_deleted")
+        .map_err(display_error)?;
+    Ok(result)
+}
+
+#[tauri::command]
+pub(crate) async fn runtime_output_follow(
+    request: RuntimeOutputFollowRequest,
+    channel: Channel<RuntimeOutputFollowFrame>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    if request.after_sequence < 0 {
+        return Err("Runtime output cursor cannot be negative".to_string());
+    }
+    let (project_root, project_id) = active_project_scope(&state).await.map_err(display_error)?;
+    let sender = state
+        .runtime_registry
+        .output_sender(&project_root, &request.execution_id);
+    let mut notifications = sender.subscribe();
+    let mut cursor = request.after_sequence;
+    let admitted = crate::read_store(&state)
+        .map_err(display_error)?
+        .get_runtime_execution(&project_root, &request.execution_id)
+        .map_err(display_error)?
+        .context("Runtime execution is unavailable in the active project")
+        .map_err(display_error)?;
+    channel
+        .send(RuntimeOutputFollowFrame::Admitted {
+            project_id: project_id.clone(),
+            execution_id: request.execution_id.clone(),
+            committed_through: admitted.last_sequence,
+            execution: admitted,
+        })
+        .map_err(display_error)?;
+    loop {
+        let page = crate::read_store(&state)
+            .map_err(display_error)?
+            .runtime_output_page(
+                &project_root,
+                &request.execution_id,
+                cursor,
+                DEFAULT_RUNTIME_OUTPUT_PAGE_SIZE,
+                DEFAULT_RUNTIME_OUTPUT_PAGE_BYTES,
+            )
+            .map_err(display_error)?;
+        if let (Some(first), Some(last)) = (page.chunks.first(), page.chunks.last()) {
+            if first.sequence > cursor + 1 {
+                channel
+                    .send(RuntimeOutputFollowFrame::Gap {
+                        project_id: project_id.clone(),
+                        execution_id: request.execution_id.clone(),
+                        expected_sequence: cursor + 1,
+                        committed_through: page.next_sequence,
+                    })
+                    .map_err(display_error)?;
+            }
+            cursor = last.sequence;
+            channel
+                .send(RuntimeOutputFollowFrame::Chunks {
+                    project_id: project_id.clone(),
+                    execution_id: request.execution_id.clone(),
+                    first_sequence: first.sequence,
+                    last_sequence: last.sequence,
+                    chunks: page.chunks,
+                })
+                .map_err(display_error)?;
+            continue;
+        }
+        let execution = crate::read_store(&state)
+            .map_err(display_error)?
+            .get_runtime_execution(&project_root, &request.execution_id)
+            .map_err(display_error)?
+            .context("Runtime execution is unavailable in the active project")
+            .map_err(display_error)?;
+        if matches!(
+            execution.status.as_str(),
+            "completed" | "failed" | "interrupted"
+        ) {
+            channel
+                .send(RuntimeOutputFollowFrame::Terminal {
+                    project_id,
+                    execution_id: request.execution_id.clone(),
+                    committed_through: execution.last_sequence,
+                    execution,
+                })
+                .map_err(display_error)?;
+            state
+                .runtime_registry
+                .forget_output_sender(&project_root, &request.execution_id);
+            return Ok(());
+        }
+        channel
+            .send(RuntimeOutputFollowFrame::Checkpoint {
+                project_id: project_id.clone(),
+                execution_id: request.execution_id.clone(),
+                committed_through: cursor,
+            })
+            .map_err(display_error)?;
+        match notifications.recv().await {
+            Ok(()) | Err(broadcast::error::RecvError::Lagged(_)) => {}
+            Err(broadcast::error::RecvError::Closed) => {
+                notifications = state
+                    .runtime_registry
+                    .output_sender(&project_root, &request.execution_id)
+                    .subscribe();
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rho_store::RuntimeOutputPolicyUpdate;
     use rho_ui_contract::{
         ApplicationComponentId, ProjectId, RuntimeCapabilityId, RuntimeKindId,
         RuntimeProviderDefinitionV1,
     };
+    use tempfile::TempDir;
 
     fn provider(generation: u64) -> RuntimeProviderRegistrationV1 {
         RuntimeProviderRegistrationV1 {
@@ -1429,5 +2518,147 @@ mod tests {
         assert!(descriptor.is_none());
         assert_eq!(late.snapshot, recovered);
         assert_eq!(late.snapshot.instances[0].status, RuntimeStatusV1::Ready);
+    }
+
+    #[test]
+    fn workspace_projector_keeps_human_output_and_drops_bridge_envelope_noise() {
+        let blocks = workspace_projected_output(&serde_json::json!({
+            "execution_id": "internal-id",
+            "execution": {
+                "ok": false,
+                "stdout": "first\r\nsecond\n",
+                "value": {"text": "42"},
+                "messages": [{"message": "attached package"}],
+                "warnings": ["deprecated"],
+                "error": {"message": "object not found", "call": "print(x)"},
+                "events": [{"type": "busy"}],
+                "bridge_command": "large internal implementation detail"
+            }
+        }));
+        assert_eq!(
+            blocks,
+            vec![
+                ProjectedOutput {
+                    kind: "stdout",
+                    text: "first\nsecond".to_string(),
+                },
+                ProjectedOutput {
+                    kind: "value",
+                    text: "42".to_string(),
+                },
+                ProjectedOutput {
+                    kind: "message",
+                    text: "attached package".to_string(),
+                },
+                ProjectedOutput {
+                    kind: "warning",
+                    text: "deprecated".to_string(),
+                },
+                ProjectedOutput {
+                    kind: "error",
+                    text: "object not found\nIn: print(x)".to_string(),
+                },
+            ]
+        );
+        assert!(
+            blocks
+                .iter()
+                .all(|block| !block.text.contains("bridge_command"))
+        );
+    }
+
+    #[test]
+    fn workspace_output_journal_uses_typed_plot_and_artifact_references() {
+        let payload = serde_json::json!({
+            "execution": {"stdout": "done", "ok": true},
+            "plot_references": [{
+                "plot_id": "plot_run_1_1",
+                "media_type": "image/png",
+                "payload_bytes": 4096,
+                "payload_sha256": "a".repeat(64)
+            }],
+            "artifact_references": [{
+                "artifact_id": "artifact_run_1_file_1",
+                "media_type": "text/csv",
+                "payload_bytes": 8192,
+                "payload_sha256": "b".repeat(64)
+            }]
+        });
+        let drafts = workspace_output_drafts(7, &payload);
+        assert!(matches!(
+            drafts[1].payload,
+            RuntimeOutputPayload::RecordRef {
+                ref reference_kind,
+                ref reference_id,
+                payload_bytes: 4096,
+                ..
+            } if reference_kind == "plot" && reference_id == "plot_run_1_1"
+        ));
+        assert!(matches!(
+            drafts[2].payload,
+            RuntimeOutputPayload::RecordRef {
+                ref reference_kind,
+                ref reference_id,
+                payload_bytes: 8192,
+                ..
+            } if reference_kind == "artifact" && reference_id == "artifact_run_1_file_1"
+        ));
+    }
+
+    #[test]
+    fn runtime_capture_reads_the_revisioned_project_policy() {
+        let directory = TempDir::new().unwrap();
+        let mut store = rho_store::Store::open(directory.path().join("rho.sqlite")).unwrap();
+        assert_eq!(
+            runtime_output_capture_limit(&store, "D:/project").unwrap(),
+            Some(128 * 1024 * 1024)
+        );
+        store
+            .update_runtime_output_policy(
+                "D:/project",
+                &RuntimeOutputPolicyUpdate {
+                    expected_revision: 0,
+                    max_runtime_output_bytes_per_execution: None,
+                    runtime_output_project_warning_bytes: Some(1024),
+                    max_runtime_execution_rows: Some(10),
+                    auto_prune_enabled: false,
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            runtime_output_capture_limit(&store, "D:/project").unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn kernel_projector_ignores_protocol_chatter_without_truncating_streams() {
+        let long = "x".repeat(70 * 1024);
+        let stream = kernel_projected_output(&CorrelatedKernelEvent {
+            parent_id: Some("parent".to_string()),
+            event: KernelEvent::Stream {
+                name: "stdout".to_string(),
+                text: long.clone(),
+            },
+        });
+        assert_eq!(stream[0].kind, "stdout");
+        assert_eq!(stream[0].text, long);
+        assert!(
+            kernel_projected_output(&CorrelatedKernelEvent {
+                parent_id: None,
+                event: KernelEvent::Busy,
+            })
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn output_notification_without_followers_never_changes_execution_lease_truth() {
+        let registry = RuntimeRegistryState::default();
+        let lease = registry.begin_execution();
+        registry.notify_output("D:/project", "execution.one");
+        assert_eq!(registry.active_execution_count(), 1);
+        drop(lease);
+        assert_eq!(registry.active_execution_count(), 0);
     }
 }

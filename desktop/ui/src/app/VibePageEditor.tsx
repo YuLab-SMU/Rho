@@ -25,6 +25,7 @@ import type {
   VibeSection,
 } from "../transport";
 import { SurfaceViewport } from "./SurfaceViewport";
+import { surfaceDisplayLabel, surfaceUxProfile } from "./surface-ux";
 
 const ATOM_KINDS = [
   "callout",
@@ -396,8 +397,8 @@ export function VibePageEditor({
     profileRevision,
     pageRevision: page.page_revision,
   });
-  const [selectedBlock, setSelectedBlock] = useState(page.focused_block_id);
-  const selectedBlockRef = useRef(page.focused_block_id);
+  const [selectedBlock, setSelectedBlock] = useState<string | null>(null);
+  const selectedBlockRef = useRef<string | null>(null);
   const [exported, setExported] = useState<VibePageExport | null>(null);
   const [saving, setSaving] = useState(false);
   handlers.current = { instances, renderSurface, invokeCommand };
@@ -469,10 +470,11 @@ export function VibePageEditor({
       const content = JSON.parse(node.attrs.payload as string) as VibeBlockContent;
       if (content.kind === "surface_ref") {
         const instance = handlers.current.instances.get(content.instance_id);
+        const profile = instance == null ? null : surfaceUxProfile(instance.surface_id);
         return instance == null || !content.live
           ? <div className="rho-vibe-missing">Surface {content.instance_id} is unavailable. Its exact place is preserved.</div>
-          : <SurfaceViewport label={`${instance.surface_id} ${instance.instance_id}`}>
-              <div className="rho-vibe-live-surface">{handlers.current.renderSurface(instance)}</div>
+          : <SurfaceViewport label={surfaceDisplayLabel(instance.surface_id)}>
+              <div className={`rho-vibe-live-surface rho-vibe-live-surface-${profile!.areaRole}`}>{handlers.current.renderSurface(instance)}</div>
             </SurfaceViewport>;
       }
       if (content.kind === "command_ref") {
@@ -624,29 +626,50 @@ export function VibePageEditor({
   return (
     <article className="rho-vibe-page rho-vibe-editor" data-page-id={page.page_id}>
       <header className="rho-vibe-page-header">
-        <div><span className="rho-eyebrow">Vibe page · r{page.page_revision}</span><h1>{page.label}</h1></div>
-        <span className="rho-vibe-save-state" role="status">{saving ? "Saving…" : "Saved"}</span>
+        <div>
+          <span className="rho-eyebrow">Vibe page</span>
+          <div className="rho-vibe-page-identity">
+            <h1>{page.label}</h1>
+            <span className="rho-vibe-save-state" role="status">{saving ? "Saving…" : "Saved"}</span>
+          </div>
+        </div>
       </header>
       <div className="rho-vibe-toolbar" role="toolbar" aria-label="Vibe Page composition">
-        <button type="button" onClick={() => runCommand(toggleMark(vibeSchema.marks.strong!))} aria-label="Bold"><strong>B</strong></button>
-        <button type="button" onClick={() => runCommand(toggleMark(vibeSchema.marks.emphasis!))} aria-label="Italic"><em>I</em></button>
-        <button type="button" onClick={() => runCommand(toggleMark(vibeSchema.marks.code!))} aria-label="Inline code"><code>&lt;/&gt;</code></button>
-        <button type="button" onClick={() => runCommand(setBlockType(vibeSchema.nodes.heading!, { level: 2 }))}>Heading</button>
-        <button type="button" onClick={() => runCommand(setBlockType(vibeSchema.nodes.paragraph!))}>Paragraph</button>
-        <button type="button" onClick={() => runCommand(undo)} aria-label="Undo Page edit">Undo</button>
-        <button type="button" onClick={() => runCommand(redo)} aria-label="Redo Page edit">Redo</button>
-        <span className="rho-vibe-toolbar-separator" />
-        <button type="button" onClick={() => replaceSections((sections) => [...sections, flowSection()])}>+ Section</button>
-        <button type="button" onClick={() => addBlock(plainBlock())}>+ Text</button>
-        <select aria-label="Insert live Surface" value="" onChange={(event) => { if (event.target.value) addBlock(surfaceBlock(event.target.value)); }}>
-          <option value="">+ Surface…</option>
-          {unplaced.map((instance) => <option value={instance.instance_id} key={instance.instance_id}>{instance.surface_id} · {instance.mode_id ?? "default"}</option>)}
-        </select>
-        <span className="rho-vibe-toolbar-separator" />
+        <div className="rho-vibe-toolbar-group rho-vibe-text-tools" role="group" aria-label="Text formatting">
+          <button type="button" onClick={() => runCommand(toggleMark(vibeSchema.marks.strong!))} aria-label="Bold" title="Bold"><strong>B</strong></button>
+          <button type="button" onClick={() => runCommand(toggleMark(vibeSchema.marks.emphasis!))} aria-label="Italic" title="Italic"><em>I</em></button>
+          <button type="button" onClick={() => runCommand(toggleMark(vibeSchema.marks.code!))} aria-label="Inline code" title="Inline code"><code>&lt;/&gt;</code></button>
+          <button type="button" onClick={() => runCommand(setBlockType(vibeSchema.nodes.heading!, { level: 2 }))}>Heading</button>
+          <button type="button" onClick={() => runCommand(setBlockType(vibeSchema.nodes.paragraph!))}>Body</button>
+        </div>
+        <div className="rho-vibe-toolbar-group" role="group" aria-label="Edit history">
+          <button type="button" onClick={() => runCommand(undo)} aria-label="Undo Page edit">Undo</button>
+          <button type="button" onClick={() => runCommand(redo)} aria-label="Redo Page edit">Redo</button>
+        </div>
+        <div className="rho-vibe-toolbar-group rho-vibe-add-tools" role="group" aria-label="Add content">
+          <button type="button" onClick={() => addBlock(plainBlock())}>Add text</button>
+          <button type="button" onClick={() => replaceSections((sections) => [...sections, flowSection()])}>New section</button>
+          <select aria-label="Add component" value="" onChange={(event) => { if (event.target.value) addBlock(surfaceBlock(event.target.value)); }}>
+            <option value="">Add component…</option>
+            {unplaced.map((instance) => <option value={instance.instance_id} key={instance.instance_id}>{surfaceDisplayLabel(instance.surface_id)}</option>)}
+          </select>
+        </div>
+        <div className="rho-vibe-toolbar-group rho-vibe-document-tools" role="group" aria-label="Document actions">
+          <button type="button" onClick={() => void flush()}>Save now</button>
+          <button type="button" onClick={() => void exportPage({
+            project_id: page.project_id,
+            expected_profile_revision: queue.current.profileRevision,
+            page_id: page.page_id,
+            expected_page_revision: queue.current.pageRevision,
+          }).then(setExported).catch(reportError)}>Export</button>
+        </div>
+      </div>
+      {selectedBlock != null && <div className="rho-vibe-selection-tools" role="toolbar" aria-label="Selected block actions">
+        <span>Selected block</span>
         <button type="button" disabled={selectedBlock == null} onClick={() => move(-1)} aria-label="Move selected block earlier">↑</button>
         <button type="button" disabled={selectedBlock == null} onClick={() => move(1)} aria-label="Move selected block later">↓</button>
-        <button type="button" disabled={selectedBlock == null} onClick={() => changeSpan(-1)} aria-label="Narrow selected grid block">− width</button>
-        <button type="button" disabled={selectedBlock == null} onClick={() => changeSpan(1)} aria-label="Widen selected grid block">+ width</button>
+        <button type="button" disabled={selectedBlock == null} onClick={() => changeSpan(-1)} aria-label="Narrow selected grid block">Narrower</button>
+        <button type="button" disabled={selectedBlock == null} onClick={() => changeSpan(1)} aria-label="Widen selected grid block">Wider</button>
         <button type="button" disabled={selectedBlock == null} onClick={() => replaceSections((sections) => {
           const found = locate(sections);
           if (found == null) return sections;
@@ -657,25 +680,25 @@ export function VibePageEditor({
           setSelectedBlock(null);
           selectedBlockRef.current = null;
           return next;
-        })}>Remove</button>
-        <button type="button" onClick={() => replaceSections((sections) => {
-          const found = locate(sections);
-          const index = found?.sectionIndex ?? Math.max(0, sections.length - 1);
-          const target = sections[index];
-          if (target == null) return sections;
-          const next = [...sections];
-          next[index] = target.layout.kind === "grid" ? { ...target, layout: { kind: "flow" } } : reflow(target);
-          return next;
-        })}>Flow / Grid</button>
-        <span className="rho-vibe-toolbar-spacer" />
-        <button type="button" onClick={() => void flush()}>Save now</button>
-        <button type="button" onClick={() => void exportPage({
-          project_id: page.project_id,
-          expected_profile_revision: queue.current.profileRevision,
-          page_id: page.page_id,
-          expected_page_revision: queue.current.pageRevision,
-        }).then(setExported).catch(reportError)}>Export</button>
-      </div>
+        })}>Remove block</button>
+        {(() => {
+          const found = locate(page.sections);
+          const index = found?.sectionIndex ?? Math.max(0, page.sections.length - 1);
+          const target = page.sections[index];
+          const currentLayout = target?.layout.kind ?? "flow";
+          return (
+            <button type="button" disabled={target == null} onClick={() => replaceSections((sections) => {
+              const found = locate(sections);
+              const index = found?.sectionIndex ?? Math.max(0, sections.length - 1);
+              const target = sections[index];
+              if (target == null) return sections;
+              const next = [...sections];
+              next[index] = target.layout.kind === "grid" ? { ...target, layout: { kind: "flow" } } : reflow(target);
+              return next;
+            })}>Section: {currentLayout === "grid" ? "Grid" : "Flow"}</button>
+          );
+        })()}
+      </div>}
       <div ref={mount} className="rho-vibe-prosemirror" aria-label={`${page.label} editor`} />
       {exported != null && <aside className="rho-vibe-export" aria-label="Read-only Page export"><header><strong>Deterministic export</strong><button type="button" onClick={() => setExported(null)}>Close</button></header><pre>{exported.markdown}</pre></aside>}
     </article>

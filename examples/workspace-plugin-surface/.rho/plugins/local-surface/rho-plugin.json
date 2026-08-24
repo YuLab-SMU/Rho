@@ -23,6 +23,7 @@
       "contractMajor": 1,
       "label": "Local notes",
       "purpose": "Exercise independent multi-instance declarative Surfaces",
+      "icon": "🗒",
       "inputSchema": {
         "type": "object",
         "properties": {

@@ -189,6 +189,11 @@ pub struct SurfaceDefinitionV1 {
     pub contract_major: u16,
     pub label: String,
     pub purpose: String,
+    /// Optional short icon glyph (emoji or 1-2 characters) shown in shell
+    /// chrome such as the sidebar plugin rail. Absent means the shell derives
+    /// a fallback from the label.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
     pub renderer_kind: SurfaceRendererKindV1,
     pub scope: SurfaceScopeV1,
     pub instance_policy: SurfaceInstancePolicyV1,
@@ -211,6 +216,9 @@ impl Validate for SurfaceDefinitionV1 {
         }
         validate_label(&self.label, "surface.label")?;
         validate_purpose(&self.purpose, "surface.purpose")?;
+        if let Some(icon) = &self.icon {
+            crate::validate_icon(icon, "surface.icon")?;
+        }
         if self.resource_kinds.len() > MAX_SURFACE_RESOURCE_KINDS {
             return Err(ContractError::LimitExceeded {
                 path: "surface.resource_kinds".to_string(),
@@ -783,6 +791,7 @@ mod tests {
             contract_major: 1,
             label: "Console".to_string(),
             purpose: "Project runtime console".to_string(),
+            icon: None,
             renderer_kind: SurfaceRendererKindV1::TrustedHost,
             scope: SurfaceScopeV1::Project,
             instance_policy: policy,

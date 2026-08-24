@@ -144,6 +144,13 @@ session.
 
 ## Cross-Review
 
+- The authorized
+  [`active Runtime output and Agent context closed-loop contract`](active-2026-08-24-runtime-output-agent-context-closed-loop-spec.md)
+  keeps this document's ordinary model-facing result projection bounded and
+  non-duplicative. It adds a separately budgeted, explicit Agent read of exact
+  Store-backed output ranges; ordinary tool results and prompts do not attach
+  Console/Run output automatically. At final cutover the output journal, not a
+  larger framed result, owns replayable human display output.
 - The [accepted scientific workflow handoff](accepted-2026-07-25-0.3x-scientific-workflow-handoff.md)
   retains Workspace R authority, broker revision checks, durable run/event
   truth, and bounded transport.

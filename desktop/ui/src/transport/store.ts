@@ -151,7 +151,10 @@ export class UiExternalStore {
 
   #install(snapshot: UiKernelSnapshot): void {
     const current = this.#state;
-    if (current.status === "ready") {
+    if (
+      current.status === "ready" &&
+      snapshot.project.project_id === current.snapshot.project.project_id
+    ) {
       const currentRevision = current.snapshot.snapshot_revision;
       if (snapshot.snapshot_revision < currentRevision) return;
       if (snapshot.snapshot_revision === currentRevision) {
@@ -232,7 +235,7 @@ export class SurfaceExternalStore {
 
   #install(snapshot: SurfaceRuntimeSnapshot): void {
     const current = this.#state;
-    if (current.status === "ready") {
+    if (current.status === "ready" && snapshot.project_id === current.snapshot.project_id) {
       const revision = current.snapshot.snapshot_revision;
       if (snapshot.snapshot_revision < revision) return;
       if (snapshot.snapshot_revision === revision) {
@@ -341,7 +344,7 @@ export class StudioExternalStore {
 
   #install(snapshot: StudioRuntimeSnapshot): void {
     const current = this.#state;
-    if (current.status === "ready") {
+    if (current.status === "ready" && snapshot.project_id === current.snapshot.project_id) {
       const revision = current.snapshot.snapshot_revision;
       if (snapshot.snapshot_revision < revision) return;
       if (snapshot.snapshot_revision === revision) {
@@ -569,7 +572,7 @@ export class RuntimeExternalStore {
 
   #install(snapshot: RuntimeRegistrySnapshot): void {
     const current = this.#state;
-    if (current.status === "ready") {
+    if (current.status === "ready" && snapshot.project_id === current.snapshot.project_id) {
       const revision = current.snapshot.snapshot_revision;
       if (snapshot.snapshot_revision < revision) return;
       if (snapshot.snapshot_revision === revision) {
@@ -640,8 +643,38 @@ export class RuntimeExternalStore {
     return this.#transport.detachRuntime(request);
   }
 
-  execute(request: RuntimeExecuteRequest) {
-    return this.#transport.executeRuntime(request);
+  startExecution(request: RuntimeExecuteRequest) {
+    return this.#transport.startRuntimeExecution(request);
+  }
+
+  getExecution(executionId: string) {
+    return this.#transport.getRuntimeExecution(executionId);
+  }
+
+  listExecutions(limit = 50) {
+    return this.#transport.listRuntimeExecutions(limit);
+  }
+
+  outputPage(executionId: string, afterSequence = 0) {
+    return this.#transport.loadRuntimeOutputPage({
+      execution_id: executionId,
+      after_sequence: afterSequence,
+      page_size: 100,
+      byte_limit: 512 * 1024,
+    });
+  }
+
+  outputPageBefore(executionId: string, beforeSequence: number) {
+    return this.#transport.loadRuntimeOutputPage({
+      execution_id: executionId,
+      before_sequence: beforeSequence,
+      page_size: 100,
+      byte_limit: 512 * 1024,
+    });
+  }
+
+  followOutput(executionId: string, afterSequence: number, listener: Parameters<UiKernelTransport["followRuntimeOutput"]>[2]) {
+    return this.#transport.followRuntimeOutput(executionId, afterSequence, listener);
   }
 }
 
@@ -684,7 +717,7 @@ export class ResourceExternalStore {
 
   #install(snapshot: ResourceRegistrySnapshot): void {
     const current = this.#state;
-    if (current.status === "ready") {
+    if (current.status === "ready" && snapshot.project_id === current.snapshot.project_id) {
       const revision = current.snapshot.snapshot_revision;
       if (snapshot.snapshot_revision < revision) return;
       if (snapshot.snapshot_revision === revision) {

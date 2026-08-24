@@ -4,6 +4,206 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.1-dev.15 - 2026-08-24
+
+### Durable Runtime output and explicit Agent context
+
+- Every admitted Runtime execution now receives a project-scoped durable
+  journal identity before work starts. Output is committed in ordered,
+  deduplicated chunks and then delivered through the start/follow Channel path;
+  renderer release, dropped notifications, reload, and desktop restart recover
+  from the Store instead of relying on a monolithic IPC response or Surface
+  state. The old buffered `runtime_execute` command is no longer exposed by the
+  desktop invoke surface or frontend transport.
+- Console mounts a bounded tail from durable History, follows live output
+  without stealing an intentionally scrolled reading position, pages older
+  chunks upward, returns to the latest tail on demand, and searches normalized
+  durable output beyond the mounted DOM. Starting a new transcript changes only
+  that Console's view anchor; it never deletes execution output.
+- Runs is presented as Runtime History with cursor-paged execution records and
+  the same human output projection used by Console. Plot and Artifact references
+  are typed, digest-bound actions. Payload pruning and execution-record deletion
+  remain separate, explicit operations with active/reference rejection and
+  project isolation.
+- Runtime capture is configurable per project, with a 128 MiB per-execution
+  default, a 1 GiB project warning, a 5,000-execution warning threshold, and an
+  explicit unlimited option. Crossing capture capacity records one truthful
+  partial-output tombstone while computation continues; automatic pruning stays
+  disabled.
+- Workspace R large results use a small V2 control manifest plus verified,
+  execution-owned sidecars, so large stdout/value payloads no longer depend on
+  one oversized JSON frame. Missing, tampered, duplicate, and symlink sidecars
+  fail closed without confusing output capture with scientific Run outcome.
+- Users can select an exact Runtime output chunk range and explicitly add its
+  immutable digest-bound reference to Agent. Ordinary prompts never attach
+  visible Console or Run content. Context review is capacity-aware for the
+  selected model, keeps the current request intact, records inclusion/omission
+  receipts without source text, and exposes only bounded project-scoped read
+  tools for admitted Conversation turns and Runtime ranges.
+- Unknown/custom model context capacity uses a visible conservative default and
+  can be changed through revision-safe settings. Preview digest, dispatch plan,
+  redaction, and `Context used` receipts share the same broker-owned planner so
+  stale or foreign references are rejected before a Provider call.
+- The one-click debug launcher now gracefully replaces either the raw debug
+  binary or a stale debug `.app` from the same checkout before building, while
+  still refusing to stop installed or foreign-checkout Rho processes. Workspace
+  startup diagnostics retain a bounded, credential-redacted error chain so a
+  migration or recovery failure shows its actionable cause instead of only the
+  outer operation label.
+
+## 0.4.1-dev.14 - 2026-08-22
+
+### Studio design language and workbench frame
+
+- The workbench adopts the ink-on-paper Studio design language: one token
+  system for color, type, spacing, and focus, with functional color reserved
+  for status semantics. The Console is now a paper-light monospace surface,
+  and all interface text stays at or above readable product sizes.
+- The measured 56px top bar now defaults to three stable anchors only: the Rho
+  menu, a geometrically centered Studio/Vibe switch, and Customize toolbar.
+  Project context, Scene/Page selection, command search, Check project,
+  Runtime status, and Compose are optional projections that can be shown,
+  hidden, pointer-reordered, or Arrow-key reordered per project. The preference
+  is device-local and recovers to the minimal bar if unavailable or invalid;
+  ⌘K/Ctrl+K still opens command search when it is not pinned. A fixed 28px
+  status bar remains the always-visible source for workspace and Agent
+  readiness, running tasks, Diagnostics, and project path.
+- Development builds now expose a compact, copyable content-derived build ID in
+  the Rho menu. `npm run rsr:dev:desktop` is the single raw-debug launcher and
+  now restarts exact same-checkout debug processes automatically before it
+  builds and launches the current binary. It never signals an installed/foreign
+  Rho path, never escalates to force-kill, and fails visibly if graceful exit
+  cannot be confirmed; `--no-restart` retains fail-closed inspection behavior.
+  The complete frontend gate now drives installed Chrome/Edge through real
+  Source, Console, History, docking, resizing, rejection and narrow-layout
+  interactions without downloading a test browser.
+- Frontend operation failures now pass through one bounded, path-redacting
+  presentation boundary. A 64-entry memory-only operation trace distinguishes
+  admission, conflict, R execution, Runtime infrastructure and transport
+  failures; Copy session diagnostics in the Rho menu exports only safe operation
+  names/stages/timings and resets when the project changes. Runtime/Surface/
+  Resource/Profile/Agent invalidation subscriptions now share one parity-checked
+  manifest across the desktop and browser mock.
+- The default Studio Scene is now a three-column composition: a Project
+  Navigator (Files/History/Artifacts with recent outputs), a center document and
+  Console area, and an Agent/Environment context stack. Opening a file from
+  the Navigator places its File Source in the document area. Saved Scenes
+  keep their own arrangements, and the Compose layout inspector is now an
+  on-demand overlay.
+- Stack tabs are closable, icon buttons have proper 28px targets, and the
+  component catalog defines consistent rest/hover/focus/pressed/disabled/busy
+  states across buttons, tabs, navigation rows, links, inputs, menus, and
+  resize separators.
+- Runtime states are presented truthfully: a busy Console shows a progress
+  bar with a reachable Stop, a running Agent shows elapsed time with a Stop
+  control, a restarting Runtime covers its Console with a recovery card, and
+  unavailable plugin Surfaces offer Retry and Close actions.
+- The R Console now prioritizes code and output: its Runtime row no longer
+  repeats idle actions or status text, output filtering opens only when asked,
+  and Restart/Clear remain reachable in a viewport-aware More menu. The prompt
+  grows for multiline code, Return runs while Shift+Return adds a line, history
+  navigation respects the text cursor, new results stay visible, and clearing
+  one Console preserves its history and every sibling Console.
+- Console results are now rendered as a user transcript instead of a Runtime
+  bridge dump. R values, stdout, messages, warnings, and errors receive clear
+  semantic presentation, while execution/workspace/artifact IDs, bridge code,
+  kernel envelopes, and raw JSON stay out of the default output and filter.
+  Completed output state settles before another request can target that
+  Console, avoiding stale-revision failures during rapid sequential Source
+  execution; bounded host rejection messages are preserved instead of being
+  replaced by a generic Runtime failure.
+- Console transcripts no longer ride inside the generic 64 KiB Surface
+  `view_state`. Existing oversized Console state is recovered once and
+  automatically compacted to versioned filter/scroll metadata; drafts,
+  command history, and projected output stay in a project-isolated session
+  cache. The live transcript is byte-bounded, preserves the newest result, and
+  visibly links to History when older entries are released. Workspace R
+  History remains the durable execution record, while auxiliary Runtime output
+  is explicitly session-only.
+- Agent turns now apply one 64K-character budget across already-authorized
+  exact-conversation history, explicit editor/problem context, project Skills,
+  and workspace-plugin context. A manifest declares complete, truncated,
+  omitted, and unavailable sections; the current user request remains complete
+  and outside this attachment budget. Console transcripts and Run output are
+  not attached automatically.
+- Source files can again run directly in R Console: Run or Ctrl/Command+Enter
+  sends the literal selection or, with no selection, the smallest complete R
+  expression containing the cursor. Nested calls, function bodies, ggplot and
+  custom-infix chains, strings, comments, and `else` continuations stay intact;
+  incomplete or comment-only scopes stop before Runtime admission. The cursor
+  then advances to the next executable expression, skipping blank and
+  comment-only gaps without moving focus to Console. Invoking Run directly on
+  such a gap only moves the cursor; an end-of-file gap is a quiet no-op, so
+  neither path creates a Console entry, History record, or error toast.
+  Execution uses the sole visible or last explicitly chosen Console and keeps
+  that instance's draft, history, output, Runtime binding, and sibling Consoles
+  isolated. If no Console is visible, the explicit Run action now activates a
+  compatible hidden Console or reuses an unplaced one, attaches it to Workspace
+  R when safe, and creates one only as a last resort; it then appears directly
+  below Source in a focused 70/30 work/support split and runs the original code.
+  Preparing is deduplicated and undoable, while ambiguous, paused, unbound,
+  recovering, busy, or failed preparation stops before the cursor moves. Monaco
+  also hydrates from the latest shared Resource content when its runtime finishes
+  loading after the file read. Source submissions now retain their project file,
+  document revision, execution mode, and exact UTF-16 range through the existing
+  Runtime request so durable execution history no longer mislabels them as Console
+  commands; direct Console submissions remain unchanged.
+- Studio layout is directly manipulable through a shell-owned pointer gesture:
+  drag a Stack tab or Surface title across nested panes, use the visible
+  five-position docking guide to split or stack, or use the insertion marker
+  to place a tab exactly before or after another tab. Active tabs can tear out
+  against their own Stack edge; Escape and invalid/self drops cancel cleanly.
+  Every completed drop is one ordinary undoable scene edit, and resize
+  separators keep their pointer and keyboard control.
+- Saved fixed-width arrangements now assign otherwise unused window space to
+  the final resizable work region. Expanding the window no longer leaves an
+  unreachable blank canvas beside the last component, and the adjacent
+  separator can resize across the complete available work area.
+- Surface frames now default to a compact title, More, and Close instead of
+  permanently repeating internal IDs, revision/binding facts, and lifecycle
+  management. Navigator gives its height to the file tree, opens search only
+  when requested, and no longer reserves an empty Recent outputs rail. File
+  Source and Preview use one command bar; Info and More retain revisions,
+  view-group, rename, and delete controls, while Save now commits an active
+  local draft and saves it in one click with retry-safe failure handling.
+- The Rho menu now makes its current-project card actionable: click it to pick
+  another folder, or choose one of up to six recent projects in a single click.
+  Switching stays on the current project when cancelled, blocked, or recovered
+  from failure, reports actionable errors beside the choices, and reloads all
+  project-owned views only after the existing project broker confirms success.
+- Agent keeps completed answers in focus and moves model/status facts into
+  optional details; its composer exposes authorization only in Act mode.
+  Environment now separates package health from operation requests, leads with
+  attention items, opens search on demand, and keeps broker identifiers and raw
+  payloads out of the default view.
+- History, Render jobs, Artifacts, Plots, Problems, Logs, Evidence, Git, Help, and
+  Check results now use task-specific timelines, outputs, scan rows, claims,
+  change summaries, and disclosures instead of generic JSON cards. History leads
+  with submitted code, human source, outcome, error, and time; it omits pure
+  comments, whitespace, and system probes while retaining real user, Agent, and
+  plugin scientific work. Eligible failures keep the existing retry lane as
+  `Run again`; the projection now refreshes on the existing Runtime completion
+  event. Internal `rho.runs` and storage/command identifiers stay compatible.
+- Loading, empty, no-match, paused, unavailable, and failed components share an
+  accessible action-oriented state language. Component discovery uses human
+  labels, marks workspace-plugin views as project components, and keeps the
+  state playground in a collapsed Developer tools group; plugin revisions and
+  preview instance identifiers stay secondary by default. Adaptive hidden
+  regions are restored by component name instead of internal layout IDs.
+- Every first-party component now has an explicit primary task, default focus,
+  action budget, area role, narrow behavior, and actionable empty state.
+  Navigator and project-component tabs support roving-keyboard navigation, and
+  every declared component mode is reachable from the common Surface menu
+  through the same revision-safe view-state path.
+- Vibe pages now open as focused documents: Page revisions are no longer shown
+  in the title, formatting/add/document actions form compact wrapping groups,
+  and move/width/layout/removal controls appear only after selecting a block.
+  Embedded context components use their content height instead of reserving a
+  viewport-sized blank region. Compose leads with the component catalog while
+  layout structure, Resource/Runtime registries, and developer previews stay
+  disclosed on demand; idle task text is removed from the status bar. These
+  controls remain keyboard-reachable without horizontal overflow at 200% zoom.
+
 ## 0.4.1-dev.13 - 2026-08-22
 
 ### Surface scaling and accessibility hardening

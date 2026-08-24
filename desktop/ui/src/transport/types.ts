@@ -207,6 +207,19 @@ export interface RuntimeExecuteRequest {
   readonly console_instance_id: string;
   readonly expected_console_revision: number;
   readonly code: string;
+  readonly source_context?: RuntimeExecutionSourceContext | null;
+}
+
+export interface RuntimeExecutionSourceContext {
+  readonly source_path: string;
+  readonly execution_mode: "selection" | "expression";
+  readonly document_version: number | null;
+  readonly source_range: {
+    readonly start_line: number;
+    readonly start_column: number;
+    readonly end_line: number;
+    readonly end_column: number;
+  };
 }
 
 export interface RuntimeOutputEvent {
@@ -217,14 +230,193 @@ export interface RuntimeOutputEvent {
   readonly payload: unknown;
 }
 
-export interface RuntimeExecutionResult {
+export type RuntimeExecutionStatus = "admitted" | "running" | "completed" | "failed" | "interrupted";
+export type RuntimeOutputState = "collecting" | "complete" | "partial" | "unavailable" | "pruned";
+
+export interface RuntimeExecution {
   readonly execution_id: string;
+  readonly project_root: string;
+  readonly run_id: string | null;
+  readonly runtime_provider_id: string;
   readonly runtime_instance_id: string;
   readonly runtime_activation_generation: number;
   readonly console_instance_id: string;
-  readonly state_revision_after: number;
-  readonly status: "completed" | "cancelled" | "failed";
-  readonly events: readonly RuntimeOutputEvent[];
+  readonly submitted_code: string;
+  readonly workspace_id: string | null;
+  readonly source_path: string | null;
+  readonly execution_mode: string | null;
+  readonly document_version: number | null;
+  readonly status: RuntimeExecutionStatus;
+  readonly terminal_reason: string | null;
+  readonly output_state: RuntimeOutputState;
+  readonly last_sequence: number;
+  readonly output_bytes: number;
+  readonly started_at: string;
+  readonly finished_at: string | null;
+}
+
+export interface RuntimeOutputChunk {
+  readonly execution_id: string;
+  readonly project_root: string;
+  readonly sequence: number;
+  readonly producer_sequence: number;
+  readonly projection_slot: number;
+  readonly source_kind: string;
+  readonly presentation_kind: "stdout" | "value" | "message" | "warning" | "error" | "status" | "display_ref";
+  readonly media_type: string | null;
+  readonly storage_kind: "inline_text" | "inline_json" | "record_ref" | "tombstone";
+  readonly text_payload: string | null;
+  readonly json_payload: string | null;
+  readonly reference_kind: "plot" | "artifact" | null;
+  readonly reference_id: string | null;
+  readonly payload_bytes: number;
+  readonly payload_sha256: string;
+  readonly created_at: string;
+}
+
+export interface RuntimeExecutionStartResponse {
+  readonly execution: RuntimeExecution;
+  readonly committed_through: number;
+}
+
+export interface RuntimeOutputPage {
+  readonly execution_id: string;
+  readonly project_root: string;
+  readonly status: RuntimeExecutionStatus;
+  readonly output_state: RuntimeOutputState;
+  readonly total_output_bytes: number;
+  readonly after_sequence: number;
+  readonly before_sequence: number | null;
+  readonly previous_sequence: number;
+  readonly next_sequence: number;
+  readonly has_older: boolean;
+  readonly has_more: boolean;
+  readonly chunks: readonly RuntimeOutputChunk[];
+}
+
+export type RuntimeOutputFollowFrame =
+  | {
+      readonly type: "admitted";
+      readonly project_id: string;
+      readonly execution_id: string;
+      readonly committed_through: number;
+      readonly execution: RuntimeExecution;
+    }
+  | {
+      readonly type: "chunks";
+      readonly project_id: string;
+      readonly execution_id: string;
+      readonly first_sequence: number;
+      readonly last_sequence: number;
+      readonly chunks: readonly RuntimeOutputChunk[];
+    }
+  | {
+      readonly type: "gap";
+      readonly project_id: string;
+      readonly execution_id: string;
+      readonly expected_sequence: number;
+      readonly committed_through: number;
+    }
+  | {
+      readonly type: "checkpoint";
+      readonly project_id: string;
+      readonly execution_id: string;
+      readonly committed_through: number;
+    }
+  | {
+      readonly type: "terminal";
+      readonly project_id: string;
+      readonly execution_id: string;
+      readonly committed_through: number;
+      readonly execution: RuntimeExecution;
+    };
+
+export interface RuntimeOutputPageRequest {
+  readonly execution_id: string;
+  readonly after_sequence?: number;
+  readonly before_sequence?: number;
+  readonly page_size?: number;
+  readonly byte_limit?: number;
+}
+
+export interface RuntimeExecutionCursor {
+  readonly started_at: string;
+  readonly execution_id: string;
+}
+
+export interface RuntimeOutputSearchRequest {
+  readonly query: string;
+  readonly console_instance_id?: string;
+  readonly started_after?: string;
+  readonly limit?: number;
+}
+
+export interface RuntimeOutputSearchHit {
+  readonly execution_id: string;
+  readonly sequence: number;
+  readonly presentation_kind: string;
+  readonly storage_kind: string;
+  readonly preview: string;
+  readonly reference_kind: "plot" | "artifact" | null;
+  readonly reference_id: string | null;
+  readonly payload_sha256: string;
+}
+
+export interface RuntimeOutputSearchResult {
+  readonly query: string;
+  readonly searched_execution_count: number;
+  readonly matched_execution_count: number;
+  readonly incomplete_execution_count: number;
+  readonly truncated: boolean;
+  readonly hits: readonly RuntimeOutputSearchHit[];
+}
+
+export interface RuntimeOutputPolicy {
+  readonly project_root: string;
+  readonly revision: number;
+  readonly max_runtime_output_bytes_per_execution: number | null;
+  readonly runtime_output_project_warning_bytes: number | null;
+  readonly max_runtime_execution_rows: number | null;
+  readonly auto_prune_enabled: false;
+  readonly updated_at: string;
+}
+
+export interface RuntimeOutputPolicyView {
+  readonly policy: RuntimeOutputPolicy;
+  readonly project_output_bytes: number;
+  readonly project_execution_count: number;
+  readonly warning_active: boolean;
+}
+
+export interface RuntimeOutputPolicyUpdate {
+  readonly expected_revision: number;
+  readonly max_runtime_output_bytes_per_execution: number | null;
+  readonly runtime_output_project_warning_bytes: number | null;
+  readonly max_runtime_execution_rows: number | null;
+  readonly auto_prune_enabled: false;
+}
+
+export interface RuntimeOutputPruneResult {
+  readonly outcome: "applied" | "unchanged" | "not_found" | "not_active";
+  readonly pruned_chunk_count: number;
+  readonly reclaimed_bytes: number;
+}
+
+export interface RuntimeOutputReference {
+  readonly project_id: string;
+  readonly execution_id: string;
+  readonly start_sequence: number;
+  readonly end_sequence: number;
+  readonly range_sha256: string;
+  readonly payload_bytes: number;
+  readonly chunk_count: number;
+  readonly status: RuntimeExecutionStatus;
+  readonly output_state: RuntimeOutputState;
+}
+
+export interface RuntimeExecutionDeleteResult {
+  readonly outcome: "applied" | "unchanged" | "not_found" | "not_active";
+  readonly deleted_output_chunk_count: number;
 }
 
 export type ResourceStatus = "ready" | "missing" | "unsupported";
@@ -332,6 +524,7 @@ export interface SurfaceDefinition {
   readonly contract_major: number;
   readonly label: string;
   readonly purpose: string;
+  readonly icon?: string;
   readonly renderer_kind: "trusted_host" | "declarative_document";
   readonly scope: "application" | "project";
   readonly instance_policy: "singleton" | "multi_instance";
@@ -1005,6 +1198,68 @@ export interface AgentTurnDetail {
   readonly turn: AgentTurnSummary;
   readonly events: readonly AgentTurnEvent[];
   readonly approvals: readonly AgentApprovalRequest[];
+  readonly context_items?: readonly AgentContextPlanItem[];
+}
+
+export interface AgentContextPlanItem {
+  readonly ordinal: number;
+  readonly source_kind: string;
+  readonly source_id: string | null;
+  readonly source_revision: string | null;
+  readonly source_sha256: string;
+  readonly trust_class: string;
+  readonly capacity_source: string;
+  readonly original_bytes: number;
+  readonly included_bytes: number;
+  readonly estimated_tokens: number;
+  readonly disposition: string;
+  readonly reason_code: string | null;
+}
+
+export interface AgentContextPreviewRequest {
+  readonly prompt: string;
+  readonly mode: AgentMode;
+  readonly task_kind: "agent_turn" | "problem_repair";
+  readonly model_id: string | null;
+  readonly editor_context: unknown | null;
+  readonly conversation_id: string | null;
+  readonly runtime_output_context: RuntimeOutputReference | null;
+}
+
+export interface AgentContextPlanPreview {
+  readonly plan_digest: string;
+  readonly context_window_tokens: number;
+  readonly reserved_output_tokens: number;
+  readonly estimated_input_tokens: number;
+  readonly capacity_source: string;
+  readonly items: readonly AgentContextPlanItem[];
+  readonly model_profile_id: string;
+  readonly model_display_name: string;
+  readonly settings_revision: number;
+  readonly conversation_id: string | null;
+  readonly runtime_output_context: RuntimeOutputReference | null;
+}
+
+export interface AgentModelContextCapacity {
+  readonly id: string;
+  readonly display_name: string;
+  readonly selected: boolean;
+  readonly context_window_tokens: number;
+  readonly reserved_output_tokens: number;
+  readonly context_capacity_source: "catalog" | "user_declared" | "conservative_default";
+}
+
+export interface AgentLlmSettingsView {
+  readonly revision: number;
+  readonly selected_model_id: string;
+  readonly models: readonly AgentModelContextCapacity[];
+}
+
+export interface AgentContextCapacityRequest {
+  readonly model_id: string;
+  readonly expected_revision: number;
+  readonly context_window_tokens: number;
+  readonly reserved_output_tokens: number;
 }
 
 export interface RunAgentRequest {
@@ -1015,6 +1270,8 @@ export interface RunAgentRequest {
   readonly auto_approve: boolean;
   readonly editor_context: unknown | null;
   readonly conversation_id: string | null;
+  readonly runtime_output_context: RuntimeOutputReference | null;
+  readonly context_plan_digest: string | null;
 }
 
 export interface RunAgentResponse {
@@ -1073,6 +1330,12 @@ export interface DomainSurfaceData {
   readonly items: readonly DomainSurfaceItem[];
 }
 
+export interface PlotImageView {
+  readonly plot_id: string;
+  readonly media_type: string;
+  readonly data_base64: string;
+}
+
 export type Unsubscribe = () => void;
 
 export interface WorkspacePreparationIssue {
@@ -1090,9 +1353,39 @@ export interface WorkspacePreparation {
   readonly issue: WorkspacePreparationIssue | null;
 }
 
+export type ProjectSwitchStatus =
+  | "ready"
+  | "cancelled"
+  | "blocked"
+  | "unavailable"
+  | "failed_restored"
+  | "fatal";
+
+export interface ProjectSwitchResponse {
+  readonly status: ProjectSwitchStatus;
+  readonly project: {
+    readonly root: string;
+    readonly files: readonly unknown[];
+    readonly truncated: boolean;
+  } | null;
+  readonly session: unknown;
+  readonly unavailable: { readonly path: string; readonly reason: string } | null;
+  readonly blocker: {
+    readonly kind: string;
+    readonly message: string;
+    readonly pending_count: number;
+  } | null;
+  readonly reason_code: string | null;
+  readonly message: string | null;
+  readonly restored_root: string | null;
+  readonly restart_required: boolean;
+}
+
 export interface UiKernelTransport {
   readonly source: UiSnapshotSource;
   prepareWorkspace(chooseRscript?: boolean): Promise<WorkspacePreparation>;
+  openProject(path: string): Promise<ProjectSwitchResponse>;
+  pickProjectDirectory(): Promise<ProjectSwitchResponse>;
   loadSnapshot(): Promise<UiKernelSnapshot>;
   setSelection(request: SetUiSelectionRequest): Promise<UiKernelSnapshot>;
   subscribeInvalidated(listener: () => void): Unsubscribe;
@@ -1133,7 +1426,25 @@ export interface UiKernelTransport {
   interruptRuntime(request: RuntimeInstanceRequest): Promise<RuntimeRegistrySnapshot>;
   restartRuntime(request: RuntimeInstanceRequest): Promise<RuntimeRegistrySnapshot>;
   stopRuntime(request: RuntimeInstanceRequest): Promise<RuntimeRegistrySnapshot>;
-  executeRuntime(request: RuntimeExecuteRequest): Promise<RuntimeExecutionResult>;
+  startRuntimeExecution(request: RuntimeExecuteRequest): Promise<RuntimeExecutionStartResponse>;
+  getRuntimeExecution(executionId: string): Promise<RuntimeExecution>;
+  listRuntimeExecutions(limit?: number, before?: RuntimeExecutionCursor): Promise<readonly RuntimeExecution[]>;
+  loadRuntimeOutputPage(request: RuntimeOutputPageRequest): Promise<RuntimeOutputPage>;
+  searchRuntimeOutput(request: RuntimeOutputSearchRequest): Promise<RuntimeOutputSearchResult>;
+  getRuntimeOutputPolicy(): Promise<RuntimeOutputPolicyView>;
+  updateRuntimeOutputPolicy(request: RuntimeOutputPolicyUpdate): Promise<RuntimeOutputPolicyView>;
+  createRuntimeOutputReference(
+    executionId: string,
+    startSequence?: number,
+    endSequence?: number,
+  ): Promise<RuntimeOutputReference>;
+  pruneRuntimeOutput(executionId: string): Promise<RuntimeOutputPruneResult>;
+  deleteRuntimeExecution(executionId: string): Promise<RuntimeExecutionDeleteResult>;
+  followRuntimeOutput(
+    executionId: string,
+    afterSequence: number,
+    listener: (frame: RuntimeOutputFollowFrame) => void,
+  ): Promise<void>;
   subscribeRuntimesInvalidated(listener: () => void): Unsubscribe;
   loadResources(): Promise<ResourceRegistrySnapshot>;
   resolveResource(request: ResourceResolveRequest): Promise<ResourceRegistrySnapshot>;
@@ -1148,6 +1459,9 @@ export interface UiKernelTransport {
   createAgentConversation(): Promise<AgentConversationSummary>;
   listAgentTurns(conversationId: string | null, limit?: number): Promise<readonly AgentTurnSummary[]>;
   getAgentTurnDetail(turnId: string): Promise<AgentTurnDetail | null>;
+  loadAgentLlmSettings(): Promise<AgentLlmSettingsView>;
+  setAgentContextCapacity(request: AgentContextCapacityRequest): Promise<AgentLlmSettingsView>;
+  previewAgentContext(request: AgentContextPreviewRequest): Promise<AgentContextPlanPreview>;
   runAgent(request: RunAgentRequest): Promise<RunAgentResponse>;
   retryAgentTurn(turnId: string): Promise<RunAgentResponse>;
   cancelAgentTurn(turnId: string): Promise<unknown>;
@@ -1156,6 +1470,7 @@ export interface UiKernelTransport {
   retryAgentRuntime(): Promise<AgentRuntimeDiagnostics>;
   subscribeAgentInvalidated(listener: () => void): Unsubscribe;
   loadDomainSurface(surfaceId: string): Promise<DomainSurfaceData>;
+  readPlotArtifact(plotId: string): Promise<PlotImageView>;
   retryRun(runId: string): Promise<unknown>;
   applyAgentFileEdit(request: AgentFileApplyRequest): Promise<AgentFileMutationResponse>;
   undoAgentFileEdit(request: AgentFileUndoRequest): Promise<AgentFileMutationResponse>;

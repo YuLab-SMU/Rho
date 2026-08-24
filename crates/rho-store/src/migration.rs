@@ -1635,6 +1635,291 @@ pub(crate) fn rebuild_plot_artifacts_v8(
     Ok(())
 }
 
+pub(crate) fn create_runtime_output_schema(connection: &Connection) -> Result<(), StoreError> {
+    connection.execute_batch(
+        "
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_runs_id_project
+            ON runs(run_id, project_root);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_turns_id_project
+            ON agent_turns(turn_id, project_root);
+
+        CREATE TABLE IF NOT EXISTS runtime_executions (
+            execution_id TEXT NOT NULL CHECK (length(execution_id) BETWEEN 1 AND 128),
+            project_root TEXT NOT NULL CHECK (project_root <> ''),
+            run_id TEXT,
+            runtime_provider_id TEXT NOT NULL CHECK (
+                length(runtime_provider_id) BETWEEN 1 AND 128
+            ),
+            runtime_instance_id TEXT NOT NULL CHECK (
+                length(runtime_instance_id) BETWEEN 1 AND 128
+            ),
+            runtime_activation_generation INTEGER NOT NULL CHECK (
+                runtime_activation_generation > 0
+            ),
+            console_instance_id TEXT NOT NULL CHECK (
+                length(console_instance_id) BETWEEN 1 AND 128
+            ),
+            workspace_id TEXT CHECK (
+                workspace_id IS NULL OR length(workspace_id) BETWEEN 1 AND 128
+            ),
+            source_path TEXT,
+            execution_mode TEXT CHECK (
+                execution_mode IS NULL OR length(execution_mode) BETWEEN 1 AND 64
+            ),
+            document_version INTEGER CHECK (
+                document_version IS NULL OR document_version >= 0
+            ),
+            submitted_code TEXT NOT NULL CHECK (
+                length(CAST(submitted_code AS BLOB)) BETWEEN 1 AND 1048576
+            ),
+            status TEXT NOT NULL CHECK (
+                status IN ('admitted', 'running', 'completed', 'failed', 'interrupted')
+            ),
+            terminal_reason TEXT CHECK (
+                terminal_reason IS NULL OR
+                length(CAST(terminal_reason AS BLOB)) <= 2048
+            ),
+            output_state TEXT NOT NULL CHECK (
+                output_state IN ('collecting', 'complete', 'partial', 'unavailable', 'pruned')
+            ),
+            last_sequence INTEGER NOT NULL DEFAULT 0 CHECK (last_sequence >= 0),
+            output_bytes INTEGER NOT NULL DEFAULT 0 CHECK (output_bytes >= 0),
+            started_at TEXT NOT NULL,
+            finished_at TEXT,
+            PRIMARY KEY(execution_id, project_root),
+            FOREIGN KEY(run_id, project_root)
+                REFERENCES runs(run_id, project_root) ON DELETE RESTRICT,
+            CHECK (
+                (status IN ('admitted', 'running') AND finished_at IS NULL AND
+                    output_state IN ('collecting', 'partial')) OR
+                (status IN ('completed', 'failed', 'interrupted') AND
+                    finished_at IS NOT NULL AND output_state <> 'collecting')
+            )
+        );
+
+        CREATE TABLE IF NOT EXISTS runtime_output_chunks (
+            execution_id TEXT NOT NULL,
+            project_root TEXT NOT NULL CHECK (project_root <> ''),
+            sequence INTEGER NOT NULL CHECK (sequence > 0),
+            producer_sequence INTEGER NOT NULL CHECK (producer_sequence >= 0),
+            projection_slot INTEGER NOT NULL DEFAULT 0 CHECK (projection_slot >= 0),
+            source_kind TEXT NOT NULL CHECK (length(source_kind) BETWEEN 1 AND 64),
+            presentation_kind TEXT NOT NULL CHECK (
+                presentation_kind IN (
+                    'stdout', 'value', 'message', 'warning', 'error', 'status',
+                    'display_ref'
+                )
+            ),
+            media_type TEXT CHECK (
+                media_type IS NULL OR length(media_type) BETWEEN 1 AND 255
+            ),
+            storage_kind TEXT NOT NULL CHECK (
+                storage_kind IN ('inline_text', 'inline_json', 'record_ref', 'tombstone')
+            ),
+            text_payload TEXT,
+            json_payload TEXT,
+            reference_kind TEXT CHECK (
+                reference_kind IS NULL OR reference_kind IN ('plot', 'artifact')
+            ),
+            reference_id TEXT CHECK (
+                reference_id IS NULL OR length(reference_id) BETWEEN 1 AND 128
+            ),
+            payload_bytes INTEGER NOT NULL CHECK (payload_bytes >= 0),
+            payload_sha256 TEXT NOT NULL CHECK (
+                length(payload_sha256) = 64 AND
+                payload_sha256 = lower(payload_sha256) AND
+                payload_sha256 NOT GLOB '*[^0-9a-f]*'
+            ),
+            created_at TEXT NOT NULL,
+            PRIMARY KEY(execution_id, project_root, sequence),
+            UNIQUE(execution_id, project_root, producer_sequence, projection_slot),
+            FOREIGN KEY(execution_id, project_root)
+                REFERENCES runtime_executions(execution_id, project_root)
+                ON DELETE CASCADE,
+            CHECK (
+                (storage_kind = 'inline_text' AND text_payload IS NOT NULL AND
+                    length(CAST(text_payload AS BLOB)) = payload_bytes AND
+                    payload_bytes <= 65536 AND
+                    json_payload IS NULL AND reference_kind IS NULL AND
+                    reference_id IS NULL) OR
+                (storage_kind = 'inline_json' AND text_payload IS NULL AND
+                    json_payload IS NOT NULL AND json_valid(json_payload) AND
+                    length(CAST(json_payload AS BLOB)) = payload_bytes AND
+                    payload_bytes <= 65536 AND
+                    reference_kind IS NULL AND reference_id IS NULL) OR
+                (storage_kind = 'record_ref' AND text_payload IS NULL AND
+                    json_payload IS NULL AND reference_kind IS NOT NULL AND
+                    reference_id IS NOT NULL) OR
+                (storage_kind = 'tombstone' AND text_payload IS NULL AND
+                    json_payload IS NOT NULL AND json_valid(json_payload) AND
+                    length(CAST(json_payload AS BLOB)) = payload_bytes AND
+                    payload_bytes <= 65536 AND
+                    reference_kind IS NULL AND reference_id IS NULL)
+            )
+        );
+
+        CREATE TABLE IF NOT EXISTS agent_turn_context_items (
+            context_item_id TEXT PRIMARY KEY CHECK (
+                length(context_item_id) BETWEEN 1 AND 128
+            ),
+            turn_id TEXT NOT NULL,
+            project_root TEXT NOT NULL CHECK (project_root <> ''),
+            ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+            source_kind TEXT NOT NULL CHECK (length(source_kind) BETWEEN 1 AND 64),
+            source_id TEXT CHECK (
+                source_id IS NULL OR length(CAST(source_id AS BLOB)) <= 512
+            ),
+            source_revision TEXT CHECK (
+                source_revision IS NULL OR
+                length(CAST(source_revision AS BLOB)) <= 512
+            ),
+            source_sha256 TEXT NOT NULL CHECK (
+                length(source_sha256) = 64 AND
+                source_sha256 = lower(source_sha256) AND
+                source_sha256 NOT GLOB '*[^0-9a-f]*'
+            ),
+            trust_class TEXT NOT NULL CHECK (length(trust_class) BETWEEN 1 AND 64),
+            capacity_source TEXT NOT NULL CHECK (
+                capacity_source IN ('catalog', 'user', 'conservative')
+            ),
+            original_bytes INTEGER NOT NULL CHECK (original_bytes >= 0),
+            included_bytes INTEGER NOT NULL CHECK (
+                included_bytes >= 0 AND included_bytes <= original_bytes
+            ),
+            estimated_tokens INTEGER NOT NULL CHECK (estimated_tokens >= 0),
+            disposition TEXT NOT NULL CHECK (
+                disposition IN (
+                    'complete', 'projected', 'truncated', 'omitted',
+                    'unavailable', 'rejected'
+                )
+            ),
+            reason_code TEXT CHECK (
+                reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 128
+            ),
+            UNIQUE(turn_id, ordinal),
+            FOREIGN KEY(turn_id, project_root)
+                REFERENCES agent_turns(turn_id, project_root) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS project_runtime_output_policies (
+            project_root TEXT NOT NULL PRIMARY KEY CHECK (project_root <> ''),
+            revision INTEGER NOT NULL CHECK (revision >= 0),
+            max_runtime_output_bytes_per_execution INTEGER CHECK (
+                max_runtime_output_bytes_per_execution IS NULL OR
+                max_runtime_output_bytes_per_execution >= 0
+            ),
+            runtime_output_project_warning_bytes INTEGER CHECK (
+                runtime_output_project_warning_bytes IS NULL OR
+                runtime_output_project_warning_bytes >= 0
+            ),
+            max_runtime_execution_rows INTEGER CHECK (
+                max_runtime_execution_rows IS NULL OR max_runtime_execution_rows > 0
+            ),
+            auto_prune_enabled INTEGER NOT NULL DEFAULT 0 CHECK (
+                auto_prune_enabled = 0
+            ),
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_runtime_executions_project_started
+            ON runtime_executions(project_root, started_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_runtime_executions_console_started
+            ON runtime_executions(project_root, console_instance_id, started_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_runtime_executions_workspace_started
+            ON runtime_executions(project_root, workspace_id, started_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_runtime_output_project_execution_sequence
+            ON runtime_output_chunks(project_root, execution_id, sequence);
+        CREATE INDEX IF NOT EXISTS idx_agent_turn_context_project_turn
+            ON agent_turn_context_items(project_root, turn_id, ordinal);
+        ",
+    )?;
+    Ok(())
+}
+
+pub(crate) fn assert_runtime_output_schema(connection: &Connection) -> Result<(), StoreError> {
+    for table in [
+        "runtime_executions",
+        "runtime_output_chunks",
+        "agent_turn_context_items",
+        "project_runtime_output_policies",
+    ] {
+        assert_table_exists(connection, table)?;
+        assert_not_null_project_identity(connection, table)?;
+    }
+    for index in [
+        "idx_runs_id_project",
+        "idx_agent_turns_id_project",
+        "idx_runtime_executions_project_started",
+        "idx_runtime_executions_console_started",
+        "idx_runtime_executions_workspace_started",
+        "idx_runtime_output_project_execution_sequence",
+        "idx_agent_turn_context_project_turn",
+    ] {
+        assert_index_exists(connection, index)?;
+    }
+    assert_table_sql_contains(
+        connection,
+        "runtime_executions",
+        &[
+            "statusin('admitted','running','completed','failed','interrupted')",
+            "output_statein('collecting','complete','partial','unavailable','pruned')",
+            "length(cast(submitted_codeasblob))between1and1048576",
+            "foreignkey(run_id,project_root)referencesruns(run_id,project_root)",
+        ],
+    )?;
+    assert_table_sql_contains(
+        connection,
+        "project_runtime_output_policies",
+        &[
+            "revisionintegernotnullcheck(revision>=0)",
+            "auto_prune_enabledintegernotnulldefault0check(auto_prune_enabled=0)",
+        ],
+    )?;
+    assert_table_sql_contains(
+        connection,
+        "runtime_output_chunks",
+        &[
+            "storage_kindin('inline_text','inline_json','record_ref','tombstone')",
+            "unique(execution_id,project_root,producer_sequence,projection_slot)",
+            "foreignkey(execution_id,project_root)referencesruntime_executions",
+        ],
+    )?;
+    assert_table_sql_contains(
+        connection,
+        "agent_turn_context_items",
+        &[
+            "included_bytes<=original_bytes",
+            "capacity_sourcein('catalog','user','conservative')",
+            "foreignkey(turn_id,project_root)referencesagent_turns(turn_id,project_root)",
+        ],
+    )?;
+
+    let foreign_key_failures: i64 = connection.query_row(
+        "SELECT COUNT(*) FROM pragma_foreign_key_check
+         WHERE \"table\" IN (
+            'runtime_executions', 'runtime_output_chunks', 'agent_turn_context_items',
+            'project_runtime_output_policies'
+         )",
+        [],
+        |row| row.get(0),
+    )?;
+    if foreign_key_failures != 0 {
+        return Err(StoreError::MigrationRejected {
+            message: "Runtime output or Agent context foreign keys are inconsistent".to_string(),
+            outcome: MigrationOutcome::rejected(
+                Some(SCHEMA_VERSION),
+                None,
+                MigrationRecordCounts {
+                    rejected: foreign_key_failures,
+                    ..MigrationRecordCounts::default()
+                },
+                "invalid_runtime_output_foreign_key",
+            ),
+        });
+    }
+    Ok(())
+}
+
 pub(crate) fn assert_not_null_project_identity(
     connection: &Connection,
     table: &str,

@@ -6,7 +6,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub(crate) const SCHEMA_VERSION: i64 = 14;
+pub(crate) const SCHEMA_VERSION: i64 = 15;
 const DEFAULT_LIMIT: usize = 50;
 const MAX_AGENT_LIST_LIMIT: usize = 100;
 const MAX_DIAGNOSTIC_LINE: u32 = 10_000_000;
@@ -29,6 +29,7 @@ mod plugin_permission_service;
 mod project;
 mod query;
 mod run;
+mod runtime_output;
 mod workbench;
 
 pub use agent::{
@@ -76,6 +77,14 @@ pub use project::{
 };
 pub use query::ProjectQueryService;
 pub use run::{ProblemSummary, RunDetail, RunDraft, RunErrorRange, RunFinish, RunSummary};
+pub use runtime_output::{
+    AgentTurnContextItem, AgentTurnContextItemDraft, RuntimeExecution,
+    RuntimeExecutionDeleteResult, RuntimeExecutionDraft, RuntimeExecutionFinish,
+    RuntimeExecutionMutationOutcome, RuntimeOutputAppendResult, RuntimeOutputChunk,
+    RuntimeOutputDraft, RuntimeOutputPage, RuntimeOutputPayload, RuntimeOutputPolicy,
+    RuntimeOutputPolicyUpdate, RuntimeOutputPruneResult, RuntimeOutputSearchHit,
+    RuntimeOutputSearchResult,
+};
 
 pub fn normalize_project_root(root: &str) -> String {
     let normalized = root.replace('\\', "/");
@@ -268,6 +277,8 @@ struct StoreOpenOptions {
     inject_v12_failure_before_commit: bool,
     #[cfg(test)]
     inject_v13_failure_before_commit: bool,
+    #[cfg(test)]
+    inject_v14_failure_before_commit: bool,
 }
 
 #[derive(Debug)]
@@ -299,6 +310,7 @@ impl Store {
             self.connection.execute_batch(migration::v8_schema_sql())?;
             migration::create_plugin_permission_schema(&self.connection)?;
             migration::create_plugin_lifecycle_schema(&self.connection)?;
+            migration::create_runtime_output_schema(&self.connection)?;
             self.set_schema_version(SCHEMA_VERSION)?;
             self.assert_current_schema()?;
             self.migration_outcome = MigrationOutcome::bootstrapped_current();
@@ -351,6 +363,12 @@ impl Store {
                 let backup_path =
                     migration::create_pre_migration_backup(&self.connection, path, 13)?;
                 let outcome = self.migrate_v13_to_v14(backup_path, options)?;
+                self.migration_outcome = outcome;
+            }
+            Some(14) => {
+                let backup_path =
+                    migration::create_pre_migration_backup(&self.connection, path, 14)?;
+                let outcome = self.migrate_v14_to_v15(backup_path, options)?;
                 self.migration_outcome = outcome;
             }
             Some(other) => {
@@ -413,6 +431,7 @@ impl Store {
         migration::create_agent_conversation_schema(&transaction)?;
         migration::create_plugin_permission_schema(&transaction)?;
         migration::create_plugin_lifecycle_schema(&transaction)?;
+        migration::create_runtime_output_schema(&transaction)?;
         transaction.execute_batch(
             "
             CREATE INDEX IF NOT EXISTS idx_runs_project_started
@@ -469,6 +488,7 @@ impl Store {
         migration::create_agent_conversation_schema(&transaction)?;
         migration::create_plugin_permission_schema(&transaction)?;
         migration::create_plugin_lifecycle_schema(&transaction)?;
+        migration::create_runtime_output_schema(&transaction)?;
         transaction.execute(
             "INSERT INTO metadata(key, value) VALUES('schema_version', ?1)
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -510,6 +530,7 @@ impl Store {
         migration::create_agent_conversation_schema(&transaction)?;
         migration::create_plugin_permission_schema(&transaction)?;
         migration::create_plugin_lifecycle_schema(&transaction)?;
+        migration::create_runtime_output_schema(&transaction)?;
         transaction.execute(
             "INSERT INTO metadata(key, value) VALUES('schema_version', ?1)
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -574,6 +595,7 @@ impl Store {
         migration::create_agent_conversation_schema(&transaction)?;
         migration::create_plugin_permission_schema(&transaction)?;
         migration::create_plugin_lifecycle_schema(&transaction)?;
+        migration::create_runtime_output_schema(&transaction)?;
         let after_count: i64 =
             transaction.query_row("SELECT COUNT(*) FROM runs", [], |row| row.get(0))?;
         if before_count != after_count {
@@ -665,6 +687,7 @@ impl Store {
         migration::create_agent_conversation_schema(&transaction)?;
         migration::create_plugin_permission_schema(&transaction)?;
         migration::create_plugin_lifecycle_schema(&transaction)?;
+        migration::create_runtime_output_schema(&transaction)?;
         let mapping_count: i64 =
             transaction.query_row("SELECT COUNT(*) FROM agent_conversation_turns", [], |row| {
                 row.get(0)
@@ -727,6 +750,7 @@ impl Store {
         let transaction = self.connection.transaction()?;
         migration::create_plugin_permission_schema(&transaction)?;
         migration::create_plugin_lifecycle_schema(&transaction)?;
+        migration::create_runtime_output_schema(&transaction)?;
         transaction.execute(
             "INSERT INTO metadata(key, value) VALUES('schema_version', ?1)
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -765,6 +789,7 @@ impl Store {
             .map(|path| path.to_string_lossy().replace('\\', "/"));
         let transaction = self.connection.transaction()?;
         migration::create_plugin_lifecycle_schema(&transaction)?;
+        migration::create_runtime_output_schema(&transaction)?;
         transaction.execute(
             "INSERT INTO metadata(key, value) VALUES('schema_version', ?1)
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -786,6 +811,44 @@ impl Store {
         self.assert_current_schema()?;
         Ok(MigrationOutcome::migrated(
             13,
+            backup_path
+                .as_ref()
+                .map(|path| path.to_string_lossy().replace('\\', "/")),
+            MigrationRecordCounts::default(),
+        ))
+    }
+
+    fn migrate_v14_to_v15(
+        &mut self,
+        backup_path: Option<PathBuf>,
+        _options: &StoreOpenOptions,
+    ) -> Result<MigrationOutcome, StoreError> {
+        let _backup_path_string = backup_path
+            .as_ref()
+            .map(|path| path.to_string_lossy().replace('\\', "/"));
+        let transaction = self.connection.transaction()?;
+        migration::create_runtime_output_schema(&transaction)?;
+        transaction.execute(
+            "INSERT INTO metadata(key, value) VALUES('schema_version', ?1)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            [SCHEMA_VERSION.to_string()],
+        )?;
+        #[cfg(test)]
+        if _options.inject_v14_failure_before_commit {
+            return Err(StoreError::MigrationRejected {
+                message: "injected v14 migration failure".to_string(),
+                outcome: MigrationOutcome::rejected(
+                    Some(14),
+                    _backup_path_string,
+                    MigrationRecordCounts::default(),
+                    "injected_failure",
+                ),
+            });
+        }
+        transaction.commit()?;
+        self.assert_current_schema()?;
+        Ok(MigrationOutcome::migrated(
+            14,
             backup_path
                 .as_ref()
                 .map(|path| path.to_string_lossy().replace('\\', "/")),
@@ -819,6 +882,7 @@ impl Store {
         migration::assert_agent_conversation_schema(&self.connection)?;
         migration::assert_plugin_permission_schema(&self.connection)?;
         migration::assert_plugin_lifecycle_schema(&self.connection)?;
+        migration::assert_runtime_output_schema(&self.connection)?;
         Ok(())
     }
 
@@ -1995,7 +2059,7 @@ impl Store {
                 normalize_project_root(project_root),
                 conversation_id,
                 exclude_turn_id,
-                limit.clamp(1, 4) as i64,
+                limit.clamp(1, 100) as i64,
             ],
             |row| {
                 Ok(AgentConversationTurn {
@@ -2012,6 +2076,52 @@ impl Store {
         let mut turns = rows.collect::<Result<Vec<_>, _>>()?;
         turns.reverse();
         Ok(turns)
+    }
+
+    pub fn get_agent_conversation_turn(
+        &self,
+        project_root: &str,
+        conversation_id: &str,
+        turn_id: &str,
+    ) -> Result<Option<AgentConversationTurn>, StoreError> {
+        let project_root = normalize_project_root(project_root);
+        let conversation_id = conversation_id.trim();
+        let turn_id = turn_id.trim();
+        if conversation_id.is_empty() || turn_id.is_empty() {
+            return Err(StoreError::Validation(
+                "Agent Conversation and turn identities are required".to_string(),
+            ));
+        }
+        self.connection
+            .query_row(
+                "SELECT
+                    agent_turns.turn_id, mode, status, prompt, final_message, error_message,
+                    started_at
+                 FROM agent_turns
+                 JOIN agent_conversation_turns AS link
+                   ON link.turn_id = agent_turns.turn_id
+                 JOIN agent_conversations AS conversation
+                   ON conversation.conversation_id = link.conversation_id
+                 WHERE agent_turns.project_root = ?1
+                   AND conversation.project_root = ?1
+                   AND link.conversation_id = ?2
+                   AND agent_turns.turn_id = ?3
+                   AND status IN ('completed', 'failed')",
+                params![project_root, conversation_id, turn_id],
+                |row| {
+                    Ok(AgentConversationTurn {
+                        turn_id: row.get(0)?,
+                        mode: row.get(1)?,
+                        status: row.get(2)?,
+                        prompt: row.get(3)?,
+                        final_message: row.get(4)?,
+                        error_message: row.get(5)?,
+                        started_at: row.get(6)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(StoreError::from)
     }
 
     pub fn list_approval_requests(
@@ -2834,11 +2944,50 @@ impl Store {
             params![project_root, if session_only { 1 } else { 0 }, workspace_id],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
+        let (runtime_execution_count, runtime_pruned_execution_count) = self.connection.query_row(
+            "SELECT
+                    COUNT(*),
+                    COALESCE(SUM(CASE WHEN output_state = 'pruned' THEN 1 ELSE 0 END), 0)
+                 FROM runtime_executions
+                 WHERE project_root = ?1
+                   AND (?2 = 0 OR workspace_id IS ?3)",
+            params![project_root, if session_only { 1 } else { 0 }, workspace_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        let (
+            runtime_inline_output_bytes,
+            runtime_referenced_artifact_bytes,
+            runtime_tombstone_count,
+        ) = self.connection.query_row(
+            "SELECT
+                COALESCE(SUM(CASE
+                    WHEN output.storage_kind IN ('inline_text', 'inline_json')
+                    THEN output.payload_bytes ELSE 0 END), 0),
+                COALESCE(SUM(CASE
+                    WHEN output.storage_kind = 'record_ref'
+                     AND output.reference_kind = 'artifact'
+                    THEN output.payload_bytes ELSE 0 END), 0),
+                COALESCE(SUM(CASE
+                    WHEN output.storage_kind = 'tombstone' THEN 1 ELSE 0 END), 0)
+             FROM runtime_output_chunks AS output
+             JOIN runtime_executions AS execution
+               ON execution.project_root = output.project_root
+              AND execution.execution_id = output.execution_id
+             WHERE execution.project_root = ?1
+               AND (?2 = 0 OR execution.workspace_id IS ?3)",
+            params![project_root, if session_only { 1 } else { 0 }, workspace_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
         Ok(RetentionScopeSummary {
             plot_history_count,
             plot_payload_bytes,
             artifact_record_count,
             artifact_metadata_bytes,
+            runtime_execution_count,
+            runtime_inline_output_bytes,
+            runtime_referenced_artifact_bytes,
+            runtime_tombstone_count,
+            runtime_pruned_execution_count,
         })
     }
 
@@ -4347,6 +4496,23 @@ mod tests {
             history[0].error_message.as_deref(),
             Some("provider network unavailable")
         );
+        let exact = store
+            .get_agent_conversation_turn("D:/Rho/project", "conversation_plot", "turn_plot")
+            .unwrap()
+            .unwrap();
+        assert_eq!(exact.prompt, "用 iris 数据集画图，并按 species 上色。");
+        assert!(
+            store
+                .get_agent_conversation_turn("D:/Rho/project", "conversation_other", "turn_plot",)
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            store
+                .get_agent_conversation_turn("D:/Rho/other", "conversation_plot", "turn_plot",)
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]
@@ -5093,10 +5259,28 @@ mod tests {
         assert_eq!(legacy_null_runs, 1);
     }
 
+    fn drop_runtime_output_schema(connection: &Connection) {
+        connection
+            .execute_batch(
+                "DROP TABLE IF EXISTS agent_turn_context_items;
+                 DROP TABLE IF EXISTS runtime_output_chunks;
+                 DROP TABLE IF EXISTS runtime_executions;
+                 DROP INDEX IF EXISTS idx_agent_turn_context_project_turn;
+                 DROP INDEX IF EXISTS idx_runtime_output_project_execution_sequence;
+                 DROP INDEX IF EXISTS idx_runtime_executions_workspace_started;
+                 DROP INDEX IF EXISTS idx_runtime_executions_console_started;
+                 DROP INDEX IF EXISTS idx_runtime_executions_project_started;
+                 DROP INDEX IF EXISTS idx_agent_turns_id_project;
+                 DROP INDEX IF EXISTS idx_runs_id_project;",
+            )
+            .unwrap();
+    }
+
     fn create_v8_fixture(path: &Path) {
         let store = Store::open(path).unwrap();
         drop(store);
         let connection = Connection::open(path).unwrap();
+        drop_runtime_output_schema(&connection);
         connection
             .execute_batch(
                 "ALTER TABLE runs DROP COLUMN error_start_line;
@@ -5182,6 +5366,7 @@ mod tests {
         let store = Store::open(path).unwrap();
         drop(store);
         let connection = Connection::open(path).unwrap();
+        drop_runtime_output_schema(&connection);
         connection
             .execute_batch(
                 "ALTER TABLE runs DROP COLUMN error_start_line;
@@ -5528,6 +5713,7 @@ mod tests {
         drop(store);
 
         let connection = Connection::open(path).unwrap();
+        drop_runtime_output_schema(&connection);
         connection
             .execute_batch(
                 "DROP INDEX IF EXISTS idx_agent_conversation_turns_conversation;
@@ -5722,6 +5908,7 @@ mod tests {
         let store = Store::open(path).unwrap();
         drop(store);
         let connection = Connection::open(path).unwrap();
+        drop_runtime_output_schema(&connection);
         connection
             .execute_batch(
                 "DROP TABLE plugin_permission_events;
@@ -5862,6 +6049,7 @@ mod tests {
                  DROP TABLE workspace_plugin_states;",
             )
             .unwrap();
+        drop_runtime_output_schema(&store.connection);
         set_schema_version(&store.connection, 13).unwrap();
     }
 
@@ -5874,7 +6062,10 @@ mod tests {
         let store = Store::open(&database).unwrap();
         assert_eq!(store.migration_outcome().status, MigrationStatus::Migrated);
         assert_eq!(store.migration_outcome().from_schema_version, Some(13));
-        assert_eq!(store.migration_outcome().to_schema_version, Some(14));
+        assert_eq!(
+            store.migration_outcome().to_schema_version,
+            Some(SCHEMA_VERSION)
+        );
         assert!(
             store
                 .migration_outcome()
@@ -5944,7 +6135,10 @@ mod tests {
         drop(verification);
 
         let recovered = Store::open(&database).unwrap();
-        assert_eq!(recovered.migration_outcome().to_schema_version, Some(14));
+        assert_eq!(
+            recovered.migration_outcome().to_schema_version,
+            Some(SCHEMA_VERSION)
+        );
         assert_plugin_lifecycle_schema(&recovered.connection).unwrap();
     }
 

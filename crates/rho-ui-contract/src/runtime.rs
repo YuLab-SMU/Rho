@@ -13,6 +13,7 @@ pub const MAX_RUNTIME_INSTANCES: usize = 32;
 pub const MAX_AUXILIARY_RUNTIMES: u16 = 8;
 pub const MAX_RUNTIME_SNAPSHOT_BYTES: usize = 512 * 1024;
 pub const MAX_RUNTIME_CODE_BYTES: usize = 1024 * 1024;
+pub const MAX_RUNTIME_SOURCE_PATH_BYTES: usize = 4096;
 pub const MAX_RUNTIME_OUTPUT_BYTES: usize = 2 * 1024 * 1024;
 pub const MAX_RUNTIME_OUTPUT_EVENTS: usize = 2048;
 pub const RUNTIME_REGISTRY_SNAPSHOT_CONTRACT: &str = "rho.ui.runtime-registry.snapshot.v1";
@@ -328,11 +329,123 @@ pub struct RuntimeDetachRequestV1 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RuntimeExecutionSourceRangeV1 {
+    pub start_line: u32,
+    pub start_column: u32,
+    pub end_line: u32,
+    pub end_column: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RuntimeExecutionSourceContextV1 {
+    pub source_path: String,
+    pub execution_mode: String,
+    pub document_version: Option<u64>,
+    pub source_range: RuntimeExecutionSourceRangeV1,
+}
+
+impl RuntimeExecutionSourceContextV1 {
+    fn validate_for_code(&self, code: &str) -> Result<(), ContractError> {
+        const MAX_SOURCE_LINE: u32 = 10_000_000;
+        const MAX_SOURCE_COLUMN: u32 = 1_000_000;
+        let source_path = self.source_path.as_str();
+        let windows_drive = source_path.as_bytes().get(1) == Some(&b':')
+            && source_path
+                .as_bytes()
+                .first()
+                .is_some_and(u8::is_ascii_alphabetic);
+        let unnormalized = source_path.trim() != source_path
+            || source_path.starts_with('/')
+            || source_path.starts_with('\\')
+            || source_path.contains('\\')
+            || source_path
+                .split('/')
+                .any(|segment| segment.is_empty() || matches!(segment, "." | ".."));
+        if source_path.is_empty() || source_path.starts_with('<') || windows_drive || unnormalized {
+            return Err(ContractError::InvalidValue {
+                path: "runtime_execute.source_context.source_path".to_string(),
+                reason: "Source execution requires a real project-relative path".to_string(),
+            });
+        }
+        if self.source_path.len() > MAX_RUNTIME_SOURCE_PATH_BYTES {
+            return Err(ContractError::LimitExceeded {
+                path: "runtime_execute.source_context.source_path".to_string(),
+                limit: MAX_RUNTIME_SOURCE_PATH_BYTES,
+                actual: self.source_path.len(),
+            });
+        }
+        if !matches!(self.execution_mode.as_str(), "selection" | "expression") {
+            return Err(ContractError::InvalidValue {
+                path: "runtime_execute.source_context.execution_mode".to_string(),
+                reason: "execution mode must be selection or expression".to_string(),
+            });
+        }
+        if self.document_version == Some(0) {
+            return Err(ContractError::InvalidValue {
+                path: "runtime_execute.source_context.document_version".to_string(),
+                reason: "document version must be positive when present".to_string(),
+            });
+        }
+        let range = &self.source_range;
+        let bounded = range.start_line > 0
+            && range.start_column > 0
+            && range.end_line > 0
+            && range.end_column > 0
+            && range.start_line <= MAX_SOURCE_LINE
+            && range.end_line <= MAX_SOURCE_LINE
+            && range.start_column <= MAX_SOURCE_COLUMN
+            && range.end_column <= MAX_SOURCE_COLUMN;
+        if !bounded {
+            return Err(ContractError::InvalidValue {
+                path: "runtime_execute.source_context.source_range".to_string(),
+                reason: "source range is out of bounds".to_string(),
+            });
+        }
+        let lines = code.split('\n').collect::<Vec<_>>();
+        let line_delta = u32::try_from(lines.len().saturating_sub(1)).map_err(|_| {
+            ContractError::InvalidValue {
+                path: "runtime_execute.source_context.source_range".to_string(),
+                reason: "source range line count overflowed".to_string(),
+            }
+        })?;
+        let expected_end_line = range.start_line.checked_add(line_delta).ok_or_else(|| {
+            ContractError::InvalidValue {
+                path: "runtime_execute.source_context.source_range".to_string(),
+                reason: "source range line count overflowed".to_string(),
+            }
+        })?;
+        let last_width = u32::try_from(lines.last().map_or(0, |line| line.encode_utf16().count()))
+            .map_err(|_| ContractError::InvalidValue {
+                path: "runtime_execute.source_context.source_range".to_string(),
+                reason: "source range column overflowed".to_string(),
+            })?;
+        let expected_end_column = if lines.len() == 1 {
+            range.start_column.checked_add(last_width)
+        } else {
+            last_width.checked_add(1)
+        }
+        .ok_or_else(|| ContractError::InvalidValue {
+            path: "runtime_execute.source_context.source_range".to_string(),
+            reason: "source range column overflowed".to_string(),
+        })?;
+        if range.end_line != expected_end_line || range.end_column != expected_end_column {
+            return Err(ContractError::InvalidValue {
+                path: "runtime_execute.source_context.source_range".to_string(),
+                reason: "source range does not match the submitted code".to_string(),
+            });
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RuntimeExecuteRequestV1 {
     pub runtime: RuntimeInstanceRequestV1,
     pub console_instance_id: SurfaceInstanceId,
     pub expected_console_revision: u64,
     pub code: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_context: Option<RuntimeExecutionSourceContextV1>,
 }
 
 impl Validate for RuntimeExecuteRequestV1 {
@@ -356,6 +469,9 @@ impl Validate for RuntimeExecuteRequestV1 {
                 limit: MAX_RUNTIME_CODE_BYTES,
                 actual: self.code.len(),
             });
+        }
+        if let Some(context) = &self.source_context {
+            context.validate_for_code(&self.code)?;
         }
         Ok(())
     }
@@ -520,6 +636,23 @@ mod tests {
         }
     }
 
+    fn execute_request(code: &str) -> RuntimeExecuteRequestV1 {
+        RuntimeExecuteRequestV1 {
+            runtime: RuntimeInstanceRequestV1 {
+                project_id: ProjectId::new("project:a").unwrap(),
+                runtime_provider_id: RuntimeProviderId::new("rho.ark-r").unwrap(),
+                runtime_instance_id: RuntimeInstanceId::new("runtime:workspace-r").unwrap(),
+                activation_generation: 1,
+                expected_project_revision: 1,
+                expected_state_revision: 1,
+            },
+            console_instance_id: SurfaceInstanceId::new("instance:console-a").unwrap(),
+            expected_console_revision: 1,
+            code: code.to_string(),
+            source_context: None,
+        }
+    }
+
     #[test]
     fn registry_accepts_runtime_generation_independent_of_provider_activation() {
         registry().validate().unwrap();
@@ -558,6 +691,59 @@ mod tests {
         result.events[0].console_instance_id =
             SurfaceInstanceId::new("instance:console-b").unwrap();
         assert!(result.validate().is_err());
+    }
+
+    #[test]
+    fn execution_source_context_is_optional_and_validates_exact_utf16_range() {
+        execute_request("1 + 1").validate().unwrap();
+
+        let mut source = execute_request("x <- \"🧬\"\nprint(x)");
+        source.source_context = Some(RuntimeExecutionSourceContextV1 {
+            source_path: "analysis.R".to_string(),
+            execution_mode: "expression".to_string(),
+            document_version: Some(3),
+            source_range: RuntimeExecutionSourceRangeV1 {
+                start_line: 4,
+                start_column: 3,
+                end_line: 5,
+                end_column: 9,
+            },
+        });
+        source.validate().unwrap();
+
+        source
+            .source_context
+            .as_mut()
+            .unwrap()
+            .source_range
+            .end_column = 8;
+        assert!(source.validate().is_err());
+    }
+
+    #[test]
+    fn execution_source_context_rejects_virtual_paths_and_unknown_modes() {
+        let mut source = execute_request("plot(x)");
+        source.source_context = Some(RuntimeExecutionSourceContextV1 {
+            source_path: "<console>".to_string(),
+            execution_mode: "line".to_string(),
+            document_version: Some(1),
+            source_range: RuntimeExecutionSourceRangeV1 {
+                start_line: 1,
+                start_column: 1,
+                end_line: 1,
+                end_column: 8,
+            },
+        });
+        assert!(source.validate().is_err());
+
+        source.source_context.as_mut().unwrap().source_path = "analysis.R".to_string();
+        assert!(source.validate().is_err());
+
+        source.source_context.as_mut().unwrap().execution_mode = "expression".to_string();
+        for path in ["/tmp/analysis.R", "C:\\tmp\\analysis.R", "../analysis.R"] {
+            source.source_context.as_mut().unwrap().source_path = path.to_string();
+            assert!(source.validate().is_err());
+        }
     }
 
     #[test]

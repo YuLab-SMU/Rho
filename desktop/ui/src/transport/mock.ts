@@ -1,10 +1,13 @@
 import fixture from "../contracts/generated/rsr-contract-fixtures.json";
+import { projectConsoleEvents } from "../app/console-output";
 import { projectLabel } from "./normalize";
 import { applySceneEdit, collectSceneInstances, reconcileStudio } from "./studio-model";
 import { applyVibePageMutation, exportVibePage } from "./vibe-model";
 import type {
   AgentApprovalDecisionRequest,
   AgentConversationSummary,
+  AgentContextCapacityRequest,
+  AgentLlmSettingsView,
   AgentMode,
   AgentRuntimeDiagnostics,
   AgentTurnDetail,
@@ -21,6 +24,7 @@ import type {
   PluginSurfaceDocumentView,
   PluginSurfaceEventRequest,
   PluginSurfaceEventResult,
+  ProjectSwitchResponse,
   ProjectUiProfileSnapshot,
   ResourceBinding,
   ResourceContent,
@@ -40,7 +44,19 @@ import type {
   RuntimeDescriptor,
   RuntimeDetachRequest,
   RuntimeExecuteRequest,
-  RuntimeExecutionResult,
+  RuntimeExecution,
+  RuntimeExecutionCursor,
+  RuntimeExecutionStartResponse,
+  RuntimeOutputChunk,
+  RuntimeOutputEvent,
+  RuntimeOutputFollowFrame,
+  RuntimeOutputPage,
+  RuntimeOutputPageRequest,
+  RuntimeOutputReference,
+  RuntimeOutputSearchRequest,
+  RuntimeOutputSearchResult,
+  RuntimeOutputPolicyUpdate,
+  RuntimeOutputPolicyView,
   RuntimeInstanceRequest,
   RuntimeRegistrySnapshot,
   SetUiSelectionRequest,
@@ -68,8 +84,14 @@ import type {
   VibeSection,
   Unsubscribe,
 } from "./types";
+import { INVALIDATION_TOPICS } from "./invalidation-contract";
+
+export const MOCK_INVALIDATION_TOPICS = INVALIDATION_TOPICS;
 
 const generatedSnapshot = fixture.kernel_snapshot as unknown as UiKernelSnapshot;
+// Small inline PNG so the mock Plots gallery exercises the real thumbnail path.
+const MOCK_PLOT_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAHgAAABQCAIAAABd+SbeAAACNUlEQVR4nO3c7W3CMBSFYfOxyJUyAqt0A7bgd7dgg67CApGQ7iRIlRIpCokpKbaPfe3z/kIVpehpemOHqLu+7x1L39E5JyKAn9RyqrrP/R5aidCgCA2K0KAIDYrQoAgNitCgCA2K0MAtOAuv+/4aH9wvP94n8IiOqbx4PI/Qoa1lvdaEBkVoUDwZft50Hf9wPs2/7j0fEjqIWFU3rjoIHeQ79cp3itChxBsjdFrfqaahu9eDNSJx69Dd83ZutI7u2zp059vOPa63FMRNQ3tLRDzGnSGoRqEfw5T410I4sBahZTjjza1TK7c4oyXZuuLv2jqiJZNyW9CST7khaMmq3Aq05FZuAloKUK4fWspQrhxailGuGVpKUq4WWgpTrhNaylOuEFqKVK4NWkpVxl1U6t7d9lC3MuiI7jbcbFm3MgJ6482WdSvXMKPFgnI2aBmK8jomlJOfDEeIw/pmy4vHeiPWNHmmz6LKV3bO7fq+T/FvJOavqapvVx3r9+DlW8z3x/VmQllV40MviMNfZP3bmgf4XDU8VY08OmINTX3+9nHOLEaQraKdDOczN/qfsw45y+2jE6cTua+mhIm5EQcaQ+yVNaQctLyLctL7IFu+QdC5iE13rHgzZgZ6scvggZwEenFt09Z+18yqY70HO5xPFSxmM2b+MqmVCJ0V2vQezNgRbXcPZm95R9+IcUaDIjQoQoMiNChCgyI0KEKDIjQoQoMiNChCgyI0KEKDIjTwMik/CXTp+wUUsf2F+KI8owAAAABJRU5ErkJggg==";
 const generatedSurfaces =
   fixture.surface_runtime_snapshot as unknown as SurfaceRuntimeSnapshot;
 const generatedStudio =
@@ -112,6 +134,7 @@ export interface MockUiKernelTransport extends UiKernelTransport {
   publishRuntimes(snapshot: RuntimeRegistrySnapshot): void;
   publishResources(snapshot: ResourceRegistrySnapshot): void;
   publishUiProfile(snapshot: ProjectUiProfileSnapshot): void;
+  queueRuntimeEvents(events: readonly RuntimeOutputEvent[]): void;
 }
 
 export function createMockUiKernelTransport(
@@ -119,6 +142,45 @@ export function createMockUiKernelTransport(
 ): MockUiKernelTransport {
   const search =
     typeof searchInput === "string" ? new URLSearchParams(searchInput) : searchInput;
+  const scenarioTrace = {
+    runtimeExecuteAttempts: [] as Array<{ readonly code: string; readonly sourcePath: string | null }>,
+    runtimeExecuteSuccesses: 0,
+    runtimeExecuteRejections: 0,
+    invalidations: [] as string[],
+  };
+  const queuedRuntimeEvents: Array<readonly RuntimeOutputEvent[]> = [];
+  if (search.has("scenario_trace")) {
+    Object.defineProperty(globalThis, "__RHO_RSR_SCENARIO_TRACE__", {
+      configurable: true,
+      value: scenarioTrace,
+    });
+  }
+  const invalidationRules = search.getAll("invalidation");
+  const heldInvalidations = new Map<string, () => void>();
+  const emitInvalidation = (topic: string, emit: () => void) => {
+    scenarioTrace.invalidations.push(topic);
+    if (invalidationRules.includes(`drop:${topic}`)) return;
+    const reorder = invalidationRules.find((rule) => rule.startsWith("reorder:"))?.split(":");
+    if (reorder?.length === 3 && reorder[1] === topic) {
+      heldInvalidations.set(topic, emit);
+      return;
+    }
+    if (reorder?.length === 3 && reorder[2] === topic) {
+      emit();
+      const held = heldInvalidations.get(reorder[1]!);
+      heldInvalidations.delete(reorder[1]!);
+      held?.();
+      return;
+    }
+    const delayRule = invalidationRules.find((rule) => rule.startsWith(`delay:${topic}:`));
+    if (delayRule != null) {
+      const milliseconds = Math.max(1, Math.min(2_000, Number(delayRule.split(":")[2] ?? "1")));
+      setTimeout(emit, milliseconds);
+      return;
+    }
+    emit();
+    if (invalidationRules.includes(`duplicate:${topic}`)) queueMicrotask(emit);
+  };
   const snapshot = copySnapshot(generatedSnapshot);
   const requestedProject = search.get("project");
   if (requestedProject != null && requestedProject.length > 0) {
@@ -138,9 +200,10 @@ export function createMockUiKernelTransport(
   const firstPartyFactorySpecs = [
     ["rho.agent", "Agent", [["conversation", "Conversation"], ["activity", "Activity"], ["composer", "Composer"]], false],
     ["rho.environment", "Environment", [["packages", "Packages"], ["requests", "Requests"]], false],
+    ["rho.navigator", "Navigator", [["files", "Files"], ["runs", "History"], ["artifacts", "Artifacts"]], false],
     ["rho.evidence", "Evidence", [["claims", "Claims"]], false],
     ["rho.git", "Git", [["changes", "Changes"], ["history", "History"]], false],
-    ["rho.runs", "Runs", [["history", "History"]], false],
+    ["rho.runs", "History", [["history", "History"]], false],
     ["rho.artifacts", "Artifacts", [["gallery", "Gallery"], ["list", "List"]], false],
     ["rho.problems", "Problems", [["list", "List"]], true],
     ["rho.plots", "Plots", [["gallery", "Gallery"], ["single", "Single"]], false],
@@ -213,16 +276,12 @@ export function createMockUiKernelTransport(
   const activeMockScene = profile.profile.studio_scenes.find(
     (scene) => scene.scene_id === profile.profile.active_studio_scene_id,
   );
-  const rightNode = studio.scene.root.kind === "container"
-    ? studio.scene.root.children.find((child) => child.child.kind === "container")?.child
+  const contextStack = studio.scene.root.kind === "container"
+    ? studio.scene.root.children.map((child) => child.child).find((child) => child.kind === "stack")
     : null;
-  if (rightNode?.kind === "container") {
-    (rightNode.children as unknown as LayoutChild[]).splice(Math.max(0, rightNode.children.length - 1), 0, {
-      child: { kind: "surface", node_id: "node:agent-shared", instance_id: mockAgentInstance.instance_id },
-      basis: { kind: "minmax", min_logical_pixels: 180, max_logical_pixels: 900, weight: 2 },
-      resizable: true,
-      collapse_priority: 20,
-    });
+  if (contextStack?.kind === "stack") {
+    (contextStack.instances as unknown as string[]).unshift(mockAgentInstance.instance_id);
+    (contextStack as { active_instance_id: string }).active_instance_id = mockAgentInstance.instance_id;
   }
   if (activeMockScene != null) {
     (activeMockScene as { root: SceneState["root"] }).root = structuredClone(studio.scene.root);
@@ -242,6 +301,7 @@ export function createMockUiKernelTransport(
         contract_major: 1,
         label: "Differential expression",
         purpose: "Explore one bounded differential-expression result.",
+        icon: "🧬",
         renderer_kind: "declarative_document" as const,
         scope: "project" as const,
         instance_policy: "multi_instance" as const,
@@ -385,9 +445,65 @@ export function createMockUiKernelTransport(
       (page.sections as unknown as VibeSection[]).push(section);
     }
   }
-  const persistedContent = new Map<string, string>([
-    ["analysis.R", "library(ggplot2)\nplot(mtcars$wt, mtcars$mpg)\n"],
-  ]);
+  const sourceFixture = search.get("fixture") === "source-gaps"
+    ? [
+        "# setup",
+        "",
+        "library(ggplot2)",
+        "",
+        "df <- data.frame(",
+        "  x = 1:3,",
+        "  y = c(2, 4, 8)",
+        ")",
+        "",
+        "plot(df$x, df$y)",
+        "",
+      ].join("\n")
+    : "library(ggplot2)\nplot(mtcars$wt, mtcars$mpg)\n";
+  const persistedContent = new Map<string, string>([["analysis.R", sourceFixture]]);
+  const runtimeHistoryItems: Array<DomainSurfaceData["items"][number]> = [{
+    id: "run:mock-1",
+    title: "workspace.execute",
+    subtitle: "analysis.R",
+    status: "completed",
+    detail: "{\"origin\":\"user\",\"source_path\":\"analysis.R\",\"execution_mode\":\"expression\",\"code_preview\":\"summary(mtcars)\",\"started_at\":\"2026-08-23T06:00:00Z\"}",
+  }];
+  const runtimeExecutionRecords: RuntimeExecution[] = [];
+  const runtimeOutputChunks = new Map<string, readonly RuntimeOutputChunk[]>();
+  const runtimeOutputPolicies = new Map<string, RuntimeOutputPolicyView["policy"]>();
+  const runtimeOutputPolicy = () => {
+    const root = current.project.display_path;
+    const existing = runtimeOutputPolicies.get(root);
+    if (existing != null) return existing;
+    const policy: RuntimeOutputPolicyView["policy"] = {
+      project_root: root,
+      revision: 0,
+      max_runtime_output_bytes_per_execution: 128 * 1024 * 1024,
+      runtime_output_project_warning_bytes: 1024 * 1024 * 1024,
+      max_runtime_execution_rows: 5_000,
+      auto_prune_enabled: false,
+      updated_at: "",
+    };
+    runtimeOutputPolicies.set(root, policy);
+    return policy;
+  };
+  const runtimeOutputPolicyView = (): RuntimeOutputPolicyView => {
+    const policy = runtimeOutputPolicy();
+    const rows = runtimeExecutionRecords.filter((execution) => execution.project_root === current.project.display_path);
+    const bytes = rows.reduce((total, execution) => total + execution.output_bytes, 0);
+    return {
+      policy,
+      project_output_bytes: bytes,
+      project_execution_count: rows.length,
+      warning_active: (policy.runtime_output_project_warning_bytes != null
+        && bytes >= policy.runtime_output_project_warning_bytes)
+        || (policy.max_runtime_execution_rows != null && rows.length >= policy.max_runtime_execution_rows),
+    };
+  };
+  const mockContextPlanDigest = (prompt: string, reference: RuntimeOutputReference | null) => {
+    const nibble = (prompt.length + (reference?.end_sequence ?? 0)) % 16;
+    return nibble.toString(16).repeat(64);
+  };
   const documents = new Map<string, {
     content: string;
     baseContent: string;
@@ -414,6 +530,18 @@ export function createMockUiKernelTransport(
   const agentListeners = new Set<() => void>();
   const agentNow = "2026-08-22T12:00:00Z";
   const agentProjectRoot = current.project.display_path;
+  let agentLlmSettings: AgentLlmSettingsView = {
+    revision: 1,
+    selected_model_id: "mock-profile",
+    models: [{
+      id: "mock-profile",
+      display_name: "Mock model",
+      selected: true,
+      context_window_tokens: 32_768,
+      reserved_output_tokens: 4_096,
+      context_capacity_source: "conservative_default",
+    }],
+  };
   let agentRuntimeDiagnostics: AgentRuntimeDiagnostics = {
     available: false,
     status: "needs_attention",
@@ -527,16 +655,32 @@ export function createMockUiKernelTransport(
     }],
     approvals: [],
   }]]);
+  const notifyKernel = () => {
+    emitInvalidation("kernel", () => {
+      for (const listener of listeners) listener();
+    });
+  };
   const notifyAgent = () => {
-    for (const listener of agentListeners) listener();
-    for (const listener of listeners) listener();
+    emitInvalidation("agent", () => {
+      for (const listener of agentListeners) listener();
+    });
+    notifyKernel();
   };
   const profileListeners = new Set<() => void>();
   const notifySurfaces = () => {
-    for (const listener of surfaceListeners) listener();
+    emitInvalidation("surfaces", () => {
+      for (const listener of surfaceListeners) listener();
+    });
   };
   const notifyPluginSurfaces = () => {
-    for (const listener of pluginSurfaceListeners) listener();
+    emitInvalidation("plugin-surfaces", () => {
+      for (const listener of pluginSurfaceListeners) listener();
+    });
+  };
+  const notifyCheckResults = () => {
+    emitInvalidation("check-results", () => {
+      for (const listener of checkResultListeners) listener();
+    });
   };
   const pluginDocuments = new Map<string, PluginSurfaceDocument>();
   const checkResults = new Map<string, CheckResult>();
@@ -553,12 +697,23 @@ export function createMockUiKernelTransport(
           { kind: "notice", tone: "info", text: "Workspace plugin · declarative trusted rendering" },
           { kind: "text", text: "Compare a selected contrast without coupling this view to another instance." },
           {
-            kind: "key_value",
-            items: [{ key: "Genes", value: "18,442" }, { key: "Significant", value: "612" }],
-          },
-          {
-            kind: "field", control_id: "contrast", label: "Contrast", value: "treated-control",
-            placeholder: "group-a/group-b", disabled: false, busy: false,
+            kind: "tabs",
+            active_tab_id: "summary",
+            tabs: [{
+              tab_id: "summary",
+              label: "Summary",
+              blocks: [{
+                kind: "key_value",
+                items: [{ key: "Genes", value: "18,442" }, { key: "Significant", value: "612" }],
+              }],
+            }, {
+              tab_id: "configure",
+              label: "Configure",
+              blocks: [{
+                kind: "field", control_id: "contrast", label: "Contrast", value: "treated-control",
+                placeholder: "group-a/group-b", disabled: false, busy: false,
+              }],
+            }],
           },
           {
             kind: "command_button", control_id: "apply", label: "Apply filter",
@@ -571,16 +726,24 @@ export function createMockUiKernelTransport(
     return created;
   };
   const notifyStudio = () => {
-    for (const listener of studioListeners) listener();
+    emitInvalidation("studio", () => {
+      for (const listener of studioListeners) listener();
+    });
   };
   const notifyRuntimes = () => {
-    for (const listener of runtimeListeners) listener();
+    emitInvalidation("runtimes", () => {
+      for (const listener of runtimeListeners) listener();
+    });
   };
   const notifyResources = () => {
-    for (const listener of resourceListeners) listener();
+    emitInvalidation("resources", () => {
+      for (const listener of resourceListeners) listener();
+    });
   };
   const notifyProfile = () => {
-    for (const listener of profileListeners) listener();
+    emitInvalidation("profile", () => {
+      for (const listener of profileListeners) listener();
+    });
   };
   const validateProfileTarget = (target: UiProfileRevisionRequest) => {
     if (
@@ -838,6 +1001,164 @@ export function createMockUiKernelTransport(
     const missing = [...placed].find((id) => !availableIds().includes(id));
     if (missing != null) throw new Error(`Mock Studio instance ${missing} is unavailable.`);
   };
+  const captureProjectBundle = () => ({
+    current: copySnapshot(current),
+    surfaces: copySurfaces(surfaces),
+    studio: copyStudio(studio),
+    runtimes: copyRuntimes(runtimes),
+    resources: copyResources(resources),
+    profile: copyProfile(profile),
+    persistedContent: structuredClone(persistedContent),
+    documents: structuredClone(documents),
+    agentConversations: structuredClone(agentConversations),
+    agentTurns: structuredClone(agentTurns),
+    agentDetails: structuredClone(agentDetails),
+    pluginDocuments: structuredClone(pluginDocuments),
+    checkResults: structuredClone(checkResults),
+  });
+  type MockProjectBundle = ReturnType<typeof captureProjectBundle>;
+  const initialProjectBundle = captureProjectBundle();
+  let activeProjectPath = current.project.display_path;
+  const projectBundles = new Map<string, MockProjectBundle>();
+  const replaceMap = <K, V>(target: Map<K, V>, source: Map<K, V>) => {
+    target.clear();
+    for (const [key, value] of source) target.set(key, value);
+  };
+  const reprojectBundle = (source: MockProjectBundle, path: string): MockProjectBundle => {
+    const bundle = structuredClone(source);
+    const projectId = `project:mock:${encodeURIComponent(path)}`;
+    bundle.current = {
+      ...bundle.current,
+      snapshot_revision: 1,
+      project: {
+        project_id: projectId,
+        display_label: projectLabel(path),
+        display_path: path,
+      },
+      context: {
+        ...bundle.current.context,
+        project_id: projectId,
+        project_revision: 1,
+        selection: null,
+        active_operations: [],
+      },
+    };
+    bundle.surfaces = {
+      ...bundle.surfaces,
+      snapshot_revision: 1,
+      project_id: projectId,
+      project_revision: 1,
+      catalog: {
+        ...bundle.surfaces.catalog,
+        instances: bundle.surfaces.catalog.instances.map((instance) => ({
+          ...instance,
+          project_id: projectId,
+          runtime_binding: instance.runtime_binding == null
+            ? null
+            : { ...instance.runtime_binding, project_id: projectId },
+        })),
+      },
+    };
+    bundle.studio = {
+      ...bundle.studio,
+      snapshot_revision: 1,
+      project_id: projectId,
+      project_revision: 1,
+      scene: { ...bundle.studio.scene, project_id: projectId, layout_revision: 1 },
+    };
+    bundle.runtimes = {
+      ...bundle.runtimes,
+      snapshot_revision: 1,
+      project_id: projectId,
+      project_revision: 1,
+      instances: bundle.runtimes.instances.map((runtime) => ({ ...runtime, project_id: projectId })),
+    };
+    bundle.resources = {
+      ...bundle.resources,
+      snapshot_revision: 1,
+      project_id: projectId,
+      project_revision: 1,
+      resources: bundle.resources.resources.map((resource) => ({ ...resource, project_id: projectId })),
+    };
+    bundle.profile = {
+      ...bundle.profile,
+      profile: {
+        ...bundle.profile.profile,
+        project_id: projectId,
+        revision: 1,
+        studio_scenes: bundle.profile.profile.studio_scenes.map((scene) => ({
+          ...scene,
+          project_id: projectId,
+          layout_revision: 1,
+        })),
+        vibe_pages: bundle.profile.profile.vibe_pages.map((page) => ({
+          ...page,
+          project_id: projectId,
+          page_revision: 1,
+        })),
+      },
+      immutable_scene_presets: bundle.profile.immutable_scene_presets.map((preset) => ({
+        ...preset,
+        scene: { ...preset.scene, project_id: projectId },
+      })),
+    };
+    bundle.agentConversations = bundle.agentConversations.map((conversation) => ({
+      ...conversation,
+      project_root: path,
+    }));
+    bundle.agentTurns = bundle.agentTurns.map((turn) => ({
+      ...turn,
+      project_root: path,
+      project_revision_before: 1,
+      project_revision_after: 1,
+    }));
+    bundle.agentDetails = new Map([...bundle.agentDetails].map(([id, detail]) => [id, {
+      ...detail,
+      turn: {
+        ...detail.turn,
+        project_root: path,
+        project_revision_before: 1,
+        project_revision_after: 1,
+      },
+    }]));
+    return bundle;
+  };
+  const installProjectBundle = (bundle: MockProjectBundle) => {
+    current = copySnapshot(bundle.current);
+    surfaces = copySurfaces(bundle.surfaces);
+    studio = copyStudio(bundle.studio);
+    runtimes = copyRuntimes(bundle.runtimes);
+    resources = copyResources(bundle.resources);
+    profile = copyProfile(bundle.profile);
+    replaceMap(persistedContent, bundle.persistedContent);
+    replaceMap(documents, bundle.documents);
+    agentConversations.splice(0, agentConversations.length, ...structuredClone(bundle.agentConversations));
+    agentTurns.splice(0, agentTurns.length, ...structuredClone(bundle.agentTurns));
+    replaceMap(agentDetails, bundle.agentDetails);
+    replaceMap(pluginDocuments, bundle.pluginDocuments);
+    replaceMap(checkResults, bundle.checkResults);
+  };
+  const notifyProjectChanged = () => {
+    notifySurfaces();
+    notifyPluginSurfaces();
+    notifyStudio();
+    notifyRuntimes();
+    notifyResources();
+    notifyProfile();
+    notifyAgent();
+    notifyCheckResults();
+  };
+  const cancelledProjectSwitch = (): ProjectSwitchResponse => ({
+    status: "cancelled",
+    project: null,
+    session: {},
+    unavailable: null,
+    blocker: null,
+    reason_code: null,
+    message: null,
+    restored_root: null,
+    restart_required: false,
+  });
   return {
     source: "mock",
     async prepareWorkspace() {
@@ -848,6 +1169,34 @@ export function createMockUiKernelTransport(
         restored_project_status: "ready",
         issue: null,
       } as const;
+    },
+    async openProject(path: string) {
+      if (!path || [...path].some((character) => {
+        const codePoint = character.codePointAt(0) ?? 0;
+        return codePoint <= 31 || codePoint === 127;
+      })) {
+        throw new Error("Mock project path is invalid.");
+      }
+      projectBundles.set(activeProjectPath, captureProjectBundle());
+      const next = projectBundles.get(path) ?? reprojectBundle(initialProjectBundle, path);
+      installProjectBundle(next);
+      activeProjectPath = path;
+      projectBundles.set(path, captureProjectBundle());
+      notifyProjectChanged();
+      return {
+        status: "ready",
+        project: { root: path, files: [], truncated: false },
+        session: {},
+        unavailable: null,
+        blocker: null,
+        reason_code: null,
+        message: null,
+        restored_root: null,
+        restart_required: false,
+      } satisfies ProjectSwitchResponse;
+    },
+    async pickProjectDirectory() {
+      return cancelledProjectSwitch();
     },
     async loadSnapshot() {
       return copySnapshot(current);
@@ -863,7 +1212,7 @@ export function createMockUiKernelTransport(
       current = copySnapshot(current);
       (current.context as { selection: typeof request.selection }).selection = request.selection;
       (current as { snapshot_revision: number }).snapshot_revision += 1;
-      for (const listener of listeners) listener();
+      notifyKernel();
       return copySnapshot(current);
     },
     subscribeInvalidated(listener: () => void): Unsubscribe {
@@ -872,7 +1221,7 @@ export function createMockUiKernelTransport(
     },
     publish(next: UiKernelSnapshot) {
       current = copySnapshot(next);
-      for (const listener of listeners) listener();
+      notifyKernel();
     },
     async loadSurfaces() {
       return copySurfaces(surfaces);
@@ -1179,7 +1528,7 @@ export function createMockUiKernelTransport(
         limitations: [],
       };
       checkResults.set(resultId, result);
-      for (const listener of checkResultListeners) listener();
+      notifyCheckResults();
       return { result: structuredClone(result) };
     },
     async loadCheckResult(request: CheckResultRequest) {
@@ -1421,6 +1770,9 @@ export function createMockUiKernelTransport(
       profile = copyProfile(next);
       notifyProfile();
     },
+    queueRuntimeEvents(events: readonly RuntimeOutputEvent[]) {
+      queuedRuntimeEvents.push(structuredClone(events));
+    },
     async loadRuntimes() {
       return copyRuntimes(runtimes);
     },
@@ -1505,7 +1857,11 @@ export function createMockUiKernelTransport(
       }
       return installRuntimes(runtimes.instances.filter((_, at) => at !== index));
     },
-    async executeRuntime(request: RuntimeExecuteRequest): Promise<RuntimeExecutionResult> {
+    async startRuntimeExecution(request: RuntimeExecuteRequest): Promise<RuntimeExecutionStartResponse> {
+      scenarioTrace.runtimeExecuteAttempts.push({
+        code: request.code,
+        sourcePath: request.source_context?.source_path ?? null,
+      });
       const index = validateRuntime(request.runtime);
       const runtime = runtimes.instances[index]!;
       const console = surfaces.catalog.instances.find(
@@ -1518,25 +1874,307 @@ export function createMockUiKernelTransport(
         console.runtime_binding.activation_generation !== runtime.activation_generation
       ) throw new Error("Mock Console attachment is stale or unavailable.");
       if (!request.code.trim()) throw new Error("Mock Runtime code must not be empty.");
+      if (search.get("delay") === "runtime-execute") {
+        const delayMs = Math.max(1, Math.min(2_000, Number(search.get("delay_ms") ?? "250")));
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, delayMs));
+      }
+      if (search.get("fault") === "runtime-execute") {
+        scenarioTrace.runtimeExecuteRejections += 1;
+        throw new Error("Injected Runtime rejection: execution was not admitted and no run was recorded.");
+      }
       const instances = [...runtimes.instances];
       const finished = { ...runtime, state_revision: runtime.state_revision + 2, status: "ready" as const };
       instances[index] = finished;
       installRuntimes(instances);
-      return {
-        execution_id: `runtime-execution:mock-${nextExecution++}`,
-        runtime_instance_id: runtime.runtime_instance_id,
-        runtime_activation_generation: runtime.activation_generation,
-        console_instance_id: console.instance_id,
-        state_revision_after: finished.state_revision,
+      const executionId = `runtime-execution:mock-${nextExecution++}`;
+      runtimeHistoryItems.unshift({
+        id: executionId,
+        title: "Console command",
+        subtitle: request.source_context?.source_path ?? "R Console",
         status: "completed",
-        events: [{
+        detail: JSON.stringify({
+          origin: "user",
+          source_path: request.source_context?.source_path ?? null,
+          execution_mode: request.source_context?.execution_mode ?? "console",
+          code_preview: request.code,
+          started_at: new Date().toISOString(),
+        }),
+      });
+      scenarioTrace.runtimeExecuteSuccesses += 1;
+      const events = queuedRuntimeEvents.shift() ?? [{
           sequence: 1,
           runtime_instance_id: runtime.runtime_instance_id,
           console_instance_id: console.instance_id,
           kind: "mock_result",
           payload: { text: `Mock evaluation: ${request.code}` },
-        }],
+        }] satisfies readonly RuntimeOutputEvent[];
+      const now = new Date().toISOString();
+      const admitted: RuntimeExecution = {
+        execution_id: executionId,
+        project_root: current.project.display_path,
+        run_id: null,
+        runtime_provider_id: runtime.runtime_provider_id,
+        runtime_instance_id: runtime.runtime_instance_id,
+        runtime_activation_generation: runtime.activation_generation,
+        console_instance_id: console.instance_id,
+        submitted_code: request.code,
+        workspace_id: "workspace:mock",
+        source_path: request.source_context?.source_path ?? null,
+        execution_mode: request.source_context?.execution_mode ?? "console",
+        document_version: request.source_context?.document_version ?? null,
+        status: "admitted",
+        terminal_reason: null,
+        output_state: "collecting",
+        last_sequence: 0,
+        output_bytes: 0,
+        started_at: now,
+        finished_at: null,
       };
+      const chunks: RuntimeOutputChunk[] = projectConsoleEvents(events).map((block, index) => {
+        const bytes = new TextEncoder().encode(block.text).byteLength;
+        return {
+          execution_id: executionId,
+          project_root: admitted.project_root,
+          sequence: index + 1,
+          producer_sequence: index + 1,
+          projection_slot: 0,
+          source_kind: "mock_projection",
+          presentation_kind: block.kind,
+          media_type: "text/plain; charset=utf-8",
+          storage_kind: "inline_text",
+          text_payload: block.text,
+          json_payload: null,
+          reference_kind: null,
+          reference_id: null,
+          payload_bytes: bytes,
+          payload_sha256: "a".repeat(64),
+          created_at: now,
+        };
+      });
+      const bytes = chunks.reduce((total, chunk) => total + chunk.payload_bytes, 0);
+      const completed: RuntimeExecution = {
+        ...admitted,
+        run_id: runtime.primary_scientific_runtime ? executionId : null,
+        status: "completed",
+        output_state: "complete",
+        last_sequence: chunks.length,
+        output_bytes: bytes,
+        finished_at: now,
+      };
+      runtimeExecutionRecords.unshift(completed);
+      runtimeOutputChunks.set(executionId, chunks);
+      notifyKernel();
+      return { execution: admitted, committed_through: 0 };
+    },
+    async getRuntimeExecution(executionId: string): Promise<RuntimeExecution> {
+      const execution = runtimeExecutionRecords.find((candidate) => candidate.execution_id === executionId);
+      if (execution == null) throw new Error("Mock Runtime execution was not found.");
+      return structuredClone(execution);
+    },
+    async listRuntimeExecutions(limit = 50, before?: RuntimeExecutionCursor): Promise<readonly RuntimeExecution[]> {
+      const start = before == null ? 0 : Math.max(0, runtimeExecutionRecords.findIndex((execution) => (
+        execution.started_at === before.started_at && execution.execution_id === before.execution_id
+      )) + 1);
+      return structuredClone(runtimeExecutionRecords.slice(start, start + Math.max(1, Math.min(100, limit))));
+    },
+    async loadRuntimeOutputPage(request: RuntimeOutputPageRequest): Promise<RuntimeOutputPage> {
+      const execution = runtimeExecutionRecords.find((candidate) => candidate.execution_id === request.execution_id);
+      if (execution == null) throw new Error("Mock Runtime execution was not found.");
+      const after = request.after_sequence ?? 0;
+      const before = request.before_sequence;
+      const pageSize = request.page_size ?? 100;
+      const all = runtimeOutputChunks.get(request.execution_id) ?? [];
+      const chunks = before == null
+        ? all.filter((chunk) => chunk.sequence > after).slice(0, pageSize)
+        : all.filter((chunk) => chunk.sequence < before).slice(-pageSize);
+      const previousSequence = chunks.at(0)?.sequence ?? before ?? after;
+      const nextSequence = chunks.at(-1)?.sequence ?? after;
+      return {
+        execution_id: request.execution_id,
+        project_root: execution.project_root,
+        status: execution.status,
+        output_state: execution.output_state,
+        total_output_bytes: execution.output_bytes,
+        after_sequence: after,
+        before_sequence: before ?? null,
+        previous_sequence: previousSequence,
+        next_sequence: nextSequence,
+        has_older: all.some((chunk) => chunk.sequence < previousSequence),
+        has_more: all.some((chunk) => chunk.sequence > nextSequence),
+        chunks: structuredClone(chunks),
+      };
+    },
+    async searchRuntimeOutput(request: RuntimeOutputSearchRequest): Promise<RuntimeOutputSearchResult> {
+      const query = request.query.trim().toLowerCase();
+      if (!query) throw new Error("Runtime output search query cannot be empty.");
+      const scoped = runtimeExecutionRecords.filter((execution) => (
+        (request.console_instance_id == null || execution.console_instance_id === request.console_instance_id)
+        && (request.started_after == null || execution.started_at > request.started_after)
+      ));
+      const hits = scoped.flatMap((execution) => {
+        const codeHit = execution.submitted_code.toLowerCase().includes(query) ? [{
+          execution_id: execution.execution_id,
+          sequence: 0,
+          presentation_kind: "code",
+          storage_kind: "inline_text",
+          preview: execution.submitted_code.slice(0, 1_000),
+          reference_kind: null,
+          reference_id: null,
+          payload_sha256: "c".repeat(64),
+        }] : [];
+        const outputHits = (runtimeOutputChunks.get(execution.execution_id) ?? []).flatMap((chunk) => {
+          const preview = chunk.text_payload ?? chunk.json_payload ?? chunk.reference_id ?? "";
+          return preview.toLowerCase().includes(query) ? [{
+            execution_id: execution.execution_id,
+            sequence: chunk.sequence,
+            presentation_kind: chunk.presentation_kind,
+            storage_kind: chunk.storage_kind,
+            preview: preview.slice(0, 1_000),
+            reference_kind: chunk.reference_kind,
+            reference_id: chunk.reference_id,
+            payload_sha256: chunk.payload_sha256,
+          }] : [];
+        });
+        return [...codeHit, ...outputHits];
+      });
+      const limit = Math.max(1, Math.min(200, request.limit ?? 100));
+      const limited = hits.slice(0, limit);
+      return {
+        query: request.query.trim(),
+        searched_execution_count: scoped.length,
+        matched_execution_count: new Set(hits.map((hit) => hit.execution_id)).size,
+        incomplete_execution_count: scoped.filter((execution) => (
+          ["partial", "unavailable", "pruned"].includes(execution.output_state)
+        )).length,
+        truncated: hits.length > limit,
+        hits: structuredClone(limited),
+      };
+    },
+    async getRuntimeOutputPolicy() {
+      return structuredClone(runtimeOutputPolicyView());
+    },
+    async updateRuntimeOutputPolicy(request: RuntimeOutputPolicyUpdate) {
+      const currentPolicy = runtimeOutputPolicy();
+      if (request.expected_revision !== currentPolicy.revision) {
+        throw new Error("Runtime output policy changed while it was being edited.");
+      }
+      if (request.auto_prune_enabled
+          || request.max_runtime_output_bytes_per_execution != null && request.max_runtime_output_bytes_per_execution < 0
+          || request.runtime_output_project_warning_bytes != null && request.runtime_output_project_warning_bytes < 0
+          || request.max_runtime_execution_rows != null && request.max_runtime_execution_rows < 1) {
+        throw new Error("Runtime output policy values are out of bounds.");
+      }
+      runtimeOutputPolicies.set(currentPolicy.project_root, {
+        ...currentPolicy,
+        revision: currentPolicy.revision + 1,
+        max_runtime_output_bytes_per_execution: request.max_runtime_output_bytes_per_execution,
+        runtime_output_project_warning_bytes: request.runtime_output_project_warning_bytes,
+        max_runtime_execution_rows: request.max_runtime_execution_rows,
+        auto_prune_enabled: false,
+        updated_at: new Date().toISOString(),
+      });
+      return structuredClone(runtimeOutputPolicyView());
+    },
+    async createRuntimeOutputReference(executionId, startSequence = 1, endSequence) {
+      const execution = runtimeExecutionRecords.find((candidate) => candidate.execution_id === executionId);
+      if (execution == null) throw new Error("Mock Runtime execution was not found.");
+      if (execution.output_state === "pruned") throw new Error("The selected Runtime output was pruned.");
+      const end = endSequence ?? execution.last_sequence;
+      const chunks = (runtimeOutputChunks.get(executionId) ?? [])
+        .filter((chunk) => chunk.sequence >= startSequence && chunk.sequence <= end);
+      if (chunks.length !== end - startSequence + 1) throw new Error("Mock Runtime output range is incomplete.");
+      return {
+        project_id: runtimes.project_id,
+        execution_id: executionId,
+        start_sequence: startSequence,
+        end_sequence: end,
+        range_sha256: "c".repeat(64),
+        payload_bytes: chunks.reduce((sum, chunk) => sum + chunk.payload_bytes, 0),
+        chunk_count: chunks.length,
+        status: execution.status,
+        output_state: execution.output_state,
+      };
+    },
+    async pruneRuntimeOutput(executionId) {
+      const index = runtimeExecutionRecords.findIndex((candidate) => candidate.execution_id === executionId);
+      if (index < 0) return { outcome: "not_found", pruned_chunk_count: 0, reclaimed_bytes: 0 };
+      const execution = runtimeExecutionRecords[index]!;
+      if (["admitted", "running"].includes(execution.status)) {
+        return { outcome: "not_active", pruned_chunk_count: 0, reclaimed_bytes: 0 };
+      }
+      const chunks = runtimeOutputChunks.get(executionId) ?? [];
+      const candidates = chunks.filter((chunk) => ["inline_text", "inline_json"].includes(chunk.storage_kind));
+      if (candidates.length === 0) return { outcome: "unchanged", pruned_chunk_count: 0, reclaimed_bytes: 0 };
+      const pruned = chunks.map((chunk) => {
+        if (!["inline_text", "inline_json"].includes(chunk.storage_kind)) return chunk;
+        const metadata = JSON.stringify({ reason: "pruned", original_payload_bytes: chunk.payload_bytes });
+        return {
+          ...chunk,
+          presentation_kind: "status" as const,
+          media_type: "application/json",
+          storage_kind: "tombstone" as const,
+          text_payload: null,
+          json_payload: metadata,
+          reference_kind: null,
+          reference_id: null,
+          payload_bytes: new TextEncoder().encode(metadata).byteLength,
+          payload_sha256: "b".repeat(64),
+        };
+      });
+      const before = candidates.reduce((sum, chunk) => sum + chunk.payload_bytes, 0);
+      const after = pruned.filter((chunk) => chunk.storage_kind === "tombstone")
+        .reduce((sum, chunk) => sum + chunk.payload_bytes, 0);
+      runtimeOutputChunks.set(executionId, pruned);
+      runtimeExecutionRecords[index] = {
+        ...execution,
+        output_state: "pruned",
+        output_bytes: pruned.reduce((sum, chunk) => sum + chunk.payload_bytes, 0),
+      };
+      notifyKernel();
+      return { outcome: "applied", pruned_chunk_count: candidates.length, reclaimed_bytes: Math.max(0, before - after) };
+    },
+    async deleteRuntimeExecution(executionId) {
+      const index = runtimeExecutionRecords.findIndex((candidate) => candidate.execution_id === executionId);
+      if (index < 0) return { outcome: "not_found", deleted_output_chunk_count: 0 };
+      if (["admitted", "running"].includes(runtimeExecutionRecords[index]!.status)) {
+        return { outcome: "not_active", deleted_output_chunk_count: 0 };
+      }
+      const count = runtimeOutputChunks.get(executionId)?.length ?? 0;
+      runtimeExecutionRecords.splice(index, 1);
+      runtimeOutputChunks.delete(executionId);
+      const historyIndex = runtimeHistoryItems.findIndex((item) => item.id === executionId);
+      if (historyIndex >= 0) runtimeHistoryItems.splice(historyIndex, 1);
+      notifyKernel();
+      return { outcome: "applied", deleted_output_chunk_count: count };
+    },
+    async followRuntimeOutput(executionId, afterSequence, listener): Promise<void> {
+      const execution = runtimeExecutionRecords.find((candidate) => candidate.execution_id === executionId);
+      if (execution == null) throw new Error("Mock Runtime execution was not found.");
+      const chunks = (runtimeOutputChunks.get(executionId) ?? [])
+        .filter((chunk) => chunk.sequence > afterSequence);
+      if (search.get("delay") === "runtime-execute") {
+        const delayMs = Math.max(1, Math.min(2_000, Number(search.get("delay_ms") ?? "250")));
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, delayMs));
+      }
+      if (chunks.length > 0) {
+        const frame: RuntimeOutputFollowFrame = {
+          type: "chunks",
+          project_id: runtimes.project_id,
+          execution_id: executionId,
+          first_sequence: chunks[0]!.sequence,
+          last_sequence: chunks.at(-1)!.sequence,
+          chunks: structuredClone(chunks),
+        };
+        listener(frame);
+        if (search.get("stream") === "duplicate") listener(frame);
+      }
+      listener({
+        type: "terminal",
+        project_id: runtimes.project_id,
+        execution_id: executionId,
+        committed_through: execution.last_sequence,
+        execution: structuredClone(execution),
+      });
     },
     subscribeRuntimesInvalidated(listener: () => void): Unsubscribe {
       runtimeListeners.add(listener);
@@ -1784,7 +2422,82 @@ export function createMockUiKernelTransport(
     async getAgentTurnDetail(turnId) {
       return structuredClone(agentDetails.get(turnId) ?? null);
     },
+    async loadAgentLlmSettings() {
+      return structuredClone(agentLlmSettings);
+    },
+    async setAgentContextCapacity(request: AgentContextCapacityRequest) {
+      if (request.expected_revision !== agentLlmSettings.revision) {
+        throw new Error("Model settings changed while this context capacity editor was open. Reload and try again.");
+      }
+      if (request.context_window_tokens < 4_096
+          || request.reserved_output_tokens < 256
+          || request.reserved_output_tokens >= request.context_window_tokens) {
+        throw new Error("Reserved output tokens must be at least 256 and smaller than the context window.");
+      }
+      const model = agentLlmSettings.models.find((candidate) => candidate.id === request.model_id);
+      if (model == null) throw new Error(`Unknown model: ${request.model_id}`);
+      agentLlmSettings = {
+        ...agentLlmSettings,
+        revision: agentLlmSettings.revision + 1,
+        models: agentLlmSettings.models.map((candidate) => candidate.id === request.model_id ? {
+          ...candidate,
+          context_window_tokens: request.context_window_tokens,
+          reserved_output_tokens: request.reserved_output_tokens,
+          context_capacity_source: "user_declared",
+        } : candidate),
+      };
+      return structuredClone(agentLlmSettings);
+    },
+    async previewAgentContext(request) {
+      const reference = request.runtime_output_context;
+      const selectedModel = agentLlmSettings.models.find((model) => model.selected)
+        ?? agentLlmSettings.models[0];
+      if (selectedModel == null) throw new Error("Mock Agent has no configured model.");
+      return {
+        plan_digest: mockContextPlanDigest(request.prompt, reference),
+        context_window_tokens: selectedModel.context_window_tokens,
+        reserved_output_tokens: selectedModel.reserved_output_tokens,
+        estimated_input_tokens: request.prompt.length + (reference?.payload_bytes ?? 0),
+        capacity_source: selectedModel.context_capacity_source,
+        items: [{
+          ordinal: 0,
+          source_kind: "current_request",
+          source_id: null,
+          source_revision: "1",
+          source_sha256: "a".repeat(64),
+          trust_class: "user_instruction",
+          capacity_source: "conservative",
+          original_bytes: request.prompt.length,
+          included_bytes: request.prompt.length,
+          estimated_tokens: request.prompt.length,
+          disposition: "complete",
+          reason_code: null,
+        }, ...(reference == null ? [] : [{
+          ordinal: 1,
+          source_kind: "runtime_output",
+          source_id: `${reference.execution_id}:${reference.start_sequence}-${reference.end_sequence}`,
+          source_revision: `sequence:${reference.end_sequence}`,
+          source_sha256: reference.range_sha256,
+          trust_class: "explicit_project_data",
+          capacity_source: "conservative",
+          original_bytes: reference.payload_bytes,
+          included_bytes: reference.payload_bytes,
+          estimated_tokens: reference.payload_bytes,
+          disposition: "complete",
+          reason_code: null,
+        }])],
+        model_profile_id: selectedModel.id,
+        model_display_name: selectedModel.display_name,
+        settings_revision: agentLlmSettings.revision,
+        conversation_id: request.conversation_id,
+        runtime_output_context: reference,
+      };
+    },
     async runAgent(request) {
+      if (request.runtime_output_context != null
+          && request.context_plan_digest !== mockContextPlanDigest(request.prompt, request.runtime_output_context)) {
+        throw new Error("Agent context changed after review.");
+      }
       let conversation = agentConversations.find(
         (candidate) => candidate.conversation_id === request.conversation_id,
       );
@@ -1827,7 +2540,25 @@ export function createMockUiKernelTransport(
         details_json: "{}",
       }];
       agentTurns.unshift(turn);
-      agentDetails.set(turnId, { turn, events, approvals: [] });
+      agentDetails.set(turnId, {
+        turn,
+        events,
+        approvals: [],
+        context_items: request.runtime_output_context == null ? [] : [{
+          ordinal: 1,
+          source_kind: "runtime_output",
+          source_id: `${request.runtime_output_context.execution_id}:${request.runtime_output_context.start_sequence}-${request.runtime_output_context.end_sequence}`,
+          source_revision: `sequence:${request.runtime_output_context.end_sequence}`,
+          source_sha256: request.runtime_output_context.range_sha256,
+          trust_class: "explicit_project_data",
+          capacity_source: "conservative",
+          original_bytes: request.runtime_output_context.payload_bytes,
+          included_bytes: request.runtime_output_context.payload_bytes,
+          estimated_tokens: request.runtime_output_context.payload_bytes,
+          disposition: "complete",
+          reason_code: null,
+        }],
+      });
       const conversationIndex = agentConversations.findIndex(
         (candidate) => candidate.conversation_id === conversation!.conversation_id,
       );
@@ -1862,6 +2593,8 @@ export function createMockUiKernelTransport(
         auto_approve: false,
         editor_context: null,
         conversation_id: source.conversation_id,
+        runtime_output_context: null,
+        context_plan_digest: null,
       });
       const created = agentTurns.find((turn) => turn.turn_id === response.turn_id)!;
       agentTurns[agentTurns.indexOf(created)] = { ...created, retry_of_turn_id: turnId };
@@ -1922,7 +2655,7 @@ export function createMockUiKernelTransport(
         ],
         "rho.evidence": [{ id: "claim:1", title: "Analysis uses a fixed seed", subtitle: "analysis.R:1-2", status: "current", detail: "Source-backed evidence claim" }],
         "rho.git": [{ id: "git:main", title: "main", subtitle: "2 modified · 1 staged", status: "dirty", detail: "Local project repository" }],
-        "rho.runs": [{ id: "run:mock-1", title: "workspace.execute", subtitle: "analysis.R", status: "completed", detail: "Workspace R execution" }],
+        "rho.runs": runtimeHistoryItems,
         "rho.artifacts": [{ id: "artifact:plot-1", title: "plots/qc.png", subtitle: "image/png", status: "available", detail: "Produced by run:mock-1" }],
         "rho.problems": [{ id: "problem:seed", title: "Random result may change", subtitle: "analysis.R:2", status: "warning", detail: "Set a deliberate seed." }],
         "rho.plots": [{ id: "plot:mock-1", title: "QC plot", subtitle: "image/png", status: "ready", detail: "Runtime plot artifact" }],
@@ -1936,6 +2669,13 @@ export function createMockUiKernelTransport(
         loaded_at: agentNow,
         summary: `${items.length} ${items.length === 1 ? "record" : "records"}`,
         items: structuredClone(items),
+      };
+    },
+    async readPlotArtifact(plotId) {
+      return {
+        plot_id: plotId,
+        media_type: "image/png",
+        data_base64: MOCK_PLOT_PNG_BASE64,
       };
     },
     async retryRun(runId) {

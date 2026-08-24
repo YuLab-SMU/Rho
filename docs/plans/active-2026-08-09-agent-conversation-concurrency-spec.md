@@ -244,6 +244,19 @@ Limits:
 - no prompt, model response, source, approval argument, or credential is added
   to diagnostics beyond existing bounded records.
 
+### 2026-08-24 capacity-planner activation amendment
+
+The authorized
+[`active-2026-08-24-runtime-output-agent-context-closed-loop-spec.md`](active-2026-08-24-runtime-output-agent-context-closed-loop-spec.md)
+supersedes only the fixed four-prior-turn packing bound when its tested final
+cutover occurs. Until that cutover, four prior turns remains the production
+bound. After cutover, this document continues to own exact Conversation
+identity, the 100-turn read ceiling, scheduling, retry, cancellation and
+project isolation; the closed-loop contract owns model-capacity accounting,
+deterministic inclusion/omission order, explicit output references, preview
+digest and metadata-only context receipt. No background summarization or
+cross-Conversation memory is authorized.
+
 ## Concurrency And Scheduling Contract
 
 ### Model admission

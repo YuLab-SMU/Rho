@@ -8,7 +8,7 @@ use rho_ui_contract::{
     BlockId, LayoutAxisV1, LayoutBasisV1, LayoutChildV1, LayoutNodeId, LayoutNodeV1,
     PROJECT_UI_PROFILE_SCHEMA_VERSION, PROJECT_UI_PROFILE_SNAPSHOT_CONTRACT, PageId, ProjectId,
     ProjectUiProfileSnapshotV1, ProjectUiProfileV1, RSR_CONTRACT_MAJOR, RuntimeAttachmentIntentV1,
-    RuntimeRegistrySnapshotV1, SceneId, ScenePresetId, SceneStateV1, SectionId,
+    RuntimeRegistrySnapshotV1, SceneId, ScenePresetId, SceneStateV1, SectionId, StackNodeV1,
     StudioScenePresetV1, SurfaceFactoryRegistrationV1, SurfaceInstanceSpecV1,
     SurfaceLifecycleStateV1, SurfaceRuntimeSnapshotV1, UiProfileLoadStatusV1, UiProfileModeV1,
     UiProfileMutationV1, UiProfileRevisionRequestV1, Validate, VibeBlockContentV1, VibeBlockV1,
@@ -460,6 +460,36 @@ fn default_surface_specs(
     let mut specs = Vec::new();
     if let Some(factory) = factories
         .iter()
+        .find(|factory| factory.definition.surface_id.as_str() == "rho.navigator")
+    {
+        specs.push(SurfaceInstanceSpecV1 {
+            instance_id: next_instance_id(),
+            surface_id: factory.definition.surface_id.clone(),
+            origin: factory.definition.origin.clone(),
+            mode_id: Some(rho_ui_contract::SurfaceModeId::new("files").unwrap()),
+            resource_binding: None,
+            runtime_attachment_intent: None,
+            view_group_id: None,
+            view_state: json!({ "tab": "files" }),
+        });
+    }
+    if let Some(factory) = factories
+        .iter()
+        .find(|factory| factory.definition.surface_id.as_str() == "rho.environment")
+    {
+        specs.push(SurfaceInstanceSpecV1 {
+            instance_id: next_instance_id(),
+            surface_id: factory.definition.surface_id.clone(),
+            origin: factory.definition.origin.clone(),
+            mode_id: Some(rho_ui_contract::SurfaceModeId::new("packages").unwrap()),
+            resource_binding: None,
+            runtime_attachment_intent: None,
+            view_group_id: None,
+            view_state: json!({}),
+        });
+    }
+    if let Some(factory) = factories
+        .iter()
         .find(|factory| factory.definition.surface_id.as_str() == "rho.status")
     {
         specs.push(SurfaceInstanceSpecV1 {
@@ -534,61 +564,79 @@ fn rho_studio_scene(
     label: &str,
     specs: &[SurfaceInstanceSpecV1],
 ) -> SceneStateV1 {
-    let console = specs
-        .iter()
-        .find(|spec| spec.surface_id.as_str() == "rho.console");
-    let status = specs
-        .iter()
-        .find(|spec| spec.surface_id.as_str() == "rho.status");
-    let agent = specs
-        .iter()
-        .find(|spec| spec.surface_id.as_str() == "rho.agent");
+    let find = |surface_id: &str| {
+        specs
+            .iter()
+            .find(|spec| spec.surface_id.as_str() == surface_id)
+    };
+    let navigator = find("rho.navigator");
+    let console = find("rho.console");
+    let status = find("rho.status");
+    let agent = find("rho.agent");
+    let environment = find("rho.environment");
     let mut children = Vec::new();
-    let mut primary_children = Vec::new();
+    if let Some(navigator) = navigator {
+        children.push(LayoutChildV1 {
+            child: LayoutNodeV1::Surface {
+                node_id: next_node_id(),
+                instance_id: navigator.instance_id.clone(),
+            },
+            basis: LayoutBasisV1::Minmax {
+                min_logical_pixels: 240,
+                max_logical_pixels: 340,
+                weight: 1,
+            },
+            resizable: true,
+            collapse_priority: Some(30),
+        });
+    }
     if let Some(console) = console {
-        primary_children.push(LayoutChildV1 {
+        children.push(LayoutChildV1 {
             child: LayoutNodeV1::Surface {
                 node_id: next_node_id(),
                 instance_id: console.instance_id.clone(),
             },
-            basis: LayoutBasisV1::Fraction { weight: 3 },
+            basis: LayoutBasisV1::Fraction { weight: 7 },
             resizable: true,
             collapse_priority: None,
         });
     }
-    if let Some(agent) = agent {
-        primary_children.push(LayoutChildV1 {
-            child: LayoutNodeV1::Surface {
+    let context_instances = [agent, environment]
+        .into_iter()
+        .flatten()
+        .map(|spec| spec.instance_id.clone())
+        .collect::<Vec<_>>();
+    if !context_instances.is_empty() {
+        children.push(LayoutChildV1 {
+            child: LayoutNodeV1::Stack(StackNodeV1 {
                 node_id: next_node_id(),
-                instance_id: agent.instance_id.clone(),
+                active_instance_id: agent
+                    .or(environment)
+                    .map(|spec| spec.instance_id.clone())
+                    .expect("context stack members were just collected"),
+                instances: context_instances,
+            }),
+            basis: LayoutBasisV1::Minmax {
+                min_logical_pixels: 340,
+                max_logical_pixels: 520,
+                weight: 2,
             },
-            basis: LayoutBasisV1::Fraction { weight: 2 },
             resizable: true,
             collapse_priority: Some(20),
         });
     }
-    if !primary_children.is_empty() {
-        children.push(LayoutChildV1 {
-            child: LayoutNodeV1::Container {
-                node_id: next_node_id(),
-                axis: LayoutAxisV1::Horizontal,
-                children: primary_children,
-            },
-            basis: LayoutBasisV1::Fraction { weight: 1 },
-            resizable: true,
-            collapse_priority: None,
-        });
-    }
-    if let Some(status) = status {
-        children.push(LayoutChildV1 {
-            child: LayoutNodeV1::Surface {
-                node_id: next_node_id(),
-                instance_id: status.instance_id.clone(),
-            },
-            basis: LayoutBasisV1::Intrinsic,
-            resizable: false,
-            collapse_priority: None,
-        });
+    if children.is_empty() {
+        if let Some(status) = status {
+            children.push(LayoutChildV1 {
+                child: LayoutNodeV1::Surface {
+                    node_id: next_node_id(),
+                    instance_id: status.instance_id.clone(),
+                },
+                basis: LayoutBasisV1::Intrinsic,
+                resizable: false,
+                collapse_priority: None,
+            });
+        }
     }
     SceneStateV1 {
         scene_id,
@@ -597,7 +645,7 @@ fn rho_studio_scene(
         layout_revision: 1,
         root: LayoutNodeV1::Container {
             node_id: next_node_id(),
-            axis: LayoutAxisV1::Vertical,
+            axis: LayoutAxisV1::Horizontal,
             children,
         },
         focused_surface_instance_id: agent.or(console).map(|spec| spec.instance_id.clone()),
@@ -1137,6 +1185,7 @@ mod tests {
                 contract_major: 1,
                 label: id.to_string(),
                 purpose: "profile fixture".to_string(),
+                icon: None,
                 renderer_kind: SurfaceRendererKindV1::TrustedHost,
                 scope: SurfaceScopeV1::Project,
                 instance_policy: SurfaceInstancePolicyV1::MultiInstance,

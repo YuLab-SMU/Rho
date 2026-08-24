@@ -9,6 +9,7 @@ pub const MAX_ID_BYTES: usize = 128;
 pub const MAX_LABEL_BYTES: usize = 512;
 pub const MAX_PURPOSE_BYTES: usize = 2 * 1024;
 pub const MAX_OPAQUE_TEXT_BYTES: usize = 4 * 1024;
+pub const MAX_ICON_BYTES: usize = 32;
 pub const MAX_BOUNDED_JSON_DEPTH: usize = 16;
 pub const MAX_BOUNDED_JSON_NODES: usize = 4_096;
 
@@ -132,6 +133,10 @@ pub fn validate_purpose(value: &str, path: &str) -> Result<(), ContractError> {
 
 pub fn validate_opaque_text(value: &str, path: &str) -> Result<(), ContractError> {
     validate_text(value, path, MAX_OPAQUE_TEXT_BYTES, false, false)
+}
+
+pub fn validate_icon(value: &str, path: &str) -> Result<(), ContractError> {
+    validate_text(value, path, MAX_ICON_BYTES, false, false)
 }
 
 pub fn ensure_revision(path: &str, expected: u64, actual: u64) -> Result<(), ContractError> {

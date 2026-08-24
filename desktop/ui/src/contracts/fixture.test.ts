@@ -35,8 +35,17 @@ describe("Rust-generated RSR contract fixture", () => {
     const scene = fixture.scenes[0];
     expect(scene?.root.kind).toBe("container");
     if (scene?.root.kind !== "container") throw new Error("fixture scene root changed");
-    expect(scene.root.children[0]?.basis).toEqual({ kind: "fraction", weight: 7 });
-    expect(JSON.stringify(scene)).toContain('"kind":"intrinsic"');
+    expect(scene.root.children[0]?.basis).toEqual({
+      kind: "minmax",
+      min_logical_pixels: 240,
+      max_logical_pixels: 340,
+      weight: 1,
+    });
+    expect(scene.root.children.map((child) => child.basis.kind)).toEqual([
+      "minmax",
+      "fraction",
+      "minmax",
+    ]);
 
     const page = fixture.pages[0];
     expect(page?.sections[0]?.layout.kind).toBe("grid");

@@ -21,6 +21,7 @@ pub const MAX_CONTRIBUTIONS_PER_PROJECT: usize = 256;
 pub const MAX_CONTRIBUTIONS_PER_PACKAGE: usize = 32;
 pub const MAX_CONTRIBUTION_LABEL_BYTES: usize = 128;
 pub const MAX_CONTRIBUTION_PURPOSE_BYTES: usize = 1024;
+pub const MAX_CONTRIBUTION_ICON_BYTES: usize = 32;
 pub const MAX_CONTRIBUTION_MEDIA_TYPES: usize = 16;
 pub const MAX_CONTRIBUTION_MEDIA_TYPE_BYTES: usize = 128;
 pub const PLUGIN_DETAILS_PANEL_SLOT: &str = "plugin_details";
@@ -89,6 +90,10 @@ pub struct ContributionDeclaration {
     pub contract_major: u64,
     pub label: String,
     pub purpose: String,
+    /// Optional short icon glyph (emoji or 1-2 characters) rendered by the
+    /// trusted shell, e.g. in the sidebar plugin rail.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input_schema: Option<BoundedJsonSchema>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -116,6 +121,9 @@ impl ContributionDeclaration {
         }
         validate_untrusted_text(&self.label, MAX_CONTRIBUTION_LABEL_BYTES, "label")?;
         validate_untrusted_text(&self.purpose, MAX_CONTRIBUTION_PURPOSE_BYTES, "purpose")?;
+        if let Some(icon) = &self.icon {
+            validate_untrusted_text(icon, MAX_CONTRIBUTION_ICON_BYTES, "icon")?;
+        }
         validate_media_types(&self.media_types)?;
 
         let has_call_schemas = self.input_schema.is_some() && self.output_schema.is_some();
@@ -206,6 +214,7 @@ pub struct Contribution {
     pub contract_major: u64,
     pub label: String,
     pub purpose: String,
+    pub icon: Option<String>,
     pub input_schema: Option<BoundedJsonSchema>,
     pub output_schema: Option<BoundedJsonSchema>,
     pub media_types: Vec<String>,
@@ -231,6 +240,7 @@ impl Contribution {
             contract_major: 1,
             label: label.into(),
             purpose: purpose.into(),
+            icon: None,
             input_schema: call_schema.clone(),
             output_schema: call_schema,
             media_types: Vec::new(),
@@ -253,6 +263,7 @@ impl Contribution {
             contract_major: declaration.contract_major,
             label: declaration.label,
             purpose: declaration.purpose,
+            icon: declaration.icon,
             input_schema: declaration.input_schema,
             output_schema: declaration.output_schema,
             media_types: declaration.media_types,
@@ -269,6 +280,7 @@ impl Contribution {
             contract_major: self.contract_major,
             label: self.label.clone(),
             purpose: self.purpose.clone(),
+            icon: self.icon.clone(),
             input_schema: self.input_schema.clone(),
             output_schema: self.output_schema.clone(),
             media_types: self.media_types.clone(),
@@ -731,6 +743,7 @@ mod tests {
             contract_major: 1,
             label: id.to_string(),
             purpose: "Exercise transactional contribution routing".to_string(),
+            icon: None,
             input_schema: Some(schema.clone()),
             output_schema: Some(schema),
             media_types: Vec::new(),

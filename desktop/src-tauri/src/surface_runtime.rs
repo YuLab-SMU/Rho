@@ -1235,6 +1235,7 @@ mod tests {
                 contract_major: 1,
                 label: "Fixture Surface".to_string(),
                 purpose: "Exercise the desktop Surface Runtime transaction boundary.".to_string(),
+                icon: None,
                 renderer_kind: SurfaceRendererKindV1::TrustedHost,
                 scope: SurfaceScopeV1::Project,
                 instance_policy: policy,

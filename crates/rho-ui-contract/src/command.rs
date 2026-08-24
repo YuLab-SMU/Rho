@@ -280,8 +280,8 @@ pub fn application_command_definitions_v1() -> Result<Vec<CommandDefinitionV1>, 
         ("git", "Open Git", "Open project source-control state."),
         (
             "runs",
-            "Open Runs",
-            "Open scientific run history and recovery actions.",
+            "Open History",
+            "Open scientific execution history and recovery actions.",
         ),
         (
             "artifacts",

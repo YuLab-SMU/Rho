@@ -2,7 +2,11 @@
 
 Status: active; ISSUE-15-EDITOR-1 implementation, automated contract
 verification, browser/mock review, and post-verification contract review
-complete 2026-08-10; installed Windows acceptance open
+complete 2026-08-10; RSR WP11 continuity implementation and automated/real-
+Monaco verification complete 2026-08-22; installed exact-app selection
+acceptance open; WP15 complete-expression amendment implemented and verified
+2026-08-23; WP15-R1 empty/comment-gap navigation repair owner-authorized and
+automated/browser verified 2026-08-23, with exact-app owner acceptance open
 
 Date: 2026-08-10
 Authorization: user requested implementation of GitHub Issue #15 and a pull
@@ -125,3 +129,73 @@ selection, and line completion may not transfer focus to Console; explicit
 Console-tab selection and interaction-revision-guarded Console-origin
 restoration remain valid. The original Issue #15 evidence remains historical
 for its exact implementation baseline and does not prove the amended rule.
+
+## Surface Runtime Continuity Amendment (authorized 2026-08-22)
+
+The RSR cutover retained Monaco, shared Resource drafts, Console Surfaces, and
+Runtime execution but omitted the WP2 Run action and shortcut from the new
+`SourceEditor` adapter. The owner explicitly requested restoration after
+observing the current Source/Console composition. WP11 of
+`active-2026-08-22-studio-design-language-and-ux-overhaul-design.md` owns the
+bounded RSR integration and multi-Console target rule; this document continues
+to own the invariant that an admitted current-line request advances exactly
+once, persists the new cursor, retains editor focus, and is not rolled back by
+later Runtime failure. Selection and empty-line behavior remain unchanged.
+
+The continuity implementation must reuse the exact chosen Console's existing
+Runtime execution lane and instance-local output. It adds no smart statement
+expansion, backend payload, schema, or execution authority. The 2026-08-10
+evidence remains historical and does not by itself prove the RSR adapter;
+WP11's new focused and complete affected verification is recorded below.
+
+WP11 has now restored the shared action in the RSR adapter. Six pure range
+tests, eight App regressions, the 105-test complete frontend gate, and real
+Monaco toolbar/current-line/advance/empty-line/focus review pass. The selected
+Console retains exact Runtime/Surface origin and its independent draft/output;
+rejection and later failure do not falsely move or roll back the cursor. Real
+browser automation could not deterministically produce a Monaco-native mouse
+selection, so the original literal-selection contract remains covered by pure
+and App-level regression evidence while owner exact-app selection feel
+acceptance stays open.
+
+## WP15 Complete R Expression Amendment (authorized 2026-08-23)
+
+The owner's demonstrated multi-line R call supersedes this document's
+physical-line-only and no-statement-expansion restrictions. With no selection,
+the shared toolbar/Command+Enter path now resolves the smallest lexically
+complete top-level R expression containing the cursor line. This is a bounded
+frontend lexical operation, not a semantic R parser, chunk runner or whole-file
+fallback. A literal selection remains unchanged.
+
+An admitted expression advances once to the first physical line after that
+expression, persists the cursor and retains Source focus. Incomplete or
+unbalanced expressions reject before Runtime admission and do not advance;
+later Runtime semantic failure still does not roll back an admitted advance.
+WP15 in the active Studio design contract owns expression boundaries and
+optional Source provenance. This document continues to own cursor, selection,
+focus and shortcut-parity invariants. All historical evidence above remains
+accurate for the superseded physical-line baseline rather than evidence for the
+new resolver.
+
+WP15 verification passed the 152-test complete frontend gate, including a
+Command+Enter regression from inside the demonstrated nested `do.call`/
+`lapply`/`function` expression, plus seven Runtime contract tests, two desktop
+range tests, Rust check/format, browser smoke and rebuilt debug-app review.
+Literal selection, one post-admission cursor transition and Source focus remain
+unchanged. Owner shortcut feel acceptance in the exact app remains open.
+
+WP15-R1 amends the cursor transition target only: after a complete expression,
+the cursor lands on the next executable expression rather than an intervening
+blank/comment-only line. Invoking the shortcut on such an intervening gap is a
+navigation-only action with no execution or error; a terminal gap is a quiet
+no-op. This does not change literal selection, complete-expression scope,
+post-admission ownership, editor focus, Runtime admission, or failure history.
+
+WP15-R1 verification passed LF/CRLF and continued-expression gap tests,
+toolbar/Command+Enter navigation, delayed Console-persistence sequencing,
+raw-string Runtime rejection projection and live History reload. The focused
+gate passed 108 tests and the complete frontend gate passed 158 tests with
+typecheck, lint, build/asset/cutover checks and browser smoke. Seven Runtime
+contract tests, two desktop range tests, Rust format/check and diff validation
+passed. The raw debug binary was rebuilt and launched without closing older
+windows; exact-app owner interaction acceptance remains open.

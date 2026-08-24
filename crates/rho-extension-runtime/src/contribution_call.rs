@@ -661,6 +661,7 @@ mod tests {
             contract_major: 1,
             label: "Read fixture".to_string(),
             purpose: "Read bounded fixture metadata".to_string(),
+            icon: None,
             input_schema: Some(schema(json!({"type": "object", "properties": {}}))),
             output_schema: Some(schema(json!({
                 "type": "object",

@@ -1,5 +1,9 @@
 import type {
   AgentConversationSummary,
+  AgentContextPlanPreview,
+  AgentContextPreviewRequest,
+  AgentContextCapacityRequest,
+  AgentLlmSettingsView,
   AgentRuntimeDiagnostics,
   AgentFileMutationResponse,
   AgentTurnDetail,
@@ -15,6 +19,8 @@ import type {
   PluginSurfaceDocumentView,
   PluginSurfaceEventRequest,
   PluginSurfaceEventResult,
+  PlotImageView,
+  ProjectSwitchResponse,
   ProjectUiProfileSnapshot,
   ResourceContent,
   ResourceDeleteRequest,
@@ -30,7 +36,19 @@ import type {
   RuntimeCreateRequest,
   RuntimeDetachRequest,
   RuntimeExecuteRequest,
-  RuntimeExecutionResult,
+  RuntimeExecution,
+  RuntimeExecutionCursor,
+  RuntimeExecutionDeleteResult,
+  RuntimeExecutionStartResponse,
+  RuntimeOutputFollowFrame,
+  RuntimeOutputPage,
+  RuntimeOutputPageRequest,
+  RuntimeOutputPruneResult,
+  RuntimeOutputReference,
+  RuntimeOutputSearchRequest,
+  RuntimeOutputSearchResult,
+  RuntimeOutputPolicyUpdate,
+  RuntimeOutputPolicyView,
   RuntimeInstanceRequest,
   RuntimeRegistrySnapshot,
   SceneEditRequest,
@@ -52,18 +70,14 @@ import type {
   VibePageMutationRequest,
   WorkspacePreparation,
 } from "./types";
+import { Channel } from "@tauri-apps/api/core";
+import { invalidationEvents } from "./invalidation-contract";
 
 export type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 export type Listen = <T>(
   event: string,
   handler: (event: { readonly payload: T }) => void,
 ) => Promise<Unsubscribe>;
-
-const INVALIDATION_EVENTS = [
-  "rho://ui-snapshot-invalidated",
-  "project://files-changed",
-  "rho://agent-turn-updated",
-] as const;
 
 function boundedJson(value: unknown): string | null {
   if (value == null) return null;
@@ -111,9 +125,9 @@ function domainData(surfaceId: string, payload: unknown): DomainSurfaceData {
     return {
       id,
       title: recordValue(record, [
-        "title", "message", "summary", "package", "name", "output_path", "path", "request_type", "artifact_kind", "branch",
+        "title", "message", "summary", "package", "name", "output_path", "path", "source_path", "request_type", "artifact_kind", "branch", "media_type",
       ]) ?? id,
-      subtitle: recordValue(record, ["source_path", "kind", "version", "author", "date", "mode", "tool"]),
+      subtitle: recordValue(record, ["source_path", "media_type", "kind", "version", "author", "date", "started_at", "mode", "tool", "request_type"]),
       status: recordValue(record, ["status", "severity", "state"]),
       detail: boundedJson(record),
     };
@@ -240,11 +254,13 @@ export function createTauriUiKernelTransport(
         };
       }
     },
+    openProject: (path) => invoke<ProjectSwitchResponse>("project_open", { path }),
+    pickProjectDirectory: () => invoke<ProjectSwitchResponse>("project_pick_directory"),
     loadSnapshot: () => invoke<UiKernelSnapshot>("ui_kernel_snapshot"),
     setSelection: (request) =>
       invoke<UiKernelSnapshot>("ui_set_selection", { request }),
     subscribeInvalidated: (listener) =>
-      subscribeEvents(listen, INVALIDATION_EVENTS, listener),
+      subscribeEvents(listen, invalidationEvents("kernel"), listener),
     loadSurfaces: () => invoke<SurfaceRuntimeSnapshot>("surface_list"),
     openSurface: (request: OpenSurfaceRequest) =>
       invoke<SurfaceRuntimeSnapshot>("surface_open", { request }),
@@ -257,35 +273,19 @@ export function createTauriUiKernelTransport(
     resumeSurface: (request: SurfaceInstanceRequest) =>
       invoke<SurfaceRuntimeSnapshot>("surface_resume", { request }),
     subscribeSurfacesInvalidated: (listener) =>
-      subscribeEvents(
-        listen,
-        ["rho://surface-runtime-changed", "rho://ui-snapshot-invalidated"],
-        listener,
-      ),
+      subscribeEvents(listen, invalidationEvents("surfaces"), listener),
     loadPluginSurfaceDocument: (request: PluginSurfaceDocumentRequest) =>
       invoke<PluginSurfaceDocumentView>("plugin_surface_document", { request }),
     dispatchPluginSurfaceEvent: (request: PluginSurfaceEventRequest) =>
       invoke<PluginSurfaceEventResult>("plugin_surface_event", { request }),
     subscribePluginSurfacesInvalidated: (listener) =>
-      subscribeEvents(
-        listen,
-        [
-          "rho://plugin-surface-changed",
-          "rho://surface-runtime-changed",
-          "rho://ui-snapshot-invalidated",
-        ],
-        listener,
-      ),
+      subscribeEvents(listen, invalidationEvents("plugin-surfaces"), listener),
     runCheckProject: (request: CheckRunRequest) =>
       invoke<CheckRunResponse>("check_project_run", { request }),
     loadCheckResult: (request: CheckResultRequest) =>
       invoke<CheckResult>("check_result", { request }),
     subscribeCheckResultsInvalidated: (listener) =>
-      subscribeEvents(
-        listen,
-        ["rho://check-results-changed", "rho://ui-snapshot-invalidated"],
-        listener,
-      ),
+      subscribeEvents(listen, invalidationEvents("check-results"), listener),
     loadStudio: () => invoke<StudioRuntimeSnapshot>("studio_scene"),
     applyStudio: (request: SceneEditRequest) =>
       invoke<StudioRuntimeSnapshot>("studio_apply", { request }),
@@ -294,15 +294,7 @@ export function createTauriUiKernelTransport(
     redoStudio: (request: StudioRevisionRequest) =>
       invoke<StudioRuntimeSnapshot>("studio_redo", { request }),
     subscribeStudioInvalidated: (listener) =>
-      subscribeEvents(
-        listen,
-        [
-          "rho://studio-runtime-changed",
-          "rho://surface-runtime-changed",
-          "rho://ui-snapshot-invalidated",
-        ],
-        listener,
-      ),
+      subscribeEvents(listen, invalidationEvents("studio"), listener),
     loadUiProfile: () => invoke<ProjectUiProfileSnapshot>("ui_profile_snapshot"),
     setUiProfileMode: (request: UiProfileSetModeRequest) =>
       invoke<ProjectUiProfileSnapshot>("ui_profile_set_mode", { request }),
@@ -325,11 +317,7 @@ export function createTauriUiKernelTransport(
     resetUiProfileScene: (request: UiProfileSceneTargetRequest) =>
       invoke<ProjectUiProfileSnapshot>("ui_profile_scene_reset", { request }),
     subscribeUiProfileInvalidated: (listener) =>
-      subscribeEvents(
-        listen,
-        ["rho://ui-profile-changed", "rho://ui-snapshot-invalidated"],
-        listener,
-      ),
+      subscribeEvents(listen, invalidationEvents("profile"), listener),
     loadRuntimes: () => invoke<RuntimeRegistrySnapshot>("runtime_list"),
     createRuntime: (request: RuntimeCreateRequest) =>
       invoke<RuntimeRegistrySnapshot>("runtime_create", { request }),
@@ -343,14 +331,46 @@ export function createTauriUiKernelTransport(
       invoke<RuntimeRegistrySnapshot>("runtime_restart", { request }),
     stopRuntime: (request: RuntimeInstanceRequest) =>
       invoke<RuntimeRegistrySnapshot>("runtime_stop", { request }),
-    executeRuntime: (request: RuntimeExecuteRequest) =>
-      invoke<RuntimeExecutionResult>("runtime_execute", { request }),
+    startRuntimeExecution: (request: RuntimeExecuteRequest) =>
+      invoke<RuntimeExecutionStartResponse>("runtime_execution_start", { request }),
+    getRuntimeExecution: (executionId: string) =>
+      invoke<RuntimeExecution>("runtime_execution_get", { request: { execution_id: executionId } }),
+    listRuntimeExecutions: (limit = 50, before?: RuntimeExecutionCursor) =>
+      invoke<readonly RuntimeExecution[]>("runtime_execution_list", { request: {
+        limit,
+        before_started_at: before?.started_at,
+        before_execution_id: before?.execution_id,
+      } }),
+    loadRuntimeOutputPage: (request: RuntimeOutputPageRequest) =>
+      invoke<RuntimeOutputPage>("runtime_output_page", { request }),
+    searchRuntimeOutput: (request: RuntimeOutputSearchRequest) =>
+      invoke<RuntimeOutputSearchResult>("runtime_output_search", { request }),
+    getRuntimeOutputPolicy: () =>
+      invoke<RuntimeOutputPolicyView>("runtime_output_policy_get"),
+    updateRuntimeOutputPolicy: (request: RuntimeOutputPolicyUpdate) =>
+      invoke<RuntimeOutputPolicyView>("runtime_output_policy_update", { request }),
+    createRuntimeOutputReference: (executionId: string, startSequence?: number, endSequence?: number) =>
+      invoke<RuntimeOutputReference>("runtime_output_reference", {
+        request: {
+          execution_id: executionId,
+          start_sequence: startSequence,
+          end_sequence: endSequence,
+        },
+      }),
+    pruneRuntimeOutput: (executionId: string) =>
+      invoke<RuntimeOutputPruneResult>("runtime_output_prune", { request: { execution_id: executionId } }),
+    deleteRuntimeExecution: (executionId: string) =>
+      invoke<RuntimeExecutionDeleteResult>("runtime_execution_delete", { request: { execution_id: executionId } }),
+    followRuntimeOutput: async (executionId, afterSequence, listener) => {
+      const channel = new Channel<RuntimeOutputFollowFrame>();
+      channel.onmessage = listener;
+      await invoke<void>("runtime_output_follow", {
+        request: { execution_id: executionId, after_sequence: afterSequence },
+        channel,
+      });
+    },
     subscribeRuntimesInvalidated: (listener) =>
-      subscribeEvents(
-        listen,
-        ["rho://runtime-registry-changed", "rho://ui-snapshot-invalidated"],
-        listener,
-      ),
+      subscribeEvents(listen, invalidationEvents("runtimes"), listener),
     loadResources: () => invoke<ResourceRegistrySnapshot>("resource_list"),
     resolveResource: (request: ResourceResolveRequest) =>
       invoke<ResourceRegistrySnapshot>("resource_resolve", { request }),
@@ -367,11 +387,7 @@ export function createTauriUiKernelTransport(
     deleteResource: (request: ResourceDeleteRequest) =>
       invoke<ResourceRegistrySnapshot>("resource_delete", { request }),
     subscribeResourcesInvalidated: (listener) =>
-      subscribeEvents(
-        listen,
-        ["rho://resource-registry-changed", "rho://ui-snapshot-invalidated"],
-        listener,
-      ),
+      subscribeEvents(listen, invalidationEvents("resources"), listener),
     listAgentConversations: (limit = 50) =>
       invoke<readonly AgentConversationSummary[]>("list_agent_conversations", { limit }),
     createAgentConversation: () =>
@@ -380,6 +396,20 @@ export function createTauriUiKernelTransport(
       invoke<readonly AgentTurnSummary[]>("list_agent_turns", { conversationId, limit }),
     getAgentTurnDetail: (turnId) =>
       invoke<AgentTurnDetail | null>("get_agent_turn_detail", { turnId }),
+    loadAgentLlmSettings: () =>
+      invoke<AgentLlmSettingsView>("agent_llm_settings"),
+    setAgentContextCapacity: (request: AgentContextCapacityRequest) =>
+      invoke<AgentLlmSettingsView>("agent_llm_set_context_capacity", { request }),
+    previewAgentContext: (request: AgentContextPreviewRequest) =>
+      invoke<AgentContextPlanPreview>("agent_context_preview", {
+        prompt: request.prompt,
+        mode: request.mode,
+        taskKind: request.task_kind,
+        modelId: request.model_id,
+        editorContext: request.editor_context,
+        conversationId: request.conversation_id,
+        runtimeOutputContext: request.runtime_output_context,
+      }),
     runAgent: (request) => invoke<RunAgentResponse>("run_agent", {
       prompt: request.prompt,
       mode: request.mode,
@@ -388,6 +418,8 @@ export function createTauriUiKernelTransport(
       autoApprove: request.auto_approve,
       editorContext: request.editor_context,
       conversationId: request.conversation_id,
+      runtimeOutputContext: request.runtime_output_context,
+      contextPlanDigest: request.context_plan_digest,
     }),
     retryAgentTurn: (turnId) =>
       invoke<RunAgentResponse>("retry_agent_turn", { turnId }),
@@ -398,11 +430,7 @@ export function createTauriUiKernelTransport(
     retryAgentRuntime: () =>
       invoke<AgentRuntimeDiagnostics>("agent_runtime_retry"),
     subscribeAgentInvalidated: (listener) =>
-      subscribeEvents(
-        listen,
-        ["rho://agent-turn-updated", "rho://ui-snapshot-invalidated"],
-        listener,
-      ),
+      subscribeEvents(listen, invalidationEvents("agent"), listener),
     loadDomainSurface: async (surfaceId) => {
       let payload: unknown;
       switch (surfaceId) {
@@ -457,6 +485,7 @@ export function createTauriUiKernelTransport(
       }
       return domainData(surfaceId, payload);
     },
+    readPlotArtifact: (plotId) => invoke<PlotImageView>("read_plot_artifact", { plotId }),
     retryRun: (runId) => invoke("retry_run", { runId }),
     applyAgentFileEdit: (request) => invoke<AgentFileMutationResponse>("apply_agent_file_edit", {
       request: {

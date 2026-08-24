@@ -81,7 +81,10 @@ Stop and amend/review the contract before continuing when:
   before `cargo +stable-x86_64-pc-windows-gnu ...`
 
 - Keep browser/mock mode in lockstep with new Tauri commands.
-  If a new desktop command changes Environment panel state, add a mock handler in `desktop/dist/app.js` in the same round. Otherwise UI review in browser mode quickly drifts away from the real contract.
+  If a new desktop command changes Environment panel state, add the mock handler in `desktop/ui/src/transport/mock.ts` in the same round (the legacy `desktop/dist/app.js` no longer exists; parity is enforced by `scripts/test-rsr-contract.mjs`). Otherwise UI review in browser mode quickly drifts away from the real contract.
+
+- Frontend styles live in the design-token suite under `desktop/ui/src/styles/`.
+  `foundation.css` is only the layer-ordered aggregator; edit `tokens.css`, `base.css`, `components.css`, `workbench.css`, or `surfaces.css` instead. Visual values must come from tokens (`docs/design/active-2026-08-22-studio-design-language-and-ux-overhaul-design.md`), not new hard-coded colors or sizes.
 
 - Do not trust `msedge --dump-dom` blindly for local preview evidence on Windows.
   In this repo it can return empty output even when the page rendered and screenshots succeeded. Keep a deterministic preview hook in the page, and treat screenshot readiness checks as the primary fallback when DOM capture goes mute.

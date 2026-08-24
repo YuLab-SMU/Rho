@@ -26,6 +26,8 @@ test_that("aisdk workspace tools target the broker boundary", {
     c(
       "get_workspace_snapshot",
       "inspect_r_object",
+      "read_conversation_turn",
+      "read_runtime_output",
       "run_r",
       "initialize_project_environment",
       "restore_project_environment",
@@ -41,6 +43,8 @@ test_that("aisdk workspace tools target the broker boundary", {
     vapply(tools, function(tool) tool$name, character(1L))
   )
   expect_identical(approvals[["get_workspace_snapshot"]], "automatic")
+  expect_identical(approvals[["read_conversation_turn"]], "automatic")
+  expect_identical(approvals[["read_runtime_output"]], "automatic")
   expect_identical(approvals[["propose_file_edit"]], "automatic")
   expect_true(all(approvals[c(
     "run_r", "initialize_project_environment", "restore_project_environment",

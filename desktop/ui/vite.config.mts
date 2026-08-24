@@ -3,12 +3,29 @@ import { URL, fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
+import { currentBuildIdentity } from "../../scripts/rsr-build-identity.mjs";
+
 const uiRoot = fileURLToPath(new URL(".", import.meta.url));
 
 export default defineConfig({
   root: uiRoot,
   base: "./",
-  plugins: [react()],
+  define: {
+    __RHO_FRONTEND_BUILD_ID__: JSON.stringify(currentBuildIdentity.id),
+  },
+  plugins: [
+    react(),
+    {
+      name: "rho-build-identity",
+      generateBundle() {
+        this.emitFile({
+          type: "asset",
+          fileName: "build-identity.json",
+          source: `${JSON.stringify({ build_id: currentBuildIdentity.id })}\n`,
+        });
+      },
+    },
+  ],
   server: {
     host: "127.0.0.1",
     port: 1421,

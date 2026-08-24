@@ -1,0 +1,87 @@
+/* Rho Studio design tokens — the single source of visual truth.
+   Contract: docs/design/active-2026-08-22-studio-design-language-and-ux-overhaul-design.md */
+
+@layer tokens {
+  :root {
+    color-scheme: light;
+    font-family: var(--rho-font-ui);
+    color: var(--rho-ink);
+    background: var(--rho-canvas);
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+
+    /* Ink on paper. Functional color is reserved for status semantics. */
+    --rho-ink: #1b1b1b;
+    --rho-ink-2: #4a4a4a;
+    --rho-muted: #767676;
+    --rho-line: #d9d9d9;
+    --rho-line-strong: #1b1b1b;
+    --rho-paper: #ffffff;
+    --rho-panel: #fafafa;
+    --rho-canvas: #f0f0f0;
+    --rho-fill: #efefef;
+    --rho-fill-2: #e4e4e4;
+    --rho-inverse: #1b1b1b;
+    --rho-on-inverse: #ffffff;
+
+    /* Status semantics only; never the sole carrier of meaning. */
+    --rho-ok: #1e7f4f;
+    --rho-warn: #9a6a00;
+    --rho-danger: #b3261e;
+    --rho-ok-tint: color-mix(in srgb, var(--rho-ok) 8%, var(--rho-paper));
+    --rho-warn-tint: color-mix(in srgb, var(--rho-warn) 6%, var(--rho-paper));
+    --rho-danger-tint: color-mix(in srgb, var(--rho-danger) 6%, var(--rho-paper));
+
+    /* Typography. 12px is the default UI size; nothing below 11px. */
+    --rho-font-ui: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --rho-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --rho-font-doc: Georgia, "Times New Roman", serif;
+    --rho-text-caption: 0.6875rem;
+    --rho-text-ui: 0.75rem;
+    --rho-text-body: 0.8125rem;
+    --rho-text-title: 0.9375rem;
+    --rho-text-head: 1.0625rem;
+    --rho-text-display: 1.25rem;
+    --rho-text-hero: 1.5rem;
+    --rho-weight-regular: 400;
+    --rho-weight-medium: 500;
+    --rho-weight-semibold: 650;
+
+    /* Spacing scale. */
+    --rho-space-1: 2px;
+    --rho-space-2: 4px;
+    --rho-space-3: 8px;
+    --rho-space-4: 12px;
+    --rho-space-5: 16px;
+    --rho-space-6: 24px;
+    --rho-space-7: 32px;
+    --rho-space-8: 48px;
+
+    /* Shape. */
+    --rho-radius-1: 3px;
+    --rho-radius-2: 6px;
+    --rho-border: 1px solid var(--rho-line);
+    --rho-border-strong: 1px solid var(--rho-line-strong);
+
+    /* Elevation: floating layers only. */
+    --rho-shadow-float: 0 8px 24px rgb(0 0 0 / 12%);
+
+    /* Interaction geometry. */
+    --rho-focus-ring: 2px solid var(--rho-ink);
+    --rho-target-min: 28px;
+    --rho-target-preferred: 36px;
+    --rho-control-small: 24px;
+
+    /* Frame geometry (UI-design sheet 1). */
+    --rho-bar-height: 56px;
+    --rho-rail-width: 4rem;
+    --rho-statusbar-height: 28px;
+    --rho-nav-min: 240px;
+    --rho-nav-max: 340px;
+    --rho-context-min: 340px;
+    --rho-context-max: 520px;
+    --rho-toolbar-popover-width: 18rem;
+    --rho-toolbar-search-width: 28rem;
+    --rho-toolbar-slot-max: 18rem;
+  }
+}
