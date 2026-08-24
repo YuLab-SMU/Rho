@@ -17,6 +17,7 @@ export type { AgentSettingsTransport } from "./agent-settings";
 export type { AgentFileTransport } from "./agent-file";
 export type { PluginSurfaceTransport } from "./plugin-surface";
 export type { ProjectTransport } from "./project";
+export type { KernelTransport } from "./kernel-generated";
 
 export function createUiKernelTransport(): UiKernelTransport {
   if (isTauri()) {

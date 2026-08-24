@@ -6,7 +6,6 @@ import type {
   DomainSurfaceData,
   DomainSurfaceItem,
   PlotImageView,
-  UiKernelSnapshot,
   UiKernelTransport,
   Unsubscribe,
   WorkspacePreparation,
@@ -23,6 +22,7 @@ import {
   createTauriProjectTransport,
   normalizeProjectSwitchResponse,
 } from "./project";
+import { createTauriKernelTransport } from "./kernel-generated";
 import { createTauriAgentTurnDetailTransport } from "./agent-turn";
 import { createTauriProfileTransport } from "./profile";
 import { createTauriResourceTransport } from "./resource";
@@ -124,6 +124,7 @@ export function createTauriUiKernelTransport(
 ): UiKernelTransport {
   const agentRuntimeTransport = createTauriAgentRuntimeTransport(invoke);
   const projectCommands = createTauriProjectCommands(invoke);
+  const kernelTransport = createTauriKernelTransport(invoke);
   return {
     source: "tauri",
     async prepareWorkspace(chooseRscript = false): Promise<WorkspacePreparation> {
@@ -216,9 +217,7 @@ export function createTauriUiKernelTransport(
       }
     },
     ...createTauriProjectTransport(projectCommands),
-    loadSnapshot: () => invoke<UiKernelSnapshot>("ui_kernel_snapshot"),
-    setSelection: (request) =>
-      invoke<UiKernelSnapshot>("ui_set_selection", { request }),
+    ...kernelTransport,
     subscribeInvalidated: (listener) =>
       subscribeEvents(listen, invalidationEvents("kernel"), listener),
     ...createTauriSurfaceStudioTransport(invoke),
@@ -280,7 +279,7 @@ export function createTauriUiKernelTransport(
         }
         case "rho.help": {
           const [snapshot, app] = await Promise.all([
-            invoke<UiKernelSnapshot>("ui_kernel_snapshot"),
+            kernelTransport.loadSnapshot(),
             invoke<{
               readonly version: string;
               readonly commit: string;

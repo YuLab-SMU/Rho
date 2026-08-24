@@ -11,7 +11,7 @@ use rho_ui_contract::{
     UiHealthSnapshotV1, UiKernelSnapshotV1, UiProjectV1, UiSelectionV1, Validate,
     application_command_registry_v1, encoded_json_len, next_revision,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tauri::{AppHandle, Emitter, State};
 
@@ -42,10 +42,12 @@ pub(crate) struct UiRuntimeState {
     inner: StdMutex<UiRuntimeInner>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub(crate) struct SetUiSelectionRequest {
     project_id: ProjectId,
+    #[specta(type = rho_ui_contract::UiIpcNumber)]
     expected_project_revision: u64,
+    #[specta(type = rho_ui_contract::UiIpcNumber)]
     expected_snapshot_revision: u64,
     selection: Option<UiSelectionV1>,
 }
@@ -524,6 +526,7 @@ pub(crate) fn emit_snapshot_invalidated(app: &AppHandle, reason: &str) {
     );
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn ui_kernel_snapshot(
     state: State<'_, AppState>,
@@ -535,6 +538,7 @@ pub(crate) async fn ui_kernel_snapshot(
         .map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn ui_set_selection(
     request: SetUiSelectionRequest,
@@ -776,5 +780,35 @@ mod tests {
             );
         }
         assert!(registry.registrations.len() < application_command_count + 20);
+    }
+
+    #[test]
+    fn kernel_ipc_serialization_matches_generated_contract() {
+        let snapshot = snapshot("project:fixture", 7);
+        let request = selection_request(&snapshot);
+        let snapshot = serde_json::to_value(snapshot).unwrap();
+        let request = serde_json::to_value(request).unwrap();
+        assert_eq!(snapshot["contract"], UI_KERNEL_SNAPSHOT_CONTRACT);
+        assert_eq!(snapshot["contract_major"], 1);
+        assert_eq!(snapshot["context"]["project_revision"], 7);
+        assert!(snapshot["command_registry"]["registrations"].is_array());
+        assert_eq!(request["project_id"], "project:fixture");
+        assert_eq!(request["expected_project_revision"], 7);
+        assert_eq!(request["selection"]["kind"], "resource");
+    }
+
+    #[test]
+    #[ignore = "writes the requested generated TypeScript contract"]
+    fn kernel_typescript_export() {
+        let output_path = std::env::var_os("RHO_KERNEL_BINDINGS_PATH")
+            .expect("RHO_KERNEL_BINDINGS_PATH must name the generated file");
+        tauri_specta::Builder::<tauri::Wry>::new()
+            .commands(tauri_specta::collect_commands![
+                super::ui_kernel_snapshot,
+                super::ui_set_selection,
+            ])
+            .error_handling(tauri_specta::ErrorHandlingMode::Throw)
+            .export(specta_typescript::Typescript::default(), output_path)
+            .expect("Kernel TypeScript export must succeed");
     }
 }

@@ -8,7 +8,7 @@ use crate::{
 pub const UI_KERNEL_SNAPSHOT_CONTRACT: &str = "rho.ui.kernel.snapshot.v1";
 pub const MAX_UI_KERNEL_SNAPSHOT_BYTES: usize = 2 * 1024 * 1024;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct UiProjectV1 {
     pub project_id: ProjectId,
     pub display_label: String,
@@ -22,7 +22,7 @@ impl Validate for UiProjectV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct UiHealthDetailV1 {
     pub state: HealthStateV1,
     pub label: String,
@@ -39,7 +39,7 @@ impl Validate for UiHealthDetailV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct UiHealthSnapshotV1 {
     pub workspace: UiHealthDetailV1,
     pub agent: UiHealthDetailV1,
@@ -52,10 +52,12 @@ impl Validate for UiHealthSnapshotV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct UiKernelSnapshotV1 {
     pub contract: String,
+    #[specta(type = crate::UiIpcNumber)]
     pub contract_major: u16,
+    #[specta(type = crate::UiIpcNumber)]
     pub snapshot_revision: u64,
     pub project: UiProjectV1,
     pub context: UiContextV1,

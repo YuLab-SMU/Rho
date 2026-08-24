@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -19,7 +21,18 @@ pub const PREDICATE_ACTIVE_OPERATION: &str = "rho.predicate.active-operation";
 pub const PREDICATE_AGENT_READY: &str = "rho.predicate.agent-ready";
 pub const PREDICATE_PLUGIN_READY: &str = "rho.predicate.plugin-ready";
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(untagged)]
+enum UiContractJsonValue {
+    Null(()),
+    Boolean(bool),
+    Number(f64),
+    String(String),
+    Array(Vec<UiContractJsonValue>),
+    Object(BTreeMap<String, UiContractJsonValue>),
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum CommandPlacementTagV1 {
     Palette,
@@ -43,11 +56,12 @@ impl CommandPlacementTagV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct CommandDefinitionV1 {
     pub command_id: CommandId,
     pub label: String,
     pub purpose: String,
+    #[specta(type = UiContractJsonValue)]
     pub input_schema: Value,
     pub consequence: String,
     pub availability_predicate_id: PredicateId,
@@ -86,7 +100,7 @@ impl Validate for CommandDefinitionV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(tag = "state", rename_all = "snake_case")]
 pub enum CommandAvailabilityV1 {
     Available,
@@ -104,9 +118,10 @@ impl Validate for CommandAvailabilityV1 {
 
 /// One exact command registration. Availability is presentation state only:
 /// execution must still pass the owning broker command's admission checks.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct CommandRegistrationV1 {
     pub definition: CommandDefinitionV1,
+    #[specta(type = crate::UiIpcNumber)]
     pub activation_generation: u64,
     pub availability: CommandAvailabilityV1,
 }
@@ -124,7 +139,7 @@ impl Validate for CommandRegistrationV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct CommandRegistryV1 {
     pub registrations: Vec<CommandRegistrationV1>,
 }

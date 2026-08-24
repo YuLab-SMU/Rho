@@ -7,7 +7,7 @@ use crate::{
 
 pub const MAX_ACTIVE_OPERATIONS: usize = 64;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum HealthStateV1 {
     Ready,
@@ -16,7 +16,7 @@ pub enum HealthStateV1 {
     Restarting,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ActiveOperationStateV1 {
     Queued,
@@ -25,7 +25,7 @@ pub enum ActiveOperationStateV1 {
     Cancelling,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct ActiveOperationV1 {
     pub operation_id: OperationId,
     pub label: String,
@@ -38,7 +38,7 @@ impl Validate for ActiveOperationV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum UiSelectionV1 {
     Resource {
@@ -46,7 +46,9 @@ pub enum UiSelectionV1 {
     },
     TextRange {
         binding: ResourceBindingV1,
+        #[specta(type = crate::UiIpcNumber)]
         start: u64,
+        #[specta(type = crate::UiIpcNumber)]
         end: u64,
     },
     Run {
@@ -104,9 +106,10 @@ impl Validate for UiSelectionV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct UiContextV1 {
     pub project_id: ProjectId,
+    #[specta(type = crate::UiIpcNumber)]
     pub project_revision: u64,
     pub scene_id: Option<SceneId>,
     pub page_id: Option<PageId>,
