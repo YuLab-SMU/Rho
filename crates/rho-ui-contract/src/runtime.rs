@@ -312,7 +312,7 @@ impl Validate for RuntimeInstanceRequestV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct RuntimeAttachmentRequestV1 {
     pub runtime: RuntimeInstanceRequestV1,
     pub surface: SurfaceInstanceRequestV1,
@@ -335,7 +335,7 @@ impl Validate for RuntimeAttachmentRequestV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct RuntimeDetachRequestV1 {
     pub surface: SurfaceInstanceRequestV1,
 }

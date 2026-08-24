@@ -14,7 +14,6 @@ import type {
   CheckRunResponse,
   DomainSurfaceData,
   DomainSurfaceItem,
-  OpenSurfaceRequest,
   PluginSurfaceDocumentRequest,
   PluginSurfaceDocumentView,
   PluginSurfaceEventRequest,
@@ -32,14 +31,6 @@ import type {
   ResourceResolveRequest,
   ResourceSaveRequest,
   RunAgentResponse,
-  RuntimeAttachmentRequest,
-  RuntimeDetachRequest,
-  SceneEditRequest,
-  StudioRevisionRequest,
-  StudioRuntimeSnapshot,
-  SurfaceInstanceRequest,
-  SurfaceRuntimeSnapshot,
-  UpdateSurfaceRequest,
   UiKernelSnapshot,
   UiKernelTransport,
   Unsubscribe,
@@ -56,6 +47,7 @@ import type {
 import { invalidationEvents } from "./invalidation-contract";
 import { createTauriRuntimeTransport } from "./runtime";
 import { createTauriRuntimeOutputTransport } from "./runtime-output";
+import { createTauriSurfaceStudioTransport } from "./surface-studio";
 
 export type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 export type Listen = <T>(
@@ -245,17 +237,7 @@ export function createTauriUiKernelTransport(
       invoke<UiKernelSnapshot>("ui_set_selection", { request }),
     subscribeInvalidated: (listener) =>
       subscribeEvents(listen, invalidationEvents("kernel"), listener),
-    loadSurfaces: () => invoke<SurfaceRuntimeSnapshot>("surface_list"),
-    openSurface: (request: OpenSurfaceRequest) =>
-      invoke<SurfaceRuntimeSnapshot>("surface_open", { request }),
-    updateSurface: (request: UpdateSurfaceRequest) =>
-      invoke<SurfaceRuntimeSnapshot>("surface_update", { request }),
-    closeSurface: (request: SurfaceInstanceRequest) =>
-      invoke<SurfaceRuntimeSnapshot>("surface_close", { request }),
-    suspendSurface: (request: SurfaceInstanceRequest) =>
-      invoke<SurfaceRuntimeSnapshot>("surface_suspend", { request }),
-    resumeSurface: (request: SurfaceInstanceRequest) =>
-      invoke<SurfaceRuntimeSnapshot>("surface_resume", { request }),
+    ...createTauriSurfaceStudioTransport(invoke),
     subscribeSurfacesInvalidated: (listener) =>
       subscribeEvents(listen, invalidationEvents("surfaces"), listener),
     loadPluginSurfaceDocument: (request: PluginSurfaceDocumentRequest) =>
@@ -270,13 +252,6 @@ export function createTauriUiKernelTransport(
       invoke<CheckResult>("check_result", { request }),
     subscribeCheckResultsInvalidated: (listener) =>
       subscribeEvents(listen, invalidationEvents("check-results"), listener),
-    loadStudio: () => invoke<StudioRuntimeSnapshot>("studio_scene"),
-    applyStudio: (request: SceneEditRequest) =>
-      invoke<StudioRuntimeSnapshot>("studio_apply", { request }),
-    undoStudio: (request: StudioRevisionRequest) =>
-      invoke<StudioRuntimeSnapshot>("studio_undo", { request }),
-    redoStudio: (request: StudioRevisionRequest) =>
-      invoke<StudioRuntimeSnapshot>("studio_redo", { request }),
     subscribeStudioInvalidated: (listener) =>
       subscribeEvents(listen, invalidationEvents("studio"), listener),
     loadUiProfile: () => invoke<ProjectUiProfileSnapshot>("ui_profile_snapshot"),
@@ -303,10 +278,6 @@ export function createTauriUiKernelTransport(
     subscribeUiProfileInvalidated: (listener) =>
       subscribeEvents(listen, invalidationEvents("profile"), listener),
     ...createTauriRuntimeTransport(invoke),
-    attachRuntime: (request: RuntimeAttachmentRequest) =>
-      invoke<SurfaceRuntimeSnapshot>("runtime_attach", { request }),
-    detachRuntime: (request: RuntimeDetachRequest) =>
-      invoke<SurfaceRuntimeSnapshot>("runtime_detach", { request }),
     ...createTauriRuntimeOutputTransport(invoke),
     subscribeRuntimesInvalidated: (listener) =>
       subscribeEvents(listen, invalidationEvents("runtimes"), listener),

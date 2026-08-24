@@ -397,6 +397,7 @@ async fn prepare(
     Ok((surface, studio))
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn studio_scene(
     app: AppHandle,
@@ -409,6 +410,7 @@ pub(crate) async fn studio_scene(
         .map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn studio_apply(
     request: SceneEditRequestV1,
@@ -470,6 +472,7 @@ async fn mutate_history(
     Ok(transition.snapshot)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn studio_undo(
     request: StudioRevisionRequestV1,
@@ -479,6 +482,7 @@ pub(crate) async fn studio_undo(
     mutate_history(request, app, state, true).await
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn studio_redo(
     request: StudioRevisionRequestV1,

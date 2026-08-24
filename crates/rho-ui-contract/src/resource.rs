@@ -18,11 +18,12 @@ pub const MAX_RESOURCE_DOCUMENTS: usize = 128;
 pub const RESOURCE_REGISTRY_SNAPSHOT_CONTRACT: &str = "rho.ui.resource-registry.snapshot.v1";
 pub const RESOURCE_CONTENT_CONTRACT: &str = "rho.ui.resource-content.v1";
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct ResourceBindingV1 {
     pub resource_provider_id: ResourceProviderId,
     pub resource_kind: ResourceKindId,
     pub resource_id: String,
+    #[specta(type = Option<crate::UiIpcNumber>)]
     pub resource_revision: Option<u64>,
 }
 

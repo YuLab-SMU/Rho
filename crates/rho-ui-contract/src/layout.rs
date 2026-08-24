@@ -17,14 +17,14 @@ pub const MAX_LAYOUT_FRACTION_WEIGHT: u16 = 10_000;
 pub const STUDIO_RUNTIME_SNAPSHOT_CONTRACT: &str = "rho.ui.studio-runtime.snapshot.v1";
 pub const MAX_STUDIO_RUNTIME_SNAPSHOT_BYTES: usize = 2 * 1024 * 1024;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum LayoutAxisV1 {
     Horizontal,
     Vertical,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum LayoutBasisV1 {
     Auto,
@@ -91,7 +91,7 @@ fn validate_weight(value: u16, path: &str) -> Result<(), ContractError> {
     Ok(())
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct LayoutChildV1 {
     pub child: LayoutNodeV1,
     pub basis: LayoutBasisV1,
@@ -99,14 +99,14 @@ pub struct LayoutChildV1 {
     pub collapse_priority: Option<u16>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct StackNodeV1 {
     pub node_id: LayoutNodeId,
     pub active_instance_id: SurfaceInstanceId,
     pub instances: Vec<SurfaceInstanceId>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum LayoutNodeV1 {
     Container {
@@ -130,23 +130,26 @@ impl LayoutNodeV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct SceneStateV1 {
     pub scene_id: SceneId,
     pub project_id: ProjectId,
     pub label: String,
+    #[specta(type = crate::UiIpcNumber)]
     pub layout_revision: u64,
     pub root: LayoutNodeV1,
     pub focused_surface_instance_id: Option<SurfaceInstanceId>,
     pub utility_tray: Option<StackNodeV1>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct StudioRuntimeSnapshotV1 {
     pub contract: String,
     pub contract_major: u16,
+    #[specta(type = crate::UiIpcNumber)]
     pub snapshot_revision: u64,
     pub project_id: ProjectId,
+    #[specta(type = crate::UiIpcNumber)]
     pub project_revision: u64,
     pub scene: SceneStateV1,
     pub unplaced_instance_ids: Vec<SurfaceInstanceId>,
@@ -505,11 +508,12 @@ pub fn apply_scene_mutation(
     Ok(next)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum SceneEditV1 {
     InsertSurface {
         target_container_node_id: LayoutNodeId,
+        #[specta(type = crate::UiIpcNumber)]
         child_index: usize,
         instance_id: SurfaceInstanceId,
         basis: LayoutBasisV1,
@@ -517,6 +521,7 @@ pub enum SceneEditV1 {
     MoveSurface {
         instance_id: SurfaceInstanceId,
         target_container_node_id: LayoutNodeId,
+        #[specta(type = crate::UiIpcNumber)]
         child_index: usize,
         basis: LayoutBasisV1,
     },
@@ -527,6 +532,7 @@ pub enum SceneEditV1 {
     UnstackSurface {
         instance_id: SurfaceInstanceId,
         target_container_node_id: LayoutNodeId,
+        #[specta(type = crate::UiIpcNumber)]
         child_index: usize,
         basis: LayoutBasisV1,
     },
@@ -535,17 +541,20 @@ pub enum SceneEditV1 {
     },
     ResizeBoundary {
         container_node_id: LayoutNodeId,
+        #[specta(type = crate::UiIpcNumber)]
         before_child_index: usize,
         before_basis: LayoutBasisV1,
         after_basis: LayoutBasisV1,
     },
     SetChildBasis {
         container_node_id: LayoutNodeId,
+        #[specta(type = crate::UiIpcNumber)]
         child_index: usize,
         basis: LayoutBasisV1,
     },
     SetCollapsePriority {
         container_node_id: LayoutNodeId,
+        #[specta(type = crate::UiIpcNumber)]
         child_index: usize,
         collapse_priority: Option<u16>,
     },
@@ -569,10 +578,12 @@ pub enum SceneEditV1 {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct SceneEditRequestV1 {
     pub project_id: ProjectId,
+    #[specta(type = crate::UiIpcNumber)]
     pub expected_project_revision: u64,
+    #[specta(type = crate::UiIpcNumber)]
     pub expected_layout_revision: u64,
     pub edit: SceneEditV1,
 }
@@ -591,10 +602,12 @@ impl Validate for SceneEditRequestV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct StudioRevisionRequestV1 {
     pub project_id: ProjectId,
+    #[specta(type = crate::UiIpcNumber)]
     pub expected_project_revision: u64,
+    #[specta(type = crate::UiIpcNumber)]
     pub expected_layout_revision: u64,
 }
 

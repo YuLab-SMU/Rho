@@ -901,6 +901,7 @@ fn rebind_restarted_runtime(
     Ok(())
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn runtime_attach(
     request: RuntimeAttachmentRequestV1,
@@ -954,6 +955,7 @@ pub(crate) async fn runtime_attach(
     Ok(transition.snapshot)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn runtime_detach(
     request: RuntimeDetachRequestV1,

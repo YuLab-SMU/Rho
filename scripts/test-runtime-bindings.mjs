@@ -48,6 +48,10 @@ try {
   );
 
   const generated = fs.readFileSync(generatedPath, "utf8");
+  const surfaceGenerated = fs.readFileSync(
+    path.join(repositoryRoot, "desktop/ui/src/transport/generated/surface-studio.ts"),
+    "utf8",
+  );
   const tauri = fs.readFileSync(path.join(repositoryRoot, "desktop/ui/src/transport/tauri.ts"), "utf8");
   const types = fs.readFileSync(path.join(repositoryRoot, "desktop/ui/src/transport/types.ts"), "utf8");
   const facet = fs.readFileSync(path.join(repositoryRoot, "desktop/ui/src/transport/runtime.ts"), "utf8");
@@ -68,7 +72,12 @@ try {
   }
   for (const surfaceCommand of ["runtime_attach", "runtime_detach"]) {
     assert.equal(count(generated, `"${surfaceCommand}"`), 0, `${surfaceCommand} belongs to Surface IPC`);
-    assert.equal(count(tauri, `"${surfaceCommand}"`), 1, `${surfaceCommand} must remain until Surface migration`);
+    assert.equal(count(tauri, `"${surfaceCommand}"`), 0, `${surfaceCommand} must not remain handwritten`);
+    assert.equal(
+      count(surfaceGenerated, `"${surfaceCommand}"`),
+      1,
+      `${surfaceCommand} must be generated exactly once by Surface IPC`,
+    );
   }
   for (const typeName of [
     "RuntimeBinding",

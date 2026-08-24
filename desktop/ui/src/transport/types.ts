@@ -13,13 +13,19 @@ import type {
   RuntimeOutputSearchResult,
 } from "./runtime-output";
 import type {
-  RuntimeBinding,
   RuntimeCreateRequest,
   RuntimeExecuteRequest,
   RuntimeExecutionStartResponse,
   RuntimeInstanceRequest,
   RuntimeRegistrySnapshot,
 } from "./runtime";
+import type {
+  ResourceBinding,
+  SceneState,
+  SurfaceInstanceRequest,
+  SurfaceOrigin,
+  SurfaceStudioTransport,
+} from "./surface-studio";
 
 export type {
   RuntimeExecution,
@@ -62,6 +68,33 @@ export type {
   RuntimeTransport,
 } from "./runtime";
 
+export type {
+  LayoutAxis,
+  LayoutBasis,
+  LayoutChild,
+  LayoutNode,
+  OpenSurfaceRequest,
+  ResourceBinding,
+  RuntimeAttachmentRequest,
+  RuntimeDetachRequest,
+  SceneEdit,
+  SceneEditRequest,
+  SceneState,
+  StackNode,
+  StudioRevisionRequest,
+  StudioRuntimeSnapshot,
+  SurfaceDefinition,
+  SurfaceFactoryRegistration,
+  SurfaceInstance,
+  SurfaceInstanceMutation,
+  SurfaceInstanceRequest,
+  SurfaceLifecycleState,
+  SurfaceOrigin,
+  SurfaceRuntimeSnapshot,
+  SurfaceStudioTransport,
+  UpdateSurfaceRequest,
+} from "./surface-studio";
+
 export type UiSnapshotSource = "tauri" | "mock";
 export type HealthState = "ready" | "degraded" | "unavailable" | "restarting";
 export type ActiveOperationState = "queued" | "running" | "waiting" | "cancelling";
@@ -72,21 +105,6 @@ export type CommandPlacementTag =
   | "menu"
   | "context_menu"
   | "keyboard";
-
-export type SurfaceOrigin =
-  | { readonly kind: "application"; readonly component_id: string }
-  | {
-      readonly kind: "workspace_plugin";
-      readonly plugin_id: string;
-      readonly package_digest: string;
-    };
-
-export interface ResourceBinding {
-  readonly resource_provider_id: string;
-  readonly resource_kind: string;
-  readonly resource_id: string;
-  readonly resource_revision: number | null;
-}
 
 export type UiSelection =
   | { readonly kind: "resource"; readonly binding: ResourceBinding }
@@ -172,22 +190,6 @@ export interface SetUiSelectionRequest {
   readonly expected_project_revision: number;
   readonly expected_snapshot_revision: number;
   readonly selection: UiSelection | null;
-}
-
-export type SurfaceLifecycleState =
-  | "active"
-  | "hidden"
-  | "suspended"
-  | "failed"
-  | "placeholder";
-
-export interface RuntimeAttachmentRequest {
-  readonly runtime: RuntimeInstanceRequest;
-  readonly surface: SurfaceInstanceRequest;
-}
-
-export interface RuntimeDetachRequest {
-  readonly surface: SurfaceInstanceRequest;
 }
 
 export interface RuntimeOutputEvent {
@@ -296,95 +298,6 @@ export interface ResourceDeleteRequest {
   readonly target: ResourceTarget;
   readonly expected_document_revision: number | null;
   readonly discard_dirty: boolean;
-}
-
-export interface SurfaceDefinition {
-  readonly surface_id: string;
-  readonly contract_major: number;
-  readonly label: string;
-  readonly purpose: string;
-  readonly icon?: string;
-  readonly renderer_kind: "trusted_host" | "declarative_document";
-  readonly scope: "application" | "project";
-  readonly instance_policy: "singleton" | "multi_instance";
-  readonly instance_quota_class: "strip" | "standard" | "heavy";
-  readonly resource_kinds: readonly string[];
-  readonly modes: readonly {
-    readonly mode_id: string;
-    readonly label: string;
-    readonly interaction_kind: "read_only" | "interactive";
-  }[];
-  readonly sizing_hints: Readonly<Record<string, unknown>>;
-  readonly accepted_contexts: readonly string[];
-  readonly commands: readonly string[];
-  readonly origin: SurfaceOrigin;
-}
-
-export interface SurfaceFactoryRegistration {
-  readonly definition: SurfaceDefinition;
-  readonly activation_generation: number;
-}
-
-export interface SurfaceInstance {
-  readonly instance_id: string;
-  readonly surface_id: string;
-  readonly project_id: string;
-  readonly origin: SurfaceOrigin;
-  readonly activation_generation: number;
-  readonly surface_revision: number;
-  readonly mode_id: string | null;
-  readonly resource_binding: ResourceBinding | null;
-  readonly runtime_binding: RuntimeBinding | null;
-  readonly view_group_id: string | null;
-  readonly view_state: unknown;
-  readonly lifecycle_state: SurfaceLifecycleState;
-}
-
-export interface SurfaceRuntimeSnapshot {
-  readonly contract: "rho.ui.surface-runtime.snapshot.v1";
-  readonly contract_major: 1;
-  readonly snapshot_revision: number;
-  readonly project_id: string;
-  readonly project_revision: number;
-  readonly catalog: {
-    readonly factories: readonly SurfaceFactoryRegistration[];
-    readonly instances: readonly SurfaceInstance[];
-  };
-}
-
-export interface OpenSurfaceRequest {
-  readonly surface_id: string;
-  readonly project_id: string;
-  readonly mode_id: string | null;
-  readonly resource_binding: ResourceBinding | null;
-  readonly runtime_binding: RuntimeBinding | null;
-  readonly view_group_id: string | null;
-  readonly view_state: unknown;
-  readonly instance_disposition: "reuse_exact" | "new_instance";
-  readonly placement_intent: "current" | "beside" | "stack" | "container";
-  readonly expected_project_revision: number;
-  readonly expected_layout_revision: number;
-}
-
-export interface SurfaceInstanceRequest {
-  readonly project_id: string;
-  readonly instance_id: string;
-  readonly activation_generation: number;
-  readonly expected_project_revision: number;
-  readonly expected_surface_revision: number;
-}
-
-export type SurfaceInstanceMutation =
-  | { readonly kind: "set_mode"; readonly mode_id: string | null }
-  | { readonly kind: "set_view_state"; readonly view_state: unknown }
-  | { readonly kind: "set_lifecycle"; readonly state: SurfaceLifecycleState }
-  | { readonly kind: "bind_resource"; readonly binding: ResourceBinding | null }
-  | { readonly kind: "bind_runtime"; readonly binding: RuntimeBinding | null }
-  | { readonly kind: "set_view_group"; readonly view_group_id: string | null };
-
-export interface UpdateSurfaceRequest {
-  readonly target: SurfaceInstanceRequest;
-  readonly mutation: SurfaceInstanceMutation;
 }
 
 export type PluginSurfaceEventKind = "input" | "change" | "submit" | "activate";
@@ -563,140 +476,6 @@ export interface CheckResultRequest extends CheckRunRequest {
 
 export interface CheckRunResponse {
   readonly result: CheckResult;
-}
-
-export type LayoutAxis = "horizontal" | "vertical";
-
-export type LayoutBasis =
-  | { readonly kind: "auto" }
-  | { readonly kind: "intrinsic" }
-  | { readonly kind: "fixed"; readonly logical_pixels: number }
-  | { readonly kind: "fraction"; readonly weight: number }
-  | {
-      readonly kind: "minmax";
-      readonly min_logical_pixels: number;
-      readonly max_logical_pixels: number;
-      readonly weight: number;
-    };
-
-export interface LayoutChild {
-  readonly child: LayoutNode;
-  readonly basis: LayoutBasis;
-  readonly resizable: boolean;
-  readonly collapse_priority: number | null;
-}
-
-export interface StackNode {
-  readonly node_id: string;
-  readonly active_instance_id: string;
-  readonly instances: readonly string[];
-}
-
-export type LayoutNode =
-  | {
-      readonly kind: "container";
-      readonly node_id: string;
-      readonly axis: LayoutAxis;
-      readonly children: readonly LayoutChild[];
-    }
-  | ({ readonly kind: "stack" } & StackNode)
-  | { readonly kind: "surface"; readonly node_id: string; readonly instance_id: string };
-
-export interface SceneState {
-  readonly scene_id: string;
-  readonly project_id: string;
-  readonly label: string;
-  readonly layout_revision: number;
-  readonly root: LayoutNode;
-  readonly focused_surface_instance_id: string | null;
-  readonly utility_tray: StackNode | null;
-}
-
-export type SceneEdit =
-  | {
-      readonly kind: "insert_surface";
-      readonly target_container_node_id: string;
-      readonly child_index: number;
-      readonly instance_id: string;
-      readonly basis: LayoutBasis;
-    }
-  | {
-      readonly kind: "move_surface";
-      readonly instance_id: string;
-      readonly target_container_node_id: string;
-      readonly child_index: number;
-      readonly basis: LayoutBasis;
-    }
-  | {
-      readonly kind: "stack_surface";
-      readonly instance_id: string;
-      readonly target_instance_id: string;
-    }
-  | {
-      readonly kind: "unstack_surface";
-      readonly instance_id: string;
-      readonly target_container_node_id: string;
-      readonly child_index: number;
-      readonly basis: LayoutBasis;
-    }
-  | { readonly kind: "close_surface_placement"; readonly instance_id: string }
-  | {
-      readonly kind: "resize_boundary";
-      readonly container_node_id: string;
-      readonly before_child_index: number;
-      readonly before_basis: LayoutBasis;
-      readonly after_basis: LayoutBasis;
-    }
-  | {
-      readonly kind: "set_child_basis";
-      readonly container_node_id: string;
-      readonly child_index: number;
-      readonly basis: LayoutBasis;
-    }
-  | {
-      readonly kind: "set_collapse_priority";
-      readonly container_node_id: string;
-      readonly child_index: number;
-      readonly collapse_priority: number | null;
-    }
-  | {
-      readonly kind: "set_container_axis";
-      readonly container_node_id: string;
-      readonly axis: LayoutAxis;
-    }
-  | {
-      readonly kind: "set_stack_active";
-      readonly stack_node_id: string;
-      readonly instance_id: string;
-    }
-  | { readonly kind: "set_focus"; readonly instance_id: string | null }
-  | { readonly kind: "normalize" }
-  | { readonly kind: "distribute_container"; readonly container_node_id: string }
-  | { readonly kind: "replace_root"; readonly root: LayoutNode };
-
-export interface SceneEditRequest {
-  readonly project_id: string;
-  readonly expected_project_revision: number;
-  readonly expected_layout_revision: number;
-  readonly edit: SceneEdit;
-}
-
-export interface StudioRevisionRequest {
-  readonly project_id: string;
-  readonly expected_project_revision: number;
-  readonly expected_layout_revision: number;
-}
-
-export interface StudioRuntimeSnapshot {
-  readonly contract: "rho.ui.studio-runtime.snapshot.v1";
-  readonly contract_major: 1;
-  readonly snapshot_revision: number;
-  readonly project_id: string;
-  readonly project_revision: number;
-  readonly scene: SceneState;
-  readonly unplaced_instance_ids: readonly string[];
-  readonly can_undo: boolean;
-  readonly can_redo: boolean;
 }
 
 export type UiProfileMode = "studio" | "vibe";
@@ -1160,7 +939,7 @@ export interface ProjectSwitchResponse {
   readonly restart_required: boolean;
 }
 
-export interface UiKernelTransport {
+export interface UiKernelTransport extends SurfaceStudioTransport {
   readonly source: UiSnapshotSource;
   prepareWorkspace(chooseRscript?: boolean): Promise<WorkspacePreparation>;
   openProject(path: string): Promise<ProjectSwitchResponse>;
@@ -1168,12 +947,6 @@ export interface UiKernelTransport {
   loadSnapshot(): Promise<UiKernelSnapshot>;
   setSelection(request: SetUiSelectionRequest): Promise<UiKernelSnapshot>;
   subscribeInvalidated(listener: () => void): Unsubscribe;
-  loadSurfaces(): Promise<SurfaceRuntimeSnapshot>;
-  openSurface(request: OpenSurfaceRequest): Promise<SurfaceRuntimeSnapshot>;
-  updateSurface(request: UpdateSurfaceRequest): Promise<SurfaceRuntimeSnapshot>;
-  closeSurface(request: SurfaceInstanceRequest): Promise<SurfaceRuntimeSnapshot>;
-  suspendSurface(request: SurfaceInstanceRequest): Promise<SurfaceRuntimeSnapshot>;
-  resumeSurface(request: SurfaceInstanceRequest): Promise<SurfaceRuntimeSnapshot>;
   subscribeSurfacesInvalidated(listener: () => void): Unsubscribe;
   loadPluginSurfaceDocument(request: PluginSurfaceDocumentRequest): Promise<PluginSurfaceDocumentView>;
   dispatchPluginSurfaceEvent(request: PluginSurfaceEventRequest): Promise<PluginSurfaceEventResult>;
@@ -1181,10 +954,6 @@ export interface UiKernelTransport {
   runCheckProject(request: CheckRunRequest): Promise<CheckRunResponse>;
   loadCheckResult(request: CheckResultRequest): Promise<CheckResult>;
   subscribeCheckResultsInvalidated(listener: () => void): Unsubscribe;
-  loadStudio(): Promise<StudioRuntimeSnapshot>;
-  applyStudio(request: SceneEditRequest): Promise<StudioRuntimeSnapshot>;
-  undoStudio(request: StudioRevisionRequest): Promise<StudioRuntimeSnapshot>;
-  redoStudio(request: StudioRevisionRequest): Promise<StudioRuntimeSnapshot>;
   subscribeStudioInvalidated(listener: () => void): Unsubscribe;
   loadUiProfile(): Promise<ProjectUiProfileSnapshot>;
   setUiProfileMode(request: UiProfileSetModeRequest): Promise<ProjectUiProfileSnapshot>;
@@ -1200,8 +969,6 @@ export interface UiKernelTransport {
   subscribeUiProfileInvalidated(listener: () => void): Unsubscribe;
   loadRuntimes(): Promise<RuntimeRegistrySnapshot>;
   createRuntime(request: RuntimeCreateRequest): Promise<RuntimeRegistrySnapshot>;
-  attachRuntime(request: RuntimeAttachmentRequest): Promise<SurfaceRuntimeSnapshot>;
-  detachRuntime(request: RuntimeDetachRequest): Promise<SurfaceRuntimeSnapshot>;
   interruptRuntime(request: RuntimeInstanceRequest): Promise<RuntimeRegistrySnapshot>;
   restartRuntime(request: RuntimeInstanceRequest): Promise<RuntimeRegistrySnapshot>;
   stopRuntime(request: RuntimeInstanceRequest): Promise<RuntimeRegistrySnapshot>;

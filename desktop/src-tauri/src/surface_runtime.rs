@@ -1038,6 +1038,7 @@ pub(crate) fn persist_surface_state(
     Ok(studio)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn surface_list(
     app: AppHandle,
@@ -1053,6 +1054,7 @@ pub(crate) async fn surface_list(
     Ok(transition.snapshot)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn surface_open(
     request: OpenSurfaceRequestV1,
@@ -1094,6 +1096,7 @@ pub(crate) async fn surface_open(
     Ok(transition.snapshot)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn surface_update(
     request: UpdateSurfaceRequestV1,
@@ -1166,6 +1169,7 @@ async fn mutate_target(
     Ok(transition.snapshot)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn surface_close(
     request: SurfaceInstanceRequestV1,
@@ -1180,6 +1184,7 @@ pub(crate) async fn surface_close(
     Ok(snapshot)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn surface_suspend(
     request: SurfaceInstanceRequestV1,
@@ -1197,6 +1202,7 @@ pub(crate) async fn surface_suspend(
     Ok(snapshot)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn surface_resume(
     request: SurfaceInstanceRequestV1,
@@ -1208,6 +1214,10 @@ pub(crate) async fn surface_resume(
     })
     .await
 }
+
+#[cfg(test)]
+#[path = "surface_runtime/surface_studio_contract_tests.rs"]
+mod surface_studio_contract_tests;
 
 #[cfg(test)]
 mod tests {

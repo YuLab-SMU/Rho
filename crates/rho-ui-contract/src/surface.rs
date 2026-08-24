@@ -26,7 +26,7 @@ pub const MAX_HEAVY_SURFACE_INSTANCES: usize = 32;
 pub const MAX_SURFACE_RUNTIME_SNAPSHOT_BYTES: usize = 2 * 1024 * 1024;
 pub const SURFACE_RUNTIME_SNAPSHOT_CONTRACT: &str = "rho.ui.surface-runtime.snapshot.v1";
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum SurfaceOriginV1 {
     Application {
@@ -44,28 +44,30 @@ impl Validate for SurfaceOriginV1 {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum SurfaceRendererKindV1 {
     TrustedHost,
     DeclarativeDocument,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum SurfaceScopeV1 {
     Application,
     Project,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum SurfaceInstancePolicyV1 {
     Singleton,
     MultiInstance,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash, specta::Type,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum SurfaceInstanceQuotaClassV1 {
     Strip,
@@ -73,14 +75,14 @@ pub enum SurfaceInstanceQuotaClassV1 {
     Heavy,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum SurfaceInteractionKindV1 {
     ReadOnly,
     Interactive,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct SurfaceModeV1 {
     pub mode_id: SurfaceModeId,
     pub label: String,
@@ -93,7 +95,7 @@ impl Validate for SurfaceModeV1 {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum SurfacePresentationClassV1 {
     Full,
@@ -111,7 +113,7 @@ impl SurfacePresentationClassV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct SurfaceSizingHintsV1 {
     pub min_inline: u32,
     pub min_block: u32,
@@ -183,7 +185,7 @@ impl Validate for SurfaceSizingHintsV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct SurfaceDefinitionV1 {
     pub surface_id: SurfaceId,
     pub contract_major: u16,
@@ -271,7 +273,7 @@ impl Validate for SurfaceDefinitionV1 {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum SurfaceLifecycleStateV1 {
     Active,
@@ -281,18 +283,21 @@ pub enum SurfaceLifecycleStateV1 {
     Placeholder,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct SurfaceInstanceV1 {
     pub instance_id: SurfaceInstanceId,
     pub surface_id: SurfaceId,
     pub project_id: ProjectId,
     pub origin: SurfaceOriginV1,
+    #[specta(type = crate::UiIpcNumber)]
     pub activation_generation: u64,
+    #[specta(type = crate::UiIpcNumber)]
     pub surface_revision: u64,
     pub mode_id: Option<SurfaceModeId>,
     pub resource_binding: Option<ResourceBindingV1>,
     pub runtime_binding: Option<RuntimeBindingV1>,
     pub view_group_id: Option<ViewGroupId>,
+    #[specta(type = specta_typescript::Unknown)]
     pub view_state: Value,
     pub lifecycle_state: SurfaceLifecycleStateV1,
 }
@@ -326,15 +331,16 @@ impl Validate for SurfaceInstanceV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct SurfaceCatalogV1 {
     pub factories: Vec<SurfaceFactoryRegistrationV1>,
     pub instances: Vec<SurfaceInstanceV1>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct SurfaceFactoryRegistrationV1 {
     pub definition: SurfaceDefinitionV1,
+    #[specta(type = crate::UiIpcNumber)]
     pub activation_generation: u64,
 }
 
@@ -480,14 +486,14 @@ impl Validate for SurfaceCatalogV1 {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum SurfaceInstanceDispositionV1 {
     ReuseExact,
     NewInstance,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum SurfacePlacementIntentV1 {
     Current,
@@ -496,7 +502,7 @@ pub enum SurfacePlacementIntentV1 {
     Container,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct OpenSurfaceRequestV1 {
     pub surface_id: SurfaceId,
     pub project_id: ProjectId,
@@ -504,10 +510,13 @@ pub struct OpenSurfaceRequestV1 {
     pub resource_binding: Option<ResourceBindingV1>,
     pub runtime_binding: Option<RuntimeBindingV1>,
     pub view_group_id: Option<ViewGroupId>,
+    #[specta(type = specta_typescript::Unknown)]
     pub view_state: Value,
     pub instance_disposition: SurfaceInstanceDispositionV1,
     pub placement_intent: SurfacePlacementIntentV1,
+    #[specta(type = crate::UiIpcNumber)]
     pub expected_project_revision: u64,
+    #[specta(type = crate::UiIpcNumber)]
     pub expected_layout_revision: u64,
 }
 
@@ -533,12 +542,15 @@ impl Validate for OpenSurfaceRequestV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct SurfaceInstanceRequestV1 {
     pub project_id: ProjectId,
     pub instance_id: SurfaceInstanceId,
+    #[specta(type = crate::UiIpcNumber)]
     pub activation_generation: u64,
+    #[specta(type = crate::UiIpcNumber)]
     pub expected_project_revision: u64,
+    #[specta(type = crate::UiIpcNumber)]
     pub expected_surface_revision: u64,
 }
 
@@ -554,7 +566,7 @@ impl Validate for SurfaceInstanceRequestV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct UpdateSurfaceRequestV1 {
     pub target: SurfaceInstanceRequestV1,
     pub mutation: SurfaceInstanceMutationV1,
@@ -580,15 +592,28 @@ impl Validate for UpdateSurfaceRequestV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum SurfaceInstanceMutationV1 {
-    SetMode { mode_id: Option<SurfaceModeId> },
-    SetViewState { view_state: Value },
-    SetLifecycle { state: SurfaceLifecycleStateV1 },
-    BindResource { binding: Option<ResourceBindingV1> },
-    BindRuntime { binding: Option<RuntimeBindingV1> },
-    SetViewGroup { view_group_id: Option<ViewGroupId> },
+    SetMode {
+        mode_id: Option<SurfaceModeId>,
+    },
+    SetViewState {
+        #[specta(type = specta_typescript::Unknown)]
+        view_state: Value,
+    },
+    SetLifecycle {
+        state: SurfaceLifecycleStateV1,
+    },
+    BindResource {
+        binding: Option<ResourceBindingV1>,
+    },
+    BindRuntime {
+        binding: Option<RuntimeBindingV1>,
+    },
+    SetViewGroup {
+        view_group_id: Option<ViewGroupId>,
+    },
 }
 
 pub fn apply_surface_instance_mutation(
@@ -675,12 +700,14 @@ impl Validate for SurfaceRuntimeEventV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct SurfaceRuntimeSnapshotV1 {
     pub contract: String,
     pub contract_major: u16,
+    #[specta(type = crate::UiIpcNumber)]
     pub snapshot_revision: u64,
     pub project_id: ProjectId,
+    #[specta(type = crate::UiIpcNumber)]
     pub project_revision: u64,
     pub catalog: SurfaceCatalogV1,
 }
