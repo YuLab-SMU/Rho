@@ -18,11 +18,12 @@ pub const MAX_PROJECT_FILES: usize = 2_000;
 pub const MAX_PROJECT_ENTRIES: usize = 10_000;
 pub const MAX_PROJECT_DEPTH: usize = 8;
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, specta::Type)]
 pub struct ProjectFile {
     pub path: String,
     pub name: String,
     pub kind: &'static str,
+    #[specta(type = rho_ui_contract::UiIpcNumber)]
     pub size_bytes: u64,
 }
 
@@ -37,29 +38,34 @@ pub struct ViewerFile {
     pub size_bytes: u64,
 }
 
-#[derive(Clone, Debug, Serialize, Default)]
+#[derive(Clone, Debug, Serialize, Default, specta::Type)]
 pub struct ProjectState {
     pub root: String,
     pub files: Vec<ProjectFile>,
     pub truncated: bool,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default, specta::Type)]
 pub struct PanelSizes {
+    #[specta(type = Option<rho_ui_contract::UiIpcNumber>)]
     pub left: Option<u32>,
+    #[specta(type = Option<rho_ui_contract::UiIpcNumber>)]
     pub right: Option<u32>,
+    #[specta(type = Option<rho_ui_contract::UiIpcNumber>)]
     pub dock: Option<u32>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default, specta::Type)]
 pub struct ProjectDocumentSession {
     pub path: String,
+    #[specta(type = rho_ui_contract::UiIpcNumber)]
     pub cursor_start: usize,
+    #[specta(type = rho_ui_contract::UiIpcNumber)]
     pub cursor_end: usize,
     pub draft_content: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default, specta::Type)]
 #[serde(default)]
 pub struct ProjectSessionSnapshot {
     pub open_documents: Vec<ProjectDocumentSession>,
@@ -83,13 +89,13 @@ struct GlobalProjectIndex {
     last_opened_project: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, specta::Type)]
 pub struct UnavailableProject {
     pub path: String,
     pub reason: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ProjectSwitchBlockerKind {
     ActiveRun,
@@ -99,10 +105,11 @@ pub enum ProjectSwitchBlockerKind {
     EnvironmentOperation,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct ProjectSwitchBlocker {
     pub kind: ProjectSwitchBlockerKind,
     pub message: String,
+    #[specta(type = rho_ui_contract::UiIpcNumber)]
     pub pending_count: usize,
     pub run_id: Option<String>,
     pub turn_id: Option<String>,
@@ -110,7 +117,7 @@ pub struct ProjectSwitchBlocker {
     pub operation_status: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Default)]
+#[derive(Clone, Debug, Serialize, Default, specta::Type)]
 pub struct ProjectRestoreResponse {
     pub status: String,
     pub project: Option<ProjectState>,
@@ -775,6 +782,72 @@ pub fn display_path(path: &Path) -> String {
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    #[test]
+    fn project_transition_ipc_serialization_keeps_complete_recovery_identity() {
+        let session = ProjectSessionSnapshot {
+            open_documents: vec![ProjectDocumentSession {
+                path: "analysis.R".to_string(),
+                cursor_start: 4,
+                cursor_end: 9,
+                draft_content: Some("value <- 1".to_string()),
+            }],
+            closed_documents: Vec::new(),
+            active_document: Some("analysis.R".to_string()),
+            selected_agent_conversation_id: Some("conversation:fixture".to_string()),
+            panels: PanelSizes {
+                left: Some(240),
+                right: None,
+                dock: Some(320),
+            },
+        };
+        let ready = ProjectRestoreResponse::ready(
+            ProjectState {
+                root: "/projects/fixture".to_string(),
+                files: vec![ProjectFile {
+                    path: "analysis.R".to_string(),
+                    name: "analysis.R".to_string(),
+                    kind: "file",
+                    size_bytes: 128,
+                }],
+                truncated: false,
+            },
+            session.clone(),
+        );
+        let blocked = ProjectRestoreResponse::blocked(
+            session,
+            ProjectSwitchBlocker {
+                kind: ProjectSwitchBlockerKind::AgentFileMutation,
+                message: "Finish the pending file mutation.".to_string(),
+                pending_count: 1,
+                run_id: None,
+                turn_id: Some("turn:fixture".to_string()),
+                request_id: Some("request:fixture".to_string()),
+                operation_status: Some("active".to_string()),
+            },
+        );
+        let unavailable =
+            ProjectRestoreResponse::unavailable("/projects/missing".to_string(), "not a directory");
+        let fatal = ProjectRestoreResponse::fatal(
+            ProjectSessionSnapshot::default(),
+            "project_switch_restore_failed",
+            "Restart required.",
+        );
+
+        let ready = serde_json::to_value(ready).unwrap();
+        let blocked = serde_json::to_value(blocked).unwrap();
+        let unavailable = serde_json::to_value(unavailable).unwrap();
+        let fatal = serde_json::to_value(fatal).unwrap();
+        assert_eq!(ready["status"], "ready");
+        assert_eq!(ready["project"]["files"][0]["size_bytes"], 128);
+        assert_eq!(ready["session"]["open_documents"][0]["cursor_end"], 9);
+        assert_eq!(blocked["status"], "blocked");
+        assert_eq!(blocked["blocker"]["kind"], "agent_file_mutation");
+        assert_eq!(blocked["blocker"]["turn_id"], "turn:fixture");
+        assert_eq!(unavailable["unavailable"]["path"], "/projects/missing");
+        assert_eq!(fatal["reason_code"], "project_switch_restore_failed");
+        assert_eq!(fatal["restart_required"], true);
+    }
 
     #[test]
     fn project_paths_stay_inside_root() {

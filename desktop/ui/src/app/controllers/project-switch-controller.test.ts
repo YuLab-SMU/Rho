@@ -48,7 +48,15 @@ describe("Project switch controller", () => {
 
     const blockedResponse = {
       ...response("blocked"),
-      blocker: { kind: "active_run", message: "Stop the active run first.", pending_count: 1 },
+      blocker: {
+        kind: "active_run" as const,
+        message: "Stop the active run first.",
+        pending_count: 1,
+        run_id: "run:fixture",
+        turn_id: null,
+        request_id: null,
+        operation_status: "running",
+      },
     };
     expect(projectSwitchFailure(blockedResponse, "/projects/b")).toBe("Stop the active run first.");
     const unavailableResponse = {

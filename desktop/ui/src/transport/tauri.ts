@@ -6,7 +6,6 @@ import type {
   DomainSurfaceData,
   DomainSurfaceItem,
   PlotImageView,
-  ProjectSwitchResponse,
   UiKernelSnapshot,
   UiKernelTransport,
   Unsubscribe,
@@ -19,6 +18,11 @@ import { createTauriAgentRuntimeTransport } from "./agent-runtime";
 import { createTauriAgentSettingsTransport } from "./agent-settings";
 import { createTauriAgentFileTransport } from "./agent-file";
 import { createTauriPluginSurfaceTransport } from "./plugin-surface";
+import {
+  createTauriProjectCommands,
+  createTauriProjectTransport,
+  normalizeProjectSwitchResponse,
+} from "./project";
 import { createTauriAgentTurnDetailTransport } from "./agent-turn";
 import { createTauriProfileTransport } from "./profile";
 import { createTauriResourceTransport } from "./resource";
@@ -119,6 +123,7 @@ export function createTauriUiKernelTransport(
   listen: Listen,
 ): UiKernelTransport {
   const agentRuntimeTransport = createTauriAgentRuntimeTransport(invoke);
+  const projectCommands = createTauriProjectCommands(invoke);
   return {
     source: "tauri",
     async prepareWorkspace(chooseRscript = false): Promise<WorkspacePreparation> {
@@ -169,8 +174,10 @@ export function createTauriUiKernelTransport(
       }
       void agentRuntimeTransport.retryAgentRuntime().catch(() => undefined);
       try {
-        const restored = await invoke<{ readonly status?: string }>("project_restore_session");
-        const restoredStatus = restored.status ?? "unknown";
+        const restored = normalizeProjectSwitchResponse(
+          await projectCommands.projectRestoreSession(),
+        );
+        const restoredStatus = restored.status;
         if (restoredStatus === "ready") {
           return {
             status: "ready",
@@ -208,8 +215,7 @@ export function createTauriUiKernelTransport(
         };
       }
     },
-    openProject: (path) => invoke<ProjectSwitchResponse>("project_open", { path }),
-    pickProjectDirectory: () => invoke<ProjectSwitchResponse>("project_pick_directory"),
+    ...createTauriProjectTransport(projectCommands),
     loadSnapshot: () => invoke<UiKernelSnapshot>("ui_kernel_snapshot"),
     setSelection: (request) =>
       invoke<UiKernelSnapshot>("ui_set_selection", { request }),

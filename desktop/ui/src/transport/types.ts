@@ -41,6 +41,7 @@ import type { AgentRuntimeTransport } from "./agent-runtime";
 import type { AgentSettingsTransport } from "./agent-settings";
 import type { AgentFileTransport } from "./agent-file";
 import type { PluginSurfaceTransport } from "./plugin-surface";
+import type { ProjectTransport } from "./project";
 
 export type {
   RuntimeExecution,
@@ -222,6 +223,20 @@ export type {
   PluginSurfaceNoticeTone,
   PluginSurfaceTransport,
 } from "./plugin-surface";
+
+export type {
+  ProjectBlockerKind,
+  ProjectDocumentSession,
+  ProjectFile,
+  ProjectPanelSizes,
+  ProjectSessionSnapshot,
+  ProjectState,
+  ProjectSwitchBlocker,
+  ProjectSwitchResponse,
+  ProjectSwitchStatus,
+  ProjectTransport,
+  UnavailableProject,
+} from "./project";
 
 export type UiSnapshotSource = "tauri" | "mock";
 export type HealthState = "ready" | "degraded" | "unavailable" | "restarting";
@@ -449,39 +464,9 @@ export interface WorkspacePreparation {
   readonly issue: WorkspacePreparationIssue | null;
 }
 
-export type ProjectSwitchStatus =
-  | "ready"
-  | "cancelled"
-  | "blocked"
-  | "unavailable"
-  | "failed_restored"
-  | "fatal";
-
-export interface ProjectSwitchResponse {
-  readonly status: ProjectSwitchStatus;
-  readonly project: {
-    readonly root: string;
-    readonly files: readonly unknown[];
-    readonly truncated: boolean;
-  } | null;
-  readonly session: unknown;
-  readonly unavailable: { readonly path: string; readonly reason: string } | null;
-  readonly blocker: {
-    readonly kind: string;
-    readonly message: string;
-    readonly pending_count: number;
-  } | null;
-  readonly reason_code: string | null;
-  readonly message: string | null;
-  readonly restored_root: string | null;
-  readonly restart_required: boolean;
-}
-
-export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTransport, ProfileTransport, AgentConversationTransport, AgentTurnDetailTransport, AgentExecutionTransport, AgentRuntimeTransport, AgentSettingsTransport, AgentFileTransport, PluginSurfaceTransport {
+export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTransport, ProfileTransport, AgentConversationTransport, AgentTurnDetailTransport, AgentExecutionTransport, AgentRuntimeTransport, AgentSettingsTransport, AgentFileTransport, PluginSurfaceTransport, ProjectTransport {
   readonly source: UiSnapshotSource;
   prepareWorkspace(chooseRscript?: boolean): Promise<WorkspacePreparation>;
-  openProject(path: string): Promise<ProjectSwitchResponse>;
-  pickProjectDirectory(): Promise<ProjectSwitchResponse>;
   loadSnapshot(): Promise<UiKernelSnapshot>;
   setSelection(request: SetUiSelectionRequest): Promise<UiKernelSnapshot>;
   subscribeInvalidated(listener: () => void): Unsubscribe;

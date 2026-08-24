@@ -1485,6 +1485,7 @@ async fn project_mark_files_changed(state: State<'_, AppState>) -> Result<Value,
     serde_json::to_value(identity).map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn project_open(
     path: String,
@@ -1498,6 +1499,7 @@ async fn project_open(
         .map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn project_pick_directory(
     app: AppHandle,
@@ -1513,6 +1515,7 @@ async fn project_pick_directory(
         .map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn project_restore_session(
     app: AppHandle,
@@ -10314,13 +10317,14 @@ mod tests {
         find_executable_on_path, finish_render_job, has_png_signature, interrupt_all_agent_tasks,
         load_runtime_cache, locate_ark_from_candidates, locate_rscript,
         lockfile_inventory_arguments, parse_r_runtime_probe, pending_native_update_matches,
-        project_switch_blocker, r_architecture_supported, reconcile_render_job,
-        recover_incomplete_agent_file_mutations, render_job_is_terminal, retry_run_arguments,
-        run_is_retryable, run_r_probe, runtime_file_signature, safe_delete_project_file,
-        save_runtime_cache, shutdown_application, source_claim_snapshot,
-        switch_project_with_watcher_factory, text_sha256, undo_agent_file_edit_state,
-        validate_execute_source_range_shape, validate_persisted_agent_file_proposal_structure,
-        workspace_project_root_code, write_r_probe_script,
+        project_open, project_pick_directory, project_restore_session, project_switch_blocker,
+        r_architecture_supported, reconcile_render_job, recover_incomplete_agent_file_mutations,
+        render_job_is_terminal, retry_run_arguments, run_is_retryable, run_r_probe,
+        runtime_file_signature, safe_delete_project_file, save_runtime_cache, shutdown_application,
+        source_claim_snapshot, switch_project_with_watcher_factory, text_sha256,
+        undo_agent_file_edit_state, validate_execute_source_range_shape,
+        validate_persisted_agent_file_proposal_structure, workspace_project_root_code,
+        write_r_probe_script,
     };
     use crate::commands::runs::{contain_audit_panic, list_runs_with_state};
     use crate::platform;
@@ -15719,6 +15723,22 @@ mod tests {
         assert_eq!(job.output_path.as_deref(), Some("report.html"));
         assert_eq!(job.media_type.as_deref(), Some("text/html"));
         assert_eq!(job.provenance_complete, Some(true));
+    }
+
+    #[test]
+    #[ignore = "writes the requested generated TypeScript contract"]
+    fn project_typescript_export() {
+        let output_path = std::env::var_os("RHO_PROJECT_BINDINGS_PATH")
+            .expect("RHO_PROJECT_BINDINGS_PATH must name the generated file");
+        tauri_specta::Builder::<tauri::Wry>::new()
+            .commands(tauri_specta::collect_commands![
+                project_open,
+                project_pick_directory,
+                project_restore_session,
+            ])
+            .error_handling(tauri_specta::ErrorHandlingMode::Throw)
+            .export(specta_typescript::Typescript::default(), output_path)
+            .expect("Project TypeScript export must succeed");
     }
 }
 
