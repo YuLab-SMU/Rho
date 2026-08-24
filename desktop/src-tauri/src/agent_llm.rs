@@ -290,7 +290,7 @@ struct AgentLlmSettingsV2 {
     capability_routes: Vec<AgentCapabilityRoute>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(deny_unknown_fields)]
 pub struct AgentProviderProfile {
     pub id: String,
@@ -305,7 +305,7 @@ pub struct AgentProviderProfile {
     pub disable_stream_options: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(deny_unknown_fields)]
 pub struct AgentModelProfile {
     pub id: String,
@@ -315,7 +315,9 @@ pub struct AgentModelProfile {
     pub enabled: bool,
     pub model_type: AgentCapabilityValue,
     pub capabilities: BTreeMap<String, AgentCapabilityValue>,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
     pub context_window_tokens: u64,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
     pub reserved_output_tokens: u64,
     pub context_capacity_source: String,
     pub last_test: Option<AgentModelTestResult>,
@@ -355,7 +357,7 @@ pub struct AgentModelCapabilitiesV1 {
     pub source: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(deny_unknown_fields)]
 pub struct AgentCapabilityValue {
     pub value: String,
@@ -379,11 +381,12 @@ pub struct AgentModelCapabilityPatch {
     pub capabilities: BTreeMap<String, String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(deny_unknown_fields)]
 pub struct AgentModelTestResult {
     pub status: String,
     pub checked_at: String,
+    #[specta(type = Option<rho_store::RuntimeOutputIpcNumber>)]
     pub latency_ms: Option<u64>,
     pub error_class: Option<String>,
     pub message: Option<String>,
@@ -432,13 +435,13 @@ pub struct AgentModelDiscoveryResponse {
     pub error_class: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct AgentUserEnvironInfo {
     pub path: String,
     pub source: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct AgentProviderProfileView {
     #[serde(flatten)]
     pub profile: AgentProviderProfile,
@@ -446,7 +449,7 @@ pub struct AgentProviderProfileView {
     pub credential_source: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct AgentModelProfileView {
     #[serde(flatten)]
     pub profile: AgentModelProfile,
@@ -456,7 +459,7 @@ pub struct AgentModelProfileView {
     pub act_enabled: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct AgentCapabilityRouteView {
     pub capability: String,
     pub label: String,
@@ -473,7 +476,7 @@ pub struct AgentCapabilityRouteView {
     pub consumer_status: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct AgentSelectedModelView {
     pub id: String,
     pub display_name: String,
@@ -483,9 +486,10 @@ pub struct AgentSelectedModelView {
     pub act_enabled: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct AgentLlmSettingsView {
     pub schema_version: u32,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
     pub revision: u64,
     /// Compatibility projection for the existing composer. The persisted V2
     /// authority is the `agent.chat` route, not this derived field.
@@ -523,12 +527,15 @@ pub struct DeleteProviderRequest {
     pub expected_revision: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(deny_unknown_fields)]
 pub struct AgentContextCapacityRequest {
     pub model_id: String,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
     pub expected_revision: u64,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
     pub context_window_tokens: u64,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
     pub reserved_output_tokens: u64,
 }
 

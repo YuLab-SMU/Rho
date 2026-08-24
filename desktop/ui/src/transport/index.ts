@@ -13,6 +13,7 @@ export type { AgentConversationTransport } from "./agent-conversation";
 export type { AgentTurnDetailTransport } from "./agent-turn";
 export type { AgentExecutionTransport } from "./agent-execution";
 export type { AgentRuntimeTransport } from "./agent-runtime";
+export type { AgentSettingsTransport } from "./agent-settings";
 
 export function createUiKernelTransport(): UiKernelTransport {
   if (isTauri()) {

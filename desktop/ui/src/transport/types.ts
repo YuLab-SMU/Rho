@@ -39,6 +39,7 @@ import type {
 } from "./agent-turn";
 import type { AgentExecutionTransport } from "./agent-execution";
 import type { AgentRuntimeTransport } from "./agent-runtime";
+import type { AgentSettingsTransport } from "./agent-settings";
 
 export type {
   RuntimeExecution,
@@ -192,6 +193,13 @@ export type {
   AgentRuntimeDiagnostics,
   AgentRuntimeTransport,
 } from "./agent-runtime";
+
+export type {
+  AgentContextCapacityRequest,
+  AgentLlmSettingsView,
+  AgentModelContextCapacity,
+  AgentSettingsTransport,
+} from "./agent-settings";
 
 export type UiSnapshotSource = "tauri" | "mock";
 export type HealthState = "ready" | "degraded" | "unavailable" | "restarting";
@@ -476,28 +484,6 @@ export interface CheckRunResponse {
   readonly result: CheckResult;
 }
 
-export interface AgentModelContextCapacity {
-  readonly id: string;
-  readonly display_name: string;
-  readonly selected: boolean;
-  readonly context_window_tokens: number;
-  readonly reserved_output_tokens: number;
-  readonly context_capacity_source: "catalog" | "user_declared" | "conservative_default";
-}
-
-export interface AgentLlmSettingsView {
-  readonly revision: number;
-  readonly selected_model_id: string;
-  readonly models: readonly AgentModelContextCapacity[];
-}
-
-export interface AgentContextCapacityRequest {
-  readonly model_id: string;
-  readonly expected_revision: number;
-  readonly context_window_tokens: number;
-  readonly reserved_output_tokens: number;
-}
-
 export interface AgentFileApplyRequest {
   readonly turn_id: string;
   readonly proposal_event_id: number;
@@ -590,7 +576,7 @@ export interface ProjectSwitchResponse {
   readonly restart_required: boolean;
 }
 
-export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTransport, ProfileTransport, AgentConversationTransport, AgentTurnDetailTransport, AgentExecutionTransport, AgentRuntimeTransport {
+export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTransport, ProfileTransport, AgentConversationTransport, AgentTurnDetailTransport, AgentExecutionTransport, AgentRuntimeTransport, AgentSettingsTransport {
   readonly source: UiSnapshotSource;
   prepareWorkspace(chooseRscript?: boolean): Promise<WorkspacePreparation>;
   openProject(path: string): Promise<ProjectSwitchResponse>;
@@ -633,8 +619,6 @@ export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTrans
   ): Promise<void>;
   subscribeRuntimesInvalidated(listener: () => void): Unsubscribe;
   subscribeResourcesInvalidated(listener: () => void): Unsubscribe;
-  loadAgentLlmSettings(): Promise<AgentLlmSettingsView>;
-  setAgentContextCapacity(request: AgentContextCapacityRequest): Promise<AgentLlmSettingsView>;
   subscribeAgentInvalidated(listener: () => void): Unsubscribe;
   loadDomainSurface(surfaceId: string): Promise<DomainSurfaceData>;
   readPlotArtifact(plotId: string): Promise<PlotImageView>;

@@ -181,6 +181,123 @@ fn agent_runtime_ipc_serialization_matches_generated_contract() {
     );
 }
 
+fn agent_settings_fixture() -> AgentLlmSettingsView {
+    let provider = AgentProviderProfile {
+        id: "provider:fixture".to_string(),
+        display_name: "Fixture Provider".to_string(),
+        kind: "openai_compatible".to_string(),
+        registered_provider_id: None,
+        api_key_env: Some("FIXTURE_API_KEY".to_string()),
+        api_key_required: true,
+        base_url: Some("https://example.invalid/v1".to_string()),
+        base_url_env: None,
+        wire_api: Some("openai".to_string()),
+        disable_stream_options: Some(false),
+    };
+    let model = AgentModelProfile {
+        id: "model:fixture".to_string(),
+        provider_id: provider.id.clone(),
+        display_name: "Fixture Model".to_string(),
+        model_id: "fixture-model".to_string(),
+        enabled: true,
+        model_type: agent_llm::AgentCapabilityValue {
+            value: "language".to_string(),
+            source: "catalog".to_string(),
+        },
+        capabilities: std::collections::BTreeMap::from([(
+            "function_call".to_string(),
+            agent_llm::AgentCapabilityValue {
+                value: "supported".to_string(),
+                source: "catalog".to_string(),
+            },
+        )]),
+        context_window_tokens: 128_000,
+        reserved_output_tokens: 8_192,
+        context_capacity_source: "catalog".to_string(),
+        last_test: Some(agent_llm::AgentModelTestResult {
+            status: "ready".to_string(),
+            checked_at: "2026-08-24T12:00:00Z".to_string(),
+            latency_ms: Some(42),
+            error_class: None,
+            message: None,
+        }),
+    };
+    AgentLlmSettingsView {
+        schema_version: 3,
+        revision: 9,
+        selected_model_id: model.id.clone(),
+        providers: vec![agent_llm::AgentProviderProfileView {
+            profile: provider,
+            credential_status: "unchecked".to_string(),
+            credential_source: "unchecked".to_string(),
+        }],
+        models: vec![agent_llm::AgentModelProfileView {
+            profile: model,
+            provider_display_name: "Fixture Provider".to_string(),
+            selected: true,
+            selector_status: "ready".to_string(),
+            act_enabled: true,
+        }],
+        selected_model: Some(agent_llm::AgentSelectedModelView {
+            id: "model:fixture".to_string(),
+            display_name: "Fixture Model".to_string(),
+            provider_display_name: "Fixture Provider".to_string(),
+            selector_status: "ready".to_string(),
+            tool_calling: "supported".to_string(),
+            act_enabled: true,
+        }),
+        capability_routes: vec![agent_llm::AgentCapabilityRouteView {
+            capability: "agent.chat".to_string(),
+            label: "Chat".to_string(),
+            description: "Ordinary Agent conversation".to_string(),
+            model_id: Some("model:fixture".to_string()),
+            model_display_name: Some("Fixture Model".to_string()),
+            provider_display_name: Some("Fixture Provider".to_string()),
+            model_type: "language".to_string(),
+            required_model_capabilities: Vec::new(),
+            configured: true,
+            inherited_from: None,
+            compatibility: "ready".to_string(),
+            credential_status: "unchecked".to_string(),
+            consumer_status: "ready".to_string(),
+        }],
+        user_environ: agent_llm::AgentUserEnvironInfo {
+            path: "/Users/fixture/.Renviron".to_string(),
+            source: "not_used_for_agent_credentials".to_string(),
+        },
+        validation_error: None,
+    }
+}
+
+#[test]
+fn agent_settings_ipc_serialization_matches_generated_contract() {
+    let settings = serde_json::to_value(agent_settings_fixture()).unwrap();
+    let request: AgentContextCapacityRequest = serde_json::from_value(serde_json::json!({
+        "model_id": "model:fixture",
+        "expected_revision": 9,
+        "context_window_tokens": 262144,
+        "reserved_output_tokens": 16384
+    }))
+    .unwrap();
+
+    assert_eq!(settings["schema_version"], 3);
+    assert_eq!(settings["revision"], 9);
+    assert_eq!(settings["providers"][0]["id"], "provider:fixture");
+    assert_eq!(settings["providers"][0]["credential_status"], "unchecked");
+    assert_eq!(settings["models"][0]["context_window_tokens"], 128_000);
+    assert_eq!(
+        settings["models"][0]["capabilities"]["function_call"]["value"],
+        "supported"
+    );
+    assert_eq!(settings["capability_routes"][0]["capability"], "agent.chat");
+    assert!(settings["validation_error"].is_null());
+    assert_eq!(request.expected_revision, 9);
+    assert_eq!(request.context_window_tokens, 262_144);
+    let encoded = serde_json::to_string(&settings).unwrap();
+    assert!(!encoded.contains("fixture-secret"));
+    assert_javascript_safe_numbers(&settings);
+}
+
 #[test]
 fn agent_conversation_ipc_serialization_matches_generated_contract() {
     let conversations = serde_json::to_value(vec![conversation()]).unwrap();
@@ -349,4 +466,19 @@ fn agent_diagnostics_typescript_export() {
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
         .export(specta_typescript::Typescript::default(), output_path)
         .expect("Agent runtime TypeScript export must succeed");
+}
+
+#[test]
+#[ignore = "writes the requested generated TypeScript contract"]
+fn agent_settings_typescript_export() {
+    let output_path = std::env::var_os("RHO_AGENT_SETTINGS_BINDINGS_PATH")
+        .expect("RHO_AGENT_SETTINGS_BINDINGS_PATH must name the generated file");
+    tauri_specta::Builder::<tauri::Wry>::new()
+        .commands(tauri_specta::collect_commands![
+            crate::agent_llm_settings,
+            crate::agent_llm_set_context_capacity,
+        ])
+        .error_handling(tauri_specta::ErrorHandlingMode::Throw)
+        .export(specta_typescript::Typescript::default(), output_path)
+        .expect("Agent settings TypeScript export must succeed");
 }

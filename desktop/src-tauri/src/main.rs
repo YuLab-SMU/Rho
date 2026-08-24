@@ -5615,6 +5615,7 @@ async fn retry_agent_turn(
     .await
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn agent_llm_settings(state: State<'_, AppState>) -> Result<AgentLlmSettingsView, String> {
     let result = (|| {
@@ -5684,6 +5685,7 @@ async fn agent_llm_save_model(
     agent_llm::settings_view_from_settings(settings).map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn agent_llm_set_context_capacity(
     request: AgentContextCapacityRequest,

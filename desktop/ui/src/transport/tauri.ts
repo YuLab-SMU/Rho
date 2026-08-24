@@ -1,6 +1,4 @@
 import type {
-  AgentContextCapacityRequest,
-  AgentLlmSettingsView,
   AgentFileMutationResponse,
   CheckResult,
   CheckResultRequest,
@@ -23,6 +21,7 @@ import { invalidationEvents } from "./invalidation-contract";
 import { createTauriAgentConversationTransport } from "./agent-conversation";
 import { createTauriAgentExecutionTransport } from "./agent-execution";
 import { createTauriAgentRuntimeTransport } from "./agent-runtime";
+import { createTauriAgentSettingsTransport } from "./agent-settings";
 import { createTauriAgentTurnDetailTransport } from "./agent-turn";
 import { createTauriProfileTransport } from "./profile";
 import { createTauriResourceTransport } from "./resource";
@@ -250,10 +249,7 @@ export function createTauriUiKernelTransport(
     ...createTauriAgentTurnDetailTransport(invoke),
     ...createTauriAgentExecutionTransport(invoke),
     ...agentRuntimeTransport,
-    loadAgentLlmSettings: () =>
-      invoke<AgentLlmSettingsView>("agent_llm_settings"),
-    setAgentContextCapacity: (request: AgentContextCapacityRequest) =>
-      invoke<AgentLlmSettingsView>("agent_llm_set_context_capacity", { request }),
+    ...createTauriAgentSettingsTransport(invoke),
     subscribeAgentInvalidated: (listener) =>
       subscribeEvents(listen, invalidationEvents("agent"), listener),
     loadDomainSurface: async (surfaceId) => {
