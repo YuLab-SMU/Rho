@@ -5750,19 +5750,21 @@ struct ApprovalDecisionRequest {
     reason: Option<String>,
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn list_agent_conversations(
-    limit: Option<usize>,
+    limit: Option<u32>,
     state: State<'_, AppState>,
 ) -> Result<Vec<AgentConversationSummary>, String> {
     let root = state.project_root.read().await.clone();
     let project_root = root.to_string_lossy();
     let store = read_store(&state).map_err(display_error)?;
     ProjectQueryService::new(&store)
-        .list_agent_conversations(project_root.as_ref(), limit)
+        .list_agent_conversations(project_root.as_ref(), limit.map(|value| value as usize))
         .map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn create_agent_conversation(
     state: State<'_, AppState>,
@@ -5781,17 +5783,22 @@ async fn create_agent_conversation(
         .map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn list_agent_turns(
     conversation_id: Option<String>,
-    limit: Option<usize>,
+    limit: Option<u32>,
     state: State<'_, AppState>,
 ) -> Result<Vec<AgentTurnSummary>, String> {
     let root = state.project_root.read().await.clone();
     let project_root = root.to_string_lossy();
     let store = read_store(&state).map_err(display_error)?;
     ProjectQueryService::new(&store)
-        .list_agent_turns(project_root.as_ref(), conversation_id.as_deref(), limit)
+        .list_agent_turns(
+            project_root.as_ref(),
+            conversation_id.as_deref(),
+            limit.map(|value| value as usize),
+        )
         .map_err(display_error)
 }
 
@@ -10107,6 +10114,10 @@ fn classify_startup_error(detail: &str) -> StartupIssue {
         actions,
     )
 }
+
+#[cfg(test)]
+#[path = "agent_contract_tests.rs"]
+mod agent_contract_tests;
 
 #[cfg(test)]
 mod tests {

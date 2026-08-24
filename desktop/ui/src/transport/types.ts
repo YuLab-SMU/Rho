@@ -31,6 +31,11 @@ import type {
 import type {
   ProfileTransport,
 } from "./profile";
+import type {
+  AgentConversationTransport,
+  AgentMode,
+  AgentTurnSummary,
+} from "./agent-conversation";
 
 export type {
   RuntimeExecution,
@@ -150,6 +155,13 @@ export type {
   VibeSection,
   VibeSectionLayout,
 } from "./profile";
+
+export type {
+  AgentConversationSummary,
+  AgentConversationTransport,
+  AgentMode,
+  AgentTurnSummary,
+} from "./agent-conversation";
 
 export type UiSnapshotSource = "tauri" | "mock";
 export type HealthState = "ready" | "degraded" | "unavailable" | "restarting";
@@ -434,8 +446,6 @@ export interface CheckRunResponse {
   readonly result: CheckResult;
 }
 
-export type AgentMode = "ask" | "plan" | "act";
-
 export interface AgentDependencyDiagnostics {
   readonly package: string;
   readonly status: "ready" | "checking" | "missing" | "incompatible_version" | "namespace_load_failed" | "incompatible_api" | "probe_failed" | string;
@@ -456,46 +466,6 @@ export interface AgentRuntimeDiagnostics {
   readonly provider_health: string;
   readonly dependencies: readonly AgentDependencyDiagnostics[];
   readonly error: string | null;
-}
-
-export interface AgentConversationSummary {
-  readonly conversation_id: string;
-  readonly project_root: string;
-  readonly title: string;
-  readonly created_at: string;
-  readonly updated_at: string;
-  readonly archived_at: string | null;
-  readonly legacy_unthreaded: boolean;
-  readonly turn_count: number;
-  readonly status: string;
-  readonly latest_turn_id: string | null;
-  readonly latest_mode: string | null;
-  readonly latest_prompt_preview: string | null;
-  readonly terminal_reason: string | null;
-  readonly pending_request_id: string | null;
-}
-
-export interface AgentTurnSummary {
-  readonly turn_id: string;
-  readonly conversation_id: string;
-  readonly project_root: string;
-  readonly mode: AgentMode;
-  readonly status: string;
-  readonly started_at: string;
-  readonly finished_at: string | null;
-  readonly prompt_preview: string;
-  readonly model: string;
-  readonly workspace_id_before: string | null;
-  readonly state_revision_before: number | null;
-  readonly project_revision_before: number | null;
-  readonly workspace_id_after: string | null;
-  readonly state_revision_after: number | null;
-  readonly project_revision_after: number | null;
-  readonly final_message: string | null;
-  readonly error_message: string | null;
-  readonly pending_request_id: string | null;
-  readonly retry_of_turn_id: string | null;
-  readonly terminal_reason: string | null;
 }
 
 export interface AgentTurnEvent {
@@ -718,7 +688,7 @@ export interface ProjectSwitchResponse {
   readonly restart_required: boolean;
 }
 
-export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTransport, ProfileTransport {
+export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTransport, ProfileTransport, AgentConversationTransport {
   readonly source: UiSnapshotSource;
   prepareWorkspace(chooseRscript?: boolean): Promise<WorkspacePreparation>;
   openProject(path: string): Promise<ProjectSwitchResponse>;
@@ -761,9 +731,6 @@ export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTrans
   ): Promise<void>;
   subscribeRuntimesInvalidated(listener: () => void): Unsubscribe;
   subscribeResourcesInvalidated(listener: () => void): Unsubscribe;
-  listAgentConversations(limit?: number): Promise<readonly AgentConversationSummary[]>;
-  createAgentConversation(): Promise<AgentConversationSummary>;
-  listAgentTurns(conversationId: string | null, limit?: number): Promise<readonly AgentTurnSummary[]>;
   getAgentTurnDetail(turnId: string): Promise<AgentTurnDetail | null>;
   loadAgentLlmSettings(): Promise<AgentLlmSettingsView>;
   setAgentContextCapacity(request: AgentContextCapacityRequest): Promise<AgentLlmSettingsView>;

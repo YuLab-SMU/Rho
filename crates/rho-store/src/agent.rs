@@ -9,7 +9,7 @@ pub struct AgentConversationDraft {
     pub legacy_unthreaded: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 pub struct AgentConversationSummary {
     pub conversation_id: String,
     pub project_root: String,
@@ -18,6 +18,7 @@ pub struct AgentConversationSummary {
     pub updated_at: String,
     pub archived_at: Option<String>,
     pub legacy_unthreaded: bool,
+    #[specta(type = crate::RuntimeOutputIpcNumber)]
     pub turn_count: i64,
     pub status: String,
     pub latest_turn_id: Option<String>,
@@ -51,7 +52,7 @@ pub struct AgentTurnFinish {
     pub error_message: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct AgentTurnSummary {
     pub turn_id: String,
     pub conversation_id: String,
@@ -63,10 +64,14 @@ pub struct AgentTurnSummary {
     pub prompt_preview: String,
     pub model: String,
     pub workspace_id_before: Option<String>,
+    #[specta(type = Option<crate::RuntimeOutputIpcNumber>)]
     pub state_revision_before: Option<i64>,
+    #[specta(type = Option<crate::RuntimeOutputIpcNumber>)]
     pub project_revision_before: Option<i64>,
     pub workspace_id_after: Option<String>,
+    #[specta(type = Option<crate::RuntimeOutputIpcNumber>)]
     pub state_revision_after: Option<i64>,
+    #[specta(type = Option<crate::RuntimeOutputIpcNumber>)]
     pub project_revision_after: Option<i64>,
     pub final_message: Option<String>,
     pub error_message: Option<String>,

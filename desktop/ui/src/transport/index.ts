@@ -9,6 +9,7 @@ export type { RuntimeTransport } from "./runtime";
 export type { SurfaceStudioTransport } from "./surface-studio";
 export type { ResourceTransport } from "./resource";
 export type { ProfileTransport } from "./profile";
+export type { AgentConversationTransport } from "./agent-conversation";
 
 export function createUiKernelTransport(): UiKernelTransport {
   if (isTauri()) {

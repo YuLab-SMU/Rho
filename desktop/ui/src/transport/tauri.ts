@@ -1,5 +1,4 @@
 import type {
-  AgentConversationSummary,
   AgentContextPlanPreview,
   AgentContextPreviewRequest,
   AgentContextCapacityRequest,
@@ -7,7 +6,6 @@ import type {
   AgentRuntimeDiagnostics,
   AgentFileMutationResponse,
   AgentTurnDetail,
-  AgentTurnSummary,
   CheckResult,
   CheckResultRequest,
   CheckRunRequest,
@@ -27,6 +25,7 @@ import type {
   WorkspacePreparation,
 } from "./types";
 import { invalidationEvents } from "./invalidation-contract";
+import { createTauriAgentConversationTransport } from "./agent-conversation";
 import { createTauriProfileTransport } from "./profile";
 import { createTauriResourceTransport } from "./resource";
 import { createTauriRuntimeTransport } from "./runtime";
@@ -248,12 +247,7 @@ export function createTauriUiKernelTransport(
     ...createTauriResourceTransport(invoke),
     subscribeResourcesInvalidated: (listener) =>
       subscribeEvents(listen, invalidationEvents("resources"), listener),
-    listAgentConversations: (limit = 50) =>
-      invoke<readonly AgentConversationSummary[]>("list_agent_conversations", { limit }),
-    createAgentConversation: () =>
-      invoke<AgentConversationSummary>("create_agent_conversation"),
-    listAgentTurns: (conversationId, limit = 50) =>
-      invoke<readonly AgentTurnSummary[]>("list_agent_turns", { conversationId, limit }),
+    ...createTauriAgentConversationTransport(invoke),
     getAgentTurnDetail: (turnId) =>
       invoke<AgentTurnDetail | null>("get_agent_turn_detail", { turnId }),
     loadAgentLlmSettings: () =>
