@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-12",
+  "active_work_packages": ["AM-W2-13"],
+  "integration_lane": "AM-W2-13",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -258,6 +258,11 @@ modules. All remain inherent implementations on the single registry and retain
 the exact method bodies. The combined runtime-call module remains a temporary
 diagnostic hotspot until call families can be separated without widening
 private crash/admission helpers.
+
+`AM-W2-13` partitions the remaining free helpers into recovery, broker-context,
+projection-validation and activation/grant modules. Helpers called by sibling
+implementation modules become `pub(super)` only; the `workspace_plugins`
+module remains private to the crate and no command or runtime authority changes.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
