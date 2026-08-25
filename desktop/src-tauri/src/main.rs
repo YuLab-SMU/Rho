@@ -59,20 +59,18 @@ use rho_extension_runtime::{
 use rho_kernel::{ArkLaunchConfig, ArkSession, KernelEvent};
 use rho_server::coordinator::{
     AgentContextPlanPreview, AgentExplicitContextItem, AgentPluginContributionAdapter,
-    AgentRuntimeAdapters, AgentWorkspaceLane, ApprovalResponseInput, EnvironmentOperationArguments,
-    PendingApprovalRegistry, ProjectSkillDiscoverySummary, WorkspaceSnapshotAdapter,
-    bootstrap_bridge, decide_environment_operation, discover_project_skill_summaries,
-    dispatch_workspace_request, dispatch_workspace_request_with_execution_id,
-    preview_agent_context_plan, request_environment_operation, run_agent_turn,
+    AgentRuntimeAdapters, AgentWorkspaceLane, ApprovalResponseInput, PendingApprovalRegistry,
+    ProjectSkillDiscoverySummary, WorkspaceSnapshotAdapter, bootstrap_bridge,
+    discover_project_skill_summaries, dispatch_workspace_request,
+    dispatch_workspace_request_with_execution_id, preview_agent_context_plan, run_agent_turn,
 };
 use rho_server::workspace_lane::{WorkspaceBrokerLane, WorkspaceBrokerState};
 use rho_store::{
     AgentConversationDraft, AgentConversationSummary, AgentTurnContextItem,
     AgentTurnContextItemDraft, AgentTurnDetail, AgentTurnDraft, AgentTurnEvent,
     AgentTurnEventDraft, AgentTurnFinish, AgentTurnSummary, ApprovalRequestSummary,
-    ArtifactRecordSummary, BorrowedStore, EnvironmentOperationRequestSummary,
-    ProjectTransitionSnapshot, RunRepository, RunSummary, Store, StoreConnection, StoreExecutor,
-    StoreExecutorOperationError, normalize_project_root,
+    ArtifactRecordSummary, BorrowedStore, ProjectTransitionSnapshot, RunRepository, RunSummary,
+    Store, StoreConnection, StoreExecutor, StoreExecutorOperationError, normalize_project_root,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -861,25 +859,6 @@ fn editor_format_result(response: Value) -> Result<Value> {
     );
     Ok(execution)
 }
-
-#[derive(Deserialize)]
-struct EnvironmentOperationRequestInput {
-    operation: String,
-    repositories: Option<HashMap<String, String>>,
-    bioconductor: Option<String>,
-    package: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct EnvironmentOperationDecisionRequest {
-    request_id: String,
-    decision: String,
-    reason: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, specta::Type)]
-#[serde(transparent)]
-struct InstalledPackageInventory(#[specta(type = rho_ui_contract::UiIpcUnknown)] Value);
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(transparent)]
@@ -3724,206 +3703,6 @@ async fn cancel_render_job(job_id: String, state: State<'_, AppState>) -> Result
         "job_id": job_id,
         "status": "cancel_requested"
     }))
-}
-
-#[tauri::command]
-async fn request_environment_operation_preview(
-    request: EnvironmentOperationRequestInput,
-    state: State<'_, AppState>,
-) -> Result<EnvironmentOperationRequestSummary, String> {
-    let session = active_session(&state).await.map_err(display_error)?;
-    let context = active_context(&state).await.map_err(display_error)?;
-    let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, executor } = &mut *context;
-    request_environment_operation(
-        EnvironmentOperationArguments {
-            operation: request.operation,
-            project_root: None,
-            repositories: request.repositories,
-            bioconductor: request.bioconductor,
-            package: request.package,
-            project_library: None,
-        },
-        None,
-        "user",
-        session.as_ref(),
-        broker,
-        executor,
-    )
-    .await
-    .map_err(display_error)
-}
-
-#[cfg_attr(test, specta::specta)]
-#[tauri::command]
-async fn list_environment_operation_requests(
-    limit: Option<rho_ui_contract::UiIpcUsize>,
-    status: Option<String>,
-    state: State<'_, AppState>,
-) -> Result<Vec<EnvironmentOperationRequestSummary>, String> {
-    let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy().replace('\\', "/");
-    store_executor(&state)
-        .await
-        .map_err(display_error)?
-        .environment_repository()
-        .list_requests(project_root, limit.map(usize::from), status)
-        .await
-        .map_err(display_error)
-}
-
-#[tauri::command]
-async fn get_environment_operation_request(
-    request_id: String,
-    state: State<'_, AppState>,
-) -> Result<Option<EnvironmentOperationRequestSummary>, String> {
-    let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy().replace('\\', "/");
-    store_executor(&state)
-        .await
-        .map_err(display_error)?
-        .environment_repository()
-        .get_request(project_root, request_id)
-        .await
-        .map_err(display_error)
-}
-
-#[cfg_attr(test, specta::specta)]
-#[tauri::command]
-async fn list_installed_packages(
-    limit: Option<rho_ui_contract::UiIpcU64>,
-    state: State<'_, AppState>,
-) -> Result<InstalledPackageInventory, String> {
-    let session = active_session(&state).await.map_err(display_error)?;
-    let context = active_context(&state).await.map_err(display_error)?;
-    let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, executor } = &mut *context;
-    let payload = json!({
-        "arguments": { "limit": limit.map(u64::from).unwrap_or(500) },
-        "expected_workspace": broker.identity()
-    });
-    dispatch_workspace_request(
-        "workspace.list_installed_packages",
-        &payload,
-        ExecutionOrigin::System,
-        session.as_ref(),
-        broker,
-        executor,
-    )
-    .await
-    .map(InstalledPackageInventory)
-    .map_err(display_error)
-}
-
-fn lockfile_inventory_arguments(project_root: &Path, limit: Option<u64>) -> Value {
-    json!({
-        "project_root": normalize_project_root(project_root.to_string_lossy().as_ref()),
-        "limit": limit.unwrap_or(500).clamp(1, 500)
-    })
-}
-
-#[tauri::command]
-async fn list_lockfile_packages(
-    limit: Option<u64>,
-    state: State<'_, AppState>,
-) -> Result<Value, String> {
-    let session = active_session(&state).await.map_err(display_error)?;
-    let root = state.project_root.read().await.clone();
-    let context = active_context(&state).await.map_err(display_error)?;
-    let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, executor } = &mut *context;
-    let payload = json!({
-        "arguments": lockfile_inventory_arguments(&root, limit),
-        "expected_workspace": broker.identity()
-    });
-    dispatch_workspace_request(
-        "workspace.list_lockfile_packages",
-        &payload,
-        ExecutionOrigin::System,
-        session.as_ref(),
-        broker,
-        executor,
-    )
-    .await
-    .map_err(display_error)
-}
-
-#[tauri::command]
-async fn respond_environment_operation(
-    request: EnvironmentOperationDecisionRequest,
-    state: State<'_, AppState>,
-) -> Result<Value, String> {
-    if !matches!(request.decision.as_str(), "approve" | "reject" | "cancel") {
-        return Err(format!(
-            "unsupported environment operation decision `{}`",
-            request.decision
-        ));
-    }
-    let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy().replace('\\', "/");
-    let environment_store = store_executor(&state)
-        .await
-        .map_err(display_error)?
-        .environment_repository();
-    let pending = environment_store
-        .get_request(project_root, request.request_id.clone())
-        .await
-        .map_err(display_error)?
-        .filter(|item| item.status == "requested")
-        .context(format!(
-            "Environment operation request not found or no longer pending: {}",
-            request.request_id
-        ))
-        .map_err(display_error)?;
-    if pending.source == "agent" {
-        let delivered = state
-            .environment_approvals
-            .respond_for_turn(
-                &request.request_id,
-                pending.turn_id.as_deref(),
-                ApprovalResponseInput {
-                    decision: request.decision.clone(),
-                    reason: request.reason.clone(),
-                },
-            )
-            .await;
-        if !delivered {
-            environment_store
-                .decide_request(
-                    request.request_id.clone(),
-                    rho_store::EnvironmentOperationDecisionRecord {
-                        decision: "cancel".to_string(),
-                        status: "interrupted".to_string(),
-                        reason: Some(
-                            "Environment operation channel is no longer active.".to_string(),
-                        ),
-                    },
-                )
-                .await
-                .map_err(display_error)?;
-        }
-        return Ok(json!({
-            "status": if delivered { "delivered" } else { "not_delivered" },
-            "request_id": request.request_id,
-            "turn_id": pending.turn_id
-        }));
-    }
-
-    let session = active_session(&state).await.map_err(display_error)?;
-    let context = active_context(&state).await.map_err(display_error)?;
-    let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, executor } = &mut *context;
-    decide_environment_operation(
-        &request.request_id,
-        &request.decision,
-        request.reason,
-        ExecutionOrigin::User,
-        session.as_ref(),
-        broker,
-        executor,
-    )
-    .await
-    .map_err(display_error)
 }
 
 #[tauri::command]
@@ -9486,21 +9265,22 @@ mod tests {
         editor_format_result, ensure_agent_file_proposal_turn_terminal,
         ensure_supported_r_architecture, ensure_supported_r_version, existing_startup_file,
         find_executable_on_path, finish_render_job, interrupt_all_agent_tasks, load_runtime_cache,
-        locate_ark_from_candidates, locate_rscript, lockfile_inventory_arguments,
-        parse_r_runtime_probe, persist_agent_file_mutation_event_to_store,
-        persist_workspace_identity, project_open, project_pick_directory, project_restore_session,
-        project_switch_blocker, r_architecture_supported, reconcile_render_job,
-        recover_incomplete_agent_file_mutations, render_job_is_terminal, retry_run_arguments,
-        run_is_retryable, run_r_probe, runtime_file_signature, safe_delete_project_file,
-        save_runtime_cache, shutdown_application, store_executor,
-        switch_project_with_watcher_factory, text_sha256, undo_agent_file_edit_state,
-        validate_execute_source_range_shape, validate_persisted_agent_file_proposal_structure,
-        workspace_project_root_code, write_r_probe_script,
+        locate_ark_from_candidates, locate_rscript, parse_r_runtime_probe,
+        persist_agent_file_mutation_event_to_store, persist_workspace_identity, project_open,
+        project_pick_directory, project_restore_session, project_switch_blocker,
+        r_architecture_supported, reconcile_render_job, recover_incomplete_agent_file_mutations,
+        render_job_is_terminal, retry_run_arguments, run_is_retryable, run_r_probe,
+        runtime_file_signature, safe_delete_project_file, save_runtime_cache, shutdown_application,
+        store_executor, switch_project_with_watcher_factory, text_sha256,
+        undo_agent_file_edit_state, validate_execute_source_range_shape,
+        validate_persisted_agent_file_proposal_structure, workspace_project_root_code,
+        write_r_probe_script,
     };
     use crate::commands::artifacts::{
         data_view_artifact_metadata, data_view_delimited_text, decode_plot_png_base64,
         ensure_artifact_export_target, has_png_signature,
     };
+    use crate::commands::environment::lockfile_inventory_arguments;
     use crate::commands::evidence::source_claim_snapshot;
     use crate::commands::runs::{audit_reproducibility_with_state, list_runs_with_state};
     use crate::platform;
@@ -15260,8 +15040,8 @@ mod tests {
             .expect("RHO_ENVIRONMENT_BINDINGS_PATH must name the generated file");
         tauri_specta::Builder::<tauri::Wry>::new()
             .commands(tauri_specta::collect_commands![
-                super::list_installed_packages,
-                super::list_environment_operation_requests,
+                crate::commands::environment::list_installed_packages,
+                crate::commands::environment::list_environment_operation_requests,
             ])
             .error_handling(tauri_specta::ErrorHandlingMode::Throw)
             .export(specta_typescript::Typescript::default(), output_path)
@@ -17295,12 +17075,12 @@ fn main() {
             render_document_job,
             render_job_status,
             cancel_render_job,
-            request_environment_operation_preview,
-            list_environment_operation_requests,
-            get_environment_operation_request,
-            respond_environment_operation,
-            list_installed_packages,
-            list_lockfile_packages,
+            commands::environment::request_environment_operation_preview,
+            commands::environment::list_environment_operation_requests,
+            commands::environment::get_environment_operation_request,
+            commands::environment::respond_environment_operation,
+            commands::environment::list_installed_packages,
+            commands::environment::list_lockfile_packages,
             commands::plugins::list_workspace_plugins,
             commands::plugins::get_workspace_plugin_transition,
             commands::plugins::request_workspace_plugin_enable,
