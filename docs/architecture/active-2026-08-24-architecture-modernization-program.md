@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-44",
+  "active_work_packages": ["AM-W2-45"],
+  "integration_lane": "AM-W2-45",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -422,6 +422,10 @@ diagnostic and Workspace-bootstrap Tauri adapters into one Startup command
 facade while preserving the existing probe, log, transition-gate, extension-
 finalization and recovery services unchanged. The same slice repairs the stale
 plugin restart checker source discovery found during focused verification.
+
+`AM-W2-45` moves Agent conversation list/create/turn-list/delete commands and
+their guarded deletion service into a conversation-owned facade without
+changing project isolation, active-turn/file-mutation blockers or Store data.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
