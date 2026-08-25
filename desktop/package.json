@@ -32,6 +32,7 @@
     "rsr:test:plugin-surface-bindings": "node ../scripts/test-plugin-surface-bindings.mjs",
     "rsr:test:project-bindings": "node ../scripts/test-project-bindings.mjs",
     "rsr:test:kernel-bindings": "node ../scripts/test-kernel-bindings.mjs",
+    "rsr:test:generated-transport-boundary": "node ../scripts/test-generated-transport-boundary.mjs",
     "rsr:test:check-bindings": "node ../scripts/test-check-bindings.mjs",
     "rsr:test:startup-bindings": "node ../scripts/test-startup-bindings.mjs",
     "rsr:test:history-bindings": "node ../scripts/test-history-bindings.mjs",
@@ -41,7 +42,7 @@
     "rsr:test:architecture": "node ../scripts/test-architecture-program.mjs && node ../scripts/architecture-program.mjs validate --root ..",
     "rsr:test:cutover": "node ../scripts/test-rsr-cutover.mjs",
     "rsr:accept:exact": "node ../scripts/accept-rsr-exact-app.mjs",
-    "rsr:check": "npm run rsr:typecheck && npm run rsr:lint && npm run rsr:test:identity && npm run rsr:test:commands && npm run rsr:test:runtime-output-bindings && npm run rsr:test:runtime-bindings && npm run rsr:test:surface-studio-bindings && npm run rsr:test:resource-bindings && npm run rsr:test:profile-bindings && npm run rsr:test:agent-conversation-bindings && npm run rsr:test:agent-turn-bindings && npm run rsr:test:agent-execution-bindings && npm run rsr:test:agent-runtime-bindings && npm run rsr:test:agent-settings-bindings && npm run rsr:test:agent-file-bindings && npm run rsr:test:plugin-surface-bindings && npm run rsr:test:project-bindings && npm run rsr:test:kernel-bindings && npm run rsr:test:check-bindings && npm run rsr:test:startup-bindings && npm run rsr:test:history-bindings && npm run rsr:test:environment-bindings && npm run rsr:test:evidence-bindings && npm run rsr:test:git-bindings && npm run rsr:test:architecture && npm run rsr:test:contract && npm run rsr:test && npm run rsr:build && npm run rsr:test:assets && npm run rsr:test:cutover && npm run rsr:test:browser && npm run rsr:test:interactions"
+    "rsr:check": "npm run rsr:typecheck && npm run rsr:lint && npm run rsr:test:identity && npm run rsr:test:commands && npm run rsr:test:runtime-output-bindings && npm run rsr:test:runtime-bindings && npm run rsr:test:surface-studio-bindings && npm run rsr:test:resource-bindings && npm run rsr:test:profile-bindings && npm run rsr:test:agent-conversation-bindings && npm run rsr:test:agent-turn-bindings && npm run rsr:test:agent-execution-bindings && npm run rsr:test:agent-runtime-bindings && npm run rsr:test:agent-settings-bindings && npm run rsr:test:agent-file-bindings && npm run rsr:test:plugin-surface-bindings && npm run rsr:test:project-bindings && npm run rsr:test:kernel-bindings && npm run rsr:test:generated-transport-boundary && npm run rsr:test:check-bindings && npm run rsr:test:startup-bindings && npm run rsr:test:history-bindings && npm run rsr:test:environment-bindings && npm run rsr:test:evidence-bindings && npm run rsr:test:git-bindings && npm run rsr:test:architecture && npm run rsr:test:contract && npm run rsr:test && npm run rsr:build && npm run rsr:test:assets && npm run rsr:test:cutover && npm run rsr:test:browser && npm run rsr:test:interactions"
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1",

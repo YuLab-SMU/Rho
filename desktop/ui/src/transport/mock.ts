@@ -13,6 +13,7 @@ import type {
   AgentTurnDetail,
   AgentTurnEvent,
   AgentTurnSummary,
+  AppInfo,
   DomainSurfaceData,
   CheckResult,
   CheckResultRequest,
@@ -1255,6 +1256,24 @@ export function createMockUiKernelTransport(
     },
     async loadSnapshot() {
       return copySnapshot(current);
+    },
+    async appInfo() {
+      return {
+        version: "0.4.1-dev.15",
+        channel: "development",
+        commit: "mock-build",
+        platform: "browser-mock",
+        executable_path: "unavailable",
+        frontend_entry: "mock",
+        website_url: "https://yulab-smu.top/Rho/",
+        source_url: "https://github.com/YuLab-SMU/Rho",
+        runtime: {
+          rscript: "/mock/Rscript",
+          r_version: "4.5.1",
+          agent_available: true,
+          aisdk_version: "mock",
+        },
+      } satisfies AppInfo;
     },
     async setSelection(request: SetUiSelectionRequest) {
       if (

@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const generator = path.join(repositoryRoot, "scripts/generate-kernel-bindings.mjs");
 const generatedPath = path.join(repositoryRoot, "desktop/ui/src/transport/generated/kernel.ts");
-const commands = ["ui_kernel_snapshot", "ui_set_selection"];
+const commands = ["app_info", "ui_kernel_snapshot", "ui_set_selection"];
 
 function count(text, needle) {
   return text.split(needle).length - 1;
@@ -45,6 +45,10 @@ try {
   assert.match(generated, /import type \{ SurfaceOriginV1 \} from "\.\/surface-studio"/);
   assert.match(generated, /uiKernelSnapshot: \(\)/);
   assert.match(generated, /uiSetSelection: \(request: SetUiSelectionRequest\)/);
+  assert.match(generated, /appInfo: \(\)/);
+  assert.match(generated, /export type AppInfo = \{/);
+  assert.match(generated, /channel: ReleaseChannel/);
+  assert.match(generated, /runtime: AppRuntimeInfo/);
   assert.match(generated, /command_registry: CommandRegistryV1/);
   assert.match(generated, /selection: UiSelectionV1 \| null/);
   assert.match(facet, /readonly contract: "rho\.ui\.kernel\.snapshot\.v1"/);
@@ -58,7 +62,7 @@ try {
   for (const name of ["UiSelection", "UiContext", "CommandDefinition", "CommandRegistration", "UiKernelSnapshot", "SetUiSelectionRequest"]) {
     assert.doesNotMatch(types, new RegExp(`export (?:interface|type) ${name}\\b`));
   }
-  for (const method of ["loadSnapshot", "setSelection"]) {
+  for (const method of ["appInfo", "loadSnapshot", "setSelection"]) {
     assert.match(facet, new RegExp(`\\b${method}\\b`));
     assert.match(mock, new RegExp(`\\b${method}\\b`));
   }

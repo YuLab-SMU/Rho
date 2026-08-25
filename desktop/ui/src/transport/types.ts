@@ -240,6 +240,7 @@ export type {
 export type {
   ActiveOperation,
   ActiveOperationState,
+  AppInfo,
   CommandAvailability,
   CommandDefinition,
   CommandPlacementTag,

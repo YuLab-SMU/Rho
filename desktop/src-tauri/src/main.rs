@@ -255,7 +255,7 @@ fn normalized_display_path(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, specta::Type)]
 struct AppRuntimeInfo {
     rscript: Option<String>,
     r_version: Option<String>,
@@ -263,7 +263,7 @@ struct AppRuntimeInfo {
     aisdk_version: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, specta::Type)]
 struct AppInfo {
     version: String,
     channel: ReleaseChannel,
@@ -1026,6 +1026,7 @@ async fn startup_status(state: State<'_, AppState>) -> Result<StartupView, Strin
     Ok(current_startup_view(&state))
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn app_info(state: State<'_, AppState>) -> Result<AppInfo, String> {
     let version = env!("CARGO_PKG_VERSION").to_string();

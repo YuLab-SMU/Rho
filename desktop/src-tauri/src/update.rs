@@ -24,7 +24,7 @@ const NATIVE_UPDATE_DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const DEFAULT_NATIVE_UPDATE_NOTES: &str = "A signed Rho update is available.";
 const TAURI_CONFIG: &str = include_str!("../tauri.conf.json");
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ReleaseChannel {
     Stable,

@@ -277,13 +277,7 @@ export function createTauriUiKernelTransport(
         case "rho.help": {
           const [snapshot, app] = await Promise.all([
             kernelTransport.loadSnapshot(),
-            invoke<{
-              readonly version: string;
-              readonly commit: string;
-              readonly platform: string;
-              readonly executable_path: string;
-              readonly frontend_entry: string;
-            }>("app_info"),
+            kernelTransport.appInfo(),
           ]);
           payload = [{
             id: "rho.build-identity",

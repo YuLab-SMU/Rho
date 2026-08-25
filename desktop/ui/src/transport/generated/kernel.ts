@@ -11,6 +11,7 @@ export type KernelInvoke = <T>(
 
 /** Commands */
 export const createKernelCommands = (__TAURI_INVOKE: KernelInvoke) => ({
+	appInfo: () => __TAURI_INVOKE<AppInfo>("app_info"),
 	uiKernelSnapshot: () => __TAURI_INVOKE<UiKernelSnapshotV1>("ui_kernel_snapshot"),
 	uiSetSelection: (request: SetUiSelectionRequest) => __TAURI_INVOKE<UiKernelSnapshotV1>("ui_set_selection", { request }),
 });
@@ -22,6 +23,25 @@ export type ActiveOperationV1 = {
 	operation_id: OperationId,
 	label: string,
 	state: ActiveOperationStateV1,
+};
+
+export type AppInfo = {
+	version: string,
+	channel: ReleaseChannel,
+	commit: string,
+	platform: string,
+	executable_path: string,
+	frontend_entry: string,
+	website_url: string,
+	source_url: string,
+	runtime: AppRuntimeInfo,
+};
+
+export type AppRuntimeInfo = {
+	rscript: string | null,
+	r_version: string | null,
+	agent_available: boolean | null,
+	aisdk_version: string | null,
 };
 
 export type ApplicationComponentId = string;
@@ -72,6 +92,8 @@ export type PluginId = string;
 export type PredicateId = string;
 
 export type ProjectId = string;
+
+export type ReleaseChannel = "stable" | "development";
 
 export type ResourceKindId = string;
 

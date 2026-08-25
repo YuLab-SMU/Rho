@@ -795,6 +795,27 @@ mod tests {
         assert_eq!(request["project_id"], "project:fixture");
         assert_eq!(request["expected_project_revision"], 7);
         assert_eq!(request["selection"]["kind"], "resource");
+
+        let app = serde_json::to_value(crate::AppInfo {
+            version: "0.4.1-dev.15".to_string(),
+            channel: crate::ReleaseChannel::Development,
+            commit: "fixture-commit".to_string(),
+            platform: "fixture-platform".to_string(),
+            executable_path: "/fixture/rho".to_string(),
+            frontend_entry: "assets/index-fixture.js".to_string(),
+            website_url: crate::WEBSITE_URL,
+            source_url: crate::SOURCE_URL,
+            runtime: crate::AppRuntimeInfo {
+                rscript: Some("/fixture/Rscript".to_string()),
+                r_version: Some("4.5.1".to_string()),
+                agent_available: Some(true),
+                aisdk_version: None,
+            },
+        })
+        .unwrap();
+        assert_eq!(app["channel"], "development");
+        assert_eq!(app["runtime"]["agent_available"], true);
+        assert!(app["runtime"]["aisdk_version"].is_null());
     }
 
     #[test]
@@ -804,6 +825,7 @@ mod tests {
             .expect("RHO_KERNEL_BINDINGS_PATH must name the generated file");
         tauri_specta::Builder::<tauri::Wry>::new()
             .commands(tauri_specta::collect_commands![
+                crate::app_info,
                 super::ui_kernel_snapshot,
                 super::ui_set_selection,
             ])

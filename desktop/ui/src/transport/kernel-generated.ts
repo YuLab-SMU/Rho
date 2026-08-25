@@ -1,5 +1,6 @@
 import {
   createKernelCommands,
+  type AppInfo as AppInfoWire,
   type ActiveOperationStateV1,
   type ActiveOperationV1,
   type CommandAvailabilityV1,
@@ -32,6 +33,7 @@ export type CommandDefinition = DeepReadonly<CommandDefinitionV1>;
 export type CommandAvailability = DeepReadonly<CommandAvailabilityV1>;
 export type CommandRegistration = DeepReadonly<CommandRegistrationV1>;
 export type SetUiSelectionRequest = DeepReadonly<SetUiSelectionRequestWire>;
+export type AppInfo = DeepReadonly<AppInfoWire>;
 
 export type UiKernelSnapshot = Omit<
   DeepReadonly<UiKernelSnapshotV1>,
@@ -42,6 +44,7 @@ export type UiKernelSnapshot = Omit<
 };
 
 export interface KernelTransport {
+  appInfo(): Promise<AppInfo>;
   loadSnapshot(): Promise<UiKernelSnapshot>;
   setSelection(request: SetUiSelectionRequest): Promise<UiKernelSnapshot>;
 }
@@ -58,6 +61,7 @@ function snapshotFromWire(snapshot: UiKernelSnapshotV1): UiKernelSnapshot {
 export function createTauriKernelTransport(invoke: KernelInvoke): KernelTransport {
   const commands = createKernelCommands(invoke);
   return {
+    appInfo: () => commands.appInfo(),
     loadSnapshot: async () => snapshotFromWire(await commands.uiKernelSnapshot()),
     setSelection: async (request) => snapshotFromWire(
       await commands.uiSetSelection(request),
