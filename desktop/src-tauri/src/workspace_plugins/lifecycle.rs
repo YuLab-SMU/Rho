@@ -724,7 +724,7 @@ impl PendingPluginPermissionRegistry {
         &self,
         context: &PluginRuntimeContext,
         kind: &str,
-        store: &mut Store,
+        store: &mut Store<impl StoreConnection>,
     ) -> WorkspacePluginBoundaryTeardownReport {
         let kind = if matches!(kind, "project_teardown" | "shutdown") {
             kind

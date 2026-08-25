@@ -11,12 +11,20 @@ use rho_store::{BorrowedStore, StoreExecutor, StoreExecutorOperationError};
 
 use super::{
     PendingPluginPermissionRegistry, PluginRuntimeContext, WorkspacePluginAgentProjection,
+    WorkspacePluginBoundaryTeardownReport, WorkspacePluginHeartbeatReport,
+    WorkspacePluginReconciliationReport,
 };
 
 pub(crate) struct AgentPluginProjectionSnapshot {
     pub project_root: String,
     pub runtime_context: PluginRuntimeContext,
     pub projection: WorkspacePluginAgentProjection,
+}
+
+pub(crate) struct PluginBoundaryTeardownOutcome {
+    pub report: WorkspacePluginBoundaryTeardownReport,
+    pub permission_recovery_error: Option<String>,
+    pub grant_recovery_error: Option<String>,
 }
 
 pub(crate) async fn run_store_service<R, F>(executor: &StoreExecutor, operation: F) -> Result<R>
@@ -69,6 +77,54 @@ pub(crate) async fn agent_plugin_projection_snapshot(
             runtime_context,
             projection,
         })
+    })
+    .await
+}
+
+pub(crate) async fn teardown_plugin_boundary(
+    registry: Arc<PendingPluginPermissionRegistry>,
+    executor: &StoreExecutor,
+    context: PluginRuntimeContext,
+    kind: String,
+    trigger: String,
+) -> Result<PluginBoundaryTeardownOutcome> {
+    run_store_service(executor, move |store| {
+        let report = registry.teardown_project(&context, &kind, store);
+        let permission_recovery_error = store
+            .recover_pending_plugin_permission_requests(&context.project_root, &trigger)
+            .err()
+            .map(|error| error.to_string());
+        let grant_recovery_error = store
+            .recover_transient_plugin_permission_grants(&context.project_root, &trigger)
+            .err()
+            .map(|error| error.to_string());
+        Ok(PluginBoundaryTeardownOutcome {
+            report,
+            permission_recovery_error,
+            grant_recovery_error,
+        })
+    })
+    .await
+}
+
+pub(crate) async fn reconcile_plugin_project(
+    registry: Arc<PendingPluginPermissionRegistry>,
+    executor: &StoreExecutor,
+    context: PluginRuntimeContext,
+) -> Result<WorkspacePluginReconciliationReport> {
+    run_store_service(executor, move |store| {
+        Ok(registry.reconcile_project(&context, store))
+    })
+    .await
+}
+
+pub(crate) async fn sweep_plugin_heartbeats(
+    registry: Arc<PendingPluginPermissionRegistry>,
+    executor: &StoreExecutor,
+    context: PluginRuntimeContext,
+) -> Result<WorkspacePluginHeartbeatReport> {
+    run_store_service(executor, move |store| {
+        Ok(registry.sweep_project_heartbeats(&context, store))
     })
     .await
 }

@@ -3217,7 +3217,7 @@ impl WorkspaceSnapshotAdapter for ExtensionWorkspaceSnapshotAdapter {
 struct WorkspacePluginAgentAdapter {
     registry: Arc<workspace_plugins::PendingPluginPermissionRegistry>,
     context: workspace_plugins::PluginRuntimeContext,
-    store_path: PathBuf,
+    store_executor: StoreExecutor,
 }
 
 impl AgentPluginContributionAdapter for WorkspacePluginAgentAdapter {
@@ -3226,16 +3226,21 @@ impl AgentPluginContributionAdapter for WorkspacePluginAgentAdapter {
         contribution_id: &'a str,
         input: Value,
     ) -> Pin<Box<dyn Future<Output = Result<Value>> + Send + 'a>> {
+        let registry = Arc::clone(&self.registry);
+        let context = self.context.clone();
+        let store_executor = self.store_executor.clone();
+        let contribution_id = contribution_id.to_string();
         Box::pin(async move {
-            let mut store = Store::open(&self.store_path)
-                .context("opening Store for Agent plugin contribution")?;
-            self.registry.invoke_file_contribution(
-                &self.context,
-                contribution_id,
-                rho_extension_runtime::ContributionInvocationOrigin::AgentTool,
-                input,
-                &mut store,
-            )
+            workspace_plugins::run_store_service(&store_executor, move |store| {
+                registry.invoke_file_contribution(
+                    &context,
+                    &contribution_id,
+                    rho_extension_runtime::ContributionInvocationOrigin::AgentTool,
+                    input,
+                    store,
+                )
+            })
+            .await
         })
     }
 }
@@ -5291,7 +5296,7 @@ async fn start_agent_turn(
             Arc::new(WorkspacePluginAgentAdapter {
                 registry: Arc::clone(&state.plugin_permissions),
                 context: plugin_runtime_context,
-                store_path: config.store_path.clone(),
+                store_executor: store_executor.clone(),
             }) as Arc<dyn AgentPluginContributionAdapter>
         });
     let runtime_profile = agent_runtime_profile;
@@ -6383,13 +6388,11 @@ async fn teardown_workspace_plugins_for_boundary(
             return;
         }
     };
-    let mut context = context.lock().await;
-    let identity = context.broker.identity().clone();
+    let identity = context.identity();
     let plugin_context =
         match workspace_plugin_runtime_context(data_dir, project_root.to_string(), &identity) {
             Ok(context) => context,
             Err(error) => {
-                drop(context);
                 write_startup_event(json!({
                     "kind": "workspace_plugin_boundary_teardown_unavailable",
                     "trigger": trigger,
@@ -6400,35 +6403,58 @@ async fn teardown_workspace_plugins_for_boundary(
                 return;
             }
         };
-    let report =
-        state
-            .plugin_permissions
-            .teardown_project(&plugin_context, kind, &mut context.store);
-    if let Err(error) = context
-        .store
-        .recover_pending_plugin_permission_requests(project_root, trigger)
+    let executor = match store_executor(state).await {
+        Ok(executor) => executor,
+        Err(error) => {
+            write_startup_event(json!({
+                "kind": "workspace_plugin_boundary_teardown_unavailable",
+                "trigger": trigger,
+                "reason_code": "plugin_store_unavailable",
+                "message": bounded_diagnostic(&error.to_string()),
+            }));
+            state.plugin_permissions.invalidate_project(project_root);
+            return;
+        }
+    };
+    let outcome = match workspace_plugins::teardown_plugin_boundary(
+        Arc::clone(&state.plugin_permissions),
+        executor,
+        plugin_context,
+        kind.to_string(),
+        trigger.to_string(),
+    )
+    .await
     {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            write_startup_event(json!({
+                "kind": "workspace_plugin_boundary_teardown_unavailable",
+                "trigger": trigger,
+                "reason_code": "plugin_store_operation_failed",
+                "message": bounded_diagnostic(&error.to_string()),
+            }));
+            state.plugin_permissions.invalidate_project(project_root);
+            return;
+        }
+    };
+    if let Some(error) = outcome.permission_recovery_error.as_deref() {
         write_startup_event(json!({
             "kind": "workspace_plugin_boundary_permission_recovery_failed",
             "trigger": trigger,
-            "message": bounded_diagnostic(&error.to_string()),
+            "message": bounded_diagnostic(error),
         }));
     }
-    if let Err(error) = context
-        .store
-        .recover_transient_plugin_permission_grants(project_root, trigger)
-    {
+    if let Some(error) = outcome.grant_recovery_error.as_deref() {
         write_startup_event(json!({
             "kind": "workspace_plugin_boundary_grant_recovery_failed",
             "trigger": trigger,
-            "message": bounded_diagnostic(&error.to_string()),
+            "message": bounded_diagnostic(error),
         }));
     }
-    drop(context);
     write_startup_event(json!({
         "kind": "workspace_plugin_boundary_teardown",
         "trigger": trigger,
-        "report": report,
+        "report": outcome.report,
     }));
 }
 
@@ -6461,14 +6487,41 @@ async fn reconcile_workspace_plugins_for_boundary(
             return;
         }
     };
-    let mut context = context.lock().await;
-    let identity = context.broker.identity().clone();
+    let identity = context.identity();
     match workspace_plugin_runtime_context(data_dir, project_root.to_string(), &identity) {
         Ok(plugin_context) => {
-            let report = state
-                .plugin_permissions
-                .reconcile_project(&plugin_context, &mut context.store);
+            let executor = match store_executor(state).await {
+                Ok(executor) => executor,
+                Err(error) => {
+                    write_startup_event(json!({
+                        "kind": "workspace_plugin_reconciliation_unavailable",
+                        "trigger": trigger,
+                        "reason_code": "plugin_store_unavailable",
+                        "message": bounded_diagnostic(&error.to_string()),
+                    }));
+                    return;
+                }
+            };
+            let report = match workspace_plugins::reconcile_plugin_project(
+                Arc::clone(&state.plugin_permissions),
+                executor,
+                plugin_context.clone(),
+            )
+            .await
+            {
+                Ok(report) => report,
+                Err(error) => {
+                    write_startup_event(json!({
+                        "kind": "workspace_plugin_reconciliation_unavailable",
+                        "trigger": trigger,
+                        "reason_code": "plugin_store_operation_failed",
+                        "message": bounded_diagnostic(&error.to_string()),
+                    }));
+                    return;
+                }
+            };
             let post_revision_report = if report.project_files_changed {
+                let mut context = context.lock().await;
                 context.broker.project_changed();
                 let identity = context.broker.identity().clone();
                 if let Err(error) = context.store.save_identity(&identity) {
@@ -6479,22 +6532,41 @@ async fn reconcile_workspace_plugins_for_boundary(
                     }));
                     None
                 } else {
+                    drop(context);
                     workspace_plugin_runtime_context(
                         plugin_context.app_data_dir.clone(),
                         project_root.to_string(),
                         &identity,
                     )
                     .ok()
-                    .map(|fresh_context| {
-                        state
-                            .plugin_permissions
-                            .reconcile_project(&fresh_context, &mut context.store)
-                    })
+                    .map(|fresh_context| (executor, fresh_context))
                 }
             } else {
                 None
             };
-            drop(context);
+            let post_revision_report = match post_revision_report {
+                Some((executor, fresh_context)) => {
+                    match workspace_plugins::reconcile_plugin_project(
+                        Arc::clone(&state.plugin_permissions),
+                        executor,
+                        fresh_context,
+                    )
+                    .await
+                    {
+                        Ok(report) => Some(report),
+                        Err(error) => {
+                            write_startup_event(json!({
+                                "kind": "workspace_plugin_reconciliation_unavailable",
+                                "trigger": trigger,
+                                "reason_code": "post_revision_store_operation_failed",
+                                "message": bounded_diagnostic(&error.to_string()),
+                            }));
+                            None
+                        }
+                    }
+                }
+                None => None,
+            };
             write_startup_event(json!({
                 "kind": "workspace_plugin_reconciliation",
                 "trigger": trigger,
@@ -6503,7 +6575,6 @@ async fn reconcile_workspace_plugins_for_boundary(
             }));
         }
         Err(error) => {
-            drop(context);
             write_startup_event(json!({
                 "kind": "workspace_plugin_reconciliation_unavailable",
                 "trigger": trigger,
@@ -6537,17 +6608,26 @@ async fn monitor_workspace_plugin_heartbeats(app: AppHandle) {
             Ok(context) => context,
             Err(_) => continue,
         };
-        let mut context = context.lock().await;
-        let identity = context.broker.identity().clone();
+        let identity = context.identity();
         let plugin_context =
             match workspace_plugin_runtime_context(data_dir, project_root, &identity) {
                 Ok(context) => context,
                 Err(_) => continue,
             };
-        let report = state
-            .plugin_permissions
-            .sweep_project_heartbeats(&plugin_context, &mut context.store);
-        drop(context);
+        let executor = match store_executor(&state).await {
+            Ok(executor) => executor,
+            Err(_) => continue,
+        };
+        let report = match workspace_plugins::sweep_plugin_heartbeats(
+            Arc::clone(&state.plugin_permissions),
+            executor,
+            plugin_context,
+        )
+        .await
+        {
+            Ok(report) => report,
+            Err(_) => continue,
+        };
         if report.checked > 0 || report.failures > 0 {
             write_startup_event(json!({
                 "kind": "workspace_plugin_heartbeat_sweep",

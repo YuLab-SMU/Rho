@@ -57,7 +57,7 @@ impl PendingPluginPermissionRegistry {
     pub(crate) fn sweep_project_heartbeats(
         &self,
         context: &PluginRuntimeContext,
-        store: &mut Store,
+        store: &mut Store<impl StoreConnection>,
     ) -> WorkspacePluginHeartbeatReport {
         let prefix = format!("{}\0", normalize_project_root(&context.project_root));
         let mut failed = Vec::new();

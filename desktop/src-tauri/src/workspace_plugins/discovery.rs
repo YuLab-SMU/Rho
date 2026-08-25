@@ -130,7 +130,7 @@ impl PendingPluginPermissionRegistry {
     pub(crate) fn reconcile_project(
         &self,
         context: &PluginRuntimeContext,
-        store: &mut Store,
+        store: &mut Store<impl StoreConnection>,
     ) -> WorkspacePluginReconciliationReport {
         let mut report = WorkspacePluginReconciliationReport {
             project_root: context.project_root.clone(),

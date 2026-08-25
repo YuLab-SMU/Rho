@@ -203,6 +203,75 @@ async fn workspace_plugin_lifecycle_runs_on_store_worker_and_recovers_after_reje
     assert_eq!(lifecycle.observed_state, "disabled");
 }
 
+#[tokio::test]
+async fn workspace_plugin_background_services_do_not_wait_for_workspace_lane() {
+    let directory = tempdir().unwrap();
+    write_plugin(directory.path(), serde_json::json!([]));
+    let context = context(directory.path());
+    let database = directory.path().join("rho.sqlite");
+    let executor = StoreExecutor::open(&database).await.unwrap();
+    let registry = Arc::new(PendingPluginPermissionRegistry::default());
+
+    let enable_registry = Arc::clone(&registry);
+    let enable_context = context.clone();
+    run_store_service(&executor, move |store| {
+        enable_registry.request_enable(&enable_context, "org.example.plugin", store)
+    })
+    .await
+    .unwrap();
+
+    let lane = Arc::new(WorkspaceBrokerLane::new(
+        BrokerState::new("workspace.background-services"),
+        Store::open(&database).unwrap(),
+    ));
+    let held_workspace = lane.lock().await;
+
+    let heartbeat = tokio::time::timeout(
+        Duration::from_millis(250),
+        sweep_plugin_heartbeats(Arc::clone(&registry), &executor, context.clone()),
+    )
+    .await
+    .expect("plugin heartbeat waited for the held Workspace broker lane")
+    .unwrap();
+    assert_eq!(heartbeat.checked, 1);
+    assert_eq!(heartbeat.failures, 0);
+
+    let teardown = tokio::time::timeout(
+        Duration::from_millis(250),
+        teardown_plugin_boundary(
+            Arc::clone(&registry),
+            &executor,
+            context.clone(),
+            "shutdown".to_string(),
+            "test_shutdown".to_string(),
+        ),
+    )
+    .await
+    .expect("plugin teardown waited for the held Workspace broker lane")
+    .unwrap();
+    assert_eq!(teardown.report.attempted, 1);
+    assert_eq!(teardown.report.completed, 1);
+    assert!(teardown.permission_recovery_error.is_none());
+    assert!(teardown.grant_recovery_error.is_none());
+
+    let reconciliation = tokio::time::timeout(
+        Duration::from_millis(250),
+        reconcile_plugin_project(Arc::clone(&registry), &executor, context),
+    )
+    .await
+    .expect("plugin reconciliation waited for the held Workspace broker lane")
+    .unwrap();
+    assert_eq!(reconciliation.reactivated, 1);
+    assert!(!reconciliation.project_files_changed);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(20), lane.lock())
+            .await
+            .is_err(),
+        "test did not keep the Workspace broker lane contended"
+    );
+    drop(held_workspace);
+}
+
 fn wat_data(value: &str) -> String {
     value
         .as_bytes()

@@ -92,7 +92,7 @@ pub(super) fn bounded_reconciliation_reason(message: &str) -> String {
 
 pub(super) fn recover_project_plugin_files(
     context: &PluginRuntimeContext,
-    store: &mut Store,
+    store: &mut Store<impl StoreConnection>,
     report: &mut WorkspacePluginReconciliationReport,
 ) {
     let transitions = match PluginLifecycleQueryService::new(store)
@@ -296,7 +296,7 @@ pub(super) fn reconcile_discovered_plugin(
     registry: &mut RegistryState,
     context: &PluginRuntimeContext,
     plugin: &DiscoveredPlugin,
-    store: &mut Store,
+    store: &mut Store<impl StoreConnection>,
 ) -> Result<ReconciliationStatus> {
     let (_, lifecycle) = PluginLifecycleMutationService::new(store).discover(
         &context.project_root,
@@ -497,7 +497,7 @@ pub(super) fn reconcile_discovered_plugin(
 }
 
 pub(super) fn prepare_recovery_enable_transition(
-    store: &mut Store,
+    store: &mut Store<impl StoreConnection>,
     context: &PluginRuntimeContext,
     plugin: &DiscoveredPlugin,
     target_digest: &str,
@@ -679,7 +679,7 @@ pub(super) fn prepare_retry_transition(
 }
 
 pub(super) fn persist_missing_plugin_block(
-    store: &mut Store,
+    store: &mut Store<impl StoreConnection>,
     context: &PluginRuntimeContext,
     lifecycle: &WorkspacePluginState,
 ) -> Result<()> {

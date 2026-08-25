@@ -9,7 +9,7 @@ use std::path::Path;
 
 use rho_store::{
     PluginLifecycleMutationOutcome, PluginLifecycleMutationService, PluginLifecycleQueryService,
-    Store, StoreError, WorkspacePluginPackageTombstone, WorkspacePluginPurgeDraft,
+    Store, StoreConnection, StoreError, WorkspacePluginPackageTombstone, WorkspacePluginPurgeDraft,
     WorkspacePluginRetentionSweep,
 };
 use thiserror::Error;
@@ -49,7 +49,7 @@ impl PluginTrashRetentionService {
 
     pub fn expire(
         &self,
-        store: &mut Store,
+        store: &mut Store<impl StoreConnection>,
         project_root: &str,
         cutoff: &str,
         limit: usize,
@@ -61,7 +61,7 @@ impl PluginTrashRetentionService {
 
     pub fn purge_exact_tombstone(
         &self,
-        store: &mut Store,
+        store: &mut Store<impl StoreConnection>,
         project_root: &str,
         tombstone_id: &str,
     ) -> Result<PluginRetentionPurgeReport, PluginRetentionError> {
