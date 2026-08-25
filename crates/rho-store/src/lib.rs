@@ -38,6 +38,7 @@ mod run;
 mod run_repository;
 mod runtime_output;
 mod runtime_output_contract;
+mod runtime_output_repository;
 mod workbench;
 
 pub use agent::{
@@ -107,6 +108,7 @@ pub use runtime_output_contract::{
     RuntimeExecutionStatus, RuntimeOutputIpcNumber, RuntimeOutputPresentationKind,
     RuntimeOutputReferenceKind, RuntimeOutputState, RuntimeOutputStorageKind,
 };
+pub use runtime_output_repository::{RuntimeOutputPolicySnapshot, RuntimeOutputRepository};
 
 pub fn normalize_project_root(root: &str) -> String {
     let normalized = root.replace('\\', "/");

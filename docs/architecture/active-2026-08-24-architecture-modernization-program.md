@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-23",
+  "active_work_packages": ["AM-W2-24"],
+  "integration_lane": "AM-W2-24",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -315,6 +315,11 @@ SQLite work uses the Store worker.
 preflight in one Store worker operation and uses that worker for active-root
 prepare/commit/rollback. The project-transition gate and all Workspace,
 watcher, extension and recovery ordering remain authoritative in the caller.
+
+`AM-W2-24` moves Runtime Output queries, follow reads, policy maintenance,
+retention actions and interrupted-execution reconciliation onto one durable
+repository. Supervised execution streaming/backpressure stays intact for its
+own behavior package.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
