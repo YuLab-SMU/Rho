@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-02",
+  "active_work_packages": ["AM-W2-03"],
+  "integration_lane": "AM-W2-03",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -198,6 +198,9 @@ boundaries.
 product-link/license handlers into a Shell module without changing command
 registration, state, responses or tests. It deliberately leaves Coordinator,
 Store and concurrency semantics untouched for later behavior packages.
+
+`AM-W2-03` moves the complete Git command adapter set into a dedicated module;
+the existing bounded Git execution and review services remain unchanged.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
