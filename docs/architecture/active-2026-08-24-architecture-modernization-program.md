@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W2-53"],
+  "active_work_packages": [],
   "integration_lane": "AM-W2-53",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -464,7 +464,7 @@ transaction, preflight blockers, candidate extension ownership,
 Workspace/Store/watcher sequencing and compensating recovery into
 `project_transition.rs`.
 
-`AM-W2-53` extracts the internal extension host's application/project/
+`AM-W2-53` (`c2e0719`/AM-E-0080) extracts the internal extension host's application/project/
 Workspace plugin inventory, broker facades, deterministic scope identities and
 candidate lifecycle from the composition root. Capability identity, scope
 isolation, broker authority and publish/rollback behavior remain unchanged;
