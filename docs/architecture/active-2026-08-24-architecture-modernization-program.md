@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W2-03"],
+  "active_work_packages": [],
   "integration_lane": "AM-W2-03",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -349,6 +349,10 @@ state/handlers, product URL and bundled-license behavior into `shell.rs`.
 unchanged, and the Kernel generated contract changes only its truthful source
 header. Coordinator, Store and concurrency semantics remain untouched for the
 next bounded packages.
+AM-W2-03 (`0f37ef3`/AM-E-0030) moves all thirteen Git Tauri adapters into
+`git_commands.rs`; `main.rs` falls to 17,518 lines while command identity,
+bounded subprocess execution, revision guards and project isolation remain
+unchanged.
 
 ## Version, NEWS, and release decision
 
