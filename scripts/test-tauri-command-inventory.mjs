@@ -76,6 +76,26 @@ const PROJECT_COMMANDS = [
   "viewer_read_file",
 ];
 
+const AGENT_LLM_COMMANDS = [
+  "agent_llm_cancel_test",
+  "agent_llm_catalog",
+  "agent_llm_declare_model_capabilities",
+  "agent_llm_delete_capability_route",
+  "agent_llm_delete_credential",
+  "agent_llm_delete_model",
+  "agent_llm_delete_provider",
+  "agent_llm_discover_models",
+  "agent_llm_refresh_credentials",
+  "agent_llm_save_capability_route",
+  "agent_llm_save_model",
+  "agent_llm_save_provider",
+  "agent_llm_select_model",
+  "agent_llm_set_context_capacity",
+  "agent_llm_set_credential",
+  "agent_llm_settings",
+  "agent_llm_test_model",
+];
+
 const PLUGIN_COMMANDS = [
   "accept_workspace_plugin_update",
   "disable_workspace_plugin",
@@ -249,6 +269,14 @@ export function validateCommandInventory({ sources, main, frontend, expectedHand
     "Project command module ownership changed",
   );
 
+  const agentLlmSource = sources.find(({ name }) => name.endsWith("commands/agent_llm.rs"));
+  assert.ok(agentLlmSource, "Agent LLM command module is missing");
+  assert.deepEqual(
+    commandDefinitions([agentLlmSource]).map(({ name }) => name).sort(),
+    AGENT_LLM_COMMANDS,
+    "Agent LLM command module ownership changed",
+  );
+
   return { commands: definitionNames.length, sources: sources.length };
 }
 
@@ -268,6 +296,9 @@ function fixtures() {
   const projectHandlers = PROJECT_COMMANDS.map(
     (command) => `  commands::project_session::${command},`,
   ).join("\n");
+  const agentLlmHandlers = AGENT_LLM_COMMANDS.map(
+    (command) => `  commands::agent_llm::${command},`,
+  ).join("\n");
   const pluginHandlers = PLUGIN_COMMANDS.map(
     (command) => `  commands::plugins::${command},`,
   ).join("\n");
@@ -282,6 +313,7 @@ ${evidenceHandlers}
 ${environmentHandlers}
 ${editorHandlers}
 ${projectHandlers}
+${agentLlmHandlers}
   commands::runs::list_runs,
   commands::runs::list_problems,
   commands::runs::get_run_detail,
@@ -311,6 +343,9 @@ ${projectHandlers}
       { name: "commands/project_session.rs", text: PROJECT_COMMANDS.map(
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
+      { name: "commands/agent_llm.rs", text: AGENT_LLM_COMMANDS.map(
+        (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
+      ).join("\n") },
       { name: "commands/plugins.rs", text: PLUGIN_COMMANDS.map(
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
@@ -323,6 +358,7 @@ ${projectHandlers}
       ...ENVIRONMENT_COMMANDS,
       ...EDITOR_COMMANDS,
       ...PROJECT_COMMANDS,
+      ...AGENT_LLM_COMMANDS,
       ...PLUGIN_COMMANDS,
     ].map(
       (command) => `invoke("${command}");`,

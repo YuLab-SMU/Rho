@@ -9,5 +9,5 @@ runTauriSpectaBindingGenerator({
   outputEnvironment: "RHO_AGENT_SETTINGS_BINDINGS_PATH",
   factoryName: "createAgentSettingsCommands",
   invokeTypeName: "AgentSettingsInvoke",
-  rustSources: "rho-desktop/agent_llm + main Agent settings and capacity commands",
+  rustSources: "rho-desktop/agent_llm service + commands/agent_llm facade",
 });

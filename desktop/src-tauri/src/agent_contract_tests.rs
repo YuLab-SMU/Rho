@@ -475,8 +475,8 @@ fn agent_settings_typescript_export() {
         .expect("RHO_AGENT_SETTINGS_BINDINGS_PATH must name the generated file");
     tauri_specta::Builder::<tauri::Wry>::new()
         .commands(tauri_specta::collect_commands![
-            crate::agent_llm_settings,
-            crate::agent_llm_set_context_capacity,
+            crate::commands::agent_llm::agent_llm_settings,
+            crate::commands::agent_llm::agent_llm_set_context_capacity,
         ])
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
         .export(specta_typescript::Typescript::default(), output_path)

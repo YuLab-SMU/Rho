@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-41",
+  "active_work_packages": ["AM-W2-42"],
+  "integration_lane": "AM-W2-42",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -403,6 +403,10 @@ without changing RunRepository or Workspace authority.
 `AM-W2-41` (`9bfa90b`/AM-E-0068) completes Project facade ownership by moving
 the remaining active-root skill-discovery adapter without changing discovery
 or filesystem policy.
+
+`AM-W2-42` moves the seventeen Agent LLM handlers beside their existing service
+owner and updates generated source identity without changing settings, secrets,
+network, revision or recovery behavior.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 

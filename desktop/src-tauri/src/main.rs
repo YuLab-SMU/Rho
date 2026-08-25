@@ -33,10 +33,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex as StdMutex, OnceLock, RwLock as SyncRwLock};
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
+use agent_llm::AgentModelTestControl;
+#[cfg(test)]
 use agent_llm::{
-    AgentCapabilityRoute, AgentContextCapacityRequest, AgentLlmSettingsView,
-    AgentModelCapabilityPatch, AgentModelDiscoveryResponse, AgentModelProfile,
-    AgentModelTestControl, AgentProviderProfile, DeleteModelRequest, DeleteProviderRequest,
+    AgentContextCapacityRequest, AgentLlmSettingsView, AgentModelProfile, AgentProviderProfile,
 };
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use project::{
@@ -838,13 +838,6 @@ enum AgentFileProposalMutationState {
     Undone,
     Stale,
     Uncertain,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct AgentLlmSelectRequest {
-    model_id: String,
-    expected_revision: u64,
 }
 
 fn runtime_config(state: &AppState) -> Result<RuntimeConfig> {
@@ -4021,222 +4014,6 @@ async fn retry_agent_turn(
         &state,
     )
     .await
-}
-
-#[cfg_attr(test, specta::specta)]
-#[tauri::command]
-async fn agent_llm_settings(state: State<'_, AppState>) -> Result<AgentLlmSettingsView, String> {
-    let result = (|| {
-        let config = runtime_config(&state)?;
-        agent_llm::settings_view(&config.data_dir, &config.rscript)
-    })();
-    match result {
-        Ok(view) => Ok(view),
-        Err(error) => {
-            write_startup_log(&format!(
-                "agent_llm_settings outcome=failed detail={error:#}"
-            ));
-            Err(display_error(error))
-        }
-    }
-}
-
-#[tauri::command]
-async fn agent_llm_save_provider(
-    provider: AgentProviderProfile,
-    state: State<'_, AppState>,
-) -> Result<AgentLlmSettingsView, String> {
-    let config = runtime_config(&state).map_err(display_error)?;
-    let settings = agent_llm::save_provider(&config.data_dir, provider).map_err(display_error)?;
-    agent_llm::settings_view_from_settings(settings).map_err(display_error)
-}
-
-#[tauri::command]
-async fn agent_llm_delete_provider(
-    request: DeleteProviderRequest,
-    state: State<'_, AppState>,
-) -> Result<AgentLlmSettingsView, String> {
-    let config = runtime_config(&state).map_err(display_error)?;
-    let settings = agent_llm::delete_provider(&config.data_dir, &request).map_err(display_error)?;
-    agent_llm::settings_view_from_settings(settings).map_err(display_error)
-}
-
-#[tauri::command]
-async fn agent_llm_set_credential(
-    provider_id: String,
-    credential: String,
-    state: State<'_, AppState>,
-) -> Result<AgentLlmSettingsView, String> {
-    let config = runtime_config(&state).map_err(display_error)?;
-    agent_llm::set_credential(&config.data_dir, &provider_id, &credential)
-        .map_err(display_error)?;
-    agent_llm::settings_view(&config.data_dir, &config.rscript).map_err(display_error)
-}
-
-#[tauri::command]
-async fn agent_llm_delete_credential(
-    provider_id: String,
-    state: State<'_, AppState>,
-) -> Result<AgentLlmSettingsView, String> {
-    let config = runtime_config(&state).map_err(display_error)?;
-    agent_llm::delete_credential(&config.data_dir, &provider_id).map_err(display_error)?;
-    agent_llm::settings_view(&config.data_dir, &config.rscript).map_err(display_error)
-}
-
-#[tauri::command]
-async fn agent_llm_save_model(
-    model: AgentModelProfile,
-    state: State<'_, AppState>,
-) -> Result<AgentLlmSettingsView, String> {
-    let config = runtime_config(&state).map_err(display_error)?;
-    let settings = agent_llm::save_model(&config.data_dir, model).map_err(display_error)?;
-    agent_llm::settings_view_from_settings(settings).map_err(display_error)
-}
-
-#[cfg_attr(test, specta::specta)]
-#[tauri::command]
-async fn agent_llm_set_context_capacity(
-    request: AgentContextCapacityRequest,
-    state: State<'_, AppState>,
-) -> Result<AgentLlmSettingsView, String> {
-    let config = runtime_config(&state).map_err(display_error)?;
-    let settings =
-        agent_llm::set_context_capacity(&config.data_dir, &request).map_err(display_error)?;
-    agent_llm::settings_view_from_settings(settings).map_err(display_error)
-}
-
-#[tauri::command]
-async fn agent_llm_delete_model(
-    request: DeleteModelRequest,
-    state: State<'_, AppState>,
-) -> Result<AgentLlmSettingsView, String> {
-    let config = runtime_config(&state).map_err(display_error)?;
-    let settings = agent_llm::delete_model(&config.data_dir, &request).map_err(display_error)?;
-    agent_llm::settings_view_from_settings(settings).map_err(display_error)
-}
-
-#[tauri::command]
-async fn agent_llm_select_model(
-    request: AgentLlmSelectRequest,
-    state: State<'_, AppState>,
-) -> Result<AgentLlmSettingsView, String> {
-    let config = runtime_config(&state).map_err(display_error)?;
-    let settings = agent_llm::save_capability_route(
-        &config.data_dir,
-        request.expected_revision,
-        AgentCapabilityRoute {
-            capability: "agent.chat".to_string(),
-            model_id: request.model_id,
-            model_type: "language".to_string(),
-            required_model_capabilities: Vec::new(),
-        },
-    )
-    .map_err(display_error)?;
-    agent_llm::settings_view_from_settings(settings).map_err(display_error)
-}
-
-#[tauri::command]
-async fn agent_llm_save_capability_route(
-    expected_revision: u64,
-    route: AgentCapabilityRoute,
-    state: State<'_, AppState>,
-) -> Result<AgentLlmSettingsView, String> {
-    let config = runtime_config(&state).map_err(display_error)?;
-    let settings = agent_llm::save_capability_route(&config.data_dir, expected_revision, route)
-        .map_err(display_error)?;
-    agent_llm::settings_view_from_settings(settings).map_err(display_error)
-}
-
-#[tauri::command]
-async fn agent_llm_delete_capability_route(
-    expected_revision: u64,
-    capability: String,
-    state: State<'_, AppState>,
-) -> Result<AgentLlmSettingsView, String> {
-    let config = runtime_config(&state).map_err(display_error)?;
-    let settings =
-        agent_llm::delete_capability_route(&config.data_dir, expected_revision, &capability)
-            .map_err(display_error)?;
-    agent_llm::settings_view_from_settings(settings).map_err(display_error)
-}
-
-#[tauri::command]
-async fn agent_llm_declare_model_capabilities(
-    expected_revision: u64,
-    model_id: String,
-    patch: AgentModelCapabilityPatch,
-    state: State<'_, AppState>,
-) -> Result<AgentLlmSettingsView, String> {
-    let config = runtime_config(&state).map_err(display_error)?;
-    let settings = agent_llm::declare_model_capabilities(
-        &config.data_dir,
-        expected_revision,
-        &model_id,
-        patch,
-    )
-    .map_err(display_error)?;
-    agent_llm::settings_view_from_settings(settings).map_err(display_error)
-}
-
-#[tauri::command]
-async fn agent_llm_refresh_credentials(
-    state: State<'_, AppState>,
-) -> Result<AgentLlmSettingsView, String> {
-    let config = runtime_config(&state).map_err(display_error)?;
-    agent_llm::refresh_credentials_view(&config.data_dir, &config.rscript).map_err(display_error)
-}
-
-#[tauri::command]
-async fn agent_llm_test_model(
-    model_id: String,
-    state: State<'_, AppState>,
-) -> Result<AgentLlmSettingsView, String> {
-    let config = runtime_config(&state).map_err(display_error)?;
-    let data_dir = config.data_dir.clone();
-    let rscript = config.rscript.clone();
-    let agent_package = config.agent_package.clone();
-    let test_control = state.agent_llm_test_control.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        agent_llm::test_model(
-            &data_dir,
-            &rscript,
-            &agent_package,
-            &model_id,
-            Some(&test_control),
-        )
-    })
-    .await
-    .map_err(display_error)?
-    .map_err(display_error)
-}
-
-#[tauri::command]
-async fn agent_llm_cancel_test(state: State<'_, AppState>) -> Result<Value, String> {
-    let cancelled = agent_llm::cancel_test(&state.agent_llm_test_control).map_err(display_error)?;
-    Ok(json!({ "status": if cancelled { "cancelled" } else { "idle" } }))
-}
-
-#[tauri::command]
-async fn agent_llm_catalog(state: State<'_, AppState>) -> Result<Value, String> {
-    let config = runtime_config(&state).map_err(display_error)?;
-    let entries = agent_llm::catalog(&config.rscript).map_err(display_error)?;
-    serde_json::to_value(entries).map_err(display_error)
-}
-
-#[tauri::command]
-async fn agent_llm_discover_models(
-    provider_id: String,
-    state: State<'_, AppState>,
-) -> Result<AgentModelDiscoveryResponse, String> {
-    let config = runtime_config(&state).map_err(display_error)?;
-    let data_dir = config.data_dir.clone();
-    let rscript = config.rscript.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        agent_llm::discover_models(&data_dir, &rscript, &provider_id)
-    })
-    .await
-    .map_err(display_error)?
-    .map_err(display_error)
 }
 
 #[derive(Debug, Clone, Deserialize, specta::Type)]
@@ -16587,23 +16364,23 @@ fn main() {
             commands::runs::retry_run,
             run_agent,
             agent_context_preview,
-            agent_llm_settings,
-            agent_llm_save_provider,
-            agent_llm_delete_provider,
-            agent_llm_set_credential,
-            agent_llm_delete_credential,
-            agent_llm_save_model,
-            agent_llm_set_context_capacity,
-            agent_llm_delete_model,
-            agent_llm_select_model,
-            agent_llm_save_capability_route,
-            agent_llm_delete_capability_route,
-            agent_llm_declare_model_capabilities,
-            agent_llm_refresh_credentials,
-            agent_llm_test_model,
-            agent_llm_cancel_test,
-            agent_llm_catalog,
-            agent_llm_discover_models,
+            commands::agent_llm::agent_llm_settings,
+            commands::agent_llm::agent_llm_save_provider,
+            commands::agent_llm::agent_llm_delete_provider,
+            commands::agent_llm::agent_llm_set_credential,
+            commands::agent_llm::agent_llm_delete_credential,
+            commands::agent_llm::agent_llm_save_model,
+            commands::agent_llm::agent_llm_set_context_capacity,
+            commands::agent_llm::agent_llm_delete_model,
+            commands::agent_llm::agent_llm_select_model,
+            commands::agent_llm::agent_llm_save_capability_route,
+            commands::agent_llm::agent_llm_delete_capability_route,
+            commands::agent_llm::agent_llm_declare_model_capabilities,
+            commands::agent_llm::agent_llm_refresh_credentials,
+            commands::agent_llm::agent_llm_test_model,
+            commands::agent_llm::agent_llm_cancel_test,
+            commands::agent_llm::agent_llm_catalog,
+            commands::agent_llm::agent_llm_discover_models,
             list_agent_conversations,
             create_agent_conversation,
             list_agent_turns,
