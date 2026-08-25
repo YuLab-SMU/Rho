@@ -57,7 +57,7 @@ pub use evidence::{
     ClaimReviewStatus, EvidenceClaim, EvidenceClaimDraft, EvidenceClaimReview, EvidenceEntry,
     EvidenceEntryDraft,
 };
-pub use executor::{StoreExecutor, StoreExecutorError};
+pub use executor::{StoreExecutor, StoreExecutorError, StoreExecutorOperationError};
 pub use mutation::ProjectMutationService;
 pub use plugin_lifecycle::{
     PluginLifecycleMutationOutcome, WorkspacePluginCrashOutcome, WorkspacePluginDiscoveredDraft,
@@ -295,6 +295,16 @@ pub struct Store<C = Box<Connection>> {
     connection: C,
     migration_outcome: MigrationOutcome,
 }
+
+/// Connection ownership accepted by the Store's durable domain APIs.
+///
+/// The owned application Store uses `Box<Connection>` while the asynchronous
+/// executor lends `&mut Connection` for the duration of one service call. This
+/// trait keeps repository/service signatures independent of that ownership
+/// detail without exposing a second persistence implementation.
+pub trait StoreConnection: std::ops::Deref<Target = Connection> + std::ops::DerefMut {}
+
+impl<C> StoreConnection for C where C: std::ops::Deref<Target = Connection> + std::ops::DerefMut {}
 
 impl Store {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StoreError> {

@@ -1,7 +1,7 @@
 use super::*;
 
 pub(super) fn record_call_event(
-    store: &mut Store,
+    store: &mut Store<impl StoreConnection>,
     context: &PluginRuntimeContext,
     plugin_id: &str,
     package_digest: &str,

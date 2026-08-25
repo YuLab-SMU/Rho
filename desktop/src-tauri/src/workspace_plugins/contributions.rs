@@ -4,7 +4,7 @@ impl PendingPluginPermissionRegistry {
     pub(crate) fn agent_projection(
         &self,
         context: &PluginRuntimeContext,
-        store: &mut Store,
+        store: &mut Store<impl StoreConnection>,
     ) -> Result<WorkspacePluginAgentProjection> {
         let records = {
             let state = self

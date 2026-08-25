@@ -41,8 +41,8 @@ use rho_store::{
     PluginPermissionCallEventDraft, PluginPermissionDecision, PluginPermissionDecisionDraft,
     PluginPermissionGrant, PluginPermissionMutationOutcome, PluginPermissionMutationService,
     PluginPermissionQueryService, PluginPermissionRequest, PluginPermissionRequestDraft, Store,
-    WorkspacePluginCrashOutcome, WorkspacePluginDiscoveredDraft, WorkspacePluginState,
-    WorkspacePluginTombstoneDraft, WorkspacePluginTransitionAdvance,
+    StoreConnection, WorkspacePluginCrashOutcome, WorkspacePluginDiscoveredDraft,
+    WorkspacePluginState, WorkspacePluginTombstoneDraft, WorkspacePluginTransitionAdvance,
     WorkspacePluginTransitionDraft, normalize_project_root,
 };
 use sha2::{Digest, Sha256};
@@ -68,6 +68,7 @@ mod permissions;
 mod projection_helpers;
 mod recovery_helpers;
 mod runtime_health;
+mod service;
 mod upgrade;
 mod workspace_dispatch;
 
@@ -82,6 +83,7 @@ use projection_helpers::{
 };
 pub(crate) use projection_helpers::{validate_surface_artifacts, validate_surface_command_result};
 use recovery_helpers::*;
+pub(crate) use service::*;
 pub(crate) use workspace_dispatch::*;
 
 #[derive(Clone)]

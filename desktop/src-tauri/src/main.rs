@@ -4960,41 +4960,24 @@ async fn agent_context_preview(
     let explicit_context = resolve_agent_explicit_context(&state, runtime_output_context.as_ref())
         .await
         .map_err(display_error)?;
-    let agent_store = store_executor(&state)
+    let store_executor = store_executor(&state).await.map_err(display_error)?;
+    let agent_store = store_executor.agent_repository();
+    let _project_transition = state.project_transition_gate.lock().await;
+    let identity = active_context(&state)
         .await
         .map_err(display_error)?
-        .agent_repository();
-    let _project_transition = state.project_transition_gate.lock().await;
-    let context = active_context(&state).await.map_err(display_error)?;
-    let (project_root, plugin_projection) = {
-        let mut context_guard = context.lock().await;
-        let identity = context_guard.broker.identity().clone();
-        let project_root = context_guard
-            .store
-            .active_project_root()
-            .map_err(display_error)?
-            .context("Cannot preview Agent context without an active project identity")
-            .map_err(display_error)?;
-        let plugin_runtime_context = workspace_plugins::PluginRuntimeContext {
-            app_data_dir: config.data_dir.clone(),
-            project_scope_id: extension_project_scope_id(&project_root).map_err(display_error)?,
-            project_root: project_root.clone(),
-            project_revision: i64::try_from(identity.project_revision)
-                .context("project revision exceeds the plugin contribution range")
-                .map_err(display_error)?,
-            workspace: Some(WorkspaceGrantIdentity {
-                workspace_id: identity.workspace_id.clone(),
-                kernel_instance_id: identity.kernel_instance_id.clone(),
-                state_revision: identity.state_revision,
-                project_revision: identity.project_revision,
-            }),
-        };
-        let plugin_projection = state
-            .plugin_permissions
-            .agent_projection(&plugin_runtime_context, &mut context_guard.store)
-            .map_err(display_error)?;
-        (project_root, plugin_projection)
-    };
+        .identity();
+    let plugin_snapshot = workspace_plugins::agent_plugin_projection_snapshot(
+        Arc::clone(&state.plugin_permissions),
+        store_executor,
+        config.data_dir.clone(),
+        identity,
+        "Cannot preview Agent context without an active project identity",
+    )
+    .await
+    .map_err(display_error)?;
+    let project_root = plugin_snapshot.project_root;
+    let plugin_projection = plugin_snapshot.projection;
     let history = if let Some(conversation_id) = requested_conversation_id.as_deref() {
         agent_store
             .recent_conversation(
@@ -5143,45 +5126,24 @@ async fn start_agent_turn(
     let explicit_context = resolve_agent_explicit_context(state, runtime_output_context.as_ref())
         .await
         .map_err(display_error)?;
-    let agent_store = store_executor(state)
-        .await
-        .map_err(display_error)?
-        .agent_repository();
+    let store_executor = store_executor(state).await.map_err(display_error)?;
+    let agent_store = store_executor.agent_repository();
     let conversation_id;
-    let project_root;
-    let identity;
-    let plugin_runtime_context;
-    let plugin_projection;
     let mut agent_runtime_profile = resolved_model.runtime_profile.clone();
-    {
-        let mut context_guard = context.lock().await;
-        identity = context_guard.broker.identity().clone();
-        project_root = context_guard
-            .store
-            .active_project_root()
-            .map_err(display_error)?
-            .context("Cannot start Agent without an active project identity")
-            .map_err(display_error)?;
-        plugin_runtime_context = workspace_plugins::PluginRuntimeContext {
-            app_data_dir: config.data_dir.clone(),
-            project_scope_id: extension_project_scope_id(&project_root).map_err(display_error)?,
-            project_root: project_root.clone(),
-            project_revision: i64::try_from(identity.project_revision)
-                .context("project revision exceeds the plugin contribution range")
-                .map_err(display_error)?,
-            workspace: Some(WorkspaceGrantIdentity {
-                workspace_id: identity.workspace_id.clone(),
-                kernel_instance_id: identity.kernel_instance_id.clone(),
-                state_revision: identity.state_revision,
-                project_revision: identity.project_revision,
-            }),
-        };
-        plugin_projection = state
-            .plugin_permissions
-            .agent_projection(&plugin_runtime_context, &mut context_guard.store)
-            .map_err(display_error)?;
-        agent_runtime_profile.plugin_tools = plugin_projection.tools.clone();
-    }
+    let identity = context.identity();
+    let plugin_snapshot = workspace_plugins::agent_plugin_projection_snapshot(
+        Arc::clone(&state.plugin_permissions),
+        store_executor,
+        config.data_dir.clone(),
+        Arc::clone(&identity),
+        "Cannot start Agent without an active project identity",
+    )
+    .await
+    .map_err(display_error)?;
+    let project_root = plugin_snapshot.project_root;
+    let plugin_runtime_context = plugin_snapshot.runtime_context;
+    let plugin_projection = plugin_snapshot.projection;
+    agent_runtime_profile.plugin_tools = plugin_projection.tools.clone();
 
     if explicit_context.is_some() || context_plan_digest.is_some() {
         let digest_conversation_id = requested_conversation_id

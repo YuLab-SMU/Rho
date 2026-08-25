@@ -1,22 +1,23 @@
 //! Project-scoped application seam for durable workspace-plugin lifecycle facts.
 
 use crate::{
-    PluginLifecycleMutationOutcome, Store, StoreError, WorkspacePluginCrashOutcome,
-    WorkspacePluginDiscoveredDraft, WorkspacePluginGenerationAllocation,
-    WorkspacePluginLifecycleEvent, WorkspacePluginPackageTombstone, WorkspacePluginPurgeDraft,
-    WorkspacePluginPurgeResult, WorkspacePluginReplacementCompletion,
-    WorkspacePluginRestoreCompletion, WorkspacePluginRetentionSweep, WorkspacePluginState,
-    WorkspacePluginTombstoneDraft, WorkspacePluginTransition, WorkspacePluginTransitionAdvance,
-    WorkspacePluginTransitionDraft, WorkspacePluginTransitionRequestResult,
-    WorkspacePluginUninstallCompletion, query::required_project_root,
+    PluginLifecycleMutationOutcome, Store, StoreConnection, StoreError,
+    WorkspacePluginCrashOutcome, WorkspacePluginDiscoveredDraft,
+    WorkspacePluginGenerationAllocation, WorkspacePluginLifecycleEvent,
+    WorkspacePluginPackageTombstone, WorkspacePluginPurgeDraft, WorkspacePluginPurgeResult,
+    WorkspacePluginReplacementCompletion, WorkspacePluginRestoreCompletion,
+    WorkspacePluginRetentionSweep, WorkspacePluginState, WorkspacePluginTombstoneDraft,
+    WorkspacePluginTransition, WorkspacePluginTransitionAdvance, WorkspacePluginTransitionDraft,
+    WorkspacePluginTransitionRequestResult, WorkspacePluginUninstallCompletion,
+    query::required_project_root,
 };
 
-pub struct PluginLifecycleQueryService<'a> {
-    store: &'a Store,
+pub struct PluginLifecycleQueryService<'a, C: StoreConnection = Box<rusqlite::Connection>> {
+    store: &'a Store<C>,
 }
 
-impl<'a> PluginLifecycleQueryService<'a> {
-    pub fn new(store: &'a Store) -> Self {
+impl<'a, C: StoreConnection> PluginLifecycleQueryService<'a, C> {
+    pub fn new(store: &'a Store<C>) -> Self {
         Self { store }
     }
 
@@ -86,12 +87,12 @@ impl<'a> PluginLifecycleQueryService<'a> {
     }
 }
 
-pub struct PluginLifecycleMutationService<'a> {
-    store: &'a mut Store,
+pub struct PluginLifecycleMutationService<'a, C: StoreConnection = Box<rusqlite::Connection>> {
+    store: &'a mut Store<C>,
 }
 
-impl<'a> PluginLifecycleMutationService<'a> {
-    pub fn new(store: &'a mut Store) -> Self {
+impl<'a, C: StoreConnection> PluginLifecycleMutationService<'a, C> {
+    pub fn new(store: &'a mut Store<C>) -> Self {
         Self { store }
     }
 

@@ -8,15 +8,15 @@
 use crate::{
     PluginPermissionCallEventDraft, PluginPermissionDecisionDraft, PluginPermissionEvent,
     PluginPermissionGrant, PluginPermissionMutationOutcome, PluginPermissionRequest,
-    PluginPermissionRequestDraft, Store, StoreError, query::required_project_root,
+    PluginPermissionRequestDraft, Store, StoreConnection, StoreError, query::required_project_root,
 };
 
-pub struct PluginPermissionQueryService<'a> {
-    store: &'a Store,
+pub struct PluginPermissionQueryService<'a, C: StoreConnection = Box<rusqlite::Connection>> {
+    store: &'a Store<C>,
 }
 
-impl<'a> PluginPermissionQueryService<'a> {
-    pub fn new(store: &'a Store) -> Self {
+impl<'a, C: StoreConnection> PluginPermissionQueryService<'a, C> {
+    pub fn new(store: &'a Store<C>) -> Self {
         Self { store }
     }
 
@@ -63,12 +63,12 @@ impl<'a> PluginPermissionQueryService<'a> {
     }
 }
 
-pub struct PluginPermissionMutationService<'a> {
-    store: &'a mut Store,
+pub struct PluginPermissionMutationService<'a, C: StoreConnection = Box<rusqlite::Connection>> {
+    store: &'a mut Store<C>,
 }
 
-impl<'a> PluginPermissionMutationService<'a> {
-    pub fn new(store: &'a mut Store) -> Self {
+impl<'a, C: StoreConnection> PluginPermissionMutationService<'a, C> {
+    pub fn new(store: &'a mut Store<C>) -> Self {
         Self { store }
     }
 

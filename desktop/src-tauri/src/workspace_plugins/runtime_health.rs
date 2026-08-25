@@ -160,7 +160,7 @@ impl PendingPluginPermissionRegistry {
         key: &str,
         identity: &ActiveCrashIdentity,
         reason_code: &str,
-        store: &mut Store,
+        store: &mut Store<impl StoreConnection>,
     ) -> Result<bool> {
         {
             let mut state = self

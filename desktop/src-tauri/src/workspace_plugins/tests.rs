@@ -1,9 +1,12 @@
 use super::*;
+use rho_core::BrokerState;
 use rho_extension_runtime::{GrantTokenSource, P2_1_SMOKE_WASM, ScopeId, SystemGrantClock};
 use rho_server::plugin_network::{NetworkResolver, NetworkTransport, NetworkTransportResponse};
 use rho_server::plugin_workspace::{
     PreparedWorkspaceInspection, WorkspaceReferenceClock, WorkspaceReferenceIdSource,
 };
+use rho_server::workspace_lane::WorkspaceBrokerLane;
+use rho_store::StoreExecutor;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -78,6 +81,66 @@ fn deterministic_registry_with_network_and_token(
             network_engine: Arc::new(network_engine),
         }),
     }
+}
+
+#[tokio::test]
+async fn workspace_plugin_agent_projection_does_not_wait_for_workspace_lane() {
+    let directory = tempdir().unwrap();
+    let project_root = normalize_project_root(
+        directory
+            .path()
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .as_ref(),
+    );
+    let app_data_dir = directory.path().join("app-data");
+    fs::create_dir_all(&app_data_dir).unwrap();
+
+    let executor = StoreExecutor::open(directory.path().join("application.sqlite"))
+        .await
+        .unwrap();
+    let durable_root = project_root.clone();
+    executor
+        .run_service(
+            move |store| -> std::result::Result<(), rho_store::StoreError> {
+                store.set_project_root(Some(&durable_root))
+            },
+        )
+        .await
+        .unwrap();
+
+    let lane = Arc::new(WorkspaceBrokerLane::new(
+        BrokerState::new("workspace.projection"),
+        Store::open(directory.path().join("application.sqlite")).unwrap(),
+    ));
+    let held_workspace = lane.lock().await;
+    let identity = lane.identity();
+
+    let snapshot = tokio::time::timeout(
+        Duration::from_millis(250),
+        agent_plugin_projection_snapshot(
+            PendingPluginPermissionRegistry::new(),
+            &executor,
+            app_data_dir,
+            identity,
+            "test active project is unavailable",
+        ),
+    )
+    .await
+    .expect("plugin projection waited for the held Workspace broker lane")
+    .unwrap();
+
+    assert_eq!(snapshot.project_root, project_root);
+    assert!(snapshot.projection.tools.is_empty());
+    assert!(snapshot.projection.context.is_empty());
+    assert!(
+        tokio::time::timeout(Duration::from_millis(20), lane.lock())
+            .await
+            .is_err(),
+        "test did not keep the Workspace broker lane contended"
+    );
+    drop(held_workspace);
 }
 
 fn wat_data(value: &str) -> String {

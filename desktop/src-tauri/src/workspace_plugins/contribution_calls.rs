@@ -156,7 +156,7 @@ impl PendingPluginPermissionRegistry {
         contribution_id: &str,
         origin: ContributionInvocationOrigin,
         input: serde_json::Value,
-        store: &mut Store,
+        store: &mut Store<impl StoreConnection>,
     ) -> Result<serde_json::Value> {
         let crash_context = {
             let state = self
@@ -206,7 +206,7 @@ impl PendingPluginPermissionRegistry {
         contribution_id: &str,
         origin: ContributionInvocationOrigin,
         input: serde_json::Value,
-        store: &mut Store,
+        store: &mut Store<impl StoreConnection>,
     ) -> Result<serde_json::Value> {
         {
             let state = self

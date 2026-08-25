@@ -687,7 +687,7 @@ pub(super) fn persist_missing_plugin_block(
 }
 
 pub(super) fn persist_recovery_block(
-    store: &mut Store,
+    store: &mut Store<impl StoreConnection>,
     context: &PluginRuntimeContext,
     lifecycle: &WorkspacePluginState,
     reason_code: &str,

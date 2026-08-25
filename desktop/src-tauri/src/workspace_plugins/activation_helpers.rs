@@ -167,7 +167,7 @@ pub(super) fn discovered_from_cache(
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn advance_enable_transition(
-    store: &mut Store,
+    store: &mut Store<impl StoreConnection>,
     context: &PluginRuntimeContext,
     transition_id: &str,
     expected_phase: &str,
@@ -213,7 +213,7 @@ pub(super) fn advance_enable_transition(
 }
 
 pub(super) fn fail_enable_transition(
-    store: &mut Store,
+    store: &mut Store<impl StoreConnection>,
     context: &PluginRuntimeContext,
     transition_id: &str,
     reason_code: &str,

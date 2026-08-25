@@ -5,6 +5,7 @@
 //! `tokio-rusqlite` worker. Repository calls are serialized on the worker and
 //! never execute SQLite work on a Tokio request thread.
 
+use std::fmt;
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
@@ -29,6 +30,38 @@ impl StoreExecutorError {
         match self {
             Self::Store(error) => error.migration_outcome(),
             Self::Initialization(_) | Self::Worker(_) => None,
+        }
+    }
+}
+
+/// Failure from an application service executed on the Store worker.
+///
+/// Domain errors remain typed instead of being flattened into a worker error;
+/// transport failures are kept separate so callers can preserve truthful
+/// failure and recovery behavior.
+#[derive(Debug)]
+pub enum StoreExecutorOperationError<E> {
+    Operation(E),
+    Worker(String),
+}
+
+impl<E: fmt::Display> fmt::Display for StoreExecutorOperationError<E> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Operation(error) => error.fmt(formatter),
+            Self::Worker(message) => write!(formatter, "Store worker failed: {message}"),
+        }
+    }
+}
+
+impl<E> std::error::Error for StoreExecutorOperationError<E>
+where
+    E: std::error::Error + 'static,
+{
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Operation(error) => Some(error),
+            Self::Worker(_) => None,
         }
     }
 }
@@ -73,6 +106,40 @@ impl StoreExecutor {
             .map_err(|error| match error {
                 tokio_rusqlite::Error::Error(error) => StoreExecutorError::Store(error),
                 other => StoreExecutorError::Worker(other.to_string()),
+            })
+    }
+
+    /// Run one application service against the worker's existing configured
+    /// Store connection. The borrowed Store cannot escape because results must
+    /// be `'static`; all SQLite work remains serialized on the same worker.
+    pub async fn run_service<R, E, F>(
+        &self,
+        operation: F,
+    ) -> Result<R, StoreExecutorOperationError<E>>
+    where
+        R: Send + 'static,
+        E: Send + 'static,
+        F: FnOnce(&mut Store<&mut rusqlite::Connection>) -> Result<R, E> + Send + 'static,
+    {
+        self.connection
+            .call(move |connection| {
+                let mut store = Store::borrowed(connection);
+                operation(&mut store)
+            })
+            .await
+            .map_err(|error| match error {
+                tokio_rusqlite::Error::Error(error) => {
+                    StoreExecutorOperationError::Operation(error)
+                }
+                tokio_rusqlite::Error::ConnectionClosed => {
+                    StoreExecutorOperationError::Worker("connection closed".to_string())
+                }
+                tokio_rusqlite::Error::Close((_, error)) => {
+                    StoreExecutorOperationError::Worker(error.to_string())
+                }
+                _ => StoreExecutorOperationError::Worker(
+                    "unknown Store worker transport failure".to_string(),
+                ),
             })
     }
 
@@ -215,6 +282,14 @@ mod tests {
 
     use super::*;
     use crate::{ClaimReviewStatus, MigrationStatus};
+
+    #[derive(Debug, Error)]
+    enum TestServiceError {
+        #[error("injected service rejection")]
+        Injected,
+        #[error(transparent)]
+        Store(#[from] StoreError),
+    }
 
     fn entry_draft(project_root: &str, title: &str) -> EvidenceEntryDraft {
         EvidenceEntryDraft {
@@ -408,6 +483,32 @@ mod tests {
                 .len(),
             1
         );
+    }
+
+    #[tokio::test]
+    async fn executor_service_preserves_operation_errors_and_recovers_on_same_store() {
+        let directory = TempDir::new().unwrap();
+        let executor = StoreExecutor::open(directory.path().join("rho.sqlite"))
+            .await
+            .unwrap();
+
+        let error = executor
+            .run_service(|_store| Err::<(), _>(TestServiceError::Injected))
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            StoreExecutorOperationError::Operation(TestServiceError::Injected)
+        ));
+
+        let project_root = executor
+            .run_service(|store| -> Result<_, TestServiceError> {
+                store.set_project_root(Some("D:\\projects\\A\\"))?;
+                Ok(store.active_project_root()?.unwrap())
+            })
+            .await
+            .unwrap();
+        assert_eq!(project_root, "D:/projects/A");
     }
 
     #[tokio::test]
