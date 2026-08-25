@@ -15,11 +15,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tauri::{AppHandle, Emitter, State};
 
-use crate::workspace_plugins::{PluginContributionList, PluginContributionView};
-use crate::{
-    AgentRuntimeStatus, AppState, StartupView, bounded_diagnostic, current_startup_view,
-    display_error, normalize_project_root, text_sha256, workspace_plugin_runtime_context,
+use crate::startup_runtime::{
+    AgentRuntimeStatus, StartupView, bounded_diagnostic, current_startup_view, display_error,
 };
+use crate::workspace_plugins::{PluginContributionList, PluginContributionView};
+use crate::{AppState, normalize_project_root, text_sha256, workspace_plugin_runtime_context};
 
 pub(crate) const UI_SNAPSHOT_INVALIDATED_EVENT: &str = "rho://ui-snapshot-invalidated";
 

@@ -8,11 +8,12 @@ use tauri::{AppHandle, Manager, State, path::BaseDirectory};
 use tauri_plugin_updater::UpdaterExt;
 use tokio::sync::Mutex;
 
-use crate::update::{self, ReleaseChannel, SOURCE_URL, WEBSITE_URL};
-use crate::{
-    AppState, bounded_diagnostic, display_error, hide_console_window, normalized_display_path,
-    platform, shutdown_application, write_startup_log,
+use crate::startup_runtime::{
+    bounded_diagnostic, display_error, hide_console_window, normalized_display_path,
+    write_startup_log,
 };
+use crate::update::{self, ReleaseChannel, SOURCE_URL, WEBSITE_URL};
+use crate::{AppState, platform, shutdown_application};
 
 const RHO_LICENSE_RESOURCE: &str = "licenses/rho/LICENSE.txt";
 

@@ -815,7 +815,7 @@ async fn launch_auxiliary(
     state: &AppState,
     entry: &RuntimeEntry,
 ) -> Result<Arc<RwLock<ArkSession>>> {
-    let config = crate::runtime_config(state)?;
+    let config = crate::startup_runtime::runtime_config(state)?;
     let mut launch = ArkLaunchConfig::new(&config.kernelspec);
     launch.session_name = entry.descriptor.runtime_instance_id.to_string();
     let session = ArkSession::launch(&launch)
@@ -1669,7 +1669,7 @@ async fn finish_runtime_descriptor(
     };
     match transition {
         Ok((transition, _)) => emit_transition(app, &transition),
-        Err(error) => crate::write_startup_event(serde_json::json!({
+        Err(error) => crate::startup_runtime::write_startup_event(serde_json::json!({
             "kind": "runtime_execution_descriptor_finish_failed",
             "execution_runtime": request.runtime.runtime_instance_id.to_string(),
             "message": error.to_string(),
@@ -1692,7 +1692,7 @@ async fn run_supervised_execution(
         Ok(executor) => executor.runtime_output_repository(),
         Err(error) => {
             finish_runtime_descriptor(&app, &state, &request, false, false).await;
-            crate::write_startup_event(serde_json::json!({
+            crate::startup_runtime::write_startup_event(serde_json::json!({
                 "kind": "runtime_execution_store_unavailable",
                 "execution_id": execution_id,
                 "message": error.to_string(),

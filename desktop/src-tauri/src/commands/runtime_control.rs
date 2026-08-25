@@ -14,10 +14,10 @@ use crate::commands::agent_execution::interrupt_all_agent_tasks;
 use crate::commands::render::{
     attach_render_artifact, reconcile_render_job, render_job_is_terminal,
 };
+use crate::startup_runtime::{AgentRuntimeStatus, write_startup_event};
 use crate::{
-    AgentRuntimeStatus, AppState, active_context, active_session, display_error,
-    finalize_workspace_start, start_workspace, store_executor,
-    teardown_workspace_plugins_for_boundary, write_startup_event,
+    AppState, active_context, active_session, display_error, finalize_workspace_start,
+    start_workspace, store_executor, teardown_workspace_plugins_for_boundary,
 };
 
 #[derive(Serialize, specta::Type)]

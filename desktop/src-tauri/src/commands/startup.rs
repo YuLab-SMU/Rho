@@ -6,12 +6,12 @@ use serde_json::{Value, json};
 use tauri::{AppHandle, State};
 
 use crate::commands::runtime_control::WorkspaceStatus;
-use crate::{
-    AgentRuntimeStatusView, AppState, StartupView, bootstrap_runtime, current_startup_view,
-    display_error, display_error_chain, finalize_workspace_start, hide_console_window, platform,
-    probe_agent_runtime, runtime_config, start_workspace, startup_log_path, ui_runtime,
-    write_startup_log,
+use crate::startup_runtime::{
+    AgentRuntimeStatusView, StartupView, bootstrap_runtime, current_startup_view, display_error,
+    display_error_chain, hide_console_window, probe_agent_runtime, runtime_config,
+    startup_log_path, write_startup_log,
 };
+use crate::{AppState, finalize_workspace_start, platform, start_workspace, ui_runtime};
 
 #[tauri::command]
 pub(crate) async fn startup_status(state: State<'_, AppState>) -> Result<StartupView, String> {

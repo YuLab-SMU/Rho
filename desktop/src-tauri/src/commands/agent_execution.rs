@@ -24,10 +24,11 @@ use tokio::sync::oneshot;
 use uuid::Uuid;
 
 use crate::commands::workspace::{ExtensionWorkspaceSnapshotAdapter, WorkspacePluginAgentAdapter};
+use crate::startup_runtime::runtime_config;
 use crate::{
     AgentTaskEntry, AppState, active_context, active_session, agent_llm,
-    agent_turn_admission_error, display_error, durable_project_root, runtime_config,
-    runtime_registry, store_executor, workspace_plugins,
+    agent_turn_admission_error, display_error, durable_project_root, runtime_registry,
+    store_executor, workspace_plugins,
 };
 
 async fn resolve_agent_explicit_context(

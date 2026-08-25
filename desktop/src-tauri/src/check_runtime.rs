@@ -208,7 +208,7 @@ fn plugin_check_input(snapshot: &CheckProjectSnapshotV1) -> Value {
 }
 
 fn bounded_limitation(value: impl AsRef<str>) -> String {
-    crate::bounded_diagnostic(value.as_ref())
+    crate::startup_runtime::bounded_diagnostic(value.as_ref())
         .chars()
         .take(1_024)
         .collect()

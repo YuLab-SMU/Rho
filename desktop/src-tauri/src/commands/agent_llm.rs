@@ -1,9 +1,10 @@
+use crate::AppState;
 use crate::agent_llm::{
     self as service, AgentCapabilityRoute, AgentContextCapacityRequest, AgentLlmSettingsView,
     AgentModelCapabilityPatch, AgentModelDiscoveryResponse, AgentModelProfile,
     AgentProviderProfile, DeleteModelRequest, DeleteProviderRequest,
 };
-use crate::{AppState, display_error, runtime_config, write_startup_log};
+use crate::startup_runtime::{display_error, runtime_config, write_startup_log};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use tauri::State;
