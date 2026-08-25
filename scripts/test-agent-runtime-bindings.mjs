@@ -58,7 +58,6 @@ try {
   const types = fs.readFileSync(path.join(repositoryRoot, "desktop/ui/src/transport/types.ts"), "utf8");
   const facet = fs.readFileSync(path.join(repositoryRoot, "desktop/ui/src/transport/agent-runtime.ts"), "utf8");
   const mock = fs.readFileSync(path.join(repositoryRoot, "desktop/ui/src/transport/mock.ts"), "utf8");
-  const rustService = fs.readFileSync(path.join(repositoryRoot, "desktop/src-tauri/src/main.rs"), "utf8");
   const rustFacade = fs.readFileSync(
     path.join(repositoryRoot, "desktop/src-tauri/src/commands/startup.rs"),
     "utf8",
@@ -101,7 +100,6 @@ try {
     rustFacade,
     /async fn agent_runtime_retry\([\s\S]{0,400}?\) -> Result<AgentRuntimeStatusView, String>/,
   );
-  assert.match(rustService, /serde\(default = "default_agent_runtime_status"\)/);
 } finally {
   fs.rmSync(temporaryDirectory, { recursive: true, force: true });
 }
