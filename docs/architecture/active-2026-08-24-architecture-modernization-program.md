@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W4-03",
+  "active_work_packages": ["AM-W4-04"],
+  "integration_lane": "AM-W4-04",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -630,6 +630,12 @@ separate behavioral slices rather than being inferred from successful parsing.
 Implemented by `e8a9530` with evidence `AM-E-0101`; no WASI or guest authority
 was introduced. Executable typed lifecycle and step behavior remains open under
 `AM-F-0006`.
+
+`AM-W4-04` instantiates that exact WIT world behind an empty linker and adds a
+crate-owned typed lifecycle host under the existing fuel, epoch and StoreLimits
+policy. It proves success, typed-export rejection, fault containment and
+two-project isolation before any desktop activation route or broker step is
+allowed to select the new ABI.
 
 ### Wave 5 — worktrees and shared generated artifacts
 
