@@ -73,9 +73,8 @@ use rho_store::{
     AgentTurnEventDraft, AgentTurnFinish, AgentTurnSummary, ApprovalRequestSummary,
     ArtifactRecordDraft, ArtifactRecordSummary, EnvironmentOperationRequestSummary, EvidenceClaim,
     EvidenceClaimDraft, EvidenceClaimReview, EvidenceEntry, EvidenceEntryDraft,
-    PlotArtifactSummary, PlotPayloadPruneResult, ProjectMutationService, ProjectRetentionSummary,
-    RetentionPolicy, RunDetail, RunRepository, RunSummary, Store, StoreExecutor,
-    normalize_project_root,
+    PlotArtifactSummary, PlotPayloadPruneResult, ProjectRetentionSummary, RetentionPolicy,
+    RunDetail, RunRepository, RunSummary, Store, StoreExecutor, normalize_project_root,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -3720,12 +3719,13 @@ async fn cancel_render_job(job_id: String, state: State<'_, AppState>) -> Result
         }
     };
     if should_interrupt {
-        let marked = {
-            let mut store = read_store(&state).map_err(display_error)?;
-            store
-                .request_cancel(&project_root, &job_id)
-                .map_err(display_error)?
-        };
+        let marked = store_executor(&state)
+            .await
+            .map_err(display_error)?
+            .run_repository()
+            .request_cancel(project_root, job_id.clone())
+            .await
+            .map_err(display_error)?;
         // The render owns the coordinator lock while running, so this cannot
         // target a different Workspace R request during the pre-run race.
         let session = active_session(&state).await.map_err(display_error)?;
@@ -6120,18 +6120,14 @@ pub(crate) async fn restart_workspace_locked(state: &AppState) -> Result<Workspa
             .collect::<Vec<_>>()
     };
 
-    let active_run_id = {
-        let mut store = read_store(state).map_err(display_error)?;
-        let run_id = store
-            .latest_active_run_id(&current_project_root)
-            .map_err(display_error)?;
-        if let Some(run_id) = run_id.as_ref() {
-            let _ = store
-                .request_cancel(&current_project_root, run_id)
-                .map_err(display_error)?;
-        }
-        run_id
-    };
+    let active_run_id = store_executor(state)
+        .await
+        .map_err(display_error)?
+        .run_repository()
+        .request_cancel_latest(current_project_root.clone())
+        .await
+        .map_err(display_error)?
+        .map(|outcome| outcome.run_id);
 
     if state.extension_host.mode() == InternalExtensionRuntimeMode::Candidate {
         let expected_workspace = state.extension_host.scopes().workspace();
@@ -6842,21 +6838,25 @@ async fn request_run_interrupt(run_id: Option<String>, state: &AppState) -> Resu
     let session = active_session(state).await?;
     let root = state.project_root.read().await.clone();
     let project_root = normalize_project_root(root.to_string_lossy().as_ref());
-    let mut store = read_store(state)?;
-    let target = match run_id {
-        Some(value) => value,
-        None => store
-            .latest_active_run_id(&project_root)
-            .context("looking up active run")?
-            .context("No active run is available to interrupt")?,
+    let repository = store_executor(state).await?.run_repository();
+    let (target, marked) = match run_id {
+        Some(target) => {
+            let marked = repository
+                .request_cancel(project_root, target.clone())
+                .await
+                .context("marking run as cancel-requested")?;
+            (target, marked)
+        }
+        None => {
+            let outcome = repository
+                .request_cancel_latest(project_root)
+                .await
+                .context("looking up active run")?
+                .context("No active run is available to interrupt")?;
+            (outcome.run_id, outcome.marked)
+        }
     };
-    ensure!(
-        ProjectMutationService::new(&mut store)
-            .request_cancel(&project_root, &target)
-            .context("marking run as cancel-requested")?,
-        "Run is not active: {target}"
-    );
-    drop(store);
+    ensure!(marked, "Run is not active: {target}");
     session
         .interrupt()
         .await
@@ -9799,8 +9799,12 @@ async fn cancel_agent_turn_state(
     let active_workspace_run = state.agent_workspace_lane.cancel_turn(&turn_id);
     let mut joined_after_interrupt = false;
     if let Some(run_id) = active_workspace_run.as_deref() {
-        let cancel_requested = match read_store(&state) {
-            Ok(mut store) => store.request_cancel(&project_root, run_id).unwrap_or(false),
+        let cancel_requested = match store_executor(state).await {
+            Ok(executor) => executor
+                .run_repository()
+                .request_cancel(project_root.clone(), run_id.to_string())
+                .await
+                .unwrap_or(false),
             Err(_) => false,
         };
         if let Ok(session) = active_session(&state).await {

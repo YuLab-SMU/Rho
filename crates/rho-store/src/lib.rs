@@ -92,7 +92,7 @@ pub use project::{
 };
 pub use query::ProjectQueryService;
 pub use run::{ProblemSummary, RunDetail, RunDraft, RunErrorRange, RunFinish, RunSummary};
-pub use run_repository::RunRepository;
+pub use run_repository::{RunCancelOutcome, RunRepository};
 pub use runtime_output::{
     AgentTurnContextItem, AgentTurnContextItemDraft, RuntimeExecution,
     RuntimeExecutionDeleteResult, RuntimeExecutionDraft, RuntimeExecutionFinish,
