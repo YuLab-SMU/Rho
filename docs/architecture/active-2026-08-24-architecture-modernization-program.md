@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W1-24",
+  "active_work_packages": ["AM-W1-25"],
+  "integration_lane": "AM-W1-25",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -163,6 +163,14 @@ generation, command/serde shape drift, unsupported Channel semantics, or a
 material regression that remains unacceptable after profiling. Compatibility
 with an older compiler than the repository's pinned toolchain is diagnostic
 evidence, not a fallback trigger.
+
+`AM-W1-25` replaces remaining process-only vetoes with a risk-weighted local
+feedback policy. Product correctness, data/project isolation, authority,
+public/serialized contract identity, deterministic generation and truthful
+recovery remain blocking. LOC, schedule waves, build/bundle trends, unaffected
+full suites, manual review and release/platform evidence remain visible without
+blocking an ordinary local development slice merely because a numeric or
+ceremonial threshold was crossed.
 
 ### Wave 2 — backend modules and concurrency boundaries
 
