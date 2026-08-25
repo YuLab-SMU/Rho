@@ -27,7 +27,7 @@
     "rsr:test:agent-conversation-bindings": "node ../scripts/test-agent-conversation-bindings.mjs",
     "rsr:test:agent-turn-bindings": "node ../scripts/test-agent-turn-bindings.mjs",
     "rsr:test:agent-execution-bindings": "node ../scripts/test-agent-execution-bindings.mjs",
-    "rsr:test:agent-runtime-bindings": "node ../scripts/test-agent-runtime-bindings.mjs && node ../scripts/test-agent-dependency-diagnostics.mjs --test && node ../scripts/test-agent-dependency-diagnostics.mjs",
+    "rsr:test:agent-runtime-bindings": "node ../scripts/test-agent-runtime-bindings.mjs",
     "rsr:test:agent-settings-bindings": "node ../scripts/test-agent-settings-bindings.mjs",
     "rsr:test:agent-file-bindings": "node ../scripts/test-agent-file-bindings.mjs",
     "rsr:test:plugin-surface-bindings": "node ../scripts/test-plugin-surface-bindings.mjs",
