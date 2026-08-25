@@ -6,12 +6,12 @@
   "record_type": "program",
   "program_id": "AM-2026",
   "status": "active",
-  "current_wave": 5,
+  "current_wave": 6,
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W5-01"],
-  "integration_lane": "AM-W5-01",
+  "active_work_packages": ["AM-W6-01"],
+  "integration_lane": "AM-W6-01",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -674,6 +674,13 @@ broker, crash and restart state machine. Core-v2 remains supported. Candidate
 NEWS and generated summaries to the integration lane, decides whether
 `desktop/dist` is untracked build output or deterministic integration output,
 and proves a Runtime/Agent/two-feature-worktree merge-tree scenario.
+
+Implemented by `5dd0756` with evidence `AM-E-0106`: worktree base, ownership and
+feature/shared-path violations fail before integration; fragments compose
+deterministically; disjoint Runtime and Agent worktrees merge cleanly; and
+`desktop/dist` is ignored source-built output whose two clean builds, licenses,
+manifest and build identity match byte-for-byte. No repository branch was
+merged and no external publication action occurred.
 
 ### Wave 6 — convergence and continuous governance
 
