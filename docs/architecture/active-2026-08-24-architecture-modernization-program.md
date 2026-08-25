@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W2-36"],
+  "active_work_packages": [],
   "integration_lane": "AM-W2-36",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -377,10 +377,10 @@ Workspace, project revision, filesystem and IPC behavior remain unchanged;
 capability ownership and deterministic command identity pass, while LOC remains
 diagnostic telemetry only.
 
-`AM-W2-36` mechanically moves the complete Evidence command-adapter boundary,
-including DOI lookup and source-anchor validation, out of the desktop
-composition root. Network/filesystem authority, Store project isolation,
-serialization and command identity remain unchanged.
+`AM-W2-36` (`bbeb4ad`/AM-E-0063) mechanically moves the complete Evidence
+command-adapter boundary, including DOI lookup and source-anchor validation,
+out of the desktop composition root. Network/filesystem authority, Store
+project isolation, serialization and command identity remain unchanged.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
