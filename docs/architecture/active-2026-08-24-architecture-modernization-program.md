@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W3-05"],
-  "integration_lane": "AM-W3-05",
+  "active_work_packages": ["AM-W3-06"],
+  "integration_lane": "AM-W3-06",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -555,11 +555,21 @@ It preserves DOM/accessibility and exact `SceneEdit` emission so the following
 Dockview package compares against an executable controlled baseline rather than
 rewriting layout and dependency behavior in one step.
 
-`AM-W3-05` evaluates locked `dockview-react 8.2.0` behind that adapter. Rust
-Scene/CAS stays authoritative; Dockview JSON is not persisted, and bundle size
-is review telemetry rather than a proxy veto. Production cutover occurs only if
-gesture translation, project isolation, component lifetime and accessibility
-pass against the legacy baseline.
+`AM-W3-05` (`cf08726`/AM-E-0093) adopts locked `dockview-react 8.2.0` behind a
+controlled adapter. Rust Scene/CAS remains authoritative and Dockview JSON is
+never persisted. Recursive/repeated-axis conversion, stack activation, pointer
+and keyboard resize, docking, narrow collapse, stale rebuild, component
+lifetime and real-browser interaction pass. A focus-only Scene revision no
+longer reloads panel DOM between pointerdown and click, and Console renderers do
+not register for execution until legacy view-state compaction has committed.
+The initial JS chunk grows by about 85 KiB gzip, recorded as telemetry rather
+than treated as a proxy veto.
+
+`AM-W3-06` mechanically extracts the Agent Surface domain component, local view
+state, proposal presentation and controller-facing props from `App.tsx` without
+changing Agent authority, persistence, transport, project isolation or visible
+behavior. This is the first bounded shell-composition slice after projection
+and layout cutover.
 
 ### Wave 4 — Wasmtime Component Model and WIT
 
