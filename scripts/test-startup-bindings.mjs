@@ -8,7 +8,12 @@ import { fileURLToPath } from "node:url";
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const generator = path.join(repositoryRoot, "scripts/generate-startup-bindings.mjs");
 const generatedPath = path.join(repositoryRoot, "desktop/ui/src/transport/generated/startup.ts");
-const commands = ["startup_bootstrap", "startup_choose_rscript", "workspace_start"];
+const commands = [
+  "startup_bootstrap",
+  "startup_choose_rscript",
+  "workspace_start",
+  "startup_diagnostics",
+];
 
 function count(text, needle) {
   return text.split(needle).length - 1;
@@ -41,6 +46,7 @@ try {
   assert.match(generated, /startupBootstrap: \(\)/);
   assert.match(generated, /startupChooseRscript: \(\)/);
   assert.match(generated, /workspaceStart: \(\)/);
+  assert.match(generated, /startupDiagnostics: \(\)/);
   assert.match(generated, /severity: StartupSeverity/);
   assert.match(generated, /kernel_pid: number \| null/);
   assert.match(generated, /workspace: unknown/);

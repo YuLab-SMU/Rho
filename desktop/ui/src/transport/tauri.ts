@@ -265,7 +265,7 @@ export function createTauriUiKernelTransport(
         case "rho.artifacts": payload = await historyTransport.listArtifactRecords(100, false); break;
         case "rho.problems": payload = await historyTransport.listProblems(100); break;
         case "rho.plots": payload = await historyTransport.listPlotArtifacts(100, true); break;
-        case "rho.logs": payload = { id: "startup-diagnostics", title: "Startup diagnostics", status: "current", detail: await invoke<string>("startup_diagnostics") }; break;
+        case "rho.logs": payload = { id: "startup-diagnostics", title: "Startup diagnostics", status: "current", detail: await startupTransport.diagnostics() }; break;
         case "rho.render-jobs": {
           const runs = await historyTransport.listRuns(100);
           payload = Array.isArray(runs) ? runs.filter((run) => {

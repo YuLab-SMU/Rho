@@ -1342,22 +1342,27 @@ async fn startup_choose_rscript(state: State<'_, AppState>) -> Result<StartupVie
     Ok(bootstrap_runtime(&state, Some(path)).await)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn startup_diagnostics(state: State<'_, AppState>) -> Result<String, String> {
     let path = startup_log_path();
     let content = std::fs::read_to_string(&path).unwrap_or_default();
-    let log_tail = content
+    let log_tail = startup_log_tail(&content);
+    let view = serde_json::to_string_pretty(&current_startup_view(&state)).unwrap_or_default();
+    Ok(format!(
+        "Rho startup status\n{view}\n\nStartup log\n{log_tail}"
+    ))
+}
+
+fn startup_log_tail(content: &str) -> String {
+    content
         .chars()
         .rev()
         .take(65_536)
         .collect::<String>()
         .chars()
         .rev()
-        .collect::<String>();
-    let view = serde_json::to_string_pretty(&current_startup_view(&state)).unwrap_or_default();
-    Ok(format!(
-        "Rho startup status\n{view}\n\nStartup log\n{log_tail}"
-    ))
+        .collect()
 }
 
 #[tauri::command]
@@ -15773,6 +15778,7 @@ mod tests {
                 super::startup_bootstrap,
                 super::startup_choose_rscript,
                 super::workspace_start,
+                super::startup_diagnostics,
             ])
             .error_handling(tauri_specta::ErrorHandlingMode::Throw)
             .export(specta_typescript::Typescript::default(), output_path)
@@ -15837,6 +15843,15 @@ mod tests {
             .error_handling(tauri_specta::ErrorHandlingMode::Throw)
             .export(specta_typescript::Typescript::default(), output_path)
             .expect("Git TypeScript export must succeed");
+    }
+
+    #[test]
+    fn startup_log_tail_is_unicode_safe_and_exactly_bounded() {
+        let content = format!("discarded{}kept", "界".repeat(65_536));
+        let tail = super::startup_log_tail(&content);
+        assert_eq!(tail.chars().count(), 65_536);
+        assert!(tail.ends_with("kept"));
+        assert!(!tail.contains("discarded"));
     }
 }
 

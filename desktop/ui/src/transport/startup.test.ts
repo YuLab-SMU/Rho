@@ -39,22 +39,28 @@ function readyWorkspace(): WorkspaceStatus {
 }
 
 describe("Startup generated transport", () => {
-  it("owns exact bootstrap, picker and workspace-start commands", async () => {
+  it("owns exact bootstrap, picker, workspace-start and diagnostics commands", async () => {
     const calls: string[] = [];
     const startup = readyStartup();
     const workspace = readyWorkspace();
     const transport = createTauriStartupTransport(async <T,>(command: string): Promise<T> => {
       calls.push(command);
-      return (command === "workspace_start" ? workspace : startup) as T;
+      return (command === "workspace_start"
+        ? workspace
+        : command === "startup_diagnostics"
+          ? "Rho startup status"
+          : startup) as T;
     });
 
     await expect(transport.bootstrapStartup()).resolves.toStrictEqual(startup);
     await expect(transport.chooseRscript()).resolves.toStrictEqual(startup);
     await expect(transport.startWorkspace()).resolves.toStrictEqual(workspace);
+    await expect(transport.diagnostics()).resolves.toBe("Rho startup status");
     expect(calls).toEqual([
       "startup_bootstrap",
       "startup_choose_rscript",
       "workspace_start",
+      "startup_diagnostics",
     ]);
   });
 });

@@ -12,6 +12,7 @@ export const createStartupCommands = (__TAURI_INVOKE: StartupInvoke) => ({
 	startupBootstrap: () => __TAURI_INVOKE<StartupView>("startup_bootstrap"),
 	startupChooseRscript: () => __TAURI_INVOKE<StartupView>("startup_choose_rscript"),
 	workspaceStart: () => __TAURI_INVOKE<WorkspaceStatus>("workspace_start"),
+	startupDiagnostics: () => __TAURI_INVOKE<string>("startup_diagnostics"),
 });
 
 /* Types */

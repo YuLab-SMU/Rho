@@ -9,6 +9,7 @@ export interface StartupTransport {
   bootstrapStartup(): Promise<StartupView>;
   chooseRscript(): Promise<StartupView>;
   startWorkspace(): Promise<WorkspaceStatus>;
+  diagnostics(): Promise<string>;
 }
 
 export function createTauriStartupTransport(invoke: StartupInvoke): StartupTransport {
@@ -17,5 +18,6 @@ export function createTauriStartupTransport(invoke: StartupInvoke): StartupTrans
     bootstrapStartup: commands.startupBootstrap,
     chooseRscript: commands.startupChooseRscript,
     startWorkspace: commands.workspaceStart,
+    diagnostics: commands.startupDiagnostics,
   };
 }
