@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W3-10"],
-  "integration_lane": "AM-W3-10",
+  "active_work_packages": ["AM-W3-11"],
+  "integration_lane": "AM-W3-11",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -591,7 +591,13 @@ empty projection boundary and change no mutation authority
 `AM-W3-10` extracts the per-instance `SurfaceView` composition boundary and
 Console renderer state from the Workbench root. Workbench continues to build
 all service callbacks; the extracted component only selects a Surface domain
-and coordinates renderer-local state.
+and coordinates renderer-local state (`5d813dd`/AM-E-0098).
+
+`AM-W3-11` establishes the final shell boundary: `App.tsx` owns startup
+preparation and delegates the ready state to `WorkbenchApp.tsx`, which owns
+project-scoped controller/service composition. This is a mechanical module
+boundary; follow-up responsibility splits operate on the explicit Workbench
+owner rather than growing the startup shell again.
 
 ### Wave 4 — Wasmtime Component Model and WIT
 
