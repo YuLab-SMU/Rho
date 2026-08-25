@@ -5,29 +5,27 @@
   "schema_version": 1,
   "record_type": "program",
   "program_id": "AM-2026",
-  "status": "active",
+  "status": "implemented",
   "current_wave": 6,
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W6-01"],
+  "active_work_packages": [],
   "integration_lane": "AM-W6-01",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
 
-Status: active D3/R3 architecture program; Wave 0 control-plane package
-authorized 2026-08-24
+Status: implemented D3/R3 architecture program; Waves 0-6 completed locally
+2026-08-25
 
 Date: 2026-08-24
 
 Owner: repository architecture modernization integration lane
 
-Next mandatory checkpoint: each work package's relevant local correctness
-checks and truthful evidence record. Bounded child packages covered by this
-owner-authorized program activate automatically when their declared dependency
-and ownership conditions are true; another human waiting point is required only
-for product choice or authority expansion outside this contract.
+Completion evidence: `AM-E-0107`. Future architecture changes use the durable
+governance and telemetry installed by this program; they are not implicit child
+packages of this completed authorization.
 
 ## Purpose and problem evidence
 
@@ -688,6 +686,14 @@ merged and no external publication action occurred.
 facades/duplicate stores/manual types, remeasures architecture, and promotes the
 tracker, overlap, generated freshness and dependency checks into normal local
 validation. LOC and planned-wave targets remain status telemetry.
+
+Implemented by `edca7cd` and `861c87c` with evidence `AM-E-0107`. Legacy LOC
+baselines, expiry waves and exception vetoes are gone; status JSON reports the
+current tree, change fragments validate in the ordinary architecture check, and
+the standalone coordinator probe now exposes bounded/redacted startup failures.
+The rebuilt live probe passed Agent authentication, stale rejection, Workspace
+execution and persistence. All local Rust, frontend, R and worktree/governance
+matrices passed without changing product authority.
 
 ## Verification contract
 

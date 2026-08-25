@@ -113,7 +113,7 @@ changes.
 - Accepted plugin-native Surface Runtime architecture: [`design/accepted-2026-08-21-plugin-native-surface-runtime-design.md`](design/accepted-2026-08-21-plugin-native-surface-runtime-design.md)
 - Active Studio design language and UX overhaul: [`design/active-2026-08-22-studio-design-language-and-ux-overhaul-design.md`](design/active-2026-08-22-studio-design-language-and-ux-overhaul-design.md)
 - Active Runtime output, Console, History, and Agent context closed loop: [`plans/active-2026-08-24-runtime-output-agent-context-closed-loop-spec.md`](plans/active-2026-08-24-runtime-output-agent-context-closed-loop-spec.md)
-- Active architecture modernization program and repository-local tracker: [`architecture/active-2026-08-24-architecture-modernization-program.md`](architecture/active-2026-08-24-architecture-modernization-program.md)
+- Implemented architecture modernization program and repository-local tracker: [`architecture/implemented-2026-08-24-architecture-modernization-program.md`](architecture/implemented-2026-08-24-architecture-modernization-program.md)
 
 Add new documents to the category that describes their purpose. Prefer a dated
 filename for time-bounded plans and keep durable decisions in ADRs.
