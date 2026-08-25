@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W2-25"],
+  "active_work_packages": [],
   "integration_lane": "AM-W2-25",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -321,10 +321,11 @@ policy maintenance, retention actions and interrupted-execution reconciliation
 onto one durable repository. Supervised execution streaming/backpressure stays
 intact for its own behavior package.
 
-`AM-W2-25` removes the current Rust release literal from the toolchain
-validator. The repository pin remains exact and reproducible, but a coherent
-stable-semver advance is evaluated by capability and contract evidence instead
-of being rejected by the previous version's embedded constant.
+`AM-W2-25` (`53fcf1f`/AM-E-0052) removes the current Rust release literal from
+the toolchain validator. The repository pin remains exact and reproducible, but
+a coherent stable-semver advance is evaluated by capability and contract
+evidence instead of being rejected by the previous version's embedded
+constant.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
