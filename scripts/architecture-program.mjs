@@ -422,7 +422,10 @@ function enumerateFiles(directory, root = directory) {
   return output;
 }
 
-export function checkOverlap(packages, { root = process.cwd(), workPackageId = null, changed = [] } = {}) {
+export function checkOverlap(
+  packages,
+  { root = process.cwd(), workPackageId = null, changed = [], baseCommit = null } = {},
+) {
   const candidates = workPackageId == null
     ? packages.filter(({ status }) => status === "active")
     : packages.filter(({ id, status }) => id === workPackageId || status === "active");
@@ -455,19 +458,28 @@ export function checkOverlap(packages, { root = process.cwd(), workPackageId = n
   }
   const undeclared = [];
   const integrationWrites = [];
+  const forbiddenSharedWrites = [];
   if (target != null) {
     for (const file of changed.map(normalizePath).sort()) {
       if (target.owned_paths.some((pattern) => pathMatchesPattern(file, pattern))) continue;
       if (target.shared_write_paths.some((pattern) => pathMatchesPattern(file, pattern))) {
-        integrationWrites.push(file);
+        if (target.lane === "integration") integrationWrites.push(file);
+        else forbiddenSharedWrites.push(file);
       } else undeclared.push(file);
     }
   }
+  const baseMismatch = target != null && baseCommit != null && target.base_commit !== baseCommit
+    ? { declared: target.base_commit, actual: baseCommit }
+    : null;
   return {
     work_package: workPackageId,
+    registered_base_commit: target?.base_commit ?? null,
+    base_mismatch: baseMismatch,
+    unknown_work_package: workPackageId != null && target == null,
     collisions: collisions.sort((left, right) => left.packages.join().localeCompare(right.packages.join())),
     undeclared_paths: undeclared,
     integration_lane_paths: integrationWrites,
+    forbidden_shared_paths: forbiddenSharedWrites,
   };
 }
 
@@ -668,7 +680,14 @@ function humanStatus(payload) {
 
 function parseArguments(argv) {
   const command = argv[0] ?? "status";
-  const options = { root: process.cwd(), json: false, output: null, workPackageId: null, changed: [] };
+  const options = {
+    root: process.cwd(),
+    json: false,
+    output: null,
+    workPackageId: null,
+    changed: [],
+    baseCommit: null,
+  };
   for (let index = 1; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--json") options.json = true;
@@ -676,6 +695,7 @@ function parseArguments(argv) {
     else if (argument === "--output") options.output = argv[++index];
     else if (argument === "--work-package") options.workPackageId = argv[++index];
     else if (argument === "--changed") options.changed.push(argv[++index]);
+    else if (argument === "--base") options.baseCommit = argv[++index];
     else throw new Error(`Unknown argument: ${argument}`);
   }
   return { command, options };
@@ -710,9 +730,16 @@ export function runCli(argv = process.argv.slice(2)) {
       root: options.root,
       workPackageId: options.workPackageId,
       changed: options.changed,
+      baseCommit: options.baseCommit,
     });
     emit(result, options);
-    if (result.collisions.length > 0 || result.undeclared_paths.length > 0) process.exitCode = 1;
+    if (
+      result.unknown_work_package ||
+      result.base_mismatch != null ||
+      result.collisions.length > 0 ||
+      result.undeclared_paths.length > 0 ||
+      result.forbidden_shared_paths.length > 0
+    ) process.exitCode = 1;
   } else throw new Error(`Unknown command: ${command}`);
 }
 

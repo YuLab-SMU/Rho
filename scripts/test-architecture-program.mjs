@@ -352,8 +352,43 @@ function runOverlapFixtures() {
       changed: ["src/a/new.ts", "src/other.ts"],
     });
     assert.deepEqual(paths.undeclared_paths, ["src/other.ts"]);
+    assert.equal(paths.registered_base_commit, BASE);
+    assert.equal(paths.base_mismatch, null);
     assert(pathMatchesPattern("src/a/new.ts", "src/a/**"));
     assert(!pathMatchesPattern("src/b/new.ts", "src/a/**"));
+
+    const mismatchedBase = checkOverlap([first], {
+      root: temporary,
+      workPackageId: "AM-W0-01",
+      baseCommit: "abcdef0",
+    });
+    assert.deepEqual(mismatchedBase.base_mismatch, {
+      declared: BASE,
+      actual: "abcdef0",
+    });
+
+    const feature = workPackage({
+      lane: "feature",
+      shared_write_paths: ["NEWS.md", "Cargo.lock"],
+    });
+    const forbiddenShared = checkOverlap([feature], {
+      root: temporary,
+      workPackageId: feature.id,
+      changed: ["NEWS.md", "Cargo.lock"],
+    });
+    assert.deepEqual(forbiddenShared.forbidden_shared_paths, ["Cargo.lock", "NEWS.md"]);
+    assert.deepEqual(forbiddenShared.integration_lane_paths, []);
+
+    const integration = workPackage({
+      shared_write_paths: ["NEWS.md"],
+    });
+    const allowedShared = checkOverlap([integration], {
+      root: temporary,
+      workPackageId: integration.id,
+      changed: ["NEWS.md"],
+    });
+    assert.deepEqual(allowedShared.integration_lane_paths, ["NEWS.md"]);
+    assert.deepEqual(allowedShared.forbidden_shared_paths, []);
   } finally {
     fs.rmSync(temporary, { recursive: true, force: true });
   }
