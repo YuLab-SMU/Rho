@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W1-19"],
+  "active_work_packages": [],
   "integration_lane": "AM-W1-19",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -289,8 +289,8 @@ conversation inventory (`5467db4`/AM-E-0010), Agent turn detail
 hidden. Credential and Provider-network mutations remain separate Agent
 contract facets. Workspace-plugin Surface (`157f474`/AM-E-0016), Project
 transition (`4cfbe76`/AM-E-0017), UI Kernel (`172f3e2`/AM-E-0018), Check
-(`fdfa367`/AM-E-0019), and Startup (`26f1e64`/AM-E-0020) now use the same
-Rust-owned generated boundary.
+(`fdfa367`/AM-E-0019), Startup (`26f1e64`/AM-E-0020), and History and artifact
+reads (`3cb7c3d`/AM-E-0021) now use the same Rust-owned generated boundary.
 
 ## Version, NEWS, and release decision
 
