@@ -4884,16 +4884,17 @@ async fn create_evidence_claim(
         .map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn list_evidence_claims(
-    limit: Option<usize>,
+    limit: Option<rho_ui_contract::UiIpcUsize>,
     state: State<'_, AppState>,
 ) -> Result<Vec<EvidenceClaim>, String> {
     let root = state.project_root.read().await.clone();
     let project_root = root.to_string_lossy().replace('\\', "/");
     let store = read_store(&state).map_err(display_error)?;
     store
-        .list_evidence_claims(&project_root, limit)
+        .list_evidence_claims(&project_root, limit.map(usize::from))
         .map_err(display_error)
 }
 
@@ -15807,6 +15808,18 @@ mod tests {
             .error_handling(tauri_specta::ErrorHandlingMode::Throw)
             .export(specta_typescript::Typescript::default(), output_path)
             .expect("Environment TypeScript export must succeed");
+    }
+
+    #[test]
+    #[ignore = "writes the requested generated TypeScript contract"]
+    fn evidence_typescript_export() {
+        let output_path = std::env::var_os("RHO_EVIDENCE_BINDINGS_PATH")
+            .expect("RHO_EVIDENCE_BINDINGS_PATH must name the generated file");
+        tauri_specta::Builder::<tauri::Wry>::new()
+            .commands(tauri_specta::collect_commands![super::list_evidence_claims,])
+            .error_handling(tauri_specta::ErrorHandlingMode::Throw)
+            .export(specta_typescript::Typescript::default(), output_path)
+            .expect("Evidence TypeScript export must succeed");
     }
 }
 

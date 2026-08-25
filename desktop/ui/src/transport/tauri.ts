@@ -22,6 +22,7 @@ import { createTauriCheckTransport } from "./check";
 import { createTauriStartupTransport } from "./startup";
 import { createTauriHistoryReadTransport } from "./history";
 import { createTauriEnvironmentReadTransport } from "./environment";
+import { createTauriEvidenceReadTransport } from "./evidence";
 import { createTauriAgentTurnDetailTransport } from "./agent-turn";
 import { createTauriProfileTransport } from "./profile";
 import { createTauriResourceTransport } from "./resource";
@@ -127,6 +128,7 @@ export function createTauriUiKernelTransport(
   const startupTransport = createTauriStartupTransport(invoke);
   const historyTransport = createTauriHistoryReadTransport(invoke);
   const environmentTransport = createTauriEnvironmentReadTransport(invoke);
+  const evidenceTransport = createTauriEvidenceReadTransport(invoke);
   return {
     source: "tauri",
     async prepareWorkspace(chooseRscript = false): Promise<WorkspacePreparation> {
@@ -252,7 +254,7 @@ export function createTauriUiKernelTransport(
           installed: await environmentTransport.listInstalledPackages(200),
           requests: await environmentTransport.listEnvironmentOperationRequests(50),
         }; break;
-        case "rho.evidence": payload = await invoke<unknown>("list_evidence_claims", { limit: 100 }); break;
+        case "rho.evidence": payload = await evidenceTransport.listEvidenceClaims(100); break;
         case "rho.git": payload = {
           status: await invoke<unknown>("git_status"),
           history: await invoke<unknown>("git_log", { limit: 30 }),

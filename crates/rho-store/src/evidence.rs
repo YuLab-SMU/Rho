@@ -39,7 +39,7 @@ pub enum ClaimReviewStatus {
     CrossProjectRejected,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct EvidenceClaim {
     pub claim_id: String,
     pub project_root: String,
@@ -47,13 +47,18 @@ pub struct EvidenceClaim {
     pub summary: String,
     pub anchor_kind: String,
     pub source_path: Option<String>,
+    #[specta(type = Option<i32>)]
     pub start_line: Option<i64>,
+    #[specta(type = Option<i32>)]
     pub start_column: Option<i64>,
+    #[specta(type = Option<i32>)]
     pub end_line: Option<i64>,
+    #[specta(type = Option<i32>)]
     pub end_column: Option<i64>,
     pub source_sha256: Option<String>,
     pub source_excerpt: Option<String>,
     pub artifact_id: Option<String>,
+    #[specta(type = Vec<i32>)]
     pub linked_evidence_ids: Vec<i64>,
     pub created_at: String,
     pub updated_at: String,
