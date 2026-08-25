@@ -460,8 +460,8 @@ fn agent_diagnostics_typescript_export() {
         .expect("RHO_AGENT_RUNTIME_BINDINGS_PATH must name the generated file");
     tauri_specta::Builder::<tauri::Wry>::new()
         .commands(tauri_specta::collect_commands![
-            crate::agent_runtime_status,
-            crate::agent_runtime_retry,
+            crate::commands::startup::agent_runtime_status,
+            crate::commands::startup::agent_runtime_retry,
         ])
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
         .export(specta_typescript::Typescript::default(), output_path)

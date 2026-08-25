@@ -96,6 +96,18 @@ const AGENT_LLM_COMMANDS = [
   "agent_llm_test_model",
 ];
 
+const STARTUP_COMMANDS = [
+  "agent_runtime_retry",
+  "agent_runtime_status",
+  "startup_bootstrap",
+  "startup_choose_rscript",
+  "startup_diagnostics",
+  "startup_open_log_directory",
+  "startup_status",
+  "workspace_start",
+  "workspace_status",
+];
+
 const PLUGIN_COMMANDS = [
   "accept_workspace_plugin_update",
   "disable_workspace_plugin",
@@ -277,6 +289,14 @@ export function validateCommandInventory({ sources, main, frontend, expectedHand
     "Agent LLM command module ownership changed",
   );
 
+  const startupSource = sources.find(({ name }) => name.endsWith("commands/startup.rs"));
+  assert.ok(startupSource, "Startup command module is missing");
+  assert.deepEqual(
+    commandDefinitions([startupSource]).map(({ name }) => name).sort(),
+    STARTUP_COMMANDS,
+    "Startup command module ownership changed",
+  );
+
   return { commands: definitionNames.length, sources: sources.length };
 }
 
@@ -299,6 +319,9 @@ function fixtures() {
   const agentLlmHandlers = AGENT_LLM_COMMANDS.map(
     (command) => `  commands::agent_llm::${command},`,
   ).join("\n");
+  const startupHandlers = STARTUP_COMMANDS.map(
+    (command) => `  commands::startup::${command},`,
+  ).join("\n");
   const pluginHandlers = PLUGIN_COMMANDS.map(
     (command) => `  commands::plugins::${command},`,
   ).join("\n");
@@ -314,6 +337,7 @@ ${environmentHandlers}
 ${editorHandlers}
 ${projectHandlers}
 ${agentLlmHandlers}
+${startupHandlers}
   commands::runs::list_runs,
   commands::runs::list_problems,
   commands::runs::get_run_detail,
@@ -346,6 +370,9 @@ ${agentLlmHandlers}
       { name: "commands/agent_llm.rs", text: AGENT_LLM_COMMANDS.map(
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
+      { name: "commands/startup.rs", text: STARTUP_COMMANDS.map(
+        (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
+      ).join("\n") },
       { name: "commands/plugins.rs", text: PLUGIN_COMMANDS.map(
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
@@ -359,6 +386,7 @@ ${agentLlmHandlers}
       ...EDITOR_COMMANDS,
       ...PROJECT_COMMANDS,
       ...AGENT_LLM_COMMANDS,
+      ...STARTUP_COMMANDS,
       ...PLUGIN_COMMANDS,
     ].map(
       (command) => `invoke("${command}");`,

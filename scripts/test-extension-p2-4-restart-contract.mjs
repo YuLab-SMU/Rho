@@ -3,6 +3,17 @@ import fs from "node:fs";
 
 const read = (path) => fs.readFileSync(path, "utf8");
 
+function readRustTree(directory) {
+  return fs.readdirSync(directory, { withFileTypes: true })
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .flatMap((entry) => {
+      const entryPath = `${directory}/${entry.name}`;
+      if (entry.isDirectory()) return [readRustTree(entryPath)];
+      return entry.isFile() && entry.name.endsWith(".rs") ? [read(entryPath)] : [];
+    })
+    .join("\n");
+}
+
 export function validateP24RestartContract(value) {
   for (const marker of [
     "WorkspacePluginReconciliationReport",
@@ -95,7 +106,7 @@ if (process.argv.includes("--test")) {
   }
 } else {
   validateP24RestartContract({
-    desktop: read("desktop/src-tauri/src/workspace_plugins.rs"),
+    desktop: readRustTree("desktop/src-tauri/src/workspace_plugins"),
     main: read("desktop/src-tauri/src/main.rs"),
     commands: read("desktop/src-tauri/src/commands/plugins.rs"),
     store: read("crates/rho-store/src/plugin_lifecycle.rs"),

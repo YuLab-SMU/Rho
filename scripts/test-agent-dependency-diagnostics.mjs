@@ -55,10 +55,11 @@ if (process.argv.includes("--test")) {
     assert.throws(() => validateAgentDependencyDiagnostics(value), undefined, name);
   }
 } else {
-  const rust = read("desktop/src-tauri/src/main.rs");
+  const rustService = read("desktop/src-tauri/src/main.rs");
+  const rust = `${rustService}\n${read("desktop/src-tauri/src/commands/startup.rs")}`;
   validateAgentDependencyDiagnostics({
     rust,
-    probe: rust.slice(rust.indexOf("fn agent_runtime_probe_expression"), rust.indexOf("fn agent_runtime_status_from_probe")),
+    probe: rustService.slice(rustService.indexOf("fn agent_runtime_probe_expression"), rustService.indexOf("fn agent_runtime_status_from_probe")),
     frontend: `${read("desktop/ui/src/app/App.tsx")}\n${read("desktop/ui/src/transport/types.ts")}`,
     mock: read("desktop/ui/src/transport/mock.ts"),
     transport: `${read("desktop/ui/src/transport/tauri.ts")}\n${read("desktop/ui/src/transport/agent-runtime.ts")}\n${read("desktop/ui/src/transport/generated/agent-runtime.ts")}`,

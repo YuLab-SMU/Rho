@@ -44,6 +44,7 @@ try {
   const tauri = fs.readFileSync(path.join(repositoryRoot, "desktop/ui/src/transport/tauri.ts"), "utf8");
   const facet = fs.readFileSync(path.join(repositoryRoot, "desktop/ui/src/transport/startup.ts"), "utf8");
   assert.match(generated, /startupBootstrap: \(\)/);
+  assert.match(generated, /Rust sources: rho-desktop startup service \+ commands\/startup facade/);
   assert.match(generated, /startupChooseRscript: \(\)/);
   assert.match(generated, /workspaceStart: \(\)/);
   assert.match(generated, /startupDiagnostics: \(\)/);

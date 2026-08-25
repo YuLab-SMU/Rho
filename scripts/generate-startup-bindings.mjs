@@ -9,5 +9,5 @@ runTauriSpectaBindingGenerator({
   outputEnvironment: "RHO_STARTUP_BINDINGS_PATH",
   factoryName: "createStartupCommands",
   invokeTypeName: "StartupInvoke",
-  rustSources: "rho-desktop startup+workspace composition root",
+  rustSources: "rho-desktop startup service + commands/startup facade",
 });

@@ -9,5 +9,5 @@ runTauriSpectaBindingGenerator({
   outputEnvironment: "RHO_AGENT_RUNTIME_BINDINGS_PATH",
   factoryName: "createAgentRuntimeCommands",
   invokeTypeName: "AgentRuntimeInvoke",
-  rustSources: "rho-desktop/main Agent runtime diagnostic commands",
+  rustSources: "rho-desktop Agent runtime service + commands/startup facade",
 });
