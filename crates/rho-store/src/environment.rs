@@ -49,7 +49,7 @@ pub struct EnvironmentOperationFinish {
     pub reason: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct EnvironmentOperationRequestSummary {
     pub request_id: String,
     pub turn_id: Option<String>,
@@ -63,7 +63,9 @@ pub struct EnvironmentOperationRequestSummary {
     pub preview_json: String,
     pub preview_sha256: String,
     pub workspace_id: Option<String>,
+    #[specta(type = Option<i32>)]
     pub state_revision: Option<i64>,
+    #[specta(type = Option<i32>)]
     pub project_revision: Option<i64>,
     pub before_snapshot_id: Option<String>,
     pub run_id: Option<String>,

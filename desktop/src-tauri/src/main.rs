@@ -976,6 +976,10 @@ struct EnvironmentOperationDecisionRequest {
     reason: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(transparent)]
+struct InstalledPackageInventory(#[specta(type = rho_ui_contract::UiIpcUnknown)] Value);
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AgentLlmSelectRequest {
@@ -3993,9 +3997,10 @@ async fn request_environment_operation_preview(
     .map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn list_environment_operation_requests(
-    limit: Option<usize>,
+    limit: Option<rho_ui_contract::UiIpcUsize>,
     status: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Vec<EnvironmentOperationRequestSummary>, String> {
@@ -4003,7 +4008,11 @@ async fn list_environment_operation_requests(
     let project_root = root.to_string_lossy().replace('\\', "/");
     read_store(&state)
         .map_err(display_error)?
-        .list_environment_operation_requests(&project_root, limit, status.as_deref())
+        .list_environment_operation_requests(
+            &project_root,
+            limit.map(usize::from),
+            status.as_deref(),
+        )
         .map_err(display_error)
 }
 
@@ -4020,17 +4029,18 @@ async fn get_environment_operation_request(
         .map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn list_installed_packages(
-    limit: Option<u64>,
+    limit: Option<rho_ui_contract::UiIpcU64>,
     state: State<'_, AppState>,
-) -> Result<Value, String> {
+) -> Result<InstalledPackageInventory, String> {
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
     let CoordinatorRuntime { broker, store } = &mut *context;
     let payload = json!({
-        "arguments": { "limit": limit.unwrap_or(500) },
+        "arguments": { "limit": limit.map(u64::from).unwrap_or(500) },
         "expected_workspace": broker.identity()
     });
     dispatch_workspace_request(
@@ -4042,6 +4052,7 @@ async fn list_installed_packages(
         store,
     )
     .await
+    .map(InstalledPackageInventory)
     .map_err(display_error)
 }
 
@@ -15781,6 +15792,21 @@ mod tests {
             .error_handling(tauri_specta::ErrorHandlingMode::Throw)
             .export(specta_typescript::Typescript::default(), output_path)
             .expect("History TypeScript export must succeed");
+    }
+
+    #[test]
+    #[ignore = "writes the requested generated TypeScript contract"]
+    fn environment_typescript_export() {
+        let output_path = std::env::var_os("RHO_ENVIRONMENT_BINDINGS_PATH")
+            .expect("RHO_ENVIRONMENT_BINDINGS_PATH must name the generated file");
+        tauri_specta::Builder::<tauri::Wry>::new()
+            .commands(tauri_specta::collect_commands![
+                super::list_installed_packages,
+                super::list_environment_operation_requests,
+            ])
+            .error_handling(tauri_specta::ErrorHandlingMode::Throw)
+            .export(specta_typescript::Typescript::default(), output_path)
+            .expect("Environment TypeScript export must succeed");
     }
 }
 

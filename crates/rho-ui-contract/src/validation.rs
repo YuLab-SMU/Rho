@@ -43,6 +43,32 @@ impl From<UiIpcUsize> for usize {
     }
 }
 
+/// A serde-transparent `u64` command argument exported as TypeScript number.
+///
+/// JavaScript represents JSON integers as numbers, so this preserves the
+/// existing deserialization range without exporting a bigint-only type.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(transparent)]
+pub struct UiIpcU64(u64);
+
+impl UiIpcU64 {
+    pub fn get(self) -> u64 {
+        self.0
+    }
+}
+
+impl specta::Type for UiIpcU64 {
+    fn definition(types: &mut specta::Types) -> specta::datatype::DataType {
+        <i32 as specta::Type>::definition(types)
+    }
+}
+
+impl From<UiIpcU64> for u64 {
+    fn from(value: UiIpcU64) -> Self {
+        value.get()
+    }
+}
+
 /// Export an intentionally opaque JSON payload as TypeScript `unknown`.
 ///
 /// This keeps exporter-only metadata in the contract crate instead of making
@@ -387,6 +413,22 @@ mod tests {
         for value in ["مرحبا بالعالم", "שלום עולם", "分析结果 🧬"] {
             assert!(validate_label(value, "label").is_ok(), "{value:?}");
         }
+    }
+
+    #[test]
+    fn ipc_unsigned_wrappers_preserve_the_existing_json_integer_range() {
+        let encoded_u64 = u64::MAX.to_string();
+        let decoded_u64: UiIpcU64 = serde_json::from_str(&encoded_u64).unwrap();
+        assert_eq!(decoded_u64.get(), u64::MAX);
+        assert_eq!(serde_json::to_string(&decoded_u64).unwrap(), encoded_u64);
+
+        let encoded_usize = usize::MAX.to_string();
+        let decoded_usize: UiIpcUsize = serde_json::from_str(&encoded_usize).unwrap();
+        assert_eq!(decoded_usize.get(), usize::MAX);
+        assert_eq!(
+            serde_json::to_string(&decoded_usize).unwrap(),
+            encoded_usize
+        );
     }
 
     #[test]
