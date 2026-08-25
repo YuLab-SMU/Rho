@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W4-02"],
+  "active_work_packages": [],
   "integration_lane": "AM-W4-02",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -617,6 +617,9 @@ V4 ABI is never guessed from exports.
 declare `runtime.abi = "core-v2" | "component-v1"`, while V1–V3 without that
 field resolve to the existing core-v2 path. V4 missing/unknown ABI fails before
 activation; no export-shape guessing or Component execution enters this slice.
+Implemented by `1b2502b`; parser, discovery and downstream compatibility
+evidence is recorded in `AM-E-0100`. The executable Component path remains open
+under `AM-F-0006`.
 
 ### Wave 5 — worktrees and shared generated artifacts
 
