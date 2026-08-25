@@ -30,6 +30,7 @@ mod lifecycle;
 mod manifest;
 mod model;
 mod observation;
+mod plugin_host;
 mod resolver;
 mod surface_contribution;
 mod surface_document;
@@ -144,6 +145,7 @@ pub use observation::{
     OutcomeClass, PatternObservation, Recipe, RedactionProfile, SkillSuggestion,
     self_grant_attempt_rejected,
 };
+pub use plugin_host::{GuestCallHost, PluginCancellationHandle, PluginGuestHost};
 pub use resolver::resolve_activation_plan;
 pub use surface_contribution::{
     MAX_WORKSPACE_SURFACE_RESOURCE_KINDS, WORKSPACE_SURFACE_CONTRACT_MAJOR,

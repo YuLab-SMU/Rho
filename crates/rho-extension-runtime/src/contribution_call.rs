@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    CapabilityId, ContributionInstanceIdentity, ContributionKind, ContributionStore, GuestStep,
-    HostRequestId, ScopeId, WasmPluginHost,
+    CapabilityId, ContributionInstanceIdentity, ContributionKind, ContributionStore, GuestCallHost,
+    GuestStep, HostRequestId, ScopeId,
 };
 
 pub const CONTRIBUTION_CALL_DEADLINE_MILLIS: u64 = 30_000;
@@ -204,11 +204,11 @@ impl ContributionCallSession {
         self.waiting_for_broker = false;
     }
 
-    pub fn begin(
+    pub fn begin<H: GuestCallHost + ?Sized>(
         registry: &ContributionStore,
         request: ContributionCallRequest,
         clock: &dyn ContributionClock,
-        host: &mut WasmPluginHost,
+        host: &mut H,
     ) -> Result<(Self, GuestStep), ContributionCallError> {
         let ContributionCallRequest {
             project_id,
@@ -325,13 +325,13 @@ impl ContributionCallSession {
         Ok((session, step))
     }
 
-    pub fn resume(
+    pub fn resume<H: GuestCallHost + ?Sized>(
         &mut self,
         registry: &ContributionStore,
         broker_result: &Value,
         raw_result_bytes: usize,
         clock: &dyn ContributionClock,
-        host: &mut WasmPluginHost,
+        host: &mut H,
     ) -> Result<GuestStep, ContributionCallError> {
         self.ensure_live(registry, clock, host)?;
         if self.terminal || !self.waiting_for_broker {
@@ -356,12 +356,12 @@ impl ContributionCallSession {
         Ok(step)
     }
 
-    pub fn finish(
+    pub fn finish<H: GuestCallHost + ?Sized>(
         &mut self,
         registry: &ContributionStore,
         step: &GuestStep,
         clock: &dyn ContributionClock,
-        host: &mut WasmPluginHost,
+        host: &mut H,
     ) -> Result<ContributionCallOutcome, ContributionCallError> {
         self.ensure_live(registry, clock, host)?;
         if self.terminal {
@@ -405,7 +405,10 @@ impl ContributionCallSession {
         Ok(outcome)
     }
 
-    pub fn cancel(&mut self, host: &mut WasmPluginHost) -> Result<bool, ContributionCallError> {
+    pub fn cancel<H: GuestCallHost + ?Sized>(
+        &mut self,
+        host: &mut H,
+    ) -> Result<bool, ContributionCallError> {
         if self.terminal {
             return Ok(false);
         }
@@ -449,11 +452,11 @@ impl ContributionCallSession {
         Ok(())
     }
 
-    fn ensure_live(
+    fn ensure_live<H: GuestCallHost + ?Sized>(
         &mut self,
         registry: &ContributionStore,
         clock: &dyn ContributionClock,
-        host: &mut WasmPluginHost,
+        host: &mut H,
     ) -> Result<(), ContributionCallError> {
         if clock.now_millis() >= self.deadline_millis {
             let _ = host.cancel_broker_call(&self.request_id);
@@ -528,9 +531,9 @@ fn validate_handle_set(handles: &BTreeMap<String, String>) -> Result<(), Contrib
     Ok(())
 }
 
-fn ensure_current_host(
+fn ensure_current_host<H: GuestCallHost + ?Sized>(
     identity: &ContributionInstanceIdentity,
-    host: &WasmPluginHost,
+    host: &H,
 ) -> Result<(), ContributionCallError> {
     let host_identity = host.identity();
     if host_identity.project_id() != &identity.project_id
@@ -609,7 +612,7 @@ mod tests {
         ActivationGeneration, BoundedJsonSchema, BrokerCallIdSource, ContributionDeclaration,
         ContributionInstanceIdentity, ContributionKind, HOST_PROTOCOL_VERSION, HostFrame,
         HostInstanceId, HostMessage, HostResponse, P2_2_SMOKE_WASM, PackageDigest, PluginId,
-        WasmHostIdentity,
+        WasmHostIdentity, WasmPluginHost,
     };
 
     #[derive(Debug)]
