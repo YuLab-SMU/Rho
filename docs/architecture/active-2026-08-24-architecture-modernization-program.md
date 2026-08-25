@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-08",
+  "active_work_packages": ["AM-W2-09"],
+  "integration_lane": "AM-W2-09",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -229,6 +229,14 @@ dispatch intentionally retain their existing authority ordering.
 cancellation and history adapters onto the same repository. It removes
 per-command synchronous Store opens while retaining project-transition,
 active-task, file-mutation and Workspace cancellation gates.
+
+`AM-W2-09` establishes a directory-backed Workspace-plugin module spine and
+moves the existing inline regression suite into its own test submodule. This is
+a mechanical source-layout boundary: public and crate-visible paths, runtime
+state, Store access, permission ordering, discovery, activation, recovery and
+guest execution semantics remain byte-for-byte source-equivalent apart from
+module placement and rustfmt. Later packages can extract production domains
+without repeatedly moving the 6,000-line regression corpus.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
