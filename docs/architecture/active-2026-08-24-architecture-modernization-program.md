@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W1-22"],
+  "active_work_packages": [],
   "integration_lane": "AM-W1-22",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -291,8 +291,8 @@ contract facets. Workspace-plugin Surface (`157f474`/AM-E-0016), Project
 transition (`4cfbe76`/AM-E-0017), UI Kernel (`172f3e2`/AM-E-0018), Check
 (`fdfa367`/AM-E-0019), Startup (`26f1e64`/AM-E-0020), History and artifact
 reads (`3cb7c3d`/AM-E-0021), Environment reads (`fbcb53b`/AM-E-0022), and
-Evidence reads (`c2c3b67`/AM-E-0023) now use the same Rust-owned generated
-boundary.
+Evidence reads (`c2c3b67`/AM-E-0023), and Git reads
+(`1017454`/AM-E-0024) now use the same Rust-owned generated boundary.
 
 ## Version, NEWS, and release decision
 
