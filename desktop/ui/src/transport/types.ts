@@ -40,6 +40,7 @@ import type { PluginSurfaceTransport } from "./plugin-surface";
 import type { ProjectTransport } from "./project";
 import type { KernelTransport } from "./kernel-generated";
 import type { CheckTransport } from "./check";
+import type { PlotImageView } from "./history";
 
 export type {
   RuntimeExecution,
@@ -264,6 +265,8 @@ export type {
   CheckTransport,
 } from "./check";
 
+export type { PlotImageView } from "./history";
+
 export type UiSnapshotSource = "tauri" | "mock";
 
 export interface RuntimeOutputEvent {
@@ -287,12 +290,6 @@ export interface DomainSurfaceData {
   readonly loaded_at: string;
   readonly summary: string;
   readonly items: readonly DomainSurfaceItem[];
-}
-
-export interface PlotImageView {
-  readonly plot_id: string;
-  readonly media_type: string;
-  readonly data_base64: string;
 }
 
 export type Unsubscribe = () => void;

@@ -17,6 +17,32 @@ impl specta::Type for UiIpcNumber {
     }
 }
 
+/// A serde-transparent `usize` command argument exported as TypeScript number.
+///
+/// Unlike [`UiIpcNumber`], this carries the runtime value so command signatures
+/// can preserve Rust's native range without exporting a forbidden bigint type.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(transparent)]
+pub struct UiIpcUsize(usize);
+
+impl UiIpcUsize {
+    pub fn get(self) -> usize {
+        self.0
+    }
+}
+
+impl specta::Type for UiIpcUsize {
+    fn definition(types: &mut specta::Types) -> specta::datatype::DataType {
+        <i32 as specta::Type>::definition(types)
+    }
+}
+
+impl From<UiIpcUsize> for usize {
+    fn from(value: UiIpcUsize) -> Self {
+        value.get()
+    }
+}
+
 /// Export an intentionally opaque JSON payload as TypeScript `unknown`.
 ///
 /// This keeps exporter-only metadata in the contract crate instead of making

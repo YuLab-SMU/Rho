@@ -1,7 +1,6 @@
 import type {
   DomainSurfaceData,
   DomainSurfaceItem,
-  PlotImageView,
   UiKernelTransport,
   Unsubscribe,
   WorkspacePreparation,
@@ -21,6 +20,7 @@ import {
 import { createTauriKernelTransport } from "./kernel-generated";
 import { createTauriCheckTransport } from "./check";
 import { createTauriStartupTransport } from "./startup";
+import { createTauriHistoryReadTransport } from "./history";
 import { createTauriAgentTurnDetailTransport } from "./agent-turn";
 import { createTauriProfileTransport } from "./profile";
 import { createTauriResourceTransport } from "./resource";
@@ -124,6 +124,7 @@ export function createTauriUiKernelTransport(
   const projectCommands = createTauriProjectCommands(invoke);
   const kernelTransport = createTauriKernelTransport(invoke);
   const startupTransport = createTauriStartupTransport(invoke);
+  const historyTransport = createTauriHistoryReadTransport(invoke);
   return {
     source: "tauri",
     async prepareWorkspace(chooseRscript = false): Promise<WorkspacePreparation> {
@@ -254,13 +255,13 @@ export function createTauriUiKernelTransport(
           status: await invoke<unknown>("git_status"),
           history: await invoke<unknown>("git_log", { limit: 30 }),
         }; break;
-        case "rho.runs": payload = await invoke<unknown>("list_runs", { limit: 100 }); break;
-        case "rho.artifacts": payload = await invoke<unknown>("list_artifact_records", { limit: 100, sessionOnly: false }); break;
-        case "rho.problems": payload = await invoke<unknown>("list_problems", { limit: 100 }); break;
-        case "rho.plots": payload = await invoke<unknown>("list_plot_artifacts", { limit: 100, sessionOnly: true }); break;
+        case "rho.runs": payload = await historyTransport.listRuns(100); break;
+        case "rho.artifacts": payload = await historyTransport.listArtifactRecords(100, false); break;
+        case "rho.problems": payload = await historyTransport.listProblems(100); break;
+        case "rho.plots": payload = await historyTransport.listPlotArtifacts(100, true); break;
         case "rho.logs": payload = { id: "startup-diagnostics", title: "Startup diagnostics", status: "current", detail: await invoke<string>("startup_diagnostics") }; break;
         case "rho.render-jobs": {
-          const runs = await invoke<unknown>("list_runs", { limit: 100 });
+          const runs = await historyTransport.listRuns(100);
           payload = Array.isArray(runs) ? runs.filter((run) => {
             const encoded = boundedJson(run)?.toLowerCase() ?? "";
             return encoded.includes("render");
@@ -296,7 +297,7 @@ export function createTauriUiKernelTransport(
       }
       return domainData(surfaceId, payload);
     },
-    readPlotArtifact: (plotId) => invoke<PlotImageView>("read_plot_artifact", { plotId }),
+    readPlotArtifact: historyTransport.readPlotArtifact,
     retryRun: (runId) => invoke("retry_run", { runId }),
   };
 }

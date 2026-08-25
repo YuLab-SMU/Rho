@@ -40,7 +40,7 @@ pub struct RunFinish {
     pub environment_snapshot_id_after: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct RunSummary {
     pub run_id: String,
     pub parent_run_id: Option<String>,
@@ -54,11 +54,16 @@ pub struct RunSummary {
     pub operation_class: String,
     pub source_path: Option<String>,
     pub execution_mode: Option<String>,
+    #[specta(type = Option<i32>)]
     pub document_version: Option<i64>,
     pub workspace_id: Option<String>,
+    #[specta(type = Option<i32>)]
     pub state_revision_before: Option<i64>,
+    #[specta(type = Option<i32>)]
     pub project_revision_before: Option<i64>,
+    #[specta(type = Option<i32>)]
     pub state_revision_after: Option<i64>,
+    #[specta(type = Option<i32>)]
     pub project_revision_after: Option<i64>,
     pub environment_snapshot_id: Option<String>,
     pub environment_snapshot_id_after: Option<String>,
@@ -75,7 +80,7 @@ pub struct RunErrorRange {
     pub range_kind: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct ProblemSummary {
     pub run_id: String,
     pub parent_run_id: Option<String>,
@@ -87,10 +92,15 @@ pub struct ProblemSummary {
     pub traceback: Vec<String>,
     pub source_path: Option<String>,
     pub execution_mode: Option<String>,
+    #[specta(type = Option<i32>)]
     pub document_version: Option<i64>,
+    #[specta(type = Option<i32>)]
     pub line_number: Option<u32>,
+    #[specta(type = Option<i32>)]
     pub column_number: Option<u32>,
+    #[specta(type = Option<i32>)]
     pub end_line_number: Option<u32>,
+    #[specta(type = Option<i32>)]
     pub end_column_number: Option<u32>,
     pub range_kind: Option<String>,
     pub workspace_id: Option<String>,

@@ -4298,9 +4298,10 @@ async fn editor_format_source(
     editor_format_result(response).map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn list_plot_artifacts(
-    limit: Option<usize>,
+    limit: Option<rho_ui_contract::UiIpcUsize>,
     session_only: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<Vec<PlotArtifactSummary>, String> {
@@ -4311,7 +4312,7 @@ async fn list_plot_artifacts(
     read_store(&state)
         .map_err(display_error)?
         .list_plot_artifacts(
-            limit,
+            limit.map(usize::from),
             Some(&project_root),
             Some(&workspace_id),
             session_only.unwrap_or(true),
@@ -4409,13 +4410,14 @@ async fn export_plot_artifact(
 /// cannot flood the webview through a data URL.
 const MAX_PLOT_PREVIEW_BASE64_BYTES: usize = 16 * 1024 * 1024;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 struct PlotImageView {
     plot_id: String,
     media_type: String,
     data_base64: String,
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn read_plot_artifact(
     plot_id: String,
@@ -4572,9 +4574,10 @@ async fn export_data_view_artifact(
     })
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn list_artifact_records(
-    limit: Option<usize>,
+    limit: Option<rho_ui_contract::UiIpcUsize>,
     session_only: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<Vec<ArtifactRecordSummary>, String> {
@@ -4584,7 +4587,7 @@ async fn list_artifact_records(
     read_store(&state)
         .map_err(display_error)?
         .list_artifact_records(
-            limit,
+            limit.map(usize::from),
             &root.to_string_lossy().replace('\\', "/"),
             Some(&workspace_id),
             session_only.unwrap_or(false),
@@ -15760,6 +15763,24 @@ mod tests {
             .error_handling(tauri_specta::ErrorHandlingMode::Throw)
             .export(specta_typescript::Typescript::default(), output_path)
             .expect("Startup TypeScript export must succeed");
+    }
+
+    #[test]
+    #[ignore = "writes the requested generated TypeScript contract"]
+    fn history_typescript_export() {
+        let output_path = std::env::var_os("RHO_HISTORY_BINDINGS_PATH")
+            .expect("RHO_HISTORY_BINDINGS_PATH must name the generated file");
+        tauri_specta::Builder::<tauri::Wry>::new()
+            .commands(tauri_specta::collect_commands![
+                crate::commands::runs::list_runs,
+                super::list_artifact_records,
+                crate::commands::runs::list_problems,
+                super::list_plot_artifacts,
+                super::read_plot_artifact,
+            ])
+            .error_handling(tauri_specta::ErrorHandlingMode::Throw)
+            .export(specta_typescript::Typescript::default(), output_path)
+            .expect("History TypeScript export must succeed");
     }
 }
 

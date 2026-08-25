@@ -15,12 +15,13 @@ use crate::{
     run_history_source_capability_id,
 };
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn list_runs(
-    limit: Option<usize>,
+    limit: Option<rho_ui_contract::UiIpcUsize>,
     state: State<'_, AppState>,
 ) -> Result<Vec<RunSummary>, String> {
-    list_runs_with_state(limit, &state).await
+    list_runs_with_state(limit.map(usize::from), &state).await
 }
 
 async fn list_runs_legacy(
@@ -103,16 +104,17 @@ pub(crate) async fn list_runs_with_state(
     serde_json::from_value(result.payload.into_value()).map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn list_problems(
-    limit: Option<usize>,
+    limit: Option<rho_ui_contract::UiIpcUsize>,
     state: State<'_, AppState>,
 ) -> Result<Vec<ProblemSummary>, String> {
     let root = state.project_root.read().await.clone();
     let project_root = root.to_string_lossy();
     let store = read_store(&state).map_err(display_error)?;
     ProjectQueryService::new(&store)
-        .list_problems(project_root.as_ref(), limit)
+        .list_problems(project_root.as_ref(), limit.map(usize::from))
         .map_err(display_error)
 }
 

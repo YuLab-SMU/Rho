@@ -17,16 +17,19 @@ pub struct PlotArtifactDraft {
     pub provenance_complete: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct PlotArtifactSummary {
     pub plot_id: String,
     pub run_id: String,
     pub project_root: Option<String>,
     pub source_path: Option<String>,
     pub execution_mode: Option<String>,
+    #[specta(type = Option<i32>)]
     pub document_version: Option<i64>,
     pub workspace_id: Option<String>,
+    #[specta(type = Option<i32>)]
     pub state_revision: Option<i64>,
+    #[specta(type = Option<i32>)]
     pub project_revision: Option<i64>,
     pub media_type: String,
     pub payload_json: String,
@@ -53,7 +56,7 @@ pub struct ArtifactRecordDraft {
     pub incomplete_reason: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct ArtifactRecordSummary {
     pub artifact_id: String,
     pub artifact_kind: String,
@@ -62,9 +65,12 @@ pub struct ArtifactRecordSummary {
     pub output_path: String,
     pub source_path: Option<String>,
     pub execution_mode: Option<String>,
+    #[specta(type = Option<i32>)]
     pub document_version: Option<i64>,
     pub workspace_id: Option<String>,
+    #[specta(type = Option<i32>)]
     pub state_revision: Option<i64>,
+    #[specta(type = Option<i32>)]
     pub project_revision: Option<i64>,
     pub media_type: String,
     pub metadata_json: String,
