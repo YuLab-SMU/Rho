@@ -1,4 +1,13 @@
 use super::*;
+use crate::commands::agent_execution::{
+    AgentApprovalDeliveryResponse, AgentApprovalDeliveryStatus, AgentContextPlanPreviewView,
+    AgentTurnCancelResponse, AgentTurnCancelStatus, AgentTurnDetailView, AgentTurnStartResponse,
+    AgentTurnStartStatus, ApprovalDecisionRequest,
+};
+use rho_store::{
+    AgentConversationSummary, AgentTurnContextItem, AgentTurnContextItemDraft, AgentTurnEvent,
+    AgentTurnSummary, ApprovalRequestSummary,
+};
 
 fn conversation() -> AgentConversationSummary {
     AgentConversationSummary {
@@ -428,7 +437,7 @@ fn agent_turn_typescript_export() {
         .expect("RHO_AGENT_TURN_BINDINGS_PATH must name the generated file");
     tauri_specta::Builder::<tauri::Wry>::new()
         .commands(tauri_specta::collect_commands![
-            crate::get_agent_turn_detail
+            crate::commands::agent_execution::get_agent_turn_detail
         ])
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
         .export(specta_typescript::Typescript::default(), output_path)
@@ -442,11 +451,11 @@ fn agent_execution_typescript_export() {
         .expect("RHO_AGENT_EXECUTION_BINDINGS_PATH must name the generated file");
     tauri_specta::Builder::<tauri::Wry>::new()
         .commands(tauri_specta::collect_commands![
-            crate::agent_context_preview,
-            crate::run_agent,
-            crate::retry_agent_turn,
-            crate::cancel_agent_turn,
-            crate::respond_approval,
+            crate::commands::agent_execution::agent_context_preview,
+            crate::commands::agent_execution::run_agent,
+            crate::commands::agent_execution::retry_agent_turn,
+            crate::commands::agent_execution::cancel_agent_turn,
+            crate::commands::agent_execution::respond_approval,
         ])
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
         .export(specta_typescript::Typescript::default(), output_path)

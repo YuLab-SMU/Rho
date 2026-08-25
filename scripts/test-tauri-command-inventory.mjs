@@ -103,6 +103,17 @@ const AGENT_CONVERSATION_COMMANDS = [
   "list_agent_turns",
 ];
 
+const AGENT_EXECUTION_COMMANDS = [
+  "agent_context_preview",
+  "cancel_agent_turn",
+  "clear_agent_history",
+  "get_agent_turn_detail",
+  "list_approval_requests",
+  "respond_approval",
+  "retry_agent_turn",
+  "run_agent",
+];
+
 const STARTUP_COMMANDS = [
   "agent_runtime_retry",
   "agent_runtime_status",
@@ -321,6 +332,16 @@ export function validateCommandInventory({ sources, main, frontend, expectedHand
     "Agent conversation command module ownership changed",
   );
 
+  const agentExecutionSource = sources.find(
+    ({ name }) => name.endsWith("commands/agent_execution.rs"),
+  );
+  assert.ok(agentExecutionSource, "Agent execution command module is missing");
+  assert.deepEqual(
+    commandDefinitions([agentExecutionSource]).map(({ name }) => name).sort(),
+    AGENT_EXECUTION_COMMANDS,
+    "Agent execution command module ownership changed",
+  );
+
   const startupSource = sources.find(({ name }) => name.endsWith("commands/startup.rs"));
   assert.ok(startupSource, "Startup command module is missing");
   assert.deepEqual(
@@ -370,6 +391,9 @@ function fixtures() {
   const agentConversationHandlers = AGENT_CONVERSATION_COMMANDS.map(
     (command) => `  commands::agent_conversation::${command},`,
   ).join("\n");
+  const agentExecutionHandlers = AGENT_EXECUTION_COMMANDS.map(
+    (command) => `  commands::agent_execution::${command},`,
+  ).join("\n");
   const startupHandlers = STARTUP_COMMANDS.map(
     (command) => `  commands::startup::${command},`,
   ).join("\n");
@@ -395,6 +419,7 @@ ${editorHandlers}
 ${projectHandlers}
 ${agentLlmHandlers}
 ${agentConversationHandlers}
+${agentExecutionHandlers}
 ${startupHandlers}
 ${renderHandlers}
 ${workspaceHandlers}
@@ -433,6 +458,9 @@ ${workspaceHandlers}
       { name: "commands/agent_conversation.rs", text: AGENT_CONVERSATION_COMMANDS.map(
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
+      { name: "commands/agent_execution.rs", text: AGENT_EXECUTION_COMMANDS.map(
+        (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
+      ).join("\n") },
       { name: "commands/startup.rs", text: STARTUP_COMMANDS.map(
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
@@ -456,6 +484,7 @@ ${workspaceHandlers}
       ...PROJECT_COMMANDS,
       ...AGENT_LLM_COMMANDS,
       ...AGENT_CONVERSATION_COMMANDS,
+      ...AGENT_EXECUTION_COMMANDS,
       ...STARTUP_COMMANDS,
       ...RENDER_COMMANDS,
       ...WORKSPACE_COMMANDS,
