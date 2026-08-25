@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W4-05"],
+  "active_work_packages": [],
   "integration_lane": "AM-W4-05",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -644,6 +644,9 @@ under `AM-F-0006`.
 It reuses core-v2 call, payload, step and cumulative-result limits, exposes only
 fully yielded validated steps, and adds exact epoch cancellation without
 performing broker work inside a borrowed guest Store.
+Implemented by `344cbd8` and `a3723e1` with evidence `AM-E-0103`, including a
+deterministic epoch interruption while guest instructions execute. Desktop
+selection, grant delivery and durable recovery remain open under `AM-F-0006`.
 
 ### Wave 5 — worktrees and shared generated artifacts
 
