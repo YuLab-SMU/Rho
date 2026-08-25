@@ -3557,7 +3557,7 @@ async fn handle_tool_approval_required(
     let uses_environment_contract =
         request_type.is_some_and(request_type_uses_environment_contract);
     let mut context_guard = context.lock().await;
-    let WorkspaceBrokerState { broker, store, .. } = &mut *context_guard;
+    let WorkspaceBrokerState { broker, .. } = &mut *context_guard;
     let identity = broker.identity().clone();
     let code = arguments
         .get("code")
@@ -3570,17 +3570,19 @@ async fn handle_tool_approval_required(
         } else {
             format!("Tool `{tool}` is not approved for Workspace mutation")
         };
-        store.append_agent_turn_event(&AgentTurnEventDraft {
-            turn_id: turn_id.to_string(),
-            event_type: "approval.policy_denied".to_string(),
-            title: format!("Policy denied · {tool}"),
-            body: Some(reason.clone()),
-            status: "error".to_string(),
-            tool: Some(tool),
-            request_id: Some(request_id.clone()),
-            code,
-            details_json: serde_json::to_string(&incoming.payload)?,
-        })?;
+        agent_store
+            .append_turn_event(AgentTurnEventDraft {
+                turn_id: turn_id.to_string(),
+                event_type: "approval.policy_denied".to_string(),
+                title: format!("Policy denied · {tool}"),
+                body: Some(reason.clone()),
+                status: "error".to_string(),
+                tool: Some(tool),
+                request_id: Some(request_id.clone()),
+                code,
+                details_json: serde_json::to_string(&incoming.payload)?,
+            })
+            .await?;
         return Ok(json!({
             "approved": false,
             "request_id": request_id,
@@ -3598,7 +3600,6 @@ async fn handle_tool_approval_required(
             "agent",
             session,
             broker,
-            store,
             &executor,
         )
         .await?;
@@ -3608,8 +3609,8 @@ async fn handle_tool_approval_required(
         let receiver = environment_approvals
             .register(request.request_id.clone(), Some(turn_id.to_string()))
             .await;
-        store.update_agent_turn_status(turn_id, "waiting")?;
-        store.append_agent_turn_event(&AgentTurnEventDraft {
+        let waiting_turn_id = turn_id.to_string();
+        let waiting_event = AgentTurnEventDraft {
             turn_id: turn_id.to_string(),
             event_type: "environment.requested".to_string(),
             title: format!("Environment review required · {}", request.request_name),
@@ -3628,7 +3629,13 @@ async fn handle_tool_approval_required(
                 "before_snapshot_id": request.before_snapshot_id,
                 "project_root": request.project_root
             }))?,
-        })?;
+        };
+        run_workspace_store_service(&executor, move |store| {
+            store.update_agent_turn_status(&waiting_turn_id, "waiting")?;
+            store.append_agent_turn_event(&waiting_event)?;
+            Ok(())
+        })
+        .await?;
         drop(context_guard);
 
         let response = receiver.await.unwrap_or(ApprovalResponseInput {
@@ -3640,13 +3647,17 @@ async fn handle_tool_approval_required(
         environment_approvals.remove(&request.request_id).await;
 
         let mut context_guard = context.lock().await;
-        let WorkspaceBrokerState { broker, store, .. } = &mut *context_guard;
-        let request = store
-            .get_environment_operation_request(&request.project_root, &request.request_id)?
+        let WorkspaceBrokerState { broker, .. } = &mut *context_guard;
+        let request = executor
+            .environment_repository()
+            .get_request(request.project_root.clone(), request.request_id.clone())
+            .await?
             .context("Environment operation request disappeared before approval resolution")?;
         if response.decision == "approve" {
-            let current_project_root = store
-                .active_project_root()?
+            let current_project_root = executor
+                .project_transition_repository()
+                .active_project_root()
+                .await?
                 .unwrap_or_default()
                 .replace('\\', "/");
             let current_snapshot_id =
@@ -3659,16 +3670,14 @@ async fn handle_tool_approval_required(
                 &current_project_root,
                 current_snapshot_id.as_deref(),
             ) {
-                store.decide_environment_operation_request(
-                    &request.request_id,
-                    &EnvironmentOperationDecisionRecord {
-                        decision: "approve".to_string(),
-                        status: "stale".to_string(),
-                        reason: Some(reason.clone()),
-                    },
-                )?;
-                store.update_agent_turn_status(turn_id, "running")?;
-                store.append_agent_turn_event(&AgentTurnEventDraft {
+                let stale_request_id = request.request_id.clone();
+                let stale_decision = EnvironmentOperationDecisionRecord {
+                    decision: "approve".to_string(),
+                    status: "stale".to_string(),
+                    reason: Some(reason.clone()),
+                };
+                let running_turn_id = turn_id.to_string();
+                let stale_event = AgentTurnEventDraft {
                     turn_id: turn_id.to_string(),
                     event_type: "environment.stale".to_string(),
                     title: format!("Environment approval stale · {}", request.request_name),
@@ -3678,7 +3687,15 @@ async fn handle_tool_approval_required(
                     request_id: Some(request.request_id.clone()),
                     code: None,
                     details_json: serde_json::to_string(&json!({"reason": reason}))?,
-                })?;
+                };
+                run_workspace_store_service(&executor, move |store| {
+                    store
+                        .decide_environment_operation_request(&stale_request_id, &stale_decision)?;
+                    store.update_agent_turn_status(&running_turn_id, "running")?;
+                    store.append_agent_turn_event(&stale_event)?;
+                    Ok(())
+                })
+                .await?;
                 return Ok(json!({
                     "approved": false,
                     "request_id": request.request_id,
@@ -3688,16 +3705,14 @@ async fn handle_tool_approval_required(
                 }));
             }
 
-            store.decide_environment_operation_request(
-                &request.request_id,
-                &EnvironmentOperationDecisionRecord {
-                    decision: "approve".to_string(),
-                    status: "approved".to_string(),
-                    reason: response.reason.clone(),
-                },
-            )?;
-            store.update_agent_turn_status(turn_id, "running")?;
-            store.append_agent_turn_event(&AgentTurnEventDraft {
+            let approved_request_id = request.request_id.clone();
+            let approved_decision = EnvironmentOperationDecisionRecord {
+                decision: "approve".to_string(),
+                status: "approved".to_string(),
+                reason: response.reason.clone(),
+            };
+            let running_turn_id = turn_id.to_string();
+            let approved_event = AgentTurnEventDraft {
                 turn_id: turn_id.to_string(),
                 event_type: "environment.approved".to_string(),
                 title: format!("Environment approval granted · {}", request.request_name),
@@ -3710,7 +3725,17 @@ async fn handle_tool_approval_required(
                     "request_type": request_type,
                     "arguments": approved_arguments
                 }))?,
-            })?;
+            };
+            run_workspace_store_service(&executor, move |store| {
+                store.decide_environment_operation_request(
+                    &approved_request_id,
+                    &approved_decision,
+                )?;
+                store.update_agent_turn_status(&running_turn_id, "running")?;
+                store.append_agent_turn_event(&approved_event)?;
+                Ok(())
+            })
+            .await?;
             approved_mutations.insert(
                 request.request_id.clone(),
                 ApprovedMutation {
@@ -3746,16 +3771,14 @@ async fn handle_tool_approval_required(
                     .unwrap_or_else(|| "The environment operation was rejected.".to_string()),
             ),
         };
-        store.decide_environment_operation_request(
-            &request.request_id,
-            &EnvironmentOperationDecisionRecord {
-                decision: response.decision.clone(),
-                status: status.to_string(),
-                reason: response.reason.clone(),
-            },
-        )?;
-        store.update_agent_turn_status(turn_id, "running")?;
-        store.append_agent_turn_event(&AgentTurnEventDraft {
+        let terminal_request_id = request.request_id.clone();
+        let terminal_decision = EnvironmentOperationDecisionRecord {
+            decision: response.decision.clone(),
+            status: status.to_string(),
+            reason: response.reason.clone(),
+        };
+        let running_turn_id = turn_id.to_string();
+        let terminal_event = AgentTurnEventDraft {
             turn_id: turn_id.to_string(),
             event_type: format!("environment.{status}"),
             title: format!("Environment approval {status} · {}", request.request_name),
@@ -3768,7 +3791,14 @@ async fn handle_tool_approval_required(
                 "decision": response.decision,
                 "reason": response.reason
             }))?,
-        })?;
+        };
+        run_workspace_store_service(&executor, move |store| {
+            store.decide_environment_operation_request(&terminal_request_id, &terminal_decision)?;
+            store.update_agent_turn_status(&running_turn_id, "running")?;
+            store.append_agent_turn_event(&terminal_event)?;
+            Ok(())
+        })
+        .await?;
         return Ok(json!({
             "approved": false,
             "request_id": request.request_id,
@@ -3778,10 +3808,12 @@ async fn handle_tool_approval_required(
         }));
     }
 
-    let project_root = store
-        .active_project_root()?
+    let project_root = executor
+        .project_transition_repository()
+        .active_project_root()
+        .await?
         .context("Cannot persist approval without an active project identity")?;
-    store.create_approval_request(&ApprovalRequestDraft {
+    let approval_draft = ApprovalRequestDraft {
         request_id: request_id.clone(),
         turn_id: turn_id.to_string(),
         project_root,
@@ -3792,20 +3824,23 @@ async fn handle_tool_approval_required(
         workspace_id: identity.workspace_id.clone(),
         state_revision: identity.state_revision as i64,
         project_revision: identity.project_revision as i64,
-    })?;
+    };
+    run_workspace_store_service(&executor, move |store| {
+        store.create_approval_request(&approval_draft)?;
+        Ok(())
+    })
+    .await?;
 
     if auto_approve {
-        store.resolve_approval_request(
-            &request_id,
-            &ApprovalDecisionRecord {
-                decision: "approve".to_string(),
-                status: "approved".to_string(),
-                reason: Some("Act session authorization enabled by the user.".to_string()),
-                continuation_outcome: Some("execute".to_string()),
-            },
-        )?;
-        store.update_agent_turn_status(turn_id, "running")?;
-        store.append_agent_turn_event(&AgentTurnEventDraft {
+        let approved_request_id = request_id.clone();
+        let approved_decision = ApprovalDecisionRecord {
+            decision: "approve".to_string(),
+            status: "approved".to_string(),
+            reason: Some("Act session authorization enabled by the user.".to_string()),
+            continuation_outcome: Some("execute".to_string()),
+        };
+        let running_turn_id = turn_id.to_string();
+        let approved_event = AgentTurnEventDraft {
             turn_id: turn_id.to_string(),
             event_type: "approval.auto_approved".to_string(),
             title: format!("Act authorization granted · {tool}"),
@@ -3817,7 +3852,14 @@ async fn handle_tool_approval_required(
             request_id: Some(request_id.clone()),
             code: code.clone(),
             details_json: serde_json::to_string(&json!({"policy": "act_session_authorized"}))?,
-        })?;
+        };
+        run_workspace_store_service(&executor, move |store| {
+            store.resolve_approval_request(&approved_request_id, &approved_decision)?;
+            store.update_agent_turn_status(&running_turn_id, "running")?;
+            store.append_agent_turn_event(&approved_event)?;
+            Ok(())
+        })
+        .await?;
         approved_mutations.insert(
             request_id.clone(),
             ApprovedMutation {
@@ -3837,8 +3879,8 @@ async fn handle_tool_approval_required(
     let receiver = approvals
         .register(request_id.clone(), Some(turn_id.to_string()))
         .await;
-    store.update_agent_turn_status(turn_id, "waiting")?;
-    store.append_agent_turn_event(&AgentTurnEventDraft {
+    let waiting_turn_id = turn_id.to_string();
+    let waiting_event = AgentTurnEventDraft {
         turn_id: turn_id.to_string(),
         event_type: "approval.requested".to_string(),
         title: format!("Approval requested · {tool}"),
@@ -3848,7 +3890,13 @@ async fn handle_tool_approval_required(
         request_id: Some(request_id.clone()),
         code: code.clone(),
         details_json: serde_json::to_string(&incoming.payload)?,
-    })?;
+    };
+    run_workspace_store_service(&executor, move |store| {
+        store.update_agent_turn_status(&waiting_turn_id, "waiting")?;
+        store.append_agent_turn_event(&waiting_event)?;
+        Ok(())
+    })
+    .await?;
 
     drop(context_guard);
     let response = receiver.await.unwrap_or(ApprovalResponseInput {
@@ -3858,7 +3906,7 @@ async fn handle_tool_approval_required(
     approvals.remove(&request_id).await;
 
     let mut context_guard = context.lock().await;
-    let WorkspaceBrokerState { broker, store, .. } = &mut *context_guard;
+    let WorkspaceBrokerState { broker, .. } = &mut *context_guard;
     let current = broker.identity();
     if response.decision == "approve"
         && (current.workspace_id != identity.workspace_id
@@ -3866,17 +3914,15 @@ async fn handle_tool_approval_required(
             || current.project_revision as i64 != identity.project_revision as i64)
     {
         let reason = "Workspace state changed before approval was granted.".to_string();
-        store.resolve_approval_request(
-            &request_id,
-            &ApprovalDecisionRecord {
-                decision: response.decision,
-                status: "stale".to_string(),
-                reason: Some(reason.clone()),
-                continuation_outcome: Some("replan_required".to_string()),
-            },
-        )?;
-        store.update_agent_turn_status(turn_id, "running")?;
-        store.append_agent_turn_event(&AgentTurnEventDraft {
+        let stale_request_id = request_id.clone();
+        let stale_decision = ApprovalDecisionRecord {
+            decision: response.decision,
+            status: "stale".to_string(),
+            reason: Some(reason.clone()),
+            continuation_outcome: Some("replan_required".to_string()),
+        };
+        let running_turn_id = turn_id.to_string();
+        let stale_event = AgentTurnEventDraft {
             turn_id: turn_id.to_string(),
             event_type: "approval.stale".to_string(),
             title: format!("Approval stale · {tool}"),
@@ -3886,7 +3932,14 @@ async fn handle_tool_approval_required(
             request_id: Some(request_id.clone()),
             code,
             details_json: serde_json::to_string(&json!({"reason": reason}))?,
-        })?;
+        };
+        run_workspace_store_service(&executor, move |store| {
+            store.resolve_approval_request(&stale_request_id, &stale_decision)?;
+            store.update_agent_turn_status(&running_turn_id, "running")?;
+            store.append_agent_turn_event(&stale_event)?;
+            Ok(())
+        })
+        .await?;
         return Ok(json!({
             "approved": false,
             "request_id": request_id,
@@ -3925,17 +3978,15 @@ async fn handle_tool_approval_required(
             "approval_rejected",
         ),
     };
-    store.resolve_approval_request(
-        &request_id,
-        &ApprovalDecisionRecord {
-            decision: response.decision.clone(),
-            status: status.to_string(),
-            reason: response.reason.clone(),
-            continuation_outcome: Some(continuation.to_string()),
-        },
-    )?;
-    store.update_agent_turn_status(turn_id, "running")?;
-    store.append_agent_turn_event(&AgentTurnEventDraft {
+    let terminal_request_id = request_id.clone();
+    let terminal_decision = ApprovalDecisionRecord {
+        decision: response.decision.clone(),
+        status: status.to_string(),
+        reason: response.reason.clone(),
+        continuation_outcome: Some(continuation.to_string()),
+    };
+    let running_turn_id = turn_id.to_string();
+    let terminal_event = AgentTurnEventDraft {
         turn_id: turn_id.to_string(),
         event_type: format!("approval.{status}"),
         title,
@@ -3953,7 +4004,14 @@ async fn handle_tool_approval_required(
             "reason": response.reason,
             "continuation_outcome": continuation
         }))?,
-    })?;
+    };
+    run_workspace_store_service(&executor, move |store| {
+        store.resolve_approval_request(&terminal_request_id, &terminal_decision)?;
+        store.update_agent_turn_status(&running_turn_id, "running")?;
+        store.append_agent_turn_event(&terminal_event)?;
+        Ok(())
+    })
+    .await?;
     if approved {
         approved_mutations.insert(
             request_id.clone(),
@@ -4319,12 +4377,13 @@ async fn preview_environment_operation(
     source: &str,
     session: &ArkSession,
     broker: &BrokerState,
-    store: &mut Store,
     executor: &StoreExecutor,
 ) -> Result<EnvironmentOperationRequestSummary> {
     let request_name = environment_operation_request_name(&arguments.operation)?;
-    let project_root = store
-        .active_project_root()?
+    let project_root = executor
+        .project_transition_repository()
+        .active_project_root()
+        .await?
         .context("No active project root is configured")?
         .replace('\\', "/");
     let project_argument = r_string(&project_root)?;
@@ -4431,7 +4490,7 @@ async fn preview_environment_operation(
     let preview_sha256 = sha256_hex(preview_json.as_bytes());
     let request_id = format!("envreq_{}", Uuid::new_v4());
     let identity = broker.identity().clone();
-    store.create_environment_operation_request(&EnvironmentOperationRequestDraft {
+    let draft = EnvironmentOperationRequestDraft {
         request_id: request_id.clone(),
         turn_id: turn_id.map(str::to_string),
         source: source.to_string(),
@@ -4444,10 +4503,14 @@ async fn preview_environment_operation(
         state_revision: identity.state_revision as i64,
         project_revision: identity.project_revision as i64,
         before_snapshot_id,
-    })?;
-    store
-        .get_environment_operation_request(&project_root, &request_id)?
-        .context("Environment operation request was not persisted")
+    };
+    run_workspace_store_service(executor, move |store| {
+        store.create_environment_operation_request(&draft)?;
+        store
+            .get_environment_operation_request(&project_root, &request_id)?
+            .context("Environment operation request was not persisted")
+    })
+    .await
 }
 
 async fn execute_confirmed_environment_operation(
@@ -4516,13 +4579,9 @@ pub async fn request_environment_operation(
     source: &str,
     session: &ArkSession,
     broker: &BrokerState,
-    store: &mut Store,
     executor: &StoreExecutor,
 ) -> Result<EnvironmentOperationRequestSummary> {
-    preview_environment_operation(
-        &arguments, turn_id, source, session, broker, store, executor,
-    )
-    .await
+    preview_environment_operation(&arguments, turn_id, source, session, broker, executor).await
 }
 
 pub async fn decide_environment_operation(
@@ -4532,17 +4591,20 @@ pub async fn decide_environment_operation(
     origin: ExecutionOrigin,
     session: &ArkSession,
     broker: &mut BrokerState,
-    store: &mut Store,
     executor: &StoreExecutor,
 ) -> Result<Value> {
-    let project_root = store
-        .active_project_root()?
-        .context("Cannot decide environment operation without an active project identity")?;
-    let request = store
-        .get_environment_operation_request(&project_root, request_id)?
-        .context(format!(
-            "Environment operation request not found: {request_id}"
-        ))?;
+    let requested_id = request_id.to_string();
+    let request = run_workspace_store_service(executor, move |store| {
+        let project_root = store
+            .active_project_root()?
+            .context("Cannot decide environment operation without an active project identity")?;
+        store
+            .get_environment_operation_request(&project_root, &requested_id)?
+            .context(format!(
+                "Environment operation request not found: {requested_id}"
+            ))
+    })
+    .await?;
     ensure!(
         request.status == "requested",
         "Environment operation request is no longer pending: {}",
@@ -4554,23 +4616,30 @@ pub async fn decide_environment_operation(
         } else {
             "rejected"
         };
-        store.decide_environment_operation_request(
-            request_id,
-            &EnvironmentOperationDecisionRecord {
-                decision: decision.to_string(),
-                status: status.to_string(),
-                reason: reason.clone(),
-            },
-        )?;
+        let request_id = request_id.to_string();
+        let persisted_request_id = request_id.clone();
+        let decision_value = decision.to_string();
+        let decision_record = EnvironmentOperationDecisionRecord {
+            decision: decision_value.clone(),
+            status: status.to_string(),
+            reason: reason.clone(),
+        };
+        run_workspace_store_service(executor, move |store| {
+            store.decide_environment_operation_request(&persisted_request_id, &decision_record)?;
+            Ok(())
+        })
+        .await?;
         return Ok(json!({
             "request_id": request_id,
             "status": status,
-            "decision": decision
+            "decision": decision_value
         }));
     }
 
-    let current_project_root = store
-        .active_project_root()?
+    let current_project_root = executor
+        .project_transition_repository()
+        .active_project_root()
+        .await?
         .unwrap_or_default()
         .replace('\\', "/");
     let current_snapshot_id =
@@ -4583,14 +4652,18 @@ pub async fn decide_environment_operation(
         &current_project_root,
         current_snapshot_id.as_deref(),
     ) {
-        store.decide_environment_operation_request(
-            request_id,
-            &EnvironmentOperationDecisionRecord {
-                decision: "approve".to_string(),
-                status: "stale".to_string(),
-                reason: Some(stale_reason.clone()),
-            },
-        )?;
+        let request_id = request_id.to_string();
+        let persisted_request_id = request_id.clone();
+        let decision = EnvironmentOperationDecisionRecord {
+            decision: "approve".to_string(),
+            status: "stale".to_string(),
+            reason: Some(stale_reason.clone()),
+        };
+        run_workspace_store_service(executor, move |store| {
+            store.decide_environment_operation_request(&persisted_request_id, &decision)?;
+            Ok(())
+        })
+        .await?;
         return Ok(json!({
             "request_id": request_id,
             "status": "stale",
@@ -4598,27 +4671,35 @@ pub async fn decide_environment_operation(
         }));
     }
 
-    store.decide_environment_operation_request(
-        request_id,
-        &EnvironmentOperationDecisionRecord {
-            decision: "approve".to_string(),
-            status: "approved".to_string(),
-            reason,
-        },
-    )?;
+    let approved_request_id = request_id.to_string();
+    let approved_decision = EnvironmentOperationDecisionRecord {
+        decision: "approve".to_string(),
+        status: "approved".to_string(),
+        reason,
+    };
+    run_workspace_store_service(executor, move |store| {
+        store.decide_environment_operation_request(&approved_request_id, &approved_decision)?;
+        Ok(())
+    })
+    .await?;
     let result =
         execute_confirmed_environment_operation(&request, origin, session, broker, executor).await;
     if let Err(error) = &result {
         // Dispatch can fail before the execution envelope claims the request
         // as running. Do not leave a user-visible approval without a truthful
         // terminal outcome.
-        let _ = store.finish_environment_operation_request(&EnvironmentOperationFinish {
+        let finish = EnvironmentOperationFinish {
             request_id: request_id.to_string(),
             status: "failed".to_string(),
             run_id: None,
             terminal_outcome: Some("dispatch_error".to_string()),
             reason: Some(redact_sensitive_text(&error.to_string())),
-        });
+        };
+        let _ = run_workspace_store_service(executor, move |store| {
+            store.finish_environment_operation_request(&finish)?;
+            Ok(())
+        })
+        .await;
     }
     result
 }

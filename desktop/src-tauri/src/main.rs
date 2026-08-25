@@ -3977,7 +3977,7 @@ async fn request_environment_operation_preview(
     let mut context = context.lock().await;
     let WorkspaceBrokerState {
         broker,
-        store,
+        store: _,
         executor,
     } = &mut *context;
     request_environment_operation(
@@ -3993,7 +3993,6 @@ async fn request_environment_operation_preview(
         "user",
         session.as_ref(),
         broker,
-        store,
         executor,
     )
     .await
@@ -4168,7 +4167,7 @@ async fn respond_environment_operation(
     let mut context = context.lock().await;
     let WorkspaceBrokerState {
         broker,
-        store,
+        store: _,
         executor,
     } = &mut *context;
     decide_environment_operation(
@@ -4178,7 +4177,6 @@ async fn respond_environment_operation(
         ExecutionOrigin::User,
         session.as_ref(),
         broker,
-        store,
         executor,
     )
     .await
