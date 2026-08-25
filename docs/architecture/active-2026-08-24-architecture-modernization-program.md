@@ -6,12 +6,12 @@
   "record_type": "program",
   "program_id": "AM-2026",
   "status": "active",
-  "current_wave": 4,
+  "current_wave": 5,
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W4-07"],
-  "integration_lane": "AM-W4-07",
+  "active_work_packages": ["AM-W5-01"],
+  "integration_lane": "AM-W5-01",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -660,6 +660,13 @@ Manifest ABI is the only selector; grants, contribution publication, broker
 delivery, durable lifecycle and restart reconstruction remain one shared path.
 This is the first distributable component-v1 slice, so its verified candidate
 owns synchronized application version metadata and NEWS.
+
+Wave 4 is locally implemented. Manifest V4 explicitly selects component-v1;
+typed Components have no imports, use bounded lifecycle and guest steps, share
+one host consumer facade, and enter the existing desktop grant, contribution,
+broker, crash and restart state machine. Core-v2 remains supported. Candidate
+`0.4.1-dev.17`, commits `6617f82`/`6f0299e` and evidence `AM-E-0105` close
+`AM-F-0006` without a release, install or publication action.
 
 ### Wave 5 — worktrees and shared generated artifacts
 
