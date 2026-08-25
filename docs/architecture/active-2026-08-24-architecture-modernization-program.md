@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-10",
+  "active_work_packages": ["AM-W2-11"],
+  "integration_lane": "AM-W2-11",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -244,6 +244,12 @@ facade re-exports the same crate-visible names, while the concrete dispatcher
 remains the only extracted component allowed to acquire the Workspace broker
 lane. Registry state, Store calls and every lifecycle transition remain in the
 existing implementation for later behavior-neutral domain slices.
+
+`AM-W2-11` moves the registry's discovery/list/reconciliation adapters and its
+Agent/UI/Surface/Check contribution projection adapters into separate inherent
+implementation modules. The same registry and private helper functions remain
+authoritative; this slice changes only which source module owns each existing
+method and leaves activation, grant and guest-call state transitions untouched.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
