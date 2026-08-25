@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W2-49"],
+  "active_work_packages": [],
   "integration_lane": "AM-W2-49",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -444,10 +444,10 @@ approval operations, history clearing and single/all-turn interruption—while
 preserving Store truth, project-transition serialization, waiter cleanup and
 Workspace cancellation semantics.
 
-`AM-W2-49` extracts legacy Workspace Runtime control—run interruption,
-restart/reconciliation and targets inspection—into an explicit controller used
-by both Tauri and Runtime Registry while preserving transition-gate, broker,
-durable Run/Artifact and extension-scope authority.
+`AM-W2-49` (`fe7043b`/AM-E-0076) extracts legacy Workspace Runtime
+control—run interruption, restart/reconciliation and targets inspection—into an
+explicit controller used by both Tauri and Runtime Registry while preserving
+transition-gate, broker, durable Run/Artifact and extension-scope authority.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
