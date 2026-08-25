@@ -1,5 +1,6 @@
 pub(crate) mod agent_conversation;
 pub(crate) mod agent_execution;
+pub(crate) mod agent_files;
 pub(crate) mod agent_llm;
 pub(crate) mod artifacts;
 pub(crate) mod editor;

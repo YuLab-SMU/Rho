@@ -9,5 +9,5 @@ runTauriSpectaBindingGenerator({
   outputEnvironment: "RHO_AGENT_FILE_BINDINGS_PATH",
   factoryName: "createAgentFileCommands",
   invokeTypeName: "AgentFileInvoke",
-  rustSources: "rho-desktop/main Agent file mutation commands",
+  rustSources: "rho-desktop/commands/agent_files",
 });

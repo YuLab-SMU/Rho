@@ -114,6 +114,11 @@ const AGENT_EXECUTION_COMMANDS = [
   "run_agent",
 ];
 
+const AGENT_FILE_COMMANDS = [
+  "apply_agent_file_edit",
+  "undo_agent_file_edit",
+];
+
 const STARTUP_COMMANDS = [
   "agent_runtime_retry",
   "agent_runtime_status",
@@ -349,6 +354,16 @@ export function validateCommandInventory({ sources, main, frontend, expectedHand
     "Agent execution command module ownership changed",
   );
 
+  const agentFileSource = sources.find(
+    ({ name }) => name.endsWith("commands/agent_files.rs"),
+  );
+  assert.ok(agentFileSource, "Agent file command module is missing");
+  assert.deepEqual(
+    commandDefinitions([agentFileSource]).map(({ name }) => name).sort(),
+    AGENT_FILE_COMMANDS,
+    "Agent file command module ownership changed",
+  );
+
   const startupSource = sources.find(({ name }) => name.endsWith("commands/startup.rs"));
   assert.ok(startupSource, "Startup command module is missing");
   assert.deepEqual(
@@ -411,6 +426,9 @@ function fixtures() {
   const agentExecutionHandlers = AGENT_EXECUTION_COMMANDS.map(
     (command) => `  commands::agent_execution::${command},`,
   ).join("\n");
+  const agentFileHandlers = AGENT_FILE_COMMANDS.map(
+    (command) => `  commands::agent_files::${command},`,
+  ).join("\n");
   const startupHandlers = STARTUP_COMMANDS.map(
     (command) => `  commands::startup::${command},`,
   ).join("\n");
@@ -440,6 +458,7 @@ ${projectHandlers}
 ${agentLlmHandlers}
 ${agentConversationHandlers}
 ${agentExecutionHandlers}
+${agentFileHandlers}
 ${startupHandlers}
 ${renderHandlers}
 ${workspaceHandlers}
@@ -482,6 +501,9 @@ ${runtimeControlHandlers}
       { name: "commands/agent_execution.rs", text: AGENT_EXECUTION_COMMANDS.map(
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
+      { name: "commands/agent_files.rs", text: AGENT_FILE_COMMANDS.map(
+        (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
+      ).join("\n") },
       { name: "commands/startup.rs", text: STARTUP_COMMANDS.map(
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
@@ -509,6 +531,7 @@ ${runtimeControlHandlers}
       ...AGENT_LLM_COMMANDS,
       ...AGENT_CONVERSATION_COMMANDS,
       ...AGENT_EXECUTION_COMMANDS,
+      ...AGENT_FILE_COMMANDS,
       ...STARTUP_COMMANDS,
       ...RENDER_COMMANDS,
       ...WORKSPACE_COMMANDS,

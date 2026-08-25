@@ -4,6 +4,10 @@ use crate::commands::agent_execution::{
     AgentTurnCancelResponse, AgentTurnCancelStatus, AgentTurnDetailView, AgentTurnStartResponse,
     AgentTurnStartStatus, ApprovalDecisionRequest,
 };
+use crate::commands::agent_files::{
+    AgentFileApplyRequest, AgentFileMutationResponse, AgentFileUndoRequest,
+};
+use crate::project::ProjectState;
 use rho_store::{
     AgentConversationSummary, AgentTurnContextItem, AgentTurnContextItemDraft, AgentTurnEvent,
     AgentTurnSummary, ApprovalRequestSummary,
@@ -559,8 +563,8 @@ fn agent_file_typescript_export() {
         .expect("RHO_AGENT_FILE_BINDINGS_PATH must name the generated file");
     tauri_specta::Builder::<tauri::Wry>::new()
         .commands(tauri_specta::collect_commands![
-            crate::apply_agent_file_edit,
-            crate::undo_agent_file_edit,
+            crate::commands::agent_files::apply_agent_file_edit,
+            crate::commands::agent_files::undo_agent_file_edit,
         ])
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
         .export(specta_typescript::Typescript::default(), output_path)
