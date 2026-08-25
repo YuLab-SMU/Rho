@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W2-33"],
+  "active_work_packages": [],
   "integration_lane": "AM-W2-33",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -363,7 +363,8 @@ and `AM-E-0059` pass Store and complete desktop verification.
 
 `AM-W2-33` phases Agent and direct environment approval persistence through the
 shared Store worker so neither approval waits nor Ark evidence capture retain a
-legacy Store borrow inside the Workspace lane.
+legacy Store borrow inside the Workspace lane; commit `6028158` and
+`AM-E-0060` pass approval/environment and complete Server/Desktop matrices.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
