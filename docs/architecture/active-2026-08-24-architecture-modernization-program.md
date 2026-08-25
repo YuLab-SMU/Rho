@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-09",
+  "active_work_packages": ["AM-W2-10"],
+  "integration_lane": "AM-W2-10",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -237,6 +237,13 @@ state, Store access, permission ordering, discovery, activation, recovery and
 guest execution semantics remain byte-for-byte source-equivalent apart from
 module placement and rustfmt. Later packages can extract production domains
 without repeatedly moving the 6,000-line regression corpus.
+
+`AM-W2-10` extracts the stable plugin command/projection contracts and the
+Workspace inspection dispatcher into independent child modules. The parent
+facade re-exports the same crate-visible names, while the concrete dispatcher
+remains the only extracted component allowed to acquire the Workspace broker
+lane. Registry state, Store calls and every lifecycle transition remain in the
+existing implementation for later behavior-neutral domain slices.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 

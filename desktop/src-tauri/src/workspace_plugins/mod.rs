@@ -5,15 +5,12 @@
 //! filesystem, network, Workspace R, contribution, install, or update call.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::future::Future;
-use std::path::{Path, PathBuf};
-use std::pin::Pin;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
-use rho_core::ExecutionOrigin;
 use rho_extension_runtime::{
     ActivationGeneration, BrokerCallIdSource, CapabilityHandle, ContributionCallOutcome,
     ContributionCallRequest, ContributionCallSession, ContributionCandidate,
@@ -22,14 +19,10 @@ use rho_extension_runtime::{
     GuestStep, HOST_PROTOCOL_VERSION, HostFrame, HostInstanceId, HostInstanceState, HostMessage,
     HostRequestId, HostResponse, MAX_WASM_MODULE_BYTES, OsBrokerCallIdSource,
     PermissionConstraints, PermissionKind, PermissionUse, PluginCommandResultV1, PluginId,
-    Revalidation, RevalidationRequest, RuntimeKind, ScopeId, SystemContributionClock,
-    ViewerDocumentV1, WasmHostIdentity, WasmPluginHost, WorkspaceGrantIdentity,
-    discover_workspace_plugins,
+    Revalidation, RevalidationRequest, RuntimeKind, SystemContributionClock, ViewerDocumentV1,
+    WasmHostIdentity, WasmPluginHost, WorkspaceGrantIdentity, discover_workspace_plugins,
 };
-use rho_kernel::ArkSession;
-use rho_server::coordinator::{
-    AgentPluginContextItem, AgentPluginToolDefinition, dispatch_workspace_request,
-};
+use rho_server::coordinator::{AgentPluginContextItem, AgentPluginToolDefinition};
 use rho_server::plugin_fs::{ProjectFsReadErrorCode, ProjectFsReadRequest, read_project_file};
 use rho_server::plugin_network::{
     NetworkAuthorizer, NetworkFetchEngine, NetworkFetchError, NetworkFetchErrorCode,
@@ -40,11 +33,9 @@ use rho_server::plugin_package_cache::{CachedPluginPackage, PluginPackageCache};
 use rho_server::plugin_package_trash::{PluginPackageOwnershipOutcome, PluginPackageTrash};
 use rho_server::plugin_retention::PluginTrashRetentionService;
 use rho_server::plugin_workspace::{
-    PreparedWorkspaceInspection, WorkspaceInspectErrorCode, WorkspaceInspectOperation,
-    WorkspaceInspectRequest, WorkspaceInspectionContext, WorkspaceObjectReferenceRegistry,
-    WorkspaceObjectReferenceView,
+    WorkspaceInspectErrorCode, WorkspaceInspectOperation, WorkspaceInspectRequest,
+    WorkspaceInspectionContext, WorkspaceObjectReferenceRegistry, WorkspaceObjectReferenceView,
 };
-use rho_server::workspace_lane::{WorkspaceBrokerLane, WorkspaceBrokerState};
 use rho_store::{
     PluginLifecycleMutationOutcome, PluginLifecycleMutationService, PluginLifecycleQueryService,
     PluginPermissionCallEventDraft, PluginPermissionDecision, PluginPermissionDecisionDraft,
@@ -54,7 +45,6 @@ use rho_store::{
     WorkspacePluginTombstoneDraft, WorkspacePluginTransitionAdvance,
     WorkspacePluginTransitionDraft, normalize_project_root,
 };
-use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 const POLICY_REVISION: i64 = 1;
@@ -64,353 +54,11 @@ const MAX_AGENT_PLUGIN_TOOL_PROFILE_BYTES: usize = 2 * 1024 * 1024;
 const MAX_AGENT_PLUGIN_CONTEXT_PROFILE_BYTES: usize = 512 * 1024;
 const MAX_PLUGIN_RECONCILIATION_ENTRIES: usize = 256;
 
-pub(crate) struct WorkspacePluginAgentProjection {
-    pub tools: Vec<AgentPluginToolDefinition>,
-    pub context: Vec<AgentPluginContextItem>,
-}
+mod contracts;
+mod workspace_dispatch;
 
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct PluginContributionList {
-    pub project_root: String,
-    pub project_revision: i64,
-    pub contributions: Vec<PluginContributionView>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct PluginContributionView {
-    pub contribution_id: String,
-    pub kind: String,
-    pub label: String,
-    pub purpose: String,
-    pub contract_major: u64,
-    pub plugin_id: String,
-    pub package_digest: String,
-    pub activation_generation: u64,
-    pub short_digest: String,
-    pub status: String,
-    pub available: bool,
-    pub accepts_empty_input: bool,
-    pub input_schema: Option<serde_json::Value>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct PluginCommandInvocationView {
-    pub project_root: String,
-    pub project_revision: i64,
-    pub contribution_id: String,
-    pub result: PluginCommandResultV1,
-    pub provenance: serde_json::Value,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct PluginViewerDocumentView {
-    pub project_root: String,
-    pub project_revision: i64,
-    pub contribution_id: String,
-    pub document: ViewerDocumentV1,
-    pub provenance: serde_json::Value,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct WorkspacePluginList {
-    pub project_root: String,
-    pub project_revision: i64,
-    pub status: String,
-    pub plugins: Vec<WorkspacePluginView>,
-    pub failures: Vec<WorkspacePluginFailureView>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct WorkspacePluginView {
-    pub plugin_id: String,
-    pub directory_name: String,
-    pub name: String,
-    pub version: String,
-    pub package_digest: String,
-    pub short_digest: String,
-    pub runtime_kind: String,
-    pub permission_count: usize,
-    pub pending_request_count: usize,
-    pub active_grant_count: usize,
-    pub status: String,
-    pub desired_state: String,
-    pub observed_state: String,
-    pub accepted_digest: Option<String>,
-    pub rollback_digest: Option<String>,
-    pub transition_id: Option<String>,
-    pub recoverable_tombstone_id: Option<String>,
-    pub message: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct WorkspacePluginFailureView {
-    pub path: String,
-    pub reason: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct WorkspacePluginEnableResult {
-    pub status: String,
-    pub plugin_id: String,
-    pub request_ids: Vec<String>,
-    pub active_grant_count: usize,
-    pub transition_id: Option<String>,
-    pub message: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct WorkspacePluginDisableResult {
-    pub status: String,
-    pub plugin_id: String,
-    pub transition_id: Option<String>,
-    pub route_closed: bool,
-    pub calls_cancelled: usize,
-    pub pending_requests_cancelled: usize,
-    pub handles_revoked: usize,
-    pub contributions_disposed: usize,
-    pub host_disposed: bool,
-    pub errors: Vec<String>,
-    pub message: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct WorkspacePluginUninstallInput {
-    pub plugin_id: String,
-    pub directory_name: String,
-    pub package_digest: String,
-    pub expected_project_revision: i64,
-    pub confirmed: bool,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct WorkspacePluginUninstallResult {
-    pub status: String,
-    pub plugin_id: String,
-    pub transition_id: String,
-    pub tombstone_id: String,
-    pub project_revision: i64,
-    pub route_closed: bool,
-    pub pending_requests_cancelled: usize,
-    pub durable_grants_revoked: usize,
-    pub message: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct WorkspacePluginRestoreInput {
-    pub tombstone_id: String,
-    pub expected_project_revision: i64,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct WorkspacePluginRestoreResult {
-    pub status: String,
-    pub plugin_id: String,
-    pub tombstone_id: String,
-    pub project_revision: i64,
-    pub message: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct WorkspacePluginUpdateInput {
-    pub plugin_id: String,
-    pub expected_old_digest: String,
-    pub candidate_digest: String,
-    pub expected_project_revision: i64,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct WorkspacePluginRollbackInput {
-    pub plugin_id: String,
-    pub expected_current_digest: String,
-    pub rollback_digest: String,
-    pub expected_project_revision: i64,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct WorkspacePluginBoundaryTeardownReport {
-    pub project_root: String,
-    pub kind: String,
-    pub attempted: usize,
-    pub completed: usize,
-    pub completion_uncertain: usize,
-    pub forced: usize,
-    pub entries: Vec<WorkspacePluginBoundaryTeardownEntry>,
-    pub truncated: bool,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct WorkspacePluginBoundaryTeardownEntry {
-    pub plugin_id: String,
-    pub status: String,
-    pub route_closed: bool,
-    pub error_codes: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct WorkspacePluginHeartbeatReport {
-    pub project_root: String,
-    pub checked: usize,
-    pub crashed: usize,
-    pub blocked: usize,
-    pub failures: usize,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct WorkspacePluginReconciliationReport {
-    pub project_root: String,
-    pub reactivated: usize,
-    pub already_active: usize,
-    pub permission_required: usize,
-    pub update_pending: usize,
-    pub blocked: usize,
-    pub skipped: usize,
-    pub recovered_uninstalls: usize,
-    pub recovered_purges: usize,
-    pub recovered_replacements: usize,
-    pub recovery_required: usize,
-    pub project_files_changed: bool,
-    pub entries: Vec<WorkspacePluginReconciliationEntry>,
-    pub truncated: bool,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct WorkspacePluginReconciliationEntry {
-    pub plugin_id: Option<String>,
-    pub status: String,
-    pub reason_code: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct PluginPermissionDecisionInput {
-    pub request_id: String,
-    pub decision: String,
-    pub expected_project_revision: i64,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct PluginPermissionDecisionResult {
-    pub outcome: PluginPermissionMutationOutcome,
-    pub request: PluginPermissionRequest,
-    pub plugin_status: String,
-    pub active_grant_count: usize,
-    pub message: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct PluginGrantList {
-    pub project_root: String,
-    pub grants: Vec<PluginGrantView>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct PluginGrantView {
-    pub grant_id: String,
-    pub plugin_id: String,
-    pub plugin_version: String,
-    pub package_digest: String,
-    pub short_digest: String,
-    pub permission: String,
-    pub constraints: serde_json::Value,
-    pub grant_source: String,
-    pub policy_revision: i64,
-    pub expires_at: String,
-    pub status: String,
-    pub live_handle: bool,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct PluginGrantRevokeResult {
-    pub outcome: PluginPermissionMutationOutcome,
-    pub grant_id: String,
-    pub live_handle_revoked: bool,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct WorkspacePluginCallResult {
-    pub plugin_id: String,
-    pub status: String,
-    pub result: Option<serde_json::Value>,
-    pub error_code: Option<String>,
-    pub broker_steps: usize,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct PluginRuntimeContext {
-    pub app_data_dir: PathBuf,
-    pub project_root: String,
-    pub project_revision: i64,
-    pub project_scope_id: ScopeId,
-    pub workspace: Option<WorkspaceGrantIdentity>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct WorkspaceSurfaceInvocationRoute {
-    pub contribution_id: String,
-    pub plugin_id: String,
-    pub package_digest: String,
-    pub activation_generation: u64,
-    pub host_instance_id: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct WorkspaceCheckRuleRegistration {
-    pub contribution_id: String,
-    pub plugin_id: String,
-    pub package_digest: String,
-    pub activation_generation: u64,
-}
-
-pub(crate) struct WorkspaceDispatchResult {
-    pub response: serde_json::Value,
-    pub current_workspace: rho_protocol::WorkspaceIdentity,
-}
-
-pub(crate) trait WorkspacePluginDispatcher: Send + Sync {
-    fn dispatch<'a>(
-        &'a self,
-        prepared: PreparedWorkspaceInspection,
-    ) -> Pin<Box<dyn Future<Output = Result<WorkspaceDispatchResult>> + Send + 'a>>;
-}
-
-#[allow(dead_code)]
-pub(crate) struct CoordinatorWorkspacePluginDispatcher {
-    pub session: Arc<ArkSession>,
-    pub context: Arc<WorkspaceBrokerLane>,
-}
-
-impl WorkspacePluginDispatcher for CoordinatorWorkspacePluginDispatcher {
-    fn dispatch<'a>(
-        &'a self,
-        prepared: PreparedWorkspaceInspection,
-    ) -> Pin<Box<dyn Future<Output = Result<WorkspaceDispatchResult>> + Send + 'a>> {
-        Box::pin(async move {
-            let payload = serde_json::json!({
-                "arguments": prepared.arguments,
-                "expected_workspace": prepared.expected_workspace,
-            });
-            let mut context = self.context.lock().await;
-            let WorkspaceBrokerState { broker, store } = &mut *context;
-            let response = dispatch_workspace_request(
-                prepared.request_type,
-                &payload,
-                ExecutionOrigin::System,
-                self.session.as_ref(),
-                broker,
-                store,
-            )
-            .await?;
-            Ok(WorkspaceDispatchResult {
-                response,
-                current_workspace: broker.identity().clone(),
-            })
-        })
-    }
-}
+pub(crate) use contracts::*;
+pub(crate) use workspace_dispatch::*;
 
 #[derive(Clone)]
 struct PendingEnable {
