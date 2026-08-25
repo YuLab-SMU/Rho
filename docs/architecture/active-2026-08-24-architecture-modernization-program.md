@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W4-04"],
+  "active_work_packages": [],
   "integration_lane": "AM-W4-04",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -636,6 +636,9 @@ crate-owned typed lifecycle host under the existing fuel, epoch and StoreLimits
 policy. It proves success, typed-export rejection, fault containment and
 two-project isolation before any desktop activation route or broker step is
 allowed to select the new ABI.
+Implemented by `03aae40` with evidence `AM-E-0102`. Typed guest-call sequencing,
+broker grants, cancellation/recovery and desktop dual-ABI selection remain open
+under `AM-F-0006`.
 
 ### Wave 5 — worktrees and shared generated artifacts
 
