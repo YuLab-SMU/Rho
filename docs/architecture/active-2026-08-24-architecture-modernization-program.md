@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-06",
+  "active_work_packages": ["AM-W2-07"],
+  "integration_lane": "AM-W2-07",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -219,6 +219,11 @@ owned or borrowed SQLite connection. This is a behavior-neutral seam: open,
 migration and recovery remain available only on the owned Store, while the
 same domain methods can execute on the already-open asynchronous Store worker
 without copying SQL or introducing a second persistence contract.
+
+`AM-W2-07` exposes an asynchronous Agent repository over that worker and moves
+the active Agent turn lifecycle, context receipts and admitted context reads
+off the Workspace lane. Environment mutation review and actual Workspace R
+dispatch intentionally retain their existing authority ordering.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 

@@ -4960,9 +4960,13 @@ async fn agent_context_preview(
     let explicit_context = resolve_agent_explicit_context(&state, runtime_output_context.as_ref())
         .await
         .map_err(display_error)?;
+    let agent_store = store_executor(&state)
+        .await
+        .map_err(display_error)?
+        .agent_repository();
     let _project_transition = state.project_transition_gate.lock().await;
     let context = active_context(&state).await.map_err(display_error)?;
-    let (project_root, history, plugin_projection) = {
+    let (project_root, plugin_projection) = {
         let mut context_guard = context.lock().await;
         let identity = context_guard.broker.identity().clone();
         let project_root = context_guard
@@ -4971,14 +4975,6 @@ async fn agent_context_preview(
             .map_err(display_error)?
             .context("Cannot preview Agent context without an active project identity")
             .map_err(display_error)?;
-        let history = if let Some(conversation_id) = requested_conversation_id.as_deref() {
-            context_guard
-                .store
-                .recent_agent_conversation(&project_root, conversation_id, "preview", 100)
-                .map_err(display_error)?
-        } else {
-            Vec::new()
-        };
         let plugin_runtime_context = workspace_plugins::PluginRuntimeContext {
             app_data_dir: config.data_dir.clone(),
             project_scope_id: extension_project_scope_id(&project_root).map_err(display_error)?,
@@ -4997,7 +4993,20 @@ async fn agent_context_preview(
             .plugin_permissions
             .agent_projection(&plugin_runtime_context, &mut context_guard.store)
             .map_err(display_error)?;
-        (project_root, history, plugin_projection)
+        (project_root, plugin_projection)
+    };
+    let history = if let Some(conversation_id) = requested_conversation_id.as_deref() {
+        agent_store
+            .recent_conversation(
+                project_root.clone(),
+                conversation_id.to_string(),
+                "preview".to_string(),
+                100,
+            )
+            .await
+            .map_err(display_error)?
+    } else {
+        Vec::new()
     };
     let mut runtime_profile = resolved_model.runtime_profile.clone();
     runtime_profile.plugin_tools = plugin_projection.tools.clone();
@@ -5134,14 +5143,20 @@ async fn start_agent_turn(
     let explicit_context = resolve_agent_explicit_context(state, runtime_output_context.as_ref())
         .await
         .map_err(display_error)?;
+    let agent_store = store_executor(state)
+        .await
+        .map_err(display_error)?
+        .agent_repository();
     let conversation_id;
+    let project_root;
+    let identity;
     let plugin_runtime_context;
     let plugin_projection;
     let mut agent_runtime_profile = resolved_model.runtime_profile.clone();
     {
         let mut context_guard = context.lock().await;
-        let identity = context_guard.broker.identity().clone();
-        let project_root = context_guard
+        identity = context_guard.broker.identity().clone();
+        project_root = context_guard
             .store
             .active_project_root()
             .map_err(display_error)?
@@ -5166,109 +5181,117 @@ async fn start_agent_turn(
             .agent_projection(&plugin_runtime_context, &mut context_guard.store)
             .map_err(display_error)?;
         agent_runtime_profile.plugin_tools = plugin_projection.tools.clone();
-        if explicit_context.is_some() || context_plan_digest.is_some() {
-            let digest_conversation_id = requested_conversation_id
-                .as_deref()
-                .unwrap_or("new_conversation");
-            let history = if let Some(conversation_id) = requested_conversation_id.as_deref() {
-                context_guard
-                    .store
-                    .recent_agent_conversation(&project_root, conversation_id, "preview", 100)
-                    .map_err(display_error)?
-            } else {
-                Vec::new()
-            };
-            let current_plan = preview_agent_context_plan(
-                &prompt,
-                &history,
-                editor_context.as_ref(),
-                Some(&project_root),
-                &plugin_projection.context,
-                explicit_context.as_ref(),
-                &agent_runtime_profile,
-                digest_conversation_id,
-            )
-            .map_err(display_error)?;
-            let expected = context_plan_digest.as_deref().ok_or_else(|| {
-                "Explicit Agent context requires a reviewed context-plan digest".to_string()
-            })?;
-            if expected != current_plan.plan_digest {
-                return Err(
-                    "Agent context changed after review. Review the current context plan and send again."
-                        .to_string(),
-                );
-            }
-        }
-        let turn_draft = AgentTurnDraft {
-            turn_id: turn_id.clone(),
-            project_root: project_root.clone(),
-            mode: mode.clone(),
-            prompt: prompt.clone(),
-            model: resolved_model.effective_model_ref.clone(),
-            workspace_id: identity.workspace_id.clone(),
-            state_revision_before: identity.state_revision as i64,
-            project_revision_before: identity.project_revision as i64,
-        };
-        conversation_id = if let Some(conversation_id) = requested_conversation_id {
-            context_guard
-                .store
-                .create_agent_turn_in_conversation(
-                    &conversation_id,
-                    retry_of_turn_id.as_deref(),
-                    &turn_draft,
+    }
+
+    if explicit_context.is_some() || context_plan_digest.is_some() {
+        let digest_conversation_id = requested_conversation_id
+            .as_deref()
+            .unwrap_or("new_conversation");
+        let history = if let Some(conversation_id) = requested_conversation_id.as_deref() {
+            agent_store
+                .recent_conversation(
+                    project_root.clone(),
+                    conversation_id.to_string(),
+                    "preview".to_string(),
+                    100,
                 )
-                .map_err(display_error)?;
-            conversation_id
+                .await
+                .map_err(display_error)?
         } else {
-            let conversation_id = format!("agent_conversation_{}", Uuid::new_v4());
-            context_guard
-                .store
-                .create_agent_turn_with_conversation(
-                    &AgentConversationDraft {
-                        conversation_id: conversation_id.clone(),
-                        project_root,
-                        title: "New conversation".to_string(),
-                        legacy_unthreaded: false,
-                    },
-                    &turn_draft,
-                )
-                .map_err(display_error)?;
-            conversation_id
+            Vec::new()
         };
-        let event_result = context_guard
-            .store
-            .append_agent_turn_event(&AgentTurnEventDraft {
-                turn_id: turn_id.clone(),
-                event_type: "agent.user_prompt".to_string(),
-                title: "You".to_string(),
-                body: Some(prompt.clone()),
-                status: "completed".to_string(),
-                tool: None,
-                request_id: None,
-                code: None,
-                details_json: serde_json::to_string(&json!({
-                    "prompt": prompt,
-                    "mode": mode,
-                    "task_kind": task_kind,
-                    "conversation_id": conversation_id,
-                    "retry_of_turn_id": retry_of_turn_id,
-                    "auto_approve": auto_approve,
-                    "editor_context": editor_context.clone(),
-                    "runtime_output_context": runtime_output_context,
-                    "context_plan_digest": context_plan_digest.clone(),
-                    "model_profile_id": resolved_model.runtime_profile.profile_id,
-                    "model_display_name": resolved_model.model_display_name,
-                    "provider_display_name": resolved_model.provider_display_name,
-                    "effective_model": resolved_model.effective_model_ref,
-                    "model_settings_revision": resolved_model.settings_revision,
-                    "capability_route": resolved_model.route_capability,
-                    "plugin_tool_count": plugin_projection.tools.len(),
-                    "plugin_context_count": plugin_projection.context.len()
-                }))
-                .map_err(display_error)?,
-            });
-        if let Err(error) = event_result {
-            let _ = context_guard.store.finish_agent_turn(&AgentTurnFinish {
+        let current_plan = preview_agent_context_plan(
+            &prompt,
+            &history,
+            editor_context.as_ref(),
+            Some(&project_root),
+            &plugin_projection.context,
+            explicit_context.as_ref(),
+            &agent_runtime_profile,
+            digest_conversation_id,
+        )
+        .map_err(display_error)?;
+        let expected = context_plan_digest.as_deref().ok_or_else(|| {
+            "Explicit Agent context requires a reviewed context-plan digest".to_string()
+        })?;
+        if expected != current_plan.plan_digest {
+            return Err(
+                "Agent context changed after review. Review the current context plan and send again."
+                    .to_string(),
+            );
+        }
+    }
+    let turn_draft = AgentTurnDraft {
+        turn_id: turn_id.clone(),
+        project_root: project_root.clone(),
+        mode: mode.clone(),
+        prompt: prompt.clone(),
+        model: resolved_model.effective_model_ref.clone(),
+        workspace_id: identity.workspace_id.clone(),
+        state_revision_before: identity.state_revision as i64,
+        project_revision_before: identity.project_revision as i64,
+    };
+    conversation_id = if let Some(conversation_id) = requested_conversation_id {
+        agent_store
+            .create_turn_in_conversation(
+                conversation_id.clone(),
+                retry_of_turn_id.clone(),
+                turn_draft,
+            )
+            .await
+            .map_err(display_error)?;
+        conversation_id
+    } else {
+        let conversation_id = format!("agent_conversation_{}", Uuid::new_v4());
+        agent_store
+            .create_turn_with_conversation(
+                AgentConversationDraft {
+                    conversation_id: conversation_id.clone(),
+                    project_root: project_root.clone(),
+                    title: "New conversation".to_string(),
+                    legacy_unthreaded: false,
+                },
+                turn_draft,
+            )
+            .await
+            .map_err(display_error)?;
+        conversation_id
+    };
+    let event_result = agent_store
+        .append_turn_event(AgentTurnEventDraft {
+            turn_id: turn_id.clone(),
+            event_type: "agent.user_prompt".to_string(),
+            title: "You".to_string(),
+            body: Some(prompt.clone()),
+            status: "completed".to_string(),
+            tool: None,
+            request_id: None,
+            code: None,
+            details_json: serde_json::to_string(&json!({
+                "prompt": prompt,
+                "mode": mode,
+                "task_kind": task_kind,
+                "conversation_id": conversation_id,
+                "retry_of_turn_id": retry_of_turn_id,
+                "auto_approve": auto_approve,
+                "editor_context": editor_context.clone(),
+                "runtime_output_context": runtime_output_context,
+                "context_plan_digest": context_plan_digest.clone(),
+                "model_profile_id": resolved_model.runtime_profile.profile_id,
+                "model_display_name": resolved_model.model_display_name,
+                "provider_display_name": resolved_model.provider_display_name,
+                "effective_model": resolved_model.effective_model_ref,
+                "model_settings_revision": resolved_model.settings_revision,
+                "capability_route": resolved_model.route_capability,
+                "plugin_tool_count": plugin_projection.tools.len(),
+                "plugin_context_count": plugin_projection.context.len()
+            }))
+            .map_err(display_error)?,
+        })
+        .await;
+    if let Err(error) = event_result {
+        let _ = agent_store
+            .finish_turn(AgentTurnFinish {
                 turn_id: turn_id.clone(),
                 status: "failed".to_string(),
                 terminal_reason: Some("agent_failure".to_string()),
@@ -5280,9 +5303,9 @@ async fn start_agent_turn(
                     "Agent turn could not start because its initial event was not persisted."
                         .to_string(),
                 ),
-            });
-            return Err(display_error(error));
-        }
+            })
+            .await;
+        return Err(display_error(error));
     }
 
     let approvals = state.approvals.clone();
@@ -5317,6 +5340,8 @@ async fn start_agent_turn(
         let _ = run_agent_turn(
             session.as_ref(),
             context,
+            agent_store,
+            project_root,
             rscript,
             Some(process_path),
             agent_package,
@@ -15768,16 +15793,17 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
         let prompt =
             "请检查 rho_desktop_smoke 对象，告诉我它有多少行和多少列。不要修改工作区。".to_string();
         let resolved_model = agent_llm::resolve_model_for_turn(&config.data_dir, None, "ask")?;
+        let agent_project_root;
         {
             let mut context_guard = context.lock().await;
             let identity = context_guard.broker.identity().clone();
-            let project_root = context_guard
+            agent_project_root = context_guard
                 .store
                 .active_project_root()?
                 .context("Cannot run Agent smoke without an active project identity")?;
             context_guard.store.create_agent_turn(&AgentTurnDraft {
                 turn_id: turn_id.clone(),
-                project_root,
+                project_root: agent_project_root.clone(),
                 mode: "ask".to_string(),
                 prompt: prompt.clone(),
                 model: resolved_model.effective_model_ref.clone(),
@@ -15801,9 +15827,14 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
                     )?,
                 })?;
         }
+        let agent_store = StoreExecutor::open(&config.store_path)
+            .await?
+            .agent_repository();
         let result = run_agent_turn(
             session.as_ref(),
             context.clone(),
+            agent_store,
+            agent_project_root,
             config.rscript.clone(),
             Some(config.process_path.clone()),
             config.agent_package.clone(),

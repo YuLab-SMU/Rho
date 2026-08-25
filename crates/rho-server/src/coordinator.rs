@@ -17,8 +17,8 @@ use rho_core::{BrokerState, ExecutionOrigin, ExecutionRequest};
 use rho_kernel::{ArkLaunchConfig, ArkSession, CorrelatedKernelEvent, KernelEvent};
 use rho_protocol::{Envelope, ExpectedWorkspace, MAX_FRAME_BYTES, MessageKind, OperationClass};
 use rho_store::{
-    AgentConversationTurn, AgentTurnContextItemDraft, AgentTurnEventDraft, AgentTurnFinish,
-    ApprovalDecisionRecord, ApprovalRequestDraft, ArtifactRecordDraft,
+    AgentConversationTurn, AgentRepository, AgentTurnContextItemDraft, AgentTurnEventDraft,
+    AgentTurnFinish, ApprovalDecisionRecord, ApprovalRequestDraft, ArtifactRecordDraft,
     EnvironmentOperationDecisionRecord, EnvironmentOperationFinish,
     EnvironmentOperationRequestDraft, EnvironmentOperationRequestSummary, EnvironmentSnapshotDraft,
     PlotArtifactDraft, RunDraft, RunErrorRange, RunFinish, Store, normalize_project_root,
@@ -922,16 +922,14 @@ async fn send_identity(
 async fn send_shared_identity(
     agent: &mut AuthenticatedAgent,
     context: Arc<WorkspaceBrokerLane>,
+    agent_store: &AgentRepository,
 ) -> Result<()> {
-    let event = {
-        let mut context = context.lock().await;
-        let event = Envelope::new(
-            MessageKind::Event,
-            json!({"type": "workspace.identity", "identity": context.broker.identity()}),
-        );
-        context.store.append_event(&event)?;
-        event
-    };
+    let identity = context.identity();
+    let event = Envelope::new(
+        MessageKind::Event,
+        json!({"type": "workspace.identity", "identity": identity.as_ref()}),
+    );
+    agent_store.append_protocol_event(event.clone()).await?;
     write_async_frame(&mut agent.stream, &event).await?;
     Ok(())
 }
@@ -2521,6 +2519,8 @@ fn configure_agent_process_environment(
 pub async fn run_agent_turn(
     session: &ArkSession,
     context: Arc<WorkspaceBrokerLane>,
+    agent_store: AgentRepository,
+    project_root: String,
     rscript: PathBuf,
     process_path: Option<OsString>,
     agent_package: PathBuf,
@@ -2547,23 +2547,15 @@ pub async fn run_agent_turn(
         "unsupported Agent mode `{mode}`"
     );
     let result = async {
-        let history = {
-            let context = context.lock().await;
-            let project_root = context
-                .store
-                .active_project_root()?
-                .context("Cannot load Agent context without an active project identity")?;
-            context
-                .store
-                .recent_agent_conversation(&project_root, &conversation_id, &turn_id, 100)?
-        };
-        let project_skills = {
-            let context = context.lock().await;
-            context
-                .store
-                .active_project_root()?
-                .map(|project_root| discover_project_skills(&project_root))
-        };
+        let history = agent_store
+            .recent_conversation(
+                project_root.clone(),
+                conversation_id.clone(),
+                turn_id.clone(),
+                100,
+            )
+            .await?;
+        let project_skills = Some(discover_project_skills(&project_root));
         if !plugin_context.is_empty() {
             let origins = plugin_context
                 .iter()
@@ -2577,11 +2569,8 @@ pub async fn run_agent_turn(
                     })
                 })
                 .collect::<Vec<_>>();
-            context
-                .lock()
-                .await
-                .store
-                .append_agent_turn_event(&AgentTurnEventDraft {
+            agent_store
+                .append_turn_event(AgentTurnEventDraft {
                     turn_id: turn_id.clone(),
                     event_type: "agent.plugin_context".to_string(),
                     title: "Workspace plugin context".to_string(),
@@ -2594,7 +2583,8 @@ pub async fn run_agent_turn(
                     request_id: None,
                     code: None,
                     details_json: serde_json::to_string(&json!({"origins": origins}))?,
-                })?;
+                })
+                .await?;
         }
         let runtime_profile = runtime_profile
             .with_context(|| format!("missing runtime profile for Agent model `{model}`"))?;
@@ -2623,18 +2613,13 @@ pub async fn run_agent_turn(
                 "Agent context changed after review. Review the current context plan and send again."
             );
         }
-        {
-            let mut context = context.lock().await;
-            let project_root = context
-                .store
-                .active_project_root()?
-                .context("Cannot record Agent context without an active project identity")?;
-            context.store.record_agent_turn_context_items(
-                &project_root,
-                &turn_id,
-                &context_plan.receipts,
-            )?;
-        }
+        agent_store
+            .record_context_items(
+                project_root.clone(),
+                turn_id.clone(),
+                context_plan.receipts.clone(),
+            )
+            .await?;
         let model_prompt = context_plan.model_prompt;
         let mut authenticator = AgentAuthenticator::bind().await?;
         let address = authenticator.local_addr()?;
@@ -2710,11 +2695,13 @@ pub async fn run_agent_turn(
                 );
             }
         };
-        send_shared_identity(&mut agent, context.clone()).await?;
+        send_shared_identity(&mut agent, context.clone(), &agent_store).await?;
         let completion_result = serve_desktop_agent(
             &mut agent,
             session,
             context.clone(),
+            agent_store.clone(),
+            &project_root,
             &turn_id,
             &mode,
             workspace_lane,
@@ -2743,9 +2730,9 @@ pub async fn run_agent_turn(
             output.status,
             redact_sensitive_text(&String::from_utf8_lossy(&output.stderr))
         );
-        let mut context = context.lock().await;
-        let after = context.broker.identity().clone();
-        context.store.finish_agent_turn(&AgentTurnFinish {
+        let after = context.identity();
+        agent_store
+            .finish_turn(AgentTurnFinish {
             turn_id: turn_id.clone(),
             status: if completion.failed {
                 "failed"
@@ -2754,17 +2741,18 @@ pub async fn run_agent_turn(
             }
             .to_string(),
             terminal_reason: completion.failed.then(|| "agent_failure".to_string()),
-            workspace_id_after: Some(after.workspace_id),
+            workspace_id_after: Some(after.workspace_id.clone()),
             state_revision_after: Some(after.state_revision as i64),
             project_revision_after: Some(after.project_revision as i64),
             final_message: completion.final_message.clone(),
             error_message: completion.error_message.clone(),
-        })?;
+            })
+            .await?;
         Ok(json!({
             "turn_id": turn_id,
             "model": model,
             "mode": mode,
-            "workspace": context.broker.identity(),
+            "workspace": after.as_ref(),
             "events": completion.events,
             "status": if completion.failed { "failed" } else { "completed" },
             "stdout": redact_sensitive_text(&String::from_utf8_lossy(&output.stdout)),
@@ -2774,18 +2762,19 @@ pub async fn run_agent_turn(
     .await;
 
     if let Err(error) = &result {
-        let mut context = context.lock().await;
-        let after = context.broker.identity().clone();
-        context.store.finish_agent_turn(&AgentTurnFinish {
-            turn_id,
-            status: "failed".to_string(),
-            terminal_reason: Some("agent_failure".to_string()),
-            workspace_id_after: Some(after.workspace_id),
-            state_revision_after: Some(after.state_revision as i64),
-            project_revision_after: Some(after.project_revision as i64),
-            final_message: None,
-            error_message: Some(redact_sensitive_text(&error.to_string())),
-        })?;
+        let after = context.identity();
+        agent_store
+            .finish_turn(AgentTurnFinish {
+                turn_id,
+                status: "failed".to_string(),
+                terminal_reason: Some("agent_failure".to_string()),
+                workspace_id_after: Some(after.workspace_id.clone()),
+                state_revision_after: Some(after.state_revision as i64),
+                project_revision_after: Some(after.project_revision as i64),
+                final_message: None,
+                error_message: Some(redact_sensitive_text(&error.to_string())),
+            })
+            .await?;
     }
     result
 }
@@ -2794,6 +2783,8 @@ async fn serve_desktop_agent(
     agent: &mut AuthenticatedAgent,
     session: &ArkSession,
     context: Arc<WorkspaceBrokerLane>,
+    agent_store: AgentRepository,
+    project_root: &str,
     turn_id: &str,
     mode: &str,
     workspace_lane: Arc<AgentWorkspaceLane>,
@@ -2812,22 +2803,15 @@ async fn serve_desktop_agent(
         )
         .await
         .context("timed out waiting for desktop Agent R request")??;
-        context.lock().await.store.append_event(&incoming)?;
+        agent_store.append_protocol_event(incoming.clone()).await?;
 
-        {
-            let context = context.lock().await;
-            let active_project = context
-                .store
-                .active_project_root()?
-                .context("Agent request has no active project identity")?;
-            ensure!(
-                context
-                    .store
-                    .get_agent_turn_detail(&active_project, turn_id)?
-                    .is_some(),
-                "Agent turn does not belong to the active project"
-            );
-        }
+        ensure!(
+            agent_store
+                .get_turn_detail(project_root.to_string(), turn_id.to_string())
+                .await?
+                .is_some(),
+            "Agent turn does not belong to the active project"
+        );
 
         match incoming.kind {
             MessageKind::Request => {
@@ -2859,6 +2843,8 @@ async fn serve_desktop_agent(
                                 &incoming.payload,
                                 session,
                                 context.clone(),
+                                agent_store.clone(),
+                                project_root,
                                 turn_id,
                                 workspace_lane.clone(),
                                 adapters.clone(),
@@ -2876,10 +2862,10 @@ async fn serve_desktop_agent(
                     json!(workspace.as_ref()),
                 );
                 let ok = response.payload["ok"].as_bool().unwrap_or(false);
-                context.lock().await.store.append_event(&response)?;
+                agent_store.append_protocol_event(response.clone()).await?;
                 write_async_frame(&mut agent.stream, &response).await?;
                 if !ok {
-                    send_shared_identity(agent, context.clone()).await?;
+                    send_shared_identity(agent, context.clone(), &agent_store).await?;
                 }
             }
             MessageKind::Event => {
@@ -2887,11 +2873,7 @@ async fn serve_desktop_agent(
                 if let Some(text) = event_message_text(&incoming.payload) {
                     final_message = Some(text);
                 }
-                record_agent_turn_event(
-                    &mut context.lock().await.store,
-                    turn_id,
-                    &incoming.payload,
-                )?;
+                record_agent_turn_event(&agent_store, turn_id, &incoming.payload).await?;
                 let agent_failed = incoming.payload["type"] == "desktop.agent_failed";
                 let error_message =
                     agent_failed.then(|| bounded_provider_failure(&incoming.payload));
@@ -2920,6 +2902,8 @@ async fn dispatch_agent_workspace_request(
     payload: &Value,
     session: &ArkSession,
     context: Arc<WorkspaceBrokerLane>,
+    agent_store: AgentRepository,
+    project_root: &str,
     turn_id: &str,
     workspace_lane: Arc<AgentWorkspaceLane>,
     adapters: AgentRuntimeAdapters,
@@ -2943,12 +2927,19 @@ async fn dispatch_agent_workspace_request(
         request_type,
         "conversation.read_turn" | "workspace.read_runtime_output"
     ) {
-        return dispatch_agent_context_read_request(request_type, payload, context, turn_id).await;
+        return dispatch_agent_context_read_request(
+            request_type,
+            payload,
+            &agent_store,
+            project_root,
+            turn_id,
+        )
+        .await;
     }
     let _lane_guard = match workspace_lane.gate.try_lock() {
         Ok(guard) => guard,
         Err(_) => {
-            record_agent_workspace_wait(context.clone(), turn_id, request_type).await?;
+            record_agent_workspace_wait(&agent_store, turn_id, request_type).await?;
             workspace_lane.gate.lock().await
         }
     };
@@ -2993,21 +2984,17 @@ fn runtime_output_receipt_range(source_id: &str, execution_id: &str) -> Option<(
 async fn dispatch_agent_context_read_request(
     request_type: &str,
     payload: &Value,
-    context: Arc<WorkspaceBrokerLane>,
+    agent_store: &AgentRepository,
+    project_root: &str,
     turn_id: &str,
 ) -> Result<Value> {
     let arguments = payload
         .get("arguments")
         .and_then(Value::as_object)
         .context("Agent context-read arguments must be an object")?;
-    let context = context.lock().await;
-    let project_root = context
-        .store
-        .active_project_root()?
-        .context("Agent context reads require an active project")?;
-    let current = context
-        .store
-        .get_agent_turn_detail(&project_root, turn_id)?
+    let current = agent_store
+        .get_turn_detail(project_root.to_string(), turn_id.to_string())
+        .await?
         .context("Agent context read lost its owning turn")?;
     match request_type {
         "conversation.read_turn" => {
@@ -3019,13 +3006,13 @@ async fn dispatch_agent_context_read_request(
                 requested_turn_id != turn_id,
                 "conversation.read_turn cannot read the active turn"
             );
-            let turn = context
-                .store
-                .get_agent_conversation_turn(
-                    &project_root,
-                    &current.turn.conversation_id,
-                    requested_turn_id,
-                )?
+            let turn = agent_store
+                .get_conversation_turn(
+                    project_root.to_string(),
+                    current.turn.conversation_id.clone(),
+                    requested_turn_id.to_string(),
+                )
+                .await?
                 .context("The requested turn is not a terminal turn in this Conversation")?;
             Ok(json!({
                 "turn_id": turn.turn_id,
@@ -3044,9 +3031,9 @@ async fn dispatch_agent_context_read_request(
                 .get("execution_id")
                 .and_then(Value::as_str)
                 .context("workspace.read_runtime_output requires string argument `execution_id`")?;
-            let receipt = context
-                .store
-                .list_agent_turn_context_items(&project_root, turn_id)?
+            let receipt = agent_store
+                .list_context_items(project_root.to_string(), turn_id.to_string())
+                .await?
                 .into_iter()
                 .find(|item| {
                     item.source_kind == "runtime_output"
@@ -3083,13 +3070,15 @@ async fn dispatch_agent_context_read_request(
                 .and_then(Value::as_u64)
                 .unwrap_or(20)
                 .clamp(1, 50) as usize;
-            let page = context.store.runtime_output_page(
-                &project_root,
-                execution_id,
-                after_sequence,
-                page_size,
-                64 * 1024,
-            )?;
+            let page = agent_store
+                .runtime_output_page(
+                    project_root.to_string(),
+                    execution_id.to_string(),
+                    after_sequence,
+                    page_size,
+                    64 * 1024,
+                )
+                .await?;
             let chunks = page
                 .chunks
                 .into_iter()
@@ -3160,15 +3149,12 @@ async fn dispatch_workspace_snapshot_adapter(
 }
 
 async fn record_agent_workspace_wait(
-    context: Arc<WorkspaceBrokerLane>,
+    agent_store: &AgentRepository,
     turn_id: &str,
     request_type: &str,
 ) -> Result<()> {
-    context
-        .lock()
-        .await
-        .store
-        .append_agent_turn_event(&AgentTurnEventDraft {
+    agent_store
+        .append_turn_event(AgentTurnEventDraft {
             turn_id: turn_id.to_string(),
             event_type: "resource.waiting".to_string(),
             title: "Waiting for Workspace R".to_string(),
@@ -3184,7 +3170,9 @@ async fn record_agent_workspace_wait(
                 "lane": "workspace",
                 "request_type": request_type
             }))?,
-        })?;
+        })
+        .await
+        .map(|_| ())?;
     Ok(())
 }
 
@@ -3825,11 +3813,15 @@ async fn handle_tool_approval_required(
     }))
 }
 
-fn record_agent_turn_event(store: &mut Store, turn_id: &str, payload: &Value) -> Result<()> {
+async fn record_agent_turn_event(
+    agent_store: &AgentRepository,
+    turn_id: &str,
+    payload: &Value,
+) -> Result<()> {
     let Some(event) = project_agent_turn_event(turn_id, payload)? else {
         return Ok(());
     };
-    store.append_agent_turn_event(&event)?;
+    agent_store.append_turn_event(event).await?;
     Ok(())
 }
 
@@ -6413,9 +6405,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn workspace_contention_records_a_turn_scoped_wait_event() {
+    async fn agent_persistence_progresses_while_workspace_lane_is_held() {
         let directory = TempDir::new().unwrap();
-        let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let database = directory.path().join("rho.sqlite");
+        let mut store = Store::open(&database).unwrap();
         let project_root = "D:/Rho/project";
         store.set_project_root(Some(project_root)).unwrap();
         store
@@ -6439,17 +6432,29 @@ mod tests {
             )
             .unwrap();
         let context = Arc::new(WorkspaceBrokerLane::new(BrokerState::new("ws-test"), store));
-
-        record_agent_workspace_wait(context.clone(), "turn-wait", "workspace.snapshot")
+        let agent_store = rho_store::StoreExecutor::open(&database)
             .await
-            .unwrap();
-
-        let context = context.lock().await;
-        let detail = context
-            .store
-            .get_agent_turn_detail(project_root, "turn-wait")
             .unwrap()
-            .unwrap();
+            .agent_repository();
+        let workspace_guard = context.lock().await;
+
+        tokio::time::timeout(
+            std::time::Duration::from_millis(250),
+            record_agent_workspace_wait(&agent_store, "turn-wait", "workspace.snapshot"),
+        )
+        .await
+        .expect("Agent persistence waited for the held Workspace lane")
+        .unwrap();
+
+        let detail = tokio::time::timeout(
+            std::time::Duration::from_millis(250),
+            agent_store.get_turn_detail(project_root.to_string(), "turn-wait".to_string()),
+        )
+        .await
+        .expect("Agent query waited for the held Workspace lane")
+        .unwrap()
+        .unwrap();
+        drop(workspace_guard);
         assert_eq!(detail.events.len(), 1);
         assert_eq!(detail.events[0].event_type, "resource.waiting");
         assert_eq!(detail.events[0].tool.as_deref(), Some("workspace.snapshot"));

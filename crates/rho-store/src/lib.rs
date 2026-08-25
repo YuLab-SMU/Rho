@@ -15,6 +15,7 @@ const MAX_DIAGNOSTIC_COLUMN: u32 = 1_000_000;
 pub(crate) const LEGACY_UNSCOPED: &str = "legacy_unscoped";
 
 mod agent;
+mod agent_repository;
 mod artifact;
 mod audit;
 mod compare;
@@ -39,6 +40,7 @@ pub use agent::{
     AgentTurnDraft, AgentTurnEvent, AgentTurnEventDraft, AgentTurnFinish, AgentTurnSummary,
     ApprovalDecisionRecord, ApprovalRequestDraft, ApprovalRequestSummary,
 };
+pub use agent_repository::AgentRepository;
 pub use artifact::{
     ArtifactRecordDraft, ArtifactRecordSummary, PlotArtifactDraft, PlotArtifactSummary,
 };

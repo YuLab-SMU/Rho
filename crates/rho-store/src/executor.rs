@@ -62,7 +62,7 @@ impl StoreExecutor {
         &self.migration_outcome
     }
 
-    async fn call<R, F>(&self, operation: F) -> Result<R, StoreExecutorError>
+    pub(crate) async fn call<R, F>(&self, operation: F) -> Result<R, StoreExecutorError>
     where
         R: Send + 'static,
         F: FnOnce(&mut rusqlite::Connection) -> Result<R, StoreError> + Send + 'static,
