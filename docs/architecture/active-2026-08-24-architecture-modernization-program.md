@@ -6,12 +6,12 @@
   "record_type": "program",
   "program_id": "AM-2026",
   "status": "active",
-  "current_wave": 2,
+  "current_wave": 3,
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
   "active_work_packages": [],
-  "integration_lane": "AM-W2-61",
+  "integration_lane": "AM-W2-01",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -493,9 +493,29 @@ unchanged.
 assembled from five item-complete source parts. Shared fixtures and test names
 remain identical; each physical test source stays below 1,500 lines.
 
-`AM-W2-59` extracts the local real-process smoke harness into desktop, Wasm
-plugin-host and internal-extension source parts. `main.rs` becomes only Tauri
-composition, handler registration and exit wiring.
+`AM-W2-59` (`4e6c9c2`/AM-E-0086) extracts the local real-process smoke harness
+into desktop, Wasm plugin-host and internal-extension source parts. `main.rs`
+becomes only Tauri composition, handler registration and exit wiring.
+
+`AM-W2-60` (`db3b980`/AM-E-0087) turns `coordinator.rs` into a 48-line facade
+over physical startup, Workspace dispatch, Agent context/execution/
+authorization, Environment and protocol owners. Production and test token
+inventories remain identical across the mechanical move, and every production
+part stays below the repository's diagnostic hotspot threshold.
+
+`AM-W2-61` (`179c350`/AM-E-0088) moves desktop and coordinator startup
+recovery onto their existing single `StoreExecutor`. Root binding, interrupted
+Run/Agent/approval/environment/plugin recovery and protocol persistence no
+longer perform synchronous SQLite work on an async request path. The unrelated
+live diagnostic connection stall remains explicit as `AM-F-0096` rather than
+being misreported as a passed product check.
+
+`AM-W2-01` closes the backend wave after the complete locked workspace test and
+all-target compile matrices pass. Workspace/Ark serialization, project
+transition serialization, Store execution, Agent/plugin services and read
+projections now have separate ownership. The remaining repository-wide module
+budget is advisory cleanup owned by Wave 6, not a reason to hold the working
+backend architecture in an artificial intermediate state.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
