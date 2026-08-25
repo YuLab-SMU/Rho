@@ -11,7 +11,8 @@ use crate::startup_runtime::{
     display_error_chain, hide_console_window, probe_agent_runtime, runtime_config,
     startup_log_path, write_startup_log,
 };
-use crate::{AppState, finalize_workspace_start, platform, start_workspace, ui_runtime};
+use crate::workspace_lifecycle::{finalize_workspace_start, start_workspace};
+use crate::{AppState, platform, ui_runtime};
 
 #[tauri::command]
 pub(crate) async fn startup_status(state: State<'_, AppState>) -> Result<StartupView, String> {

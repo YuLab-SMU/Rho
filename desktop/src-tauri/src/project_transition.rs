@@ -25,9 +25,11 @@ use crate::project::{
     ProjectWatcherControl, display_path, list_project_files, start_project_watcher,
 };
 use crate::startup_runtime::{bounded_diagnostic, write_startup_event, write_startup_log};
+use crate::workspace_lifecycle::{
+    reconcile_workspace_plugins_for_boundary, teardown_workspace_plugins_for_boundary,
+};
 use crate::{
-    AppState, active_context, active_session, reconcile_workspace_plugins_for_boundary,
-    runtime_registry, store_executor, teardown_workspace_plugins_for_boundary, ui_runtime,
+    AppState, active_context, active_session, runtime_registry, store_executor, ui_runtime,
 };
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
