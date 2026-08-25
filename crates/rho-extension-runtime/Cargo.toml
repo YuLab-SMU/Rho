@@ -25,3 +25,5 @@ wasmtime.workspace = true
 [dev-dependencies]
 tempfile.workspace = true
 wat.workspace = true
+wit-component.workspace = true
+wit-parser.workspace = true
