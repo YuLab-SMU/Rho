@@ -45,6 +45,14 @@ The following are hard development blockers when affected:
 - implementation expands authority, schema, public protocol or destructive
   scope beyond the active contract.
 
+Finding severity is not a blocker switch. `critical`, `high`, `medium`, and
+`low` express impact and scheduling priority only. A tracked finding blocks a
+development slice only when it explicitly names an affected hard domain:
+product correctness, data integrity, project isolation, authority/security,
+public or serialized contract identity, or truthful recovery. An advisory
+finding can be urgent and should be fixed quickly, but it cannot invalidate a
+correct slice merely because its severity label is high.
+
 LOC, file count, build duration, bundle/binary size, dependency count, planned
 wave dates, old-toolchain support, unaffected full suites, unavailable
 platforms, manual review and release artifacts are diagnostics by default. They

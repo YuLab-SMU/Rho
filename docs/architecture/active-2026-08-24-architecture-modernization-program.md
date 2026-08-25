@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-42",
+  "active_work_packages": ["AM-W2-43"],
+  "integration_lane": "AM-W2-43",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -407,6 +407,11 @@ or filesystem policy.
 `AM-W2-42` (`a0c62d9`/AM-E-0069) moves the seventeen Agent LLM handlers beside
 their existing service owner and updates generated source identity without
 changing settings, secrets, network, revision or recovery behavior.
+
+`AM-W2-43` separates finding severity from acceptance impact. Severity remains
+prioritization telemetry; only an explicit product-correctness, data-integrity,
+project-isolation, authority/security, public/serialized-contract or truthful-
+recovery domain can block a package from completion.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
