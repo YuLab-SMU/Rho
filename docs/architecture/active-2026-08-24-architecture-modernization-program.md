@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W2-29"],
+  "active_work_packages": [],
   "integration_lane": "AM-W2-29",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -342,7 +342,9 @@ file lane, durable before/after ledger, Workspace identity ordering and restart
 recovery truth. `main.rs` no longer has an ordinary `read_store` path.
 
 `AM-W2-29` routes every network and Workspace plugin broker audit phase through
-the shared Store worker instead of reopening SQLite around external awaits.
+the shared Store worker instead of reopening SQLite around external awaits;
+commit `9c7243e` and `AM-E-0056` preserve the exact permission, grant, failure and
+project-isolation behavior.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
