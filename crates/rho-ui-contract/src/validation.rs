@@ -17,6 +17,18 @@ impl specta::Type for UiIpcNumber {
     }
 }
 
+/// Export an intentionally opaque JSON payload as TypeScript `unknown`.
+///
+/// This keeps exporter-only metadata in the contract crate instead of making
+/// production callers depend directly on a language-specific generator.
+pub struct UiIpcUnknown;
+
+impl specta::Type for UiIpcUnknown {
+    fn definition(types: &mut specta::Types) -> specta::datatype::DataType {
+        <specta_typescript::Unknown as specta::Type>::definition(types)
+    }
+}
+
 pub const MAX_ID_BYTES: usize = 128;
 pub const MAX_LABEL_BYTES: usize = 512;
 pub const MAX_PURPOSE_BYTES: usize = 2 * 1024;

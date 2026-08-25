@@ -20,6 +20,7 @@ import {
 } from "./project";
 import { createTauriKernelTransport } from "./kernel-generated";
 import { createTauriCheckTransport } from "./check";
+import { createTauriStartupTransport } from "./startup";
 import { createTauriAgentTurnDetailTransport } from "./agent-turn";
 import { createTauriProfileTransport } from "./profile";
 import { createTauriResourceTransport } from "./resource";
@@ -122,18 +123,13 @@ export function createTauriUiKernelTransport(
   const agentRuntimeTransport = createTauriAgentRuntimeTransport(invoke);
   const projectCommands = createTauriProjectCommands(invoke);
   const kernelTransport = createTauriKernelTransport(invoke);
+  const startupTransport = createTauriStartupTransport(invoke);
   return {
     source: "tauri",
     async prepareWorkspace(chooseRscript = false): Promise<WorkspacePreparation> {
-      const startup = await invoke<{
-        readonly phase: string;
-        readonly issue: {
-          readonly code: string;
-          readonly title: string;
-          readonly message: string;
-          readonly technical_detail?: string;
-        } | null;
-      }>(chooseRscript ? "startup_choose_rscript" : "startup_bootstrap");
+      const startup = chooseRscript
+        ? await startupTransport.chooseRscript()
+        : await startupTransport.bootstrapStartup();
       if (startup.phase !== "runtime_ready" || startup.issue != null) {
         return {
           status: "needs_attention",
@@ -154,7 +150,7 @@ export function createTauriUiKernelTransport(
         };
       }
       try {
-        await invoke<unknown>("workspace_start");
+        await startupTransport.startWorkspace();
       } catch (error: unknown) {
         const detail = error instanceof Error ? error.message : String(error);
         return {

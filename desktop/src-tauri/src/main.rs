@@ -113,14 +113,14 @@ struct RuntimeConfig {
     store_path: PathBuf,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 enum StartupSeverity {
     Recoverable,
     Fatal,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, specta::Type)]
 struct StartupIssue {
     code: String,
     phase: String,
@@ -132,14 +132,14 @@ struct StartupIssue {
     diagnostics_path: String,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, specta::Type)]
 struct StartupRuntimeView {
     rscript: String,
     r_version: String,
     agent_runtime: AgentRuntimeStatus,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, specta::Type)]
 struct StartupView {
     phase: String,
     busy: bool,
@@ -158,7 +158,7 @@ struct AgentDependencyStatus {
     remediation: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, specta::Type)]
 struct AgentRuntimeStatus {
     available: bool,
     #[serde(default = "default_agent_runtime_status")]
@@ -700,12 +700,14 @@ impl SwitchTestControl {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, specta::Type)]
 struct WorkspaceStatus {
     status: &'static str,
     r_version: String,
     r_home: String,
+    #[specta(type = Option<rho_ui_contract::UiIpcNumber>)]
     kernel_pid: Option<u32>,
+    #[specta(type = rho_ui_contract::UiIpcUnknown)]
     workspace: Option<Value>,
     agent_runtime: AgentRuntimeStatus,
     python_required: bool,
@@ -1317,11 +1319,13 @@ async fn bootstrap_runtime(state: &AppState, selected: Option<PathBuf>) -> Start
     view
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn startup_bootstrap(state: State<'_, AppState>) -> Result<StartupView, String> {
     Ok(bootstrap_runtime(&state, None).await)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn startup_choose_rscript(state: State<'_, AppState>) -> Result<StartupView, String> {
     let mut dialog = rfd::FileDialog::new().set_title(platform::rscript_picker_title());
@@ -1412,6 +1416,7 @@ async fn agent_runtime_retry(
     Ok(status.into())
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn workspace_start(state: State<'_, AppState>) -> Result<WorkspaceStatus, String> {
     let _project_transition = state.project_transition_gate.lock().await;
@@ -15739,6 +15744,22 @@ mod tests {
             .error_handling(tauri_specta::ErrorHandlingMode::Throw)
             .export(specta_typescript::Typescript::default(), output_path)
             .expect("Project TypeScript export must succeed");
+    }
+
+    #[test]
+    #[ignore = "writes the requested generated TypeScript contract"]
+    fn startup_typescript_export() {
+        let output_path = std::env::var_os("RHO_STARTUP_BINDINGS_PATH")
+            .expect("RHO_STARTUP_BINDINGS_PATH must name the generated file");
+        tauri_specta::Builder::<tauri::Wry>::new()
+            .commands(tauri_specta::collect_commands![
+                super::startup_bootstrap,
+                super::startup_choose_rscript,
+                super::workspace_start,
+            ])
+            .error_handling(tauri_specta::ErrorHandlingMode::Throw)
+            .export(specta_typescript::Typescript::default(), output_path)
+            .expect("Startup TypeScript export must succeed");
     }
 }
 
