@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W2-55"],
+  "active_work_packages": [],
   "integration_lane": "AM-W2-55",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -475,7 +475,7 @@ reconciliation and heartbeat supervision into one lifecycle service. Store
 execution and application shutdown remain separate owners; Workspace identity,
 plugin grants, recovery revisions and extension publication stay unchanged.
 
-`AM-W2-55` moves application state, active Ark/Workspace handle access and
+`AM-W2-55` (`5d420dc`/AM-E-0082) moves application state, active Ark/Workspace handle access and
 the single asynchronous Store executor into one explicit state service.
 Production consumers import that owner directly; composition retains only a
 type re-export for Tauri assembly and test compatibility.
