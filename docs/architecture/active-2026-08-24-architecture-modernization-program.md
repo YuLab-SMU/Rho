@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W2-17"],
+  "active_work_packages": [],
   "integration_lane": "AM-W2-17",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -283,7 +283,7 @@ Runtime context uses a short project-transition snapshot plus committed
 identity instead of the Workspace lane; only update, rollback, uninstall and
 restore retain their existing full-transaction transition gate.
 
-`AM-W2-17` migrates plugin boundary teardown, reconciliation, heartbeat
+`AM-W2-17` (`8623ba3`/AM-E-0044) migrates plugin boundary teardown, reconciliation, heartbeat
 maintenance and Agent contribution persistence onto the same Store worker.
 Plugin-only work uses the committed identity projection; reconciliation retains
 the Workspace lane only for an actual recovered-file project revision change.
