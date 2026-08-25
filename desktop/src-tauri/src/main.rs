@@ -73,8 +73,9 @@ use rho_store::{
     AgentTurnEventDraft, AgentTurnFinish, AgentTurnSummary, ApprovalRequestSummary,
     ArtifactRecordDraft, ArtifactRecordSummary, EnvironmentOperationRequestSummary, EvidenceClaim,
     EvidenceClaimDraft, EvidenceClaimReview, EvidenceEntry, EvidenceEntryDraft,
-    PlotArtifactSummary, PlotPayloadPruneResult, ProjectRetentionSummary, RetentionPolicy,
-    RunDetail, RunRepository, RunSummary, Store, StoreExecutor, normalize_project_root,
+    PlotArtifactSummary, PlotPayloadPruneResult, ProjectRetentionSummary,
+    ProjectTransitionSnapshot, RetentionPolicy, RunDetail, RunRepository, RunSummary, Store,
+    StoreExecutor, normalize_project_root,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -8107,7 +8108,11 @@ where
     let previous_session = state
         .project_store
         .load_session_or_default(&previous_ui_root);
-    let previous_store_root = read_store(state)?.active_project_root()?;
+    let previous_store_root = store_executor(state)
+        .await?
+        .project_transition_repository()
+        .active_project_root()
+        .await?;
     let mut prepared_extension =
         prepare_extension_project_candidate(state, &normalized_root).await?;
 
@@ -8191,7 +8196,9 @@ where
         state,
         Some(&normalized_root),
         SwitchTestStep::SetActiveProjectRoot,
-    ) {
+    )
+    .await
+    {
         return recover_failed_project_switch(
             state,
             &previous_ui_root,
@@ -8327,7 +8334,8 @@ async fn recover_failed_project_switch(
             state,
             previous_store_root,
             SwitchTestStep::RestoreActiveProjectRoot,
-        )?;
+        )
+        .await?;
         Result::<()>::Ok(())
     }
     .await;
@@ -8383,8 +8391,12 @@ async fn project_switch_blocker(state: &AppState) -> Result<Option<ProjectSwitch
     };
     let approval_count = state.approvals.count().await;
     let environment_approval_count = state.environment_approvals.count().await;
-    let store = read_store(state)?;
-    let current_root = store.active_project_root()?.unwrap_or(fallback_root);
+    let durable = store_executor(state)
+        .await?
+        .project_transition_repository()
+        .snapshot(fallback_root)
+        .await?;
+    let current_root = durable.active_project_root.clone();
 
     let runtime_execution_count = state.runtime_registry.active_execution_count();
     if runtime_execution_count > 0 {
@@ -8400,13 +8412,13 @@ async fn project_switch_blocker(state: &AppState) -> Result<Option<ProjectSwitch
         }));
     }
 
-    if let Some(run_id) = store.latest_active_run_id(&current_root)? {
+    if let Some(run_id) = durable.active_run_id.as_ref() {
         return Ok(Some(ProjectSwitchBlocker {
             kind: ProjectSwitchBlockerKind::ActiveRun,
             message: "Finish or interrupt the active scientific run before switching projects."
                 .to_string(),
             pending_count: 1,
-            run_id: Some(run_id),
+            run_id: Some(run_id.clone()),
             turn_id: None,
             request_id: None,
             operation_status: Some("running".to_string()),
@@ -8457,8 +8469,7 @@ async fn project_switch_blocker(state: &AppState) -> Result<Option<ProjectSwitch
         }));
     }
 
-    let waiting_approvals =
-        store.list_approval_requests(&current_root, Some(10), Some("waiting"))?;
+    let waiting_approvals = &durable.waiting_approvals;
     if approval_count > 0 || !waiting_approvals.is_empty() {
         return Ok(Some(ProjectSwitchBlocker {
             kind: ProjectSwitchBlockerKind::Approval,
@@ -8476,7 +8487,7 @@ async fn project_switch_blocker(state: &AppState) -> Result<Option<ProjectSwitch
     }
 
     if let Some(blocker) =
-        environment_operation_switch_blocker(&store, &current_root, environment_approval_count)?
+        environment_operation_switch_blocker(&durable, environment_approval_count)
     {
         return Ok(Some(blocker));
     }
@@ -8485,33 +8496,37 @@ async fn project_switch_blocker(state: &AppState) -> Result<Option<ProjectSwitch
 }
 
 fn environment_operation_switch_blocker(
-    store: &Store,
-    project_root: &str,
+    durable: &ProjectTransitionSnapshot,
     environment_approval_count: usize,
-) -> Result<Option<ProjectSwitchBlocker>> {
-    for status in ["running", "approved", "requested"] {
-        let requests =
-            store.list_environment_operation_requests(project_root, Some(10), Some(status))?;
-        if !requests.is_empty() {
-            let message = match status {
-                "running" => {
-                    "Wait for the active direct environment operation to finish before switching projects."
-                }
-                _ => "Resolve the direct environment operation decision before switching projects.",
-            };
-            return Ok(Some(ProjectSwitchBlocker {
-                kind: ProjectSwitchBlockerKind::EnvironmentOperation,
-                message: message.to_string(),
-                pending_count: environment_approval_count.max(requests.len()),
-                run_id: requests.first().and_then(|request| request.run_id.clone()),
-                turn_id: requests.first().and_then(|request| request.turn_id.clone()),
-                request_id: requests.first().map(|request| request.request_id.clone()),
-                operation_status: Some(status.to_string()),
-            }));
-        }
+) -> Option<ProjectSwitchBlocker> {
+    if let Some(status) = durable.environment_status.as_deref() {
+        let message = match status {
+            "running" => {
+                "Wait for the active direct environment operation to finish before switching projects."
+            }
+            _ => "Resolve the direct environment operation decision before switching projects.",
+        };
+        return Some(ProjectSwitchBlocker {
+            kind: ProjectSwitchBlockerKind::EnvironmentOperation,
+            message: message.to_string(),
+            pending_count: environment_approval_count.max(durable.environment_requests.len()),
+            run_id: durable
+                .environment_requests
+                .first()
+                .and_then(|request| request.run_id.clone()),
+            turn_id: durable
+                .environment_requests
+                .first()
+                .and_then(|request| request.turn_id.clone()),
+            request_id: durable
+                .environment_requests
+                .first()
+                .map(|request| request.request_id.clone()),
+            operation_status: Some(status.to_string()),
+        });
     }
     if environment_approval_count > 0 {
-        return Ok(Some(ProjectSwitchBlocker {
+        return Some(ProjectSwitchBlocker {
             kind: ProjectSwitchBlockerKind::EnvironmentOperation,
             message: "Resolve the direct environment operation decision before switching projects."
                 .to_string(),
@@ -8520,9 +8535,9 @@ fn environment_operation_switch_blocker(
             turn_id: None,
             request_id: None,
             operation_status: Some("requested".to_string()),
-        }));
+        });
     }
-    Ok(None)
+    None
 }
 
 fn maybe_handle_switch_test_directive(state: &AppState, step: SwitchTestStep) -> Result<bool> {
@@ -8533,7 +8548,7 @@ fn maybe_handle_switch_test_directive(state: &AppState, step: SwitchTestStep) ->
     }
 }
 
-fn set_store_active_project_root(
+async fn set_store_active_project_root(
     state: &AppState,
     project_root: Option<&str>,
     step: SwitchTestStep,
@@ -8541,8 +8556,11 @@ fn set_store_active_project_root(
     if maybe_handle_switch_test_directive(state, step)? {
         return Ok(());
     }
-    let mut store = read_store(state)?;
-    store.set_project_root(project_root)?;
+    store_executor(state)
+        .await?
+        .project_transition_repository()
+        .set_active_project_root(project_root.map(str::to_string))
+        .await?;
     Ok(())
 }
 

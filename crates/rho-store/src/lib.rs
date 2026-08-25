@@ -32,6 +32,7 @@ mod plugin_lifecycle_service;
 mod plugin_permission;
 mod plugin_permission_service;
 mod project;
+mod project_transition_repository;
 mod query;
 mod run;
 mod run_repository;
@@ -90,6 +91,7 @@ pub use plugin_permission_service::{
 pub use project::{
     PlotPayloadPruneResult, ProjectRetentionSummary, RetentionPolicy, RetentionScopeSummary,
 };
+pub use project_transition_repository::{ProjectTransitionRepository, ProjectTransitionSnapshot};
 pub use query::ProjectQueryService;
 pub use run::{ProblemSummary, RunDetail, RunDraft, RunErrorRange, RunFinish, RunSummary};
 pub use run_repository::{RunCancelOutcome, RunRepository};

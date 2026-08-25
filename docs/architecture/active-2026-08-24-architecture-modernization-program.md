@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-22",
+  "active_work_packages": ["AM-W2-23"],
+  "integration_lane": "AM-W2-23",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -310,6 +310,11 @@ interruption remain in their existing authority lanes.
 project-scoped cancellation and latest-active selection. Console, Render,
 restart and Agent controls keep Ark interrupt and task authority while durable
 SQLite work uses the Store worker.
+
+`AM-W2-23` captures the durable half of project-switch preflight in one Store
+worker operation and uses that worker for active-root prepare/commit/rollback.
+The project-transition gate and all Workspace, watcher, extension and recovery
+ordering remain authoritative in the caller.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
