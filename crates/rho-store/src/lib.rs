@@ -17,6 +17,7 @@ pub(crate) const LEGACY_UNSCOPED: &str = "legacy_unscoped";
 mod agent;
 mod agent_repository;
 mod artifact;
+mod artifact_repository;
 mod audit;
 mod audit_repository;
 mod compare;
@@ -46,6 +47,10 @@ pub use agent::{
 pub use agent_repository::AgentRepository;
 pub use artifact::{
     ArtifactRecordDraft, ArtifactRecordSummary, PlotArtifactDraft, PlotArtifactSummary,
+};
+pub use artifact_repository::{
+    ArtifactRecordProjection, ArtifactRepository, ArtifactRetentionProjection,
+    RunArtifactProjection,
 };
 pub use audit::*;
 pub use audit_repository::{AuditRepository, AuditRepositoryError};

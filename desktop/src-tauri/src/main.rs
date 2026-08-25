@@ -3647,21 +3647,26 @@ async fn render_job_status(
         // The worker updates the in-memory projection after the durable Run
         // is finished. Reconcile from the store here as well so a completed
         // render cannot leave the UI polling forever if that update is late.
-        let durable = read_store(&state).ok().and_then(|store| {
-            let run = store.get_run_detail(&job_project_root, &id).ok().flatten();
-            let artifact = store
-                .get_artifact_record_for_run(&job_project_root, &id, "render_output")
+        let durable = match store_executor(&state).await {
+            Ok(executor) => executor
+                .artifact_repository()
+                .run_artifacts(
+                    job_project_root,
+                    vec![id.clone()],
+                    "render_output".to_string(),
+                )
+                .await
                 .ok()
-                .flatten();
-            Some((run, artifact))
-        });
-        if let Some((run, artifact)) = durable {
+                .and_then(|mut projections| projections.pop()),
+            Err(_) => None,
+        };
+        if let Some(durable) = durable {
             let mut jobs = state.render_jobs.lock().await;
             if let Some(job) = jobs.get_mut(&id) {
-                if let Some(artifact) = artifact.as_ref() {
+                if let Some(artifact) = durable.artifact.as_ref() {
                     attach_render_artifact(job, artifact);
                 }
-                if let Some(run) = run.as_ref() {
+                if let Some(run) = durable.run.as_ref() {
                     reconcile_render_job(
                         job,
                         Some(run.status.as_str()),
@@ -4094,14 +4099,17 @@ async fn list_plot_artifacts(
     let project_root = durable_project_root(&root);
     let context = active_context(&state).await.map_err(display_error)?;
     let workspace_id = context.identity().workspace_id.clone();
-    read_store(&state)
+    store_executor(&state)
+        .await
         .map_err(display_error)?
-        .list_plot_artifacts(
-            limit.map(usize::from),
-            Some(&project_root),
-            Some(&workspace_id),
+        .artifact_repository()
+        .list_plots(
+            project_root,
+            Some(workspace_id),
             session_only.unwrap_or(true),
+            limit.map(usize::from),
         )
+        .await
         .map_err(display_error)
 }
 
@@ -4210,9 +4218,12 @@ async fn read_plot_artifact(
 ) -> Result<PlotImageView, String> {
     let root = state.project_root.read().await.clone();
     let project_root = root.to_string_lossy().replace('\\', "/");
-    let plot = read_store(&state)
+    let plot = store_executor(&state)
+        .await
         .map_err(display_error)?
-        .get_plot_artifact(&project_root, &plot_id)
+        .artifact_repository()
+        .get_plot(project_root, plot_id.clone())
+        .await
         .map_err(display_error)?
         .context(format!("Plot artifact not found: {plot_id}"))
         .map_err(display_error)?;
@@ -4369,14 +4380,17 @@ async fn list_artifact_records(
     let root = state.project_root.read().await.clone();
     let context = active_context(&state).await.map_err(display_error)?;
     let workspace_id = context.identity().workspace_id.clone();
-    read_store(&state)
+    store_executor(&state)
+        .await
         .map_err(display_error)?
-        .list_artifact_records(
-            limit.map(usize::from),
-            &root.to_string_lossy().replace('\\', "/"),
-            Some(&workspace_id),
+        .artifact_repository()
+        .list_records(
+            root.to_string_lossy().replace('\\', "/"),
+            Some(workspace_id),
             session_only.unwrap_or(false),
+            limit.map(usize::from),
         )
+        .await
         .map_err(display_error)
 }
 
@@ -4387,28 +4401,24 @@ async fn get_artifact_record(
 ) -> Result<Option<ArtifactRecordView>, String> {
     let root = state.project_root.read().await.clone();
     let project_root = root.to_string_lossy().replace('\\', "/");
-    let store = read_store(&state).map_err(display_error)?;
-    let Some(artifact) = store
-        .get_artifact_record(&project_root, &artifact_id)
+    let Some(projection) = store_executor(&state)
+        .await
+        .map_err(display_error)?
+        .artifact_repository()
+        .get_record(project_root, artifact_id)
+        .await
         .map_err(display_error)?
     else {
         return Ok(None);
     };
-    let run = artifact
-        .run_id
-        .as_deref()
-        .map(|run_id| store.get_run_detail(&project_root, run_id))
-        .transpose()
-        .map_err(display_error)?
-        .flatten();
     let (output_absolute_path, file_available, file_status) =
-        artifact_file_status(&root, &artifact.output_path);
+        artifact_file_status(&root, &projection.artifact.output_path);
     Ok(Some(ArtifactRecordView {
-        artifact,
+        artifact: projection.artifact,
         file_available,
         file_status: file_status.to_string(),
         output_absolute_path,
-        run,
+        run: projection.run,
     }))
 }
 
@@ -4432,14 +4442,16 @@ async fn clear_artifact_records(
     let root = state.project_root.read().await.clone();
     let context = active_context(&state).await.map_err(display_error)?;
     let workspace_id = context.identity().workspace_id.clone();
-    let mut store = read_store(&state).map_err(display_error)?;
-    let project_root = root.to_string_lossy();
-    let deleted = ProjectMutationService::new(&mut store)
-        .clear_artifact_records(
-            project_root.as_ref(),
-            Some(&workspace_id),
+    let deleted = store_executor(&state)
+        .await
+        .map_err(display_error)?
+        .artifact_repository()
+        .clear_records(
+            root.to_string_lossy().into_owned(),
+            Some(workspace_id),
             session_only.unwrap_or(false),
         )
+        .await
         .map_err(display_error)?;
     Ok(json!({ "deleted": deleted }))
 }
@@ -4453,13 +4465,16 @@ async fn clear_plot_artifacts(
     let project_root = durable_project_root(&root);
     let context = active_context(&state).await.map_err(display_error)?;
     let workspace_id = context.identity().workspace_id.clone();
-    let mut store = read_store(&state).map_err(display_error)?;
-    let deleted = ProjectMutationService::new(&mut store)
-        .clear_plot_artifacts(
-            &project_root,
-            Some(&workspace_id),
+    let deleted = store_executor(&state)
+        .await
+        .map_err(display_error)?
+        .artifact_repository()
+        .clear_plots(
+            project_root,
+            Some(workspace_id),
             session_only.unwrap_or(true),
         )
+        .await
         .map_err(display_error)?;
     Ok(json!({"deleted": deleted}))
 }
@@ -4742,13 +4757,16 @@ async fn prune_plot_payloads(
     let project_root = durable_project_root(&root);
     let context = active_context(&state).await.map_err(display_error)?;
     let workspace_id = context.identity().workspace_id.clone();
-    let mut store = read_store(&state).map_err(display_error)?;
-    store
-        .prune_plot_artifact_payloads(
-            Some(&project_root),
-            Some(&workspace_id),
+    store_executor(&state)
+        .await
+        .map_err(display_error)?
+        .artifact_repository()
+        .prune_plot_payloads(
+            project_root,
+            Some(workspace_id),
             session_only.unwrap_or(true),
         )
+        .await
         .map_err(display_error)
 }
 
@@ -4760,22 +4778,28 @@ async fn get_project_retention_summary(
     let project_root = durable_project_root(&root);
     let context = active_context(&state).await.map_err(display_error)?;
     let workspace_id = context.identity().workspace_id.clone();
-    let store = read_store(&state).map_err(display_error)?;
-    let summary = store
-        .project_retention_summary(&project_root, Some(&workspace_id))
-        .map_err(display_error)?;
-    let runtime_policy = store
-        .get_runtime_output_policy(&project_root)
+    let retention = store_executor(&state)
+        .await
+        .map_err(display_error)?
+        .artifact_repository()
+        .retention(project_root, Some(workspace_id))
+        .await
         .map_err(display_error)?;
     let policy = RetentionPolicy {
-        max_runtime_output_bytes_per_execution: runtime_policy
+        max_runtime_output_bytes_per_execution: retention
+            .runtime_policy
             .max_runtime_output_bytes_per_execution,
-        runtime_output_project_warning_bytes: runtime_policy.runtime_output_project_warning_bytes,
-        max_runtime_execution_rows: runtime_policy.max_runtime_execution_rows,
-        auto_prune_enabled: runtime_policy.auto_prune_enabled,
+        runtime_output_project_warning_bytes: retention
+            .runtime_policy
+            .runtime_output_project_warning_bytes,
+        max_runtime_execution_rows: retention.runtime_policy.max_runtime_execution_rows,
+        auto_prune_enabled: retention.runtime_policy.auto_prune_enabled,
         ..RetentionPolicy::default()
     };
-    Ok(ProjectRetentionView { summary, policy })
+    Ok(ProjectRetentionView {
+        summary: retention.summary,
+        policy,
+    })
 }
 
 #[cfg_attr(test, specta::specta)]
@@ -6156,33 +6180,40 @@ pub(crate) async fn restart_workspace_locked(state: &AppState) -> Result<Workspa
         .await
         .map_err(display_error)?;
     if !render_job_ids.is_empty() {
-        let reconciled = {
-            let store = read_store(state).map_err(display_error)?;
-            let mut reconciled = Vec::with_capacity(render_job_ids.len());
-            for job_id in &render_job_ids {
-                let run = store
-                    .get_run_detail(&current_project_root, job_id)
-                    .map_err(display_error)?;
-                let artifact = store
-                    .get_artifact_record_for_run(&current_project_root, job_id, "render_output")
-                    .map_err(display_error)?;
-                reconciled.push((job_id.clone(), run, artifact));
-            }
-            reconciled
-        };
+        let reconciled = store_executor(state)
+            .await
+            .map_err(display_error)?
+            .artifact_repository()
+            .run_artifacts(
+                current_project_root,
+                render_job_ids,
+                "render_output".to_string(),
+            )
+            .await
+            .map_err(display_error)?;
         let mut jobs = state.render_jobs.lock().await;
-        for (job_id, run, artifact) in reconciled {
-            if let Some(job) = jobs.get_mut(&job_id) {
-                if run.as_ref().is_some_and(|run| run.status == "completed") {
-                    if let Some(artifact) = artifact.as_ref() {
+        for projection in reconciled {
+            if let Some(job) = jobs.get_mut(&projection.run_id) {
+                if projection
+                    .run
+                    .as_ref()
+                    .is_some_and(|run| run.status == "completed")
+                {
+                    if let Some(artifact) = projection.artifact.as_ref() {
                         attach_render_artifact(job, artifact);
                     }
                 }
                 reconcile_render_job(
                     job,
-                    run.as_ref().map(|run| run.status.as_str()),
-                    run.as_ref().and_then(|run| run.error_message.clone()),
-                    run.as_ref().and_then(|run| run.terminal_reason.as_deref()),
+                    projection.run.as_ref().map(|run| run.status.as_str()),
+                    projection
+                        .run
+                        .as_ref()
+                        .and_then(|run| run.error_message.clone()),
+                    projection
+                        .run
+                        .as_ref()
+                        .and_then(|run| run.terminal_reason.as_deref()),
                 );
             }
         }
