@@ -306,6 +306,23 @@ impl ComponentPluginHost {
         maximum_input_bytes: usize,
         maximum_return_bytes: usize,
     ) -> Result<GuestStep, HostProtocolError> {
+        self.begin_broker_call_bounded_with_hook(
+            request_id,
+            request,
+            maximum_input_bytes,
+            maximum_return_bytes,
+            || {},
+        )
+    }
+
+    fn begin_broker_call_bounded_with_hook(
+        &mut self,
+        request_id: HostRequestId,
+        request: Value,
+        maximum_input_bytes: usize,
+        maximum_return_bytes: usize,
+        before_guest_call: impl FnOnce(),
+    ) -> Result<GuestStep, HostProtocolError> {
         if self.state != HostInstanceState::Active {
             return Err(invalid_state(self.state));
         }
@@ -327,13 +344,16 @@ impl ComponentPluginHost {
         }
         let request_json = serde_json::to_string(&request)
             .map_err(|_| protocol_error(HostProtocolErrorCode::InvalidBrokerStep))?;
-        let raw_step = self.call_guest(|runtime| {
-            runtime.bindings.rho_plugin_guest_calls().call_begin(
-                &mut runtime.store,
-                &call_id,
-                &request_json,
-            )
-        })?;
+        let raw_step = self.call_guest_with_hook(
+            |runtime| {
+                runtime.bindings.rho_plugin_guest_calls().call_begin(
+                    &mut runtime.store,
+                    &call_id,
+                    &request_json,
+                )
+            },
+            before_guest_call,
+        )?;
         let (step, encoded) = match decode_component_step(raw_step, &call_id, maximum_return_bytes)
         {
             Ok(step) => step,
@@ -633,6 +653,14 @@ impl ComponentPluginHost {
         &mut self,
         operation: impl FnOnce(&mut ComponentRuntime) -> wasmtime::Result<T>,
     ) -> Result<T, HostProtocolError> {
+        self.call_guest_with_hook(operation, || {})
+    }
+
+    fn call_guest_with_hook<T>(
+        &mut self,
+        operation: impl FnOnce(&mut ComponentRuntime) -> wasmtime::Result<T>,
+        before_guest_call: impl FnOnce(),
+    ) -> Result<T, HostProtocolError> {
         if self.cancellation.cancelled.load(Ordering::SeqCst) {
             return self.fail(HostProtocolErrorCode::Cancelled);
         }
@@ -642,6 +670,7 @@ impl ComponentPluginHost {
         if prepare_component_store(&mut runtime.store).is_err() {
             return self.fail(HostProtocolErrorCode::ResourceLimit);
         }
+        before_guest_call();
         let result = catch_unwind(AssertUnwindSafe(|| operation(runtime)));
         match result {
             Ok(Ok(value)) => Ok(value),
@@ -803,5 +832,85 @@ fn invalid_state(state: HostInstanceState) -> HostProtocolError {
     HostProtocolError {
         code: HostProtocolErrorCode::InvalidStateTransition,
         message: Some(format!("invalid transition from {state:?}")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{ActivationGeneration, HostInstanceId, PluginId, ScopeId};
+
+    #[allow(dead_code)]
+    mod fixture {
+        include!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/support/component_fixture.rs"
+        ));
+    }
+
+    fn identity(project: &str, digest: char) -> WasmHostIdentity {
+        WasmHostIdentity::new(
+            ScopeId::new(project).unwrap(),
+            PluginId::new("org.example.component").unwrap(),
+            PackageDigest::parse(digest.to_string().repeat(64)).unwrap(),
+            ActivationGeneration::new(1).unwrap(),
+            HostInstanceId::generate(),
+        )
+    }
+
+    fn frame(host: &ComponentPluginHost, message: HostMessage) -> HostFrame {
+        HostFrame {
+            instance_id: host.identity().host_instance_id().clone(),
+            message,
+        }
+    }
+
+    fn activate(host: &mut ComponentPluginHost) {
+        host.handle_frame(frame(
+            host,
+            HostMessage::Hello {
+                api_version: HOST_PROTOCOL_VERSION,
+            },
+        ))
+        .unwrap();
+        host.handle_frame(frame(host, HostMessage::Activate))
+            .unwrap();
+    }
+
+    #[test]
+    fn epoch_interrupt_during_component_execution_is_exactly_cancelled() {
+        let infinite_begin = fixture::component_fixture_with_calls(
+            "i32.const 0",
+            "i32.const 0",
+            1,
+            "(loop $spin br $spin) i32.const 64",
+            fixture::COMPLETE_STEP_BODY,
+            fixture::CANCEL_TRUE_BODY,
+        );
+        let mut host =
+            ComponentPluginHost::from_bytes(identity("project.a", 'a'), &infinite_begin).unwrap();
+        activate(&mut host);
+        let request_id = HostRequestId::new("request.executing").unwrap();
+        let request_for_hook = request_id.clone();
+        let cancellation = host.cancellation_handle();
+        let error = host
+            .begin_broker_call_bounded_with_hook(
+                request_id,
+                serde_json::json!({}),
+                MAX_GUEST_STEP_BYTES,
+                MAX_GUEST_STEP_BYTES,
+                move || assert!(cancellation.cancel_inflight(&request_for_hook)),
+            )
+            .unwrap_err();
+        assert_eq!(error.code, HostProtocolErrorCode::Cancelled);
+        assert_eq!(host.state(), HostInstanceState::Quarantined);
+
+        let mut sibling = ComponentPluginHost::from_bytes(
+            identity("project.b", 'b'),
+            &fixture::component_fixture("i32.const 0", "i32.const 0", 1),
+        )
+        .unwrap();
+        activate(&mut sibling);
+        assert_eq!(sibling.state(), HostInstanceState::Active);
     }
 }
