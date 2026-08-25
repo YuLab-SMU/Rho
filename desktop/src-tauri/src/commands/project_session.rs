@@ -3,6 +3,7 @@ use std::time::Instant;
 
 use anyhow::{Result, ensure};
 use rho_extension_runtime::InternalExtensionRuntimeMode;
+use rho_server::coordinator::{ProjectSkillDiscoverySummary, discover_project_skill_summaries};
 use serde_json::{Value, json};
 use tauri::{AppHandle, State};
 
@@ -242,6 +243,18 @@ pub(crate) async fn project_delete_file(
         .map_err(display_error)?;
     drop(context);
     project_state(state).await
+}
+
+#[tauri::command]
+pub(crate) async fn list_project_skills(
+    state: State<'_, AppState>,
+) -> Result<ProjectSkillDiscoverySummary, String> {
+    let root = state.project_root.read().await.clone();
+    let normalized = root.to_string_lossy().replace('\\', "/");
+    if normalized.trim().is_empty() {
+        return Ok(ProjectSkillDiscoverySummary::default());
+    }
+    Ok(discover_project_skill_summaries(&normalized))
 }
 
 fn project_delete_target(root: &Path, path: &str) -> Result<PathBuf> {

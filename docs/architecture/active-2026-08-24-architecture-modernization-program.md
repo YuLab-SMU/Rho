@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-40",
+  "active_work_packages": ["AM-W2-41"],
+  "integration_lane": "AM-W2-41",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -399,6 +399,9 @@ existing owner.
 `AM-W2-40` (`1c82dfd`/AM-E-0067) completes the existing Run command facade by
 moving its lone retry adapter and replay validation out of the composition root
 without changing RunRepository or Workspace authority.
+
+`AM-W2-41` completes Project facade ownership by moving the remaining active-
+root skill-discovery adapter without changing discovery or filesystem policy.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 

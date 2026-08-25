@@ -62,6 +62,7 @@ const EDITOR_COMMANDS = [
 ];
 
 const PROJECT_COMMANDS = [
+  "list_project_skills",
   "project_create_file",
   "project_delete_file",
   "project_mark_files_changed",

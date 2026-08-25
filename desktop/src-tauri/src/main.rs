@@ -60,8 +60,7 @@ use rho_kernel::{ArkLaunchConfig, ArkSession, KernelEvent};
 use rho_server::coordinator::{
     AgentContextPlanPreview, AgentExplicitContextItem, AgentPluginContributionAdapter,
     AgentRuntimeAdapters, AgentWorkspaceLane, ApprovalResponseInput, PendingApprovalRegistry,
-    ProjectSkillDiscoverySummary, WorkspaceSnapshotAdapter, bootstrap_bridge,
-    discover_project_skill_summaries, dispatch_workspace_request,
+    WorkspaceSnapshotAdapter, bootstrap_bridge, dispatch_workspace_request,
     dispatch_workspace_request_with_execution_id, preview_agent_context_plan, run_agent_turn,
 };
 use rho_server::workspace_lane::{WorkspaceBrokerLane, WorkspaceBrokerState};
@@ -3367,18 +3366,6 @@ async fn cancel_render_job(job_id: String, state: State<'_, AppState>) -> Result
         "job_id": job_id,
         "status": "cancel_requested"
     }))
-}
-
-#[tauri::command]
-async fn list_project_skills(
-    state: State<'_, AppState>,
-) -> Result<ProjectSkillDiscoverySummary, String> {
-    let root = state.project_root.read().await.clone();
-    let normalized = root.to_string_lossy().replace('\\', "/");
-    if normalized.trim().is_empty() {
-        return Ok(ProjectSkillDiscoverySummary::default());
-    }
-    Ok(discover_project_skill_summaries(&normalized))
 }
 
 // ── Evidence workspace commands ──────────────────────────────
@@ -16582,7 +16569,7 @@ fn main() {
             commands::artifacts::get_artifact_record,
             commands::artifacts::prune_plot_payloads,
             commands::artifacts::get_project_retention_summary,
-            list_project_skills,
+            commands::project_session::list_project_skills,
             commands::artifacts::clear_artifact_records,
             commands::artifacts::clear_plot_artifacts,
             commands::runs::list_problems,
