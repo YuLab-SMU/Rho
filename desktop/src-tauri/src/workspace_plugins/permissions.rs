@@ -5,7 +5,7 @@ impl PendingPluginPermissionRegistry {
         &self,
         context: &PluginRuntimeContext,
         input: PluginPermissionDecisionInput,
-        store: &mut Store,
+        store: &mut Store<impl StoreConnection>,
     ) -> Result<PluginPermissionDecisionResult> {
         ensure!(
             input.expected_project_revision == context.project_revision,
@@ -112,7 +112,7 @@ impl PendingPluginPermissionRegistry {
     pub(crate) fn list_grants(
         &self,
         context: &PluginRuntimeContext,
-        store: &Store,
+        store: &Store<impl StoreConnection>,
     ) -> Result<PluginGrantList> {
         let grants = PluginPermissionQueryService::new(store).list_grants(
             &context.project_root,
@@ -136,7 +136,7 @@ impl PendingPluginPermissionRegistry {
         &self,
         context: &PluginRuntimeContext,
         grant_id: &str,
-        store: &mut Store,
+        store: &mut Store<impl StoreConnection>,
     ) -> Result<PluginGrantRevokeResult> {
         let outcome = PluginPermissionMutationService::new(store).revoke_grant(
             &context.project_root,

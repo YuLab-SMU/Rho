@@ -244,7 +244,7 @@ pub(super) fn contribution_kind_name(kind: ContributionKind) -> &'static str {
 }
 
 pub(super) fn validate_command_result_artifacts(
-    store: &Store,
+    store: &Store<impl StoreConnection>,
     context: &PluginRuntimeContext,
     result: &PluginCommandResultV1,
 ) -> Result<()> {
@@ -260,7 +260,7 @@ pub(super) fn validate_command_result_artifacts(
 }
 
 pub(super) fn validate_viewer_artifacts(
-    store: &Store,
+    store: &Store<impl StoreConnection>,
     context: &PluginRuntimeContext,
     document: &ViewerDocumentV1,
 ) -> Result<()> {
@@ -290,7 +290,7 @@ pub(crate) fn validate_surface_command_result(
 }
 
 pub(super) fn validate_same_project_artifact(
-    store: &Store,
+    store: &Store<impl StoreConnection>,
     context: &PluginRuntimeContext,
     artifact_id: &str,
     expected_media_type: Option<&str>,

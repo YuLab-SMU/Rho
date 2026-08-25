@@ -11122,6 +11122,42 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn plugin_runtime_context_does_not_wait_for_workspace_lane() {
+        let directory = tempfile::tempdir().unwrap();
+        let project_root = directory.path().join("project");
+        std::fs::create_dir_all(&project_root).unwrap();
+        let store_path = directory.path().join("rho.sqlite");
+        let state = test_app_state(directory.path(), &project_root, &store_path);
+        install_test_context(&state, Store::open(&store_path).unwrap()).await;
+
+        let lane = active_context(&state).await.unwrap();
+        let held_workspace = lane.lock().await;
+        let context = tokio::time::timeout(
+            Duration::from_millis(250),
+            crate::commands::plugins::runtime_context(&state),
+        )
+        .await
+        .expect("plugin runtime context waited for the held Workspace lane")
+        .unwrap();
+
+        assert_eq!(
+            context.project_root,
+            normalize_project_root(project_root.to_string_lossy().as_ref())
+        );
+        assert_eq!(
+            context.workspace.as_ref().unwrap().workspace_id,
+            "ws-file-test"
+        );
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), lane.lock())
+                .await
+                .is_err(),
+            "test did not keep the Workspace broker lane contended"
+        );
+        drop(held_workspace);
+    }
+
     fn create_run_fixture(store: &mut Store, project_root: &str, run_id: &str, code: &str) {
         store
             .create_run(&RunDraft {

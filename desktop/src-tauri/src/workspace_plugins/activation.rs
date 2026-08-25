@@ -5,7 +5,7 @@ impl PendingPluginPermissionRegistry {
         &self,
         context: &PluginRuntimeContext,
         plugin_id: &str,
-        store: &mut Store,
+        store: &mut Store<impl StoreConnection>,
     ) -> Result<WorkspacePluginEnableResult> {
         ensure!(
             context.project_revision >= 0,
@@ -237,7 +237,7 @@ impl PendingPluginPermissionRegistry {
         &self,
         context: &PluginRuntimeContext,
         plugin_id: &str,
-        store: &mut Store,
+        store: &mut Store<impl StoreConnection>,
     ) -> Result<WorkspacePluginEnableResult> {
         ensure!(
             context.project_revision >= 0,

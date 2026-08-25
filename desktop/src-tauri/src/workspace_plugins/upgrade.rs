@@ -5,7 +5,7 @@ impl PendingPluginPermissionRegistry {
         &self,
         context: &PluginRuntimeContext,
         input: &WorkspacePluginUpdateInput,
-        store: &mut Store,
+        store: &mut Store<impl StoreConnection>,
     ) -> Result<WorkspacePluginEnableResult> {
         ensure!(
             input.expected_project_revision == context.project_revision,
@@ -199,7 +199,7 @@ impl PendingPluginPermissionRegistry {
         &self,
         context: &PluginRuntimeContext,
         input: &WorkspacePluginRollbackInput,
-        store: &mut Store,
+        store: &mut Store<impl StoreConnection>,
     ) -> Result<WorkspacePluginEnableResult> {
         ensure!(
             input.expected_project_revision == context.project_revision,

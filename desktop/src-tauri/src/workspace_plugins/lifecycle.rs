@@ -5,7 +5,7 @@ impl PendingPluginPermissionRegistry {
         &self,
         context: &PluginRuntimeContext,
         plugin_id: &str,
-        store: &mut Store,
+        store: &mut Store<impl StoreConnection>,
     ) -> Result<WorkspacePluginDisableResult> {
         self.teardown_plugin(
             context,
@@ -21,7 +21,7 @@ impl PendingPluginPermissionRegistry {
         &self,
         context: &PluginRuntimeContext,
         input: &WorkspacePluginUninstallInput,
-        store: &mut Store,
+        store: &mut Store<impl StoreConnection>,
     ) -> Result<WorkspacePluginUninstallResult> {
         ensure!(
             input.confirmed,
@@ -215,7 +215,7 @@ impl PendingPluginPermissionRegistry {
         &self,
         context: &PluginRuntimeContext,
         input: &WorkspacePluginRestoreInput,
-        store: &mut Store,
+        store: &mut Store<impl StoreConnection>,
     ) -> Result<WorkspacePluginRestoreResult> {
         ensure!(
             input.expected_project_revision == context.project_revision,
@@ -300,7 +300,7 @@ impl PendingPluginPermissionRegistry {
         transition_kind: &str,
         request_event_type: &str,
         preserve_desired_state: bool,
-        store: &mut Store,
+        store: &mut Store<impl StoreConnection>,
     ) -> Result<WorkspacePluginDisableResult> {
         ensure!(
             context.project_revision >= 0,

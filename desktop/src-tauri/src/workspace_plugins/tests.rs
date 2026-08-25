@@ -143,6 +143,66 @@ async fn workspace_plugin_agent_projection_does_not_wait_for_workspace_lane() {
     drop(held_workspace);
 }
 
+#[tokio::test]
+async fn workspace_plugin_lifecycle_runs_on_store_worker_and_recovers_after_rejection() {
+    let directory = tempdir().unwrap();
+    write_plugin(directory.path(), serde_json::json!([]));
+    let context = context(directory.path());
+    let executor = StoreExecutor::open(directory.path().join("rho.sqlite"))
+        .await
+        .unwrap();
+    let registry = Arc::new(PendingPluginPermissionRegistry::default());
+
+    let rejected_registry = Arc::clone(&registry);
+    let rejected_context = context.clone();
+    let error = run_store_service(&executor, move |store| {
+        rejected_registry.request_enable(&rejected_context, "org.example.missing", store)
+    })
+    .await
+    .unwrap_err();
+    assert!(error.to_string().contains("not discovered"));
+
+    let enable_registry = Arc::clone(&registry);
+    let enable_context = context.clone();
+    let enabled = run_store_service(&executor, move |store| {
+        enable_registry.request_enable(&enable_context, "org.example.plugin", store)
+    })
+    .await
+    .unwrap();
+    assert_eq!(enabled.status, "enabled");
+
+    let list_registry = Arc::clone(&registry);
+    let list_context = context.clone();
+    let list = run_store_service(&executor, move |store| {
+        list_registry.list(&list_context, store)
+    })
+    .await
+    .unwrap();
+    assert_eq!(list.plugins.len(), 1);
+    assert_eq!(list.plugins[0].status, "enabled");
+
+    let disable_registry = Arc::clone(&registry);
+    let disable_context = context.clone();
+    let disabled = run_store_service(&executor, move |store| {
+        disable_registry.disable(&disable_context, "org.example.plugin", store)
+    })
+    .await
+    .unwrap();
+    assert_eq!(disabled.status, "disabled");
+
+    let project_root = context.project_root.clone();
+    let lifecycle = run_store_service(&executor, move |store| {
+        PluginLifecycleQueryService::new(store)
+            .get_state(&project_root, "org.example.plugin")
+            .map_err(Into::into)
+    })
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(lifecycle.desired_state, "disabled");
+    assert_eq!(lifecycle.observed_state, "disabled");
+}
+
 fn wat_data(value: &str) -> String {
     value
         .as_bytes()

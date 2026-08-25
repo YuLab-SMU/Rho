@@ -296,6 +296,9 @@ pub struct Store<C = Box<Connection>> {
     migration_outcome: MigrationOutcome,
 }
 
+/// A Store view lent by [`StoreExecutor`] for one worker operation.
+pub type BorrowedStore<'connection> = Store<&'connection mut Connection>;
+
 /// Connection ownership accepted by the Store's durable domain APIs.
 ///
 /// The owned application Store uses `Box<Connection>` while the asynchronous

@@ -592,7 +592,7 @@ pub(super) fn prepare_recovery_enable_transition(
 }
 
 pub(super) fn prepare_retry_transition(
-    store: &mut Store,
+    store: &mut Store<impl StoreConnection>,
     context: &PluginRuntimeContext,
     plugin: &DiscoveredPlugin,
 ) -> Result<(String, CachedPluginPackage)> {

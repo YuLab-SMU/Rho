@@ -4,7 +4,7 @@ impl PendingPluginPermissionRegistry {
     pub(crate) fn list(
         &self,
         context: &PluginRuntimeContext,
-        store: &mut Store,
+        store: &mut Store<impl StoreConnection>,
     ) -> Result<WorkspacePluginList> {
         let report = discover_workspace_plugins(Path::new(&context.project_root))?;
         let requests = PluginPermissionQueryService::new(store).list_requests(

@@ -17,7 +17,7 @@ pub(super) fn remove_active_plugin(state: &mut RegistryState, key: &str) -> Opti
 
 pub(super) fn revoke_exact_durable_grants(
     state: &mut RegistryState,
-    store: &mut Store,
+    store: &mut Store<impl StoreConnection>,
     context: &PluginRuntimeContext,
     plugin_id: &str,
     package_digest: &str,
@@ -48,7 +48,7 @@ pub(super) fn revoke_exact_durable_grants(
 }
 
 pub(super) fn matching_project_grants(
-    store: &Store,
+    store: &Store<impl StoreConnection>,
     context: &PluginRuntimeContext,
     plugin: &DiscoveredPlugin,
 ) -> Result<BTreeMap<(String, String), PluginPermissionGrant>> {
@@ -91,7 +91,7 @@ pub(super) fn matching_project_grants(
 }
 
 pub(super) fn plan_plugin_permissions(
-    store: &Store,
+    store: &Store<impl StoreConnection>,
     context: &PluginRuntimeContext,
     plugin: &DiscoveredPlugin,
 ) -> Result<(
@@ -253,7 +253,7 @@ pub(super) fn push_teardown_error(errors: &mut Vec<String>, code: &str) {
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn record_disable_phase(
-    store: &mut Store,
+    store: &mut Store<impl StoreConnection>,
     context: &PluginRuntimeContext,
     transition_id: &str,
     expected_phase: &str,
@@ -300,7 +300,7 @@ pub(super) fn try_activate_pending(
     state: &mut RegistryState,
     context: &PluginRuntimeContext,
     plugin_id: &str,
-    store: &mut Store,
+    store: &mut Store<impl StoreConnection>,
 ) -> Result<(String, usize)> {
     let key = registry_key(&context.project_root, plugin_id);
     let pending = state
@@ -507,7 +507,7 @@ pub(super) fn activate_plugin_durable<'a>(
     cached: &CachedPluginPackage,
     transition_id: &str,
     durable_grants: impl IntoIterator<Item = &'a PluginPermissionGrant>,
-    store: &mut Store,
+    store: &mut Store<impl StoreConnection>,
 ) -> Result<WorkspacePluginEnableResult> {
     let retry_transition = PluginLifecycleQueryService::new(store)
         .get_transition(&context.project_root, transition_id)?
@@ -649,7 +649,7 @@ pub(super) fn activate_plugin_replacement_durable<'a>(
     transition_id: &str,
     expected_old_digest: &str,
     durable_grants: impl IntoIterator<Item = &'a PluginPermissionGrant>,
-    store: &mut Store,
+    store: &mut Store<impl StoreConnection>,
 ) -> Result<WorkspacePluginEnableResult> {
     let key = registry_key(&context.project_root, plugin.manifest.id.as_str());
     let expected_old_contribution = {
@@ -818,7 +818,7 @@ fn prepare_plugin_activation<'a>(
     transition_id: &str,
     durable_grants: impl IntoIterator<Item = &'a PluginPermissionGrant>,
     expected_old_contribution: Option<&ContributionInstanceIdentity>,
-    store: &mut Store,
+    store: &mut Store<impl StoreConnection>,
 ) -> Result<PreparedPluginActivation> {
     ensure!(
         cached.plugin_id == plugin.manifest.id.as_str()

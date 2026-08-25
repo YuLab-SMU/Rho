@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-15",
+  "active_work_packages": ["AM-W2-16"],
+  "integration_lane": "AM-W2-16",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -276,6 +276,12 @@ asynchronous worker's borrowed connection, and Agent plugin projection combines
 that worker with the Workspace lane's committed identity view under the
 existing project-transition gate. Actual Workspace R dispatch remains
 serialized by `WorkspaceBrokerLane`.
+
+`AM-W2-16` migrates every plugin Tauri command adapter from per-request
+synchronous Store opens to that shared asynchronous worker. Runtime context
+uses a short project-transition snapshot plus committed identity instead of the
+Workspace lane; only update, rollback, uninstall and restore retain their
+existing full-transaction transition gate.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
