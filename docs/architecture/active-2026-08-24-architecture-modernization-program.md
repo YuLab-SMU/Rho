@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-56",
+  "active_work_packages": ["AM-W2-57"],
+  "integration_lane": "AM-W2-57",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -483,6 +483,11 @@ type re-export for Tauri assembly and test compatibility.
 `AM-W2-56` (`f6f2bb9`/AM-E-0083) returns the remaining root-owned pure logic to its domains: Agent
 task admission to Agent execution, content hashing to a digest utility, durable
 root normalization to Project and execution-origin parsing to Runs.
+
+`AM-W2-57` extracts the complete application shutdown transaction and
+platform-specific Ark termination fallback. Gate ordering, cancellation,
+plugin/runtime/watcher/extension teardown and truthful process cleanup remain
+unchanged.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
