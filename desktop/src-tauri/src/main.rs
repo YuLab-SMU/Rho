@@ -74,7 +74,8 @@ use rho_store::{
     ArtifactRecordDraft, ArtifactRecordSummary, EnvironmentOperationRequestSummary, EvidenceClaim,
     EvidenceClaimDraft, EvidenceClaimReview, EvidenceEntry, EvidenceEntryDraft,
     PlotArtifactSummary, PlotPayloadPruneResult, ProjectMutationService, ProjectRetentionSummary,
-    RetentionPolicy, RunDetail, RunSummary, Store, StoreExecutor, normalize_project_root,
+    RetentionPolicy, RunDetail, RunRepository, RunSummary, Store, StoreExecutor,
+    normalize_project_root,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -7701,30 +7702,31 @@ struct RunHistoryListRequest {
     limit: Option<usize>,
 }
 
+enum RunHistoryRepository {
+    Ready(RunRepository),
+    #[cfg(test)]
+    Unavailable(String),
+}
+
 struct RunHistoryBrokerFacade {
-    store_path: PathBuf,
+    repository: RunHistoryRepository,
     project_root: String,
 }
 
 impl RunHistoryBrokerFacade {
-    fn call_sync(&self, request: BrokerRequest) -> Result<BrokerResponse, BrokerError> {
-        if request.operation_id != runs_broker_operation_id() {
-            return Err(BrokerError::Unavailable {
-                operation_id: request.operation_id,
-            });
+    fn new(repository: RunRepository, project_root: String) -> Self {
+        Self {
+            repository: RunHistoryRepository::Ready(repository),
+            project_root,
         }
-        let arguments: RunHistoryListRequest =
-            serde_json::from_value(request.payload.value().clone()).map_err(|error| {
-                BrokerError::rejected("runs_request_invalid", error.to_string())
-            })?;
-        let store = Store::open(&self.store_path)
-            .map_err(|error| BrokerError::rejected("runs_store_open", error.to_string()))?;
-        let runs = store
-            .list_runs(&self.project_root, arguments.limit)
-            .map_err(|error| BrokerError::rejected("runs_list_failed", error.to_string()))?;
-        let value = serde_json::to_value(runs)
-            .map_err(|error| BrokerError::rejected("runs_response_encode", error.to_string()))?;
-        BrokerResponse::new(value, &request).map_err(BrokerError::from)
+    }
+
+    #[cfg(test)]
+    fn unavailable(project_root: String, reason: impl Into<String>) -> Self {
+        Self {
+            repository: RunHistoryRepository::Unavailable(reason.into()),
+            project_root,
+        }
     }
 }
 
@@ -7733,8 +7735,32 @@ impl BrokerFacade for RunHistoryBrokerFacade {
         &'a self,
         request: BrokerRequest,
     ) -> Pin<Box<dyn Future<Output = Result<BrokerResponse, BrokerError>> + Send + 'a>> {
-        let result = self.call_sync(request);
-        Box::pin(async move { result })
+        Box::pin(async move {
+            if request.operation_id != runs_broker_operation_id() {
+                return Err(BrokerError::Unavailable {
+                    operation_id: request.operation_id,
+                });
+            }
+            let arguments: RunHistoryListRequest =
+                serde_json::from_value(request.payload.value().clone()).map_err(|error| {
+                    BrokerError::rejected("runs_request_invalid", error.to_string())
+                })?;
+            let repository = match &self.repository {
+                RunHistoryRepository::Ready(repository) => repository,
+                #[cfg(test)]
+                RunHistoryRepository::Unavailable(reason) => {
+                    return Err(BrokerError::rejected("runs_store_open", reason));
+                }
+            };
+            let runs = repository
+                .list_runs(self.project_root.clone(), arguments.limit)
+                .await
+                .map_err(|error| BrokerError::rejected("runs_list_failed", error.to_string()))?;
+            let value = serde_json::to_value(runs).map_err(|error| {
+                BrokerError::rejected("runs_response_encode", error.to_string())
+            })?;
+            BrokerResponse::new(value, &request).map_err(BrokerError::from)
+        })
     }
 }
 
@@ -7862,16 +7888,16 @@ async fn ensure_extension_project_scope(
         state.extension_host.scopes().workspace().is_none(),
         "Cannot replace an extension project scope while its Workspace child is active"
     );
-    let config = runtime_config(state)?;
+    let run_repository = store_executor(state).await?.run_repository();
     let candidate = state
         .extension_host
         .build_project_candidate(
             scope_id,
             internal_plugins_for_scope(&rho_extension_runtime::ScopePolicy::project_kind()),
-            Arc::new(RunHistoryBrokerFacade {
-                store_path: config.store_path,
-                project_root: normalized_project_root.to_string(),
-            }),
+            Arc::new(RunHistoryBrokerFacade::new(
+                run_repository,
+                normalized_project_root.to_string(),
+            )),
         )
         .await
         .context("building extension project scope for Workspace startup")?;
@@ -7948,16 +7974,16 @@ async fn prepare_extension_project_candidate(
     let expected_project = state.extension_host.scopes().project();
     maybe_handle_switch_test_directive(state, SwitchTestStep::ActivateExtensionCandidate)
         .context("activating required extension project candidate")?;
-    let config = runtime_config(state)?;
+    let run_repository = store_executor(state).await?.run_repository();
     let project_candidate = state
         .extension_host
         .build_project_candidate(
             extension_project_scope_id(normalized_project_root)?,
             internal_plugins_for_scope(&rho_extension_runtime::ScopePolicy::project_kind()),
-            Arc::new(RunHistoryBrokerFacade {
-                store_path: config.store_path,
-                project_root: normalized_project_root.to_string(),
-            }),
+            Arc::new(RunHistoryBrokerFacade::new(
+                run_repository,
+                normalized_project_root.to_string(),
+            )),
         )
         .await
         .context("building required extension project candidate")?;
@@ -10153,7 +10179,8 @@ mod tests {
     use rho_store::{
         AgentConversationDraft, AgentTurnDraft, AgentTurnEventDraft, AgentTurnFinish,
         ApprovalRequestDraft, ArtifactRecordSummary, EnvironmentOperationRequestDraft,
-        EvidenceEntryDraft, PlotArtifactDraft, RunDraft, RunFinish, Store, normalize_project_root,
+        EvidenceEntryDraft, PlotArtifactDraft, RunDraft, RunFinish, Store, StoreExecutor,
+        normalize_project_root,
     };
     use serde_json::json;
     use std::collections::HashMap;
@@ -13764,16 +13791,20 @@ mod tests {
             let context = Arc::new(WorkspaceBrokerLane::new(broker, store));
 
             let host = test_candidate_extension_host_with_application_plugins().await;
+            let run_repository = StoreExecutor::open(&store_path)
+                .await
+                .unwrap()
+                .run_repository();
             let project = host
                 .build_project_candidate(
                     super::extension_project_scope_id(&normalized_root).unwrap(),
                     super::internal_plugins_for_scope(
                         &rho_extension_runtime::ScopePolicy::project_kind(),
                     ),
-                    Arc::new(super::RunHistoryBrokerFacade {
-                        store_path: store_path.clone(),
-                        project_root: normalized_root.clone(),
-                    }),
+                    Arc::new(super::RunHistoryBrokerFacade::new(
+                        run_repository,
+                        normalized_root.clone(),
+                    )),
                 )
                 .await
                 .unwrap();
@@ -13868,16 +13899,20 @@ mod tests {
             let identity = broker.identity().clone();
             let context = Arc::new(WorkspaceBrokerLane::new(broker, store));
             let host = test_candidate_extension_host_with_application_plugins().await;
+            let run_repository = StoreExecutor::open(&store_path)
+                .await
+                .unwrap()
+                .run_repository();
             let project = host
                 .build_project_candidate(
                     super::extension_project_scope_id(&normalized_root).unwrap(),
                     super::internal_plugins_for_scope(
                         &rho_extension_runtime::ScopePolicy::project_kind(),
                     ),
-                    Arc::new(super::RunHistoryBrokerFacade {
-                        store_path: store_path.clone(),
-                        project_root: normalized_root,
-                    }),
+                    Arc::new(super::RunHistoryBrokerFacade::new(
+                        run_repository,
+                        normalized_root,
+                    )),
                 )
                 .await
                 .unwrap();
@@ -14309,10 +14344,10 @@ mod tests {
                     super::internal_plugins_for_scope(
                         &rho_extension_runtime::ScopePolicy::project_kind(),
                     ),
-                    Arc::new(super::RunHistoryBrokerFacade {
-                        store_path: tempdir.path().join("missing").join("rho.sqlite"),
-                        project_root: root,
-                    }),
+                    Arc::new(super::RunHistoryBrokerFacade::unavailable(
+                        root,
+                        "injected Store executor initialization failure",
+                    )),
                 )
                 .await
                 .unwrap();
@@ -14380,13 +14415,10 @@ mod tests {
     fn runs_broker_rejects_unknown_request_fields_before_store_dispatch() {
         let runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.block_on(async {
-            let tempdir = TempDir::new().unwrap();
-            let store_path = tempdir.path().join("rho.sqlite");
-            Store::open(&store_path).unwrap();
-            let facade = super::RunHistoryBrokerFacade {
-                store_path,
-                project_root: "project.a".to_string(),
-            };
+            let facade = super::RunHistoryBrokerFacade::unavailable(
+                "project.a".to_string(),
+                "Store must not be reached for malformed input",
+            );
             for payload in [
                 json!({ "limit": 1, "unknown": true }),
                 json!({ "limit": -1 }),
@@ -14404,6 +14436,53 @@ mod tests {
                         if code == "runs_request_invalid"
                 ));
             }
+        });
+    }
+
+    #[test]
+    fn run_history_facade_does_not_wait_for_workspace_lane() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let tempdir = TempDir::new().unwrap();
+            let project_root = tempdir.path().join("project-a");
+            std::fs::create_dir_all(&project_root).unwrap();
+            let normalized_root = normalize_project_root(project_root.to_string_lossy().as_ref());
+            let store_path = tempdir.path().join("rho.sqlite");
+            let mut store = Store::open(&store_path).unwrap();
+            create_run_fixture(&mut store, &normalized_root, "run-a", "a <- 1");
+            drop(store);
+
+            let repository = StoreExecutor::open(&store_path)
+                .await
+                .unwrap()
+                .run_repository();
+            let lane = Arc::new(WorkspaceBrokerLane::new(
+                BrokerState::new("workspace.run-history"),
+                Store::open(&store_path).unwrap(),
+            ));
+            let held_workspace = lane.lock().await;
+            let facade = super::RunHistoryBrokerFacade::new(repository, normalized_root);
+            let request = rho_extension_runtime::BrokerRequest::new(
+                super::runs_broker_operation_id(),
+                json!({"limit": 10}),
+                rho_extension_runtime::BrokerResponseClass::Generic,
+            )
+            .unwrap();
+            let response = tokio::time::timeout(Duration::from_millis(250), facade.call(request))
+                .await
+                .expect("Run History facade waited for the held Workspace broker lane")
+                .unwrap();
+            let runs: Vec<rho_store::RunSummary> =
+                serde_json::from_value(response.payload.into_value()).unwrap();
+            assert_eq!(runs.len(), 1);
+            assert_eq!(runs[0].run_id, "run-a");
+            assert!(
+                tokio::time::timeout(Duration::from_millis(20), lane.lock())
+                    .await
+                    .is_err(),
+                "test did not keep the Workspace broker lane contended"
+            );
+            drop(held_workspace);
         });
     }
 
@@ -17330,14 +17409,15 @@ async fn smoke_extension_runtime(
 
     let normalized_project_root =
         normalize_project_root(canonical_project_root.to_string_lossy().as_ref());
+    let run_repository = StoreExecutor::open(store_path).await?.run_repository();
     let project = host
         .build_project_candidate(
             extension_project_scope_id(&normalized_project_root)?,
             internal_plugins_for_scope(&rho_extension_runtime::ScopePolicy::project_kind()),
-            Arc::new(RunHistoryBrokerFacade {
-                store_path: store_path.to_path_buf(),
-                project_root: normalized_project_root.clone(),
-            }),
+            Arc::new(RunHistoryBrokerFacade::new(
+                run_repository,
+                normalized_project_root.clone(),
+            )),
         )
         .await?;
     host.publish_project_candidate(None, project.clone())

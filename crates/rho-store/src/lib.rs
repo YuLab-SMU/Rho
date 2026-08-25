@@ -31,6 +31,7 @@ mod plugin_permission_service;
 mod project;
 mod query;
 mod run;
+mod run_repository;
 mod runtime_output;
 mod runtime_output_contract;
 mod workbench;
@@ -82,6 +83,7 @@ pub use project::{
 };
 pub use query::ProjectQueryService;
 pub use run::{ProblemSummary, RunDetail, RunDraft, RunErrorRange, RunFinish, RunSummary};
+pub use run_repository::RunRepository;
 pub use runtime_output::{
     AgentTurnContextItem, AgentTurnContextItemDraft, RuntimeExecution,
     RuntimeExecutionDeleteResult, RuntimeExecutionDraft, RuntimeExecutionFinish,

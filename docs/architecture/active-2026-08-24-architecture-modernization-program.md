@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-17",
+  "active_work_packages": ["AM-W2-18"],
+  "integration_lane": "AM-W2-18",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -287,6 +287,10 @@ restore retain their existing full-transaction transition gate.
 maintenance and Agent contribution persistence onto the same Store worker.
 Plugin-only work uses the committed identity projection; reconciliation retains
 the Workspace lane only for an actual recovered-file project revision change.
+
+`AM-W2-18` gives Run History a narrow executor-backed repository shared by
+legacy Tauri queries and the candidate internal-extension source facade. Query
+shape, bounds, failure and stale-generation behavior remain unchanged.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 

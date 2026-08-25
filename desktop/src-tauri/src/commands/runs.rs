@@ -4,15 +4,15 @@ use rho_extension_runtime::{
     InternalExtensionRuntimeMode, SourceCallError,
 };
 use rho_store::{
-    AuditLimits, AuditResponse, AuditScope, CompareRunsResponse, ProblemSummary,
-    ProjectQueryService, RunDetail, RunSummary,
+    AuditLimits, AuditResponse, AuditScope, CompareRunsResponse, ProblemSummary, RunDetail,
+    RunSummary,
 };
 use serde_json::json;
 use tauri::State;
 
 use crate::{
     AppState, display_error, extension_project_scope_id, read_store,
-    run_history_source_capability_id,
+    run_history_source_capability_id, store_executor,
 };
 
 #[cfg_attr(test, specta::specta)]
@@ -29,10 +29,13 @@ async fn list_runs_legacy(
     state: &AppState,
 ) -> Result<Vec<RunSummary>, String> {
     let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy();
-    let store = read_store(state).map_err(display_error)?;
-    ProjectQueryService::new(&store)
-        .list_runs(project_root.as_ref(), limit)
+    let project_root = root.to_string_lossy().into_owned();
+    store_executor(state)
+        .await
+        .map_err(display_error)?
+        .run_repository()
+        .list_runs(project_root, limit)
+        .await
         .map_err(display_error)
 }
 
@@ -111,10 +114,13 @@ pub(crate) async fn list_problems(
     state: State<'_, AppState>,
 ) -> Result<Vec<ProblemSummary>, String> {
     let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy();
-    let store = read_store(&state).map_err(display_error)?;
-    ProjectQueryService::new(&store)
-        .list_problems(project_root.as_ref(), limit.map(usize::from))
+    let project_root = root.to_string_lossy().into_owned();
+    store_executor(&state)
+        .await
+        .map_err(display_error)?
+        .run_repository()
+        .list_problems(project_root, limit.map(usize::from))
+        .await
         .map_err(display_error)
 }
 
@@ -124,10 +130,13 @@ pub(crate) async fn get_run_detail(
     state: State<'_, AppState>,
 ) -> Result<Option<RunDetail>, String> {
     let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy();
-    let store = read_store(&state).map_err(display_error)?;
-    ProjectQueryService::new(&store)
-        .get_run_detail(project_root.as_ref(), &run_id)
+    let project_root = root.to_string_lossy().into_owned();
+    store_executor(&state)
+        .await
+        .map_err(display_error)?
+        .run_repository()
+        .get_run_detail(project_root, run_id)
+        .await
         .map_err(display_error)
 }
 
@@ -138,10 +147,13 @@ pub(crate) async fn compare_runs(
     state: State<'_, AppState>,
 ) -> Result<CompareRunsResponse, String> {
     let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy();
-    let store = read_store(&state).map_err(display_error)?;
-    ProjectQueryService::new(&store)
-        .compare_runs(project_root.as_ref(), &left_run_id, &right_run_id)
+    let project_root = root.to_string_lossy().into_owned();
+    store_executor(&state)
+        .await
+        .map_err(display_error)?
+        .run_repository()
+        .compare_runs(project_root, left_run_id, right_run_id)
+        .await
         .map_err(display_error)
 }
 
