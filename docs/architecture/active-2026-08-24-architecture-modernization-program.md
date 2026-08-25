@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-11",
+  "active_work_packages": ["AM-W2-12"],
+  "integration_lane": "AM-W2-12",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -250,6 +250,14 @@ Agent/UI/Surface/Check contribution projection adapters into separate inherent
 implementation modules. The same registry and private helper functions remain
 authoritative; this slice changes only which source module owns each existing
 method and leaves activation, grant and guest-call state transitions untouched.
+
+`AM-W2-12` completes the mechanical registry-method partition by moving enable
+and retry, update and rollback, disable/uninstall/restore teardown, permission
+decisions/grants, and guest/broker/runtime health methods into five source
+modules. All remain inherent implementations on the single registry and retain
+the exact method bodies. The combined runtime-call module remains a temporary
+diagnostic hotspot until call families can be separated without widening
+private crash/admission helpers.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
