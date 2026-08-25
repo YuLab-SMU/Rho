@@ -141,6 +141,13 @@ const WORKSPACE_COMMANDS = [
   "snapshot_workspace",
 ];
 
+const RUNTIME_CONTROL_COMMANDS = [
+  "cancel_run",
+  "interrupt_r",
+  "restart_workspace",
+  "targets_status",
+];
+
 const PLUGIN_COMMANDS = [
   "accept_workspace_plugin_update",
   "disable_workspace_plugin",
@@ -366,6 +373,16 @@ export function validateCommandInventory({ sources, main, frontend, expectedHand
     "Workspace command module ownership changed",
   );
 
+  const runtimeControlSource = sources.find(
+    ({ name }) => name.endsWith("commands/runtime_control.rs"),
+  );
+  assert.ok(runtimeControlSource, "Runtime control command module is missing");
+  assert.deepEqual(
+    commandDefinitions([runtimeControlSource]).map(({ name }) => name).sort(),
+    RUNTIME_CONTROL_COMMANDS,
+    "Runtime control command module ownership changed",
+  );
+
   return { commands: definitionNames.length, sources: sources.length };
 }
 
@@ -403,6 +420,9 @@ function fixtures() {
   const workspaceHandlers = WORKSPACE_COMMANDS.map(
     (command) => `  commands::workspace::${command},`,
   ).join("\n");
+  const runtimeControlHandlers = RUNTIME_CONTROL_COMMANDS.map(
+    (command) => `  commands::runtime_control::${command},`,
+  ).join("\n");
   const pluginHandlers = PLUGIN_COMMANDS.map(
     (command) => `  commands::plugins::${command},`,
   ).join("\n");
@@ -423,6 +443,7 @@ ${agentExecutionHandlers}
 ${startupHandlers}
 ${renderHandlers}
 ${workspaceHandlers}
+${runtimeControlHandlers}
   commands::runs::list_runs,
   commands::runs::list_problems,
   commands::runs::get_run_detail,
@@ -470,6 +491,9 @@ ${workspaceHandlers}
       { name: "commands/workspace.rs", text: WORKSPACE_COMMANDS.map(
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
+      { name: "commands/runtime_control.rs", text: RUNTIME_CONTROL_COMMANDS.map(
+        (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
+      ).join("\n") },
       { name: "commands/plugins.rs", text: PLUGIN_COMMANDS.map(
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
@@ -488,6 +512,7 @@ ${workspaceHandlers}
       ...STARTUP_COMMANDS,
       ...RENDER_COMMANDS,
       ...WORKSPACE_COMMANDS,
+      ...RUNTIME_CONTROL_COMMANDS,
       ...PLUGIN_COMMANDS,
     ].map(
       (command) => `invoke("${command}");`,

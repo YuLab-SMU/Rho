@@ -9,5 +9,6 @@ pub(crate) mod plugins;
 pub(crate) mod project_session;
 pub(crate) mod render;
 pub(crate) mod runs;
+pub(crate) mod runtime_control;
 pub(crate) mod startup;
 pub(crate) mod workspace;

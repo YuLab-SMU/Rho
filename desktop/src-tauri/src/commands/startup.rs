@@ -5,11 +5,12 @@ use rho_extension_runtime::InternalExtensionRuntimeMode;
 use serde_json::{Value, json};
 use tauri::{AppHandle, State};
 
+use crate::commands::runtime_control::WorkspaceStatus;
 use crate::{
-    AgentRuntimeStatusView, AppState, StartupView, WorkspaceStatus, bootstrap_runtime,
-    current_startup_view, display_error, display_error_chain, finalize_workspace_start,
-    hide_console_window, platform, probe_agent_runtime, runtime_config, start_workspace,
-    startup_log_path, ui_runtime, write_startup_log,
+    AgentRuntimeStatusView, AppState, StartupView, bootstrap_runtime, current_startup_view,
+    display_error, display_error_chain, finalize_workspace_start, hide_console_window, platform,
+    probe_agent_runtime, runtime_config, start_workspace, startup_log_path, ui_runtime,
+    write_startup_log,
 };
 
 #[tauri::command]

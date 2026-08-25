@@ -1082,7 +1082,7 @@ pub(crate) async fn runtime_restart(
         if let Ok(session) = crate::active_session(&state).await {
             let _ = session.interrupt().await;
         }
-        return match crate::restart_workspace_locked(&state).await {
+        return match crate::commands::runtime_control::restart_workspace_locked(&state).await {
             Ok(_) => {
                 let ready = prepare(&app, &state).await.map_err(display_error)?;
                 rebind_restarted_runtime(
