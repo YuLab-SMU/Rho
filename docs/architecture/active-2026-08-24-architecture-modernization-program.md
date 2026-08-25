@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-01",
+  "active_work_packages": ["AM-W3-02"],
+  "integration_lane": "AM-W3-02",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -526,6 +526,14 @@ Rust Scene JSON and CAS remain the sole durable layout authority. Dockview JSON
 is never persisted. If controlled Scene conversion fails or initial gzip grows
 more than 200 KiB, current mechanics move into an isolated layout-engine module
 instead.
+
+`AM-W3-02` is the additive contract boundary: define and generate one
+`WorkbenchProjectionV1` command that captures Kernel, Surface, Studio, Runtime,
+Resource and Profile snapshots while holding the existing project-transition
+gate. It validates one project identity plus the complete revision vector and
+does not claim transaction atomicity across later independent mutations. The
+six existing commands and stores remain available until the frontend cutover
+passes separately.
 
 ### Wave 4 — Wasmtime Component Model and WIT
 
