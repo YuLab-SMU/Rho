@@ -19,7 +19,7 @@ describe("UI Kernel generated transport", () => {
     const calls: Array<{ command: string; args?: Record<string, unknown> }> = [];
     const snapshot = fixtureSnapshot();
     const app = {
-      version: "0.4.1-dev.16",
+      version: "0.4.1-dev.17",
       channel: "development",
       commit: "fixture-commit",
       platform: "macos-aarch64",

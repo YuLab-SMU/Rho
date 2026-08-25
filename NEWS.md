@@ -4,6 +4,20 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.1-dev.17 - 2026-08-25
+
+### Typed Component plugins
+
+- Workspace plugin Manifest V4 packages can explicitly select the additive
+  `component-v1` ABI. Typed Components run through the same project identity,
+  permission grants, contribution publication, broker yield/resume,
+  cancellation, crash containment and restart reconstruction as existing
+  `core-v2` plugins; Rho never guesses an ABI from guest exports or falls back
+  to a different parser after rejection.
+- Existing Manifest V1–V3 and `core-v2` packages remain compatible. Component
+  guests receive no WASI or ambient host imports, and the established fuel,
+  epoch, memory, payload and per-project isolation limits remain in force.
+
 ## 0.4.1-dev.16 - 2026-08-25
 
 ### Controlled Studio layout adapter

@@ -280,7 +280,7 @@ mod tests {
     #[test]
     fn shell_app_info_serialization_matches_generated_contract() {
         let app = serde_json::to_value(AppInfo {
-            version: "0.4.1-dev.16".to_string(),
+            version: "0.4.1-dev.17".to_string(),
             channel: ReleaseChannel::Development,
             commit: "fixture-commit".to_string(),
             platform: "fixture-platform".to_string(),
