@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W4-03"],
+  "active_work_packages": [],
   "integration_lane": "AM-W4-03",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -627,6 +627,9 @@ Component feature, rejects malformed, oversized and import-bearing components,
 and compiles generated bindings without yet wiring desktop execution. Runtime
 limits, typed lifecycle dispatch and broker/recovery equivalence remain
 separate behavioral slices rather than being inferred from successful parsing.
+Implemented by `e8a9530` with evidence `AM-E-0101`; no WASI or guest authority
+was introduced. Executable typed lifecycle and step behavior remains open under
+`AM-F-0006`.
 
 ### Wave 5 — worktrees and shared generated artifacts
 
