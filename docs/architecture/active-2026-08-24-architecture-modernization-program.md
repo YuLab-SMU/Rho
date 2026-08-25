@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W3-07"],
-  "integration_lane": "AM-W3-07",
+  "active_work_packages": ["AM-W3-08"],
+  "integration_lane": "AM-W3-08",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -574,7 +574,11 @@ slice after projection and layout cutover.
 `AM-W3-07` mechanically extracts the File Resource Surface, Source editor
 composition and its Resource mutation prop boundary from `App.tsx`. Resource
 revision/CAS, project identity, draft/save/reload/rename/delete behavior and
-Source-to-Console execution remain unchanged.
+Source-to-Console execution remain unchanged (`aed0e8e`/AM-E-0095).
+
+`AM-W3-08` mechanically extracts the Workspace Plugin Surface declarative
+block, field and tab renderer. Plugin guest execution, permission/grant,
+document revision and event dispatch authority stay in their existing owners.
 
 ### Wave 4 — Wasmtime Component Model and WIT
 
