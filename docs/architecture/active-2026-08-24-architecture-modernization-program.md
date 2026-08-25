@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-51",
+  "active_work_packages": ["AM-W2-52"],
+  "integration_lane": "AM-W2-52",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -458,6 +458,10 @@ without changing filesystem authority, proposal validation or recovery truth.
 discovery and probe, generated runtime preparation, diagnostics and recovery
 classification into a dedicated service with a separate probe submodule;
 application state and domain consumers depend on that service explicitly.
+
+`AM-W2-52` extracts the complete Project transition transaction, preflight
+blockers, candidate extension ownership, Workspace/Store/watcher sequencing and
+compensating recovery into `project_transition.rs`.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
