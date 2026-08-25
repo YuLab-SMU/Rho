@@ -20,6 +20,7 @@ mod audit;
 mod compare;
 mod environment;
 mod evidence;
+mod executor;
 mod migration;
 mod mutation;
 mod plugin_lifecycle;
@@ -54,6 +55,7 @@ pub use evidence::{
     ClaimReviewStatus, EvidenceClaim, EvidenceClaimDraft, EvidenceClaimReview, EvidenceEntry,
     EvidenceEntryDraft,
 };
+pub use executor::{StoreExecutor, StoreExecutorError};
 pub use mutation::ProjectMutationService;
 pub use plugin_lifecycle::{
     PluginLifecycleMutationOutcome, WorkspacePluginCrashOutcome, WorkspacePluginDiscoveredDraft,

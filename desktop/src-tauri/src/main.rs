@@ -74,7 +74,7 @@ use rho_store::{
     ArtifactRecordSummary, EnvironmentOperationRequestSummary, EvidenceClaim, EvidenceClaimDraft,
     EvidenceClaimReview, EvidenceEntry, EvidenceEntryDraft, PlotArtifactSummary,
     PlotPayloadPruneResult, ProjectMutationService, ProjectQueryService, ProjectRetentionSummary,
-    RetentionPolicy, RunDetail, RunSummary, Store, normalize_project_root,
+    RetentionPolicy, RunDetail, RunSummary, Store, StoreExecutor, normalize_project_root,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -82,7 +82,7 @@ use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter, Manager, State};
 #[cfg(test)]
 use tokio::sync::Notify;
-use tokio::sync::{Mutex, RwLock, oneshot};
+use tokio::sync::{Mutex, OnceCell, RwLock, oneshot};
 use uuid::Uuid;
 
 const BRIDGE_STATE: &str = include_str!("../../../r/rho.bridge/R/state.R");
@@ -326,6 +326,7 @@ struct AppState {
     project_watcher: Mutex<Option<ProjectWatcherControl>>,
     session: RwLock<Option<Arc<ArkSession>>>,
     context: Mutex<Option<Arc<Mutex<CoordinatorRuntime>>>>,
+    store_executor: OnceCell<StoreExecutor>,
     approvals: Arc<PendingApprovalRegistry>,
     environment_approvals: Arc<PendingApprovalRegistry>,
     project_transition_gate: Arc<Mutex<()>>,
@@ -4521,9 +4522,10 @@ async fn create_evidence_entry(
 ) -> Result<EvidenceEntry, String> {
     let root = state.project_root.read().await.clone();
     let project_root = root.to_string_lossy().into_owned();
-    let mut store = read_store(&state).map_err(display_error)?;
-    ProjectMutationService::new(&mut store)
-        .create_evidence_entry(&EvidenceEntryDraft {
+    store_executor(&state)
+        .await
+        .map_err(display_error)?
+        .create_evidence_entry(EvidenceEntryDraft {
             project_root,
             title,
             notes: notes.unwrap_or_default(),
@@ -4531,6 +4533,7 @@ async fn create_evidence_entry(
             run_id,
             artifact_id,
         })
+        .await
         .map_err(display_error)
 }
 
@@ -4542,9 +4545,11 @@ async fn list_evidence_entries(
 ) -> Result<Vec<EvidenceEntry>, String> {
     let root = state.project_root.read().await.clone();
     let project_root = root.to_string_lossy().replace('\\', "/");
-    let store = read_store(&state).map_err(display_error)?;
-    store
-        .list_evidence_entries(&project_root, limit, search.as_deref())
+    store_executor(&state)
+        .await
+        .map_err(display_error)?
+        .list_evidence_entries(project_root, limit, search)
+        .await
         .map_err(display_error)
 }
 
@@ -4555,19 +4560,23 @@ async fn get_evidence_entry(
 ) -> Result<Option<EvidenceEntry>, String> {
     let root = state.project_root.read().await.clone();
     let project_root = root.to_string_lossy().replace('\\', "/");
-    let store = read_store(&state).map_err(display_error)?;
-    store
-        .get_evidence_entry(&project_root, id)
+    store_executor(&state)
+        .await
+        .map_err(display_error)?
+        .get_evidence_entry(project_root, id)
+        .await
         .map_err(display_error)
 }
 
 #[tauri::command]
 async fn delete_evidence_entry(id: i64, state: State<'_, AppState>) -> Result<bool, String> {
     let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy();
-    let mut store = read_store(&state).map_err(display_error)?;
-    ProjectMutationService::new(&mut store)
-        .delete_evidence_entry(project_root.as_ref(), id)
+    let project_root = root.to_string_lossy().into_owned();
+    store_executor(&state)
+        .await
+        .map_err(display_error)?
+        .delete_evidence_entry(project_root, id)
+        .await
         .map_err(display_error)
 }
 
@@ -4626,9 +4635,10 @@ async fn create_evidence_claim(
     } else {
         (None, None)
     };
-    let mut store = read_store(&state).map_err(display_error)?;
-    store
-        .create_evidence_claim(&EvidenceClaimDraft {
+    store_executor(&state)
+        .await
+        .map_err(display_error)?
+        .create_evidence_claim(EvidenceClaimDraft {
             project_root,
             kind: request.kind,
             summary: request.summary,
@@ -4643,6 +4653,7 @@ async fn create_evidence_claim(
             artifact_id: request.artifact_id,
             evidence_ids: request.evidence_ids,
         })
+        .await
         .map_err(display_error)
 }
 
@@ -4654,9 +4665,11 @@ async fn list_evidence_claims(
 ) -> Result<Vec<EvidenceClaim>, String> {
     let root = state.project_root.read().await.clone();
     let project_root = root.to_string_lossy().replace('\\', "/");
-    let store = read_store(&state).map_err(display_error)?;
-    store
-        .list_evidence_claims(&project_root, limit.map(usize::from))
+    store_executor(&state)
+        .await
+        .map_err(display_error)?
+        .list_evidence_claims(project_root, limit.map(usize::from))
+        .await
         .map_err(display_error)
 }
 
@@ -4667,9 +4680,10 @@ async fn review_evidence_claim(
 ) -> Result<EvidenceClaimReview, String> {
     let root = state.project_root.read().await.clone();
     let project_root = root.to_string_lossy().replace('\\', "/");
-    let store = read_store(&state).map_err(display_error)?;
-    let claim = store
-        .get_evidence_claim(&project_root, &claim_id)
+    let executor = store_executor(&state).await.map_err(display_error)?;
+    let claim = executor
+        .get_evidence_claim(project_root.clone(), claim_id.clone())
+        .await
         .map_err(display_error)?;
     let source_resolved = claim.as_ref().and_then(|claim| {
         if claim.anchor_kind != "source_range" {
@@ -4687,8 +4701,9 @@ async fn review_evidence_claim(
                 && claim.source_excerpt.as_deref() == Some(snapshot.1.as_str()),
         )
     });
-    store
-        .review_evidence_claim(&project_root, &claim_id, source_resolved)
+    executor
+        .review_evidence_claim(project_root, claim_id, source_resolved)
+        .await
         .map_err(display_error)
 }
 
@@ -4699,9 +4714,11 @@ async fn delete_evidence_claim(
 ) -> Result<bool, String> {
     let root = state.project_root.read().await.clone();
     let project_root = root.to_string_lossy().replace('\\', "/");
-    let mut store = read_store(&state).map_err(display_error)?;
-    store
-        .delete_evidence_claim(&project_root, &claim_id)
+    store_executor(&state)
+        .await
+        .map_err(display_error)?
+        .delete_evidence_claim(project_root, claim_id)
+        .await
         .map_err(display_error)
 }
 
@@ -6265,6 +6282,18 @@ pub(crate) async fn active_workspace_id(state: &AppState) -> Option<String> {
 fn read_store(state: &AppState) -> Result<Store> {
     let config = runtime_config(state)?;
     Store::open(&config.store_path).context("opening Rho event store")
+}
+
+async fn store_executor(state: &AppState) -> Result<&StoreExecutor> {
+    let store_path = runtime_config(state)?.store_path;
+    state
+        .store_executor
+        .get_or_try_init(|| async move {
+            StoreExecutor::open(store_path)
+                .await
+                .context("opening asynchronous Rho Store executor")
+        })
+        .await
 }
 
 async fn teardown_workspace_plugins_for_boundary(
@@ -9946,9 +9975,10 @@ mod tests {
         reconcile_render_job, recover_incomplete_agent_file_mutations, render_job_is_terminal,
         retry_run_arguments, run_is_retryable, run_r_probe, runtime_file_signature,
         safe_delete_project_file, save_runtime_cache, shutdown_application, source_claim_snapshot,
-        switch_project_with_watcher_factory, text_sha256, undo_agent_file_edit_state,
-        validate_execute_source_range_shape, validate_persisted_agent_file_proposal_structure,
-        workspace_project_root_code, write_r_probe_script,
+        store_executor, switch_project_with_watcher_factory, text_sha256,
+        undo_agent_file_edit_state, validate_execute_source_range_shape,
+        validate_persisted_agent_file_proposal_structure, workspace_project_root_code,
+        write_r_probe_script,
     };
     use crate::commands::runs::{contain_audit_panic, list_runs_with_state};
     use crate::platform;
@@ -9969,7 +9999,7 @@ mod tests {
     use rho_store::{
         AgentConversationDraft, AgentTurnDraft, AgentTurnEventDraft, AgentTurnFinish,
         ApprovalRequestDraft, ArtifactRecordSummary, EnvironmentOperationRequestDraft,
-        PlotArtifactDraft, RunDraft, RunFinish, Store, normalize_project_root,
+        EvidenceEntryDraft, PlotArtifactDraft, RunDraft, RunFinish, Store, normalize_project_root,
     };
     use serde_json::json;
     use std::collections::HashMap;
@@ -10939,6 +10969,7 @@ mod tests {
             project_watcher: Mutex::new(None),
             session: RwLock::new(None),
             context: Mutex::new(None),
+            store_executor: tokio::sync::OnceCell::new(),
             approvals: Arc::new(PendingApprovalRegistry::default()),
             environment_approvals: Arc::new(PendingApprovalRegistry::default()),
             project_transition_gate: Arc::new(Mutex::new(())),
@@ -10964,6 +10995,57 @@ mod tests {
                 .unwrap(),
             ui_runtime: crate::ui_runtime::UiRuntimeState::default(),
         }
+    }
+
+    #[tokio::test]
+    async fn evidence_store_executor_is_shared_and_project_isolated() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let project_a = tempdir.path().join("project-a");
+        let project_b = tempdir.path().join("project-b");
+        std::fs::create_dir_all(&project_a).unwrap();
+        std::fs::create_dir_all(&project_b).unwrap();
+        let store_path = tempdir.path().join("rho.sqlite");
+        let state = test_app_state(tempdir.path(), &project_a, &store_path);
+
+        let first = store_executor(&state).await.unwrap();
+        let first_address = std::ptr::from_ref(first);
+        first
+            .create_evidence_entry(EvidenceEntryDraft {
+                project_root: normalize_project_root(project_a.to_string_lossy().as_ref()),
+                title: "Project A evidence".to_string(),
+                notes: String::new(),
+                doi: None,
+                run_id: None,
+                artifact_id: None,
+            })
+            .await
+            .unwrap();
+
+        let second = store_executor(&state).await.unwrap();
+        assert_eq!(first_address, std::ptr::from_ref(second));
+        assert_eq!(
+            second
+                .list_evidence_entries(
+                    normalize_project_root(project_a.to_string_lossy().as_ref()),
+                    None,
+                    None,
+                )
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(
+            second
+                .list_evidence_entries(
+                    normalize_project_root(project_b.to_string_lossy().as_ref()),
+                    None,
+                    None,
+                )
+                .await
+                .unwrap()
+                .is_empty()
+        );
     }
 
     fn create_run_fixture(store: &mut Store, project_root: &str, run_id: &str, code: &str) {
@@ -17251,6 +17333,7 @@ fn main() {
                 project_watcher: Mutex::new(None),
                 session: RwLock::new(None),
                 context: Mutex::new(None),
+                store_executor: tokio::sync::OnceCell::new(),
                 approvals: Arc::new(PendingApprovalRegistry::default()),
                 environment_approvals: Arc::new(PendingApprovalRegistry::default()),
                 project_transition_gate: Arc::new(Mutex::new(())),

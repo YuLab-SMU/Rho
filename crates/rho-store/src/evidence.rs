@@ -1,5 +1,5 @@
 use chrono::Utc;
-use rusqlite::OptionalExtension;
+use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -94,34 +94,7 @@ impl super::Store {
         &mut self,
         draft: &EvidenceEntryDraft,
     ) -> Result<EvidenceEntry, StoreError> {
-        let now = Utc::now().to_rfc3339();
-        self.connection.execute(
-            "INSERT INTO evidence_entries(
-                project_root, title, notes, doi, run_id, artifact_id, created_at, updated_at
-             ) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)",
-            rusqlite::params![
-                draft.project_root,
-                draft.title,
-                draft.notes,
-                draft.doi,
-                draft.run_id,
-                draft.artifact_id,
-                now,
-            ],
-        )?;
-        let id = self.connection.last_insert_rowid();
-        Ok(EvidenceEntry {
-            id,
-            project_root: draft.project_root.clone(),
-            title: draft.title.clone(),
-            notes: draft.notes.clone(),
-            doi: draft.doi.clone(),
-            run_id: draft.run_id.clone(),
-            artifact_id: draft.artifact_id.clone(),
-            citation_json: None,
-            created_at: now.clone(),
-            updated_at: now,
-        })
+        create_evidence_entry_on(&self.connection, draft)
     }
 
     pub fn list_evidence_entries(
@@ -130,39 +103,7 @@ impl super::Store {
         limit: Option<usize>,
         search: Option<&str>,
     ) -> Result<Vec<EvidenceEntry>, StoreError> {
-        let limit_val = limit.unwrap_or(DEFAULT_LIMIT) as i64;
-        if let Some(term) = search {
-            let like_pattern = format!("%{term}%");
-            let mut stmt = self.connection.prepare(
-                "SELECT id, project_root, title, notes, doi, run_id, artifact_id,
-                        citation_json, created_at, updated_at
-                 FROM evidence_entries
-                 WHERE project_root = ?1 AND (title LIKE ?2 OR notes LIKE ?2)
-                 ORDER BY created_at DESC
-                 LIMIT ?3",
-            )?;
-            let rows = stmt.query_map(
-                rusqlite::params![project_root, like_pattern, limit_val],
-                decode_evidence_entry,
-            )?;
-            rows.collect::<Result<Vec<_>, _>>()
-                .map_err(StoreError::from)
-        } else {
-            let mut stmt = self.connection.prepare(
-                "SELECT id, project_root, title, notes, doi, run_id, artifact_id,
-                        citation_json, created_at, updated_at
-                 FROM evidence_entries
-                 WHERE project_root = ?1
-                 ORDER BY created_at DESC
-                 LIMIT ?2",
-            )?;
-            let rows = stmt.query_map(
-                rusqlite::params![project_root, limit_val],
-                decode_evidence_entry,
-            )?;
-            rows.collect::<Result<Vec<_>, _>>()
-                .map_err(StoreError::from)
-        }
+        list_evidence_entries_on(&self.connection, project_root, limit, search)
     }
 
     pub fn get_evidence_entry(
@@ -170,17 +111,7 @@ impl super::Store {
         project_root: &str,
         id: i64,
     ) -> Result<Option<EvidenceEntry>, StoreError> {
-        self.connection
-            .query_row(
-                "SELECT id, project_root, title, notes, doi, run_id, artifact_id,
-                        citation_json, created_at, updated_at
-                 FROM evidence_entries
-                 WHERE project_root = ?1 AND id = ?2",
-                rusqlite::params![project_root, id],
-                decode_evidence_entry,
-            )
-            .optional()
-            .map_err(StoreError::from)
+        get_evidence_entry_on(&self.connection, project_root, id)
     }
 
     pub fn delete_evidence_entry(
@@ -188,11 +119,7 @@ impl super::Store {
         project_root: &str,
         id: i64,
     ) -> Result<bool, StoreError> {
-        let changed = self.connection.execute(
-            "DELETE FROM evidence_entries WHERE project_root = ?1 AND id = ?2",
-            rusqlite::params![project_root, id],
-        )?;
-        Ok(changed > 0)
+        delete_evidence_entry_on(&self.connection, project_root, id)
     }
 
     pub fn set_evidence_citation(
@@ -201,122 +128,14 @@ impl super::Store {
         id: i64,
         citation_json: &str,
     ) -> Result<bool, StoreError> {
-        let changed = self.connection.execute(
-            "UPDATE evidence_entries
-             SET citation_json = ?3, updated_at = ?4
-             WHERE project_root = ?1 AND id = ?2",
-            rusqlite::params![project_root, id, citation_json, Utc::now().to_rfc3339()],
-        )?;
-        Ok(changed > 0)
+        set_evidence_citation_on(&self.connection, project_root, id, citation_json)
     }
 
     pub fn create_evidence_claim(
         &mut self,
         draft: &EvidenceClaimDraft,
     ) -> Result<EvidenceClaim, StoreError> {
-        validate_claim_draft(draft)?;
-        let mut evidence_ids = draft.evidence_ids.clone();
-        evidence_ids.sort_unstable();
-        evidence_ids.dedup();
-        if evidence_ids.len() > 20 {
-            return Err(StoreError::Validation(
-                "a claim may link at most 20 Evidence entries".to_string(),
-            ));
-        }
-        let transaction = self.connection.transaction()?;
-        for evidence_id in &evidence_ids {
-            let owner: Option<String> = transaction
-                .query_row(
-                    "SELECT project_root FROM evidence_entries WHERE id = ?1",
-                    [evidence_id],
-                    |row| row.get(0),
-                )
-                .optional()?;
-            match owner.as_deref() {
-                Some(owner) if owner == draft.project_root => {}
-                Some(_) => {
-                    return Err(StoreError::Validation(
-                        "cross-project Evidence link rejected".to_string(),
-                    ));
-                }
-                None => {
-                    return Err(StoreError::Validation(
-                        "linked Evidence entry was not found".to_string(),
-                    ));
-                }
-            }
-        }
-        if let Some(artifact_id) = draft.artifact_id.as_deref() {
-            let exists = transaction
-                .query_row(
-                    "SELECT 1 FROM artifact_records WHERE project_root = ?1 AND artifact_id = ?2",
-                    rusqlite::params![draft.project_root, artifact_id],
-                    |_row| Ok(()),
-                )
-                .optional()?
-                .is_some();
-            if !exists {
-                return Err(StoreError::Validation(
-                    "Artifact anchor was not found in the active project".to_string(),
-                ));
-            }
-        }
-        let now = Utc::now().to_rfc3339();
-        let mut hasher = Sha256::new();
-        hasher.update(draft.project_root.as_bytes());
-        hasher.update(draft.kind.as_bytes());
-        hasher.update(draft.summary.as_bytes());
-        hasher.update(now.as_bytes());
-        let digest = format!("{:x}", hasher.finalize());
-        let mut claim_id = format!("cl_{}", &digest[..24]);
-        let mut suffix = 0u32;
-        while transaction
-            .query_row(
-                "SELECT 1 FROM evidence_claims WHERE claim_id = ?1",
-                [&claim_id],
-                |_row| Ok(()),
-            )
-            .optional()?
-            .is_some()
-        {
-            suffix += 1;
-            claim_id = format!("cl_{}_{}", &digest[..24], suffix);
-        }
-        transaction.execute(
-            "INSERT INTO evidence_claims(
-                claim_id, project_root, kind, summary, anchor_kind, source_path,
-                start_line, start_column, end_line, end_column, source_sha256,
-                source_excerpt, artifact_id, created_at, updated_at
-             ) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?14)",
-            rusqlite::params![
-                claim_id,
-                draft.project_root,
-                draft.kind,
-                draft.summary,
-                draft.anchor_kind,
-                draft.source_path,
-                draft.start_line,
-                draft.start_column,
-                draft.end_line,
-                draft.end_column,
-                draft.source_sha256,
-                draft.source_excerpt,
-                draft.artifact_id,
-                now,
-            ],
-        )?;
-        for evidence_id in &evidence_ids {
-            transaction.execute(
-                "INSERT INTO claim_evidence_links(claim_id, evidence_id, project_root, created_at)
-                 VALUES(?1, ?2, ?3, ?4)",
-                rusqlite::params![claim_id, evidence_id, draft.project_root, now],
-            )?;
-        }
-        transaction.commit()?;
-        self.get_evidence_claim(&draft.project_root, &claim_id)?
-            .ok_or_else(|| {
-                StoreError::Validation("created claim could not be reloaded".to_string())
-            })
+        create_evidence_claim_on(&mut self.connection, draft)
     }
 
     pub fn list_evidence_claims(
@@ -324,20 +143,7 @@ impl super::Store {
         project_root: &str,
         limit: Option<usize>,
     ) -> Result<Vec<EvidenceClaim>, StoreError> {
-        let limit = limit.unwrap_or(DEFAULT_LIMIT).min(100) as i64;
-        let mut statement = self.connection.prepare(
-            "SELECT claim_id, project_root, kind, summary, anchor_kind, source_path,
-                    start_line, start_column, end_line, end_column, source_sha256,
-                    source_excerpt, artifact_id, created_at, updated_at
-             FROM evidence_claims WHERE project_root = ?1
-             ORDER BY created_at DESC LIMIT ?2",
-        )?;
-        let rows = statement.query_map(rusqlite::params![project_root, limit], decode_claim)?;
-        let mut claims = rows.collect::<Result<Vec<_>, _>>()?;
-        for claim in &mut claims {
-            claim.linked_evidence_ids = self.claim_evidence_ids(project_root, &claim.claim_id)?;
-        }
-        Ok(claims)
+        list_evidence_claims_on(&self.connection, project_root, limit)
     }
 
     pub fn get_evidence_claim(
@@ -345,21 +151,7 @@ impl super::Store {
         project_root: &str,
         claim_id: &str,
     ) -> Result<Option<EvidenceClaim>, StoreError> {
-        let mut claim = self
-            .connection
-            .query_row(
-                "SELECT claim_id, project_root, kind, summary, anchor_kind, source_path,
-                        start_line, start_column, end_line, end_column, source_sha256,
-                        source_excerpt, artifact_id, created_at, updated_at
-                 FROM evidence_claims WHERE project_root = ?1 AND claim_id = ?2",
-                rusqlite::params![project_root, claim_id],
-                decode_claim,
-            )
-            .optional()?;
-        if let Some(claim) = &mut claim {
-            claim.linked_evidence_ids = self.claim_evidence_ids(project_root, claim_id)?;
-        }
-        Ok(claim)
+        get_evidence_claim_on(&self.connection, project_root, claim_id)
     }
 
     pub fn review_evidence_claim(
@@ -368,82 +160,12 @@ impl super::Store {
         claim_id: &str,
         source_anchor_resolved: Option<bool>,
     ) -> Result<EvidenceClaimReview, StoreError> {
-        let owner: Option<String> = self
-            .connection
-            .query_row(
-                "SELECT project_root FROM evidence_claims WHERE claim_id = ?1",
-                [claim_id],
-                |row| row.get(0),
-            )
-            .optional()?;
-        if owner.as_deref().is_some_and(|owner| owner != project_root) {
-            return Ok(EvidenceClaimReview {
-                status: ClaimReviewStatus::CrossProjectRejected,
-                claim: None,
-                evidence: Vec::new(),
-                limitations: vec!["The claim belongs to another project.".to_string()],
-            });
-        }
-        let Some(claim) = self.get_evidence_claim(project_root, claim_id)? else {
-            return Err(StoreError::Validation("claim was not found".to_string()));
-        };
-        let mut evidence = Vec::new();
-        for evidence_id in &claim.linked_evidence_ids {
-            if let Some(entry) = self.get_evidence_entry(project_root, *evidence_id)? {
-                evidence.push(entry);
-            }
-        }
-        let anchor_resolved = if claim.anchor_kind == "source_range" {
-            source_anchor_resolved.unwrap_or(false)
-        } else {
-            self.connection
-                .query_row(
-                    "SELECT 1 FROM artifact_records WHERE project_root = ?1 AND artifact_id = ?2",
-                    rusqlite::params![project_root, claim.artifact_id],
-                    |_row| Ok(()),
-                )
-                .optional()?
-                .is_some()
-        };
-        let (status, limitations) = if !anchor_resolved {
-            (
-                ClaimReviewStatus::UnresolvedSource,
-                vec!["The exact claim anchor no longer resolves.".to_string()],
-            )
-        } else if claim.linked_evidence_ids.is_empty() {
-            (
-                ClaimReviewStatus::MissingEvidence,
-                vec!["No Evidence entry is linked to this claim.".to_string()],
-            )
-        } else if evidence.len() != claim.linked_evidence_ids.len()
-            || evidence.iter().any(|entry| {
-                entry
-                    .doi
-                    .as_deref()
-                    .is_none_or(|value| value.trim().is_empty())
-                    && entry
-                        .citation_json
-                        .as_deref()
-                        .is_none_or(|value| value.trim().is_empty())
-                    && entry.notes.trim().is_empty()
-            })
-        {
-            (
-                ClaimReviewStatus::IncompleteEvidence,
-                vec![
-                    "At least one linked Evidence entry lacks inspectable metadata or notes."
-                        .to_string(),
-                ],
-            )
-        } else {
-            (ClaimReviewStatus::Linked, Vec::new())
-        };
-        Ok(EvidenceClaimReview {
-            status,
-            claim: Some(claim),
-            evidence,
-            limitations,
-        })
+        review_evidence_claim_on(
+            &self.connection,
+            project_root,
+            claim_id,
+            source_anchor_resolved,
+        )
     }
 
     pub fn delete_evidence_claim(
@@ -451,27 +173,388 @@ impl super::Store {
         project_root: &str,
         claim_id: &str,
     ) -> Result<bool, StoreError> {
-        let changed = self.connection.execute(
-            "DELETE FROM evidence_claims WHERE project_root = ?1 AND claim_id = ?2",
-            rusqlite::params![project_root, claim_id],
-        )?;
-        Ok(changed > 0)
+        delete_evidence_claim_on(&self.connection, project_root, claim_id)
     }
+}
 
-    fn claim_evidence_ids(
-        &self,
-        project_root: &str,
-        claim_id: &str,
-    ) -> Result<Vec<i64>, StoreError> {
-        let mut statement = self.connection.prepare(
-            "SELECT evidence_id FROM claim_evidence_links
-             WHERE project_root = ?1 AND claim_id = ?2 ORDER BY evidence_id",
+pub(crate) fn create_evidence_entry_on(
+    connection: &Connection,
+    draft: &EvidenceEntryDraft,
+) -> Result<EvidenceEntry, StoreError> {
+    let now = Utc::now().to_rfc3339();
+    connection.execute(
+        "INSERT INTO evidence_entries(
+            project_root, title, notes, doi, run_id, artifact_id, created_at, updated_at
+         ) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)",
+        rusqlite::params![
+            draft.project_root,
+            draft.title,
+            draft.notes,
+            draft.doi,
+            draft.run_id,
+            draft.artifact_id,
+            now,
+        ],
+    )?;
+    let id = connection.last_insert_rowid();
+    Ok(EvidenceEntry {
+        id,
+        project_root: draft.project_root.clone(),
+        title: draft.title.clone(),
+        notes: draft.notes.clone(),
+        doi: draft.doi.clone(),
+        run_id: draft.run_id.clone(),
+        artifact_id: draft.artifact_id.clone(),
+        citation_json: None,
+        created_at: now.clone(),
+        updated_at: now,
+    })
+}
+
+pub(crate) fn list_evidence_entries_on(
+    connection: &Connection,
+    project_root: &str,
+    limit: Option<usize>,
+    search: Option<&str>,
+) -> Result<Vec<EvidenceEntry>, StoreError> {
+    let limit_val = limit.unwrap_or(DEFAULT_LIMIT) as i64;
+    if let Some(term) = search {
+        let like_pattern = format!("%{term}%");
+        let mut stmt = connection.prepare(
+            "SELECT id, project_root, title, notes, doi, run_id, artifact_id,
+                    citation_json, created_at, updated_at
+             FROM evidence_entries
+             WHERE project_root = ?1 AND (title LIKE ?2 OR notes LIKE ?2)
+             ORDER BY created_at DESC
+             LIMIT ?3",
         )?;
-        statement
-            .query_map(rusqlite::params![project_root, claim_id], |row| row.get(0))?
-            .collect::<Result<Vec<_>, _>>()
+        let rows = stmt.query_map(
+            rusqlite::params![project_root, like_pattern, limit_val],
+            decode_evidence_entry,
+        )?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(StoreError::from)
+    } else {
+        let mut stmt = connection.prepare(
+            "SELECT id, project_root, title, notes, doi, run_id, artifact_id,
+                    citation_json, created_at, updated_at
+             FROM evidence_entries
+             WHERE project_root = ?1
+             ORDER BY created_at DESC
+             LIMIT ?2",
+        )?;
+        let rows = stmt.query_map(
+            rusqlite::params![project_root, limit_val],
+            decode_evidence_entry,
+        )?;
+        rows.collect::<Result<Vec<_>, _>>()
             .map_err(StoreError::from)
     }
+}
+
+pub(crate) fn get_evidence_entry_on(
+    connection: &Connection,
+    project_root: &str,
+    id: i64,
+) -> Result<Option<EvidenceEntry>, StoreError> {
+    connection
+        .query_row(
+            "SELECT id, project_root, title, notes, doi, run_id, artifact_id,
+                    citation_json, created_at, updated_at
+             FROM evidence_entries
+             WHERE project_root = ?1 AND id = ?2",
+            rusqlite::params![project_root, id],
+            decode_evidence_entry,
+        )
+        .optional()
+        .map_err(StoreError::from)
+}
+
+pub(crate) fn delete_evidence_entry_on(
+    connection: &Connection,
+    project_root: &str,
+    id: i64,
+) -> Result<bool, StoreError> {
+    let changed = connection.execute(
+        "DELETE FROM evidence_entries WHERE project_root = ?1 AND id = ?2",
+        rusqlite::params![project_root, id],
+    )?;
+    Ok(changed > 0)
+}
+
+pub(crate) fn set_evidence_citation_on(
+    connection: &Connection,
+    project_root: &str,
+    id: i64,
+    citation_json: &str,
+) -> Result<bool, StoreError> {
+    let changed = connection.execute(
+        "UPDATE evidence_entries
+         SET citation_json = ?3, updated_at = ?4
+         WHERE project_root = ?1 AND id = ?2",
+        rusqlite::params![project_root, id, citation_json, Utc::now().to_rfc3339()],
+    )?;
+    Ok(changed > 0)
+}
+
+pub(crate) fn create_evidence_claim_on(
+    connection: &mut Connection,
+    draft: &EvidenceClaimDraft,
+) -> Result<EvidenceClaim, StoreError> {
+    validate_claim_draft(draft)?;
+    let mut evidence_ids = draft.evidence_ids.clone();
+    evidence_ids.sort_unstable();
+    evidence_ids.dedup();
+    if evidence_ids.len() > 20 {
+        return Err(StoreError::Validation(
+            "a claim may link at most 20 Evidence entries".to_string(),
+        ));
+    }
+    let transaction = connection.transaction()?;
+    for evidence_id in &evidence_ids {
+        let owner: Option<String> = transaction
+            .query_row(
+                "SELECT project_root FROM evidence_entries WHERE id = ?1",
+                [evidence_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        match owner.as_deref() {
+            Some(owner) if owner == draft.project_root => {}
+            Some(_) => {
+                return Err(StoreError::Validation(
+                    "cross-project Evidence link rejected".to_string(),
+                ));
+            }
+            None => {
+                return Err(StoreError::Validation(
+                    "linked Evidence entry was not found".to_string(),
+                ));
+            }
+        }
+    }
+    if let Some(artifact_id) = draft.artifact_id.as_deref() {
+        let exists = transaction
+            .query_row(
+                "SELECT 1 FROM artifact_records WHERE project_root = ?1 AND artifact_id = ?2",
+                rusqlite::params![draft.project_root, artifact_id],
+                |_row| Ok(()),
+            )
+            .optional()?
+            .is_some();
+        if !exists {
+            return Err(StoreError::Validation(
+                "Artifact anchor was not found in the active project".to_string(),
+            ));
+        }
+    }
+    let now = Utc::now().to_rfc3339();
+    let mut hasher = Sha256::new();
+    hasher.update(draft.project_root.as_bytes());
+    hasher.update(draft.kind.as_bytes());
+    hasher.update(draft.summary.as_bytes());
+    hasher.update(now.as_bytes());
+    let digest = format!("{:x}", hasher.finalize());
+    let mut claim_id = format!("cl_{}", &digest[..24]);
+    let mut suffix = 0u32;
+    while transaction
+        .query_row(
+            "SELECT 1 FROM evidence_claims WHERE claim_id = ?1",
+            [&claim_id],
+            |_row| Ok(()),
+        )
+        .optional()?
+        .is_some()
+    {
+        suffix += 1;
+        claim_id = format!("cl_{}_{}", &digest[..24], suffix);
+    }
+    transaction.execute(
+        "INSERT INTO evidence_claims(
+            claim_id, project_root, kind, summary, anchor_kind, source_path,
+            start_line, start_column, end_line, end_column, source_sha256,
+            source_excerpt, artifact_id, created_at, updated_at
+         ) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?14)",
+        rusqlite::params![
+            claim_id,
+            draft.project_root,
+            draft.kind,
+            draft.summary,
+            draft.anchor_kind,
+            draft.source_path,
+            draft.start_line,
+            draft.start_column,
+            draft.end_line,
+            draft.end_column,
+            draft.source_sha256,
+            draft.source_excerpt,
+            draft.artifact_id,
+            now,
+        ],
+    )?;
+    for evidence_id in &evidence_ids {
+        transaction.execute(
+            "INSERT INTO claim_evidence_links(claim_id, evidence_id, project_root, created_at)
+             VALUES(?1, ?2, ?3, ?4)",
+            rusqlite::params![claim_id, evidence_id, draft.project_root, now],
+        )?;
+    }
+    transaction.commit()?;
+    get_evidence_claim_on(connection, &draft.project_root, &claim_id)?
+        .ok_or_else(|| StoreError::Validation("created claim could not be reloaded".to_string()))
+}
+
+pub(crate) fn list_evidence_claims_on(
+    connection: &Connection,
+    project_root: &str,
+    limit: Option<usize>,
+) -> Result<Vec<EvidenceClaim>, StoreError> {
+    let limit = limit.unwrap_or(DEFAULT_LIMIT).min(100) as i64;
+    let mut statement = connection.prepare(
+        "SELECT claim_id, project_root, kind, summary, anchor_kind, source_path,
+                start_line, start_column, end_line, end_column, source_sha256,
+                source_excerpt, artifact_id, created_at, updated_at
+         FROM evidence_claims WHERE project_root = ?1
+         ORDER BY created_at DESC LIMIT ?2",
+    )?;
+    let rows = statement.query_map(rusqlite::params![project_root, limit], decode_claim)?;
+    let mut claims = rows.collect::<Result<Vec<_>, _>>()?;
+    for claim in &mut claims {
+        claim.linked_evidence_ids =
+            claim_evidence_ids_on(connection, project_root, &claim.claim_id)?;
+    }
+    Ok(claims)
+}
+
+pub(crate) fn get_evidence_claim_on(
+    connection: &Connection,
+    project_root: &str,
+    claim_id: &str,
+) -> Result<Option<EvidenceClaim>, StoreError> {
+    let mut claim = connection
+        .query_row(
+            "SELECT claim_id, project_root, kind, summary, anchor_kind, source_path,
+                    start_line, start_column, end_line, end_column, source_sha256,
+                    source_excerpt, artifact_id, created_at, updated_at
+             FROM evidence_claims WHERE project_root = ?1 AND claim_id = ?2",
+            rusqlite::params![project_root, claim_id],
+            decode_claim,
+        )
+        .optional()?;
+    if let Some(claim) = &mut claim {
+        claim.linked_evidence_ids = claim_evidence_ids_on(connection, project_root, claim_id)?;
+    }
+    Ok(claim)
+}
+
+pub(crate) fn review_evidence_claim_on(
+    connection: &Connection,
+    project_root: &str,
+    claim_id: &str,
+    source_anchor_resolved: Option<bool>,
+) -> Result<EvidenceClaimReview, StoreError> {
+    let owner: Option<String> = connection
+        .query_row(
+            "SELECT project_root FROM evidence_claims WHERE claim_id = ?1",
+            [claim_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if owner.as_deref().is_some_and(|owner| owner != project_root) {
+        return Ok(EvidenceClaimReview {
+            status: ClaimReviewStatus::CrossProjectRejected,
+            claim: None,
+            evidence: Vec::new(),
+            limitations: vec!["The claim belongs to another project.".to_string()],
+        });
+    }
+    let Some(claim) = get_evidence_claim_on(connection, project_root, claim_id)? else {
+        return Err(StoreError::Validation("claim was not found".to_string()));
+    };
+    let mut evidence = Vec::new();
+    for evidence_id in &claim.linked_evidence_ids {
+        if let Some(entry) = get_evidence_entry_on(connection, project_root, *evidence_id)? {
+            evidence.push(entry);
+        }
+    }
+    let anchor_resolved = if claim.anchor_kind == "source_range" {
+        source_anchor_resolved.unwrap_or(false)
+    } else {
+        connection
+            .query_row(
+                "SELECT 1 FROM artifact_records WHERE project_root = ?1 AND artifact_id = ?2",
+                rusqlite::params![project_root, claim.artifact_id],
+                |_row| Ok(()),
+            )
+            .optional()?
+            .is_some()
+    };
+    let (status, limitations) = if !anchor_resolved {
+        (
+            ClaimReviewStatus::UnresolvedSource,
+            vec!["The exact claim anchor no longer resolves.".to_string()],
+        )
+    } else if claim.linked_evidence_ids.is_empty() {
+        (
+            ClaimReviewStatus::MissingEvidence,
+            vec!["No Evidence entry is linked to this claim.".to_string()],
+        )
+    } else if evidence.len() != claim.linked_evidence_ids.len()
+        || evidence.iter().any(|entry| {
+            entry
+                .doi
+                .as_deref()
+                .is_none_or(|value| value.trim().is_empty())
+                && entry
+                    .citation_json
+                    .as_deref()
+                    .is_none_or(|value| value.trim().is_empty())
+                && entry.notes.trim().is_empty()
+        })
+    {
+        (
+            ClaimReviewStatus::IncompleteEvidence,
+            vec![
+                "At least one linked Evidence entry lacks inspectable metadata or notes."
+                    .to_string(),
+            ],
+        )
+    } else {
+        (ClaimReviewStatus::Linked, Vec::new())
+    };
+    Ok(EvidenceClaimReview {
+        status,
+        claim: Some(claim),
+        evidence,
+        limitations,
+    })
+}
+
+pub(crate) fn delete_evidence_claim_on(
+    connection: &Connection,
+    project_root: &str,
+    claim_id: &str,
+) -> Result<bool, StoreError> {
+    let changed = connection.execute(
+        "DELETE FROM evidence_claims WHERE project_root = ?1 AND claim_id = ?2",
+        rusqlite::params![project_root, claim_id],
+    )?;
+    Ok(changed > 0)
+}
+
+fn claim_evidence_ids_on(
+    connection: &Connection,
+    project_root: &str,
+    claim_id: &str,
+) -> Result<Vec<i64>, StoreError> {
+    let mut statement = connection.prepare(
+        "SELECT evidence_id FROM claim_evidence_links
+         WHERE project_root = ?1 AND claim_id = ?2 ORDER BY evidence_id",
+    )?;
+    statement
+        .query_map(rusqlite::params![project_root, claim_id], |row| row.get(0))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(StoreError::from)
 }
 
 fn validate_claim_draft(draft: &EvidenceClaimDraft) -> Result<(), StoreError> {

@@ -15,6 +15,8 @@ serde_json.workspace = true
 sha2 = "0.10"
 specta.workspace = true
 thiserror.workspace = true
+tokio.workspace = true
+tokio-rusqlite.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]

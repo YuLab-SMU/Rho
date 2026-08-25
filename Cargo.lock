@@ -4248,6 +4248,8 @@ dependencies = [
  "specta",
  "tempfile",
  "thiserror 2.0.18",
+ "tokio",
+ "tokio-rusqlite",
  "uuid",
 ]
 
@@ -5575,6 +5577,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "tokio-rusqlite"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "302563ae4a2127f3d2c105f4f2f0bd7cae3609371755600ebc148e0ccd8510d6"
+dependencies = [
+ "crossbeam-channel",
+ "rusqlite",
+ "tokio",
 ]
 
 [[package]]
