@@ -6,12 +6,12 @@
   "record_type": "program",
   "program_id": "AM-2026",
   "status": "active",
-  "current_wave": 3,
+  "current_wave": 4,
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W3-11"],
-  "integration_lane": "AM-W3-11",
+  "active_work_packages": ["AM-W4-02"],
+  "integration_lane": "AM-W4-02",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -597,7 +597,13 @@ and coordinates renderer-local state (`5d813dd`/AM-E-0098).
 preparation and delegates the ready state to `WorkbenchApp.tsx`, which owns
 project-scoped controller/service composition. This is a mechanical module
 boundary; follow-up responsibility splits operate on the explicit Workbench
-owner rather than growing the startup shell again.
+owner rather than growing the startup shell again (`a1e064e`/AM-E-0099).
+
+Wave 3 is locally implemented. `App.tsx` is a 91-line startup shell; Rust owns
+one coherent Workbench projection and Scene/CAS authority; Dockview owns only
+transient rendering/gestures; Surface domains and renderer composition have
+physical owners. `WorkbenchApp.tsx` remains a 1,784-line Wave 6 responsibility
+hotspot under `AM-F-0002`, not an acceptance-critical frontend defect.
 
 ### Wave 4 — Wasmtime Component Model and WIT
 
@@ -606,6 +612,11 @@ owner rather than growing the startup shell again.
 fuel, epoch, limits, per-plugin Engine, no-WASI, yield/resume, and broker grants.
 Manifest V4 requires an explicit `runtime.abi`; V1-V3 retain core behavior and
 V4 ABI is never guessed from exports.
+
+`AM-W4-02` establishes the package-protocol boundary first: Manifest V4 must
+declare `runtime.abi = "core-v2" | "component-v1"`, while V1–V3 without that
+field resolve to the existing core-v2 path. V4 missing/unknown ABI fails before
+activation; no export-shape guessing or Component execution enters this slice.
 
 ### Wave 5 — worktrees and shared generated artifacts
 
