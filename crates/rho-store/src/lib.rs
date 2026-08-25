@@ -21,6 +21,7 @@ mod audit;
 mod audit_repository;
 mod compare;
 mod environment;
+mod environment_repository;
 mod evidence;
 mod executor;
 mod migration;
@@ -56,6 +57,7 @@ pub use environment::{
     EnvironmentOperationRequestDraft, EnvironmentOperationRequestSummary, EnvironmentSnapshotDraft,
     EnvironmentSnapshotRecord,
 };
+pub use environment_repository::EnvironmentRepository;
 pub use evidence::{
     ClaimReviewStatus, EvidenceClaim, EvidenceClaimDraft, EvidenceClaimReview, EvidenceEntry,
     EvidenceEntryDraft,

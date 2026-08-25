@@ -3774,13 +3774,12 @@ async fn list_environment_operation_requests(
 ) -> Result<Vec<EnvironmentOperationRequestSummary>, String> {
     let root = state.project_root.read().await.clone();
     let project_root = root.to_string_lossy().replace('\\', "/");
-    read_store(&state)
+    store_executor(&state)
+        .await
         .map_err(display_error)?
-        .list_environment_operation_requests(
-            &project_root,
-            limit.map(usize::from),
-            status.as_deref(),
-        )
+        .environment_repository()
+        .list_requests(project_root, limit.map(usize::from), status)
+        .await
         .map_err(display_error)
 }
 
@@ -3791,9 +3790,12 @@ async fn get_environment_operation_request(
 ) -> Result<Option<EnvironmentOperationRequestSummary>, String> {
     let root = state.project_root.read().await.clone();
     let project_root = root.to_string_lossy().replace('\\', "/");
-    read_store(&state)
+    store_executor(&state)
+        .await
         .map_err(display_error)?
-        .get_environment_operation_request(&project_root, &request_id)
+        .environment_repository()
+        .get_request(project_root, request_id)
+        .await
         .map_err(display_error)
 }
 
@@ -3870,9 +3872,13 @@ async fn respond_environment_operation(
     }
     let root = state.project_root.read().await.clone();
     let project_root = root.to_string_lossy().replace('\\', "/");
-    let pending = read_store(&state)
+    let environment_store = store_executor(&state)
+        .await
         .map_err(display_error)?
-        .get_environment_operation_request(&project_root, &request.request_id)
+        .environment_repository();
+    let pending = environment_store
+        .get_request(project_root, request.request_id.clone())
+        .await
         .map_err(display_error)?
         .filter(|item| item.status == "requested")
         .context(format!(
@@ -3893,11 +3899,10 @@ async fn respond_environment_operation(
             )
             .await;
         if !delivered {
-            read_store(&state)
-                .map_err(display_error)?
-                .decide_environment_operation_request(
-                    &request.request_id,
-                    &rho_store::EnvironmentOperationDecisionRecord {
+            environment_store
+                .decide_request(
+                    request.request_id.clone(),
+                    rho_store::EnvironmentOperationDecisionRecord {
                         decision: "cancel".to_string(),
                         status: "interrupted".to_string(),
                         reason: Some(
@@ -3905,6 +3910,7 @@ async fn respond_environment_operation(
                         ),
                     },
                 )
+                .await
                 .map_err(display_error)?;
         }
         return Ok(json!({

@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-19",
+  "active_work_packages": ["AM-W2-20"],
+  "integration_lane": "AM-W2-20",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -295,6 +295,10 @@ shape, bounds, failure and stale-generation behavior remain unchanged.
 `AM-W2-19` (`1776f7e`/AM-E-0046) moves the cross-domain reproducibility audit onto its own repository
 over the Store worker. Panic containment executes inside the submitted
 operation, preserving its stable retry message without risking the worker.
+
+`AM-W2-20` gives durable Environment request projections and non-executing
+Agent fallback decisions a dedicated Store repository. Real environment R
+execution remains in the Workspace broker lane and its separate approval path.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
