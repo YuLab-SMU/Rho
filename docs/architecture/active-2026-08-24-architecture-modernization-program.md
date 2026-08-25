@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W4-04",
+  "active_work_packages": ["AM-W4-05"],
+  "integration_lane": "AM-W4-05",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -639,6 +639,11 @@ allowed to select the new ABI.
 Implemented by `03aae40` with evidence `AM-E-0102`. Typed guest-call sequencing,
 broker grants, cancellation/recovery and desktop dual-ABI selection remain open
 under `AM-F-0006`.
+
+`AM-W4-05` adds typed begin/resume/cancel sequencing to the crate-owned host.
+It reuses core-v2 call, payload, step and cumulative-result limits, exposes only
+fully yielded validated steps, and adds exact epoch cancellation without
+performing broker work inside a borrowed guest Store.
 
 ### Wave 5 — worktrees and shared generated artifacts
 
