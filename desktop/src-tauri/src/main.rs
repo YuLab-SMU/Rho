@@ -1250,9 +1250,8 @@ async fn project_mark_files_changed(state: State<'_, AppState>) -> Result<Value,
     let mut context = context.lock().await;
     context.broker.project_changed();
     let identity = context.broker.identity().clone();
-    context
-        .store
-        .save_identity(&identity)
+    persist_workspace_identity(&context.executor, identity.clone())
+        .await
         .map_err(display_error)?;
     serde_json::to_value(identity).map_err(display_error)
 }
@@ -1410,9 +1409,8 @@ async fn project_write_file(
     atomic_write(&file, content.as_bytes()).map_err(display_error)?;
     context.broker.project_changed();
     let identity = context.broker.identity().clone();
-    context
-        .store
-        .save_identity(&identity)
+    persist_workspace_identity(&context.executor, identity)
+        .await
         .map_err(display_error)?;
     drop(context);
     project_state(state).await
@@ -1436,9 +1434,8 @@ async fn project_create_file(
     atomic_write_new(&file, content.as_bytes()).map_err(display_error)?;
     context.broker.project_changed();
     let identity = context.broker.identity().clone();
-    context
-        .store
-        .save_identity(&identity)
+    persist_workspace_identity(&context.executor, identity)
+        .await
         .map_err(display_error)?;
     drop(context);
     project_state(state).await
@@ -1455,9 +1452,8 @@ async fn project_delete_file(
     safe_delete_project_file(&root, &path).map_err(display_error)?;
     context.broker.project_changed();
     let identity = context.broker.identity().clone();
-    context
-        .store
-        .save_identity(&identity)
+    persist_workspace_identity(&context.executor, identity)
+        .await
         .map_err(display_error)?;
     drop(context);
     project_state(state).await
@@ -1783,13 +1779,12 @@ struct AgentFileMutationEventRecord {
     details: Value,
 }
 
-async fn run_agent_file_store_service<R, F>(state: &AppState, operation: F) -> Result<R>
+async fn run_store_executor_service<R, F>(executor: &StoreExecutor, operation: F) -> Result<R>
 where
     R: Send + 'static,
     F: FnOnce(&mut BorrowedStore<'_>) -> Result<R> + Send + 'static,
 {
-    store_executor(state)
-        .await?
+    executor
         .run_service(operation)
         .await
         .map_err(|error| match error {
@@ -1798,6 +1793,25 @@ where
                 anyhow!("Store worker failed: {message}")
             }
         })
+}
+
+async fn run_agent_file_store_service<R, F>(state: &AppState, operation: F) -> Result<R>
+where
+    R: Send + 'static,
+    F: FnOnce(&mut BorrowedStore<'_>) -> Result<R> + Send + 'static,
+{
+    run_store_executor_service(store_executor(state).await?, operation).await
+}
+
+async fn persist_workspace_identity(
+    executor: &StoreExecutor,
+    identity: rho_protocol::WorkspaceIdentity,
+) -> Result<()> {
+    run_store_executor_service(executor, move |store| {
+        store.save_identity(&identity)?;
+        Ok(())
+    })
+    .await
 }
 
 async fn persist_agent_file_mutation_event(
@@ -2267,7 +2281,7 @@ async fn record_agent_file_project_change(
     let mut context = context.lock().await;
     context.broker.project_changed();
     let identity = context.broker.identity().clone();
-    context.store.save_identity(&identity)?;
+    persist_workspace_identity(&context.executor, identity.clone()).await?;
     Ok(identity)
 }
 
@@ -4429,9 +4443,8 @@ async fn export_plot_artifact(
         .map_err(display_error)?;
     context.broker.project_changed();
     let identity = context.broker.identity().clone();
-    context
-        .store
-        .save_identity(&identity)
+    persist_workspace_identity(&context.executor, identity)
+        .await
         .map_err(display_error)?;
     let detail = context
         .store
@@ -4608,7 +4621,9 @@ async fn export_data_view_artifact(
         .map_err(display_error)?;
     broker.project_changed();
     let identity = broker.identity().clone();
-    store.save_identity(&identity).map_err(display_error)?;
+    persist_workspace_identity(executor, identity)
+        .await
+        .map_err(display_error)?;
     let detail = store
         .get_artifact_record(&project_root, &artifact.artifact_id)
         .map_err(display_error)?
@@ -6814,7 +6829,7 @@ async fn reconcile_workspace_plugins_for_boundary(
                 let mut context = context.lock().await;
                 context.broker.project_changed();
                 let identity = context.broker.identity().clone();
-                if let Err(error) = context.store.save_identity(&identity) {
+                if let Err(error) = persist_workspace_identity(executor, identity.clone()).await {
                     write_startup_event(json!({
                         "kind": "workspace_plugin_recovery_revision_failed",
                         "trigger": trigger,
@@ -7004,9 +7019,9 @@ async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus> {
             "uncertain": file_recovery.uncertain
         }));
     }
-    let mut broker = BrokerState::new(format!("desktop_{}", Uuid::new_v4()));
-    store.save_identity(broker.identity())?;
     let executor = store_executor(state).await?.clone();
+    let mut broker = BrokerState::new(format!("desktop_{}", Uuid::new_v4()));
+    persist_workspace_identity(&executor, broker.identity().clone()).await?;
     bootstrap_bridge(
         session.as_ref(),
         &mut broker,
@@ -7026,7 +7041,7 @@ async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus> {
                 .reconcile_project(&plugin_context, &mut store);
             let post_revision_reconciliation = if plugin_reconciliation.project_files_changed {
                 broker.project_changed();
-                store.save_identity(broker.identity())?;
+                persist_workspace_identity(&executor, broker.identity().clone()).await?;
                 let fresh_context = workspace_plugin_runtime_context(
                     config.data_dir.clone(),
                     normalized_project_root.clone(),
@@ -10474,12 +10489,12 @@ mod tests {
         existing_startup_file, find_executable_on_path, finish_render_job, has_png_signature,
         interrupt_all_agent_tasks, load_runtime_cache, locate_ark_from_candidates, locate_rscript,
         lockfile_inventory_arguments, parse_r_runtime_probe,
-        persist_agent_file_mutation_event_to_store, project_open, project_pick_directory,
-        project_restore_session, project_switch_blocker, r_architecture_supported,
-        reconcile_render_job, recover_incomplete_agent_file_mutations, render_job_is_terminal,
-        retry_run_arguments, run_is_retryable, run_r_probe, runtime_file_signature,
-        safe_delete_project_file, save_runtime_cache, shutdown_application, source_claim_snapshot,
-        store_executor, switch_project_with_watcher_factory, text_sha256,
+        persist_agent_file_mutation_event_to_store, persist_workspace_identity, project_open,
+        project_pick_directory, project_restore_session, project_switch_blocker,
+        r_architecture_supported, reconcile_render_job, recover_incomplete_agent_file_mutations,
+        render_job_is_terminal, retry_run_arguments, run_is_retryable, run_r_probe,
+        runtime_file_signature, safe_delete_project_file, save_runtime_cache, shutdown_application,
+        source_claim_snapshot, store_executor, switch_project_with_watcher_factory, text_sha256,
         undo_agent_file_edit_state, validate_execute_source_range_shape,
         validate_persisted_agent_file_proposal_structure, workspace_project_root_code,
         write_r_probe_script,
@@ -11766,6 +11781,60 @@ mod tests {
         let executor = store_executor(state).await.unwrap().clone();
         *state.context.lock().await =
             Some(Arc::new(WorkspaceBrokerLane::new(broker, store, executor)));
+    }
+
+    #[test]
+    fn project_identity_persistence_rejection_preserves_truth_and_worker_recovers() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let tempdir = TempDir::new().unwrap();
+            let store_path = tempdir.path().join("rho.sqlite");
+            let executor = StoreExecutor::open(&store_path).await.unwrap();
+            let mut broker = BrokerState::new("revision-worker-test");
+            let initial_identity = broker.identity().clone();
+            persist_workspace_identity(&executor, initial_identity.clone())
+                .await
+                .unwrap();
+
+            let connection = rusqlite::Connection::open(&store_path).unwrap();
+            connection
+                .execute_batch(
+                    "CREATE TRIGGER reject_workspace_identity_update
+                     BEFORE UPDATE ON workspace_identity
+                     BEGIN
+                       SELECT RAISE(ABORT, 'injected identity persistence failure');
+                     END;",
+                )
+                .unwrap();
+
+            broker.project_changed();
+            let next_identity = broker.identity().clone();
+            let error = persist_workspace_identity(&executor, next_identity.clone())
+                .await
+                .unwrap_err();
+            assert!(
+                error
+                    .to_string()
+                    .contains("injected identity persistence failure")
+            );
+            let durable_after_rejection = executor
+                .run_service(|store| store.load_identity())
+                .await
+                .unwrap();
+            assert_eq!(durable_after_rejection, Some(initial_identity));
+
+            connection
+                .execute_batch("DROP TRIGGER reject_workspace_identity_update;")
+                .unwrap();
+            persist_workspace_identity(&executor, next_identity.clone())
+                .await
+                .unwrap();
+            let durable_after_retry = executor
+                .run_service(|store| store.load_identity())
+                .await
+                .unwrap();
+            assert_eq!(durable_after_retry, Some(next_identity));
+        });
     }
 
     #[test]

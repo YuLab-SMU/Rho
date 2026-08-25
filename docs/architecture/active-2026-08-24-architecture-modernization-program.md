@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-30",
+  "active_work_packages": ["AM-W2-31"],
+  "integration_lane": "AM-W2-31",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -350,6 +350,9 @@ project-isolation behavior.
 plot and artifact persistence onto that worker while Ark and revisions remain
 serialized by the Workspace lane; commit `13a90a7` and `AM-E-0057` pass the
 Store, Server and complete desktop matrices.
+
+`AM-W2-31` moves the remaining project, Agent-file and plugin-recovery revision
+commits from the legacy lane Store to the shared Store worker.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
