@@ -28,6 +28,18 @@ const ARTIFACT_COMMANDS = [
   "read_plot_artifact",
 ];
 
+const EVIDENCE_COMMANDS = [
+  "create_evidence_claim",
+  "create_evidence_entry",
+  "delete_evidence_claim",
+  "delete_evidence_entry",
+  "get_evidence_entry",
+  "list_evidence_claims",
+  "list_evidence_entries",
+  "resolve_doi",
+  "review_evidence_claim",
+];
+
 const PLUGIN_COMMANDS = [
   "accept_workspace_plugin_update",
   "disable_workspace_plugin",
@@ -169,12 +181,23 @@ export function validateCommandInventory({ sources, main, frontend, expectedHand
     "Artifact command module ownership changed",
   );
 
+  const evidenceSource = sources.find(({ name }) => name.endsWith("commands/evidence.rs"));
+  assert.ok(evidenceSource, "Evidence command module is missing");
+  assert.deepEqual(
+    commandDefinitions([evidenceSource]).map(({ name }) => name).sort(),
+    EVIDENCE_COMMANDS,
+    "Evidence command module ownership changed",
+  );
+
   return { commands: definitionNames.length, sources: sources.length };
 }
 
 function fixtures() {
   const artifactHandlers = ARTIFACT_COMMANDS.map(
     (command) => `  commands::artifacts::${command},`,
+  ).join("\n");
+  const evidenceHandlers = EVIDENCE_COMMANDS.map(
+    (command) => `  commands::evidence::${command},`,
   ).join("\n");
   const pluginHandlers = PLUGIN_COMMANDS.map(
     (command) => `  commands::plugins::${command},`,
@@ -186,6 +209,7 @@ async fn app_info() {}
   app_info,
 ${pluginHandlers}
 ${artifactHandlers}
+${evidenceHandlers}
   commands::runs::list_runs,
   commands::runs::list_problems,
   commands::runs::get_run_detail,
@@ -202,18 +226,22 @@ ${artifactHandlers}
       { name: "commands/artifacts.rs", text: ARTIFACT_COMMANDS.map(
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
+      { name: "commands/evidence.rs", text: EVIDENCE_COMMANDS.map(
+        (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
+      ).join("\n") },
       { name: "commands/plugins.rs", text: PLUGIN_COMMANDS.map(
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
     ],
     main,
-    frontend: RUN_COMMANDS.map(
+    frontend: [
+      ...RUN_COMMANDS,
+      ...ARTIFACT_COMMANDS,
+      ...EVIDENCE_COMMANDS,
+      ...PLUGIN_COMMANDS,
+    ].map(
       (command) => `invoke("${command}");`,
-    ).concat(ARTIFACT_COMMANDS.map(
-      (command) => `invoke("${command}");`,
-    ).concat(PLUGIN_COMMANDS.map(
-      (command) => `invoke("${command}");`,
-    ))).join("\n"),
+    ).join("\n"),
   };
 }
 

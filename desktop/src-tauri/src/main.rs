@@ -70,8 +70,7 @@ use rho_store::{
     AgentConversationDraft, AgentConversationSummary, AgentTurnContextItem,
     AgentTurnContextItemDraft, AgentTurnDetail, AgentTurnDraft, AgentTurnEvent,
     AgentTurnEventDraft, AgentTurnFinish, AgentTurnSummary, ApprovalRequestSummary,
-    ArtifactRecordSummary, BorrowedStore, EnvironmentOperationRequestSummary, EvidenceClaim,
-    EvidenceClaimDraft, EvidenceClaimReview, EvidenceEntry, EvidenceEntryDraft,
+    ArtifactRecordSummary, BorrowedStore, EnvironmentOperationRequestSummary,
     ProjectTransitionSnapshot, RunRepository, RunSummary, Store, StoreConnection, StoreExecutor,
     StoreExecutorOperationError, normalize_project_root,
 };
@@ -861,20 +860,6 @@ fn editor_format_result(response: Value) -> Result<Value> {
         "Formatting response returned an unexpected Workspace R result"
     );
     Ok(execution)
-}
-
-#[derive(Deserialize)]
-struct EvidenceClaimCreateRequest {
-    kind: String,
-    summary: String,
-    anchor_kind: String,
-    source_path: Option<String>,
-    start_line: Option<i64>,
-    start_column: Option<i64>,
-    end_line: Option<i64>,
-    end_column: Option<i64>,
-    artifact_id: Option<String>,
-    evidence_ids: Vec<i64>,
 }
 
 #[derive(Deserialize)]
@@ -4100,273 +4085,6 @@ async fn list_project_skills(
 }
 
 // ── Evidence workspace commands ──────────────────────────────
-
-fn resolve_doi_citation(doi: &str) -> Option<Value> {
-    let url = format!("https://api.crossref.org/works/{doi}");
-    let client = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(8))
-        .build()
-        .ok()?;
-    let resp = client
-        .get(&url)
-        .header("Accept", "application/json")
-        .send()
-        .ok()?;
-    let body: Value = resp.json().ok()?;
-    let message = body.get("message")?;
-    let title = message.get("title")?.as_array()?.first()?.as_str()?;
-    let authors = message
-        .get("author")
-        .and_then(|v| v.as_array())
-        .map(|authors| {
-            authors
-                .iter()
-                .filter_map(|a| a.get("family").and_then(|v| v.as_str()))
-                .collect::<Vec<_>>()
-                .join(", ")
-        })
-        .unwrap_or_default();
-    let year = message
-        .get("published-print")
-        .or_else(|| message.get("published-online"))
-        .or_else(|| message.get("issued"))
-        .and_then(|v| v.get("date-parts"))
-        .and_then(|v| v.as_array())
-        .and_then(|parts| parts.first())
-        .and_then(|p| p.as_array())
-        .and_then(|p| p.first())
-        .and_then(|y| y.as_i64());
-    let journal = message
-        .get("container-title")
-        .and_then(|v| v.as_array())
-        .and_then(|titles| titles.first())
-        .and_then(|t| t.as_str());
-    Some(json!({
-        "title": title,
-        "authors": authors,
-        "year": year,
-        "journal": journal,
-    }))
-}
-
-#[tauri::command]
-async fn resolve_doi(doi: String, _state: State<'_, AppState>) -> Result<Value, String> {
-    tokio::task::spawn_blocking(move || resolve_doi_citation(&doi))
-        .await
-        .map_err(|e| format!("DOI resolution failed: {e}"))
-        .map(|v| v.unwrap_or(Value::Null))
-}
-
-#[tauri::command]
-async fn create_evidence_entry(
-    title: String,
-    notes: Option<String>,
-    doi: Option<String>,
-    run_id: Option<String>,
-    artifact_id: Option<String>,
-    state: State<'_, AppState>,
-) -> Result<EvidenceEntry, String> {
-    let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy().into_owned();
-    store_executor(&state)
-        .await
-        .map_err(display_error)?
-        .create_evidence_entry(EvidenceEntryDraft {
-            project_root,
-            title,
-            notes: notes.unwrap_or_default(),
-            doi,
-            run_id,
-            artifact_id,
-        })
-        .await
-        .map_err(display_error)
-}
-
-#[tauri::command]
-async fn list_evidence_entries(
-    limit: Option<usize>,
-    search: Option<String>,
-    state: State<'_, AppState>,
-) -> Result<Vec<EvidenceEntry>, String> {
-    let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy().replace('\\', "/");
-    store_executor(&state)
-        .await
-        .map_err(display_error)?
-        .list_evidence_entries(project_root, limit, search)
-        .await
-        .map_err(display_error)
-}
-
-#[tauri::command]
-async fn get_evidence_entry(
-    id: i64,
-    state: State<'_, AppState>,
-) -> Result<Option<EvidenceEntry>, String> {
-    let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy().replace('\\', "/");
-    store_executor(&state)
-        .await
-        .map_err(display_error)?
-        .get_evidence_entry(project_root, id)
-        .await
-        .map_err(display_error)
-}
-
-#[tauri::command]
-async fn delete_evidence_entry(id: i64, state: State<'_, AppState>) -> Result<bool, String> {
-    let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy().into_owned();
-    store_executor(&state)
-        .await
-        .map_err(display_error)?
-        .delete_evidence_entry(project_root, id)
-        .await
-        .map_err(display_error)
-}
-
-fn source_claim_snapshot(
-    root: &Path,
-    path: &str,
-    start_line: i64,
-    end_line: i64,
-) -> Result<(String, String)> {
-    ensure!(
-        start_line >= 1 && end_line >= start_line,
-        "Claim source range is invalid"
-    );
-    ensure!(
-        end_line - start_line < 200,
-        "Claim source range exceeds 200 lines"
-    );
-    let file = project_path(root, path)?;
-    ensure_editable_file(&file)?;
-    ensure_editable_file_size(&file)?;
-    let content = std::fs::read_to_string(&file)?;
-    let lines = content.lines().collect::<Vec<_>>();
-    ensure!(
-        end_line as usize <= lines.len(),
-        "Claim source range is outside the file"
-    );
-    let excerpt = lines[(start_line as usize - 1)..end_line as usize].join("\n");
-    ensure!(
-        excerpt.len() <= 16 * 1024,
-        "Claim source excerpt exceeds 16 KiB"
-    );
-    let digest = format!("{:x}", Sha256::digest(content.as_bytes()));
-    Ok((digest, excerpt))
-}
-
-#[tauri::command]
-async fn create_evidence_claim(
-    request: EvidenceClaimCreateRequest,
-    state: State<'_, AppState>,
-) -> Result<EvidenceClaim, String> {
-    let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy().replace('\\', "/");
-    let (source_sha256, source_excerpt) = if request.anchor_kind == "source_range" {
-        let path = request
-            .source_path
-            .as_deref()
-            .ok_or_else(|| "Source path is required".to_string())?;
-        let (digest, excerpt) = source_claim_snapshot(
-            &root,
-            path,
-            request.start_line.unwrap_or(0),
-            request.end_line.unwrap_or(0),
-        )
-        .map_err(display_error)?;
-        (Some(digest), Some(excerpt))
-    } else {
-        (None, None)
-    };
-    store_executor(&state)
-        .await
-        .map_err(display_error)?
-        .create_evidence_claim(EvidenceClaimDraft {
-            project_root,
-            kind: request.kind,
-            summary: request.summary,
-            anchor_kind: request.anchor_kind,
-            source_path: request.source_path.map(|path| path.replace('\\', "/")),
-            start_line: request.start_line,
-            start_column: request.start_column,
-            end_line: request.end_line,
-            end_column: request.end_column,
-            source_sha256,
-            source_excerpt,
-            artifact_id: request.artifact_id,
-            evidence_ids: request.evidence_ids,
-        })
-        .await
-        .map_err(display_error)
-}
-
-#[cfg_attr(test, specta::specta)]
-#[tauri::command]
-async fn list_evidence_claims(
-    limit: Option<rho_ui_contract::UiIpcUsize>,
-    state: State<'_, AppState>,
-) -> Result<Vec<EvidenceClaim>, String> {
-    let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy().replace('\\', "/");
-    store_executor(&state)
-        .await
-        .map_err(display_error)?
-        .list_evidence_claims(project_root, limit.map(usize::from))
-        .await
-        .map_err(display_error)
-}
-
-#[tauri::command]
-async fn review_evidence_claim(
-    claim_id: String,
-    state: State<'_, AppState>,
-) -> Result<EvidenceClaimReview, String> {
-    let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy().replace('\\', "/");
-    let executor = store_executor(&state).await.map_err(display_error)?;
-    let claim = executor
-        .get_evidence_claim(project_root.clone(), claim_id.clone())
-        .await
-        .map_err(display_error)?;
-    let source_resolved = claim.as_ref().and_then(|claim| {
-        if claim.anchor_kind != "source_range" {
-            return None;
-        }
-        let snapshot = source_claim_snapshot(
-            &root,
-            claim.source_path.as_deref()?,
-            claim.start_line?,
-            claim.end_line?,
-        )
-        .ok()?;
-        Some(
-            claim.source_sha256.as_deref() == Some(snapshot.0.as_str())
-                && claim.source_excerpt.as_deref() == Some(snapshot.1.as_str()),
-        )
-    });
-    executor
-        .review_evidence_claim(project_root, claim_id, source_resolved)
-        .await
-        .map_err(display_error)
-}
-
-#[tauri::command]
-async fn delete_evidence_claim(
-    claim_id: String,
-    state: State<'_, AppState>,
-) -> Result<bool, String> {
-    let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy().replace('\\', "/");
-    store_executor(&state)
-        .await
-        .map_err(display_error)?
-        .delete_evidence_claim(project_root, claim_id)
-        .await
-        .map_err(display_error)
-}
 
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
@@ -9774,7 +9492,7 @@ mod tests {
         project_switch_blocker, r_architecture_supported, reconcile_render_job,
         recover_incomplete_agent_file_mutations, render_job_is_terminal, retry_run_arguments,
         run_is_retryable, run_r_probe, runtime_file_signature, safe_delete_project_file,
-        save_runtime_cache, shutdown_application, source_claim_snapshot, store_executor,
+        save_runtime_cache, shutdown_application, store_executor,
         switch_project_with_watcher_factory, text_sha256, undo_agent_file_edit_state,
         validate_execute_source_range_shape, validate_persisted_agent_file_proposal_structure,
         workspace_project_root_code, write_r_probe_script,
@@ -9783,6 +9501,7 @@ mod tests {
         data_view_artifact_metadata, data_view_delimited_text, decode_plot_png_base64,
         ensure_artifact_export_target, has_png_signature,
     };
+    use crate::commands::evidence::source_claim_snapshot;
     use crate::commands::runs::{audit_reproducibility_with_state, list_runs_with_state};
     use crate::platform;
 
@@ -15555,7 +15274,9 @@ mod tests {
         let output_path = std::env::var_os("RHO_EVIDENCE_BINDINGS_PATH")
             .expect("RHO_EVIDENCE_BINDINGS_PATH must name the generated file");
         tauri_specta::Builder::<tauri::Wry>::new()
-            .commands(tauri_specta::collect_commands![super::list_evidence_claims,])
+            .commands(tauri_specta::collect_commands![
+                crate::commands::evidence::list_evidence_claims,
+            ])
             .error_handling(tauri_specta::ErrorHandlingMode::Throw)
             .export(specta_typescript::Typescript::default(), output_path)
             .expect("Evidence TypeScript export must succeed");
@@ -17669,15 +17390,15 @@ fn main() {
             git_commands::git_list_conflicts,
             git_commands::git_resolve_conflict,
             targets_status,
-            resolve_doi,
-            create_evidence_entry,
-            list_evidence_entries,
-            get_evidence_entry,
-            delete_evidence_entry,
-            create_evidence_claim,
-            list_evidence_claims,
-            review_evidence_claim,
-            delete_evidence_claim,
+            commands::evidence::resolve_doi,
+            commands::evidence::create_evidence_entry,
+            commands::evidence::list_evidence_entries,
+            commands::evidence::get_evidence_entry,
+            commands::evidence::delete_evidence_entry,
+            commands::evidence::create_evidence_claim,
+            commands::evidence::list_evidence_claims,
+            commands::evidence::review_evidence_claim,
+            commands::evidence::delete_evidence_claim,
         ])
         .build(tauri::generate_context!());
     match run_result {
