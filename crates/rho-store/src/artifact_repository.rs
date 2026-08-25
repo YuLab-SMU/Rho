@@ -1,9 +1,9 @@
 //! Asynchronous Artifact, Plot and retention persistence boundary.
 
 use crate::{
-    ArtifactRecordSummary, PlotArtifactSummary, PlotPayloadPruneResult, ProjectRetentionSummary,
-    RunDetail, RuntimeOutputPolicy, Store, StoreExecutor, StoreExecutorError,
-    query::required_project_root,
+    ArtifactRecordDraft, ArtifactRecordSummary, PlotArtifactSummary, PlotPayloadPruneResult,
+    ProjectRetentionSummary, RunDetail, RuntimeOutputPolicy, Store, StoreExecutor,
+    StoreExecutorError, query::required_project_root,
 };
 
 #[derive(Clone, Debug)]
@@ -111,6 +111,27 @@ impl ArtifactRepository {
                     .transpose()?
                     .flatten();
                 Ok(Some(ArtifactRecordProjection { artifact, run }))
+            })
+            .await
+    }
+
+    pub async fn create_record(
+        &self,
+        mut draft: ArtifactRecordDraft,
+    ) -> Result<ArtifactRecordSummary, StoreExecutorError> {
+        let project_root = required_project_root(&draft.project_root)?;
+        draft.project_root.clone_from(&project_root);
+        self.executor
+            .call(move |connection| {
+                let mut store = Store::borrowed(connection);
+                store.create_artifact_record(&draft)?;
+                store
+                    .get_artifact_record(&project_root, &draft.artifact_id)?
+                    .ok_or_else(|| {
+                        crate::StoreError::Validation(
+                            "Created artifact record could not be reloaded".to_string(),
+                        )
+                    })
             })
             .await
     }
@@ -388,7 +409,6 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
-
         let record = repository
             .get_record("/projects/a".to_string(), "artifact-a".to_string())
             .await
@@ -487,6 +507,72 @@ mod tests {
                 .await
                 .unwrap()
                 .is_some()
+        );
+    }
+
+    #[tokio::test]
+    async fn artifact_record_commit_rejects_duplicates_recovers_and_isolates_projects() {
+        let directory = tempdir().unwrap();
+        let database = directory.path().join("rho.sqlite");
+        let mut store = Store::open(&database).unwrap();
+        create_run(&mut store, "/projects/a", "run-a", "workspace-a");
+        create_run(&mut store, "/projects/b", "run-b", "workspace-b");
+        drop(store);
+
+        let repository = StoreExecutor::open(&database)
+            .await
+            .unwrap()
+            .artifact_repository();
+        let draft = |project_root: &str, run_id: &str, artifact_id: &str, workspace_id: &str| {
+            ArtifactRecordDraft {
+                artifact_id: artifact_id.to_string(),
+                artifact_kind: "plot_export".to_string(),
+                run_id: Some(run_id.to_string()),
+                project_root: project_root.to_string(),
+                output_path: format!("artifacts/{artifact_id}.png"),
+                source_path: Some("report.qmd".to_string()),
+                execution_mode: Some("render".to_string()),
+                document_version: Some(1),
+                workspace_id: Some(workspace_id.to_string()),
+                state_revision: Some(2),
+                project_revision: Some(2),
+                media_type: "image/png".to_string(),
+                metadata_json: "{}".to_string(),
+                provenance_complete: true,
+                incomplete_reason: None,
+            }
+        };
+
+        let created = repository
+            .create_record(draft("/projects/a", "run-a", "artifact-a", "workspace-a"))
+            .await
+            .unwrap();
+        assert_eq!(created.artifact_id, "artifact-a");
+        assert!(
+            repository
+                .get_record("/projects/b".to_string(), "artifact-a".to_string())
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            repository
+                .create_record(draft("/projects/a", "run-a", "artifact-a", "workspace-a",))
+                .await
+                .is_err()
+        );
+
+        let recovered = repository
+            .create_record(draft("/projects/b", "run-b", "artifact-b", "workspace-b"))
+            .await
+            .unwrap();
+        assert_eq!(recovered.artifact_id, "artifact-b");
+        assert!(
+            repository
+                .get_record("/projects/a".to_string(), "artifact-b".to_string())
+                .await
+                .unwrap()
+                .is_none()
         );
     }
 }

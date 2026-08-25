@@ -105,6 +105,26 @@ impl RunRepository {
             .await
     }
 
+    pub async fn find_for_workspace_state(
+        &self,
+        project_root: String,
+        workspace_id: String,
+        state_revision_after: i64,
+        project_revision_after: i64,
+    ) -> Result<Option<RunDetail>, StoreExecutorError> {
+        let project_root = required_project_root(&project_root)?;
+        self.executor
+            .call(move |connection| {
+                Store::borrowed(connection).find_run_detail_for_workspace_state(
+                    &project_root,
+                    &workspace_id,
+                    state_revision_after,
+                    project_revision_after,
+                )
+            })
+            .await
+    }
+
     pub async fn compare_runs(
         &self,
         project_root: String,
@@ -218,6 +238,30 @@ mod tests {
         assert!(
             repository
                 .get_run_detail("/projects/b".to_string(), "run-a-1".to_string())
+                .await
+                .unwrap()
+                .is_none()
+        );
+        let workspace_run = repository
+            .find_for_workspace_state(
+                "/projects/a".to_string(),
+                "workspace.run-repository".to_string(),
+                2,
+                1,
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(workspace_run.project_root, "/projects/a");
+        assert!(workspace_run.run_id.starts_with("run-a-"));
+        assert!(
+            repository
+                .find_for_workspace_state(
+                    "/projects/a".to_string(),
+                    "workspace.other".to_string(),
+                    2,
+                    1,
+                )
                 .await
                 .unwrap()
                 .is_none()

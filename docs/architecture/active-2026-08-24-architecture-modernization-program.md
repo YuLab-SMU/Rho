@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-31",
+  "active_work_packages": ["AM-W2-32"],
+  "integration_lane": "AM-W2-32",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -355,6 +355,10 @@ Store, Server and complete desktop matrices.
 commits from the legacy lane Store to the shared Store worker; commit `9e797d8`
 and `AM-E-0058` pass the complete desktop matrix and injected persistence
 rejection/recovery test.
+
+`AM-W2-32` moves artifact-export source/record access and run-retry source
+lookup from the legacy Workspace Store to the existing Artifact and Run
+repositories while retaining file, Ark and revision ordering.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 

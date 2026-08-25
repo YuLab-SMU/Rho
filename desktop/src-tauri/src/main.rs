@@ -4387,9 +4387,10 @@ async fn export_plot_artifact(
         ensure_artifact_export_target(&root, &request.path, &["png"]).map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let plot = context
-        .store
-        .get_plot_artifact(&project_root, &request.plot_id)
+    let artifact_repository = context.executor.artifact_repository();
+    let plot = artifact_repository
+        .get_plot(project_root.clone(), request.plot_id.clone())
+        .await
         .map_err(display_error)?
         .context(format!("Plot artifact not found: {}", request.plot_id))
         .map_err(display_error)?;
@@ -4408,8 +4409,10 @@ async fn export_plot_artifact(
     }
     atomic_write_new(&file, &bytes).map_err(display_error)?;
     let run = context
-        .store
-        .get_run_detail(&project_root, &plot.run_id)
+        .executor
+        .run_repository()
+        .get_run_detail(project_root, plot.run_id.clone())
+        .await
         .map_err(display_error)?;
     let (provenance_complete, incomplete_reason) = artifact_provenance_status(
         run.as_ref(),
@@ -4437,20 +4440,14 @@ async fn export_plot_artifact(
         provenance_complete,
         incomplete_reason,
     };
-    context
-        .store
-        .create_artifact_record(&artifact)
+    let detail = artifact_repository
+        .create_record(artifact)
+        .await
         .map_err(display_error)?;
     context.broker.project_changed();
     let identity = context.broker.identity().clone();
     persist_workspace_identity(&context.executor, identity)
         .await
-        .map_err(display_error)?;
-    let detail = context
-        .store
-        .get_artifact_record(&project_root, &artifact.artifact_id)
-        .map_err(display_error)?
-        .context("Exported artifact record was not found")
         .map_err(display_error)?;
     Ok(ArtifactRecordView {
         artifact: detail,
@@ -4530,7 +4527,7 @@ async fn export_data_view_artifact(
     let mut context = context.lock().await;
     let WorkspaceBrokerState {
         broker,
-        store,
+        store: _,
         executor,
     } = &mut *context;
     let payload = json!({
@@ -4572,13 +4569,15 @@ async fn export_data_view_artifact(
         request.workspace.state_revision,
         request.workspace.project_revision,
     ) {
-        (Some(workspace_id), Some(state_revision), Some(project_revision)) => store
-            .find_run_detail_for_workspace_state(
-                &project_root,
-                workspace_id,
+        (Some(workspace_id), Some(state_revision), Some(project_revision)) => executor
+            .run_repository()
+            .find_for_workspace_state(
+                project_root.clone(),
+                workspace_id.to_string(),
                 state_revision as i64,
                 project_revision as i64,
             )
+            .await
             .map_err(display_error)?,
         _ => None,
     };
@@ -4616,18 +4615,15 @@ async fn export_data_view_artifact(
         provenance_complete,
         incomplete_reason,
     };
-    store
-        .create_artifact_record(&artifact)
+    let detail = executor
+        .artifact_repository()
+        .create_record(artifact)
+        .await
         .map_err(display_error)?;
     broker.project_changed();
     let identity = broker.identity().clone();
     persist_workspace_identity(executor, identity)
         .await
-        .map_err(display_error)?;
-    let detail = store
-        .get_artifact_record(&project_root, &artifact.artifact_id)
-        .map_err(display_error)?
-        .context("Exported table artifact record was not found")
         .map_err(display_error)?;
     Ok(ArtifactRecordView {
         artifact: detail,
@@ -5078,9 +5074,15 @@ async fn retry_run(run_id: String, state: State<'_, AppState>) -> Result<RunRetr
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let detail = context
-        .store
-        .get_run_detail(&project_root, &run_id)
+    let WorkspaceBrokerState {
+        broker,
+        store: _,
+        executor,
+    } = &mut *context;
+    let detail = executor
+        .run_repository()
+        .get_run_detail(project_root, run_id.clone())
+        .await
         .map_err(display_error)?
         .context(format!("Run not found: {run_id}"))
         .map_err(display_error)?;
@@ -5092,11 +5094,6 @@ async fn retry_run(run_id: String, state: State<'_, AppState>) -> Result<RunRetr
     }
     let arguments =
         retry_run_arguments(&detail.arguments_json, &detail.run_id).map_err(display_error)?;
-    let WorkspaceBrokerState {
-        broker,
-        store: _,
-        executor,
-    } = &mut *context;
     let payload = json!({
         "arguments": arguments,
         "expected_workspace": broker.identity()
