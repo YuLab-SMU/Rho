@@ -5,6 +5,7 @@ import { createMockUiKernelTransport } from "./mock";
 import { ResourceExternalStore, RuntimeExternalStore, StudioExternalStore, SurfaceExternalStore, UiExternalStore, UiProfileExternalStore } from "./store";
 import { createTauriUiKernelTransport } from "./tauri";
 import type {
+  CheckResult,
   OpenSurfaceRequest,
   ProjectUiProfileSnapshot,
   ResourceRegistrySnapshot,
@@ -47,6 +48,40 @@ function generatedProfile(): ProjectUiProfileSnapshot {
   return structuredClone(
     fixture.project_ui_profile_snapshot,
   ) as unknown as ProjectUiProfileSnapshot;
+}
+
+function generatedCheckResult(): CheckResult {
+  return {
+    contract: "rho.ui.check-result.v1",
+    result_id: "check-result:fixture",
+    project_id: "project:fixture",
+    project_revision: 7,
+    snapshot: {
+      contract: "rho.ui.check-project.snapshot.v1",
+      snapshot_id: "check-snapshot:fixture",
+      project_id: "project:fixture",
+      project_revision: 7,
+      captured_at: "2026-08-25T00:00:00Z",
+      files: [],
+      source_bytes: 0,
+      renv_lock_sha256: null,
+      truncated: false,
+      limitations: [],
+    },
+    ruleset_digest: "a".repeat(64),
+    generated_at: "2026-08-25T00:00:01Z",
+    status: "clean",
+    findings: [],
+    coverage: {
+      files_scanned: 0,
+      files_skipped: 0,
+      core_rules: 22,
+      plugin_rule_packs: 0,
+      plugin_rule_failures: 0,
+    },
+    truncated: false,
+    limitations: [],
+  };
 }
 
 describe("UI Kernel transport and external store", () => {
@@ -427,9 +462,9 @@ describe("UI Kernel transport and external store", () => {
             provenance: {},
           }
         : command === "check_project_run"
-        ? { result: {} }
+        ? { result: generatedCheckResult() }
         : command === "check_result"
-        ? {}
+        ? generatedCheckResult()
         : command.startsWith("surface_")
         ? generatedSurfaces()
         : command.startsWith("studio_")

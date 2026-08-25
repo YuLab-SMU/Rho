@@ -79,20 +79,22 @@ impl CheckRuntimeState {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, specta::Type)]
 pub(crate) struct CheckRunRequest {
     pub project_id: ProjectId,
+    #[specta(type = rho_ui_contract::UiIpcNumber)]
     pub expected_project_revision: u64,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, specta::Type)]
 pub(crate) struct CheckResultRequest {
     pub project_id: ProjectId,
+    #[specta(type = rho_ui_contract::UiIpcNumber)]
     pub expected_project_revision: u64,
     pub result_id: CheckResultId,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub(crate) struct CheckRunResponse {
     pub result: CheckResultV1,
 }
@@ -538,6 +540,7 @@ fn build_result(
     Ok(result)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn check_project_run(
     request: CheckRunRequest,
@@ -689,6 +692,7 @@ pub(crate) async fn check_project_run(
     Ok(CheckRunResponse { result })
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn check_result(
     request: CheckResultRequest,
@@ -792,6 +796,59 @@ mod tests {
     }
 
     #[test]
+    fn check_ipc_serialization_matches_generated_contract() {
+        let mut result = clean_result("project:fixture", 7);
+        result.status = CheckResultStatusV1::Findings;
+        result.findings.push(CheckFindingV1 {
+            rule_id: CheckRuleId::new("rho.repro.v1.randomness.rng_without_seed").unwrap(),
+            rule_version: 1,
+            origin: SurfaceOriginV1::Application {
+                component_id: ApplicationComponentId::new("rho.check.core").unwrap(),
+            },
+            activation_generation: 3,
+            severity: CheckSeverityV1::Warning,
+            category: "randomness".to_string(),
+            title: "Random result may change".to_string(),
+            summary: "Random-number generation has no nearby fixed seed.".to_string(),
+            remediation: "Set a deliberate seed before the analysis.".to_string(),
+            evidence: vec![CheckEvidenceV1::SourceRange {
+                path: "analysis.R".to_string(),
+                line: 2,
+                column: Some(4),
+                excerpt: Some("sample(values)".to_string()),
+            }],
+            limitations: Vec::new(),
+        });
+        result.validate().unwrap();
+        let run_request = CheckRunRequest {
+            project_id: ProjectId::new("project:fixture").unwrap(),
+            expected_project_revision: 1,
+        };
+        let result_request = CheckResultRequest {
+            project_id: ProjectId::new("project:fixture").unwrap(),
+            expected_project_revision: 1,
+            result_id: result.result_id.clone(),
+        };
+
+        let response = serde_json::to_value(CheckRunResponse { result }).unwrap();
+        let run_request = serde_json::to_value(run_request).unwrap();
+        let result_request = serde_json::to_value(result_request).unwrap();
+        assert_eq!(response["result"]["contract"], CHECK_RESULT_CONTRACT);
+        assert_eq!(
+            response["result"]["snapshot"]["contract"],
+            CHECK_PROJECT_SNAPSHOT_CONTRACT
+        );
+        assert_eq!(response["result"]["findings"][0]["severity"], "warning");
+        assert_eq!(
+            response["result"]["findings"][0]["evidence"][0]["kind"],
+            "source_range"
+        );
+        assert_eq!(response["result"]["findings"][0]["evidence"][0]["line"], 2);
+        assert_eq!(run_request["expected_project_revision"], 1);
+        assert_eq!(result_request["result_id"], "check-result:7");
+    }
+
+    #[test]
     fn plugin_descriptor_truncation_omits_nulls_and_never_exposes_source_bytes() {
         let raw = CurrentProjectAuditSnapshot {
             project_root: "/tmp/project".to_string(),
@@ -812,5 +869,20 @@ mod tests {
         assert!(!encoded.contains("skip_reason"));
         assert!(!encoded.contains("renv_lock_sha256"));
         assert_eq!(input["snapshot"]["source_bytes"], 26);
+    }
+
+    #[test]
+    #[ignore = "writes the requested generated TypeScript contract"]
+    fn check_typescript_export() {
+        let output_path = std::env::var_os("RHO_CHECK_BINDINGS_PATH")
+            .expect("RHO_CHECK_BINDINGS_PATH must name the generated file");
+        tauri_specta::Builder::<tauri::Wry>::new()
+            .commands(tauri_specta::collect_commands![
+                super::check_project_run,
+                super::check_result,
+            ])
+            .error_handling(tauri_specta::ErrorHandlingMode::Throw)
+            .export(specta_typescript::Typescript::default(), output_path)
+            .expect("Check TypeScript export must succeed");
     }
 }

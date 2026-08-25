@@ -24,10 +24,11 @@ pub const MAX_CHECK_RESULT_BYTES: usize = 2 * 1024 * 1024;
 pub const MAX_CHECK_RULE_PACK_FINDINGS: usize = 128;
 pub const MAX_CHECK_RULE_PACK_BYTES: usize = 512 * 1024;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(deny_unknown_fields)]
 pub struct CheckSnapshotFileV1 {
     pub path: String,
+    #[specta(type = crate::UiIpcNumber)]
     pub size_bytes: u64,
     pub content_sha256: String,
     pub skipped: bool,
@@ -64,15 +65,17 @@ impl Validate for CheckSnapshotFileV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(deny_unknown_fields)]
 pub struct CheckProjectSnapshotV1 {
     pub contract: String,
     pub snapshot_id: CheckSnapshotId,
     pub project_id: ProjectId,
+    #[specta(type = crate::UiIpcNumber)]
     pub project_revision: u64,
     pub captured_at: String,
     pub files: Vec<CheckSnapshotFileV1>,
+    #[specta(type = crate::UiIpcNumber)]
     pub source_bytes: u64,
     pub renv_lock_sha256: Option<String>,
     pub truncated: bool,
@@ -131,7 +134,7 @@ impl Validate for CheckProjectSnapshotV1 {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum CheckSeverityV1 {
     Info,
@@ -139,12 +142,14 @@ pub enum CheckSeverityV1 {
     Error,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum CheckEvidenceV1 {
     SourceRange {
         path: String,
+        #[specta(type = crate::UiIpcNumber)]
         line: u32,
+        #[specta(type = Option<crate::UiIpcNumber>)]
         column: Option<u32>,
         excerpt: Option<String>,
     },
@@ -193,12 +198,14 @@ impl Validate for CheckEvidenceV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(deny_unknown_fields)]
 pub struct CheckFindingV1 {
     pub rule_id: CheckRuleId,
+    #[specta(type = crate::UiIpcNumber)]
     pub rule_version: u32,
     pub origin: SurfaceOriginV1,
+    #[specta(type = crate::UiIpcNumber)]
     pub activation_generation: u64,
     pub severity: CheckSeverityV1,
     pub category: String,
@@ -232,7 +239,7 @@ impl Validate for CheckFindingV1 {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum CheckResultStatusV1 {
     Clean,
@@ -241,22 +248,28 @@ pub enum CheckResultStatusV1 {
     Failed,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(deny_unknown_fields)]
 pub struct CheckCoverageV1 {
+    #[specta(type = crate::UiIpcNumber)]
     pub files_scanned: usize,
+    #[specta(type = crate::UiIpcNumber)]
     pub files_skipped: usize,
+    #[specta(type = crate::UiIpcNumber)]
     pub core_rules: usize,
+    #[specta(type = crate::UiIpcNumber)]
     pub plugin_rule_packs: usize,
+    #[specta(type = crate::UiIpcNumber)]
     pub plugin_rule_failures: usize,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(deny_unknown_fields)]
 pub struct CheckResultV1 {
     pub contract: String,
     pub result_id: CheckResultId,
     pub project_id: ProjectId,
+    #[specta(type = crate::UiIpcNumber)]
     pub project_revision: u64,
     pub snapshot: CheckProjectSnapshotV1,
     pub ruleset_digest: String,
@@ -329,10 +342,11 @@ impl Validate for CheckResultV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(deny_unknown_fields)]
 pub struct PluginCheckFindingV1 {
     pub rule_id: CheckRuleId,
+    #[specta(type = crate::UiIpcNumber)]
     pub rule_version: u32,
     pub severity: CheckSeverityV1,
     pub category: String,
@@ -365,7 +379,7 @@ impl PluginCheckFindingV1 {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(deny_unknown_fields)]
 pub struct CheckRulePackOutputV1 {
     pub contract: String,

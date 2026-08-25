@@ -1,8 +1,4 @@
 import type {
-  CheckResult,
-  CheckResultRequest,
-  CheckRunRequest,
-  CheckRunResponse,
   DomainSurfaceData,
   DomainSurfaceItem,
   PlotImageView,
@@ -23,6 +19,7 @@ import {
   normalizeProjectSwitchResponse,
 } from "./project";
 import { createTauriKernelTransport } from "./kernel-generated";
+import { createTauriCheckTransport } from "./check";
 import { createTauriAgentTurnDetailTransport } from "./agent-turn";
 import { createTauriProfileTransport } from "./profile";
 import { createTauriResourceTransport } from "./resource";
@@ -226,10 +223,7 @@ export function createTauriUiKernelTransport(
     ...createTauriPluginSurfaceTransport(invoke),
     subscribePluginSurfacesInvalidated: (listener) =>
       subscribeEvents(listen, invalidationEvents("plugin-surfaces"), listener),
-    runCheckProject: (request: CheckRunRequest) =>
-      invoke<CheckRunResponse>("check_project_run", { request }),
-    loadCheckResult: (request: CheckResultRequest) =>
-      invoke<CheckResult>("check_result", { request }),
+    ...createTauriCheckTransport(invoke),
     subscribeCheckResultsInvalidated: (listener) =>
       subscribeEvents(listen, invalidationEvents("check-results"), listener),
     subscribeStudioInvalidated: (listener) =>
