@@ -823,9 +823,10 @@ async fn launch_auxiliary(
         .context("starting auxiliary Ark R runtime")?;
     let project_root = state.project_root.read().await.clone();
     session
-        .execute(crate::workspace_project_root_code(&project_root)?, |_| {
-            Ok(())
-        })
+        .execute(
+            crate::project_transition::workspace_project_root_code(&project_root)?,
+            |_| Ok(()),
+        )
         .await
         .context("binding auxiliary R runtime to the active project")?;
     Ok(Arc::new(RwLock::new(session)))

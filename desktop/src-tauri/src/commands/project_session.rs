@@ -14,10 +14,11 @@ use crate::project::{
     list_project_files, normalize_existing_project_root, project_path, read_viewer_file,
     validate_project_root,
 };
+use crate::project_transition::switch_project;
 use crate::startup_runtime::write_startup_log;
 use crate::{
     AppState, active_context, display_error, persist_workspace_identity,
-    project_file_viewer_capability_id, switch_project, text_sha256,
+    project_file_viewer_capability_id, text_sha256,
 };
 
 #[tauri::command]
