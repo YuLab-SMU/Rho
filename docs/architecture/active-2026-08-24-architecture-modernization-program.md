@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W2-50"],
+  "active_work_packages": [],
   "integration_lane": "AM-W2-50",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -449,10 +449,10 @@ control—run interruption, restart/reconciliation and targets inspection—into
 explicit controller used by both Tauri and Runtime Registry while preserving
 transition-gate, broker, durable Run/Artifact and extension-scope authority.
 
-`AM-W2-50` extracts the complete Agent file-mutation transaction boundary—
-per-path lanes, queued claims, durable intent/completion ledger, failure
-classification, restart recovery, Apply/Undo and typed IPC—without changing
-filesystem authority, proposal validation or recovery truth.
+`AM-W2-50` (`7b8ca44`/AM-E-0077) extracts the complete Agent file-mutation
+transaction boundary—per-path lanes, queued claims, durable intent/completion
+ledger, failure classification, restart recovery, Apply/Undo and typed IPC—
+without changing filesystem authority, proposal validation or recovery truth.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
