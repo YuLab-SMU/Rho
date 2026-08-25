@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W3-09"],
-  "integration_lane": "AM-W3-09",
+  "active_work_packages": ["AM-W3-10"],
+  "integration_lane": "AM-W3-10",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -585,7 +585,13 @@ document revision and event dispatch authority stay in their existing owners
 Result, Environment and generic Domain views—behind their existing narrow
 transport and presentation helpers. It is one cohesive package rather than
 three ceremonial micro-packages because all three share the same load/error/
-empty projection boundary and change no mutation authority.
+empty projection boundary and change no mutation authority
+(`2f0d4aa`/AM-E-0097).
+
+`AM-W3-10` extracts the per-instance `SurfaceView` composition boundary and
+Console renderer state from the Workbench root. Workbench continues to build
+all service callbacks; the extracted component only selects a Surface domain
+and coordinates renderer-local state.
 
 ### Wave 4 — Wasmtime Component Model and WIT
 
