@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W2-31"],
+  "active_work_packages": [],
   "integration_lane": "AM-W2-31",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -352,7 +352,9 @@ serialized by the Workspace lane; commit `13a90a7` and `AM-E-0057` pass the
 Store, Server and complete desktop matrices.
 
 `AM-W2-31` moves the remaining project, Agent-file and plugin-recovery revision
-commits from the legacy lane Store to the shared Store worker.
+commits from the legacy lane Store to the shared Store worker; commit `9e797d8`
+and `AM-E-0058` pass the complete desktop matrix and injected persistence
+rejection/recovery test.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
