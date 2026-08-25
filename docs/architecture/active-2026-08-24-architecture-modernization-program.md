@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-07",
+  "active_work_packages": ["AM-W2-08"],
+  "integration_lane": "AM-W2-08",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -224,6 +224,11 @@ without copying SQL or introducing a second persistence contract.
 the active Agent turn lifecycle, context receipts and admitted context reads
 off the Workspace lane. Environment mutation review and actual Workspace R
 dispatch intentionally retain their existing authority ordering.
+
+`AM-W2-08` moves desktop Agent conversation, detail, approval-response,
+cancellation and history adapters onto the same repository. It removes
+per-command synchronous Store opens while retaining project-transition,
+active-task, file-mutation and Workspace cancellation gates.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 

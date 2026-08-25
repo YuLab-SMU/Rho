@@ -8,9 +8,10 @@
 use rho_protocol::Envelope;
 
 use crate::{
-    AgentConversationDraft, AgentConversationTurn, AgentTurnContextItem, AgentTurnContextItemDraft,
-    AgentTurnDetail, AgentTurnDraft, AgentTurnEventDraft, AgentTurnFinish, RuntimeOutputPage,
-    Store, StoreExecutor, StoreExecutorError, query::required_project_root,
+    AgentConversationDraft, AgentConversationSummary, AgentConversationTurn, AgentTurnContextItem,
+    AgentTurnContextItemDraft, AgentTurnDetail, AgentTurnDraft, AgentTurnEventDraft,
+    AgentTurnFinish, AgentTurnSummary, ApprovalDecisionRecord, ApprovalRequestSummary,
+    RuntimeOutputPage, Store, StoreExecutor, StoreExecutorError, query::required_project_root,
 };
 
 #[derive(Clone, Debug)]
@@ -27,6 +28,92 @@ impl StoreExecutor {
 }
 
 impl AgentRepository {
+    pub async fn create_conversation(
+        &self,
+        mut draft: AgentConversationDraft,
+    ) -> Result<AgentConversationSummary, StoreExecutorError> {
+        draft.project_root = required_project_root(&draft.project_root)?;
+        self.executor
+            .call(move |connection| Store::borrowed(connection).create_agent_conversation(&draft))
+            .await
+    }
+
+    pub async fn list_conversations(
+        &self,
+        project_root: String,
+        limit: Option<usize>,
+    ) -> Result<Vec<AgentConversationSummary>, StoreExecutorError> {
+        let project_root = required_project_root(&project_root)?;
+        self.executor
+            .call(move |connection| {
+                Store::borrowed(connection).list_agent_conversations(&project_root, limit)
+            })
+            .await
+    }
+
+    pub async fn get_conversation(
+        &self,
+        project_root: String,
+        conversation_id: String,
+    ) -> Result<Option<AgentConversationSummary>, StoreExecutorError> {
+        let project_root = required_project_root(&project_root)?;
+        self.executor
+            .call(move |connection| {
+                Store::borrowed(connection).get_agent_conversation(&project_root, &conversation_id)
+            })
+            .await
+    }
+
+    pub async fn list_turns(
+        &self,
+        project_root: String,
+        conversation_id: Option<String>,
+        limit: Option<usize>,
+    ) -> Result<Vec<AgentTurnSummary>, StoreExecutorError> {
+        let project_root = required_project_root(&project_root)?;
+        self.executor
+            .call(move |connection| {
+                let store = Store::borrowed(connection);
+                match conversation_id.as_deref() {
+                    Some(conversation_id) => store.list_agent_turns_for_conversation(
+                        &project_root,
+                        conversation_id,
+                        limit,
+                    ),
+                    None => store.list_agent_turns(&project_root, limit),
+                }
+            })
+            .await
+    }
+
+    pub async fn conversation_turn_ids(
+        &self,
+        project_root: String,
+        conversation_id: String,
+    ) -> Result<Vec<String>, StoreExecutorError> {
+        let project_root = required_project_root(&project_root)?;
+        self.executor
+            .call(move |connection| {
+                Store::borrowed(connection)
+                    .agent_conversation_turn_ids(&project_root, &conversation_id)
+            })
+            .await
+    }
+
+    pub async fn delete_conversation(
+        &self,
+        project_root: String,
+        conversation_id: String,
+    ) -> Result<usize, StoreExecutorError> {
+        let project_root = required_project_root(&project_root)?;
+        self.executor
+            .call(move |connection| {
+                Store::borrowed(connection)
+                    .delete_agent_conversation(&project_root, &conversation_id)
+            })
+            .await
+    }
+
     pub async fn create_turn_with_conversation(
         &self,
         mut conversation: AgentConversationDraft,
@@ -196,6 +283,90 @@ impl AgentRepository {
             .call(move |connection| Store::borrowed(connection).finish_agent_turn(&finish))
             .await
     }
+
+    pub async fn list_approval_requests(
+        &self,
+        project_root: String,
+        limit: Option<usize>,
+        status: Option<String>,
+    ) -> Result<Vec<ApprovalRequestSummary>, StoreExecutorError> {
+        let project_root = required_project_root(&project_root)?;
+        self.executor
+            .call(move |connection| {
+                Store::borrowed(connection).list_approval_requests(
+                    &project_root,
+                    limit,
+                    status.as_deref(),
+                )
+            })
+            .await
+    }
+
+    pub async fn get_approval_request(
+        &self,
+        project_root: String,
+        request_id: String,
+    ) -> Result<Option<ApprovalRequestSummary>, StoreExecutorError> {
+        let project_root = required_project_root(&project_root)?;
+        self.executor
+            .call(move |connection| {
+                Store::borrowed(connection).get_approval_request(&project_root, &request_id)
+            })
+            .await
+    }
+
+    pub async fn resolve_approval_request(
+        &self,
+        request_id: String,
+        decision: ApprovalDecisionRecord,
+    ) -> Result<usize, StoreExecutorError> {
+        self.executor
+            .call(move |connection| {
+                Store::borrowed(connection).resolve_approval_request(&request_id, &decision)
+            })
+            .await
+    }
+
+    pub async fn clear_history(&self, project_root: String) -> Result<usize, StoreExecutorError> {
+        let project_root = required_project_root(&project_root)?;
+        self.executor
+            .call(move |connection| Store::borrowed(connection).clear_agent_history(&project_root))
+            .await
+    }
+
+    pub async fn interrupt_approvals(
+        &self,
+        turn_id: String,
+        reason: String,
+        terminal_outcome: String,
+    ) -> Result<usize, StoreExecutorError> {
+        self.executor
+            .call(move |connection| {
+                Store::borrowed(connection).interrupt_agent_approvals_with_outcome(
+                    &turn_id,
+                    &reason,
+                    &terminal_outcome,
+                )
+            })
+            .await
+    }
+
+    pub async fn interrupt_environment_operations(
+        &self,
+        turn_id: String,
+        reason: String,
+        terminal_outcome: String,
+    ) -> Result<usize, StoreExecutorError> {
+        self.executor
+            .call(move |connection| {
+                Store::borrowed(connection).interrupt_agent_environment_operations_with_outcome(
+                    &turn_id,
+                    &reason,
+                    &terminal_outcome,
+                )
+            })
+            .await
+    }
 }
 
 #[cfg(test)]
@@ -290,6 +461,52 @@ mod tests {
         assert_eq!(detail.turn.status, "completed");
         assert_eq!(detail.turn.final_message.as_deref(), Some("Done"));
         assert_eq!(detail.events.len(), 1);
+        assert_eq!(
+            reopened
+                .list_conversations("D:/projects/A".to_string(), None)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            reopened
+                .get_conversation("D:/projects/A".to_string(), "conversation-a".to_string(),)
+                .await
+                .unwrap()
+                .unwrap()
+                .turn_count,
+            1
+        );
+        assert_eq!(
+            reopened
+                .list_turns("D:/projects/A".to_string(), None, None)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            reopened
+                .conversation_turn_ids("D:/projects/A".to_string(), "conversation-a".to_string(),)
+                .await
+                .unwrap(),
+            vec!["turn-a"]
+        );
+        assert_eq!(
+            reopened
+                .delete_conversation("D:/projects/A".to_string(), "conversation-a".to_string(),)
+                .await
+                .unwrap(),
+            1
+        );
+        assert!(
+            reopened
+                .list_conversations("D:/projects/A".to_string(), None)
+                .await
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[tokio::test]

@@ -69,11 +69,11 @@ use rho_server::coordinator::{
 use rho_server::workspace_lane::{WorkspaceBrokerLane, WorkspaceBrokerState};
 use rho_store::{
     AgentConversationDraft, AgentConversationSummary, AgentTurnContextItem,
-    AgentTurnContextItemDraft, AgentTurnDraft, AgentTurnEvent, AgentTurnEventDraft,
-    AgentTurnFinish, AgentTurnSummary, ApprovalRequestSummary, ArtifactRecordDraft,
-    ArtifactRecordSummary, EnvironmentOperationRequestSummary, EvidenceClaim, EvidenceClaimDraft,
-    EvidenceClaimReview, EvidenceEntry, EvidenceEntryDraft, PlotArtifactSummary,
-    PlotPayloadPruneResult, ProjectMutationService, ProjectQueryService, ProjectRetentionSummary,
+    AgentTurnContextItemDraft, AgentTurnDetail, AgentTurnDraft, AgentTurnEvent,
+    AgentTurnEventDraft, AgentTurnFinish, AgentTurnSummary, ApprovalRequestSummary,
+    ArtifactRecordDraft, ArtifactRecordSummary, EnvironmentOperationRequestSummary, EvidenceClaim,
+    EvidenceClaimDraft, EvidenceClaimReview, EvidenceEntry, EvidenceEntryDraft,
+    PlotArtifactSummary, PlotPayloadPruneResult, ProjectMutationService, ProjectRetentionSummary,
     RetentionPolicy, RunDetail, RunSummary, Store, StoreExecutor, normalize_project_root,
 };
 use serde::{Deserialize, Serialize};
@@ -5401,6 +5401,7 @@ struct AgentRetrySource {
     conversation_id: String,
 }
 
+#[cfg(test)]
 fn agent_retry_source(
     store: &Store,
     project_root: &str,
@@ -5411,13 +5412,18 @@ fn agent_retry_source(
         .with_context(|| {
             format!("Agent Retry source was not found in the active project: {turn_id}")
         })?;
-    ensure!(
-        !matches!(detail.turn.status.as_str(), "running" | "waiting"),
-        "An active Agent turn cannot be retried"
-    );
+    validate_agent_retry_detail(&detail)?;
     let conversation = store
         .get_agent_conversation(project_root, &detail.turn.conversation_id)?
         .context("Agent Retry Conversation was not found")?;
+    project_agent_retry_source(detail, conversation)
+}
+
+fn project_agent_retry_source(
+    detail: AgentTurnDetail,
+    conversation: AgentConversationSummary,
+) -> Result<AgentRetrySource> {
+    validate_agent_retry_detail(&detail)?;
     ensure!(
         !conversation.legacy_unthreaded && conversation.archived_at.is_none(),
         "Legacy or archived Agent Conversations cannot be retried; start a new Conversation."
@@ -5448,6 +5454,14 @@ fn agent_retry_source(
     })
 }
 
+fn validate_agent_retry_detail(detail: &AgentTurnDetail) -> Result<()> {
+    ensure!(
+        !matches!(detail.turn.status.as_str(), "running" | "waiting"),
+        "An active Agent turn cannot be retried"
+    );
+    Ok(())
+}
+
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn retry_agent_turn(
@@ -5461,9 +5475,26 @@ async fn retry_agent_turn(
     }
     let root = state.project_root.read().await.clone();
     let project_root = normalize_project_root(root.to_string_lossy().as_ref());
-    let store = read_store(&state).map_err(display_error)?;
-    let source = agent_retry_source(&store, &project_root, &turn_id).map_err(display_error)?;
-    drop(store);
+    let agent_store = store_executor(&state)
+        .await
+        .map_err(display_error)?
+        .agent_repository();
+    let detail = agent_store
+        .get_turn_detail(project_root.clone(), turn_id.clone())
+        .await
+        .map_err(display_error)?
+        .with_context(|| {
+            format!("Agent Retry source was not found in the active project: {turn_id}")
+        })
+        .map_err(display_error)?;
+    validate_agent_retry_detail(&detail).map_err(display_error)?;
+    let conversation = agent_store
+        .get_conversation(project_root, detail.turn.conversation_id.clone())
+        .await
+        .map_err(display_error)?
+        .context("Agent Retry Conversation was not found")
+        .map_err(display_error)?;
+    let source = project_agent_retry_source(detail, conversation).map_err(display_error)?;
 
     start_agent_turn(
         source.prompt,
@@ -5726,10 +5757,13 @@ async fn list_agent_conversations(
     state: State<'_, AppState>,
 ) -> Result<Vec<AgentConversationSummary>, String> {
     let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy();
-    let store = read_store(&state).map_err(display_error)?;
-    ProjectQueryService::new(&store)
-        .list_agent_conversations(project_root.as_ref(), limit.map(|value| value as usize))
+    let project_root = durable_project_root(&root);
+    store_executor(&state)
+        .await
+        .map_err(display_error)?
+        .agent_repository()
+        .list_conversations(project_root, limit.map(|value| value as usize))
+        .await
         .map_err(display_error)
 }
 
@@ -5741,14 +5775,17 @@ async fn create_agent_conversation(
     let _project_transition = state.project_transition_gate.lock().await;
     let root = state.project_root.read().await.clone();
     let project_root = durable_project_root(&root);
-    let mut store = read_store(&state).map_err(display_error)?;
-    store
-        .create_agent_conversation(&AgentConversationDraft {
+    store_executor(&state)
+        .await
+        .map_err(display_error)?
+        .agent_repository()
+        .create_conversation(AgentConversationDraft {
             conversation_id: format!("agent_conversation_{}", Uuid::new_v4()),
             project_root,
             title: "New conversation".to_string(),
             legacy_unthreaded: false,
         })
+        .await
         .map_err(display_error)
 }
 
@@ -5760,14 +5797,17 @@ async fn list_agent_turns(
     state: State<'_, AppState>,
 ) -> Result<Vec<AgentTurnSummary>, String> {
     let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy();
-    let store = read_store(&state).map_err(display_error)?;
-    ProjectQueryService::new(&store)
-        .list_agent_turns(
-            project_root.as_ref(),
-            conversation_id.as_deref(),
+    let project_root = durable_project_root(&root);
+    store_executor(&state)
+        .await
+        .map_err(display_error)?
+        .agent_repository()
+        .list_turns(
+            project_root,
+            conversation_id,
             limit.map(|value| value as usize),
         )
+        .await
         .map_err(display_error)
 }
 
@@ -5797,14 +5837,17 @@ async fn delete_agent_conversation_state(conversation_id: &str, state: &AppState
             .any(|task| task.conversation_id == conversation_id),
         "Stop the active Agent Conversation before deleting it."
     );
-    let mut store = read_store(state)?;
-    let turn_ids = store.agent_conversation_turn_ids(&project_root, &conversation_id)?;
+    let agent_store = store_executor(state).await?.agent_repository();
+    let turn_ids = agent_store
+        .conversation_turn_ids(project_root.clone(), conversation_id.clone())
+        .await?;
     ensure!(
         !state.agent_file_mutations.has_any_turn(&turn_ids),
         "Wait for the selected Conversation's file operation before deleting it."
     );
-    let deleted_turns = ProjectMutationService::new(&mut store)
-        .delete_agent_conversation(&project_root, &conversation_id)?;
+    let deleted_turns = agent_store
+        .delete_conversation(project_root, conversation_id.clone())
+        .await?;
     drop(tasks);
     Ok(json!({
         "status": "deleted",
@@ -5821,10 +5864,13 @@ async fn list_approval_requests(
     state: State<'_, AppState>,
 ) -> Result<Vec<ApprovalRequestSummary>, String> {
     let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy();
-    let store = read_store(&state).map_err(display_error)?;
-    ProjectQueryService::new(&store)
-        .list_approval_requests(project_root.as_ref(), limit, status.as_deref())
+    let project_root = durable_project_root(&root);
+    store_executor(&state)
+        .await
+        .map_err(display_error)?
+        .agent_repository()
+        .list_approval_requests(project_root, limit, status)
+        .await
         .map_err(display_error)
 }
 
@@ -5843,16 +5889,21 @@ async fn get_agent_turn_detail(
     state: State<'_, AppState>,
 ) -> Result<Option<AgentTurnDetailView>, String> {
     let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy();
-    let store = read_store(&state).map_err(display_error)?;
-    let detail = ProjectQueryService::new(&store)
-        .get_agent_turn_detail(project_root.as_ref(), &turn_id)
+    let project_root = durable_project_root(&root);
+    let agent_store = store_executor(&state)
+        .await
+        .map_err(display_error)?
+        .agent_repository();
+    let detail = agent_store
+        .get_turn_detail(project_root.clone(), turn_id.clone())
+        .await
         .map_err(display_error)?;
     let Some(detail) = detail else {
         return Ok(None);
     };
-    let context_items = store
-        .list_agent_turn_context_items(project_root.as_ref(), &turn_id)
+    let context_items = agent_store
+        .list_context_items(project_root, turn_id)
+        .await
         .map_err(display_error)?;
     Ok(Some(AgentTurnDetailView {
         turn: detail.turn,
@@ -5875,10 +5926,14 @@ async fn respond_approval(
         ));
     }
     let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy().replace('\\', "/");
-    let pending = read_store(&state)
+    let project_root = durable_project_root(&root);
+    let agent_store = store_executor(&state)
+        .await
         .map_err(display_error)?
-        .get_approval_request(&project_root, &request.request_id)
+        .agent_repository();
+    let pending = agent_store
+        .get_approval_request(project_root, request.request_id.clone())
+        .await
         .map_err(display_error)?
         .filter(|item| item.status == "waiting")
         .context(format!(
@@ -5898,17 +5953,17 @@ async fn respond_approval(
         )
         .await;
     if !delivered {
-        read_store(&state)
-            .map_err(display_error)?
+        agent_store
             .resolve_approval_request(
-                &request.request_id,
-                &rho_store::ApprovalDecisionRecord {
+                request.request_id.clone(),
+                rho_store::ApprovalDecisionRecord {
                     decision: "cancel".to_string(),
                     status: "interrupted".to_string(),
                     reason: Some("Approval channel is no longer active.".to_string()),
                     continuation_outcome: Some("agent_unavailable".to_string()),
                 },
             )
+            .await
             .map_err(display_error)?;
     }
     Ok(AgentApprovalDeliveryResponse {
@@ -5962,43 +6017,58 @@ async fn interrupt_all_agent_tasks(
 
     let root = state.project_root.read().await.clone();
     let project_root = normalize_project_root(root.to_string_lossy().as_ref());
-    let mut store = read_store(state)?;
+    let agent_store = store_executor(state).await?.agent_repository();
     for turn_id in turn_ids {
-        let Some(detail) = store.get_agent_turn_detail(&project_root, &turn_id)? else {
+        let Some(detail) = agent_store
+            .get_turn_detail(project_root.clone(), turn_id.clone())
+            .await?
+        else {
             continue;
         };
         if !matches!(detail.turn.status.as_str(), "running" | "waiting") {
             continue;
         }
-        store.interrupt_agent_approvals_with_outcome(&turn_id, message, terminal_reason)?;
-        store.interrupt_agent_environment_operations_with_outcome(
-            &turn_id,
-            message,
-            terminal_reason,
-        )?;
-        store.append_agent_turn_event(&AgentTurnEventDraft {
-            turn_id: turn_id.clone(),
-            event_type: "agent.interrupted".to_string(),
-            title: "Agent turn interrupted".to_string(),
-            body: Some(message.to_string()),
-            status: "interrupted".to_string(),
-            tool: None,
-            request_id: None,
-            code: None,
-            details_json: serde_json::to_string(&json!({
-                "terminal_reason": terminal_reason
-            }))?,
-        })?;
-        store.finish_agent_turn(&AgentTurnFinish {
-            turn_id,
-            status: "interrupted".to_string(),
-            terminal_reason: Some(terminal_reason.to_string()),
-            workspace_id_after: None,
-            state_revision_after: None,
-            project_revision_after: None,
-            final_message: None,
-            error_message: Some(message.to_string()),
-        })?;
+        agent_store
+            .interrupt_approvals(
+                turn_id.clone(),
+                message.to_string(),
+                terminal_reason.to_string(),
+            )
+            .await?;
+        agent_store
+            .interrupt_environment_operations(
+                turn_id.clone(),
+                message.to_string(),
+                terminal_reason.to_string(),
+            )
+            .await?;
+        agent_store
+            .append_turn_event(AgentTurnEventDraft {
+                turn_id: turn_id.clone(),
+                event_type: "agent.interrupted".to_string(),
+                title: "Agent turn interrupted".to_string(),
+                body: Some(message.to_string()),
+                status: "interrupted".to_string(),
+                tool: None,
+                request_id: None,
+                code: None,
+                details_json: serde_json::to_string(&json!({
+                    "terminal_reason": terminal_reason
+                }))?,
+            })
+            .await?;
+        agent_store
+            .finish_turn(AgentTurnFinish {
+                turn_id,
+                status: "interrupted".to_string(),
+                terminal_reason: Some(terminal_reason.to_string()),
+                workspace_id_after: None,
+                state_revision_after: None,
+                project_revision_after: None,
+                final_message: None,
+                error_message: Some(message.to_string()),
+            })
+            .await?;
     }
     Ok(count)
 }
@@ -9513,9 +9583,12 @@ async fn clear_agent_history(state: State<'_, AppState>) -> Result<Value, String
     if state.agent_file_mutations.blocker(&project_root).is_some() {
         return Err("Wait for Agent file operations before clearing history.".to_string());
     }
-    let mut store = read_store(&state).map_err(display_error)?;
-    let deleted = ProjectMutationService::new(&mut store)
-        .clear_agent_history(&project_root)
+    let deleted = store_executor(&state)
+        .await
+        .map_err(display_error)?
+        .agent_repository()
+        .clear_history(project_root)
+        .await
         .map_err(display_error)?;
     drop(tasks);
     Ok(json!({"deleted": deleted}))
@@ -9587,9 +9660,13 @@ async fn cancel_agent_turn_state(
     let _project_transition = state.project_transition_gate.lock().await;
     let root = state.project_root.read().await.clone();
     let project_root = normalize_project_root(root.to_string_lossy().as_ref());
-    let detail = read_store(&state)
+    let agent_store = store_executor(state)
+        .await
         .map_err(display_error)?
-        .get_agent_turn_detail(&project_root, &turn_id)
+        .agent_repository();
+    let detail = agent_store
+        .get_turn_detail(project_root.clone(), turn_id.clone())
+        .await
         .map_err(display_error)?
         .context(format!(
             "Agent turn was not found in the active project: {turn_id}"
@@ -9652,20 +9729,30 @@ async fn cancel_agent_turn_state(
         .as_ref()
         .map(|identity| identity.project_revision as i64)
         .or(detail.turn.project_revision_before);
-    let mut store = read_store(state).map_err(display_error)?;
-    if store
-        .get_agent_turn_detail(&project_root, &turn_id)
+    if agent_store
+        .get_turn_detail(project_root, turn_id.clone())
+        .await
         .map_err(display_error)?
         .is_some()
     {
-        store
-            .interrupt_agent_approvals(&turn_id, "Agent turn cancelled by the user.")
+        agent_store
+            .interrupt_approvals(
+                turn_id.clone(),
+                "Agent turn cancelled by the user.".to_string(),
+                "user_cancelled".to_string(),
+            )
+            .await
             .map_err(display_error)?;
-        store
-            .interrupt_agent_environment_operations(&turn_id, "Agent turn cancelled by the user.")
+        agent_store
+            .interrupt_environment_operations(
+                turn_id.clone(),
+                "Agent turn cancelled by the user.".to_string(),
+                "user_cancelled".to_string(),
+            )
+            .await
             .map_err(display_error)?;
-        store
-            .append_agent_turn_event(&AgentTurnEventDraft {
+        agent_store
+            .append_turn_event(AgentTurnEventDraft {
                 turn_id: turn_id.clone(),
                 event_type: "agent.cancelled".to_string(),
                 title: "Agent turn cancelled".to_string(),
@@ -9682,9 +9769,10 @@ async fn cancel_agent_turn_state(
                 }))
                 .map_err(display_error)?,
             })
+            .await
             .map_err(display_error)?;
-        store
-            .finish_agent_turn(&AgentTurnFinish {
+        agent_store
+            .finish_turn(AgentTurnFinish {
                 turn_id: turn_id.clone(),
                 status: "interrupted".to_string(),
                 terminal_reason: Some("user_cancelled".to_string()),
@@ -9694,6 +9782,7 @@ async fn cancel_agent_turn_state(
                 final_message: None,
                 error_message: Some("Agent turn cancelled by the user.".to_string()),
             })
+            .await
             .map_err(display_error)?;
     }
     Ok(AgentTurnCancelResponse {
