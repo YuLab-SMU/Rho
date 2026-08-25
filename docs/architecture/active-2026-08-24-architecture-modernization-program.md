@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W4-06"],
-  "integration_lane": "AM-W4-06",
+  "active_work_packages": ["AM-W4-07"],
+  "integration_lane": "AM-W4-07",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -648,10 +648,18 @@ Implemented by `344cbd8` and `a3723e1` with evidence `AM-E-0103`, including a
 deterministic epoch interruption while guest instructions execute. Desktop
 selection, grant delivery and durable recovery remain open under `AM-F-0006`.
 
-`AM-W4-06` now introduces one explicit core-v2/component-v1 guest-host façade
-and makes contribution sessions depend only on their shared call boundary. This
-prevents desktop selection from forking identity, grant, contribution or
-recovery semantics into ABI-specific implementations.
+`AM-W4-06` introduces one explicit core-v2/component-v1 guest-host façade and
+makes contribution sessions depend only on their shared call boundary. Exact
+ABI selection never probes or falls back, while lifecycle, complete/yield/
+resume/cancel, contribution validation and sibling isolation use one consumer
+path. Implemented by `7894af3` with evidence `AM-E-0104`. Desktop selection,
+grant delivery and durable reconstruction remain open under `AM-F-0006`.
+
+`AM-W4-07` now moves desktop activation onto that facade. The already-validated
+Manifest ABI is the only selector; grants, contribution publication, broker
+delivery, durable lifecycle and restart reconstruction remain one shared path.
+This is the first distributable component-v1 slice, so its verified candidate
+owns synchronized application version metadata and NEWS.
 
 ### Wave 5 — worktrees and shared generated artifacts
 
