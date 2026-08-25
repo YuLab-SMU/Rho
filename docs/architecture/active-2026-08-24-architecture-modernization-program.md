@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W3-04"],
+  "active_work_packages": [],
   "integration_lane": "AM-W3-04",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -549,7 +549,7 @@ closed a real Console CAS race: execution waits for already-running mutations
 and then reads current Surface and Runtime targets without globally serializing
 otherwise independent frontend operations.
 
-`AM-W3-04` mechanically isolates the current recursive Scene renderer, stack,
+`AM-W3-04` (`bc9bd55`/AM-E-0092) mechanically isolates the current recursive Scene renderer, stack,
 collapse, resize and inspector outline behind a physical layout adapter module.
 It preserves DOM/accessibility and exact `SceneEdit` emission so the following
 Dockview package compares against an executable controlled baseline rather than
