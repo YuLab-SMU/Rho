@@ -47,8 +47,8 @@ pub use builder::{
     StaticValidation, candidate_within_envelope,
 };
 pub use component_host::{
-    AdmittedComponentPlugin, COMPONENT_ABI_V1, ComponentPluginHost, MAX_WASM_COMPONENT_BYTES,
-    MAX_WASM_COMPONENT_INSTANCES,
+    AdmittedComponentPlugin, COMPONENT_ABI_V1, ComponentCancellationHandle, ComponentPluginHost,
+    MAX_WASM_COMPONENT_BYTES, MAX_WASM_COMPONENT_INSTANCES,
 };
 pub use contribution::{
     Contribution, ContributionCandidate, ContributionDeclaration, ContributionError,

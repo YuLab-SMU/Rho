@@ -981,7 +981,25 @@ fn decode_guest_step(
     }
     let step: GuestStep =
         serde_json::from_str(encoded).map_err(|_| HostProtocolErrorCode::InvalidBrokerStep)?;
-    let call_id = match &step {
+    validate_guest_step(
+        &step,
+        encoded.len(),
+        expected_call_id,
+        maximum_terminal_bytes,
+    )?;
+    Ok(step)
+}
+
+pub(crate) fn validate_guest_step(
+    step: &GuestStep,
+    encoded_len: usize,
+    expected_call_id: &str,
+    maximum_terminal_bytes: usize,
+) -> Result<(), HostProtocolErrorCode> {
+    if encoded_len > maximum_terminal_bytes {
+        return Err(HostProtocolErrorCode::PayloadTooLarge);
+    }
+    let call_id = match step {
         GuestStep::BrokerRequest { call_id, .. }
         | GuestStep::Complete { call_id, .. }
         | GuestStep::Error { call_id, .. } => call_id,
@@ -989,7 +1007,7 @@ fn decode_guest_step(
     if call_id != expected_call_id {
         return Err(HostProtocolErrorCode::BrokerSequenceViolation);
     }
-    match &step {
+    match step {
         GuestStep::BrokerRequest {
             handle_id,
             permission,
@@ -997,7 +1015,7 @@ fn decode_guest_step(
             args,
             ..
         } => {
-            if encoded.len() > MAX_GUEST_STEP_BYTES {
+            if encoded_len > MAX_GUEST_STEP_BYTES {
                 return Err(HostProtocolErrorCode::PayloadTooLarge);
             }
             let handle = handle_id.strip_prefix("handle.").unwrap_or_default();
@@ -1023,7 +1041,7 @@ fn decode_guest_step(
         }
         GuestStep::Complete { .. } => {}
         GuestStep::Error { code, .. } => {
-            if encoded.len() > MAX_GUEST_STEP_BYTES {
+            if encoded_len > MAX_GUEST_STEP_BYTES {
                 return Err(HostProtocolErrorCode::PayloadTooLarge);
             }
             if code.is_empty()
@@ -1038,14 +1056,14 @@ fn decode_guest_step(
             }
         }
     }
-    Ok(step)
+    Ok(())
 }
 
-fn step_is_terminal(step: &GuestStep) -> bool {
+pub(crate) fn step_is_terminal(step: &GuestStep) -> bool {
     matches!(step, GuestStep::Complete { .. } | GuestStep::Error { .. })
 }
 
-fn step_digest(encoded: &str) -> String {
+pub(crate) fn step_digest(encoded: &str) -> String {
     use std::fmt::Write;
     let digest = Sha256::digest(encoded.as_bytes());
     let mut output = String::with_capacity(64);

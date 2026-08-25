@@ -1,14 +1,49 @@
 use std::path::Path;
+use std::sync::Arc;
 
 use rho_extension_runtime::{
-    ActivationGeneration, ComponentPluginHost, HOST_PROTOCOL_VERSION, HostFrame, HostInstanceId,
-    HostInstanceState, HostMessage, HostProtocolErrorCode, HostRequestId, HostResponse,
+    ActivationGeneration, BrokerCallIdSource, ComponentPluginHost, GuestStep,
+    HOST_PROTOCOL_VERSION, HostFrame, HostInstanceId, HostInstanceState, HostMessage,
+    HostProtocolErrorCode, HostRequestId, HostResponse, MAX_GUEST_BROKER_RESULT_BYTES,
     PackageDigest, PluginId, ScopeId, WasmHostIdentity,
 };
 use wit_component::{ComponentEncoder, StringEncoding, embed_component_metadata};
 use wit_parser::Resolve;
 
+const COMPLETE_STEP_BODY: &str = "i32.const 64 i32.const 1 i32.store8 i32.const 68 local.get $call-ptr i32.store i32.const 72 local.get $call-len i32.store i32.const 76 local.get $json-ptr i32.store i32.const 80 local.get $json-len i32.store i32.const 64";
+const CANCEL_TRUE_BODY: &str =
+    "i32.const 96 i32.const 0 i32.store8 i32.const 100 i32.const 1 i32.store8 i32.const 96";
+const YIELD_STEP_BODY: &str = "i32.const 64 i32.const 0 i32.store8 i32.const 68 local.get $call-ptr i32.store i32.const 72 local.get $call-len i32.store i32.const 76 i32.const 256 i32.store i32.const 80 i32.const 71 i32.store i32.const 84 i32.const 352 i32.store i32.const 88 i32.const 15 i32.store i32.const 92 i32.const 384 i32.store i32.const 96 i32.const 15 i32.store i32.const 100 i32.const 416 i32.store i32.const 104 i32.const 2 i32.store i32.const 64";
+const INVALID_STEP_BODY: &str = "i32.const 64 i32.const 0 i32.store8 i32.const 68 local.get $call-ptr i32.store i32.const 72 local.get $call-len i32.store i32.const 76 i32.const 416 i32.store i32.const 80 i32.const 2 i32.store i32.const 84 i32.const 352 i32.store i32.const 88 i32.const 15 i32.store i32.const 92 i32.const 384 i32.store i32.const 96 i32.const 15 i32.store i32.const 100 i32.const 416 i32.store i32.const 104 i32.const 2 i32.store i32.const 64";
+
+#[derive(Debug)]
+struct FixedCallId(u64);
+
+impl BrokerCallIdSource for FixedCallId {
+    fn next_call_id(&self) -> u64 {
+        self.0
+    }
+}
+
 fn component_fixture(activate_body: &str, dispose_body: &str, memory_pages: u32) -> Vec<u8> {
+    component_fixture_with_calls(
+        activate_body,
+        dispose_body,
+        memory_pages,
+        COMPLETE_STEP_BODY,
+        COMPLETE_STEP_BODY,
+        CANCEL_TRUE_BODY,
+    )
+}
+
+fn component_fixture_with_calls(
+    activate_body: &str,
+    dispose_body: &str,
+    memory_pages: u32,
+    begin_body: &str,
+    resume_body: &str,
+    cancel_body: &str,
+) -> Vec<u8> {
     let mut resolve = Resolve::default();
     let (package, _) = resolve
         .push_path(Path::new(env!("CARGO_MANIFEST_DIR")).join("wit"))
@@ -37,6 +72,10 @@ fn component_fixture(activate_body: &str, dispose_body: &str, memory_pages: u32)
     end)
   (func (export "cm32p2_initialize"))
   (data (i32.const 128) "denied")
+  (data (i32.const 256) "handle.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+  (data (i32.const 352) "project.fs.read")
+  (data (i32.const 384) "project.fs.read")
+  (data (i32.const 416) "{{}}")
 
   (func (export "cm32p2|rho:plugin/lifecycle@1|activate") (param i64) (result i32)
     {activate_body})
@@ -57,26 +96,14 @@ fn component_fixture(activate_body: &str, dispose_body: &str, memory_pages: u32)
 
   (func (export "cm32p2|rho:plugin/guest-calls@1|begin")
     (param $call-ptr i32) (param $call-len i32) (param $json-ptr i32) (param $json-len i32) (result i32)
-    i32.const 64 i32.const 1 i32.store8
-    i32.const 68 local.get $call-ptr i32.store
-    i32.const 72 local.get $call-len i32.store
-    i32.const 76 local.get $json-ptr i32.store
-    i32.const 80 local.get $json-len i32.store
-    i32.const 64)
+    {begin_body})
   (func (export "cm32p2|rho:plugin/guest-calls@1|begin_post") (param i32))
   (func (export "cm32p2|rho:plugin/guest-calls@1|resume")
     (param $call-ptr i32) (param $call-len i32) (param $json-ptr i32) (param $json-len i32) (result i32)
-    i32.const 64 i32.const 1 i32.store8
-    i32.const 68 local.get $call-ptr i32.store
-    i32.const 72 local.get $call-len i32.store
-    i32.const 76 local.get $json-ptr i32.store
-    i32.const 80 local.get $json-len i32.store
-    i32.const 64)
+    {resume_body})
   (func (export "cm32p2|rho:plugin/guest-calls@1|resume_post") (param i32))
   (func (export "cm32p2|rho:plugin/guest-calls@1|cancel") (param i32 i32) (result i32)
-    i32.const 96 i32.const 0 i32.store8
-    i32.const 100 i32.const 1 i32.store8
-    i32.const 96)
+    {cancel_body})
   (func (export "cm32p2|rho:plugin/guest-calls@1|cancel_post") (param i32))
 )
 "#
@@ -297,4 +324,249 @@ fn component_host_is_send_and_timeout_is_idempotent() {
     assert!(host.quarantine_for_timeout());
     assert_eq!(host.state(), HostInstanceState::Quarantined);
     assert!(!host.quarantine_for_timeout());
+}
+
+#[test]
+fn typed_guest_steps_complete_yield_resume_and_cancel() {
+    let bytes = successful_component();
+    let mut complete_host = ComponentPluginHost::from_bytes_with_call_id_source(
+        identity("project.a", 'a'),
+        &bytes,
+        Arc::new(FixedCallId(42)),
+    )
+    .unwrap();
+    negotiate_and_activate(&mut complete_host);
+    let complete_request = HostRequestId::new("request.complete").unwrap();
+    assert_eq!(
+        complete_host
+            .begin_broker_call(
+                complete_request,
+                serde_json::json!({"operation": "inspect"}),
+            )
+            .unwrap(),
+        GuestStep::Complete {
+            call_id: "call.000000000000002a".to_string(),
+            result: serde_json::json!({"operation": "inspect"}),
+        }
+    );
+    assert!(!complete_host.broker_call_active());
+
+    let yielded = component_fixture_with_calls(
+        "i32.const 0",
+        "i32.const 0",
+        1,
+        YIELD_STEP_BODY,
+        COMPLETE_STEP_BODY,
+        CANCEL_TRUE_BODY,
+    );
+    let mut yielded_host = ComponentPluginHost::from_bytes_with_call_id_source(
+        identity("project.a", 'b'),
+        &yielded,
+        Arc::new(FixedCallId(7)),
+    )
+    .unwrap();
+    negotiate_and_activate(&mut yielded_host);
+    let request_id = HostRequestId::new("request.yield").unwrap();
+    let step = yielded_host
+        .begin_broker_call(request_id.clone(), serde_json::json!({"path": "data.csv"}))
+        .unwrap();
+    assert!(matches!(
+        step,
+        GuestStep::BrokerRequest {
+            ref call_id,
+            ref permission,
+            ref operation,
+            ref args,
+            ..
+        } if call_id == "call.0000000000000007"
+            && permission == "project.fs.read"
+            && operation == "project.fs.read"
+            && args == &serde_json::json!({})
+    ));
+    assert_eq!(
+        yielded_host.active_broker_request_id(),
+        Some(request_id.clone())
+    );
+    assert_eq!(
+        yielded_host
+            .resume_broker_call(&request_id, &serde_json::json!({"bytes": 12}), 12)
+            .unwrap(),
+        GuestStep::Complete {
+            call_id: "call.0000000000000007".to_string(),
+            result: serde_json::json!({"bytes": 12}),
+        }
+    );
+    assert!(!yielded_host.broker_call_active());
+
+    let mut cancel_host = ComponentPluginHost::from_bytes_with_call_id_source(
+        identity("project.a", 'c'),
+        &yielded,
+        Arc::new(FixedCallId(8)),
+    )
+    .unwrap();
+    negotiate_and_activate(&mut cancel_host);
+    let cancel_request = HostRequestId::new("request.guest-cancel").unwrap();
+    cancel_host
+        .begin_broker_call(cancel_request.clone(), serde_json::json!({}))
+        .unwrap();
+    assert!(cancel_host.cancel_broker_call(&cancel_request).unwrap());
+    assert!(!cancel_host.broker_call_active());
+    assert_eq!(cancel_host.state(), HostInstanceState::Active);
+}
+
+#[test]
+fn typed_guest_steps_reject_invalid_sequence_and_result_budgets() {
+    let invalid = component_fixture_with_calls(
+        "i32.const 0",
+        "i32.const 0",
+        1,
+        INVALID_STEP_BODY,
+        COMPLETE_STEP_BODY,
+        CANCEL_TRUE_BODY,
+    );
+    let mut invalid_host = ComponentPluginHost::from_bytes_with_call_id_source(
+        identity("project.a", 'a'),
+        &invalid,
+        Arc::new(FixedCallId(1)),
+    )
+    .unwrap();
+    negotiate_and_activate(&mut invalid_host);
+    let error = invalid_host
+        .begin_broker_call(
+            HostRequestId::new("request.invalid").unwrap(),
+            serde_json::json!({}),
+        )
+        .unwrap_err();
+    assert_eq!(error.code, HostProtocolErrorCode::InvalidBrokerStep);
+    assert_eq!(invalid_host.state(), HostInstanceState::Quarantined);
+
+    let yielded = component_fixture_with_calls(
+        "i32.const 0",
+        "i32.const 0",
+        1,
+        YIELD_STEP_BODY,
+        COMPLETE_STEP_BODY,
+        CANCEL_TRUE_BODY,
+    );
+    let mut wrong_request_host = ComponentPluginHost::from_bytes_with_call_id_source(
+        identity("project.a", 'd'),
+        &yielded,
+        Arc::new(FixedCallId(4)),
+    )
+    .unwrap();
+    negotiate_and_activate(&mut wrong_request_host);
+    let exact_request = HostRequestId::new("request.exact").unwrap();
+    wrong_request_host
+        .begin_broker_call(exact_request, serde_json::json!({}))
+        .unwrap();
+    let error = wrong_request_host
+        .resume_broker_call(
+            &HostRequestId::new("request.wrong").unwrap(),
+            &serde_json::json!({}),
+            0,
+        )
+        .unwrap_err();
+    assert_eq!(error.code, HostProtocolErrorCode::BrokerSequenceViolation);
+    assert_eq!(wrong_request_host.state(), HostInstanceState::Quarantined);
+
+    let repeated = component_fixture_with_calls(
+        "i32.const 0",
+        "i32.const 0",
+        1,
+        YIELD_STEP_BODY,
+        YIELD_STEP_BODY,
+        CANCEL_TRUE_BODY,
+    );
+    let mut repeated_host = ComponentPluginHost::from_bytes_with_call_id_source(
+        identity("project.a", 'b'),
+        &repeated,
+        Arc::new(FixedCallId(2)),
+    )
+    .unwrap();
+    negotiate_and_activate(&mut repeated_host);
+    let repeated_request = HostRequestId::new("request.repeated").unwrap();
+    repeated_host
+        .begin_broker_call(repeated_request.clone(), serde_json::json!({}))
+        .unwrap();
+    let error = repeated_host
+        .resume_broker_call(&repeated_request, &serde_json::json!({"ok": true}), 1)
+        .unwrap_err();
+    assert_eq!(error.code, HostProtocolErrorCode::BrokerSequenceViolation);
+    assert_eq!(repeated_host.state(), HostInstanceState::Quarantined);
+
+    let mut budget_host = ComponentPluginHost::from_bytes_with_call_id_source(
+        identity("project.a", 'c'),
+        &yielded,
+        Arc::new(FixedCallId(3)),
+    )
+    .unwrap();
+    negotiate_and_activate(&mut budget_host);
+    let budget_request = HostRequestId::new("request.budget").unwrap();
+    budget_host
+        .begin_broker_call(budget_request.clone(), serde_json::json!({}))
+        .unwrap();
+    let error = budget_host
+        .resume_broker_call(
+            &budget_request,
+            &serde_json::json!({}),
+            MAX_GUEST_BROKER_RESULT_BYTES + 1,
+        )
+        .unwrap_err();
+    assert_eq!(error.code, HostProtocolErrorCode::BrokerResultLimit);
+    assert_eq!(budget_host.state(), HostInstanceState::Quarantined);
+}
+
+#[test]
+fn exact_component_cancellation_prevents_dispatch_and_interrupts_active_call() {
+    let yielded = component_fixture_with_calls(
+        "i32.const 0",
+        "i32.const 0",
+        1,
+        YIELD_STEP_BODY,
+        COMPLETE_STEP_BODY,
+        CANCEL_TRUE_BODY,
+    );
+    let mut pending_host =
+        ComponentPluginHost::from_bytes(identity("project.a", 'a'), &yielded).unwrap();
+    negotiate_and_activate(&mut pending_host);
+    let pending = HostRequestId::new("request.pending").unwrap();
+    assert_eq!(
+        pending_host
+            .handle_frame(frame(
+                &pending_host,
+                HostMessage::Cancel {
+                    request_id: pending.clone(),
+                },
+            ))
+            .unwrap(),
+        None
+    );
+    let error = pending_host
+        .begin_broker_call(pending, serde_json::json!({}))
+        .unwrap_err();
+    assert_eq!(error.code, HostProtocolErrorCode::Cancelled);
+    assert_eq!(pending_host.state(), HostInstanceState::Active);
+
+    let mut active_host =
+        ComponentPluginHost::from_bytes(identity("project.a", 'b'), &yielded).unwrap();
+    negotiate_and_activate(&mut active_host);
+    let active = HostRequestId::new("request.active").unwrap();
+    active_host
+        .begin_broker_call(active.clone(), serde_json::json!({}))
+        .unwrap();
+    let handle = active_host.cancellation_handle();
+    assert!(!handle.cancel_inflight(&HostRequestId::new("request.wrong").unwrap()));
+    assert!(handle.is_inflight(&active));
+    assert!(handle.cancel_inflight(&active));
+    let error = active_host
+        .resume_broker_call(&active, &serde_json::json!({"late": true}), 1)
+        .unwrap_err();
+    assert_eq!(error.code, HostProtocolErrorCode::Cancelled);
+    assert_eq!(active_host.state(), HostInstanceState::Quarantined);
+
+    let mut sibling =
+        ComponentPluginHost::from_bytes(identity("project.b", 'c'), &successful_component())
+            .unwrap();
+    negotiate_and_activate(&mut sibling);
+    assert_eq!(sibling.state(), HostInstanceState::Active);
 }
