@@ -14,6 +14,7 @@ export const createHistoryCommands = (__TAURI_INVOKE: HistoryInvoke) => ({
 	listProblems: (limit: number | null) => __TAURI_INVOKE<ProblemSummary[]>("list_problems", { limit }),
 	listPlotArtifacts: (limit: number | null, sessionOnly: boolean | null) => __TAURI_INVOKE<PlotArtifactSummary[]>("list_plot_artifacts", { limit, sessionOnly }),
 	readPlotArtifact: (plotId: string) => __TAURI_INVOKE<PlotImageView>("read_plot_artifact", { plotId }),
+	retryRun: (runId: string) => __TAURI_INVOKE<RunRetryResult>("retry_run", { runId }),
 });
 
 /* Types */
@@ -79,6 +80,8 @@ export type ProblemSummary = {
 	started_at: string,
 	finished_at: string | null,
 };
+
+export type RunRetryResult = unknown;
 
 export type RunSummary = {
 	run_id: string,

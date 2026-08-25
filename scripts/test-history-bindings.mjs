@@ -14,6 +14,7 @@ const commands = [
   "list_problems",
   "list_plot_artifacts",
   "read_plot_artifact",
+  "retry_run",
 ];
 
 function count(text, needle) {
@@ -49,8 +50,11 @@ try {
   assert.match(generated, /document_version: number \| null/);
   assert.match(generated, /project_revision_after: number \| null/);
   assert.match(generated, /line_number: number \| null/);
+  assert.match(generated, /retryRun: \(runId: string\)/);
+  assert.match(generated, /RunRetryResult = unknown/);
   assert.match(facet, /export interface HistoryReadTransport/);
-  assert.match(tauri, /const historyTransport = createTauriHistoryReadTransport\(invoke\)/);
+  assert.match(facet, /export interface HistoryMutationTransport/);
+  assert.match(tauri, /const historyTransport = createTauriHistoryTransport\(invoke\)/);
   for (const command of commands) {
     assert.equal(count(generated, `"${command}"`), 1);
     assert.equal(count(tauri, `"${command}"`), 0);

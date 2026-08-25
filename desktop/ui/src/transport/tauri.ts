@@ -20,7 +20,7 @@ import {
 import { createTauriKernelTransport } from "./kernel-generated";
 import { createTauriCheckTransport } from "./check";
 import { createTauriStartupTransport } from "./startup";
-import { createTauriHistoryReadTransport } from "./history";
+import { createTauriHistoryTransport } from "./history";
 import { createTauriEnvironmentReadTransport } from "./environment";
 import { createTauriEvidenceReadTransport } from "./evidence";
 import { createTauriGitReadTransport } from "./git";
@@ -127,7 +127,7 @@ export function createTauriUiKernelTransport(
   const projectCommands = createTauriProjectCommands(invoke);
   const kernelTransport = createTauriKernelTransport(invoke);
   const startupTransport = createTauriStartupTransport(invoke);
-  const historyTransport = createTauriHistoryReadTransport(invoke);
+  const historyTransport = createTauriHistoryTransport(invoke);
   const environmentTransport = createTauriEnvironmentReadTransport(invoke);
   const evidenceTransport = createTauriEvidenceReadTransport(invoke);
   const gitTransport = createTauriGitReadTransport(invoke);
@@ -304,6 +304,6 @@ export function createTauriUiKernelTransport(
       return domainData(surfaceId, payload);
     },
     readPlotArtifact: historyTransport.readPlotArtifact,
-    retryRun: (runId) => invoke("retry_run", { runId }),
+    retryRun: historyTransport.retryRun,
   };
 }

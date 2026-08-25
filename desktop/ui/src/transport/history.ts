@@ -36,7 +36,13 @@ export interface HistoryReadTransport {
   readPlotArtifact(plotId: string): Promise<PlotImageView>;
 }
 
-export function createTauriHistoryReadTransport(invoke: HistoryInvoke): HistoryReadTransport {
+export interface HistoryMutationTransport {
+  retryRun(runId: string): Promise<unknown>;
+}
+
+export type HistoryTransport = HistoryReadTransport & HistoryMutationTransport;
+
+export function createTauriHistoryTransport(invoke: HistoryInvoke): HistoryTransport {
   const commands = createHistoryCommands(invoke);
   return {
     listRuns: (limit = 100) => commands.listRuns(limit),
@@ -46,5 +52,6 @@ export function createTauriHistoryReadTransport(invoke: HistoryInvoke): HistoryR
     listPlotArtifacts: (limit = 100, sessionOnly = true) =>
       commands.listPlotArtifacts(limit, sessionOnly),
     readPlotArtifact: commands.readPlotArtifact,
+    retryRun: commands.retryRun,
   };
 }

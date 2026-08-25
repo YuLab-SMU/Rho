@@ -980,6 +980,10 @@ struct EnvironmentOperationDecisionRequest {
 #[serde(transparent)]
 struct InstalledPackageInventory(#[specta(type = rho_ui_contract::UiIpcUnknown)] Value);
 
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(transparent)]
+struct RunRetryResult(#[specta(type = rho_ui_contract::UiIpcUnknown)] Value);
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AgentLlmSelectRequest {
@@ -4993,8 +4997,9 @@ async fn get_project_retention_summary(
     Ok(ProjectRetentionView { summary, policy })
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
-async fn retry_run(run_id: String, state: State<'_, AppState>) -> Result<Value, String> {
+async fn retry_run(run_id: String, state: State<'_, AppState>) -> Result<RunRetryResult, String> {
     let root = state.project_root.read().await.clone();
     let project_root = root.to_string_lossy().replace('\\', "/");
     let session = active_session(&state).await.map_err(display_error)?;
@@ -5028,6 +5033,7 @@ async fn retry_run(run_id: String, state: State<'_, AppState>) -> Result<Value, 
         store,
     )
     .await
+    .map(RunRetryResult)
     .map_err(display_error)
 }
 
@@ -15797,6 +15803,7 @@ mod tests {
                 crate::commands::runs::list_problems,
                 super::list_plot_artifacts,
                 super::read_plot_artifact,
+                super::retry_run,
             ])
             .error_handling(tauri_specta::ErrorHandlingMode::Throw)
             .export(specta_typescript::Typescript::default(), output_path)
