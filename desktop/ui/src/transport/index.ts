@@ -34,14 +34,17 @@ export function createUiKernelTransport(): UiKernelTransport {
 
 export {
   commandsForPlacement,
-  StudioExternalStore,
-  UiProfileExternalStore,
-  SurfaceExternalStore,
-  RuntimeExternalStore,
-  ResourceExternalStore,
-  UiExternalStore,
+  WorkbenchProjectionStore,
 } from "./store";
-export type { ResourceStoreSnapshot, RuntimeStoreSnapshot, StudioStoreSnapshot, SurfaceStoreSnapshot, UiProfileStoreSnapshot, UiStoreSnapshot } from "./store";
+export type {
+  ResourceStoreSnapshot,
+  RuntimeStoreSnapshot,
+  StudioStoreSnapshot,
+  SurfaceStoreSnapshot,
+  UiProfileStoreSnapshot,
+  UiStoreSnapshot,
+  WorkbenchStoreSnapshot,
+} from "./store";
 export type {
   CommandAvailability,
   CommandPlacementTag,

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import fixture from "../contracts/generated/rsr-contract-fixtures.json";
 import { createMockUiKernelTransport } from "./mock";
-import { ResourceExternalStore, RuntimeExternalStore, StudioExternalStore, SurfaceExternalStore, UiExternalStore, UiProfileExternalStore } from "./store";
+import { WorkbenchProjectionStore } from "./store";
 import { createTauriUiKernelTransport } from "./tauri";
 import type {
   CheckResult,
@@ -105,95 +105,61 @@ describe("UI Kernel transport and external store", () => {
     });
   });
 
-  it("caches immutable snapshots without tearing and ignores stale responses", async () => {
+  it("caches one immutable Workbench projection without tearing", async () => {
     const transport = createMockUiKernelTransport();
-    const store = new UiExternalStore(transport);
+    const store = new WorkbenchProjectionStore(transport);
     const changes = vi.fn();
     const unsubscribe = store.subscribe(changes);
     await store.refresh();
     const first = store.getSnapshot();
     expect(store.getSnapshot()).toBe(first);
     expect(first.status).toBe("ready");
-    if (first.status !== "ready") throw new Error("snapshot did not load");
+    if (first.status !== "ready") throw new Error("projection did not load");
     expect(Object.isFrozen(first.snapshot)).toBe(true);
-
-    const stale = generated();
-    (stale as { snapshot_revision: number }).snapshot_revision =
-      first.snapshot.snapshot_revision - 1;
-    transport.publish(stale);
+    expect(Object.isFrozen(first.snapshot.kernel)).toBe(true);
+    transport.publish(generated());
     await store.refresh();
-    expect(store.getSnapshot()).toBe(first);
-    unsubscribe();
-  });
-
-  it("accepts a monotonic project A/B/A sequence", async () => {
-    const transport = createMockUiKernelTransport();
-    const store = new UiExternalStore(transport);
-    const unsubscribe = store.subscribe(() => undefined);
-    await store.refresh();
-    const base = generated();
-    for (const [revision, project] of [
-      [10, "project:a"],
-      [11, "project:b"],
-      [12, "project:a"],
-    ] as const) {
-      const next = structuredClone(base);
-      (next as { snapshot_revision: number }).snapshot_revision = revision;
-      const mutableProject = next.project as {
-        project_id: string;
-        display_label: string;
-        display_path: string;
-      };
-      mutableProject.project_id = project;
-      mutableProject.display_label = project;
-      mutableProject.display_path = `/tmp/${project}`;
-      (next.context as { project_id: string }).project_id = project;
-      transport.publish(next);
-      await store.refresh();
-      const state = store.getSnapshot();
-      expect(state.status).toBe("ready");
-      if (state.status === "ready") expect(state.snapshot.project.project_id).toBe(project);
+    const second = store.getSnapshot();
+    expect(second.status).toBe("ready");
+    if (second.status === "ready") {
+      expect(second.snapshot.projection_generation)
+        .toBeGreaterThan(first.snapshot.projection_generation);
     }
-    const final = store.getSnapshot();
-    if (final.status !== "ready") throw new Error("final snapshot is unavailable");
-    expect(final.snapshot.snapshot_revision).toBe(12);
     unsubscribe();
   });
 
-  it("accepts lower snapshot revisions after every projection changes project", async () => {
+  it("switches every domain to a new project in one publication", async () => {
     const projectB = "/tmp/project-b";
     const transport = createMockUiKernelTransport("?project=%2Ftmp%2Fproject-a");
-    const stores = [
-      new UiExternalStore(transport),
-      new SurfaceExternalStore(transport),
-      new StudioExternalStore(transport),
-      new RuntimeExternalStore(transport),
-      new ResourceExternalStore(transport),
-      new UiProfileExternalStore(transport),
-    ] as const;
-    const stops = stores.map((store) => store.subscribe(() => undefined));
-    await Promise.all(stores.map((store) => store.refresh()));
+    const store = new WorkbenchProjectionStore(transport);
+    const stop = store.subscribe(() => undefined);
+    await store.refresh();
 
     await transport.openProject(projectB);
-    await Promise.all(stores.map((store) => store.refresh()));
+    await store.refresh();
 
-    const projectIds = stores.map((store) => {
-      const state = store.getSnapshot();
-      if (state.status !== "ready") throw new Error("project projection did not reload");
-      if ("project" in state.snapshot) return state.snapshot.project.project_id;
-      if ("profile" in state.snapshot) return state.snapshot.profile.project_id;
-      return state.snapshot.project_id;
-    });
+    const state = store.getSnapshot();
+    if (state.status !== "ready") throw new Error("project projection did not reload");
+    const projection = state.snapshot;
+    const projectIds = [
+      projection.project_id,
+      projection.kernel.project.project_id,
+      projection.surfaces.project_id,
+      projection.studio.project_id,
+      projection.runtimes.project_id,
+      projection.resources.project_id,
+      projection.profile.profile.project_id,
+    ];
     expect(new Set(projectIds)).toEqual(new Set([`project:mock:${encodeURIComponent(projectB)}`]));
-    for (const stop of stops) stop();
+    stop();
   });
 
   it("keeps Project UI Profile mode and Scene mutations CAS-safe", async () => {
     const transport = createMockUiKernelTransport();
-    const store = new UiProfileExternalStore(transport);
+    const store = new WorkbenchProjectionStore(transport);
     const stop = store.subscribe(() => undefined);
     await store.refresh();
-    const state = store.getSnapshot();
+    const state = store.getProfileSnapshot();
     if (state.status !== "ready") throw new Error("UI Profile fixture did not load");
     const base = state.snapshot.profile;
     await expect(store.setMode({
@@ -251,10 +217,10 @@ describe("UI Kernel transport and external store", () => {
 
   it("separates shared documents from immutable previews across repeated file views", async () => {
     const transport = createMockUiKernelTransport();
-    const store = new ResourceExternalStore(transport);
+    const store = new WorkbenchProjectionStore(transport);
     const stop = store.subscribe(() => undefined);
     await store.refresh();
-    const state = store.getSnapshot();
+    const state = store.getResourceSnapshot();
     if (state.status !== "ready") throw new Error("Resource fixture did not load");
     const descriptor = state.snapshot.resources[0]!;
     const target = {
@@ -878,10 +844,10 @@ describe("UI Kernel transport and external store", () => {
 
   it("keeps the mock Surface command lane in lockstep with instance semantics", async () => {
     const transport = createMockUiKernelTransport();
-    const store = new SurfaceExternalStore(transport);
+    const store = new WorkbenchProjectionStore(transport);
     const stop = store.subscribe(() => undefined);
     await store.refresh();
-    const state = store.getSnapshot();
+    const state = store.getSurfaceSnapshot();
     if (state.status !== "ready") throw new Error("Surface fixture did not load");
     const initial = state.snapshot.catalog.instances.length;
     const request: OpenSurfaceRequest = {
@@ -919,52 +885,52 @@ describe("UI Kernel transport and external store", () => {
     stop();
   });
 
-  it("coalesces a Surface invalidation flood into one trailing refresh", async () => {
+  it("coalesces a Workbench invalidation flood into one trailing refresh", async () => {
     const base = createMockUiKernelTransport();
-    const first = generatedSurfaces();
-    const second = generatedSurfaces();
-    (first as { snapshot_revision: number }).snapshot_revision = 40;
-    (second as { snapshot_revision: number }).snapshot_revision = 41;
+    const first = await base.loadWorkbenchProjection();
+    const second = await base.loadWorkbenchProjection();
 
-    let resolveFirst: ((snapshot: SurfaceRuntimeSnapshot) => void) | undefined;
-    const firstLoad = new Promise<SurfaceRuntimeSnapshot>((resolve) => {
+    let resolveFirst: ((snapshot: typeof first) => void) | undefined;
+    const firstLoad = new Promise<typeof first>((resolve) => {
       resolveFirst = resolve;
     });
-    const loadSurfaces = vi
-      .fn<() => Promise<SurfaceRuntimeSnapshot>>()
+    const loadWorkbenchProjection = vi
+      .fn<() => Promise<typeof first>>()
       .mockImplementationOnce(() => firstLoad)
       .mockResolvedValueOnce(second);
     let invalidate: () => void = () => undefined;
     const transport = {
       ...base,
-      loadSurfaces,
-      subscribeSurfacesInvalidated(listener: () => void) {
+      loadWorkbenchProjection,
+      subscribeWorkbenchInvalidated(listener: () => void) {
         invalidate = listener;
         return () => undefined;
       },
     };
-    const store = new SurfaceExternalStore(transport);
+    const store = new WorkbenchProjectionStore(transport);
     const stop = store.subscribe(() => undefined);
 
-    await vi.waitFor(() => expect(loadSurfaces).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(loadWorkbenchProjection).toHaveBeenCalledTimes(1));
     for (let index = 0; index < 128; index += 1) invalidate();
     resolveFirst?.(first);
-    await vi.waitFor(() => expect(loadSurfaces).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(loadWorkbenchProjection).toHaveBeenCalledTimes(2));
     await vi.waitFor(() => {
       const state = store.getSnapshot();
       expect(state.status).toBe("ready");
-      if (state.status === "ready") expect(state.snapshot.snapshot_revision).toBe(41);
+      if (state.status === "ready") {
+        expect(state.snapshot.projection_generation).toBe(second.projection_generation);
+      }
     });
-    expect(loadSurfaces).toHaveBeenCalledTimes(2);
+    expect(loadWorkbenchProjection).toHaveBeenCalledTimes(2);
     stop();
   });
 
   it("keeps Studio edits stale-safe, undoable, and reconciled with Surface availability", async () => {
     const transport = createMockUiKernelTransport();
-    const store = new StudioExternalStore(transport);
+    const store = new WorkbenchProjectionStore(transport);
     const stop = store.subscribe(() => undefined);
     await store.refresh();
-    const state = store.getSnapshot();
+    const state = store.getStudioSnapshot();
     if (state.status !== "ready") throw new Error("Studio fixture did not load");
     const initial = state.snapshot;
     const placed = await store.apply({
@@ -1090,10 +1056,10 @@ describe("UI Kernel transport and external store", () => {
 
   it("supports shared and split runtimes without coupling Console or layout lifetime", async () => {
     const transport = createMockUiKernelTransport();
-    const runtimeStore = new RuntimeExternalStore(transport);
+    const runtimeStore = new WorkbenchProjectionStore(transport);
     const stop = runtimeStore.subscribe(() => undefined);
     await runtimeStore.refresh();
-    let runtimeState = runtimeStore.getSnapshot();
+    let runtimeState = runtimeStore.getRuntimeSnapshot();
     if (runtimeState.status !== "ready") throw new Error("Runtime fixture did not load");
     const workspace = runtimeState.snapshot.instances[0]!;
     const runtimeTarget = (runtime = workspace) => ({
@@ -1124,7 +1090,7 @@ describe("UI Kernel transport and external store", () => {
       console_instance_id: consoleA.instance_id,
     });
     await runtimeStore.refresh();
-    runtimeState = runtimeStore.getSnapshot();
+    runtimeState = runtimeStore.getRuntimeSnapshot();
     if (runtimeState.status !== "ready") throw new Error("Runtime refresh failed");
     const currentWorkspace = runtimeState.snapshot.instances[0]!;
     const second = await runtimeStore.startExecution({
@@ -1135,7 +1101,7 @@ describe("UI Kernel transport and external store", () => {
     });
     expect(second.execution.console_instance_id).toBe(consoleB.instance_id);
     await runtimeStore.refresh();
-    runtimeState = runtimeStore.getSnapshot();
+    runtimeState = runtimeStore.getRuntimeSnapshot();
     if (runtimeState.status !== "ready") throw new Error("Runtime refresh failed");
     await transport.closeSurface({
       project_id: consoleA.project_id,

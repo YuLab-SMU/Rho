@@ -522,14 +522,14 @@ describe("Studio foundation app", () => {
     const first = await transport.loadUiProfile();
     const firstLayout = setToolbarComponentVisible(defaultToolbarLayout(), "compose", true);
     saveToolbarLayout(window.localStorage, first.profile.project_id, firstLayout);
-    const second = structuredClone(first);
-    (second.profile as { project_id: string }).project_id = "project:toolbar-other";
+    const secondPath = "/tmp/toolbar-other";
+    const secondProjectId = `project:mock:${encodeURIComponent(secondPath)}`;
     const secondLayout = setToolbarComponentVisible(defaultToolbarLayout(), "runtime_status", true);
-    saveToolbarLayout(window.localStorage, second.profile.project_id, secondLayout);
+    saveToolbarLayout(window.localStorage, secondProjectId, secondLayout);
     const { container } = await renderApp(transport);
     expect(container.querySelector("[data-toolbar-component='compose']")).not.toBeNull();
     await act(async () => {
-      transport.publishUiProfile(second);
+      await transport.openProject(secondPath);
       await settle();
       await settle();
     });
@@ -1054,6 +1054,7 @@ describe("Studio foundation app", () => {
       editor.setSelectionRange(0, 0);
       source.querySelector<HTMLButtonElement>("[aria-label='Run selection or current R expression in Console']")!.click();
       for (let index = 0; index < 16; index += 1) await Promise.resolve();
+      await settle();
     });
     expect(execute).toHaveBeenCalledOnce();
     expect(execute.mock.calls[0]?.[0]).toMatchObject({
@@ -1991,6 +1992,7 @@ describe("Studio foundation app", () => {
       composer.dispatchEvent(new Event("input", { bubbles: true }));
       composer.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
       for (let index = 0; index < 12; index += 1) await Promise.resolve();
+      await settle();
       consoleView.querySelector<HTMLButtonElement>("[aria-label='Filter Console output']")!.click();
       await settle();
     });

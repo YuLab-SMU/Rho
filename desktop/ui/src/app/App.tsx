@@ -11,12 +11,7 @@ import {
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 
 import {
-  ResourceExternalStore,
-  StudioExternalStore,
-  SurfaceExternalStore,
-  RuntimeExternalStore,
-  UiExternalStore,
-  UiProfileExternalStore,
+  WorkbenchProjectionStore,
   commandsForPlacement,
   createUiKernelTransport,
 } from "../transport";
@@ -176,12 +171,7 @@ function SurfaceTaskState({
 }
 
 const defaultTransport = createUiKernelTransport();
-const defaultStore = new UiExternalStore(defaultTransport);
-const defaultSurfaceStore = new SurfaceExternalStore(defaultTransport);
-const defaultStudioStore = new StudioExternalStore(defaultTransport);
-const defaultRuntimeStore = new RuntimeExternalStore(defaultTransport);
-const defaultResourceStore = new ResourceExternalStore(defaultTransport);
-const defaultProfileStore = new UiProfileExternalStore(defaultTransport);
+const defaultStore = new WorkbenchProjectionStore(defaultTransport);
 
 type PreparationState =
   | { readonly status: "preparing" }
@@ -3064,24 +3054,23 @@ function WorkbenchApp({ transport }: AppProps) {
     consoleExecutionRouter.markPreferred(instanceId);
   }, [consoleExecutionRouter]);
   const pluginTransport = transport ?? defaultTransport;
-  const store = useMemo(() => transport == null ? defaultStore : new UiExternalStore(transport), [transport]);
-  const surfaceStore = useMemo(() => transport == null ? defaultSurfaceStore : new SurfaceExternalStore(transport), [transport]);
-  const studioStore = useMemo(() => transport == null ? defaultStudioStore : new StudioExternalStore(transport), [transport]);
-  const runtimeStore = useMemo(() => transport == null ? defaultRuntimeStore : new RuntimeExternalStore(transport), [transport]);
-  const resourceStore = useMemo(() => transport == null ? defaultResourceStore : new ResourceExternalStore(transport), [transport]);
-  const profileStore = useMemo(() => transport == null ? defaultProfileStore : new UiProfileExternalStore(transport), [transport]);
+  const store = useMemo(
+    () => transport == null ? defaultStore : new WorkbenchProjectionStore(transport),
+    [transport],
+  );
+  const surfaceStore = store;
+  const studioStore = store;
+  const runtimeStore = store;
+  const resourceStore = store;
+  const profileStore = store;
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
-  const surfaceState = useSyncExternalStore(surfaceStore.subscribe, surfaceStore.getSnapshot, surfaceStore.getSnapshot);
-  const studioState = useSyncExternalStore(studioStore.subscribe, studioStore.getSnapshot, studioStore.getSnapshot);
-  const runtimeState = useSyncExternalStore(runtimeStore.subscribe, runtimeStore.getSnapshot, runtimeStore.getSnapshot);
-  const resourceState = useSyncExternalStore(resourceStore.subscribe, resourceStore.getSnapshot, resourceStore.getSnapshot);
-  const profileState = useSyncExternalStore(profileStore.subscribe, profileStore.getSnapshot, profileStore.getSnapshot);
-  const snapshot = state.status === "ready" ? state.snapshot : null;
-  const surfaces = surfaceState.status === "ready" ? surfaceState.snapshot : null;
-  const studio = studioState.status === "ready" ? studioState.snapshot : null;
-  const runtimes = runtimeState.status === "ready" ? runtimeState.snapshot : null;
-  const resources = resourceState.status === "ready" ? resourceState.snapshot : null;
-  const profileSnapshot = profileState.status === "ready" ? profileState.snapshot : null;
+  const projection = state.status === "ready" ? state.snapshot : null;
+  const snapshot = projection?.kernel ?? null;
+  const surfaces = projection?.surfaces ?? null;
+  const studio = projection?.studio ?? null;
+  const runtimes = projection?.runtimes ?? null;
+  const resources = projection?.resources ?? null;
+  const profileSnapshot = projection?.profile ?? null;
   const profile = profileSnapshot?.profile ?? null;
   const projectionProjectId = snapshot?.project.project_id ?? null;
   useConsoleProjectActivation(consoleExecutionRouter, projectionProjectId);
@@ -3094,12 +3083,7 @@ function WorkbenchApp({ transport }: AppProps) {
   useEffect(() => {
     setAgentRuntimeOutputContext(null);
   }, [projectionProjectId]);
-  const projectProjectionsCoherent = projectionProjectId != null &&
-    surfaces?.project_id === projectionProjectId &&
-    studio?.project_id === projectionProjectId &&
-    runtimes?.project_id === projectionProjectId &&
-    resources?.project_id === projectionProjectId &&
-    profile?.project_id === projectionProjectId;
+  const projectProjectionsCoherent = projection != null;
   const toolbarProjectId = profile?.project_id ?? null;
   const toolbarLayout = toolbarPreference.projectId === toolbarProjectId
     ? toolbarPreference.layout
@@ -3194,7 +3178,7 @@ function WorkbenchApp({ transport }: AppProps) {
     ).catch((error: unknown) => setActionError(workbenchFailureMessage(error, "Studio operation failed.")));
   };
   const studioMutationController = useMemo(() => new StudioMutationController({
-    getStudio: studioStore.getSnapshot,
+    getStudio: studioStore.getStudioSnapshot,
     apply: (request) => studioStore.apply(request),
     undo: (request) => studioStore.undo(request),
     redo: (request) => studioStore.redo(request),
@@ -3202,7 +3186,7 @@ function WorkbenchApp({ transport }: AppProps) {
     allocateLayoutNodeId: () => `layout-node:${crypto.randomUUID().replaceAll("-", "")}`,
   }), [studioStore]);
   const surfaceMutationController = useMemo(() => new SurfaceInstanceMutationController({
-    getSurfaces: surfaceStore.getSnapshot,
+    getSurfaces: surfaceStore.getSurfaceSnapshot,
     update: (request) => surfaceStore.update(request),
     suspend: (request) => surfaceStore.suspend(request),
     resume: (request) => surfaceStore.resume(request),
@@ -3454,7 +3438,7 @@ function WorkbenchApp({ transport }: AppProps) {
       return created;
     }
     await profileStore.refresh();
-    const latest = profileStore.getSnapshot();
+    const latest = profileStore.getProfileSnapshot();
     if (latest.status !== "ready") throw new Error("Vibe Page Profile is unavailable.");
     const latestProfile = latest.snapshot.profile;
     const page = latestProfile.vibe_pages.find(
@@ -3573,7 +3557,7 @@ function WorkbenchApp({ transport }: AppProps) {
       });
     } else if (profile?.active_mode === "vibe") {
       await profileStore.refresh();
-      const latest = profileStore.getSnapshot();
+      const latest = profileStore.getProfileSnapshot();
       if (latest.status !== "ready") throw new Error("Vibe Page Profile is unavailable after Check.");
       const activePage = latest.snapshot.profile.vibe_pages.find(
         (page) => page.page_id === latest.snapshot.profile.active_vibe_page_id,
@@ -3628,7 +3612,7 @@ function WorkbenchApp({ transport }: AppProps) {
   };
   const pinAgentTask = async (turn: AgentTurnSummary) => {
     await profileStore.refresh();
-    const latest = profileStore.getSnapshot();
+    const latest = profileStore.getProfileSnapshot();
     if (latest.status !== "ready") throw new Error("The Project UI Profile is unavailable.");
     const latestProfile = latest.snapshot.profile;
     const activePage = latestProfile.vibe_pages.find(
@@ -3688,10 +3672,10 @@ function WorkbenchApp({ transport }: AppProps) {
     });
   };
   const consoleRequirementController = useMemo(() => new ConsoleRequirementController({
-    getSurfaces: surfaceStore.getSnapshot,
-    getStudio: studioStore.getSnapshot,
-    getRuntimes: runtimeStore.getSnapshot,
-    getProfile: profileStore.getSnapshot,
+    getSurfaces: surfaceStore.getSurfaceSnapshot,
+    getStudio: studioStore.getStudioSnapshot,
+    getRuntimes: runtimeStore.getRuntimeSnapshot,
+    getProfile: profileStore.getProfileSnapshot,
     attachRuntime: (request) => runtimeStore.attach(request),
     refreshSurfaces: () => surfaceStore.refresh(),
     openSurface: (request) => surfaceStore.open(request),
@@ -3787,13 +3771,28 @@ function WorkbenchApp({ transport }: AppProps) {
         await surfaceStore.refresh();
       }}
       startRuntimeExecution={async (runtime, code, sourceContext) => {
-        if (runtimes == null) throw new Error("Runtime Registry is not ready.");
+        await store.settled();
+        const runtimeState = runtimeStore.getRuntimeSnapshot();
+        const surfaceState = surfaceStore.getSurfaceSnapshot();
+        if (runtimeState.status !== "ready" || surfaceState.status !== "ready") {
+          throw new Error("Runtime Registry or Surface Runtime is not ready.");
+        }
+        const currentRuntime = runtimeState.snapshot.instances.find((candidate) =>
+          candidate.runtime_instance_id === runtime.runtime_instance_id &&
+          candidate.activation_generation === runtime.activation_generation
+        );
+        const currentConsole = surfaceState.snapshot.catalog.instances.find(
+          (candidate) => candidate.instance_id === instance.instance_id,
+        );
+        if (currentRuntime == null || currentConsole == null) {
+          throw new Error("The Console or Runtime changed before execution could start.");
+        }
         const result = await workbenchOperationTrace.run(
           "runtime.execution.start",
           () => runtimeStore.startExecution({
-            runtime: runtimeRequest(runtime, runtimes.project_revision),
-            console_instance_id: instance.instance_id,
-            expected_console_revision: instance.surface_revision,
+            runtime: runtimeRequest(currentRuntime, runtimeState.snapshot.project_revision),
+            console_instance_id: currentConsole.instance_id,
+            expected_console_revision: currentConsole.surface_revision,
             code,
             ...(sourceContext == null ? {} : { source_context: sourceContext }),
           }),
@@ -4045,14 +4044,7 @@ function WorkbenchApp({ transport }: AppProps) {
   const closeRhoMenu = () => {
     if (rhoMenuRef.current != null) rhoMenuRef.current.open = false;
   };
-  const refreshProjectProjections = () => Promise.all([
-    store.refresh(),
-    surfaceStore.refresh(),
-    studioStore.refresh(),
-    runtimeStore.refresh(),
-    resourceStore.refresh(),
-    profileStore.refresh(),
-  ]);
+  const refreshProjectProjections = () => store.refresh();
   const performProjectSwitch = async (
     operation: () => Promise<ProjectSwitchResponse>,
     targetPath: string | null,
@@ -4624,11 +4616,6 @@ function WorkbenchApp({ transport }: AppProps) {
         </aside>}
         <section className={`rho-studio-canvas rho-canvas-${profile?.active_mode ?? "loading"}`} aria-label={profile?.active_mode === "vibe" ? "Vibe page canvas" : "Studio layout canvas"}>
           {state.status === "failed" && <p role="alert">{state.message}</p>}
-          {surfaceState.status === "failed" && <p role="alert">{surfaceState.message}</p>}
-          {studioState.status === "failed" && <p role="alert">{studioState.message}</p>}
-          {runtimeState.status === "failed" && <p role="alert">{runtimeState.message}</p>}
-          {resourceState.status === "failed" && <p role="alert">{resourceState.message}</p>}
-          {profileState.status === "failed" && <p role="alert">{profileState.message}</p>}
           {profileSnapshot?.recovery_detail != null && (
             <div className="rho-profile-recovery" role="status">
               <div><strong>UI Profile recovered from backup</strong><code>{profileSnapshot.recovery_detail}</code></div>

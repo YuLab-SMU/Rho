@@ -47,8 +47,8 @@ export interface WorkbenchProjectionTransport {
   subscribeWorkbenchInvalidated(listener: () => void): Unsubscribe;
 }
 
-function checkedWorkbenchProjection(
-  projection: WorkbenchProjectionV1_Serialize,
+export function validateWorkbenchProjection(
+  projection: WorkbenchProjectionV1_Serialize | WorkbenchProjection,
 ): WorkbenchProjection {
   if (
     projection.contract !== "rho.ui.workbench-projection.v1" ||
@@ -101,7 +101,7 @@ export function createTauriWorkbenchProjectionTransport(
   const commands = createWorkbenchProjectionCommands(invoke);
   return {
     loadWorkbenchProjection: () => (
-      commands.workbenchProjectionSnapshot().then(checkedWorkbenchProjection)
+      commands.workbenchProjectionSnapshot().then(validateWorkbenchProjection)
     ),
   };
 }
