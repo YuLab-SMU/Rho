@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-04",
+  "active_work_packages": ["AM-W2-05"],
+  "integration_lane": "AM-W2-05",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -207,6 +207,12 @@ the existing bounded Git execution and review services remain unchanged.
 off request-thread `Store::open` calls. Existing synchronous Store consumers
 remain compatible while later domain packages move onto the same lane; no
 schema, transaction, project-scope or serialized response contract changes.
+
+`AM-W2-05` replaces `Arc<Mutex<CoordinatorRuntime>>` with an explicit
+`WorkspaceBrokerLane`. Only the lane's Broker/legacy-Store working set is
+serialized; a committed identity projection remains readable without waiting
+for Workspace R. A publishing guard advances the projection only when a lane
+operation releases, so readers never observe a partially applied revision.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
