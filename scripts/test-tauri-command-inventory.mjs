@@ -15,6 +15,19 @@ const RUN_COMMANDS = [
   "list_runs",
 ];
 
+const ARTIFACT_COMMANDS = [
+  "clear_artifact_records",
+  "clear_plot_artifacts",
+  "export_data_view_artifact",
+  "export_plot_artifact",
+  "get_artifact_record",
+  "get_project_retention_summary",
+  "list_artifact_records",
+  "list_plot_artifacts",
+  "prune_plot_payloads",
+  "read_plot_artifact",
+];
+
 const PLUGIN_COMMANDS = [
   "accept_workspace_plugin_update",
   "disable_workspace_plugin",
@@ -148,10 +161,21 @@ export function validateCommandInventory({ sources, main, frontend, expectedHand
     "Workspace Plugins command module ownership changed",
   );
 
+  const artifactSource = sources.find(({ name }) => name.endsWith("commands/artifacts.rs"));
+  assert.ok(artifactSource, "Artifact command module is missing");
+  assert.deepEqual(
+    commandDefinitions([artifactSource]).map(({ name }) => name).sort(),
+    ARTIFACT_COMMANDS,
+    "Artifact command module ownership changed",
+  );
+
   return { commands: definitionNames.length, sources: sources.length };
 }
 
 function fixtures() {
+  const artifactHandlers = ARTIFACT_COMMANDS.map(
+    (command) => `  commands::artifacts::${command},`,
+  ).join("\n");
   const pluginHandlers = PLUGIN_COMMANDS.map(
     (command) => `  commands::plugins::${command},`,
   ).join("\n");
@@ -161,6 +185,7 @@ async fn app_info() {}
 .invoke_handler(tauri::generate_handler![
   app_info,
 ${pluginHandlers}
+${artifactHandlers}
   commands::runs::list_runs,
   commands::runs::list_problems,
   commands::runs::get_run_detail,
@@ -174,6 +199,9 @@ ${pluginHandlers}
     sources: [
       { name: "main.rs", text: main },
       { name: "commands/runs.rs", text: runs },
+      { name: "commands/artifacts.rs", text: ARTIFACT_COMMANDS.map(
+        (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
+      ).join("\n") },
       { name: "commands/plugins.rs", text: PLUGIN_COMMANDS.map(
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
@@ -181,9 +209,11 @@ ${pluginHandlers}
     main,
     frontend: RUN_COMMANDS.map(
       (command) => `invoke("${command}");`,
+    ).concat(ARTIFACT_COMMANDS.map(
+      (command) => `invoke("${command}");`,
     ).concat(PLUGIN_COMMANDS.map(
       (command) => `invoke("${command}");`,
-    )).join("\n"),
+    ))).join("\n"),
   };
 }
 

@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-34",
+  "active_work_packages": ["AM-W2-35"],
+  "integration_lane": "AM-W2-35",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -370,6 +370,12 @@ legacy Store borrow inside the Workspace lane; commit `6028158` and
 removes the now-unused synchronous Store from `WorkspaceBrokerState`; commit
 `dba32cb` and `AM-E-0061` pass injected recovery failure, lane isolation and
 complete Server/Desktop matrices, resolving `AM-F-0003`.
+
+`AM-W2-35` mechanically moves the complete Artifact/Plot command-adapter
+boundary out of the desktop composition root. Repository, Workspace, project
+revision, filesystem and IPC behavior remain unchanged; capability ownership
+and deterministic command identity are the acceptance criteria, while LOC is
+reported only as diagnostic telemetry.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
