@@ -55,3 +55,5 @@ rusqlite.workspace = true
 specta-typescript.workspace = true
 tauri-specta.workspace = true
 wat.workspace = true
+wit-component.workspace = true
+wit-parser.workspace = true

@@ -14,6 +14,9 @@ use std::time::Duration;
 use std::{fs, path::Path};
 use tempfile::tempdir;
 
+mod component_fixture;
+use component_fixture::{complete_component, file_broker_component};
+
 #[derive(Debug)]
 struct FixedToken(u8);
 
@@ -555,6 +558,44 @@ fn write_plugin(project: &Path, permissions: serde_json::Value) {
             "version": "1.0.0",
             "apiVersion": "^1.0",
             "runtime": { "kind": "wasm", "entry": "dist/plugin.wasm", "scope": "project" },
+            "activation": [],
+            "provides": [],
+            "requires": [],
+            "optional": [],
+            "permissions": permissions
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+}
+
+fn write_component_plugin(
+    project: &Path,
+    permissions: serde_json::Value,
+    yields_file_request: bool,
+) {
+    let directory = project.join(".rho/plugins/example/dist");
+    fs::create_dir_all(&directory).unwrap();
+    let component = if yields_file_request {
+        file_broker_component()
+    } else {
+        complete_component()
+    };
+    fs::write(directory.join("plugin.wasm"), component).unwrap();
+    fs::write(
+        project.join(".rho/plugins/example/rho-plugin.json"),
+        serde_json::to_vec(&serde_json::json!({
+            "schemaVersion": 4,
+            "id": "org.example.plugin",
+            "name": "Component fixture",
+            "version": "1.0.0",
+            "apiVersion": "^1.0",
+            "runtime": {
+                "kind": "wasm",
+                "entry": "dist/plugin.wasm",
+                "scope": "project",
+                "abi": "component-v1"
+            },
             "activation": [],
             "provides": [],
             "requires": [],
@@ -1122,6 +1163,221 @@ fn context(project: &Path) -> PluginRuntimeContext {
             project_revision: 3,
         }),
     }
+}
+
+#[test]
+fn manifest_v4_component_activates_and_reconstructs_with_fresh_identity() {
+    let directory = tempdir().unwrap();
+    write_component_plugin(directory.path(), serde_json::json!([]), false);
+    let database = directory.path().join("rho.sqlite");
+    let context = context(directory.path());
+    let mut store = Store::open(&database).unwrap();
+    let first_registry = deterministic_registry();
+    let enabled = first_registry
+        .request_enable(&context, "org.example.plugin", &mut store)
+        .unwrap();
+    assert_eq!(enabled.status, "enabled");
+    let first_identity = {
+        let state = first_registry
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let active = state
+            .active
+            .get(&registry_key(&context.project_root, "org.example.plugin"))
+            .unwrap();
+        assert_eq!(
+            active.host.runtime_abi(),
+            rho_extension_runtime::RuntimeAbi::ComponentV1
+        );
+        assert_eq!(active.host.state(), HostInstanceState::Active);
+        active.host.identity().clone()
+    };
+    drop(first_registry);
+    drop(store);
+
+    let mut reopened = Store::open(&database).unwrap();
+    let restarted_registry = deterministic_registry();
+    let report = restarted_registry.reconcile_project(&context, &mut reopened);
+    assert_eq!(report.reactivated, 1);
+    let second_identity = {
+        let state = restarted_registry
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let active = state
+            .active
+            .get(&registry_key(&context.project_root, "org.example.plugin"))
+            .unwrap();
+        assert_eq!(
+            active.host.runtime_abi(),
+            rho_extension_runtime::RuntimeAbi::ComponentV1
+        );
+        assert_eq!(active.host.state(), HostInstanceState::Active);
+        active.host.identity().clone()
+    };
+    assert_eq!(first_identity.activation_generation().get(), 1);
+    assert_eq!(second_identity.activation_generation().get(), 2);
+    assert_ne!(
+        first_identity.host_instance_id(),
+        second_identity.host_instance_id()
+    );
+    assert_eq!(
+        first_identity.package_digest(),
+        second_identity.package_digest()
+    );
+}
+
+#[test]
+fn component_v1_file_broker_uses_existing_permission_and_audit_lane() {
+    let directory = tempdir().unwrap();
+    write_component_plugin(
+        directory.path(),
+        serde_json::json!([{
+            "name": "project.fs.read",
+            "paths": ["data/**/*.csv"],
+            "maxBytes": 1024
+        }]),
+        true,
+    );
+    let manifest_path = directory
+        .path()
+        .join(".rho/plugins/example/rho-plugin.json");
+    let mut manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+    manifest["provides"] =
+        serde_json::json!([{"capability": "tool.fixture.read", "contract_major": 1}]);
+    manifest["contributions"] = serde_json::json!([{
+        "id": "tool.fixture.read",
+        "kind": "tool",
+        "contractMajor": 1,
+        "label": "Read fixture",
+        "purpose": "Read bounded fixture metadata",
+        "inputSchema": {"type": "object", "properties": {}},
+        "outputSchema": {
+            "type": "object",
+            "properties": {"received": {"type": "boolean"}},
+            "required": ["received"]
+        }
+    }]);
+    fs::write(manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    fs::create_dir_all(directory.path().join("data")).unwrap();
+    fs::write(directory.path().join("data/input.csv"), b"abcde").unwrap();
+    let mut store = Store::open(directory.path().join("rho.sqlite")).unwrap();
+    let registry = deterministic_registry();
+    let context = context(directory.path());
+    let requested = registry
+        .request_enable(&context, "org.example.plugin", &mut store)
+        .unwrap();
+    assert_eq!(requested.request_ids.len(), 1);
+    let decision = registry
+        .respond(
+            &context,
+            PluginPermissionDecisionInput {
+                request_id: requested.request_ids[0].clone(),
+                decision: "allow_once".to_string(),
+                expected_project_revision: context.project_revision,
+            },
+            &mut store,
+        )
+        .unwrap();
+    assert_eq!(decision.plugin_status, "enabled");
+
+    let result = registry
+        .invoke_file_contribution(
+            &context,
+            "tool.fixture.read",
+            ContributionInvocationOrigin::AgentTool,
+            serde_json::json!({}),
+            &mut store,
+        )
+        .unwrap();
+    assert_eq!(result["status"], "completed");
+    assert_eq!(result["result"], serde_json::json!({"received": true}));
+    assert_eq!(result["provenance"]["broker_steps"], 1);
+    assert_eq!(
+        PluginPermissionQueryService::new(&store)
+            .list_grants(&context.project_root, None, Some("consumed"))
+            .unwrap()
+            .len(),
+        1
+    );
+    let events = PluginPermissionQueryService::new(&store)
+        .list_events(&context.project_root, Some(100))
+        .unwrap();
+    for event_type in [
+        "handle_minted",
+        "call_admitted",
+        "call_completed",
+        "grant_consumed",
+    ] {
+        assert!(events.iter().any(|event| event.event_type == event_type));
+    }
+    assert!(!serde_json::to_string(&events).unwrap().contains("handle."));
+}
+
+#[test]
+fn component_v1_failure_is_exact_and_two_projects_remain_isolated() {
+    let project_a = tempdir().unwrap();
+    let project_b = tempdir().unwrap();
+    let invalid_project = tempdir().unwrap();
+    write_component_plugin(project_a.path(), serde_json::json!([]), false);
+    write_component_plugin(project_b.path(), serde_json::json!([]), false);
+    write_component_plugin(invalid_project.path(), serde_json::json!([]), false);
+    fs::write(
+        invalid_project
+            .path()
+            .join(".rho/plugins/example/dist/plugin.wasm"),
+        rho_extension_runtime::P2_2_SMOKE_WASM,
+    )
+    .unwrap();
+
+    let mut context_a = context(project_a.path());
+    context_a.project_scope_id = ScopeId::new("project.component.a").unwrap();
+    let mut context_b = context(project_b.path());
+    context_b.project_scope_id = ScopeId::new("project.component.b").unwrap();
+    let mut invalid_context = context(invalid_project.path());
+    invalid_context.project_scope_id = ScopeId::new("project.component.invalid").unwrap();
+    let registry = deterministic_registry();
+    let mut store = Store::open(project_a.path().join("rho.sqlite")).unwrap();
+    registry
+        .request_enable(&context_a, "org.example.plugin", &mut store)
+        .unwrap();
+    registry
+        .request_enable(&context_b, "org.example.plugin", &mut store)
+        .unwrap();
+
+    let key_a = registry_key(&context_a.project_root, "org.example.plugin");
+    let key_b = registry_key(&context_b.project_root, "org.example.plugin");
+    {
+        let mut state = registry
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert!(
+            state
+                .active
+                .get_mut(&key_a)
+                .unwrap()
+                .host
+                .quarantine_for_timeout()
+        );
+        assert_eq!(state.active[&key_b].host.state(), HostInstanceState::Active);
+    }
+
+    let error = registry
+        .request_enable(&invalid_context, "org.example.plugin", &mut store)
+        .unwrap_err();
+    assert!(error.to_string().contains("InvalidModule"));
+    let state = registry
+        .state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    assert_eq!(state.active[&key_b].host.state(), HostInstanceState::Active);
+    assert!(!state.active.contains_key(&registry_key(
+        &invalid_context.project_root,
+        "org.example.plugin"
+    )));
 }
 
 fn prepare_runtime_replacement(

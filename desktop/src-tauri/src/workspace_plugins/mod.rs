@@ -18,9 +18,9 @@ use rho_extension_runtime::{
     ContributionStore, DiscoveredPlugin, GrantErrorKind, GrantRequest, GrantSource, GrantStore,
     GuestStep, HOST_PROTOCOL_VERSION, HostFrame, HostInstanceId, HostInstanceState, HostMessage,
     HostRequestId, HostResponse, MAX_WASM_MODULE_BYTES, OsBrokerCallIdSource,
-    PermissionConstraints, PermissionKind, PermissionUse, PluginCommandResultV1, PluginId,
-    Revalidation, RevalidationRequest, RuntimeKind, SystemContributionClock, ViewerDocumentV1,
-    WasmHostIdentity, WasmPluginHost, WorkspaceGrantIdentity, discover_workspace_plugins,
+    PermissionConstraints, PermissionKind, PermissionUse, PluginCommandResultV1, PluginGuestHost,
+    PluginId, Revalidation, RevalidationRequest, RuntimeKind, SystemContributionClock,
+    ViewerDocumentV1, WasmHostIdentity, WorkspaceGrantIdentity, discover_workspace_plugins,
 };
 use rho_server::coordinator::{AgentPluginContextItem, AgentPluginToolDefinition};
 use rho_server::plugin_fs::{ProjectFsReadErrorCode, ProjectFsReadRequest, read_project_file};
@@ -110,7 +110,7 @@ struct ActivePlugin {
     plugin_version: String,
     package_digest: String,
     host_instance_id: HostInstanceId,
-    host: WasmPluginHost,
+    host: PluginGuestHost,
     handles: BTreeMap<String, CapabilityHandle>,
     permission_count: usize,
     contribution_identity: Option<ContributionInstanceIdentity>,

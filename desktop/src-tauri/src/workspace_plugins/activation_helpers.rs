@@ -904,7 +904,8 @@ fn prepare_plugin_activation<'a>(
         generation,
         host_instance_id.clone(),
     );
-    let mut host = WasmPluginHost::from_bytes_with_call_id_source(
+    let mut host = PluginGuestHost::from_runtime_abi_with_call_id_source(
+        plugin.manifest.runtime_abi(),
         identity,
         module_bytes,
         Arc::clone(&state.broker_call_id_source),
@@ -912,8 +913,8 @@ fn prepare_plugin_activation<'a>(
     .map_err(|error| anyhow!("workspace plugin host rejected the module: {error:?}"))?;
     if !plugin.manifest.permissions.is_empty() {
         ensure!(
-            host.guest_abi_version() == rho_extension_runtime::GUEST_ABI_V2,
-            "permission-bearing workspace plugins require no-import Guest ABI V2"
+            host.supports_guest_calls(),
+            "permission-bearing workspace plugins require typed guest calls"
         );
     }
     let frame = |message| HostFrame {
@@ -948,8 +949,8 @@ fn prepare_plugin_activation<'a>(
     );
     if !plugin.manifest.contributions.is_empty() {
         ensure!(
-            host.guest_abi_version() == rho_extension_runtime::GUEST_ABI_V2,
-            "contributing workspace plugins require no-import Guest ABI V2"
+            host.supports_guest_calls(),
+            "contributing workspace plugins require typed guest calls"
         );
     }
     let contribution_candidate = ContributionStore::stage(
