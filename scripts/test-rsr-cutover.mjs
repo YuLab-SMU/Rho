@@ -43,7 +43,7 @@ assert.equal(
 );
 assert.equal(
   packageJson.scripts["rsr:test:architecture"],
-  "node ../scripts/test-architecture-program.mjs && node ../scripts/architecture-program.mjs validate --root ..",
+  "node ../scripts/test-architecture-program.mjs && node ../scripts/change-fragments.mjs validate --root .. && node ../scripts/architecture-program.mjs validate --root ..",
 );
 assert.doesNotMatch(packageJson.description, /current Rho shell/u);
 

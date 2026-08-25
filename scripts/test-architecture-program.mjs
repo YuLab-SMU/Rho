@@ -118,11 +118,6 @@ function decision(overrides = {}) {
       production_suggested_lines: 8,
       production_attention_lines: 10,
       test_attention_lines: 20,
-      legacy_review_growth_lines: 2,
-      legacy_review_growth_percent: 10,
-      legacy_attention_growth_lines: 4,
-      legacy_attention_growth_percent: 25,
-      exceptions: [],
     },
     _file: "docs/architecture/modernization/decisions/AM-D-0001.md",
     ...overrides,
@@ -208,26 +203,6 @@ function runValidationFixtures() {
   assert.match(overdue.warnings.join("\n"), /finding target wave 0 has passed; replan or resolve it/u);
 
   const baseDecision = decision();
-  const hotspotReview = validateProgram([
-    program({ current_wave: 1 }),
-    finding({ target_wave: 1 }),
-    workPackage(),
-    decision({
-      line_budget: {
-        ...baseDecision.line_budget,
-        exceptions: [{
-          path: "src/legacy.ts",
-          baseline_lines: 8,
-          target_lines: 4,
-          finding: "AM-F-0001",
-          removal_work_package: "AM-W0-01",
-          expires_wave: 0,
-        }],
-      },
-    }),
-  ], { root: process.cwd(), lineBudget: false });
-  assert.match(hotspotReview.warnings.join("\n"), /hotspot src\/legacy\.ts passed review wave 0/u);
-
   expectInvalid([
     program(),
     finding(),
@@ -406,7 +381,7 @@ function runLineBudgetFixtures() {
   try {
     fs.mkdirSync(path.join(temporary, "src"), { recursive: true });
     fs.writeFileSync(path.join(temporary, "src/new.ts"), repeatedLines(11));
-    fs.writeFileSync(path.join(temporary, "src/legacy.ts"), repeatedLines(13));
+    fs.writeFileSync(path.join(temporary, "src/new.test.ts"), repeatedLines(21));
     const config = {
       enforcement: "advisory",
       production_roots: ["src"],
@@ -416,22 +391,15 @@ function runLineBudgetFixtures() {
       production_suggested_lines: 8,
       production_attention_lines: 10,
       test_attention_lines: 20,
-      legacy_review_growth_lines: 2,
-      legacy_review_growth_percent: 10,
-      legacy_attention_growth_lines: 4,
-      legacy_attention_growth_percent: 25,
-      exceptions: [{ path: "src/legacy.ts", baseline_lines: 8 }],
     };
     const result = checkLineBudget(temporary, config);
-    assert.deepEqual(result.failures, []);
     assert.deepEqual(result.warnings, [
-      "src/legacy.ts: 13 lines exceeds legacy attention threshold 10 (baseline 8)",
+      "src/new.test.ts: 21 lines exceeds attention threshold 20",
       "src/new.ts: 11 lines exceeds attention threshold 10",
     ]);
-    fs.writeFileSync(path.join(temporary, "src/legacy.ts"), repeatedLines(10));
-    assert.deepEqual(checkLineBudget(temporary, config).warnings, [
-      "src/legacy.ts: 10 lines exceeds legacy review threshold 9 (baseline 8)",
-      "src/new.ts: 11 lines exceeds attention threshold 10",
+    assert.deepEqual(result.measurements, [
+      { path: "src/new.test.ts", lines: 21, kind: "test" },
+      { path: "src/new.ts", lines: 11, kind: "production" },
     ]);
   } finally {
     fs.rmSync(temporary, { recursive: true, force: true });
@@ -457,6 +425,8 @@ function runDeterminismFixture() {
   const first = `${JSON.stringify(statusPayload(context), null, 2)}\n`;
   const second = `${JSON.stringify(statusPayload(context), null, 2)}\n`;
   assert.equal(first, second);
+  assert.equal(statusPayload(context).line_telemetry.enforcement, "advisory");
+  assert.equal(statusPayload(context).line_telemetry.production.files, 0);
 
   const historicalFinding = finding({
     status: "resolved",
