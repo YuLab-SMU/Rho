@@ -13,10 +13,9 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use tauri::State;
 
+use crate::application_state::{active_context, active_session, store_executor};
 use crate::internal_extensions::{extension_project_scope_id, run_history_source_capability_id};
-use crate::{
-    AppState, active_context, active_session, display_error, parse_execution_origin, store_executor,
-};
+use crate::{AppState, display_error, parse_execution_origin};
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(transparent)]

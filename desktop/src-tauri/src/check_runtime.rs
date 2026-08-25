@@ -611,7 +611,11 @@ pub(crate) async fn check_project_run(
     let store_executor = if registrations.is_empty() {
         None
     } else {
-        Some(crate::store_executor(&state).await.map_err(display_error)?)
+        Some(
+            crate::application_state::store_executor(&state)
+                .await
+                .map_err(display_error)?,
+        )
     };
     for registration in &registrations {
         let Some(plugin_context) = plugin_context.as_ref() else {

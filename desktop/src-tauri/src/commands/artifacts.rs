@@ -14,12 +14,12 @@ use serde_json::{Value, json};
 use tauri::State;
 use uuid::Uuid;
 
+use crate::application_state::{
+    active_context, active_session, persist_workspace_identity, store_executor,
+};
 use crate::commands::workspace::{ViewerWorkspaceRequest, viewer_expected_workspace};
 use crate::project::{atomic_write_new, project_path, relative_project_path};
-use crate::{
-    AppState, active_context, active_session, display_error, durable_project_root,
-    persist_workspace_identity, store_executor,
-};
+use crate::{AppState, display_error, durable_project_root};
 
 #[derive(Deserialize)]
 pub(crate) struct ExportPlotArtifactRequest {

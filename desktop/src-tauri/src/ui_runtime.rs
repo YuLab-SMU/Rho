@@ -310,7 +310,7 @@ fn active_state(status: &str) -> ActiveOperationStateV1 {
 
 async fn active_operations(state: &AppState, project_root: &str) -> Vec<ActiveOperationV1> {
     let mut operations = Vec::new();
-    if let Ok(executor) = crate::store_executor(state).await
+    if let Ok(executor) = crate::application_state::store_executor(state).await
         && let Ok(runs) = executor
             .run_repository()
             .list_runs(project_root.to_string(), Some(64))

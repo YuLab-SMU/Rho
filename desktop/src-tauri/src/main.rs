@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod agent_llm;
+mod application_state;
 mod check_runtime;
 mod commands;
 mod git;
@@ -23,6 +24,9 @@ mod update;
 mod workspace_lifecycle;
 mod workspace_plugins;
 
+pub(crate) use application_state::AppState;
+#[cfg(test)]
+use application_state::{active_context, persist_workspace_identity, store_executor};
 use internal_extensions::*;
 use project_transition::*;
 use startup_runtime::*;
@@ -42,7 +46,9 @@ use commands::agent_files::{
     ensure_agent_file_proposal_turn_terminal, persist_agent_file_mutation_event_to_store,
     undo_agent_file_edit_state, validate_persisted_agent_file_proposal_structure,
 };
-use commands::render::{RenderJobState, render_job_is_terminal};
+#[cfg(test)]
+use commands::render::RenderJobState;
+use commands::render::render_job_is_terminal;
 #[cfg(test)]
 use commands::render::{attach_render_artifact, finish_render_job, reconcile_render_job};
 #[cfg(test)]
@@ -55,7 +61,7 @@ use commands::workspace::{
 };
 
 use std::collections::{BTreeMap, HashMap};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 #[cfg(windows)]
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -70,7 +76,7 @@ use agent_llm::{
 use anyhow::{Context, Result, anyhow, bail, ensure};
 #[cfg(test)]
 use project::{MAX_VIEWER_FILE_BYTES, MAX_VIEWER_HTML_BYTES};
-use project::{ProjectSessionStore, ProjectWatcherControl, default_project_root, read_viewer_file};
+use project::{ProjectSessionStore, default_project_root, read_viewer_file};
 use rho_core::{BrokerState, ExecutionOrigin};
 use rho_extension_runtime::{
     BoundedJson, CapabilityDeclaration, DiagnosticSink, DisposeOutcome, ExtensionDiagnostic,
@@ -83,55 +89,17 @@ use rho_server::coordinator::{
 };
 use rho_server::workspace_lane::WorkspaceBrokerLane;
 use rho_store::{
-    AgentTurnDraft, AgentTurnEventDraft, BorrowedStore, RunSummary, Store, StoreExecutor,
-    StoreExecutorOperationError, normalize_project_root,
+    AgentTurnDraft, AgentTurnEventDraft, RunSummary, Store, StoreExecutor, normalize_project_root,
 };
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use tauri::Manager;
-use tokio::sync::{Mutex, OnceCell, RwLock};
+use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
-
-struct AppState {
-    data_dir: PathBuf,
-    ark: PathBuf,
-    config: SyncRwLock<Option<RuntimeConfig>>,
-    selected_rscript: SyncRwLock<Option<PathBuf>>,
-    startup: SyncRwLock<StartupView>,
-    project_store: ProjectSessionStore,
-    project_root: RwLock<PathBuf>,
-    project_watcher: Mutex<Option<ProjectWatcherControl>>,
-    session: RwLock<Option<Arc<ArkSession>>>,
-    context: Mutex<Option<Arc<WorkspaceBrokerLane>>>,
-    store_executor: OnceCell<StoreExecutor>,
-    approvals: Arc<PendingApprovalRegistry>,
-    environment_approvals: Arc<PendingApprovalRegistry>,
-    project_transition_gate: Arc<Mutex<()>>,
-    extension_host: Arc<ExtensionHost>,
-    plugin_permissions: Arc<workspace_plugins::PendingPluginPermissionRegistry>,
-    agent_tasks: Arc<Mutex<HashMap<String, AgentTaskEntry>>>,
-    agent_workspace_lane: Arc<AgentWorkspaceLane>,
-    agent_file_mutations: Arc<AgentFileMutationRegistry>,
-    #[cfg(test)]
-    agent_file_apply_test_control: AgentFileApplyTestControl,
-    agent_llm_test_control: AgentModelTestControl,
-    switch_test_control: SwitchTestControl,
-    shutdown_started: AtomicBool,
-    render_jobs: Arc<Mutex<HashMap<String, RenderJobState>>>,
-    render_tasks: Arc<Mutex<HashMap<String, tauri::async_runtime::JoinHandle<()>>>>,
-    surface_runtime: surface_runtime::SurfaceRuntimeState,
-    plugin_surface_runtime: plugin_surface_runtime::PluginSurfaceRuntimeState,
-    check_runtime: check_runtime::CheckRuntimeState,
-    studio_runtime: studio_runtime::StudioRuntimeState,
-    runtime_registry: runtime_registry::RuntimeRegistryState,
-    resource_registry: resource_registry::ResourceRegistryState,
-    ui_profile: ui_profile::ProjectUiProfileState,
-    ui_runtime: ui_runtime::UiRuntimeState,
-}
 
 const MAX_CONCURRENT_AGENT_TURNS: usize = 2;
 
-struct AgentTaskEntry {
+pub(crate) struct AgentTaskEntry {
     conversation_id: String,
     handle: tauri::async_runtime::JoinHandle<()>,
 }
@@ -158,33 +126,6 @@ fn agent_turn_admission_error(
 
 fn text_sha256(content: &str) -> String {
     format!("{:x}", Sha256::digest(content.as_bytes()))
-}
-
-async fn run_store_executor_service<R, F>(executor: &StoreExecutor, operation: F) -> Result<R>
-where
-    R: Send + 'static,
-    F: FnOnce(&mut BorrowedStore<'_>) -> Result<R> + Send + 'static,
-{
-    executor
-        .run_service(operation)
-        .await
-        .map_err(|error| match error {
-            StoreExecutorOperationError::Operation(error) => error,
-            StoreExecutorOperationError::Worker(message) => {
-                anyhow!("Store worker failed: {message}")
-            }
-        })
-}
-
-async fn persist_workspace_identity(
-    executor: &StoreExecutor,
-    identity: rho_protocol::WorkspaceIdentity,
-) -> Result<()> {
-    run_store_executor_service(executor, move |store| {
-        store.save_identity(&identity)?;
-        Ok(())
-    })
-    .await
 }
 
 async fn shutdown_application(state: &AppState) -> Result<(), String> {
@@ -294,41 +235,6 @@ fn terminate_process_tree(pid: u32) -> Result<()> {
         .context("starting taskkill for Ark")?;
     ensure!(status.success(), "taskkill failed with status {status}");
     Ok(())
-}
-
-async fn active_session(state: &AppState) -> Result<Arc<ArkSession>> {
-    state
-        .session
-        .read()
-        .await
-        .clone()
-        .context("Workspace R is not running")
-}
-
-async fn active_context(state: &AppState) -> Result<Arc<WorkspaceBrokerLane>> {
-    state
-        .context
-        .lock()
-        .await
-        .clone()
-        .context("Workspace context is not ready")
-}
-
-pub(crate) async fn active_workspace_id(state: &AppState) -> Option<String> {
-    let context = state.context.lock().await.clone()?;
-    Some(context.identity().workspace_id.clone())
-}
-
-async fn store_executor(state: &AppState) -> Result<&StoreExecutor> {
-    let store_path = runtime_config(state)?.store_path;
-    state
-        .store_executor
-        .get_or_try_init(|| async move {
-            StoreExecutor::open(store_path)
-                .await
-                .context("opening asynchronous Rho Store executor")
-        })
-        .await
 }
 
 fn durable_project_root(root: &Path) -> String {

@@ -7,6 +7,7 @@ use rho_store::{
 use serde_json::Value;
 use tauri::State;
 
+use crate::application_state::{active_context, store_executor};
 use crate::internal_extensions::extension_project_scope_id;
 use crate::workspace_plugins::run_store_service;
 use crate::workspace_plugins::{
@@ -17,7 +18,7 @@ use crate::workspace_plugins::{
     WorkspacePluginRollbackInput, WorkspacePluginUninstallInput, WorkspacePluginUninstallResult,
     WorkspacePluginUpdateInput,
 };
-use crate::{AppState, active_context, display_error, store_executor};
+use crate::{AppState, display_error};
 
 pub(crate) async fn runtime_context(state: &AppState) -> Result<PluginRuntimeContext> {
     let _project_transition = state.project_transition_gate.lock().await;
@@ -170,7 +171,8 @@ async fn persist_plugin_project_change(state: &AppState) -> Result<i64> {
     let mut coordinator = coordinator.lock().await;
     coordinator.broker.project_changed();
     let identity = coordinator.broker.identity().clone();
-    crate::persist_workspace_identity(&coordinator.executor, identity.clone()).await?;
+    crate::application_state::persist_workspace_identity(&coordinator.executor, identity.clone())
+        .await?;
     i64::try_from(identity.project_revision).context("project revision exceeds plugin range")
 }
 

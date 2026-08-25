@@ -10,8 +10,9 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use tauri::State;
 
+use crate::application_state::store_executor;
 use crate::project::{ensure_editable_file, ensure_editable_file_size, project_path};
-use crate::{AppState, display_error, store_executor};
+use crate::{AppState, display_error};
 
 #[derive(Deserialize)]
 pub(crate) struct EvidenceClaimCreateRequest {

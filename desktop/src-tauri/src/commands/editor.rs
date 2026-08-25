@@ -6,7 +6,8 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use tauri::State;
 
-use crate::{AppState, active_context, active_session, display_error};
+use crate::application_state::{active_context, active_session};
+use crate::{AppState, display_error};
 
 #[derive(Deserialize)]
 pub(crate) struct EditorFormatRequest {

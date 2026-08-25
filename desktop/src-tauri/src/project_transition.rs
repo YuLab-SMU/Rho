@@ -12,6 +12,7 @@ use rho_store::{ProjectTransitionSnapshot, normalize_project_root};
 use serde_json::json;
 use tauri::AppHandle;
 
+use crate::application_state::{active_context, active_session, store_executor};
 use crate::commands::agent_files::{
     AgentFileMutationRecoverySummary, recover_incomplete_agent_file_mutations,
 };
@@ -28,9 +29,7 @@ use crate::startup_runtime::{bounded_diagnostic, write_startup_event, write_star
 use crate::workspace_lifecycle::{
     reconcile_workspace_plugins_for_boundary, teardown_workspace_plugins_for_boundary,
 };
-use crate::{
-    AppState, active_context, active_session, runtime_registry, store_executor, ui_runtime,
-};
+use crate::{AppState, runtime_registry, ui_runtime};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(crate) enum SwitchTestStep {

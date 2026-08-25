@@ -954,11 +954,12 @@ async fn prepare(app: &AppHandle, state: &AppState) -> Result<ResourceTransition
 }
 
 async fn record_project_change(state: &AppState) -> Result<u64> {
-    let context = crate::active_context(state).await?;
+    let context = crate::application_state::active_context(state).await?;
     let mut context = context.lock().await;
     context.broker.project_changed();
     let identity = context.broker.identity().clone();
-    crate::persist_workspace_identity(&context.executor, identity.clone()).await?;
+    crate::application_state::persist_workspace_identity(&context.executor, identity.clone())
+        .await?;
     Ok(identity.project_revision)
 }
 

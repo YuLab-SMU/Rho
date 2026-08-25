@@ -461,7 +461,9 @@ pub(crate) async fn plugin_surface_document(
     let contribution_id = instance.surface_id.as_str().to_string();
     let input = render_input(&instance);
     let (document, provenance) = run_store_service(
-        crate::store_executor(&state).await.map_err(display_error)?,
+        crate::application_state::store_executor(&state)
+            .await
+            .map_err(display_error)?,
         move |store| {
             let outcome = registry.invoke_surface_contribution(
                 &service_context,
@@ -523,19 +525,22 @@ async fn execute_event(
     let context = context.clone();
     let contribution_id = queued.event.surface_id.as_str().to_string();
     let input = event_input(&queued.event);
-    run_store_service(crate::store_executor(state).await?, move |store| {
-        let outcome =
-            registry.invoke_surface_contribution(&context, &contribution_id, input, store)?;
-        let (result, provenance) = completed_payload(&outcome)?;
-        let (document, command_result) = parse_event_result(result.clone())?;
-        if let Some(document) = &document {
-            validate_surface_artifacts(store, &context, document)?;
-        }
-        if let Some(command_result) = &command_result {
-            validate_surface_command_result(store, &context, command_result)?;
-        }
-        Ok((document, command_result, provenance))
-    })
+    run_store_service(
+        crate::application_state::store_executor(state).await?,
+        move |store| {
+            let outcome =
+                registry.invoke_surface_contribution(&context, &contribution_id, input, store)?;
+            let (result, provenance) = completed_payload(&outcome)?;
+            let (document, command_result) = parse_event_result(result.clone())?;
+            if let Some(document) = &document {
+                validate_surface_artifacts(store, &context, document)?;
+            }
+            if let Some(command_result) = &command_result {
+                validate_surface_command_result(store, &context, command_result)?;
+            }
+            Ok((document, command_result, provenance))
+        },
+    )
     .await
 }
 

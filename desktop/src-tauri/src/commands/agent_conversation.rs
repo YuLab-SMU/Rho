@@ -4,7 +4,8 @@ use serde_json::{Value, json};
 use tauri::State;
 use uuid::Uuid;
 
-use crate::{AppState, display_error, durable_project_root, store_executor};
+use crate::application_state::store_executor;
+use crate::{AppState, display_error, durable_project_root};
 
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]

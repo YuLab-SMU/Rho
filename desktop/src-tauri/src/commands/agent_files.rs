@@ -17,12 +17,13 @@ use tokio::sync::Mutex;
 use tokio::sync::Notify;
 use uuid::Uuid;
 
+use crate::application_state::{active_context, persist_workspace_identity};
 use crate::project::{
     ProjectState, atomic_write, atomic_write_new, ensure_editable_content_size,
     ensure_editable_file, ensure_editable_file_size, list_project_files, project_path,
     relative_project_path,
 };
-use crate::{AppState, active_context, display_error, persist_workspace_identity, text_sha256};
+use crate::{AppState, display_error, text_sha256};
 
 #[derive(Default)]
 pub(crate) struct AgentFileMutationRegistry {

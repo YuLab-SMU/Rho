@@ -12,6 +12,9 @@ use serde_json::{Value, json};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
+use crate::application_state::{
+    active_context, active_session, persist_workspace_identity, store_executor,
+};
 use crate::commands::agent_files::{
     AgentFileMutationRecoverySummary, recover_incomplete_agent_file_mutations,
 };
@@ -24,10 +27,7 @@ use crate::project_transition::{SwitchTestStep, sync_workspace_project_root};
 use crate::startup_runtime::{
     RuntimeConfig, bounded_diagnostic, runtime_config, write_startup_event,
 };
-use crate::{
-    AppState, active_context, active_session, persist_workspace_identity, store_executor,
-    workspace_plugins,
-};
+use crate::{AppState, workspace_plugins};
 
 pub(crate) async fn teardown_workspace_plugins_for_boundary(
     state: &AppState,

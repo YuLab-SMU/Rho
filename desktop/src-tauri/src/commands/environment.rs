@@ -13,7 +13,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tauri::State;
 
-use crate::{AppState, active_context, active_session, display_error, store_executor};
+use crate::application_state::{active_context, active_session, store_executor};
+use crate::{AppState, display_error};
 
 #[derive(Deserialize)]
 pub(crate) struct EnvironmentOperationRequestInput {

@@ -1028,7 +1028,9 @@ pub(crate) async fn runtime_interrupt(
     .map_err(display_error)?;
     entry.cancellation_requested.store(true, Ordering::Release);
     let result = if entry.descriptor.primary_scientific_runtime {
-        let session = crate::active_session(&state).await.map_err(display_error)?;
+        let session = crate::application_state::active_session(&state)
+            .await
+            .map_err(display_error)?;
         session.interrupt().await
     } else {
         let session = entry
@@ -1080,7 +1082,7 @@ pub(crate) async fn runtime_restart(
     .map_err(display_error)?;
     entry.cancellation_requested.store(true, Ordering::Release);
     if entry.descriptor.primary_scientific_runtime {
-        if let Ok(session) = crate::active_session(&state).await {
+        if let Ok(session) = crate::application_state::active_session(&state).await {
             let _ = session.interrupt().await;
         }
         return match crate::commands::runtime_control::restart_workspace_locked(&state).await {
@@ -1228,7 +1230,7 @@ async fn reconcile_persisted_output_once(state: &AppState, project_root: &str) -
     if !state.runtime_registry.claim_output_recovery(project_root) {
         return Ok(());
     }
-    let result = crate::store_executor(state)
+    let result = crate::application_state::store_executor(state)
         .await?
         .runtime_output_repository()
         .reconcile_interrupted(project_root.to_string())
@@ -1293,7 +1295,7 @@ pub(crate) async fn resolve_runtime_output_context(
         );
     }
     reconcile_persisted_output_once(state, &project_root).await?;
-    let repository = crate::store_executor(state)
+    let repository = crate::application_state::store_executor(state)
         .await?
         .runtime_output_repository();
     let execution = repository
@@ -1689,7 +1691,7 @@ async fn run_supervised_execution(
     let state = app.state::<AppState>();
     let _execution_lease = execution_lease;
     let _queue = admitted.execution_gate.lock().await;
-    let repository = match crate::store_executor(&state).await {
+    let repository = match crate::application_state::store_executor(&state).await {
         Ok(executor) => executor.runtime_output_repository(),
         Err(error) => {
             finish_runtime_descriptor(&app, &state, &request, false, false).await;
@@ -1998,7 +2000,7 @@ pub(crate) async fn runtime_execution_start(
         .await
         .map_err(display_error)?;
     let execution_id = format!("runtime-execution:{}", Uuid::new_v4().simple());
-    let execution = crate::store_executor(&state)
+    let execution = crate::application_state::store_executor(&state)
         .await
         .map_err(display_error)?
         .runtime_output_repository()
@@ -2012,7 +2014,7 @@ pub(crate) async fn runtime_execution_start(
                 .map_err(display_error)?,
             console_instance_id: request.console_instance_id.to_string(),
             submitted_code: request.code.clone(),
-            workspace_id: crate::active_workspace_id(&state).await,
+            workspace_id: crate::application_state::active_workspace_id(&state).await,
             source_path: request
                 .source_context
                 .as_ref()
@@ -2062,7 +2064,7 @@ pub(crate) async fn runtime_execution_get(
     reconcile_persisted_output_once(&state, &project_root)
         .await
         .map_err(display_error)?;
-    crate::store_executor(&state)
+    crate::application_state::store_executor(&state)
         .await
         .map_err(display_error)?
         .runtime_output_repository()
@@ -2097,7 +2099,7 @@ pub(crate) async fn runtime_execution_list(
             );
         }
     };
-    crate::store_executor(&state)
+    crate::application_state::store_executor(&state)
         .await
         .map_err(display_error)?
         .runtime_output_repository()
@@ -2116,7 +2118,7 @@ pub(crate) async fn runtime_output_search(
     reconcile_persisted_output_once(&state, &project_root)
         .await
         .map_err(display_error)?;
-    crate::store_executor(&state)
+    crate::application_state::store_executor(&state)
         .await
         .map_err(display_error)?
         .runtime_output_repository()
@@ -2160,7 +2162,7 @@ pub(crate) async fn runtime_output_policy_get(
     state: State<'_, AppState>,
 ) -> Result<RuntimeOutputPolicyView, String> {
     let (project_root, _) = active_project_scope(&state).await.map_err(display_error)?;
-    let snapshot = crate::store_executor(&state)
+    let snapshot = crate::application_state::store_executor(&state)
         .await
         .map_err(display_error)?
         .runtime_output_repository()
@@ -2177,7 +2179,7 @@ pub(crate) async fn runtime_output_policy_update(
     state: State<'_, AppState>,
 ) -> Result<RuntimeOutputPolicyView, String> {
     let (project_root, _) = active_project_scope(&state).await.map_err(display_error)?;
-    let snapshot = crate::store_executor(&state)
+    let snapshot = crate::application_state::store_executor(&state)
         .await
         .map_err(display_error)?
         .runtime_output_repository()
@@ -2210,7 +2212,7 @@ pub(crate) async fn runtime_output_page(
                     .to_string(),
             );
         }
-        crate::store_executor(&state)
+        crate::application_state::store_executor(&state)
             .await
             .map_err(display_error)?
             .runtime_output_repository()
@@ -2225,7 +2227,7 @@ pub(crate) async fn runtime_output_page(
             .await
             .map_err(display_error)
     } else {
-        crate::store_executor(&state)
+        crate::application_state::store_executor(&state)
             .await
             .map_err(display_error)?
             .runtime_output_repository()
@@ -2262,7 +2264,7 @@ pub(crate) async fn runtime_output_prune(
     state: State<'_, AppState>,
 ) -> Result<RuntimeOutputPruneResult, String> {
     let (project_root, _) = active_project_scope(&state).await.map_err(display_error)?;
-    let result = crate::store_executor(&state)
+    let result = crate::application_state::store_executor(&state)
         .await
         .map_err(display_error)?
         .runtime_output_repository()
@@ -2282,7 +2284,7 @@ pub(crate) async fn runtime_execution_delete(
     state: State<'_, AppState>,
 ) -> Result<RuntimeExecutionDeleteResult, String> {
     let (project_root, _) = active_project_scope(&state).await.map_err(display_error)?;
-    let result = crate::store_executor(&state)
+    let result = crate::application_state::store_executor(&state)
         .await
         .map_err(display_error)?
         .runtime_output_repository()
@@ -2310,7 +2312,7 @@ pub(crate) async fn runtime_output_follow(
         .output_sender(&project_root, &request.execution_id);
     let mut notifications = sender.subscribe();
     let mut cursor = request.after_sequence;
-    let repository = crate::store_executor(&state)
+    let repository = crate::application_state::store_executor(&state)
         .await
         .map_err(display_error)?
         .runtime_output_repository();

@@ -14,8 +14,9 @@ use rho_kernel::ArkSession;
 use rho_server::workspace_lane::WorkspaceBrokerLane;
 use serde_json::json;
 
+use crate::application_state::store_executor;
 use crate::startup_runtime::write_startup_event;
-use crate::{AppState, store_executor, text_sha256, workspace_plugins};
+use crate::{AppState, text_sha256, workspace_plugins};
 
 pub(crate) use facades::{RunHistoryBrokerFacade, WorkspaceSnapshotBrokerFacade};
 #[cfg(test)]

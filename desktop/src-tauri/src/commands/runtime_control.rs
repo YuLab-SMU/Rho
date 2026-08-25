@@ -10,14 +10,15 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use tauri::State;
 
+use crate::application_state::{active_context, active_session, store_executor};
 use crate::commands::agent_execution::interrupt_all_agent_tasks;
 use crate::commands::render::{
     attach_render_artifact, reconcile_render_job, render_job_is_terminal,
 };
 use crate::startup_runtime::{AgentRuntimeStatus, write_startup_event};
 use crate::{
-    AppState, active_context, active_session, display_error, finalize_workspace_start,
-    start_workspace, store_executor, teardown_workspace_plugins_for_boundary,
+    AppState, display_error, finalize_workspace_start, start_workspace,
+    teardown_workspace_plugins_for_boundary,
 };
 
 #[derive(Serialize, specta::Type)]

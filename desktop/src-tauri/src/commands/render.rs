@@ -7,10 +7,11 @@ use serde_json::{Value, json};
 use tauri::State;
 use uuid::Uuid;
 
+use crate::application_state::{active_context, active_session, store_executor};
 use crate::project::project_path;
 use crate::{
-    AppState, active_context, active_session, dispatch_workspace_request,
-    dispatch_workspace_request_with_execution_id, display_error, store_executor,
+    AppState, dispatch_workspace_request, dispatch_workspace_request_with_execution_id,
+    display_error,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

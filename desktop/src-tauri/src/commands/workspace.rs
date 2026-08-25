@@ -12,13 +12,14 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tauri::State;
 
+use crate::application_state::{active_context, active_session};
 use crate::internal_extensions::{
     WorkspaceOperation, extension_workspace_scope_id, workspace_snapshot_tool_capability_id,
 };
 use crate::project::project_path;
 use crate::{
-    AppState, active_context, active_session, dispatch_workspace_request,
-    dispatch_workspace_request_with_execution_id, display_error, workspace_plugins,
+    AppState, dispatch_workspace_request, dispatch_workspace_request_with_execution_id,
+    display_error, workspace_plugins,
 };
 
 #[derive(Clone, Copy, Deserialize, Serialize)]
