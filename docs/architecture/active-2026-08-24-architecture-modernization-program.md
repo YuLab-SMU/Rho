@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W1-25",
+  "active_work_packages": ["AM-W1-26"],
+  "integration_lane": "AM-W1-26",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -176,6 +176,12 @@ recovery remain blocking. LOC, schedule waves, build/bundle trends, unaffected
 full suites, manual review and release/platform evidence remain visible without
 blocking an ordinary local development slice merely because a numeric or
 ceremonial threshold was crossed.
+
+`AM-W1-26` closes the last handwritten production Tauri command call by adding
+shell build identity to the existing generated Kernel facet. An AST-based local
+ratchet rejects any future direct `invoke(...)` call in non-generated transport
+production files, including multiline generic calls, while still allowing the
+composition root to pass the invoke capability into generated domain adapters.
 
 ### Wave 2 — backend modules and concurrency boundaries
 
