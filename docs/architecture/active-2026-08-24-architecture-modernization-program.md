@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W2-21"],
+  "active_work_packages": [],
   "integration_lane": "AM-W2-21",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -301,10 +301,10 @@ and non-executing Agent fallback decisions a dedicated Store repository. Real
 environment R execution remains in the Workspace broker lane and its separate
 approval path.
 
-`AM-W2-21` gives Artifact/Plot projections, bounded retention mutations and
-render recovery reads one asynchronous durable repository. File export,
-Workspace revision mutation, render execution and interruption remain in their
-existing authority lanes.
+`AM-W2-21` (`f668d2d`/AM-E-0048) gives Artifact/Plot projections, bounded
+retention mutations and render recovery reads one asynchronous durable
+repository. File export, Workspace revision mutation, render execution and
+interruption remain in their existing authority lanes.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
