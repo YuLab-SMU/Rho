@@ -122,6 +122,14 @@ const RENDER_COMMANDS = [
   "render_job_status",
 ];
 
+const WORKSPACE_COMMANDS = [
+  "execute_r",
+  "inspect_data_object",
+  "inspect_object",
+  "read_data_view",
+  "snapshot_workspace",
+];
+
 const PLUGIN_COMMANDS = [
   "accept_workspace_plugin_update",
   "disable_workspace_plugin",
@@ -329,6 +337,14 @@ export function validateCommandInventory({ sources, main, frontend, expectedHand
     "Render command module ownership changed",
   );
 
+  const workspaceSource = sources.find(({ name }) => name.endsWith("commands/workspace.rs"));
+  assert.ok(workspaceSource, "Workspace command module is missing");
+  assert.deepEqual(
+    commandDefinitions([workspaceSource]).map(({ name }) => name).sort(),
+    WORKSPACE_COMMANDS,
+    "Workspace command module ownership changed",
+  );
+
   return { commands: definitionNames.length, sources: sources.length };
 }
 
@@ -360,6 +376,9 @@ function fixtures() {
   const renderHandlers = RENDER_COMMANDS.map(
     (command) => `  commands::render::${command},`,
   ).join("\n");
+  const workspaceHandlers = WORKSPACE_COMMANDS.map(
+    (command) => `  commands::workspace::${command},`,
+  ).join("\n");
   const pluginHandlers = PLUGIN_COMMANDS.map(
     (command) => `  commands::plugins::${command},`,
   ).join("\n");
@@ -378,6 +397,7 @@ ${agentLlmHandlers}
 ${agentConversationHandlers}
 ${startupHandlers}
 ${renderHandlers}
+${workspaceHandlers}
   commands::runs::list_runs,
   commands::runs::list_problems,
   commands::runs::get_run_detail,
@@ -419,6 +439,9 @@ ${renderHandlers}
       { name: "commands/render.rs", text: RENDER_COMMANDS.map(
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
+      { name: "commands/workspace.rs", text: WORKSPACE_COMMANDS.map(
+        (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
+      ).join("\n") },
       { name: "commands/plugins.rs", text: PLUGIN_COMMANDS.map(
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
@@ -435,6 +458,7 @@ ${renderHandlers}
       ...AGENT_CONVERSATION_COMMANDS,
       ...STARTUP_COMMANDS,
       ...RENDER_COMMANDS,
+      ...WORKSPACE_COMMANDS,
       ...PLUGIN_COMMANDS,
     ].map(
       (command) => `invoke("${command}");`,

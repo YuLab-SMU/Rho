@@ -1174,7 +1174,7 @@ async fn admit_runtime_execution(
     request.validate()?;
     let _project_transition = state.project_transition_gate.lock().await;
     prepare(app, state).await?;
-    crate::validate_runtime_execute_source(request, state).await?;
+    crate::commands::workspace::validate_runtime_execute_source(request, state).await?;
     let admitted = {
         let inner = state.runtime_registry.inner();
         RuntimeRegistryState::target(&inner, &request.runtime, true)?
@@ -1778,7 +1778,9 @@ async fn run_supervised_execution(
 
     let output_failure = Arc::new(StdMutex::new(None::<String>));
     let execution = if running.descriptor.primary_scientific_runtime {
-        let result = crate::execute_workspace_runtime(&request, &state, &execution_id).await;
+        let result =
+            crate::commands::workspace::execute_workspace_runtime(&request, &state, &execution_id)
+                .await;
         if result.is_ok()
             && let Err(error) = repository
                 .link_run(

@@ -9,3 +9,4 @@ pub(crate) mod project_session;
 pub(crate) mod render;
 pub(crate) mod runs;
 pub(crate) mod startup;
+pub(crate) mod workspace;
