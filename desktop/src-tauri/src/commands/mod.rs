@@ -6,5 +6,6 @@ pub(crate) mod environment;
 pub(crate) mod evidence;
 pub(crate) mod plugins;
 pub(crate) mod project_session;
+pub(crate) mod render;
 pub(crate) mod runs;
 pub(crate) mod startup;

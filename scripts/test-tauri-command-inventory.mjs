@@ -115,6 +115,13 @@ const STARTUP_COMMANDS = [
   "workspace_status",
 ];
 
+const RENDER_COMMANDS = [
+  "cancel_render_job",
+  "render_document",
+  "render_document_job",
+  "render_job_status",
+];
+
 const PLUGIN_COMMANDS = [
   "accept_workspace_plugin_update",
   "disable_workspace_plugin",
@@ -314,6 +321,14 @@ export function validateCommandInventory({ sources, main, frontend, expectedHand
     "Startup command module ownership changed",
   );
 
+  const renderSource = sources.find(({ name }) => name.endsWith("commands/render.rs"));
+  assert.ok(renderSource, "Render command module is missing");
+  assert.deepEqual(
+    commandDefinitions([renderSource]).map(({ name }) => name).sort(),
+    RENDER_COMMANDS,
+    "Render command module ownership changed",
+  );
+
   return { commands: definitionNames.length, sources: sources.length };
 }
 
@@ -342,6 +357,9 @@ function fixtures() {
   const startupHandlers = STARTUP_COMMANDS.map(
     (command) => `  commands::startup::${command},`,
   ).join("\n");
+  const renderHandlers = RENDER_COMMANDS.map(
+    (command) => `  commands::render::${command},`,
+  ).join("\n");
   const pluginHandlers = PLUGIN_COMMANDS.map(
     (command) => `  commands::plugins::${command},`,
   ).join("\n");
@@ -359,6 +377,7 @@ ${projectHandlers}
 ${agentLlmHandlers}
 ${agentConversationHandlers}
 ${startupHandlers}
+${renderHandlers}
   commands::runs::list_runs,
   commands::runs::list_problems,
   commands::runs::get_run_detail,
@@ -397,6 +416,9 @@ ${startupHandlers}
       { name: "commands/startup.rs", text: STARTUP_COMMANDS.map(
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
+      { name: "commands/render.rs", text: RENDER_COMMANDS.map(
+        (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
+      ).join("\n") },
       { name: "commands/plugins.rs", text: PLUGIN_COMMANDS.map(
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
@@ -412,6 +434,7 @@ ${startupHandlers}
       ...AGENT_LLM_COMMANDS,
       ...AGENT_CONVERSATION_COMMANDS,
       ...STARTUP_COMMANDS,
+      ...RENDER_COMMANDS,
       ...PLUGIN_COMMANDS,
     ].map(
       (command) => `invoke("${command}");`,
