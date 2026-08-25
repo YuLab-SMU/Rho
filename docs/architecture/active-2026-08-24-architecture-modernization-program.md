@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W2-28"],
+  "active_work_packages": [],
   "integration_lane": "AM-W2-28",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -336,9 +336,10 @@ moves Runtime execution admission, streaming output and terminal persistence
 onto `RuntimeOutputRepository` without introducing a buffer or weakening
 backpressure. The local real-Ark probe now exercises the async path.
 
-`AM-W2-28` phases Agent file proposal/ledger reads and mutation-event writes
-through the Store worker while preserving the existing file lane, durable
-before/after ledger, Workspace identity ordering and restart recovery truth.
+`AM-W2-28` (`094e00d`/AM-E-0055) phases Agent file proposal/ledger reads and
+mutation-event writes through the Store worker while preserving the existing
+file lane, durable before/after ledger, Workspace identity ordering and restart
+recovery truth. `main.rs` no longer has an ordinary `read_store` path.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
