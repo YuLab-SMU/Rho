@@ -6,12 +6,12 @@
   "record_type": "program",
   "program_id": "AM-2026",
   "status": "active",
-  "current_wave": 1,
+  "current_wave": 2,
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W1-26",
+  "active_work_packages": ["AM-W2-02"],
+  "integration_lane": "AM-W2-02",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -193,6 +193,11 @@ the `spawn_blocking` Store executor remains a behavioral fallback only if the
 crate cannot preserve the required single-connection transaction and recovery
 semantics. Mechanical extraction and behavior changes are separate review
 boundaries.
+
+`AM-W2-02` is the first mechanical boundary: move build identity, updater and
+product-link/license handlers into a Shell module without changing command
+registration, state, responses or tests. It deliberately leaves Coordinator,
+Store and concurrency semantics untouched for later behavior packages.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
