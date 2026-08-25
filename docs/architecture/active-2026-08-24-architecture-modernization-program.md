@@ -119,10 +119,13 @@ implemented.
 
 Dynamic discovery follows these rules:
 
-- a finding that invalidates the current package's data, project isolation,
-  authority, security, public/serialized contract, recovery or test truth is
-  recorded immediately, pauses that package, and receives an independent repair
-  package before the original work resumes;
+- severity controls priority, never acceptance by itself; every unresolved
+  finding declares `acceptance_domains`, and an empty array is advisory;
+- a finding that explicitly declares product correctness, data integrity,
+  project isolation, authority/security, public/serialized contract or recovery
+  truth and invalidates the current package is recorded immediately, pauses that
+  package, and receives an independent repair package before the original work
+  resumes;
 - other findings are recorded immediately without expanding the active package
   and are scheduled by engineering priority rather than severity labels alone;
 - authority expansion, network/filesystem/credential broadening, public

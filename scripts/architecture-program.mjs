@@ -30,6 +30,14 @@ const PACKAGE_TRANSITIONS = new Map([
   ["blocked", new Set(["ready"])],
 ]);
 const RECORD_TYPES = new Set(["program", "finding", "work_package", "decision", "evidence"]);
+const ACCEPTANCE_DOMAINS = new Set([
+  "product_correctness",
+  "data_integrity",
+  "project_isolation",
+  "authority_security",
+  "public_serialized_contract",
+  "recovery_truth",
+]);
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
 const COMMIT_PATTERN = /^(?:[0-9a-f]{7,40}|WORKTREE)$/u;
 
@@ -152,6 +160,9 @@ function validateFinding(record, errors) {
   requireArray(record, "evidence", errors, { nonEmpty: true });
   requireArray(record, "tests", errors, { nonEmpty: true });
   requireArray(record, "commits", errors);
+  if (record.status !== "resolved" || Object.hasOwn(record, "acceptance_domains")) {
+    requireArray(record, "acceptance_domains", errors);
+  }
   if (!/^AM-F-\d{4}$/u.test(record.id ?? "")) errors.push(`${record._file}: invalid finding id ${record.id}`);
   if (!new Set(["critical", "high", "medium", "low"]).has(record.severity)) {
     errors.push(`${record._file}: invalid severity ${record.severity}`);
@@ -161,6 +172,17 @@ function validateFinding(record, errors) {
     errors.push(`${record._file}: target_wave must be a non-negative integer`);
   }
   if (!FINDING_STATES.has(record.status)) errors.push(`${record._file}: invalid finding status ${record.status}`);
+  if (Array.isArray(record.acceptance_domains)) {
+    const unique = new Set(record.acceptance_domains);
+    if (unique.size !== record.acceptance_domains.length) {
+      errors.push(`${record._file}: acceptance_domains must not contain duplicates`);
+    }
+    for (const domain of record.acceptance_domains) {
+      if (!ACCEPTANCE_DOMAINS.has(domain)) {
+        errors.push(`${record._file}: invalid acceptance domain ${domain}`);
+      }
+    }
+  }
   validateHistory(record, FINDING_STATES, FINDING_TRANSITIONS, errors);
 }
 
@@ -286,9 +308,13 @@ function checkReferences({ root, program, findings, packages, decisions, evidenc
   for (const workPackage of packages.filter(({ status }) => status === "implemented")) {
     const blocking = workPackage.findings
       .map((id) => findings.find((finding) => finding.id === id))
-      .filter((finding) => finding != null && ["critical", "high"].includes(finding.severity) && finding.status !== "resolved");
+      .filter((finding) =>
+        finding != null &&
+        finding.status !== "resolved" &&
+        (finding.acceptance_domains?.length ?? 0) > 0
+      );
     if (blocking.length > 0) {
-      errors.push(`${workPackage._file}: implemented package retains blocking findings ${blocking.map(({ id }) => id).join(", ")}`);
+      errors.push(`${workPackage._file}: implemented package retains hard-domain findings ${blocking.map(({ id }) => id).join(", ")}`);
     }
   }
   const ratchet = decisions.find(({ id }) => id === "AM-D-0001");
@@ -596,6 +622,10 @@ export function statusPayload(context) {
     findings: context.findings.map((finding) => ({
       id: finding.id,
       severity: finding.severity,
+      acceptance: finding.acceptance_domains == null
+        ? "historical"
+        : finding.acceptance_domains.length > 0 ? "blocking" : "advisory",
+      acceptance_domains: [...(finding.acceptance_domains ?? [])].sort(),
       status: finding.status,
       target_wave: finding.target_wave,
       disposition_work_package: finding.disposition_work_package,

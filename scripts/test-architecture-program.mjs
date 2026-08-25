@@ -78,6 +78,7 @@ function finding(overrides = {}) {
     title: "Fixture finding",
     severity: "high",
     category: "fixture",
+    acceptance_domains: ["product_correctness"],
     discovered_at: DATE,
     discovered_in: "fixture",
     evidence: ["fixture reproduction"],
@@ -184,6 +185,20 @@ function runValidationFixtures() {
     decision(),
   ], /unknown disposition package AM-W9-99/u);
 
+  expectInvalid([
+    program(),
+    finding({ acceptance_domains: undefined }),
+    workPackage(),
+    decision(),
+  ], /acceptance_domains must be an array/u);
+
+  expectInvalid([
+    program(),
+    finding({ acceptance_domains: ["schedule_pressure"] }),
+    workPackage(),
+    decision(),
+  ], /invalid acceptance domain schedule_pressure/u);
+
   const overdue = validateProgram([
     program({ current_wave: 1 }),
     finding({ target_wave: 0 }),
@@ -240,7 +255,7 @@ function evidence() {
 function runCompletionAndDependencyFixtures() {
   expectInvalid([
     program({ active_work_packages: [] }),
-    finding(),
+    finding({ severity: "low" }),
     workPackage({
       status: "implemented",
       evidence: ["AM-E-0001"],
@@ -255,7 +270,29 @@ function runCompletionAndDependencyFixtures() {
     }),
     decision(),
     evidence(),
-  ], /implemented package retains blocking findings AM-F-0001/u);
+  ], /implemented package retains hard-domain findings AM-F-0001/u);
+
+  const advisoryImplemented = workPackage({
+    status: "implemented",
+    evidence: ["AM-E-0001"],
+    commits: ["abcdef0"],
+    status_history: [
+      { status: "proposed", at: DATE, reason: "proposed" },
+      { status: "ready", at: DATE, reason: "ready" },
+      { status: "active", at: DATE, reason: "active" },
+      { status: "verifying", at: DATE, reason: "verifying" },
+      { status: "implemented", at: DATE, reason: "implemented" },
+    ],
+  });
+  const advisoryContext = validateProgram([
+    program({ active_work_packages: [] }),
+    finding({ severity: "high", acceptance_domains: [] }),
+    advisoryImplemented,
+    decision(),
+    evidence(),
+  ], { root: process.cwd(), lineBudget: false });
+  assert.equal(statusPayload(advisoryContext).findings[0].acceptance, "advisory");
+  assert.deepEqual(statusPayload(advisoryContext).findings[0].acceptance_domains, []);
 
   const implemented = workPackage({
     status: "implemented",
@@ -385,6 +422,38 @@ function runDeterminismFixture() {
   const first = `${JSON.stringify(statusPayload(context), null, 2)}\n`;
   const second = `${JSON.stringify(statusPayload(context), null, 2)}\n`;
   assert.equal(first, second);
+
+  const historicalFinding = finding({
+    status: "resolved",
+    commits: ["abcdef0"],
+    status_history: [
+      { status: "observed", at: DATE, reason: "observed" },
+      { status: "triaged", at: DATE, reason: "triaged" },
+      { status: "active", at: DATE, reason: "active" },
+      { status: "verifying", at: DATE, reason: "verifying" },
+      { status: "resolved", at: DATE, reason: "resolved" },
+    ],
+  });
+  delete historicalFinding.acceptance_domains;
+  const historical = validateProgram([
+    program({ active_work_packages: [] }),
+    historicalFinding,
+    workPackage({
+      status: "implemented",
+      evidence: ["AM-E-0001"],
+      commits: ["abcdef0"],
+      status_history: [
+        { status: "proposed", at: DATE, reason: "proposed" },
+        { status: "ready", at: DATE, reason: "ready" },
+        { status: "active", at: DATE, reason: "active" },
+        { status: "verifying", at: DATE, reason: "verifying" },
+        { status: "implemented", at: DATE, reason: "implemented" },
+      ],
+    }),
+    decision(),
+    evidence(),
+  ], { root: process.cwd(), lineBudget: false });
+  assert.equal(statusPayload(historical).findings[0].acceptance, "historical");
 }
 
 runValidationFixtures();
