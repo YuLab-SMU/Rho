@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W3-04",
+  "active_work_packages": ["AM-W3-05"],
+  "integration_lane": "AM-W3-05",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -554,6 +554,12 @@ collapse, resize and inspector outline behind a physical layout adapter module.
 It preserves DOM/accessibility and exact `SceneEdit` emission so the following
 Dockview package compares against an executable controlled baseline rather than
 rewriting layout and dependency behavior in one step.
+
+`AM-W3-05` evaluates locked `dockview-react 8.2.0` behind that adapter. Rust
+Scene/CAS stays authoritative; Dockview JSON is not persisted, and bundle size
+is review telemetry rather than a proxy veto. Production cutover occurs only if
+gesture translation, project isolation, component lifetime and accessibility
+pass against the legacy baseline.
 
 ### Wave 4 — Wasmtime Component Model and WIT
 
