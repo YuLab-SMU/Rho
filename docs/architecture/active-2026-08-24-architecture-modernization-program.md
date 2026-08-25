@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-58",
+  "active_work_packages": ["AM-W2-59"],
+  "integration_lane": "AM-W2-59",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -492,6 +492,10 @@ unchanged.
 `AM-W2-58` (`ec59afc`/AM-E-0085) moves the inline desktop regression corpus into one test module
 assembled from five item-complete source parts. Shared fixtures and test names
 remain identical; each physical test source stays below 1,500 lines.
+
+`AM-W2-59` extracts the local real-process smoke harness into desktop, Wasm
+plugin-host and internal-extension source parts. `main.rs` becomes only Tauri
+composition, handler registration and exit wiring.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
