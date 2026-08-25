@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W1-26"],
+  "active_work_packages": [],
   "integration_lane": "AM-W1-26",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -300,9 +300,11 @@ commands and the first truthful cwd failure are recorded in AM-E-0001 through
 AM-E-0003. The integration lane regenerated tracked `desktop/dist` from build
 identity `f07d05c35aa2`. No application/R version or NEWS change is required.
 
-Wave 1's umbrella remains proposed. AM-W1-03 replaced the frozen Rust 1.88 veto
-with a rolling exact 1.97.0 toolchain contract in `b4f25fb`; the same locked
-tauri-specta graph passes the complete local workspace matrix. Generated
+Wave 1 is implemented through bounded vertical packages and its AM-W1-01
+umbrella is closed by the final integration evidence. AM-W1-03 replaced the
+frozen Rust 1.88 veto with a rolling exact 1.97.0 toolchain contract in
+`b4f25fb`; the same locked tauri-specta graph passes the complete local workspace
+matrix. Generated
 verticals are implemented for Runtime Output (`24d1e62`/AM-E-0005), Runtime
 lifecycle (`bd6f3a9`/AM-E-0006), Surface/Studio (`00be5e3`/AM-E-0007), Resource
 (`e169e9a`/AM-E-0008), Profile/Vibe (`90d67d9`/AM-E-0009), and Agent
@@ -325,6 +327,11 @@ AM-W1-25 (`b986917`/AM-E-0027) makes LOC, hotspot growth and planned-wave
 targets advisory, narrows per-slice validation to relevant risk, and reserves
 hard development failures for product correctness, authority, data/contract
 identity, deterministic generation and recovery truth.
+AM-W1-26 (`f762ae0`/AM-E-0028) moves shell build identity into the generated
+Kernel facet and adds an AST ratchet across 29 production transport files. The
+final Wave 1 audit reports zero direct `invoke(...)` calls outside generated
+commands; Rust owns every current production command name and DTO boundary,
+while real and mock transports compose narrow domain facets.
 
 ## Version, NEWS, and release decision
 
