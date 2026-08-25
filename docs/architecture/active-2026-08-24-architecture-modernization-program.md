@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W2-37"],
+  "active_work_packages": [],
   "integration_lane": "AM-W2-37",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -382,9 +382,10 @@ command-adapter boundary, including DOI lookup and source-anchor validation,
 out of the desktop composition root. Network/filesystem authority, Store
 project isolation, serialization and command identity remain unchanged.
 
-`AM-W2-37` mechanically moves the complete Environment command-adapter
-boundary out of the desktop composition root while retaining the dedicated
-Environment approval registry, Store worker and Workspace execution lane.
+`AM-W2-37` (`5fcb122`/AM-E-0064) mechanically moves the complete Environment
+command-adapter boundary out of the desktop composition root while retaining
+the dedicated Environment approval registry, Store worker and Workspace
+execution lane.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
