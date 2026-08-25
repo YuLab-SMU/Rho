@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W3-02",
+  "active_work_packages": ["AM-W3-03"],
+  "integration_lane": "AM-W3-03",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -538,6 +538,13 @@ passes separately. Complete verification also removed two Agent diagnostics
 source-text gates that had mistaken the old `main.rs` location and UI copy for
 contracts; existing Rust behavior, generated binding and UI interaction tests
 remain authoritative.
+
+`AM-W3-03` cuts production composition over to one
+`WorkbenchProjectionStore`. One invalidation reloads the complete Rust-owned
+projection; monotonic generation rejects late responses across A/B/A switches,
+and a successful mutation does not resolve until a coherent projection for the
+same project is published. The six legacy external stores are removed rather
+than retained as a second publication model.
 
 ### Wave 4 — Wasmtime Component Model and WIT
 
