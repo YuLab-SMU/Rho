@@ -71,11 +71,11 @@ use rho_store::{
     AgentConversationDraft, AgentConversationSummary, AgentTurnContextItem,
     AgentTurnContextItemDraft, AgentTurnDetail, AgentTurnDraft, AgentTurnEvent,
     AgentTurnEventDraft, AgentTurnFinish, AgentTurnSummary, ApprovalRequestSummary,
-    ArtifactRecordDraft, ArtifactRecordSummary, EnvironmentOperationRequestSummary, EvidenceClaim,
-    EvidenceClaimDraft, EvidenceClaimReview, EvidenceEntry, EvidenceEntryDraft,
+    ArtifactRecordDraft, ArtifactRecordSummary, BorrowedStore, EnvironmentOperationRequestSummary,
+    EvidenceClaim, EvidenceClaimDraft, EvidenceClaimReview, EvidenceEntry, EvidenceEntryDraft,
     PlotArtifactSummary, PlotPayloadPruneResult, ProjectRetentionSummary,
     ProjectTransitionSnapshot, RetentionPolicy, RunDetail, RunRepository, RunSummary, Store,
-    StoreExecutor, normalize_project_root,
+    StoreConnection, StoreExecutor, StoreExecutorOperationError, normalize_project_root,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -1503,7 +1503,7 @@ fn utf16_offset_to_byte_index(content: &str, offset: usize) -> Option<usize> {
 }
 
 fn persisted_agent_file_proposal(
-    store: &Store,
+    store: &Store<impl StoreConnection>,
     project_root: &str,
     turn_id: &str,
     proposal_event_id: i64,
@@ -1590,7 +1590,7 @@ fn persisted_agent_file_proposal(
 }
 
 fn ensure_agent_file_proposal_turn_terminal(
-    store: &Store,
+    store: &Store<impl StoreConnection>,
     project_root: &str,
     turn_id: &str,
 ) -> Result<()> {
@@ -1743,7 +1743,7 @@ fn calculate_persisted_agent_file_edit(
 }
 
 fn append_agent_file_mutation_event(
-    store: &mut Store,
+    store: &mut Store<impl StoreConnection>,
     turn_id: &str,
     event_type: &str,
     title: &str,
@@ -1772,6 +1772,61 @@ fn append_agent_file_mutation_event(
     Ok(())
 }
 
+struct AgentFileMutationEventRecord {
+    turn_id: String,
+    event_type: &'static str,
+    title: &'static str,
+    status: &'static str,
+    path: String,
+    operation: String,
+    proposal_event_id: i64,
+    details: Value,
+}
+
+async fn run_agent_file_store_service<R, F>(state: &AppState, operation: F) -> Result<R>
+where
+    R: Send + 'static,
+    F: FnOnce(&mut BorrowedStore<'_>) -> Result<R> + Send + 'static,
+{
+    store_executor(state)
+        .await?
+        .run_service(operation)
+        .await
+        .map_err(|error| match error {
+            StoreExecutorOperationError::Operation(error) => error,
+            StoreExecutorOperationError::Worker(message) => {
+                anyhow!("Store worker failed: {message}")
+            }
+        })
+}
+
+async fn persist_agent_file_mutation_event(
+    state: &AppState,
+    event: AgentFileMutationEventRecord,
+) -> Result<()> {
+    run_agent_file_store_service(state, move |store| {
+        persist_agent_file_mutation_event_to_store(store, event)
+    })
+    .await
+}
+
+fn persist_agent_file_mutation_event_to_store(
+    store: &mut Store<impl StoreConnection>,
+    event: AgentFileMutationEventRecord,
+) -> Result<()> {
+    append_agent_file_mutation_event(
+        store,
+        &event.turn_id,
+        event.event_type,
+        event.title,
+        event.status,
+        &event.path,
+        &event.operation,
+        event.proposal_event_id,
+        event.details,
+    )
+}
+
 fn agent_file_mutation_details(event: &rho_store::AgentTurnEvent) -> Result<Option<Value>> {
     let details: Value = serde_json::from_str(&event.details_json)
         .context("Agent file mutation event details are malformed")?;
@@ -1785,7 +1840,7 @@ fn agent_file_mutation_details(event: &rho_store::AgentTurnEvent) -> Result<Opti
 }
 
 fn persisted_agent_file_mutation_state(
-    store: &Store,
+    store: &Store<impl StoreConnection>,
     project_root: &str,
     turn_id: &str,
     proposal_event_id: i64,
@@ -2064,8 +2119,7 @@ fn recover_incomplete_agent_file_mutations(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn agent_file_write_failure(
-    store: &mut Store,
+fn classify_agent_file_write_failure(
     root: &Path,
     turn_id: &str,
     path: &str,
@@ -2076,7 +2130,7 @@ fn agent_file_write_failure(
     expected_before_sha256: Option<&str>,
     expected_before_absent: bool,
     error: &anyhow::Error,
-) -> anyhow::Error {
+) -> (AgentFileMutationEventRecord, anyhow::Error) {
     let observation = observe_agent_file(root, path);
     let unchanged =
         observation_matches(&observation, expected_before_sha256, expected_before_absent);
@@ -2100,28 +2154,91 @@ fn agent_file_write_failure(
         AgentFileObservation::Digest(digest) => digest,
         AgentFileObservation::Unknown(reason) => format!("unknown: {reason}"),
     };
-    let _ = append_agent_file_mutation_event(
-        store,
-        turn_id,
-        event_type,
-        title,
-        status,
-        path,
-        operation,
-        proposal_event_id,
-        json!({
-            "mutation_id": mutation_id,
-            "action": action,
-            "error": error.to_string(),
-            "observation": observation_detail
-        }),
-    );
-    anyhow!("{code}: The Agent file {action} did not complete cleanly: {error}")
+    (
+        AgentFileMutationEventRecord {
+            turn_id: turn_id.to_string(),
+            event_type,
+            title,
+            status,
+            path: path.to_string(),
+            operation: operation.to_string(),
+            proposal_event_id,
+            details: json!({
+                "mutation_id": mutation_id,
+                "action": action,
+                "error": error.to_string(),
+                "observation": observation_detail
+            }),
+        },
+        anyhow!("{code}: The Agent file {action} did not complete cleanly: {error}"),
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
-fn agent_file_postwrite_failure(
-    store: &mut Store,
+async fn persist_agent_file_write_failure(
+    state: &AppState,
+    root: &Path,
+    turn_id: &str,
+    path: &str,
+    operation: &str,
+    proposal_event_id: i64,
+    mutation_id: &str,
+    action: &str,
+    expected_before_sha256: Option<&str>,
+    expected_before_absent: bool,
+    error: &anyhow::Error,
+) -> anyhow::Error {
+    let (event, result) = classify_agent_file_write_failure(
+        root,
+        turn_id,
+        path,
+        operation,
+        proposal_event_id,
+        mutation_id,
+        action,
+        expected_before_sha256,
+        expected_before_absent,
+        error,
+    );
+    let _ = persist_agent_file_mutation_event(state, event).await;
+    result
+}
+
+#[allow(clippy::too_many_arguments)]
+fn classify_agent_file_postwrite_failure(
+    turn_id: &str,
+    path: &str,
+    operation: &str,
+    proposal_event_id: i64,
+    mutation_id: &str,
+    action: &str,
+    error: &anyhow::Error,
+) -> (AgentFileMutationEventRecord, anyhow::Error) {
+    (
+        AgentFileMutationEventRecord {
+            turn_id: turn_id.to_string(),
+            event_type: "file_edit.outcome_uncertain",
+            title: "Agent file mutation outcome needs review",
+            status: "error",
+            path: path.to_string(),
+            operation: operation.to_string(),
+            proposal_event_id,
+            details: json!({
+                "mutation_id": mutation_id,
+                "action": action,
+                "error": error.to_string(),
+                "reason": "postwrite_persistence_failed"
+            }),
+        },
+        anyhow!(
+            "AGENT_FILE_OUTCOME_UNCERTAIN: The file reached its intended disk state, but {action} persistence failed: {error}"
+        ),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn persist_agent_file_postwrite_failure(
+    state: &AppState,
     turn_id: &str,
     path: &str,
     operation: &str,
@@ -2130,25 +2247,17 @@ fn agent_file_postwrite_failure(
     action: &str,
     error: &anyhow::Error,
 ) -> anyhow::Error {
-    let _ = append_agent_file_mutation_event(
-        store,
+    let (event, result) = classify_agent_file_postwrite_failure(
         turn_id,
-        "file_edit.outcome_uncertain",
-        "Agent file mutation outcome needs review",
-        "error",
         path,
         operation,
         proposal_event_id,
-        json!({
-            "mutation_id": mutation_id,
-            "action": action,
-            "error": error.to_string(),
-            "reason": "postwrite_persistence_failed"
-        }),
+        mutation_id,
+        action,
+        error,
     );
-    anyhow!(
-        "AGENT_FILE_OUTCOME_UNCERTAIN: The file reached its intended disk state, but {action} persistence failed: {error}"
-    )
+    let _ = persist_agent_file_mutation_event(state, event).await;
+    result
 }
 
 async fn record_agent_file_project_change(
@@ -2180,10 +2289,12 @@ async fn apply_agent_file_edit_state(
         normalized_path == request.path,
         "Agent file proposal path is not normalized"
     );
-    {
-        let store = read_store(state)?;
-        ensure_agent_file_proposal_turn_terminal(&store, &project_root, &request.turn_id)?;
-    }
+    let terminal_project_root = project_root.clone();
+    let terminal_turn_id = request.turn_id.clone();
+    run_agent_file_store_service(state, move |store| {
+        ensure_agent_file_proposal_turn_terminal(store, &terminal_project_root, &terminal_turn_id)
+    })
+    .await?;
     let lane_key = format!("{project_root}\0{normalized_path}");
     let task_registry = state.agent_tasks.lock().await;
     let claim =
@@ -2196,42 +2307,52 @@ async fn apply_agent_file_edit_state(
     let _lane_guard = lane.lock().await;
     let admitted = state.agent_file_mutations.begin_running(&claim.claim_id);
 
-    let mut store = read_store(state)?;
     if !admitted {
-        append_agent_file_mutation_event(
-            &mut store,
-            &request.turn_id,
-            "file_edit.cancelled",
-            "Agent file proposal cancelled before admission",
-            "interrupted",
-            &normalized_path,
-            "unknown",
-            request.proposal_event_id,
-            json!({"action": "apply", "reason": "turn_cancelled_while_queued"}),
-        )?;
+        persist_agent_file_mutation_event(
+            state,
+            AgentFileMutationEventRecord {
+                turn_id: request.turn_id.clone(),
+                event_type: "file_edit.cancelled",
+                title: "Agent file proposal cancelled before admission",
+                status: "interrupted",
+                path: normalized_path.clone(),
+                operation: "unknown".to_string(),
+                proposal_event_id: request.proposal_event_id,
+                details: json!({"action": "apply", "reason": "turn_cancelled_while_queued"}),
+            },
+        )
+        .await?;
         bail!("AGENT_FILE_CANCELLED: The Agent file edit was cancelled before admission.");
     }
-    ensure!(
-        store.active_project_root()?.as_deref() == Some(project_root.as_str()),
-        "AGENT_FILE_PROJECT_CHANGED: The active project changed before the file edit was admitted."
-    );
-    let proposal = persisted_agent_file_proposal(
-        &store,
-        &project_root,
-        &request.turn_id,
-        request.proposal_event_id,
-    )?;
-    ensure!(
-        proposal.path == normalized_path,
-        "Agent file proposal path does not match its durable event"
-    );
-    validate_persisted_agent_file_proposal_structure(&proposal)?;
-    ensure_agent_file_apply_available(persisted_agent_file_mutation_state(
-        &store,
-        &project_root,
-        &request.turn_id,
-        request.proposal_event_id,
-    )?)?;
+    let preflight_project_root = project_root.clone();
+    let preflight_turn_id = request.turn_id.clone();
+    let preflight_path = normalized_path.clone();
+    let proposal_event_id = request.proposal_event_id;
+    let proposal = run_agent_file_store_service(state, move |store| {
+        ensure!(
+            store.active_project_root()?.as_deref() == Some(preflight_project_root.as_str()),
+            "AGENT_FILE_PROJECT_CHANGED: The active project changed before the file edit was admitted."
+        );
+        let proposal = persisted_agent_file_proposal(
+            store,
+            &preflight_project_root,
+            &preflight_turn_id,
+            proposal_event_id,
+        )?;
+        ensure!(
+            proposal.path == preflight_path,
+            "Agent file proposal path does not match its durable event"
+        );
+        validate_persisted_agent_file_proposal_structure(&proposal)?;
+        ensure_agent_file_apply_available(persisted_agent_file_mutation_state(
+            store,
+            &preflight_project_root,
+            &preflight_turn_id,
+            proposal_event_id,
+        )?)?;
+        Ok(proposal)
+    })
+    .await?;
 
     let actual_disk_sha256 = if proposal.operation == "create" {
         ensure!(
@@ -2239,17 +2360,20 @@ async fn apply_agent_file_edit_state(
             "Create proposals must expect an absent file"
         );
         if file.exists() {
-            append_agent_file_mutation_event(
-                &mut store,
-                &request.turn_id,
-                "file_edit.resource_stale",
-                "Agent file proposal became stale",
-                "error",
-                &normalized_path,
-                &proposal.operation,
-                request.proposal_event_id,
-                json!({"action": "apply", "reason": "create_target_exists"}),
-            )?;
+            persist_agent_file_mutation_event(
+                state,
+                AgentFileMutationEventRecord {
+                    turn_id: request.turn_id.clone(),
+                    event_type: "file_edit.resource_stale",
+                    title: "Agent file proposal became stale",
+                    status: "error",
+                    path: normalized_path.clone(),
+                    operation: proposal.operation.clone(),
+                    proposal_event_id: request.proposal_event_id,
+                    details: json!({"action": "apply", "reason": "create_target_exists"}),
+                },
+            )
+            .await?;
             bail!(
                 "AGENT_FILE_RESOURCE_STALE: Cannot create {} because the file now exists.",
                 normalized_path
@@ -2258,17 +2382,20 @@ async fn apply_agent_file_edit_state(
         None
     } else {
         if !file.exists() || !file.is_file() {
-            append_agent_file_mutation_event(
-                &mut store,
-                &request.turn_id,
-                "file_edit.resource_stale",
-                "Agent file proposal became stale",
-                "error",
-                &normalized_path,
-                &proposal.operation,
-                request.proposal_event_id,
-                json!({"action": "apply", "reason": "edit_target_missing"}),
-            )?;
+            persist_agent_file_mutation_event(
+                state,
+                AgentFileMutationEventRecord {
+                    turn_id: request.turn_id.clone(),
+                    event_type: "file_edit.resource_stale",
+                    title: "Agent file proposal became stale",
+                    status: "error",
+                    path: normalized_path.clone(),
+                    operation: proposal.operation.clone(),
+                    proposal_event_id: request.proposal_event_id,
+                    details: json!({"action": "apply", "reason": "edit_target_missing"}),
+                },
+            )
+            .await?;
             bail!(
                 "AGENT_FILE_RESOURCE_STALE: Cannot edit {} because the file no longer exists.",
                 normalized_path
@@ -2282,17 +2409,20 @@ async fn apply_agent_file_edit_state(
             .as_deref()
             .context("Existing-file proposals require an expected disk digest")?;
         if actual != expected {
-            append_agent_file_mutation_event(
-                &mut store,
-                &request.turn_id,
-                "file_edit.resource_stale",
-                "Agent file proposal became stale",
-                "error",
-                &normalized_path,
-                &proposal.operation,
-                request.proposal_event_id,
-                json!({"action": "apply", "reason": "content_digest_changed", "expected_sha256": expected, "actual_sha256": actual}),
-            )?;
+            persist_agent_file_mutation_event(
+                state,
+                AgentFileMutationEventRecord {
+                    turn_id: request.turn_id.clone(),
+                    event_type: "file_edit.resource_stale",
+                    title: "Agent file proposal became stale",
+                    status: "error",
+                    path: normalized_path.clone(),
+                    operation: proposal.operation.clone(),
+                    proposal_event_id: request.proposal_event_id,
+                    details: json!({"action": "apply", "reason": "content_digest_changed", "expected_sha256": expected, "actual_sha256": actual}),
+                },
+            )
+            .await?;
             bail!(
                 "AGENT_FILE_RESOURCE_STALE: {} changed before the Agent edit acquired its file lane.",
                 normalized_path
@@ -2307,17 +2437,20 @@ async fn apply_agent_file_edit_state(
     ) {
         Ok(edit) => edit,
         Err(error) => {
-            append_agent_file_mutation_event(
-                &mut store,
-                &request.turn_id,
-                "file_edit.resource_stale",
-                "Agent file proposal became stale",
-                "error",
-                &normalized_path,
-                &proposal.operation,
-                request.proposal_event_id,
-                json!({"action": "apply", "reason": "editor_context_changed", "detail": error.to_string()}),
-            )?;
+            persist_agent_file_mutation_event(
+                state,
+                AgentFileMutationEventRecord {
+                    turn_id: request.turn_id.clone(),
+                    event_type: "file_edit.resource_stale",
+                    title: "Agent file proposal became stale",
+                    status: "error",
+                    path: normalized_path.clone(),
+                    operation: proposal.operation.clone(),
+                    proposal_event_id: request.proposal_event_id,
+                    details: json!({"action": "apply", "reason": "editor_context_changed", "detail": error.to_string()}),
+                },
+            )
+            .await?;
             bail!(
                 "AGENT_FILE_RESOURCE_STALE: {} no longer matches the proposal context: {}",
                 normalized_path,
@@ -2328,36 +2461,39 @@ async fn apply_agent_file_edit_state(
     ensure_editable_content_size(&content)?;
     let after_sha256 = text_sha256(&content);
     let mutation_id = format!("agent_file_mutation_{}", Uuid::new_v4().simple());
-    append_agent_file_mutation_event(
-        &mut store,
-        &request.turn_id,
-        "file_edit.mutation_started",
-        "Agent file mutation admitted",
-        "running",
-        &normalized_path,
-        &proposal.operation,
-        request.proposal_event_id,
-        json!({
-            "mutation_id": mutation_id,
-            "action": "apply",
-            "path": normalized_path,
-            "operation": proposal.operation,
-            "proposal_event_id": request.proposal_event_id,
-            "expected_before_sha256": actual_disk_sha256,
-            "expected_before_absent": proposal.operation == "create",
-            "restore_content_sha256": text_sha256(&request.before_content),
-            "intended_after_sha256": after_sha256,
-            "intended_after_absent": false
-        }),
-    )?;
+    persist_agent_file_mutation_event(
+        state,
+        AgentFileMutationEventRecord {
+            turn_id: request.turn_id.clone(),
+            event_type: "file_edit.mutation_started",
+            title: "Agent file mutation admitted",
+            status: "running",
+            path: normalized_path.clone(),
+            operation: proposal.operation.clone(),
+            proposal_event_id: request.proposal_event_id,
+            details: json!({
+                "mutation_id": mutation_id,
+                "action": "apply",
+                "path": normalized_path,
+                "operation": proposal.operation,
+                "proposal_event_id": request.proposal_event_id,
+                "expected_before_sha256": actual_disk_sha256,
+                "expected_before_absent": proposal.operation == "create",
+                "restore_content_sha256": text_sha256(&request.before_content),
+                "intended_after_sha256": after_sha256,
+                "intended_after_absent": false
+            }),
+        },
+    )
+    .await?;
     let write_result = if proposal.operation == "create" {
         atomic_write_new(&file, content.as_bytes())
     } else {
         atomic_write(&file, content.as_bytes())
     };
     if let Err(error) = write_result {
-        return Err(agent_file_write_failure(
-            &mut store,
+        return Err(persist_agent_file_write_failure(
+            state,
             &root,
             &request.turn_id,
             &normalized_path,
@@ -2368,7 +2504,8 @@ async fn apply_agent_file_edit_state(
             actual_disk_sha256.as_deref(),
             proposal.operation == "create",
             &error,
-        ));
+        )
+        .await);
     }
     #[cfg(test)]
     state
@@ -2378,8 +2515,8 @@ async fn apply_agent_file_edit_state(
         Ok(identity) => identity,
         Err(error) => {
             let error = anyhow!(error);
-            return Err(agent_file_postwrite_failure(
-                &mut store,
+            return Err(persist_agent_file_postwrite_failure(
+                state,
                 &request.turn_id,
                 &normalized_path,
                 &proposal.operation,
@@ -2387,28 +2524,33 @@ async fn apply_agent_file_edit_state(
                 &mutation_id,
                 "apply",
                 &error,
-            ));
+            )
+            .await);
         }
     };
-    if let Err(error) = append_agent_file_mutation_event(
-        &mut store,
-        &request.turn_id,
-        "file_edit.applied",
-        "Agent file proposal applied",
-        "completed",
-        &normalized_path,
-        &proposal.operation,
-        request.proposal_event_id,
-        json!({
-            "mutation_id": mutation_id,
-            "action": "apply",
-            "expected_disk_sha256": request.expected_disk_sha256,
-            "actual_disk_sha256": actual_disk_sha256,
-            "after_sha256": after_sha256
-        }),
-    ) {
-        return Err(agent_file_postwrite_failure(
-            &mut store,
+    if let Err(error) = persist_agent_file_mutation_event(
+        state,
+        AgentFileMutationEventRecord {
+            turn_id: request.turn_id.clone(),
+            event_type: "file_edit.applied",
+            title: "Agent file proposal applied",
+            status: "completed",
+            path: normalized_path.clone(),
+            operation: proposal.operation.clone(),
+            proposal_event_id: request.proposal_event_id,
+            details: json!({
+                "mutation_id": mutation_id,
+                "action": "apply",
+                "expected_disk_sha256": request.expected_disk_sha256,
+                "actual_disk_sha256": actual_disk_sha256,
+                "after_sha256": after_sha256
+            }),
+        },
+    )
+    .await
+    {
+        return Err(persist_agent_file_postwrite_failure(
+            state,
             &request.turn_id,
             &normalized_path,
             &proposal.operation,
@@ -2416,7 +2558,8 @@ async fn apply_agent_file_edit_state(
             &mutation_id,
             "apply",
             &error,
-        ));
+        )
+        .await);
     }
     let project = list_project_files(&root)?;
     drop(claim);
@@ -2463,41 +2606,52 @@ async fn undo_agent_file_edit_state(
     let _lane_guard = lane.lock().await;
     let admitted = state.agent_file_mutations.begin_running(&claim.claim_id);
 
-    let mut store = read_store(state)?;
     if !admitted {
-        append_agent_file_mutation_event(
-            &mut store,
-            &request.turn_id,
-            "file_edit.cancelled",
-            "Agent file Undo cancelled before admission",
-            "interrupted",
-            &normalized_path,
-            "unknown",
-            request.proposal_event_id,
-            json!({"action": "undo", "reason": "turn_cancelled_while_queued"}),
-        )?;
+        persist_agent_file_mutation_event(
+            state,
+            AgentFileMutationEventRecord {
+                turn_id: request.turn_id.clone(),
+                event_type: "file_edit.cancelled",
+                title: "Agent file Undo cancelled before admission",
+                status: "interrupted",
+                path: normalized_path.clone(),
+                operation: "unknown".to_string(),
+                proposal_event_id: request.proposal_event_id,
+                details: json!({"action": "undo", "reason": "turn_cancelled_while_queued"}),
+            },
+        )
+        .await?;
         bail!("AGENT_FILE_CANCELLED: The Agent file Undo was cancelled before admission.");
     }
-    ensure!(
-        store.active_project_root()?.as_deref() == Some(project_root.as_str()),
-        "AGENT_FILE_PROJECT_CHANGED: The active project changed before Undo was admitted."
-    );
-    let proposal = persisted_agent_file_proposal(
-        &store,
-        &project_root,
-        &request.turn_id,
-        request.proposal_event_id,
-    )?;
-    ensure!(
-        proposal.path == normalized_path && (proposal.operation == "create") == request.created,
-        "Agent file Undo does not match its durable proposal"
-    );
-    let applied_ledger = durable_agent_file_undo_ledger(persisted_agent_file_mutation_state(
-        &store,
-        &project_root,
-        &request.turn_id,
-        request.proposal_event_id,
-    )?)?;
+    let preflight_project_root = project_root.clone();
+    let preflight_turn_id = request.turn_id.clone();
+    let preflight_path = normalized_path.clone();
+    let proposal_event_id = request.proposal_event_id;
+    let created = request.created;
+    let (proposal, applied_ledger) = run_agent_file_store_service(state, move |store| {
+        ensure!(
+            store.active_project_root()?.as_deref() == Some(preflight_project_root.as_str()),
+            "AGENT_FILE_PROJECT_CHANGED: The active project changed before Undo was admitted."
+        );
+        let proposal = persisted_agent_file_proposal(
+            store,
+            &preflight_project_root,
+            &preflight_turn_id,
+            proposal_event_id,
+        )?;
+        ensure!(
+            proposal.path == preflight_path && (proposal.operation == "create") == created,
+            "Agent file Undo does not match its durable proposal"
+        );
+        let applied_ledger = durable_agent_file_undo_ledger(persisted_agent_file_mutation_state(
+            store,
+            &preflight_project_root,
+            &preflight_turn_id,
+            proposal_event_id,
+        )?)?;
+        Ok((proposal, applied_ledger))
+    })
+    .await?;
     ensure!(
         applied_ledger.path == normalized_path
             && applied_ledger.operation == proposal.operation
@@ -2523,17 +2677,20 @@ async fn undo_agent_file_edit_state(
         );
     }
     if !file.exists() || !file.is_file() {
-        append_agent_file_mutation_event(
-            &mut store,
-            &request.turn_id,
-            "file_edit.resource_stale",
-            "Agent file Undo became stale",
-            "error",
-            &normalized_path,
-            &proposal.operation,
-            request.proposal_event_id,
-            json!({"action": "undo", "reason": "undo_target_missing"}),
-        )?;
+        persist_agent_file_mutation_event(
+            state,
+            AgentFileMutationEventRecord {
+                turn_id: request.turn_id.clone(),
+                event_type: "file_edit.resource_stale",
+                title: "Agent file Undo became stale",
+                status: "error",
+                path: normalized_path.clone(),
+                operation: proposal.operation.clone(),
+                proposal_event_id: request.proposal_event_id,
+                details: json!({"action": "undo", "reason": "undo_target_missing"}),
+            },
+        )
+        .await?;
         bail!(
             "AGENT_FILE_RESOURCE_STALE: Cannot undo {} because the applied file is missing.",
             normalized_path
@@ -2543,22 +2700,25 @@ async fn undo_agent_file_edit_state(
     let current = std::fs::read_to_string(&file)?;
     let actual_after_sha256 = text_sha256(&current);
     if actual_after_sha256 != request.expected_after_sha256 {
-        append_agent_file_mutation_event(
-            &mut store,
-            &request.turn_id,
-            "file_edit.resource_stale",
-            "Agent file Undo became stale",
-            "error",
-            &normalized_path,
-            &proposal.operation,
-            request.proposal_event_id,
-            json!({
-                "action": "undo",
-                "reason": "undo_content_digest_changed",
-                "expected_sha256": request.expected_after_sha256,
-                "actual_sha256": actual_after_sha256
-            }),
-        )?;
+        persist_agent_file_mutation_event(
+            state,
+            AgentFileMutationEventRecord {
+                turn_id: request.turn_id.clone(),
+                event_type: "file_edit.resource_stale",
+                title: "Agent file Undo became stale",
+                status: "error",
+                path: normalized_path.clone(),
+                operation: proposal.operation.clone(),
+                proposal_event_id: request.proposal_event_id,
+                details: json!({
+                    "action": "undo",
+                    "reason": "undo_content_digest_changed",
+                    "expected_sha256": request.expected_after_sha256,
+                    "actual_sha256": actual_after_sha256
+                }),
+            },
+        )
+        .await?;
         bail!(
             "AGENT_FILE_RESOURCE_STALE: {} changed after the Agent edit, so automatic Undo was stopped.",
             normalized_path
@@ -2567,35 +2727,38 @@ async fn undo_agent_file_edit_state(
 
     let after_sha256 = (!request.created).then(|| text_sha256(&request.before_content));
     let mutation_id = format!("agent_file_mutation_{}", Uuid::new_v4().simple());
-    append_agent_file_mutation_event(
-        &mut store,
-        &request.turn_id,
-        "file_edit.mutation_started",
-        "Agent file Undo admitted",
-        "running",
-        &normalized_path,
-        &proposal.operation,
-        request.proposal_event_id,
-        json!({
-            "mutation_id": mutation_id,
-            "action": "undo",
-            "path": normalized_path,
-            "operation": proposal.operation,
-            "proposal_event_id": request.proposal_event_id,
-            "expected_before_sha256": actual_after_sha256,
-            "expected_before_absent": false,
-            "intended_after_sha256": after_sha256,
-            "intended_after_absent": request.created
-        }),
-    )?;
+    persist_agent_file_mutation_event(
+        state,
+        AgentFileMutationEventRecord {
+            turn_id: request.turn_id.clone(),
+            event_type: "file_edit.mutation_started",
+            title: "Agent file Undo admitted",
+            status: "running",
+            path: normalized_path.clone(),
+            operation: proposal.operation.clone(),
+            proposal_event_id: request.proposal_event_id,
+            details: json!({
+                "mutation_id": mutation_id,
+                "action": "undo",
+                "path": normalized_path,
+                "operation": proposal.operation,
+                "proposal_event_id": request.proposal_event_id,
+                "expected_before_sha256": actual_after_sha256,
+                "expected_before_absent": false,
+                "intended_after_sha256": after_sha256,
+                "intended_after_absent": request.created
+            }),
+        },
+    )
+    .await?;
     let write_result = if request.created {
         safe_delete_project_file(&root, &normalized_path)
     } else {
         atomic_write(&file, request.before_content.as_bytes())
     };
     if let Err(error) = write_result {
-        return Err(agent_file_write_failure(
-            &mut store,
+        return Err(persist_agent_file_write_failure(
+            state,
             &root,
             &request.turn_id,
             &normalized_path,
@@ -2606,15 +2769,16 @@ async fn undo_agent_file_edit_state(
             Some(&actual_after_sha256),
             false,
             &error,
-        ));
+        )
+        .await);
     }
     let content = (!request.created).then_some(request.before_content);
     let identity = match record_agent_file_project_change(state).await {
         Ok(identity) => identity,
         Err(error) => {
             let error = anyhow!(error);
-            return Err(agent_file_postwrite_failure(
-                &mut store,
+            return Err(persist_agent_file_postwrite_failure(
+                state,
                 &request.turn_id,
                 &normalized_path,
                 &proposal.operation,
@@ -2622,26 +2786,31 @@ async fn undo_agent_file_edit_state(
                 &mutation_id,
                 "undo",
                 &error,
-            ));
+            )
+            .await);
         }
     };
-    if let Err(error) = append_agent_file_mutation_event(
-        &mut store,
-        &request.turn_id,
-        "file_edit.undone",
-        "Agent file proposal undone",
-        "completed",
-        &normalized_path,
-        &proposal.operation,
-        request.proposal_event_id,
-        json!({
-            "mutation_id": mutation_id,
-            "action": "undo",
-            "after_sha256": after_sha256
-        }),
-    ) {
-        return Err(agent_file_postwrite_failure(
-            &mut store,
+    if let Err(error) = persist_agent_file_mutation_event(
+        state,
+        AgentFileMutationEventRecord {
+            turn_id: request.turn_id.clone(),
+            event_type: "file_edit.undone",
+            title: "Agent file proposal undone",
+            status: "completed",
+            path: normalized_path.clone(),
+            operation: proposal.operation.clone(),
+            proposal_event_id: request.proposal_event_id,
+            details: json!({
+                "mutation_id": mutation_id,
+                "action": "undo",
+                "after_sha256": after_sha256
+            }),
+        },
+    )
+    .await
+    {
+        return Err(persist_agent_file_postwrite_failure(
+            state,
             &request.turn_id,
             &normalized_path,
             &proposal.operation,
@@ -2649,7 +2818,8 @@ async fn undo_agent_file_edit_state(
             &mutation_id,
             "undo",
             &error,
-        ));
+        )
+        .await);
     }
     let project = list_project_files(&root)?;
     drop(claim);
@@ -6372,11 +6542,6 @@ async fn active_context(state: &AppState) -> Result<Arc<WorkspaceBrokerLane>> {
 pub(crate) async fn active_workspace_id(state: &AppState) -> Option<String> {
     let context = state.context.lock().await.clone()?;
     Some(context.identity().workspace_id.clone())
-}
-
-fn read_store(state: &AppState) -> Result<Store> {
-    let config = runtime_config(state)?;
-    Store::open(&config.store_path).context("opening Rho event store")
 }
 
 async fn store_executor(state: &AppState) -> Result<&StoreExecutor> {
@@ -10197,10 +10362,11 @@ mod tests {
         PersistedAgentFileProposal, ProbeProcessOutput, REVIEWED_AISDK_PROVIDERS_REMOTE,
         REVIEWED_AISDK_REMOTE, RProbeStartup, RUNTIME_CACHE_VERSION, RUserStartupFiles,
         RenderJobState, RuntimeCacheFile, RuntimeConfig, StartupView, SwitchTestControl,
-        SwitchTestStep, active_context, agent_file_postwrite_failure, agent_file_write_failure,
-        agent_retry_source, agent_runtime_probe_expression, agent_runtime_status_from_probe,
-        agent_turn_admission_error, append_agent_file_mutation_event, apply_agent_file_edit_state,
-        ark_candidate_paths, attach_render_artifact, bounded_diagnostic, cancel_agent_turn_state,
+        SwitchTestStep, active_context, agent_retry_source, agent_runtime_probe_expression,
+        agent_runtime_status_from_probe, agent_turn_admission_error,
+        append_agent_file_mutation_event, apply_agent_file_edit_state, ark_candidate_paths,
+        attach_render_artifact, bounded_diagnostic, cancel_agent_turn_state,
+        classify_agent_file_postwrite_failure, classify_agent_file_write_failure,
         classify_startup_error, configure_user_startup, data_view_artifact_metadata,
         data_view_delimited_text, decode_plot_png_base64, deferred_agent_runtime_status,
         delete_agent_conversation_state, display_error_chain, durable_project_root,
@@ -10208,7 +10374,8 @@ mod tests {
         ensure_artifact_export_target, ensure_supported_r_architecture, ensure_supported_r_version,
         existing_startup_file, find_executable_on_path, finish_render_job, has_png_signature,
         interrupt_all_agent_tasks, load_runtime_cache, locate_ark_from_candidates, locate_rscript,
-        lockfile_inventory_arguments, parse_r_runtime_probe, project_open, project_pick_directory,
+        lockfile_inventory_arguments, parse_r_runtime_probe,
+        persist_agent_file_mutation_event_to_store, project_open, project_pick_directory,
         project_restore_session, project_switch_blocker, r_architecture_supported,
         reconcile_render_job, recover_incomplete_agent_file_mutations, render_job_is_terminal,
         retry_run_arguments, run_is_retryable, run_r_probe, runtime_file_signature,
@@ -12402,8 +12569,7 @@ mod tests {
             "before\nafter\n",
         );
         let injected = anyhow::anyhow!("injected atomic write failure");
-        let safe_error = agent_file_write_failure(
-            &mut store,
+        let (safe_event, safe_error) = classify_agent_file_write_failure(
             &project_root,
             "turn-write-failure",
             "analysis.R",
@@ -12415,6 +12581,7 @@ mod tests {
             false,
             &injected,
         );
+        persist_agent_file_mutation_event_to_store(&mut store, safe_event).unwrap();
         assert!(safe_error.to_string().contains("AGENT_FILE_WRITE_FAILED"));
 
         add_agent_file_mutation_start(
@@ -12427,8 +12594,7 @@ mod tests {
             "before\nafter\n",
         );
         std::fs::write(&file, "different\n").unwrap();
-        let uncertain_error = agent_file_write_failure(
-            &mut store,
+        let (uncertain_event, uncertain_error) = classify_agent_file_write_failure(
             &project_root,
             "turn-write-failure",
             "analysis.R",
@@ -12440,6 +12606,7 @@ mod tests {
             false,
             &injected,
         );
+        persist_agent_file_mutation_event_to_store(&mut store, uncertain_event).unwrap();
         assert!(
             uncertain_error
                 .to_string()
@@ -12455,8 +12622,7 @@ mod tests {
             "different\n",
             "different\nafter\n",
         );
-        let postwrite_error = agent_file_postwrite_failure(
-            &mut store,
+        let (postwrite_event, postwrite_error) = classify_agent_file_postwrite_failure(
             "turn-write-failure",
             "analysis.R",
             "append",
@@ -12465,6 +12631,7 @@ mod tests {
             "apply",
             &injected,
         );
+        persist_agent_file_mutation_event_to_store(&mut store, postwrite_event).unwrap();
         assert!(
             postwrite_error
                 .to_string()
