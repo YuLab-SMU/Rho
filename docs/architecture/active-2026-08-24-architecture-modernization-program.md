@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W2-51"],
+  "active_work_packages": [],
   "integration_lane": "AM-W2-51",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -454,10 +454,10 @@ transaction boundary—per-path lanes, queued claims, durable intent/completion
 ledger, failure classification, restart recovery, Apply/Undo and typed IPC—
 without changing filesystem authority, proposal validation or recovery truth.
 
-`AM-W2-51` extracts Startup runtime state, R/Ark discovery and probe, generated
-runtime preparation, diagnostics and recovery classification into a dedicated
-service with a separate probe submodule; application state and domain consumers
-depend on that service explicitly.
+`AM-W2-51` (`161fd69`/AM-E-0078) extracts Startup runtime state, R/Ark
+discovery and probe, generated runtime preparation, diagnostics and recovery
+classification into a dedicated service with a separate probe submodule;
+application state and domain consumers depend on that service explicitly.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
