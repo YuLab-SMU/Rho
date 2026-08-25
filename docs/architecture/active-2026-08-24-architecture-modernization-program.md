@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W2-57"],
+  "active_work_packages": [],
   "integration_lane": "AM-W2-57",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -484,7 +484,7 @@ type re-export for Tauri assembly and test compatibility.
 task admission to Agent execution, content hashing to a digest utility, durable
 root normalization to Project and execution-origin parsing to Runs.
 
-`AM-W2-57` extracts the complete application shutdown transaction and
+`AM-W2-57` (`6ecf553`/AM-E-0084) extracts the complete application shutdown transaction and
 platform-specific Ark termination fallback. Gate ordering, cancellation,
 plugin/runtime/watcher/extension teardown and truthful process cleanup remain
 unchanged.
