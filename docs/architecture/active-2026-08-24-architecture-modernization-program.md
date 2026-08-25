@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W2-22"],
+  "active_work_packages": [],
   "integration_lane": "AM-W2-22",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -306,9 +306,10 @@ retention mutations and render recovery reads one asynchronous durable
 repository. File export, Workspace revision mutation, render execution and
 interruption remain in their existing authority lanes.
 
-`AM-W2-22` extends the Run repository to own project-scoped cancellation and
-latest-active selection. Console, Render, restart and Agent controls keep Ark
-interrupt and task authority while durable SQLite work uses the Store worker.
+`AM-W2-22` (`47616e7`/AM-E-0049) extends the Run repository to own
+project-scoped cancellation and latest-active selection. Console, Render,
+restart and Agent controls keep Ark interrupt and task authority while durable
+SQLite work uses the Store worker.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
