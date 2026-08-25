@@ -19,6 +19,7 @@ use serde_json::Value;
 use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
+use crate::internal_extensions::workspace_plugin_runtime_context;
 use crate::{AppState, display_error};
 
 pub(crate) const SURFACE_RUNTIME_CHANGED_EVENT: &str = "rho://surface-runtime-changed";
@@ -918,11 +919,8 @@ pub(crate) async fn available_factories(
         let identity = context_handle.lock().await.broker.identity().clone();
         let root = state.project_root.read().await.clone();
         let normalized_root = crate::normalize_project_root(root.to_string_lossy().as_ref());
-        let plugin_context = crate::workspace_plugin_runtime_context(
-            state.data_dir.clone(),
-            normalized_root,
-            &identity,
-        )?;
+        let plugin_context =
+            workspace_plugin_runtime_context(state.data_dir.clone(), normalized_root, &identity)?;
         factories.extend(
             state
                 .plugin_permissions

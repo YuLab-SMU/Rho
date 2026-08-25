@@ -7,6 +7,7 @@ use rho_server::coordinator::{ProjectSkillDiscoverySummary, discover_project_ski
 use serde_json::{Value, json};
 use tauri::{AppHandle, State};
 
+use crate::internal_extensions::project_file_viewer_capability_id;
 use crate::project::{
     MAX_VIEWER_FILE_BYTES, MAX_VIEWER_HTML_BYTES, ProjectRestoreResponse, ProjectSessionSnapshot,
     ProjectState, atomic_write, atomic_write_new, default_project_root,
@@ -16,10 +17,7 @@ use crate::project::{
 };
 use crate::project_transition::switch_project;
 use crate::startup_runtime::write_startup_log;
-use crate::{
-    AppState, active_context, display_error, persist_workspace_identity,
-    project_file_viewer_capability_id, text_sha256,
-};
+use crate::{AppState, active_context, display_error, persist_workspace_identity, text_sha256};
 
 #[tauri::command]
 pub(crate) async fn project_state(state: State<'_, AppState>) -> Result<ProjectState, String> {

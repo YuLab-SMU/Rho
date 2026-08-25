@@ -7,6 +7,7 @@ use rho_store::{
 use serde_json::Value;
 use tauri::State;
 
+use crate::internal_extensions::extension_project_scope_id;
 use crate::workspace_plugins::run_store_service;
 use crate::workspace_plugins::{
     PluginCommandInvocationView, PluginContributionList, PluginGrantList, PluginGrantRevokeResult,
@@ -16,7 +17,7 @@ use crate::workspace_plugins::{
     WorkspacePluginRollbackInput, WorkspacePluginUninstallInput, WorkspacePluginUninstallResult,
     WorkspacePluginUpdateInput,
 };
-use crate::{AppState, active_context, display_error, extension_project_scope_id, store_executor};
+use crate::{AppState, active_context, display_error, store_executor};
 
 pub(crate) async fn runtime_context(state: &AppState) -> Result<PluginRuntimeContext> {
     let _project_transition = state.project_transition_gate.lock().await;

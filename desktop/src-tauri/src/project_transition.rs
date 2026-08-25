@@ -16,16 +16,18 @@ use crate::commands::agent_files::{
     AgentFileMutationRecoverySummary, recover_incomplete_agent_file_mutations,
 };
 use crate::commands::render::render_job_is_terminal;
+use crate::internal_extensions::{
+    RunHistoryBrokerFacade, build_extension_workspace_candidate, extension_project_scope_id,
+    internal_plugins_for_scope,
+};
 use crate::project::{
     ProjectRestoreResponse, ProjectSessionSnapshot, ProjectSwitchBlocker, ProjectSwitchBlockerKind,
     ProjectWatcherControl, display_path, list_project_files, start_project_watcher,
 };
 use crate::startup_runtime::{bounded_diagnostic, write_startup_event, write_startup_log};
 use crate::{
-    AppState, RunHistoryBrokerFacade, active_context, active_session,
-    build_extension_workspace_candidate, extension_project_scope_id, internal_plugins_for_scope,
-    reconcile_workspace_plugins_for_boundary, runtime_registry, store_executor,
-    teardown_workspace_plugins_for_boundary, ui_runtime,
+    AppState, active_context, active_session, reconcile_workspace_plugins_for_boundary,
+    runtime_registry, store_executor, teardown_workspace_plugins_for_boundary, ui_runtime,
 };
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

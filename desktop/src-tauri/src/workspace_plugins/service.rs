@@ -14,6 +14,7 @@ use super::{
     WorkspacePluginBoundaryTeardownReport, WorkspacePluginHeartbeatReport,
     WorkspacePluginReconciliationReport,
 };
+use crate::internal_extensions::extension_project_scope_id;
 
 pub(crate) struct AgentPluginProjectionSnapshot {
     pub project_root: String,
@@ -60,7 +61,7 @@ pub(crate) async fn agent_plugin_projection_snapshot(
             .context(missing_active_project_message)?;
         let runtime_context = PluginRuntimeContext {
             app_data_dir,
-            project_scope_id: crate::extension_project_scope_id(&project_root)?,
+            project_scope_id: extension_project_scope_id(&project_root)?,
             project_root: project_root.clone(),
             project_revision: i64::try_from(identity.project_revision)
                 .context("project revision exceeds the plugin contribution range")?,
