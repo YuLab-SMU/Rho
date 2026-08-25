@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W3-08"],
-  "integration_lane": "AM-W3-08",
+  "active_work_packages": ["AM-W3-09"],
+  "integration_lane": "AM-W3-09",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -578,7 +578,14 @@ Source-to-Console execution remain unchanged (`aed0e8e`/AM-E-0095).
 
 `AM-W3-08` mechanically extracts the Workspace Plugin Surface declarative
 block, field and tab renderer. Plugin guest execution, permission/grant,
-document revision and event dispatch authority stay in their existing owners.
+document revision and event dispatch authority stay in their existing owners
+(`c2a48a5`/AM-E-0096).
+
+`AM-W3-09` extracts the three read-oriented projected Surface domains—Check
+Result, Environment and generic Domain views—behind their existing narrow
+transport and presentation helpers. It is one cohesive package rather than
+three ceremonial micro-packages because all three share the same load/error/
+empty projection boundary and change no mutation authority.
 
 ### Wave 4 — Wasmtime Component Model and WIT
 
