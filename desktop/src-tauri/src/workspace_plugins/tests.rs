@@ -3060,6 +3060,7 @@ async fn workspace_inspection_uses_fixed_request_consumes_once_and_strips_untrus
         )
         .unwrap();
     drop(store);
+    let executor = StoreExecutor::open(&database).await.unwrap();
     let dispatcher = MockWorkspaceDispatcher {
         response: workspace_inspection_response(&context),
         current_workspace: protocol_workspace(&context),
@@ -3070,7 +3071,7 @@ async fn workspace_inspection_uses_fixed_request_consumes_once_and_strips_untrus
             &context,
             "org.example.plugin",
             serde_json::json!({"contribution": "test"}),
-            &database,
+            &executor,
             &dispatcher,
         )
         .await
@@ -3134,6 +3135,7 @@ async fn workspace_late_completion_and_crash_return_typed_errors_without_false_c
         )
         .unwrap();
     drop(store);
+    let executor = StoreExecutor::open(&database).await.unwrap();
 
     let mut late_workspace = protocol_workspace(&context);
     late_workspace.state_revision += 1;
@@ -3149,7 +3151,7 @@ async fn workspace_late_completion_and_crash_return_typed_errors_without_false_c
             &context,
             "org.example.plugin",
             serde_json::json!({}),
-            &database,
+            &executor,
             &late,
         )
         .await
@@ -3166,7 +3168,7 @@ async fn workspace_late_completion_and_crash_return_typed_errors_without_false_c
             &context,
             "org.example.plugin",
             serde_json::json!({}),
-            &database,
+            &executor,
             &crashing,
         )
         .await
@@ -3235,12 +3237,13 @@ async fn network_fetch_consumes_once_and_persists_only_bounded_metadata() {
         )
         .unwrap();
     drop(store);
+    let executor = StoreExecutor::open(&database).await.unwrap();
     let result = registry
         .invoke_network_plugin(
             &context,
             "org.example.plugin",
             serde_json::json!({}),
-            &database,
+            &executor,
         )
         .await
         .unwrap();
@@ -3319,12 +3322,13 @@ async fn network_timeout_consumes_once_uncertain_while_private_dns_remains_retry
             )
             .unwrap();
         drop(store);
+        let executor = StoreExecutor::open(&database).await.unwrap();
         let result = registry
             .invoke_network_plugin(
                 &context,
                 "org.example.plugin",
                 serde_json::json!({}),
-                &database,
+                &executor,
             )
             .await
             .unwrap();

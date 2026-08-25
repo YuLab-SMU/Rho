@@ -1,4 +1,42 @@
 use super::*;
+use rho_store::StoreExecutor;
+
+#[allow(clippy::too_many_arguments)]
+async fn persist_broker_call_event(
+    executor: &StoreExecutor,
+    context: &PluginRuntimeContext,
+    plugin_id: &str,
+    package_digest: &str,
+    grant_id: Option<&str>,
+    event_type: &str,
+    status: &str,
+    reason_code: Option<&str>,
+    details: serde_json::Value,
+    consume_allow_once: bool,
+) -> Result<String> {
+    let context = context.clone();
+    let plugin_id = plugin_id.to_string();
+    let package_digest = package_digest.to_string();
+    let grant_id = grant_id.map(str::to_string);
+    let event_type = event_type.to_string();
+    let status = status.to_string();
+    let reason_code = reason_code.map(str::to_string);
+    run_store_service(executor, move |store| {
+        record_call_event(
+            store,
+            &context,
+            &plugin_id,
+            &package_digest,
+            grant_id.as_deref(),
+            &event_type,
+            &status,
+            reason_code.as_deref(),
+            details,
+            consume_allow_once,
+        )
+    })
+    .await
+}
 
 impl PendingPluginPermissionRegistry {
     #[allow(dead_code)]
@@ -22,7 +60,7 @@ impl PendingPluginPermissionRegistry {
         context: &PluginRuntimeContext,
         plugin_id: &str,
         request: serde_json::Value,
-        store_path: &Path,
+        executor: &StoreExecutor,
     ) -> Result<WorkspacePluginCallResult> {
         let key = registry_key(&context.project_root, plugin_id);
         let request_id = HostRequestId::generate();
@@ -136,9 +174,8 @@ impl PendingPluginPermissionRegistry {
                             Ok(setup) => setup,
                             Err(code) => {
                                 drop(state);
-                                let mut store = Store::open(store_path)?;
-                                if let Err(persistence_error) = record_call_event(
-                                    &mut store,
+                                if let Err(persistence_error) = persist_broker_call_event(
+                                    executor,
                                     context,
                                     identity.plugin_id().as_str(),
                                     identity.package_digest().as_str(),
@@ -148,7 +185,9 @@ impl PendingPluginPermissionRegistry {
                                     Some(code),
                                     serde_json::json!({"operation": "network.fetch"}),
                                     false,
-                                ) {
+                                )
+                                .await
+                                {
                                     self.cancel_plugin_call(&key, &request_id);
                                     return Err(persistence_error);
                                 }
@@ -176,9 +215,8 @@ impl PendingPluginPermissionRegistry {
                         let admitted = state.grants.revalidate(revalidation.clone());
                         if let Revalidation::Denied(error) = admitted {
                             drop(state);
-                            let mut store = Store::open(store_path)?;
-                            if let Err(persistence_error) = record_call_event(
-                                &mut store,
+                            if let Err(persistence_error) = persist_broker_call_event(
+                                executor,
                                 context,
                                 identity.plugin_id().as_str(),
                                 identity.package_digest().as_str(),
@@ -188,7 +226,9 @@ impl PendingPluginPermissionRegistry {
                                 Some(grant_error_code(error)),
                                 serde_json::json!({"operation": "network.fetch"}),
                                 false,
-                            ) {
+                            )
+                            .await
+                            {
                                 self.cancel_plugin_call(&key, &request_id);
                                 return Err(persistence_error);
                             }
@@ -213,24 +253,23 @@ impl PendingPluginPermissionRegistry {
                             Arc::clone(&state.network_engine),
                         )
                     };
+                    if let Err(error) = persist_broker_call_event(
+                        executor,
+                        context,
+                        &plugin_identity_id,
+                        &package_digest,
+                        Some(&grant_id),
+                        "call_admitted",
+                        "completed",
+                        None,
+                        serde_json::json!({"operation": "network.fetch"}),
+                        false,
+                    )
+                    .await
                     {
-                        let mut store = Store::open(store_path)?;
-                        if let Err(error) = record_call_event(
-                            &mut store,
-                            context,
-                            &plugin_identity_id,
-                            &package_digest,
-                            Some(&grant_id),
-                            "call_admitted",
-                            "completed",
-                            None,
-                            serde_json::json!({"operation": "network.fetch"}),
-                            false,
-                        ) {
-                            self.release_plugin_admission(&handle_id);
-                            self.cancel_plugin_call(&key, &request_id);
-                            return Err(error);
-                        }
+                        self.release_plugin_admission(&handle_id);
+                        self.cancel_plugin_call(&key, &request_id);
+                        return Err(error);
                     }
                     let authorizer = LiveNetworkAuthorizer {
                         registry: self,
@@ -247,10 +286,9 @@ impl PendingPluginPermissionRegistry {
                             let code = network_error_code(error.code);
                             let authorization_stale =
                                 error.code == NetworkFetchErrorCode::AuthorizationDenied;
-                            let mut store = Store::open(store_path)?;
                             let persisted = if authorization_stale {
-                                record_call_event(
-                                    &mut store,
+                                persist_broker_call_event(
+                                    executor,
                                     context,
                                     &plugin_identity_id,
                                     &package_digest,
@@ -261,9 +299,10 @@ impl PendingPluginPermissionRegistry {
                                     serde_json::json!({"operation": "network.fetch"}),
                                     false,
                                 )
+                                .await
                             } else if error.completion_uncertain {
-                                record_call_event(
-                                    &mut store,
+                                persist_broker_call_event(
+                                    executor,
                                     context,
                                     &plugin_identity_id,
                                     &package_digest,
@@ -274,9 +313,10 @@ impl PendingPluginPermissionRegistry {
                                     serde_json::json!({"operation": "network.fetch"}),
                                     true,
                                 )
+                                .await
                             } else {
-                                record_call_event(
-                                    &mut store,
+                                persist_broker_call_event(
+                                    executor,
                                     context,
                                     &plugin_identity_id,
                                     &package_digest,
@@ -287,6 +327,7 @@ impl PendingPluginPermissionRegistry {
                                     serde_json::json!({"operation": "network.fetch"}),
                                     false,
                                 )
+                                .await
                             };
                             if authorization_stale {
                                 self.release_plugin_admission(&handle_id);
@@ -311,9 +352,8 @@ impl PendingPluginPermissionRegistry {
                         state.grants.revalidate_admitted(&revalidation) == Revalidation::Allowed
                     };
                     if !final_admitted {
-                        let mut store = Store::open(store_path)?;
-                        if let Err(persistence_error) = record_call_event(
-                            &mut store,
+                        if let Err(persistence_error) = persist_broker_call_event(
+                            executor,
                             context,
                             &plugin_identity_id,
                             &package_digest,
@@ -323,7 +363,9 @@ impl PendingPluginPermissionRegistry {
                             Some("stale_after_dispatch"),
                             serde_json::json!({"operation": "network.fetch"}),
                             false,
-                        ) {
+                        )
+                        .await
+                        {
                             self.release_plugin_admission(&handle_id);
                             self.cancel_plugin_call(&key, &request_id);
                             return Err(persistence_error);
@@ -333,30 +375,29 @@ impl PendingPluginPermissionRegistry {
                             self.resume_plugin_error(&key, &request_id, "stale_after_dispatch")?;
                         continue;
                     }
+                    if let Err(error) = persist_broker_call_event(
+                        executor,
+                        context,
+                        &plugin_identity_id,
+                        &package_digest,
+                        Some(&grant_id),
+                        "call_completed",
+                        "completed",
+                        None,
+                        serde_json::json!({
+                            "durationMs": started.elapsed().as_millis().min(u64::MAX as u128) as u64,
+                            "operation": "network.fetch",
+                            "redirectCount": fetched.redirect_count,
+                            "sizeBytes": fetched.size_bytes,
+                            "statusCode": fetched.status
+                        }),
+                        true,
+                    )
+                    .await
                     {
-                        let mut store = Store::open(store_path)?;
-                        if let Err(error) = record_call_event(
-                            &mut store,
-                            context,
-                            &plugin_identity_id,
-                            &package_digest,
-                            Some(&grant_id),
-                            "call_completed",
-                            "completed",
-                            None,
-                            serde_json::json!({
-                                "durationMs": started.elapsed().as_millis().min(u64::MAX as u128) as u64,
-                                "operation": "network.fetch",
-                                "redirectCount": fetched.redirect_count,
-                                "sizeBytes": fetched.size_bytes,
-                                "statusCode": fetched.status
-                            }),
-                            true,
-                        ) {
-                            self.complete_plugin_uncertain(&handle_id);
-                            self.cancel_plugin_call(&key, &request_id);
-                            return Err(error);
-                        }
+                        self.complete_plugin_uncertain(&handle_id);
+                        self.cancel_plugin_call(&key, &request_id);
+                        return Err(error);
                     }
                     let fetched_bytes = fetched.size_bytes as usize;
                     let fetched = serde_json::to_value(fetched)?;
@@ -394,9 +435,8 @@ impl PendingPluginPermissionRegistry {
                                 .unwrap_or_else(std::sync::PoisonError::into_inner);
                             remove_active_plugin(&mut state, &key);
                             drop(state);
-                            let mut store = Store::open(store_path)?;
-                            record_call_event(
-                                &mut store,
+                            persist_broker_call_event(
+                                executor,
                                 context,
                                 &plugin_identity_id,
                                 &package_digest,
@@ -406,7 +446,8 @@ impl PendingPluginPermissionRegistry {
                                 Some("completion_delivery_failed"),
                                 serde_json::json!({"operation": "network.fetch"}),
                                 false,
-                            )?;
+                            )
+                            .await?;
                             return Err(error);
                         }
                     };
@@ -421,7 +462,7 @@ impl PendingPluginPermissionRegistry {
         context: &PluginRuntimeContext,
         plugin_id: &str,
         request: serde_json::Value,
-        store_path: &Path,
+        executor: &StoreExecutor,
         dispatcher: &dyn WorkspacePluginDispatcher,
     ) -> Result<WorkspacePluginCallResult> {
         let key = registry_key(&context.project_root, plugin_id);
@@ -543,9 +584,8 @@ impl PendingPluginPermissionRegistry {
                         let admitted = state.grants.revalidate(revalidation.clone());
                         if let Revalidation::Denied(error) = admitted {
                             drop(state);
-                            let mut store = Store::open(store_path)?;
-                            if let Err(persistence_error) = record_call_event(
-                                &mut store,
+                            if let Err(persistence_error) = persist_broker_call_event(
+                                executor,
                                 context,
                                 identity.plugin_id().as_str(),
                                 identity.package_digest().as_str(),
@@ -555,7 +595,9 @@ impl PendingPluginPermissionRegistry {
                                 Some(grant_error_code(error)),
                                 serde_json::json!({"operation": "workspace.r.inspect"}),
                                 false,
-                            ) {
+                            )
+                            .await
+                            {
                                 self.cancel_plugin_call(&key, &request_id);
                                 return Err(persistence_error);
                             }
@@ -579,32 +621,30 @@ impl PendingPluginPermissionRegistry {
                             identity.package_digest().to_string(),
                         )
                     };
+                    if let Err(error) = persist_broker_call_event(
+                        executor,
+                        context,
+                        &plugin_identity_id,
+                        &package_digest,
+                        Some(&grant_id),
+                        "call_admitted",
+                        "completed",
+                        None,
+                        serde_json::json!({"operation": "workspace.r.inspect"}),
+                        false,
+                    )
+                    .await
                     {
-                        let mut store = Store::open(store_path)?;
-                        if let Err(error) = record_call_event(
-                            &mut store,
-                            context,
-                            &plugin_identity_id,
-                            &package_digest,
-                            Some(&grant_id),
-                            "call_admitted",
-                            "completed",
-                            None,
-                            serde_json::json!({"operation": "workspace.r.inspect"}),
-                            false,
-                        ) {
-                            self.release_plugin_admission(&handle_id);
-                            self.cancel_plugin_call(&key, &request_id);
-                            return Err(error);
-                        }
+                        self.release_plugin_admission(&handle_id);
+                        self.cancel_plugin_call(&key, &request_id);
+                        return Err(error);
                     }
                     let started = Instant::now();
                     let dispatched = match dispatcher.dispatch(prepared.clone()).await {
                         Ok(result) => result,
                         Err(_) => {
-                            let mut store = Store::open(store_path)?;
-                            if let Err(persistence_error) = record_call_event(
-                                &mut store,
+                            if let Err(persistence_error) = persist_broker_call_event(
+                                executor,
                                 context,
                                 &plugin_identity_id,
                                 &package_digest,
@@ -614,7 +654,9 @@ impl PendingPluginPermissionRegistry {
                                 Some("workspace_dispatch_failed"),
                                 serde_json::json!({"operation": "workspace.r.inspect"}),
                                 false,
-                            ) {
+                            )
+                            .await
+                            {
                                 self.release_plugin_admission(&handle_id);
                                 self.cancel_plugin_call(&key, &request_id);
                                 return Err(persistence_error);
@@ -647,9 +689,8 @@ impl PendingPluginPermissionRegistry {
                         Ok(projected) => projected,
                         Err(error) => {
                             let code = workspace_error_code(error.code);
-                            let mut store = Store::open(store_path)?;
-                            if let Err(persistence_error) = record_call_event(
-                                &mut store,
+                            if let Err(persistence_error) = persist_broker_call_event(
+                                executor,
                                 context,
                                 &plugin_identity_id,
                                 &package_digest,
@@ -659,7 +700,9 @@ impl PendingPluginPermissionRegistry {
                                 Some(code),
                                 serde_json::json!({"operation": "workspace.r.inspect"}),
                                 false,
-                            ) {
+                            )
+                            .await
+                            {
                                 self.release_plugin_admission(&handle_id);
                                 self.cancel_plugin_call(&key, &request_id);
                                 return Err(persistence_error);
@@ -681,9 +724,8 @@ impl PendingPluginPermissionRegistry {
                             == Revalidation::Allowed
                     };
                     if !still_admitted {
-                        let mut store = Store::open(store_path)?;
-                        if let Err(persistence_error) = record_call_event(
-                            &mut store,
+                        if let Err(persistence_error) = persist_broker_call_event(
+                            executor,
                             context,
                             &plugin_identity_id,
                             &package_digest,
@@ -693,7 +735,9 @@ impl PendingPluginPermissionRegistry {
                             Some("stale_after_dispatch"),
                             serde_json::json!({"operation": "workspace.r.inspect"}),
                             false,
-                        ) {
+                        )
+                        .await
+                        {
                             self.release_plugin_admission(&handle_id);
                             self.cancel_plugin_call(&key, &request_id);
                             return Err(persistence_error);
@@ -704,28 +748,27 @@ impl PendingPluginPermissionRegistry {
                         continue;
                     }
                     let projected_bytes = serde_json::to_vec(&projected)?.len();
+                    if let Err(error) = persist_broker_call_event(
+                        executor,
+                        context,
+                        &plugin_identity_id,
+                        &package_digest,
+                        Some(&grant_id),
+                        "call_completed",
+                        "completed",
+                        None,
+                        serde_json::json!({
+                            "durationMs": started.elapsed().as_millis().min(u64::MAX as u128) as u64,
+                            "operation": "workspace.r.inspect",
+                            "sizeBytes": projected_bytes
+                        }),
+                        true,
+                    )
+                    .await
                     {
-                        let mut store = Store::open(store_path)?;
-                        if let Err(error) = record_call_event(
-                            &mut store,
-                            context,
-                            &plugin_identity_id,
-                            &package_digest,
-                            Some(&grant_id),
-                            "call_completed",
-                            "completed",
-                            None,
-                            serde_json::json!({
-                                "durationMs": started.elapsed().as_millis().min(u64::MAX as u128) as u64,
-                                "operation": "workspace.r.inspect",
-                                "sizeBytes": projected_bytes
-                            }),
-                            true,
-                        ) {
-                            self.release_plugin_admission(&handle_id);
-                            self.cancel_plugin_call(&key, &request_id);
-                            return Err(error);
-                        }
+                        self.release_plugin_admission(&handle_id);
+                        self.cancel_plugin_call(&key, &request_id);
+                        return Err(error);
                     }
                     let resume_result = (|| -> Result<GuestStep> {
                         let mut state = self
@@ -759,9 +802,8 @@ impl PendingPluginPermissionRegistry {
                                 .unwrap_or_else(std::sync::PoisonError::into_inner);
                             remove_active_plugin(&mut state, &key);
                             drop(state);
-                            let mut store = Store::open(store_path)?;
-                            record_call_event(
-                                &mut store,
+                            persist_broker_call_event(
+                                executor,
                                 context,
                                 &plugin_identity_id,
                                 &package_digest,
@@ -771,7 +813,8 @@ impl PendingPluginPermissionRegistry {
                                 Some("completion_delivery_failed"),
                                 serde_json::json!({"operation": "workspace.r.inspect"}),
                                 false,
-                            )?;
+                            )
+                            .await?;
                             return Err(error);
                         }
                     };
