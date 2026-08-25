@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-53",
+  "active_work_packages": ["AM-W2-54"],
+  "integration_lane": "AM-W2-54",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -469,6 +469,11 @@ Workspace plugin inventory, broker facades, deterministic scope identities and
 candidate lifecycle from the composition root. Capability identity, scope
 isolation, broker authority and publish/rollback behavior remain unchanged;
 module size and root LOC are diagnostic outcomes rather than acceptance gates.
+
+`AM-W2-54` extracts Workspace startup/finalization, plugin-boundary teardown,
+reconciliation and heartbeat supervision into one lifecycle service. Store
+execution and application shutdown remain separate owners; Workspace identity,
+plugin grants, recovery revisions and extension publication stay unchanged.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
