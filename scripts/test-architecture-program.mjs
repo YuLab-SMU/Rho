@@ -269,6 +269,55 @@ function runCompletionAndDependencyFixtures() {
   assert.equal(statusPayload(advisoryContext).findings[0].acceptance, "advisory");
   assert.deepEqual(statusPayload(advisoryContext).findings[0].acceptance_domains, []);
 
+  const terminalFinding = finding({
+    status: "resolved",
+    acceptance_domains: [],
+    commits: ["abcdef0"],
+    status_history: [
+      { status: "observed", at: DATE, reason: "observed" },
+      { status: "triaged", at: DATE, reason: "triaged" },
+      { status: "active", at: DATE, reason: "active" },
+      { status: "verifying", at: DATE, reason: "verifying" },
+      { status: "resolved", at: DATE, reason: "resolved" },
+    ],
+  });
+  const terminalPackage = workPackage({
+    status: "implemented",
+    residual_risks: [],
+    evidence: ["AM-E-0001"],
+    commits: ["abcdef0"],
+    status_history: [
+      { status: "proposed", at: DATE, reason: "proposed" },
+      { status: "ready", at: DATE, reason: "ready" },
+      { status: "active", at: DATE, reason: "active" },
+      { status: "verifying", at: DATE, reason: "verifying" },
+      { status: "implemented", at: DATE, reason: "implemented" },
+    ],
+  });
+  const terminalContext = validateProgram([
+    program({
+      status: "implemented",
+      active_work_packages: [],
+      _file: "docs/architecture/implemented-2026-08-24-architecture-modernization-program.md",
+    }),
+    terminalFinding,
+    terminalPackage,
+    decision(),
+    evidence(),
+  ], { root: process.cwd(), lineBudget: false });
+  assert.equal(statusPayload(terminalContext).program.status, "implemented");
+
+  expectInvalid([
+    program({
+      status: "implemented",
+      active_work_packages: [],
+      _file: "docs/architecture/implemented-2026-08-24-architecture-modernization-program.md",
+    }),
+    terminalFinding,
+    workPackage(),
+    decision(),
+  ], /implemented program retains unfinished work packages AM-W0-01/u);
+
   const implemented = workPackage({
     status: "implemented",
     findings: [],

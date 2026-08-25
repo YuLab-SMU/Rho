@@ -83,12 +83,19 @@ export function parseRecord(file, root = process.cwd()) {
 }
 
 export function loadProgram(root = process.cwd()) {
-  const programFile = path.join(
-    root,
-    "docs/architecture/active-2026-08-24-architecture-modernization-program.md",
-  );
+  const programFiles = ["active", "implemented"]
+    .map((status) => path.join(
+      root,
+      `docs/architecture/${status}-2026-08-24-architecture-modernization-program.md`,
+    ))
+    .filter((file) => fs.existsSync(file));
+  if (programFiles.length !== 1) {
+    throw new ProgramValidationError([
+      `expected exactly one active or implemented architecture program; found ${programFiles.length}`,
+    ]);
+  }
   const files = [
-    programFile,
+    programFiles[0],
     ...markdownFiles(path.join(root, "docs/architecture/modernization")),
   ];
   const records = [];
@@ -531,10 +538,36 @@ export function validateProgram(records, { root = process.cwd(), lineBudget = tr
     ], errors);
     requireArray(program, "active_work_packages", errors);
     if (program.program_id !== "AM-2026") errors.push(`${program._file}: unexpected program_id ${program.program_id}`);
-    if (program.status !== "active") errors.push(`${program._file}: program must remain active until final acceptance`);
+    if (!new Set(["active", "implemented"]).has(program.status)) {
+      errors.push(`${program._file}: program status must be active or implemented`);
+    }
     if (!Number.isInteger(program.current_wave) || program.current_wave < 0) errors.push(`${program._file}: invalid current_wave`);
     if (!DATE_PATTERN.test(program.authorized_at ?? "")) errors.push(`${program._file}: invalid authorized_at`);
     if (!COMMIT_PATTERN.test(program.base_commit ?? "")) errors.push(`${program._file}: invalid base_commit`);
+    if (program.status === "implemented") {
+      if (!program._file.startsWith("docs/architecture/implemented-")) {
+        errors.push(`${program._file}: implemented program must use an implemented- filename`);
+      }
+      if (program.active_work_packages.length > 0) {
+        errors.push(`${program._file}: implemented program cannot retain active work packages`);
+      }
+      const unfinishedPackages = records
+        .filter(({ record_type, status }) => record_type === "work_package" && status !== "implemented")
+        .map(({ id }) => id)
+        .sort();
+      if (unfinishedPackages.length > 0) {
+        errors.push(`${program._file}: implemented program retains unfinished work packages ${unfinishedPackages.join(", ")}`);
+      }
+      const openFindings = records
+        .filter(({ record_type, status }) => record_type === "finding" && !["resolved", "deferred"].includes(status))
+        .map(({ id }) => id)
+        .sort();
+      if (openFindings.length > 0) {
+        errors.push(`${program._file}: implemented program retains open findings ${openFindings.join(", ")}`);
+      }
+    } else if (!program._file.startsWith("docs/architecture/active-")) {
+      errors.push(`${program._file}: active program must use an active- filename`);
+    }
   }
   const context = {
     root,
