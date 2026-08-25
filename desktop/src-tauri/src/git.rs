@@ -49,19 +49,22 @@ fn read_bounded(mut stream: impl Read, limit: usize) -> std::io::Result<(Vec<u8>
     Ok((captured, truncated))
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct GitStatus {
     pub is_repo: bool,
     pub branch: Option<String>,
     pub dirty: bool,
     pub ahead: i32,
     pub behind: i32,
+    #[specta(type = i32)]
     pub untracked: usize,
+    #[specta(type = i32)]
     pub modified: usize,
+    #[specta(type = i32)]
     pub staged: usize,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct GitLogEntry {
     pub hash: String,
     pub author: String,

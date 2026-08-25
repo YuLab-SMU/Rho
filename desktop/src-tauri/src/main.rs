@@ -6341,19 +6341,21 @@ pub(crate) async fn restart_workspace_locked(state: &AppState) -> Result<Workspa
     Ok(status)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn git_status(state: State<'_, AppState>) -> Result<git::GitStatus, String> {
     let root = state.project_root.read().await.clone();
     git::git_status(Path::new(&root)).map_err(|e| e.to_string())
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 async fn git_log(
-    limit: Option<usize>,
+    limit: Option<rho_ui_contract::UiIpcUsize>,
     state: State<'_, AppState>,
 ) -> Result<Vec<git::GitLogEntry>, String> {
     let root = state.project_root.read().await.clone();
-    git::git_log(Path::new(&root), limit.unwrap_or(20)).map_err(|e| e.to_string())
+    git::git_log(Path::new(&root), limit.map(usize::from).unwrap_or(20)).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -15820,6 +15822,21 @@ mod tests {
             .error_handling(tauri_specta::ErrorHandlingMode::Throw)
             .export(specta_typescript::Typescript::default(), output_path)
             .expect("Evidence TypeScript export must succeed");
+    }
+
+    #[test]
+    #[ignore = "writes the requested generated TypeScript contract"]
+    fn git_typescript_export() {
+        let output_path = std::env::var_os("RHO_GIT_BINDINGS_PATH")
+            .expect("RHO_GIT_BINDINGS_PATH must name the generated file");
+        tauri_specta::Builder::<tauri::Wry>::new()
+            .commands(tauri_specta::collect_commands![
+                super::git_status,
+                super::git_log,
+            ])
+            .error_handling(tauri_specta::ErrorHandlingMode::Throw)
+            .export(specta_typescript::Typescript::default(), output_path)
+            .expect("Git TypeScript export must succeed");
     }
 }
 
