@@ -18,6 +18,10 @@ pub const MAX_PROJECT_FILES: usize = 2_000;
 pub const MAX_PROJECT_ENTRIES: usize = 10_000;
 pub const MAX_PROJECT_DEPTH: usize = 8;
 
+pub(crate) fn durable_project_root(root: &Path) -> String {
+    rho_store::normalize_project_root(root.to_string_lossy().as_ref())
+}
+
 #[derive(Clone, Debug, Serialize, specta::Type)]
 pub struct ProjectFile {
     pub path: String,

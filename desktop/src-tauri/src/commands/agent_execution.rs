@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -25,11 +25,36 @@ use uuid::Uuid;
 
 use crate::application_state::{active_context, active_session, store_executor};
 use crate::commands::workspace::{ExtensionWorkspaceSnapshotAdapter, WorkspacePluginAgentAdapter};
+use crate::project::durable_project_root;
 use crate::startup_runtime::runtime_config;
-use crate::{
-    AgentTaskEntry, AppState, agent_llm, agent_turn_admission_error, display_error,
-    durable_project_root, runtime_registry, workspace_plugins,
-};
+use crate::{AppState, agent_llm, display_error, runtime_registry, workspace_plugins};
+
+const MAX_CONCURRENT_AGENT_TURNS: usize = 2;
+
+pub(crate) struct AgentTaskEntry {
+    pub(crate) conversation_id: String,
+    pub(crate) handle: tauri::async_runtime::JoinHandle<()>,
+}
+
+pub(crate) fn agent_turn_admission_error(
+    tasks: &HashMap<String, AgentTaskEntry>,
+    conversation_id: Option<&str>,
+    _mode: &str,
+) -> Option<&'static str> {
+    if conversation_id.is_some_and(|conversation_id| {
+        tasks
+            .values()
+            .any(|task| task.conversation_id == conversation_id)
+    }) {
+        return Some(
+            "AGENT_CONVERSATION_BUSY: This Conversation already has an active Agent turn.",
+        );
+    }
+    if tasks.len() >= MAX_CONCURRENT_AGENT_TURNS {
+        return Some("AGENT_CONCURRENCY_LIMIT: At most two Agent turns can run at once.");
+    }
+    None
+}
 
 async fn resolve_agent_explicit_context(
     state: &AppState,

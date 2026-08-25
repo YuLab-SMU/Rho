@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use rho_core::ExecutionOrigin;
 use rho_extension_runtime::{
     BoundedJson, DiagnosticCode, DiagnosticSeverity, ExtensionDiagnostic,
     InternalExtensionRuntimeMode, SourceCallError,
@@ -15,7 +16,15 @@ use tauri::State;
 
 use crate::application_state::{active_context, active_session, store_executor};
 use crate::internal_extensions::{extension_project_scope_id, run_history_source_capability_id};
-use crate::{AppState, display_error, parse_execution_origin};
+use crate::{AppState, display_error};
+
+fn parse_execution_origin(origin: &str) -> ExecutionOrigin {
+    match origin {
+        "agent" => ExecutionOrigin::Agent,
+        "system" => ExecutionOrigin::System,
+        _ => ExecutionOrigin::User,
+    }
+}
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(transparent)]

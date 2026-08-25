@@ -5,7 +5,8 @@ use tauri::State;
 use uuid::Uuid;
 
 use crate::application_state::store_executor;
-use crate::{AppState, display_error, durable_project_root};
+use crate::project::durable_project_root;
+use crate::{AppState, display_error};
 
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]

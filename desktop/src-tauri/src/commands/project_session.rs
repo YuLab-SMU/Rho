@@ -8,6 +8,7 @@ use serde_json::{Value, json};
 use tauri::{AppHandle, State};
 
 use crate::application_state::{active_context, persist_workspace_identity};
+use crate::digest::text_sha256;
 use crate::internal_extensions::project_file_viewer_capability_id;
 use crate::project::{
     MAX_VIEWER_FILE_BYTES, MAX_VIEWER_HTML_BYTES, ProjectRestoreResponse, ProjectSessionSnapshot,
@@ -18,7 +19,7 @@ use crate::project::{
 };
 use crate::project_transition::switch_project;
 use crate::startup_runtime::write_startup_log;
-use crate::{AppState, display_error, text_sha256};
+use crate::{AppState, display_error};
 
 #[tauri::command]
 pub(crate) async fn project_state(state: State<'_, AppState>) -> Result<ProjectState, String> {

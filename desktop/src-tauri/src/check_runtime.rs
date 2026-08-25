@@ -19,7 +19,8 @@ use serde_json::{Value, json};
 use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
-use crate::{AppState, display_error, text_sha256};
+use crate::digest::text_sha256;
+use crate::{AppState, display_error};
 
 pub(crate) const CHECK_RESULTS_CHANGED_EVENT: &str = "rho://check-results-changed";
 const CHECK_CORE_RULE_COUNT: usize = 22;

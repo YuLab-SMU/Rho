@@ -4,6 +4,7 @@ mod agent_llm;
 mod application_state;
 mod check_runtime;
 mod commands;
+mod digest;
 mod git;
 mod git_commands;
 mod git_review;
@@ -27,6 +28,10 @@ mod workspace_plugins;
 pub(crate) use application_state::AppState;
 #[cfg(test)]
 use application_state::{active_context, persist_workspace_identity, store_executor};
+#[cfg(test)]
+use commands::agent_execution::{AgentTaskEntry, agent_turn_admission_error};
+#[cfg(test)]
+use digest::text_sha256;
 use internal_extensions::*;
 use project_transition::*;
 use startup_runtime::*;
@@ -75,6 +80,8 @@ use agent_llm::{
 };
 use anyhow::{Context, Result, anyhow, bail, ensure};
 #[cfg(test)]
+use project::durable_project_root;
+#[cfg(test)]
 use project::{MAX_VIEWER_FILE_BYTES, MAX_VIEWER_HTML_BYTES};
 use project::{ProjectSessionStore, default_project_root, read_viewer_file};
 use rho_core::{BrokerState, ExecutionOrigin};
@@ -92,41 +99,9 @@ use rho_store::{
     AgentTurnDraft, AgentTurnEventDraft, RunSummary, Store, StoreExecutor, normalize_project_root,
 };
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use tauri::Manager;
 use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
-
-const MAX_CONCURRENT_AGENT_TURNS: usize = 2;
-
-pub(crate) struct AgentTaskEntry {
-    conversation_id: String,
-    handle: tauri::async_runtime::JoinHandle<()>,
-}
-
-fn agent_turn_admission_error(
-    tasks: &HashMap<String, AgentTaskEntry>,
-    conversation_id: Option<&str>,
-    _mode: &str,
-) -> Option<&'static str> {
-    if conversation_id.is_some_and(|conversation_id| {
-        tasks
-            .values()
-            .any(|task| task.conversation_id == conversation_id)
-    }) {
-        return Some(
-            "AGENT_CONVERSATION_BUSY: This Conversation already has an active Agent turn.",
-        );
-    }
-    if tasks.len() >= MAX_CONCURRENT_AGENT_TURNS {
-        return Some("AGENT_CONCURRENCY_LIMIT: At most two Agent turns can run at once.");
-    }
-    None
-}
-
-fn text_sha256(content: &str) -> String {
-    format!("{:x}", Sha256::digest(content.as_bytes()))
-}
 
 async fn shutdown_application(state: &AppState) -> Result<(), String> {
     write_startup_log("Rho desktop shutdown started");
@@ -235,18 +210,6 @@ fn terminate_process_tree(pid: u32) -> Result<()> {
         .context("starting taskkill for Ark")?;
     ensure!(status.success(), "taskkill failed with status {status}");
     Ok(())
-}
-
-fn durable_project_root(root: &Path) -> String {
-    normalize_project_root(root.to_string_lossy().as_ref())
-}
-
-fn parse_execution_origin(origin: &str) -> ExecutionOrigin {
-    match origin {
-        "agent" => ExecutionOrigin::Agent,
-        "system" => ExecutionOrigin::System,
-        _ => ExecutionOrigin::User,
-    }
 }
 
 #[cfg(test)]

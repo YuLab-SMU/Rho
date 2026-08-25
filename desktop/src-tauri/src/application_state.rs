@@ -12,6 +12,7 @@ use rho_store::{BorrowedStore, StoreExecutor, StoreExecutorOperationError};
 use tokio::sync::{Mutex, OnceCell, RwLock};
 
 use crate::agent_llm::AgentModelTestControl;
+use crate::commands::agent_execution::AgentTaskEntry;
 #[cfg(test)]
 use crate::commands::agent_files::AgentFileApplyTestControl;
 use crate::commands::agent_files::AgentFileMutationRegistry;
@@ -20,8 +21,8 @@ use crate::project::{ProjectSessionStore, ProjectWatcherControl};
 use crate::project_transition::SwitchTestControl;
 use crate::startup_runtime::{RuntimeConfig, StartupView, runtime_config};
 use crate::{
-    AgentTaskEntry, check_runtime, plugin_surface_runtime, resource_registry, runtime_registry,
-    studio_runtime, surface_runtime, ui_profile, ui_runtime, workspace_plugins,
+    check_runtime, plugin_surface_runtime, resource_registry, runtime_registry, studio_runtime,
+    surface_runtime, ui_profile, ui_runtime, workspace_plugins,
 };
 
 pub(crate) struct AppState {
