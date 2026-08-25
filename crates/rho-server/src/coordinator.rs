@@ -26,7 +26,7 @@ use rho_store::{
 };
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{Mutex, oneshot};
 use uuid::Uuid;
 

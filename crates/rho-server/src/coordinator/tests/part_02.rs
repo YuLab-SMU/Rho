@@ -413,6 +413,80 @@
         );
     }
 
+    fn coordinator_probe_fixture_child(fixture: &str) -> tokio::process::Child {
+        tokio::process::Command::new(std::env::current_exe().unwrap())
+            .arg("--ignored")
+            .arg("--nocapture")
+            .arg(fixture)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .unwrap()
+    }
+
+    #[test]
+    #[ignore = "child-process fixture for coordinator probe diagnostics"]
+    fn coordinator_probe_exit_child_fixture() {
+        println!("probe fixture stdout ?token=fixture-secret");
+        println!("{}", "x".repeat(PROBE_CHILD_DIAGNOSTIC_BYTES + 128));
+        eprintln!("probe fixture stderr");
+    }
+
+    #[test]
+    #[ignore = "child-process fixture for coordinator probe diagnostics"]
+    fn coordinator_probe_timeout_child_fixture() {
+        println!("probe timeout stdout ?token=fixture-secret");
+        eprintln!("probe timeout stderr");
+        std::io::Write::flush(&mut std::io::stdout()).unwrap();
+        std::io::Write::flush(&mut std::io::stderr()).unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(5));
+    }
+
+    #[tokio::test]
+    async fn coordinator_probe_reports_bounded_output_when_child_exits_before_authentication() {
+        let mut child = coordinator_probe_fixture_child("coordinator_probe_exit_child_fixture");
+        let output = ProbeChildOutput::capture(&mut child).unwrap();
+        let error = await_probe_authentication(
+            std::future::pending::<std::result::Result<(), &'static str>>(),
+            &mut child,
+            output,
+            std::time::Duration::from_secs(5),
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+
+        assert!(error.contains("exited before authentication"));
+        assert!(error.contains("probe fixture stdout ?token=[REDACTED]"));
+        assert!(error.contains("probe fixture stderr"));
+        assert!(error.contains("... [truncated]"));
+        assert!(error.len() < PROBE_CHILD_DIAGNOSTIC_BYTES * 2 + 1_000);
+        assert!(!error.contains("fixture-secret"));
+    }
+
+    #[tokio::test]
+    async fn coordinator_probe_timeout_terminates_child_and_reports_bounded_output() {
+        let mut child =
+            coordinator_probe_fixture_child("coordinator_probe_timeout_child_fixture");
+        let output = ProbeChildOutput::capture(&mut child).unwrap();
+        let error = await_probe_authentication(
+            std::future::pending::<std::result::Result<(), &'static str>>(),
+            &mut child,
+            output,
+            std::time::Duration::from_millis(100),
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+
+        assert!(error.contains("timed out waiting for Agent R coordinator probe authentication"));
+        assert!(error.contains("probe timeout stdout ?token=[REDACTED]"));
+        assert!(error.contains("probe timeout stderr"));
+        assert!(!error.contains("fixture-secret"));
+    }
+
     #[test]
     fn desktop_agent_startup_resolves_the_profile_before_validating_its_route() {
         let script = desktop_agent_turn_script();

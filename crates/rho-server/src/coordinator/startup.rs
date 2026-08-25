@@ -176,6 +176,131 @@ fn coordinator_probe_args(
     ]
 }
 
+const PROBE_CHILD_DIAGNOSTIC_BYTES: usize = 4_000;
+
+#[derive(Debug)]
+struct ProbeChildOutput {
+    stdout: tokio::task::JoinHandle<std::io::Result<String>>,
+    stderr: tokio::task::JoinHandle<std::io::Result<String>>,
+}
+
+impl ProbeChildOutput {
+    fn capture(child: &mut tokio::process::Child) -> Result<Self> {
+        let stdout = child
+            .stdout
+            .take()
+            .context("capturing Agent R coordinator probe stdout")?;
+        let stderr = child
+            .stderr
+            .take()
+            .context("capturing Agent R coordinator probe stderr")?;
+        Ok(Self {
+            stdout: tokio::spawn(capture_probe_child_stream(stdout)),
+            stderr: tokio::spawn(capture_probe_child_stream(stderr)),
+        })
+    }
+
+    async fn finish(self) -> (String, String) {
+        (
+            finish_probe_child_stream(self.stdout, "stdout").await,
+            finish_probe_child_stream(self.stderr, "stderr").await,
+        )
+    }
+}
+
+async fn capture_probe_child_stream<R>(mut stream: R) -> std::io::Result<String>
+where
+    R: AsyncRead + Unpin,
+{
+    let mut retained = Vec::with_capacity(PROBE_CHILD_DIAGNOSTIC_BYTES);
+    let mut chunk = [0_u8; 1_024];
+    let mut truncated = false;
+    loop {
+        let count = stream.read(&mut chunk).await?;
+        if count == 0 {
+            break;
+        }
+        let available = PROBE_CHILD_DIAGNOSTIC_BYTES.saturating_sub(retained.len());
+        let keep = available.min(count);
+        retained.extend_from_slice(&chunk[..keep]);
+        truncated |= keep < count;
+    }
+    let mut output = String::from_utf8_lossy(&retained).into_owned();
+    if truncated {
+        output.push_str("... [truncated]");
+    }
+    Ok(redact_sensitive_text(&output))
+}
+
+async fn finish_probe_child_stream(
+    task: tokio::task::JoinHandle<std::io::Result<String>>,
+    stream: &str,
+) -> String {
+    match task.await {
+        Ok(Ok(output)) => output,
+        Ok(Err(error)) => format!("[failed to read child {stream}: {error}]"),
+        Err(error) => format!("[child {stream} capture task failed: {error}]"),
+    }
+}
+
+enum ProbeStartup<T, E> {
+    Authentication(std::result::Result<T, E>),
+    Exited(std::io::Result<std::process::ExitStatus>),
+}
+
+async fn stop_probe_child(child: &mut tokio::process::Child) -> Result<std::process::ExitStatus> {
+    let _ = child.kill().await;
+    child
+        .wait()
+        .await
+        .context("waiting for terminated Agent R coordinator probe")
+}
+
+async fn await_probe_authentication<T, E, F>(
+    authentication: F,
+    child: &mut tokio::process::Child,
+    output: ProbeChildOutput,
+    timeout: std::time::Duration,
+) -> Result<(T, ProbeChildOutput)>
+where
+    F: Future<Output = std::result::Result<T, E>>,
+    E: std::fmt::Display,
+{
+    tokio::pin!(authentication);
+    let startup = tokio::time::timeout(timeout, async {
+        tokio::select! {
+            authentication = &mut authentication => ProbeStartup::Authentication(authentication),
+            status = child.wait() => ProbeStartup::Exited(status),
+        }
+    })
+    .await;
+
+    match startup {
+        Ok(ProbeStartup::Authentication(Ok(agent))) => Ok((agent, output)),
+        Ok(ProbeStartup::Authentication(Err(error))) => {
+            let status = stop_probe_child(child).await?;
+            let (stdout, stderr) = output.finish().await;
+            bail!(
+                "Agent R coordinator probe authentication failed: {error}; process status {status}; stdout: {stdout}; stderr: {stderr}"
+            )
+        }
+        Ok(ProbeStartup::Exited(status)) => {
+            let status = status.context("waiting for Agent R coordinator probe authentication")?;
+            let (stdout, stderr) = output.finish().await;
+            bail!(
+                "Agent R coordinator probe exited before authentication with {status}; stdout: {stdout}; stderr: {stderr}"
+            )
+        }
+        Err(_) => {
+            let status = stop_probe_child(child).await?;
+            let (stdout, stderr) = output.finish().await;
+            bail!(
+                "timed out waiting for Agent R coordinator probe authentication; process status {status}; stdout: {stdout}; stderr: {stderr}"
+            )
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn run_probe(
     session: &ArkSession,
@@ -219,37 +344,49 @@ async fn run_probe(
     let mut stdin = child.stdin.take().context("opening Agent R stdin")?;
     stdin.write_all(format!("{token}\n").as_bytes()).await?;
     stdin.shutdown().await?;
+    drop(stdin);
 
-    let mut agent = tokio::time::timeout(
-        std::time::Duration::from_secs(30),
+    let output = ProbeChildOutput::capture(&mut child)?;
+    let (mut agent, output) = await_probe_authentication(
         authenticator.authenticate_next(),
+        &mut child,
+        output,
+        std::time::Duration::from_secs(30),
     )
-    .await
-    .context("timed out waiting for Agent R authentication")??;
+    .await?;
 
     send_identity(&mut agent, broker, executor).await?;
     if !real_model {
         run_user_probe(session, broker, executor).await?;
     }
     let completion_result = serve_agent(&mut agent, session, broker, executor).await;
-    let output = tokio::time::timeout(
+    let status = match tokio::time::timeout(
         std::time::Duration::from_secs(120),
-        child.wait_with_output(),
+        child.wait(),
     )
     .await
-    .context("timed out waiting for Agent R coordinator probe")??;
+    {
+        Ok(status) => status.context("waiting for Agent R coordinator probe")?,
+        Err(_) => {
+            let status = stop_probe_child(&mut child).await?;
+            let (stdout, stderr) = output.finish().await;
+            bail!(
+                "timed out waiting for Agent R coordinator probe; process status {status}; stdout: {stdout}; stderr: {stderr}"
+            )
+        }
+    };
+    let (stdout, stderr) = output.finish().await;
     let completion = completion_result.with_context(|| {
         format!(
             "Agent R loop ended before completion; process status {}; stderr: {}",
-            output.status,
-            redact_sensitive_text(&String::from_utf8_lossy(&output.stderr))
+            status, stderr
         )
     })?;
     ensure!(
-        output.status.success(),
+        status.success(),
         "Agent R coordinator probe exited with {}: {}",
-        output.status,
-        redact_sensitive_text(&String::from_utf8_lossy(&output.stderr))
+        status,
+        stderr
     );
 
     let persisted_event_count =
@@ -265,8 +402,8 @@ async fn run_probe(
             "recovered_runs": recovered_runs,
             "store": store_path,
             "python_required": false,
-            "stdout": redact_sensitive_text(&String::from_utf8_lossy(&output.stdout)),
-            "stderr": redact_sensitive_text(&String::from_utf8_lossy(&output.stderr))
+            "stdout": stdout,
+            "stderr": stderr
         }))?
     );
     Ok(())
