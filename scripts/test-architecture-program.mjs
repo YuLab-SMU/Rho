@@ -109,17 +109,18 @@ function decision(overrides = {}) {
     rationale: "test",
     consequences: ["test"],
     line_budget: {
+      enforcement: "advisory",
       production_roots: [],
       production_extensions: [".ts"],
       generated_segments: [],
       test_segments: [".test."],
       production_suggested_lines: 8,
-      production_hard_lines: 10,
-      test_hard_lines: 20,
+      production_attention_lines: 10,
+      test_attention_lines: 20,
       legacy_review_growth_lines: 2,
       legacy_review_growth_percent: 10,
-      legacy_hard_growth_lines: 4,
-      legacy_hard_growth_percent: 25,
+      legacy_attention_growth_lines: 4,
+      legacy_attention_growth_percent: 25,
       exceptions: [],
     },
     _file: "docs/architecture/modernization/decisions/AM-D-0001.md",
@@ -183,12 +184,41 @@ function runValidationFixtures() {
     decision(),
   ], /unknown disposition package AM-W9-99/u);
 
-  expectInvalid([
+  const overdue = validateProgram([
     program({ current_wave: 1 }),
     finding({ target_wave: 0 }),
     workPackage(),
     decision(),
-  ], /finding is overdue for wave 0/u);
+  ], { root: process.cwd(), lineBudget: false });
+  assert.match(overdue.warnings.join("\n"), /finding target wave 0 has passed; replan or resolve it/u);
+
+  const baseDecision = decision();
+  const hotspotReview = validateProgram([
+    program({ current_wave: 1 }),
+    finding({ target_wave: 1 }),
+    workPackage(),
+    decision({
+      line_budget: {
+        ...baseDecision.line_budget,
+        exceptions: [{
+          path: "src/legacy.ts",
+          baseline_lines: 8,
+          target_lines: 4,
+          finding: "AM-F-0001",
+          removal_work_package: "AM-W0-01",
+          expires_wave: 0,
+        }],
+      },
+    }),
+  ], { root: process.cwd(), lineBudget: false });
+  assert.match(hotspotReview.warnings.join("\n"), /hotspot src\/legacy\.ts passed review wave 0/u);
+
+  expectInvalid([
+    program(),
+    finding(),
+    workPackage(),
+    decision({ line_budget: { ...baseDecision.line_budget, enforcement: "blocking" } }),
+  ], /line_budget\.enforcement must be advisory/u);
 }
 
 function evidence() {
@@ -306,27 +336,30 @@ function runLineBudgetFixtures() {
     fs.writeFileSync(path.join(temporary, "src/new.ts"), repeatedLines(11));
     fs.writeFileSync(path.join(temporary, "src/legacy.ts"), repeatedLines(13));
     const config = {
+      enforcement: "advisory",
       production_roots: ["src"],
       production_extensions: [".ts"],
       generated_segments: [],
       test_segments: [".test."],
       production_suggested_lines: 8,
-      production_hard_lines: 10,
-      test_hard_lines: 20,
+      production_attention_lines: 10,
+      test_attention_lines: 20,
       legacy_review_growth_lines: 2,
       legacy_review_growth_percent: 10,
-      legacy_hard_growth_lines: 4,
-      legacy_hard_growth_percent: 25,
+      legacy_attention_growth_lines: 4,
+      legacy_attention_growth_percent: 25,
       exceptions: [{ path: "src/legacy.ts", baseline_lines: 8 }],
     };
     const result = checkLineBudget(temporary, config);
-    assert.deepEqual(result.failures, [
-      "src/legacy.ts: 13 lines exceeds legacy emergency ceiling 10 (baseline 8)",
-      "src/new.ts: 11 lines exceeds hard limit 10 without an exception",
+    assert.deepEqual(result.failures, []);
+    assert.deepEqual(result.warnings, [
+      "src/legacy.ts: 13 lines exceeds legacy attention threshold 10 (baseline 8)",
+      "src/new.ts: 11 lines exceeds attention threshold 10",
     ]);
     fs.writeFileSync(path.join(temporary, "src/legacy.ts"), repeatedLines(10));
     assert.deepEqual(checkLineBudget(temporary, config).warnings, [
       "src/legacy.ts: 10 lines exceeds legacy review threshold 9 (baseline 8)",
+      "src/new.ts: 11 lines exceeds attention threshold 10",
     ]);
   } finally {
     fs.rmSync(temporary, { recursive: true, force: true });

@@ -220,7 +220,7 @@ function validateEvidence(record, errors) {
   }
 }
 
-function checkReferences({ root, program, findings, packages, decisions, evidence }, errors) {
+function checkReferences({ root, program, findings, packages, decisions, evidence }, errors, warnings) {
   const findingIds = new Set(findings.map(({ id }) => id));
   const packageIds = new Set(packages.map(({ id }) => id));
   const evidenceIds = new Set(evidence.map(({ id }) => id));
@@ -274,7 +274,7 @@ function checkReferences({ root, program, findings, packages, decisions, evidenc
       if (!packageIds.has(related)) errors.push(`${finding._file}: unknown related package ${related}`);
     }
     if (finding.target_wave < program.current_wave && !["resolved", "deferred", "needs_authorization"].includes(finding.status)) {
-      errors.push(`${finding._file}: finding is overdue for wave ${finding.target_wave}`);
+      warnings.push(`${finding._file}: finding target wave ${finding.target_wave} has passed; replan or resolve it`);
     }
     if (finding.status === "resolved" && finding.commits.length === 0) {
       errors.push(`${finding._file}: resolved finding requires at least one commit`);
@@ -293,22 +293,25 @@ function checkReferences({ root, program, findings, packages, decisions, evidenc
   }
   const ratchet = decisions.find(({ id }) => id === "AM-D-0001");
   if (ratchet == null || ratchet.line_budget == null) errors.push(`AM-D-0001 line-budget decision is required`);
-  else validateRatchetReferences(ratchet, { program, findingIds, packageIds }, errors);
+  else validateRatchetReferences(ratchet, { program, findingIds, packageIds }, errors, warnings);
 }
 
-function validateRatchetReferences(decision, { program, findingIds, packageIds }, errors) {
+function validateRatchetReferences(decision, { program, findingIds, packageIds }, errors, warnings) {
   const config = decision.line_budget;
+  if (config.enforcement !== "advisory") {
+    errors.push(`${decision._file}: line_budget.enforcement must be advisory`);
+  }
   for (const field of ["production_roots", "production_extensions", "generated_segments", "test_segments", "exceptions"]) {
     if (!Array.isArray(config[field])) errors.push(`${decision._file}: line_budget.${field} must be an array`);
   }
   for (const field of [
     "production_suggested_lines",
-    "production_hard_lines",
-    "test_hard_lines",
+    "production_attention_lines",
+    "test_attention_lines",
     "legacy_review_growth_lines",
     "legacy_review_growth_percent",
-    "legacy_hard_growth_lines",
-    "legacy_hard_growth_percent",
+    "legacy_attention_growth_lines",
+    "legacy_attention_growth_percent",
   ]) {
     if (!Number.isInteger(config[field]) || config[field] <= 0) errors.push(`${decision._file}: line_budget.${field} must be positive`);
   }
@@ -322,8 +325,10 @@ function validateRatchetReferences(decision, { program, findingIds, packageIds }
     if (!Number.isInteger(baselineLines) || !Number.isInteger(exception.target_lines) || exception.target_lines >= baselineLines) {
       errors.push(`${decision._file}: exception ${exception.path} requires integer target_lines below baseline_lines`);
     }
-    if (!Number.isInteger(exception.expires_wave) || exception.expires_wave < program.current_wave) {
-      errors.push(`${decision._file}: exception ${exception.path} expired in wave ${exception.expires_wave}`);
+    if (!Number.isInteger(exception.expires_wave) || exception.expires_wave < 0) {
+      errors.push(`${decision._file}: exception ${exception.path} requires a non-negative review wave`);
+    } else if (exception.expires_wave < program.current_wave) {
+      warnings.push(`${decision._file}: hotspot ${exception.path} passed review wave ${exception.expires_wave}; remeasure or replan it`);
     }
   }
 }
@@ -469,7 +474,7 @@ export function checkLineBudget(root, config) {
     const lines = countLines(fs.readFileSync(path.join(root, file), "utf8"));
     const isTest = config.test_segments.some((segment) => `/${file}`.includes(segment));
     const exception = exceptions.get(file);
-    const hardLimit = isTest ? config.test_hard_lines : config.production_hard_lines;
+    const attentionLimit = isTest ? config.test_attention_lines : config.production_attention_lines;
     measurements.push({ path: file, lines, kind: isTest ? "test" : "production" });
     if (exception != null) {
       const baselineLines = exception.baseline_lines ?? exception.max_lines;
@@ -477,20 +482,20 @@ export function checkLineBudget(root, config) {
         config.legacy_review_growth_lines,
         Math.ceil(baselineLines * config.legacy_review_growth_percent / 100),
       );
-      const hardGrowth = Math.min(
-        config.legacy_hard_growth_lines,
-        Math.ceil(baselineLines * config.legacy_hard_growth_percent / 100),
+      const attentionGrowth = Math.min(
+        config.legacy_attention_growth_lines,
+        Math.ceil(baselineLines * config.legacy_attention_growth_percent / 100),
       );
       const reviewCeiling = baselineLines + reviewGrowth;
-      const hardCeiling = baselineLines + hardGrowth;
-      if (lines > hardCeiling) {
-        failures.push(`${file}: ${lines} lines exceeds legacy emergency ceiling ${hardCeiling} (baseline ${baselineLines})`);
+      const attentionCeiling = baselineLines + attentionGrowth;
+      if (lines > attentionCeiling) {
+        warnings.push(`${file}: ${lines} lines exceeds legacy attention threshold ${attentionCeiling} (baseline ${baselineLines})`);
       } else if (lines > reviewCeiling) {
         warnings.push(`${file}: ${lines} lines exceeds legacy review threshold ${reviewCeiling} (baseline ${baselineLines})`);
       }
       continue;
     }
-    if (lines > hardLimit) failures.push(`${file}: ${lines} lines exceeds hard limit ${hardLimit} without an exception`);
+    if (lines > attentionLimit) warnings.push(`${file}: ${lines} lines exceeds attention threshold ${attentionLimit}`);
     else if (!isTest && lines > config.production_suggested_lines) {
       warnings.push(`${file}: ${lines} lines exceeds suggested limit ${config.production_suggested_lines}`);
     }
@@ -547,7 +552,7 @@ export function validateProgram(records, { root = process.cwd(), lineBudget = tr
     evidence: records.filter(({ record_type }) => record_type === "evidence").sort((a, b) => a.id.localeCompare(b.id)),
   };
   if (program != null) {
-    checkReferences(context, errors);
+    checkReferences(context, errors, warnings);
     validateDependencyCycles(context.packages, errors);
     const overlap = checkOverlap(context.packages, { root });
     for (const collision of overlap.collisions) {

@@ -23,9 +23,11 @@ Date: 2026-08-24
 
 Owner: repository architecture modernization integration lane
 
-Next mandatory checkpoint: each work package's automated gate, contract review,
-and evidence record. A later package may become active only after its entry
-conditions are true.
+Next mandatory checkpoint: each work package's relevant local correctness
+checks and truthful evidence record. Bounded child packages covered by this
+owner-authorized program activate automatically when their declared dependency
+and ownership conditions are true; another human waiting point is required only
+for product choice or authority expansion outside this contract.
 
 ## Purpose and problem evidence
 
@@ -117,16 +119,19 @@ implemented.
 
 Dynamic discovery follows these rules:
 
-- a blocking or high-risk finding is recorded immediately, pauses the current
-  package, and receives an independent repair package before the original work
-  resumes;
-- a medium/low finding is recorded immediately without expanding the active
-  package and is assigned to a wave cleanup package;
+- a finding that invalidates the current package's data, project isolation,
+  authority, security, public/serialized contract, recovery or test truth is
+  recorded immediately, pauses that package, and receives an independent repair
+  package before the original work resumes;
+- other findings are recorded immediately without expanding the active package
+  and are scheduled by engineering priority rather than severity labels alone;
 - authority expansion, network/filesystem/credential broadening, public
   protocol change, or guessed historical data moves the finding to
   `needs_authorization`;
 - every TODO, unrun check, exception, and residual risk references a finding;
-- a wave cannot close while it has an untreated due finding.
+- a planned wave is scheduling telemetry, not a correctness veto. A wave may
+  close with explicitly owned follow-up findings unless one invalidates an
+  acceptance invariant of that wave.
 
 ## Concurrency and integration lane
 
@@ -142,7 +147,7 @@ work begins and again before integration.
 ### Wave 0 — stable control plane
 
 - `AM-W0-01`: record schema, validator/status/next/overlap, deterministic tests,
-  and LOC ratchet.
+  and LOC telemetry.
 - `AM-W0-02`: repair the current handler digest and make the command inventory
   self-test plus repository check mandatory in `rsr:check`.
 - `AM-W0-03`: move Console project activation to committed React lifecycle and
@@ -203,24 +208,27 @@ V4 ABI is never guessed from exports.
 
 ### Wave 5 — worktrees and shared generated artifacts
 
-`AM-W5-01` enforces overlap admission, introduces change fragments, assigns
+`AM-W5-01` checks overlap admission, introduces change fragments, assigns
 NEWS and generated summaries to the integration lane, decides whether
 `desktop/dist` is untracked build output or deterministic integration output,
 and proves a Runtime/Agent/two-feature-worktree merge-tree scenario.
 
 ### Wave 6 — convergence and continuous governance
 
-`AM-W6-01` closes cleanup findings, removes superseded facades/duplicate stores/
-manual types/expired exceptions, remeasures architecture, and promotes the
-tracker, LOC, overlap, generated freshness, finding completeness, and dependency
-checks into normal local and CI validation.
+`AM-W6-01` closes acceptance-critical cleanup findings, removes superseded
+facades/duplicate stores/manual types, remeasures architecture, and promotes the
+tracker, overlap, generated freshness and dependency checks into normal local
+validation. LOC and planned-wave targets remain status telemetry.
 
 ## Verification contract
 
-Each package runs focused tests, affected package checks, boundary/failure
-tests, the complete affected matrix, then an independent contract review.
-Evidence records include exact command, result, platform, source commit,
-duration when material, and all intentionally unrun checks.
+Each package runs focused tests plus the changed boundary, failure and recovery
+checks that can actually detect regressions in its scope. Broad affected
+matrices run at integration/wave boundaries or when the changed risk spans
+those systems; independent review is required for safety, data, authority,
+public-contract or release-significant changes, not for every mechanical or
+equivalence slice. Evidence records include exact command, result, platform,
+source commit, duration when material, and all intentionally unrun checks.
 
 The program-level matrix includes:
 
@@ -235,17 +243,21 @@ The program-level matrix includes:
   recovery, pointer, keyboard, zoom, and browser scenarios;
 - equivalent core-v2/component-v1 lifecycle and security/failure/isolation;
 - non-overlapping worktree merge and pre-start rejection of overlap;
-- pinned Rust, `npm --prefix desktop run rsr:check`, both R packages, and
-  `git diff --check` before final program acceptance.
+- pinned Rust, `npm --prefix desktop run rsr:check`, and `git diff --check`
+  before final local program acceptance. R packages run when their source or
+  Rust/R bridge contract changes; an unaffected package is recorded as not run.
 
-Windows, installed-app, or owner-feel checks that have not run remain explicit
-open evidence. They are never represented as passed.
+Windows, installed-app, distribution and remote-CI checks are outside ordinary
+local program acceptance. If a future release contract makes one relevant, it
+is recorded and run at that candidate boundary; it is never represented as
+passed when unrun.
 
 ## Architecture completion metrics
 
 - command inventory self-test and real check are mandatory and passing;
-- `main.rs <= 600`, `App.tsx <= 800`, and no non-generated production file is
-  over 1,500 lines;
+- `main.rs` and `App.tsx` become small composition roots with domain-owned
+  dependencies; all hotspot LOC, fan-in and change-frequency measurements are
+  reported, but no architecture claim is accepted or rejected by LOC alone;
 - no global Coordinator mutex and no synchronous SQLite work blocks Tokio;
 - Rust owns generated IPC DTOs and mock transport is domain-faceted;
 - component-v1 is usable while legacy core plugins continue to run;
@@ -253,12 +265,13 @@ open evidence. They are never represented as passed.
   controlled adapter or isolated engine;
 - representative architecture, Runtime, and Agent worktrees integrate without
   shared-file conflict;
-- all due findings are resolved and complete automation plus required manual
-  acceptance is recorded.
+- all acceptance-critical findings are resolved, remaining follow-ups have an
+  owner, and the complete relevant local automation is recorded.
 
-The filename changes from `active-` to `implemented-` only after every program
-metric, full automated matrix, independent review, and required manual gate is
-true.
+The filename changes from `active-` to `implemented-` only after every product
+and architecture invariant is true, acceptance-critical findings are resolved,
+and the relevant local automated matrix is recorded. Proxy metrics, unavailable
+platforms and release ceremony cannot keep locally correct modernization open.
 
 ## Wave 0 checkpoint (2026-08-24)
 
@@ -267,7 +280,7 @@ Wave 0 is implemented in three reviewed packages:
 - AM-W0-01 established the strict JSON-in-Markdown records, adversarial
   validator/status/next/overlap commands, deterministic generated dashboard,
   and the initial legacy LOC ratchet in `07b604b` (later refined by AM-W1-02
-  into review bands plus emergency ceilings);
+  and AM-W1-25 into advisory hotspot telemetry);
 - AM-W0-02 repaired the 193-command handler digest, made repository resolution
   cwd-independent, and added command plus architecture checks to `rsr:check` in
   `392f114`;

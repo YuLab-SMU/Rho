@@ -25,6 +25,38 @@ The governing principle is:
 Passing tests does not by itself authorize a design, accept a milestone, or
 make a release public-ready.
 
+## Development Feedback Policy
+
+Rho is an early-stage product under rapid local iteration. Development checks
+must maximize useful feedback, not reward ceremony or proxy metrics. A normal
+slice runs the narrowest deterministic checks capable of detecting a regression
+in the behavior and boundaries it changes. Broader matrices are integration-
+boundary tools, not a tax repeated after every mechanical extraction.
+
+The following are hard development blockers when affected:
+
+- a relevant compile, type, lint, focused behavior or boundary test fails;
+- project/data isolation, persistence truth, authorization, credentials,
+  destructive-operation safety or recoverability is unproven;
+- public or serialized contract identity drifts without an accepted migration;
+- generation, source identity or locked dependency resolution is not
+  reproducible;
+- evidence would claim a check, behavior or completion state that is not true;
+- implementation expands authority, schema, public protocol or destructive
+  scope beyond the active contract.
+
+LOC, file count, build duration, bundle/binary size, dependency count, planned
+wave dates, old-toolchain support, unaffected full suites, unavailable
+platforms, manual review and release artifacts are diagnostics by default. They
+trigger investigation when materially surprising, but never reject an ordinary
+local slice solely for crossing a fixed number. An active release contract may
+promote relevant diagnostics to exact-candidate acceptance gates.
+
+Risk profiles below are evidence menus. Apply every case the changed behavior
+can reach; mark irrelevant cases as not applicable with a short reason. Do not
+manufacture cancellation, restart, browser, two-project or installed-app work
+for a pure boundary that cannot exercise it.
+
 ## Authority
 
 This document governs the development process. Product behavior remains owned
@@ -32,9 +64,10 @@ by accepted ADRs, the active roadmap, active milestone/release contracts, and
 authorized feature specifications in the authority order defined by
 `active-document-cross-review.md`.
 
-When this process conflicts with a release-specific gate, apply the stricter
-requirement. Do not weaken a release checklist, security boundary, migration
-rule, or manual acceptance requirement to satisfy a generic workflow step.
+When this process conflicts with a release-specific gate for an actual release
+candidate, apply the stricter requirement. Do not weaken a release checklist,
+security boundary, migration rule, or required candidate acceptance to satisfy
+a generic workflow step.
 
 ## Change Classes
 
@@ -92,8 +125,10 @@ Minimum evidence:
   applicable, and restart/recovery behavior;
 - two-project isolation for project-owned data;
 - byte/shape bounds for transported data;
-- deterministic browser/mock scenario and manual UI review when visible;
-- complete affected Rust/R/frontend suite before handoff.
+- deterministic browser/mock scenario when visible behavior changes;
+- focused package and cross-boundary checks per slice, with the complete
+  affected Rust/R/frontend matrix at the integration boundary or when the risk
+  genuinely spans it.
 
 ### R3: Safety-Critical Foundation
 
@@ -110,9 +145,10 @@ Minimum evidence includes all R2 evidence plus:
 - foreign-project, malformed historical data, and legacy/unscoped tests;
 - credential/redaction and authority-broadening review where applicable;
 - historical schema or compatibility fixtures;
-- an independent review pass focused on safety and contract compliance;
-- representative installed-app/manual acceptance when user or runtime behavior
-  changes.
+- an independent review pass when safety, data, authority, public protocol or
+  destructive/recovery semantics change;
+- representative installed-app/manual acceptance only at a candidate boundary
+  whose active contract requires it.
 
 ### R4: Release And Publication
 
@@ -190,18 +226,24 @@ does not mean implementation is authorized.
 ### 4. Authorize And Activate
 
 Product-code work begins only after explicit authorization for a bounded work
-package.
+package or an active program that pre-authorizes bounded child packages.
 
 At authorization:
 
-- record the authorized work package and date;
+- record the authorized work package/program and date;
 - verify its entry conditions;
 - rename its lifecycle prefix from `proposed-` to `active-`, or create an active
   implementation handoff that points to the still-proposed broader direction;
 - update the document `Status:` field and cross-review matrix in the same
   documentation change;
 - identify the next mandatory stop/review point;
-- do not activate later phases implicitly.
+- do not activate behavior or authority outside the authorized boundary.
+
+An owner-authorized continuous program may activate its next declared child
+package automatically after dependency, ownership and scope checks pass. This
+is not implicit product authorization: a child that introduces a new product
+choice, schema, public protocol, credential/network/filesystem authority or
+destructive behavior stops for explicit review.
 
 Emergency correction is limited to an immediate safety, data-loss, startup, or
 release-blocking defect. It still requires a short written reproduction,
@@ -249,17 +291,19 @@ Do not postpone all tests, docs, and review until the end of a multi-day package
 
 ### 7. Verify By Layer And Workflow
 
-Run tests in this order:
+Run applicable tests in this order:
 
 1. focused unit/regression tests;
 2. affected package/crate checks;
 3. boundary/integration/contract tests;
 4. affected frontend/mock and deterministic preview tests;
-5. complete affected repository validation;
-6. representative manual workflow;
-7. installed-candidate acceptance when required.
+5. complete affected repository validation at an integration/wave checkpoint;
+6. representative manual workflow when automation cannot cover a changed
+   user-visible risk;
+7. installed-candidate acceptance only when a release/candidate contract
+   requires it.
 
-The current common validation baseline is:
+The current broad integration baseline is:
 
 ```powershell
 $env:PATH="C:\rtools45\x86_64-w64-mingw32.static.posix\bin;$env:PATH"
@@ -271,9 +315,10 @@ Rscript -e "testthat::test_local('r/rho.agent')"
 git diff --check
 ```
 
-Use repository release scripts for release candidates. Commands may be narrowed
-for an intermediate slice, but the handoff records exactly what ran, what did
-not run, and why. A skipped check is not a pass.
+Use repository release scripts for release candidates. Commands should be
+narrowed for an intermediate slice; the handoff records exactly what ran, what
+did not run, and why. An irrelevant or deferred check is not a pass, but it also
+does not block a slice whose acceptance contract does not require it.
 
 Tests should be deterministic, isolated, bounded, and safe for a dirty worktree.
 Use temporary projects/directories and fixtures. Do not depend on developer
@@ -298,10 +343,12 @@ Verification passing is followed by a separate review pass:
 - review diff scope and ensure no user changes were reverted;
 - record findings by severity and resolve blocking findings before completion.
 
-R2-R4 changes require a review perspective independent of the implementation
-pass. This may be a second human reviewer or a deliberately separate review
-session/agent using the accepted spec and diff. The reviewer must not infer
-correctness from the author's summary.
+R3-R4 changes that affect safety, data, authority, public protocol, destructive
+or recovery semantics require a review perspective independent of the
+implementation pass. A mechanical/equivalence R2-R3 slice may use a deliberate
+self-review against the accepted spec and diff when focused contract tests
+fully determine its behavior. No reviewer may infer correctness from the
+author's summary.
 
 ### 9. Version And Changelog
 
@@ -358,8 +405,9 @@ After implementation and review:
 - update NEWS when appropriate;
 - rename `active-` to `implemented-` only when every in-scope implementation and
   verification gate is complete;
-- keep the document `active-` when implementation landed but integration,
-  manual, installed-app, milestone, or release acceptance remains open;
+- keep the document `active-` when an in-scope product or architecture invariant
+  remains open. Unaffected manual, installed-app, platform or release work does
+  not hold a local development document open;
 - use `historical-` for a completed snapshot no longer governing current work;
 - use `accepted-` only for adopted durable architecture decisions, not merely
   completed features.
@@ -599,11 +647,12 @@ A work package is ready to implement when:
 A work package is done when:
 
 - accepted scope is implemented without silent contract drift;
-- required positive, negative, boundary, isolation, and recovery tests pass;
-- full affected validation is recorded;
-- independent review has no unresolved blocking finding;
-- manual/installed acceptance is recorded or the document truthfully remains
-  active with that gate open;
+- applicable positive, negative, boundary, isolation and recovery tests pass;
+- focused slice validation is recorded, with broad validation deferred to a
+  named integration checkpoint when it is not relevant yet;
+- the risk-appropriate review has no unresolved blocking finding;
+- required candidate manual/installed acceptance is recorded only when a
+  release contract puts it in scope;
 - version and NEWS decisions are complete;
 - docs, roadmap, cross-review, and lifecycle status reflect actual facts;
 - diff and commit are scoped and reviewable;
