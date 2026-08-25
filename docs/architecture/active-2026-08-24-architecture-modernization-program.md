@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W3-06"],
-  "integration_lane": "AM-W3-06",
+  "active_work_packages": ["AM-W3-07"],
+  "integration_lane": "AM-W3-07",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -568,8 +568,13 @@ than treated as a proxy veto.
 `AM-W3-06` mechanically extracts the Agent Surface domain component, local view
 state, proposal presentation and controller-facing props from `App.tsx` without
 changing Agent authority, persistence, transport, project isolation or visible
-behavior. This is the first bounded shell-composition slice after projection
-and layout cutover.
+behavior (`4d66d2a`/AM-E-0094). This is the first bounded shell-composition
+slice after projection and layout cutover.
+
+`AM-W3-07` mechanically extracts the File Resource Surface, Source editor
+composition and its Resource mutation prop boundary from `App.tsx`. Resource
+revision/CAS, project identity, draft/save/reload/rename/delete behavior and
+Source-to-Console execution remain unchanged.
 
 ### Wave 4 — Wasmtime Component Model and WIT
 
