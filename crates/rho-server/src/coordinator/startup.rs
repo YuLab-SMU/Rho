@@ -10,30 +10,35 @@ pub async fn probe(
     if let Some(parent) = store_path.parent()
         && !parent.as_os_str().is_empty()
     {
-        std::fs::create_dir_all(parent)
+        tokio::fs::create_dir_all(parent)
+            .await
             .with_context(|| format!("creating store directory {}", parent.display()))?;
     }
 
-    let mut store = Store::open(&store_path)?;
+    let executor = StoreExecutor::open(&store_path)
+        .await
+        .context("opening coordinator probe Store worker")?;
     let probe_project_root = std::env::current_dir()
         .context("resolving the probe project root")?
         .canonicalize()
         .context("canonicalizing the probe project root")?;
-    store.set_project_root(Some(&normalize_project_root(
+    let probe_project_root = normalize_project_root(
         probe_project_root.to_string_lossy().as_ref(),
-    )))?;
-    let recovered_runs = store.recover_incomplete_runs()?;
+    );
     let mut broker = BrokerState::new("ws_phase0_coordinator");
-    store.save_identity(broker.identity())?;
-    let executor = StoreExecutor::open(&store_path)
-        .await
-        .context("opening coordinator probe Store worker")?;
+    let initial_identity = broker.identity().clone();
+    let recovered_runs = run_workspace_store_service(&executor, move |store| {
+        store.set_project_root(Some(&probe_project_root))?;
+        let recovered_runs = store.recover_incomplete_runs()?;
+        store.save_identity(&initial_identity)?;
+        Ok(recovered_runs)
+    })
+    .await?;
 
     let mut session = ArkSession::launch(&ArkLaunchConfig::new(kernelspec)).await?;
     let run_result = run_probe(
         &mut session,
         &mut broker,
-        &mut store,
         &executor,
         rscript,
         agent_package,
@@ -175,7 +180,6 @@ fn coordinator_probe_args(
 async fn run_probe(
     session: &ArkSession,
     broker: &mut BrokerState,
-    store: &mut Store,
     executor: &StoreExecutor,
     rscript: PathBuf,
     agent_package: PathBuf,
@@ -223,11 +227,11 @@ async fn run_probe(
     .await
     .context("timed out waiting for Agent R authentication")??;
 
-    send_identity(&mut agent, broker, store).await?;
+    send_identity(&mut agent, broker, executor).await?;
     if !real_model {
-        run_user_probe(session, broker, store, executor).await?;
+        run_user_probe(session, broker, executor).await?;
     }
-    let completion_result = serve_agent(&mut agent, session, broker, store, executor).await;
+    let completion_result = serve_agent(&mut agent, session, broker, executor).await;
     let output = tokio::time::timeout(
         std::time::Duration::from_secs(120),
         child.wait_with_output(),
@@ -248,6 +252,8 @@ async fn run_probe(
         redact_sensitive_text(&String::from_utf8_lossy(&output.stderr))
     );
 
+    let persisted_event_count =
+        run_workspace_store_service(executor, |store| Ok(store.event_count()?)).await?;
     println!(
         "{}",
         serde_json::to_string_pretty(&json!({
@@ -255,7 +261,7 @@ async fn run_probe(
             "model": model,
             "workspace": broker.identity(),
             "completion": completion,
-            "persisted_event_count": store.event_count()?,
+            "persisted_event_count": persisted_event_count,
             "recovered_runs": recovered_runs,
             "store": store_path,
             "python_required": false,
@@ -402,13 +408,16 @@ pub async fn bootstrap_bridge(
 async fn send_identity(
     agent: &mut AuthenticatedAgent,
     broker: &BrokerState,
-    store: &mut Store,
+    executor: &StoreExecutor,
 ) -> Result<()> {
     let event = Envelope::new(
         MessageKind::Event,
         json!({"type": "workspace.identity", "identity": broker.identity()}),
     );
-    store.append_event(&event)?;
+    executor
+        .agent_repository()
+        .append_protocol_event(event.clone())
+        .await?;
     write_async_frame(&mut agent.stream, &event).await?;
     Ok(())
 }
@@ -431,7 +440,6 @@ async fn send_shared_identity(
 async fn run_user_probe(
     session: &ArkSession,
     broker: &mut BrokerState,
-    store: &mut Store,
     executor: &StoreExecutor,
 ) -> Result<()> {
     let request = Envelope::new(
@@ -443,7 +451,8 @@ async fn run_user_probe(
             "expected_workspace": broker.identity()
         }),
     );
-    store.append_event(&request)?;
+    let agent_store = executor.agent_repository();
+    agent_store.append_protocol_event(request.clone()).await?;
     let result = dispatch_workspace_request(
         "workspace.execute",
         &request.payload,
@@ -453,16 +462,17 @@ async fn run_user_probe(
         executor,
     )
     .await?;
-    append_event(
-        store,
-        MessageKind::Response,
-        json!({
+    agent_store
+        .append_protocol_event(Envelope::new(
+            MessageKind::Response,
+            json!({
             "type": "workspace.execute.result",
             "request_id": request.id,
             "ok": true,
             "result": result
-        }),
-    )?;
+            }),
+        ))
+        .await?;
     Ok(())
 }
 
@@ -470,9 +480,9 @@ async fn serve_agent(
     agent: &mut AuthenticatedAgent,
     session: &ArkSession,
     broker: &mut BrokerState,
-    store: &mut Store,
     executor: &StoreExecutor,
 ) -> Result<Value> {
+    let agent_store = executor.agent_repository();
     loop {
         let incoming = tokio::time::timeout(
             std::time::Duration::from_secs(60),
@@ -480,7 +490,7 @@ async fn serve_agent(
         )
         .await
         .context("timed out waiting for Agent R request")??;
-        store.append_event(&incoming)?;
+        agent_store.append_protocol_event(incoming.clone()).await?;
 
         match incoming.kind {
             MessageKind::Request => {
@@ -512,7 +522,7 @@ async fn serve_agent(
                                 "result": value
                             }),
                         );
-                        store.append_event(&response)?;
+                        agent_store.append_protocol_event(response.clone()).await?;
                         write_async_frame(&mut agent.stream, &response).await?;
                     }
                     Err(error) => {
@@ -525,9 +535,9 @@ async fn serve_agent(
                                 "error": error.to_string()
                             }),
                         );
-                        store.append_event(&response)?;
+                        agent_store.append_protocol_event(response.clone()).await?;
                         write_async_frame(&mut agent.stream, &response).await?;
-                        send_identity(agent, broker, store).await?;
+                        send_identity(agent, broker, executor).await?;
                     }
                 }
             }

@@ -7,13 +7,14 @@ use rho_extension_runtime::{DEFAULT_HEARTBEAT_INTERVAL, InternalExtensionRuntime
 use rho_kernel::{ArkLaunchConfig, ArkSession};
 use rho_server::coordinator::bootstrap_bridge;
 use rho_server::workspace_lane::WorkspaceBrokerLane;
-use rho_store::{Store, normalize_project_root};
+use rho_store::{MigrationOutcome, StoreExecutor, StoreExecutorError, normalize_project_root};
 use serde_json::{Value, json};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
 use crate::application_state::{
-    active_context, active_session, persist_workspace_identity, store_executor,
+    active_context, active_session, persist_workspace_identity, run_store_executor_service,
+    store_executor,
 };
 use crate::commands::agent_files::{
     AgentFileMutationRecoverySummary, recover_incomplete_agent_file_mutations,
@@ -28,6 +29,42 @@ use crate::startup_runtime::{
     RuntimeConfig, bounded_diagnostic, runtime_config, write_startup_event,
 };
 use crate::{AppState, workspace_plugins};
+
+fn store_migration_outcome(error: &anyhow::Error) -> Option<&MigrationOutcome> {
+    error.chain().find_map(|source| {
+        source
+            .downcast_ref::<StoreExecutorError>()
+            .and_then(StoreExecutorError::migration_outcome)
+    })
+}
+
+async fn recover_workspace_store(executor: &StoreExecutor, project_root: String) -> Result<()> {
+    run_store_executor_service(executor, move |store| {
+        store
+            .set_project_root(Some(&project_root))
+            .context("binding the active project identity")?;
+        store
+            .recover_incomplete_runs()
+            .context("recovering incomplete runs after desktop restart")?;
+        store
+            .recover_incomplete_agent_turns()
+            .context("recovering incomplete agent turns after desktop restart")?;
+        store
+            .recover_incomplete_approvals()
+            .context("recovering incomplete approvals after desktop restart")?;
+        store
+            .recover_incomplete_environment_operations()
+            .context("recovering incomplete environment operations after desktop restart")?;
+        store
+            .recover_pending_plugin_permission_requests(&project_root, "broker_restart")
+            .context("recovering pending workspace plugin permission requests")?;
+        store
+            .recover_transient_plugin_permission_grants(&project_root, "broker_restart")
+            .context("recovering one-shot workspace plugin grants")?;
+        Ok(())
+    })
+    .await
+}
 
 pub(crate) async fn teardown_workspace_plugins_for_boundary(
     state: &AppState,
@@ -327,48 +364,27 @@ pub(crate) async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus>
             .await
             .context("starting Ark-backed Workspace R")?,
     );
-    let mut store = match Store::open(&config.store_path) {
-        Ok(store) => {
+    let executor = match store_executor(state).await {
+        Ok(executor) => {
             write_startup_event(json!({
                 "kind": "store_migration",
-                "outcome": store.migration_outcome(),
+                "outcome": executor.migration_outcome(),
             }));
-            store
+            executor.clone()
         }
         Err(error) => {
-            if let Some(outcome) = error.migration_outcome() {
+            if let Some(outcome) = store_migration_outcome(&error) {
                 write_startup_event(json!({
                     "kind": "store_migration",
                     "outcome": outcome,
                 }));
             }
-            return Err(error).context("opening Rho event store");
+            return Err(error).context("opening asynchronous Rho event store");
         }
     };
     let project_root = state.project_root.read().await.clone();
     let normalized_project_root = normalize_project_root(project_root.to_string_lossy().as_ref());
-    store
-        .set_project_root(Some(&normalized_project_root))
-        .context("binding the active project identity")?;
-    store
-        .recover_incomplete_runs()
-        .context("recovering incomplete runs after desktop restart")?;
-    store
-        .recover_incomplete_agent_turns()
-        .context("recovering incomplete agent turns after desktop restart")?;
-    store
-        .recover_incomplete_approvals()
-        .context("recovering incomplete approvals after desktop restart")?;
-    store
-        .recover_incomplete_environment_operations()
-        .context("recovering incomplete environment operations after desktop restart")?;
-    store
-        .recover_pending_plugin_permission_requests(&normalized_project_root, "broker_restart")
-        .context("recovering pending workspace plugin permission requests")?;
-    store
-        .recover_transient_plugin_permission_grants(&normalized_project_root, "broker_restart")
-        .context("recovering one-shot workspace plugin grants")?;
-    let executor = store_executor(state).await?.clone();
+    recover_workspace_store(&executor, normalized_project_root.clone()).await?;
     let file_recovery =
         recover_incomplete_agent_file_mutations(&executor, &project_root, &normalized_project_root)
             .await
@@ -398,9 +414,13 @@ pub(crate) async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus>
         &plugin_identity,
     ) {
         Ok(plugin_context) => {
-            let plugin_reconciliation = state
-                .plugin_permissions
-                .reconcile_project(&plugin_context, &mut store);
+            let plugin_reconciliation = workspace_plugins::reconcile_plugin_project(
+                Arc::clone(&state.plugin_permissions),
+                &executor,
+                plugin_context,
+            )
+            .await
+            .context("reconciling Workspace plugins after startup recovery")?;
             let post_revision_reconciliation = if plugin_reconciliation.project_files_changed {
                 broker.project_changed();
                 persist_workspace_identity(&executor, broker.identity().clone()).await?;
@@ -410,9 +430,13 @@ pub(crate) async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus>
                     broker.identity(),
                 )?;
                 Some(
-                    state
-                        .plugin_permissions
-                        .reconcile_project(&fresh_context, &mut store),
+                    workspace_plugins::reconcile_plugin_project(
+                        Arc::clone(&state.plugin_permissions),
+                        &executor,
+                        fresh_context,
+                    )
+                    .await
+                    .context("reconciling Workspace plugins after project revision change")?,
                 )
             } else {
                 None
@@ -482,4 +506,61 @@ fn status_from(
         agent_runtime: config.agent_runtime.clone(),
         python_required: false,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use rho_store::{RunDraft, Store};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn startup_recovery_runs_on_one_store_worker_and_is_idempotent() {
+        let directory = tempfile::tempdir().unwrap();
+        let database = directory.path().join("rho.sqlite");
+        let project_root =
+            normalize_project_root(directory.path().join("project").to_string_lossy().as_ref());
+        let mut seed = Store::open(&database).unwrap();
+        seed.create_run(&RunDraft {
+            run_id: "startup-recovery-run".to_string(),
+            parent_run_id: None,
+            project_root: project_root.clone(),
+            origin: "user".to_string(),
+            request_type: "workspace.execute".to_string(),
+            operation_class: "scientific".to_string(),
+            code: "Sys.sleep(10)".to_string(),
+            arguments_json: "{}".to_string(),
+            source_path: None,
+            execution_mode: Some("console".to_string()),
+            document_version: None,
+            workspace_id: "workspace-startup-recovery".to_string(),
+            state_revision_before: 1,
+            project_revision_before: 1,
+            environment_snapshot_id: None,
+        })
+        .unwrap();
+        drop(seed);
+
+        let executor = StoreExecutor::open(&database).await.unwrap();
+        recover_workspace_store(&executor, project_root.clone())
+            .await
+            .unwrap();
+        recover_workspace_store(&executor, project_root.clone())
+            .await
+            .unwrap();
+
+        let query_root = project_root.clone();
+        let (active_root, runs) = run_store_executor_service(&executor, move |store| {
+            Ok((
+                store.active_project_root()?,
+                store.list_runs(&query_root, Some(10))?,
+            ))
+        })
+        .await
+        .unwrap();
+        assert_eq!(active_root.as_deref(), Some(project_root.as_str()));
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].status, "interrupted");
+        assert_eq!(runs[0].terminal_reason.as_deref(), Some("broker_restart"));
+    }
 }
