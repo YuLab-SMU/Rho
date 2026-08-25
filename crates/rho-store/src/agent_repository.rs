@@ -28,6 +28,12 @@ impl StoreExecutor {
 }
 
 impl AgentRepository {
+    /// Clone the shared executor for an adjacent durable service that must
+    /// participate in the same application connection lane.
+    pub fn store_executor(&self) -> StoreExecutor {
+        self.executor.clone()
+    }
+
     pub async fn create_conversation(
         &self,
         mut draft: AgentConversationDraft,

@@ -3063,7 +3063,11 @@ async fn dispatch_workspace_execution_with_id(
     let session = active_session(state).await?;
     let context = active_context(state).await?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, store } = &mut *context;
+    let WorkspaceBrokerState {
+        broker,
+        store: _,
+        executor,
+    } = &mut *context;
     let payload = json!({
         "arguments": {
             "code": request.code,
@@ -3080,7 +3084,7 @@ async fn dispatch_workspace_execution_with_id(
         ExecutionOrigin::User,
         session.as_ref(),
         broker,
-        store,
+        executor,
         execution_id,
     )
     .await
@@ -3203,7 +3207,11 @@ async fn editor_goto_definition(name: String, state: State<'_, AppState>) -> Res
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, store } = &mut *context;
+    let WorkspaceBrokerState {
+        broker,
+        store: _,
+        executor,
+    } = &mut *context;
     let payload = json!({
         "arguments": { "name": name, "project_root": project_root },
         "expected_workspace": broker.identity()
@@ -3214,7 +3222,7 @@ async fn editor_goto_definition(name: String, state: State<'_, AppState>) -> Res
         ExecutionOrigin::System,
         session.as_ref(),
         broker,
-        store,
+        executor,
     )
     .await
     .map_err(display_error)
@@ -3231,7 +3239,11 @@ async fn editor_find_project_references(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, store } = &mut *context;
+    let WorkspaceBrokerState {
+        broker,
+        store: _,
+        executor,
+    } = &mut *context;
     let payload = json!({
         "arguments": {
             "name": name,
@@ -3246,7 +3258,7 @@ async fn editor_find_project_references(
         ExecutionOrigin::System,
         session.as_ref(),
         broker,
-        store,
+        executor,
     )
     .await
     .map_err(display_error)
@@ -3257,7 +3269,11 @@ async fn editor_discover_chunks(path: String, state: State<'_, AppState>) -> Res
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, store } = &mut *context;
+    let WorkspaceBrokerState {
+        broker,
+        store: _,
+        executor,
+    } = &mut *context;
     let payload = json!({
         "arguments": { "path": path },
         "expected_workspace": broker.identity()
@@ -3268,7 +3284,7 @@ async fn editor_discover_chunks(path: String, state: State<'_, AppState>) -> Res
         ExecutionOrigin::System,
         session.as_ref(),
         broker,
-        store,
+        executor,
     )
     .await
     .map_err(display_error)
@@ -3432,7 +3448,11 @@ async fn snapshot_workspace_with_state(state: &AppState) -> Result<Value, String
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, store } = &mut *context;
+    let WorkspaceBrokerState {
+        broker,
+        store: _,
+        executor,
+    } = &mut *context;
     let payload = json!({
         "arguments": {},
         "expected_workspace": broker.identity()
@@ -3443,7 +3463,7 @@ async fn snapshot_workspace_with_state(state: &AppState) -> Result<Value, String
         ExecutionOrigin::System,
         session.as_ref(),
         broker,
-        store,
+        executor,
     )
     .await
     .map_err(display_error)
@@ -3457,7 +3477,11 @@ async fn inspect_object(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, store } = &mut *context;
+    let WorkspaceBrokerState {
+        broker,
+        store: _,
+        executor,
+    } = &mut *context;
     let payload = json!({
         "arguments": {
             "name": request.name
@@ -3470,7 +3494,7 @@ async fn inspect_object(
         ExecutionOrigin::System,
         session.as_ref(),
         broker,
-        store,
+        executor,
     )
     .await
     .map_err(display_error)
@@ -3494,7 +3518,11 @@ async fn inspect_data_object(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, store } = &mut *context;
+    let WorkspaceBrokerState {
+        broker,
+        store: _,
+        executor,
+    } = &mut *context;
     let payload = json!({
         "arguments": {
             "object_name": request.object_name
@@ -3507,7 +3535,7 @@ async fn inspect_data_object(
         ExecutionOrigin::System,
         session.as_ref(),
         broker,
-        store,
+        executor,
     )
     .await
     .map_err(display_error)
@@ -3521,7 +3549,11 @@ async fn read_data_view(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, store } = &mut *context;
+    let WorkspaceBrokerState {
+        broker,
+        store: _,
+        executor,
+    } = &mut *context;
     let payload = json!({
         "arguments": {
             "object_name": request.object_name,
@@ -3544,7 +3576,7 @@ async fn read_data_view(
         ExecutionOrigin::System,
         session.as_ref(),
         broker,
-        store,
+        executor,
     )
     .await
     .map_err(display_error)
@@ -3572,7 +3604,11 @@ async fn render_document(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, store } = &mut *context;
+    let WorkspaceBrokerState {
+        broker,
+        store: _,
+        executor,
+    } = &mut *context;
     let payload = json!({
         "arguments": {
             "path": file.to_string_lossy(),
@@ -3589,7 +3625,7 @@ async fn render_document(
         ExecutionOrigin::User,
         session.as_ref(),
         broker,
-        store,
+        executor,
     )
     .await
     .map_err(display_error)
@@ -3709,7 +3745,11 @@ async fn render_document_job(
             render_tasks.lock().await.remove(&job_id);
             return;
         }
-        let WorkspaceBrokerState { broker, store } = &mut *context;
+        let WorkspaceBrokerState {
+            broker,
+            store,
+            executor,
+        } = &mut *context;
         let payload = serde_json::json!({
             "arguments": {
                 "path": file_path,
@@ -3725,7 +3765,7 @@ async fn render_document_job(
             ExecutionOrigin::User,
             session.as_ref(),
             broker,
-            store,
+            executor,
             Some(&job_id),
         )
         .await;
@@ -3921,7 +3961,11 @@ async fn request_environment_operation_preview(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, store } = &mut *context;
+    let WorkspaceBrokerState {
+        broker,
+        store,
+        executor,
+    } = &mut *context;
     request_environment_operation(
         EnvironmentOperationArguments {
             operation: request.operation,
@@ -3936,6 +3980,7 @@ async fn request_environment_operation_preview(
         session.as_ref(),
         broker,
         store,
+        executor,
     )
     .await
     .map_err(display_error)
@@ -3984,7 +4029,11 @@ async fn list_installed_packages(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, store } = &mut *context;
+    let WorkspaceBrokerState {
+        broker,
+        store: _,
+        executor,
+    } = &mut *context;
     let payload = json!({
         "arguments": { "limit": limit.map(u64::from).unwrap_or(500) },
         "expected_workspace": broker.identity()
@@ -3995,7 +4044,7 @@ async fn list_installed_packages(
         ExecutionOrigin::System,
         session.as_ref(),
         broker,
-        store,
+        executor,
     )
     .await
     .map(InstalledPackageInventory)
@@ -4018,7 +4067,11 @@ async fn list_lockfile_packages(
     let root = state.project_root.read().await.clone();
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, store } = &mut *context;
+    let WorkspaceBrokerState {
+        broker,
+        store: _,
+        executor,
+    } = &mut *context;
     let payload = json!({
         "arguments": lockfile_inventory_arguments(&root, limit),
         "expected_workspace": broker.identity()
@@ -4029,7 +4082,7 @@ async fn list_lockfile_packages(
         ExecutionOrigin::System,
         session.as_ref(),
         broker,
-        store,
+        executor,
     )
     .await
     .map_err(display_error)
@@ -4099,7 +4152,11 @@ async fn respond_environment_operation(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, store } = &mut *context;
+    let WorkspaceBrokerState {
+        broker,
+        store,
+        executor,
+    } = &mut *context;
     decide_environment_operation(
         &request.request_id,
         &request.decision,
@@ -4108,6 +4165,7 @@ async fn respond_environment_operation(
         session.as_ref(),
         broker,
         store,
+        executor,
     )
     .await
     .map_err(display_error)
@@ -4122,7 +4180,11 @@ async fn editor_package_functions(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, store } = &mut *context;
+    let WorkspaceBrokerState {
+        broker,
+        store: _,
+        executor,
+    } = &mut *context;
     let payload = json!({
         "arguments": {
             "packages": packages,
@@ -4136,7 +4198,7 @@ async fn editor_package_functions(
         ExecutionOrigin::System,
         session.as_ref(),
         broker,
-        store,
+        executor,
     )
     .await
     .map_err(display_error)
@@ -4151,7 +4213,11 @@ async fn editor_function_help(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, store } = &mut *context;
+    let WorkspaceBrokerState {
+        broker,
+        store: _,
+        executor,
+    } = &mut *context;
     let payload = json!({
         "arguments": {
             "name": name,
@@ -4165,7 +4231,7 @@ async fn editor_function_help(
         ExecutionOrigin::System,
         session.as_ref(),
         broker,
-        store,
+        executor,
     )
     .await
     .map_err(display_error)
@@ -4180,7 +4246,11 @@ async fn editor_function_documentation(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, store } = &mut *context;
+    let WorkspaceBrokerState {
+        broker,
+        store: _,
+        executor,
+    } = &mut *context;
     let payload = json!({
         "arguments": { "name": name, "package": package },
         "expected_workspace": broker.identity()
@@ -4191,7 +4261,7 @@ async fn editor_function_documentation(
         ExecutionOrigin::System,
         session.as_ref(),
         broker,
-        store,
+        executor,
     )
     .await
     .map_err(display_error)
@@ -4206,7 +4276,11 @@ async fn editor_lint_file(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, store } = &mut *context;
+    let WorkspaceBrokerState {
+        broker,
+        store: _,
+        executor,
+    } = &mut *context;
     let payload = json!({
         "arguments": { "path": path, "document_version": document_version },
         "expected_workspace": broker.identity()
@@ -4217,7 +4291,7 @@ async fn editor_lint_file(
         ExecutionOrigin::System,
         session.as_ref(),
         broker,
-        store,
+        executor,
     )
     .await
     .map_err(display_error)
@@ -4231,7 +4305,11 @@ async fn editor_format_source(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, store } = &mut *context;
+    let WorkspaceBrokerState {
+        broker,
+        store: _,
+        executor,
+    } = &mut *context;
     let EditorFormatRequest {
         path,
         source,
@@ -4252,7 +4330,7 @@ async fn editor_format_source(
         ExecutionOrigin::System,
         session.as_ref(),
         broker,
-        store,
+        executor,
     )
     .await
     .map_err(display_error)?;
@@ -4437,7 +4515,11 @@ async fn export_data_view_artifact(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, store } = &mut *context;
+    let WorkspaceBrokerState {
+        broker,
+        store,
+        executor,
+    } = &mut *context;
     let payload = json!({
         "arguments": {
             "object_name": request.object_name,
@@ -4460,7 +4542,7 @@ async fn export_data_view_artifact(
         ExecutionOrigin::System,
         session.as_ref(),
         broker,
-        store,
+        executor,
     )
     .await
     .map_err(display_error)?;
@@ -4995,7 +5077,11 @@ async fn retry_run(run_id: String, state: State<'_, AppState>) -> Result<RunRetr
     }
     let arguments =
         retry_run_arguments(&detail.arguments_json, &detail.run_id).map_err(display_error)?;
-    let WorkspaceBrokerState { broker, store } = &mut *context;
+    let WorkspaceBrokerState {
+        broker,
+        store: _,
+        executor,
+    } = &mut *context;
     let payload = json!({
         "arguments": arguments,
         "expected_workspace": broker.identity()
@@ -5006,7 +5092,7 @@ async fn retry_run(run_id: String, state: State<'_, AppState>) -> Result<RunRetr
         parse_execution_origin(&detail.origin),
         session.as_ref(),
         broker,
-        store,
+        executor,
     )
     .await
     .map(RunRetryResult)
@@ -6395,7 +6481,11 @@ async fn targets_status(state: State<'_, AppState>) -> Result<Value, String> {
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, store } = &mut *context;
+    let WorkspaceBrokerState {
+        broker,
+        store: _,
+        executor,
+    } = &mut *context;
     let payload = json!({
         "arguments": { "project_root": project_root },
         "expected_workspace": broker.identity()
@@ -6406,7 +6496,7 @@ async fn targets_status(state: State<'_, AppState>) -> Result<Value, String> {
         ExecutionOrigin::System,
         session.as_ref(),
         broker,
-        store,
+        executor,
     )
     .await
     .map_err(display_error)
@@ -6916,10 +7006,11 @@ async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus> {
     }
     let mut broker = BrokerState::new(format!("desktop_{}", Uuid::new_v4()));
     store.save_identity(broker.identity())?;
+    let executor = store_executor(state).await?.clone();
     bootstrap_bridge(
         session.as_ref(),
         &mut broker,
-        &mut store,
+        &executor,
         &config.bridge_package,
     )
     .await?;
@@ -6964,7 +7055,7 @@ async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus> {
         })),
     }
     let status = status_from(&config, &session, Some(broker.identity()))?;
-    let context = Arc::new(WorkspaceBrokerLane::new(broker, store));
+    let context = Arc::new(WorkspaceBrokerLane::new(broker, store, executor));
     if state.extension_host.mode() == InternalExtensionRuntimeMode::Candidate {
         ensure_extension_project_scope(state, &normalized_project_root)
             .await?
@@ -7997,14 +8088,18 @@ impl BrokerFacade for WorkspaceSnapshotBrokerFacade {
                 "expected_workspace": expected_workspace,
             });
             let mut context = self.context.lock().await;
-            let WorkspaceBrokerState { broker, store } = &mut *context;
+            let WorkspaceBrokerState {
+                broker,
+                store: _,
+                executor,
+            } = &mut *context;
             let value = dispatch_workspace_request_with_execution_id(
                 "workspace.snapshot",
                 &payload,
                 origin,
                 self.session.as_ref(),
                 broker,
-                store,
+                executor,
                 execution_id.as_deref(),
             )
             .await
@@ -8747,7 +8842,11 @@ async fn sync_workspace_project_root(
     let session = active_session(state).await?;
     let context = active_context(state).await?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, store } = &mut *context;
+    let WorkspaceBrokerState {
+        broker,
+        store,
+        executor,
+    } = &mut *context;
     let payload = json!({
         "arguments": {"code": workspace_project_root_code(root)?},
         "expected_workspace": broker.identity()
@@ -8758,7 +8857,7 @@ async fn sync_workspace_project_root(
         ExecutionOrigin::System,
         session.as_ref(),
         broker,
-        store,
+        executor,
     )
     .await?;
     let normalized_root = normalize_project_root(root.to_string_lossy().as_ref());
@@ -11037,6 +11136,7 @@ mod tests {
             let lane = Arc::new(WorkspaceBrokerLane::new(
                 BrokerState::new("workspace.audit"),
                 Store::open(&store_path).unwrap(),
+                StoreExecutor::open(&store_path).await.unwrap(),
             ));
             let held_workspace = lane.lock().await;
 
@@ -11663,7 +11763,9 @@ mod tests {
     async fn install_test_context(state: &AppState, mut store: Store) {
         let broker = BrokerState::new("ws-file-test");
         store.save_identity(broker.identity()).unwrap();
-        *state.context.lock().await = Some(Arc::new(WorkspaceBrokerLane::new(broker, store)));
+        let executor = store_executor(state).await.unwrap().clone();
+        *state.context.lock().await =
+            Some(Arc::new(WorkspaceBrokerLane::new(broker, store, executor)));
     }
 
     #[test]
@@ -14044,13 +14146,11 @@ mod tests {
             store.set_project_root(Some(&normalized_root)).unwrap();
             let broker = BrokerState::new("workspace-test");
             let identity = broker.identity().clone();
-            let context = Arc::new(WorkspaceBrokerLane::new(broker, store));
+            let executor = StoreExecutor::open(&store_path).await.unwrap();
+            let context = Arc::new(WorkspaceBrokerLane::new(broker, store, executor.clone()));
 
             let host = test_candidate_extension_host_with_application_plugins().await;
-            let run_repository = StoreExecutor::open(&store_path)
-                .await
-                .unwrap()
-                .run_repository();
+            let run_repository = executor.run_repository();
             let project = host
                 .build_project_candidate(
                     super::extension_project_scope_id(&normalized_root).unwrap(),
@@ -14153,12 +14253,10 @@ mod tests {
             store.set_project_root(Some(&normalized_root)).unwrap();
             let broker = BrokerState::new("workspace-failure");
             let identity = broker.identity().clone();
-            let context = Arc::new(WorkspaceBrokerLane::new(broker, store));
+            let executor = StoreExecutor::open(&store_path).await.unwrap();
+            let context = Arc::new(WorkspaceBrokerLane::new(broker, store, executor.clone()));
             let host = test_candidate_extension_host_with_application_plugins().await;
-            let run_repository = StoreExecutor::open(&store_path)
-                .await
-                .unwrap()
-                .run_repository();
+            let run_repository = executor.run_repository();
             let project = host
                 .build_project_candidate(
                     super::extension_project_scope_id(&normalized_root).unwrap(),
@@ -14708,13 +14806,12 @@ mod tests {
             create_run_fixture(&mut store, &normalized_root, "run-a", "a <- 1");
             drop(store);
 
-            let repository = StoreExecutor::open(&store_path)
-                .await
-                .unwrap()
-                .run_repository();
+            let executor = StoreExecutor::open(&store_path).await.unwrap();
+            let repository = executor.run_repository();
             let lane = Arc::new(WorkspaceBrokerLane::new(
                 BrokerState::new("workspace.run-history"),
                 Store::open(&store_path).unwrap(),
+                executor,
             ));
             let held_workspace = lane.lock().await;
             let facade = super::RunHistoryBrokerFacade::new(repository, normalized_root);
@@ -16039,8 +16136,16 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
     let mut broker = BrokerState::new("desktop_smoke");
     store.set_project_root(Some(project_a_root.to_string_lossy().as_ref()))?;
     store.save_identity(broker.identity())?;
-    bootstrap_bridge(&session, &mut broker, &mut store, &config.bridge_package).await?;
-    set_smoke_project_root(&session, &mut broker, &mut store, &project_a_root).await?;
+    let executor = StoreExecutor::open(&config.store_path).await?;
+    bootstrap_bridge(&session, &mut broker, &executor, &config.bridge_package).await?;
+    set_smoke_project_root(
+        &session,
+        &mut broker,
+        &mut store,
+        &executor,
+        &project_a_root,
+    )
+    .await?;
     let mut interrupt_requested = false;
     session
         .execute_with_options(
@@ -16072,7 +16177,7 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
         ExecutionOrigin::User,
         &session,
         &mut broker,
-        &mut store,
+        &executor,
     )
     .await?;
     let snapshot_payload = json!({
@@ -16085,7 +16190,7 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
         ExecutionOrigin::System,
         &session,
         &mut broker,
-        &mut store,
+        &executor,
     )
     .await?;
     let viewer_identity = broker.identity().clone();
@@ -16101,7 +16206,7 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
         ExecutionOrigin::System,
         &session,
         &mut broker,
-        &mut store,
+        &executor,
     )
     .await?;
     let view_token = inspect_data["execution"]["view_token"]
@@ -16127,7 +16232,7 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
         ExecutionOrigin::System,
         &session,
         &mut broker,
-        &mut store,
+        &executor,
     )
     .await?;
     let page_row_count = page["execution"]["page"]["rows"]
@@ -16168,7 +16273,7 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
         ExecutionOrigin::User,
         &session,
         &mut broker,
-        &mut store,
+        &executor,
     )
     .await?;
     let stale_page = dispatch_workspace_request(
@@ -16177,7 +16282,7 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
         ExecutionOrigin::System,
         &session,
         &mut broker,
-        &mut store,
+        &executor,
     )
     .await;
     ensure!(
@@ -16209,7 +16314,14 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
         .run_id
         .clone();
 
-    set_smoke_project_root(&session, &mut broker, &mut store, &project_b_root).await?;
+    set_smoke_project_root(
+        &session,
+        &mut broker,
+        &mut store,
+        &executor,
+        &project_b_root,
+    )
+    .await?;
     let project_b_payload = json!({
         "arguments": {
             "code": "rho_desktop_smoke_b <- data.frame(group = c('b1', 'b2'), value = c(10, 20))"
@@ -16222,7 +16334,7 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
         ExecutionOrigin::User,
         &session,
         &mut broker,
-        &mut store,
+        &executor,
     )
     .await?;
     let project_b = normalize_project_root(project_b_root.to_string_lossy().as_ref());
@@ -16246,8 +16358,15 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
     let session = Arc::new(ArkSession::launch(&ArkLaunchConfig::new(&config.kernelspec)).await?);
     let mut broker = BrokerState::new("desktop_smoke_restart");
     store.save_identity(broker.identity())?;
-    bootstrap_bridge(&session, &mut broker, &mut store, &config.bridge_package).await?;
-    set_smoke_project_root(&session, &mut broker, &mut store, &project_a_root).await?;
+    bootstrap_bridge(&session, &mut broker, &executor, &config.bridge_package).await?;
+    set_smoke_project_root(
+        &session,
+        &mut broker,
+        &mut store,
+        &executor,
+        &project_a_root,
+    )
+    .await?;
     let restart_payload = json!({
         "arguments": {
             "code": "rho_desktop_restart <- nrow(rho_desktop_smoke)"
@@ -16260,7 +16379,7 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
         ExecutionOrigin::User,
         &session,
         &mut broker,
-        &mut store,
+        &executor,
     )
     .await?;
     let project_a_runs_after_restart = store.list_runs(&project_a, Some(10))?;
@@ -16280,7 +16399,7 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
         "project A restart run leaked into project B after Workspace R restart"
     );
 
-    let context = Arc::new(WorkspaceBrokerLane::new(broker, store));
+    let context = Arc::new(WorkspaceBrokerLane::new(broker, store, executor));
     let extension_runtime = smoke_extension_runtime(
         Arc::clone(&session),
         Arc::clone(&context),
@@ -17775,6 +17894,7 @@ async fn set_smoke_project_root(
     session: &ArkSession,
     broker: &mut BrokerState,
     store: &mut Store,
+    executor: &StoreExecutor,
     root: &Path,
 ) -> Result<()> {
     store.set_project_root(Some(root.to_string_lossy().as_ref()))?;
@@ -17790,7 +17910,7 @@ async fn set_smoke_project_root(
         ExecutionOrigin::System,
         session,
         broker,
-        store,
+        executor,
     )
     .await?;
     Ok(())

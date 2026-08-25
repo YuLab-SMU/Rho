@@ -5,12 +5,13 @@ use std::sync::Arc;
 use arc_swap::ArcSwap;
 use rho_core::BrokerState;
 use rho_protocol::WorkspaceIdentity;
-use rho_store::Store;
+use rho_store::{Store, StoreExecutor};
 use tokio::sync::{Mutex, MutexGuard};
 
 pub struct WorkspaceBrokerState {
     pub broker: BrokerState,
     pub store: Store,
+    pub executor: StoreExecutor,
 }
 
 /// Exclusive mutation lane for Workspace R, its Broker identity and the
@@ -21,10 +22,14 @@ pub struct WorkspaceBrokerLane {
 }
 
 impl WorkspaceBrokerLane {
-    pub fn new(broker: BrokerState, store: Store) -> Self {
+    pub fn new(broker: BrokerState, store: Store, executor: StoreExecutor) -> Self {
         let identity = Arc::new(broker.identity().clone());
         Self {
-            state: Mutex::new(WorkspaceBrokerState { broker, store }),
+            state: Mutex::new(WorkspaceBrokerState {
+                broker,
+                store,
+                executor,
+            }),
             identity: ArcSwap::from(identity),
         }
     }
@@ -79,17 +84,19 @@ mod tests {
 
     use super::*;
 
-    fn test_lane(directory: &TempDir, workspace_id: &str) -> WorkspaceBrokerLane {
+    async fn test_lane(directory: &TempDir, workspace_id: &str) -> WorkspaceBrokerLane {
+        let store_path = directory.path().join(format!("{workspace_id}.sqlite"));
         WorkspaceBrokerLane::new(
             BrokerState::new(workspace_id),
-            Store::open(directory.path().join(format!("{workspace_id}.sqlite"))).unwrap(),
+            Store::open(&store_path).unwrap(),
+            StoreExecutor::open(&store_path).await.unwrap(),
         )
     }
 
     #[tokio::test]
     async fn workspace_broker_lane_identity_reads_do_not_wait_or_publish_partial_state() {
         let directory = TempDir::new().unwrap();
-        let lane = test_lane(&directory, "ws-lane");
+        let lane = test_lane(&directory, "ws-lane").await;
         let initial = lane.identity();
         let mut workspace = lane.lock().await;
         workspace.broker.project_changed();
@@ -108,7 +115,7 @@ mod tests {
     #[tokio::test]
     async fn workspace_broker_lane_serializes_and_recovers_after_cancelled_waiter() {
         let directory = TempDir::new().unwrap();
-        let lane = Arc::new(test_lane(&directory, "ws-serial"));
+        let lane = Arc::new(test_lane(&directory, "ws-serial").await);
         let first = lane.lock().await;
         let waiting_lane = Arc::clone(&lane);
         let waiter = tokio::spawn(async move {
@@ -131,8 +138,8 @@ mod tests {
     #[tokio::test]
     async fn workspace_broker_lane_keeps_two_workspace_identities_isolated() {
         let directory = TempDir::new().unwrap();
-        let lane_a = test_lane(&directory, "ws-a");
-        let lane_b = test_lane(&directory, "ws-b");
+        let lane_a = test_lane(&directory, "ws-a").await;
+        let lane_b = test_lane(&directory, "ws-b").await;
         {
             let mut workspace_a = lane_a.lock().await;
             workspace_a.broker.project_changed();

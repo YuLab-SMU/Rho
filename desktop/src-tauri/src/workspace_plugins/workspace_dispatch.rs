@@ -38,14 +38,16 @@ impl WorkspacePluginDispatcher for CoordinatorWorkspacePluginDispatcher {
                 "expected_workspace": prepared.expected_workspace,
             });
             let mut context = self.context.lock().await;
-            let WorkspaceBrokerState { broker, store } = &mut *context;
+            let WorkspaceBrokerState {
+                broker, executor, ..
+            } = &mut *context;
             let response = dispatch_workspace_request(
                 prepared.request_type,
                 &payload,
                 ExecutionOrigin::System,
                 self.session.as_ref(),
                 broker,
-                store,
+                executor,
             )
             .await?;
             Ok(WorkspaceDispatchResult {

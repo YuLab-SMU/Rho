@@ -110,9 +110,11 @@ async fn workspace_plugin_agent_projection_does_not_wait_for_workspace_lane() {
         .await
         .unwrap();
 
+    let application_database = directory.path().join("application.sqlite");
     let lane = Arc::new(WorkspaceBrokerLane::new(
         BrokerState::new("workspace.projection"),
-        Store::open(directory.path().join("application.sqlite")).unwrap(),
+        Store::open(&application_database).unwrap(),
+        StoreExecutor::open(&application_database).await.unwrap(),
     ));
     let held_workspace = lane.lock().await;
     let identity = lane.identity();
@@ -223,6 +225,7 @@ async fn workspace_plugin_background_services_do_not_wait_for_workspace_lane() {
     let lane = Arc::new(WorkspaceBrokerLane::new(
         BrokerState::new("workspace.background-services"),
         Store::open(&database).unwrap(),
+        StoreExecutor::open(&database).await.unwrap(),
     ));
     let held_workspace = lane.lock().await;
 

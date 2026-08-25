@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-29",
+  "active_work_packages": ["AM-W2-30"],
+  "integration_lane": "AM-W2-30",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -345,6 +345,10 @@ recovery truth. `main.rs` no longer has an ordinary `read_store` path.
 the shared Store worker instead of reopening SQLite around external awaits;
 commit `9c7243e` and `AM-E-0056` preserve the exact permission, grant, failure and
 project-isolation behavior.
+
+`AM-W2-30` moves Workspace bootstrap, run, kernel-event, environment-snapshot,
+plot and artifact persistence onto that worker while Ark and revisions remain
+serialized by the Workspace lane.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 

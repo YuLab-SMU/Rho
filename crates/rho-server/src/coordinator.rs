@@ -19,9 +19,10 @@ use rho_protocol::{Envelope, ExpectedWorkspace, MAX_FRAME_BYTES, MessageKind, Op
 use rho_store::{
     AgentConversationTurn, AgentRepository, AgentTurnContextItemDraft, AgentTurnEventDraft,
     AgentTurnFinish, ApprovalDecisionRecord, ApprovalRequestDraft, ArtifactRecordDraft,
-    EnvironmentOperationDecisionRecord, EnvironmentOperationFinish,
+    BorrowedStore, EnvironmentOperationDecisionRecord, EnvironmentOperationFinish,
     EnvironmentOperationRequestDraft, EnvironmentOperationRequestSummary, EnvironmentSnapshotDraft,
-    PlotArtifactDraft, RunDraft, RunErrorRange, RunFinish, Store, normalize_project_root,
+    PlotArtifactDraft, RunDraft, RunErrorRange, RunFinish, Store, StoreConnection, StoreExecutor,
+    StoreExecutorOperationError, normalize_project_root,
 };
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -30,6 +31,22 @@ use tokio::sync::{Mutex, oneshot};
 use uuid::Uuid;
 
 use crate::workspace_lane::{WorkspaceBrokerLane, WorkspaceBrokerState};
+
+async fn run_workspace_store_service<R, F>(executor: &StoreExecutor, operation: F) -> Result<R>
+where
+    R: Send + 'static,
+    F: FnOnce(&mut BorrowedStore<'_>) -> Result<R> + Send + 'static,
+{
+    executor
+        .run_service(operation)
+        .await
+        .map_err(|error| match error {
+            StoreExecutorOperationError::Operation(error) => error,
+            StoreExecutorOperationError::Worker(message) => {
+                anyhow::anyhow!("Store worker failed: {message}")
+            }
+        })
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct AgentRuntimeCapabilityRoute {
@@ -565,12 +582,16 @@ pub async fn probe(
     let recovered_runs = store.recover_incomplete_runs()?;
     let mut broker = BrokerState::new("ws_phase0_coordinator");
     store.save_identity(broker.identity())?;
+    let executor = StoreExecutor::open(&store_path)
+        .await
+        .context("opening coordinator probe Store worker")?;
 
     let mut session = ArkSession::launch(&ArkLaunchConfig::new(kernelspec)).await?;
     let run_result = run_probe(
         &mut session,
         &mut broker,
         &mut store,
+        &executor,
         rscript,
         agent_package,
         bridge_package,
@@ -712,6 +733,7 @@ async fn run_probe(
     session: &ArkSession,
     broker: &mut BrokerState,
     store: &mut Store,
+    executor: &StoreExecutor,
     rscript: PathBuf,
     agent_package: PathBuf,
     bridge_package: PathBuf,
@@ -720,7 +742,7 @@ async fn run_probe(
     model: Option<String>,
     prompt: String,
 ) -> Result<()> {
-    bootstrap_bridge(session, broker, store, &bridge_package).await?;
+    bootstrap_bridge(session, broker, executor, &bridge_package).await?;
 
     let mut authenticator = AgentAuthenticator::bind().await?;
     let address = authenticator.local_addr()?;
@@ -760,9 +782,9 @@ async fn run_probe(
 
     send_identity(&mut agent, broker, store).await?;
     if !real_model {
-        run_user_probe(session, broker, store).await?;
+        run_user_probe(session, broker, store, executor).await?;
     }
-    let completion_result = serve_agent(&mut agent, session, broker, store).await;
+    let completion_result = serve_agent(&mut agent, session, broker, store, executor).await;
     let output = tokio::time::timeout(
         std::time::Duration::from_secs(120),
         child.wait_with_output(),
@@ -804,7 +826,7 @@ async fn run_probe(
 pub async fn bootstrap_bridge(
     session: &ArkSession,
     broker: &mut BrokerState,
-    store: &mut Store,
+    executor: &StoreExecutor,
     bridge_package: &Path,
 ) -> Result<()> {
     let bridge_path = r_string(&normalized_path(bridge_package))?;
@@ -825,10 +847,13 @@ pub async fn bootstrap_bridge(
         code.clone(),
     );
     let before = broker.identity().clone();
-    let project_root = store
-        .active_project_root()?
-        .context("Cannot persist bootstrap run without an active project identity")?;
-    store.create_run(&RunDraft {
+    let project_root = run_workspace_store_service(executor, |store| {
+        store
+            .active_project_root()?
+            .context("Cannot persist bootstrap run without an active project identity")
+    })
+    .await?;
+    let run_draft = RunDraft {
         run_id: request.execution_id.clone(),
         parent_run_id: None,
         project_root: project_root.clone(),
@@ -844,28 +869,43 @@ pub async fn bootstrap_bridge(
         state_revision_before: before.state_revision as i64,
         project_revision_before: before.project_revision as i64,
         environment_snapshot_id: None,
-    })?;
-    store.update_run_status(&request.execution_id, "running", None)?;
+    };
+    let run_id = request.execution_id.clone();
+    run_workspace_store_service(executor, move |store| {
+        store.create_run(&run_draft)?;
+        store.update_run_status(&run_id, "running", None)?;
+        Ok(())
+    })
+    .await?;
+    let event_executor = executor.clone();
+    let event_execution_id = request.execution_id.clone();
     let result = session
-        .execute(code, |event| {
-            append_event(
-                store,
-                MessageKind::Event,
-                json!({
-                    "type": "kernel.event",
-                    "execution_id": request.execution_id,
-                    "event": event
-                }),
-            )?;
-            Ok(())
+        .execute_async(code, move |event| {
+            let executor = event_executor.clone();
+            let execution_id = event_execution_id.clone();
+            async move {
+                run_workspace_store_service(&executor, move |store| {
+                    append_event(
+                        store,
+                        MessageKind::Event,
+                        json!({
+                            "type": "kernel.event",
+                            "execution_id": execution_id,
+                            "event": event
+                        }),
+                    )?;
+                    Ok(())
+                })
+                .await
+            }
         })
         .await;
     match result {
         Ok(()) => {
             broker.complete(&request);
-            store.save_identity(broker.identity())?;
             let after = broker.identity().clone();
-            store.finish_run(&RunFinish {
+            let identity = broker.identity().clone();
+            let finish = RunFinish {
                 run_id: request.execution_id,
                 status: "completed".to_string(),
                 terminal_reason: None,
@@ -880,11 +920,17 @@ pub async fn bootstrap_bridge(
                 error_call: None,
                 traceback: Vec::new(),
                 environment_snapshot_id_after: None,
-            })?;
+            };
+            run_workspace_store_service(executor, move |store| {
+                store.save_identity(&identity)?;
+                store.finish_run(&finish)?;
+                Ok(())
+            })
+            .await?;
             Ok(())
         }
         Err(error) => {
-            store.finish_run(&RunFinish {
+            let finish = RunFinish {
                 run_id: request.execution_id,
                 status: "failed".to_string(),
                 terminal_reason: Some("bootstrap_error".to_string()),
@@ -899,7 +945,12 @@ pub async fn bootstrap_bridge(
                 error_call: None,
                 traceback: Vec::new(),
                 environment_snapshot_id_after: None,
-            })?;
+            };
+            run_workspace_store_service(executor, move |store| {
+                store.finish_run(&finish)?;
+                Ok(())
+            })
+            .await?;
             Err(error).context("bootstrapping rho.bridge in Ark")
         }
     }
@@ -938,6 +989,7 @@ async fn run_user_probe(
     session: &ArkSession,
     broker: &mut BrokerState,
     store: &mut Store,
+    executor: &StoreExecutor,
 ) -> Result<()> {
     let request = Envelope::new(
         MessageKind::Request,
@@ -955,7 +1007,7 @@ async fn run_user_probe(
         ExecutionOrigin::User,
         session,
         broker,
-        store,
+        executor,
     )
     .await?;
     append_event(
@@ -976,6 +1028,7 @@ async fn serve_agent(
     session: &ArkSession,
     broker: &mut BrokerState,
     store: &mut Store,
+    executor: &StoreExecutor,
 ) -> Result<Value> {
     loop {
         let incoming = tokio::time::timeout(
@@ -1001,7 +1054,7 @@ async fn serve_agent(
                         ExecutionOrigin::Agent,
                         session,
                         broker,
-                        store,
+                        executor,
                     )
                     .await
                 };
@@ -1052,7 +1105,7 @@ pub async fn dispatch_workspace_request(
     origin: ExecutionOrigin,
     session: &ArkSession,
     broker: &mut BrokerState,
-    store: &mut Store,
+    executor: &StoreExecutor,
 ) -> Result<Value> {
     dispatch_workspace_request_with_execution_id(
         request_type,
@@ -1060,7 +1113,7 @@ pub async fn dispatch_workspace_request(
         origin,
         session,
         broker,
-        store,
+        executor,
         None,
     )
     .await
@@ -1072,7 +1125,7 @@ pub async fn dispatch_workspace_request_with_execution_id(
     origin: ExecutionOrigin,
     session: &ArkSession,
     broker: &mut BrokerState,
-    store: &mut Store,
+    executor: &StoreExecutor,
     execution_id: Option<&str>,
 ) -> Result<Value> {
     let expected: ExpectedWorkspace = serde_json::from_value(
@@ -1109,28 +1162,40 @@ pub async fn dispatch_workspace_request_with_execution_id(
     }
     broker.authorize(&request)?;
     let before = broker.identity().clone();
-    let project_root = store
-        .active_project_root()?
-        .context("Cannot persist run without an active project identity")?;
+    let project_root = run_workspace_store_service(executor, |store| {
+        store
+            .active_project_root()?
+            .context("Cannot persist run without an active project identity")
+    })
+    .await?;
     if let Some(request_id) = environment_operation_request_id.as_deref() {
+        let project_root = project_root.clone();
+        let request_type = request_type.to_string();
+        let request_id = request_id.to_string();
+        let execution_id = request.execution_id.clone();
         ensure!(
-            store.claim_environment_operation_request(
-                &project_root,
-                request_type,
-                request_id,
-                &request.execution_id,
-            )?,
+            run_workspace_store_service(executor, move |store| {
+                store
+                    .claim_environment_operation_request(
+                        &project_root,
+                        &request_type,
+                        &request_id,
+                        &execution_id,
+                    )
+                    .map_err(Into::into)
+            })
+            .await?,
             "Environment operation approval is missing, invalid, or already consumed"
         );
     }
     let environment_snapshot_id = if scientific_run_requires_environment_snapshot(request_type) {
-        Some(capture_environment_snapshot_id(session, store).await?)
+        Some(capture_environment_snapshot_id(session, &project_root, executor).await?)
     } else {
         None
     };
     let generated_output_before = (request_type == "workspace.execute")
         .then(|| capture_generated_output_snapshot(Path::new(&project_root)));
-    store.create_run(&RunDraft {
+    let run_draft = RunDraft {
         run_id: request.execution_id.clone(),
         parent_run_id: arguments
             .get("parent_run_id")
@@ -1155,41 +1220,72 @@ pub async fn dispatch_workspace_request_with_execution_id(
         state_revision_before: before.state_revision as i64,
         project_revision_before: before.project_revision as i64,
         environment_snapshot_id,
-    })?;
-    store.update_run_status(&request.execution_id, "running", None)?;
+    };
+    let run_id = request.execution_id.clone();
+    run_workspace_store_service(executor, move |store| {
+        store.create_run(&run_draft)?;
+        store.update_run_status(&run_id, "running", None)?;
+        Ok(())
+    })
+    .await?;
     let result_file = ResultFile::new(&request.execution_id)?;
     let bridge_call = bridge_result_publisher(&bridge_expression, &result_file)?;
     request.code = bridge_call.clone();
-    let mut kernel_events = Vec::new();
+    let kernel_events = Arc::new(StdMutex::new(Vec::new()));
+    let event_kernel_events = Arc::clone(&kernel_events);
+    let event_executor = executor.clone();
+    let event_execution_id = request.execution_id.clone();
     let execution = session
-        .execute(bridge_call, |event| {
-            kernel_events.push(event.clone());
-            append_event(
-                store,
-                MessageKind::Event,
-                json!({
-                    "type": "kernel.event",
-                    "execution_id": request.execution_id,
-                    "event": event
-                }),
-            )?;
-            Ok(())
+        .execute_async(bridge_call, move |event| {
+            event_kernel_events
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .push(event.clone());
+            let executor = event_executor.clone();
+            let execution_id = event_execution_id.clone();
+            async move {
+                run_workspace_store_service(&executor, move |store| {
+                    append_event(
+                        store,
+                        MessageKind::Event,
+                        json!({
+                            "type": "kernel.event",
+                            "execution_id": execution_id,
+                            "event": event
+                        }),
+                    )?;
+                    Ok(())
+                })
+                .await
+            }
         })
         .await
-        .and_then(|_| ensure_no_kernel_errors(&kernel_events));
+        .and_then(|_| {
+            let events = kernel_events
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            ensure_no_kernel_errors(&events)
+        });
     match execution {
         Ok(()) => {}
         Err(error) => {
-            let cancelled = store
-                .cancel_requested(&request.execution_id)
-                .unwrap_or(false);
+            let cancel_execution_id = request.execution_id.clone();
+            let cancelled = run_workspace_store_service(executor, move |store| {
+                Ok(store
+                    .cancel_requested(&cancel_execution_id)
+                    .unwrap_or(false))
+            })
+            .await?;
             let environment_snapshot_id_after =
                 if environment_operation_requires_after_snapshot(request_type) {
-                    capture_environment_snapshot_id(session, store).await.ok()
+                    capture_environment_snapshot_id(session, &project_root, executor)
+                        .await
+                        .ok()
                 } else {
                     None
                 };
-            store.finish_run(&RunFinish {
+            let error_message = redact_sensitive_text(&error.to_string());
+            let finish = RunFinish {
                 run_id: request.execution_id.clone(),
                 status: if cancelled { "interrupted" } else { "failed" }.to_string(),
                 terminal_reason: Some(
@@ -1207,48 +1303,62 @@ pub async fn dispatch_workspace_request_with_execution_id(
                 value_text: None,
                 messages: Vec::new(),
                 warnings: Vec::new(),
-                error_message: Some(redact_sensitive_text(&error.to_string())),
+                error_message: Some(error_message.clone()),
                 error_call: None,
                 traceback: Vec::new(),
                 environment_snapshot_id_after,
-            })?;
-            if let Some(request_id) = environment_operation_request_id.as_deref() {
-                let _ =
-                    store.finish_environment_operation_request(&EnvironmentOperationFinish {
-                        request_id: request_id.to_string(),
-                        status: if cancelled {
-                            "interrupted".to_string()
+            };
+            let environment_finish = environment_operation_request_id.as_ref().map(|request_id| {
+                EnvironmentOperationFinish {
+                    request_id: request_id.to_string(),
+                    status: if cancelled {
+                        "interrupted".to_string()
+                    } else {
+                        "failed".to_string()
+                    },
+                    run_id: Some(request.execution_id.clone()),
+                    terminal_outcome: Some(
+                        if cancelled {
+                            "user_interrupt"
                         } else {
-                            "failed".to_string()
-                        },
-                        run_id: Some(request.execution_id.clone()),
-                        terminal_outcome: Some(
-                            if cancelled {
-                                "user_interrupt"
-                            } else {
-                                "execution_error"
-                            }
-                            .to_string(),
-                        ),
-                        reason: Some(redact_sensitive_text(&error.to_string())),
-                    })?;
-            }
+                            "execution_error"
+                        }
+                        .to_string(),
+                    ),
+                    reason: Some(error_message),
+                }
+            });
+            run_workspace_store_service(executor, move |store| {
+                store.finish_run(&finish)?;
+                if let Some(environment_finish) = environment_finish {
+                    let _ = store.finish_environment_operation_request(&environment_finish)?;
+                }
+                Ok(())
+            })
+            .await?;
             return Err(error).context("executing Workspace R request");
         }
     }
     let result = match result_file.read_json() {
         Ok(value) => value,
         Err(error) => {
-            let cancelled = store
-                .cancel_requested(&request.execution_id)
-                .unwrap_or(false);
+            let cancel_execution_id = request.execution_id.clone();
+            let cancelled = run_workspace_store_service(executor, move |store| {
+                Ok(store
+                    .cancel_requested(&cancel_execution_id)
+                    .unwrap_or(false))
+            })
+            .await?;
             let environment_snapshot_id_after =
                 if environment_operation_requires_after_snapshot(request_type) {
-                    capture_environment_snapshot_id(session, store).await.ok()
+                    capture_environment_snapshot_id(session, &project_root, executor)
+                        .await
+                        .ok()
                 } else {
                     None
                 };
-            store.finish_run(&RunFinish {
+            let error_message = redact_sensitive_text(&error.to_string());
+            let finish = RunFinish {
                 run_id: request.execution_id.clone(),
                 status: if cancelled { "interrupted" } else { "failed" }.to_string(),
                 terminal_reason: Some(
@@ -1266,38 +1376,50 @@ pub async fn dispatch_workspace_request_with_execution_id(
                 value_text: None,
                 messages: Vec::new(),
                 warnings: Vec::new(),
-                error_message: Some(redact_sensitive_text(&error.to_string())),
+                error_message: Some(error_message.clone()),
                 error_call: None,
                 traceback: Vec::new(),
                 environment_snapshot_id_after,
-            })?;
-            if let Some(request_id) = environment_operation_request_id.as_deref() {
-                let _ =
-                    store.finish_environment_operation_request(&EnvironmentOperationFinish {
-                        request_id: request_id.to_string(),
-                        status: if cancelled {
-                            "interrupted".to_string()
+            };
+            let environment_finish = environment_operation_request_id.as_ref().map(|request_id| {
+                EnvironmentOperationFinish {
+                    request_id: request_id.to_string(),
+                    status: if cancelled {
+                        "interrupted".to_string()
+                    } else {
+                        "failed".to_string()
+                    },
+                    run_id: Some(request.execution_id.clone()),
+                    terminal_outcome: Some(
+                        if cancelled {
+                            "user_interrupt"
                         } else {
-                            "failed".to_string()
-                        },
-                        run_id: Some(request.execution_id.clone()),
-                        terminal_outcome: Some(
-                            if cancelled {
-                                "user_interrupt"
-                            } else {
-                                "result_unavailable"
-                            }
-                            .to_string(),
-                        ),
-                        reason: Some(redact_sensitive_text(&error.to_string())),
-                    })?;
-            }
+                            "result_unavailable"
+                        }
+                        .to_string(),
+                    ),
+                    reason: Some(error_message),
+                }
+            });
+            run_workspace_store_service(executor, move |store| {
+                store.finish_run(&finish)?;
+                if let Some(environment_finish) = environment_finish {
+                    let _ = store.finish_environment_operation_request(&environment_finish)?;
+                }
+                Ok(())
+            })
+            .await?;
             return Err(error);
         }
     };
     broker.complete(&request);
-    store.save_identity(broker.identity())?;
     let after = broker.identity().clone();
+    let durable_identity = after.clone();
+    run_workspace_store_service(executor, move |store| {
+        store.save_identity(&durable_identity)?;
+        Ok(())
+    })
+    .await?;
     let failed = workspace_result_failed(&result);
     let generated_output_after = (!failed && request_type == "workspace.execute")
         .then(|| capture_generated_output_snapshot(Path::new(&project_root)));
@@ -1308,68 +1430,81 @@ pub async fn dispatch_workspace_request_with_execution_id(
         .unwrap_or_default();
     let environment_snapshot_id_after =
         if environment_operation_requires_after_snapshot(request_type) {
-            capture_environment_snapshot_id(session, store).await.ok()
+            capture_environment_snapshot_id(session, &project_root, executor)
+                .await
+                .ok()
         } else {
             None
         };
     let error_range = translated_run_error_range(&arguments, &result);
-    store.finish_run_with_error_range(
-        &RunFinish {
-            run_id: request.execution_id.clone(),
-            status: if failed { "failed" } else { "completed" }.to_string(),
-            terminal_reason: failed.then_some("r_error".to_string()),
-            workspace_id: Some(after.workspace_id.clone()),
-            state_revision_after: Some(after.state_revision as i64),
-            project_revision_after: Some(after.project_revision as i64),
-            stdout: json_string(&result, "stdout"),
-            value_text: json_string(&result, "value"),
-            messages: json_string_list(&result, "messages"),
-            warnings: json_string_list(&result, "warnings"),
-            error_message: result
-                .get("error")
-                .and_then(|value| value.get("message"))
-                .and_then(Value::as_str)
-                .map(redact_sensitive_text),
-            error_call: result
-                .get("error")
-                .and_then(|value| value.get("call"))
-                .and_then(Value::as_str)
-                .map(str::to_string),
-            traceback: json_string_list(&result, "traceback")
-                .into_iter()
-                .chain(json_string_list(&result, "calls"))
-                .collect(),
-            environment_snapshot_id_after,
-        },
-        error_range.as_ref(),
-    )?;
-    if let Some(request_id) = environment_operation_request_id.as_deref() {
-        let _ = store.finish_environment_operation_request(&EnvironmentOperationFinish {
-            request_id: request_id.to_string(),
-            status: if failed {
-                "failed".to_string()
-            } else {
-                "completed".to_string()
-            },
-            run_id: Some(request.execution_id.clone()),
-            terminal_outcome: Some(if failed { "r_error" } else { "completed" }.to_string()),
-            reason: result
-                .get("error")
-                .and_then(|value| value.get("message"))
-                .and_then(Value::as_str)
-                .map(redact_sensitive_text),
-        })?;
-    }
+    let finish = RunFinish {
+        run_id: request.execution_id.clone(),
+        status: if failed { "failed" } else { "completed" }.to_string(),
+        terminal_reason: failed.then_some("r_error".to_string()),
+        workspace_id: Some(after.workspace_id.clone()),
+        state_revision_after: Some(after.state_revision as i64),
+        project_revision_after: Some(after.project_revision as i64),
+        stdout: json_string(&result, "stdout"),
+        value_text: json_string(&result, "value"),
+        messages: json_string_list(&result, "messages"),
+        warnings: json_string_list(&result, "warnings"),
+        error_message: result
+            .get("error")
+            .and_then(|value| value.get("message"))
+            .and_then(Value::as_str)
+            .map(redact_sensitive_text),
+        error_call: result
+            .get("error")
+            .and_then(|value| value.get("call"))
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        traceback: json_string_list(&result, "traceback")
+            .into_iter()
+            .chain(json_string_list(&result, "calls"))
+            .collect(),
+        environment_snapshot_id_after,
+    };
+    let environment_finish =
+        environment_operation_request_id
+            .as_ref()
+            .map(|request_id| EnvironmentOperationFinish {
+                request_id: request_id.to_string(),
+                status: if failed {
+                    "failed".to_string()
+                } else {
+                    "completed".to_string()
+                },
+                run_id: Some(request.execution_id.clone()),
+                terminal_outcome: Some(if failed { "r_error" } else { "completed" }.to_string()),
+                reason: result
+                    .get("error")
+                    .and_then(|value| value.get("message"))
+                    .and_then(Value::as_str)
+                    .map(redact_sensitive_text),
+            });
+    run_workspace_store_service(executor, move |store| {
+        store.finish_run_with_error_range(&finish, error_range.as_ref())?;
+        if let Some(environment_finish) = environment_finish {
+            let _ = store.finish_environment_operation_request(&environment_finish)?;
+        }
+        Ok(())
+    })
+    .await?;
+    let kernel_events = kernel_events
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone();
     let plot_payloads = extract_plot_payloads(&kernel_events);
     let mut plot_references = Vec::new();
+    let mut plot_drafts = Vec::new();
     for (index, (media_type, payload_json)) in plot_payloads.into_iter().enumerate() {
         let plot_id = format!("plot_{}_{}", request.execution_id, index + 1);
         let payload_bytes = payload_json.len();
         let payload_sha256 = sha256_hex(payload_json.as_bytes());
-        store.create_plot_artifact(&PlotArtifactDraft {
+        plot_drafts.push(PlotArtifactDraft {
             plot_id: plot_id.clone(),
             run_id: request.execution_id.clone(),
-            project_root: store.active_project_root()?,
+            project_root: Some(project_root.clone()),
             source_path: arguments
                 .get("source_path")
                 .and_then(Value::as_str)
@@ -1392,7 +1527,7 @@ pub async fn dispatch_workspace_request_with_execution_id(
                     .get("document_version")
                     .and_then(Value::as_i64)
                     .is_some(),
-        })?;
+        });
         plot_references.push(json!({
             "plot_id": plot_id,
             "media_type": media_type,
@@ -1400,7 +1535,17 @@ pub async fn dispatch_workspace_request_with_execution_id(
             "payload_sha256": payload_sha256,
         }));
     }
+    if !plot_drafts.is_empty() {
+        run_workspace_store_service(executor, move |store| {
+            for draft in &plot_drafts {
+                store.create_plot_artifact(draft)?;
+            }
+            Ok(())
+        })
+        .await?;
+    }
     let mut artifact_references = Vec::new();
+    let mut artifact_drafts = Vec::new();
     if !generated_output_deltas.is_empty() {
         let source_path = arguments
             .get("source_path")
@@ -1421,7 +1566,7 @@ pub async fn dispatch_workspace_request_with_execution_id(
             );
             let media_type = infer_output_media_type(&delta.path);
             let output_signature = hash_project_output(Path::new(&project_root), &delta.path).ok();
-            store.create_artifact_record(&ArtifactRecordDraft {
+            artifact_drafts.push(ArtifactRecordDraft {
                 artifact_id: artifact_id.clone(),
                 artifact_kind: "generated_file".to_string(),
                 run_id: Some(request.execution_id.clone()),
@@ -1446,7 +1591,7 @@ pub async fn dispatch_workspace_request_with_execution_id(
                 }))?,
                 provenance_complete,
                 incomplete_reason: incomplete_reason.clone(),
-            })?;
+            });
             artifact_references.push(json!({
                 "artifact_id": artifact_id,
                 "media_type": media_type,
@@ -1460,51 +1605,58 @@ pub async fn dispatch_workspace_request_with_execution_id(
     let mut artifact_media_type = None;
     if !failed && request_type == "workspace.render_document" {
         if let Some(output_path) = result.get("output_path").and_then(Value::as_str) {
-            if let Some(project_root) = store.active_project_root()? {
-                let source_path = arguments
-                    .get("source_path")
-                    .and_then(Value::as_str)
-                    .map(str::to_string);
-                let document_version = arguments.get("document_version").and_then(Value::as_i64);
-                let (provenance_complete, incomplete_reason) = artifact_provenance_status(
-                    Some(&request.execution_id),
-                    source_path.as_deref(),
+            let source_path = arguments
+                .get("source_path")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            let document_version = arguments.get("document_version").and_then(Value::as_i64);
+            let (provenance_complete, incomplete_reason) = artifact_provenance_status(
+                Some(&request.execution_id),
+                source_path.as_deref(),
+                document_version,
+            );
+            let created_artifact_id = render_artifact_id(&request.execution_id);
+            let created_media_type = infer_output_media_type(output_path);
+            let relative_output = artifact_output_path(Some(&project_root), output_path);
+            let output_materialized =
+                materialized_project_output(Path::new(&project_root), &relative_output);
+            if output_materialized {
+                artifact_drafts.push(ArtifactRecordDraft {
+                    artifact_id: created_artifact_id.clone(),
+                    artifact_kind: "render_output".to_string(),
+                    run_id: Some(request.execution_id.clone()),
+                    project_root: project_root.clone(),
+                    output_path: relative_output,
+                    source_path,
+                    execution_mode: arguments
+                        .get("execution_mode")
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
                     document_version,
-                );
-                let created_artifact_id = render_artifact_id(&request.execution_id);
-                let created_media_type = infer_output_media_type(output_path);
-                let relative_output = artifact_output_path(Some(&project_root), output_path);
-                let output_materialized =
-                    materialized_project_output(Path::new(&project_root), &relative_output);
-                if output_materialized {
-                    store.create_artifact_record(&ArtifactRecordDraft {
-                        artifact_id: created_artifact_id.clone(),
-                        artifact_kind: "render_output".to_string(),
-                        run_id: Some(request.execution_id.clone()),
-                        project_root: project_root.clone(),
-                        output_path: relative_output,
-                        source_path,
-                        execution_mode: arguments
-                            .get("execution_mode")
-                            .and_then(Value::as_str)
-                            .map(str::to_string),
-                        document_version,
-                        workspace_id: Some(after.workspace_id.clone()),
-                        state_revision: Some(after.state_revision as i64),
-                        project_revision: Some(after.project_revision as i64),
-                        media_type: created_media_type.clone(),
-                        metadata_json: serde_json::to_string(&json!({
-                            "tool": result.get("tool").and_then(Value::as_str),
-                            "source_path": arguments.get("source_path").and_then(Value::as_str),
-                        }))?,
-                        provenance_complete,
-                        incomplete_reason,
-                    })?;
-                    artifact_id = Some(created_artifact_id);
-                    artifact_media_type = Some(created_media_type);
-                }
+                    workspace_id: Some(after.workspace_id.clone()),
+                    state_revision: Some(after.state_revision as i64),
+                    project_revision: Some(after.project_revision as i64),
+                    media_type: created_media_type.clone(),
+                    metadata_json: serde_json::to_string(&json!({
+                        "tool": result.get("tool").and_then(Value::as_str),
+                        "source_path": arguments.get("source_path").and_then(Value::as_str),
+                    }))?,
+                    provenance_complete,
+                    incomplete_reason,
+                });
+                artifact_id = Some(created_artifact_id);
+                artifact_media_type = Some(created_media_type);
             }
         }
+    }
+    if !artifact_drafts.is_empty() {
+        run_workspace_store_service(executor, move |store| {
+            for draft in &artifact_drafts {
+                store.create_artifact_record(draft)?;
+            }
+            Ok(())
+        })
+        .await?;
     }
     Ok(json!({
         "execution_id": request.execution_id,
@@ -2823,6 +2975,7 @@ async fn serve_desktop_agent(
                         mode,
                         session,
                         context.clone(),
+                        &agent_store,
                         approvals.clone(),
                         environment_approvals.clone(),
                         &mut approved_mutations,
@@ -2955,15 +3108,16 @@ async fn dispatch_agent_workspace_request(
     {
         return result;
     }
+    let executor = agent_store.store_executor();
     let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, store } = &mut *context;
+    let broker = &mut context.broker;
     dispatch_workspace_request_with_execution_id(
         request_type,
         payload,
         ExecutionOrigin::Agent,
         session,
         broker,
-        store,
+        &executor,
         Some(&execution_id),
     )
     .await
@@ -3378,11 +3532,13 @@ async fn handle_tool_approval_required(
     mode: &str,
     session: &ArkSession,
     context: Arc<WorkspaceBrokerLane>,
+    agent_store: &AgentRepository,
     approvals: Arc<PendingApprovalRegistry>,
     environment_approvals: Arc<PendingApprovalRegistry>,
     approved_mutations: &mut HashMap<String, ApprovedMutation>,
     auto_approve: bool,
 ) -> Result<Value> {
+    let executor = agent_store.store_executor();
     let tool = incoming.payload["tool"]
         .as_str()
         .unwrap_or("run_r")
@@ -3401,7 +3557,7 @@ async fn handle_tool_approval_required(
     let uses_environment_contract =
         request_type.is_some_and(request_type_uses_environment_contract);
     let mut context_guard = context.lock().await;
-    let WorkspaceBrokerState { broker, store } = &mut *context_guard;
+    let WorkspaceBrokerState { broker, store, .. } = &mut *context_guard;
     let identity = broker.identity().clone();
     let code = arguments
         .get("code")
@@ -3443,6 +3599,7 @@ async fn handle_tool_approval_required(
             session,
             broker,
             store,
+            &executor,
         )
         .await?;
         let request_type = request.request_name.clone();
@@ -3483,7 +3640,7 @@ async fn handle_tool_approval_required(
         environment_approvals.remove(&request.request_id).await;
 
         let mut context_guard = context.lock().await;
-        let WorkspaceBrokerState { broker, store } = &mut *context_guard;
+        let WorkspaceBrokerState { broker, store, .. } = &mut *context_guard;
         let request = store
             .get_environment_operation_request(&request.project_root, &request.request_id)?
             .context("Environment operation request disappeared before approval resolution")?;
@@ -3492,7 +3649,10 @@ async fn handle_tool_approval_required(
                 .active_project_root()?
                 .unwrap_or_default()
                 .replace('\\', "/");
-            let current_snapshot_id = capture_environment_snapshot_id(session, store).await.ok();
+            let current_snapshot_id =
+                capture_environment_snapshot_id(session, &current_project_root, &executor)
+                    .await
+                    .ok();
             if let Some(reason) = environment_operation_stale_reason(
                 &request,
                 broker,
@@ -3698,7 +3858,7 @@ async fn handle_tool_approval_required(
     approvals.remove(&request_id).await;
 
     let mut context_guard = context.lock().await;
-    let WorkspaceBrokerState { broker, store } = &mut *context_guard;
+    let WorkspaceBrokerState { broker, store, .. } = &mut *context_guard;
     let current = broker.identity();
     if response.decision == "approve"
         && (current.workspace_id != identity.workspace_id
@@ -4160,6 +4320,7 @@ async fn preview_environment_operation(
     session: &ArkSession,
     broker: &BrokerState,
     store: &mut Store,
+    executor: &StoreExecutor,
 ) -> Result<EnvironmentOperationRequestSummary> {
     let request_name = environment_operation_request_name(&arguments.operation)?;
     let project_root = store
@@ -4221,7 +4382,9 @@ async fn preview_environment_operation(
             })
         })
     };
-    let before_snapshot_id = capture_environment_snapshot_id(session, store).await.ok();
+    let before_snapshot_id = capture_environment_snapshot_id(session, &project_root, executor)
+        .await
+        .ok();
     let preview_repositories = if package_operation && arguments.operation != "remove_package" {
         Some(
             serde_json::from_value(
@@ -4292,7 +4455,7 @@ async fn execute_confirmed_environment_operation(
     origin: ExecutionOrigin,
     session: &ArkSession,
     broker: &mut BrokerState,
-    store: &mut Store,
+    executor: &StoreExecutor,
 ) -> Result<Value> {
     let stored_arguments: EnvironmentOperationArguments =
         serde_json::from_str(&request.arguments_json)
@@ -4315,7 +4478,7 @@ async fn execute_confirmed_environment_operation(
         origin,
         session,
         broker,
-        store,
+        executor,
     )
     .await
 }
@@ -4354,8 +4517,12 @@ pub async fn request_environment_operation(
     session: &ArkSession,
     broker: &BrokerState,
     store: &mut Store,
+    executor: &StoreExecutor,
 ) -> Result<EnvironmentOperationRequestSummary> {
-    preview_environment_operation(&arguments, turn_id, source, session, broker, store).await
+    preview_environment_operation(
+        &arguments, turn_id, source, session, broker, store, executor,
+    )
+    .await
 }
 
 pub async fn decide_environment_operation(
@@ -4366,6 +4533,7 @@ pub async fn decide_environment_operation(
     session: &ArkSession,
     broker: &mut BrokerState,
     store: &mut Store,
+    executor: &StoreExecutor,
 ) -> Result<Value> {
     let project_root = store
         .active_project_root()?
@@ -4405,7 +4573,10 @@ pub async fn decide_environment_operation(
         .active_project_root()?
         .unwrap_or_default()
         .replace('\\', "/");
-    let current_snapshot_id = capture_environment_snapshot_id(session, store).await.ok();
+    let current_snapshot_id =
+        capture_environment_snapshot_id(session, &current_project_root, executor)
+            .await
+            .ok();
     if let Some(stale_reason) = environment_operation_stale_reason(
         &request,
         broker,
@@ -4436,7 +4607,7 @@ pub async fn decide_environment_operation(
         },
     )?;
     let result =
-        execute_confirmed_environment_operation(&request, origin, session, broker, store).await;
+        execute_confirmed_environment_operation(&request, origin, session, broker, executor).await;
     if let Err(error) = &result {
         // Dispatch can fail before the execution envelope claims the request
         // as running. Do not leave a user-visible approval without a truthful
@@ -4454,12 +4625,10 @@ pub async fn decide_environment_operation(
 
 async fn capture_environment_snapshot_id(
     session: &ArkSession,
-    store: &mut Store,
+    project_root: &str,
+    executor: &StoreExecutor,
 ) -> Result<String> {
-    let project_root = store
-        .active_project_root()?
-        .unwrap_or_default()
-        .replace('\\', "/");
+    let project_root = project_root.replace('\\', "/");
     let project_argument = if project_root.is_empty() {
         "getwd()".to_string()
     } else {
@@ -4490,11 +4659,16 @@ async fn capture_environment_snapshot_id(
         })
     });
     let snapshot_id = sha256_hex(canonical_json.as_bytes());
-    store.record_environment_snapshot(&EnvironmentSnapshotDraft {
+    let draft = EnvironmentSnapshotDraft {
         snapshot_id: snapshot_id.clone(),
         project_root: snapshot.project_root.clone(),
         canonical_json,
-    })?;
+    };
+    run_workspace_store_service(executor, move |store| {
+        store.record_environment_snapshot(&draft)?;
+        Ok(())
+    })
+    .await?;
     Ok(snapshot_id)
 }
 
@@ -5222,7 +5396,11 @@ fn bridge_expression(request_type: &str, arguments: &Value) -> Result<(Operation
     }
 }
 
-fn append_event(store: &mut Store, kind: MessageKind, payload: Value) -> Result<i64> {
+fn append_event(
+    store: &mut Store<impl StoreConnection>,
+    kind: MessageKind,
+    payload: Value,
+) -> Result<i64> {
     Ok(store.append_event(&Envelope::new(kind, payload))?)
 }
 
@@ -6431,11 +6609,13 @@ mod tests {
                 },
             )
             .unwrap();
-        let context = Arc::new(WorkspaceBrokerLane::new(BrokerState::new("ws-test"), store));
-        let agent_store = rho_store::StoreExecutor::open(&database)
-            .await
-            .unwrap()
-            .agent_repository();
+        let executor = rho_store::StoreExecutor::open(&database).await.unwrap();
+        let context = Arc::new(WorkspaceBrokerLane::new(
+            BrokerState::new("ws-test"),
+            store,
+            executor.clone(),
+        ));
+        let agent_store = executor.agent_repository();
         let workspace_guard = context.lock().await;
 
         tokio::time::timeout(
