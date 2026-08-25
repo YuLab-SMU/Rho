@@ -47,6 +47,6 @@ tokio = { version = "1.0", features = ["full"] }
 tokio-rusqlite = "=0.7.0"
 tokio-util = { version = "0.7", default-features = false, features = ["rt"] }
 uuid = { version = "1.18", features = ["v4", "serde"] }
-wasmtime = { version = "=38.0.4", default-features = false, features = ["cranelift", "runtime", "std"] }
-wat = { version = "=1.257.1", default-features = false }
+wasmtime = { version = "=38.0.4", default-features = false, features = ["component-model", "cranelift", "runtime", "std"] }
+wat = { version = "=1.257.1", default-features = false, features = ["component-model"] }
 zeroize = "1.9"

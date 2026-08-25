@@ -1055,11 +1055,12 @@ fn step_digest(encoded: &str) -> String {
     output
 }
 
-fn build_engine() -> Result<Engine, HostProtocolError> {
+pub(crate) fn build_engine() -> Result<Engine, HostProtocolError> {
     let mut config = Config::new();
     config
         .consume_fuel(true)
         .epoch_interruption(true)
+        .wasm_component_model(true)
         .wasm_memory64(false)
         .wasm_multi_memory(false)
         .wasm_tail_call(false)

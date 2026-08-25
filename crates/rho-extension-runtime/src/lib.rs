@@ -12,6 +12,7 @@
 
 mod broker;
 mod builder;
+mod component_host;
 mod contribution;
 mod contribution_call;
 mod digest;
@@ -45,6 +46,7 @@ pub use builder::{
     BuildProvenance, BuilderError, CandidateProfile, StagedCandidate, StagingLedger,
     StaticValidation, candidate_within_envelope,
 };
+pub use component_host::{AdmittedComponentPlugin, COMPONENT_ABI_V1, MAX_WASM_COMPONENT_BYTES};
 pub use contribution::{
     Contribution, ContributionCandidate, ContributionDeclaration, ContributionError,
     ContributionInstanceIdentity, ContributionKind, ContributionRecord, ContributionStore,
