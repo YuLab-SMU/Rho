@@ -1043,9 +1043,11 @@ pub(crate) async fn resource_read(
             if !preview_supported(&entry.descriptor.resource_id) {
                 return Err("Resource preview is unsupported".to_string());
             }
-            let viewed =
-                crate::viewer_read_file_with_state(entry.descriptor.resource_id.clone(), &state)
-                    .await?;
+            let viewed = crate::commands::project_session::viewer_read_file_with_state(
+                entry.descriptor.resource_id.clone(),
+                &state,
+            )
+            .await?;
             let content = ResourceContentV1 {
                 contract: RESOURCE_CONTENT_CONTRACT.to_string(),
                 descriptor: entry.descriptor.clone(),

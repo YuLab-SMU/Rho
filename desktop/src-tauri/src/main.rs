@@ -44,8 +44,8 @@ use project::{
     ProjectSessionStore, ProjectState, ProjectSwitchBlocker, ProjectSwitchBlockerKind,
     ProjectWatcherControl, atomic_write, atomic_write_new, default_project_root, display_path,
     ensure_editable_content_size, ensure_editable_file, ensure_editable_file_size,
-    list_project_files, normalize_existing_project_root, project_path, read_viewer_file,
-    relative_project_path, start_project_watcher, validate_project_root,
+    list_project_files, project_path, read_viewer_file, relative_project_path,
+    start_project_watcher,
 };
 use rho_core::{BrokerState, ExecutionOrigin};
 use rho_extension_runtime::{
@@ -1138,241 +1138,6 @@ async fn workspace_status(state: State<'_, AppState>) -> Result<Value, String> {
         "workspace": workspace,
         "python_required": false
     }))
-}
-
-#[tauri::command]
-async fn project_state(state: State<'_, AppState>) -> Result<ProjectState, String> {
-    let root = state.project_root.read().await.clone();
-    list_project_files(&root).map_err(display_error)
-}
-
-#[tauri::command]
-async fn project_mark_files_changed(state: State<'_, AppState>) -> Result<Value, String> {
-    let context = active_context(&state).await.map_err(display_error)?;
-    let mut context = context.lock().await;
-    context.broker.project_changed();
-    let identity = context.broker.identity().clone();
-    persist_workspace_identity(&context.executor, identity.clone())
-        .await
-        .map_err(display_error)?;
-    serde_json::to_value(identity).map_err(display_error)
-}
-
-#[cfg_attr(test, specta::specta)]
-#[tauri::command]
-async fn project_open(
-    path: String,
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<ProjectRestoreResponse, String> {
-    let root = validate_project_root(Path::new(&path)).map_err(display_error)?;
-    let session_snapshot = state.project_store.load_session_or_default(&root);
-    switch_project(root, Some(session_snapshot), app, &state)
-        .await
-        .map_err(display_error)
-}
-
-#[cfg_attr(test, specta::specta)]
-#[tauri::command]
-async fn project_pick_directory(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<ProjectRestoreResponse, String> {
-    let Some(path) = rfd::FileDialog::new().pick_folder() else {
-        return Ok(ProjectRestoreResponse::cancelled());
-    };
-    let root = normalize_existing_project_root(&path).map_err(display_error)?;
-    let session_snapshot = state.project_store.load_session_or_default(&root);
-    switch_project(root, Some(session_snapshot), app, &state)
-        .await
-        .map_err(display_error)
-}
-
-#[cfg_attr(test, specta::specta)]
-#[tauri::command]
-async fn project_restore_session(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<ProjectRestoreResponse, String> {
-    let started = Instant::now();
-    let requested_root = state
-        .project_store
-        .last_opened_project()
-        .map_err(display_error)?
-        .unwrap_or_else(default_project_root);
-    let root = match normalize_existing_project_root(&requested_root) {
-        Ok(root) => root,
-        Err(error) => {
-            return Ok(ProjectRestoreResponse::unavailable(
-                requested_root.to_string_lossy().replace('\\', "/"),
-                error.to_string(),
-            ));
-        }
-    };
-    let session_snapshot = state.project_store.load_session_or_default(&root);
-    let result = switch_project(root.clone(), Some(session_snapshot), app, &state)
-        .await
-        .map_err(|error| {
-            write_startup_log(&format!(
-                "project_restore_session failed for {}: {error:#}",
-                root.display()
-            ));
-            display_error(error)
-        });
-    write_startup_log(&format!(
-        "startup_phase=project_restore elapsed_ms={} outcome={}",
-        started.elapsed().as_millis(),
-        if result.is_ok() { "ok" } else { "failed" }
-    ));
-    result
-}
-
-#[tauri::command]
-async fn project_save_session(
-    snapshot: ProjectSessionSnapshot,
-    state: State<'_, AppState>,
-) -> Result<Value, String> {
-    let root = state.project_root.read().await.clone();
-    state
-        .project_store
-        .save_session(&root, &snapshot)
-        .map_err(display_error)?;
-    Ok(json!({"status": "saved"}))
-}
-
-#[tauri::command]
-async fn project_read_file(path: String, state: State<'_, AppState>) -> Result<Value, String> {
-    let root = state.project_root.read().await.clone();
-    let file = project_path(&root, &path).map_err(display_error)?;
-    ensure_editable_file_size(&file).map_err(display_error)?;
-    let content = std::fs::read_to_string(&file).map_err(display_error)?;
-    let sha256 = text_sha256(&content);
-    Ok(json!({"path": path, "content": content, "sha256": sha256}))
-}
-
-#[tauri::command]
-async fn viewer_read_file(
-    path: String,
-    state: State<'_, AppState>,
-) -> Result<project::ViewerFile, String> {
-    viewer_read_file_with_state(path, &state).await
-}
-
-async fn viewer_read_file_with_state(
-    path: String,
-    state: &AppState,
-) -> Result<project::ViewerFile, String> {
-    if state.extension_host.mode() == InternalExtensionRuntimeMode::Legacy {
-        let root = state.project_root.read().await.clone();
-        return read_viewer_file(&root, &path).map_err(display_error);
-    }
-    let application = state.extension_host.scopes().application();
-    let resolution = application
-        .registry()
-        .resolve_project_file_viewer(&project_file_viewer_capability_id())
-        .map_err(display_error)?;
-    if resolution.contribution().general_maximum_bytes() != MAX_VIEWER_FILE_BYTES as usize
-        || resolution.contribution().html_maximum_bytes() != MAX_VIEWER_HTML_BYTES as usize
-    {
-        return Err("Project file viewer contribution has incompatible size limits".to_string());
-    }
-    let root = state.project_root.read().await.clone();
-    let viewed = read_viewer_file(&root, &path).map_err(display_error)?;
-    let current_root = state.project_root.read().await.clone();
-    if current_root != root {
-        return Err("Project file viewer result is stale after a project switch".to_string());
-    }
-    if !resolution
-        .contribution()
-        .supported_media_types()
-        .iter()
-        .any(|media_type| media_type == viewed.media_type)
-    {
-        return Err(format!(
-            "Project file viewer contribution does not declare media type {}",
-            viewed.media_type
-        ));
-    }
-    Ok(viewed)
-}
-
-#[tauri::command]
-async fn project_write_file(
-    path: String,
-    content: String,
-    state: State<'_, AppState>,
-) -> Result<ProjectState, String> {
-    ensure_editable_content_size(&content).map_err(display_error)?;
-    let root = state.project_root.read().await.clone();
-    let file = project_path(&root, &path).map_err(display_error)?;
-    ensure_editable_file(&file).map_err(display_error)?;
-    let context = active_context(&state).await.map_err(display_error)?;
-    let mut context = context.lock().await;
-    atomic_write(&file, content.as_bytes()).map_err(display_error)?;
-    context.broker.project_changed();
-    let identity = context.broker.identity().clone();
-    persist_workspace_identity(&context.executor, identity)
-        .await
-        .map_err(display_error)?;
-    drop(context);
-    project_state(state).await
-}
-
-#[tauri::command]
-async fn project_create_file(
-    path: String,
-    content: String,
-    state: State<'_, AppState>,
-) -> Result<ProjectState, String> {
-    ensure_editable_content_size(&content).map_err(display_error)?;
-    let root = state.project_root.read().await.clone();
-    let file = project_path(&root, &path).map_err(display_error)?;
-    ensure_editable_file(&file).map_err(display_error)?;
-    if file.exists() {
-        return Err(format!("Project file already exists: {path}"));
-    }
-    let context = active_context(&state).await.map_err(display_error)?;
-    let mut context = context.lock().await;
-    atomic_write_new(&file, content.as_bytes()).map_err(display_error)?;
-    context.broker.project_changed();
-    let identity = context.broker.identity().clone();
-    persist_workspace_identity(&context.executor, identity)
-        .await
-        .map_err(display_error)?;
-    drop(context);
-    project_state(state).await
-}
-
-#[tauri::command]
-async fn project_delete_file(
-    path: String,
-    state: State<'_, AppState>,
-) -> Result<ProjectState, String> {
-    let root = state.project_root.read().await.clone();
-    let context = active_context(&state).await.map_err(display_error)?;
-    let mut context = context.lock().await;
-    safe_delete_project_file(&root, &path).map_err(display_error)?;
-    context.broker.project_changed();
-    let identity = context.broker.identity().clone();
-    persist_workspace_identity(&context.executor, identity)
-        .await
-        .map_err(display_error)?;
-    drop(context);
-    project_state(state).await
-}
-
-fn project_delete_target(root: &Path, path: &str) -> Result<PathBuf> {
-    let file = project_path(root, path)?;
-    ensure_editable_file(&file)?;
-    ensure!(file.exists(), "Project file does not exist: {path}");
-    ensure!(file.is_file(), "Project path is not a file: {path}");
-    Ok(file)
-}
-
-fn safe_delete_project_file(root: &Path, path: &str) -> Result<()> {
-    let file = project_delete_target(root, path)?;
-    std::fs::remove_file(&file)?;
-    Ok(())
 }
 
 fn text_sha256(content: &str) -> String {
@@ -2701,7 +2466,7 @@ async fn undo_agent_file_edit_state(
     )
     .await?;
     let write_result = if request.created {
-        safe_delete_project_file(&root, &normalized_path)
+        commands::project_session::safe_delete_project_file(&root, &normalized_path)
     } else {
         atomic_write(&file, request.before_content.as_bytes())
     };
@@ -9023,12 +8788,11 @@ mod tests {
         ensure_supported_r_version, existing_startup_file, find_executable_on_path,
         finish_render_job, interrupt_all_agent_tasks, load_runtime_cache,
         locate_ark_from_candidates, locate_rscript, parse_r_runtime_probe,
-        persist_agent_file_mutation_event_to_store, persist_workspace_identity, project_open,
-        project_pick_directory, project_restore_session, project_switch_blocker,
-        r_architecture_supported, reconcile_render_job, recover_incomplete_agent_file_mutations,
-        render_job_is_terminal, retry_run_arguments, run_is_retryable, run_r_probe,
-        runtime_file_signature, safe_delete_project_file, save_runtime_cache, shutdown_application,
-        store_executor, switch_project_with_watcher_factory, text_sha256,
+        persist_agent_file_mutation_event_to_store, persist_workspace_identity,
+        project_switch_blocker, r_architecture_supported, reconcile_render_job,
+        recover_incomplete_agent_file_mutations, render_job_is_terminal, retry_run_arguments,
+        run_is_retryable, run_r_probe, runtime_file_signature, save_runtime_cache,
+        shutdown_application, store_executor, switch_project_with_watcher_factory, text_sha256,
         undo_agent_file_edit_state, validate_execute_source_range_shape,
         validate_persisted_agent_file_proposal_structure, workspace_project_root_code,
         write_r_probe_script,
@@ -9040,6 +8804,7 @@ mod tests {
     use crate::commands::editor::editor_format_result;
     use crate::commands::environment::lockfile_inventory_arguments;
     use crate::commands::evidence::source_claim_snapshot;
+    use crate::commands::project_session::safe_delete_project_file;
     use crate::commands::runs::{audit_reproducibility_with_state, list_runs_with_state};
     use crate::platform;
 
@@ -13055,25 +12820,32 @@ mod tests {
                 &store_path,
                 test_candidate_extension_host_with_application_plugins().await,
             );
-            let legacy_a = super::viewer_read_file_with_state("report.html".to_string(), &legacy)
-                .await
-                .unwrap();
-            let candidate_a =
-                super::viewer_read_file_with_state("report.html".to_string(), &candidate)
-                    .await
-                    .unwrap();
+            let legacy_a = crate::commands::project_session::viewer_read_file_with_state(
+                "report.html".to_string(),
+                &legacy,
+            )
+            .await
+            .unwrap();
+            let candidate_a = crate::commands::project_session::viewer_read_file_with_state(
+                "report.html".to_string(),
+                &candidate,
+            )
+            .await
+            .unwrap();
             assert_eq!(legacy_a, candidate_a);
             assert_eq!(candidate_a.content, "<h1>project A</h1>");
 
             *candidate.project_root.write().await = project_b.clone();
-            let candidate_b =
-                super::viewer_read_file_with_state("report.html".to_string(), &candidate)
-                    .await
-                    .unwrap();
+            let candidate_b = crate::commands::project_session::viewer_read_file_with_state(
+                "report.html".to_string(),
+                &candidate,
+            )
+            .await
+            .unwrap();
             assert_eq!(candidate_b.content, "<h1>project B</h1>");
             assert_ne!(candidate_a.project_root, candidate_b.project_root);
             assert!(
-                super::viewer_read_file_with_state(
+                crate::commands::project_session::viewer_read_file_with_state(
                     "../project-a/report.html".to_string(),
                     &candidate
                 )
@@ -13087,9 +12859,12 @@ mod tests {
                 &store_path,
                 InternalExtensionRuntimeMode::Candidate,
             );
-            let error = super::viewer_read_file_with_state("report.html".to_string(), &missing)
-                .await
-                .unwrap_err();
+            let error = crate::commands::project_session::viewer_read_file_with_state(
+                "report.html".to_string(),
+                &missing,
+            )
+            .await
+            .unwrap_err();
             assert!(error.contains("viewer contribution is missing"));
         });
     }
@@ -14746,9 +14521,9 @@ mod tests {
             .expect("RHO_PROJECT_BINDINGS_PATH must name the generated file");
         tauri_specta::Builder::<tauri::Wry>::new()
             .commands(tauri_specta::collect_commands![
-                project_open,
-                project_pick_directory,
-                project_restore_session,
+                crate::commands::project_session::project_open,
+                crate::commands::project_session::project_pick_directory,
+                crate::commands::project_session::project_restore_session,
             ])
             .error_handling(tauri_specta::ErrorHandlingMode::Throw)
             .export(specta_typescript::Typescript::default(), output_path)
@@ -16811,17 +16586,17 @@ fn main() {
             resource_registry::resource_delete,
             workspace_start,
             workspace_status,
-            project_state,
-            project_mark_files_changed,
-            project_open,
-            project_pick_directory,
-            project_restore_session,
-            project_save_session,
-            project_read_file,
-            viewer_read_file,
-            project_write_file,
-            project_create_file,
-            project_delete_file,
+            commands::project_session::project_state,
+            commands::project_session::project_mark_files_changed,
+            commands::project_session::project_open,
+            commands::project_session::project_pick_directory,
+            commands::project_session::project_restore_session,
+            commands::project_session::project_save_session,
+            commands::project_session::project_read_file,
+            commands::project_session::viewer_read_file,
+            commands::project_session::project_write_file,
+            commands::project_session::project_create_file,
+            commands::project_session::project_delete_file,
             apply_agent_file_edit,
             undo_agent_file_edit,
             execute_r,

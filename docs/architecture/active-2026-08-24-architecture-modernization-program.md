@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-38",
+  "active_work_packages": ["AM-W2-39"],
+  "integration_lane": "AM-W2-39",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -390,6 +390,10 @@ execution lane.
 `AM-W2-38` (`7088588`/AM-E-0065) mechanically unifies the split Editor
 command-adapter boundary in one module while retaining exact project scoping,
 Workspace dispatch, result validation and registration identity.
+
+`AM-W2-39` mechanically moves the Project/session/file command facade into one
+module while keeping the high-risk project-switch transaction, gate, watcher,
+Store and extension-scope authority in their existing owner.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
