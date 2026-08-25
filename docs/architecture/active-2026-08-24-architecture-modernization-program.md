@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-57",
+  "active_work_packages": ["AM-W2-58"],
+  "integration_lane": "AM-W2-58",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -488,6 +488,10 @@ root normalization to Project and execution-origin parsing to Runs.
 platform-specific Ark termination fallback. Gate ordering, cancellation,
 plugin/runtime/watcher/extension teardown and truthful process cleanup remain
 unchanged.
+
+`AM-W2-58` moves the inline desktop regression corpus into one test module
+assembled from five item-complete source parts. Shared fixtures and test names
+remain identical; each physical test source stays below 1,500 lines.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
