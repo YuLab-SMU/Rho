@@ -160,7 +160,10 @@ struct ValidatedRequest {
     expected_project_revision: i64,
 }
 
-impl Store {
+impl<C> Store<C>
+where
+    C: std::ops::Deref<Target = rusqlite::Connection> + std::ops::DerefMut,
+{
     pub fn create_plugin_permission_request(
         &mut self,
         draft: &PluginPermissionRequestDraft,

@@ -89,7 +89,10 @@ pub struct EvidenceClaimReview {
     pub limitations: Vec<String>,
 }
 
-impl super::Store {
+impl<C> super::Store<C>
+where
+    C: std::ops::Deref<Target = Connection> + std::ops::DerefMut,
+{
     pub fn create_evidence_entry(
         &mut self,
         draft: &EvidenceEntryDraft,

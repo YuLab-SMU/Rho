@@ -233,7 +233,10 @@ pub struct WorkspacePluginReplacementCompletion {
     pub transition: WorkspacePluginTransition,
 }
 
-impl Store {
+impl<C> Store<C>
+where
+    C: std::ops::Deref<Target = rusqlite::Connection> + std::ops::DerefMut,
+{
     pub fn upsert_discovered_workspace_plugin(
         &mut self,
         draft: &WorkspacePluginDiscoveredDraft,

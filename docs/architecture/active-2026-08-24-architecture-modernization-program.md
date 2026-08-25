@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-05",
+  "active_work_packages": ["AM-W2-06"],
+  "integration_lane": "AM-W2-06",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -213,6 +213,12 @@ schema, transaction, project-scope or serialized response contract changes.
 serialized; a committed identity projection remains readable without waiting
 for Workspace R. A publishing guard advances the projection only when a lane
 operation releases, so readers never observe a partially applied revision.
+
+`AM-W2-06` makes the existing Store repository implementation reusable over an
+owned or borrowed SQLite connection. This is a behavior-neutral seam: open,
+migration and recovery remain available only on the owned Store, while the
+same domain methods can execute on the already-open asynchronous Store worker
+without copying SQL or introducing a second persistence contract.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 

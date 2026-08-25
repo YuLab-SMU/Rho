@@ -31,7 +31,10 @@ fn truncate_str(s: &str, max_chars: usize) -> String {
 
 // ── Projections ──────────────────────────────────────────────────────────────
 
-impl Store {
+impl<C> Store<C>
+where
+    C: std::ops::Deref<Target = rusqlite::Connection> + std::ops::DerefMut,
+{
     // ── Capabilities ─────────────────────────────────────────────────────────
 
     /// Return the static WB1 capabilities for this runtime.

@@ -11,7 +11,7 @@ use thiserror::Error;
 
 use crate::{
     EvidenceClaim, EvidenceClaimDraft, EvidenceClaimReview, EvidenceEntry, EvidenceEntryDraft,
-    MigrationOutcome, Store, StoreError, evidence, query::required_project_root,
+    MigrationOutcome, Store, StoreError, query::required_project_root,
 };
 
 #[derive(Debug, Error)]
@@ -53,7 +53,7 @@ impl StoreExecutor {
             migration_outcome,
         } = store;
         Ok(Self {
-            connection: connection.into(),
+            connection: (*connection).into(),
             migration_outcome,
         })
     }
@@ -81,7 +81,7 @@ impl StoreExecutor {
         mut draft: EvidenceEntryDraft,
     ) -> Result<EvidenceEntry, StoreExecutorError> {
         draft.project_root = required_project_root(&draft.project_root)?;
-        self.call(move |connection| evidence::create_evidence_entry_on(connection, &draft))
+        self.call(move |connection| Store::borrowed(connection).create_evidence_entry(&draft))
             .await
     }
 
@@ -92,7 +92,11 @@ impl StoreExecutor {
         search: Option<String>,
     ) -> Result<Vec<EvidenceEntry>, StoreExecutorError> {
         self.call(move |connection| {
-            evidence::list_evidence_entries_on(connection, &project_root, limit, search.as_deref())
+            Store::borrowed(connection).list_evidence_entries(
+                &project_root,
+                limit,
+                search.as_deref(),
+            )
         })
         .await
     }
@@ -102,8 +106,10 @@ impl StoreExecutor {
         project_root: String,
         id: i64,
     ) -> Result<Option<EvidenceEntry>, StoreExecutorError> {
-        self.call(move |connection| evidence::get_evidence_entry_on(connection, &project_root, id))
-            .await
+        self.call(move |connection| {
+            Store::borrowed(connection).get_evidence_entry(&project_root, id)
+        })
+        .await
     }
 
     pub async fn delete_evidence_entry(
@@ -113,7 +119,7 @@ impl StoreExecutor {
     ) -> Result<bool, StoreExecutorError> {
         let project_root = required_project_root(&project_root)?;
         self.call(move |connection| {
-            evidence::delete_evidence_entry_on(connection, &project_root, id)
+            Store::borrowed(connection).delete_evidence_entry(&project_root, id)
         })
         .await
     }
@@ -125,7 +131,7 @@ impl StoreExecutor {
         citation_json: String,
     ) -> Result<bool, StoreExecutorError> {
         self.call(move |connection| {
-            evidence::set_evidence_citation_on(connection, &project_root, id, &citation_json)
+            Store::borrowed(connection).set_evidence_citation(&project_root, id, &citation_json)
         })
         .await
     }
@@ -134,7 +140,7 @@ impl StoreExecutor {
         &self,
         draft: EvidenceClaimDraft,
     ) -> Result<EvidenceClaim, StoreExecutorError> {
-        self.call(move |connection| evidence::create_evidence_claim_on(connection, &draft))
+        self.call(move |connection| Store::borrowed(connection).create_evidence_claim(&draft))
             .await
     }
 
@@ -144,7 +150,7 @@ impl StoreExecutor {
         limit: Option<usize>,
     ) -> Result<Vec<EvidenceClaim>, StoreExecutorError> {
         self.call(move |connection| {
-            evidence::list_evidence_claims_on(connection, &project_root, limit)
+            Store::borrowed(connection).list_evidence_claims(&project_root, limit)
         })
         .await
     }
@@ -155,7 +161,7 @@ impl StoreExecutor {
         claim_id: String,
     ) -> Result<Option<EvidenceClaim>, StoreExecutorError> {
         self.call(move |connection| {
-            evidence::get_evidence_claim_on(connection, &project_root, &claim_id)
+            Store::borrowed(connection).get_evidence_claim(&project_root, &claim_id)
         })
         .await
     }
@@ -167,8 +173,7 @@ impl StoreExecutor {
         source_anchor_resolved: Option<bool>,
     ) -> Result<EvidenceClaimReview, StoreExecutorError> {
         self.call(move |connection| {
-            evidence::review_evidence_claim_on(
-                connection,
+            Store::borrowed(connection).review_evidence_claim(
                 &project_root,
                 &claim_id,
                 source_anchor_resolved,
@@ -183,7 +188,7 @@ impl StoreExecutor {
         claim_id: String,
     ) -> Result<bool, StoreExecutorError> {
         self.call(move |connection| {
-            evidence::delete_evidence_claim_on(connection, &project_root, &claim_id)
+            Store::borrowed(connection).delete_evidence_claim(&project_root, &claim_id)
         })
         .await
     }

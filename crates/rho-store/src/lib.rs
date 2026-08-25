@@ -289,8 +289,8 @@ struct StoreOpenOptions {
 }
 
 #[derive(Debug)]
-pub struct Store {
-    connection: Connection,
+pub struct Store<C = Box<Connection>> {
+    connection: C,
     migration_outcome: MigrationOutcome,
 }
 
@@ -305,7 +305,7 @@ impl Store {
         connection.pragma_update(None, "foreign_keys", "ON")?;
         connection.busy_timeout(std::time::Duration::from_secs(5))?;
         let mut store = Self {
-            connection,
+            connection: Box::new(connection),
             migration_outcome: MigrationOutcome::opened_current(),
         };
         store.migrate(path, &options)?;
@@ -892,7 +892,21 @@ impl Store {
         migration::assert_runtime_output_schema(&self.connection)?;
         Ok(())
     }
+}
 
+impl<'connection> Store<&'connection mut Connection> {
+    fn borrowed(connection: &'connection mut Connection) -> Self {
+        Self {
+            connection,
+            migration_outcome: MigrationOutcome::opened_current(),
+        }
+    }
+}
+
+impl<C> Store<C>
+where
+    C: std::ops::Deref<Target = Connection> + std::ops::DerefMut,
+{
     pub fn append_event(&mut self, event: &Envelope) -> Result<i64, StoreError> {
         let payload = serde_json::to_string(&event.payload)?;
         let kind = serde_json::to_string(&event.kind)?;

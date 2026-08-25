@@ -482,7 +482,10 @@ fn extract_identifier_before_colons(before: &str) -> Option<String> {
 // Audit implementation
 // ---------------------------------------------------------------------------
 
-impl Store {
+impl<C> Store<C>
+where
+    C: std::ops::Deref<Target = rusqlite::Connection> + std::ops::DerefMut,
+{
     /// Run the full reproducibility audit against the store and the
     /// on-disk project.  This is a read-only operation.
     pub fn audit_reproducibility(

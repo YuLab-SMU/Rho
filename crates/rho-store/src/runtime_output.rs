@@ -297,7 +297,10 @@ struct PreparedOutput {
     payload_sha256: String,
 }
 
-impl Store {
+impl<C> Store<C>
+where
+    C: std::ops::Deref<Target = rusqlite::Connection> + std::ops::DerefMut,
+{
     pub fn create_runtime_execution(
         &mut self,
         draft: &RuntimeExecutionDraft,
