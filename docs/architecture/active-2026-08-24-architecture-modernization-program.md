@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-46",
+  "active_work_packages": ["AM-W2-47"],
+  "integration_lane": "AM-W2-47",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -432,6 +432,11 @@ blockers or Store data.
 memory job projection boundary, including durable Run/Artifact reconciliation
 and cancellation, while keeping Workspace dispatch, Store and project identity
 authoritative.
+
+`AM-W2-47` extracts Workspace execution, snapshot and data-view commands plus
+their Runtime/Agent adapters into an explicit Workspace service boundary;
+Runtime Registry and Artifact commands depend on that module directly rather
+than using the composition root as a hidden service locator.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
