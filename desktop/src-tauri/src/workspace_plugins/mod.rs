@@ -56,15 +56,18 @@ const MAX_PLUGIN_RECONCILIATION_ENTRIES: usize = 256;
 
 mod activation;
 mod activation_helpers;
+mod broker_calls;
 mod broker_helpers;
 mod contracts;
+mod contribution_calls;
 mod contributions;
 mod discovery;
+mod guest_calls;
 mod lifecycle;
 mod permissions;
 mod projection_helpers;
 mod recovery_helpers;
-mod runtime_calls;
+mod runtime_health;
 mod upgrade;
 mod workspace_dispatch;
 

@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-13",
+  "active_work_packages": ["AM-W2-14"],
+  "integration_lane": "AM-W2-14",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -263,6 +263,12 @@ private crash/admission helpers.
 projection-validation and activation/grant modules. Helpers called by sibling
 implementation modules become `pub(super)` only; the `workspace_plugins`
 module remains private to the crate and no command or runtime authority changes.
+
+`AM-W2-14` replaces the temporary combined runtime-call module with independent
+network/Workspace broker, direct guest, contribution and health/crash inherent
+implementation modules. Shared cancellation/admission and crash helpers gain
+only private-parent visibility; call order, grant consumption, durable audit and
+quarantine behavior remain unchanged.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
