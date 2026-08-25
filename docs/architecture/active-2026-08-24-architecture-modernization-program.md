@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W2-02"],
+  "active_work_packages": [],
   "integration_lane": "AM-W2-02",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -337,6 +337,15 @@ Kernel facet and adds an AST ratchet across 29 production transport files. The
 final Wave 1 audit reports zero direct `invoke(...)` calls outside generated
 commands; Rust owns every current production command name and DTO boundary,
 while real and mock transports compose narrow domain facets.
+
+## Wave 2 progress (2026-08-25)
+
+AM-W2-02 (`1ced6ac`/AM-E-0029) mechanically extracts AppInfo, native updater
+state/handlers, product URL and bundled-license behavior into `shell.rs`.
+`main.rs` drops from 17,970 to 17,677 lines, the 193-command identity/order is
+unchanged, and the Kernel generated contract changes only its truthful source
+header. Coordinator, Store and concurrency semantics remain untouched for the
+next bounded packages.
 
 ## Version, NEWS, and release decision
 
