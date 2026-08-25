@@ -4,6 +4,7 @@ mod agent_llm;
 mod check_runtime;
 mod commands;
 mod git;
+mod git_commands;
 mod git_review;
 mod platform;
 mod plugin_surface_runtime;
@@ -6102,166 +6103,6 @@ pub(crate) async fn restart_workspace_locked(state: &AppState) -> Result<Workspa
         }
     }
     Ok(status)
-}
-
-#[cfg_attr(test, specta::specta)]
-#[tauri::command]
-async fn git_status(state: State<'_, AppState>) -> Result<git::GitStatus, String> {
-    let root = state.project_root.read().await.clone();
-    git::git_status(Path::new(&root)).map_err(|e| e.to_string())
-}
-
-#[cfg_attr(test, specta::specta)]
-#[tauri::command]
-async fn git_log(
-    limit: Option<rho_ui_contract::UiIpcUsize>,
-    state: State<'_, AppState>,
-) -> Result<Vec<git::GitLogEntry>, String> {
-    let root = state.project_root.read().await.clone();
-    git::git_log(Path::new(&root), limit.map(usize::from).unwrap_or(20)).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn git_diff(
-    staged: Option<bool>,
-    state: State<'_, AppState>,
-) -> Result<Vec<git_review::GitReviewFile>, String> {
-    let root = state.project_root.read().await.clone();
-    git_review::list_files(Path::new(&root), staged.unwrap_or(false)).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn git_stage(
-    file_path: String,
-    expected_revision: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    let root = state.project_root.read().await.clone();
-    git_review::stage_file(Path::new(&root), &file_path, &expected_revision)
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn git_commit(
-    message: String,
-    expected_staged_revision: String,
-    state: State<'_, AppState>,
-) -> Result<String, String> {
-    let root = state.project_root.read().await.clone();
-    git_review::commit(Path::new(&root), &message, &expected_staged_revision)
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn git_diff_unified(
-    file_path: String,
-    staged: Option<bool>,
-    state: State<'_, AppState>,
-) -> Result<git_review::GitReviewDiff, String> {
-    let root = state.project_root.read().await.clone();
-    git_review::review_diff(Path::new(&root), &file_path, staged.unwrap_or(false))
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn git_hunk_stage(
-    file_path: String,
-    hunk_index: usize,
-    expected_revision: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    let root = state.project_root.read().await.clone();
-    git_review::stage_hunk(Path::new(&root), &file_path, hunk_index, &expected_revision)
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn git_hunk_unstage(
-    file_path: String,
-    hunk_index: usize,
-    expected_revision: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    let root = state.project_root.read().await.clone();
-    git_review::unstage_hunk(Path::new(&root), &file_path, hunk_index, &expected_revision)
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn git_restore_file(
-    file_path: String,
-    expected_revision: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    let root = state.project_root.read().await.clone();
-    git_review::restore_file(Path::new(&root), &file_path, &expected_revision)
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn git_unstage_file(
-    file_path: String,
-    expected_revision: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    let root = state.project_root.read().await.clone();
-    git_review::unstage_file(Path::new(&root), &file_path, &expected_revision)
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn git_staged_revision(state: State<'_, AppState>) -> Result<String, String> {
-    let root = state.project_root.read().await.clone();
-    git_review::staged_revision(Path::new(&root)).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn git_list_conflicts(state: State<'_, AppState>) -> Result<Value, String> {
-    let root = state.project_root.read().await.clone();
-    let project_root = Path::new(&*root);
-    // Check MERGE_HEAD
-    let merge_head = git::run_git(project_root, &["rev-parse", "--short", "MERGE_HEAD"])
-        .map(|s| s.trim().to_string())
-        .ok();
-    let output = git::run_git(project_root, &["diff", "--name-only", "--diff-filter=U"])
-        .map_err(|e| e.to_string())?;
-    let files: Vec<String> = output
-        .lines()
-        .map(|l| l.trim().to_string())
-        .filter(|l| !l.is_empty())
-        .collect();
-    Ok(json!({
-        "files": files,
-        "merge_head": merge_head,
-        "has_conflicts": !files.is_empty(),
-    }))
-}
-
-#[tauri::command]
-async fn git_resolve_conflict(
-    file_path: String,
-    resolution: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    let root = state.project_root.read().await.clone();
-    let root_path = Path::new(&*root);
-    match resolution.as_str() {
-        "ours" => {
-            git::run_git(root_path, &["checkout", "--ours", "--", &file_path])
-                .map_err(|e| e.to_string())?;
-            git::run_git(root_path, &["add", "--", &file_path]).map_err(|e| e.to_string())?;
-        }
-        "theirs" => {
-            git::run_git(root_path, &["checkout", "--theirs", "--", &file_path])
-                .map_err(|e| e.to_string())?;
-            git::run_git(root_path, &["add", "--", &file_path]).map_err(|e| e.to_string())?;
-        }
-        "mark" => {
-            git::run_git(root_path, &["add", "--", &file_path]).map_err(|e| e.to_string())?;
-        }
-        other => return Err(format!("unknown resolution: {other}")),
-    }
-    Ok(())
 }
 
 #[tauri::command]
@@ -15555,8 +15396,8 @@ mod tests {
             .expect("RHO_GIT_BINDINGS_PATH must name the generated file");
         tauri_specta::Builder::<tauri::Wry>::new()
             .commands(tauri_specta::collect_commands![
-                super::git_status,
-                super::git_log,
+                crate::git_commands::git_status,
+                crate::git_commands::git_log,
             ])
             .error_handling(tauri_specta::ErrorHandlingMode::Throw)
             .export(specta_typescript::Typescript::default(), output_path)
@@ -17614,19 +17455,19 @@ fn main() {
             cancel_run,
             cancel_agent_turn,
             restart_workspace,
-            git_status,
-            git_log,
-            git_diff,
-            git_stage,
-            git_commit,
-            git_diff_unified,
-            git_hunk_stage,
-            git_hunk_unstage,
-            git_restore_file,
-            git_unstage_file,
-            git_staged_revision,
-            git_list_conflicts,
-            git_resolve_conflict,
+            git_commands::git_status,
+            git_commands::git_log,
+            git_commands::git_diff,
+            git_commands::git_stage,
+            git_commands::git_commit,
+            git_commands::git_diff_unified,
+            git_commands::git_hunk_stage,
+            git_commands::git_hunk_unstage,
+            git_commands::git_restore_file,
+            git_commands::git_unstage_file,
+            git_commands::git_staged_revision,
+            git_commands::git_list_conflicts,
+            git_commands::git_resolve_conflict,
             targets_status,
             resolve_doi,
             create_evidence_entry,

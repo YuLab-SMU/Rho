@@ -9,5 +9,5 @@ runTauriSpectaBindingGenerator({
   outputEnvironment: "RHO_GIT_BINDINGS_PATH",
   factoryName: "createGitCommands",
   invokeTypeName: "GitInvoke",
-  rustSources: "rho-desktop Git DTOs + read commands",
+  rustSources: "rho-desktop Git DTOs + git_commands read adapters",
 });
