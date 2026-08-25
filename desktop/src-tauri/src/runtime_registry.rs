@@ -1620,27 +1620,19 @@ fn workspace_output_drafts(producer_sequence: i64, payload: &Value) -> Vec<Runti
     drafts
 }
 
-fn runtime_output_capture_limit(
-    store: &rho_store::Store,
-    project_root: &str,
-) -> Result<Option<i64>> {
-    Ok(store
-        .get_runtime_output_policy(project_root)?
-        .max_runtime_output_bytes_per_execution)
-}
-
-fn append_projected_output(
+async fn append_projected_output(
     state: &AppState,
-    store: &mut rho_store::Store,
+    repository: &rho_store::RuntimeOutputRepository,
     project_root: &str,
     execution_id: &str,
-    drafts: &[RuntimeOutputDraft],
+    drafts: Vec<RuntimeOutputDraft>,
 ) -> Result<()> {
     if drafts.is_empty() {
         return Ok(());
     }
-    let capture_limit = runtime_output_capture_limit(store, project_root)?;
-    let result = store.append_runtime_output(project_root, execution_id, drafts, capture_limit)?;
+    let result = repository
+        .append(project_root.to_string(), execution_id.to_string(), drafts)
+        .await?;
     if !result.committed.is_empty() {
         state
             .runtime_registry
@@ -1696,8 +1688,8 @@ async fn run_supervised_execution(
     let state = app.state::<AppState>();
     let _execution_lease = execution_lease;
     let _queue = admitted.execution_gate.lock().await;
-    let mut store = match crate::read_store(&state) {
-        Ok(store) => store,
+    let repository = match crate::store_executor(&state).await {
+        Ok(executor) => executor.runtime_output_repository(),
         Err(error) => {
             finish_runtime_descriptor(&app, &state, &request, false, false).await;
             crate::write_startup_event(serde_json::json!({
@@ -1709,18 +1701,22 @@ async fn run_supervised_execution(
         }
     };
     if !matches!(
-        store.mark_runtime_execution_running(&project_root, &execution_id),
+        repository
+            .mark_running(project_root.clone(), execution_id.clone())
+            .await,
         Ok(RuntimeExecutionMutationOutcome::Applied | RuntimeExecutionMutationOutcome::Unchanged)
     ) {
-        let _ = store.finish_runtime_execution(
-            &project_root,
-            &execution_id,
-            &RuntimeExecutionFinish {
-                status: "failed".to_string(),
-                terminal_reason: Some("runtime_output_admission_lost".to_string()),
-                output_state: "unavailable".to_string(),
-            },
-        );
+        let _ = repository
+            .finish(
+                project_root.clone(),
+                execution_id.clone(),
+                RuntimeExecutionFinish {
+                    status: "failed".to_string(),
+                    terminal_reason: Some("runtime_output_admission_lost".to_string()),
+                    output_state: "unavailable".to_string(),
+                },
+            )
+            .await;
         state
             .runtime_registry
             .notify_output(&project_root, &execution_id);
@@ -1753,15 +1749,17 @@ async fn run_supervised_execution(
         }) {
             Ok(running) => running,
             Err(error) => {
-                let _ = store.finish_runtime_execution(
-                    &project_root,
-                    &execution_id,
-                    &RuntimeExecutionFinish {
-                        status: "failed".to_string(),
-                        terminal_reason: Some(error.to_string()),
-                        output_state: "unavailable".to_string(),
-                    },
-                );
+                let _ = repository
+                    .finish(
+                        project_root.clone(),
+                        execution_id.clone(),
+                        RuntimeExecutionFinish {
+                            status: "failed".to_string(),
+                            terminal_reason: Some(error.to_string()),
+                            output_state: "unavailable".to_string(),
+                        },
+                    )
+                    .await;
                 state
                     .runtime_registry
                     .notify_output(&project_root, &execution_id);
@@ -1778,26 +1776,38 @@ async fn run_supervised_execution(
         }
     };
 
-    let mut output_failure: Option<String> = None;
+    let output_failure = Arc::new(StdMutex::new(None::<String>));
     let execution = if running.descriptor.primary_scientific_runtime {
         let result = crate::execute_workspace_runtime(&request, &state, &execution_id).await;
         if result.is_ok()
-            && let Err(error) =
-                store.link_runtime_execution_run(&project_root, &execution_id, &execution_id)
+            && let Err(error) = repository
+                .link_run(
+                    project_root.clone(),
+                    execution_id.clone(),
+                    execution_id.clone(),
+                )
+                .await
         {
-            output_failure = Some(error.to_string());
+            *output_failure
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(error.to_string());
         }
         match &result {
             Ok(payload) => {
                 let drafts = workspace_output_drafts(1, payload);
                 if let Err(error) = append_projected_output(
                     &state,
-                    &mut store,
+                    &repository,
                     &project_root,
                     &execution_id,
-                    &drafts,
-                ) {
-                    output_failure.get_or_insert_with(|| error.to_string());
+                    drafts,
+                )
+                .await
+                {
+                    output_failure
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .get_or_insert_with(|| error.to_string());
                 }
             }
             Err(error) => {
@@ -1811,12 +1821,17 @@ async fn run_supervised_execution(
                 );
                 if let Err(append_error) = append_projected_output(
                     &state,
-                    &mut store,
+                    &repository,
                     &project_root,
                     &execution_id,
-                    &drafts,
-                ) {
-                    output_failure.get_or_insert_with(|| append_error.to_string());
+                    drafts,
+                )
+                .await
+                {
+                    output_failure
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .get_or_insert_with(|| append_error.to_string());
                 }
             }
         }
@@ -1829,28 +1844,48 @@ async fn run_supervised_execution(
         match session {
             Ok(session) => {
                 let mut producer_sequence = 0_i64;
+                let event_repository = repository.clone();
+                let event_failure = Arc::clone(&output_failure);
+                let event_project_root = project_root.clone();
+                let event_execution_id = execution_id.clone();
+                let event_app = app.clone();
                 session
                     .read()
                     .await
-                    .execute(request.code.clone(), |event| {
+                    .execute_async(request.code.clone(), move |event| {
                         producer_sequence = producer_sequence.saturating_add(1);
-                        if output_failure.is_none() {
-                            let drafts = output_drafts(
-                                producer_sequence,
-                                "kernel_event",
-                                kernel_projected_output(&event),
-                            );
-                            if let Err(error) = append_projected_output(
-                                &state,
-                                &mut store,
-                                &project_root,
-                                &execution_id,
-                                &drafts,
-                            ) {
-                                output_failure = Some(error.to_string());
+                        let already_failed = event_failure
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .is_some();
+                        let drafts = output_drafts(
+                            producer_sequence,
+                            "kernel_event",
+                            kernel_projected_output(&event),
+                        );
+                        let repository = event_repository.clone();
+                        let failure = Arc::clone(&event_failure);
+                        let project_root = event_project_root.clone();
+                        let execution_id = event_execution_id.clone();
+                        let app = event_app.clone();
+                        async move {
+                            if !already_failed
+                                && let Err(error) = append_projected_output(
+                                    &app.state::<AppState>(),
+                                    &repository,
+                                    &project_root,
+                                    &execution_id,
+                                    drafts,
+                                )
+                                .await
+                            {
+                                *failure
+                                    .lock()
+                                    .unwrap_or_else(std::sync::PoisonError::into_inner) =
+                                    Some(error.to_string());
                             }
+                            Ok(())
                         }
-                        Ok(())
                     })
                     .await
             }
@@ -1860,9 +1895,14 @@ async fn run_supervised_execution(
 
     let cancelled = running.cancellation_requested.load(Ordering::Acquire);
     let succeeded = execution.is_ok() && !cancelled;
-    if cancelled && output_failure.is_none() {
-        let producer_sequence = store
-            .get_runtime_execution(&project_root, &execution_id)
+    let output_persistence_healthy = output_failure
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .is_none();
+    if cancelled && output_persistence_healthy {
+        let producer_sequence = repository
+            .get_execution(project_root.clone(), execution_id.clone())
+            .await
             .ok()
             .flatten()
             .map_or(1, |record| record.last_sequence.saturating_add(1));
@@ -1875,17 +1915,24 @@ async fn run_supervised_execution(
             }],
         );
         if let Err(error) =
-            append_projected_output(&state, &mut store, &project_root, &execution_id, &drafts)
+            append_projected_output(&state, &repository, &project_root, &execution_id, drafts).await
         {
-            output_failure = Some(error.to_string());
+            *output_failure
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(error.to_string());
         }
     }
 
     finish_runtime_descriptor(&app, &state, &request, succeeded, cancelled).await;
-    let current_output = store
-        .get_runtime_execution(&project_root, &execution_id)
+    let current_output = repository
+        .get_execution(project_root.clone(), execution_id.clone())
+        .await
         .ok()
         .flatten();
+    let output_failure = output_failure
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone();
     let output_state = if output_failure.is_some() {
         if current_output
             .as_ref()
@@ -1910,22 +1957,24 @@ async fn run_supervised_execution(
     } else {
         execution.as_ref().err().map(ToString::to_string)
     };
-    let _ = store.finish_runtime_execution(
-        &project_root,
-        &execution_id,
-        &RuntimeExecutionFinish {
-            status: if cancelled {
-                "interrupted"
-            } else if succeeded {
-                "completed"
-            } else {
-                "failed"
-            }
-            .to_string(),
-            terminal_reason,
-            output_state: output_state.to_string(),
-        },
-    );
+    let _ = repository
+        .finish(
+            project_root.clone(),
+            execution_id.clone(),
+            RuntimeExecutionFinish {
+                status: if cancelled {
+                    "interrupted"
+                } else if succeeded {
+                    "completed"
+                } else {
+                    "failed"
+                }
+                .to_string(),
+                terminal_reason,
+                output_state: output_state.to_string(),
+            },
+        )
+        .await;
     state
         .runtime_registry
         .notify_output(&project_root, &execution_id);
@@ -1946,9 +1995,11 @@ pub(crate) async fn runtime_execution_start(
         .await
         .map_err(display_error)?;
     let execution_id = format!("runtime-execution:{}", Uuid::new_v4().simple());
-    let mut store = crate::read_store(&state).map_err(display_error)?;
-    let execution = store
-        .create_runtime_execution(&RuntimeExecutionDraft {
+    let execution = crate::store_executor(&state)
+        .await
+        .map_err(display_error)?
+        .runtime_output_repository()
+        .create_execution(RuntimeExecutionDraft {
             execution_id: execution_id.clone(),
             project_root: project_root.clone(),
             run_id: None,
@@ -1975,6 +2026,7 @@ pub(crate) async fn runtime_execution_start(
                 .transpose()
                 .map_err(display_error)?,
         })
+        .await
         .map_err(display_error)?;
     state
         .runtime_registry
@@ -2710,18 +2762,26 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn runtime_capture_reads_the_revisioned_project_policy() {
+    #[tokio::test]
+    async fn runtime_capture_reads_the_revisioned_project_policy() {
         let directory = TempDir::new().unwrap();
-        let mut store = rho_store::Store::open(directory.path().join("rho.sqlite")).unwrap();
+        let repository = rho_store::StoreExecutor::open(directory.path().join("rho.sqlite"))
+            .await
+            .unwrap()
+            .runtime_output_repository();
         assert_eq!(
-            runtime_output_capture_limit(&store, "D:/project").unwrap(),
+            repository
+                .policy("D:/project".to_string())
+                .await
+                .unwrap()
+                .policy
+                .max_runtime_output_bytes_per_execution,
             Some(128 * 1024 * 1024)
         );
-        store
-            .update_runtime_output_policy(
-                "D:/project",
-                &RuntimeOutputPolicyUpdate {
+        repository
+            .update_policy(
+                "D:/project".to_string(),
+                RuntimeOutputPolicyUpdate {
                     expected_revision: 0,
                     max_runtime_output_bytes_per_execution: None,
                     runtime_output_project_warning_bytes: Some(1024),
@@ -2729,9 +2789,15 @@ mod tests {
                     auto_prune_enabled: false,
                 },
             )
+            .await
             .unwrap();
         assert_eq!(
-            runtime_output_capture_limit(&store, "D:/project").unwrap(),
+            repository
+                .policy("D:/project".to_string())
+                .await
+                .unwrap()
+                .policy
+                .max_runtime_output_bytes_per_execution,
             None
         );
     }

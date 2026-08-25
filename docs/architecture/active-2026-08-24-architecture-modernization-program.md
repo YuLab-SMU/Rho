@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-26",
+  "active_work_packages": ["AM-W2-27"],
+  "integration_lane": "AM-W2-27",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -330,6 +330,11 @@ constant.
 `AM-W2-26` (`7e11db5`/AM-E-0053) moves bounded Plugin Surface and Check guest
 contribution execution plus their Store-backed validation off Tokio request
 threads and onto the existing plugin Store service seam.
+
+`AM-W2-27` adds ordered async Ark event callbacks and moves Runtime execution
+admission, streaming output and terminal persistence onto
+`RuntimeOutputRepository` without introducing a buffer or weakening
+backpressure.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 

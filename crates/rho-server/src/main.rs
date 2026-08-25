@@ -481,9 +481,9 @@ async fn probe_ark(
     for code in codes {
         eprintln!("Executing: {code}");
         run_result = session
-            .execute_with_options(
+            .execute_with_options_async(
                 code,
-                |event| {
+                |event| async move {
                     println!("{}", serde_json::to_string(&event)?);
                     Ok(())
                 },

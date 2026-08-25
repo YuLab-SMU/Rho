@@ -1,9 +1,10 @@
 //! Asynchronous Runtime Output projections and bounded maintenance.
 
 use crate::{
-    ProjectRetentionSummary, RuntimeExecution, RuntimeExecutionDeleteResult, RuntimeOutputPage,
-    RuntimeOutputPolicy, RuntimeOutputPolicyUpdate, RuntimeOutputPruneResult,
-    RuntimeOutputSearchResult, Store, StoreExecutor, StoreExecutorError,
+    ProjectRetentionSummary, RuntimeExecution, RuntimeExecutionDeleteResult, RuntimeExecutionDraft,
+    RuntimeExecutionFinish, RuntimeExecutionMutationOutcome, RuntimeOutputAppendResult,
+    RuntimeOutputDraft, RuntimeOutputPage, RuntimeOutputPolicy, RuntimeOutputPolicyUpdate,
+    RuntimeOutputPruneResult, RuntimeOutputSearchResult, Store, StoreExecutor, StoreExecutorError,
     query::required_project_root,
 };
 
@@ -27,6 +28,84 @@ impl StoreExecutor {
 }
 
 impl RuntimeOutputRepository {
+    pub async fn create_execution(
+        &self,
+        mut draft: RuntimeExecutionDraft,
+    ) -> Result<RuntimeExecution, StoreExecutorError> {
+        draft.project_root = required_project_root(&draft.project_root)?;
+        self.executor
+            .call(move |connection| Store::borrowed(connection).create_runtime_execution(&draft))
+            .await
+    }
+
+    pub async fn mark_running(
+        &self,
+        project_root: String,
+        execution_id: String,
+    ) -> Result<RuntimeExecutionMutationOutcome, StoreExecutorError> {
+        let project_root = required_project_root(&project_root)?;
+        self.executor
+            .call(move |connection| {
+                Store::borrowed(connection)
+                    .mark_runtime_execution_running(&project_root, &execution_id)
+            })
+            .await
+    }
+
+    pub async fn link_run(
+        &self,
+        project_root: String,
+        execution_id: String,
+        run_id: String,
+    ) -> Result<RuntimeExecutionMutationOutcome, StoreExecutorError> {
+        let project_root = required_project_root(&project_root)?;
+        self.executor
+            .call(move |connection| {
+                Store::borrowed(connection).link_runtime_execution_run(
+                    &project_root,
+                    &execution_id,
+                    &run_id,
+                )
+            })
+            .await
+    }
+
+    pub async fn append(
+        &self,
+        project_root: String,
+        execution_id: String,
+        drafts: Vec<RuntimeOutputDraft>,
+    ) -> Result<RuntimeOutputAppendResult, StoreExecutorError> {
+        let project_root = required_project_root(&project_root)?;
+        self.executor
+            .call(move |connection| {
+                let mut store = Store::borrowed(connection);
+                let capture_limit = store
+                    .get_runtime_output_policy(&project_root)?
+                    .max_runtime_output_bytes_per_execution;
+                store.append_runtime_output(&project_root, &execution_id, &drafts, capture_limit)
+            })
+            .await
+    }
+
+    pub async fn finish(
+        &self,
+        project_root: String,
+        execution_id: String,
+        finish: RuntimeExecutionFinish,
+    ) -> Result<RuntimeExecutionMutationOutcome, StoreExecutorError> {
+        let project_root = required_project_root(&project_root)?;
+        self.executor
+            .call(move |connection| {
+                Store::borrowed(connection).finish_runtime_execution(
+                    &project_root,
+                    &execution_id,
+                    &finish,
+                )
+            })
+            .await
+    }
+
     pub async fn reconcile_interrupted(
         &self,
         project_root: String,
@@ -217,18 +296,25 @@ mod tests {
     async fn repository_preserves_queries_policy_maintenance_and_project_isolation() {
         let directory = tempdir().unwrap();
         let database = directory.path().join("rho.sqlite");
-        let mut store = Store::open(&database).unwrap();
-        store
-            .create_runtime_execution(&execution("/projects/a", "execution-a"))
+        drop(Store::open(&database).unwrap());
+
+        let repository = StoreExecutor::open(&database)
+            .await
+            .unwrap()
+            .runtime_output_repository();
+        repository
+            .create_execution(execution("/projects/a", "execution-a"))
+            .await
             .unwrap();
-        store
-            .mark_runtime_execution_running("/projects/a", "execution-a")
+        repository
+            .mark_running("/projects/a".to_string(), "execution-a".to_string())
+            .await
             .unwrap();
-        store
-            .append_runtime_output(
-                "/projects/a",
-                "execution-a",
-                &[RuntimeOutputDraft {
+        repository
+            .append(
+                "/projects/a".to_string(),
+                "execution-a".to_string(),
+                vec![RuntimeOutputDraft {
                     producer_sequence: 1,
                     projection_slot: 0,
                     source_kind: "kernel_event".to_string(),
@@ -238,18 +324,13 @@ mod tests {
                         text: "repository output".to_string(),
                     },
                 }],
-                None,
             )
-            .unwrap();
-        store
-            .create_runtime_execution(&execution("/projects/b", "execution-b"))
-            .unwrap();
-        drop(store);
-
-        let repository = StoreExecutor::open(&database)
             .await
-            .unwrap()
-            .runtime_output_repository();
+            .unwrap();
+        repository
+            .create_execution(execution("/projects/b", "execution-b"))
+            .await
+            .unwrap();
         assert!(
             repository
                 .get_execution(" ".to_string(), "execution-a".to_string())
@@ -350,5 +431,24 @@ mod tests {
                 .unwrap()
                 .is_some()
         );
+        repository
+            .mark_running("/projects/b".to_string(), "execution-b".to_string())
+            .await
+            .unwrap();
+        assert!(matches!(
+            repository
+                .finish(
+                    "/projects/b".to_string(),
+                    "execution-b".to_string(),
+                    RuntimeExecutionFinish {
+                        status: "completed".to_string(),
+                        terminal_reason: None,
+                        output_state: "complete".to_string(),
+                    },
+                )
+                .await
+                .unwrap(),
+            RuntimeExecutionMutationOutcome::Applied
+        ));
     }
 }

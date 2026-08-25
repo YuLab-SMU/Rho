@@ -96,6 +96,14 @@ pub struct ArkSession {
     pub kernel_info: Value,
 }
 
+async fn deliver_kernel_event<F, Fut>(on_event: &mut F, event: CorrelatedKernelEvent) -> Result<()>
+where
+    F: FnMut(CorrelatedKernelEvent) -> Fut,
+    Fut: std::future::Future<Output = Result<()>>,
+{
+    on_event(event).await
+}
+
 impl ArkSession {
     pub async fn launch(config: &ArkLaunchConfig) -> Result<Self> {
         let mut spec = KernelSpec::load(&config.kernelspec_path).with_context(|| {
@@ -331,7 +339,41 @@ impl ArkSession {
         .await
     }
 
+    pub async fn execute_async<F, Fut>(&self, code: impl Into<String>, on_event: F) -> Result<()>
+    where
+        F: FnMut(CorrelatedKernelEvent) -> Fut,
+        Fut: std::future::Future<Output = Result<()>>,
+    {
+        self.execute_with_options_async(
+            code,
+            on_event,
+            |prompt, _password| anyhow::bail!("unexpected stdin request: {prompt}"),
+            None,
+        )
+        .await
+    }
+
     pub async fn execute_with_options<F, I>(
+        &self,
+        code: impl Into<String>,
+        mut on_event: F,
+        on_input: I,
+        interrupt_after: Option<std::time::Duration>,
+    ) -> Result<()>
+    where
+        F: FnMut(CorrelatedKernelEvent) -> Result<()>,
+        I: FnMut(&str, bool) -> Result<String>,
+    {
+        self.execute_with_options_async(
+            code,
+            move |event| std::future::ready(on_event(event)),
+            on_input,
+            interrupt_after,
+        )
+        .await
+    }
+
+    pub async fn execute_with_options_async<F, Fut, I>(
         &self,
         code: impl Into<String>,
         mut on_event: F,
@@ -339,7 +381,8 @@ impl ArkSession {
         interrupt_after: Option<std::time::Duration>,
     ) -> Result<()>
     where
-        F: FnMut(CorrelatedKernelEvent) -> Result<()>,
+        F: FnMut(CorrelatedKernelEvent) -> Fut,
+        Fut: std::future::Future<Output = Result<()>>,
         I: FnMut(&str, bool) -> Result<String>,
     {
         let request: JupyterMessage = ExecuteRequest {
@@ -391,19 +434,27 @@ impl ArkSession {
                     }
                     saw_idle |= matches!(&event.data, EventData::Idle { .. });
                     saw_reply |= matches!(&event.data, EventData::ExecuteReply { .. });
-                    on_event(CorrelatedKernelEvent {
-                        parent_id,
-                        event: event.data.into(),
-                    })?;
+                    deliver_kernel_event(
+                        &mut on_event,
+                        CorrelatedKernelEvent {
+                            parent_id,
+                            event: event.data.into(),
+                        },
+                    )
+                    .await?;
                     if saw_idle && saw_reply {
                         break;
                     }
                 }
                 _ = &mut interrupt, if !interrupted => {
-                    on_event(CorrelatedKernelEvent {
-                        parent_id: Some(request_id.clone()),
-                        event: KernelEvent::InterruptRequested,
-                    })?;
+                    deliver_kernel_event(
+                        &mut on_event,
+                        CorrelatedKernelEvent {
+                            parent_id: Some(request_id.clone()),
+                            event: KernelEvent::InterruptRequested,
+                        },
+                    )
+                    .await?;
                     self.client
                         .interrupt()
                         .await
@@ -534,7 +585,54 @@ fn is_sensitive_environment_name(name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::is_sensitive_environment_name;
+    use super::{
+        CorrelatedKernelEvent, KernelEvent, deliver_kernel_event, is_sensitive_environment_name,
+    };
+
+    #[tokio::test]
+    async fn async_event_delivery_awaits_in_order_and_propagates_callback_failure() {
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let callback_observed = std::rc::Rc::clone(&observed);
+        let mut callback = move |event: CorrelatedKernelEvent| {
+            let observed = std::rc::Rc::clone(&callback_observed);
+            async move {
+                tokio::task::yield_now().await;
+                let label = match &event.event {
+                    KernelEvent::Busy => "busy",
+                    KernelEvent::Idle => "idle",
+                    _ => "other",
+                };
+                observed.borrow_mut().push(label);
+                if matches!(event.event, KernelEvent::Idle) {
+                    anyhow::bail!("event sink failed")
+                }
+                Ok(())
+            }
+        };
+
+        deliver_kernel_event(
+            &mut callback,
+            CorrelatedKernelEvent {
+                parent_id: Some("execution-1".to_string()),
+                event: KernelEvent::Busy,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(*observed.borrow(), vec!["busy"]);
+
+        let error = deliver_kernel_event(
+            &mut callback,
+            CorrelatedKernelEvent {
+                parent_id: Some("execution-1".to_string()),
+                event: KernelEvent::Idle,
+            },
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error.to_string(), "event sink failed");
+        assert_eq!(*observed.borrow(), vec!["busy", "idle"]);
+    }
 
     #[cfg(unix)]
     use super::{process_group_exists, signal_process_group, terminate_process_group_by_pid};
