@@ -271,7 +271,7 @@ pub(super) fn validate_viewer_artifacts(
 }
 
 pub(crate) fn validate_surface_artifacts(
-    store: &Store,
+    store: &Store<impl StoreConnection>,
     context: &PluginRuntimeContext,
     document: &rho_extension_runtime::SurfaceDocumentV1,
 ) -> Result<()> {
@@ -282,7 +282,7 @@ pub(crate) fn validate_surface_artifacts(
 }
 
 pub(crate) fn validate_surface_command_result(
-    store: &Store,
+    store: &Store<impl StoreConnection>,
     context: &PluginRuntimeContext,
     result: &PluginCommandResultV1,
 ) -> Result<()> {

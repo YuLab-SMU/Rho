@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-25",
+  "active_work_packages": ["AM-W2-26"],
+  "integration_lane": "AM-W2-26",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -326,6 +326,10 @@ the toolchain validator. The repository pin remains exact and reproducible, but
 a coherent stable-semver advance is evaluated by capability and contract
 evidence instead of being rejected by the previous version's embedded
 constant.
+
+`AM-W2-26` moves bounded Plugin Surface and Check guest contribution execution
+plus their Store-backed validation off Tokio request threads and onto the
+existing plugin Store service seam.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 

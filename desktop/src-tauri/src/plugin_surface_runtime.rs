@@ -17,10 +17,10 @@ use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
 use crate::workspace_plugins::{
-    PluginRuntimeContext, WorkspaceSurfaceInvocationRoute, validate_surface_artifacts,
-    validate_surface_command_result,
+    PluginRuntimeContext, WorkspaceSurfaceInvocationRoute, run_store_service,
+    validate_surface_artifacts, validate_surface_command_result,
 };
-use crate::{AppState, display_error, read_store};
+use crate::{AppState, display_error};
 
 pub(crate) const PLUGIN_SURFACE_CHANGED_EVENT: &str = "rho://plugin-surface-changed";
 const MAX_CACHED_SURFACE_DOCUMENTS: usize = 16;
@@ -456,19 +456,27 @@ pub(crate) async fn plugin_surface_document(
         });
     }
 
-    let mut store = read_store(&state).map_err(display_error)?;
-    let outcome = state
-        .plugin_permissions
-        .invoke_surface_contribution(
-            &context,
-            instance.surface_id.as_str(),
-            render_input(&instance),
-            &mut store,
-        )
-        .map_err(display_error)?;
-    let (result, provenance) = completed_payload(&outcome).map_err(display_error)?;
-    let document = SurfaceDocumentV1::parse(result.clone()).map_err(display_error)?;
-    validate_surface_artifacts(&store, &context, &document).map_err(display_error)?;
+    let registry = state.plugin_permissions.clone();
+    let service_context = context.clone();
+    let contribution_id = instance.surface_id.as_str().to_string();
+    let input = render_input(&instance);
+    let (document, provenance) = run_store_service(
+        crate::store_executor(&state).await.map_err(display_error)?,
+        move |store| {
+            let outcome = registry.invoke_surface_contribution(
+                &service_context,
+                &contribution_id,
+                input,
+                store,
+            )?;
+            let (result, provenance) = completed_payload(&outcome)?;
+            let document = SurfaceDocumentV1::parse(result.clone())?;
+            validate_surface_artifacts(store, &service_context, &document)?;
+            Ok((document, provenance))
+        },
+    )
+    .await
+    .map_err(display_error)?;
     let encoded_bytes = serde_json::to_vec(&(&document, &provenance))
         .map_err(display_error)?
         .len();
@@ -502,7 +510,7 @@ pub(crate) async fn plugin_surface_document(
     })
 }
 
-fn execute_event(
+async fn execute_event(
     state: &AppState,
     context: &PluginRuntimeContext,
     queued: &QueuedSurfaceEventV1,
@@ -511,22 +519,24 @@ fn execute_event(
     Option<PluginCommandResultV1>,
     Value,
 )> {
-    let mut store = read_store(state)?;
-    let outcome = state.plugin_permissions.invoke_surface_contribution(
-        context,
-        queued.event.surface_id.as_str(),
-        event_input(&queued.event),
-        &mut store,
-    )?;
-    let (result, provenance) = completed_payload(&outcome)?;
-    let (document, command_result) = parse_event_result(result.clone())?;
-    if let Some(document) = &document {
-        validate_surface_artifacts(&store, context, document)?;
-    }
-    if let Some(command_result) = &command_result {
-        validate_surface_command_result(&store, context, command_result)?;
-    }
-    Ok((document, command_result, provenance))
+    let registry = state.plugin_permissions.clone();
+    let context = context.clone();
+    let contribution_id = queued.event.surface_id.as_str().to_string();
+    let input = event_input(&queued.event);
+    run_store_service(crate::store_executor(state).await?, move |store| {
+        let outcome =
+            registry.invoke_surface_contribution(&context, &contribution_id, input, store)?;
+        let (result, provenance) = completed_payload(&outcome)?;
+        let (document, command_result) = parse_event_result(result.clone())?;
+        if let Some(document) = &document {
+            validate_surface_artifacts(store, &context, document)?;
+        }
+        if let Some(command_result) = &command_result {
+            validate_surface_command_result(store, &context, command_result)?;
+        }
+        Ok((document, command_result, provenance))
+    })
+    .await
 }
 
 #[cfg_attr(test, specta::specta)]
@@ -647,7 +657,7 @@ pub(crate) async fn plugin_surface_event(
                 .and_then(|queue| queue.active().cloned())
         };
         let Some(active) = active else { break };
-        let result = execute_event(&state, &context, &active);
+        let result = execute_event(&state, &context, &active).await;
         if let Ok((document, command_result, provenance)) = &result {
             if let Some(document) = document {
                 let encoded_bytes = serde_json::to_vec(&(document, provenance))

@@ -19,7 +19,7 @@ use serde_json::{Value, json};
 use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
-use crate::{AppState, display_error, read_store, text_sha256};
+use crate::{AppState, display_error, text_sha256};
 
 pub(crate) const CHECK_RESULTS_CHANGED_EVENT: &str = "rho://check-results-changed";
 const CHECK_CORE_RULE_COUNT: usize = 22;
@@ -608,19 +608,26 @@ pub(crate) async fn check_project_run(
             "Only the first {MAX_CHECK_PLUGIN_RULE_PACKS} workspace rule packs ran in this bounded Check."
         ));
     }
+    let store_executor = if registrations.is_empty() {
+        None
+    } else {
+        Some(crate::store_executor(&state).await.map_err(display_error)?)
+    };
     for registration in &registrations {
         let Some(plugin_context) = plugin_context.as_ref() else {
             break;
         };
-        let invocation = {
-            let mut store = read_store(&state).map_err(display_error)?;
-            state.plugin_permissions.invoke_check_rule(
-                plugin_context,
-                &registration.contribution_id,
-                plugin_check_input(&plugin_input_snapshot),
-                &mut store,
-            )
-        };
+        let registry = state.plugin_permissions.clone();
+        let plugin_context = plugin_context.clone();
+        let contribution_id = registration.contribution_id.clone();
+        let input = plugin_check_input(&plugin_input_snapshot);
+        let invocation = crate::workspace_plugins::run_store_service(
+            store_executor.expect("non-empty registrations require a Store executor"),
+            move |store| {
+                registry.invoke_check_rule(&plugin_context, &contribution_id, input, store)
+            },
+        )
+        .await;
         let output = invocation
             .and_then(|value| completed_plugin_result(&value))
             .and_then(|value| CheckRulePackOutputV1::parse(value).map_err(anyhow::Error::from));

@@ -277,7 +277,7 @@ impl PendingPluginPermissionRegistry {
         context: &PluginRuntimeContext,
         contribution_id: &str,
         input: serde_json::Value,
-        store: &mut Store,
+        store: &mut Store<impl StoreConnection>,
     ) -> Result<serde_json::Value> {
         self.invoke_file_contribution(
             context,
@@ -335,7 +335,7 @@ impl PendingPluginPermissionRegistry {
         context: &PluginRuntimeContext,
         contribution_id: &str,
         input: serde_json::Value,
-        store: &mut Store,
+        store: &mut Store<impl StoreConnection>,
     ) -> Result<serde_json::Value> {
         self.invoke_file_contribution(
             context,
