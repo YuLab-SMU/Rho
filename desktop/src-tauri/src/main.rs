@@ -3876,113 +3876,6 @@ struct AgentApprovalDeliveryResponse {
     turn_id: String,
 }
 
-#[cfg_attr(test, specta::specta)]
-#[tauri::command]
-async fn list_agent_conversations(
-    limit: Option<u32>,
-    state: State<'_, AppState>,
-) -> Result<Vec<AgentConversationSummary>, String> {
-    let root = state.project_root.read().await.clone();
-    let project_root = durable_project_root(&root);
-    store_executor(&state)
-        .await
-        .map_err(display_error)?
-        .agent_repository()
-        .list_conversations(project_root, limit.map(|value| value as usize))
-        .await
-        .map_err(display_error)
-}
-
-#[cfg_attr(test, specta::specta)]
-#[tauri::command]
-async fn create_agent_conversation(
-    state: State<'_, AppState>,
-) -> Result<AgentConversationSummary, String> {
-    let _project_transition = state.project_transition_gate.lock().await;
-    let root = state.project_root.read().await.clone();
-    let project_root = durable_project_root(&root);
-    store_executor(&state)
-        .await
-        .map_err(display_error)?
-        .agent_repository()
-        .create_conversation(AgentConversationDraft {
-            conversation_id: format!("agent_conversation_{}", Uuid::new_v4()),
-            project_root,
-            title: "New conversation".to_string(),
-            legacy_unthreaded: false,
-        })
-        .await
-        .map_err(display_error)
-}
-
-#[cfg_attr(test, specta::specta)]
-#[tauri::command]
-async fn list_agent_turns(
-    conversation_id: Option<String>,
-    limit: Option<u32>,
-    state: State<'_, AppState>,
-) -> Result<Vec<AgentTurnSummary>, String> {
-    let root = state.project_root.read().await.clone();
-    let project_root = durable_project_root(&root);
-    store_executor(&state)
-        .await
-        .map_err(display_error)?
-        .agent_repository()
-        .list_turns(
-            project_root,
-            conversation_id,
-            limit.map(|value| value as usize),
-        )
-        .await
-        .map_err(display_error)
-}
-
-#[tauri::command]
-async fn delete_agent_conversation(
-    conversation_id: String,
-    state: State<'_, AppState>,
-) -> Result<Value, String> {
-    delete_agent_conversation_state(&conversation_id, &state)
-        .await
-        .map_err(display_error)
-}
-
-async fn delete_agent_conversation_state(conversation_id: &str, state: &AppState) -> Result<Value> {
-    let conversation_id = conversation_id.trim().to_string();
-    ensure!(
-        !conversation_id.is_empty(),
-        "Agent Conversation identity is required"
-    );
-    let _project_transition = state.project_transition_gate.lock().await;
-    let root = state.project_root.read().await.clone();
-    let project_root = durable_project_root(&root);
-    let tasks = state.agent_tasks.lock().await;
-    ensure!(
-        !tasks
-            .values()
-            .any(|task| task.conversation_id == conversation_id),
-        "Stop the active Agent Conversation before deleting it."
-    );
-    let agent_store = store_executor(state).await?.agent_repository();
-    let turn_ids = agent_store
-        .conversation_turn_ids(project_root.clone(), conversation_id.clone())
-        .await?;
-    ensure!(
-        !state.agent_file_mutations.has_any_turn(&turn_ids),
-        "Wait for the selected Conversation's file operation before deleting it."
-    );
-    let deleted_turns = agent_store
-        .delete_conversation(project_root, conversation_id.clone())
-        .await?;
-    drop(tasks);
-    Ok(json!({
-        "status": "deleted",
-        "conversation_id": conversation_id,
-        "deleted_turns": deleted_turns,
-        "deleted_turn_ids": turn_ids
-    }))
-}
-
 #[tauri::command]
 async fn list_approval_requests(
     limit: Option<usize>,
@@ -8325,10 +8218,9 @@ mod tests {
         attach_render_artifact, bounded_diagnostic, cancel_agent_turn_state,
         classify_agent_file_postwrite_failure, classify_agent_file_write_failure,
         classify_startup_error, configure_user_startup, deferred_agent_runtime_status,
-        delete_agent_conversation_state, display_error_chain, durable_project_root,
-        ensure_agent_file_proposal_turn_terminal, ensure_supported_r_architecture,
-        ensure_supported_r_version, existing_startup_file, find_executable_on_path,
-        finish_render_job, interrupt_all_agent_tasks, load_runtime_cache,
+        display_error_chain, durable_project_root, ensure_agent_file_proposal_turn_terminal,
+        ensure_supported_r_architecture, ensure_supported_r_version, existing_startup_file,
+        find_executable_on_path, finish_render_job, interrupt_all_agent_tasks, load_runtime_cache,
         locate_ark_from_candidates, locate_rscript, parse_r_runtime_probe,
         persist_agent_file_mutation_event_to_store, persist_workspace_identity,
         project_switch_blocker, r_architecture_supported, reconcile_render_job,
@@ -8338,6 +8230,7 @@ mod tests {
         validate_execute_source_range_shape, validate_persisted_agent_file_proposal_structure,
         workspace_project_root_code, write_r_probe_script,
     };
+    use crate::commands::agent_conversation::delete_agent_conversation_state;
     use crate::commands::artifacts::{
         data_view_artifact_metadata, data_view_delimited_text, decode_plot_png_base64,
         ensure_artifact_export_target, has_png_signature,
@@ -16220,11 +16113,11 @@ fn main() {
             commands::agent_llm::agent_llm_cancel_test,
             commands::agent_llm::agent_llm_catalog,
             commands::agent_llm::agent_llm_discover_models,
-            list_agent_conversations,
-            create_agent_conversation,
-            list_agent_turns,
+            commands::agent_conversation::list_agent_conversations,
+            commands::agent_conversation::create_agent_conversation,
+            commands::agent_conversation::list_agent_turns,
             retry_agent_turn,
-            delete_agent_conversation,
+            commands::agent_conversation::delete_agent_conversation,
             clear_agent_history,
             list_approval_requests,
             get_agent_turn_detail,

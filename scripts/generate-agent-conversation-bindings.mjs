@@ -9,5 +9,5 @@ runTauriSpectaBindingGenerator({
   outputEnvironment: "RHO_AGENT_CONVERSATION_BINDINGS_PATH",
   factoryName: "createAgentConversationCommands",
   invokeTypeName: "AgentConversationInvoke",
-  rustSources: "rho-store/agent + rho-desktop/main Agent conversation commands",
+  rustSources: "rho-store/agent + rho-desktop commands/agent_conversation facade",
 });

@@ -412,9 +412,9 @@ fn agent_conversation_typescript_export() {
         .expect("RHO_AGENT_CONVERSATION_BINDINGS_PATH must name the generated file");
     tauri_specta::Builder::<tauri::Wry>::new()
         .commands(tauri_specta::collect_commands![
-            crate::list_agent_conversations,
-            crate::create_agent_conversation,
-            crate::list_agent_turns,
+            crate::commands::agent_conversation::list_agent_conversations,
+            crate::commands::agent_conversation::create_agent_conversation,
+            crate::commands::agent_conversation::list_agent_turns,
         ])
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
         .export(specta_typescript::Typescript::default(), output_path)
