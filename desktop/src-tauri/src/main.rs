@@ -60,13 +60,13 @@ use rho_extension_runtime::{
 use rho_kernel::{ArkLaunchConfig, ArkSession, KernelEvent};
 use rho_server::coordinator::{
     AgentContextPlanPreview, AgentExplicitContextItem, AgentPluginContributionAdapter,
-    AgentRuntimeAdapters, AgentWorkspaceLane, ApprovalResponseInput, CoordinatorRuntime,
-    EnvironmentOperationArguments, PendingApprovalRegistry, ProjectSkillDiscoverySummary,
-    WorkspaceSnapshotAdapter, bootstrap_bridge, decide_environment_operation,
-    discover_project_skill_summaries, dispatch_workspace_request,
-    dispatch_workspace_request_with_execution_id, preview_agent_context_plan,
-    request_environment_operation, run_agent_turn,
+    AgentRuntimeAdapters, AgentWorkspaceLane, ApprovalResponseInput, EnvironmentOperationArguments,
+    PendingApprovalRegistry, ProjectSkillDiscoverySummary, WorkspaceSnapshotAdapter,
+    bootstrap_bridge, decide_environment_operation, discover_project_skill_summaries,
+    dispatch_workspace_request, dispatch_workspace_request_with_execution_id,
+    preview_agent_context_plan, request_environment_operation, run_agent_turn,
 };
+use rho_server::workspace_lane::{WorkspaceBrokerLane, WorkspaceBrokerState};
 use rho_store::{
     AgentConversationDraft, AgentConversationSummary, AgentTurnContextItem,
     AgentTurnContextItemDraft, AgentTurnDraft, AgentTurnEvent, AgentTurnEventDraft,
@@ -325,7 +325,7 @@ struct AppState {
     project_root: RwLock<PathBuf>,
     project_watcher: Mutex<Option<ProjectWatcherControl>>,
     session: RwLock<Option<Arc<ArkSession>>>,
-    context: Mutex<Option<Arc<Mutex<CoordinatorRuntime>>>>,
+    context: Mutex<Option<Arc<WorkspaceBrokerLane>>>,
     store_executor: OnceCell<StoreExecutor>,
     approvals: Arc<PendingApprovalRegistry>,
     environment_approvals: Arc<PendingApprovalRegistry>,
@@ -1225,8 +1225,7 @@ async fn workspace_status(state: State<'_, AppState>) -> Result<Value, String> {
     let session = state.session.read().await.clone();
     let context = state.context.lock().await.clone();
     let workspace = if let Some(context) = context {
-        let context = context.lock().await;
-        Some(serde_json::to_value(context.broker.identity()).unwrap_or(Value::Null))
+        Some(serde_json::to_value(context.identity().as_ref()).unwrap_or(Value::Null))
     } else {
         None
     };
@@ -2893,7 +2892,7 @@ async fn dispatch_workspace_execution_with_id(
     let session = active_session(state).await?;
     let context = active_context(state).await?;
     let mut context = context.lock().await;
-    let CoordinatorRuntime { broker, store } = &mut *context;
+    let WorkspaceBrokerState { broker, store } = &mut *context;
     let payload = json!({
         "arguments": {
             "code": request.code,
@@ -3033,7 +3032,7 @@ async fn editor_goto_definition(name: String, state: State<'_, AppState>) -> Res
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let CoordinatorRuntime { broker, store } = &mut *context;
+    let WorkspaceBrokerState { broker, store } = &mut *context;
     let payload = json!({
         "arguments": { "name": name, "project_root": project_root },
         "expected_workspace": broker.identity()
@@ -3061,7 +3060,7 @@ async fn editor_find_project_references(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let CoordinatorRuntime { broker, store } = &mut *context;
+    let WorkspaceBrokerState { broker, store } = &mut *context;
     let payload = json!({
         "arguments": {
             "name": name,
@@ -3087,7 +3086,7 @@ async fn editor_discover_chunks(path: String, state: State<'_, AppState>) -> Res
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let CoordinatorRuntime { broker, store } = &mut *context;
+    let WorkspaceBrokerState { broker, store } = &mut *context;
     let payload = json!({
         "arguments": { "path": path },
         "expected_workspace": broker.identity()
@@ -3121,7 +3120,7 @@ fn expected_workspace(
 
 async fn call_extension_workspace_snapshot(
     extension_host: &ExtensionHost,
-    context: Arc<Mutex<CoordinatorRuntime>>,
+    context: Arc<WorkspaceBrokerLane>,
     expected_workspace: rho_protocol::ExpectedWorkspace,
     origin: ExecutionOrigin,
     execution_id: Option<String>,
@@ -3155,9 +3154,9 @@ async fn call_extension_workspace_snapshot(
     if result.scope.parent_id.as_ref() != Some(&project.identity().id) {
         return Err("Workspace Snapshot extension scope belongs to a stale project".to_string());
     }
-    let identity = context.lock().await.broker.identity().clone();
+    let identity = context.identity();
     let expected_scope_id =
-        extension_workspace_scope_id(&project, &identity).map_err(display_error)?;
+        extension_workspace_scope_id(&project, identity.as_ref()).map_err(display_error)?;
     if result.scope.id != expected_scope_id {
         return Err(
             "Workspace Snapshot extension scope belongs to a stale kernel lineage".to_string(),
@@ -3185,7 +3184,7 @@ async fn call_extension_workspace_snapshot(
 
 struct ExtensionWorkspaceSnapshotAdapter {
     extension_host: Arc<ExtensionHost>,
-    context: Arc<Mutex<CoordinatorRuntime>>,
+    context: Arc<WorkspaceBrokerLane>,
 }
 
 impl WorkspaceSnapshotAdapter for ExtensionWorkspaceSnapshotAdapter {
@@ -3244,11 +3243,11 @@ impl AgentPluginContributionAdapter for WorkspacePluginAgentAdapter {
 async fn snapshot_workspace_with_state(state: &AppState) -> Result<Value, String> {
     if state.extension_host.mode() == InternalExtensionRuntimeMode::Candidate {
         let context = active_context(state).await.map_err(display_error)?;
-        let identity = context.lock().await.broker.identity().clone();
+        let identity = context.identity();
         return call_extension_workspace_snapshot(
             state.extension_host.as_ref(),
             context,
-            expected_workspace(&identity),
+            expected_workspace(identity.as_ref()),
             ExecutionOrigin::System,
             None,
         )
@@ -3257,7 +3256,7 @@ async fn snapshot_workspace_with_state(state: &AppState) -> Result<Value, String
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let CoordinatorRuntime { broker, store } = &mut *context;
+    let WorkspaceBrokerState { broker, store } = &mut *context;
     let payload = json!({
         "arguments": {},
         "expected_workspace": broker.identity()
@@ -3282,7 +3281,7 @@ async fn inspect_object(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let CoordinatorRuntime { broker, store } = &mut *context;
+    let WorkspaceBrokerState { broker, store } = &mut *context;
     let payload = json!({
         "arguments": {
             "name": request.name
@@ -3319,7 +3318,7 @@ async fn inspect_data_object(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let CoordinatorRuntime { broker, store } = &mut *context;
+    let WorkspaceBrokerState { broker, store } = &mut *context;
     let payload = json!({
         "arguments": {
             "object_name": request.object_name
@@ -3346,7 +3345,7 @@ async fn read_data_view(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let CoordinatorRuntime { broker, store } = &mut *context;
+    let WorkspaceBrokerState { broker, store } = &mut *context;
     let payload = json!({
         "arguments": {
             "object_name": request.object_name,
@@ -3397,7 +3396,7 @@ async fn render_document(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let CoordinatorRuntime { broker, store } = &mut *context;
+    let WorkspaceBrokerState { broker, store } = &mut *context;
     let payload = json!({
         "arguments": {
             "path": file.to_string_lossy(),
@@ -3534,7 +3533,7 @@ async fn render_document_job(
             render_tasks.lock().await.remove(&job_id);
             return;
         }
-        let CoordinatorRuntime { broker, store } = &mut *context;
+        let WorkspaceBrokerState { broker, store } = &mut *context;
         let payload = serde_json::json!({
             "arguments": {
                 "path": file_path,
@@ -3740,7 +3739,7 @@ async fn request_environment_operation_preview(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let CoordinatorRuntime { broker, store } = &mut *context;
+    let WorkspaceBrokerState { broker, store } = &mut *context;
     request_environment_operation(
         EnvironmentOperationArguments {
             operation: request.operation,
@@ -3801,7 +3800,7 @@ async fn list_installed_packages(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let CoordinatorRuntime { broker, store } = &mut *context;
+    let WorkspaceBrokerState { broker, store } = &mut *context;
     let payload = json!({
         "arguments": { "limit": limit.map(u64::from).unwrap_or(500) },
         "expected_workspace": broker.identity()
@@ -3835,7 +3834,7 @@ async fn list_lockfile_packages(
     let root = state.project_root.read().await.clone();
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let CoordinatorRuntime { broker, store } = &mut *context;
+    let WorkspaceBrokerState { broker, store } = &mut *context;
     let payload = json!({
         "arguments": lockfile_inventory_arguments(&root, limit),
         "expected_workspace": broker.identity()
@@ -3912,7 +3911,7 @@ async fn respond_environment_operation(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let CoordinatorRuntime { broker, store } = &mut *context;
+    let WorkspaceBrokerState { broker, store } = &mut *context;
     decide_environment_operation(
         &request.request_id,
         &request.decision,
@@ -3935,7 +3934,7 @@ async fn editor_package_functions(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let CoordinatorRuntime { broker, store } = &mut *context;
+    let WorkspaceBrokerState { broker, store } = &mut *context;
     let payload = json!({
         "arguments": {
             "packages": packages,
@@ -3964,7 +3963,7 @@ async fn editor_function_help(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let CoordinatorRuntime { broker, store } = &mut *context;
+    let WorkspaceBrokerState { broker, store } = &mut *context;
     let payload = json!({
         "arguments": {
             "name": name,
@@ -3993,7 +3992,7 @@ async fn editor_function_documentation(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let CoordinatorRuntime { broker, store } = &mut *context;
+    let WorkspaceBrokerState { broker, store } = &mut *context;
     let payload = json!({
         "arguments": { "name": name, "package": package },
         "expected_workspace": broker.identity()
@@ -4019,7 +4018,7 @@ async fn editor_lint_file(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let CoordinatorRuntime { broker, store } = &mut *context;
+    let WorkspaceBrokerState { broker, store } = &mut *context;
     let payload = json!({
         "arguments": { "path": path, "document_version": document_version },
         "expected_workspace": broker.identity()
@@ -4044,7 +4043,7 @@ async fn editor_format_source(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let CoordinatorRuntime { broker, store } = &mut *context;
+    let WorkspaceBrokerState { broker, store } = &mut *context;
     let EditorFormatRequest {
         path,
         source,
@@ -4082,7 +4081,7 @@ async fn list_plot_artifacts(
     let root = state.project_root.read().await.clone();
     let project_root = durable_project_root(&root);
     let context = active_context(&state).await.map_err(display_error)?;
-    let workspace_id = context.lock().await.broker.identity().workspace_id.clone();
+    let workspace_id = context.identity().workspace_id.clone();
     read_store(&state)
         .map_err(display_error)?
         .list_plot_artifacts(
@@ -4244,7 +4243,7 @@ async fn export_data_view_artifact(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let CoordinatorRuntime { broker, store } = &mut *context;
+    let WorkspaceBrokerState { broker, store } = &mut *context;
     let payload = json!({
         "arguments": {
             "object_name": request.object_name,
@@ -4357,7 +4356,7 @@ async fn list_artifact_records(
 ) -> Result<Vec<ArtifactRecordSummary>, String> {
     let root = state.project_root.read().await.clone();
     let context = active_context(&state).await.map_err(display_error)?;
-    let workspace_id = context.lock().await.broker.identity().workspace_id.clone();
+    let workspace_id = context.identity().workspace_id.clone();
     read_store(&state)
         .map_err(display_error)?
         .list_artifact_records(
@@ -4420,7 +4419,7 @@ async fn clear_artifact_records(
 ) -> Result<Value, String> {
     let root = state.project_root.read().await.clone();
     let context = active_context(&state).await.map_err(display_error)?;
-    let workspace_id = context.lock().await.broker.identity().workspace_id.clone();
+    let workspace_id = context.identity().workspace_id.clone();
     let mut store = read_store(&state).map_err(display_error)?;
     let project_root = root.to_string_lossy();
     let deleted = ProjectMutationService::new(&mut store)
@@ -4441,7 +4440,7 @@ async fn clear_plot_artifacts(
     let root = state.project_root.read().await.clone();
     let project_root = durable_project_root(&root);
     let context = active_context(&state).await.map_err(display_error)?;
-    let workspace_id = context.lock().await.broker.identity().workspace_id.clone();
+    let workspace_id = context.identity().workspace_id.clone();
     let mut store = read_store(&state).map_err(display_error)?;
     let deleted = ProjectMutationService::new(&mut store)
         .clear_plot_artifacts(
@@ -4730,7 +4729,7 @@ async fn prune_plot_payloads(
     let root = state.project_root.read().await.clone();
     let project_root = durable_project_root(&root);
     let context = active_context(&state).await.map_err(display_error)?;
-    let workspace_id = context.lock().await.broker.identity().workspace_id.clone();
+    let workspace_id = context.identity().workspace_id.clone();
     let mut store = read_store(&state).map_err(display_error)?;
     store
         .prune_plot_artifact_payloads(
@@ -4748,7 +4747,7 @@ async fn get_project_retention_summary(
     let root = state.project_root.read().await.clone();
     let project_root = durable_project_root(&root);
     let context = active_context(&state).await.map_err(display_error)?;
-    let workspace_id = context.lock().await.broker.identity().workspace_id.clone();
+    let workspace_id = context.identity().workspace_id.clone();
     let store = read_store(&state).map_err(display_error)?;
     let summary = store
         .project_retention_summary(&project_root, Some(&workspace_id))
@@ -4789,7 +4788,7 @@ async fn retry_run(run_id: String, state: State<'_, AppState>) -> Result<RunRetr
     }
     let arguments =
         retry_run_arguments(&detail.arguments_json, &detail.run_id).map_err(display_error)?;
-    let CoordinatorRuntime { broker, store } = &mut *context;
+    let WorkspaceBrokerState { broker, store } = &mut *context;
     let payload = json!({
         "arguments": arguments,
         "expected_workspace": broker.identity()
@@ -6129,7 +6128,7 @@ async fn targets_status(state: State<'_, AppState>) -> Result<Value, String> {
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let CoordinatorRuntime { broker, store } = &mut *context;
+    let WorkspaceBrokerState { broker, store } = &mut *context;
     let payload = json!({
         "arguments": { "project_root": project_root },
         "expected_workspace": broker.identity()
@@ -6264,7 +6263,7 @@ async fn active_session(state: &AppState) -> Result<Arc<ArkSession>> {
         .context("Workspace R is not running")
 }
 
-async fn active_context(state: &AppState) -> Result<Arc<Mutex<CoordinatorRuntime>>> {
+async fn active_context(state: &AppState) -> Result<Arc<WorkspaceBrokerLane>> {
     state
         .context
         .lock()
@@ -6275,8 +6274,7 @@ async fn active_context(state: &AppState) -> Result<Arc<Mutex<CoordinatorRuntime
 
 pub(crate) async fn active_workspace_id(state: &AppState) -> Option<String> {
     let context = state.context.lock().await.clone()?;
-    let context = context.lock().await;
-    Some(context.broker.identity().workspace_id.clone())
+    Some(context.identity().workspace_id.clone())
 }
 
 fn read_store(state: &AppState) -> Result<Store> {
@@ -6511,12 +6509,11 @@ async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus> {
     if let Some(session) = state.session.read().await.clone() {
         let context = state.context.lock().await.clone();
         let identity = if let Some(context) = context {
-            let context = context.lock().await;
-            Some(context.broker.identity().clone())
+            Some(context.identity())
         } else {
             None
         };
-        return status_from(&config, &session, identity.as_ref());
+        return status_from(&config, &session, identity.as_deref());
     }
 
     let session = Arc::new(
@@ -6630,7 +6627,7 @@ async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus> {
         })),
     }
     let status = status_from(&config, &session, Some(broker.identity()))?;
-    let context = Arc::new(Mutex::new(CoordinatorRuntime { broker, store }));
+    let context = Arc::new(WorkspaceBrokerLane::new(broker, store));
     if state.extension_host.mode() == InternalExtensionRuntimeMode::Candidate {
         ensure_extension_project_scope(state, &normalized_project_root)
             .await?
@@ -6662,8 +6659,8 @@ async fn finalize_workspace_start(
     let config = runtime_config(state)?;
     let session = active_session(state).await?;
     let context = active_context(state).await?;
-    let identity = context.lock().await.broker.identity().clone();
-    status_from(&config, session.as_ref(), Some(&identity))
+    let identity = context.identity();
+    status_from(&config, session.as_ref(), Some(identity.as_ref()))
 }
 
 async fn request_run_interrupt(run_id: Option<String>, state: &AppState) -> Result<Value> {
@@ -7606,7 +7603,7 @@ impl BrokerFacade for RunHistoryBrokerFacade {
 
 struct WorkspaceSnapshotBrokerFacade {
     session: Arc<ArkSession>,
-    context: Arc<Mutex<CoordinatorRuntime>>,
+    context: Arc<WorkspaceBrokerLane>,
 }
 
 impl BrokerFacade for WorkspaceSnapshotBrokerFacade {
@@ -7634,7 +7631,7 @@ impl BrokerFacade for WorkspaceSnapshotBrokerFacade {
                 "expected_workspace": expected_workspace,
             });
             let mut context = self.context.lock().await;
-            let CoordinatorRuntime { broker, store } = &mut *context;
+            let WorkspaceBrokerState { broker, store } = &mut *context;
             let value = dispatch_workspace_request_with_execution_id(
                 "workspace.snapshot",
                 &payload,
@@ -7753,17 +7750,17 @@ async fn build_extension_workspace_candidate(
     state: &AppState,
     parent: &Arc<ScopeSnapshot>,
     session: Arc<ArkSession>,
-    context: Arc<Mutex<CoordinatorRuntime>>,
+    context: Arc<WorkspaceBrokerLane>,
 ) -> Result<Option<Arc<ScopeSnapshot>>> {
     if state.extension_host.mode() == InternalExtensionRuntimeMode::Legacy {
         return Ok(None);
     }
-    let identity = context.lock().await.broker.identity().clone();
+    let identity = context.identity();
     let candidate = state
         .extension_host
         .build_workspace_candidate(
             parent,
-            extension_workspace_scope_id(parent, &identity)?,
+            extension_workspace_scope_id(parent, identity.as_ref())?,
             internal_plugins_for_scope(&rho_extension_runtime::ScopePolicy::workspace_kind()),
             Arc::new(WorkspaceSnapshotBrokerFacade { session, context }),
         )
@@ -7776,7 +7773,7 @@ async fn publish_extension_workspace_scope(
     state: &AppState,
     parent: &Arc<ScopeSnapshot>,
     session: Arc<ArkSession>,
-    context: Arc<Mutex<CoordinatorRuntime>>,
+    context: Arc<WorkspaceBrokerLane>,
 ) -> Result<Option<Arc<ScopeSnapshot>>> {
     let expected = state.extension_host.scopes().workspace();
     let candidate = build_extension_workspace_candidate(state, parent, session, context).await?;
@@ -8367,7 +8364,7 @@ async fn sync_workspace_project_root(
     let session = active_session(state).await?;
     let context = active_context(state).await?;
     let mut context = context.lock().await;
-    let CoordinatorRuntime { broker, store } = &mut *context;
+    let WorkspaceBrokerState { broker, store } = &mut *context;
     let payload = json!({
         "arguments": {"code": workspace_project_root_code(root)?},
         "expected_workspace": broker.identity()
@@ -9615,7 +9612,7 @@ async fn cancel_agent_turn_state(
     state.agent_workspace_lane.clear_turn_cancellation(&turn_id);
 
     let identity = match active_context(state).await {
-        Ok(context) => Some(context.lock().await.broker.identity().clone()),
+        Ok(context) => Some(context.identity()),
         Err(_) => None,
     };
     let workspace_id_after = identity
@@ -9994,8 +9991,9 @@ mod tests {
         LifecycleDeadlines, PluginContext, ScopeLifecycleState, SourceHandler,
     };
     use rho_server::coordinator::{
-        AgentWorkspaceLane, ApprovalResponseInput, CoordinatorRuntime, PendingApprovalRegistry,
+        AgentWorkspaceLane, ApprovalResponseInput, PendingApprovalRegistry,
     };
+    use rho_server::workspace_lane::WorkspaceBrokerLane;
     use rho_store::{
         AgentConversationDraft, AgentTurnDraft, AgentTurnEventDraft, AgentTurnFinish,
         ApprovalRequestDraft, ArtifactRecordSummary, EnvironmentOperationRequestDraft,
@@ -11190,8 +11188,7 @@ mod tests {
     async fn install_test_context(state: &AppState, mut store: Store) {
         let broker = BrokerState::new("ws-file-test");
         store.save_identity(broker.identity()).unwrap();
-        *state.context.lock().await =
-            Some(Arc::new(Mutex::new(CoordinatorRuntime { broker, store })));
+        *state.context.lock().await = Some(Arc::new(WorkspaceBrokerLane::new(broker, store)));
     }
 
     #[test]
@@ -13572,7 +13569,7 @@ mod tests {
             store.set_project_root(Some(&normalized_root)).unwrap();
             let broker = BrokerState::new("workspace-test");
             let identity = broker.identity().clone();
-            let context = Arc::new(Mutex::new(CoordinatorRuntime { broker, store }));
+            let context = Arc::new(WorkspaceBrokerLane::new(broker, store));
 
             let host = test_candidate_extension_host_with_application_plugins().await;
             let project = host
@@ -13677,7 +13674,7 @@ mod tests {
             store.set_project_root(Some(&normalized_root)).unwrap();
             let broker = BrokerState::new("workspace-failure");
             let identity = broker.identity().clone();
-            let context = Arc::new(Mutex::new(CoordinatorRuntime { broker, store }));
+            let context = Arc::new(WorkspaceBrokerLane::new(broker, store));
             let host = test_candidate_extension_host_with_application_plugins().await;
             let project = host
                 .build_project_candidate(
@@ -15756,7 +15753,7 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
         "project A restart run leaked into project B after Workspace R restart"
     );
 
-    let context = Arc::new(Mutex::new(CoordinatorRuntime { broker, store }));
+    let context = Arc::new(WorkspaceBrokerLane::new(broker, store));
     let extension_runtime = smoke_extension_runtime(
         Arc::clone(&session),
         Arc::clone(&context),
@@ -17035,7 +17032,7 @@ fn smoke_wasm_plugin_host(store_path: &Path, project_root: &Path) -> Result<Valu
 
 async fn smoke_extension_runtime(
     session: Arc<ArkSession>,
-    context: Arc<Mutex<CoordinatorRuntime>>,
+    context: Arc<WorkspaceBrokerLane>,
     store_path: &Path,
     project_root: &Path,
 ) -> Result<Value> {
@@ -17147,11 +17144,11 @@ async fn smoke_extension_runtime(
         .await?;
     host.publish_project_candidate(None, project.clone())
         .await?;
-    let workspace_identity = context.lock().await.broker.identity().clone();
+    let workspace_identity = context.identity();
     let workspace = host
         .build_workspace_candidate(
             &project,
-            extension_workspace_scope_id(&project, &workspace_identity)?,
+            extension_workspace_scope_id(&project, workspace_identity.as_ref())?,
             internal_plugins_for_scope(&rho_extension_runtime::ScopePolicy::workspace_kind()),
             Arc::new(WorkspaceSnapshotBrokerFacade {
                 session: Arc::clone(&session),
@@ -17164,7 +17161,7 @@ async fn smoke_extension_runtime(
 
     let snapshot_request =
         BoundedJson::generic(serde_json::to_value(WorkspaceOperation::Snapshot {
-            expected_workspace: expected_workspace(&workspace_identity),
+            expected_workspace: expected_workspace(workspace_identity.as_ref()),
             origin: ExecutionOrigin::System,
             execution_id: None,
         })?)?;

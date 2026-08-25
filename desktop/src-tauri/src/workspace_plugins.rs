@@ -28,8 +28,7 @@ use rho_extension_runtime::{
 };
 use rho_kernel::ArkSession;
 use rho_server::coordinator::{
-    AgentPluginContextItem, AgentPluginToolDefinition, CoordinatorRuntime,
-    dispatch_workspace_request,
+    AgentPluginContextItem, AgentPluginToolDefinition, dispatch_workspace_request,
 };
 use rho_server::plugin_fs::{ProjectFsReadErrorCode, ProjectFsReadRequest, read_project_file};
 use rho_server::plugin_network::{
@@ -45,6 +44,7 @@ use rho_server::plugin_workspace::{
     WorkspaceInspectRequest, WorkspaceInspectionContext, WorkspaceObjectReferenceRegistry,
     WorkspaceObjectReferenceView,
 };
+use rho_server::workspace_lane::{WorkspaceBrokerLane, WorkspaceBrokerState};
 use rho_store::{
     PluginLifecycleMutationOutcome, PluginLifecycleMutationService, PluginLifecycleQueryService,
     PluginPermissionCallEventDraft, PluginPermissionDecision, PluginPermissionDecisionDraft,
@@ -56,7 +56,6 @@ use rho_store::{
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tokio::sync::Mutex as AsyncMutex;
 
 const POLICY_REVISION: i64 = 1;
 const MAX_PLUGIN_SKILL_BYTES: usize = 64 * 1024;
@@ -381,7 +380,7 @@ pub(crate) trait WorkspacePluginDispatcher: Send + Sync {
 #[allow(dead_code)]
 pub(crate) struct CoordinatorWorkspacePluginDispatcher {
     pub session: Arc<ArkSession>,
-    pub context: Arc<AsyncMutex<CoordinatorRuntime>>,
+    pub context: Arc<WorkspaceBrokerLane>,
 }
 
 impl WorkspacePluginDispatcher for CoordinatorWorkspacePluginDispatcher {
@@ -395,7 +394,7 @@ impl WorkspacePluginDispatcher for CoordinatorWorkspacePluginDispatcher {
                 "expected_workspace": prepared.expected_workspace,
             });
             let mut context = self.context.lock().await;
-            let CoordinatorRuntime { broker, store } = &mut *context;
+            let WorkspaceBrokerState { broker, store } = &mut *context;
             let response = dispatch_workspace_request(
                 prepared.request_type,
                 &payload,

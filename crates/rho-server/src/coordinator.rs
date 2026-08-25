@@ -29,10 +29,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::sync::{Mutex, oneshot};
 use uuid::Uuid;
 
-pub struct CoordinatorRuntime {
-    pub broker: BrokerState,
-    pub store: Store,
-}
+use crate::workspace_lane::{WorkspaceBrokerLane, WorkspaceBrokerState};
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct AgentRuntimeCapabilityRoute {
@@ -924,7 +921,7 @@ async fn send_identity(
 
 async fn send_shared_identity(
     agent: &mut AuthenticatedAgent,
-    context: Arc<Mutex<CoordinatorRuntime>>,
+    context: Arc<WorkspaceBrokerLane>,
 ) -> Result<()> {
     let event = {
         let mut context = context.lock().await;
@@ -2523,7 +2520,7 @@ fn configure_agent_process_environment(
 #[allow(clippy::too_many_arguments)]
 pub async fn run_agent_turn(
     session: &ArkSession,
-    context: Arc<Mutex<CoordinatorRuntime>>,
+    context: Arc<WorkspaceBrokerLane>,
     rscript: PathBuf,
     process_path: Option<OsString>,
     agent_package: PathBuf,
@@ -2796,7 +2793,7 @@ pub async fn run_agent_turn(
 async fn serve_desktop_agent(
     agent: &mut AuthenticatedAgent,
     session: &ArkSession,
-    context: Arc<Mutex<CoordinatorRuntime>>,
+    context: Arc<WorkspaceBrokerLane>,
     turn_id: &str,
     mode: &str,
     workspace_lane: Arc<AgentWorkspaceLane>,
@@ -2871,12 +2868,12 @@ async fn serve_desktop_agent(
                         Err(error) => Err(error),
                     }
                 };
-                let workspace = context.lock().await.broker.identity().clone();
+                let workspace = context.identity();
                 let response = desktop_agent_response(
                     request_type,
                     &incoming.id,
                     result.map_err(|error| error.to_string()),
-                    json!(workspace),
+                    json!(workspace.as_ref()),
                 );
                 let ok = response.payload["ok"].as_bool().unwrap_or(false);
                 context.lock().await.store.append_event(&response)?;
@@ -2922,7 +2919,7 @@ async fn dispatch_agent_workspace_request(
     request_type: &str,
     payload: &Value,
     session: &ArkSession,
-    context: Arc<Mutex<CoordinatorRuntime>>,
+    context: Arc<WorkspaceBrokerLane>,
     turn_id: &str,
     workspace_lane: Arc<AgentWorkspaceLane>,
     adapters: AgentRuntimeAdapters,
@@ -2968,7 +2965,7 @@ async fn dispatch_agent_workspace_request(
         return result;
     }
     let mut context = context.lock().await;
-    let CoordinatorRuntime { broker, store } = &mut *context;
+    let WorkspaceBrokerState { broker, store } = &mut *context;
     dispatch_workspace_request_with_execution_id(
         request_type,
         payload,
@@ -2996,7 +2993,7 @@ fn runtime_output_receipt_range(source_id: &str, execution_id: &str) -> Option<(
 async fn dispatch_agent_context_read_request(
     request_type: &str,
     payload: &Value,
-    context: Arc<Mutex<CoordinatorRuntime>>,
+    context: Arc<WorkspaceBrokerLane>,
     turn_id: &str,
 ) -> Result<Value> {
     let arguments = payload
@@ -3163,7 +3160,7 @@ async fn dispatch_workspace_snapshot_adapter(
 }
 
 async fn record_agent_workspace_wait(
-    context: Arc<Mutex<CoordinatorRuntime>>,
+    context: Arc<WorkspaceBrokerLane>,
     turn_id: &str,
     request_type: &str,
 ) -> Result<()> {
@@ -3392,7 +3389,7 @@ async fn handle_tool_approval_required(
     turn_id: &str,
     mode: &str,
     session: &ArkSession,
-    context: Arc<Mutex<CoordinatorRuntime>>,
+    context: Arc<WorkspaceBrokerLane>,
     approvals: Arc<PendingApprovalRegistry>,
     environment_approvals: Arc<PendingApprovalRegistry>,
     approved_mutations: &mut HashMap<String, ApprovedMutation>,
@@ -3416,7 +3413,7 @@ async fn handle_tool_approval_required(
     let uses_environment_contract =
         request_type.is_some_and(request_type_uses_environment_contract);
     let mut context_guard = context.lock().await;
-    let CoordinatorRuntime { broker, store } = &mut *context_guard;
+    let WorkspaceBrokerState { broker, store } = &mut *context_guard;
     let identity = broker.identity().clone();
     let code = arguments
         .get("code")
@@ -3498,7 +3495,7 @@ async fn handle_tool_approval_required(
         environment_approvals.remove(&request.request_id).await;
 
         let mut context_guard = context.lock().await;
-        let CoordinatorRuntime { broker, store } = &mut *context_guard;
+        let WorkspaceBrokerState { broker, store } = &mut *context_guard;
         let request = store
             .get_environment_operation_request(&request.project_root, &request.request_id)?
             .context("Environment operation request disappeared before approval resolution")?;
@@ -3713,7 +3710,7 @@ async fn handle_tool_approval_required(
     approvals.remove(&request_id).await;
 
     let mut context_guard = context.lock().await;
-    let CoordinatorRuntime { broker, store } = &mut *context_guard;
+    let WorkspaceBrokerState { broker, store } = &mut *context_guard;
     let current = broker.identity();
     if response.decision == "approve"
         && (current.workspace_id != identity.workspace_id
@@ -6441,10 +6438,7 @@ mod tests {
                 },
             )
             .unwrap();
-        let context = Arc::new(Mutex::new(CoordinatorRuntime {
-            broker: BrokerState::new("ws-test"),
-            store,
-        }));
+        let context = Arc::new(WorkspaceBrokerLane::new(BrokerState::new("ws-test"), store));
 
         record_agent_workspace_wait(context.clone(), "turn-wait", "workspace.snapshot")
             .await
