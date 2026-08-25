@@ -24,6 +24,7 @@ mod surface_runtime;
 mod ui_profile;
 mod ui_runtime;
 mod update;
+mod workbench_projection;
 mod workspace_lifecycle;
 mod workspace_plugins;
 
@@ -197,6 +198,7 @@ fn main() {
                 resource_registry: resource_registry::ResourceRegistryState::default(),
                 ui_profile,
                 ui_runtime: ui_runtime::UiRuntimeState::default(),
+                workbench_projection: workbench_projection::WorkbenchProjectionState::default(),
             });
             app.manage(shell::NativeUpdaterState::new());
             let heartbeat_app = app.handle().clone();
@@ -220,6 +222,7 @@ fn main() {
             commands::startup::agent_runtime_retry,
             ui_runtime::ui_kernel_snapshot,
             ui_runtime::ui_set_selection,
+            workbench_projection::workbench_projection_snapshot,
             surface_runtime::surface_list,
             surface_runtime::surface_open,
             surface_runtime::surface_update,

@@ -22,7 +22,7 @@ use crate::project_transition::SwitchTestControl;
 use crate::startup_runtime::{RuntimeConfig, StartupView, runtime_config};
 use crate::{
     check_runtime, plugin_surface_runtime, resource_registry, runtime_registry, studio_runtime,
-    surface_runtime, ui_profile, ui_runtime, workspace_plugins,
+    surface_runtime, ui_profile, ui_runtime, workbench_projection, workspace_plugins,
 };
 
 pub(crate) struct AppState {
@@ -60,6 +60,7 @@ pub(crate) struct AppState {
     pub(crate) resource_registry: resource_registry::ResourceRegistryState,
     pub(crate) ui_profile: ui_profile::ProjectUiProfileState,
     pub(crate) ui_runtime: ui_runtime::UiRuntimeState,
+    pub(crate) workbench_projection: workbench_projection::WorkbenchProjectionState,
 }
 
 pub(crate) async fn run_store_executor_service<R, F>(

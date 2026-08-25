@@ -30,6 +30,7 @@ import { createTauriResourceTransport } from "./resource";
 import { createTauriRuntimeTransport } from "./runtime";
 import { createTauriRuntimeOutputTransport } from "./runtime-output";
 import { createTauriSurfaceStudioTransport } from "./surface-studio";
+import { createTauriWorkbenchProjectionTransport } from "./workbench-projection";
 
 export type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 export type Listen = <T>(
@@ -218,6 +219,9 @@ export function createTauriUiKernelTransport(
     },
     ...createTauriProjectTransport(projectCommands),
     ...kernelTransport,
+    ...createTauriWorkbenchProjectionTransport(invoke),
+    subscribeWorkbenchInvalidated: (listener) =>
+      subscribeEvents(listen, invalidationEvents("workbench"), listener),
     subscribeInvalidated: (listener) =>
       subscribeEvents(listen, invalidationEvents("kernel"), listener),
     ...createTauriSurfaceStudioTransport(invoke),

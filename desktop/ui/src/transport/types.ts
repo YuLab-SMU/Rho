@@ -40,6 +40,7 @@ import type { PluginSurfaceTransport } from "./plugin-surface";
 import type { ProjectTransport } from "./project";
 import type { KernelTransport } from "./kernel-generated";
 import type { CheckTransport } from "./check";
+import type { WorkbenchProjectionTransport } from "./workbench-projection";
 import type { PlotImageView } from "./history";
 
 export type {
@@ -310,7 +311,7 @@ export interface WorkspacePreparation {
   readonly issue: WorkspacePreparationIssue | null;
 }
 
-export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTransport, ProfileTransport, AgentConversationTransport, AgentTurnDetailTransport, AgentExecutionTransport, AgentRuntimeTransport, AgentSettingsTransport, AgentFileTransport, PluginSurfaceTransport, ProjectTransport, KernelTransport, CheckTransport {
+export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTransport, ProfileTransport, AgentConversationTransport, AgentTurnDetailTransport, AgentExecutionTransport, AgentRuntimeTransport, AgentSettingsTransport, AgentFileTransport, PluginSurfaceTransport, ProjectTransport, KernelTransport, CheckTransport, WorkbenchProjectionTransport {
   readonly source: UiSnapshotSource;
   prepareWorkspace(chooseRscript?: boolean): Promise<WorkspacePreparation>;
   subscribeInvalidated(listener: () => void): Unsubscribe;

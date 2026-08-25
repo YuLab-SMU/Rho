@@ -18,6 +18,7 @@ pub mod snapshot;
 pub mod surface;
 pub mod validation;
 pub mod vibe;
+pub mod workbench;
 
 pub use check::*;
 pub use command::*;
@@ -31,5 +32,6 @@ pub use snapshot::*;
 pub use surface::*;
 pub use validation::*;
 pub use vibe::*;
+pub use workbench::*;
 
 pub const RSR_CONTRACT_MAJOR: u16 = 1;

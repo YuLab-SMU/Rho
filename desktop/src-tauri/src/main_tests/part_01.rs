@@ -1081,6 +1081,8 @@
             ui_profile: crate::ui_profile::ProjectUiProfileState::new(data_dir.to_path_buf())
                 .unwrap(),
             ui_runtime: crate::ui_runtime::UiRuntimeState::default(),
+            workbench_projection:
+                crate::workbench_projection::WorkbenchProjectionState::default(),
         }
     }
 
@@ -1133,4 +1135,61 @@
                 .unwrap()
                 .is_empty()
         );
+    }
+
+    #[tokio::test]
+    async fn workbench_projection_capture_keeps_rapid_project_switches_coherent() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let project_a = tempdir.path().join("project-a");
+        let project_b = tempdir.path().join("project-b");
+        std::fs::create_dir_all(&project_a).unwrap();
+        std::fs::create_dir_all(&project_b).unwrap();
+        let store_path = tempdir.path().join("rho.sqlite");
+        let extension_host = test_candidate_extension_host_with_application_plugins().await;
+        let state = test_app_state_with_extension_host(
+            tempdir.path(),
+            &project_a,
+            &store_path,
+            extension_host,
+        );
+        let lane = Arc::new(WorkspaceBrokerLane::new(
+            BrokerState::new("workspace.projection"),
+            StoreExecutor::open(&store_path).await.unwrap(),
+        ));
+        {
+            let mut workspace = lane.lock().await;
+            workspace.broker.project_changed();
+        }
+        *state.context.lock().await = Some(Arc::clone(&lane));
+
+        let first = {
+            let _transition = state.project_transition_gate.lock().await;
+            crate::workbench_projection::capture_for_state(&state)
+                .await
+                .unwrap()
+        };
+        assert_eq!(first.projection_generation, 1);
+        assert_eq!(first.revisions.project_revision, 1);
+
+        {
+            let _transition = state.project_transition_gate.lock().await;
+            *state.project_root.write().await = project_b;
+            let mut workspace = lane.lock().await;
+            workspace.broker.project_changed();
+        }
+        let second = {
+            let _transition = state.project_transition_gate.lock().await;
+            crate::workbench_projection::capture_for_state(&state)
+                .await
+                .unwrap()
+        };
+        assert_ne!(first.project_id, second.project_id);
+        assert_eq!(second.projection_generation, 2);
+        assert_eq!(second.revisions.project_revision, 2);
+        assert_eq!(second.project_id, second.kernel.project.project_id);
+        assert_eq!(second.project_id, second.surfaces.project_id);
+        assert_eq!(second.project_id, second.studio.project_id);
+        assert_eq!(second.project_id, second.runtimes.project_id);
+        assert_eq!(second.project_id, second.resources.project_id);
+        assert_eq!(second.project_id, second.profile.profile.project_id);
     }

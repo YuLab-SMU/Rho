@@ -86,6 +86,7 @@ import type {
   Unsubscribe,
 } from "./types";
 import { INVALIDATION_TOPICS } from "./invalidation-contract";
+import type { WorkbenchProjection } from "./workbench-projection";
 
 export const MOCK_INVALIDATION_TOPICS = INVALIDATION_TOPICS;
 
@@ -518,6 +519,7 @@ export function createMockUiKernelTransport(
   let nextExecution = 1;
   let nextCheck = 1;
   let nextScene = 1;
+  let projectionGeneration = 0;
   const allocateNode = () => `node:mock-${nextNode++}`;
   const undo: SceneState[] = [];
   const redo: SceneState[] = [];
@@ -529,6 +531,7 @@ export function createMockUiKernelTransport(
   const runtimeListeners = new Set<() => void>();
   const resourceListeners = new Set<() => void>();
   const agentListeners = new Set<() => void>();
+  const workbenchListeners = new Set<() => void>();
   const agentNow = "2026-08-22T12:00:00Z";
   const agentProjectRoot = current.project.display_path;
   let agentLlmSettings: AgentLlmSettingsView = {
@@ -711,10 +714,16 @@ export function createMockUiKernelTransport(
     approvals: [],
     context_items: [],
   }]]);
+  const notifyWorkbench = () => {
+    emitInvalidation("workbench", () => {
+      for (const listener of workbenchListeners) listener();
+    });
+  };
   const notifyKernel = () => {
     emitInvalidation("kernel", () => {
       for (const listener of listeners) listener();
     });
+    notifyWorkbench();
   };
   const notifyAgent = () => {
     emitInvalidation("agent", () => {
@@ -727,6 +736,7 @@ export function createMockUiKernelTransport(
     emitInvalidation("surfaces", () => {
       for (const listener of surfaceListeners) listener();
     });
+    notifyWorkbench();
   };
   const notifyPluginSurfaces = () => {
     emitInvalidation("plugin-surfaces", () => {
@@ -785,21 +795,25 @@ export function createMockUiKernelTransport(
     emitInvalidation("studio", () => {
       for (const listener of studioListeners) listener();
     });
+    notifyWorkbench();
   };
   const notifyRuntimes = () => {
     emitInvalidation("runtimes", () => {
       for (const listener of runtimeListeners) listener();
     });
+    notifyWorkbench();
   };
   const notifyResources = () => {
     emitInvalidation("resources", () => {
       for (const listener of resourceListeners) listener();
     });
+    notifyWorkbench();
   };
   const notifyProfile = () => {
     emitInvalidation("profile", () => {
       for (const listener of profileListeners) listener();
     });
+    notifyWorkbench();
   };
   const validateProfileTarget = (target: UiProfileRevisionRequest) => {
     if (
@@ -1253,6 +1267,35 @@ export function createMockUiKernelTransport(
     },
     async pickProjectDirectory() {
       return cancelledProjectSwitch();
+    },
+    async loadWorkbenchProjection() {
+      projectionGeneration += 1;
+      return {
+        contract: "rho.ui.workbench-projection.v1",
+        contract_major: 1,
+        projection_generation: projectionGeneration,
+        project_id: current.project.project_id,
+        revisions: {
+          project_revision: current.context.project_revision,
+          kernel_snapshot_revision: current.snapshot_revision,
+          surface_snapshot_revision: surfaces.snapshot_revision,
+          studio_snapshot_revision: studio.snapshot_revision,
+          layout_revision: studio.scene.layout_revision,
+          runtime_snapshot_revision: runtimes.snapshot_revision,
+          resource_snapshot_revision: resources.snapshot_revision,
+          profile_revision: profile.profile.revision,
+        },
+        kernel: copySnapshot(current),
+        surfaces: copySurfaces(surfaces),
+        studio: copyStudio(studio),
+        runtimes: copyRuntimes(runtimes),
+        resources: copyResources(resources),
+        profile: copyProfile(profile),
+      } satisfies WorkbenchProjection;
+    },
+    subscribeWorkbenchInvalidated(listener: () => void): Unsubscribe {
+      workbenchListeners.add(listener);
+      return () => workbenchListeners.delete(listener);
     },
     async loadSnapshot() {
       return copySnapshot(current);

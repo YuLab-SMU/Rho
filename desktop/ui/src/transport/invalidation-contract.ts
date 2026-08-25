@@ -1,4 +1,14 @@
 export const INVALIDATION_EVENTS = {
+  workbench: [
+    "rho://ui-snapshot-invalidated",
+    "rho://surface-runtime-changed",
+    "rho://studio-runtime-changed",
+    "rho://ui-profile-changed",
+    "rho://runtime-registry-changed",
+    "rho://resource-registry-changed",
+    "project://files-changed",
+    "rho://agent-turn-updated",
+  ],
   kernel: [
     "rho://ui-snapshot-invalidated",
     "rho://runtime-registry-changed",

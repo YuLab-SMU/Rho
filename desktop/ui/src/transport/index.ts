@@ -19,6 +19,11 @@ export type { PluginSurfaceTransport } from "./plugin-surface";
 export type { ProjectTransport } from "./project";
 export type { KernelTransport } from "./kernel-generated";
 export type { CheckTransport } from "./check";
+export type {
+  WorkbenchProjection,
+  WorkbenchProjectionTransport,
+  WorkbenchRevisionVector,
+} from "./workbench-projection";
 
 export function createUiKernelTransport(): UiKernelTransport {
   if (isTauri()) {
