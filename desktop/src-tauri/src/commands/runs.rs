@@ -1,19 +1,26 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use rho_extension_runtime::{
     BoundedJson, DiagnosticCode, DiagnosticSeverity, ExtensionDiagnostic,
     InternalExtensionRuntimeMode, SourceCallError,
 };
+use rho_server::coordinator::dispatch_workspace_request;
+use rho_server::workspace_lane::WorkspaceBrokerState;
 use rho_store::{
     AuditLimits, AuditResponse, AuditScope, CompareRunsResponse, ProblemSummary, RunDetail,
     RunSummary,
 };
-use serde_json::json;
+use serde::Serialize;
+use serde_json::{Value, json};
 use tauri::State;
 
 use crate::{
-    AppState, display_error, extension_project_scope_id, run_history_source_capability_id,
-    store_executor,
+    AppState, active_context, active_session, display_error, extension_project_scope_id,
+    parse_execution_origin, run_history_source_capability_id, store_executor,
 };
+
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(transparent)]
+pub(crate) struct RunRetryResult(#[specta(type = rho_ui_contract::UiIpcUnknown)] Value);
 
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
@@ -198,4 +205,64 @@ pub(crate) async fn audit_reproducibility_with_state(
         )
         .await
         .map_err(display_error)
+}
+
+#[cfg_attr(test, specta::specta)]
+#[tauri::command]
+pub(crate) async fn retry_run(
+    run_id: String,
+    state: State<'_, AppState>,
+) -> Result<RunRetryResult, String> {
+    let root = state.project_root.read().await.clone();
+    let project_root = root.to_string_lossy().replace('\\', "/");
+    let session = active_session(&state).await.map_err(display_error)?;
+    let context = active_context(&state).await.map_err(display_error)?;
+    let mut context = context.lock().await;
+    let WorkspaceBrokerState { broker, executor } = &mut *context;
+    let detail = executor
+        .run_repository()
+        .get_run_detail(project_root, run_id.clone())
+        .await
+        .map_err(display_error)?
+        .context(format!("Run not found: {run_id}"))
+        .map_err(display_error)?;
+    if !run_is_retryable(&detail.request_type, &detail.origin) {
+        return Err(format!(
+            "Run type `{}` cannot be retried from history",
+            detail.request_type
+        ));
+    }
+    let arguments =
+        retry_run_arguments(&detail.arguments_json, &detail.run_id).map_err(display_error)?;
+    let payload = json!({
+        "arguments": arguments,
+        "expected_workspace": broker.identity()
+    });
+    dispatch_workspace_request(
+        &detail.request_type,
+        &payload,
+        parse_execution_origin(&detail.origin),
+        session.as_ref(),
+        broker,
+        executor,
+    )
+    .await
+    .map(RunRetryResult)
+    .map_err(display_error)
+}
+
+pub(crate) fn retry_run_arguments(arguments_json: &str, parent_run_id: &str) -> Result<Value> {
+    let mut arguments: Value = serde_json::from_str(arguments_json)?;
+    let object = arguments
+        .as_object_mut()
+        .context("Stored run arguments are invalid")?;
+    object.insert(
+        "parent_run_id".to_string(),
+        Value::String(parent_run_id.to_string()),
+    );
+    Ok(arguments)
+}
+
+pub(crate) fn run_is_retryable(request_type: &str, origin: &str) -> bool {
+    request_type == "workspace.execute" && matches!(origin, "user" | "agent")
 }

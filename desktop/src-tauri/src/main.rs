@@ -841,10 +841,6 @@ enum AgentFileProposalMutationState {
     Uncertain,
 }
 
-#[derive(Debug, Clone, Serialize, specta::Type)]
-#[serde(transparent)]
-struct RunRetryResult(#[specta(type = rho_ui_contract::UiIpcUnknown)] Value);
-
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AgentLlmSelectRequest {
@@ -3386,63 +3382,6 @@ async fn list_project_skills(
 }
 
 // ── Evidence workspace commands ──────────────────────────────
-
-#[cfg_attr(test, specta::specta)]
-#[tauri::command]
-async fn retry_run(run_id: String, state: State<'_, AppState>) -> Result<RunRetryResult, String> {
-    let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy().replace('\\', "/");
-    let session = active_session(&state).await.map_err(display_error)?;
-    let context = active_context(&state).await.map_err(display_error)?;
-    let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, executor } = &mut *context;
-    let detail = executor
-        .run_repository()
-        .get_run_detail(project_root, run_id.clone())
-        .await
-        .map_err(display_error)?
-        .context(format!("Run not found: {run_id}"))
-        .map_err(display_error)?;
-    if !run_is_retryable(&detail.request_type, &detail.origin) {
-        return Err(format!(
-            "Run type `{}` cannot be retried from history",
-            detail.request_type
-        ));
-    }
-    let arguments =
-        retry_run_arguments(&detail.arguments_json, &detail.run_id).map_err(display_error)?;
-    let payload = json!({
-        "arguments": arguments,
-        "expected_workspace": broker.identity()
-    });
-    dispatch_workspace_request(
-        &detail.request_type,
-        &payload,
-        parse_execution_origin(&detail.origin),
-        session.as_ref(),
-        broker,
-        executor,
-    )
-    .await
-    .map(RunRetryResult)
-    .map_err(display_error)
-}
-
-fn retry_run_arguments(arguments_json: &str, parent_run_id: &str) -> Result<Value> {
-    let mut arguments: Value = serde_json::from_str(arguments_json)?;
-    let object = arguments
-        .as_object_mut()
-        .context("Stored run arguments are invalid")?;
-    object.insert(
-        "parent_run_id".to_string(),
-        Value::String(parent_run_id.to_string()),
-    );
-    Ok(arguments)
-}
-
-fn run_is_retryable(request_type: &str, origin: &str) -> bool {
-    request_type == "workspace.execute" && matches!(origin, "user" | "agent")
-}
 
 async fn resolve_agent_explicit_context(
     state: &AppState,
@@ -8790,12 +8729,11 @@ mod tests {
         locate_ark_from_candidates, locate_rscript, parse_r_runtime_probe,
         persist_agent_file_mutation_event_to_store, persist_workspace_identity,
         project_switch_blocker, r_architecture_supported, reconcile_render_job,
-        recover_incomplete_agent_file_mutations, render_job_is_terminal, retry_run_arguments,
-        run_is_retryable, run_r_probe, runtime_file_signature, save_runtime_cache,
-        shutdown_application, store_executor, switch_project_with_watcher_factory, text_sha256,
-        undo_agent_file_edit_state, validate_execute_source_range_shape,
-        validate_persisted_agent_file_proposal_structure, workspace_project_root_code,
-        write_r_probe_script,
+        recover_incomplete_agent_file_mutations, render_job_is_terminal, run_r_probe,
+        runtime_file_signature, save_runtime_cache, shutdown_application, store_executor,
+        switch_project_with_watcher_factory, text_sha256, undo_agent_file_edit_state,
+        validate_execute_source_range_shape, validate_persisted_agent_file_proposal_structure,
+        workspace_project_root_code, write_r_probe_script,
     };
     use crate::commands::artifacts::{
         data_view_artifact_metadata, data_view_delimited_text, decode_plot_png_base64,
@@ -8805,7 +8743,10 @@ mod tests {
     use crate::commands::environment::lockfile_inventory_arguments;
     use crate::commands::evidence::source_claim_snapshot;
     use crate::commands::project_session::safe_delete_project_file;
-    use crate::commands::runs::{audit_reproducibility_with_state, list_runs_with_state};
+    use crate::commands::runs::{
+        audit_reproducibility_with_state, list_runs_with_state, retry_run_arguments,
+        run_is_retryable,
+    };
     use crate::platform;
 
     use crate::project::{
@@ -14559,7 +14500,7 @@ mod tests {
                 crate::commands::runs::list_problems,
                 crate::commands::artifacts::list_plot_artifacts,
                 crate::commands::artifacts::read_plot_artifact,
-                super::retry_run,
+                crate::commands::runs::retry_run,
             ])
             .error_handling(tauri_specta::ErrorHandlingMode::Throw)
             .export(specta_typescript::Typescript::default(), output_path)
@@ -16656,7 +16597,7 @@ fn main() {
             commands::editor::editor_goto_definition,
             commands::editor::editor_find_project_references,
             commands::editor::editor_discover_chunks,
-            retry_run,
+            commands::runs::retry_run,
             run_agent,
             agent_context_preview,
             agent_llm_settings,

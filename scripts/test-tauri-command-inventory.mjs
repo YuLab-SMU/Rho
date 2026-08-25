@@ -13,6 +13,7 @@ const RUN_COMMANDS = [
   "get_run_detail",
   "list_problems",
   "list_runs",
+  "retry_run",
 ];
 
 const ARTIFACT_COMMANDS = [
@@ -285,6 +286,7 @@ ${projectHandlers}
   commands::runs::get_run_detail,
   commands::runs::compare_runs,
   commands::runs::audit_reproducibility,
+  commands::runs::retry_run,
 ])`;
   const runs = RUN_COMMANDS.map(
     (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
