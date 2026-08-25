@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-18",
+  "active_work_packages": ["AM-W2-19"],
+  "integration_lane": "AM-W2-19",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -291,6 +291,10 @@ the Workspace lane only for an actual recovered-file project revision change.
 `AM-W2-18` (`4730036`/AM-E-0045) gives Run History a narrow executor-backed repository shared by
 legacy Tauri queries and the candidate internal-extension source facade. Query
 shape, bounds, failure and stale-generation behavior remain unchanged.
+
+`AM-W2-19` moves the cross-domain reproducibility audit onto its own repository
+over the Store worker. Panic containment executes inside the submitted
+operation, preserving its stable retry message without risking the worker.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 

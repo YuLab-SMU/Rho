@@ -10159,7 +10159,7 @@ mod tests {
         validate_persisted_agent_file_proposal_structure, workspace_project_root_code,
         write_r_probe_script,
     };
-    use crate::commands::runs::{contain_audit_panic, list_runs_with_state};
+    use crate::commands::runs::{audit_reproducibility_with_state, list_runs_with_state};
     use crate::platform;
 
     use crate::project::{
@@ -10800,13 +10800,43 @@ mod tests {
     }
 
     #[test]
-    fn audit_command_boundary_contains_panics() {
-        assert_eq!(contain_audit_panic(|| 42).unwrap(), 42);
-        let error = contain_audit_panic(|| -> usize { panic!("audit fixture panic") }).unwrap_err();
-        assert_eq!(
-            error,
-            "The project reproducibility check failed unexpectedly. Try the check again."
-        );
+    fn audit_command_uses_store_worker_without_waiting_for_workspace_lane() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let tempdir = TempDir::new().unwrap();
+            let project_root = tempdir.path().join("project-a");
+            std::fs::create_dir_all(&project_root).unwrap();
+            let store_path = tempdir.path().join("rho.sqlite");
+            let state = test_app_state(tempdir.path(), &project_root, &store_path);
+            let lane = Arc::new(WorkspaceBrokerLane::new(
+                BrokerState::new("workspace.audit"),
+                Store::open(&store_path).unwrap(),
+            ));
+            let held_workspace = lane.lock().await;
+
+            let response = tokio::time::timeout(
+                Duration::from_millis(250),
+                audit_reproducibility_with_state("project".to_string(), None, &state),
+            )
+            .await
+            .expect("reproducibility audit waited for the held Workspace broker lane")
+            .unwrap();
+            assert_eq!(response.schema_version, 1);
+            assert_eq!(response.scope, "project");
+            assert_eq!(
+                audit_reproducibility_with_state("unknown".to_string(), None, &state)
+                    .await
+                    .unwrap_err(),
+                "invalid audit scope: unknown (expected 'project', 'project_current', 'run:<id>', or 'artifact:<id>')"
+            );
+            assert!(
+                tokio::time::timeout(Duration::from_millis(20), lane.lock())
+                    .await
+                    .is_err(),
+                "test did not keep the Workspace broker lane contended"
+            );
+            drop(held_workspace);
+        });
     }
 
     #[test]

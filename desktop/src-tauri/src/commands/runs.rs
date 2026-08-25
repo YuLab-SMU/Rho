@@ -11,8 +11,8 @@ use serde_json::json;
 use tauri::State;
 
 use crate::{
-    AppState, display_error, extension_project_scope_id, read_store,
-    run_history_source_capability_id, store_executor,
+    AppState, display_error, extension_project_scope_id, run_history_source_capability_id,
+    store_executor,
 };
 
 #[cfg_attr(test, specta::specta)]
@@ -163,6 +163,14 @@ pub(crate) async fn audit_reproducibility(
     reference_snapshot_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<AuditResponse, String> {
+    audit_reproducibility_with_state(scope, reference_snapshot_id, &state).await
+}
+
+pub(crate) async fn audit_reproducibility_with_state(
+    scope: String,
+    reference_snapshot_id: Option<String>,
+    state: &AppState,
+) -> Result<AuditResponse, String> {
     let root = state.project_root.read().await.clone();
     let project_root = root.to_string_lossy().replace('\\', "/");
     let audit_scope = if scope == "project" {
@@ -178,19 +186,16 @@ pub(crate) async fn audit_reproducibility(
             "invalid audit scope: {scope} (expected 'project', 'project_current', 'run:<id>', or 'artifact:<id>')"
         ));
     };
-    let store = read_store(&state).map_err(display_error)?;
-    contain_audit_panic(|| {
-        store.audit_reproducibility(
+    store_executor(state)
+        .await
+        .map_err(display_error)?
+        .audit_repository()
+        .audit_reproducibility(
             audit_scope,
-            &project_root,
-            reference_snapshot_id.as_deref(),
-            &AuditLimits::default(),
+            project_root,
+            reference_snapshot_id,
+            AuditLimits::default(),
         )
-    })
-}
-
-pub(crate) fn contain_audit_panic<T>(operation: impl FnOnce() -> T) -> Result<T, String> {
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(operation)).map_err(|_| {
-        "The project reproducibility check failed unexpectedly. Try the check again.".to_string()
-    })
+        .await
+        .map_err(display_error)
 }

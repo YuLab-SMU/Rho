@@ -18,6 +18,7 @@ mod agent;
 mod agent_repository;
 mod artifact;
 mod audit;
+mod audit_repository;
 mod compare;
 mod environment;
 mod evidence;
@@ -46,6 +47,7 @@ pub use artifact::{
     ArtifactRecordDraft, ArtifactRecordSummary, PlotArtifactDraft, PlotArtifactSummary,
 };
 pub use audit::*;
+pub use audit_repository::{AuditRepository, AuditRepositoryError};
 pub use compare::{
     CompareField, CompareFieldEntry, CompareRunsResponse, CompareSection, CompareSummary,
 };
