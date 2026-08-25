@@ -6693,7 +6693,6 @@ mod tests {
         let executor = rho_store::StoreExecutor::open(&database).await.unwrap();
         let context = Arc::new(WorkspaceBrokerLane::new(
             BrokerState::new("ws-test"),
-            store,
             executor.clone(),
         ));
         let agent_store = executor.agent_repository();

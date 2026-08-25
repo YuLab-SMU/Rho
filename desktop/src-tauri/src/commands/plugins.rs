@@ -169,7 +169,7 @@ async fn persist_plugin_project_change(state: &AppState) -> Result<i64> {
     let mut coordinator = coordinator.lock().await;
     coordinator.broker.project_changed();
     let identity = coordinator.broker.identity().clone();
-    coordinator.store.save_identity(&identity)?;
+    crate::persist_workspace_identity(&coordinator.executor, identity.clone()).await?;
     i64::try_from(identity.project_revision).context("project revision exceeds plugin range")
 }
 

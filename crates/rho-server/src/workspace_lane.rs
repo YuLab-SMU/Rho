@@ -5,31 +5,25 @@ use std::sync::Arc;
 use arc_swap::ArcSwap;
 use rho_core::BrokerState;
 use rho_protocol::WorkspaceIdentity;
-use rho_store::{Store, StoreExecutor};
+use rho_store::StoreExecutor;
 use tokio::sync::{Mutex, MutexGuard};
 
 pub struct WorkspaceBrokerState {
     pub broker: BrokerState,
-    pub store: Store,
     pub executor: StoreExecutor,
 }
 
-/// Exclusive mutation lane for Workspace R, its Broker identity and the
-/// legacy synchronous Store working set used by Workspace dispatch.
+/// Exclusive mutation lane for Workspace R and its Broker identity.
 pub struct WorkspaceBrokerLane {
     state: Mutex<WorkspaceBrokerState>,
     identity: ArcSwap<WorkspaceIdentity>,
 }
 
 impl WorkspaceBrokerLane {
-    pub fn new(broker: BrokerState, store: Store, executor: StoreExecutor) -> Self {
+    pub fn new(broker: BrokerState, executor: StoreExecutor) -> Self {
         let identity = Arc::new(broker.identity().clone());
         Self {
-            state: Mutex::new(WorkspaceBrokerState {
-                broker,
-                store,
-                executor,
-            }),
+            state: Mutex::new(WorkspaceBrokerState { broker, executor }),
             identity: ArcSwap::from(identity),
         }
     }
@@ -88,7 +82,6 @@ mod tests {
         let store_path = directory.path().join(format!("{workspace_id}.sqlite"));
         WorkspaceBrokerLane::new(
             BrokerState::new(workspace_id),
-            Store::open(&store_path).unwrap(),
             StoreExecutor::open(&store_path).await.unwrap(),
         )
     }

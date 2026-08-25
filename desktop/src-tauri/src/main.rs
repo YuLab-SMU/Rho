@@ -2035,11 +2035,10 @@ fn observation_matches(
     }
 }
 
-fn recover_incomplete_agent_file_mutations(
-    store: &mut Store,
-    root: &Path,
+fn pending_agent_file_mutations(
+    store: &Store<impl StoreConnection>,
     project_root: &str,
-) -> Result<AgentFileMutationRecoverySummary> {
+) -> Result<Vec<(String, AgentFileMutationLedger)>> {
     let events = store.agent_file_mutation_events(project_root)?;
     let mut pending = HashMap::<String, (String, AgentFileMutationLedger)>::new();
     for event in events {
@@ -2067,8 +2066,19 @@ fn recover_incomplete_agent_file_mutations(
         }
     }
 
+    Ok(pending.into_values().collect())
+}
+
+fn observe_agent_file_recovery(
+    root: &Path,
+    pending: Vec<(String, AgentFileMutationLedger)>,
+) -> (
+    AgentFileMutationRecoverySummary,
+    Vec<AgentFileMutationEventRecord>,
+) {
     let mut summary = AgentFileMutationRecoverySummary::default();
-    for (turn_id, ledger) in pending.into_values() {
+    let mut events = Vec::with_capacity(pending.len());
+    for (turn_id, ledger) in pending {
         let observation = observe_agent_file(root, &ledger.path);
         let (event_type, title, status, outcome, reason) = if observation_matches(
             &observation,
@@ -2112,23 +2122,46 @@ fn recover_incomplete_agent_file_mutations(
                 reason,
             )
         };
-        append_agent_file_mutation_event(
-            store,
-            &turn_id,
+        events.push(AgentFileMutationEventRecord {
+            turn_id,
             event_type,
             title,
             status,
-            &ledger.path,
-            &ledger.operation,
-            ledger.proposal_event_id,
-            json!({
+            path: ledger.path,
+            operation: ledger.operation,
+            proposal_event_id: ledger.proposal_event_id,
+            details: json!({
                 "mutation_id": ledger.mutation_id,
                 "action": ledger.action,
                 "outcome": outcome,
                 "reason": reason
             }),
-        )?;
+        });
     }
+    (summary, events)
+}
+
+async fn recover_incomplete_agent_file_mutations(
+    executor: &StoreExecutor,
+    root: &Path,
+    project_root: &str,
+) -> Result<AgentFileMutationRecoverySummary> {
+    let project_root = project_root.to_string();
+    let pending = run_store_executor_service(executor, move |store| {
+        pending_agent_file_mutations(store, &project_root)
+    })
+    .await?;
+    let (summary, events) = observe_agent_file_recovery(root, pending);
+    if events.is_empty() {
+        return Ok(summary);
+    }
+    run_store_executor_service(executor, move |store| {
+        for event in events {
+            persist_agent_file_mutation_event_to_store(store, event)?;
+        }
+        Ok(())
+    })
+    .await?;
     Ok(summary)
 }
 
@@ -3077,11 +3110,7 @@ async fn dispatch_workspace_execution_with_id(
     let session = active_session(state).await?;
     let context = active_context(state).await?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState {
-        broker,
-        store: _,
-        executor,
-    } = &mut *context;
+    let WorkspaceBrokerState { broker, executor } = &mut *context;
     let payload = json!({
         "arguments": {
             "code": request.code,
@@ -3221,11 +3250,7 @@ async fn editor_goto_definition(name: String, state: State<'_, AppState>) -> Res
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState {
-        broker,
-        store: _,
-        executor,
-    } = &mut *context;
+    let WorkspaceBrokerState { broker, executor } = &mut *context;
     let payload = json!({
         "arguments": { "name": name, "project_root": project_root },
         "expected_workspace": broker.identity()
@@ -3253,11 +3278,7 @@ async fn editor_find_project_references(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState {
-        broker,
-        store: _,
-        executor,
-    } = &mut *context;
+    let WorkspaceBrokerState { broker, executor } = &mut *context;
     let payload = json!({
         "arguments": {
             "name": name,
@@ -3283,11 +3304,7 @@ async fn editor_discover_chunks(path: String, state: State<'_, AppState>) -> Res
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState {
-        broker,
-        store: _,
-        executor,
-    } = &mut *context;
+    let WorkspaceBrokerState { broker, executor } = &mut *context;
     let payload = json!({
         "arguments": { "path": path },
         "expected_workspace": broker.identity()
@@ -3462,11 +3479,7 @@ async fn snapshot_workspace_with_state(state: &AppState) -> Result<Value, String
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState {
-        broker,
-        store: _,
-        executor,
-    } = &mut *context;
+    let WorkspaceBrokerState { broker, executor } = &mut *context;
     let payload = json!({
         "arguments": {},
         "expected_workspace": broker.identity()
@@ -3491,11 +3504,7 @@ async fn inspect_object(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState {
-        broker,
-        store: _,
-        executor,
-    } = &mut *context;
+    let WorkspaceBrokerState { broker, executor } = &mut *context;
     let payload = json!({
         "arguments": {
             "name": request.name
@@ -3532,11 +3541,7 @@ async fn inspect_data_object(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState {
-        broker,
-        store: _,
-        executor,
-    } = &mut *context;
+    let WorkspaceBrokerState { broker, executor } = &mut *context;
     let payload = json!({
         "arguments": {
             "object_name": request.object_name
@@ -3563,11 +3568,7 @@ async fn read_data_view(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState {
-        broker,
-        store: _,
-        executor,
-    } = &mut *context;
+    let WorkspaceBrokerState { broker, executor } = &mut *context;
     let payload = json!({
         "arguments": {
             "object_name": request.object_name,
@@ -3618,11 +3619,7 @@ async fn render_document(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState {
-        broker,
-        store: _,
-        executor,
-    } = &mut *context;
+    let WorkspaceBrokerState { broker, executor } = &mut *context;
     let payload = json!({
         "arguments": {
             "path": file.to_string_lossy(),
@@ -3759,11 +3756,7 @@ async fn render_document_job(
             render_tasks.lock().await.remove(&job_id);
             return;
         }
-        let WorkspaceBrokerState {
-            broker,
-            store,
-            executor,
-        } = &mut *context;
+        let WorkspaceBrokerState { broker, executor } = &mut *context;
         let payload = serde_json::json!({
             "arguments": {
                 "path": file_path,
@@ -3783,17 +3776,22 @@ async fn render_document_job(
             Some(&job_id),
         )
         .await;
-        let artifact = outcome
+        let artifact_id = outcome
             .as_ref()
             .ok()
             .filter(|response| response["execution"]["ok"].as_bool().unwrap_or(false))
             .and_then(|response| response["artifact_id"].as_str())
-            .and_then(|artifact_id| {
-                store
-                    .get_artifact_record(&job_project_root, artifact_id)
-                    .ok()
-                    .flatten()
-            });
+            .map(str::to_string);
+        let artifact = match artifact_id {
+            Some(artifact_id) => executor
+                .artifact_repository()
+                .get_record(job_project_root.clone(), artifact_id)
+                .await
+                .ok()
+                .flatten()
+                .map(|projection| projection.artifact),
+            None => None,
+        };
         let mut jobs = render_jobs.lock().await;
         if let Some(job) = jobs.get_mut(&job_id) {
             match outcome {
@@ -3975,11 +3973,7 @@ async fn request_environment_operation_preview(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState {
-        broker,
-        store: _,
-        executor,
-    } = &mut *context;
+    let WorkspaceBrokerState { broker, executor } = &mut *context;
     request_environment_operation(
         EnvironmentOperationArguments {
             operation: request.operation,
@@ -4042,11 +4036,7 @@ async fn list_installed_packages(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState {
-        broker,
-        store: _,
-        executor,
-    } = &mut *context;
+    let WorkspaceBrokerState { broker, executor } = &mut *context;
     let payload = json!({
         "arguments": { "limit": limit.map(u64::from).unwrap_or(500) },
         "expected_workspace": broker.identity()
@@ -4080,11 +4070,7 @@ async fn list_lockfile_packages(
     let root = state.project_root.read().await.clone();
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState {
-        broker,
-        store: _,
-        executor,
-    } = &mut *context;
+    let WorkspaceBrokerState { broker, executor } = &mut *context;
     let payload = json!({
         "arguments": lockfile_inventory_arguments(&root, limit),
         "expected_workspace": broker.identity()
@@ -4165,11 +4151,7 @@ async fn respond_environment_operation(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState {
-        broker,
-        store: _,
-        executor,
-    } = &mut *context;
+    let WorkspaceBrokerState { broker, executor } = &mut *context;
     decide_environment_operation(
         &request.request_id,
         &request.decision,
@@ -4192,11 +4174,7 @@ async fn editor_package_functions(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState {
-        broker,
-        store: _,
-        executor,
-    } = &mut *context;
+    let WorkspaceBrokerState { broker, executor } = &mut *context;
     let payload = json!({
         "arguments": {
             "packages": packages,
@@ -4225,11 +4203,7 @@ async fn editor_function_help(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState {
-        broker,
-        store: _,
-        executor,
-    } = &mut *context;
+    let WorkspaceBrokerState { broker, executor } = &mut *context;
     let payload = json!({
         "arguments": {
             "name": name,
@@ -4258,11 +4232,7 @@ async fn editor_function_documentation(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState {
-        broker,
-        store: _,
-        executor,
-    } = &mut *context;
+    let WorkspaceBrokerState { broker, executor } = &mut *context;
     let payload = json!({
         "arguments": { "name": name, "package": package },
         "expected_workspace": broker.identity()
@@ -4288,11 +4258,7 @@ async fn editor_lint_file(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState {
-        broker,
-        store: _,
-        executor,
-    } = &mut *context;
+    let WorkspaceBrokerState { broker, executor } = &mut *context;
     let payload = json!({
         "arguments": { "path": path, "document_version": document_version },
         "expected_workspace": broker.identity()
@@ -4317,11 +4283,7 @@ async fn editor_format_source(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState {
-        broker,
-        store: _,
-        executor,
-    } = &mut *context;
+    let WorkspaceBrokerState { broker, executor } = &mut *context;
     let EditorFormatRequest {
         path,
         source,
@@ -4523,11 +4485,7 @@ async fn export_data_view_artifact(
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState {
-        broker,
-        store: _,
-        executor,
-    } = &mut *context;
+    let WorkspaceBrokerState { broker, executor } = &mut *context;
     let payload = json!({
         "arguments": {
             "object_name": request.object_name,
@@ -5072,11 +5030,7 @@ async fn retry_run(run_id: String, state: State<'_, AppState>) -> Result<RunRetr
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState {
-        broker,
-        store: _,
-        executor,
-    } = &mut *context;
+    let WorkspaceBrokerState { broker, executor } = &mut *context;
     let detail = executor
         .run_repository()
         .get_run_detail(project_root, run_id.clone())
@@ -6491,11 +6445,7 @@ async fn targets_status(state: State<'_, AppState>) -> Result<Value, String> {
     let session = active_session(&state).await.map_err(display_error)?;
     let context = active_context(&state).await.map_err(display_error)?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState {
-        broker,
-        store: _,
-        executor,
-    } = &mut *context;
+    let WorkspaceBrokerState { broker, executor } = &mut *context;
     let payload = json!({
         "arguments": { "project_root": project_root },
         "expected_workspace": broker.identity()
@@ -6999,12 +6949,11 @@ async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus> {
     store
         .recover_transient_plugin_permission_grants(&normalized_project_root, "broker_restart")
         .context("recovering one-shot workspace plugin grants")?;
-    let file_recovery = recover_incomplete_agent_file_mutations(
-        &mut store,
-        &project_root,
-        &normalized_project_root,
-    )
-    .context("recovering incomplete Agent file mutations after desktop restart")?;
+    let executor = store_executor(state).await?.clone();
+    let file_recovery =
+        recover_incomplete_agent_file_mutations(&executor, &project_root, &normalized_project_root)
+            .await
+            .context("recovering incomplete Agent file mutations after desktop restart")?;
     if file_recovery != AgentFileMutationRecoverySummary::default() {
         write_startup_event(json!({
             "kind": "agent_file_mutation_recovery",
@@ -7014,7 +6963,6 @@ async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus> {
             "uncertain": file_recovery.uncertain
         }));
     }
-    let executor = store_executor(state).await?.clone();
     let mut broker = BrokerState::new(format!("desktop_{}", Uuid::new_v4()));
     persist_workspace_identity(&executor, broker.identity().clone()).await?;
     bootstrap_bridge(
@@ -7065,7 +7013,7 @@ async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus> {
         })),
     }
     let status = status_from(&config, &session, Some(broker.identity()))?;
-    let context = Arc::new(WorkspaceBrokerLane::new(broker, store, executor));
+    let context = Arc::new(WorkspaceBrokerLane::new(broker, executor));
     if state.extension_host.mode() == InternalExtensionRuntimeMode::Candidate {
         ensure_extension_project_scope(state, &normalized_project_root)
             .await?
@@ -8098,11 +8046,7 @@ impl BrokerFacade for WorkspaceSnapshotBrokerFacade {
                 "expected_workspace": expected_workspace,
             });
             let mut context = self.context.lock().await;
-            let WorkspaceBrokerState {
-                broker,
-                store: _,
-                executor,
-            } = &mut *context;
+            let WorkspaceBrokerState { broker, executor } = &mut *context;
             let value = dispatch_workspace_request_with_execution_id(
                 "workspace.snapshot",
                 &payload,
@@ -8852,11 +8796,7 @@ async fn sync_workspace_project_root(
     let session = active_session(state).await?;
     let context = active_context(state).await?;
     let mut context = context.lock().await;
-    let WorkspaceBrokerState {
-        broker,
-        store,
-        executor,
-    } = &mut *context;
+    let WorkspaceBrokerState { broker, executor } = &mut *context;
     let payload = json!({
         "arguments": {"code": workspace_project_root_code(root)?},
         "expected_workspace": broker.identity()
@@ -8871,7 +8811,8 @@ async fn sync_workspace_project_root(
     )
     .await?;
     let normalized_root = normalize_project_root(root.to_string_lossy().as_ref());
-    let file_recovery = recover_incomplete_agent_file_mutations(store, root, &normalized_root)?;
+    let file_recovery =
+        recover_incomplete_agent_file_mutations(executor, root, &normalized_root).await?;
     if file_recovery != AgentFileMutationRecoverySummary::default() {
         write_startup_event(json!({
             "kind": "agent_file_mutation_recovery",
@@ -11145,7 +11086,6 @@ mod tests {
             let state = test_app_state(tempdir.path(), &project_root, &store_path);
             let lane = Arc::new(WorkspaceBrokerLane::new(
                 BrokerState::new("workspace.audit"),
-                Store::open(&store_path).unwrap(),
                 StoreExecutor::open(&store_path).await.unwrap(),
             ));
             let held_workspace = lane.lock().await;
@@ -11774,8 +11714,7 @@ mod tests {
         let broker = BrokerState::new("ws-file-test");
         store.save_identity(broker.identity()).unwrap();
         let executor = store_executor(state).await.unwrap().clone();
-        *state.context.lock().await =
-            Some(Arc::new(WorkspaceBrokerLane::new(broker, store, executor)));
+        *state.context.lock().await = Some(Arc::new(WorkspaceBrokerLane::new(broker, executor)));
     }
 
     #[test]
@@ -12471,19 +12410,21 @@ mod tests {
                     .is_none()
             );
 
-            let context = state.context.lock().await.clone().unwrap();
-            let context = context.lock().await;
-            let stale_events = ["turn-file-a", "turn-file-b"]
-                .iter()
-                .filter_map(|turn_id| {
-                    context
-                        .store
-                        .get_agent_turn_detail(&normalized_root, turn_id)
-                        .unwrap()
-                })
-                .flat_map(|detail| detail.events)
-                .filter(|event| event.event_type == "file_edit.resource_stale")
-                .count();
+            let repository = store_executor(&state).await.unwrap().agent_repository();
+            let mut stale_events = 0;
+            for turn_id in ["turn-file-a", "turn-file-b"] {
+                if let Some(detail) = repository
+                    .get_turn_detail(normalized_root.clone(), turn_id.to_string())
+                    .await
+                    .unwrap()
+                {
+                    stale_events += detail
+                        .events
+                        .iter()
+                        .filter(|event| event.event_type == "file_edit.resource_stale")
+                        .count();
+                }
+            }
             assert_eq!(stale_events, 1);
         });
     }
@@ -12567,11 +12508,12 @@ mod tests {
                     .blocker(&normalized_root)
                     .is_none()
             );
-            let context = state.context.lock().await.clone().unwrap();
-            let context = context.lock().await;
-            let detail = context
-                .store
-                .get_agent_turn_detail(&normalized_root, "turn-cancel-file")
+            let detail = store_executor(&state)
+                .await
+                .unwrap()
+                .agent_repository()
+                .get_turn_detail(normalized_root, "turn-cancel-file".to_string())
+                .await
                 .unwrap()
                 .unwrap();
             assert!(
@@ -12598,7 +12540,8 @@ mod tests {
         std::fs::write(project_a.join("not-applied.R"), "before\n").unwrap();
         std::fs::write(project_a.join("uncertain.R"), "different\n").unwrap();
         std::fs::write(project_b.join("foreign.R"), "before\nafter\n").unwrap();
-        let mut store = Store::open(tempdir.path().join("rho.sqlite")).unwrap();
+        let store_path = tempdir.path().join("rho.sqlite");
+        let mut store = Store::open(&store_path).unwrap();
         store.set_project_root(Some(&root_a)).unwrap();
 
         for (root, conversation, turn, path, mutation) in [
@@ -12652,15 +12595,26 @@ mod tests {
             );
         }
 
-        let summary =
-            recover_incomplete_agent_file_mutations(&mut store, &project_a, &root_a).unwrap();
+        drop(store);
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let executor = runtime.block_on(StoreExecutor::open(&store_path)).unwrap();
+        let summary = runtime
+            .block_on(recover_incomplete_agent_file_mutations(
+                &executor, &project_a, &root_a,
+            ))
+            .unwrap();
         assert_eq!(summary.recovered, 1);
         assert_eq!(summary.not_applied, 1);
         assert_eq!(summary.uncertain, 1);
         assert_eq!(
-            recover_incomplete_agent_file_mutations(&mut store, &project_a, &root_a).unwrap(),
+            runtime
+                .block_on(recover_incomplete_agent_file_mutations(
+                    &executor, &project_a, &root_a,
+                ))
+                .unwrap(),
             Default::default()
         );
+        let store = Store::open(&store_path).unwrap();
         let recovered = store
             .get_agent_turn_detail(&root_a, "turn-recovered")
             .unwrap()
@@ -12701,6 +12655,101 @@ mod tests {
                 | "file_edit.mutation_not_applied"
                 | "file_edit.outcome_uncertain"
         )));
+    }
+
+    #[test]
+    fn incomplete_agent_file_recovery_rejection_preserves_pending_truth_and_retries() {
+        let tempdir = TempDir::new().unwrap();
+        let project_root = tempdir.path().join("project-a");
+        std::fs::create_dir_all(&project_root).unwrap();
+        let project_root = project_root.canonicalize().unwrap();
+        let normalized_root = normalize_project_root(project_root.to_string_lossy().as_ref());
+        std::fs::write(project_root.join("recovered.R"), "before\nafter\n").unwrap();
+        let store_path = tempdir.path().join("rho.sqlite");
+        let mut store = Store::open(&store_path).unwrap();
+        store.set_project_root(Some(&normalized_root)).unwrap();
+        let proposal_event_id = add_agent_file_proposal(
+            &mut store,
+            &normalized_root,
+            "conversation-recovery-rejection",
+            "turn-recovery-rejection",
+            "recovered.R",
+            "append",
+            "after\n",
+            None,
+        );
+        add_agent_file_mutation_start(
+            &mut store,
+            "turn-recovery-rejection",
+            "recovered.R",
+            proposal_event_id,
+            "mutation-recovery-rejection",
+            "before\n",
+            "before\nafter\n",
+        );
+        drop(store);
+
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let executor = runtime.block_on(StoreExecutor::open(&store_path)).unwrap();
+        let connection = rusqlite::Connection::open(&store_path).unwrap();
+        connection
+            .execute_batch(
+                "CREATE TRIGGER reject_agent_file_recovery
+                 BEFORE INSERT ON agent_turn_events
+                 WHEN NEW.event_type = 'file_edit.recovered'
+                 BEGIN
+                   SELECT RAISE(ABORT, 'injected recovery persistence failure');
+                 END;",
+            )
+            .unwrap();
+
+        let error = runtime
+            .block_on(recover_incomplete_agent_file_mutations(
+                &executor,
+                &project_root,
+                &normalized_root,
+            ))
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("injected recovery persistence failure")
+        );
+        let detail = runtime
+            .block_on(executor.agent_repository().get_turn_detail(
+                normalized_root.clone(),
+                "turn-recovery-rejection".to_string(),
+            ))
+            .unwrap()
+            .unwrap();
+        assert!(
+            !detail
+                .events
+                .iter()
+                .any(|event| event.event_type == "file_edit.recovered")
+        );
+
+        connection
+            .execute_batch("DROP TRIGGER reject_agent_file_recovery;")
+            .unwrap();
+        let recovered = runtime
+            .block_on(recover_incomplete_agent_file_mutations(
+                &executor,
+                &project_root,
+                &normalized_root,
+            ))
+            .unwrap();
+        assert_eq!(recovered.recovered, 1);
+        assert_eq!(
+            runtime
+                .block_on(recover_incomplete_agent_file_mutations(
+                    &executor,
+                    &project_root,
+                    &normalized_root,
+                ))
+                .unwrap(),
+            Default::default()
+        );
     }
 
     #[test]
@@ -12824,8 +12873,17 @@ mod tests {
                 .count(),
             2
         );
+        let store_path = tempdir.path().join("rho.sqlite");
+        drop(store);
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let executor = runtime.block_on(StoreExecutor::open(&store_path)).unwrap();
         assert_eq!(
-            recover_incomplete_agent_file_mutations(&mut store, &project_root, &normalized_root)
+            runtime
+                .block_on(recover_incomplete_agent_file_mutations(
+                    &executor,
+                    &project_root,
+                    &normalized_root,
+                ))
                 .unwrap(),
             Default::default()
         );
@@ -14211,7 +14269,7 @@ mod tests {
             let broker = BrokerState::new("workspace-test");
             let identity = broker.identity().clone();
             let executor = StoreExecutor::open(&store_path).await.unwrap();
-            let context = Arc::new(WorkspaceBrokerLane::new(broker, store, executor.clone()));
+            let context = Arc::new(WorkspaceBrokerLane::new(broker, executor.clone()));
 
             let host = test_candidate_extension_host_with_application_plugins().await;
             let run_repository = executor.run_repository();
@@ -14318,7 +14376,7 @@ mod tests {
             let broker = BrokerState::new("workspace-failure");
             let identity = broker.identity().clone();
             let executor = StoreExecutor::open(&store_path).await.unwrap();
-            let context = Arc::new(WorkspaceBrokerLane::new(broker, store, executor.clone()));
+            let context = Arc::new(WorkspaceBrokerLane::new(broker, executor.clone()));
             let host = test_candidate_extension_host_with_application_plugins().await;
             let run_repository = executor.run_repository();
             let project = host
@@ -14874,7 +14932,6 @@ mod tests {
             let repository = executor.run_repository();
             let lane = Arc::new(WorkspaceBrokerLane::new(
                 BrokerState::new("workspace.run-history"),
-                Store::open(&store_path).unwrap(),
                 executor,
             ));
             let held_workspace = lane.lock().await;
@@ -16463,7 +16520,7 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
         "project A restart run leaked into project B after Workspace R restart"
     );
 
-    let context = Arc::new(WorkspaceBrokerLane::new(broker, store, executor));
+    let context = Arc::new(WorkspaceBrokerLane::new(broker, executor.clone()));
     let extension_runtime = smoke_extension_runtime(
         Arc::clone(&session),
         Arc::clone(&context),
@@ -16480,13 +16537,12 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
         let resolved_model = agent_llm::resolve_model_for_turn(&config.data_dir, None, "ask")?;
         let agent_project_root;
         {
-            let mut context_guard = context.lock().await;
+            let context_guard = context.lock().await;
             let identity = context_guard.broker.identity().clone();
-            agent_project_root = context_guard
-                .store
+            agent_project_root = store
                 .active_project_root()?
                 .context("Cannot run Agent smoke without an active project identity")?;
-            context_guard.store.create_agent_turn(&AgentTurnDraft {
+            store.create_agent_turn(&AgentTurnDraft {
                 turn_id: turn_id.clone(),
                 project_root: agent_project_root.clone(),
                 mode: "ask".to_string(),
@@ -16496,21 +16552,19 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
                 state_revision_before: identity.state_revision as i64,
                 project_revision_before: identity.project_revision as i64,
             })?;
-            context_guard
-                .store
-                .append_agent_turn_event(&AgentTurnEventDraft {
-                    turn_id: turn_id.clone(),
-                    event_type: "agent.user_prompt".to_string(),
-                    title: "You".to_string(),
-                    body: Some(prompt.clone()),
-                    status: "completed".to_string(),
-                    tool: None,
-                    request_id: None,
-                    code: None,
-                    details_json: serde_json::to_string(
-                        &json!({"prompt": prompt.clone(), "mode": "ask"}),
-                    )?,
-                })?;
+            store.append_agent_turn_event(&AgentTurnEventDraft {
+                turn_id: turn_id.clone(),
+                event_type: "agent.user_prompt".to_string(),
+                title: "You".to_string(),
+                body: Some(prompt.clone()),
+                status: "completed".to_string(),
+                tool: None,
+                request_id: None,
+                code: None,
+                details_json: serde_json::to_string(
+                    &json!({"prompt": prompt.clone(), "mode": "ask"}),
+                )?,
+            })?;
         }
         let agent_store = StoreExecutor::open(&config.store_path)
             .await?
@@ -16588,7 +16642,7 @@ async fn smoke_test(include_agent: bool) -> Result<Value> {
             "project_a_run_count": initial_a_runs.len(),
             "project_b_run_count": project_b_runs.len(),
             "agent": agent,
-            "event_count": context.store.event_count()?,
+            "event_count": store.event_count()?,
             "python_required": false
         })
     };
@@ -17902,11 +17956,11 @@ async fn smoke_extension_runtime(
         .validate_project_current(&candidate_runs.scope)?;
     let candidate_runs: Vec<RunSummary> =
         serde_json::from_value(candidate_runs.payload.into_value())?;
-    let direct_runs = context
-        .lock()
-        .await
-        .store
-        .list_runs(&normalized_project_root, None)?;
+    let executor = context.lock().await.executor.clone();
+    let direct_runs = executor
+        .run_repository()
+        .list_runs(normalized_project_root.clone(), None)
+        .await?;
     ensure!(
         serde_json::to_value(&candidate_runs)? == serde_json::to_value(&direct_runs)?,
         "candidate Run History diverged from Store authority"

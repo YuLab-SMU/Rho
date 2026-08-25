@@ -958,7 +958,7 @@ async fn record_project_change(state: &AppState) -> Result<u64> {
     let mut context = context.lock().await;
     context.broker.project_changed();
     let identity = context.broker.identity().clone();
-    context.store.save_identity(&identity)?;
+    crate::persist_workspace_identity(&context.executor, identity.clone()).await?;
     Ok(identity.project_revision)
 }
 

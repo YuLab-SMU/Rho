@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-33",
+  "active_work_packages": ["AM-W2-34"],
+  "integration_lane": "AM-W2-34",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -365,6 +365,9 @@ and `AM-E-0059` pass Store and complete desktop verification.
 shared Store worker so neither approval waits nor Ark evidence capture retain a
 legacy Store borrow inside the Workspace lane; commit `6028158` and
 `AM-E-0060` pass approval/environment and complete Server/Desktop matrices.
+
+`AM-W2-34` phases Agent-file restart recovery around filesystem observation and
+removes the now-unused synchronous Store from `WorkspaceBrokerState`.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
