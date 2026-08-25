@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W2-15"],
+  "active_work_packages": [],
   "integration_lane": "AM-W2-15",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -270,11 +270,12 @@ implementation modules. Shared cancellation/admission and crash helpers gain
 only private-parent visibility; call order, grant consumption, durable audit and
 quarantine behavior remain unchanged.
 
-`AM-W2-15` removes the first obsolete Store-to-Workspace lock coupling. Store
-plugin services become reusable over the asynchronous worker's borrowed
-connection, and Agent plugin projection combines that worker with the
-Workspace lane's committed identity view under the existing project-transition
-gate. Actual Workspace R dispatch remains serialized by `WorkspaceBrokerLane`.
+`AM-W2-15` (`24d4964`/AM-E-0042) removes the first obsolete
+Store-to-Workspace lock coupling. Store plugin services are reusable over the
+asynchronous worker's borrowed connection, and Agent plugin projection combines
+that worker with the Workspace lane's committed identity view under the
+existing project-transition gate. Actual Workspace R dispatch remains
+serialized by `WorkspaceBrokerLane`.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
