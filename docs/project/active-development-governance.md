@@ -602,6 +602,10 @@ content:
   repository toolchain pin. Older-compiler compatibility is not a default
   product gate; advancing the pin and baseline together is a normal reviewed
   tooling/dependency change.
+- `rust-toolchain.toml` is the sole current Rust release authority. Validation
+  derives the Cargo baseline and workflow expectations from that pin; it may
+  reject floating or inconsistent state, but a coherent stable-semver advance
+  is not itself a failure or an architecture fallback trigger.
 - CI must select exact matrix toolchains explicitly. Changing the rustup default
   does not override a repository `rust-toolchain.toml` and is not reproducible
   toolchain evidence.

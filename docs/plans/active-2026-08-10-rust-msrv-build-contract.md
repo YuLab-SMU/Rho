@@ -108,8 +108,11 @@ rust-version = "1.97"
 ```
 
 Every workspace member inherits `rust-version.workspace = true`. Cargo metadata
-is the authority for effective member values. The deterministic contract reads
-both TOML files and rejects pin/baseline disagreement.
+is the authority for effective member values. `rust-toolchain.toml` is the sole
+current-release authority: the deterministic contract derives its expected
+workspace major/minor and workflow toolchains from that file, then rejects
+pin/baseline disagreement. No current Rust version is duplicated as a validator
+constant.
 
 ## Development And Integration Workflow
 
@@ -153,21 +156,31 @@ behavior changes. It does not require proof on the superseded compiler. A
 failed dependency experiment may revert normally; no persistent user data is
 involved.
 
+The repository validator must accept such a coherent stable-semver advance
+without first being taught that version. It owns consistency and
+reproducibility, not dependency or architecture selection. If the currently
+pinned compiler is too old for a preferred dependency, advance the pin and
+validate the resulting graph; do not select a weaker implementation merely to
+satisfy the superseded baseline.
+
 ## Automated Verification
 
 The deterministic contract covers:
 
-- resolver 3 and Rust 1.97 build-baseline metadata;
+- resolver 3 and the build-baseline metadata derived from the current exact
+  toolchain pin;
 - inheritance by every workspace member;
-- exact agreement with the 1.97.0 repository toolchain;
+- exact agreement among the repository pin, Cargo metadata, workflow target
+  toolchains and runtime compiler assertions;
 - one pinned source integration leg per development OS;
-- no floating-stable, Rust 1.88, duplicate old-compiler, or installed-package
-  leg in the source compatibility workflow;
+- no floating-stable, duplicate compiler, or installed-package leg in the
+  source compatibility workflow;
 - exact pinned Draft feedback;
 - explicit toolchain selection, locked check/tests, read-only permissions, and
   cache isolation;
-- negative fixtures for baseline drift, pin drift, missing member metadata,
-  missing matrix identity, legacy-leg reintroduction, and unlocked commands.
+- positive fixtures for a coherent future stable-semver advance, plus negative
+  fixtures for baseline drift, workflow mismatch, floating pins, missing member
+  metadata, missing matrix identity and unlocked commands.
 
 Current local acceptance commands are:
 

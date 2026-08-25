@@ -5,15 +5,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 // The filename is retained for compatibility with existing workflow and
-// evidence links. This contract now enforces one rolling, pinned toolchain.
-export const EXPECTED_TOOLCHAIN = "1.97.0";
-export const EXPECTED_RUST_VERSION = "1.97";
-
-const REQUIRED_MATRIX = new Set([
-  "macos-26|1.97.0|1.97.0-aarch64-apple-darwin|aarch64-apple-darwin|source",
-  "windows-latest|1.97.0|1.97.0-x86_64-pc-windows-gnu|x86_64-pc-windows-gnu|source",
-  "ubuntu-22.04|1.97.0|1.97.0-x86_64-unknown-linux-gnu|x86_64-unknown-linux-gnu|source",
-]);
+// evidence links. rust-toolchain.toml owns the current rolling baseline; this
+// validator checks agreement instead of embedding an architecture veto.
 
 const REQUIRED_CACHE_PATHS = [
   "~/.cargo/registry/index/",
@@ -41,25 +34,48 @@ function stringField(sectionText, field) {
   return sectionText.match(new RegExp(`^${escaped}\\s*=\\s*"([^"]+)"(?:\\s*#.*)?$`, "m"))?.[1] ?? null;
 }
 
-export function validateRootManifest(text) {
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function toolchainContract(text) {
+  const toolchain = section(text, "toolchain");
+  const channel = stringField(toolchain, "channel");
+  const match = channel?.match(/^1\.(\d+)\.(\d+)$/);
+  if (!match) {
+    fail(`Rust toolchain contract requires an exact stable semver channel, received ${channel ?? "undeclared"}`);
+  }
+  return {
+    toolchain: channel,
+    rustVersion: `1.${match[1]}`,
+  };
+}
+
+function requiredMatrix(contract) {
+  const version = contract.toolchain;
+  return new Set([
+    `macos-26|${version}|${version}-aarch64-apple-darwin|aarch64-apple-darwin|source`,
+    `windows-latest|${version}|${version}-x86_64-pc-windows-gnu|x86_64-pc-windows-gnu|source`,
+    `ubuntu-22.04|${version}|${version}-x86_64-unknown-linux-gnu|x86_64-unknown-linux-gnu|source`,
+  ]);
+}
+
+export function validateRootManifest(text, contract) {
   const workspace = section(text, "workspace");
   const workspacePackage = section(text, "workspace.package");
   if (stringField(workspace, "resolver") !== "3") {
     fail('Rust toolchain contract requires [workspace] resolver = "3"');
   }
-  if (stringField(workspacePackage, "rust-version") !== EXPECTED_RUST_VERSION) {
-    fail(`Rust toolchain contract requires [workspace.package] rust-version = "${EXPECTED_RUST_VERSION}"`);
+  if (stringField(workspacePackage, "rust-version") !== contract.rustVersion) {
+    fail(`Rust toolchain contract requires [workspace.package] rust-version = "${contract.rustVersion}"`);
   }
 }
 
 export function validateToolchain(text) {
-  const toolchain = section(text, "toolchain");
-  if (stringField(toolchain, "channel") !== EXPECTED_TOOLCHAIN) {
-    fail(`Rust toolchain contract requires channel = "${EXPECTED_TOOLCHAIN}"`);
-  }
+  return toolchainContract(text);
 }
 
-export function validateWorkspaceMetadata(metadata) {
+export function validateWorkspaceMetadata(metadata, contract) {
   if (!Array.isArray(metadata?.workspace_members) || metadata.workspace_members.length === 0) {
     fail("Cargo metadata did not report any workspace members");
   }
@@ -67,8 +83,8 @@ export function validateWorkspaceMetadata(metadata) {
   for (const memberId of metadata.workspace_members) {
     const pkg = packagesById.get(memberId);
     if (!pkg) fail(`Cargo metadata omitted workspace member ${memberId}`);
-    if (pkg.rust_version !== EXPECTED_RUST_VERSION) {
-      fail(`${pkg.name} must report rust-version ${EXPECTED_RUST_VERSION}, received ${pkg.rust_version ?? "undeclared"}`);
+    if (pkg.rust_version !== contract.rustVersion) {
+      fail(`${pkg.name} must report rust-version ${contract.rustVersion}, received ${pkg.rust_version ?? "undeclared"}`);
     }
   }
 }
@@ -145,7 +161,7 @@ function requireCommonWorkflowContract(workflow, kind) {
   }
 }
 
-export function validateCompatibilityWorkflow(text) {
+export function validateCompatibilityWorkflow(text, contract) {
   const workflow = normalizeLineEndings(text);
   if (!/^name: Rust Compatibility$/m.test(workflow)) fail("Missing Rust Compatibility workflow name");
   if (!/^on:\n  push:\n    branches: \[main\]/m.test(workflow)) fail("Rust compatibility push trigger must target main");
@@ -159,15 +175,22 @@ export function validateCompatibilityWorkflow(text) {
     fail("Rust compatibility must cancel obsolete runs for the same ref");
   }
   if (!/fail-fast: false/.test(workflow)) fail("Pinned source platform failures must remain independently visible");
-  assert.deepEqual(matrixIdentities(workflow), REQUIRED_MATRIX, "Rust compatibility matrix identities changed");
-  if (/\b1\.88(?:\.0)?\b|toolchain:\s*["']?stable|rustup_toolchain:\s*stable-|lane:\s*installed/.test(workflow)) {
-    fail("Rust compatibility reintroduced a legacy, floating, or installed-package leg");
+  assert.deepEqual(
+    matrixIdentities(workflow),
+    requiredMatrix(contract),
+    "Rust compatibility matrix identities disagree with rust-toolchain.toml",
+  );
+  if (/toolchain:\s*["']?stable|rustup_toolchain:\s*stable-|lane:\s*installed/.test(workflow)) {
+    fail("Rust compatibility reintroduced a floating or installed-package leg");
   }
   if (!/^\s{6}RUSTUP_TOOLCHAIN: \$\{\{ matrix\.rustup_toolchain \}\}$/m.test(workflow)) {
     fail("Every matrix leg must explicitly select its exact toolchain");
   }
-  if ((workflow.match(/1\.97\.0/g) ?? []).length < 10) {
-    fail("Rust compatibility must declare and verify exact Rust 1.97.0 across all source legs");
+  const version = escapeRegExp(contract.toolchain);
+  if (!new RegExp(`test "\\$\\(rustc -V \\| awk '\\{print \\$2\\}'\\)" = "${version}"`).test(workflow)
+      || !new RegExp(`test "\\$rust_version" = "${version}"`).test(workflow)
+      || !new RegExp(`\\$rustVersion -ne "${version}"`).test(workflow)) {
+    fail(`Rust compatibility must verify the selected ${contract.toolchain} compiler on every source platform`);
   }
   if (!/- name: Enforce pinned-toolchain formatting\n        if: runner\.os == 'Linux'/.test(workflow)
       || !/- name: Verify source, generated frontend, licenses and release contracts\n        if: runner\.os == 'Linux'/.test(workflow)) {
@@ -180,7 +203,7 @@ export function validateCompatibilityWorkflow(text) {
   validateCompatibilityCargoCaches(workflow);
 }
 
-export function validateFastWorkflow(text) {
+export function validateFastWorkflow(text, contract) {
   const workflow = normalizeLineEndings(text);
   if (!/^name: Rust Fast$/m.test(workflow)) fail("Missing Rust Fast workflow name");
   if (!/^on:\n  pull_request:\n    branches: \[main\]/m.test(workflow)) fail("Rust Fast must target pull requests to main");
@@ -190,20 +213,21 @@ export function validateFastWorkflow(text) {
   if (!/^    if: github\.event\.pull_request\.draft == true$/m.test(workflow)) {
     fail("Rust Fast must admit Draft PRs only");
   }
+  const version = escapeRegExp(contract.toolchain);
   if (!/^    runs-on: ubuntu-22\.04$/m.test(workflow)
-      || !/^\s{6}RUSTUP_TOOLCHAIN: 1\.97\.0-x86_64-unknown-linux-gnu$/m.test(workflow)
-      || !/test "\$\(rustc -V \| awk '\{print \$2\}'\)" = "1\.97\.0"/.test(workflow)) {
+      || !new RegExp(`^\\s{6}RUSTUP_TOOLCHAIN: ${version}-x86_64-unknown-linux-gnu$`, "m").test(workflow)
+      || !new RegExp(`test "\\$\\(rustc -V \\| awk '\\{print \\$2\\}'\\)" = "${version}"`).test(workflow)) {
     fail("Rust Fast must select and verify the exact pinned Ubuntu toolchain");
   }
-  if (/\b1\.88(?:\.0)?\b|stable-x86_64-unknown-linux-gnu/.test(workflow)) {
-    fail("Rust Fast reintroduced a legacy or floating compiler");
+  if (/stable-x86_64-unknown-linux-gnu/.test(workflow)) {
+    fail("Rust Fast reintroduced a floating compiler");
   }
   if (/strategy:\s*\n\s*matrix:/.test(workflow)) fail("Rust Fast must remain one bounded job");
   requireCommonWorkflowContract(workflow, "Rust Fast");
   validateCargoCache(workflow);
 }
 
-function fixtureMetadata(rustVersions = [EXPECTED_RUST_VERSION, EXPECTED_RUST_VERSION]) {
+function fixtureMetadata(contract, rustVersions = [contract.rustVersion, contract.rustVersion]) {
   return {
     workspace_members: ["rho-a", "rho-b"],
     packages: [
@@ -214,53 +238,83 @@ function fixtureMetadata(rustVersions = [EXPECTED_RUST_VERSION, EXPECTED_RUST_VE
 }
 
 function runSelfTests() {
-  const root = `[workspace]\nresolver = "3"\n\n[workspace.package]\nrust-version = "1.97"\n`;
-  validateRootManifest(root);
-  assert.throws(() => validateRootManifest(root.replace('resolver = "3"', 'resolver = "2"')), /resolver/);
-  assert.throws(() => validateRootManifest(root.replace('rust-version = "1.97"', 'rust-version = "1.88"')), /rust-version/);
+  const sample = { toolchain: "1.91.0", rustVersion: "1.91" };
+  const root = `[workspace]\nresolver = "3"\n\n[workspace.package]\nrust-version = "1.91"\n`;
+  validateRootManifest(root, sample);
+  assert.throws(() => validateRootManifest(root.replace('resolver = "3"', 'resolver = "2"'), sample), /resolver/);
+  assert.throws(() => validateRootManifest(root.replace('rust-version = "1.91"', 'rust-version = "1.88"'), sample), /rust-version/);
 
-  const toolchain = `[toolchain]\nchannel = "1.97.0"\nprofile = "default"\n`;
-  validateToolchain(toolchain);
-  assert.throws(() => validateToolchain(toolchain.replace("1.97.0", "stable")), /channel/);
-  assert.throws(() => validateToolchain(toolchain.replace("1.97.0", "1.98.0")), /channel/);
+  const toolchain = `[toolchain]\nchannel = "1.91.0"\nprofile = "default"\n`;
+  assert.deepEqual(validateToolchain(toolchain), sample);
+  assert.throws(() => validateToolchain(toolchain.replace("1.91.0", "stable")), /exact stable semver/);
+  assert.throws(() => validateToolchain(toolchain.replace("1.91.0", "1.92")), /exact stable semver/);
 
-  validateWorkspaceMetadata(fixtureMetadata());
-  assert.throws(() => validateWorkspaceMetadata(fixtureMetadata([null, EXPECTED_RUST_VERSION])), /undeclared/);
-  assert.throws(() => validateWorkspaceMetadata(fixtureMetadata(["1.88", EXPECTED_RUST_VERSION])), /1\.88/);
-  const missingPackage = fixtureMetadata();
+  validateWorkspaceMetadata(fixtureMetadata(sample), sample);
+  assert.throws(() => validateWorkspaceMetadata(fixtureMetadata(sample, [null, sample.rustVersion]), sample), /undeclared/);
+  assert.throws(() => validateWorkspaceMetadata(fixtureMetadata(sample, ["1.88", sample.rustVersion]), sample), /1\.88/);
+  const missingPackage = fixtureMetadata(sample);
   missingPackage.packages.pop();
-  assert.throws(() => validateWorkspaceMetadata(missingPackage), /omitted workspace member/);
+  assert.throws(() => validateWorkspaceMetadata(missingPackage, sample), /omitted workspace member/);
 
   const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+  const repositoryToolchain = fs.readFileSync(path.join(repositoryRoot, "rust-toolchain.toml"), "utf8");
+  const repositoryContract = validateToolchain(repositoryToolchain);
   const compatibility = fs.readFileSync(path.join(repositoryRoot, ".github/workflows/rust-compatibility.yml"), "utf8");
-  validateCompatibilityWorkflow(compatibility);
+  validateCompatibilityWorkflow(compatibility, repositoryContract);
   assert.throws(
-    () => validateCompatibilityWorkflow(compatibility.replace("1.97.0-aarch64-apple-darwin", "1.88.0-aarch64-apple-darwin")),
-    /matrix identities|legacy/,
+    () => validateCompatibilityWorkflow(
+      compatibility.replace(`${repositoryContract.toolchain}-aarch64-apple-darwin`, "1.88.0-aarch64-apple-darwin"),
+      repositoryContract,
+    ),
+    /matrix identities/,
   );
   assert.throws(
-    () => validateCompatibilityWorkflow(compatibility.replace("cargo check --workspace --all-targets --locked", "cargo check --workspace --all-targets")),
+    () => validateCompatibilityWorkflow(
+      compatibility.replace("cargo check --workspace --all-targets --locked", "cargo check --workspace --all-targets"),
+      repositoryContract,
+    ),
     /missing/,
   );
 
   const fast = fs.readFileSync(path.join(repositoryRoot, ".github/workflows/rust-fast.yml"), "utf8");
-  validateFastWorkflow(fast);
-  assert.throws(() => validateFastWorkflow(fast.replace("1.97.0-x86_64-unknown-linux-gnu", "stable-x86_64-unknown-linux-gnu")), /exact pinned|floating/);
-  assert.throws(() => validateFastWorkflow(fast.replace("contents: read", "contents: write")), /read-only/);
+  validateFastWorkflow(fast, repositoryContract);
+  assert.throws(
+    () => validateFastWorkflow(
+      fast.replace(`${repositoryContract.toolchain}-x86_64-unknown-linux-gnu`, "stable-x86_64-unknown-linux-gnu"),
+      repositoryContract,
+    ),
+    /exact pinned|floating/,
+  );
+  assert.throws(() => validateFastWorkflow(fast.replace("contents: read", "contents: write"), repositoryContract), /read-only/);
+
+  const [major, minor] = repositoryContract.toolchain.split(".").map(Number);
+  const advancedVersion = `${major}.${minor + 1}.0`;
+  const advancedToolchain = validateToolchain(repositoryToolchain.replace(repositoryContract.toolchain, advancedVersion));
+  const repositoryManifest = fs.readFileSync(path.join(repositoryRoot, "Cargo.toml"), "utf8");
+  validateRootManifest(repositoryManifest.replace(
+    `rust-version = "${repositoryContract.rustVersion}"`,
+    `rust-version = "${advancedToolchain.rustVersion}"`,
+  ), advancedToolchain);
+  validateWorkspaceMetadata(fixtureMetadata(advancedToolchain), advancedToolchain);
+  validateCompatibilityWorkflow(
+    compatibility.replaceAll(repositoryContract.toolchain, advancedToolchain.toolchain),
+    advancedToolchain,
+  );
+  validateFastWorkflow(fast.replaceAll(repositoryContract.toolchain, advancedToolchain.toolchain), advancedToolchain);
 }
 
 function validateRepository(repositoryRoot) {
   const read = (relativePath) => fs.readFileSync(path.join(repositoryRoot, relativePath), "utf8");
-  validateRootManifest(read("Cargo.toml"));
-  validateToolchain(read("rust-toolchain.toml"));
+  const contract = validateToolchain(read("rust-toolchain.toml"));
+  validateRootManifest(read("Cargo.toml"), contract);
   const metadata = JSON.parse(execFileSync(
     "cargo",
     ["metadata", "--locked", "--offline", "--no-deps", "--format-version", "1"],
     { cwd: repositoryRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
   ));
-  validateWorkspaceMetadata(metadata);
-  validateCompatibilityWorkflow(read(".github/workflows/rust-compatibility.yml"));
-  validateFastWorkflow(read(".github/workflows/rust-fast.yml"));
+  validateWorkspaceMetadata(metadata, contract);
+  validateCompatibilityWorkflow(read(".github/workflows/rust-compatibility.yml"), contract);
+  validateFastWorkflow(read(".github/workflows/rust-fast.yml"), contract);
 }
 
 const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : null;
