@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-47",
+  "active_work_packages": ["AM-W2-48"],
+  "integration_lane": "AM-W2-48",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -437,6 +437,11 @@ authoritative.
 data-view commands plus their Runtime/Agent adapters into an explicit Workspace
 service boundary; Runtime Registry and Artifact commands depend on that module
 directly rather than using the composition root as a hidden service locator.
+
+`AM-W2-48` extracts the complete Agent execution/control boundary—context
+preview, turn start/retry, detail and approval operations, history clearing and
+single/all-turn interruption—while preserving Store truth, project-transition
+serialization, waiter cleanup and Workspace cancellation semantics.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
