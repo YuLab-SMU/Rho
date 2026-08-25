@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W2-18"],
+  "active_work_packages": [],
   "integration_lane": "AM-W2-18",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -288,7 +288,7 @@ maintenance and Agent contribution persistence onto the same Store worker.
 Plugin-only work uses the committed identity projection; reconciliation retains
 the Workspace lane only for an actual recovered-file project revision change.
 
-`AM-W2-18` gives Run History a narrow executor-backed repository shared by
+`AM-W2-18` (`4730036`/AM-E-0045) gives Run History a narrow executor-backed repository shared by
 legacy Tauri queries and the candidate internal-extension source facade. Query
 shape, bounds, failure and stale-generation behavior remain unchanged.
 
