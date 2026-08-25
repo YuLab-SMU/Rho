@@ -10,7 +10,7 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": ["AM-W1-17"],
+  "active_work_packages": [],
   "integration_lane": "AM-W1-17",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
@@ -287,7 +287,9 @@ conversation inventory (`5467db4`/AM-E-0010), Agent turn detail
 (`375fce0`/AM-E-0015). The latter also repairs the real-Tauri
 `afterSha256`/frontend `after_sha256` drift that browser mock behavior had
 hidden. Credential and Provider-network mutations remain separate Agent
-contract facets.
+contract facets. Workspace-plugin Surface (`157f474`/AM-E-0016), Project
+transition (`4cfbe76`/AM-E-0017), UI Kernel (`172f3e2`/AM-E-0018), and Check
+(`fdfa367`/AM-E-0019) now use the same Rust-owned generated boundary.
 
 ## Version, NEWS, and release decision
 
