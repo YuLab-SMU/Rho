@@ -49,6 +49,17 @@ const ENVIRONMENT_COMMANDS = [
   "respond_environment_operation",
 ];
 
+const EDITOR_COMMANDS = [
+  "editor_discover_chunks",
+  "editor_find_project_references",
+  "editor_format_source",
+  "editor_function_documentation",
+  "editor_function_help",
+  "editor_goto_definition",
+  "editor_lint_file",
+  "editor_package_functions",
+];
+
 const PLUGIN_COMMANDS = [
   "accept_workspace_plugin_update",
   "disable_workspace_plugin",
@@ -206,6 +217,14 @@ export function validateCommandInventory({ sources, main, frontend, expectedHand
     "Environment command module ownership changed",
   );
 
+  const editorSource = sources.find(({ name }) => name.endsWith("commands/editor.rs"));
+  assert.ok(editorSource, "Editor command module is missing");
+  assert.deepEqual(
+    commandDefinitions([editorSource]).map(({ name }) => name).sort(),
+    EDITOR_COMMANDS,
+    "Editor command module ownership changed",
+  );
+
   return { commands: definitionNames.length, sources: sources.length };
 }
 
@@ -219,6 +238,9 @@ function fixtures() {
   const environmentHandlers = ENVIRONMENT_COMMANDS.map(
     (command) => `  commands::environment::${command},`,
   ).join("\n");
+  const editorHandlers = EDITOR_COMMANDS.map(
+    (command) => `  commands::editor::${command},`,
+  ).join("\n");
   const pluginHandlers = PLUGIN_COMMANDS.map(
     (command) => `  commands::plugins::${command},`,
   ).join("\n");
@@ -231,6 +253,7 @@ ${pluginHandlers}
 ${artifactHandlers}
 ${evidenceHandlers}
 ${environmentHandlers}
+${editorHandlers}
   commands::runs::list_runs,
   commands::runs::list_problems,
   commands::runs::get_run_detail,
@@ -253,6 +276,9 @@ ${environmentHandlers}
       { name: "commands/environment.rs", text: ENVIRONMENT_COMMANDS.map(
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
+      { name: "commands/editor.rs", text: EDITOR_COMMANDS.map(
+        (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
+      ).join("\n") },
       { name: "commands/plugins.rs", text: PLUGIN_COMMANDS.map(
         (command) => `#[tauri::command]\npub(crate) async fn ${command}() {}`,
       ).join("\n") },
@@ -263,6 +289,7 @@ ${environmentHandlers}
       ...ARTIFACT_COMMANDS,
       ...EVIDENCE_COMMANDS,
       ...ENVIRONMENT_COMMANDS,
+      ...EDITOR_COMMANDS,
       ...PLUGIN_COMMANDS,
     ].map(
       (command) => `invoke("${command}");`,

@@ -724,13 +724,6 @@ struct RenderRequest {
     document_version: Option<i64>,
 }
 
-#[derive(Deserialize)]
-struct EditorFormatRequest {
-    path: String,
-    source: String,
-    document_version: i64,
-}
-
 #[derive(Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 struct AgentFileApplyRequest {
@@ -846,18 +839,6 @@ enum AgentFileProposalMutationState {
     Undone,
     Stale,
     Uncertain,
-}
-
-fn editor_format_result(response: Value) -> Result<Value> {
-    let execution = response
-        .get("execution")
-        .cloned()
-        .context("Formatting response omitted the Workspace R result")?;
-    ensure!(
-        execution.get("kind").and_then(Value::as_str) == Some("rho.editor_format_result.v1"),
-        "Formatting response returned an unexpected Workspace R result"
-    );
-    Ok(execution)
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -2984,84 +2965,6 @@ fn validate_execute_source_range_shape(request: &ExecuteRequest) -> Result<()> {
 }
 
 #[tauri::command]
-async fn editor_goto_definition(name: String, state: State<'_, AppState>) -> Result<Value, String> {
-    let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy().replace('\\', "/");
-    let session = active_session(&state).await.map_err(display_error)?;
-    let context = active_context(&state).await.map_err(display_error)?;
-    let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, executor } = &mut *context;
-    let payload = json!({
-        "arguments": { "name": name, "project_root": project_root },
-        "expected_workspace": broker.identity()
-    });
-    dispatch_workspace_request(
-        "workspace.find_function_definition",
-        &payload,
-        ExecutionOrigin::System,
-        session.as_ref(),
-        broker,
-        executor,
-    )
-    .await
-    .map_err(display_error)
-}
-
-#[tauri::command]
-async fn editor_find_project_references(
-    name: String,
-    limit: Option<usize>,
-    state: State<'_, AppState>,
-) -> Result<Value, String> {
-    let root = state.project_root.read().await.clone();
-    let project_root = root.to_string_lossy().replace('\\', "/");
-    let session = active_session(&state).await.map_err(display_error)?;
-    let context = active_context(&state).await.map_err(display_error)?;
-    let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, executor } = &mut *context;
-    let payload = json!({
-        "arguments": {
-            "name": name,
-            "project_root": project_root,
-            "limit": limit.unwrap_or(100).clamp(1, 200)
-        },
-        "expected_workspace": broker.identity()
-    });
-    dispatch_workspace_request(
-        "workspace.find_project_references",
-        &payload,
-        ExecutionOrigin::System,
-        session.as_ref(),
-        broker,
-        executor,
-    )
-    .await
-    .map_err(display_error)
-}
-
-#[tauri::command]
-async fn editor_discover_chunks(path: String, state: State<'_, AppState>) -> Result<Value, String> {
-    let session = active_session(&state).await.map_err(display_error)?;
-    let context = active_context(&state).await.map_err(display_error)?;
-    let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, executor } = &mut *context;
-    let payload = json!({
-        "arguments": { "path": path },
-        "expected_workspace": broker.identity()
-    });
-    dispatch_workspace_request(
-        "workspace.discover_chunks",
-        &payload,
-        ExecutionOrigin::System,
-        session.as_ref(),
-        broker,
-        executor,
-    )
-    .await
-    .map_err(display_error)
-}
-
-#[tauri::command]
 async fn snapshot_workspace(state: State<'_, AppState>) -> Result<Value, String> {
     snapshot_workspace_with_state(&state).await
 }
@@ -3703,152 +3606,6 @@ async fn cancel_render_job(job_id: String, state: State<'_, AppState>) -> Result
         "job_id": job_id,
         "status": "cancel_requested"
     }))
-}
-
-#[tauri::command]
-async fn editor_package_functions(
-    packages: Option<Vec<String>>,
-    limit: Option<usize>,
-    state: State<'_, AppState>,
-) -> Result<Value, String> {
-    let session = active_session(&state).await.map_err(display_error)?;
-    let context = active_context(&state).await.map_err(display_error)?;
-    let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, executor } = &mut *context;
-    let payload = json!({
-        "arguments": {
-            "packages": packages,
-            "limit": limit.unwrap_or(500)
-        },
-        "expected_workspace": broker.identity()
-    });
-    dispatch_workspace_request(
-        "workspace.list_package_functions",
-        &payload,
-        ExecutionOrigin::System,
-        session.as_ref(),
-        broker,
-        executor,
-    )
-    .await
-    .map_err(display_error)
-}
-
-#[tauri::command]
-async fn editor_function_help(
-    name: String,
-    package: Option<String>,
-    state: State<'_, AppState>,
-) -> Result<Value, String> {
-    let session = active_session(&state).await.map_err(display_error)?;
-    let context = active_context(&state).await.map_err(display_error)?;
-    let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, executor } = &mut *context;
-    let payload = json!({
-        "arguments": {
-            "name": name,
-            "package": package
-        },
-        "expected_workspace": broker.identity()
-    });
-    dispatch_workspace_request(
-        "workspace.function_help",
-        &payload,
-        ExecutionOrigin::System,
-        session.as_ref(),
-        broker,
-        executor,
-    )
-    .await
-    .map_err(display_error)
-}
-
-#[tauri::command]
-async fn editor_function_documentation(
-    name: String,
-    package: String,
-    state: State<'_, AppState>,
-) -> Result<Value, String> {
-    let session = active_session(&state).await.map_err(display_error)?;
-    let context = active_context(&state).await.map_err(display_error)?;
-    let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, executor } = &mut *context;
-    let payload = json!({
-        "arguments": { "name": name, "package": package },
-        "expected_workspace": broker.identity()
-    });
-    dispatch_workspace_request(
-        "workspace.function_documentation",
-        &payload,
-        ExecutionOrigin::System,
-        session.as_ref(),
-        broker,
-        executor,
-    )
-    .await
-    .map_err(display_error)
-}
-
-#[tauri::command]
-async fn editor_lint_file(
-    path: String,
-    document_version: i64,
-    state: State<'_, AppState>,
-) -> Result<Value, String> {
-    let session = active_session(&state).await.map_err(display_error)?;
-    let context = active_context(&state).await.map_err(display_error)?;
-    let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, executor } = &mut *context;
-    let payload = json!({
-        "arguments": { "path": path, "document_version": document_version },
-        "expected_workspace": broker.identity()
-    });
-    dispatch_workspace_request(
-        "workspace.lint_file",
-        &payload,
-        ExecutionOrigin::System,
-        session.as_ref(),
-        broker,
-        executor,
-    )
-    .await
-    .map_err(display_error)
-}
-
-#[tauri::command]
-async fn editor_format_source(
-    request: EditorFormatRequest,
-    state: State<'_, AppState>,
-) -> Result<Value, String> {
-    let session = active_session(&state).await.map_err(display_error)?;
-    let context = active_context(&state).await.map_err(display_error)?;
-    let mut context = context.lock().await;
-    let WorkspaceBrokerState { broker, executor } = &mut *context;
-    let EditorFormatRequest {
-        path,
-        source,
-        document_version,
-    } = request;
-    let payload = json!({
-        "arguments": {
-            "path": path.clone(),
-            "source": source,
-            "source_path": path,
-            "document_version": document_version
-        },
-        "expected_workspace": broker.identity()
-    });
-    let response = dispatch_workspace_request(
-        "workspace.format_r_source",
-        &payload,
-        ExecutionOrigin::System,
-        session.as_ref(),
-        broker,
-        executor,
-    )
-    .await
-    .map_err(display_error)?;
-    editor_format_result(response).map_err(display_error)
 }
 
 #[tauri::command]
@@ -9262,9 +9019,9 @@ mod tests {
         classify_agent_file_postwrite_failure, classify_agent_file_write_failure,
         classify_startup_error, configure_user_startup, deferred_agent_runtime_status,
         delete_agent_conversation_state, display_error_chain, durable_project_root,
-        editor_format_result, ensure_agent_file_proposal_turn_terminal,
-        ensure_supported_r_architecture, ensure_supported_r_version, existing_startup_file,
-        find_executable_on_path, finish_render_job, interrupt_all_agent_tasks, load_runtime_cache,
+        ensure_agent_file_proposal_turn_terminal, ensure_supported_r_architecture,
+        ensure_supported_r_version, existing_startup_file, find_executable_on_path,
+        finish_render_job, interrupt_all_agent_tasks, load_runtime_cache,
         locate_ark_from_candidates, locate_rscript, parse_r_runtime_probe,
         persist_agent_file_mutation_event_to_store, persist_workspace_identity, project_open,
         project_pick_directory, project_restore_session, project_switch_blocker,
@@ -9280,6 +9037,7 @@ mod tests {
         data_view_artifact_metadata, data_view_delimited_text, decode_plot_png_base64,
         ensure_artifact_export_target, has_png_signature,
     };
+    use crate::commands::editor::editor_format_result;
     use crate::commands::environment::lockfile_inventory_arguments;
     use crate::commands::evidence::source_claim_snapshot;
     use crate::commands::runs::{audit_reproducibility_with_state, list_runs_with_state};
@@ -17115,14 +16873,14 @@ fn main() {
             commands::runs::get_run_detail,
             commands::runs::compare_runs,
             commands::runs::audit_reproducibility,
-            editor_package_functions,
-            editor_function_help,
-            editor_function_documentation,
-            editor_lint_file,
-            editor_format_source,
-            editor_goto_definition,
-            editor_find_project_references,
-            editor_discover_chunks,
+            commands::editor::editor_package_functions,
+            commands::editor::editor_function_help,
+            commands::editor::editor_function_documentation,
+            commands::editor::editor_lint_file,
+            commands::editor::editor_format_source,
+            commands::editor::editor_goto_definition,
+            commands::editor::editor_find_project_references,
+            commands::editor::editor_discover_chunks,
             retry_run,
             run_agent,
             agent_context_preview,
