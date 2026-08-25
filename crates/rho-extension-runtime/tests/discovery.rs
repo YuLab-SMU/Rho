@@ -8,8 +8,8 @@ use std::fs;
 use std::path::Path;
 
 use rho_extension_runtime::{
-    PackageDigest, PluginId, discover_workspace_plugins, snapshot_workspace_plugin_cache_directory,
-    snapshot_workspace_plugin_package,
+    PackageDigest, PluginId, RuntimeAbi, discover_workspace_plugins,
+    snapshot_workspace_plugin_cache_directory, snapshot_workspace_plugin_package,
 };
 
 /// Write a minimal valid manifest into `dir/rho-plugin.json`.
@@ -107,6 +107,39 @@ fn discovery_finds_and_digests_a_valid_plugin_without_executing() {
     assert_eq!(discovered.manifest.id.as_str(), "org.example.one");
     // The digest must be non-empty and stable.
     assert!(!discovered.digest.as_str().is_empty());
+}
+
+#[test]
+fn discovery_preserves_the_explicit_v4_abi_without_inspecting_guest_bytes() {
+    let project = temp_project();
+    let plugin = plugins_root(project.path()).join("org.example.component");
+    fs::create_dir_all(plugin.join("dist")).unwrap();
+    fs::write(plugin.join("dist/plugin.wasm"), b"not-a-component").unwrap();
+    fs::write(
+        plugin.join("rho-plugin.json"),
+        r#"{
+            "schemaVersion": 4,
+            "id": "org.example.component",
+            "name": "Component fixture",
+            "version": "0.1.0",
+            "apiVersion": "^1.0",
+            "runtime": {
+                "kind": "wasm",
+                "entry": "dist/plugin.wasm",
+                "scope": "project",
+                "abi": "component-v1"
+            }
+        }"#,
+    )
+    .unwrap();
+
+    let report = discover_workspace_plugins(project.path()).unwrap().unwrap();
+    assert!(report.failures.is_empty());
+    assert_eq!(report.plugins.len(), 1);
+    assert_eq!(
+        report.plugins[0].manifest.runtime_abi(),
+        RuntimeAbi::ComponentV1
+    );
 }
 
 #[test]

@@ -124,7 +124,7 @@ pub use manifest::{
     MAX_MANIFEST_PROVIDES, MAX_MANIFEST_REQUIRES, MAX_PACKAGE_AGGREGATE_BYTES, MAX_PACKAGE_DEPTH,
     MAX_PACKAGE_FILE_BYTES, MAX_PACKAGE_FILES, MAX_PERMISSION_BYTES,
     MAX_PERMISSION_CONSTRAINT_ITEMS, MAX_PERMISSION_PURPOSE_BYTES, MAX_RELATIVE_PATH_BYTES,
-    MIN_MANIFEST_SCHEMA_VERSION, ManifestProvide, ManifestRequire, PermissionRequest,
+    MIN_MANIFEST_SCHEMA_VERSION, ManifestProvide, ManifestRequire, PermissionRequest, RuntimeAbi,
     RuntimeDeclaration, RuntimeKind, UiDeclaration, WorkspacePluginManifest,
 };
 pub use model::{

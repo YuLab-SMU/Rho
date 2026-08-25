@@ -1,9 +1,9 @@
-//! Phase 2 (P2-0) workspace plugin manifest validation.
+//! Phase 2 workspace plugin manifest validation.
 //!
-//! P2-0 owns the exact Manifest V1 schema, its fail-closed bounds, and the
-//! capability/permission separation. A manifest *describes* requested
-//! capabilities and permissions; it never grants authority. Validation runs
-//! before any code is parsed or executed.
+//! The manifest owns fail-closed package declarations and the capability/
+//! permission separation. A manifest *describes* requested capabilities and
+//! permissions; it never grants authority. Validation runs before any code is
+//! parsed or executed.
 
 use std::{collections::BTreeSet, fmt, str::FromStr};
 
@@ -41,11 +41,11 @@ pub const MAX_PACKAGE_FILES: usize = 4096;
 /// Maximum bytes of a single relative path component or full relative path.
 pub const MAX_RELATIVE_PATH_BYTES: usize = 1024;
 
-/// The newest schema version this manifest parser accepts. Manifest V1 and V2
-/// retain their exact existing meaning; V3 adds declarative `ui.surface.*`
-/// factories without reinterpreting Viewer or Panel contributions.
-pub const MANIFEST_SCHEMA_VERSION: u64 = 3;
+/// The newest schema version this manifest parser accepts. Manifest V1–V3
+/// retain their exact existing meaning; V4 requires an explicit Wasm ABI.
+pub const MANIFEST_SCHEMA_VERSION: u64 = 4;
 pub const MIN_MANIFEST_SCHEMA_VERSION: u64 = 1;
+const SURFACE_CONTRIBUTION_SCHEMA_VERSION: u64 = 3;
 
 /// Runtime kind declared by a plugin manifest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -80,6 +80,25 @@ impl FromStr for RuntimeKind {
     }
 }
 
+/// Explicit guest ABI selected by Manifest V4 packages.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RuntimeAbi {
+    /// The existing raw Wasm core-module ABI V2.
+    CoreV2,
+    /// The additive `rho:plugin@1` Component Model ABI.
+    ComponentV1,
+}
+
+impl fmt::Display for RuntimeAbi {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::CoreV2 => formatter.write_str("core-v2"),
+            Self::ComponentV1 => formatter.write_str("component-v1"),
+        }
+    }
+}
+
 /// The `runtime` object of a manifest.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -89,6 +108,10 @@ pub struct RuntimeDeclaration {
     pub entry: String,
     /// The only executable scope in the initial Phase 2 version.
     pub scope: ScopeKindId,
+    /// Manifest V4 requires an explicit ABI. Legacy manifests omit this field
+    /// and retain the existing core-v2 behavior.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub abi: Option<RuntimeAbi>,
 }
 
 /// A single `provides` entry.
@@ -147,7 +170,7 @@ pub struct UiDeclaration {
     pub viewers: Vec<String>,
 }
 
-/// A fully validated Manifest V1, V2, or V3.
+/// A fully validated Manifest V1, V2, V3, or V4.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WorkspacePluginManifest {
@@ -170,8 +193,8 @@ pub struct WorkspacePluginManifest {
     pub optional: Vec<ManifestRequire>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub permissions: Vec<PermissionRequest>,
-    /// Manifest V2/V3 only. Manifest V1 `ui` strings remain discovery metadata
-    /// and never become live contributions.
+    /// Manifest V2 and later only. Manifest V1 `ui` strings remain discovery
+    /// metadata and never become live contributions.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub contributions: Vec<ContributionDeclaration>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -209,7 +232,7 @@ impl WorkspacePluginManifest {
                 reason: "Manifest V1 cannot declare live contributions".to_string(),
             });
         }
-        if self.schema_version < MANIFEST_SCHEMA_VERSION
+        if self.schema_version < SURFACE_CONTRIBUTION_SCHEMA_VERSION
             && self.contributions.iter().any(|contribution| {
                 matches!(
                     contribution.kind,
@@ -220,6 +243,19 @@ impl WorkspacePluginManifest {
             return Err(ExtensionError::ManifestValidation {
                 reason: "ui.surface and check.rule contributions require Manifest V3".to_string(),
             });
+        }
+        match (self.schema_version, self.runtime.abi) {
+            (MANIFEST_SCHEMA_VERSION, None) => {
+                return Err(ExtensionError::ManifestValidation {
+                    reason: "Manifest V4 requires runtime.abi".to_string(),
+                });
+            }
+            (version, Some(_)) if version < MANIFEST_SCHEMA_VERSION => {
+                return Err(ExtensionError::ManifestValidation {
+                    reason: format!("runtime.abi requires Manifest V{MANIFEST_SCHEMA_VERSION}"),
+                });
+            }
+            _ => {}
         }
 
         if self.name.is_empty() {
@@ -397,6 +433,12 @@ impl WorkspacePluginManifest {
             })
             .collect();
         descriptor
+    }
+
+    /// Resolve the executable ABI without inspecting guest exports. Legacy
+    /// manifests keep the existing core-v2 path; V4 was validated as explicit.
+    pub fn runtime_abi(&self) -> RuntimeAbi {
+        self.runtime.abi.unwrap_or(RuntimeAbi::CoreV2)
     }
 }
 
@@ -777,6 +819,13 @@ mod tests {
         })
     }
 
+    fn minimal_manifest_v4(abi: &str) -> serde_json::Value {
+        let mut value = minimal_manifest_v3_surface();
+        value["schemaVersion"] = serde_json::json!(4);
+        value["runtime"]["abi"] = serde_json::json!(abi);
+        value
+    }
+
     fn parse_json(value: &serde_json::Value) -> Result<WorkspacePluginManifest, ExtensionError> {
         WorkspacePluginManifest::parse(&serde_json::to_vec(value).unwrap())
     }
@@ -794,11 +843,14 @@ mod tests {
         let v1 = WorkspacePluginManifest::parse(minimal_manifest_json().as_bytes()).unwrap();
         assert_eq!(v1.schema_version, 1);
         assert!(v1.contributions.is_empty());
+        assert_eq!(v1.runtime.abi, None);
+        assert_eq!(v1.runtime_abi(), RuntimeAbi::CoreV2);
 
         let v2 = parse_json(&minimal_manifest_v2()).unwrap();
         assert_eq!(v2.schema_version, 2);
         assert_eq!(v2.contributions.len(), 1);
         assert_eq!(v2.contributions[0].kind, crate::ContributionKind::Tool);
+        assert_eq!(v2.runtime_abi(), RuntimeAbi::CoreV2);
     }
 
     #[test]
@@ -814,6 +866,7 @@ mod tests {
         let surface = &v3.contributions[0];
         assert_eq!(surface.kind, crate::ContributionKind::Surface);
         assert!(surface.surface.is_some());
+        assert_eq!(v3.runtime_abi(), RuntimeAbi::CoreV2);
 
         let mut v2 = minimal_manifest_v3_surface();
         v2["schemaVersion"] = serde_json::json!(2);
@@ -822,6 +875,53 @@ mod tests {
         let mut unknown = minimal_manifest_v3_surface();
         unknown["contributions"][0]["surface"]["rawHtml"] = serde_json::json!(true);
         assert!(parse_json(&unknown).is_err());
+    }
+
+    #[test]
+    fn manifest_v4_requires_an_explicit_known_abi() {
+        let core = parse_json(&minimal_manifest_v4("core-v2")).unwrap();
+        assert_eq!(core.runtime.abi, Some(RuntimeAbi::CoreV2));
+        assert_eq!(core.runtime_abi(), RuntimeAbi::CoreV2);
+
+        let component = parse_json(&minimal_manifest_v4("component-v1")).unwrap();
+        assert_eq!(component.runtime.abi, Some(RuntimeAbi::ComponentV1));
+        assert_eq!(component.runtime_abi(), RuntimeAbi::ComponentV1);
+        let encoded = serde_json::to_value(&component).unwrap();
+        assert_eq!(encoded["runtime"]["abi"], "component-v1");
+        assert_eq!(parse_json(&encoded).unwrap(), component);
+
+        let mut missing = minimal_manifest_v4("core-v2");
+        missing["runtime"].as_object_mut().unwrap().remove("abi");
+        assert!(parse_json(&missing).is_err());
+
+        let mut null = minimal_manifest_v4("core-v2");
+        null["runtime"]["abi"] = serde_json::Value::Null;
+        assert!(parse_json(&null).is_err());
+
+        for invalid in [
+            serde_json::json!("core-v1"),
+            serde_json::json!({"kind": "component-v1"}),
+        ] {
+            let mut value = minimal_manifest_v4("core-v2");
+            value["runtime"]["abi"] = invalid;
+            assert!(parse_json(&value).is_err());
+        }
+    }
+
+    #[test]
+    fn legacy_manifests_cannot_opt_into_a_v4_abi_field() {
+        for schema_version in 1..=3 {
+            let mut value = if schema_version == 1 {
+                serde_json::from_str(&minimal_manifest_json()).unwrap()
+            } else if schema_version == 2 {
+                minimal_manifest_v2()
+            } else {
+                minimal_manifest_v3_surface()
+            };
+            value["schemaVersion"] = serde_json::json!(schema_version);
+            value["runtime"]["abi"] = serde_json::json!("component-v1");
+            assert!(parse_json(&value).is_err());
+        }
     }
 
     #[test]
@@ -1035,7 +1135,7 @@ mod tests {
 
     #[test]
     fn rejects_unsupported_schema() {
-        let json = minimal_manifest_json().replace("\"schemaVersion\": 1", "\"schemaVersion\": 4");
+        let json = minimal_manifest_json().replace("\"schemaVersion\": 1", "\"schemaVersion\": 5");
         assert!(WorkspacePluginManifest::parse(json.as_bytes()).is_err());
     }
 
