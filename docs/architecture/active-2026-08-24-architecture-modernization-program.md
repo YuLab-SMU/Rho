@@ -10,8 +10,8 @@
   "authorized_at": "2026-08-24",
   "authorized_by": "repository owner",
   "authorization_source": "2026-08-24 instruction to implement the architecture modernization plan",
-  "active_work_packages": [],
-  "integration_lane": "AM-W2-43",
+  "active_work_packages": ["AM-W2-44"],
+  "integration_lane": "AM-W2-44",
   "base_commit": "9a5da6dfb7bf9a50a42bff02dac63f2c2c28dc52"
 }
 ```
@@ -416,6 +416,11 @@ impact. Severity remains prioritization telemetry; only an explicit product-
 correctness, data-integrity, project-isolation, authority/security, public/
 serialized-contract or truthful-recovery domain can block a package from
 completion.
+
+`AM-W2-44` moves the nine Startup, Agent-runtime diagnostic and Workspace-
+bootstrap Tauri adapters into one Startup command facade while preserving the
+existing probe, log, transition-gate, extension-finalization and recovery
+services unchanged.
 
 ### Wave 3 — frontend composition, projection, and layout adapter
 
