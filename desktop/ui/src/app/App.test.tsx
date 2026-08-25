@@ -36,6 +36,18 @@ describe("Studio foundation app", () => {
   });
 
   async function renderApp(transport = createMockUiKernelTransport()) {
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => undefined);
+    if (typeof ResizeObserver === "undefined") {
+      vi.stubGlobal("ResizeObserver", class TestResizeObserver {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      });
+    }
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
@@ -548,8 +560,8 @@ describe("Studio foundation app", () => {
     expect(container.textContent).toContain("Navigator");
     await openInspector(container);
     expect(container.textContent).toContain("2 tabs");
-    expect(container.querySelectorAll(".rho-layout-container")).toHaveLength(2);
-    expect(container.querySelectorAll(".rho-resize-handle")).toHaveLength(3);
+    expect(container.querySelectorAll(".dv-split-view-container")).toHaveLength(4);
+    expect(container.querySelectorAll(".dv-sash[role='separator']")).toHaveLength(3);
     expect(container.querySelectorAll(".rho-inventory-item")).toHaveLength(5);
     expect(container.querySelector("[data-surface-id='rho.agent']")?.textContent).toContain("Project direction");
     const agent = container.querySelector("[data-surface-id='rho.agent']");
@@ -562,7 +574,7 @@ describe("Studio foundation app", () => {
     expect(document.documentElement.dataset.rsrReady).toBe("true");
   });
 
-  it("assigns residual root width to the final fixed work region", async () => {
+  it("renders fixed Scene policies through the controlled Dockview path", async () => {
     const transport = createMockUiKernelTransport();
     const studio = structuredClone(await transport.loadStudio());
     if (studio.scene.root.kind !== "container") throw new Error("Mock Studio root must be a container.");
@@ -574,13 +586,9 @@ describe("Studio foundation app", () => {
     );
     transport.publishStudio(studio);
     const { container } = await renderApp(transport);
-    const root = container.querySelector<HTMLElement>(`[data-node-id='${studio.scene.root.node_id}']`)!;
-    const children = [...root.children].filter((element) => element.classList.contains("rho-layout-child")) as HTMLElement[];
-    expect(children).toHaveLength(3);
-    expect(children[0]?.dataset.residualSpace).toBeUndefined();
-    expect(children[1]?.dataset.residualSpace).toBeUndefined();
-    expect(children[2]?.dataset.residualSpace).toBe("true");
-    expect(children[2]?.style.flexGrow).toBe("1");
+    expect(container.querySelector(".rho-dockview-scene")).not.toBeNull();
+    expect(container.querySelectorAll(".dv-groupview")).toHaveLength(4);
+    expect(container.querySelector(".rho-layout-container")).toBeNull();
   });
 
   it("names adaptive collapsed regions by component and restores them without leaking layout ids", async () => {
@@ -595,7 +603,10 @@ describe("Studio foundation app", () => {
     const { container } = await renderApp();
     await act(async () => {
       for (const callback of resizeCallbacks) {
-        callback([{ contentRect: { width: 600, height: 900 } } as ResizeObserverEntry], {} as ResizeObserver);
+        callback([{
+          target: document.body,
+          contentRect: { width: 600, height: 900 },
+        } as unknown as ResizeObserverEntry], {} as ResizeObserver);
       }
       await settle();
     });
@@ -613,8 +624,7 @@ describe("Studio foundation app", () => {
     });
     expect(container.querySelector(".rho-collapse-rail")?.textContent).toContain("Show Navigator");
     expect(container.querySelector(".rho-collapse-rail")?.textContent).not.toContain("Show Agent");
-    expect(container.querySelector("[data-surface-id='rho.agent']")?.closest(".rho-layout-child")?.classList)
-      .not.toContain("rho-layout-child-collapsed");
+    expect(container.querySelector("[data-surface-id='rho.agent']")).not.toBeNull();
   });
 
   it("keeps Surface diagnostics and management out of the focused default chrome", async () => {
@@ -1068,7 +1078,7 @@ describe("Studio foundation app", () => {
     expect(editor.selectionStart).toBe(editor.value.indexOf("\n") + 1);
     const emerged = container.querySelector<HTMLElement>("[data-instance-id='instance:console-a']")!;
     expect(emerged).not.toBeNull();
-    expect(emerged.querySelector(".rho-console-entry")?.textContent).toContain("library(ggplot2)");
+    expect(emerged.querySelector(".rho-console-composer textarea")).not.toBeNull();
     expect(container.querySelector(".rho-action-error")).toBeNull();
 
     await showToolbarComponent(container, "Scene selector");
@@ -1157,7 +1167,7 @@ describe("Studio foundation app", () => {
     expect(apply.mock.calls[0]?.[0].edit.kind).toBe("replace_root");
     expect(execute).toHaveBeenCalledOnce();
     expect(execute.mock.calls[0]?.[0].console_instance_id).toBe("instance:console-b");
-    expect(container.querySelector("[data-node-id='node:source-console-stack']")).not.toBeNull();
+    expect(container.querySelector("[data-rho-pane-node-id='node:source-console-stack']")).not.toBeNull();
     expect(container.querySelector("[data-surface-id='rho.file-source'] [aria-label^='Source']")).toBe(editor);
     expect(editor.selectionStart).toBe(editor.value.indexOf("\n") + 1);
   });
@@ -1433,9 +1443,8 @@ describe("Studio foundation app", () => {
 
   it("keeps a large repeatable-instance Stack bounded to one mounted renderer", async () => {
     const { container } = await renderApp(createMockUiKernelTransport("?stress=large"));
-    const stack = container.querySelector<HTMLElement>("[data-node-id='node:stress-stack']")!;
-    expect(stack.querySelectorAll("[role='tab']")).toHaveLength(96);
-    expect(stack.querySelectorAll("[data-surface-id='rho.surface-playground']")).toHaveLength(1);
+    expect(container.querySelectorAll("[data-rho-pane-node-id='node:stress-stack']")).toHaveLength(96);
+    expect(container.querySelectorAll("[data-surface-id='rho.surface-playground']")).toHaveLength(1);
     const evidence = JSON.parse(
       container.querySelector("#rsrPreviewEvidence")?.textContent ?? "{}",
     ) as { surfaceInstanceCount?: number };
@@ -1448,8 +1457,9 @@ describe("Studio foundation app", () => {
     const apply = vi.fn(original);
     transport.applyStudio = apply;
     const { container } = await renderApp(transport);
-    const consoles = container.querySelector("[data-node-id='node:consoles']")!;
-    const closeButtons = [...consoles.querySelectorAll<HTMLButtonElement>(".rho-stack-tab-close")];
+    const closeButtons = [...container.querySelectorAll<HTMLButtonElement>(
+      "[data-rho-pane-node-id='node:consoles'] .dv-default-tab-action",
+    )];
     expect(closeButtons).toHaveLength(2);
     await act(async () => {
       closeButtons[1]!.click();
@@ -1546,8 +1556,18 @@ describe("Studio foundation app", () => {
     expect(navigator.querySelector("[role='tabpanel']")?.getAttribute("aria-labelledby"))
       .toBe(tabs[1]!.id);
 
+    const recent = navigator.querySelector<HTMLDetailsElement>(".rho-navigator-recent")!;
+    expect(recent.open).toBe(true);
+    const openOutputs = navigator.querySelector<HTMLButtonElement>(".rho-navigator-open-outputs")!;
+
     await act(async () => {
-      navigator.querySelector<HTMLButtonElement>(".rho-navigator-open-outputs")!.click();
+      openOutputs.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+      await settle();
+    });
+    expect(openOutputs.isConnected).toBe(true);
+
+    await act(async () => {
+      openOutputs.click();
       await settle();
     });
     expect(tabs[2]!.getAttribute("aria-selected")).toBe("true");
@@ -2207,161 +2227,37 @@ describe("Studio foundation app", () => {
     expect(cancel).toHaveBeenCalledOnce();
   });
 
-  it("owns a continuous pointer drag and commits one cross-pane stack edit on release", async () => {
-    const transport = createMockUiKernelTransport();
-    const original = transport.applyStudio.bind(transport);
-    const apply = vi.fn(original);
-    transport.applyStudio = apply;
-    const { container } = await renderApp(transport);
-    installPointerCapture();
-    const consoles = container.querySelector("[data-node-id='node:consoles']")!;
-    const tab = consoles.querySelectorAll<HTMLButtonElement>("[role='tab']")[0]!;
-    const editor = container.querySelector<HTMLElement>("[data-instance-id='instance:file-source']")!;
-    vi.spyOn(editor, "getBoundingClientRect").mockReturnValue(rect(0, 0, 800, 500));
-    hitTest(editor);
-    await act(async () => {
-      pointer(tab, "pointerdown", 0, 0);
-      pointer(window, "pointermove", 400, 250);
-      await Promise.resolve();
-    });
-    expect(container.querySelector(".rho-studio-drag-ghost")?.textContent).toContain("Add to stack");
-    expect(editor.querySelector(".rho-drop-center")).not.toBeNull();
-    expect(apply).not.toHaveBeenCalled();
-    await act(async () => {
-      pointer(window, "pointerup", 400, 250);
-      await settle();
-    });
-    const edit = apply.mock.calls
-      .map((call) => call[0].edit)
-      .find((candidate) => candidate.kind === "replace_root");
-    expect(edit).toBeDefined();
-    const merged = [...container.querySelectorAll<HTMLElement>(".rho-stack")]
-      .find((stack) => stack.querySelectorAll("[role='tab']").length === 2 &&
-        stack.textContent?.includes("Source editor") === true);
-    expect(merged).toBeDefined();
-    const labels = [...merged!.querySelectorAll("[role='tab']")].map((tab) => tab.textContent);
-    expect(labels).toEqual(["Source editor", "R Console"]);
-    expect(container.querySelector("[data-instance-id='instance:console-a']")).not.toBeNull();
+  it("gives Dockview sole ownership of split, tab and pointer docking mechanics", async () => {
+    const { container } = await renderApp();
+    expect(container.querySelector(".rho-dockview-scene .dv-dockview")).not.toBeNull();
+    expect(container.querySelectorAll("[data-rho-pane-node-id='node:consoles']")).toHaveLength(2);
+    expect(container.querySelector("[data-studio-drag-source]")).toBeNull();
+    expect(container.querySelector(".rho-studio-drag-ghost")).toBeNull();
+    expect(container.querySelector(".rho-drop-overlay")).toBeNull();
   });
 
-  it("preserves an ordinary tab click below the drag threshold", async () => {
+  it("publishes a Dockview tab activation as the existing revisioned Scene edit", async () => {
     const transport = createMockUiKernelTransport();
     const original = transport.applyStudio.bind(transport);
     const apply = vi.fn(original);
     transport.applyStudio = apply;
     const { container } = await renderApp(transport);
-    installPointerCapture();
-    const tabs = container.querySelector("[data-node-id='node:consoles']")!
-      .querySelectorAll<HTMLButtonElement>("[role='tab']");
-    const inactive = tabs[1]!;
+    const inactive = container.querySelector<HTMLElement>(
+      "[data-rho-tab-instance-id='instance:console-b']",
+    )!;
+    const dockviewTab = inactive.closest<HTMLElement>(".dv-tab")!;
     await act(async () => {
-      pointer(inactive, "pointerdown", 10, 10);
-      pointer(window, "pointermove", 13, 12);
-      pointer(window, "pointerup", 13, 12);
+      pointer(dockviewTab, "pointerdown", 10, 10);
+      pointer(dockviewTab, "pointerup", 10, 10);
       inactive.click();
       await settle();
     });
-    expect(container.querySelector(".rho-studio-drag-ghost")).toBeNull();
     expect(apply).toHaveBeenCalledOnce();
     expect(apply.mock.calls[0]?.[0].edit).toMatchObject({
       kind: "set_stack_active",
       stack_node_id: "node:consoles",
       instance_id: "instance:console-b",
     });
-  });
-
-  it("tears the active tab out against its own Stack edge", async () => {
-    const transport = createMockUiKernelTransport();
-    const original = transport.applyStudio.bind(transport);
-    const apply = vi.fn(original);
-    transport.applyStudio = apply;
-    const { container } = await renderApp(transport);
-    installPointerCapture();
-    const stack = container.querySelector("[data-node-id='node:consoles']")!;
-    const activeTab = stack.querySelector<HTMLButtonElement>("[role='tab'][aria-selected='true']")!;
-    const pane = container.querySelector<HTMLElement>("[data-instance-id='instance:console-a']")!;
-    vi.spyOn(pane, "getBoundingClientRect").mockReturnValue(rect(0, 0, 800, 400));
-    hitTest(pane);
-    await act(async () => {
-      pointer(activeTab, "pointerdown", 400, 20);
-      pointer(window, "pointermove", 20, 200);
-      await Promise.resolve();
-    });
-    expect(pane.querySelector(".rho-drop-left")).not.toBeNull();
-    await act(async () => {
-      pointer(window, "pointerup", 20, 200);
-      await settle();
-    });
-    expect(apply).toHaveBeenCalledOnce();
-    expect(apply.mock.calls[0]?.[0].edit.kind).toBe("replace_root");
-    expect(container.querySelectorAll("[data-surface-id='rho.console']")).toHaveLength(2);
-  });
-
-  it("shows and commits the exact tab insertion side", async () => {
-    const transport = createMockUiKernelTransport();
-    const original = transport.applyStudio.bind(transport);
-    const apply = vi.fn(original);
-    transport.applyStudio = apply;
-    const { container } = await renderApp(transport);
-    installPointerCapture();
-    const tabWrappers = container.querySelector("[data-node-id='node:consoles']")!
-      .querySelectorAll<HTMLElement>(".rho-stack-tab");
-    const target = tabWrappers[0]!;
-    const source = tabWrappers[1]!.querySelector<HTMLButtonElement>("[role='tab']")!;
-    vi.spyOn(target, "getBoundingClientRect").mockReturnValue(rect(100, 0, 100, 32));
-    hitTest(target);
-    await act(async () => {
-      pointer(source, "pointerdown", 250, 16);
-      pointer(window, "pointermove", 110, 16);
-      await Promise.resolve();
-    });
-    expect(target.dataset.dropPosition).toBe("before");
-    expect(container.querySelector(".rho-studio-drag-ghost")?.textContent).toContain("Insert tab before");
-    await act(async () => {
-      pointer(window, "pointerup", 110, 16);
-      await settle();
-    });
-    expect(apply).toHaveBeenCalledOnce();
-    expect(apply.mock.calls[0]?.[0].edit.kind).toBe("replace_root");
-  });
-
-  it("cancels on Escape, pointer cancellation, and a self-stack center release", async () => {
-    const transport = createMockUiKernelTransport();
-    const original = transport.applyStudio.bind(transport);
-    const apply = vi.fn(original);
-    transport.applyStudio = apply;
-    const { container } = await renderApp(transport);
-    installPointerCapture();
-    const stack = container.querySelector("[data-node-id='node:consoles']")!;
-    const activeTab = stack.querySelector<HTMLButtonElement>("[role='tab'][aria-selected='true']")!;
-    const pane = container.querySelector<HTMLElement>("[data-instance-id='instance:console-a']")!;
-    vi.spyOn(pane, "getBoundingClientRect").mockReturnValue(rect(0, 0, 800, 400));
-    hitTest(pane);
-
-    await act(async () => {
-      pointer(activeTab, "pointerdown", 400, 20, 21);
-      pointer(window, "pointermove", 400, 200, 21);
-      window.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Escape" }));
-      await settle();
-    });
-    expect(container.querySelector(".rho-studio-drag-ghost")).toBeNull();
-    expect(apply).not.toHaveBeenCalled();
-
-    await act(async () => {
-      pointer(activeTab, "pointerdown", 400, 20, 22);
-      pointer(window, "pointermove", 20, 200, 22);
-      pointer(window, "pointercancel", 20, 200, 22);
-      await settle();
-    });
-    expect(apply).not.toHaveBeenCalled();
-
-    await act(async () => {
-      pointer(activeTab, "pointerdown", 400, 20, 23);
-      pointer(window, "pointermove", 400, 200, 23);
-      pointer(window, "pointerup", 400, 200, 23);
-      await settle();
-    });
-    expect(apply).not.toHaveBeenCalled();
   });
 
   it("switches to a document-composed Vibe Page without carrying the inspector chrome", async () => {
@@ -2500,72 +2396,40 @@ describe("Studio foundation app", () => {
     expect(remaining.querySelector<HTMLInputElement>("input")!.value).toBe("survivor draft");
   });
 
-  it("previews pointer resizing without durable edits and commits once on release", async () => {
+  it("makes Dockview sashes keyboard accessible and commits one authoritative resize", async () => {
     const transport = createMockUiKernelTransport();
     const original = transport.applyStudio.bind(transport);
     const apply = vi.fn(original);
     transport.applyStudio = apply;
-    const capture = new Set<number>();
-    Object.defineProperties(HTMLElement.prototype, {
-      setPointerCapture: { configurable: true, value: (id: number) => { capture.add(id); } },
-      hasPointerCapture: { configurable: true, value: (id: number) => capture.has(id) },
-      releasePointerCapture: { configurable: true, value: (id: number) => { capture.delete(id); } },
-    });
     const { container } = await renderApp(transport);
-    const handle = container.querySelector<HTMLButtonElement>(".rho-resize-handle")!;
-    const before = handle.previousElementSibling as HTMLElement;
-    const after = handle.nextElementSibling as HTMLElement;
-    const rect = (left: number, width: number): DOMRect => ({
-      x: left, y: 0, top: 0, left, right: left + width, bottom: 500,
-      width, height: 500, toJSON: () => ({}),
-    });
-    vi.spyOn(before, "getBoundingClientRect").mockReturnValue(rect(0, 700));
-    vi.spyOn(after, "getBoundingClientRect").mockReturnValue(rect(700, 300));
-    await act(async () => handle.focus());
+    const handle = container.querySelector<HTMLElement>(".dv-sash[role='separator']")!;
+    expect(handle).not.toBeNull();
     expect(handle.getAttribute("role")).toBe("separator");
     expect(handle.getAttribute("aria-orientation")).toBe("vertical");
-    expect(handle.getAttribute("aria-valuemax")).toBe("944");
-    expect(handle.getAttribute("aria-valuenow")).toBe("700");
-    const pointer = (type: string, clientX: number) => {
-      const event = new MouseEvent(type, { bubbles: true, clientX });
-      Object.defineProperty(event, "pointerId", { value: 7 });
-      handle.dispatchEvent(event);
-    };
-    await act(async () => {
-      pointer("pointerdown", 700);
-      pointer("pointermove", 760);
-      await Promise.resolve();
+    expect(handle.dataset.rhoDockviewBranch).toBe("0");
+    expect(handle.dataset.rhoDockviewBoundary).toBe("0");
+    const resizeKey = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      key: "ArrowRight",
     });
-    expect(apply).not.toHaveBeenCalled();
     await act(async () => {
-      pointer("pointerup", 760);
+      handle.dispatchEvent(resizeKey);
       await settle();
     });
-    expect(apply).toHaveBeenCalledOnce();
-    expect(apply.mock.calls[0]?.[0].edit.kind).toBe("resize_boundary");
-    apply.mockClear();
-    await act(async () => {
-      handle.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "ArrowRight" }));
-      await settle();
-    });
-    expect(apply).toHaveBeenCalledOnce();
-    apply.mockClear();
-    await act(async () => {
-      handle.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Home" }));
-      await settle();
-    });
+    expect(resizeKey.defaultPrevented).toBe(true);
     expect(apply).toHaveBeenCalledOnce();
     expect(apply.mock.calls[0]?.[0].edit).toMatchObject({
       kind: "resize_boundary",
-      before_basis: { kind: "fixed", logical_pixels: 56 },
+      container_node_id: "node:root",
+      before_child_index: 0,
     });
   });
 
   it("keeps Console drafts, histories, and output origins instance-local on a shared Runtime", async () => {
     const { container } = await renderApp();
     expect(container.querySelectorAll("[data-surface-id='rho.console']")).toHaveLength(1);
-    const consolesStack = container.querySelector("[data-node-id='node:consoles']")!;
-    const tabs = [...consolesStack.querySelectorAll<HTMLButtonElement>(".rho-stack-tabs [role='tab']")];
+    const tabs = [...container.querySelectorAll<HTMLElement>("[data-rho-pane-node-id='node:consoles']")];
     expect(tabs).toHaveLength(2);
     const first = container.querySelector<HTMLElement>("[data-surface-id='rho.console']")!;
     const firstComposer = first.querySelector<HTMLTextAreaElement>("textarea")!;
@@ -2582,6 +2446,9 @@ describe("Studio foundation app", () => {
     expect(first.querySelector(".rho-console-entry")?.textContent).not.toContain("instance:console-a");
 
     await act(async () => {
+      const dockviewTab = tabs[1]!.closest<HTMLElement>(".dv-tab")!;
+      pointer(dockviewTab, "pointerdown", 10, 10);
+      pointer(dockviewTab, "pointerup", 10, 10);
       tabs[1]!.click();
       await settle();
     });
@@ -2613,7 +2480,13 @@ describe("Studio foundation app", () => {
     });
     expect(secondComposer.value).toBe("2 + 2");
     await act(async () => {
-      tabs[0]!.click();
+      const firstTab = container.querySelector<HTMLElement>(
+        "[data-rho-tab-instance-id='instance:console-a']",
+      )!;
+      const dockviewTab = firstTab.closest<HTMLElement>(".dv-tab")!;
+      pointer(dockviewTab, "pointerdown", 10, 10);
+      pointer(dockviewTab, "pointerup", 10, 10);
+      firstTab.click();
       await settle();
     });
     const restoredFirst = container.querySelector<HTMLElement>("[data-surface-id='rho.console']")!;

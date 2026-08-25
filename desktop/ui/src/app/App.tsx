@@ -85,11 +85,6 @@ import {
 } from "./project-history";
 import type { ProjectHistoryLoad } from "./project-history";
 import {
-  StudioDragLayer,
-  useStudioPointerDrag,
-} from "./StudioPointerDrag";
-import type { StudioPointerDragController } from "./StudioPointerDrag";
-import {
   defaultToolbarLayout,
   loadToolbarLayout,
   saveToolbarLayout,
@@ -122,15 +117,14 @@ import { SurfaceInstanceMutationController } from "./controllers/surface-instanc
 import { surfaceDisplayLabel, surfaceUxProfile } from "./surface-ux";
 import {
   findLayoutPlacement,
-  LayoutTree,
   NodeOutline,
 } from "./layout/LegacySceneLayout";
+import { DockviewSceneLayout } from "./layout/DockviewSceneLayout";
 import type {
   ToolbarComponentId,
   ToolbarLayout,
   ToolbarPreferenceLoad,
 } from "./toolbar-model";
-import type { StudioDropTarget, StudioDropZone } from "../transport/studio-model";
 import { projectLabel } from "../transport/normalize";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
@@ -367,9 +361,6 @@ interface SurfaceViewProps {
   readonly openSurfaceById: (surfaceId: string) => void;
   readonly agentRuntimeOutputContext: RuntimeOutputReference | null;
   readonly setAgentRuntimeOutputContext: (reference: RuntimeOutputReference | null) => void;
-  readonly paneNodeId: string | null;
-  readonly paneMemberCount: number;
-  readonly studioDrag: StudioPointerDragController;
   readonly embedded: boolean;
 }
 
@@ -1895,7 +1886,6 @@ function SurfaceView({
   agentHealth, persistAgentViewState, persistSurfaceViewState, pinAgentTask,
   applyAgentFileProposal, undoAgentFileProposal, openNavigatorFile, openSurfaceById,
   agentRuntimeOutputContext, setAgentRuntimeOutputContext,
-  paneNodeId, paneMemberCount, studioDrag,
   embedded,
 }: SurfaceViewProps) {
   const [draft, setDraft] = useState(() => initialDraft(instance, draftCache));
@@ -1912,15 +1902,16 @@ function SurfaceView({
   const [consoleSearchBusy, setConsoleSearchBusy] = useState(false);
   const consoleOutputRef = useRef<HTMLDivElement>(null);
   const consoleCompactionRevisionRef = useRef<number | null>(null);
-  const dndEnabled = !embedded && paneNodeId != null;
+  const reportErrorRef = useRef(reportError);
+  reportErrorRef.current = reportError;
+  const consoleNeedsCompaction = needsConsoleStateCompaction(instance);
+  const [consoleRendererReady, setConsoleRendererReady] = useState(
+    () => !consoleNeedsCompaction,
+  );
   const runtime = instance.runtime_binding;
   const uxProfile = surfaceUxProfile(instance.surface_id);
   const isStrip = uxProfile.areaRole === "strip";
   const title = uxProfile.label;
-  const paneDropZone = studioDrag.visual?.target?.nodeId === paneNodeId &&
-    !studioDrag.visual.target.zone.startsWith("tab-")
-    ? studioDrag.visual.target.zone as Exclude<StudioDropZone, "tab-before" | "tab-after">
-    : null;
   const attached = runtimes?.instances.find((candidate) =>
     candidate.runtime_instance_id === runtime?.runtime_instance_id &&
     candidate.activation_generation === runtime.activation_generation
@@ -1942,11 +1933,20 @@ function SurfaceView({
     }
   }, [consoleSessionCache, consoleState, instance.instance_id, instance.surface_id]);
   useEffect(() => {
-    if (instance.surface_id !== "rho.console" || !needsConsoleStateCompaction(instance)) return;
+    if (instance.surface_id !== "rho.console") return;
+    if (!consoleNeedsCompaction) {
+      setConsoleRendererReady(true);
+      return;
+    }
     if (consoleCompactionRevisionRef.current === instance.surface_revision) return;
     consoleCompactionRevisionRef.current = instance.surface_revision;
-    void consoleController.persistCurrent();
-  }, [consoleController, instance, instance.surface_id, instance.surface_revision]);
+    setConsoleRendererReady(false);
+    let active = true;
+    void consoleController.persistCurrent()
+      .then(() => { if (active) setConsoleRendererReady(true); })
+      .catch((cause: unknown) => reportErrorRef.current(cause));
+    return () => { active = false; };
+  }, [consoleController, consoleNeedsCompaction, instance.surface_id, instance.surface_revision]);
   const runtimeRecovering = attached != null &&
     (attached.status === "restarting" || attached.status === "starting");
   const consoleBusy = consoleRunning || attached?.status === "busy";
@@ -2020,7 +2020,7 @@ function SurfaceView({
     return admission;
   };
   useEffect(() => {
-    if (instance.surface_id !== "rho.console") return undefined;
+    if (instance.surface_id !== "rho.console" || !consoleRendererReady) return undefined;
     return registerConsoleExecution({
       instanceId: instance.instance_id,
       submitSource: (execution) => submitConsoleCode(execution.code, false, {
@@ -2030,7 +2030,7 @@ function SurfaceView({
         source_range: execution.range,
       }),
     });
-  }, [instance.instance_id, instance.surface_id, registerConsoleExecution, submitConsoleCode]);
+  }, [consoleRendererReady, instance.instance_id, instance.surface_id, registerConsoleExecution, submitConsoleCode]);
   useLayoutEffect(() => {
     if (!consoleState.follow_tail) return;
     const element = consoleOutputRef.current;
@@ -2056,28 +2056,13 @@ function SurfaceView({
       data-surface-narrow={uxProfile.narrowBehavior}
       data-surface-default-focus={uxProfile.defaultFocus}
       aria-label={`${title} component`}
-      data-studio-drop-node-id={dndEnabled ? paneNodeId : undefined}
-      data-studio-drop-instance-id={dndEnabled ? instance.instance_id : undefined}
-      data-studio-drop-member-count={dndEnabled ? paneMemberCount : undefined}
-      data-studio-drop-label={dndEnabled ? title : undefined}
       onPointerDown={embedded && instance.surface_id !== "rho.console" ? undefined : () => {
         if (instance.surface_id === "rho.console") markConsolePreferred(instance.instance_id);
         if (!embedded) setFocus();
       }}
     >
       <header className="rho-surface-chrome">
-        <div
-          className="rho-surface-title"
-          data-studio-drag-source={dndEnabled ? instance.instance_id : undefined}
-          onPointerDown={dndEnabled ? (event) => {
-            event.stopPropagation();
-            if (instance.surface_id === "rho.console") markConsolePreferred(instance.instance_id);
-            studioDrag.begin(event, instance.instance_id, title);
-          } : undefined}
-          onClick={dndEnabled ? (event) => {
-            if (!studioDrag.consumeSuppressedClick(event.currentTarget)) setFocus();
-          } : undefined}
-        ><strong>{title}</strong></div>
+        <div className="rho-surface-title"><strong>{title}</strong></div>
         {!embedded && <div className="rho-surface-actions" onPointerDown={(event) => event.stopPropagation()}>
           <MenuPopover
             label={`More actions for ${title}`}
@@ -2560,18 +2545,6 @@ function SurfaceView({
         />
       )}
       </>}
-      {paneDropZone != null && (
-        <div className={`rho-drop-overlay rho-drop-${paneDropZone}`} aria-hidden="true">
-          <div className="rho-drop-region" />
-          <div className="rho-drop-guide">
-            <span data-zone="top" data-active={paneDropZone === "top" || undefined}>↑</span>
-            <span data-zone="left" data-active={paneDropZone === "left" || undefined}>←</span>
-            <span data-zone="center" data-active={paneDropZone === "center" || undefined}>＋</span>
-            <span data-zone="right" data-active={paneDropZone === "right" || undefined}>→</span>
-            <span data-zone="bottom" data-active={paneDropZone === "bottom" || undefined}>↓</span>
-          </div>
-        </div>
-      )}
     </article>
   );
 }
@@ -2738,14 +2711,18 @@ function WorkbenchApp({ transport }: AppProps) {
       { fallback: "Studio operation failed.", scope: "workbench" },
     ).catch((error: unknown) => setActionError(workbenchFailureMessage(error, "Studio operation failed.")));
   };
+  const allocateLayoutNodeId = useCallback(
+    () => `layout-node:${crypto.randomUUID().replaceAll("-", "")}`,
+    [],
+  );
   const studioMutationController = useMemo(() => new StudioMutationController({
     getStudio: studioStore.getStudioSnapshot,
     apply: (request) => studioStore.apply(request),
     undo: (request) => studioStore.undo(request),
     redo: (request) => studioStore.redo(request),
     report: setActionError,
-    allocateLayoutNodeId: () => `layout-node:${crypto.randomUUID().replaceAll("-", "")}`,
-  }), [studioStore]);
+    allocateLayoutNodeId,
+  }), [allocateLayoutNodeId, studioStore]);
   const surfaceMutationController = useMemo(() => new SurfaceInstanceMutationController({
     getSurfaces: surfaceStore.getSurfaceSnapshot,
     update: (request) => surfaceStore.update(request),
@@ -2775,7 +2752,7 @@ function WorkbenchApp({ transport }: AppProps) {
     setToolbarPreference({ projectId: toolbarProjectId, layout, status, detail });
   };
   const commit = (edit: SceneEdit) => {
-    void studioMutationController.commit(edit);
+    return studioMutationController.commit(edit);
   };
   const profileRevisionRequest = () => profile == null ? null : {
     project_id: profile.project_id,
@@ -2936,10 +2913,6 @@ function WorkbenchApp({ transport }: AppProps) {
     }
     run(openFactory(factory));
   };
-  const commitDrop = (dragInstanceId: string, target: StudioDropTarget) => {
-    void studioMutationController.drop(dragInstanceId, target);
-  };
-  const studioDrag = useStudioPointerDrag(commitDrop);
   const openFactory = async (
     factory: SurfaceFactoryRegistration,
     viewStateOverride?: unknown,
@@ -3243,8 +3216,8 @@ function WorkbenchApp({ transport }: AppProps) {
     applyStudio: (request) => studioStore.apply(request),
     waitForRenderer: (instanceId) => consoleExecutionRouter.waitFor(instanceId),
     markPreferred: (instanceId) => consoleExecutionRouter.markPreferred(instanceId),
-    allocateLayoutNodeId: () => `layout-node:${crypto.randomUUID().replaceAll("-", "")}`,
-  }), [consoleExecutionRouter, profileStore, runtimeStore, studioStore, surfaceStore]);
+    allocateLayoutNodeId,
+  }), [allocateLayoutNodeId, consoleExecutionRouter, profileStore, runtimeStore, studioStore, surfaceStore]);
   const runSourceExecution = async (
     sourceInstanceId: string,
     execution: SourceExecutionSubmission,
@@ -3257,8 +3230,6 @@ function WorkbenchApp({ transport }: AppProps) {
   const surfaceView = (
     instance: SurfaceInstance,
     embedded = false,
-    nodeId?: string,
-    paneMemberCount = 1,
   ) => {
     const boundDescriptor = resources?.resources.find((descriptor) =>
       descriptor.resource_provider_id === instance.resource_binding?.resource_provider_id &&
@@ -3559,9 +3530,6 @@ function WorkbenchApp({ transport }: AppProps) {
       openSurfaceById={openSurfaceById}
       agentRuntimeOutputContext={agentRuntimeOutputContext}
       setAgentRuntimeOutputContext={setAgentRuntimeOutputContext}
-      paneNodeId={nodeId ?? null}
-      paneMemberCount={paneMemberCount}
-      studioDrag={studioDrag}
     />;
   };
   const activeVibePage = profile?.vibe_pages.find(
@@ -4204,10 +4172,17 @@ function WorkbenchApp({ transport }: AppProps) {
                         : "Vibe Page operation failed.",
                     )}
                   />
-              : <LayoutTree key={studio.project_id} node={studio.scene.root} instances={instances} studio={studio} commit={commit} studioDrag={studioDrag} surfaceView={surfaceView} />}
+              : <DockviewSceneLayout
+                  key={studio.project_id}
+                  node={studio.scene.root}
+                  instances={instances}
+                  studio={studio}
+                  commit={commit}
+                  allocateLayoutNodeId={allocateLayoutNodeId}
+                  surfaceView={surfaceView}
+                />}
         </section>
       </div>
-      <StudioDragLayer controller={studioDrag} />
       <footer className="rho-statusbar" aria-label="Workbench status">
         <span className="rho-statusbar-item">
           <span className={`rho-status-dot rho-status-${snapshot?.context.workspace_health ?? "unknown"}`} />

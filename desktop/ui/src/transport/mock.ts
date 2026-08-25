@@ -1302,7 +1302,7 @@ export function createMockUiKernelTransport(
     },
     async appInfo() {
       return {
-        version: "0.4.1-dev.15",
+        version: "0.4.1-dev.16",
         channel: "development",
         commit: "mock-build",
         platform: "browser-mock",

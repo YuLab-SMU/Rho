@@ -1,7 +1,7 @@
 {
   "name": "rho-desktop-frontend",
   "private": true,
-  "version": "0.4.1-dev.15",
+  "version": "0.4.1-dev.16",
   "description": "Frontend tooling for the Rho Surface Runtime",
   "license": "AGPL-3.0-only",
   "scripts": {
@@ -47,6 +47,7 @@
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1",
+    "dockview-react": "8.2.0",
     "dompurify": "3.4.13",
     "katex": "0.16.22",
     "marked": "18.0.9",

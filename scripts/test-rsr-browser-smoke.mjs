@@ -128,7 +128,7 @@ async function dumpDom(url, virtualTimeBudget = 2000, browserArguments = []) {
 
 try {
   const standardUrl = `http://127.0.0.1:${address.port}/?preview=bootstrap&project=${project}&health=ready&plugin=surface`;
-  const standard = await dumpDom(standardUrl);
+  const standard = await dumpDom(standardUrl, 2000, ["--window-size=1440,900"]);
   if (!standard.stdout.includes('data-rsr-ready="true"')) throw new Error("RSR browser did not reach the ready state");
   if (!standard.stdout.includes("Rho Surface Runtime") || !standard.stdout.includes("Rho 科学 Project")) {
     throw new Error("RSR browser smoke did not render project identity and foundation shell");

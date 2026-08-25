@@ -134,7 +134,8 @@ try {
     const box = await separator.boundingBox();
     if (box == null) throw new Error("no visible horizontal layout boundary is pointer-resizable");
     const initialRevision = (await evidence(page)).layoutRevision;
-    const beforeWidth = await separator.evaluate((element) => element.previousElementSibling?.getBoundingClientRect().width ?? 0);
+    const resizedPane = page.locator('article[data-surface-id="rho.navigator"]');
+    const beforeWidth = (await resizedPane.boundingBox())?.width ?? 0;
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
     await page.mouse.move(box.x + box.width / 2 + 64, box.y + box.height / 2, { steps: 6 });
@@ -143,7 +144,7 @@ try {
       const hook = document.querySelector("#rsrPreviewEvidence");
       return hook != null && JSON.parse(hook.textContent ?? "{}").layoutRevision > revision;
     }, initialRevision);
-    const afterWidth = await separator.evaluate((element) => element.previousElementSibling?.getBoundingClientRect().width ?? 0);
+    const afterWidth = (await resizedPane.boundingBox())?.width ?? 0;
     if (afterWidth <= beforeWidth + 24) throw new Error(`pointer resize did not materially change width: ${beforeWidth} -> ${afterWidth}`);
     await context.close();
   }
@@ -159,8 +160,18 @@ try {
     if (await navigator.getByRole("tab", { name: "History", exact: true }).getAttribute("aria-selected") !== "true") {
       throw new Error("Navigator ArrowRight did not activate History");
     }
-    await navigator.locator(".rho-navigator-recent > summary").click();
+    const recentOutputs = navigator.locator(".rho-navigator-recent");
+    if (!await recentOutputs.evaluate((element) => element.open)) {
+      await recentOutputs.locator("summary").click();
+    }
+    if (!await recentOutputs.evaluate((element) => element.open)) {
+      throw new Error("Navigator recent outputs did not remain expanded after activation");
+    }
     await navigator.getByRole("button", { name: "View all outputs" }).click();
+    await page.waitForFunction(() =>
+      document.querySelector('article[data-surface-id="rho.navigator"] [role="tab"][aria-selected="true"]')
+        ?.textContent?.trim() === "Artifacts"
+    );
     if (await navigator.getByRole("tab", { name: "Artifacts", exact: true }).getAttribute("aria-selected") !== "true") {
       throw new Error("Navigator recent-output action did not activate Artifacts");
     }
@@ -228,7 +239,7 @@ try {
 
   {
     const { context, page } = await openWorkbench();
-    const source = page.locator('article[data-surface-id="rho.navigator"] .rho-surface-title');
+    const source = page.locator('[data-rho-tab-instance-id="instance:navigator"]');
     const target = page.locator('article[data-surface-id="rho.file-source"]');
     const sourceBox = await source.boundingBox();
     const targetBox = await target.boundingBox();
@@ -238,7 +249,7 @@ try {
     await page.mouse.down();
     await page.mouse.move(sourceBox.x + sourceBox.width / 2 + 12, sourceBox.y + sourceBox.height / 2 + 12, { steps: 2 });
     await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, { steps: 8 });
-    await page.locator(".rho-drop-overlay").waitFor({ timeout: 5_000 });
+    await page.locator(".dv-drop-target:visible").first().waitFor({ timeout: 5_000 });
     await page.mouse.up();
     await page.waitForFunction((revision) => {
       const hook = document.querySelector("#rsrPreviewEvidence");

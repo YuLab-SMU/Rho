@@ -1,3 +1,5 @@
+@import "dockview-react/dist/styles/dockview.css" layer(workbench);
+
 /* Workbench frame: startup screens, shell grid, top bar, inspector,
    canvas, layout containers, resize separators, stacks. */
 
@@ -559,6 +561,46 @@
   .rho-layout-child { min-width: 0; min-height: 0; overflow: hidden; }
   .rho-layout-child > * { width: 100%; height: 100%; }
   .rho-layout-child-collapsed { visibility: hidden; pointer-events: none; }
+
+  .rho-dockview-scene {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    --dv-activegroup-visiblepanel-tab-background-color: var(--rho-paper);
+    --dv-activegroup-hiddenpanel-tab-background-color: var(--rho-canvas);
+    --dv-inactivegroup-visiblepanel-tab-background-color: var(--rho-paper);
+    --dv-inactivegroup-hiddenpanel-tab-background-color: var(--rho-canvas);
+    --dv-tab-divider-color: var(--rho-line);
+    --dv-separator-border: var(--rho-line);
+    --dv-paneview-active-outline-color: var(--rho-ink-2);
+    --dv-activegroup-visiblepanel-tab-color: var(--rho-ink);
+    --dv-activegroup-hiddenpanel-tab-color: var(--rho-ink-2);
+    --dv-inactivegroup-visiblepanel-tab-color: var(--rho-ink-2);
+    --dv-inactivegroup-hiddenpanel-tab-color: var(--rho-muted);
+    --dv-tabs-and-actions-container-background-color: var(--rho-canvas);
+    --dv-group-view-background-color: var(--rho-paper);
+    --dv-drag-over-background-color: var(--rho-selection);
+    --dv-drag-over-border-color: var(--rho-ink-2);
+  }
+  .rho-dockview-scene > .dv-dockview,
+  .rho-dockview-scene > div,
+  .rho-dockview-scene .dv-react-part { min-width: 0; min-height: 0; }
+  .rho-dockview-scene .dv-groupview { border: var(--rho-border); }
+  .rho-dockview-scene .dv-tabs-and-actions-container { min-height: var(--rho-control-small); }
+  .rho-dockview-scene .dv-default-tab {
+    min-width: 0;
+    color: inherit;
+    font-family: var(--rho-font-sans);
+    font-size: var(--rho-text-caption);
+  }
+  .rho-dockview-scene .dv-sash[role="separator"]:focus-visible {
+    outline: 2px solid var(--rho-ink);
+    outline-offset: -2px;
+    background: var(--rho-ink-2);
+  }
 
   .rho-resize-handle {
     z-index: 4;

@@ -4,6 +4,20 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.1-dev.16 - 2026-08-25
+
+### Controlled Studio layout adapter
+
+- Studio split, stack, tab, drag and resize mechanics now render through
+  Dockview while the Rust Scene, layout revision and stale-edit rejection remain
+  authoritative. Dockview state is transient and is converted back into the
+  existing revision-checked Scene edits; it is never persisted as a second
+  layout format.
+- Focus-only Scene updates no longer rebuild component DOM during a pointer
+  gesture. Navigator keyboard navigation and recent-output actions therefore
+  remain stable during rapid focus and view-state updates, while narrow layouts,
+  collapse restoration and keyboard separators retain their existing behavior.
+
 ## 0.4.1-dev.15 - 2026-08-24
 
 ### Durable Runtime output and explicit Agent context

@@ -148,9 +148,17 @@ export function NavigatorSurfaceView({
   const [query, setQuery] = useState("");
   const [domain, setDomain] = useState<DomainSurfaceData | null>(null);
   const [recent, setRecent] = useState<DomainSurfaceData | null>(null);
+  const [recentOpen, setRecentOpen] = useState(
+    typeof instance.view_state === "object" && instance.view_state != null &&
+      "recent_open" in instance.view_state
+      ? instance.view_state.recent_open === true
+      : initialTab !== "files",
+  );
   const selectTab = (next: NavigatorTab) => {
+    const nextRecentOpen = tab === "files" && next !== "files" ? true : recentOpen;
     setTab(next);
-    void persist({ tab: next }).catch(reportError);
+    setRecentOpen(nextRecentOpen);
+    void persist({ tab: next, recent_open: nextRecentOpen }).catch(reportError);
   };
   const loadDomain = useCallback(async () => {
     try {
@@ -260,7 +268,16 @@ export function NavigatorSurfaceView({
         {tab === "artifacts" && <DomainRows data={domain} emptyLabel="No artifacts recorded yet." />}
       </div>
       {(recent?.items.length ?? 0) > 0 && (
-        <details className="rho-navigator-recent">
+        <details
+          className="rho-navigator-recent"
+          open={recentOpen}
+          onToggle={(event) => {
+            const next = event.currentTarget.open;
+            if (next === recentOpen) return;
+            setRecentOpen(next);
+            void persist({ tab, recent_open: next }).catch(reportError);
+          }}
+        >
           <summary><span>Recent outputs</span><span>{recent!.items.length}</span></summary>
           {recent!.items.slice(0, 3).map((item) => (
             <div className="rho-nav-record rho-nav-record-output" key={item.id}>
