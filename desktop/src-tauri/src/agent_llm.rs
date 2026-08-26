@@ -508,6 +508,7 @@ pub struct ResolvedAgentModel {
     pub route_capability: String,
     pub effective_model_ref: String,
     pub runtime_profile: AgentRuntimeModelProfile,
+    pub credential_environment_names: Vec<String>,
     pub provider_id: String,
     pub provider_display_name: String,
     pub model_display_name: String,
@@ -1951,6 +1952,16 @@ pub fn resolve_model_for_turn(
     resolve_model_for_turn_with_settings(&settings, requested_model_id, mode)
 }
 
+pub fn resolve_model_for_task(
+    data_dir: &Path,
+    requested_model_id: Option<&str>,
+    mode: &str,
+    task_kind: &str,
+) -> Result<ResolvedAgentModel> {
+    let settings = load_settings(data_dir)?;
+    resolve_model_for_task_with_settings(&settings, requested_model_id, mode, task_kind)
+}
+
 pub fn resolve_model_and_credential_for_turn(
     data_dir: &Path,
     requested_model_id: Option<&str>,
@@ -1990,6 +2001,23 @@ fn resolve_model_and_credential_for_task_with_store(
     task_kind: &str,
     credential_store: &impl CredentialStore,
 ) -> Result<(ResolvedAgentModel, Option<(String, String)>)> {
+    let resolved =
+        resolve_model_for_task_with_settings(settings, requested_model_id, mode, task_kind)?;
+    let credential =
+        credential_override_with_store(settings, &resolved.provider_id, credential_store)?;
+    ensure!(
+        !resolved.runtime_profile.api_key_required || credential.is_some(),
+        "Problem repair is unavailable because the effective agent.act Provider credential is missing."
+    );
+    Ok((resolved, credential))
+}
+
+fn resolve_model_for_task_with_settings(
+    settings: &AgentLlmSettings,
+    requested_model_id: Option<&str>,
+    mode: &str,
+    task_kind: &str,
+) -> Result<ResolvedAgentModel> {
     ensure!(
         task_kind == "problem_repair",
         "Unsupported typed Agent task."
@@ -1999,13 +2027,7 @@ fn resolve_model_and_credential_for_task_with_store(
         .context(
             "Problem repair requires a compatible function-calling model on the effective agent.act route.",
         )?;
-    let credential =
-        credential_override_with_store(settings, &resolved.provider_id, credential_store)?;
-    ensure!(
-        !resolved.runtime_profile.api_key_required || credential.is_some(),
-        "Problem repair is unavailable because the effective agent.act Provider credential is missing."
-    );
-    Ok((resolved, credential))
+    Ok(resolved)
 }
 
 fn resolve_model_and_credential_for_turn_with_store(
@@ -2612,11 +2634,19 @@ fn resolve_model_id_with_settings(
         }],
         plugin_tools: Vec::new(),
     };
+    let mut credential_environment_names = settings
+        .providers
+        .iter()
+        .filter_map(|provider| provider.api_key_env.clone())
+        .collect::<Vec<_>>();
+    credential_environment_names.sort();
+    credential_environment_names.dedup();
     Ok(ResolvedAgentModel {
         settings_revision: settings.revision,
         route_capability: route_capability.to_string(),
         effective_model_ref,
         runtime_profile,
+        credential_environment_names,
         provider_id: provider.id.clone(),
         provider_display_name: provider.display_name.clone(),
         model_display_name: model.display_name.clone(),
@@ -3964,6 +3994,10 @@ mod tests {
                 .unwrap();
         assert_eq!(chat.route_capability, "agent.chat");
         assert_eq!(chat.provider_id, "provider-deepseek-existing");
+        assert_eq!(
+            chat.credential_environment_names,
+            ["DEEPSEEK_API_KEY", "OPENAI_API_KEY"]
+        );
         assert_eq!(chat_credential.unwrap().1, "chat-secret");
 
         let (act, act_credential) =
@@ -4020,6 +4054,12 @@ mod tests {
             ..Default::default()
         };
 
+        let preview =
+            resolve_model_for_task_with_settings(&settings, None, "ask", "problem_repair").unwrap();
+        assert_eq!(preview.route_capability, "agent.act");
+        assert_eq!(preview.provider_id, "provider-repair");
+        assert!(store.get_calls.lock().unwrap().is_empty());
+
         let (resolved, credential) = resolve_model_and_credential_for_task_with_store(
             &settings,
             None,
@@ -4031,6 +4071,10 @@ mod tests {
         assert_eq!(resolved.route_capability, "agent.act");
         assert_eq!(resolved.provider_id, "provider-repair");
         assert_eq!(credential.unwrap().1, "repair-secret");
+        assert_eq!(
+            store.get_calls.lock().unwrap().as_slice(),
+            &["provider-repair"]
+        );
         assert!(
             resolve_model_and_credential_for_task_with_store(
                 &settings,
@@ -4041,6 +4085,10 @@ mod tests {
             )
             .is_err()
         );
+        assert_eq!(
+            store.get_calls.lock().unwrap().as_slice(),
+            &["provider-repair"]
+        );
         assert!(
             resolve_model_and_credential_for_task_with_store(
                 &settings,
@@ -4050,6 +4098,10 @@ mod tests {
                 &store,
             )
             .is_err()
+        );
+        assert_eq!(
+            store.get_calls.lock().unwrap().as_slice(),
+            &["provider-repair"]
         );
     }
 

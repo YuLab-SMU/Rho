@@ -24,8 +24,21 @@ fn configure_agent_process_environment(
     command: &mut tokio::process::Command,
     process_path: Option<&std::ffi::OsStr>,
     _user_environ: Option<&str>,
+    credential_environment_names: &[String],
+    inherited_environment_names: impl IntoIterator<Item = OsString>,
     credential_override: Option<(&str, &str)>,
 ) {
+    for name in inherited_environment_names {
+        if name
+            .to_str()
+            .is_some_and(rho_kernel::is_sensitive_environment_name)
+        {
+            command.env_remove(name);
+        }
+    }
+    for name in credential_environment_names {
+        command.env_remove(name);
+    }
     if let Some(process_path) = process_path {
         command.env("PATH", process_path);
     }
@@ -46,6 +59,7 @@ pub async fn run_agent_turn(
     model: String,
     runtime_profile: Option<AgentRuntimeModelProfile>,
     user_environ: Option<String>,
+    credential_environment_names: Vec<String>,
     credential_override: Option<(String, String)>,
     prompt: String,
     mode: String,
@@ -157,6 +171,8 @@ pub async fn run_agent_turn(
             &mut command,
             process_path.as_deref(),
             user_environ.as_deref(),
+            &credential_environment_names,
+            std::env::vars_os().map(|(name, _)| name),
             credential_override
                 .as_ref()
                 .map(|(name, value)| (name.as_str(), value.as_str())),

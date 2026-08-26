@@ -176,19 +176,10 @@ pub(crate) async fn agent_context_preview(
     if requested_conversation_id.as_deref() == Some("") {
         return Err("Agent Conversation identity cannot be empty".to_string());
     }
-    let (resolved_model, _) = if task_kind == "problem_repair" {
-        agent_llm::resolve_model_and_credential_for_task(
-            &config.data_dir,
-            model_id.as_deref(),
-            &mode,
-            &task_kind,
-        )
+    let resolved_model = if task_kind == "problem_repair" {
+        agent_llm::resolve_model_for_task(&config.data_dir, model_id.as_deref(), &mode, &task_kind)
     } else {
-        agent_llm::resolve_model_and_credential_for_turn(
-            &config.data_dir,
-            model_id.as_deref(),
-            &mode,
-        )
+        agent_llm::resolve_model_for_turn(&config.data_dir, model_id.as_deref(), &mode)
     }
     .map_err(display_error)?;
     let explicit_context = resolve_agent_explicit_context(&state, runtime_output_context.as_ref())
@@ -529,6 +520,7 @@ async fn start_agent_turn(
             )) as Arc<dyn AgentPluginContributionAdapter>
         });
     let runtime_profile = agent_runtime_profile;
+    let credential_environment_names = resolved_model.credential_environment_names.clone();
     let task_mode = mode.clone();
     let (registered_tx, registered_rx) = oneshot::channel();
     let task = tauri::async_runtime::spawn(async move {
@@ -544,6 +536,7 @@ async fn start_agent_turn(
             resolved_model.effective_model_ref,
             Some(runtime_profile),
             None,
+            credential_environment_names,
             credential_override,
             prompt,
             task_mode,

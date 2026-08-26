@@ -578,13 +578,25 @@
     }
 
     #[test]
-    fn desktop_agent_system_credential_is_environment_only() {
+    fn desktop_agent_process_receives_only_the_selected_system_credential() {
         let secret = "system-secret-value";
         let mut command = tokio::process::Command::new("Rscript");
         configure_agent_process_environment(
             &mut command,
             Some(std::ffi::OsStr::new("/opt/homebrew/bin:/usr/bin")),
             Some("C:/Users/test/.Renviron"),
+            &[
+                "CUSTOM_PROVIDER_CREDENTIAL".to_string(),
+                "DEEPSEEK_API_KEY".to_string(),
+                "OPENAI_API_KEY".to_string(),
+            ],
+            [
+                OsString::from("ANTHROPIC_API_KEY"),
+                OsString::from("DEEPSEEK_API_KEY"),
+                OsString::from("GITHUB_TOKEN"),
+                OsString::from("LANG"),
+                OsString::from("PATH"),
+            ],
             Some(("DEEPSEEK_API_KEY", secret)),
         );
         let command = command.as_std();
@@ -613,7 +625,22 @@
             environment.get("PATH").and_then(|value| value.as_deref()),
             Some("/opt/homebrew/bin:/usr/bin")
         );
+        for removed in [
+            "ANTHROPIC_API_KEY",
+            "CUSTOM_PROVIDER_CREDENTIAL",
+            "GITHUB_TOKEN",
+            "OPENAI_API_KEY",
+        ] {
+            assert_eq!(environment.get(removed), Some(&None), "{removed} was inherited");
+        }
+        assert!(!environment.contains_key("LANG"));
         assert!(!environment.contains_key("R_ENVIRON_USER"));
+        assert!(
+            environment
+                .values()
+                .flatten()
+                .all(|value| value == secret || value == "/opt/homebrew/bin:/usr/bin")
+        );
     }
 
     #[test]

@@ -567,7 +567,9 @@ pub fn load_kernelspec(path: impl AsRef<Path>) -> Result<KernelSpec> {
     KernelSpec::load(path.as_ref()).context("loading kernelspec")
 }
 
-fn is_sensitive_environment_name(name: &str) -> bool {
+/// Returns whether an inherited environment variable name commonly carries a
+/// credential and should be removed from a child process by default.
+pub fn is_sensitive_environment_name(name: &str) -> bool {
     let name = name.to_ascii_uppercase();
     name.ends_with("_API_KEY")
         || name.ends_with("_ACCESS_TOKEN")

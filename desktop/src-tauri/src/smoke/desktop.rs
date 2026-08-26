@@ -329,6 +329,8 @@ pub(crate) async fn smoke_test(include_agent: bool) -> Result<Value> {
         let agent_store = StoreExecutor::open(&config.store_path)
             .await?
             .agent_repository();
+        let credential_environment_names =
+            resolved_model.credential_environment_names.clone();
         let result = run_agent_turn(
             session.as_ref(),
             context.clone(),
@@ -340,6 +342,7 @@ pub(crate) async fn smoke_test(include_agent: bool) -> Result<Value> {
             resolved_model.effective_model_ref.clone(),
             Some(resolved_model.runtime_profile),
             None,
+            credential_environment_names,
             None,
             prompt,
             "ask".to_string(),

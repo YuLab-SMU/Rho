@@ -453,6 +453,16 @@ be activated separately and use one broker-resolved route and one credential
 in one isolated worker. Workspace R, project files, Artifact admission,
 approval lanes, and Agent history remain owned by their existing contracts.
 
+The implemented CRED-BOUNDARY-R1 repair remains inside that existing ownership:
+context preview becomes model-only, while Agent-child spawn removes configured
+and credential-shaped ambient environment names before re-adding the one
+selected system-store override. It changes no credential source, settings
+schema, Provider/network lane, project persistence, plugin authority, command,
+or visible RSR surface. The Runtime-output/context contract retains preview
+content, digest and receipt semantics; the credential specification alone owns
+whether preview may read a secret. The completed architecture-modernization
+program remains out of scope because it explicitly owns no credential policy.
+
 The Issue #4 provider reference shows an active/inactive control, but the
 existing data model has no provider-enable state. CRED-UX2 therefore derives a
 provider readiness badge from credential state and enabled models rather than

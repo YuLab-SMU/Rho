@@ -39,6 +39,9 @@ bounded repair, complete affected automated matrix, security review, and local
 CRED-KEYCHAIN-R2 zeroizing session reuse was explicitly authorized by the
 project owner's failed acceptance on 2026-08-18 after R1 still prompted on
 every conversation using the same Provider; implementation is active below;
+CRED-BOUNDARY-R1 preview and Agent-child exposure hardening was explicitly
+authorized by the project owner on 2026-08-26 after the credential-management
+audit; its bounded implementation and verification are complete below;
 CRED-UX4B isolated workers and CRED-UX4C media interaction remain unauthorized
 
 Change class: D3 credential boundary and cross-process execution configuration
@@ -330,6 +333,86 @@ must now complete the only credential-bearing acceptance step: use the same
 Provider for two conversations, entering the macOS login password if requested
 on the first. The first conversation may prompt once; the second must not.
 Until that owner observation is reported, R2 remains active and is not pushed.
+
+### CRED-BOUNDARY-R1 preview and Agent-child exposure hardening
+
+Status: implemented and verified on 2026-08-26; product release remains owned
+by the enclosing credential and release contracts
+
+Authorization: the project owner's 2026-08-26 request to start improving the
+audited credential mechanism authorizes this first bounded repair only. It is
+D1/R3 because it narrows two existing credential-exposure paths without adding
+a credential source, schema, persistence, command, UI, Provider request,
+network destination, plugin permission, or project scope.
+
+The audit reproduced two causes:
+
+1. `agent_context_preview` called the credential-bearing turn/task resolver and
+   discarded the returned secret. Context review could therefore prompt for or
+   cache a system credential even though preview performs no Provider request
+   and creates no Agent turn.
+2. the supervised Agent R command added the selected Provider override but did
+   not remove inherited credential-shaped variables or the configured API-key
+   environment names of sibling Providers. Launching Rho from a credentialed
+   shell could consequently expose unrelated credentials to the Agent child,
+   despite the one-route/one-credential runtime contract.
+
+The repaired invariants are:
+
+- context preview resolves and validates only the effective model/route;
+  ordinary Ask/Plan/Act preview and typed problem-repair preview perform zero
+  credential-store reads and do not change credential observation/cache state;
+- actual turn/task admission retains the existing selected-Provider read,
+  required-key rejection, no-fallback behavior, and connection/discovery paths;
+- one settings snapshot projects the complete bounded set of configured
+  Provider API-key environment names alongside the resolved model, without
+  projecting any credential value;
+- immediately before Agent R spawn, the broker removes every configured
+  Provider API-key environment name and every inherited credential-shaped
+  environment name, then re-adds only the selected Provider override;
+- unrelated runtime variables such as `PATH`, locale and non-secret R settings
+  remain inherited; the existing explicit `PATH` override remains unchanged;
+- the selected credential remains absent from arguments, stdin runtime profile,
+  events, diagnostics and serialized settings; and
+- no environment-variable credential fallback is introduced. Ambient values
+  are removed, never selected as a source.
+
+Deterministic regression evidence must cover model-only Ask/Act and
+problem-repair resolution, invalid task/mode/route rejection before credential
+access, actual selected-Provider credential enforcement, two configured
+Providers with distinct environment names, a custom configured environment
+name, ambient credential-shaped names, preservation of unrelated variables,
+and proof that only the selected override is present in the child command.
+Project A/B isolation, persistence failure, restart recovery, browser/mock and
+installed-app visual acceptance are not applicable: this slice creates no
+project-owned or durable state, command, presentation, or candidate. Existing
+credential-cache, missing/denied, process cancellation, redaction and graceful
+shutdown tests remain required adjacent coverage.
+
+Mandatory stop: focused `rho-desktop`, `rho-server`, and `rho-kernel` tests,
+the complete affected Rust workspace check/test matrix, formatting,
+credential/authority diff review, contract reconciliation, and a version/NEWS
+decision. A portable vault, session/environment source, runtime fallback,
+trusted settings UI, cache-policy redesign, or delayed credential lease is a
+separate D3/R3 work package and remains unauthorized by this repair.
+
+Completion evidence on 2026-08-26:
+
+- `cargo fmt --all -- --check` passed;
+- `cargo check --workspace --all-targets --locked` passed;
+- `cargo test --workspace --locked` passed, including the focused
+  model-only preview, selected-credential-only child environment, configured
+  sibling/custom environment removal, ambient credential-name removal, and
+  existing credential-cache/failure-recovery coverage;
+- `node scripts/test-agent-execution-bindings.mjs` passed and proves the
+  context-preview command contains no credential-bearing resolver call;
+- the final credential/authority diff review found no new credential source,
+  persistence, Provider/network route, command, UI, plugin authority, project
+  state, or environment fallback; and
+- no application version or `NEWS.md` change is required for this work package:
+  it creates no candidate or visible surface and restores the existing
+  one-route/one-credential security contract. Candidate integration retains
+  its independent version, NEWS, exact-build, and release decision gates.
 
 ## Goal
 
