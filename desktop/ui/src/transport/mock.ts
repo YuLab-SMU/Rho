@@ -201,6 +201,7 @@ export function createMockUiKernelTransport(
   let profile = copyProfile(generatedProfile);
   const firstPartyFactorySpecs = [
     ["rho.agent", "Agent", [["conversation", "Conversation"], ["activity", "Activity"], ["composer", "Composer"]], false],
+    ["rho.settings", "Settings", [["settings", "Settings"]], false],
     ["rho.environment", "Environment", [["packages", "Packages"], ["requests", "Requests"]], false],
     ["rho.navigator", "Navigator", [["files", "Files"], ["runs", "History"], ["artifacts", "Artifacts"]], false],
     ["rho.evidence", "Evidence", [["claims", "Claims"]], false],
@@ -220,10 +221,12 @@ export function createMockUiKernelTransport(
         surface_id: surfaceId,
         contract_major: 1,
         label,
-        purpose: `Render ${label} as an independently placeable project Surface.`,
+        purpose: surfaceId === "rho.settings"
+          ? "Configure trusted application capabilities through bounded first-party modules."
+          : `Render ${label} as an independently placeable project Surface.`,
         renderer_kind: "trusted_host",
-        scope: "project",
-        instance_policy: "multi_instance",
+        scope: surfaceId === "rho.settings" ? "application" : "project",
+        instance_policy: surfaceId === "rho.settings" ? "singleton" : "multi_instance",
         instance_quota_class: strip ? "strip" : "standard",
         resource_kinds: [],
         modes: modes.map(([modeId, modeLabel]) => ({
@@ -242,7 +245,9 @@ export function createMockUiKernelTransport(
           stretch_block: !strip,
           presentation_classes: strip ? ["strip"] : ["full", "compact"],
         },
-        accepted_contexts: ["project", "selection", "vibe"],
+        accepted_contexts: surfaceId === "rho.settings"
+          ? ["application", "project"]
+          : ["project", "selection", "vibe"],
         commands: [],
         origin: { kind: "application", component_id: surfaceId },
       },
@@ -535,7 +540,7 @@ export function createMockUiKernelTransport(
   const agentNow = "2026-08-22T12:00:00Z";
   const agentProjectRoot = current.project.display_path;
   let agentLlmSettings: AgentLlmSettingsView = {
-    schema_version: 3,
+    schema_version: 4,
     revision: 1,
     selected_model_id: "mock-profile",
     providers: [{
@@ -2541,6 +2546,47 @@ export function createMockUiKernelTransport(
       return structuredClone(agentDetails.get(turnId) ?? null);
     },
     async loadAgentLlmSettings() {
+      return structuredClone(agentLlmSettings);
+    },
+    async selectAgentChatModel(modelId: string, expectedRevision: number) {
+      if (expectedRevision !== agentLlmSettings.revision) {
+        throw new Error("Model settings changed while this model selector was open. Reload and try again.");
+      }
+      const model = agentLlmSettings.models.find((candidate) => candidate.id === modelId);
+      if (model == null || !model.enabled || model.model_type.value !== "language") {
+        throw new Error("Choose an enabled language model for Chat.");
+      }
+      agentLlmSettings = {
+        ...agentLlmSettings,
+        revision: agentLlmSettings.revision + 1,
+        selected_model_id: model.id,
+        selected_model: {
+          id: model.id,
+          display_name: model.display_name,
+          provider_display_name: model.provider_display_name,
+          selector_status: model.selector_status,
+          tool_calling: model.capabilities.function_call?.value ?? "unknown",
+          act_enabled: model.act_enabled,
+        },
+        models: agentLlmSettings.models.map((candidate) => ({
+          ...candidate,
+          selected: candidate.id === model.id,
+        })),
+        capability_routes: agentLlmSettings.capability_routes.map((route) =>
+          route.capability === "agent.chat" ? {
+            ...route,
+            model_id: model.id,
+            model_display_name: model.display_name,
+            provider_display_name: model.provider_display_name,
+            model_type: model.model_type.value,
+            configured: true,
+            compatibility: model.selector_status,
+            credential_status: agentLlmSettings.providers.find(
+              (provider) => provider.id === model.provider_id,
+            )?.credential_status ?? "unchecked",
+          } : route
+        ),
+      };
       return structuredClone(agentLlmSettings);
     },
     async setAgentContextCapacity(request: AgentContextCapacityRequest) {

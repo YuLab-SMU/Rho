@@ -23,6 +23,7 @@ import type {
   RuntimeOutputSearchResult,
   RuntimeRegistrySnapshot,
   SurfaceInstance,
+  SurfaceFactoryRegistration,
   UiKernelTransport,
 } from "../transport";
 import { AgentSurfaceView } from "./AgentSurfaceView";
@@ -41,6 +42,7 @@ import { NavigatorSurfaceView } from "./Navigator";
 import { PluginSurfaceView } from "./PluginSurfaceView";
 import type { SourceExecutionSubmission } from "./source-execution";
 import { SurfaceTaskState } from "./SurfaceTaskState";
+import { SettingsSurfaceView } from "./SettingsSurfaceView";
 import { consoleProjectionBlocksText } from "./console-output";
 import {
   consoleTranscriptOutputs,
@@ -113,6 +115,7 @@ interface SurfaceViewProps {
   readonly persistFileViewState: FileResourceViewProps["persistViewState"];
   readonly reportError: (error: unknown) => void;
   readonly pluginTransport: UiKernelTransport;
+  readonly surfaceFactories: readonly SurfaceFactoryRegistration[];
   readonly pluginDocumentRequest: PluginSurfaceDocumentRequest | null;
   readonly projectRevision: number;
   readonly openCheckEvidence: (path: string) => Promise<void>;
@@ -161,7 +164,7 @@ export function SurfaceView({
   runSourceExecution, resources, readResource, updateResourceDraft,
   saveResource, reloadResource, renameResource, deleteResource,
   refreshResourceBinding, setViewGroup, persistFileViewState, reportError,
-  pluginTransport, pluginDocumentRequest, projectRevision, openCheckEvidence,
+  pluginTransport, surfaceFactories, pluginDocumentRequest, projectRevision, openCheckEvidence,
   agentHealth, persistAgentViewState, persistSurfaceViewState, pinAgentTask,
   applyAgentFileProposal, undoAgentFileProposal, openNavigatorFile, openSurfaceById,
   agentRuntimeOutputContext, setAgentRuntimeOutputContext,
@@ -354,7 +357,9 @@ export function SurfaceView({
               : instance.lifecycle_state === "suspended"
                 ? <button type="button" data-menu-close onClick={() => void resume().catch(reportError)}>Resume component</button>
                 : null}
-            <button type="button" data-menu-close onClick={duplicate}>Duplicate component</button>
+            {instance.surface_id !== "rho.settings" && (
+              <button type="button" data-menu-close onClick={duplicate}>Duplicate component</button>
+            )}
             {availableModes.length > 1 && <>
               <div className="rho-menu-separator" />
               <div className="rho-menu-heading"><strong>View</strong></div>
@@ -777,6 +782,15 @@ export function SurfaceView({
         <EnvironmentSurfaceView
           instance={instance}
           transport={pluginTransport}
+          persist={persistSurfaceViewState}
+          reportError={reportError}
+        />
+      )}
+      {instance.surface_id === "rho.settings" && (
+        <SettingsSurfaceView
+          instance={instance}
+          transport={pluginTransport}
+          factories={surfaceFactories}
           persist={persistSurfaceViewState}
           reportError={reportError}
         />

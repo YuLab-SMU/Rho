@@ -66,7 +66,7 @@
                 .registry()
                 .resolve_application_surfaces()
                 .unwrap();
-            assert_eq!(surfaces.factories().len(), 17);
+            assert_eq!(surfaces.factories().len(), 18);
             assert_eq!(
                 surfaces
                     .factories()
@@ -80,6 +80,7 @@
                     "rho.file-source",
                     "rho.surface-playground",
                     "rho.agent",
+                    "rho.settings",
                     "rho.environment",
                     "rho.navigator",
                     "rho.evidence",
@@ -115,6 +116,26 @@
             assert_eq!(
                 console.definition.instance_policy,
                 rho_ui_contract::SurfaceInstancePolicyV1::MultiInstance
+            );
+            let settings = surfaces
+                .factories()
+                .iter()
+                .find(|factory| factory.definition.surface_id.as_str() == "rho.settings")
+                .unwrap();
+            assert_eq!(
+                settings.definition.scope,
+                rho_ui_contract::SurfaceScopeV1::Application
+            );
+            assert_eq!(
+                settings.definition.instance_policy,
+                rho_ui_contract::SurfaceInstancePolicyV1::Singleton
+            );
+            assert_eq!(
+                settings.definition.origin,
+                rho_ui_contract::SurfaceOriginV1::Application {
+                    component_id: rho_ui_contract::ApplicationComponentId::new("rho.settings")
+                        .unwrap(),
+                }
             );
             let source = surfaces
                 .factories()
@@ -230,7 +251,7 @@
                     .unwrap()
                     .factories()
                     .len(),
-                17
+                18
             );
             assert_eq!(
                 candidate

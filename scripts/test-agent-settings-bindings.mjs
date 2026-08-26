@@ -11,7 +11,11 @@ const generatedPath = path.join(
   repositoryRoot,
   "desktop/ui/src/transport/generated/agent-settings.ts",
 );
-const commandNames = ["agent_llm_settings", "agent_llm_set_context_capacity"];
+const commandNames = [
+  "agent_llm_settings",
+  "agent_llm_set_context_capacity",
+  "agent_llm_select_model",
+];
 
 function count(text, needle) {
   return text.split(needle).length - 1;
@@ -59,6 +63,7 @@ try {
   assert.match(generated, /Rust sources: rho-desktop\/agent_llm service \+ commands\/agent_llm facade/);
   assert.match(generated, /agentLlmSettings: \(\) =>/);
   assert.match(generated, /agentLlmSetContextCapacity: \(request: AgentContextCapacityRequest\)/);
+  assert.match(generated, /agentLlmSelectModel: \(request: AgentLlmSelectRequest\)/);
   assert.match(generated, /export type AgentProviderProfileView = \{[\s\S]*?\} & AgentProviderProfile/);
   assert.match(generated, /export type AgentModelProfileView = \{[\s\S]*?\} & AgentModelProfile/);
   assert.match(generated, /context_window_tokens: number/);
@@ -82,12 +87,13 @@ try {
     );
     assert.match(facet, new RegExp(`export type ${typeName}\\b`));
   }
-  for (const method of ["loadAgentLlmSettings", "setAgentContextCapacity"]) {
+  for (const method of ["loadAgentLlmSettings", "setAgentContextCapacity", "selectAgentChatModel"]) {
     assert.match(facet, new RegExp(`\\b${method}\\b`));
     assert.match(mock, new RegExp(`\\b${method}\\b`));
   }
   assert.match(rust, /async fn agent_llm_settings\([\s\S]{0,400}?\) -> Result<AgentLlmSettingsView, String>/);
   assert.match(rust, /async fn agent_llm_set_context_capacity\([\s\S]{0,500}?\) -> Result<AgentLlmSettingsView, String>/);
+  assert.match(rust, /async fn agent_llm_select_model\([\s\S]{0,500}?\) -> Result<AgentLlmSettingsView, String>/);
 } finally {
   fs.rmSync(temporaryDirectory, { recursive: true, force: true });
 }

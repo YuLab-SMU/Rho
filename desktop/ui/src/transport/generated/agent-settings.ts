@@ -11,6 +11,7 @@ export type AgentSettingsInvoke = <T>(
 export const createAgentSettingsCommands = (__TAURI_INVOKE: AgentSettingsInvoke) => ({
 	agentLlmSettings: () => __TAURI_INVOKE<AgentLlmSettingsView>("agent_llm_settings"),
 	agentLlmSetContextCapacity: (request: AgentContextCapacityRequest) => __TAURI_INVOKE<AgentLlmSettingsView>("agent_llm_set_context_capacity", { request }),
+	agentLlmSelectModel: (request: AgentLlmSelectRequest) => __TAURI_INVOKE<AgentLlmSettingsView>("agent_llm_select_model", { request }),
 });
 
 /* Types */
@@ -40,6 +41,11 @@ export type AgentContextCapacityRequest = {
 	expected_revision: number,
 	context_window_tokens: number,
 	reserved_output_tokens: number,
+};
+
+export type AgentLlmSelectRequest = {
+	modelId: string,
+	expectedRevision: number,
 };
 
 export type AgentLlmSettingsView = {

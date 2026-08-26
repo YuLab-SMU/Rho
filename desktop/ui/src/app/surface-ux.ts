@@ -92,6 +92,11 @@ export const FIRST_PARTY_SURFACE_UX: Readonly<Record<string, SurfaceUxProfile>> 
     primaryAction: "Run again", actionBudget: 2, areaRole: "support", narrowBehavior: "stack",
     emptyState: "Executed code will appear here.",
   },
+  "rho.settings": {
+    label: "Settings", primaryTask: "Configure trusted application capabilities", defaultFocus: "Settings modules",
+    primaryAction: null, actionBudget: 2, areaRole: "context", narrowBehavior: "retain",
+    emptyState: "Choose a Settings module.",
+  },
   "rho.status": {
     label: "Runtime status", primaryTask: "Monitor scientific Runtime health", defaultFocus: "Status summary",
     primaryAction: null, actionBudget: 1, areaRole: "strip", narrowBehavior: "strip",

@@ -7,7 +7,7 @@ const EXPECTED_FIRST_PARTY = [
   "rho.agent", "rho.artifacts", "rho.check-result", "rho.console", "rho.environment",
   "rho.evidence", "rho.file-preview", "rho.file-source", "rho.git", "rho.help",
   "rho.logs", "rho.navigator", "rho.plots", "rho.problems", "rho.render-jobs",
-  "rho.runs", "rho.status", "rho.surface-playground",
+  "rho.runs", "rho.settings", "rho.status", "rho.surface-playground",
 ];
 
 describe("Surface UX contract", () => {

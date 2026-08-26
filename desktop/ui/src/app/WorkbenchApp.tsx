@@ -469,26 +469,43 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
   const openNavigatorFile = async (descriptor: ResourceDescriptor) => {
     await openResource(descriptor, "rho.file-source", "source", navigatorPlacement());
   };
-  const openSurfaceById = (surfaceId: string) => {
+  const openSurfaceByIdAsync = async (surfaceId: string) => {
     const existing = surfaces?.catalog.instances.find((candidate) => candidate.surface_id === surfaceId);
+    const factory = surfaces?.catalog.factories.find((candidate) => candidate.definition.surface_id === surfaceId);
     const placement = existing == null || studio == null
       ? null
       : findLayoutPlacement(studio.scene.root, existing.instance_id);
     if (existing != null && placement != null) {
       if (placement.kind === "stack" && !placement.active) {
-        commit({ kind: "set_stack_active", stack_node_id: placement.nodeId, instance_id: existing.instance_id });
+        await commit({ kind: "set_stack_active", stack_node_id: placement.nodeId, instance_id: existing.instance_id });
       } else {
-        commit({ kind: "set_focus", instance_id: existing.instance_id });
+        await commit({ kind: "set_focus", instance_id: existing.instance_id });
       }
       return;
     }
-    const factory = surfaces?.catalog.factories.find((candidate) => candidate.definition.surface_id === surfaceId);
     if (factory == null) {
-      setActionError(`Surface ${surfaceId} is unavailable.`);
+      throw new Error(`Surface ${surfaceId} is unavailable.`);
+    }
+    if (
+      existing != null &&
+      factory.definition.instance_policy === "singleton" &&
+      studio?.scene.root.kind === "container" &&
+      studio.unplaced_instance_ids.includes(existing.instance_id)
+    ) {
+      await commit({
+        kind: "insert_surface",
+        target_container_node_id: studio.scene.root.node_id,
+        child_index: studio.scene.root.children.length,
+        instance_id: existing.instance_id,
+        basis: factory.definition.instance_quota_class === "strip"
+          ? { kind: "intrinsic" }
+          : { kind: "minmax", min_logical_pixels: 220, max_logical_pixels: 1_200, weight: 1 },
+      });
       return;
     }
-    run(openFactory(factory));
+    await openFactory(factory);
   };
+  const openSurfaceById = (surfaceId: string) => { run(openSurfaceByIdAsync(surfaceId)); };
   const focusAutomationInstance = (instanceId: string): Promise<boolean> => {
     const placement = studio == null ? null : findLayoutPlacement(studio.scene.root, instanceId);
     if (placement != null && placement.kind === "stack" && !placement.active) {
@@ -625,11 +642,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
     }
     if (commandId.startsWith("rho.surface.open.")) {
       const surfaceId = `rho.${commandId.slice("rho.surface.open.".length)}`;
-      const factory = surfaces?.catalog.factories.find(
-        (candidate) => candidate.definition.surface_id === surfaceId,
-      );
-      if (factory == null) throw new Error(`Surface factory ${surfaceId} is unavailable.`);
-      await openFactory(factory);
+      await openSurfaceByIdAsync(surfaceId);
       setCommandSearchOpen(false);
       return;
     }
@@ -1031,6 +1044,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
       }}
       reportError={(error) => setActionError(boundedFailureMessage(error, "Runtime operation failed."))}
       pluginTransport={pluginTransport}
+      surfaceFactories={surfaces?.catalog.factories ?? []}
       pluginDocumentRequest={pluginDocumentRequest}
       projectRevision={surfaces?.project_revision ?? 0}
       openCheckEvidence={async (path) => {
@@ -1194,26 +1208,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
         openProject: async (path) => {
           await performProjectSwitch(() => pluginTransport.openProject(path), path);
         },
-        openSurface: async (surfaceId) => {
-          const existing = surfaces?.catalog.instances.find(
-            (candidate) => candidate.surface_id === surfaceId,
-          );
-          const placement = existing == null || studio == null
-            ? null
-            : findLayoutPlacement(studio.scene.root, existing.instance_id);
-          if (existing != null && placement != null) {
-            await focusAutomationInstance(existing.instance_id);
-            return;
-          }
-          // Closing a placement intentionally leaves its Surface instance in
-          // the catalog. Match the visible Open Surface path: an unplaced
-          // instance is not mounted, so create and place a fresh instance.
-          const factory = surfaces?.catalog.factories.find(
-            (candidate) => candidate.definition.surface_id === surfaceId,
-          );
-          if (factory == null) throw new Error(`Surface ${surfaceId} is unavailable.`);
-          await openFactory(factory);
-        },
+        openSurface: openSurfaceByIdAsync,
         focusInstance: (instanceId) => focusAutomationInstance(instanceId).then(() => undefined),
         closeInstance: (instanceId) => commit({
           kind: "close_surface_placement",
@@ -1548,6 +1543,10 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
               )}
               <span className="rho-menu-separator" />
               <button type="button" onClick={openCommandSearch}><span>Command search</span><kbd>⌘K</kbd></button>
+              <button type="button" onClick={() => {
+                closeRhoMenu();
+                openSurfaceById("rho.settings");
+              }}>Settings…</button>
               <button type="button" onClick={() => {
                 closeRhoMenu();
                 setToolbarCustomizerOpen(true);

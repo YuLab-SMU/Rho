@@ -134,6 +134,7 @@ fn first_party_surface_definition(
 
 const FIRST_PARTY_SURFACE_IDS: &[&str] = &[
     "rho.agent",
+    "rho.settings",
     "rho.environment",
     "rho.navigator",
     "rho.evidence",
@@ -146,6 +147,22 @@ const FIRST_PARTY_SURFACE_IDS: &[&str] = &[
     "rho.render-jobs",
     "rho.help",
 ];
+
+fn settings_surface_definition(
+    interactive: rho_ui_contract::SurfaceInteractionKindV1,
+) -> rho_ui_contract::SurfaceDefinitionV1 {
+    let mut definition = first_party_surface_definition(
+        "rho.settings",
+        "Settings",
+        "Configure trusted application capabilities through bounded first-party modules without transferring authority into layout or workspace plugins.",
+        &[("settings", "Settings", interactive)],
+        false,
+    );
+    definition.scope = rho_ui_contract::SurfaceScopeV1::Application;
+    definition.instance_policy = rho_ui_contract::SurfaceInstancePolicyV1::Singleton;
+    definition.accepted_contexts = vec!["application".to_string(), "project".to_string()];
+    definition
+}
 
 fn ark_runtime_provider_capability_id() -> CapabilityId {
     CapabilityId::new("runtime.provider.ark-r")
@@ -348,6 +365,7 @@ impl InternalPlugin for SurfacePlaygroundPlugin {
             let interactive = rho_ui_contract::SurfaceInteractionKindV1::Interactive;
             let read_only = rho_ui_contract::SurfaceInteractionKindV1::ReadOnly;
             for definition in [
+                settings_surface_definition(interactive),
                 first_party_surface_definition(
                     "rho.agent",
                     "Agent",

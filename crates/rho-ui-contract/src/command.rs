@@ -323,13 +323,23 @@ pub fn application_command_definitions_v1() -> Result<Vec<CommandDefinitionV1>, 
             "Open Render jobs",
             "Open document rendering activity.",
         ),
+        (
+            "settings",
+            "Open Settings",
+            "Open trusted application settings and component information.",
+        ),
         ("help", "Open Help", "Open contextual project guidance."),
     ] {
+        let consequence = if suffix == "settings" {
+            "Focuses the placed Settings singleton, restores it when unplaced, or creates it when absent."
+        } else {
+            "Creates one new Surface instance and places it in the active Studio Scene or Vibe Page."
+        };
         definitions.push(application_command(
             &format!("rho.surface.open.{suffix}"),
             label,
             purpose,
-            "Creates one new Surface instance and places it in the active Studio Scene or Vibe Page.",
+            consequence,
             PREDICATE_PROJECT_READY,
             vec![Palette, SurfaceLocal],
             &format!("rho.{suffix}"),
@@ -524,6 +534,24 @@ mod tests {
             CommandAvailabilityV1::Unavailable {
                 reason: "No active operation can be interrupted.".to_string()
             }
+        );
+        let settings = registry
+            .registrations
+            .iter()
+            .find(|registration| {
+                registration.definition.command_id.as_str() == "rho.surface.open.settings"
+            })
+            .unwrap();
+        assert_eq!(
+            settings.definition.origin,
+            SurfaceOriginV1::Application {
+                component_id: crate::ApplicationComponentId::new("rho.settings").unwrap(),
+            }
+        );
+        assert_eq!(settings.availability, CommandAvailabilityV1::Available);
+        assert_eq!(
+            settings.definition.consequence,
+            "Focuses the placed Settings singleton, restores it when unplaced, or creates it when absent."
         );
     }
 

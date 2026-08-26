@@ -9,7 +9,7 @@ import {
 import { createMockUiKernelTransport } from "./mock";
 
 const settings = {
-  schema_version: 3,
+  schema_version: 4,
   revision: 9,
   selected_model_id: "model:fixture",
   providers: [{
@@ -94,9 +94,14 @@ describe("Agent settings generated transport", () => {
     );
 
     await expect(transport.loadAgentLlmSettings()).resolves.toBe(settings);
+    await expect(transport.selectAgentChatModel("model:alternate", 9)).resolves.toBe(settings);
     await expect(transport.setAgentContextCapacity(request)).resolves.toBe(settings);
     expect(calls).toEqual([
       { command: "agent_llm_settings" },
+      {
+        command: "agent_llm_select_model",
+        args: { request: { modelId: "model:alternate", expectedRevision: 9 } },
+      },
       { command: "agent_llm_set_context_capacity", args: { request } },
     ]);
   });
@@ -106,6 +111,7 @@ describe("Agent settings generated transport", () => {
       throw new Error("Model settings changed while this editor was open");
     });
     await expect(transport.setAgentContextCapacity(request)).rejects.toThrow("settings changed");
+    await expect(transport.selectAgentChatModel("model:fixture", 8)).rejects.toThrow("settings changed");
   });
 
   it("keeps the mock presentation safe and assignable to the narrow facet", async () => {

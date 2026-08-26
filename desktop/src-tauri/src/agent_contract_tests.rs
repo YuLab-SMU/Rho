@@ -499,6 +499,7 @@ fn agent_settings_typescript_export() {
         .commands(tauri_specta::collect_commands![
             crate::commands::agent_llm::agent_llm_settings,
             crate::commands::agent_llm::agent_llm_set_context_capacity,
+            crate::commands::agent_llm::agent_llm_select_model,
         ])
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
         .export(specta_typescript::Typescript::default(), output_path)

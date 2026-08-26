@@ -1337,6 +1337,31 @@
         },
         {
           "definition": {
+            "command_id": "rho.surface.open.settings",
+            "label": "Open Settings",
+            "purpose": "Open trusted application settings and component information.",
+            "input_schema": {
+              "properties": {},
+              "type": "object"
+            },
+            "consequence": "Focuses the placed Settings singleton, restores it when unplaced, or creates it when absent.",
+            "availability_predicate_id": "rho.predicate.project-ready",
+            "placement_tags": [
+              "palette",
+              "surface_local"
+            ],
+            "origin": {
+              "kind": "application",
+              "component_id": "rho.settings"
+            }
+          },
+          "activation_generation": 1,
+          "availability": {
+            "state": "available"
+          }
+        },
+        {
+          "definition": {
             "command_id": "rho.workspace.interrupt",
             "label": "Interrupt active operation",
             "purpose": "Interrupt a running scientific operation in the active project.",

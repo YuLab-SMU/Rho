@@ -291,6 +291,62 @@ describe("Studio foundation app", () => {
     expect(bar.querySelector(".rho-toolbar-customizer")).toBeNull();
   });
 
+  it("opens and focuses the singleton Settings plugin from the menu and command search", async () => {
+    const transport = createMockUiKernelTransport();
+    const open = vi.spyOn(transport, "openSurface");
+    const { container } = await renderApp(transport);
+    const menu = await openRhoMenu(container);
+    await act(async () => {
+      [...menu.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "Settings…")!.click();
+      await settle();
+    });
+    expect(container.querySelectorAll("[data-surface-id='rho.settings']")).toHaveLength(1);
+    expect(container.querySelector("[data-surface-id='rho.settings']")?.textContent).toContain("Model routing");
+
+    const setInput = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "k", metaKey: true }));
+      await settle();
+      const search = container.querySelector<HTMLInputElement>("[aria-label='Search commands']")!;
+      setInput.call(search, "Open Settings");
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+      await settle();
+      [...container.querySelectorAll<HTMLButtonElement>(".rho-command-results button")]
+        .find((button) => button.textContent?.includes("rho.surface.open.settings"))!.click();
+      await settle();
+    });
+    expect(container.querySelectorAll("[data-surface-id='rho.settings']")).toHaveLength(1);
+    const surfaceMenu = await openSurfaceMenu(container.querySelector("[data-surface-id='rho.settings']")!);
+    expect(surfaceMenu.textContent).not.toContain("Duplicate component");
+    expect(open).toHaveBeenCalledTimes(1);
+  }, 10_000);
+
+  it("restores the existing unplaced Settings singleton from the Rho menu", async () => {
+    const transport = createMockUiKernelTransport();
+    const open = vi.spyOn(transport, "openSurface");
+    const { container } = await renderApp(transport);
+    const menu = await openRhoMenu(container);
+    await act(async () => {
+      [...menu.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "Settings…")!.click();
+      await settle();
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("[data-surface-id='rho.settings'] [aria-label^='Remove surface-instance:']")!.click();
+      await settle();
+    });
+    expect(container.querySelector("[data-surface-id='rho.settings']")).toBeNull();
+    const restoreMenu = await openRhoMenu(container);
+    await act(async () => {
+      [...restoreMenu.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "Settings…")!.click();
+      await settle();
+    });
+    expect(container.querySelectorAll("[data-surface-id='rho.settings']")).toHaveLength(1);
+    expect(open).toHaveBeenCalledTimes(1);
+  }, 10_000);
+
   it("switches A→B→A from the project card and recent rows without leaking project UI state", async () => {
     const projectA = "/projects/project-a";
     const projectB = "/projects/project-b";

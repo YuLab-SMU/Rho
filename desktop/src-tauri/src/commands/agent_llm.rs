@@ -9,11 +9,12 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use tauri::State;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AgentLlmSelectRequest {
-    model_id: String,
-    expected_revision: u64,
+    pub(crate) model_id: String,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
+    pub(crate) expected_revision: u64,
 }
 
 #[cfg_attr(test, specta::specta)]
@@ -111,6 +112,7 @@ pub(crate) async fn agent_llm_delete_model(
     service::settings_view_from_settings(&config.data_dir, settings).map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn agent_llm_select_model(
     request: AgentLlmSelectRequest,

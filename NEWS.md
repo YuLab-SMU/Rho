@@ -4,6 +4,22 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.1-dev.20 - 2026-08-26
+
+### Plugin-native Settings
+
+- Settings is now a trusted first-party application plugin and singleton
+  Surface, available from the Rho menu and command search. It participates in
+  the same placement, focus, layout persistence, narrow-window behavior, and
+  recovery lifecycle as other Rho components; reopening an unplaced Settings
+  instance restores the existing singleton instead of creating a duplicate.
+- The initial closed module set provides Models and Components. Models projects
+  presentation-safe Provider, routing, readiness, and context-capacity truth
+  and reuses the revision-checked Chat assignment and capacity operations;
+  credentials are never accepted or stored by the Surface. Components provides
+  a read-only catalog of trusted application and current-project components,
+  with project plugin identities isolated across project switches.
+
 ## 0.4.1-dev.19 - 2026-08-26
 
 ### Startup project recovery

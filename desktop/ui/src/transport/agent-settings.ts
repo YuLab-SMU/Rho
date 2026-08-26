@@ -20,6 +20,10 @@ export type AgentContextCapacityRequest = DeepReadonly<AgentContextCapacityReque
 
 export interface AgentSettingsTransport {
   loadAgentLlmSettings(): Promise<AgentLlmSettingsView>;
+  selectAgentChatModel(
+    modelId: string,
+    expectedRevision: number,
+  ): Promise<AgentLlmSettingsView>;
   setAgentContextCapacity(
     request: AgentContextCapacityRequest,
   ): Promise<AgentLlmSettingsView>;
@@ -31,6 +35,10 @@ export function createTauriAgentSettingsTransport(
   const commands = createAgentSettingsCommands(invoke);
   return {
     loadAgentLlmSettings: () => commands.agentLlmSettings(),
+    selectAgentChatModel: (modelId, expectedRevision) => commands.agentLlmSelectModel({
+      modelId,
+      expectedRevision,
+    }),
     setAgentContextCapacity: (request) => commands.agentLlmSetContextCapacity(request),
   };
 }
