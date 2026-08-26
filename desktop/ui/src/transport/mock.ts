@@ -84,6 +84,8 @@ import type {
   VibePage,
   VibeSection,
   Unsubscribe,
+  WorkspacePreparationProgress,
+  WorkspacePreparationProgressListener,
 } from "./types";
 import { INVALIDATION_TOPICS } from "./invalidation-contract";
 import type { WorkbenchProjection } from "./workbench-projection";
@@ -104,6 +106,60 @@ const generatedResources =
   fixture.resource_registry_snapshot as unknown as ResourceRegistrySnapshot;
 const generatedProfile =
   fixture.project_ui_profile_snapshot as unknown as ProjectUiProfileSnapshot;
+
+const STARTUP_PROGRESS_TEXT_BYTE_LIMIT = 512;
+const utf8Encoder = new TextEncoder();
+
+function wellFormedProgressText(value: string): string {
+  let result = "";
+  for (let index = 0; index < value.length; index += 1) {
+    const unit = value.charCodeAt(index);
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        result += value.slice(index, index + 2);
+        index += 1;
+      } else {
+        result += "\ufffd";
+      }
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+      result += "\ufffd";
+    } else {
+      result += value[index];
+    }
+  }
+  return result;
+}
+
+function boundedProgressText(value: string): string {
+  const normalized = wellFormedProgressText(value);
+  if (utf8Encoder.encode(normalized).byteLength <= STARTUP_PROGRESS_TEXT_BYTE_LIMIT) {
+    return normalized;
+  }
+  const suffix = "…";
+  const budget = STARTUP_PROGRESS_TEXT_BYTE_LIMIT - utf8Encoder.encode(suffix).byteLength;
+  let bounded = "";
+  let byteLength = 0;
+  for (const character of normalized) {
+    const characterBytes = utf8Encoder.encode(character).byteLength;
+    if (byteLength + characterBytes > budget) break;
+    bounded += character;
+    byteLength += characterBytes;
+  }
+  return `${bounded}${suffix}`;
+}
+
+function emitPreparationProgress(
+  listener: WorkspacePreparationProgressListener | undefined,
+  snapshot: WorkspacePreparationProgress,
+) {
+  if (listener == null) return;
+  try {
+    listener(Object.freeze(snapshot));
+  } catch {
+    // Browser/mock progress is observational, matching the Tauri boundary.
+  }
+}
 
 function copySnapshot(snapshot: UiKernelSnapshot): UiKernelSnapshot {
   return structuredClone(snapshot);
@@ -1237,7 +1293,29 @@ export function createMockUiKernelTransport(
   });
   return {
     source: "mock",
-    async prepareWorkspace() {
+    async prepareWorkspace(
+      chooseRscript = false,
+      onProgress?: WorkspacePreparationProgressListener,
+    ) {
+      void chooseRscript;
+      emitPreparationProgress(onProgress, { stage: "runtime", state: "active" });
+      emitPreparationProgress(onProgress, {
+        stage: "runtime",
+        state: "complete",
+        r_version: "4.5.1",
+      });
+      emitPreparationProgress(onProgress, { stage: "workspace", state: "active" });
+      emitPreparationProgress(onProgress, {
+        stage: "workspace",
+        state: "complete",
+        workspace_pid: 4_242,
+      });
+      emitPreparationProgress(onProgress, { stage: "project", state: "active" });
+      emitPreparationProgress(onProgress, {
+        stage: "project",
+        state: "complete",
+        project_root: boundedProgressText(current.project.display_path),
+      });
       return {
         status: "ready",
         phase: "project_ready",

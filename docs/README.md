@@ -82,6 +82,7 @@ changes.
 - Active Agent-first adaptive work surface: [`plans/active-2026-08-03-agent-first-adaptive-work-surface-spec.md`](plans/active-2026-08-03-agent-first-adaptive-work-surface-spec.md)
 - Active native context, diagnostics, and editor shortcuts repair: [`plans/active-2026-08-05-native-context-lint-problems-editor-shortcuts-spec.md`](plans/active-2026-08-05-native-context-lint-problems-editor-shortcuts-spec.md)
 - Active human-facing information projection: [`plans/active-2026-08-05-human-facing-information-projection-spec.md`](plans/active-2026-08-05-human-facing-information-projection-spec.md)
+- Active startup performance and truthful progress: [`plans/active-2026-08-05-startup-performance-spec.md`](plans/active-2026-08-05-startup-performance-spec.md)
 - Active Agent result transport recovery: [`plans/active-2026-08-06-agent-result-transport-recovery-spec.md`](plans/active-2026-08-06-agent-result-transport-recovery-spec.md)
 - Active file proposal collapse: [`plans/active-2026-08-06-file-proposal-collapse-spec.md`](plans/active-2026-08-06-file-proposal-collapse-spec.md)
 - Active Act file apply and generated output capture: [`plans/active-2026-08-06-act-file-apply-and-generated-output-capture-spec.md`](plans/active-2026-08-06-act-file-apply-and-generated-output-capture-spec.md)
