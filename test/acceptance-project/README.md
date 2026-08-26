@@ -1,20 +1,22 @@
 # Rho Acceptance Test Project
 
-The self-contained manual acceptance and hands-on evaluation project for Rho.
-The generated `working-project` is the one primary project for the complete
-normal workflow: install/startup, core workbench tour, deterministic single-cell
-QC, Agent correction, editor intelligence, rendering, Environment, Evidence,
-Audit, Claims, Git, persistence, and modern interface review. Separate generated
-projects exist only for conflict, Unicode/space, large-project, and oversized
-file boundary conditions.
+The self-contained acceptance and hands-on evaluation project for Rho.
+Consolidated development visual acceptance is automated: the lane drives the real
+application through the scenarios in `scripts/visual-acceptance/`. The
+generated `working-project` is the one primary project for the normal
+workflow: startup, core workbench tour, deterministic single-cell QC, Agent
+(credential-gated), rendering, Environment, Evidence, Git (read-only),
+persistence, and boundary review. Separate generated projects exist only for
+conflict, Unicode/space, large-project, and oversized-file boundary
+conditions.
 
 ## Structure
 
 ```
 acceptance-project/
-├── MANUAL-ACCEPTANCE.md       # Manual run order and candidate handoff
-├── acceptance-results/        # Candidate evidence template
-├── tools/                     # Edge-case fixture generator
+├── VISUAL-ACCEPTANCE.md        # Automated lane: run order, evidence model, coverage index
+├── acceptance-results/         # Per-candidate record template (attaches automated evidence)
+├── tools/                      # Cross-platform fixture generator (+ legacy ps1)
 ├── examples/
 │   ├── single-cell-qc/         # Generate, analyze, plot, and repair QC workflow
 │   ├── rho-workbench-tour.R    # One-file Console/Data/Plot/Run/Problem tour
@@ -40,28 +42,37 @@ acceptance-project/
             └── skill.md       # Agent skill for QC correction review
 ```
 
-## Quick Start (in Rho)
+## Quick Start (automated lane)
 
-1. Duplicate and fill
-   [`CANDIDATE-RESULT-TEMPLATE.md`](acceptance-results/CANDIDATE-RESULT-TEMPLATE.md).
-2. Read [`MANUAL-ACCEPTANCE.md`](MANUAL-ACCEPTANCE.md); it is the executable
-   source of truth for all manual review.
-3. Run `tools/prepare-manual-fixtures.ps1` and open the generated independent
-   `working-project` in Rho.
-4. Start with `examples/rho-workbench-tour.R`, then run
-   `examples/single-cell-qc/01-generate-qc-data.R`, `02-analyze-qc.R`,
-   `03-visualize-qc.R`, and the deliberate failure in `04-fix-me.R`.
-5. Continue through Agent correction, editor intelligence, render, Evidence,
-   Audit, Git, persistence, switching, and boundary scenarios in the guide.
+1. Read [`VISUAL-ACCEPTANCE.md`](VISUAL-ACCEPTANCE.md); it is the executable
+   source of truth for the consolidated development visual lane.
+2. After UI changes, build frontend assets first with
+   `npm run rsr:build --prefix desktop`, then build the debug app with
+   `cargo build -p rho-desktop`.
+3. Run `node scripts/visual-acceptance.mjs run --output
+   target/visual-acceptance/<run>` from the repository root. Fixtures are
+   generated per run into the run directory.
+4. Review every frame in `visual-review-manifest.json` and record verdicts
+   with `record-review`; duplicate
+   [`CANDIDATE-RESULT-TEMPLATE.md`](acceptance-results/CANDIDATE-RESULT-TEMPLATE.md)
+   per candidate and attach the run evidence.
 
-## Example Coverage
+To generate the fixture set by hand (for exploration, not acceptance):
+`node tools/prepare-fixtures.mjs` (Windows equivalent:
+`tools\prepare-manual-fixtures.ps1`).
+
+## Fixture Inventory
+
+The files below support current and future acceptance packages. VA1 automates
+only the S0/S1/S2/S3/S7/S8 coverage listed in `VISUAL-ACCEPTANCE.md`; fixture
+presence does not claim that a removed or follow-up UI gate passed.
 
 | Script / File | Features Reviewed |
 |---------------|----------------|
-| `examples/rho-workbench-tour.R` | Console/Logs, Environment, Data Viewer types/missing/query/export, Plot, Run, warning, source Problem |
-| `examples/single-cell-qc/` | Scientific files, Console, Viewer, Plots, Runs, Problems, Agent correction, reproducibility |
+| `examples/rho-workbench-tour.R` | Console markers, live Workspace object probes, package Environment observation, Plot record, warning observation, Run/Problem |
+| `examples/single-cell-qc/` | Deterministic 240/217 QC data and exactly two plot records; repair scripts remain follow-up fixtures |
 | `examples/editor-intelligence.R`, `examples/editor-refactor-use.R` | Completion, installed Help/example, references, refactor, Agent Help context, diagnostics |
-| `examples/git-review-demo.txt` | Git hunk stage/unstage, restore, commit |
+| `examples/git-review-demo.txt` | Current read-only Git status/history/conflict review; retired mutation gates remain fixture history |
 | `reports/cell-qc-report.Rmd` | Chunks, render, Artifact provenance, Runs, Audit |
 | `reports/claim-review-demo.qmd` | EW-CR2 source/Artifact anchors, Evidence links, review status and recovery |
 | `01-load-explore.R` | Console, Editor, Data Viewer, Runs |
@@ -72,17 +83,19 @@ acceptance-project/
 | Project root | Files, Git, Evidence, layout, persistence and project switching |
 | `.rho/skills/` | Agent project skills and Agent-first |
 
-## Manual Review Ownership
+## Acceptance Ownership
 
-Everything required for manual execution and evidence is under this directory:
+Everything required for automated acceptance and evidence is reachable from
+this directory:
 
-- [`MANUAL-ACCEPTANCE.md`](MANUAL-ACCEPTANCE.md) is the detailed run order,
-  expected-result guide, recovery sequence, and complete coverage index.
+- [`VISUAL-ACCEPTANCE.md`](VISUAL-ACCEPTANCE.md) is the run order, evidence
+  model, coverage index, and the removed-gates record.
 - [`CANDIDATE-RESULT-TEMPLATE.md`](acceptance-results/CANDIDATE-RESULT-TEMPLATE.md)
-  is the per-candidate record.
-- `tools/prepare-manual-fixtures.ps1` creates the primary independent Git
-  project plus the four boundary projects without tracking generated output in
-  the Rho repository.
+  is the per-candidate record that attaches the automated evidence.
+- `tools/prepare-fixtures.mjs` creates the primary independent Git project
+  plus the four boundary projects without tracking generated output in the
+  Rho repository (`tools/prepare-manual-fixtures.ps1` is the equivalent
+  Windows-native entry).
 
 Project-level documents under `docs/` may point here for lifecycle status, but
 they are not required while executing the review.

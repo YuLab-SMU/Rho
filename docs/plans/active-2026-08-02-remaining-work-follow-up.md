@@ -4,7 +4,10 @@ Status: active coordination record
 
 Date: 2026-08-02
 Owner: Rho product and release workstream
-Source of truth: [`proposed-2026-08-01-next-phase-task-plan.md`](proposed-2026-08-01-next-phase-task-plan.md)
+Original checklist decomposition:
+[`proposed-2026-08-01-next-phase-task-plan.md`](proposed-2026-08-01-next-phase-task-plan.md)
+Current acceptance coordination authority: this active record, as reconciled
+with the VA1 contract and any exact-candidate release contract.
 
 ## Current Count
 
@@ -15,7 +18,7 @@ included in that checklist count.
 
 | Follow-up lane | Open items | Next gate |
 |---|---:|---|
-| M1 and `0.3.x` acceptance | 8 | Record representative manual and installed-candidate evidence |
+| M1 and `0.3.x` acceptance | 8 | Record passing real-application automated visual evidence, distribution decision, and exact-candidate suite rerun |
 | WS4 Git completion | 0 | Capability complete; installed-app acceptance remains separate |
 | WS3 table interaction | 0 | Capability complete; installed-app acceptance remains separate |
 | Render job robustness | 0 | Capability complete; installed-app acceptance remains separate |
@@ -25,19 +28,33 @@ included in that checklist count.
 | **Total** | **8** | |
 
 For near-term planning, all product implementation items in this checklist are
-complete. The **8 acceptance/release items** comprise six manual validations, one
-distribution decision, and one affected-suite rerun. The manual validations
-are now staged under `test/acceptance-project/`; staging the instructions and
-fixtures does not count them as passed.
+complete. The **8 acceptance/release items** comprise six real-application
+visual validations, one distribution decision, and one affected-suite rerun.
+The six validations were converted from a human walkthrough to the automated
+lane owned by
+[`implemented-2026-08-26-visual-acceptance-automation-spec.md`](implemented-2026-08-26-visual-acceptance-automation-spec.md).
+Retiring the human procedure does not count a failing or pending automated
+gate as passed.
+
+The first complete integrated baseline ran on 2026-08-26 and finalized every
+captured frame: 35 gates produced 12 PASS, 15 FAIL, and 8 authorized
+removed-gate SKIPs. The executable lane is therefore implemented, but all six
+real-application validation items remain open. The failure groups are Plots
+and Problems presentation, Agent layout/streaming, Git status/diff projection,
+restart/project isolation, large-project warning, and narrow-layout behavior.
+They require separately authorized product repair packages; VA1 does not absorb
+them. Durable evidence summary:
+`docs/verification/visual-acceptance-va1-baseline.md`.
 
 The staged acceptance project is example-driven rather than control-only. Its
 generated `working-project` is an isolated Git repository and provides a
 deterministic single-cell QC analysis, deliberate Agent correction, editor
 intelligence sample, render inputs, Git hunk/restore exercise, a real merge
 conflict, Unicode/space paths, 2,000+ files, and an oversized-file boundary.
-Automated fixture checks are recorded in
-`docs/verification/manual-acceptance-fixture/verification.md`; installed-app
-execution remains with the user and remains open.
+Historical fixture checks are recorded in
+`docs/verification/manual-acceptance-fixture/verification.md`; the current
+real-app driver, screenshots, and frame verdicts are defined in
+`test/acceptance-project/VISUAL-ACCEPTANCE.md`.
 
 ## Immediate Active Work
 
@@ -231,21 +248,19 @@ the current count to **8 open / 41 completed**.
 
 ## Follow-up Order
 
-1. Keep the consolidated manual acceptance suite queued in
-   `test/acceptance-project/MANUAL-ACCEPTANCE.md` and record it with
-   `test/acceptance-project/acceptance-results/CANDIDATE-RESULT-TEMPLATE.md`
-   until the user runs it against an exact candidate. These files under
-   `test/` are the executable source of truth; `docs/acceptance/` is only a
-   project-level index. Separately record the distribution decision and
-   affected-suite rerun. The suite includes the original P0/P1 checks,
-   Agent-first/Console/Logs, M1-M3 display-scale review, and focused installed
-   checks for the completed scientific/developer packages.
+1. Authorize bounded product repair packages for the failure groups recorded
+   in `docs/verification/visual-acceptance-va1-baseline.md`, then rerun the
+   consolidated suite against a fresh debug candidate. Every screenshot needs
+   its own recorded verdict; product defects remain FAIL rather than being
+   converted to removed gates. Record candidate evidence with
+   `test/acceptance-project/acceptance-results/CANDIDATE-RESULT-TEMPLATE.md`.
+   Separately record the distribution decision and affected-suite rerun.
 2. Run the affected-suite acceptance item against the chosen exact candidate;
    do not substitute the package-level matrix for candidate evidence.
 3. Reconcile this count whenever an owning acceptance gate closes or
    its evidence gate closes.
 
-## 2026-08-04 Manual Review Consolidation
+## 2026-08-04 Manual Review Consolidation (historical, superseded 2026-08-26)
 
 The executable review is now self-contained under `test/acceptance-project/`.
 One generated `working-project` owns the normal end-to-end experience; separate
@@ -264,15 +279,15 @@ change.
 
 ## Longer-term Deferred Directions
 
-These six directions remain outside the 9-item checklist and require separate
+These six directions remain outside the 8-item checklist and require separate
 authorization: WS6A pipeline execution, debugging, package-development jobs,
 interface modernization Phase 2+, cross-platform beta, and remote execution.
 
 ## Status Rules
 
 - A checked implementation item means code and its declared automated evidence
-  exist; it does not imply manual or installed-candidate acceptance.
-- Manual acceptance, installed-app acceptance, milestone acceptance, and
-  release readiness remain separate facts.
+  exist; it does not imply visual or exact installed-candidate acceptance.
+- Automated real-app visual acceptance, exact installed-app acceptance,
+  milestone acceptance, and release readiness remain separate facts.
 - This document tracks work; each product-code package still needs an owning
   active contract and cross-review before implementation.

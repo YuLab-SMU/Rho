@@ -3,7 +3,7 @@
 Status: proposed coordination plan; reconciled after focused P2/P3 packages
 
 Date: 2026-08-01
-Last reconciled: 2026-08-03
+Last reconciled: 2026-08-26
 Scope: post-Waves-1-14 implementation sprint, closing acceptance gates and
 completing remaining proposal capabilities
 
@@ -32,25 +32,34 @@ This plan remains `proposed` as an umbrella coordination record. Completed
 items below were authorized by their own accepted specifications; unchecked
 items remain unauthorized until a focused contract is activated.
 
+Acceptance ownership changed on 2026-08-26. The six consolidated development
+observations below are now real-debug-app automated visual gates owned by
+`implemented-2026-08-26-visual-acceptance-automation-spec.md`; exact-candidate
+installation, signing, distribution, and release GO/NO-GO remain separate
+release-contract gates. The active count and disposition are maintained in
+`active-2026-08-02-remaining-work-follow-up.md`, not inferred from this
+proposed historical decomposition.
+
 ## Phase 1: Close Acceptance Gates (blocking)
 
 These are the remaining Wave 0 items from the roadmap. No new capability work
 should begin before they are resolved.
 
-### P1-1: M1 Release Acceptance
+### P1-1: M1 Development Acceptance And Distribution
 
-- [ ] Clean-install acceptance on Unicode paths
-- [ ] Clean-install acceptance on paths with spaces
-- [ ] Clean-install acceptance on large projects (2,000+ files)
-- [ ] Repeatable manual acceptance record for the complete QC correction
-  workflow
+- [ ] Real-debug-app automated visual acceptance on Unicode paths
+- [ ] Real-debug-app automated visual acceptance on paths with spaces
+- [ ] Real-debug-app automated visual acceptance on large projects (2,000+
+  files)
+- [ ] Repeatable automated visual acceptance record for the complete QC
+  correction workflow
 - [ ] Explicit decision about unsigned internal versus signed public
   distribution
 
 ### P1-2: 0.3.x Milestone Acceptance
 
-- [ ] Representative-project reproducibility workflow verification
-- [ ] Manual UI review
+- [ ] Representative-project real-app reproducibility workflow verification
+- [ ] Automated per-frame UI review at the documented three viewports
 - [ ] Rerun affected cross-package automated suite (BH1-BH5 modifications
   may have shifted storage, query, migration, or switching behavior)
 

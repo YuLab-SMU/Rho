@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const EXPECTED_HANDLER_DIGEST = "21aff4d395797ce95fa26e9ba1869852af9a81a2e68864a3e8c7f2f92ea89eca";
+const EXPECTED_HANDLER_DIGEST = "3db01d5da7d300554a97525f840b885d9df3155063f0a3626dd66c306c4009fe";
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const RUN_COMMANDS = [

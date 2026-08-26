@@ -132,6 +132,41 @@ Real Tauri debug windows stay exclusive to the integration/main checkout;
 feature worktrees run focused tests or their own Vite mock (`npm run rsr:dev
 --prefix desktop` picks a free port).
 
+## Visual acceptance lane
+
+The consolidated human-executed acceptance-project walkthrough was replaced by
+automated visual verification on 2026-08-26 (owning contract:
+`docs/plans/implemented-2026-08-26-visual-acceptance-automation-spec.md`). The lane
+drives the real debug application with the real Workspace R backend:
+
+```bash
+npm run rsr:build --prefix desktop # after desktop/ui/** changes
+cargo build -p rho-desktop         # after the frontend build and desktop/** changes
+npm run rsr:accept:visual --prefix desktop
+# or directly: node scripts/visual-acceptance.mjs run --output target/visual-acceptance/<run>
+```
+
+- The acceptance bridge is debug-only and compile-gated: it listens on an
+  ephemeral `127.0.0.1` port only when `RHO_ACCEPTANCE_BRIDGE=1` and
+  `RHO_ACCEPTANCE_OUTPUT` are set, and release builds contain no listener.
+  The frontend surface `window.__rhoAutomation` is a fixed command
+  vocabulary (CSP forbids `eval`); it installs only when the backend reports
+  an active bridge. Do not widen either gate.
+- Evidence lives in the run directory: `evidence.json`, `screenshots/`,
+  `visual-review-manifest.json`, `report.md`. A gate is green only when its
+  deterministic assertion passed and every captured frame has a recorded
+  per-frame visual verdict (`record-review` writes verdicts back; pending
+  frames keep the run out of PASS).
+- Gates that target surfaces removed by the Studio overhaul (Data Viewer,
+  Git mutation controls, Human/Agent postures) are closed as removed gates by
+  the 2026-08-26 authorization. Record them with `skipGate` and the removal
+  reason; never assert a pass for them.
+- `rsr:test:visual-acceptance` covers the harness without launching the app
+  and runs at the end of `rsr:check`; `rsr:accept:visual` itself stays out of
+  `rsr:check` because it needs a built debug app and a local R runtime.
+- Exact-candidate installation, signing, distribution, and release GO/NO-GO
+  remain separate facts owned by their release contracts.
+
 ## Windows installer packaging
 
 Trigger phrases: "打包一下安装包", "打包安装包", "build installer", "package the installer"

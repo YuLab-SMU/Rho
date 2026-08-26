@@ -1,3 +1,5 @@
+# Cross-platform entry point: prepare-fixtures.mjs (same directory) supersedes
+# this script on non-Windows hosts. On Windows both are available and equivalent.
 param(
     [string]$OutputRoot = (Join-Path $PSScriptRoot '..\..\generated-manual-fixtures')
 )

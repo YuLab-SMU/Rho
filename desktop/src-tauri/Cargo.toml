@@ -43,6 +43,15 @@ keyring = { version = "4.1.6", default-features = false, features = ["v1", "wind
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "4.1.6", default-features = false, features = ["v1"] }
+# Debug-only acceptance bridge viewport capture. Versions match the committed
+# Cargo.lock transitive set (wry 0.55.1 / tauri 2.11.5) with default features
+# off, so no new dependency graph entries are introduced; only reachable from
+# cfg(debug_assertions) code.
+block2 = "0.6.2"
+objc2 = "0.6.4"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSBitmapImageRep", "NSImage", "NSImageRep"] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["NSData", "NSDictionary", "NSError"] }
+objc2-web-kit = { version = "0.3.2", default-features = false, features = ["WKSnapshotConfiguration", "WKWebView", "block2", "objc2-app-kit"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # LIN6: the keyring 4.1.6 `v1` feature selects zbus-secret-service-keyring-store

@@ -244,14 +244,17 @@ acceptance remain in progress.
 The four scoped `0.3.x` implementation packages have also landed: reviewed
 environment operations, bounded data viewers, artifact export/provenance, and
 bounded project skills. The `0.3.x` milestone remains active because its
-representative-project reproducibility workflow and manual UI review have not
-yet been accepted. The final cross-package automated suite passed on 2026-07-26
-and is recorded in `verification/0.3x-milestone/verification.md`.
+representative-project reproducibility workflow and automated real-app visual
+review have not yet passed. The final cross-package automated suite passed on
+2026-07-26 and is recorded in
+`verification/0.3x-milestone/verification.md`.
 
 Note: the implementation sprint of 2026-08-01 delivered Waves 4-14 in a single
 branch, deviating from the "one wave at a time" governance rule. The code is
-committed; per-wave verification and manual acceptance evidence are still
-required for each wave's exit gate.
+committed; per-wave verification and current-surface automated visual evidence
+are still required for each applicable exit gate. Retired legacy surfaces are
+recorded as explicit removed-gate SKIPs; exact-candidate release evidence stays
+separate.
 
 ## Direction
 
@@ -314,11 +317,15 @@ Completed in the current `0.2.x` candidate:
 - automated project regressions for spaces, non-ASCII paths and the 2,000-file
   discovery boundary.
 
-Still required to release M1:
+Still required for the consolidated M1 development acceptance record:
 
-- clean-install acceptance on Unicode paths, paths with spaces and large projects;
-- a repeatable manual acceptance record for the complete QC correction workflow;
+- passing real-debug-app automated visual evidence for Unicode paths, paths
+  with spaces, large projects, and the complete QC correction workflow;
 - an explicit decision about unsigned internal versus signed public distribution.
+
+Exact-candidate clean installation, installer behavior, signing, and public
+release authority remain owned by their release contracts and are not closed
+by the development visual lane.
 
 Post-release `0.2.x` quality work:
 
@@ -557,11 +564,12 @@ RA-RC1) have prior acceptance evidence.
 ### Wave 0: Close Current Acceptance Work
 
 Finish the representative-project `0.3.x` workflow, final cross-package suite,
-manual UI review, and documentation/release reconciliation. The cross-package
-suite, WP3 runtime DOM disposition, and current WP4 package checks passed on
-2026-07-26; retain their evidence and rerun only when affected. Only integration
-findings and repairs inside the accepted WP1-WP4 contract are permitted without
-amendment.
+automated real-app per-frame visual review, and documentation/release
+reconciliation. The cross-package suite, WP3 runtime DOM disposition, and
+current WP4 package checks passed on 2026-07-26; retain their evidence and
+rerun only when affected. Only integration findings and repairs inside the
+accepted WP1-WP4 contract are permitted without amendment. Exact-candidate
+installation and release acceptance remain separately owned.
 
 The `0.2.0-dev.12` release checklist and About/update acceptance may proceed in
 parallel because they have independent candidate and deployment authority.

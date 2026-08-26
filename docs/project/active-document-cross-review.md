@@ -2,14 +2,15 @@
 
 Status: active documentation coordination record
 
-Review date: 2026-08-22 (RSR complete construction and local candidate decision reconciled)
+Review date: 2026-08-26 (visual acceptance automation contract reconciled)
 Scope: unfinished or acceptance-active specifications, plans, and release gates
 
-Manual acceptance ownership: the runnable example workflow and candidate-level
-evidence template are `test/acceptance-project/MANUAL-ACCEPTANCE.md` and
-`test/acceptance-project/acceptance-results/CANDIDATE-RESULT-TEMPLATE.md`.
-These records are queued and currently NOT RUN; they do not replace exact
-release-candidate or package-specific acceptance gates.
+Real-application visual acceptance ownership: the executable workflow and
+candidate-level evidence template are `test/acceptance-project/VISUAL-ACCEPTANCE.md`
+and `test/acceptance-project/acceptance-results/CANDIDATE-RESULT-TEMPLATE.md`.
+The former `MANUAL-ACCEPTANCE.md` is a stable retirement notice only. This
+development evidence does not replace exact-release-candidate, distribution,
+signing, clean-install, or package-specific gates owned elsewhere.
 
 ## Purpose
 
@@ -40,6 +41,7 @@ semantics.
 | Document | Status after review | Owns | May proceed when |
 | --- | --- | --- | --- |
 | `project/active-development-governance.md` | active | required proposal-to-release development lifecycle, risk/test depth, review, versioning, and evidence rules | applies continuously to all non-trivial work |
+| `plans/implemented-2026-08-26-visual-acceptance-automation-spec.md` | implemented VA1 contract; debug bridge, fixed frontend vocabulary, cross-platform fixtures, S0/S1/S2/S3/S7/S8 scenarios, complete affected validation, and the fully reviewed 35-gate local baseline are complete | debug-only real-app visual acceptance lane and retirement of the consolidated human walkthrough | preserve release/profile fail-closed gates and evidence separation; the 12 PASS / 15 FAIL / 8 removed-gate SKIP baseline leaves product repairs in separate follow-up packages rather than silently expanding VA1 |
 | `plans/active-2026-08-10-agpl-license-transition-spec.md` | active; LIC-1 and LIC-2 implementation, affected validation, UI/bundle review, exact-head hosted validation, and protected integration complete; exact candidate and installed distribution acceptance remain open | prospective `AGPL-3.0-only` source-license boundary, synchronized repository metadata, contribution terms, third-party exclusions, fixed installed resource copies, About legal notice, and transition gates | preserve the integrated license/resource boundary; SignPath readiness may reference but not redefine it; exact candidate and installed acceptance remain release-owned |
 | `plans/active-2026-08-11-signpath-application-readiness-spec.md` | active; SP-READY1 implementation, exact-head/main hosted matrices, PR #45/#46 integration, linked attribution, public uninstall guidance, live policy deployment, private reporting, and no-bypass default-branch ruleset complete; a real Free Trial organization/project/test policy now exists; owner MFA audit, Foundation decision, approved-project GitHub App configuration, and production signing remain open | manual-only update admission, public privacy/security/code-signing policies, policy links and uninstall guidance, CODEOWNERS, and deterministic readiness enforcement | preserve completed readiness; FT-SIGN1 may use only its isolated test lane; organization owner separately closes MFA/Foundation/production gates; do not claim Free Trial evidence as public trust or release authority |
 | `plans/active-2026-08-12-signpath-free-trial-smoke-spec.md` | active durable contract; FT-SIGN1 complete after connector rejection, dedicated least-privilege CI identity, official PowerShell/REST transport, protected configuration, exact-head matrix, clean hosted run `31675464182`, downloaded evidence reconciliation, obsolete-variable removal, and leaked-predecessor-run deletion | one manual read-only-permission workflow that rewraps the exact accepted Issue #33 unsigned installer, submits it to the configured Free Trial test policy, validates returned signer/bytes, and uploads a short-lived test-only artifact | preserve exact-schema protected configuration, module pin/hash, source/output fail-closed gates, short retention, and false publication authority; candidate/manual-publish workflows remain unchanged and production signing remains separate |
@@ -111,7 +113,7 @@ credential, network, installer, or release authority moves to that table.
 | `release/historical-0.4.0-dev.43-three-platform-updater-checklist.md` | historical published prerelease; exact main/candidate/acceptance/publish/Pages evidence passed | sole immutable dev.43 source/candidate/publication/live evidence ledger | no asset, signature, or acceptance record composes into stable 0.4.0 |
 | `plans/implemented-2026-08-17-stable-0.4.0-release-spec.md` | implemented `STABLE-040`; exact source/candidate, protected stable publication, Pages repair, and live verification passed | stable SemVer identity, SemVer-derived GitHub release state, stable/development updater projection, and no-reviewer automated publication | immutable release targets `fca8e307`; preserve Free Trial trust disclosure, Apple trust, exact signed-byte gates, package versions, and runtime behavior |
 | `release/historical-0.4.0-stable-release-checklist.md` | historical `GO / RELEASED / LIVE` record for public non-prerelease `v0.4.0` | sole `0.4.0` stable identity, exact candidate, decision, public Release, and stable-channel evidence ledger | release assets are immutable; future behavior or artifact change requires a new version and fresh evidence |
-| `plans/accepted-2026-07-25-0.3x-scientific-workflow-handoff.md` | active implementation contract; WP1-WP4 code landed, automated review accepted with follow-up, milestone manual acceptance open | `0.3.x` environment, viewer, artifact, skill contracts and final acceptance | remaining representative-project and manual UI acceptance; affected evidence reruns after BH1 |
+| `plans/accepted-2026-07-25-0.3x-scientific-workflow-handoff.md` | active implementation contract; WP1-WP4 code landed, automated review accepted with follow-up, milestone real-app visual acceptance open | `0.3.x` environment, viewer, artifact, skill contracts and final acceptance | remaining representative-project and automated per-frame UI acceptance; affected evidence reruns after BH1 |
 | `release/active-0.2.0-release-hardening-spec.md` | engineering complete; release acceptance active | exact `0.2.0-dev.12` hardening and evidence contract | remaining candidate acceptance only |
 | `release/active-0.2-release-checklist.md` | active | sole `0.2.0-dev.12` GO/NO-GO checklist | P0 human evidence against the exact candidate |
 | `design/accepted-2026-07-25-about-and-update-check-design.md` | implementation active; MAC4 optional macOS artifact and multi-platform generator implemented/verified; live and installed acceptance open | About/update V1 schema, channel, endpoint, allowlist, redirect, and Pages gates | hosted candidate/publication may populate exact release and Pages facts; live/installed acceptance remains separate |
@@ -163,7 +165,7 @@ credential, network, installer, or release authority moves to that table.
 | `plans/active-2026-08-04-plot-payload-normalization-repair-spec.md` | active; PLOT-PAYLOAD-1 implemented and automated/browser verified 2026-08-04; installed acceptance open | canonical PNG base64 ingress plus compatible historical preview/export | WP3 provenance/export, BH4 retention, and M3 presentation boundaries preserved; rebuilt installed-app confirmation remains open |
 | `plans/active-2026-08-04-plot-project-root-query-repair-spec.md` | active; PLOT-ROOT-1 implemented and automated verification complete 2026-08-04; installed acceptance open | consistent durable project-root normalization for existing Plot list, retention, prune, and delete commands | WP3/BH1/BH2/BH4, PLOT-PAYLOAD-1, and M3 authority preserved; rebuilt installed-app QC confirmation remains open |
 | `plans/active-2026-08-04-windows-project-path-console-window-repair-spec.md` | active; WIN-PATH-GIT-1 implemented and automated verification complete 2026-08-04 | Workspace R project-path projection and Windows no-console policy for existing supervised Git commands | canonical containment, project identity, switching/recovery, and all Git guards preserved; installed confirmation remains open |
-| `plans/active-2026-08-02-console-logs-separation-spec.md` | active; CL1 implemented and automated/browser evidence passed | frontend-only separation of the Workspace R Console transcript from operational and Agent Logs | installed-app/manual acceptance remains open and separate |
+| `plans/active-2026-08-02-console-logs-separation-spec.md` | active; CL1 implemented and automated/browser evidence passed | frontend-only separation of the Workspace R Console transcript from operational and Agent Logs | real-app visual acceptance remains open; exact-candidate acceptance is separate |
 | `plans/active-2026-08-02-ws4-reviewable-git-mutations-spec.md` | active; implementation and automated/browser verification complete 2026-08-02 | guarded local Git review, hunk/file stage/unstage, confirmed restore, and commit UI over the supervised CLI | installed-app acceptance remains open; repository replacement/adversarial hardening remain separate |
 | `plans/active-2026-08-03-ws4-adversarial-git-hardening-spec.md` | active; WS4-G2 implementation, review, and automated verification complete 2026-08-03 | fail-closed repository/path/output admission and adversarial backend fixtures for the existing supervised Git workflow | repository replacement remains separate; no UI, schema, remote, or credential scope |
 | `plans/active-2026-08-03-ws4-repository-replacement-spec.md` | active; WS4-G3 implementation, review, and automated verification complete 2026-08-03 | repository-instance-bound stale guards and disposable replacement/recovery fixtures | no Git identity persistence, frontend/schema, remote, credential, clone, or init scope |
@@ -189,7 +191,7 @@ credential, network, installer, or release authority moves to that table.
 | `design/proposed-2026-07-26-public-workbench-protocol-cli-mcp-design.md` | proposed; independently cross-reviewed | WB1 public read-only semantic contract, WB2 authenticated local CLI/MCP/events, and WB3 broker-admitted external R execution | `0.3.x` and BH1-BH3 accepted; each WB package separately authorized and stopped for review |
 | `design/proposed-2026-07-26-reproducibility-audit-and-run-comparison-design.md` | proposed; independently cross-reviewed; RA-RC1 authorized under `active-2026-07-31-ra-rc1-run-comparison-handoff.md` | read-only deterministic audit and two-run comparison semantics | `0.3.x` milestone acceptance plus an approved RA-RC1 interface checkpoint and durable run-project identity contract |
 | `design/proposed-2026-07-26-evidence-workspace-and-claim-review-design.md` | proposed; independently cross-reviewed | project-scoped scholarly evidence entries, citation normalization, claim-to-evidence linkage, and bounded claim-review semantics | `0.3.x` milestone acceptance, BH1-BH3 acceptance, RA-RC1 acceptance, and a separately authorized EW-CR1 handoff |
-| `design/proposed-2026-07-26-rstudio-inspired-workflow-design.md` | proposed umbrella direction; partially implemented through separately accepted packages; reconciled 2026-08-02 | post-`0.3.x` scientific capability direction across WS1-WS7 | remaining WS1/WS2/WS3/WS4/WS5/WS6/WS6A scope and all WS7 work require separate focused authorization; implementation and manual acceptance remain distinct |
+| `design/proposed-2026-07-26-rstudio-inspired-workflow-design.md` | proposed umbrella direction; partially implemented through separately accepted packages; reconciled 2026-08-02 | post-`0.3.x` scientific capability direction across WS1-WS7 | remaining WS1/WS2/WS3/WS4/WS5/WS6/WS6A scope and all WS7 work require separate focused authorization; implementation, real-app visual evidence, and exact-candidate acceptance remain distinct |
 | `plans/proposed-2026-07-20-human-agent-workbench-posture-design.md` | proposed | Human/Agent posture and Direct/Monitor/Review information architecture | open decisions close and a separate posture package is approved |
 | `plans/proposed-2026-07-26-interface-modernization-plan.md` | proposed umbrella; focused M1-M3 implemented with automated/browser verification 2026-08-04 | visual tokens, icons, component presentation, responsive behavior, themes | installed/display-scale acceptance remains open; Phase 4 requires separate approval |
 | `plans/proposed-2026-08-01-next-phase-task-plan.md` | proposed coordination plan; focused P2/P3 packages reconciled 2026-08-02 | current decomposition of remaining acceptance gates and proposal gaps | each unchecked work package requires a focused handoff; P1 gates remain blocking |
@@ -646,8 +648,10 @@ The current program state is **Waves 1-14 implementation code committed (2026-08
 BH1-BH5 are accepted with verification evidence. RA-RC1, WB1, WB2, UX4, RA-RC2,
 WS2 (Air selected), WS3 (basic table), WS4 (git CLI), WS6 (async Quarto job),
 WS6A (targets read-only inspection), and WS9 (lintr) are committed. Per-wave
-verification and manual acceptance evidence are pending for Waves 4-14; each
-exit gate must be independently closed. The next-phase task plan
+verification and current-surface automated visual evidence are pending for
+Waves 4-14; each applicable exit gate must be independently closed. Removed
+legacy surfaces use explicit SKIP records, while exact-candidate release
+acceptance remains separately owned. The next-phase task plan
 (`proposed-2026-08-01-next-phase-task-plan.md`) decomposes the remaining work
 into sequenced work packages.
 
@@ -1191,23 +1195,25 @@ identity. No new product shutdown owner or cross-document conflict was created.
 
 ## Remaining Open Gates
 
-All installed-app/UI items below are intentionally consolidated under the
-candidate checklist and example workflow named above. Completing automated or
-browser evidence does not check them off.
+All real-app/UI items below are coordinated by the visual lane and the separate
+exact-candidate release contracts named above. Browser/mock evidence does not
+close real-application gates, and development visual evidence does not close
+exact-candidate release gates.
 
 - complete the `0.3.x` representative-project reproducibility workflow
-  and manual three-viewport UI acceptance;
+  and automated per-frame three-viewport visual acceptance;
 - retain the passing 2026-07-26 final cross-package validation evidence and
   rerun it after any affected repair (BH1-BH5 and Waves 4-14 may have shifted
   storage, query, migration, or switching behavior);
-- retain the accepted WP3 runtime DOM evidence; fresh `1024 x 768` and narrow
-  captures remain part of manual acceptance;
+- retain the accepted WP3 runtime DOM evidence; fresh standard and narrow
+  captures remain part of automated real-app visual acceptance;
 - retain the current WP4 package-check result of zero errors, warnings, and
   notes; the local roxygen version mismatch prevented re-documentation;
 - complete `0.2.0-dev.12` P0 installed-application acceptance and distribution
   decision;
 - complete About/update live endpoint and exact installed-candidate acceptance;
-- close per-wave verification and manual acceptance evidence for Waves 4-14;
+- close per-wave verification and applicable automated real-app visual evidence
+  for Waves 4-14;
 - define additive artifact acceptance semantics before posture Phase C;
 - approve only one Phase-3 capability workstream at a time per the next-phase
   task plan.
@@ -1223,5 +1229,6 @@ Before implementing any unfinished document:
 5. amend conflicts before editing product code;
 6. keep browser/mock behavior aligned with Tauri state changes;
 7. preserve dedicated mutation and approval lanes;
-8. report version/NEWS outcome, automated evidence, manual acceptance,
-   worktree state, and release decision as separate facts.
+8. report version/NEWS outcome, automated real-app visual evidence,
+   exact-candidate acceptance, worktree state, and release decision as separate
+   facts.

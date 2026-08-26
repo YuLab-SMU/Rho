@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod acceptance_bridge;
 mod agent_llm;
 mod application_lifecycle;
 mod application_state;
@@ -201,6 +202,12 @@ fn main() {
                 workbench_projection: workbench_projection::WorkbenchProjectionState::default(),
             });
             app.manage(shell::NativeUpdaterState::new());
+            #[cfg(debug_assertions)]
+            {
+                // Debug-only acceptance automation bridge; failures are
+                // logged to the startup log and never abort shell setup.
+                acceptance_bridge::start_if_enabled(app.handle());
+            }
             let heartbeat_app = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 monitor_workspace_plugin_heartbeats(heartbeat_app).await;
@@ -213,6 +220,8 @@ fn main() {
             shell::install_native_update,
             shell::open_rho_website,
             shell::show_rho_license,
+            acceptance_bridge::acceptance_bridge_result,
+            acceptance_bridge::acceptance_bridge_active,
             commands::startup::startup_status,
             commands::startup::startup_bootstrap,
             commands::startup::startup_choose_rscript,

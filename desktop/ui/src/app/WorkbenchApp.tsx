@@ -8,6 +8,9 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 
+import { invoke, isTauri } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+
 import {
   WorkbenchProjectionStore,
   commandsForPlacement,
@@ -45,6 +48,8 @@ import {
 } from "./toolbar-model";
 import { workbenchFailureMessage } from "./workbench-failure";
 import { workbenchOperationTrace } from "./operation-trace";
+import { installAcceptanceAutomation } from "../acceptance/automation";
+import type { AutomationHost } from "../acceptance/automation";
 import { ConsoleExecutionRouter } from "./controllers/console-execution-router";
 import type { ConsoleExecutionEndpoint } from "./controllers/console-execution-router";
 import { useConsoleProjectActivation } from "./controllers/console-project-activation";
@@ -483,6 +488,13 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
       return;
     }
     run(openFactory(factory));
+  };
+  const focusAutomationInstance = (instanceId: string): Promise<boolean> => {
+    const placement = studio == null ? null : findLayoutPlacement(studio.scene.root, instanceId);
+    if (placement != null && placement.kind === "stack" && !placement.active) {
+      return commit({ kind: "set_stack_active", stack_node_id: placement.nodeId, instance_id: instanceId });
+    }
+    return commit({ kind: "set_focus", instance_id: instanceId });
   };
   const openFactory = async (
     factory: SurfaceFactoryRegistration,
@@ -1170,6 +1182,70 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
         setProjectSwitchTarget(null);
       },
     });
+  // Acceptance automation (debug-only bridge): keep a per-render host so the
+  // stable bridge listener below always acts on fresh projections and
+  // controllers. The host carries no authority beyond the UI's own actions.
+  const automationHostRef = useRef<AutomationHost | null>(null);
+  useEffect(() => {
+    automationHostRef.current = {
+      store,
+      getEvidence: () => evidence,
+      actions: {
+        openProject: async (path) => {
+          await performProjectSwitch(() => pluginTransport.openProject(path), path);
+        },
+        openSurface: async (surfaceId) => {
+          const existing = surfaces?.catalog.instances.find(
+            (candidate) => candidate.surface_id === surfaceId,
+          );
+          const placement = existing == null || studio == null
+            ? null
+            : findLayoutPlacement(studio.scene.root, existing.instance_id);
+          if (existing != null && placement != null) {
+            await focusAutomationInstance(existing.instance_id);
+            return;
+          }
+          // Closing a placement intentionally leaves its Surface instance in
+          // the catalog. Match the visible Open Surface path: an unplaced
+          // instance is not mounted, so create and place a fresh instance.
+          const factory = surfaces?.catalog.factories.find(
+            (candidate) => candidate.definition.surface_id === surfaceId,
+          );
+          if (factory == null) throw new Error(`Surface ${surfaceId} is unavailable.`);
+          await openFactory(factory);
+        },
+        focusInstance: (instanceId) => focusAutomationInstance(instanceId).then(() => undefined),
+        closeInstance: (instanceId) => commit({
+          kind: "close_surface_placement",
+          instance_id: instanceId,
+        }).then(() => undefined),
+        setMode: async (mode) => {
+          const target = profileRevisionRequest();
+          if (target == null) throw new Error("The Project UI Profile is unavailable.");
+          await profileStore.setMode({ target, mode });
+        },
+      },
+    };
+  });
+  useEffect(() => {
+    if (!isTauri()) return undefined;
+    let disposed = false;
+    let uninstall: (() => void) | undefined;
+    // The bridge command only exists in debug builds with
+    // RHO_ACCEPTANCE_BRIDGE=1; any rejection leaves the surface uninstalled.
+    void invoke<boolean>("acceptance_bridge_active").then((active) => {
+      if (!active || disposed) return;
+      uninstall = installAcceptanceAutomation({
+        host: () => automationHostRef.current,
+        listen,
+        invoke,
+      });
+    }).catch(() => undefined);
+    return () => {
+      disposed = true;
+      uninstall?.();
+    };
+  }, []);
   const openCommandSearch = () => {
     closeRhoMenu();
     if (commandSearchRef.current == null) setCommandSearchTransient(true);
