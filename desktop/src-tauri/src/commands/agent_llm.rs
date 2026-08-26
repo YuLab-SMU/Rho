@@ -43,7 +43,7 @@ pub(crate) async fn agent_llm_save_provider(
 ) -> Result<AgentLlmSettingsView, String> {
     let config = runtime_config(&state).map_err(display_error)?;
     let settings = service::save_provider(&config.data_dir, provider).map_err(display_error)?;
-    service::settings_view_from_settings(settings).map_err(display_error)
+    service::settings_view_from_settings(&config.data_dir, settings).map_err(display_error)
 }
 
 #[tauri::command]
@@ -53,17 +53,19 @@ pub(crate) async fn agent_llm_delete_provider(
 ) -> Result<AgentLlmSettingsView, String> {
     let config = runtime_config(&state).map_err(display_error)?;
     let settings = service::delete_provider(&config.data_dir, &request).map_err(display_error)?;
-    service::settings_view_from_settings(settings).map_err(display_error)
+    service::settings_view_from_settings(&config.data_dir, settings).map_err(display_error)
 }
 
 #[tauri::command]
 pub(crate) async fn agent_llm_set_credential(
     provider_id: String,
     credential: String,
+    confirm_replace: bool,
     state: State<'_, AppState>,
 ) -> Result<AgentLlmSettingsView, String> {
     let config = runtime_config(&state).map_err(display_error)?;
-    service::set_credential(&config.data_dir, &provider_id, &credential).map_err(display_error)?;
+    service::set_credential(&config.data_dir, &provider_id, &credential, confirm_replace)
+        .map_err(display_error)?;
     service::settings_view(&config.data_dir, &config.rscript).map_err(display_error)
 }
 
@@ -84,7 +86,7 @@ pub(crate) async fn agent_llm_save_model(
 ) -> Result<AgentLlmSettingsView, String> {
     let config = runtime_config(&state).map_err(display_error)?;
     let settings = service::save_model(&config.data_dir, model).map_err(display_error)?;
-    service::settings_view_from_settings(settings).map_err(display_error)
+    service::settings_view_from_settings(&config.data_dir, settings).map_err(display_error)
 }
 
 #[cfg_attr(test, specta::specta)]
@@ -96,7 +98,7 @@ pub(crate) async fn agent_llm_set_context_capacity(
     let config = runtime_config(&state).map_err(display_error)?;
     let settings =
         service::set_context_capacity(&config.data_dir, &request).map_err(display_error)?;
-    service::settings_view_from_settings(settings).map_err(display_error)
+    service::settings_view_from_settings(&config.data_dir, settings).map_err(display_error)
 }
 
 #[tauri::command]
@@ -106,7 +108,7 @@ pub(crate) async fn agent_llm_delete_model(
 ) -> Result<AgentLlmSettingsView, String> {
     let config = runtime_config(&state).map_err(display_error)?;
     let settings = service::delete_model(&config.data_dir, &request).map_err(display_error)?;
-    service::settings_view_from_settings(settings).map_err(display_error)
+    service::settings_view_from_settings(&config.data_dir, settings).map_err(display_error)
 }
 
 #[tauri::command]
@@ -126,7 +128,7 @@ pub(crate) async fn agent_llm_select_model(
         },
     )
     .map_err(display_error)?;
-    service::settings_view_from_settings(settings).map_err(display_error)
+    service::settings_view_from_settings(&config.data_dir, settings).map_err(display_error)
 }
 
 #[tauri::command]
@@ -138,7 +140,7 @@ pub(crate) async fn agent_llm_save_capability_route(
     let config = runtime_config(&state).map_err(display_error)?;
     let settings = service::save_capability_route(&config.data_dir, expected_revision, route)
         .map_err(display_error)?;
-    service::settings_view_from_settings(settings).map_err(display_error)
+    service::settings_view_from_settings(&config.data_dir, settings).map_err(display_error)
 }
 
 #[tauri::command]
@@ -151,7 +153,7 @@ pub(crate) async fn agent_llm_delete_capability_route(
     let settings =
         service::delete_capability_route(&config.data_dir, expected_revision, &capability)
             .map_err(display_error)?;
-    service::settings_view_from_settings(settings).map_err(display_error)
+    service::settings_view_from_settings(&config.data_dir, settings).map_err(display_error)
 }
 
 #[tauri::command]
@@ -165,7 +167,7 @@ pub(crate) async fn agent_llm_declare_model_capabilities(
     let settings =
         service::declare_model_capabilities(&config.data_dir, expected_revision, &model_id, patch)
             .map_err(display_error)?;
-    service::settings_view_from_settings(settings).map_err(display_error)
+    service::settings_view_from_settings(&config.data_dir, settings).map_err(display_error)
 }
 
 #[tauri::command]

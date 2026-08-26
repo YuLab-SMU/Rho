@@ -23,8 +23,9 @@ const settings = {
     base_url_env: null,
     wire_api: "openai",
     disable_stream_options: false,
+    credential_source: "system_store",
     credential_status: "unchecked",
-    credential_source: "unchecked",
+    credential_effective_source: "unchecked",
   }],
   models: [{
     id: "model:fixture",

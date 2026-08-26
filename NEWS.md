@@ -4,6 +4,28 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.1-dev.18 - 2026-08-26
+
+### Agent LLM credential sources and store hardening
+
+- Each Agent LLM provider now declares an explicit credential source:
+  the operating-system credential store (default, unchanged), a process
+  environment variable, or a session-only key that never leaves memory and is
+  cleared when Rho quits. On Linux, when Secret Service is unavailable, a
+  provider can explicitly opt into a `0600`-permission file fallback; there is
+  no silent downgrade on any platform.
+- Agent settings move to schema V4 with the established backup-before-write
+  migration discipline; existing V1–V3 settings keep their system-store
+  behavior byte-for-byte.
+- API-key entry now rejects control characters and line breaks, enforces the
+  per-platform store size limit up front (2560 bytes on Windows Credential
+  Manager), and requires one explicit confirmation before replacing a stored
+  key.
+- Credential set, replace, delete, connection-test, model-discovery, and
+  Agent-turn injection now append redacted events to a bounded local audit
+  log (`agent-credential-audit.jsonl`); values, lengths, and prefixes are
+  never recorded.
+
 ## 0.4.1-dev.17 - 2026-08-25
 
 ### Typed Component plugins

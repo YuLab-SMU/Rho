@@ -436,6 +436,14 @@ export function AgentSurfaceView({
           </label>
           <div>
             <small>{llmSettings.models.find((model) => model.id === capacityModelId)?.context_capacity_source.replaceAll("_", " ")}</small>
+            <small>{(() => {
+              const model = llmSettings.models.find((item) => item.id === capacityModelId);
+              const provider = model == null ? null : llmSettings.providers.find((item) => item.id === model.provider_id);
+              if (provider == null) return null;
+              const source = provider.credential_source.replaceAll("_", " ");
+              const status = provider.credential_status.replaceAll("_", " ");
+              return `credential: ${status} · source: ${source}`;
+            })()}</small>
             <button type="button" disabled={capacityBusy} onClick={() => void loadContextCapacity()}>Reload</button>
             <button type="submit" className="rho-primary-action" disabled={capacityBusy || !capacityModelId}>{capacityBusy ? "Saving…" : "Save"}</button>
           </div>

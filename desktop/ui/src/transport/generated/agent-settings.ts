@@ -98,11 +98,21 @@ export type AgentProviderProfile = {
 	base_url_env: string | null,
 	wire_api: string | null,
 	disable_stream_options: boolean | null,
+	/**
+	 *  Where this provider's API key lives: `system_store` (default),
+	 *  `environment`, `session_only`, or `file_fallback` (Linux opt-in).
+	 */
+	credential_source: string,
 };
 
 export type AgentProviderProfileView = {
 	credential_status: string,
-	credential_source: string,
+	/**
+	 *  Presentation-only description of where the effective credential was
+	 *  observed. The persisted configured source is the flattened
+	 *  `credential_source` field on the profile itself.
+	 */
+	credential_effective_source: string,
 } & AgentProviderProfile;
 
 export type AgentSelectedModelView = {

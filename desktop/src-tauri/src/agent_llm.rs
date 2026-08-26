@@ -16,7 +16,8 @@ use crate::project::atomic_write;
 const SETTINGS_FILE_NAME: &str = "llm-profiles.json";
 const SETTINGS_V1_BACKUP_FILE_NAME: &str = "llm-profiles.v1.backup.json";
 const SETTINGS_V2_BACKUP_FILE_NAME: &str = "llm-profiles.v2.backup.json";
-const SETTINGS_SCHEMA_VERSION: u32 = 3;
+const SETTINGS_V3_BACKUP_FILE_NAME: &str = "llm-profiles.v3.backup.json";
+const SETTINGS_SCHEMA_VERSION: u32 = 4;
 const CONSERVATIVE_CONTEXT_WINDOW_TOKENS: u64 = 32_768;
 const CONSERVATIVE_RESERVED_OUTPUT_TOKENS: u64 = 4_096;
 const MAX_SETTINGS_BYTES: usize = 256 * 1024;
@@ -34,7 +35,21 @@ const MAX_DISCOVERED_MODELS: usize = 100;
 const PROCESS_POLL_INTERVAL: Duration = Duration::from_millis(50);
 #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 const CREDENTIAL_SERVICE: &str = "Rho Agent LLM";
-const MAX_CREDENTIAL_BYTES: usize = 16 * 1024;
+/// Windows Credential Manager caps a generic credential blob at 2560 bytes;
+/// other OS stores accept larger values but stay bounded for reviewability.
+#[cfg(windows)]
+const MAX_CREDENTIAL_BYTES: usize = 2_560;
+#[cfg(not(windows))]
+const MAX_CREDENTIAL_BYTES: usize = 4_096;
+#[cfg(windows)]
+const MAX_CREDENTIAL_BYTES_LABEL: &str = "2560-byte Windows Credential Manager";
+#[cfg(not(windows))]
+const MAX_CREDENTIAL_BYTES_LABEL: &str = "4096-byte";
+#[cfg(target_os = "linux")]
+const CREDENTIAL_DIRECTORY_NAME: &str = "credentials";
+const CREDENTIAL_AUDIT_FILE_NAME: &str = "agent-credential-audit.jsonl";
+const MAX_CREDENTIAL_AUDIT_BYTES: usize = 256 * 1024;
+const CREDENTIAL_AUDIT_KEEP_BYTES: usize = 128 * 1024;
 
 static SETTINGS_MUTATION_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 static SYSTEM_CREDENTIAL_OBSERVATIONS: OnceLock<Mutex<HashMap<String, CredentialObservation>>> =
@@ -66,7 +81,13 @@ enum CredentialObservation {
 
 #[derive(Default)]
 struct SessionCredentialCache {
+    /// Read-through cache for system-store lookups. Cleared by the explicit
+    /// credential-refresh action so the next read re-queries the OS store.
     entries: Mutex<HashMap<String, Option<Zeroizing<String>>>>,
+    /// Session-only credentials (CRED-SEC2). These are never written to any
+    /// durable store and survive the credential-refresh action; they are
+    /// dropped only by an explicit delete or by process exit.
+    session_only: Mutex<HashMap<String, Zeroizing<String>>>,
 }
 
 impl SessionCredentialCache {
@@ -115,6 +136,31 @@ impl SessionCredentialCache {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clear();
+    }
+
+    fn session_credential(&self, provider_id: &str) -> Option<String> {
+        self.session_only
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(provider_id)
+            .map(|credential| credential.as_str().to_string())
+    }
+
+    fn set_session_credential(&self, provider_id: &str, credential: &str) {
+        self.session_only
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(
+                provider_id.to_string(),
+                Zeroizing::new(credential.to_string()),
+            );
+    }
+
+    fn clear_session_credential(&self, provider_id: &str) {
+        self.session_only
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(provider_id);
     }
 
     #[cfg(test)]
@@ -188,6 +234,256 @@ impl CredentialStore for SystemCredentialStore {
         }
         result
     }
+}
+
+const CREDENTIAL_SOURCE_SYSTEM_STORE: &str = "system_store";
+const CREDENTIAL_SOURCE_ENVIRONMENT: &str = "environment";
+const CREDENTIAL_SOURCE_SESSION_ONLY: &str = "session_only";
+const CREDENTIAL_SOURCE_FILE_FALLBACK: &str = "file_fallback";
+
+fn is_supported_credential_source(source: &str) -> bool {
+    matches!(
+        source,
+        CREDENTIAL_SOURCE_SYSTEM_STORE
+            | CREDENTIAL_SOURCE_ENVIRONMENT
+            | CREDENTIAL_SOURCE_SESSION_ONLY
+            | CREDENTIAL_SOURCE_FILE_FALLBACK
+    )
+}
+
+/// Resolves the effective credential for one provider from its configured
+/// source. There is no implicit fallback between sources: a missing or
+/// unavailable configured source yields `None` or an error, never a silent
+/// probe of another source.
+fn resolve_provider_credential(
+    data_dir: &Path,
+    provider: &AgentProviderProfile,
+    system_store: &impl CredentialStore,
+) -> Result<Option<String>> {
+    match provider.credential_source.as_str() {
+        CREDENTIAL_SOURCE_SYSTEM_STORE => system_store.get(&provider.id),
+        CREDENTIAL_SOURCE_ENVIRONMENT => environment_credential(provider),
+        CREDENTIAL_SOURCE_SESSION_ONLY => {
+            Ok(system_credential_session().session_credential(&provider.id))
+        }
+        CREDENTIAL_SOURCE_FILE_FALLBACK => file_fallback_credential_get(data_dir, &provider.id),
+        other => bail!("Unsupported credential source: {other}"),
+    }
+}
+
+/// Stores a credential through the provider's configured durable source.
+/// `environment` is read-only and rejected by the service layer before this
+/// dispatch; `session_only` writes only the in-memory session cache.
+fn store_provider_credential(
+    data_dir: &Path,
+    provider: &AgentProviderProfile,
+    credential: &str,
+    system_store: &impl CredentialStore,
+) -> Result<()> {
+    match provider.credential_source.as_str() {
+        CREDENTIAL_SOURCE_SYSTEM_STORE => system_store.set(&provider.id, credential),
+        CREDENTIAL_SOURCE_SESSION_ONLY => {
+            system_credential_session().set_session_credential(&provider.id, credential);
+            Ok(())
+        }
+        CREDENTIAL_SOURCE_FILE_FALLBACK => {
+            file_fallback_credential_set(data_dir, &provider.id, credential)
+        }
+        CREDENTIAL_SOURCE_ENVIRONMENT => bail!(
+            "This provider reads its API key from an environment variable; manage it outside Rho."
+        ),
+        other => bail!("Unsupported credential source: {other}"),
+    }
+}
+
+/// Deletes the credential held by the provider's configured source.
+/// `environment` has nothing to delete and is rejected earlier.
+fn delete_provider_credential(
+    data_dir: &Path,
+    provider: &AgentProviderProfile,
+    system_store: &impl CredentialStore,
+) -> Result<()> {
+    match provider.credential_source.as_str() {
+        CREDENTIAL_SOURCE_SYSTEM_STORE => system_store.delete(&provider.id),
+        CREDENTIAL_SOURCE_SESSION_ONLY => {
+            system_credential_session().clear_session_credential(&provider.id);
+            Ok(())
+        }
+        CREDENTIAL_SOURCE_FILE_FALLBACK => file_fallback_credential_delete(data_dir, &provider.id),
+        CREDENTIAL_SOURCE_ENVIRONMENT => bail!(
+            "This provider reads its API key from an environment variable; manage it outside Rho."
+        ),
+        other => bail!("Unsupported credential source: {other}"),
+    }
+}
+
+fn environment_credential(provider: &AgentProviderProfile) -> Result<Option<String>> {
+    let Some(name) = provider.api_key_env.as_deref() else {
+        return Ok(None);
+    };
+    match std::env::var(name) {
+        Ok(value) if !value.is_empty() => Ok(Some(value)),
+        Ok(_) | Err(std::env::VarError::NotPresent) => Ok(None),
+        Err(std::env::VarError::NotUnicode(_)) => {
+            bail!("The environment variable {name} does not contain valid UTF-8.")
+        }
+    }
+}
+
+fn environment_credential_present(provider: &AgentProviderProfile) -> bool {
+    provider
+        .api_key_env
+        .as_deref()
+        .and_then(|name| std::env::var_os(name))
+        .is_some_and(|value| !value.is_empty())
+}
+
+#[cfg(target_os = "linux")]
+fn hex_encode(value: &str) -> String {
+    value.bytes().map(|byte| format!("{byte:02x}")).collect()
+}
+
+#[cfg(target_os = "linux")]
+fn file_fallback_credential_path(data_dir: &Path, provider_id: &str) -> PathBuf {
+    data_dir
+        .join(CREDENTIAL_DIRECTORY_NAME)
+        .join(hex_encode(provider_id))
+}
+
+/// Linux-only degraded store (CRED-SEC3): an opt-in `0600` file under a
+/// `0700` directory, used only when the user explicitly switches a provider
+/// to `file_fallback` because Secret Service is unavailable.
+#[cfg(target_os = "linux")]
+fn file_fallback_credential_get(data_dir: &Path, provider_id: &str) -> Result<Option<String>> {
+    let path = file_fallback_credential_path(data_dir, provider_id);
+    match std::fs::read_to_string(&path) {
+        Ok(value) => Ok(Some(value)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(anyhow::Error::new(error))
+            .with_context(|| format!("reading the file-based credential {}", path.display())),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn file_fallback_credential_set(
+    data_dir: &Path,
+    provider_id: &str,
+    credential: &str,
+) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let directory = data_dir.join(CREDENTIAL_DIRECTORY_NAME);
+    std::fs::create_dir_all(&directory)
+        .with_context(|| format!("creating the credential directory {}", directory.display()))?;
+    std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o700)).with_context(
+        || {
+            format!(
+                "restricting the credential directory {}",
+                directory.display()
+            )
+        },
+    )?;
+    let path = file_fallback_credential_path(data_dir, provider_id);
+    atomic_write(&path, credential.as_bytes())
+        .with_context(|| format!("writing the file-based credential {}", path.display()))?;
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
+        .with_context(|| format!("restricting the credential file {}", path.display()))?;
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn file_fallback_credential_delete(data_dir: &Path, provider_id: &str) -> Result<()> {
+    let path = file_fallback_credential_path(data_dir, provider_id);
+    match std::fs::remove_file(&path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(anyhow::Error::new(error))
+            .with_context(|| format!("deleting the file-based credential {}", path.display())),
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn file_fallback_credential_get(_data_dir: &Path, _provider_id: &str) -> Result<Option<String>> {
+    bail!("File-based credential storage is only available on Linux.")
+}
+
+#[cfg(not(target_os = "linux"))]
+fn file_fallback_credential_set(
+    _data_dir: &Path,
+    _provider_id: &str,
+    _credential: &str,
+) -> Result<()> {
+    bail!("File-based credential storage is only available on Linux.")
+}
+
+#[cfg(not(target_os = "linux"))]
+fn file_fallback_credential_delete(_data_dir: &Path, _provider_id: &str) -> Result<()> {
+    bail!("File-based credential storage is only available on Linux.")
+}
+
+fn credential_audit_path(data_dir: &Path) -> PathBuf {
+    data_dir.join(CREDENTIAL_AUDIT_FILE_NAME)
+}
+
+/// CRED-SEC4: append one redacted credential-access event. The event never
+/// contains credential values, lengths, prefixes, suffixes, or environment
+/// contents. An audit failure never blocks the credential operation; it is
+/// recorded in the startup log instead.
+fn record_credential_audit(
+    data_dir: &Path,
+    event: &str,
+    provider_id: &str,
+    source: &str,
+    outcome: &str,
+    detail: Option<&str>,
+) {
+    if let Err(error) =
+        append_credential_audit(data_dir, event, provider_id, source, outcome, detail)
+    {
+        crate::startup_runtime::write_startup_log(&format!(
+            "agent_llm_credential_audit outcome=failed detail={error:#}"
+        ));
+    }
+}
+
+fn append_credential_audit(
+    data_dir: &Path,
+    event: &str,
+    provider_id: &str,
+    source: &str,
+    outcome: &str,
+    detail: Option<&str>,
+) -> Result<()> {
+    let line = serde_json::to_string(&serde_json::json!({
+        "recorded_at": Utc::now().to_rfc3339(),
+        "event": event,
+        "provider_id": provider_id,
+        "credential_source": source,
+        "outcome": outcome,
+        "detail": detail,
+    }))?;
+    let path = credential_audit_path(data_dir);
+    let mut bytes = match std::fs::read(&path) {
+        Ok(existing) => existing,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        Err(error) => {
+            return Err(anyhow::Error::new(error))
+                .with_context(|| format!("reading the credential audit log {}", path.display()));
+        }
+    };
+    bytes.extend_from_slice(line.as_bytes());
+    bytes.push(b'\n');
+    if bytes.len() > MAX_CREDENTIAL_AUDIT_BYTES {
+        let tail_start = bytes.len() - CREDENTIAL_AUDIT_KEEP_BYTES;
+        let aligned = bytes[tail_start..]
+            .iter()
+            .position(|byte| *byte == b'\n')
+            .map(|offset| tail_start + offset + 1)
+            .unwrap_or(tail_start);
+        let kept = bytes.split_off(aligned);
+        bytes = kept;
+    }
+    atomic_write(&path, &bytes)
+        .with_context(|| format!("writing the credential audit log {}", path.display()))
 }
 
 #[cfg(windows)]
@@ -276,7 +572,7 @@ pub struct AgentLlmSettings {
 struct AgentLlmSettingsV1 {
     schema_version: u32,
     selected_model_id: String,
-    providers: Vec<AgentProviderProfile>,
+    providers: Vec<AgentProviderProfileV3>,
     models: Vec<AgentModelProfileV1>,
 }
 
@@ -285,9 +581,54 @@ struct AgentLlmSettingsV1 {
 struct AgentLlmSettingsV2 {
     schema_version: u32,
     revision: u64,
-    providers: Vec<AgentProviderProfile>,
+    providers: Vec<AgentProviderProfileV3>,
     models: Vec<AgentModelProfileV2>,
     capability_routes: Vec<AgentCapabilityRoute>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AgentLlmSettingsV3 {
+    schema_version: u32,
+    revision: u64,
+    providers: Vec<AgentProviderProfileV3>,
+    models: Vec<AgentModelProfile>,
+    capability_routes: Vec<AgentCapabilityRoute>,
+}
+
+/// Provider shape before schema V4 added the explicit credential source.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AgentProviderProfileV3 {
+    id: String,
+    display_name: String,
+    kind: String,
+    registered_provider_id: Option<String>,
+    api_key_env: Option<String>,
+    api_key_required: bool,
+    base_url: Option<String>,
+    base_url_env: Option<String>,
+    wire_api: Option<String>,
+    disable_stream_options: Option<bool>,
+}
+
+impl AgentProviderProfileV3 {
+    /// Pre-V4 providers always used the operating-system credential store.
+    fn into_current(self) -> AgentProviderProfile {
+        AgentProviderProfile {
+            id: self.id,
+            display_name: self.display_name,
+            kind: self.kind,
+            registered_provider_id: self.registered_provider_id,
+            api_key_env: self.api_key_env,
+            api_key_required: self.api_key_required,
+            base_url: self.base_url,
+            base_url_env: self.base_url_env,
+            wire_api: self.wire_api,
+            disable_stream_options: self.disable_stream_options,
+            credential_source: CREDENTIAL_SOURCE_SYSTEM_STORE.to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
@@ -303,6 +644,9 @@ pub struct AgentProviderProfile {
     pub base_url_env: Option<String>,
     pub wire_api: Option<String>,
     pub disable_stream_options: Option<bool>,
+    /// Where this provider's API key lives: `system_store` (default),
+    /// `environment`, `session_only`, or `file_fallback` (Linux opt-in).
+    pub credential_source: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
@@ -446,7 +790,10 @@ pub struct AgentProviderProfileView {
     #[serde(flatten)]
     pub profile: AgentProviderProfile,
     pub credential_status: String,
-    pub credential_source: String,
+    /// Presentation-only description of where the effective credential was
+    /// observed. The persisted configured source is the flattened
+    /// `credential_source` field on the profile itself.
+    pub credential_effective_source: String,
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -560,6 +907,10 @@ pub fn settings_v2_backup_path(data_dir: &Path) -> PathBuf {
     data_dir.join(SETTINGS_V2_BACKUP_FILE_NAME)
 }
 
+pub fn settings_v3_backup_path(data_dir: &Path) -> PathBuf {
+    data_dir.join(SETTINGS_V3_BACKUP_FILE_NAME)
+}
+
 fn capability_value(value: &str, source: &str) -> AgentCapabilityValue {
     AgentCapabilityValue {
         value: value.to_string(),
@@ -646,6 +997,7 @@ pub fn default_settings() -> AgentLlmSettings {
             base_url_env: None,
             wire_api: None,
             disable_stream_options: None,
+            credential_source: CREDENTIAL_SOURCE_SYSTEM_STORE.to_string(),
         }],
         models: vec![AgentModelProfile {
             id: "model-deepseek-v4-flash".to_string(),
@@ -700,8 +1052,13 @@ pub fn load_settings(data_dir: &Path) -> Result<AgentLlmSettings> {
                 .with_context(|| format!("decoding V2 Agent LLM settings {}", path.display()))?;
             migrate_settings_v2(legacy)?
         }
-        3 => serde_json::from_value(envelope)
-            .with_context(|| format!("decoding V3 Agent LLM settings {}", path.display()))?,
+        3 => {
+            let legacy: AgentLlmSettingsV3 = serde_json::from_value(envelope)
+                .with_context(|| format!("decoding V3 Agent LLM settings {}", path.display()))?;
+            migrate_settings_v3(legacy)?
+        }
+        4 => serde_json::from_value(envelope)
+            .with_context(|| format!("decoding V4 Agent LLM settings {}", path.display()))?,
         _ => bail!("Unsupported Agent LLM schema version."),
     };
     validate_settings(&settings)?;
@@ -755,15 +1112,18 @@ where
             .get("schema_version")
             .and_then(serde_json::Value::as_u64)
             .context("Agent LLM settings are missing a numeric schema_version.")?;
-        if matches!(version, 1 | 2) {
-            let backup_path = if version == 1 {
-                settings_v1_backup_path(data_dir)
-            } else {
-                settings_v2_backup_path(data_dir)
+        if matches!(version, 1 | 2 | 3) {
+            let backup_path = match version {
+                1 => settings_v1_backup_path(data_dir),
+                2 => settings_v2_backup_path(data_dir),
+                _ => settings_v3_backup_path(data_dir),
             };
             if backup_path.exists() {
                 let existing = std::fs::read(&backup_path).with_context(|| {
-                    format!("reading Agent LLM V1 backup {}", backup_path.display())
+                    format!(
+                        "reading Agent LLM migration backup {}",
+                        backup_path.display()
+                    )
                 })?;
                 ensure!(
                     existing == current,
@@ -778,7 +1138,7 @@ where
                 })?;
             }
         } else {
-            ensure!(version == 3, "Unsupported Agent LLM schema version.");
+            ensure!(version == 4, "Unsupported Agent LLM schema version.");
         }
     }
 
@@ -828,7 +1188,11 @@ fn migrate_settings_v1(legacy: AgentLlmSettingsV1) -> Result<AgentLlmSettings> {
     let settings = AgentLlmSettings {
         schema_version: SETTINGS_SCHEMA_VERSION,
         revision: 0,
-        providers: legacy.providers,
+        providers: legacy
+            .providers
+            .into_iter()
+            .map(AgentProviderProfileV3::into_current)
+            .collect(),
         models,
         capability_routes: vec![AgentCapabilityRoute {
             capability: "agent.chat".to_string(),
@@ -846,7 +1210,11 @@ fn migrate_settings_v2(legacy: AgentLlmSettingsV2) -> Result<AgentLlmSettings> {
     let settings = AgentLlmSettings {
         schema_version: SETTINGS_SCHEMA_VERSION,
         revision: legacy.revision,
-        providers: legacy.providers,
+        providers: legacy
+            .providers
+            .into_iter()
+            .map(AgentProviderProfileV3::into_current)
+            .collect(),
         models: legacy
             .models
             .into_iter()
@@ -870,9 +1238,28 @@ fn migrate_settings_v2(legacy: AgentLlmSettingsV2) -> Result<AgentLlmSettings> {
     Ok(settings)
 }
 
+fn migrate_settings_v3(legacy: AgentLlmSettingsV3) -> Result<AgentLlmSettings> {
+    ensure!(legacy.schema_version == 3, "Expected Agent LLM schema V3.");
+    let settings = AgentLlmSettings {
+        schema_version: SETTINGS_SCHEMA_VERSION,
+        revision: legacy.revision,
+        providers: legacy
+            .providers
+            .into_iter()
+            .map(AgentProviderProfileV3::into_current)
+            .collect(),
+        models: legacy.models,
+        capability_routes: legacy.capability_routes,
+    };
+    validate_settings(&settings)?;
+    Ok(settings)
+}
+
 pub fn save_provider(data_dir: &Path, provider: AgentProviderProfile) -> Result<AgentLlmSettings> {
     let _guard = settings_mutation_guard();
     let mut settings = load_settings(data_dir)?;
+    let opted_into_file_fallback = provider.credential_source == CREDENTIAL_SOURCE_FILE_FALLBACK;
+    let audited_provider_id = provider.id.clone();
     if let Some(slot) = settings
         .providers
         .iter_mut()
@@ -884,6 +1271,16 @@ pub fn save_provider(data_dir: &Path, provider: AgentProviderProfile) -> Result<
     }
     increment_revision(&mut settings)?;
     save_settings(data_dir, &settings)?;
+    if opted_into_file_fallback {
+        record_credential_audit(
+            data_dir,
+            "file_fallback_opt_in",
+            &audited_provider_id,
+            CREDENTIAL_SOURCE_FILE_FALLBACK,
+            "ok",
+            None,
+        );
+    }
     Ok(settings)
 }
 
@@ -919,11 +1316,12 @@ where
     );
     let provider_id = request.provider_id.as_str();
     validate_bounded(provider_id, "Provider ID", MAX_ID_LENGTH)?;
-    settings
+    let provider = settings
         .providers
         .iter()
         .find(|provider| provider.id == provider_id)
-        .with_context(|| format!("Unknown provider: {provider_id}"))?;
+        .with_context(|| format!("Unknown provider: {provider_id}"))?
+        .clone();
     let model_ids = settings
         .models
         .iter()
@@ -947,32 +1345,66 @@ where
         .retain(|provider| provider.id != provider_id);
     increment_revision(&mut settings)?;
     validate_settings(&settings)?;
-    let previous_credential = credential_store.get(provider_id)?;
-    credential_store.delete(provider_id)?;
+    // Environment-sourced credentials are managed outside Rho; deleting the
+    // provider never touches them.
+    let manages_credential =
+        provider.api_key_required && provider.credential_source != CREDENTIAL_SOURCE_ENVIRONMENT;
+    let previous_credential = if manages_credential {
+        resolve_provider_credential(data_dir, &provider, credential_store)?
+    } else {
+        None
+    };
+    if manages_credential {
+        delete_provider_credential(data_dir, &provider, credential_store)?;
+    }
     if let Err(save_error) = save(data_dir, &settings) {
         let recovery = if let Some(credential) = previous_credential.as_deref() {
-            if let Err(restore_error) = credential_store.set(provider_id, credential) {
+            if let Err(restore_error) =
+                store_provider_credential(data_dir, &provider, credential, credential_store)
+            {
                 return Err(anyhow::anyhow!(
-                    "Provider metadata could not be saved ({save_error:#}), and its system credential could not be restored ({restore_error:#})."
+                    "Provider metadata could not be saved ({save_error:#}), and its credential could not be restored ({restore_error:#})."
                 ));
             }
-            "Provider metadata could not be saved; its system credential was restored"
+            "Provider metadata could not be saved; its credential was restored"
         } else {
-            "Provider metadata could not be saved; no system credential needed restoration"
+            "Provider metadata could not be saved; no credential needed restoration"
         };
         return Err(save_error.context(recovery));
+    }
+    if manages_credential {
+        record_credential_audit(
+            data_dir,
+            "provider_credential_delete",
+            provider_id,
+            &provider.credential_source,
+            "ok",
+            None,
+        );
     }
     Ok(settings)
 }
 
-pub fn set_credential(data_dir: &Path, provider_id: &str, credential: &str) -> Result<()> {
-    set_credential_with_store(data_dir, provider_id, credential, &SystemCredentialStore)
+pub fn set_credential(
+    data_dir: &Path,
+    provider_id: &str,
+    credential: &str,
+    confirm_replace: bool,
+) -> Result<()> {
+    set_credential_with_store(
+        data_dir,
+        provider_id,
+        credential,
+        confirm_replace,
+        &SystemCredentialStore,
+    )
 }
 
 fn set_credential_with_store(
     data_dir: &Path,
     provider_id: &str,
     credential: &str,
+    confirm_replace: bool,
     credential_store: &impl CredentialStore,
 ) -> Result<()> {
     let _guard = settings_mutation_guard();
@@ -986,12 +1418,39 @@ fn set_credential_with_store(
         provider.api_key_required,
         "This provider does not require an API key."
     );
+    ensure!(
+        provider.credential_source != CREDENTIAL_SOURCE_ENVIRONMENT,
+        "This provider reads its API key from an environment variable; manage it outside Rho."
+    );
     ensure!(!credential.is_empty(), "Enter an API key before saving.");
     ensure!(
-        credential.len() <= MAX_CREDENTIAL_BYTES,
-        "The API key exceeds the 16 KiB storage limit."
+        !credential.chars().any(char::is_control),
+        "The API key contains control characters or line breaks. Paste the key exactly as issued."
     );
-    credential_store.set(provider_id, credential)
+    ensure!(
+        credential.len() <= MAX_CREDENTIAL_BYTES,
+        "The API key exceeds the {MAX_CREDENTIAL_BYTES_LABEL} storage limit."
+    );
+    let existing = resolve_provider_credential(data_dir, provider, credential_store)?;
+    let replacing = existing.is_some();
+    ensure!(
+        confirm_replace || !replacing,
+        "An API key is already saved for this provider. Confirm replacement to overwrite it."
+    );
+    let result = store_provider_credential(data_dir, provider, credential, credential_store);
+    record_credential_audit(
+        data_dir,
+        if replacing {
+            "credential_replace"
+        } else {
+            "credential_set"
+        },
+        provider_id,
+        &provider.credential_source,
+        if result.is_ok() { "ok" } else { "failed" },
+        None,
+    );
+    result
 }
 
 pub fn delete_credential(data_dir: &Path, provider_id: &str) -> Result<()> {
@@ -1014,7 +1473,20 @@ fn delete_credential_with_store(
         provider.api_key_required,
         "This provider does not require an API key."
     );
-    credential_store.delete(provider_id)
+    ensure!(
+        provider.credential_source != CREDENTIAL_SOURCE_ENVIRONMENT,
+        "This provider reads its API key from an environment variable; manage it outside Rho."
+    );
+    let result = delete_provider_credential(data_dir, provider, credential_store);
+    record_credential_audit(
+        data_dir,
+        "credential_delete",
+        provider_id,
+        &provider.credential_source,
+        if result.is_ok() { "ok" } else { "failed" },
+        None,
+    );
+    result
 }
 
 pub fn save_model(data_dir: &Path, model: AgentModelProfile) -> Result<AgentLlmSettings> {
@@ -1260,22 +1732,27 @@ where
 pub fn settings_view(data_dir: &Path, _rscript: &Path) -> Result<AgentLlmSettingsView> {
     let _guard = settings_mutation_guard();
     let settings = load_settings(data_dir)?;
-    settings_view_from_settings(settings)
+    settings_view_from_settings(data_dir, settings)
 }
 
-pub fn settings_view_from_settings(settings: AgentLlmSettings) -> Result<AgentLlmSettingsView> {
+pub fn settings_view_from_settings(
+    data_dir: &Path,
+    settings: AgentLlmSettings,
+) -> Result<AgentLlmSettingsView> {
     let observations = current_system_credential_observations();
     Ok(settings_view_from_settings_with_observations(
+        data_dir,
         settings,
         &observations,
     ))
 }
 
 fn settings_view_from_settings_with_observations(
+    data_dir: &Path,
     settings: AgentLlmSettings,
     observations: &HashMap<String, CredentialObservation>,
 ) -> AgentLlmSettingsView {
-    let statuses = credential_status_map(&settings.providers, observations);
+    let statuses = credential_status_map(data_dir, &settings.providers, observations);
     build_settings_view(settings, system_credential_info(), statuses)
 }
 
@@ -1450,25 +1927,51 @@ fn discover_models_with_store(
     };
 
     let credential = if provider.api_key_required {
-        match credential_store.get(provider_id) {
-            Ok(Some(value)) => Some(value),
+        match resolve_provider_credential(data_dir, provider, credential_store) {
+            Ok(Some(value)) => {
+                record_credential_audit(
+                    data_dir,
+                    "credential_discovery_read",
+                    provider_id,
+                    &provider.credential_source,
+                    "detected",
+                    None,
+                );
+                Some(value)
+            }
             Ok(None) => {
+                record_credential_audit(
+                    data_dir,
+                    "credential_discovery_read",
+                    provider_id,
+                    &provider.credential_source,
+                    "not_detected",
+                    None,
+                );
                 return Ok(model_discovery_result(
                     provider_id,
                     "error",
                     Vec::new(),
                     false,
-                    "No API key is stored for this provider. Save a key or enter a model ID manually.",
+                    "No API key is available from this provider's configured credential source. Save a key or enter a model ID manually.",
                     Some("credential"),
                 ));
             }
             Err(_) => {
+                record_credential_audit(
+                    data_dir,
+                    "credential_discovery_read",
+                    provider_id,
+                    &provider.credential_source,
+                    "unavailable",
+                    None,
+                );
                 return Ok(model_discovery_result(
                     provider_id,
                     "error",
                     Vec::new(),
                     false,
-                    "The system credential store is unavailable. Retry or enter a model ID manually.",
+                    "The configured credential source is unavailable. Retry or enter a model ID manually.",
                     Some("credential"),
                 ));
             }
@@ -1900,8 +2403,13 @@ pub fn test_model(
         "Only language models use the text connection test. Image and embedding probes are not installed."
     );
     let resolved = resolve_model_with_settings(&settings, Some(model_id))?;
-    let credential_override =
-        credential_override_with_store(&settings, &resolved.provider_id, &SystemCredentialStore);
+    let credential_override = credential_override_with_store(
+        data_dir,
+        &settings,
+        &resolved.provider_id,
+        &SystemCredentialStore,
+        "credential_test_read",
+    );
     let result = match credential_override {
         Err(_) => AgentConnectionTestResponse {
             status: "error".to_string(),
@@ -1909,7 +2417,7 @@ pub fn test_model(
             model_resolved: false,
             latency_ms: None,
             capabilities: inferred_capabilities(&resolved.runtime_profile),
-            message: "The system credential store is unavailable.".to_string(),
+            message: "The configured credential source is unavailable.".to_string(),
             error_class: Some("credential".to_string()),
         },
         Ok(None) if resolved.runtime_profile.api_key_required => AgentConnectionTestResponse {
@@ -1940,7 +2448,7 @@ pub fn test_model(
     update_model_after_test(&mut latest_settings, model_id, &result)?;
     increment_revision(&mut latest_settings)?;
     save_settings(data_dir, &latest_settings)?;
-    settings_view_from_settings(latest_settings)
+    settings_view_from_settings(data_dir, latest_settings)
 }
 
 pub fn resolve_model_for_turn(
@@ -1970,6 +2478,7 @@ pub fn resolve_model_and_credential_for_turn(
     let _guard = settings_mutation_guard();
     let settings = load_settings(data_dir)?;
     resolve_model_and_credential_for_turn_with_store(
+        data_dir,
         &settings,
         requested_model_id,
         mode,
@@ -1986,6 +2495,7 @@ pub fn resolve_model_and_credential_for_task(
     let _guard = settings_mutation_guard();
     let settings = load_settings(data_dir)?;
     resolve_model_and_credential_for_task_with_store(
+        data_dir,
         &settings,
         requested_model_id,
         mode,
@@ -1995,6 +2505,7 @@ pub fn resolve_model_and_credential_for_task(
 }
 
 fn resolve_model_and_credential_for_task_with_store(
+    data_dir: &Path,
     settings: &AgentLlmSettings,
     requested_model_id: Option<&str>,
     mode: &str,
@@ -2003,8 +2514,13 @@ fn resolve_model_and_credential_for_task_with_store(
 ) -> Result<(ResolvedAgentModel, Option<(String, String)>)> {
     let resolved =
         resolve_model_for_task_with_settings(settings, requested_model_id, mode, task_kind)?;
-    let credential =
-        credential_override_with_store(settings, &resolved.provider_id, credential_store)?;
+    let credential = credential_override_with_store(
+        data_dir,
+        settings,
+        &resolved.provider_id,
+        credential_store,
+        "credential_turn_inject",
+    )?;
     ensure!(
         !resolved.runtime_profile.api_key_required || credential.is_some(),
         "Problem repair is unavailable because the effective agent.act Provider credential is missing."
@@ -2031,14 +2547,20 @@ fn resolve_model_for_task_with_settings(
 }
 
 fn resolve_model_and_credential_for_turn_with_store(
+    data_dir: &Path,
     settings: &AgentLlmSettings,
     requested_model_id: Option<&str>,
     mode: &str,
     credential_store: &impl CredentialStore,
 ) -> Result<(ResolvedAgentModel, Option<(String, String)>)> {
     let resolved = resolve_model_for_turn_with_settings(settings, requested_model_id, mode)?;
-    let credential =
-        credential_override_with_store(settings, &resolved.provider_id, credential_store)?;
+    let credential = credential_override_with_store(
+        data_dir,
+        settings,
+        &resolved.provider_id,
+        credential_store,
+        "credential_turn_inject",
+    )?;
     Ok((resolved, credential))
 }
 
@@ -2081,9 +2603,11 @@ fn resolve_model_for_turn_with_settings(
 }
 
 fn credential_override_with_store(
+    data_dir: &Path,
     settings: &AgentLlmSettings,
     provider_id: &str,
     credential_store: &impl CredentialStore,
+    audit_event: &str,
 ) -> Result<Option<(String, String)>> {
     let provider = settings
         .providers
@@ -2093,7 +2617,20 @@ fn credential_override_with_store(
     if !provider.api_key_required {
         return Ok(None);
     }
-    let Some(value) = credential_store.get(provider_id)? else {
+    let resolved = resolve_provider_credential(data_dir, provider, credential_store);
+    record_credential_audit(
+        data_dir,
+        audit_event,
+        provider_id,
+        &provider.credential_source,
+        match &resolved {
+            Ok(Some(_)) => "detected",
+            Ok(None) => "not_detected",
+            Err(_) => "unavailable",
+        },
+        None,
+    );
+    let Some(value) = resolved? else {
         return Ok(None);
     };
     let env_name = provider
@@ -2186,7 +2723,7 @@ fn validate_settings_v1(settings: &AgentLlmSettingsV1) -> Result<()> {
     );
     let mut provider_ids = HashSet::new();
     for provider in &settings.providers {
-        validate_provider(provider)?;
+        validate_provider_v3(provider)?;
         ensure!(
             provider_ids.insert(&provider.id),
             "Provider IDs must be unique."
@@ -2351,7 +2888,7 @@ fn build_settings_view(
                 .unwrap_or_else(|| credential_presentation_for_provider(&profile));
             AgentProviderProfileView {
                 credential_status: credential.status,
-                credential_source: credential.source,
+                credential_effective_source: credential.source,
                 profile,
             }
         })
@@ -2685,6 +3222,10 @@ fn update_model_after_test(
     Ok(())
 }
 
+fn validate_provider_v3(provider: &AgentProviderProfileV3) -> Result<()> {
+    validate_provider(&provider.clone().into_current())
+}
+
 fn validate_provider(provider: &AgentProviderProfile) -> Result<()> {
     validate_bounded(&provider.id, "Provider ID", MAX_ID_LENGTH)?;
     validate_bounded(
@@ -2724,6 +3265,21 @@ fn validate_provider(provider: &AgentProviderProfile) -> Result<()> {
     validate_env_name(provider.api_key_env.as_deref(), provider.api_key_required)?;
     validate_env_name(provider.base_url_env.as_deref(), false)?;
     validate_base_url(provider.base_url.as_deref())?;
+    ensure!(
+        is_supported_credential_source(&provider.credential_source),
+        "Unsupported credential source."
+    );
+    #[cfg(not(target_os = "linux"))]
+    ensure!(
+        provider.credential_source != CREDENTIAL_SOURCE_FILE_FALLBACK,
+        "File-based credential storage is only available on Linux."
+    );
+    if provider.credential_source == CREDENTIAL_SOURCE_ENVIRONMENT && provider.api_key_required {
+        ensure!(
+            provider.api_key_env.is_some(),
+            "Environment-sourced credentials require an API key environment name."
+        );
+    }
     ensure!(
         !(provider.base_url.is_some() && provider.base_url_env.is_some()),
         "Use either Base URL or Base URL environment, not both."
@@ -2915,6 +3471,7 @@ struct CredentialPresentation {
 }
 
 fn credential_status_map(
+    data_dir: &Path,
     providers: &[AgentProviderProfile],
     observations: &HashMap<String, CredentialObservation>,
 ) -> HashMap<String, CredentialPresentation> {
@@ -2924,20 +3481,60 @@ fn credential_status_map(
             let presentation = if !provider.api_key_required {
                 credential_presentation_for_provider(provider)
             } else {
-                match observations.get(&provider.id) {
-                    Some(CredentialObservation::Detected) => CredentialPresentation {
-                        status: "detected".to_string(),
-                        source: "system".to_string(),
+                match provider.credential_source.as_str() {
+                    // System-store probes stay observation-driven so metadata
+                    // rendering can never trigger an OS keychain prompt.
+                    CREDENTIAL_SOURCE_SYSTEM_STORE => match observations.get(&provider.id) {
+                        Some(CredentialObservation::Detected) => CredentialPresentation {
+                            status: "detected".to_string(),
+                            source: "system".to_string(),
+                        },
+                        Some(CredentialObservation::NotDetected) => CredentialPresentation {
+                            status: "not_detected".to_string(),
+                            source: "none".to_string(),
+                        },
+                        Some(CredentialObservation::Unavailable) => CredentialPresentation {
+                            status: "unavailable".to_string(),
+                            source: "unavailable".to_string(),
+                        },
+                        None => credential_presentation_for_provider(provider),
                     },
-                    Some(CredentialObservation::NotDetected) => CredentialPresentation {
-                        status: "not_detected".to_string(),
-                        source: "none".to_string(),
+                    CREDENTIAL_SOURCE_ENVIRONMENT => CredentialPresentation {
+                        status: if environment_credential_present(provider) {
+                            "detected".to_string()
+                        } else {
+                            "not_detected".to_string()
+                        },
+                        source: "environment".to_string(),
                     },
-                    Some(CredentialObservation::Unavailable) => CredentialPresentation {
-                        status: "unavailable".to_string(),
-                        source: "unavailable".to_string(),
+                    CREDENTIAL_SOURCE_SESSION_ONLY => CredentialPresentation {
+                        status: if system_credential_session()
+                            .session_credential(&provider.id)
+                            .is_some()
+                        {
+                            "detected".to_string()
+                        } else {
+                            "not_detected".to_string()
+                        },
+                        source: "session".to_string(),
                     },
-                    None => credential_presentation_for_provider(provider),
+                    CREDENTIAL_SOURCE_FILE_FALLBACK => {
+                        match file_fallback_credential_get(data_dir, &provider.id) {
+                            Ok(Some(_)) => CredentialPresentation {
+                                status: "detected".to_string(),
+                                source: "file".to_string(),
+                            },
+                            Ok(None) => CredentialPresentation {
+                                status: "not_detected".to_string(),
+                                source: "file".to_string(),
+                            },
+                            Err(_) => CredentialPresentation {
+                                status: "unavailable".to_string(),
+                                source: "unavailable".to_string(),
+                            },
+                        }
+                    }
+                    _ => credential_presentation_for_provider(provider),
                 }
             };
             (provider.id.clone(), presentation)
@@ -3564,7 +4161,7 @@ mod tests {
     fn default_migration_preserves_deepseek_flash() {
         let settings = default_settings();
         assert_eq!(chat_model_id(&settings).unwrap(), "model-deepseek-v4-flash");
-        assert_eq!(settings.schema_version, 3);
+        assert_eq!(settings.schema_version, SETTINGS_SCHEMA_VERSION);
         assert_eq!(settings.models[0].context_window_tokens, 32_768);
         assert_eq!(
             settings.models[0].context_capacity_source,
@@ -3590,11 +4187,30 @@ mod tests {
         assert_eq!(loaded.models[0].display_name, "DeepSeek V4 Flash");
     }
 
+    fn legacy_v3_providers() -> Vec<AgentProviderProfileV3> {
+        default_settings()
+            .providers
+            .into_iter()
+            .map(|provider| AgentProviderProfileV3 {
+                id: provider.id,
+                display_name: provider.display_name,
+                kind: provider.kind,
+                registered_provider_id: provider.registered_provider_id,
+                api_key_env: provider.api_key_env,
+                api_key_required: provider.api_key_required,
+                base_url: provider.base_url,
+                base_url_env: provider.base_url_env,
+                wire_api: provider.wire_api,
+                disable_stream_options: provider.disable_stream_options,
+            })
+            .collect()
+    }
+
     fn legacy_settings_bytes() -> Vec<u8> {
         serde_json::to_vec_pretty(&AgentLlmSettingsV1 {
             schema_version: 1,
             selected_model_id: "model-deepseek-v4-flash".to_string(),
-            providers: default_settings().providers,
+            providers: legacy_v3_providers(),
             models: vec![AgentModelProfileV1 {
                 id: "model-deepseek-v4-flash".to_string(),
                 provider_id: "provider-deepseek-existing".to_string(),
@@ -3618,7 +4234,7 @@ mod tests {
         serde_json::to_vec_pretty(&AgentLlmSettingsV2 {
             schema_version: 2,
             revision: settings.revision,
-            providers: settings.providers,
+            providers: legacy_v3_providers(),
             models: settings
                 .models
                 .into_iter()
@@ -3646,7 +4262,7 @@ mod tests {
         std::fs::write(&path, &legacy).unwrap();
 
         let projected = load_settings(directory.path()).unwrap();
-        assert_eq!(projected.schema_version, 3);
+        assert_eq!(projected.schema_version, SETTINGS_SCHEMA_VERSION);
         assert_eq!(projected.models[0].context_window_tokens, 32_768);
         assert_eq!(projected.models[0].reserved_output_tokens, 4_096);
         assert_eq!(
@@ -3671,7 +4287,10 @@ mod tests {
         );
 
         save_settings(directory.path(), &projected).unwrap();
-        assert_eq!(load_settings(directory.path()).unwrap().schema_version, 3);
+        assert_eq!(
+            load_settings(directory.path()).unwrap().schema_version,
+            SETTINGS_SCHEMA_VERSION
+        );
     }
 
     #[test]
@@ -3681,7 +4300,7 @@ mod tests {
         std::fs::write(settings_path(directory.path()), &legacy).unwrap();
 
         let projected = load_settings(directory.path()).unwrap();
-        assert_eq!(projected.schema_version, 3);
+        assert_eq!(projected.schema_version, SETTINGS_SCHEMA_VERSION);
         assert_eq!(projected.revision, 0);
         assert_eq!(projected.models[0].model_type.value, "unknown");
         assert_eq!(
@@ -3710,7 +4329,7 @@ mod tests {
             legacy
         );
         let reopened = load_settings(directory.path()).unwrap();
-        assert_eq!(reopened.schema_version, 3);
+        assert_eq!(reopened.schema_version, SETTINGS_SCHEMA_VERSION);
         assert_eq!(reopened.revision, 1);
         assert_eq!(reopened.models[0].model_type.source, "user_declared");
     }
@@ -3746,7 +4365,10 @@ mod tests {
             std::fs::read(settings_v1_backup_path(directory.path())).unwrap(),
             legacy
         );
-        assert_eq!(load_settings(directory.path()).unwrap().schema_version, 3);
+        assert_eq!(
+            load_settings(directory.path()).unwrap().schema_version,
+            SETTINGS_SCHEMA_VERSION
+        );
     }
 
     #[test]
@@ -3958,6 +4580,7 @@ mod tests {
 
     #[test]
     fn two_provider_routes_resolve_one_effective_credential_per_turn() {
+        let directory = TempDir::new().unwrap();
         let mut settings = default_settings();
         let mut provider = settings.providers[0].clone();
         provider.id = "provider-act".to_string();
@@ -3989,9 +4612,14 @@ mod tests {
             ..Default::default()
         };
 
-        let (chat, chat_credential) =
-            resolve_model_and_credential_for_turn_with_store(&settings, None, "ask", &store)
-                .unwrap();
+        let (chat, chat_credential) = resolve_model_and_credential_for_turn_with_store(
+            directory.path(),
+            &settings,
+            None,
+            "ask",
+            &store,
+        )
+        .unwrap();
         assert_eq!(chat.route_capability, "agent.chat");
         assert_eq!(chat.provider_id, "provider-deepseek-existing");
         assert_eq!(
@@ -4000,9 +4628,14 @@ mod tests {
         );
         assert_eq!(chat_credential.unwrap().1, "chat-secret");
 
-        let (act, act_credential) =
-            resolve_model_and_credential_for_turn_with_store(&settings, None, "act", &store)
-                .unwrap();
+        let (act, act_credential) = resolve_model_and_credential_for_turn_with_store(
+            directory.path(),
+            &settings,
+            None,
+            "act",
+            &store,
+        )
+        .unwrap();
         assert_eq!(act.route_capability, "agent.act");
         assert_eq!(act.provider_id, "provider-act");
         assert_eq!(act_credential.unwrap().1, "act-secret");
@@ -4024,6 +4657,7 @@ mod tests {
 
     #[test]
     fn problem_repair_uses_only_the_tool_route_credential_in_read_only_mode() {
+        let directory = TempDir::new().unwrap();
         let mut settings = default_settings();
         let mut provider = settings.providers[0].clone();
         provider.id = "provider-repair".to_string();
@@ -4061,6 +4695,7 @@ mod tests {
         assert!(store.get_calls.lock().unwrap().is_empty());
 
         let (resolved, credential) = resolve_model_and_credential_for_task_with_store(
+            directory.path(),
             &settings,
             None,
             "ask",
@@ -4077,6 +4712,7 @@ mod tests {
         );
         assert!(
             resolve_model_and_credential_for_task_with_store(
+                directory.path(),
                 &settings,
                 None,
                 "act",
@@ -4091,6 +4727,7 @@ mod tests {
         );
         assert!(
             resolve_model_and_credential_for_task_with_store(
+                directory.path(),
                 &settings,
                 Some("model-deepseek-v4-flash"),
                 "ask",
@@ -4107,6 +4744,7 @@ mod tests {
 
     #[test]
     fn problem_repair_blocks_chat_only_unknown_and_missing_credential_routes() {
+        let directory = TempDir::new().unwrap();
         let mut settings = default_settings();
         settings.models[0].capabilities.insert(
             "function_call".to_string(),
@@ -4115,6 +4753,7 @@ mod tests {
         let store = MemoryCredentialStore::default();
         assert!(
             resolve_model_and_credential_for_task_with_store(
+                directory.path(),
                 &settings,
                 None,
                 "ask",
@@ -4130,6 +4769,7 @@ mod tests {
         );
         assert!(
             resolve_model_and_credential_for_task_with_store(
+                directory.path(),
                 &settings,
                 None,
                 "ask",
@@ -4144,6 +4784,7 @@ mod tests {
             capability_value("yes", "user_declared"),
         );
         let error = resolve_model_and_credential_for_task_with_store(
+            directory.path(),
             &settings,
             None,
             "ask",
@@ -4155,6 +4796,7 @@ mod tests {
 
         settings.providers[0].api_key_required = false;
         let (resolved, credential) = resolve_model_and_credential_for_task_with_store(
+            directory.path(),
             &settings,
             None,
             "ask",
@@ -4210,15 +4852,38 @@ mod tests {
             directory.path(),
             "provider-deepseek-existing",
             "first-secret",
+            false,
             &store,
         )
         .unwrap();
-        set_credential_with_store(directory.path(), "provider-second", "second-secret", &store)
-            .unwrap();
+        set_credential_with_store(
+            directory.path(),
+            "provider-second",
+            "second-secret",
+            false,
+            &store,
+        )
+        .unwrap();
+        // CRED-SEC5: an unconfirmed replace is rejected and preserves the value.
+        assert!(
+            set_credential_with_store(
+                directory.path(),
+                "provider-deepseek-existing",
+                "replacement-secret",
+                false,
+                &store,
+            )
+            .is_err()
+        );
+        assert_eq!(
+            store.get("provider-deepseek-existing").unwrap().as_deref(),
+            Some("first-secret")
+        );
         set_credential_with_store(
             directory.path(),
             "provider-deepseek-existing",
             "replacement-secret",
+            true,
             &store,
         )
         .unwrap();
@@ -4246,16 +4911,26 @@ mod tests {
     fn credential_validation_rejects_unknown_empty_oversize_and_key_optional_provider() {
         let directory = TempDir::new().unwrap();
         let store = MemoryCredentialStore::default();
-        assert!(set_credential_with_store(directory.path(), "missing", "secret", &store).is_err());
         assert!(
-            set_credential_with_store(directory.path(), "provider-deepseek-existing", "", &store,)
+            set_credential_with_store(directory.path(), "missing", "secret", false, &store)
                 .is_err()
         );
         assert!(
             set_credential_with_store(
                 directory.path(),
                 "provider-deepseek-existing",
+                "",
+                false,
+                &store,
+            )
+            .is_err()
+        );
+        assert!(
+            set_credential_with_store(
+                directory.path(),
+                "provider-deepseek-existing",
                 &"x".repeat(MAX_CREDENTIAL_BYTES + 1),
+                false,
                 &store,
             )
             .is_err()
@@ -4269,6 +4944,7 @@ mod tests {
                 directory.path(),
                 "provider-deepseek-existing",
                 "secret",
+                false,
                 &store,
             )
             .is_err()
@@ -4278,6 +4954,7 @@ mod tests {
 
     #[test]
     fn settings_projection_is_lazy_and_never_reads_provider_credentials() {
+        let directory = TempDir::new().unwrap();
         let settings = default_settings();
         let store = MemoryCredentialStore {
             entries: Mutex::new(HashMap::from([(
@@ -4286,7 +4963,11 @@ mod tests {
             )])),
             ..Default::default()
         };
-        let view = settings_view_from_settings_with_observations(settings, &HashMap::new());
+        let view = settings_view_from_settings_with_observations(
+            directory.path(),
+            settings,
+            &HashMap::new(),
+        );
         let provider = view
             .providers
             .iter()
@@ -4294,7 +4975,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(provider.credential_status, "unchecked");
-        assert_eq!(provider.credential_source, "unchecked");
+        assert_eq!(provider.credential_effective_source, "unchecked");
         assert!(store.get_calls.lock().unwrap().is_empty());
     }
 
@@ -4386,6 +5067,7 @@ mod tests {
 
     #[test]
     fn non_secret_observations_project_exact_credential_states() {
+        let directory = TempDir::new().unwrap();
         let mut settings = default_settings();
         for (id, required) in [
             ("provider-missing", true),
@@ -4412,7 +5094,7 @@ mod tests {
                 CredentialObservation::Unavailable,
             ),
         ]);
-        let statuses = credential_status_map(&settings.providers, &observations);
+        let statuses = credential_status_map(directory.path(), &settings.providers, &observations);
 
         assert_eq!(statuses["provider-deepseek-existing"].status, "detected");
         assert_eq!(statuses["provider-deepseek-existing"].source, "system");
@@ -4443,6 +5125,7 @@ mod tests {
                 directory.path(),
                 "provider-deepseek-existing",
                 "replacement-secret",
+                true,
                 &store,
             )
             .is_err()
@@ -4720,7 +5403,7 @@ mod tests {
             result
                 .unwrap_err()
                 .to_string()
-                .contains("system credential was restored")
+                .contains("its credential was restored")
         );
         assert_eq!(
             store.get("provider-deepseek-existing").unwrap().as_deref(),
@@ -4845,14 +5528,21 @@ mod tests {
             directory.path(),
             "provider-deepseek-existing",
             secret,
+            false,
             &store,
         )
         .unwrap();
 
         let settings = load_settings(directory.path()).unwrap();
         let resolved = resolve_model_with_settings(&settings, None).unwrap();
-        let credential =
-            credential_override_with_store(&settings, &resolved.provider_id, &store).unwrap();
+        let credential = credential_override_with_store(
+            directory.path(),
+            &settings,
+            &resolved.provider_id,
+            &store,
+            "credential_test_read",
+        )
+        .unwrap();
         assert_eq!(
             credential.as_ref().map(|(_, value)| value.as_str()),
             Some(secret)
@@ -5378,5 +6068,373 @@ mod tests {
             resolve_model_with_settings(&settings, Some("model-deepseek-v4-flash")).unwrap();
         assert_eq!(resolved.effective_model_ref, "deepseek:deepseek-v4-flash");
         assert_eq!(resolved.runtime_profile.tool_calling, "yes");
+    }
+
+    fn legacy_v3_settings_bytes() -> Vec<u8> {
+        let settings = default_settings();
+        serde_json::to_vec_pretty(&AgentLlmSettingsV3 {
+            schema_version: 3,
+            revision: settings.revision,
+            providers: legacy_v3_providers(),
+            models: settings.models,
+            capability_routes: settings.capability_routes,
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn v3_credential_source_migration_defaults_to_system_store_with_backup() {
+        let directory = TempDir::new().unwrap();
+        let legacy = legacy_v3_settings_bytes();
+        std::fs::write(settings_path(directory.path()), &legacy).unwrap();
+
+        // A read-only open migrates in memory without rewriting the source.
+        let loaded = load_settings(directory.path()).unwrap();
+        assert_eq!(loaded.schema_version, SETTINGS_SCHEMA_VERSION);
+        assert_eq!(
+            loaded.providers[0].credential_source,
+            CREDENTIAL_SOURCE_SYSTEM_STORE
+        );
+        assert_eq!(
+            std::fs::read(settings_path(directory.path())).unwrap(),
+            legacy
+        );
+        assert!(!settings_v3_backup_path(directory.path()).exists());
+
+        // The first explicit mutation writes a byte-identical V3 backup.
+        let provider = loaded.providers[0].clone();
+        let saved = save_provider(directory.path(), provider).unwrap();
+        assert_eq!(saved.revision, loaded.revision + 1);
+        assert_eq!(
+            std::fs::read(settings_v3_backup_path(directory.path())).unwrap(),
+            legacy
+        );
+        let on_disk = load_settings(directory.path()).unwrap();
+        assert_eq!(on_disk.schema_version, SETTINGS_SCHEMA_VERSION);
+        assert_eq!(
+            on_disk.providers[0].credential_source,
+            CREDENTIAL_SOURCE_SYSTEM_STORE
+        );
+    }
+
+    #[test]
+    fn v4_settings_round_trip_preserves_credential_sources() {
+        let directory = TempDir::new().unwrap();
+        let mut settings = default_settings();
+        let mut environment_provider = settings.providers[0].clone();
+        environment_provider.id = "provider-env".to_string();
+        environment_provider.display_name = "Environment Provider".to_string();
+        environment_provider.credential_source = CREDENTIAL_SOURCE_ENVIRONMENT.to_string();
+        let mut session_provider = settings.providers[0].clone();
+        session_provider.id = "provider-session".to_string();
+        session_provider.display_name = "Session Provider".to_string();
+        session_provider.credential_source = CREDENTIAL_SOURCE_SESSION_ONLY.to_string();
+        settings.providers.push(environment_provider);
+        settings.providers.push(session_provider);
+        save_settings(directory.path(), &settings).unwrap();
+
+        let loaded = load_settings(directory.path()).unwrap();
+        assert_eq!(loaded.schema_version, SETTINGS_SCHEMA_VERSION);
+        assert_eq!(
+            loaded
+                .providers
+                .iter()
+                .map(|provider| provider.credential_source.as_str())
+                .collect::<Vec<_>>(),
+            [
+                CREDENTIAL_SOURCE_SYSTEM_STORE,
+                CREDENTIAL_SOURCE_ENVIRONMENT,
+                CREDENTIAL_SOURCE_SESSION_ONLY
+            ]
+        );
+    }
+
+    #[test]
+    fn unsupported_or_platform_gated_credential_sources_are_rejected() {
+        let mut settings = default_settings();
+        settings.providers[0].credential_source = "plaintext_file".to_string();
+        assert!(validate_settings(&settings).is_err());
+
+        let mut settings = default_settings();
+        settings.providers[0].credential_source = CREDENTIAL_SOURCE_FILE_FALLBACK.to_string();
+        let validation = validate_settings(&settings);
+        #[cfg(target_os = "linux")]
+        validation.unwrap();
+        #[cfg(not(target_os = "linux"))]
+        assert!(validation.is_err());
+
+        let mut settings = default_settings();
+        settings.providers[0].credential_source = CREDENTIAL_SOURCE_ENVIRONMENT.to_string();
+        settings.providers[0].api_key_env = None;
+        assert!(validate_settings(&settings).is_err());
+    }
+
+    #[test]
+    fn environment_source_resolves_process_environment_without_touching_stores() {
+        let directory = TempDir::new().unwrap();
+        let variable = "RHO_TEST_CRED_SEC1_ENVIRONMENT_KEY";
+        let mut settings = default_settings();
+        settings.providers[0].credential_source = CREDENTIAL_SOURCE_ENVIRONMENT.to_string();
+        settings.providers[0].api_key_env = Some(variable.to_string());
+        save_settings(directory.path(), &settings).unwrap();
+        let store = MemoryCredentialStore::default();
+
+        unsafe { std::env::remove_var(variable) };
+        let resolved = resolve_model_with_settings(&settings, None).unwrap();
+        let missing = credential_override_with_store(
+            directory.path(),
+            &settings,
+            &resolved.provider_id,
+            &store,
+            "credential_test_read",
+        )
+        .unwrap();
+        assert!(missing.is_none());
+        let statuses =
+            credential_status_map(directory.path(), &settings.providers, &HashMap::new());
+        assert_eq!(
+            statuses["provider-deepseek-existing"].status,
+            "not_detected"
+        );
+        assert_eq!(statuses["provider-deepseek-existing"].source, "environment");
+
+        unsafe { std::env::set_var(variable, "env-secret") };
+        let detected = credential_override_with_store(
+            directory.path(),
+            &settings,
+            &resolved.provider_id,
+            &store,
+            "credential_test_read",
+        )
+        .unwrap();
+        assert_eq!(
+            detected
+                .as_ref()
+                .map(|(name, value)| (name.as_str(), value.as_str())),
+            Some((variable, "env-secret"))
+        );
+        let statuses =
+            credential_status_map(directory.path(), &settings.providers, &HashMap::new());
+        assert_eq!(statuses["provider-deepseek-existing"].status, "detected");
+        assert_eq!(statuses["provider-deepseek-existing"].source, "environment");
+        unsafe { std::env::remove_var(variable) };
+
+        // The environment source never touches the system store or cache.
+        assert!(store.get_calls.lock().unwrap().is_empty());
+        assert!(store.set_calls.lock().unwrap().is_empty());
+
+        // Environment-managed credentials reject set/delete in Rho.
+        assert!(
+            set_credential_with_store(
+                directory.path(),
+                "provider-deepseek-existing",
+                "secret",
+                false,
+                &store,
+            )
+            .is_err()
+        );
+        assert!(
+            delete_credential_with_store(directory.path(), "provider-deepseek-existing", &store)
+                .is_err()
+        );
+        assert!(store.set_calls.lock().unwrap().is_empty());
+        assert!(store.delete_calls.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn session_only_credentials_never_touch_durable_stores() {
+        let directory = TempDir::new().unwrap();
+        let provider_id = "provider-session-only-test";
+        let mut settings = default_settings();
+        let mut provider = settings.providers[0].clone();
+        provider.id = provider_id.to_string();
+        provider.display_name = "Session Only Provider".to_string();
+        provider.credential_source = CREDENTIAL_SOURCE_SESSION_ONLY.to_string();
+        settings.providers.push(provider);
+        save_settings(directory.path(), &settings).unwrap();
+        let store = MemoryCredentialStore::default();
+
+        set_credential_with_store(
+            directory.path(),
+            provider_id,
+            "session-secret",
+            false,
+            &store,
+        )
+        .unwrap();
+        assert!(store.set_calls.lock().unwrap().is_empty());
+        assert!(store.get_calls.lock().unwrap().is_empty());
+
+        let resolved = resolve_provider_credential(
+            directory.path(),
+            settings.providers.last().unwrap(),
+            &store,
+        )
+        .unwrap();
+        assert_eq!(resolved.as_deref(), Some("session-secret"));
+        let statuses =
+            credential_status_map(directory.path(), &settings.providers, &HashMap::new());
+        assert_eq!(statuses[provider_id].status, "detected");
+        assert_eq!(statuses[provider_id].source, "session");
+        assert!(store.get_calls.lock().unwrap().is_empty());
+
+        // The credential-refresh action re-queries the OS store but must not
+        // wipe session-only credentials; only an explicit delete (or process
+        // exit, which drops the in-memory map) removes them.
+        clear_system_credential_session();
+        let statuses =
+            credential_status_map(directory.path(), &settings.providers, &HashMap::new());
+        assert_eq!(statuses[provider_id].status, "detected");
+        assert_eq!(statuses[provider_id].source, "session");
+
+        delete_credential_with_store(directory.path(), provider_id, &store).unwrap();
+        assert!(store.delete_calls.lock().unwrap().is_empty());
+        let statuses =
+            credential_status_map(directory.path(), &settings.providers, &HashMap::new());
+        assert_eq!(statuses[provider_id].status, "not_detected");
+    }
+
+    #[test]
+    fn credential_entry_validation_rejects_control_characters_and_enforces_caps() {
+        let directory = TempDir::new().unwrap();
+        save_settings(directory.path(), &default_settings()).unwrap();
+        let store = MemoryCredentialStore::default();
+        for bad in [
+            "sk-abc\n123",
+            "sk-abc\r\n123",
+            "sk-abc\t123",
+            "sk-ab\u{0}cd",
+        ] {
+            assert!(
+                set_credential_with_store(
+                    directory.path(),
+                    "provider-deepseek-existing",
+                    bad,
+                    false,
+                    &store,
+                )
+                .is_err(),
+                "control-character credential must be rejected"
+            );
+        }
+        set_credential_with_store(
+            directory.path(),
+            "provider-deepseek-existing",
+            &"x".repeat(MAX_CREDENTIAL_BYTES),
+            false,
+            &store,
+        )
+        .unwrap();
+        assert!(
+            store
+                .entries
+                .lock()
+                .unwrap()
+                .contains_key("provider-deepseek-existing")
+        );
+        delete_credential_with_store(directory.path(), "provider-deepseek-existing", &store)
+            .unwrap();
+    }
+
+    #[test]
+    fn credential_audit_records_redacted_events_and_stays_bounded() {
+        let directory = TempDir::new().unwrap();
+        save_settings(directory.path(), &default_settings()).unwrap();
+        let store = MemoryCredentialStore::default();
+        let secret = "audit-sentinel-secret-value";
+        set_credential_with_store(
+            directory.path(),
+            "provider-deepseek-existing",
+            secret,
+            false,
+            &store,
+        )
+        .unwrap();
+        delete_credential_with_store(directory.path(), "provider-deepseek-existing", &store)
+            .unwrap();
+
+        let log = std::fs::read_to_string(credential_audit_path(directory.path())).unwrap();
+        assert!(!log.contains(secret));
+        let events = log
+            .lines()
+            .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0]["event"], "credential_set");
+        assert_eq!(events[0]["credential_source"], "system_store");
+        assert_eq!(events[0]["outcome"], "ok");
+        assert_eq!(events[0]["provider_id"], "provider-deepseek-existing");
+        assert!(events[0]["recorded_at"].is_string());
+        assert_eq!(events[1]["event"], "credential_delete");
+
+        // The log stays within its byte budget and keeps parseable lines.
+        for _ in 0..400 {
+            record_credential_audit(
+                directory.path(),
+                "credential_turn_inject",
+                "provider-deepseek-existing",
+                "system_store",
+                "detected",
+                None,
+            );
+        }
+        let bytes = std::fs::read(credential_audit_path(directory.path())).unwrap();
+        assert!(bytes.len() <= MAX_CREDENTIAL_AUDIT_BYTES);
+        let text = String::from_utf8(bytes).unwrap();
+        assert!(
+            text.lines()
+                .all(|line| serde_json::from_str::<serde_json::Value>(line).is_ok())
+        );
+        assert!(!text.contains(secret));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_file_fallback_round_trips_with_owner_only_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let directory = TempDir::new().unwrap();
+        let provider_id = "provider-file-fallback-test";
+        let mut settings = default_settings();
+        let mut provider = settings.providers[0].clone();
+        provider.id = provider_id.to_string();
+        provider.display_name = "File Fallback Provider".to_string();
+        provider.credential_source = CREDENTIAL_SOURCE_FILE_FALLBACK.to_string();
+        settings.providers.push(provider);
+        save_settings(directory.path(), &settings).unwrap();
+        let store = MemoryCredentialStore::default();
+
+        set_credential_with_store(directory.path(), provider_id, "file-secret", false, &store)
+            .unwrap();
+        assert!(store.set_calls.lock().unwrap().is_empty());
+        let path = file_fallback_credential_path(directory.path(), provider_id);
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+        let directory_mode = std::fs::metadata(directory.path().join(CREDENTIAL_DIRECTORY_NAME))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(directory_mode, 0o700);
+
+        let resolved = resolve_provider_credential(
+            directory.path(),
+            settings.providers.last().unwrap(),
+            &store,
+        )
+        .unwrap();
+        assert_eq!(resolved.as_deref(), Some("file-secret"));
+        assert!(store.get_calls.lock().unwrap().is_empty());
+
+        let statuses =
+            credential_status_map(directory.path(), &settings.providers, &HashMap::new());
+        assert_eq!(statuses[provider_id].status, "detected");
+        assert_eq!(statuses[provider_id].source, "file");
+
+        delete_credential_with_store(directory.path(), provider_id, &store).unwrap();
+        assert!(!path.exists());
+        let statuses =
+            credential_status_map(directory.path(), &settings.providers, &HashMap::new());
+        assert_eq!(statuses[provider_id].status, "not_detected");
     }
 }

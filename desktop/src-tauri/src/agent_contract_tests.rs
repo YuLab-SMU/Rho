@@ -206,6 +206,7 @@ fn agent_settings_fixture() -> AgentLlmSettingsView {
         base_url_env: None,
         wire_api: Some("openai".to_string()),
         disable_stream_options: Some(false),
+        credential_source: "system_store".to_string(),
     };
     let model = AgentModelProfile {
         id: "model:fixture".to_string(),
@@ -236,13 +237,13 @@ fn agent_settings_fixture() -> AgentLlmSettingsView {
         }),
     };
     AgentLlmSettingsView {
-        schema_version: 3,
+        schema_version: 4,
         revision: 9,
         selected_model_id: model.id.clone(),
         providers: vec![agent_llm::AgentProviderProfileView {
             profile: provider,
             credential_status: "unchecked".to_string(),
-            credential_source: "unchecked".to_string(),
+            credential_effective_source: "unchecked".to_string(),
         }],
         models: vec![agent_llm::AgentModelProfileView {
             profile: model,
@@ -293,7 +294,15 @@ fn agent_settings_ipc_serialization_matches_generated_contract() {
     }))
     .unwrap();
 
-    assert_eq!(settings["schema_version"], 3);
+    assert_eq!(settings["schema_version"], 4);
+    assert_eq!(
+        settings["providers"][0]["credential_source"],
+        "system_store"
+    );
+    assert_eq!(
+        settings["providers"][0]["credential_effective_source"],
+        "unchecked"
+    );
     assert_eq!(settings["revision"], 9);
     assert_eq!(settings["providers"][0]["id"], "provider:fixture");
     assert_eq!(settings["providers"][0]["credential_status"], "unchecked");
