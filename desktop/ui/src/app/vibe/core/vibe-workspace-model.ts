@@ -17,7 +17,11 @@ export type VibeLayoutMode =
 export interface VibeExactReferences {
   readonly surfaceInstanceIds: readonly string[];
   readonly conversationIds: readonly string[];
+  readonly runIds: readonly string[];
   readonly artifactIds: readonly string[];
+  readonly plotIds: readonly string[];
+  readonly checkIds: readonly string[];
+  readonly evidenceIds: readonly string[];
   readonly findingIds: readonly string[];
   readonly taskIds: readonly string[];
 }
@@ -50,6 +54,28 @@ export interface VibeWorkspaceViewState {
   readonly blockId: string | null;
 }
 
+const EXACT_REFERENCE_KEYS = [
+  "surfaceInstanceIds",
+  "conversationIds",
+  "runIds",
+  "artifactIds",
+  "plotIds",
+  "checkIds",
+  "evidenceIds",
+  "findingIds",
+  "taskIds",
+] as const satisfies readonly (keyof VibeExactReferences)[];
+
+export function sameVibeExactReferences(
+  left: VibeExactReferences,
+  right: VibeExactReferences,
+): boolean {
+  return EXACT_REFERENCE_KEYS.every((key) => (
+    left[key].length === right[key].length
+    && left[key].every((value, index) => value === right[key][index])
+  ));
+}
+
 export type VibeWorkspaceViewAction =
   | { readonly kind: "activate_region"; readonly region: VibeRegionRole }
   | { readonly kind: "show_overview" }
@@ -64,7 +90,11 @@ export type VibeWorkspaceViewAction =
 const EMPTY_REFS: VibeExactReferences = Object.freeze({
   surfaceInstanceIds: Object.freeze([]),
   conversationIds: Object.freeze([]),
+  runIds: Object.freeze([]),
   artifactIds: Object.freeze([]),
+  plotIds: Object.freeze([]),
+  checkIds: Object.freeze([]),
+  evidenceIds: Object.freeze([]),
   findingIds: Object.freeze([]),
   taskIds: Object.freeze([]),
 });
@@ -72,13 +102,14 @@ const EMPTY_REFS: VibeExactReferences = Object.freeze({
 export function initialVibeWorkspaceViewState(
   projectId: string,
   pageId: string,
+  blockId: string | null = null,
 ): VibeWorkspaceViewState {
   return {
     projectId,
     pageId,
     activeRegion: "manuscript",
     layoutMode: "overview",
-    blockId: null,
+    blockId,
   };
 }
 
@@ -112,7 +143,7 @@ export function reduceVibeWorkspaceView(
   }
 }
 
-function blockForId(page: VibePage, blockId: string | null): VibeBlock | null {
+export function blockForId(page: VibePage, blockId: string | null): VibeBlock | null {
   if (blockId == null) return null;
   for (const section of page.sections) {
     const block = section.blocks.find((candidate) => candidate.block_id === blockId);
@@ -121,12 +152,51 @@ function blockForId(page: VibePage, blockId: string | null): VibeBlock | null {
   return null;
 }
 
-function exactConversationId(instance: SurfaceInstance | undefined): string | null {
-  if (instance?.surface_id !== "rho.agent") return null;
+function exactViewStateId(
+  instance: SurfaceInstance | undefined,
+  key: string,
+): string | null {
+  if (instance == null) return null;
   if (instance.view_state == null || typeof instance.view_state !== "object") return null;
-  if (!("conversation_id" in instance.view_state)) return null;
-  const value = instance.view_state.conversation_id;
+  const viewState = instance.view_state as Readonly<Record<string, unknown>>;
+  if (!(key in viewState)) return null;
+  const value = viewState[key];
   return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function exactSurfaceReferences(instance: SurfaceInstance | undefined): VibeExactReferences {
+  if (instance == null) return EMPTY_REFS;
+  switch (instance.surface_id) {
+    case "rho.agent": {
+      const conversationId = exactViewStateId(instance, "conversation_id");
+      return {
+        ...EMPTY_REFS,
+        conversationIds: conversationId == null ? [] : [conversationId],
+      };
+    }
+    case "rho.check-result": {
+      const checkId = exactViewStateId(instance, "check_result_id");
+      return { ...EMPTY_REFS, checkIds: checkId == null ? [] : [checkId] };
+    }
+    case "rho.runs": {
+      const runId = exactViewStateId(instance, "selected_id");
+      return { ...EMPTY_REFS, runIds: runId == null ? [] : [runId] };
+    }
+    case "rho.artifacts": {
+      const artifactId = exactViewStateId(instance, "selected_id");
+      return { ...EMPTY_REFS, artifactIds: artifactId == null ? [] : [artifactId] };
+    }
+    case "rho.plots": {
+      const plotId = exactViewStateId(instance, "selected_id");
+      return { ...EMPTY_REFS, plotIds: plotId == null ? [] : [plotId] };
+    }
+    case "rho.evidence": {
+      const evidenceId = exactViewStateId(instance, "selected_id");
+      return { ...EMPTY_REFS, evidenceIds: evidenceId == null ? [] : [evidenceId] };
+    }
+    default:
+      return EMPTY_REFS;
+  }
 }
 
 export function exactReferencesForBlock(
@@ -139,11 +209,10 @@ export function exactReferencesForBlock(
   const content = block.content;
   switch (content.kind) {
     case "surface_ref": {
-      const conversationId = exactConversationId(instances.get(content.instance_id));
+      const linked = exactSurfaceReferences(instances.get(content.instance_id));
       return {
-        ...EMPTY_REFS,
+        ...linked,
         surfaceInstanceIds: [content.instance_id],
-        conversationIds: conversationId == null ? [] : [conversationId],
       };
     }
     case "artifact_ref":
@@ -211,14 +280,51 @@ export function correspondenceForFocus(focus: VibeFocus): VibeCorrespondence {
       }],
     };
   }
-  if (focus.exactRefs.findingIds.length > 0) {
+  if (focus.exactRefs.plotIds.length > 0) {
     return {
       hasExactLink: true,
-      summary: "当前对应：手稿中的检查发现引用 → 查验记录。",
+      summary: "当前对应：手稿中的候选图形引用 → 查验记录。",
       steps: [manuscript, {
         role: "verification",
-        label: "检查发现",
-        detail: "由手稿中精确引用的发现",
+        label: "候选图形",
+        detail: "由手稿中精确引用的图形产物",
+      }],
+    };
+  }
+  if (focus.exactRefs.runIds.length > 0) {
+    return {
+      hasExactLink: true,
+      summary: "当前对应：手稿中的执行引用 → 查验记录。",
+      steps: [manuscript, {
+        role: "verification",
+        label: "执行记录",
+        detail: "由手稿中精确引用的执行",
+      }],
+    };
+  }
+  if (focus.exactRefs.checkIds.length > 0 || focus.exactRefs.findingIds.length > 0) {
+    return {
+      hasExactLink: true,
+      summary: focus.exactRefs.checkIds.length > 0
+        ? "当前对应：手稿中的项目检查引用 → 查验记录。"
+        : "当前对应：手稿中的检查发现引用 → 查验记录。",
+      steps: [manuscript, {
+        role: "verification",
+        label: focus.exactRefs.checkIds.length > 0 ? "项目检查" : "检查发现",
+        detail: focus.exactRefs.checkIds.length > 0
+          ? "由手稿中精确引用的检查结果"
+          : "由手稿中精确引用的发现",
+      }],
+    };
+  }
+  if (focus.exactRefs.evidenceIds.length > 0) {
+    return {
+      hasExactLink: true,
+      summary: "当前对应：手稿中的证据记录引用 → 查验记录。",
+      steps: [manuscript, {
+        role: "verification",
+        label: "证据链接",
+        detail: "由手稿中精确引用的结构化证据记录",
       }],
     };
   }

@@ -2,7 +2,7 @@
 
 Status: active documentation coordination record
 
-Review date: 2026-08-26 (fast-iteration checkpoint evidence reconciled)
+Review date: 2026-08-27 (VIBE-1 integration and STARTUP-INFO-1 ownership reconciled)
 Scope: unfinished or acceptance-active specifications, plans, and release gates
 
 Real-application visual acceptance ownership: the executable workflow and
@@ -11,6 +11,80 @@ and `test/acceptance-project/acceptance-results/CANDIDATE-RESULT-TEMPLATE.md`.
 The former `MANUAL-ACCEPTANCE.md` is a stable retirement notice only. This
 development evidence does not replace exact-release-candidate, distribution,
 signing, clean-install, or package-specific gates owned elsewhere.
+
+## 2026-08-27 VIBE-1 Information-flow workbench
+
+`active-2026-08-27-vibe-information-flow-workbench-spec.md` owns one bounded
+D2/R2 frontend checkpoint inside a separately staged D3 Vibe direction. It
+replaces the generic full-canvas Page-builder presentation with three semantic
+regions—working manuscript, Agent autonomous exploration, and verification /
+draft interpretation—while preserving ordered Vibe document flow and the
+focused-document narrow contract. The 40/35/25 desktop layout is a presentation
+preset, not a second Studio Scene graph or three permanent Surface instances.
+
+The accepted Surface Runtime retains Studio/Vibe composition, Surface identity,
+Profile/Page CAS, project isolation, focus authority, keyboard and document
+order, accessible roles and behavior, and responsive reflow. The Studio design
+contract retains visual tokens, density, status presentation, focus-treatment
+appearance, target geometry, reduced-motion styling, and 200%-zoom visual
+acceptance. Agent contracts retain Conversation/Turn/event/approval/execution truth; Runtime Output retains
+Run/output and Agent-context authority; Check and Evidence retain their current
+project-rule and structural-link scope. VIBE-1 adds no schema, migration,
+scientific Claim decision, immutable manuscript revision, invalidation,
+Checkpoint, credential, network, filesystem, approval, plugin, public protocol,
+version, candidate, or release authority.
+
+Wave 13's `SurfaceViewport` lease remains authoritative wherever that component
+is composed, but VIBE-1 replaces the former live-Surface Page-builder
+presentation and intentionally mounts no Studio Surface instances or released
+renderer placeholders in Vibe. This presentation change neither deletes nor
+redefines `SurfaceViewport`; its component contract remains independently
+tested, while Vibe scale evidence now requires zero mounted Studio instances.
+
+Correspondence may use only exact typed Page references, exact Agent Surface
+conversation state, and relationships already returned by an authority. It may
+not match by time, title, prompt, filename, or proximity. Generic domain detail,
+Agent tool failure, Run completion, Artifact provenance completeness, clean
+project Check, or linked Evidence Claim cannot be relabelled as a scientific
+observation, route pivot, support decision, or verified conclusion. Missing
+relations remain visibly unlinked. Formal scientific state requires a later
+separately authorized D3/R3 package.
+
+The bounded VIBE-1 checkpoint is implemented and integration-reviewed in
+desktop candidate `0.4.1-dev.21`. Exact-target review, project-switch flush,
+one-shot return state, unresolved-selection keyboard recovery, focused browser
+and intermediate-width browser interaction, intermediate status-bar
+preservation, and the six-frame S9 real-app visual ledger passed. This fact
+does not activate VIBE-2 or move any scientific-state authority.
+
+## 2026-08-27 STARTUP-INFO-1 Truthful startup ledger
+
+`active-2026-08-05-startup-performance-spec.md` owns the authorized D2/R3
+STARTUP-INFO-1 workflow. It adds a presentation-only observer around the
+existing ordered runtime bootstrap, Workspace R start, and ready-project restore
+await boundaries, then projects those facts as a three-stage startup ledger.
+The callback is not readiness authority: `WorkspacePreparation` and the current
+RSR ready-before-Workbench admission remain authoritative, and no later stage
+may appear after an earlier failure.
+
+STARTUP-RECOVERY-1 retains contextual `Choose Rscript`, `Choose project`, Retry,
+picker cancellation, and failure semantics. The Studio design contract retains
+visual tokens, status presentation, focus-treatment appearance, target
+geometry, and reduced-motion styling. The accepted plugin-native Surface
+Runtime design retains focus authority, keyboard and document order,
+accessible roles and behavior, and responsive reflow. Project identity,
+last-project persistence, Runtime, Workspace R, Surface, Agent, credential,
+approval, execution, and release authorities do not move. No schema, command,
+Tauri event, filesystem, network, credential, approval, execution, or public
+protocol is added.
+
+The startup shell exits before `WorkbenchApp` and Vibe mount, so STARTUP-INFO-1
+does not overlap VIBE-1 information-flow state or composition. Its feature lane
+may implement only the observer, pure model, ledger view, token-only
+`workbench.css`, mock parity, and focused tests. `App.tsx`, this matrix, version
+metadata, and `NEWS.md` remain blocked until the current Vibe integration lane
+finishes; STARTUP-INFO-1B must then obtain a new single-writer integration lane
+before wiring or candidate/version work.
 
 ## Purpose
 
@@ -41,6 +115,8 @@ semantics.
 | Document | Status after review | Owns | May proceed when |
 | --- | --- | --- | --- |
 | `project/active-development-governance.md` | active; D2/R2 fast-iteration checkpoint amendment authorized 2026-08-26 | required proposal-to-release development lifecycle, risk/test depth, review, versioning, evidence rules, and same-snapshot resumable RSR validation | applies continuously to all non-trivial work; checkpoint evidence is reusable only for an unchanged repository fingerprint and unchanged gate command |
+| `plans/active-2026-08-27-vibe-information-flow-workbench-spec.md` | active D3 direction; VIBE-1 D2/R2 checkpoint implemented and integration-reviewed as `0.4.1-dev.21` on 2026-08-27 | truthful three-region Vibe information hierarchy, local focus/layout projection, exact-reference correspondence, working-manuscript editor extraction, bounded Agent durable-truth projection, typed Run/Artifact/Plot/Check/Evidence projection, Studio transition intent, and VIBE-1 frontend/visual evidence | preserve Page/Profile, Agent, Runtime Output, Check/Evidence, Surface Runtime, Studio token, project-isolation, revision/CAS and release owners; VIBE-2 and formal revision/invalidation/decision/Checkpoint or other scientific-state work require separate owner authorization and a D3/R3 contract; release remains NO-GO |
+| `plans/active-2026-08-05-startup-performance-spec.md` | active; STARTUP-PERF WP1/WP2 implemented and owner-authorized STARTUP-INFO-1 D2/R3 feature slice active | presentation-only progress observation around existing runtime/Workspace/project awaits, pure three-stage startup ledger, bounded returned facts, truthful attention/recovery projection, mock parity, and focused startup evidence | preserve RSR ready-before-Workbench, STARTUP-RECOVERY-1 actions, project/generation guards, Studio tokens and all backend authorities; feature lane cannot edit `App.tsx`, this matrix, versions or `NEWS.md`; STARTUP-INFO-1B waits for Vibe integration release and a new single-writer integration lane; no timer/percentage/ETA, schema, command/event, authority, installer or release expansion |
 | `plans/implemented-2026-08-26-plugin-native-settings-surface-spec.md` | implemented D3/R3 SETTINGS-PLUG-1; `0.4.1-dev.20`, complete affected validation, exact debug-app Models/Components and singleton restore acceptance, and final contract review passed on 2026-08-26 | trusted first-party `rho.settings` Surface, closed module host, Models projection/revision-safe chat and capacity operations, read-only current component catalog, and unplaced-singleton restore | preserve RSR Surface/Command authority and all CRED-UX/CRED-SEC settings, revision, credential, redaction and recovery contracts; no workspace-plugin Settings injection, schema, new mutation/network/filesystem authority, or release scope |
 | `plans/active-2026-08-26-cred-reveal-1a-connection-test-redaction-spec.md` | active D1/R3 CRED-REVEAL-1A; explicitly authorized by owner instruction `开始施工` on 2026-08-26; mandatory stop before 1B | selected-Provider connection-test child stdout/stderr bounds, raw stderr suppression, stable non-secret structured failure projection, removal of inherited sensitive/all-Provider credential and endpoint environment names before selected-only re-addition, fail-safe process-tree reap/test-control cleanup, sentinel/state-preservation regression, and post-test credential review; the existing command adapter may pass state-owned runtime `data_dir` internally only to obtain the validated catalog scrub list | no View UI, secret getter, IPC command name/arguments/result, binding/mock, presenter, OS auth, reveal audit, schema/source/store/network/model-selection/route authority, version, candidate, or release change; current CRED-UX/CRED-SEC no-redisplay and exact-source/no-fallback rules remain authoritative; 1B remains inactive |
 | `plans/proposed-2026-08-26-plugin-native-settings-experience-design-spec.md` | proposed revision-3 D3/R3 design contract; SETTINGS-DESIGN-3 accepted; only CRED-REVEAL-1A is active through its focused handoff, while 1B/MODEL-AUTO-1/SETTINGS-UX1/UX2 remain inactive | proposed primary `Providers / Components` information architecture, secondary soft Model preference, backend-owned deterministic pre-execution Provider/model selection, focused Provider/Connection/Add-or-Replace child screens, mode-specific first-save and replacement recovery, fixed-mask View entry plus an OS-native secure presenter for app-managed credentials, flat Components catalog, and staged CRED-REVEAL-1/MODEL-AUTO-1/SETTINGS-UX1/UX2 gates | current CRED-UX explicit-route authority, schema, no-fallback resolver, migrations, presentation-safe view, and current CRED-SEC no-redisplay/source/redaction rules remain unchanged until their separate D3/R3 amendments are implemented and accepted; product code cannot expose View until accepted CRED-REVEAL-1A connection-test error redaction and CRED-REVEAL-1B focused-window admission/revalidation, fresh OS verification on every attempt, per-Provider credential-operation locking/generation, exact-source eligibility, environment rejection before read, system-store direct reads, first-package file-fallback rejection, blocking durable fail-closed pre-display audit, awaited native close and Rho-owned-buffer clearing, failure recovery, platform acceptance, and no fallback all pass, and the secret must never return through a Settings view, Tauri IPC, generated binding, WebView, React, DOM, mock, or browser state; route UI cannot be hidden/replaced and Providers cannot become the default/fallback until MODEL-AUTO-1 is implemented, fully verified, integrated, contract-reviewed, and accepted, or until one checked-in integration boundary accepts its resolver, lossless migration, persistence, and Settings successor together while the old route UI remains reachable through that boundary; no secret or selected UI row/view state may become runtime/layout authority; RSR retains Surface/Command/view-state authority, Studio retains tokens, existing multi-Provider routes are never guessed into a Provider, and no version/release/publication is implied |

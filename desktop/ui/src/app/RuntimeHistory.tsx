@@ -21,6 +21,7 @@ interface RuntimeHistoryProps {
     "loadDomainSurface" | "subscribeInvalidated"
   >;
   readonly initialFilter: string;
+  readonly selectedId: string | null;
   readonly persistFilter: (filter: string) => Promise<void>;
   readonly reportError: (cause: unknown) => void;
   readonly useInAgent: (reference: RuntimeOutputReference) => void;
@@ -37,6 +38,47 @@ function executionKey(executionId: string): string {
 
 function legacyKey(itemId: string): string {
   return `legacy:${itemId}`;
+}
+
+function exactExecution(
+  executions: readonly RuntimeExecution[],
+  selectedId: string,
+): RuntimeExecution | null {
+  return executions.find((execution) => execution.execution_id === selectedId)
+    ?? executions.find((execution) => execution.run_id === selectedId)
+    ?? null;
+}
+
+function exactLegacy(
+  items: readonly DomainSurfaceItem[],
+  selectedId: string,
+): DomainSurfaceItem | null {
+  return items.find((item) => item.id === selectedId) ?? null;
+}
+
+const RUNTIME_HISTORY_PAGE_SIZE = 50;
+
+async function completeExactExecutionSearch(
+  transport: RuntimeHistoryProps["transport"],
+  selectedId: string,
+  firstPage: readonly RuntimeExecution[],
+): Promise<readonly RuntimeExecution[]> {
+  const executions = [...firstPage];
+  const seen = new Set(executions.map((execution) => execution.execution_id));
+  let page = firstPage;
+  while (exactExecution(executions, selectedId) == null && page.length === RUNTIME_HISTORY_PAGE_SIZE) {
+    const cursor = page.at(-1);
+    if (cursor == null) break;
+    page = await transport.listRuntimeExecutions(RUNTIME_HISTORY_PAGE_SIZE, {
+      started_at: cursor.started_at,
+      execution_id: cursor.execution_id,
+    });
+    const additions = page.filter((execution) => !seen.has(execution.execution_id));
+    if (additions.length === 0) break;
+    for (const execution of additions) seen.add(execution.execution_id);
+    executions.push(...additions);
+  }
+  return executions;
 }
 
 function matchesExecution(execution: RuntimeExecution, query: string): boolean {
@@ -60,6 +102,7 @@ function matchesLegacy(item: DomainSurfaceItem, query: string): boolean {
 export function RuntimeHistory({
   transport,
   initialFilter,
+  selectedId,
   persistFilter,
   reportError,
   useInAgent,
@@ -112,19 +155,30 @@ export function RuntimeHistory({
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [runtimeRows, legacy] = await Promise.all([
-        transport.listRuntimeExecutions(50),
+      const [firstRuntimePage, legacy] = await Promise.all([
+        transport.listRuntimeExecutions(RUNTIME_HISTORY_PAGE_SIZE),
         transport.loadDomainSurface("rho.runs"),
       ]);
+      const runtimeRows = selectedId != null
+          && exactExecution(firstRuntimePage, selectedId) == null
+          && exactLegacy(legacy.items, selectedId) == null
+        ? await completeExactExecutionSearch(transport, selectedId, firstRuntimePage)
+        : firstRuntimePage;
       const linkedIds = new Set(runtimeRows.flatMap((execution) => [
         execution.execution_id,
         ...(execution.run_id == null ? [] : [execution.run_id]),
       ]));
       const unlinkedLegacy = legacy.items.filter((item) => !linkedIds.has(item.id));
       setExecutions(runtimeRows);
-      setHasOlderExecutions(runtimeRows.length === 50);
+      setHasOlderExecutions(firstRuntimePage.length === RUNTIME_HISTORY_PAGE_SIZE);
       setLegacyItems(unlinkedLegacy);
       setSelectedKey((current) => {
+        if (selectedId != null) {
+          const execution = exactExecution(runtimeRows, selectedId);
+          if (execution != null) return executionKey(execution.execution_id);
+          const legacyItem = exactLegacy(unlinkedLegacy, selectedId);
+          return legacyItem == null ? null : legacyKey(legacyItem.id);
+        }
         if (current?.startsWith("runtime:")
             && runtimeRows.some((execution) => executionKey(execution.execution_id) === current)) return current;
         if (current?.startsWith("legacy:")
@@ -140,14 +194,14 @@ export function RuntimeHistory({
     } finally {
       setLoading(false);
     }
-  }, [transport]);
+  }, [selectedId, transport]);
 
   const loadOlderExecutions = async () => {
     const cursor = executions.at(-1);
     if (cursor == null || loadingOlder) return;
     setLoadingOlder(true);
     try {
-      const older = await transport.listRuntimeExecutions(50, {
+      const older = await transport.listRuntimeExecutions(RUNTIME_HISTORY_PAGE_SIZE, {
         started_at: cursor.started_at,
         execution_id: cursor.execution_id,
       });
@@ -155,7 +209,7 @@ export function RuntimeHistory({
         ...current,
         ...older.filter((candidate) => !current.some((existing) => existing.execution_id === candidate.execution_id)),
       ]);
-      setHasOlderExecutions(older.length === 50);
+      setHasOlderExecutions(older.length === RUNTIME_HISTORY_PAGE_SIZE);
     } catch (cause: unknown) {
       reportError(cause);
     } finally {
@@ -198,12 +252,18 @@ export function RuntimeHistory({
     }
   };
 
-  const selectedExecution = selectedKey?.startsWith("runtime:")
-    ? executions.find((execution) => executionKey(execution.execution_id) === selectedKey) ?? null
-    : null;
-  const selectedLegacy = selectedKey?.startsWith("legacy:")
-    ? legacyItems.find((item) => legacyKey(item.id) === selectedKey) ?? null
-    : null;
+  const selectedExecution = selectedId == null
+    ? selectedKey?.startsWith("runtime:")
+      ? executions.find((execution) => executionKey(execution.execution_id) === selectedKey) ?? null
+      : null
+    : exactExecution(executions, selectedId);
+  const selectedLegacy = selectedId == null
+    ? selectedKey?.startsWith("legacy:")
+      ? legacyItems.find((item) => legacyKey(item.id) === selectedKey) ?? null
+      : null
+    : exactLegacy(legacyItems, selectedId);
+  const exactUnavailable = selectedId != null && !loading
+    && selectedExecution == null && selectedLegacy == null;
 
   useEffect(() => {
     let cancelled = false;
@@ -233,12 +293,16 @@ export function RuntimeHistory({
 
   const query = filter.trim().toLowerCase();
   const visibleExecutions = useMemo(
-    () => executions.filter((execution) => matchesExecution(execution, query)),
-    [executions, query],
+    () => selectedId == null
+      ? executions.filter((execution) => matchesExecution(execution, query))
+      : selectedExecution == null ? [] : [selectedExecution],
+    [executions, query, selectedExecution, selectedId],
   );
   const visibleLegacy = useMemo(
-    () => legacyItems.filter((item) => matchesLegacy(item, query)),
-    [legacyItems, query],
+    () => selectedId == null
+      ? legacyItems.filter((item) => matchesLegacy(item, query))
+      : selectedLegacy == null ? [] : [selectedLegacy],
+    [legacyItems, query, selectedId, selectedLegacy],
   );
   const total = executions.length + legacyItems.length;
   const visibleTotal = visibleExecutions.length + visibleLegacy.length;
@@ -345,7 +409,11 @@ export function RuntimeHistory({
     </div>}
     {error == null && <div className="rho-runtime-history-body" aria-busy={loading}>
       <div className="rho-runtime-history-list" role="list" aria-label="Runtime execution history">
-        {!loading && visibleTotal === 0 && <div className="rho-runtime-history-empty rho-domain-empty rho-task-state-empty" role="status">
+        {exactUnavailable && <div className="rho-runtime-history-empty rho-domain-exact-unavailable rho-task-state-empty" role="status">
+          <strong>Exact target unavailable</strong>
+          <span>The referenced execution is not available in this project. No substitute was selected.</span>
+        </div>}
+        {!loading && !exactUnavailable && visibleTotal === 0 && <div className="rho-runtime-history-empty rho-domain-empty rho-task-state-empty" role="status">
           <strong>{query ? "No executions match this search" : "No Runtime executions yet"}</strong>
           <span>{query ? "Try code, source, Runtime, or state." : "Run code from Source or Console to create durable History."}</span>
         </div>}
@@ -383,7 +451,7 @@ export function RuntimeHistory({
           <span className="rho-runtime-history-row-copy"><strong>{projected.code ?? projected.title}</strong><small>{projected.title} · {item.subtitle ?? "Earlier Run"}</small></span>
           <span className={`rho-domain-state rho-domain-${item.status ?? "neutral"}`}>{item.status ?? "legacy"}</span>
         </button>;})}
-        {hasOlderExecutions && !query && <button
+        {selectedId == null && hasOlderExecutions && !query && <button
           type="button"
           className="rho-runtime-history-load-older"
           disabled={loadingOlder}
@@ -391,8 +459,11 @@ export function RuntimeHistory({
         >{loadingOlder ? "Loading…" : "Load older executions"}</button>}
       </div>
       <div className="rho-runtime-history-detail" aria-live="polite">
-        {selectedExecution == null && selectedLegacy == null && <div className="rho-runtime-history-empty" role="status">
-          <strong>Select an execution</strong><span>Review submitted code, human output, provenance, and completeness.</span>
+        {selectedExecution == null && selectedLegacy == null && <div className={`rho-runtime-history-empty${exactUnavailable ? " rho-domain-exact-unavailable" : ""}`} role="status">
+          <strong>{exactUnavailable ? "Exact target unavailable" : "Select an execution"}</strong>
+          <span>{exactUnavailable
+            ? "The referenced execution is not available in this project. No substitute was selected."
+            : "Review submitted code, human output, provenance, and completeness."}</span>
         </div>}
         {selectedLegacy != null && (() => {
           const projected = domainItemPresentation("rho.runs", selectedLegacy);

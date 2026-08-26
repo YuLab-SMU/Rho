@@ -14,7 +14,8 @@ import {
   type VerificationSourceProjection,
 } from "./verification-model";
 
-export const TEST_PROJECT_ID = "/projects/sc-rna-atlas";
+export const TEST_PROJECT_ID = "project:sc-rna-atlas";
+export const TEST_PROJECT_ROOT = "/projects/sc-rna-atlas";
 
 export function makeReference(
   kind: VerificationExactReference["kind"],
@@ -35,6 +36,7 @@ export function makeFocus(
 ): VerificationFocus {
   return {
     projectId: TEST_PROJECT_ID,
+    projectRoot: TEST_PROJECT_ROOT,
     projectRevision: 12,
     epoch: 3,
     pageId: "page-method",
@@ -48,7 +50,7 @@ export function makeRun(overrides: Partial<RunSummary> = {}): RunSummary {
   return {
     run_id: "run-18",
     parent_run_id: null,
-    project_root: TEST_PROJECT_ID,
+    project_root: TEST_PROJECT_ROOT,
     origin: "agent",
     status: "completed",
     started_at: "2026-08-27T03:12:00Z",
@@ -79,7 +81,7 @@ export function makeArtifact(
     artifact_id: "artifact-differential-expression",
     artifact_kind: "table",
     run_id: "run-18",
-    project_root: TEST_PROJECT_ID,
+    project_root: TEST_PROJECT_ROOT,
     output_path: "outputs/cluster-3-vs-7/differential-expression.csv",
     source_path: "analysis/cluster_contrast.R",
     execution_mode: "source",
@@ -100,7 +102,7 @@ export function makePlot(overrides: Partial<PlotArtifactSummary> = {}): PlotArti
   return {
     plot_id: "plot-donor-consistency",
     run_id: "run-18",
-    project_root: TEST_PROJECT_ID,
+    project_root: TEST_PROJECT_ROOT,
     source_path: "analysis/cluster_contrast.R",
     execution_mode: "source",
     document_version: 4,
@@ -127,7 +129,7 @@ export function makePlotView(overrides: Partial<PlotImageView> = {}): PlotImageV
 export function makeEvidence(overrides: Partial<EvidenceClaim> = {}): EvidenceClaim {
   return {
     claim_id: "claim-cluster-identity",
-    project_root: TEST_PROJECT_ID,
+    project_root: TEST_PROJECT_ROOT,
     kind: "result",
     summary: "Cluster 3 and cluster 7 differ in the recorded contrast output.",
     anchor_kind: "source_range",
@@ -198,6 +200,7 @@ export function makeSnapshot(
 ): VerificationSnapshot {
   return {
     projectId: focus.projectId,
+    projectRoot: focus.projectRoot,
     projectRevision: focus.projectRevision,
     epoch: focus.epoch,
     pageId: focus.pageId,

@@ -253,6 +253,8 @@ export function createTauriUiKernelTransport(
     ...agentRuntimeTransport,
     ...createTauriAgentSettingsTransport(invoke),
     ...createTauriAgentFileTransport(invoke),
+    ...historyTransport,
+    ...evidenceTransport,
     subscribeAgentInvalidated: (listener) =>
       subscribeEvents(listen, invalidationEvents("agent"), listener),
     loadDomainSurface: async (surfaceId) => {
@@ -303,7 +305,5 @@ export function createTauriUiKernelTransport(
       }
       return domainData(surfaceId, payload);
     },
-    readPlotArtifact: historyTransport.readPlotArtifact,
-    retryRun: historyTransport.retryRun,
   };
 }

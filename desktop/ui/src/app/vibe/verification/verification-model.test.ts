@@ -25,6 +25,8 @@ describe("verification projection model", () => {
       .not.toBe(verificationFocusKey(focus));
     expect(verificationFocusKey({ ...focus, projectId: "/projects/other" }))
       .not.toBe(verificationFocusKey(focus));
+    expect(verificationFocusKey({ ...focus, projectRoot: "/projects/other" }))
+      .not.toBe(verificationFocusKey(focus));
     expect(verificationFocusKey({
       ...focus,
       references: [makeReference("artifact", "artifact-b", "QC table")],

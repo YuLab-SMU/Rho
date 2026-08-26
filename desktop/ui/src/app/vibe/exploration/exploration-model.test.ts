@@ -164,6 +164,22 @@ describe("Vibe exploration truth projection", () => {
     });
   });
 
+  it("redacts a persisted Agent failure only in the Vibe projection", () => {
+    const persistedError = "Failed at /Users/alice/private/rho/model.R for turn_id=turn:internal-77.";
+    const summary = turn({
+      status: "failed",
+      error_message: persistedError,
+      final_message: "A public final response remains primary content.",
+    });
+    const projected = projectExplorationTurn(summary, detail(summary, []));
+
+    expect(projected.errorMessage).toContain("Failed at [local path]");
+    expect(projected.errorMessage).toContain("[internal reference]");
+    expect(projected.errorMessage).not.toContain("turn:internal-77");
+    expect(projected.finalMessage).toBe(summary.final_message);
+    expect(summary.error_message).toBe(persistedError);
+  });
+
   it("derives attention and exact-reference markers only from exact fields", () => {
     const summary = turn({ status: "waiting", pending_request_id: "approval:one" });
     const projectedTurn = projectExplorationTurn(summary, detail(summary, []));

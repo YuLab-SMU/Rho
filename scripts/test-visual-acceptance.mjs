@@ -65,7 +65,7 @@ function reviewFrame(runDirectory, frame, verdict = "pass") {
 // scenario registry is complete and every module exists
 {
   const ids = SCENARIOS.map((scenario) => scenario.id);
-  assert.deepEqual(ids, ["s0", "s1", "s2", "s3", "s7", "s8"]);
+  assert.deepEqual(ids, ["s0", "s1", "s2", "s3", "s7", "s8", "s9"]);
   assert.equal(new Set(ids).size, ids.length, "scenario ids must be unique");
   for (const scenario of SCENARIOS) {
     const file = path.join(repositoryRoot, "scripts", "visual-acceptance", scenario.file);

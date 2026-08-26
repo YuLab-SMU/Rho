@@ -4,6 +4,25 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.1-dev.21 - 2026-08-27
+
+### Vibe information-flow workbench
+
+- Vibe now presents one continuous scientific information flow across the
+  working manuscript, Agent autonomous exploration, and verification / draft
+  interpretation. The wide workspace opens as a weighted three-region view,
+  while each region can take focus and narrow windows show one complete region
+  at a time without turning the workflow into a chat panel or card grid.
+- The manuscript remains the editable human/Agent alignment surface. Agent work
+  is projected from durable conversation and Turn records without exposing raw
+  reasoning or adding Vibe-owned execution controls, and verification keeps
+  Runs, outputs, checks, provenance health, and working interpretations visibly
+  distinct from accepted scientific conclusions.
+- Exact referenced Agent work and verification records can open their matching
+  Studio target. Leaving Vibe flushes pending manuscript edits, rejects stale or
+  cross-project targets, and an in-session return restores the same Page,
+  selected block, and information layer once when those identities still exist.
+
 ## 0.4.1-dev.20 - 2026-08-26
 
 ### Plugin-native Settings

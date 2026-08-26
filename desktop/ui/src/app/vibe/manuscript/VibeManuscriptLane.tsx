@@ -27,6 +27,7 @@ const ReadyManuscriptLane = forwardRef<VibeManuscriptLaneHandle, ManuscriptReady
   readonly saveStatusId: string;
 }>(function ReadyManuscriptLane({
   page,
+  busy = false,
   profileRevision,
   commitPage,
   reportError,
@@ -49,6 +50,7 @@ const ReadyManuscriptLane = forwardRef<VibeManuscriptLaneHandle, ManuscriptReady
       data-region-role="manuscript"
       data-region-state={saveState.kind}
       aria-labelledby={headingId}
+      aria-busy={busy || undefined}
     >
       <header className="rho-vibe-manuscript-header">
         <div>
@@ -59,12 +61,13 @@ const ReadyManuscriptLane = forwardRef<VibeManuscriptLaneHandle, ManuscriptReady
           id={saveStatusId}
           className="rho-vibe-manuscript-save-state"
           role={saveState.kind === "error" ? "alert" : "status"}
-          aria-live="polite"
+          aria-live={saveState.kind === "error" ? undefined : "polite"}
         >{saveCopy(saveState)}</span>
       </header>
       <ManuscriptEditor
         ref={ref}
         page={page}
+        busy={busy}
         profileRevision={profileRevision}
         commitPage={commitPage}
         reportError={reportError}

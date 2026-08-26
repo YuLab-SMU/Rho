@@ -4,6 +4,7 @@ import type {
   AgentTurnEvent,
   AgentTurnSummary,
 } from "../../../transport";
+import { vibeFailureMessage } from "../core/vibe-failure";
 
 export type ExplorationDisplayStatus =
   | "empty"
@@ -177,13 +178,16 @@ export function projectExplorationTurn(
 ): ExplorationTurnView {
   const matchingDetail = detail?.turn.turn_id === turn.turn_id ? detail : null;
   const waitingApproval = matchingDetail?.approvals.some((approval) => approval.status === "waiting") === true;
+  const errorMessage = boundedPublicText(turn.error_message, 4_000);
   return {
     turnId: turn.turn_id,
     conversationId: turn.conversation_id,
     status: projectExplorationStatus(turn.status, turn.terminal_reason),
     task: fullTask(matchingDetail, turn.prompt_preview),
     finalMessage: boundedPublicText(turn.final_message, 16_000),
-    errorMessage: boundedPublicText(turn.error_message, 4_000),
+    errorMessage: errorMessage == null
+      ? null
+      : vibeFailureMessage(errorMessage, "Agent 失败详情暂时不可用。"),
     startedAt: turn.started_at,
     finishedAt: turn.finished_at,
     retryOfTurnId: turn.retry_of_turn_id,

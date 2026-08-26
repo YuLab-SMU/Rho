@@ -30,40 +30,43 @@ function RegionFrame({
   role,
   activeRegion,
   layoutMode,
-  titleId,
+  regionId,
   onActivate,
   children,
 }: {
   readonly role: VibeRegionRole;
   readonly activeRegion: VibeRegionRole;
   readonly layoutMode: VibeLayoutMode;
-  readonly titleId: string;
+  readonly regionId: string;
   readonly onActivate: () => void;
   readonly children: ReactNode;
 }) {
   const copy = REGION_COPY[role];
   const focused = layoutMode === `focus-${role}`;
   return (
-    <section
+    <div
+      id={regionId}
       className="rho-vibe-region"
       data-region={role}
       data-active={String(activeRegion === role)}
       data-focused={String(focused)}
-      aria-labelledby={titleId}
+      role="group"
+      aria-label={`${copy.title}区域`}
     >
       <header className="rho-vibe-region-header">
         <button
           type="button"
           className="rho-vibe-region-focus"
           aria-pressed={focused}
+          aria-label={focused ? `${copy.title}区域已聚焦` : `聚焦${copy.title}区域`}
           onClick={onActivate}
         >
-          <strong id={titleId}>{copy.title}</strong>
-          <span>{copy.subtitle}</span>
+          <strong aria-hidden="true">{copy.title}</strong>
+          <span aria-hidden="true">{focused ? "当前聚焦" : copy.subtitle}</span>
         </button>
       </header>
       <div className="rho-vibe-region-body">{children}</div>
-    </section>
+    </div>
   );
 }
 
@@ -96,7 +99,9 @@ export function VibeWorkspace({
           {(["manuscript", "exploration", "verification"] as const).map((role) => (
             <button
               type="button"
+              data-region={role}
               aria-pressed={activeRegion === role}
+              aria-controls={`${id}-${role}`}
               onClick={() => onActivateRegion(role)}
               key={role}
             >
@@ -117,21 +122,21 @@ export function VibeWorkspace({
           role="manuscript"
           activeRegion={activeRegion}
           layoutMode={layoutMode}
-          titleId={`${id}-manuscript`}
+          regionId={`${id}-manuscript`}
           onActivate={() => onActivateRegion("manuscript")}
         >{manuscript}</RegionFrame>
         <RegionFrame
           role="exploration"
           activeRegion={activeRegion}
           layoutMode={layoutMode}
-          titleId={`${id}-exploration`}
+          regionId={`${id}-exploration`}
           onActivate={() => onActivateRegion("exploration")}
         >{exploration}</RegionFrame>
         <RegionFrame
           role="verification"
           activeRegion={activeRegion}
           layoutMode={layoutMode}
-          titleId={`${id}-verification`}
+          regionId={`${id}-verification`}
           onActivate={() => onActivateRegion("verification")}
         >{verification}</RegionFrame>
       </div>

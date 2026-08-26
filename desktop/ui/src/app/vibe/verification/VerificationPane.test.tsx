@@ -234,6 +234,25 @@ describe("Vibe verification region", () => {
     expect(host.textContent).not.toContain("结论已验证");
   });
 
+  it("does not echo an unknown backend Run status into the Vibe correspondence", async () => {
+    const runReference = makeReference("run", "run-18", "Run with a future status");
+    const focus = makeFocus([runReference]);
+    const snapshot = makeSnapshot(focus, {
+      runs: source([{
+        record: makeRun({ status: "vendor_internal_state" }),
+        references: [runReference],
+      }]),
+    });
+    const { host } = await renderPane({
+      focus,
+      adapter: staticAdapter(snapshot),
+      onOpenStudio: async () => undefined,
+    });
+
+    expect(host.textContent).toContain("执行状态未知");
+    expect(host.textContent).not.toContain("vendor_internal_state");
+  });
+
   it("hides formerly loaded records when the project revision is stale", async () => {
     const artifactReference = makeReference(
       "artifact",

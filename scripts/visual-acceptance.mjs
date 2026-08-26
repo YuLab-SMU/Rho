@@ -8,7 +8,7 @@
 //
 // Usage:
 //   node scripts/visual-acceptance.mjs run [--app <path>] [--output <dir>]
-//       [--fixtures <dir>] [--scenarios s0,s1,s2,s7,s8] [--keep-app]
+//       [--fixtures <dir>] [--scenarios s0,s1,s2,s3,s7,s8,s9] [--keep-app]
 //   node scripts/visual-acceptance.mjs record-review --run <dir>
 //       --frame <name> --verdict pass|fail [--note <text>]
 //   node scripts/visual-acceptance.mjs finalize --run <dir>
@@ -31,6 +31,7 @@ export const SCENARIOS = Object.freeze([
   { id: "s3", file: "s3-agent.mjs", title: "Agent Ask/Plan/Act (truthful SKIP without credentials)" },
   { id: "s7", file: "s7-git-review.mjs", title: "Reviewable Git mutations and conflict banner" },
   { id: "s8", file: "s8-persistence-boundaries.mjs", title: "Persistence, project switching, and boundary projects" },
+  { id: "s9", file: "s9-vibe.mjs", title: "Vibe information flow: wide/intermediate overview, focus modes, and narrow reading" },
 ]);
 
 export class AcceptanceError extends Error {}

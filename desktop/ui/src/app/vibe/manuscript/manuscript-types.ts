@@ -46,6 +46,7 @@ interface ManuscriptErrorProps {
 
 export interface ManuscriptReadyProps {
   readonly status: "ready";
+  readonly busy?: boolean;
   readonly page: VibePage;
   readonly profileRevision: number;
   readonly commitPage: ManuscriptCommit;

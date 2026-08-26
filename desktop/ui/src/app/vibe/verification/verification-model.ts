@@ -12,7 +12,8 @@ export type VerificationReferenceKind =
   | "artifact"
   | "plot"
   | "check"
-  | "evidence";
+  | "evidence"
+  | "finding";
 
 export type VerificationReferenceOrigin =
   | { readonly kind: "page-block"; readonly pageId: string; readonly blockId: string }
@@ -31,6 +32,7 @@ export interface VerificationExactReference {
 
 export interface VerificationScope {
   readonly projectId: string;
+  readonly projectRoot: string;
   readonly projectRevision: number;
   readonly epoch: number;
 }
@@ -143,6 +145,7 @@ function originKey(origin: VerificationReferenceOrigin): readonly unknown[] {
 export function verificationFocusKey(focus: VerificationFocus): string {
   return JSON.stringify([
     focus.projectId,
+    focus.projectRoot,
     focus.projectRevision,
     focus.epoch,
     focus.pageId,

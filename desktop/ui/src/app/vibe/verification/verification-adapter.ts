@@ -49,6 +49,7 @@ type ReferenceGroups = ReadonlyMap<string, readonly VerificationExactReference[]
 function scopeFromFocus(focus: VerificationFocus): VerificationScope {
   return {
     projectId: focus.projectId,
+    projectRoot: focus.projectRoot,
     projectRevision: focus.projectRevision,
     epoch: focus.epoch,
   };
@@ -156,7 +157,7 @@ async function loadExactCollection<T>(
       throw new VerificationContractError("The exact-reference reader returned a duplicate identity.");
     }
     const recordProject = project(record);
-    if (recordProject != null && recordProject !== scope.projectId) {
+    if (recordProject != null && recordProject !== scope.projectRoot) {
       throw new VerificationStaleReadError();
     }
     exact.set(id, record);

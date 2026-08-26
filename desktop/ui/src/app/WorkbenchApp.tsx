@@ -31,7 +31,32 @@ import type {
   SurfaceInstanceRequest,
   UiKernelTransport,
 } from "../transport";
-import { VibePageEditor } from "./VibePageEditor";
+import {
+  VibeWorkspaceSurface,
+  type VibeReturnPoint,
+  type VibeWorkspaceSurfaceHandle,
+} from "./vibe/core/VibeWorkspaceSurface";
+import {
+  createVibeVerificationReadPort,
+} from "./vibe/core/vibe-verification-read-port";
+import {
+  exactAgentSurfaceRequest,
+  exactSurfaceInstance,
+  exactSurfaceRequestForTarget,
+  type OpenVibeTargetInStudioIntent,
+  type VibeExactSurfaceRequest,
+  type VibeStudioTarget,
+} from "./vibe/core/vibe-studio-target";
+import {
+  blockForId,
+  exactReferencesForBlock,
+  sameVibeExactReferences,
+} from "./vibe/core/vibe-workspace-model";
+import { vibeFailureMessage } from "./vibe/core/vibe-failure";
+import {
+  createVerificationAdapter,
+  type VerificationScope,
+} from "./vibe/verification";
 import { SurfaceView } from "./SurfaceView";
 import type { SourceExecutionSubmission } from "./source-execution";
 import { ToolbarCustomizer } from "./ToolbarCustomizer";
@@ -151,6 +176,18 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
   const commandSearchRef = useRef<HTMLInputElement>(null);
   const rhoMenuRef = useRef<HTMLDetailsElement>(null);
   const rhoMenuTriggerRef = useRef<HTMLElement>(null);
+  const vibeWorkspaceRef = useRef<VibeWorkspaceSurfaceHandle>(null);
+  const vibeReturnPointRef = useRef<VibeReturnPoint | null>(null);
+  const vibeTransitionRef = useRef<Promise<void> | null>(null);
+  const vibeIdentityRef = useRef<string | null>(null);
+  const vibeProjectRef = useRef<string | null>(null);
+  const verificationScopeRef = useRef<VerificationScope | null>(null);
+  const [vibeProjectEpoch, setVibeProjectEpoch] = useState(0);
+  const [vibeTransitionBusy, setVibeTransitionBusy] = useState(false);
+  const [vibeEditingLocked, setVibeEditingLocked] = useState(false);
+  const consumeVibeReturnPoint = useCallback((point: VibeReturnPoint) => {
+    if (vibeReturnPointRef.current === point) vibeReturnPointRef.current = null;
+  }, []);
   const projectSwitchController = useMemo(() => new ProjectSwitchController(), []);
   const traceProjectRef = useRef<string | null>(null);
   const consoleExecutionRouter = useMemo(() => new ConsoleExecutionRouter(), []);
@@ -183,6 +220,34 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
   const profileSnapshot = projection?.profile ?? null;
   const profile = profileSnapshot?.profile ?? null;
   const projectionProjectId = snapshot?.project.project_id ?? null;
+  const vibeIdentity = projectionProjectId == null
+    ? null
+    : `${projectionProjectId}:${profile?.active_vibe_page_id ?? "no-page"}`;
+  useEffect(() => {
+    if (vibeIdentityRef.current === vibeIdentity) return;
+    vibeIdentityRef.current = vibeIdentity;
+    if (vibeProjectRef.current !== projectionProjectId) {
+      vibeProjectRef.current = projectionProjectId;
+      vibeReturnPointRef.current = null;
+    }
+    setVibeProjectEpoch((current) => current + 1);
+  }, [projectionProjectId, vibeIdentity]);
+  verificationScopeRef.current = snapshot == null || profile == null
+    ? null
+    : {
+        projectId: snapshot.project.project_id,
+        projectRoot: snapshot.project.display_path,
+        projectRevision: snapshot.context.project_revision,
+        epoch: vibeProjectEpoch,
+      };
+  const vibeVerificationPort = useMemo(() => createVibeVerificationReadPort({
+    transport: pluginTransport,
+    currentScope: () => verificationScopeRef.current,
+  }), [pluginTransport]);
+  const vibeVerificationAdapter = useMemo(
+    () => createVerificationAdapter(vibeVerificationPort),
+    [vibeVerificationPort],
+  );
   useConsoleProjectActivation(consoleExecutionRouter, projectionProjectId);
   useEffect(() => {
     if (projectionProjectId != null && traceProjectRef.current !== projectionProjectId) {
@@ -623,6 +688,367 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
       mutation: { kind: "replace_sections", sections, focused_block_id: block.block_id },
     });
     return created;
+  };
+  const currentProfileSnapshot = () => {
+    const current = profileStore.getProfileSnapshot();
+    if (current.status !== "ready") throw new Error("The Project UI Profile is unavailable.");
+    return current.snapshot;
+  };
+  const currentSurfaceSnapshot = () => {
+    const current = surfaceStore.getSurfaceSnapshot();
+    if (current.status !== "ready") throw new Error("Surface Runtime is unavailable.");
+    return current.snapshot;
+  };
+  const currentStudioSnapshot = () => {
+    const current = studioStore.getStudioSnapshot();
+    if (current.status !== "ready") throw new Error("Studio layout is unavailable.");
+    return current.snapshot;
+  };
+  const setWorkspaceModeReconciled = async (mode: "studio" | "vibe") => {
+    const before = currentProfileSnapshot().profile;
+    if (before.active_mode === mode) return;
+    try {
+      await profileStore.setMode({
+        target: {
+          project_id: before.project_id,
+          expected_profile_revision: before.revision,
+        },
+        mode,
+      });
+    } catch (error: unknown) {
+      await profileStore.refresh().catch(() => undefined);
+      const reconciled = profileStore.getProfileSnapshot();
+      if (
+        reconciled.status === "ready"
+        && reconciled.snapshot.profile.project_id === before.project_id
+        && reconciled.snapshot.profile.active_mode === mode
+      ) return;
+      throw error;
+    }
+  };
+  const runVibeTransition = (operation: () => Promise<void>): Promise<void> => {
+    if (vibeTransitionRef.current != null) {
+      return Promise.reject(new Error("Another Vibe transition is still in progress."));
+    }
+    const profileAtStart = profileStore.getProfileSnapshot();
+    const lockCurrentVibe = profileAtStart.status === "ready"
+      && profileAtStart.snapshot.profile.active_mode === "vibe";
+    if (lockCurrentVibe) setVibeEditingLocked(true);
+    setVibeTransitionBusy(true);
+    const task = operation().finally(() => {
+      if (vibeTransitionRef.current === task) vibeTransitionRef.current = null;
+      if (lockCurrentVibe) setVibeEditingLocked(false);
+      setVibeTransitionBusy(false);
+    });
+    vibeTransitionRef.current = task;
+    return task;
+  };
+  const prepareVibeReturnPoint = async (): Promise<VibeReturnPoint> => {
+    const controller = vibeWorkspaceRef.current;
+    if (controller == null) throw new Error("The Vibe manuscript is not ready to leave.");
+    const point = await controller.prepareToLeave();
+    const latest = currentProfileSnapshot().profile;
+    if (latest.project_id !== point.projectId) {
+      throw new Error("The project changed while the working manuscript was saving.");
+    }
+    const page = latest.vibe_pages.find((candidate) => candidate.page_id === point.pageId);
+    if (page == null) throw new Error("The working manuscript changed before the transition.");
+    return {
+      ...point,
+      blockId: blockForId(page, point.blockId)?.block_id ?? null,
+    };
+  };
+  const validateVibeContext = (
+    projectId: string,
+    pageId: string,
+    blockId: string | null,
+    returnPoint: VibeReturnPoint,
+  ) => {
+    const latest = currentProfileSnapshot().profile;
+    if (latest.active_mode !== "vibe" || latest.project_id !== projectId) {
+      throw new Error("The Vibe project changed before Studio could open.");
+    }
+    const page = latest.vibe_pages.find((candidate) => candidate.page_id === pageId);
+    if (page == null) throw new Error("The working manuscript is no longer available.");
+    if (latest.active_vibe_page_id !== pageId) {
+      throw new Error("The active working manuscript changed before the transition.");
+    }
+    if (blockId != null && blockForId(page, blockId) == null) {
+      throw new Error("The selected manuscript content is no longer available.");
+    }
+    if (
+      returnPoint.projectId !== projectId
+      || returnPoint.pageId !== pageId
+      || returnPoint.blockId !== blockId
+    ) throw new Error("The Vibe return point no longer matches the selected content.");
+    return page;
+  };
+  const validateVibeIntent = (
+    intent: OpenVibeTargetInStudioIntent,
+    returnPoint: VibeReturnPoint,
+  ) => {
+    const page = validateVibeContext(
+      intent.projectId,
+      intent.pageId,
+      intent.blockId,
+      returnPoint,
+    );
+    const surfaceSnapshot = currentSurfaceSnapshot();
+    const currentInstances = new Map(
+      surfaceSnapshot.catalog.instances.map((instance) => [instance.instance_id, instance]),
+    );
+    const currentRefs = exactReferencesForBlock(page, intent.blockId, currentInstances);
+    if (!sameVibeExactReferences(currentRefs, intent.sourceExactRefs)) {
+      throw new Error("The selected manuscript reference changed before Studio could open.");
+    }
+  };
+  const prevalidateExactSurfaceRequest = (request: VibeExactSurfaceRequest) => {
+    const surfaceSnapshot = currentSurfaceSnapshot();
+    if (exactSurfaceInstance(surfaceSnapshot.catalog.instances, request) != null) return;
+    if (!request.mayCreate) throw new Error("The exact target Surface is no longer available.");
+    const factory = surfaceSnapshot.catalog.factories.find(
+      (candidate) => candidate.definition.surface_id === request.surfaceId,
+    );
+    if (factory == null) throw new Error(`Surface ${request.surfaceId} is unavailable.`);
+    if (
+      request.modeId != null
+      && !factory.definition.modes.some((mode) => mode.mode_id === request.modeId)
+    ) throw new Error(`Surface ${request.surfaceId} cannot open the required exact view.`);
+  };
+  const prevalidateVibeTarget = (target: VibeStudioTarget) => {
+    const surfaceSnapshot = currentSurfaceSnapshot();
+    if (target.kind === "surface") {
+      if (!surfaceSnapshot.catalog.instances.some((instance) => instance.instance_id === target.id)) {
+        throw new Error("The exact Surface instance is no longer available.");
+      }
+      return;
+    }
+    prevalidateExactSurfaceRequest(exactSurfaceRequestForTarget(target));
+  };
+  const applyCurrentStudioEdit = async (edit: SceneEdit): Promise<void> => {
+    const latest = currentStudioSnapshot();
+    await studioStore.apply({
+      project_id: latest.project_id,
+      expected_project_revision: latest.project_revision,
+      expected_layout_revision: latest.scene.layout_revision,
+      edit,
+    });
+  };
+  const placeAndFocusExactInstance = async (instanceId: string): Promise<void> => {
+    let latest = currentStudioSnapshot();
+    let placement = findLayoutPlacement(latest.scene.root, instanceId);
+    if (placement == null) {
+      if (
+        !latest.unplaced_instance_ids.includes(instanceId)
+        || latest.scene.root.kind !== "container"
+      ) throw new Error("The exact Surface instance cannot be placed in Studio.");
+      await applyCurrentStudioEdit({
+        kind: "insert_surface",
+        target_container_node_id: latest.scene.root.node_id,
+        child_index: latest.scene.root.children.length,
+        instance_id: instanceId,
+        basis: { kind: "minmax", min_logical_pixels: 220, max_logical_pixels: 1_200, weight: 1 },
+      });
+      latest = currentStudioSnapshot();
+      placement = findLayoutPlacement(latest.scene.root, instanceId);
+      if (placement == null) throw new Error("Studio did not place the exact Surface instance.");
+    }
+    if (placement.kind === "stack" && !placement.active) {
+      await applyCurrentStudioEdit({
+        kind: "set_stack_active",
+        stack_node_id: placement.nodeId,
+        instance_id: instanceId,
+      });
+    }
+    await applyCurrentStudioEdit({ kind: "set_focus", instance_id: instanceId });
+  };
+  const openExactSurfaceRequest = async (request: VibeExactSurfaceRequest): Promise<void> => {
+    let surfaceSnapshot = currentSurfaceSnapshot();
+    let target = exactSurfaceInstance(surfaceSnapshot.catalog.instances, request);
+    if (target == null) {
+      if (!request.mayCreate) throw new Error("The exact target Surface is no longer available.");
+      const factory = surfaceSnapshot.catalog.factories.find(
+        (candidate) => candidate.definition.surface_id === request.surfaceId,
+      );
+      if (factory == null) throw new Error(`Surface ${request.surfaceId} is unavailable.`);
+      const studioSnapshot = currentStudioSnapshot();
+      const before = new Set(
+        surfaceSnapshot.catalog.instances.map((instance) => instance.instance_id),
+      );
+      const opened = await surfaceStore.open({
+        surface_id: request.surfaceId,
+        project_id: surfaceSnapshot.project_id,
+        mode_id: request.modeId,
+        resource_binding: null,
+        runtime_binding: null,
+        view_group_id: null,
+        view_state: request.viewState,
+        instance_disposition: "new_instance",
+        placement_intent: "current",
+        expected_project_revision: surfaceSnapshot.project_revision,
+        expected_layout_revision: studioSnapshot.scene.layout_revision,
+      });
+      target = opened.catalog.instances.find((instance) => !before.has(instance.instance_id))
+        ?? exactSurfaceInstance(opened.catalog.instances, request);
+      if (target == null) throw new Error("Surface Runtime did not create the exact target view.");
+    } else {
+      if (target.lifecycle_state === "suspended") {
+        await surfaceMutationController.resume(target.instance_id);
+      }
+      if (request.modeId != null && target.mode_id !== request.modeId) {
+        await surfaceMutationController.update(target.instance_id, {
+          kind: "set_mode",
+          mode_id: request.modeId,
+        });
+      }
+      await surfaceMutationController.update(target.instance_id, {
+        kind: "set_view_state",
+        view_state: request.viewState,
+      });
+      surfaceSnapshot = currentSurfaceSnapshot();
+      target = surfaceSnapshot.catalog.instances.find(
+        (instance) => instance.instance_id === target?.instance_id,
+      ) ?? null;
+      if (target == null) throw new Error("The exact target Surface disappeared while opening.");
+    }
+    await placeAndFocusExactInstance(target.instance_id);
+  };
+  const openExactSurfaceInstance = async (instanceId: string): Promise<void> => {
+    const surfaceSnapshot = currentSurfaceSnapshot();
+    const instance = surfaceSnapshot.catalog.instances.find(
+      (candidate) => candidate.instance_id === instanceId,
+    );
+    if (instance == null) throw new Error("The exact Surface instance is no longer available.");
+    if (instance.lifecycle_state === "suspended") {
+      await surfaceMutationController.resume(instance.instance_id);
+    }
+    await placeAndFocusExactInstance(instance.instance_id);
+  };
+  const openVibeTargetInStudio = (
+    intent: OpenVibeTargetInStudioIntent,
+    returnPoint: VibeReturnPoint,
+  ): Promise<void> => runVibeTransition(async () => {
+    validateVibeIntent(intent, returnPoint);
+    prevalidateVibeTarget(intent.target);
+    vibeReturnPointRef.current = returnPoint;
+    await setWorkspaceModeReconciled("studio");
+    try {
+      if (intent.target.kind === "surface") {
+        await openExactSurfaceInstance(intent.target.id);
+      } else {
+        await openExactSurfaceRequest(exactSurfaceRequestForTarget(intent.target));
+      }
+    } catch (error: unknown) {
+      const detail = boundedFailureMessage(error, "The exact target is unavailable.");
+      throw new Error(`Studio 已打开，但精确目标未能打开。${detail}`, { cause: error });
+    }
+  });
+  const openVibeAgentInStudio = (
+    selection: { readonly conversationId: string | null; readonly turnId: string | null },
+    compose: boolean,
+    returnPoint: VibeReturnPoint,
+  ): Promise<void> => runVibeTransition(async () => {
+    validateVibeContext(
+      returnPoint.projectId,
+      returnPoint.pageId,
+      returnPoint.blockId,
+      returnPoint,
+    );
+    const surfaceSnapshot = currentSurfaceSnapshot();
+    if (!surfaceSnapshot.catalog.factories.some(
+      (factory) => factory.definition.surface_id === "rho.agent",
+    )) throw new Error("Agent Surface is unavailable.");
+    let conversationId = selection.conversationId;
+    if (conversationId == null) {
+      if (!compose) throw new Error("No exact Agent conversation is selected.");
+      const created = await pluginTransport.createAgentConversation();
+      const currentRoot = verificationScopeRef.current?.projectRoot;
+      if (created.project_root !== currentRoot) {
+        throw new Error("Agent created a conversation for another project.");
+      }
+      conversationId = created.conversation_id;
+    }
+    const request = exactAgentSurfaceRequest(conversationId, compose);
+    prevalidateExactSurfaceRequest(request);
+    vibeReturnPointRef.current = returnPoint;
+    await setWorkspaceModeReconciled("studio");
+    try {
+      await openExactSurfaceRequest(request);
+    } catch (error: unknown) {
+      const detail = boundedFailureMessage(error, "The Agent conversation is unavailable.");
+      throw new Error(`Studio 已打开，但精确的 Agent 会话未能打开。${detail}`, { cause: error });
+    }
+  });
+  const changeWorkspaceMode = (mode: "studio" | "vibe"): Promise<void> => (
+    runVibeTransition(async () => {
+      const latest = currentProfileSnapshot().profile;
+      if (latest.active_mode === mode) return;
+      if (mode === "studio") {
+        const returnPoint = await prepareVibeReturnPoint();
+        vibeReturnPointRef.current = returnPoint;
+        try {
+          await setWorkspaceModeReconciled("studio");
+        } catch (error: unknown) {
+          const actual = profileStore.getProfileSnapshot();
+          if (actual.status === "ready" && actual.snapshot.profile.active_mode === "vibe") {
+            vibeReturnPointRef.current = null;
+          }
+          throw error;
+        }
+        return;
+      }
+      const returnPoint = vibeReturnPointRef.current;
+      if (returnPoint != null && returnPoint.projectId === latest.project_id) {
+        const targetPage = latest.vibe_pages.find(
+          (candidate) => candidate.page_id === returnPoint.pageId,
+        );
+        if (targetPage == null) {
+          vibeReturnPointRef.current = null;
+        } else {
+          vibeReturnPointRef.current = {
+            ...returnPoint,
+            blockId: blockForId(targetPage, returnPoint.blockId)?.block_id ?? null,
+          };
+          if (latest.active_vibe_page_id !== targetPage.page_id) {
+            await profileStore.selectPage({
+              target: {
+                project_id: latest.project_id,
+                expected_profile_revision: latest.revision,
+              },
+              page_id: targetPage.page_id,
+            });
+          }
+        }
+      }
+      await setWorkspaceModeReconciled("vibe");
+    })
+  );
+  const selectVibePage = (pageId: string): Promise<void> => runVibeTransition(async () => {
+    await prepareVibeReturnPoint();
+    const latest = currentProfileSnapshot().profile;
+    if (!latest.vibe_pages.some((page) => page.page_id === pageId)) {
+      throw new Error("The selected Vibe Page is unavailable.");
+    }
+    if (latest.active_vibe_page_id === pageId) return;
+    vibeReturnPointRef.current = null;
+    await profileStore.selectPage({
+      target: {
+        project_id: latest.project_id,
+        expected_profile_revision: latest.revision,
+      },
+      page_id: pageId,
+    });
+  });
+  const exportCurrentVibePage = async (pageId: string) => {
+    const latest = currentProfileSnapshot().profile;
+    const page = latest.vibe_pages.find((candidate) => candidate.page_id === pageId);
+    if (page == null) throw new Error("The working manuscript is unavailable for export.");
+    return profileStore.exportPage({
+      project_id: latest.project_id,
+      expected_profile_revision: latest.revision,
+      page_id: page.page_id,
+      expected_page_revision: page.page_revision,
+    });
   };
   const invokeCommand = async (commandId: string) => {
     if (commandId === "rho.agent.new-conversation") {
@@ -1174,7 +1600,8 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
   const performProjectSwitch = async (
     operation: () => Promise<ProjectSwitchResponse>,
     targetPath: string | null,
-  ) => projectSwitchController.perform(operation, targetPath, {
+  ) => {
+    const perform = () => projectSwitchController.perform(operation, targetPath, {
       start: (target) => {
         setProjectSwitching(true);
         setProjectSwitchTarget(target);
@@ -1196,6 +1623,14 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
         setProjectSwitchTarget(null);
       },
     });
+    await runVibeTransition(async () => {
+      const current = profileStore.getProfileSnapshot();
+      if (current.status === "ready" && current.snapshot.profile.active_mode === "vibe") {
+        await prepareVibeReturnPoint();
+      }
+      await perform();
+    });
+  };
   // Acceptance automation (debug-only bridge): keep a per-render host so the
   // stable bridge listener below always acts on fresh projections and
   // controllers. The host carries no authority beyond the UI's own actions.
@@ -1215,9 +1650,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
           instance_id: instanceId,
         }).then(() => undefined),
         setMode: async (mode) => {
-          const target = profileRevisionRequest();
-          if (target == null) throw new Error("The Project UI Profile is unavailable.");
-          await profileStore.setMode({ target, mode });
+          await changeWorkspaceMode(mode);
         },
       },
     };
@@ -1338,9 +1771,9 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
                 <select
                   aria-label="Active Vibe Page"
                   value={profile.active_vibe_page_id ?? ""}
+                  disabled={vibeTransitionBusy}
                   onChange={(event) => {
-                    const target = profileRevisionRequest();
-                    if (target != null) run(profileStore.selectPage({ target, page_id: event.target.value }));
+                    run(selectVibePage(event.target.value), "vibe.select_page");
                   }}
                 >{profile.vibe_pages.map((page) => <option value={page.page_id} key={page.page_id}>{page.label}</option>)}</select>
               ) : (
@@ -1492,11 +1925,16 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
                 type="button"
                 className="rho-rho-project"
                 aria-label="Open a different project folder"
-                disabled={snapshot == null || projectSwitching}
-                onClick={() => void performProjectSwitch(
-                  () => pluginTransport.pickProjectDirectory(),
-                  null,
-                )}
+                disabled={snapshot == null || projectSwitching || vibeTransitionBusy}
+                onClick={() => {
+                  void performProjectSwitch(
+                    () => pluginTransport.pickProjectDirectory(),
+                    null,
+                  ).catch((error: unknown) => setActionError(workbenchFailureMessage(
+                    error,
+                    "The current Vibe manuscript could not be saved before switching projects.",
+                  )));
+                }}
               >
                 <span className="rho-rho-project-copy">
                   <span className="rho-eyebrow">Project</span>
@@ -1517,12 +1955,17 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
                     <button
                       type="button"
                       data-project-path={path}
-                      disabled={projectSwitching}
+                      disabled={projectSwitching || vibeTransitionBusy}
                       key={path}
-                      onClick={() => void performProjectSwitch(
-                        () => pluginTransport.openProject(path),
-                        path,
-                      )}
+                      onClick={() => {
+                        void performProjectSwitch(
+                          () => pluginTransport.openProject(path),
+                          path,
+                        ).catch((error: unknown) => setActionError(workbenchFailureMessage(
+                          error,
+                          "The current Vibe manuscript could not be saved before switching projects.",
+                        )));
+                      }}
                     >
                       <span>
                         <strong>{projectLabel(path)}</strong>
@@ -1581,12 +2024,11 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
               className="rho-rail-choice"
               aria-pressed={profile?.active_mode === mode}
               title={mode === "studio" ? "Studio mode" : "Vibe mode"}
-              disabled={profile == null}
+              disabled={profile == null || projectSwitching || vibeTransitionBusy}
               key={mode}
               onClick={() => {
-                const target = profileRevisionRequest();
-                if (target != null && profile?.active_mode !== mode) {
-                  run(profileStore.setMode({ target, mode }));
+                if (profile?.active_mode !== mode) {
+                  run(changeWorkspaceMode(mode), "profile.set_mode");
                 }
               }}
             >{mode === "studio" ? <RailStudioIcon /> : <RailVibeIcon />}<span>{mode === "studio" ? "Studio" : "Vibe"}</span></button>
@@ -1798,25 +2240,33 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
             </div>
           )}
           {actionError != null && <p className="rho-action-error" role="alert">{actionError}</p>}
-          {profile == null || surfaces == null || studio == null || !projectProjectionsCoherent
+          {snapshot == null || profile == null || surfaces == null || studio == null || !projectProjectionsCoherent
             ? <div className="rho-studio-loading">{projectSwitching ? "Switching project…" : "Loading the project UI Profile…"}</div>
             : profile.active_mode === "vibe"
               ? activeVibePage == null
                 ? <div className="rho-studio-loading">The active Vibe Page is unavailable.</div>
-                : <VibePageEditor
-                    key={profile.project_id}
+                : <VibeWorkspaceSurface
+                    key={`${profile.project_id}:${activeVibePage.page_id}`}
+                    ref={vibeWorkspaceRef}
                     page={activeVibePage}
                     profileRevision={profile.revision}
+                    projectRoot={snapshot.project.display_path}
+                    projectRevision={snapshot.context.project_revision}
+                    projectEpoch={vibeProjectEpoch}
+                    transitionBusy={vibeEditingLocked}
                     instances={instances}
-                    renderSurface={(instance) => surfaceView(instance, true)}
-                    invokeCommand={invokeCommand}
-                    commit={(request) => profileStore.applyPage(request)}
-                    exportPage={(request) => profileStore.exportPage(request)}
-                    reportError={(error) => setActionError(
-                      error instanceof Error && error.message.trim()
-                        ? error.message.slice(0, 512)
-                        : "Vibe Page operation failed.",
-                    )}
+                    restoredReturnPoint={vibeReturnPointRef.current}
+                    onReturnPointRestored={consumeVibeReturnPoint}
+                    commitPage={(request) => profileStore.applyPage(request)}
+                    exportCurrentPage={exportCurrentVibePage}
+                    explorationTransport={pluginTransport}
+                    verificationAdapter={vibeVerificationAdapter}
+                    onOpenStudio={openVibeTargetInStudio}
+                    onOpenAgent={openVibeAgentInStudio}
+                    reportError={(error) => setActionError(vibeFailureMessage(
+                      error,
+                      "Vibe Page operation failed.",
+                    ))}
                   />
               : <DockviewSceneLayout
                   key={studio.project_id}
@@ -1829,7 +2279,11 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
                 />}
         </section>
       </div>
-      <footer className="rho-statusbar" aria-label="Workbench status">
+      <footer
+        className="rho-statusbar"
+        data-workspace-mode={profile?.active_mode ?? "loading"}
+        aria-label="Workbench status"
+      >
         <span className="rho-statusbar-item">
           <span className={`rho-status-dot rho-status-${snapshot?.context.workspace_health ?? "unknown"}`} />
           {snapshot?.health.workspace.label ?? "Connecting"}

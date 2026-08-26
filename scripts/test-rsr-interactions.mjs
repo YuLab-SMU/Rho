@@ -276,45 +276,167 @@ try {
   }
 
   {
-    const { context, page } = await openWorkbench("", { width: 720, height: 700 });
+    const { context, page } = await openWorkbench("&vibe=information-flow", { width: 1440, height: 900 });
     await page.getByRole("button", { name: "Vibe", exact: true }).click();
-    const vibePage = page.locator(".rho-vibe-page");
-    await vibePage.waitFor();
-    if (await vibePage.getByRole("toolbar", { name: "Selected block actions" }).count() !== 0) {
-      throw new Error("Vibe opened with internal block controls visible before user selection");
+    const vibeWorkspace = page.locator(".rho-vibe-workspace");
+    await vibeWorkspace.waitFor();
+    if (await vibeWorkspace.getAttribute("data-layout") !== "overview") {
+      throw new Error("Vibe did not open in the three-layer overview");
     }
-    if ((await vibePage.locator(".rho-vibe-page-header").textContent())?.includes("· r")) {
+    const regions = vibeWorkspace.locator(".rho-vibe-region");
+    if (await regions.count() !== 3) {
+      throw new Error(`Vibe overview rendered ${await regions.count()} regions instead of three`);
+    }
+    for (const region of ["manuscript", "exploration", "verification"]) {
+      if (!await regions.filter({ has: page.locator(`.rho-vibe-region-body > .rho-vibe-${region}`) }).isVisible()) {
+        throw new Error(`Vibe overview did not expose the ${region} information layer`);
+      }
+    }
+    if (!await vibeWorkspace.getByLabel("当前对应关系").isVisible()) {
+      throw new Error("Vibe overview did not expose the current correspondence path");
+    }
+    if ((await vibeWorkspace.locator(".rho-vibe-workspace-header").textContent())?.includes("· r")) {
       throw new Error("Vibe exposed its internal Page revision in the default header");
     }
-    const toolbarOverflow = await vibePage.locator(".rho-vibe-toolbar").evaluate((element) =>
-      element.scrollWidth - element.clientWidth
+
+    const layerNavigation = vibeWorkspace.getByRole("navigation", { name: "Vibe information layer" });
+    const explorationLayer = layerNavigation.getByRole("button", { name: "自主探索", exact: true });
+    await explorationLayer.focus();
+    await explorationLayer.press("Enter");
+    await page.waitForFunction(() =>
+      document.querySelector(".rho-vibe-workspace")?.getAttribute("data-layout") === "focus-exploration"
     );
-    if (toolbarOverflow > 2) throw new Error(`Vibe toolbar overflowed by ${toolbarOverflow}px at 200%-equivalent geometry`);
-    const contextSurface = vibePage.locator(".rho-vibe-live-surface-context").first();
-    const contextSurfaceBox = await contextSurface.boundingBox();
-    if (contextSurfaceBox == null || contextSurfaceBox.height >= 455) {
-      throw new Error(`embedded context Surface consumed excessive default height: ${contextSurfaceBox?.height ?? "missing"}`);
+    if (!await vibeWorkspace.locator('.rho-vibe-region[data-region="exploration"] .rho-vibe-region-body').isVisible()) {
+      throw new Error("Vibe exploration focus did not expose the autonomous-exploration layer");
     }
-    await vibePage.locator(".rho-vibe-block-surface_ref").first().click({ position: { x: 4, y: 4 } });
-    await vibePage.getByRole("toolbar", { name: "Selected block actions" }).waitFor();
-    const beforeTextBlocks = await vibePage.locator(".rho-vibe-block-rich_text").count();
-    const addText = vibePage.getByRole("button", { name: "Add text", exact: true });
-    await addText.focus();
-    await addText.press("Enter");
-    const saveNow = vibePage.getByRole("button", { name: "Save now", exact: true });
+    for (const region of ["manuscript", "verification"]) {
+      if (await vibeWorkspace.locator(`.rho-vibe-region[data-region="${region}"] .rho-vibe-region-body`).isVisible()) {
+        throw new Error(`Vibe exploration focus left the ${region} region body expanded`);
+      }
+    }
+    await layerNavigation.getByRole("button", { name: "三联总览", exact: true }).click();
+    await page.waitForFunction(() =>
+      document.querySelector(".rho-vibe-workspace")?.getAttribute("data-layout") === "overview"
+    );
+    if (await vibeWorkspace.locator(".rho-vibe-region-body:visible").count() !== 3) {
+      throw new Error("Vibe did not restore all three information layers after leaving focus mode");
+    }
+
+    await page.setViewportSize({ width: 900, height: 800 });
+    await page.waitForFunction(() => {
+      const workspace = document.querySelector(".rho-vibe-workspace");
+      if (workspace?.getAttribute("data-layout") !== "overview") return false;
+      const regions = [...workspace.querySelectorAll(".rho-vibe-region")];
+      return regions.length === 3 && regions.every((region) => {
+        const body = region.querySelector(".rho-vibe-region-body");
+        const bodyVisible = body != null && getComputedStyle(body).display !== "none";
+        return region.getAttribute("data-active") === "true" ? bodyVisible : !bodyVisible;
+      });
+    });
+    if (await vibeWorkspace.locator('.rho-vibe-region[data-active="false"] .rho-vibe-region-header:visible').count() !== 2) {
+      throw new Error("Vibe intermediate overview did not preserve two readable preview bands");
+    }
+    const intermediateOverflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    if (intermediateOverflow > 2) {
+      throw new Error(`Vibe intermediate overview introduced ${intermediateOverflow}px horizontal overflow`);
+    }
+    const intermediateStatus = await page.evaluate(() => {
+      const statusbar = document.querySelector('.rho-statusbar[data-workspace-mode="vibe"]');
+      const items = [...(statusbar?.querySelectorAll(".rho-statusbar-item") ?? [])];
+      const path = statusbar?.querySelector(".rho-statusbar-path");
+      return {
+        labels: items.map((item) => item.textContent?.trim() ?? ""),
+        clipped: items.some((item) => item.scrollWidth > item.clientWidth + 1),
+        pathDisplay: path == null ? null : getComputedStyle(path).display,
+      };
+    });
+    if (intermediateStatus.clipped || intermediateStatus.pathDisplay !== "none") {
+      throw new Error(`Vibe intermediate status bar clipped authoritative labels: ${JSON.stringify(intermediateStatus)}`);
+    }
+    if (!intermediateStatus.labels.some((label) => label.startsWith("Workspace R"))
+      || !intermediateStatus.labels.some((label) => label.startsWith("Agent runtime"))) {
+      throw new Error(`Vibe intermediate status bar lost a runtime label: ${JSON.stringify(intermediateStatus.labels)}`);
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+
+    const verificationLayer = layerNavigation.getByRole("button", { name: "查验与结论", exact: true });
+    await verificationLayer.focus();
+    await verificationLayer.press("Enter");
+    await page.waitForFunction(() =>
+      document.querySelector(".rho-vibe-workspace")?.getAttribute("data-layout") === "focus-verification"
+    );
+    const openExactArtifact = vibeWorkspace.getByRole("button", { name: "在 Studio 中查看", exact: true }).first();
+    await openExactArtifact.focus();
+    await openExactArtifact.press("Enter");
+    await page.locator(".rho-canvas-studio").waitFor();
+    await page.locator("[data-surface-id='rho.artifacts'] [data-domain-id='artifact:plot-1']").waitFor();
+    const returnToVibe = page.getByRole("button", { name: "Vibe", exact: true });
+    await returnToVibe.focus();
+    await returnToVibe.press("Enter");
+    await vibeWorkspace.waitFor();
+    if (await vibeWorkspace.getAttribute("data-layout") !== "focus-verification") {
+      throw new Error("Vibe did not restore the verification focus after the exact Studio round trip");
+    }
+    if (await vibeWorkspace.locator("[data-block-id='block:vibe-artifact']").getAttribute("data-vibe-active") !== "true") {
+      throw new Error("Vibe did not restore the exact manuscript block after the Studio round trip");
+    }
+    await context.close();
+  }
+
+  {
+    const { context, page } = await openWorkbench("&vibe=information-flow", { width: 720, height: 700 });
+    await page.getByRole("button", { name: "Vibe", exact: true }).click();
+    const vibeWorkspace = page.locator(".rho-vibe-workspace");
+    await vibeWorkspace.waitFor();
+    const layerNavigation = vibeWorkspace.getByRole("navigation", { name: "Vibe information layer" });
+    if (await vibeWorkspace.locator(".rho-vibe-region:visible").count() !== 1) {
+      throw new Error("Vibe narrow layout did not reduce the workspace to one complete information layer");
+    }
+    if (!await vibeWorkspace.locator('.rho-vibe-region[data-region="manuscript"]').isVisible()) {
+      throw new Error("Vibe narrow layout did not preserve the active manuscript layer");
+    }
+    const narrowVerification = layerNavigation.getByRole("button", { name: "查验与结论", exact: true });
+    await narrowVerification.focus();
+    await narrowVerification.press("Enter");
+    await page.waitForFunction(() => {
+      const workspace = document.querySelector(".rho-vibe-workspace");
+      return workspace?.getAttribute("data-active-region") === "verification"
+        && workspace?.getAttribute("data-layout") === "focus-verification";
+    });
+    if (!await vibeWorkspace.locator('.rho-vibe-region[data-region="verification"]').isVisible()) {
+      throw new Error("Vibe narrow switcher did not expose the verification layer");
+    }
+    if (await vibeWorkspace.locator('.rho-vibe-region[data-region="manuscript"]').isVisible()) {
+      throw new Error("Vibe narrow switcher left the previous manuscript layer visible");
+    }
+
+    const narrowManuscript = layerNavigation.getByRole("button", { name: "手稿", exact: true });
+    await narrowManuscript.focus();
+    await narrowManuscript.press("Enter");
+    const manuscript = vibeWorkspace.locator('.rho-vibe-region[data-region="manuscript"]');
+    await manuscript.waitFor({ state: "visible" });
+    const editor = manuscript.getByRole("textbox", { name: / working manuscript$/ });
+    await editor.click({ position: { x: 96, y: 36 } });
+    await editor.press("End");
+    await editor.pressSequentially(" Interaction checked.");
+    const saveNow = manuscript.getByRole("button", { name: "Save now", exact: true });
     await saveNow.focus();
     await saveNow.press("Enter");
-    await vibePage.getByText("Saved", { exact: true }).waitFor();
-    if (await vibePage.locator(".rho-vibe-block-rich_text").count() !== beforeTextBlocks + 1) {
-      throw new Error("Vibe Add text did not create an editable document block");
-    }
+    await manuscript.getByText("Saved", { exact: true }).waitFor();
+
+    const toolbarOverflow = await manuscript.getByRole("toolbar", { name: "Working manuscript formatting" }).evaluate((element) =>
+      element.scrollWidth - element.clientWidth
+    );
+    if (toolbarOverflow > 2) throw new Error(`Vibe manuscript toolbar overflowed by ${toolbarOverflow}px at 200%-equivalent geometry`);
+    const switcherOverflow = await layerNavigation.evaluate((element) => element.scrollWidth - element.clientWidth);
+    if (switcherOverflow > 2) throw new Error(`Vibe information-layer switcher overflowed by ${switcherOverflow}px at 200%-equivalent geometry`);
     const horizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     if (horizontalOverflow > 2) throw new Error(`Vibe 200%-equivalent layout introduced ${horizontalOverflow}px horizontal overflow`);
     await context.close();
   }
 
   succeeded = true;
-  process.stdout.write("RSR real-interaction acceptance passed: identity, resize, Navigator/plugin tabs, component modes, Source/Console/History, rejection recovery, docking, narrow layout, and Vibe editing at 200%-equivalent geometry\n");
+  process.stdout.write("RSR real-interaction acceptance passed: identity, resize, Navigator/plugin tabs, component modes, Source/Console/History, rejection recovery, docking, narrow layout, and Vibe overview/intermediate-preview/focus/narrow editing contracts\n");
 } catch (error) {
   if (currentPage != null && !currentPage.isClosed()) {
     await currentPage.screenshot({ path: join(artifactRoot, "failure.png"), fullPage: true }).catch(() => undefined);

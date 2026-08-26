@@ -86,6 +86,13 @@ import type {
   Unsubscribe,
 } from "./types";
 import { INVALIDATION_TOPICS } from "./invalidation-contract";
+import type { EvidenceClaim } from "./evidence";
+import type {
+  ArtifactRecordSummary,
+  PlotArtifactSummary,
+  ProblemSummary,
+  RunSummary,
+} from "./history";
 import type { WorkbenchProjection } from "./workbench-projection";
 
 export const MOCK_INVALIDATION_TOPICS = INVALIDATION_TOPICS;
@@ -296,6 +303,68 @@ export function createMockUiKernelTransport(
   if (search.get("mode") === "vibe") {
     (profile.profile as { active_mode: "studio" | "vibe" }).active_mode = "vibe";
   }
+  if (search.get("vibe") === "information-flow") {
+    const page = profile.profile.vibe_pages.find(
+      (candidate) => candidate.page_id === profile.profile.active_vibe_page_id,
+    );
+    if (page != null) {
+      const sections: VibeSection[] = [{
+        section_id: "section:vibe-scientific-question",
+        heading: "问题与方法边界",
+        layout: { kind: "flow" },
+        blocks: [{
+          block_id: "block:vibe-scientific-question",
+          content: {
+            kind: "rich_text",
+            document: {
+              blocks: [{
+                kind: "paragraph",
+                content: [{
+                  text: "在 6 位 donor 的单细胞转录组中，比较 cluster 3 与 cluster 7 的差异表达；统计单位必须保持为 donor，校正 batch，并把低细胞数 donor 的不稳定性保留为解释边界。",
+                  marks: [],
+                }],
+              }, {
+                kind: "paragraph",
+                content: [{
+                  text: "预期只在方向跨 donor 一致、FDR < 0.05 且质量控制没有显示单一样本驱动时形成工作解释。",
+                  marks: [{ kind: "strong" }],
+                }],
+              }],
+            },
+          },
+        }, {
+          block_id: "block:vibe-agent-work",
+          content: {
+            kind: "surface_ref",
+            instance_id: mockAgentInstance.instance_id,
+            live: true,
+          },
+        }],
+      }, {
+        section_id: "section:vibe-candidate-output",
+        heading: "候选产物与限制",
+        layout: { kind: "flow" },
+        blocks: [{
+          block_id: "block:vibe-artifact",
+          content: {
+            kind: "artifact_ref",
+            artifact_id: "artifact:plot-1",
+            label: "donor 聚合后的差异表达与 QC 图（候选产物）",
+          },
+        }, {
+          block_id: "block:vibe-limitation",
+          content: {
+            kind: "callout",
+            tone: "warning",
+            text: "当前产物只确认执行和谱系字段已记录；它不等于生物学结论，仍需查验 donor 一致性与低细胞数敏感性。",
+          },
+        }],
+      }];
+      (page as { label: string }).label = "Cluster 3 与 7 的 donor 级差异比较";
+      (page as { sections: readonly VibeSection[] }).sections = sections;
+      (page as { focused_block_id: string | null }).focused_block_id = "block:vibe-artifact";
+    }
+  }
   if (search.get("plugin") === "surface") {
     const pluginOrigin = {
       kind: "workspace_plugin" as const,
@@ -474,6 +543,81 @@ export function createMockUiKernelTransport(
     subtitle: "analysis.R",
     status: "completed",
     detail: "{\"origin\":\"user\",\"source_path\":\"analysis.R\",\"execution_mode\":\"expression\",\"code_preview\":\"summary(mtcars)\",\"started_at\":\"2026-08-23T06:00:00Z\"}",
+  }];
+  const typedRunRecords = (): readonly RunSummary[] => [{
+    run_id: "run:mock-1",
+    parent_run_id: null,
+    project_root: current.project.display_path,
+    origin: "user",
+    status: "completed",
+    started_at: "2026-08-23T06:00:00Z",
+    finished_at: "2026-08-23T06:00:03Z",
+    terminal_reason: null,
+    request_type: "workspace.execute",
+    operation_class: "scientific_execution",
+    source_path: "analysis.R",
+    execution_mode: "expression",
+    document_version: 4,
+    workspace_id: `workspace:${current.project.project_id}`,
+    state_revision_before: 7,
+    project_revision_before: current.context.project_revision,
+    state_revision_after: 8,
+    project_revision_after: current.context.project_revision,
+    environment_snapshot_id: null,
+    environment_snapshot_id_after: null,
+    code_preview: "summary(mtcars)",
+    error_message: null,
+  }];
+  const typedArtifactRecords = (): readonly ArtifactRecordSummary[] => [{
+    artifact_id: "artifact:plot-1",
+    artifact_kind: "plot",
+    run_id: "run:mock-1",
+    project_root: current.project.display_path,
+    output_path: "plots/qc.png",
+    source_path: "analysis.R",
+    execution_mode: "expression",
+    document_version: 4,
+    workspace_id: `workspace:${current.project.project_id}`,
+    state_revision: 8,
+    project_revision: current.context.project_revision,
+    media_type: "image/png",
+    metadata_json: "{}",
+    provenance_complete: true,
+    incomplete_reason: null,
+    created_at: "2026-08-23T06:00:03Z",
+  }];
+  const typedPlotRecords = (): readonly PlotArtifactSummary[] => [{
+    plot_id: "plot:mock-1",
+    run_id: "run:mock-1",
+    project_root: current.project.display_path,
+    source_path: "analysis.R",
+    execution_mode: "expression",
+    document_version: 4,
+    workspace_id: `workspace:${current.project.project_id}`,
+    state_revision: 8,
+    project_revision: current.context.project_revision,
+    media_type: "image/png",
+    payload_json: "{}",
+    provenance_complete: true,
+    created_at: "2026-08-23T06:00:03Z",
+  }];
+  const typedEvidenceRecords = (): readonly EvidenceClaim[] => [{
+    claim_id: "claim:1",
+    project_root: current.project.display_path,
+    kind: "source_statement",
+    summary: "The analysis records a fixed random seed before sampling.",
+    anchor_kind: "source_range",
+    source_path: "analysis.R",
+    start_line: 1,
+    start_column: 1,
+    end_line: 2,
+    end_column: 24,
+    source_sha256: "a".repeat(64),
+    source_excerpt: "set.seed(42)",
+    artifact_id: null,
+    linked_evidence_ids: [1],
+    created_at: "2026-08-23T06:00:03Z",
+    updated_at: "2026-08-23T06:00:03Z",
   }];
   const runtimeExecutionRecords: RuntimeExecution[] = [];
   const runtimeOutputChunks = new Map<string, readonly RuntimeOutputChunk[]>();
@@ -2813,6 +2957,21 @@ export function createMockUiKernelTransport(
       agentListeners.add(listener);
       return () => agentListeners.delete(listener);
     },
+    async listRuns(limit = 100) {
+      return structuredClone(typedRunRecords().slice(0, Math.max(0, limit)));
+    },
+    async listArtifactRecords(limit = 100) {
+      return structuredClone(typedArtifactRecords().slice(0, Math.max(0, limit)));
+    },
+    async listProblems(limit = 100): Promise<readonly ProblemSummary[]> {
+      return structuredClone(([] as ProblemSummary[]).slice(0, Math.max(0, limit)));
+    },
+    async listPlotArtifacts(limit = 100) {
+      return structuredClone(typedPlotRecords().slice(0, Math.max(0, limit)));
+    },
+    async listEvidenceClaims(limit = 100) {
+      return structuredClone(typedEvidenceRecords().slice(0, Math.max(0, limit)));
+    },
     async loadDomainSurface(surfaceId) {
       const fixtures: Readonly<Record<string, DomainSurfaceData["items"]>> = {
         "rho.environment": [
@@ -2838,6 +2997,9 @@ export function createMockUiKernelTransport(
       };
     },
     async readPlotArtifact(plotId) {
+      if (!typedPlotRecords().some((plot) => plot.plot_id === plotId)) {
+        throw new Error("Mock Plot artifact is unavailable.");
+      }
       return {
         plot_id: plotId,
         media_type: "image/png",

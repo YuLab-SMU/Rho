@@ -100,7 +100,7 @@ function runStatusLabel(status: string): string {
     case "failed": return "执行失败";
     case "cancelled": return "执行已取消";
     case "interrupted": return "执行已中断";
-    default: return `执行状态：${status}`;
+    default: return "执行状态未知";
   }
 }
 
@@ -139,10 +139,12 @@ function uniqueLimitations(result: CheckResult): readonly string[] {
 function StudioAction({
   target,
   opening,
+  disabled,
   onOpen,
 }: {
   readonly target: VerificationStudioTarget;
   readonly opening: boolean;
+  readonly disabled: boolean;
   readonly onOpen: (target: VerificationStudioTarget) => void;
 }) {
   return (
@@ -150,6 +152,7 @@ function StudioAction({
       type="button"
       className="rho-vibe-verification-studio-action"
       aria-busy={opening || undefined}
+      disabled={disabled}
       onClick={() => onOpen(target)}
     >
       {opening ? "正在打开 Studio…" : "在 Studio 中查看"}
@@ -159,11 +162,13 @@ function StudioAction({
 
 function CandidateOutputs({
   snapshot,
+  headingId,
   openingTarget,
   onOpen,
   onRetry,
 }: {
   readonly snapshot: VerificationSnapshot;
+  readonly headingId: string;
   readonly openingTarget: string | null;
   readonly onOpen: (target: VerificationStudioTarget) => void;
   readonly onRetry: () => void;
@@ -172,8 +177,8 @@ function CandidateOutputs({
     || snapshot.plots.status !== "unlinked";
   if (!visible) return null;
   return (
-    <section className="rho-vibe-verification-section rho-vibe-verification-candidates" aria-labelledby="rho-vibe-verification-candidates-heading">
-      <h3 id="rho-vibe-verification-candidates-heading">候选产物</h3>
+    <section className="rho-vibe-verification-section rho-vibe-verification-candidates" aria-labelledby={headingId}>
+      <h3 id={headingId}>候选产物</h3>
       <p className="rho-vibe-verification-scope-note">图表与文件是待查验的输出，不是验证结论。</p>
       <SourceFailure source={snapshot.artifacts} onRetry={onRetry} />
       <SourceFailure source={snapshot.plots} onRetry={onRetry} />
@@ -208,7 +213,12 @@ function CandidateOutputs({
                   <div><dt>创建时间</dt><dd>{record.created_at}</dd></div>
                 </dl>
               </details>
-              <StudioAction target={target} opening={openingTarget === targetKey} onOpen={onOpen} />
+              <StudioAction
+                target={target}
+                opening={openingTarget === targetKey}
+                disabled={openingTarget != null}
+                onOpen={onOpen}
+              />
             </article>
           );
         })}
@@ -243,7 +253,12 @@ function CandidateOutputs({
                 ? <p className="rho-vibe-verification-boundary">谱系字段已记录；图形仍只是候选输出。</p>
                 : <p className="rho-vibe-verification-warning" role="status">图形谱系信息不完整。</p>}
               {target != null && targetKey != null && (
-                <StudioAction target={target} opening={openingTarget === targetKey} onOpen={onOpen} />
+                <StudioAction
+                  target={target}
+                  opening={openingTarget === targetKey}
+                  disabled={openingTarget != null}
+                  onOpen={onOpen}
+                />
               )}
             </article>
           );
@@ -259,19 +274,21 @@ function isNonEmptyRunId(runId: string): boolean {
 
 function ExecutionRecords({
   snapshot,
+  headingId,
   openingTarget,
   onOpen,
   onRetry,
 }: {
   readonly snapshot: VerificationSnapshot;
+  readonly headingId: string;
   readonly openingTarget: string | null;
   readonly onOpen: (target: VerificationStudioTarget) => void;
   readonly onRetry: () => void;
 }) {
   if (snapshot.runs.status === "unlinked") return null;
   return (
-    <section className="rho-vibe-verification-section rho-vibe-verification-runs" aria-labelledby="rho-vibe-verification-runs-heading">
-      <h3 id="rho-vibe-verification-runs-heading">执行记录</h3>
+    <section className="rho-vibe-verification-section rho-vibe-verification-runs" aria-labelledby={headingId}>
+      <h3 id={headingId}>执行记录</h3>
       <p className="rho-vibe-verification-scope-note">这里只陈述运行状态；执行结束不代表科学判断成立。</p>
       <SourceFailure source={snapshot.runs} onRetry={onRetry} />
       <UnresolvedReferences references={snapshot.runs.unresolved} />
@@ -298,7 +315,12 @@ function ExecutionRecords({
                   ? "该记录只确认执行过程已经结束。"
                   : "该执行尚不能作为稳定产物的依据。"}
               </p>
-              <StudioAction target={target} opening={openingTarget === targetKey} onOpen={onOpen} />
+              <StudioAction
+                target={target}
+                opening={openingTarget === targetKey}
+                disabled={openingTarget != null}
+                onOpen={onOpen}
+              />
             </article>
           );
         })}
@@ -368,26 +390,33 @@ function CheckRecord({
       {result.findings.length === 0 && (
         <p>在这次捕获的项目修订中，已执行规则没有报告问题。</p>
       )}
-      <StudioAction target={target} opening={openingTarget === targetKey} onOpen={onOpen} />
+      <StudioAction
+        target={target}
+        opening={openingTarget === targetKey}
+        disabled={openingTarget != null}
+        onOpen={onOpen}
+      />
     </article>
   );
 }
 
 function ProjectChecks({
   snapshot,
+  headingId,
   openingTarget,
   onOpen,
   onRetry,
 }: {
   readonly snapshot: VerificationSnapshot;
+  readonly headingId: string;
   readonly openingTarget: string | null;
   readonly onOpen: (target: VerificationStudioTarget) => void;
   readonly onRetry: () => void;
 }) {
   if (snapshot.checks.status === "unlinked") return null;
   return (
-    <section className="rho-vibe-verification-section rho-vibe-verification-checks" aria-labelledby="rho-vibe-verification-checks-heading">
-      <h3 id="rho-vibe-verification-checks-heading">项目检查</h3>
+    <section className="rho-vibe-verification-section rho-vibe-verification-checks" aria-labelledby={headingId}>
+      <h3 id={headingId}>项目检查</h3>
       <SourceFailure source={snapshot.checks} onRetry={onRetry} />
       <UnresolvedReferences references={snapshot.checks.unresolved} />
       <div className="rho-vibe-verification-records">
@@ -406,19 +435,21 @@ function ProjectChecks({
 
 function EvidenceLinks({
   snapshot,
+  headingId,
   openingTarget,
   onOpen,
   onRetry,
 }: {
   readonly snapshot: VerificationSnapshot;
+  readonly headingId: string;
   readonly openingTarget: string | null;
   readonly onOpen: (target: VerificationStudioTarget) => void;
   readonly onRetry: () => void;
 }) {
   if (snapshot.evidence.status === "unlinked") return null;
   return (
-    <section className="rho-vibe-verification-section rho-vibe-verification-evidence" aria-labelledby="rho-vibe-verification-evidence-heading">
-      <h3 id="rho-vibe-verification-evidence-heading">证据链接与边界</h3>
+    <section className="rho-vibe-verification-section rho-vibe-verification-evidence" aria-labelledby={headingId}>
+      <h3 id={headingId}>证据链接与边界</h3>
       <p className="rho-vibe-verification-scope-note">链接状态只描述结构是否可审计，不说明语义上支持某个结论。</p>
       <SourceFailure source={snapshot.evidence} onRetry={onRetry} />
       <UnresolvedReferences references={snapshot.evidence.unresolved} />
@@ -443,7 +474,12 @@ function EvidenceLinks({
                 ? <p className="rho-vibe-verification-warning" role="status">尚未建立可审计的证据链接。</p>
                 : <p className="rho-vibe-verification-boundary">已记录 {record.linked_evidence_ids.length} 个结构化链接；这不等于语义支持。</p>}
               {target != null && targetKey != null && (
-                <StudioAction target={target} opening={openingTarget === targetKey} onOpen={onOpen} />
+                <StudioAction
+                  target={target}
+                  opening={openingTarget === targetKey}
+                  disabled={openingTarget != null}
+                  onOpen={onOpen}
+                />
               )}
             </article>
           );
@@ -453,10 +489,10 @@ function EvidenceLinks({
   );
 }
 
-function WorkingBoundary() {
+function WorkingBoundary({ headingId }: { readonly headingId: string }) {
   return (
-    <section className="rho-vibe-verification-section rho-vibe-verification-working-boundary" aria-labelledby="rho-vibe-verification-boundary-heading" data-state="draft">
-      <h3 id="rho-vibe-verification-boundary-heading">当前还不能声称什么</h3>
+    <section className="rho-vibe-verification-section rho-vibe-verification-working-boundary" aria-labelledby={headingId} data-state="draft">
+      <h3 id={headingId}>当前还不能声称什么</h3>
       <p>
         当前记录可以帮助核对执行、产物、项目规则与结构化链接，但 Rho 尚未建立可持久化的科学决定状态。
         手稿中的解释仍是工作解释。
@@ -572,29 +608,33 @@ export function VerificationPane({
           <UnresolvedReferences references={currentState.snapshot.invalidReferences} />
           <CandidateOutputs
             snapshot={currentState.snapshot}
+            headingId={`${headingId}-candidates`}
             openingTarget={openingTarget}
             onOpen={open}
             onRetry={retry}
           />
           <ExecutionRecords
             snapshot={currentState.snapshot}
+            headingId={`${headingId}-runs`}
             openingTarget={openingTarget}
             onOpen={open}
             onRetry={retry}
           />
           <ProjectChecks
             snapshot={currentState.snapshot}
+            headingId={`${headingId}-checks`}
             openingTarget={openingTarget}
             onOpen={open}
             onRetry={retry}
           />
           <EvidenceLinks
             snapshot={currentState.snapshot}
+            headingId={`${headingId}-evidence`}
             openingTarget={openingTarget}
             onOpen={open}
             onRetry={retry}
           />
-          <WorkingBoundary />
+          <WorkingBoundary headingId={`${headingId}-boundary`} />
         </>
       )}
     </section>

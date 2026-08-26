@@ -7,6 +7,7 @@ import {
   focusForPage,
   initialVibeWorkspaceViewState,
   reduceVibeWorkspaceView,
+  sameVibeExactReferences,
 } from "./vibe-workspace-model";
 
 function page(): VibePage {
@@ -32,6 +33,9 @@ function page(): VibePage {
       }, {
         block_id: "block:artifact",
         content: { kind: "artifact_ref", artifact_id: "artifact:de", label: "差异表达表" },
+      }, {
+        block_id: "block:check",
+        content: { kind: "surface_ref", instance_id: "instance:check", live: true },
       }],
     }],
   };
@@ -51,6 +55,19 @@ function instances(): ReadonlyMap<string, SurfaceInstance> {
     resource_binding: null,
     runtime_binding: null,
     view_state: { conversation_id: "conversation:exact", mode: "ask", composer: "", auto_approve: false },
+  } as SurfaceInstance], ["instance:check", {
+    project_id: "project:alpha",
+    instance_id: "instance:check",
+    surface_id: "rho.check-result",
+    origin: { kind: "application", component_id: "rho.check-result" },
+    surface_revision: 1,
+    activation_generation: 1,
+    lifecycle_state: "active",
+    mode_id: null,
+    view_group_id: null,
+    resource_binding: null,
+    runtime_binding: null,
+    view_state: { check_result_id: "check-result:exact" },
   } as SurfaceInstance]]);
 }
 
@@ -69,13 +86,18 @@ describe("Vibe workspace view model", () => {
 
   it("derives only typed references from the selected block", () => {
     expect(exactReferencesForBlock(page(), "block:method", instances())).toMatchObject({
-      conversationIds: [], artifactIds: [], findingIds: [], taskIds: [],
+      conversationIds: [], runIds: [], artifactIds: [], plotIds: [], checkIds: [],
+      evidenceIds: [], findingIds: [], taskIds: [],
     });
     expect(exactReferencesForBlock(page(), "block:agent", instances())).toMatchObject({
       surfaceInstanceIds: ["instance:agent"],
       conversationIds: ["conversation:exact"],
     });
     expect(exactReferencesForBlock(page(), "block:artifact", instances()).artifactIds).toEqual(["artifact:de"]);
+    expect(exactReferencesForBlock(page(), "block:check", instances())).toMatchObject({
+      surfaceInstanceIds: ["instance:check"],
+      checkIds: ["check-result:exact"],
+    });
     expect(exactReferencesForBlock(page(), "block:missing", instances())).toMatchObject({
       surfaceInstanceIds: [], conversationIds: [], artifactIds: [],
     });
@@ -99,6 +121,26 @@ describe("Vibe workspace view model", () => {
     const unlinked = correspondenceForFocus(focusForPage(page(), { ...state, blockId: "block:method" }, instances()));
     expect(unlinked.hasExactLink).toBe(false);
     expect(unlinked.summary).toContain("尚未建立精确");
+
+    const checked = correspondenceForFocus(focusForPage(
+      page(),
+      { ...state, blockId: "block:check" },
+      instances(),
+    ));
+    expect(checked.summary).toContain("项目检查引用");
+    expect(checked.summary).not.toContain("check-result:exact");
+  });
+
+  it("can initialize from the Page's durable current block without changing layout", () => {
+    expect(initialVibeWorkspaceViewState(
+      "project:alpha",
+      "page:analysis",
+      "block:artifact",
+    )).toMatchObject({
+      layoutMode: "overview",
+      activeRegion: "manuscript",
+      blockId: "block:artifact",
+    });
   });
 
   it("drops a selected block that does not exist in the current Page", () => {
@@ -108,5 +150,13 @@ describe("Vibe workspace view model", () => {
     }, instances());
     expect(focus.blockId).toBeNull();
     expect(focus.exactRefs).toMatchObject({ conversationIds: [], artifactIds: [] });
+  });
+
+  it("compares every exact reference lane without treating a changed target as current", () => {
+    const first = exactReferencesForBlock(page(), "block:artifact", instances());
+    const same = exactReferencesForBlock(page(), "block:artifact", instances());
+    const changed = { ...same, artifactIds: ["artifact:replacement"] };
+    expect(sameVibeExactReferences(first, same)).toBe(true);
+    expect(sameVibeExactReferences(first, changed)).toBe(false);
   });
 });

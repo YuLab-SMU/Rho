@@ -175,4 +175,81 @@ describe("Vibe manuscript region", () => {
     })));
     expect(document.activeElement).toBe(container.querySelector(".rho-vibe-manuscript-header h2"));
   });
+
+  it("keeps one available toolbar tab stop when the active Undo or Save action becomes disabled", async () => {
+    const empty: VibePage = { ...page(), sections: [], focused_block_id: null };
+    const commitPage = vi.fn(async (request) => snapshotWithPage({
+      ...empty,
+      page_revision: 2,
+      sections: request.mutation.sections,
+      focused_block_id: request.mutation.focused_block_id,
+    }, 2));
+    const { container } = await render({
+      status: "ready",
+      page: empty,
+      profileRevision: 1,
+      commitPage,
+      reportError: vi.fn(),
+    });
+    const toolbar = container.querySelector<HTMLElement>("[role='toolbar']")!;
+    const assertOneAvailableTabStop = () => {
+      const enabled = [...toolbar.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
+      expect(enabled.filter((button) => button.tabIndex === 0)).toHaveLength(1);
+    };
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".rho-vibe-manuscript-empty button")!.click();
+    });
+    const undo = toolbar.querySelector<HTMLButtonElement>("[aria-label='Undo manuscript edit']")!;
+    expect(undo.disabled).toBe(false);
+    await act(async () => undo.focus());
+    expect(undo.tabIndex).toBe(0);
+    await act(async () => undo.click());
+    expect(undo.disabled).toBe(true);
+    assertOneAvailableTabStop();
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".rho-vibe-manuscript-empty button")!.click();
+    });
+    const save = toolbar.querySelector<HTMLButtonElement>(".rho-vibe-manuscript-save")!;
+    expect(save.disabled).toBe(false);
+    await act(async () => save.focus());
+    expect(save.tabIndex).toBe(0);
+    await act(async () => {
+      save.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(save.disabled).toBe(true);
+    assertOneAvailableTabStop();
+  });
+
+  it("keeps a busy manuscript readable while preventing editor and formatting mutations", async () => {
+    const empty: VibePage = { ...page(), sections: [], focused_block_id: null };
+    const commitPage = vi.fn();
+    const ready = {
+      status: "ready" as const,
+      page: empty,
+      profileRevision: 1,
+      commitPage,
+      reportError: vi.fn(),
+    };
+    const { container, root } = await render(ready);
+    const editor = container.querySelector<HTMLElement>(".ProseMirror")!;
+    expect(editor.getAttribute("contenteditable")).toBe("true");
+
+    await act(async () => root.render(<VibeManuscriptLane {...ready} busy />));
+
+    expect(container.querySelector(".rho-vibe-manuscript")?.getAttribute("aria-busy")).toBe("true");
+    expect(editor.getAttribute("contenteditable")).toBe("false");
+    expect(editor.getAttribute("aria-readonly")).toBe("true");
+    expect([...container.querySelectorAll<HTMLButtonElement>(".rho-vibe-manuscript-toolbar button")]
+      .every((button) => button.disabled)).toBe(true);
+    const start = container.querySelector<HTMLButtonElement>(".rho-vibe-manuscript-empty button")!;
+    expect(start.disabled).toBe(true);
+    await act(async () => start.click());
+    expect(container.querySelector(".rho-vibe-block-rich_text")).toBeNull();
+    expect(container.querySelector(".rho-vibe-manuscript-save-state")?.textContent).toBe("Saved");
+    expect(commitPage).not.toHaveBeenCalled();
+  });
 });

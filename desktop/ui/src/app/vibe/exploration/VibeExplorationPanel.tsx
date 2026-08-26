@@ -11,8 +11,8 @@ import type {
   AgentConversationSummary,
   AgentTurnDetail,
   AgentTurnSummary,
-  RunAgentResponse,
 } from "../../../transport";
+import { vibeFailureMessage } from "../core/vibe-failure";
 import {
   conversationHasExactReference,
   projectExplorationConversation,
@@ -34,11 +34,6 @@ export interface VibeExplorationTransport {
     limit?: number,
   ): Promise<readonly AgentTurnSummary[]>;
   getAgentTurnDetail(turnId: string): Promise<AgentTurnDetail | null>;
-  cancelAgentTurn(turnId: string): Promise<{
-    readonly status: "cancelled";
-    readonly turn_id: string;
-  }>;
-  retryAgentTurn(turnId: string): Promise<RunAgentResponse>;
   subscribeAgentInvalidated(listener: () => void): () => void;
 }
 
@@ -54,6 +49,7 @@ export interface VibeExplorationExactRefs {
 
 export interface VibeExplorationPanelProps {
   readonly projectId: string;
+  readonly projectRoot: string;
   readonly presentation: "overview" | "focused";
   readonly selection: VibeExplorationSelection;
   readonly exactRefs: VibeExplorationExactRefs;
@@ -83,16 +79,21 @@ type PanelState =
       readonly refreshMessage: string | null;
     };
 
-type TurnAction = {
-  readonly kind: "stop" | "retry";
-  readonly turnId: string;
-} | null;
-
 const INITIAL_STATE: PanelState = Object.freeze({ kind: "loading" });
 
+class ExplorationProjectMismatchError extends Error {
+  constructor() {
+    super("Agent records changed project while autonomous exploration was loading.");
+    this.name = "ExplorationProjectMismatchError";
+  }
+}
+
 function boundedErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message.trim()) return error.message.trim().slice(0, 512);
-  return "自主探索记录暂时不可用。";
+  return vibeFailureMessage(error, "自主探索记录暂时不可用。");
+}
+
+function boundedExplorationError(error: unknown): Error {
+  return new Error(boundedErrorMessage(error));
 }
 
 function sameSelection(left: VibeExplorationSelection, right: VibeExplorationSelection): boolean {
@@ -121,7 +122,10 @@ function projectedSelection(data: ExplorationData): VibeExplorationSelection {
   };
 }
 
-function keyboardConversationNavigation(event: ReactKeyboardEvent<HTMLButtonElement>): void {
+function keyboardListNavigation(
+  event: ReactKeyboardEvent<HTMLButtonElement>,
+  selector: string,
+): void {
   const directions: Readonly<Record<string, number>> = {
     ArrowDown: 1,
     ArrowRight: 1,
@@ -130,10 +134,10 @@ function keyboardConversationNavigation(event: ReactKeyboardEvent<HTMLButtonElem
   };
   const direction = directions[event.key];
   if (direction == null && event.key !== "Home" && event.key !== "End") return;
-  const list = event.currentTarget.closest("ul");
+  const list = event.currentTarget.closest("ul, ol");
   const buttons = list == null
     ? []
-    : [...list.querySelectorAll<HTMLButtonElement>("button[data-exploration-conversation]")];
+    : [...list.querySelectorAll<HTMLButtonElement>(selector)];
   const current = buttons.indexOf(event.currentTarget);
   if (current < 0 || buttons.length === 0) return;
   event.preventDefault();
@@ -148,6 +152,7 @@ function keyboardConversationNavigation(event: ReactKeyboardEvent<HTMLButtonElem
 
 export function VibeExplorationPanel({
   projectId,
+  projectRoot,
   presentation,
   selection,
   exactRefs,
@@ -159,18 +164,18 @@ export function VibeExplorationPanel({
 }: VibeExplorationPanelProps) {
   const headingId = useId();
   const [state, setState] = useState<PanelState>(INITIAL_STATE);
-  const [turnAction, setTurnAction] = useState<TurnAction>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
   const stateRef = useRef(state);
   const selectionRef = useRef(selection);
   const exactRefsRef = useRef(exactRefs);
   const callbacksRef = useRef({ onSelectionChange, onError });
   const projectEpochRef = useRef(0);
+  const projectRootRef = useRef(projectRoot);
   const requestGenerationRef = useRef(0);
 
   stateRef.current = state;
   selectionRef.current = selection;
   exactRefsRef.current = exactRefs;
+  projectRootRef.current = projectRoot;
   callbacksRef.current = { onSelectionChange, onError };
 
   const publish = useCallback((next: PanelState) => {
@@ -181,6 +186,7 @@ export function VibeExplorationPanel({
   const refresh = useCallback(async (
     preferred: VibeExplorationSelection = selectionRef.current,
     epoch = projectEpochRef.current,
+    expectedProjectRoot = projectRootRef.current,
   ) => {
     const requestGeneration = ++requestGenerationRef.current;
     const current = stateRef.current;
@@ -194,7 +200,7 @@ export function VibeExplorationPanel({
             if (
               epoch === projectEpochRef.current &&
               requestGeneration === requestGenerationRef.current
-            ) callbacksRef.current.onError(error);
+            ) callbacksRef.current.onError(boundedExplorationError(error));
             return null;
           })
         : Promise.resolve(null);
@@ -207,6 +213,13 @@ export function VibeExplorationPanel({
         epoch !== projectEpochRef.current ||
         requestGeneration !== requestGenerationRef.current
       ) return;
+      if (
+        projectRootRef.current !== expectedProjectRoot
+        || loadedConversationRecords.some(
+          (conversation) => conversation.project_root !== expectedProjectRoot,
+        )
+        || (hintedDetail != null && hintedDetail.turn.project_root !== expectedProjectRoot)
+      ) throw new ExplorationProjectMismatchError();
       const conversationRecords = loadedConversationRecords.slice(0, CONVERSATION_LIMIT);
 
       const selectedConversationId = selectConversationId(
@@ -225,6 +238,10 @@ export function VibeExplorationPanel({
         epoch !== projectEpochRef.current ||
         requestGeneration !== requestGenerationRef.current
       ) return;
+      if (
+        projectRootRef.current !== expectedProjectRoot
+        || loadedTurnRecords.some((turn) => turn.project_root !== expectedProjectRoot)
+      ) throw new ExplorationProjectMismatchError();
       const turnRecords = loadedTurnRecords.slice(0, TURN_LIMIT);
 
       let detailFailures = 0;
@@ -238,13 +255,18 @@ export function VibeExplorationPanel({
       const loadedDetails = await Promise.all(detailCandidates.map(async (turn) => {
         if (hintedDetail?.turn.turn_id === turn.turn_id) return hintedDetail;
         try {
-          return await transport.getAgentTurnDetail(turn.turn_id);
+          const detail = await transport.getAgentTurnDetail(turn.turn_id);
+          if (detail != null && detail.turn.project_root !== expectedProjectRoot) {
+            throw new ExplorationProjectMismatchError();
+          }
+          return detail;
         } catch (error: unknown) {
+          if (error instanceof ExplorationProjectMismatchError) throw error;
           detailFailures += 1;
           if (
             epoch === projectEpochRef.current &&
             requestGeneration === requestGenerationRef.current
-          ) callbacksRef.current.onError(error);
+          ) callbacksRef.current.onError(boundedExplorationError(error));
           return null;
         }
       }));
@@ -252,6 +274,9 @@ export function VibeExplorationPanel({
         epoch !== projectEpochRef.current ||
         requestGeneration !== requestGenerationRef.current
       ) return;
+      if (projectRootRef.current !== expectedProjectRoot) {
+        throw new ExplorationProjectMismatchError();
+      }
 
       const details = new Map(detailCandidates.map(
         (turn, index) => [turn.turn_id, loadedDetails[index] ?? null] as const,
@@ -283,7 +308,7 @@ export function VibeExplorationPanel({
         requestGeneration !== requestGenerationRef.current
       ) return;
       const message = boundedErrorMessage(error);
-      callbacksRef.current.onError(error);
+      callbacksRef.current.onError(new Error(message));
       const latest = stateRef.current;
       if (latest.kind === "ready") {
         publish({
@@ -301,8 +326,6 @@ export function VibeExplorationPanel({
   useEffect(() => {
     const epoch = ++projectEpochRef.current;
     requestGenerationRef.current = 0;
-    setTurnAction(null);
-    setActionError(null);
     publish(INITIAL_STATE);
     void refresh(selectionRef.current, epoch);
     const unsubscribe = transport.subscribeAgentInvalidated(() => {
@@ -312,7 +335,7 @@ export function VibeExplorationPanel({
       unsubscribe();
       if (projectEpochRef.current === epoch) projectEpochRef.current += 1;
     };
-  }, [projectId, publish, refresh, transport]);
+  }, [projectId, projectRoot, publish, refresh, transport]);
 
   useEffect(() => {
     const current = stateRef.current;
@@ -342,38 +365,6 @@ export function VibeExplorationPanel({
     onSelectionChange(next);
   };
 
-  const runTurnAction = async (kind: "stop" | "retry", turn: ExplorationTurnView) => {
-    if (turnAction != null) return;
-    const actionEpoch = projectEpochRef.current;
-    setActionError(null);
-    setTurnAction({ kind, turnId: turn.turnId });
-    try {
-      if (kind === "stop") {
-        await transport.cancelAgentTurn(turn.turnId);
-        if (actionEpoch !== projectEpochRef.current) return;
-        await refresh(
-          { conversationId: turn.conversationId, turnId: turn.turnId },
-          actionEpoch,
-        );
-      } else {
-        const response = await transport.retryAgentTurn(turn.turnId);
-        if (actionEpoch !== projectEpochRef.current) return;
-        const next = {
-          conversationId: response.conversation_id,
-          turnId: response.turn_id,
-        };
-        callbacksRef.current.onSelectionChange(next);
-        await refresh(next, actionEpoch);
-      }
-    } catch (error: unknown) {
-      if (actionEpoch !== projectEpochRef.current) return;
-      setActionError(boundedErrorMessage(error));
-      callbacksRef.current.onError(error);
-    } finally {
-      if (actionEpoch === projectEpochRef.current) setTurnAction(null);
-    }
-  };
-
   const ready = state.kind === "ready" ? state : null;
   const selectedConversation = ready?.data.conversations.find(
     (conversation) => conversation.conversationId === ready.data.selectedConversationId,
@@ -381,6 +372,39 @@ export function VibeExplorationPanel({
   const selectedTurn = ready?.data.turns.find(
     (turn) => turn.turnId === ready.data.selectedTurnId,
   ) ?? null;
+  const conversationTabStopId = selectedConversation?.conversationId
+    ?? ready?.data.conversations[0]?.conversationId
+    ?? null;
+  const turnTabStopId = selectedTurn?.turnId ?? ready?.data.turns[0]?.turnId ?? null;
+  const turnNavigation = ready != null
+    && presentation === "focused"
+    && ready.data.turns.length > 0
+    && (ready.data.turns.length > 1 || selectedTurn == null)
+    ? (
+        <nav className="rho-vibe-exploration-turns" aria-label="最近 Turn 记录">
+          <ol>
+            {ready.data.turns.map((turn) => (
+              <li key={turn.turnId}>
+                <button
+                  type="button"
+                  data-exploration-turn
+                  aria-current={turn.turnId === selectedTurn?.turnId ? "true" : undefined}
+                  tabIndex={turn.turnId === turnTabStopId ? 0 : -1}
+                  onKeyDown={(event) => keyboardListNavigation(
+                    event,
+                    "button[data-exploration-turn]",
+                  )}
+                  onClick={() => selectTurn(turn.turnId)}
+                >
+                  <span>{turn.task}</span>
+                  <small>{turn.status.label}{turn.retryOfTurnId == null ? "" : " · 重试记录"}</small>
+                </button>
+              </li>
+            ))}
+          </ol>
+        </nav>
+      )
+    : null;
   const currentSelection = ready == null
     ? selection
     : projectedSelection(ready.data);
@@ -473,8 +497,12 @@ export function VibeExplorationPanel({
                           data-exploration-conversation
                           data-status={conversation.status.kind}
                           aria-current={selected ? "true" : undefined}
+                          tabIndex={conversation.conversationId === conversationTabStopId ? 0 : -1}
                           title={conversation.title}
-                          onKeyDown={keyboardConversationNavigation}
+                          onKeyDown={(event) => keyboardListNavigation(
+                            event,
+                            "button[data-exploration-conversation]",
+                          )}
                           onClick={() => selectConversation(conversation.conversationId)}
                         >
                           <span>{conversation.title}</span>
@@ -520,27 +548,13 @@ export function VibeExplorationPanel({
                         <button type="button" onClick={() => onCompose(currentSelection)}>提出任务</button>
                       </div>
                     ) : selectedTurn == null ? (
-                      <div className="rho-vibe-exploration-state" role="status">选中的探索记录已不可用。</div>
+                      <>
+                        {turnNavigation}
+                        <div className="rho-vibe-exploration-state" role="status">选中的探索记录已不可用。</div>
+                      </>
                     ) : (
                       <>
-                        {presentation === "focused" && ready.data.turns.length > 1 && (
-                          <nav className="rho-vibe-exploration-turns" aria-label="最近 Turn 记录">
-                            <ol>
-                              {ready.data.turns.map((turn) => (
-                                <li key={turn.turnId}>
-                                  <button
-                                    type="button"
-                                    aria-current={turn.turnId === selectedTurn.turnId ? "true" : undefined}
-                                    onClick={() => selectTurn(turn.turnId)}
-                                  >
-                                    <span>{turn.task}</span>
-                                    <small>{turn.status.label}{turn.retryOfTurnId == null ? "" : " · 重试记录"}</small>
-                                  </button>
-                                </li>
-                              ))}
-                            </ol>
-                          </nav>
-                        )}
+                        {turnNavigation}
 
                         <section className="rho-vibe-exploration-task" aria-label="Agent 收到的任务">
                           <span className="rho-eyebrow">任务</span>
@@ -606,30 +620,7 @@ export function VibeExplorationPanel({
                           </details>
                         )}
 
-                        {actionError != null && <p className="rho-vibe-exploration-action-error" role="alert">{actionError}</p>}
                         <footer className="rho-vibe-exploration-actions">
-                          {selectedTurn.status.active && (
-                            <button
-                              type="button"
-                              disabled={turnAction != null}
-                              onClick={() => void runTurnAction("stop", selectedTurn)}
-                            >
-                              {turnAction?.kind === "stop" && turnAction.turnId === selectedTurn.turnId
-                                ? "停止中…"
-                                : "停止探索"}
-                            </button>
-                          )}
-                          {selectedTurn.status.retryable && !selectedConversation.legacyReadOnly && (
-                            <button
-                              type="button"
-                              disabled={turnAction != null}
-                              onClick={() => void runTurnAction("retry", selectedTurn)}
-                            >
-                              {turnAction?.kind === "retry" && turnAction.turnId === selectedTurn.turnId
-                                ? "重试中…"
-                                : "重试"}
-                            </button>
-                          )}
                           <button type="button" onClick={() => onCompose(currentSelection)}>
                             {selectedConversation.legacyReadOnly ? "发起新的探索" : "调整探索"}
                           </button>

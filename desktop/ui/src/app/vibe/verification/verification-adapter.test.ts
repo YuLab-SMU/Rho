@@ -12,6 +12,7 @@ import {
   makeReference,
   makeRun,
   TEST_PROJECT_ID,
+  TEST_PROJECT_ROOT,
 } from "./verification-test-fixtures";
 
 function makePort(overrides: Partial<VerificationReadPort> = {}): VerificationReadPort {
@@ -52,7 +53,12 @@ describe("typed verification adapter", () => {
     const snapshot = await createVerificationAdapter(port).load(focus);
 
     expect(readRuns).toHaveBeenCalledWith(
-      expect.objectContaining({ projectId: TEST_PROJECT_ID, projectRevision: 12, epoch: 3 }),
+      expect.objectContaining({
+        projectId: TEST_PROJECT_ID,
+        projectRoot: TEST_PROJECT_ROOT,
+        projectRevision: 12,
+        epoch: 3,
+      }),
       ["run-18"],
     );
     expect(readArtifacts).toHaveBeenCalledWith(expect.any(Object), [
@@ -179,6 +185,14 @@ describe("typed verification adapter", () => {
     expect(readArtifacts).not.toHaveBeenCalled();
     expect(snapshot.invalidReferences).toEqual([malformed]);
     expect(snapshot.artifacts.status).toBe("unlinked");
+  });
+
+  it("preserves an exact Finding reference as unresolved until a typed Finding reader exists", async () => {
+    const finding = makeReference("finding", "finding:seed", "Randomness finding");
+    const snapshot = await createVerificationAdapter(makePort()).load(makeFocus([finding]));
+
+    expect(snapshot.invalidReferences).toEqual([finding]);
+    expect(snapshot.checks.status).toBe("unlinked");
   });
 
   it("fails a source rather than selecting between duplicate exact records", async () => {

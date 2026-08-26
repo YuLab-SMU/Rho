@@ -388,6 +388,167 @@ describe("Studio foundation app", () => {
     expect(loadProjectHistory(window.localStorage).history.paths).toEqual([projectA, projectB]);
   });
 
+  it("flushes a dirty Vibe manuscript before switching projects", async () => {
+    const projectA = "/projects/project-a";
+    const projectB = "/projects/project-b";
+    saveProjectHistory(window.localStorage, { version: 1, paths: [projectA, projectB] });
+    const transport = createMockUiKernelTransport(`?project=${encodeURIComponent(projectA)}`);
+    const profile = structuredClone(await transport.loadUiProfile());
+    const page = profile.profile.vibe_pages.find(
+      (candidate) => candidate.page_id === profile.profile.active_vibe_page_id,
+    )! as unknown as { sections: unknown[]; focused_block_id: string | null };
+    page.sections = [];
+    page.focused_block_id = null;
+    transport.publishUiProfile(profile);
+    const apply = vi.spyOn(transport, "applyVibePage");
+    const open = vi.spyOn(transport, "openProject");
+    const { container } = await renderApp(transport);
+
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
+        .find((button) => button.textContent === "Vibe")!
+        .click();
+      await settle();
+      container.querySelector<HTMLButtonElement>(".rho-vibe-manuscript-empty button")!.click();
+      await settle();
+    });
+    const menu = await openRhoMenu(container);
+    await act(async () => {
+      menu.querySelector<HTMLButtonElement>(`[data-project-path='${projectB}']`)!.click();
+      for (let index = 0; index < 24; index += 1) await Promise.resolve();
+    });
+
+    expect(apply).toHaveBeenCalledOnce();
+    expect(open).toHaveBeenCalledWith(projectB);
+    expect(apply.mock.invocationCallOrder[0]).toBeLessThan(open.mock.invocationCallOrder[0]!);
+    expect(container.querySelector(".rho-statusbar")?.textContent).toContain(projectB);
+  });
+
+  it("keeps the current project when a dirty Vibe manuscript cannot be saved", async () => {
+    const projectA = "/projects/project-a";
+    const projectB = "/projects/project-b";
+    saveProjectHistory(window.localStorage, { version: 1, paths: [projectA, projectB] });
+    const transport = createMockUiKernelTransport(`?project=${encodeURIComponent(projectA)}`);
+    const profile = structuredClone(await transport.loadUiProfile());
+    const page = profile.profile.vibe_pages.find(
+      (candidate) => candidate.page_id === profile.profile.active_vibe_page_id,
+    )! as unknown as { sections: unknown[]; focused_block_id: string | null };
+    page.sections = [];
+    page.focused_block_id = null;
+    transport.publishUiProfile(profile);
+    vi.spyOn(transport, "applyVibePage").mockRejectedValue(
+      new Error("Vibe Page rejected: Page revision is stale."),
+    );
+    const open = vi.spyOn(transport, "openProject");
+    const { container } = await renderApp(transport);
+
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
+        .find((button) => button.textContent === "Vibe")!
+        .click();
+      await settle();
+      container.querySelector<HTMLButtonElement>(".rho-vibe-manuscript-empty button")!.click();
+      await settle();
+    });
+    const menu = await openRhoMenu(container);
+    await act(async () => {
+      menu.querySelector<HTMLButtonElement>(`[data-project-path='${projectB}']`)!.click();
+      for (let index = 0; index < 24; index += 1) await Promise.resolve();
+    });
+
+    expect(open).not.toHaveBeenCalled();
+    expect(container.querySelector(".rho-statusbar")?.textContent).toContain(projectA);
+    expect(container.querySelector(".rho-canvas-vibe")).not.toBeNull();
+    expect(container.querySelector(".rho-action-error")?.textContent)
+      .toContain("处理保存问题");
+  });
+
+  it("disables project switching while a Vibe mode transition is in flight", async () => {
+    const projectA = "/projects/project-a";
+    const projectB = "/projects/project-b";
+    saveProjectHistory(window.localStorage, { version: 1, paths: [projectA, projectB] });
+    const transport = createMockUiKernelTransport(`?project=${encodeURIComponent(projectA)}`);
+    const { container } = await renderApp(transport);
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
+        .find((button) => button.textContent === "Vibe")!
+        .click();
+      await settle();
+    });
+    const setMode = transport.setUiProfileMode.bind(transport);
+    let release = () => {};
+    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    transport.setUiProfileMode = vi.fn(async (request) => {
+      await blocked;
+      return setMode(request);
+    });
+
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
+        .find((button) => button.textContent === "Studio")!
+        .click();
+      await Promise.resolve();
+    });
+    const menu = await openRhoMenu(container);
+    expect(menu.querySelector<HTMLButtonElement>(".rho-rho-project")?.disabled).toBe(true);
+    expect(menu.querySelector<HTMLButtonElement>(`[data-project-path='${projectB}']`)?.disabled).toBe(true);
+
+    await act(async () => {
+      release();
+      await settle();
+    });
+  });
+
+  it("does not send an old-project mode mutation while a Studio project switch is in flight", async () => {
+    const projectA = "/projects/project-a";
+    const projectB = "/projects/project-b";
+    saveProjectHistory(window.localStorage, { version: 1, paths: [projectA, projectB] });
+    const transport = createMockUiKernelTransport(`?project=${encodeURIComponent(projectA)}`);
+    const openProject = transport.openProject.bind(transport);
+    let markProjectOpenRequested = () => {};
+    const projectOpenRequested = new Promise<void>((resolve) => {
+      markProjectOpenRequested = resolve;
+    });
+    let releaseProjectOpen = () => {};
+    const projectOpenBlocked = new Promise<void>((resolve) => {
+      releaseProjectOpen = resolve;
+    });
+    transport.openProject = vi.fn(async (path) => {
+      markProjectOpenRequested();
+      await projectOpenBlocked;
+      return openProject(path);
+    });
+    const setMode = vi.spyOn(transport, "setUiProfileMode");
+    const { container } = await renderApp(transport);
+    const vibe = [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
+      .find((button) => button.textContent === "Vibe")!;
+    const menu = await openRhoMenu(container);
+    const openB = menu.querySelector<HTMLButtonElement>(`[data-project-path='${projectB}']`)!;
+
+    await act(async () => {
+      openB.click();
+      vibe.click();
+      await projectOpenRequested;
+      await settle();
+    });
+
+    expect([...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
+      .every((button) => button.disabled)).toBe(true);
+    expect(setMode).not.toHaveBeenCalled();
+    expect(container.querySelector(".rho-statusbar")?.textContent).toContain(projectA);
+
+    await act(async () => {
+      releaseProjectOpen();
+      for (let index = 0; index < 24; index += 1) await Promise.resolve();
+    });
+
+    expect(setMode).not.toHaveBeenCalled();
+    expect(container.querySelector(".rho-statusbar")?.textContent).toContain(projectB);
+    expect(container.querySelector<HTMLButtonElement>(".rho-mode-switch button[aria-pressed='true']")?.textContent)
+      .toBe("Studio");
+    expect(vibe.disabled).toBe(false);
+  });
+
   it("keeps a cancelled picker silent and suppresses repeated switch clicks while pending", async () => {
     const projectA = "/projects/project-a";
     const transport = createMockUiKernelTransport(`?project=${encodeURIComponent(projectA)}`);
@@ -2427,25 +2588,40 @@ describe("Studio foundation app", () => {
       vibe.click();
       await settle();
     });
-    expect(container.querySelector(".rho-vibe-page")?.textContent).toContain("Project review");
-    expect(container.querySelector(".rho-vibe-live-surface [data-surface-id='rho.check-result']"))
-      .not.toBeNull();
-    expect(container.querySelector(".rho-vibe-live-surface-context")).not.toBeNull();
+    expect(container.querySelector(".rho-vibe-workspace")?.textContent).toContain("Project review");
+    expect([...container.querySelectorAll(".rho-vibe-workspace h2")].map((heading) => heading.textContent))
+      .toEqual(expect.arrayContaining(["手稿", "自主探索", "查验与结论"]));
+    expect(container.querySelector(".rho-vibe-live-surface")).toBeNull();
+    expect(container.querySelector(".rho-vibe-manuscript-atom-surface_ref")).not.toBeNull();
     expect(container.querySelector("[aria-label='Selected block actions']")).toBeNull();
-    expect(container.querySelector(".rho-vibe-page-header")?.textContent).not.toContain("· r");
+    expect(container.querySelector(".rho-vibe-manuscript-header")?.textContent).not.toContain("· r");
     expect(container.querySelector(".rho-studio-inspector")).toBeNull();
     expect(container.querySelector<HTMLButtonElement>(".rho-bar-compose")?.textContent)
       .toBe("Compose");
+    expect(container.querySelector(".rho-vibe-manuscript")?.getAttribute("aria-busy")).toBeNull();
+    expect(container.querySelector(".ProseMirror")?.getAttribute("contenteditable")).toBe("true");
 
     await act(async () => {
-      pointer(container.querySelector(".rho-vibe-block-surface_ref")!, "pointerdown", 100, 100);
+      container.querySelector("[data-block-id='block:check']")!.dispatchEvent(
+        new Event("pointerdown", { bubbles: true, cancelable: true }),
+      );
+      await settle();
       await settle();
     });
-    expect(container.querySelector("[aria-label='Selected block actions']")).not.toBeNull();
+    expect(container.querySelector(".rho-vibe-correspondence")?.textContent)
+      .toContain("该组件尚未提供精确探索或查验关系");
+    expect(container.querySelector(".rho-vibe-verification")?.textContent).toContain("尚无精确关联");
   });
 
   it("commits Vibe composition through exact Page transactions", async () => {
     const transport = createMockUiKernelTransport();
+    const profile = structuredClone(await transport.loadUiProfile());
+    const page = profile.profile.vibe_pages.find(
+      (candidate) => candidate.page_id === profile.profile.active_vibe_page_id,
+    )! as unknown as { sections: unknown[]; focused_block_id: string | null };
+    page.sections = [];
+    page.focused_block_id = null;
+    transport.publishUiProfile(profile);
     const apply = vi.spyOn(transport, "applyVibePage");
     const { container } = await renderApp(transport);
     const vibe = [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
@@ -2455,12 +2631,14 @@ describe("Studio foundation app", () => {
       await settle();
     });
     const before = container.querySelectorAll(".rho-vibe-block-rich_text").length;
-    const text = [...container.querySelectorAll<HTMLButtonElement>(".rho-vibe-toolbar button")]
-      .find((button) => button.textContent === "Add text")!;
-    const save = [...container.querySelectorAll<HTMLButtonElement>(".rho-vibe-toolbar button")]
+    const start = container.querySelector<HTMLButtonElement>(".rho-vibe-manuscript-empty button")!;
+    await act(async () => {
+      start.click();
+      await settle();
+    });
+    const save = [...container.querySelectorAll<HTMLButtonElement>(".rho-vibe-manuscript-toolbar button")]
       .find((button) => button.textContent === "Save now")!;
     await act(async () => {
-      text.click();
       save.click();
       for (let index = 0; index < 8; index += 1) await Promise.resolve();
     });
@@ -2471,7 +2649,370 @@ describe("Studio foundation app", () => {
       mutation: { kind: "replace_sections" },
     });
     expect(container.querySelectorAll(".rho-vibe-block-rich_text")).toHaveLength(before + 1);
-    expect(container.querySelector(".rho-vibe-save-state")?.textContent).toBe("Saved");
+    expect(container.querySelector(".rho-vibe-manuscript-save-state")?.textContent).toBe("Saved");
+  });
+
+  it("opens one exact referenced artifact in Studio and restores the in-session Vibe focus", async () => {
+    const transport = createMockUiKernelTransport();
+    const profile = structuredClone(await transport.loadUiProfile());
+    const page = profile.profile.vibe_pages.find(
+      (candidate) => candidate.page_id === profile.profile.active_vibe_page_id,
+    )! as unknown as {
+      sections: Array<{
+        section_id: string;
+        heading: string | null;
+        layout: { kind: "flow" };
+        blocks: Array<{
+          block_id: string;
+          content: { kind: "artifact_ref"; artifact_id: string; label: string };
+        }>;
+      }>;
+      focused_block_id: string | null;
+    };
+    page.sections = [{
+      section_id: "section:artifact-review",
+      heading: "Candidate output",
+      layout: { kind: "flow" },
+      blocks: [{
+        block_id: "block:artifact-review",
+        content: {
+          kind: "artifact_ref",
+          artifact_id: "artifact:plot-1",
+          label: "QC plot candidate",
+        },
+      }],
+    }];
+    page.focused_block_id = "block:artifact-review";
+    transport.publishUiProfile(profile);
+    const openSurface = vi.spyOn(transport, "openSurface");
+    const { container } = await renderApp(transport);
+
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
+        .find((button) => button.textContent === "Vibe")!
+        .click();
+      for (let index = 0; index < 20; index += 1) await Promise.resolve();
+    });
+    expect(container.querySelector(".rho-vibe-verification")?.textContent)
+      .toContain("QC plot candidate");
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(
+        ".rho-vibe-region-switcher button[data-region='verification']",
+      )!.click();
+      await settle();
+    });
+    expect(container.querySelector(".rho-vibe-workspace")?.getAttribute("data-layout"))
+      .toBe("focus-verification");
+
+    const setMode = transport.setUiProfileMode.bind(transport);
+    let markStudioModeRequested = () => {};
+    const studioModeRequested = new Promise<void>((resolve) => {
+      markStudioModeRequested = resolve;
+    });
+    let releaseStudioMode = () => {};
+    const studioModeBlocked = new Promise<void>((resolve) => {
+      releaseStudioMode = resolve;
+    });
+    let interceptedStudioMode = false;
+    transport.setUiProfileMode = vi.fn(async (request) => {
+      if (request.mode === "studio" && !interceptedStudioMode) {
+        interceptedStudioMode = true;
+        markStudioModeRequested();
+        await studioModeBlocked;
+      }
+      return setMode(request);
+    });
+
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>(".rho-vibe-verification button")]
+        .find((button) => button.textContent === "在 Studio 中查看")!
+        .click();
+      await studioModeRequested;
+      await settle();
+    });
+    expect(container.querySelector(".rho-vibe-workspace")?.getAttribute("data-layout"))
+      .toBe("focus-verification");
+    expect(container.querySelector<HTMLElement>("[data-block-id='block:artifact-review']")?.dataset.vibeActive)
+      .toBe("true");
+
+    await act(async () => {
+      releaseStudioMode();
+      for (let index = 0; index < 32; index += 1) await Promise.resolve();
+    });
+    expect(openSurface).toHaveBeenCalledWith(expect.objectContaining({
+      surface_id: "rho.artifacts",
+      mode_id: "list",
+      view_state: { selected_id: "artifact:plot-1", filter: "" },
+    }));
+    expect(container.querySelector(".rho-canvas-studio")).not.toBeNull();
+    expect(container.querySelector("[data-surface-id='rho.artifacts'] [data-domain-id='artifact:plot-1']"))
+      .not.toBeNull();
+
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
+        .find((button) => button.textContent === "Vibe")!
+        .click();
+      for (let index = 0; index < 24; index += 1) await Promise.resolve();
+    });
+    expect(container.querySelector(".rho-vibe-workspace")).not.toBeNull();
+    expect(container.querySelector<HTMLElement>("[data-block-id='block:artifact-review']")?.dataset.vibeActive)
+      .toBe("true");
+    expect(container.querySelector(".rho-vibe-workspace")?.getAttribute("data-layout"))
+      .toBe("focus-verification");
+
+    const pageBProfile = structuredClone(await transport.loadUiProfile());
+    const restoredPage = pageBProfile.profile.vibe_pages.find(
+      (candidate) => candidate.page_id === "page:project-review",
+    )!;
+    const secondPage = {
+      ...structuredClone(restoredPage),
+      page_id: "page:second-review",
+      label: "Second review",
+      page_revision: 1,
+      sections: [],
+      focused_block_id: null,
+    };
+    (pageBProfile.profile as { revision: number }).revision += 1;
+    (pageBProfile.profile as { active_vibe_page_id: string | null }).active_vibe_page_id = secondPage.page_id;
+    (pageBProfile.profile as { vibe_pages: typeof pageBProfile.profile.vibe_pages }).vibe_pages = [
+      ...pageBProfile.profile.vibe_pages,
+      secondPage,
+    ];
+    await act(async () => {
+      transport.publishUiProfile(pageBProfile);
+      await settle();
+    });
+    expect(container.querySelector(".rho-vibe-workspace")?.getAttribute("data-layout")).toBe("overview");
+
+    const pageAProfile = structuredClone(await transport.loadUiProfile());
+    (pageAProfile.profile as { revision: number }).revision += 1;
+    (pageAProfile.profile as { active_vibe_page_id: string | null }).active_vibe_page_id = restoredPage.page_id;
+    await act(async () => {
+      transport.publishUiProfile(pageAProfile);
+      await settle();
+    });
+    expect(container.querySelector(".rho-vibe-workspace")?.getAttribute("data-layout")).toBe("overview");
+    expect(container.querySelector(".rho-vibe-workspace")?.getAttribute("data-active-region"))
+      .toBe("manuscript");
+  });
+
+  it("keeps Vibe active when pending manuscript edits fail to save before a mode change", async () => {
+    const transport = createMockUiKernelTransport();
+    const profile = structuredClone(await transport.loadUiProfile());
+    const page = profile.profile.vibe_pages.find(
+      (candidate) => candidate.page_id === profile.profile.active_vibe_page_id,
+    )! as unknown as { sections: unknown[]; focused_block_id: string | null };
+    page.sections = [];
+    page.focused_block_id = null;
+    transport.publishUiProfile(profile);
+    const setMode = vi.spyOn(transport, "setUiProfileMode");
+    const rejection = new Error("Vibe Page rejected: Page revision is stale.");
+    vi.spyOn(transport, "applyVibePage").mockRejectedValue(rejection);
+    const { container } = await renderApp(transport);
+
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
+        .find((button) => button.textContent === "Vibe")!
+        .click();
+      await settle();
+    });
+    setMode.mockClear();
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".rho-vibe-manuscript-empty button")!.click();
+      await settle();
+      [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
+        .find((button) => button.textContent === "Studio")!
+        .click();
+      for (let index = 0; index < 20; index += 1) await Promise.resolve();
+    });
+
+    expect(setMode).not.toHaveBeenCalled();
+    expect(container.querySelector(".rho-canvas-vibe")).not.toBeNull();
+    expect(container.querySelector(".rho-vibe-manuscript-save-state[role='alert']")?.textContent)
+      .toContain("Save failed");
+    expect(container.querySelector(".rho-action-error")?.textContent).toContain("处理保存问题");
+  });
+
+  it("redacts Vibe operation failures before presenting them in the Workbench", async () => {
+    const transport = createMockUiKernelTransport();
+    const failure = new Error(
+      "Export failed for page_id=page:internal-77 at /Users/alice/private/rho/page.json.",
+    );
+    const exportPage = vi.spyOn(transport, "exportVibePage").mockRejectedValue(failure);
+    const { container } = await renderApp(transport);
+
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
+        .find((button) => button.textContent === "Vibe")!
+        .click();
+      await settle();
+      [...container.querySelectorAll<HTMLButtonElement>(".rho-vibe-document-actions button")]
+        .find((button) => button.textContent === "导出只读手稿")!
+        .click();
+      await settle();
+    });
+
+    expect(exportPage).toHaveBeenCalledOnce();
+    expect(container.querySelector(".rho-action-error")?.textContent).toContain("[internal reference]");
+    expect(container.querySelector(".rho-action-error")?.textContent).toContain("[local path]");
+    expect(container.querySelector(".rho-action-error")?.textContent).not.toContain("page:internal-77");
+    expect(container.querySelector(".rho-action-error")?.textContent).not.toContain("/Users/alice");
+  });
+
+  it("locks manuscript mutations after flush while the Studio mode mutation is pending", async () => {
+    const transport = createMockUiKernelTransport();
+    const profile = structuredClone(await transport.loadUiProfile());
+    const page = profile.profile.vibe_pages.find(
+      (candidate) => candidate.page_id === profile.profile.active_vibe_page_id,
+    )! as unknown as { sections: unknown[]; focused_block_id: string | null };
+    page.sections = [];
+    page.focused_block_id = null;
+    transport.publishUiProfile(profile);
+    const apply = vi.spyOn(transport, "applyVibePage");
+    const { container } = await renderApp(transport);
+
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
+        .find((button) => button.textContent === "Vibe")!
+        .click();
+      await settle();
+    });
+    const setMode = transport.setUiProfileMode.bind(transport);
+    let markStudioModeRequested = () => {};
+    const studioModeRequested = new Promise<void>((resolve) => {
+      markStudioModeRequested = resolve;
+    });
+    let releaseStudioMode = () => {};
+    const studioModeBlocked = new Promise<void>((resolve) => {
+      releaseStudioMode = resolve;
+    });
+    transport.setUiProfileMode = vi.fn(async (request) => {
+      if (request.mode === "studio") {
+        markStudioModeRequested();
+        await studioModeBlocked;
+      }
+      return setMode(request);
+    });
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".rho-vibe-manuscript-empty button")!.click();
+      await settle();
+    });
+    expect(container.querySelector(".rho-vibe-manuscript-save-state")?.textContent)
+      .toBe("Unsaved changes");
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
+        .find((button) => button.textContent === "Studio")!
+        .click();
+      await studioModeRequested;
+      await settle();
+    });
+
+    const editor = container.querySelector<HTMLElement>(".ProseMirror")!;
+    const editorHtml = editor.innerHTML;
+    expect(apply).toHaveBeenCalledOnce();
+    expect(container.querySelector(".rho-vibe-manuscript")?.getAttribute("aria-busy")).toBe("true");
+    expect(editor.getAttribute("contenteditable")).toBe("false");
+    expect(editor.getAttribute("aria-readonly")).toBe("true");
+    const formatting = [...container.querySelectorAll<HTMLButtonElement>(
+      ".rho-vibe-manuscript-toolbar button",
+    )];
+    expect(formatting.every((button) => button.disabled)).toBe(true);
+    await act(async () => {
+      formatting[0]!.click();
+      editor.dispatchEvent(new InputEvent("beforeinput", {
+        bubbles: true,
+        cancelable: true,
+        data: "must-not-be-drafted",
+        inputType: "insertText",
+      }));
+      await settle();
+    });
+    expect(editor.innerHTML).toBe(editorHtml);
+    expect(apply).toHaveBeenCalledOnce();
+    expect(container.querySelector(".rho-vibe-manuscript-save-state")?.textContent).toBe("Saved");
+
+    await act(async () => {
+      releaseStudioMode();
+      for (let index = 0; index < 24; index += 1) await Promise.resolve();
+    });
+    expect(container.querySelector(".rho-canvas-studio")).not.toBeNull();
+    expect(apply).toHaveBeenCalledOnce();
+  });
+
+  it("rejects an exact Studio intent when the latest manuscript block now references another target", async () => {
+    const transport = createMockUiKernelTransport();
+    const profile = structuredClone(await transport.loadUiProfile());
+    const page = profile.profile.vibe_pages.find(
+      (candidate) => candidate.page_id === profile.profile.active_vibe_page_id,
+    )! as unknown as {
+      page_revision: number;
+      sections: Array<{
+        section_id: string;
+        heading: string | null;
+        layout: { kind: "flow" };
+        blocks: Array<{
+          block_id: string;
+          content: { kind: "artifact_ref"; artifact_id: string; label: string };
+        }>;
+      }>;
+      focused_block_id: string | null;
+    };
+    page.sections = [{
+      section_id: "section:exact-current",
+      heading: "Candidate output",
+      layout: { kind: "flow" },
+      blocks: [{
+        block_id: "block:stable-id",
+        content: {
+          kind: "artifact_ref",
+          artifact_id: "artifact:plot-1",
+          label: "Current QC candidate",
+        },
+      }],
+    }];
+    page.focused_block_id = "block:stable-id";
+    transport.publishUiProfile(profile);
+    const setMode = vi.spyOn(transport, "setUiProfileMode");
+    const openSurface = vi.spyOn(transport, "openSurface");
+    const { container } = await renderApp(transport);
+
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
+        .find((button) => button.textContent === "Vibe")!
+        .click();
+      await settle();
+      await settle();
+    });
+    setMode.mockClear();
+    openSurface.mockClear();
+    const staleAction = [...container.querySelectorAll<HTMLButtonElement>(
+      ".rho-vibe-verification button",
+    )].find((button) => button.textContent === "在 Studio 中查看")!;
+    const changed = structuredClone(await transport.loadUiProfile());
+    const changedPage = changed.profile.vibe_pages.find(
+      (candidate) => candidate.page_id === changed.profile.active_vibe_page_id,
+    )! as unknown as typeof page;
+    changedPage.page_revision += 1;
+    changedPage.sections[0]!.blocks[0]!.content = {
+      kind: "artifact_ref",
+      artifact_id: "artifact:replacement",
+      label: "Replacement candidate",
+    };
+    (changed.profile as { revision: number }).revision += 1;
+
+    await act(async () => {
+      transport.publishUiProfile(changed);
+      staleAction.click();
+      for (let index = 0; index < 24; index += 1) await Promise.resolve();
+    });
+
+    expect(setMode).not.toHaveBeenCalled();
+    expect(openSurface).not.toHaveBeenCalled();
+    expect(container.querySelector(".rho-canvas-vibe")).not.toBeNull();
+    expect(container.querySelector(".rho-action-error")?.textContent)
+      .toContain("reference changed");
   });
 
   it("runs repeatable Check commands into independent typed result Surfaces", async () => {
@@ -2963,7 +3504,7 @@ describe("Studio foundation app", () => {
         "rho.runs": [{ id: "run:secret", title: "workspace.execute", subtitle: "analysis.R", status: "failed", detail: "{\"run_id\":\"secret\",\"project_root\":\"/private/project\",\"workspace_id\":\"internal-workspace\",\"source_path\":\"analysis.R\",\"execution_mode\":\"expression\",\"code_preview\":\"plot(x)\",\"error_message\":\"object x not found\",\"started_at\":\"2026-08-22T10:00:00Z\"}" }],
         "rho.render-jobs": [{ id: "render:1", title: "analysis.qmd → HTML", subtitle: "analysis.qmd", status: "completed", detail: "{\"source_path\":\"analysis.qmd\",\"request_type\":\"render\",\"started_at\":\"2026-08-22T10:00:00Z\"}" }],
         "rho.artifacts": [{ id: "artifact:1", title: "plots/qc.png", subtitle: "image/png", status: "available", detail: "{\"artifact_kind\":\"plot\",\"media_type\":\"image/png\",\"source_path\":\"analysis.R\",\"project_root\":\"/private/project\"}" }],
-        "rho.plots": [{ id: "plot:1", title: "QC plot", subtitle: "image/png", status: "ready", detail: "{\"media_type\":\"image/png\",\"source_path\":\"analysis.R\",\"payload_json\":\"private-payload\"}" }],
+        "rho.plots": [{ id: "plot:mock-1", title: "QC plot", subtitle: "image/png", status: "ready", detail: "{\"media_type\":\"image/png\",\"source_path\":\"analysis.R\",\"payload_json\":\"private-payload\"}" }],
         "rho.problems": [{ id: "problem:1", title: "object x not found", subtitle: "analysis.R", status: "error", detail: "{\"source_path\":\"analysis.R\",\"line_number\":7,\"workspace_id\":\"internal-workspace\"}" }],
         "rho.logs": [{ id: "log:1", title: "Startup diagnostics", subtitle: "now", status: "current", detail: "{\"detail\":\"Ark ready\\nWorkspace R ready\",\"project_root\":\"/private/project\"}" }],
         "rho.evidence": [{ id: "claim:1", title: "Analysis uses a fixed seed", subtitle: "analysis.R", status: null, detail: "{\"kind\":\"source_claim\",\"source_path\":\"analysis.R\",\"start_line\":1,\"source_excerpt\":\"set.seed(42)\",\"linked_evidence_ids\":[1],\"project_root\":\"/private/project\"}" }],

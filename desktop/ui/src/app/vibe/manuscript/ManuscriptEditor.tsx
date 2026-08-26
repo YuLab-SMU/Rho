@@ -2,6 +2,7 @@ import {
   forwardRef,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -36,6 +37,7 @@ import type {
 
 interface ManuscriptEditorProps {
   readonly page: VibePage;
+  readonly busy: boolean;
   readonly profileRevision: number;
   readonly commitPage: ManuscriptCommit;
   readonly reportError: (error: unknown) => void;
@@ -56,6 +58,19 @@ interface FormatState {
   readonly canUndo: boolean;
   readonly canRedo: boolean;
 }
+
+const TOOLBAR_CONTROL_IDS = [
+  "strong",
+  "emphasis",
+  "code",
+  "heading",
+  "body",
+  "undo",
+  "redo",
+  "save",
+] as const;
+
+type ToolbarControlId = typeof TOOLBAR_CONTROL_IDS[number];
 
 function formatState(state: EditorState): FormatState {
   return {
@@ -87,13 +102,15 @@ function toolbarControls(toolbar: HTMLElement): HTMLElement[] {
   return [...toolbar.querySelectorAll<HTMLElement>("button:not(:disabled)")];
 }
 
-function setToolbarTabStop(toolbar: HTMLElement, target: HTMLElement): void {
-  for (const control of toolbarControls(toolbar)) control.tabIndex = control === target ? 0 : -1;
+function toolbarControlId(element: HTMLElement): ToolbarControlId | null {
+  const value = element.dataset.toolbarControl;
+  return TOOLBAR_CONTROL_IDS.find((candidate) => candidate === value) ?? null;
 }
 
 export const ManuscriptEditor = forwardRef<VibeManuscriptLaneHandle, ManuscriptEditorProps>(
   function ManuscriptEditor({
     page,
+    busy,
     profileRevision,
     commitPage,
     reportError,
@@ -108,6 +125,8 @@ export const ManuscriptEditor = forwardRef<VibeManuscriptLaneHandle, ManuscriptE
     const mount = useRef<HTMLDivElement>(null);
     const toolbar = useRef<HTMLDivElement>(null);
     const view = useRef<EditorView | null>(null);
+    const busyRef = useRef(busy);
+    busyRef.current = busy;
     const mounted = useRef(false);
     const selectedBlock = useRef<string | null>(
       blockExists(page, activeBlockId)
@@ -125,6 +144,26 @@ export const ManuscriptEditor = forwardRef<VibeManuscriptLaneHandle, ManuscriptE
       doc: vibePageToDocument(page),
       plugins: [...manuscriptEditorPlugins()],
     })));
+    const [toolbarTabStop, setToolbarTabStop] = useState<ToolbarControlId>("strong");
+    const toolbarAvailability: Record<ToolbarControlId, boolean> = {
+      strong: !busy,
+      emphasis: !busy,
+      code: !busy,
+      heading: !busy,
+      body: !busy,
+      undo: !busy && format.canUndo,
+      redo: !busy && format.canRedo,
+      save: !busy && saveState.kind === "dirty",
+    };
+    const resolvedToolbarTabStop = toolbarAvailability[toolbarTabStop]
+      ? toolbarTabStop
+      : TOOLBAR_CONTROL_IDS.find((control) => toolbarAvailability[control]) ?? null;
+
+    useEffect(() => {
+      if (resolvedToolbarTabStop != null && resolvedToolbarTabStop !== toolbarTabStop) {
+        setToolbarTabStop(resolvedToolbarTabStop);
+      }
+    }, [resolvedToolbarTabStop, toolbarTabStop]);
 
     const restoreDocument = (durable: VibePage) => {
       const editor = view.current;
@@ -196,14 +235,17 @@ export const ManuscriptEditor = forwardRef<VibeManuscriptLaneHandle, ManuscriptE
           plugins: [...manuscriptEditorPlugins()],
         }),
         nodeViews: compactAtomNodeViews(),
+        editable: () => !busyRef.current,
         attributes: {
           role: "textbox",
           "aria-label": editorLabel,
           "aria-describedby": describedBy,
           "aria-multiline": "true",
+          "aria-readonly": String(busyRef.current),
           dir: "auto",
         },
         dispatchTransaction(transaction) {
+          if (busyRef.current && transaction.docChanged) return;
           const next = editor.state.apply(transaction);
           editor.updateState(next);
           setFormat(formatState(next));
@@ -251,6 +293,22 @@ export const ManuscriptEditor = forwardRef<VibeManuscriptLaneHandle, ManuscriptE
       };
     }, [page.project_id, page.page_id, editorLabel, describedBy]);
 
+    useLayoutEffect(() => {
+      const editor = view.current;
+      if (editor == null) return;
+      editor.setProps({
+        editable: () => !busyRef.current,
+        attributes: {
+          role: "textbox",
+          "aria-label": editorLabel,
+          "aria-describedby": describedBy,
+          "aria-multiline": "true",
+          "aria-readonly": String(busy),
+          dir: "auto",
+        },
+      });
+    }, [busy, describedBy, editorLabel]);
+
     useEffect(() => {
       if (activeBlockId === undefined) return;
       const exact = blockExists(page, activeBlockId) ? activeBlockId : null;
@@ -274,12 +332,12 @@ export const ManuscriptEditor = forwardRef<VibeManuscriptLaneHandle, ManuscriptE
 
     const runCommand = (command: Command) => {
       const editor = view.current;
-      if (editor != null) command(editor.state, editor.dispatch, editor);
+      if (editor != null && !busyRef.current) command(editor.state, editor.dispatch, editor);
     };
 
     const startWriting = () => {
       const editor = view.current;
-      if (editor == null || hasBlocks) return;
+      if (editor == null || hasBlocks || busyRef.current) return;
       const sections = createStarterSections();
       const next = vibePageToDocument({ ...page, sections });
       editor.dispatch(editor.state.tr.replaceWith(0, editor.state.doc.content.size, next.content));
@@ -302,13 +360,15 @@ export const ManuscriptEditor = forwardRef<VibeManuscriptLaneHandle, ManuscriptE
           ? controls.length - 1
           : (current + (event.key === "ArrowRight" ? 1 : -1) + controls.length) % controls.length;
       const target = controls[next]!;
-      setToolbarTabStop(event.currentTarget, target);
+      const targetId = toolbarControlId(target);
+      if (targetId != null) setToolbarTabStop(targetId);
       target.focus();
     };
 
     const onToolbarFocus = (event: React.FocusEvent<HTMLDivElement>) => {
       if (event.target instanceof HTMLElement && event.target.matches("button:not(:disabled)")) {
-        setToolbarTabStop(event.currentTarget, event.target);
+        const targetId = toolbarControlId(event.target);
+        if (targetId != null) setToolbarTabStop(targetId);
       }
     };
 
@@ -326,75 +386,88 @@ export const ManuscriptEditor = forwardRef<VibeManuscriptLaneHandle, ManuscriptE
         >
           <button
             type="button"
-            tabIndex={0}
+            data-toolbar-control="strong"
+            tabIndex={resolvedToolbarTabStop === "strong" ? 0 : -1}
             aria-label="Bold"
             aria-keyshortcuts="Control+B Meta+B"
             aria-pressed={format.strong}
+            disabled={!toolbarAvailability.strong}
             onMouseDown={preserveSelection}
             onClick={() => runCommand(toggleMark(vibeSchema.marks.strong))}
           ><strong aria-hidden="true">B</strong></button>
           <button
             type="button"
-            tabIndex={-1}
+            data-toolbar-control="emphasis"
+            tabIndex={resolvedToolbarTabStop === "emphasis" ? 0 : -1}
             aria-label="Italic"
             aria-keyshortcuts="Control+I Meta+I"
             aria-pressed={format.emphasis}
+            disabled={!toolbarAvailability.emphasis}
             onMouseDown={preserveSelection}
             onClick={() => runCommand(toggleMark(vibeSchema.marks.emphasis))}
           ><em aria-hidden="true">I</em></button>
           <button
             type="button"
-            tabIndex={-1}
+            data-toolbar-control="code"
+            tabIndex={resolvedToolbarTabStop === "code" ? 0 : -1}
             aria-label="Inline code"
             aria-pressed={format.code}
+            disabled={!toolbarAvailability.code}
             onMouseDown={preserveSelection}
             onClick={() => runCommand(toggleMark(vibeSchema.marks.code))}
           ><code aria-hidden="true">&lt;/&gt;</code></button>
           <button
             type="button"
-            tabIndex={-1}
+            data-toolbar-control="heading"
+            tabIndex={resolvedToolbarTabStop === "heading" ? 0 : -1}
             aria-label="Heading"
             aria-pressed={format.textKind === "heading"}
+            disabled={!toolbarAvailability.heading}
             onMouseDown={preserveSelection}
             onClick={() => runCommand(setBlockType(vibeSchema.nodes.heading, { level: 2 }))}
           >Heading</button>
           <button
             type="button"
-            tabIndex={-1}
+            data-toolbar-control="body"
+            tabIndex={resolvedToolbarTabStop === "body" ? 0 : -1}
             aria-label="Body text"
             aria-pressed={format.textKind === "body"}
+            disabled={!toolbarAvailability.body}
             onMouseDown={preserveSelection}
             onClick={() => runCommand(setBlockType(vibeSchema.nodes.paragraph))}
           >Body</button>
           <span className="rho-vibe-manuscript-toolbar-separator" aria-hidden="true" />
           <button
             type="button"
-            tabIndex={-1}
+            data-toolbar-control="undo"
+            tabIndex={resolvedToolbarTabStop === "undo" ? 0 : -1}
             aria-label="Undo manuscript edit"
-            disabled={!format.canUndo}
+            disabled={!toolbarAvailability.undo}
             onMouseDown={preserveSelection}
             onClick={() => runCommand(undo)}
           >Undo</button>
           <button
             type="button"
-            tabIndex={-1}
+            data-toolbar-control="redo"
+            tabIndex={resolvedToolbarTabStop === "redo" ? 0 : -1}
             aria-label="Redo manuscript edit"
-            disabled={!format.canRedo}
+            disabled={!toolbarAvailability.redo}
             onMouseDown={preserveSelection}
             onClick={() => runCommand(redo)}
           >Redo</button>
           <button
             type="button"
-            tabIndex={-1}
+            data-toolbar-control="save"
+            tabIndex={resolvedToolbarTabStop === "save" ? 0 : -1}
             className="rho-vibe-manuscript-save"
-            disabled={saveState.kind !== "dirty"}
+            disabled={!toolbarAvailability.save}
             onClick={() => void session.current?.flush()}
           >Save now</button>
         </div>
         {!hasBlocks && (
           <div className="rho-vibe-manuscript-empty">
             <p>This working manuscript has no content yet.</p>
-            <button type="button" onClick={startWriting}>Start writing</button>
+            <button type="button" disabled={busy} onClick={startWriting}>Start writing</button>
           </div>
         )}
         <div

@@ -105,11 +105,6 @@ interface MutableTransportState {
   turns: Map<string, readonly AgentTurnSummary[]>;
   details: Map<string, AgentTurnDetail | null>;
   listFailure: Error | null;
-  onCancel: ((turnId: string) => void) | null;
-  onRetry: ((turnId: string) => {
-    readonly conversationId: string;
-    readonly turnId: string;
-  }) | null;
 }
 
 function createTransport(initial: {
@@ -126,8 +121,6 @@ function createTransport(initial: {
       : [[turns[0]!.conversation_id, turns]]),
     details: new Map((initial.details ?? []).map((item) => [item.turn.turn_id, item])),
     listFailure: null,
-    onCancel: null,
-    onRetry: null,
   };
   const listeners = new Set<() => void>();
   const transport: VibeExplorationTransport = {
@@ -139,24 +132,6 @@ function createTransport(initial: {
       conversationId == null ? [] : state.turns.get(conversationId) ?? []
     )),
     getAgentTurnDetail: vi.fn(async (turnId) => state.details.get(turnId) ?? null),
-    cancelAgentTurn: vi.fn(async (turnId: string) => {
-      state.onCancel?.(turnId);
-      return { status: "cancelled" as const, turn_id: turnId };
-    }),
-    retryAgentTurn: vi.fn(async (turnId: string) => {
-      const next = state.onRetry?.(turnId) ?? {
-        conversationId: state.conversations[0]?.conversation_id ?? "conversation:retry",
-        turnId: "turn:retry",
-      };
-      return {
-        status: "started" as const,
-        turn_id: next.turnId,
-        conversation_id: next.conversationId,
-        retry_of_turn_id: turnId,
-        auto_approve: false,
-        task_kind: "agent_turn",
-      };
-    }),
     subscribeAgentInvalidated: vi.fn((listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -208,6 +183,7 @@ describe("Vibe autonomous exploration panel", () => {
   ): VibeExplorationPanelProps {
     return {
       projectId: "project:one",
+      projectRoot: "/projects/rho",
       presentation: "overview",
       selection: { conversationId: null, turnId: null },
       exactRefs: { conversationIds: [], taskIds: [] },
@@ -250,7 +226,7 @@ describe("Vibe autonomous exploration panel", () => {
     expect(onCompose).toHaveBeenCalledWith({ conversationId: null, turnId: null });
   });
 
-  it("renders only durable public Agent truth and stops the exact running Turn", async () => {
+  it("renders only durable public Agent truth without exposing Agent mutation controls", async () => {
     const runningConversation = conversation({ status: "running" });
     const runningTurn = turn({ status: "running", finished_at: null, final_message: null });
     const publicEvent = event(2, "tool.call_started", {
@@ -267,19 +243,6 @@ describe("Vibe autonomous exploration panel", () => {
       turns: [runningTurn],
       details: [detail(runningTurn, [ignoredEvent, publicEvent])],
     });
-    harness.state.onCancel = () => {
-      const cancelledTurn = turn({
-        status: "interrupted",
-        terminal_reason: "user_cancelled",
-        error_message: "Stopped by the user.",
-      });
-      harness.state.conversations = [conversation({
-        status: "interrupted",
-        terminal_reason: "user_cancelled",
-      })];
-      harness.state.turns.set("conversation:one", [cancelledTurn]);
-      harness.state.details.set("turn:one", detail(cancelledTurn, [publicEvent]));
-    };
     const props = baseProps(harness.transport, {
       selection: { conversationId: "conversation:one", turnId: "turn:one" },
     });
@@ -293,48 +256,8 @@ describe("Vibe autonomous exploration panel", () => {
     expect(container.textContent).not.toContain("secret-2");
     expect(container.textContent).not.toContain("aggregate_by_donor");
     expect(container.textContent).not.toContain("provider/private-model");
-
-    await act(async () => {
-      findButton(container, "停止探索").click();
-      await settle();
-    });
-    expect(harness.transport.cancelAgentTurn).toHaveBeenCalledWith("turn:one");
-    expect(container.textContent).toContain("已取消");
-    expect(container.textContent).toContain("探索已取消");
-  });
-
-  it("reports a stop failure without losing durable truth and permits recovery", async () => {
-    const runningConversation = conversation({ status: "running" });
-    const runningTurn = turn({ status: "running", finished_at: null, final_message: null });
-    const harness = createTransport({
-      conversations: [runningConversation],
-      turns: [runningTurn],
-      details: [detail(runningTurn)],
-    });
-    const cancel = vi.fn(async (turnId: string) => ({
-      status: "cancelled" as const,
-      turn_id: turnId,
-    }));
-    cancel.mockRejectedValueOnce(new Error("stop temporarily unavailable"));
-    harness.transport.cancelAgentTurn = cancel;
-    const onError = vi.fn();
-    const { container } = mount(baseProps(harness.transport, { onError }));
-    await act(settle);
-
-    await act(async () => {
-      findButton(container, "停止探索").click();
-      await settle();
-    });
-    expect(container.textContent).toContain("stop temporarily unavailable");
-    expect(findButton(container, "停止探索").disabled).toBe(false);
-    expect(onError).toHaveBeenCalled();
-
-    await act(async () => {
-      findButton(container, "停止探索").click();
-      await settle();
-    });
-    expect(cancel).toHaveBeenCalledTimes(2);
-    expect(container.textContent).not.toContain("stop temporarily unavailable");
+    expect(container.textContent).not.toContain("停止探索");
+    expect(container.textContent).not.toContain("重试");
   });
 
   it("shows waiting attention and marks a manuscript relationship only for exact identifiers", async () => {
@@ -361,59 +284,6 @@ describe("Vibe autonomous exploration panel", () => {
     expect(container.textContent).toContain("等待你处理");
     expect(container.textContent).toContain("来自手稿中的精确引用");
     expect(container.textContent).toContain("授权与敏感操作仍在完整 Agent 界面中处理");
-  });
-
-  it("retries the exact failed Turn and adopts the returned durable identity", async () => {
-    const failedConversation = conversation({ status: "failed", terminal_reason: "agent_failure" });
-    const failedTurn = turn({
-      status: "failed",
-      terminal_reason: "agent_failure",
-      final_message: null,
-      error_message: "Recorded execution failed.",
-    });
-    const harness = createTransport({
-      conversations: [failedConversation],
-      turns: [failedTurn],
-      details: [detail(failedTurn)],
-    });
-    harness.state.onRetry = () => {
-      const retryTurn = turn({
-        turn_id: "turn:retry",
-        status: "running",
-        finished_at: null,
-        final_message: null,
-        error_message: null,
-        retry_of_turn_id: "turn:one",
-      });
-      harness.state.conversations = [conversation({
-        status: "running",
-        latest_turn_id: "turn:retry",
-        turn_count: 2,
-      })];
-      harness.state.turns.set("conversation:one", [retryTurn, failedTurn]);
-      harness.state.details.set("turn:retry", detail(retryTurn));
-      return { conversationId: "conversation:one", turnId: "turn:retry" };
-    };
-    const onSelectionChange = vi.fn();
-    const { container } = mount(baseProps(harness.transport, {
-      selection: { conversationId: "conversation:one", turnId: "turn:one" },
-      onSelectionChange,
-    }));
-    await act(settle);
-
-    expect(container.textContent).toContain("Recorded execution failed");
-    await act(async () => {
-      findButton(container, "重试").click();
-      await settle();
-    });
-
-    expect(harness.transport.retryAgentTurn).toHaveBeenCalledWith("turn:one");
-    expect(onSelectionChange).toHaveBeenCalledWith({
-      conversationId: "conversation:one",
-      turnId: "turn:retry",
-    });
-    expect(container.textContent).toContain("这是一次精确记录的重试");
-    expect(container.textContent).toContain("探索中");
   });
 
   it("keeps focused public activity disclosure separate from overview", async () => {
@@ -453,7 +323,9 @@ describe("Vibe autonomous exploration panel", () => {
     await act(settle);
     expect(container.textContent).toContain("Compare cluster 3 and cluster 7");
 
-    harness.state.listFailure = new Error("refresh unavailable");
+    harness.state.listFailure = new Error(
+      "Refresh unavailable for agent-turn:private-42 at /Users/alice/private/rho/turn.json; retry later.",
+    );
     await act(async () => {
       harness.emitInvalidated();
       await settle();
@@ -461,8 +333,39 @@ describe("Vibe autonomous exploration panel", () => {
 
     expect(container.textContent).toContain("Compare cluster 3 and cluster 7");
     expect(container.textContent).toContain("记录可能不是最新");
-    expect(container.textContent).toContain("refresh unavailable");
-    expect(onError).toHaveBeenCalled();
+    expect(container.textContent).toContain("Refresh unavailable");
+    expect(container.textContent).toContain("[local path]");
+    expect(container.textContent).toContain("[internal reference]");
+    expect(container.textContent).not.toContain("/Users/alice/private/rho/turn.json");
+    expect(container.textContent).not.toContain("agent-turn:private-42");
+    const reported = onError.mock.calls.at(-1)?.[0];
+    expect(reported).toBeInstanceOf(Error);
+    expect((reported as Error).message).toContain("retry later");
+    expect((reported as Error).message).not.toContain("/Users/alice/private/rho/turn.json");
+    expect((reported as Error).message).not.toContain("agent-turn:private-42");
+  });
+
+  it("redacts paths and internal references from an initial failure without hiding its cause", async () => {
+    const harness = createTransport();
+    harness.state.listFailure = new Error(
+      "Runtime unavailable while reading conversation_id=private-77 from /private/tmp/rho/agent-state.json.",
+    );
+    const onError = vi.fn();
+    const { container } = mount(baseProps(harness.transport, { onError }));
+
+    await act(settle);
+
+    const alert = container.querySelector<HTMLElement>("[role='alert']");
+    expect(alert?.textContent).toContain("Runtime unavailable while reading");
+    expect(alert?.textContent).toContain("[internal reference]");
+    expect(alert?.textContent).toContain("[local path]");
+    expect(alert?.textContent).not.toContain("conversation_id=private-77");
+    expect(alert?.textContent).not.toContain("/private/tmp/rho/agent-state.json");
+    const reported = onError.mock.calls[0]?.[0];
+    expect(reported).toBeInstanceOf(Error);
+    expect((reported as Error).message).toContain("Runtime unavailable while reading");
+    expect((reported as Error).message).not.toContain("conversation_id=private-77");
+    expect((reported as Error).message).not.toContain("/private/tmp/rho/agent-state.json");
   });
 
   it("defensively bounds conversations, Turns, and detail reads", async () => {
@@ -499,9 +402,16 @@ describe("Vibe autonomous exploration panel", () => {
     const props = baseProps(harness.transport, { projectId: "project:old" });
     const { container, root } = mount(props);
 
-    act(() => root.render(<VibeExplorationPanel {...props} projectId="project:new" />));
+    act(() => root.render(
+      <VibeExplorationPanel
+        {...props}
+        projectId="project:new"
+        projectRoot="/projects/new"
+      />,
+    ));
     const newConversation = conversation({
       conversation_id: "conversation:new",
+      project_root: "/projects/new",
       title: "New project exploration",
       latest_turn_id: null,
       turn_count: 0,
@@ -518,6 +428,23 @@ describe("Vibe autonomous exploration panel", () => {
     });
     expect(container.textContent).toContain("New project exploration");
     expect(container.textContent).not.toContain("Old project must not return");
+  });
+
+  it("fails closed when typed Agent records belong to another project root", async () => {
+    const harness = createTransport({
+      conversations: [conversation({
+        project_root: "/projects/other",
+        title: "Other project exploration must not render",
+      })],
+    });
+    const onError = vi.fn();
+    const { container } = mount(baseProps(harness.transport, { onError }));
+
+    await act(settle);
+
+    expect(container.textContent).toContain("自主探索记录暂时不可用");
+    expect(container.textContent).not.toContain("Other project exploration must not render");
+    expect(onError).toHaveBeenCalledTimes(1);
   });
 
   it("supports roving keyboard focus without changing selection until activation", async () => {
@@ -563,6 +490,57 @@ describe("Vibe autonomous exploration panel", () => {
     expect(harness.transport.listAgentTurns).toHaveBeenLastCalledWith("conversation:two", 50);
   });
 
+  it("supports Arrow, Home, and End navigation across the ordered Turn list", async () => {
+    const firstTurn = turn({ turn_id: "turn:one", prompt_preview: "First recorded task" });
+    const secondTurn = turn({ turn_id: "turn:two", prompt_preview: "Second recorded task" });
+    const thirdTurn = turn({ turn_id: "turn:three", prompt_preview: "Third recorded task" });
+    const harness = createTransport({
+      conversations: [conversation({ turn_count: 3 })],
+      turns: [firstTurn, secondTurn, thirdTurn],
+      details: [detail(firstTurn), detail(secondTurn), detail(thirdTurn)],
+    });
+    const onSelectionChange = vi.fn();
+    const { container } = mount(baseProps(harness.transport, {
+      presentation: "focused",
+      selection: { conversationId: "conversation:one", turnId: "turn:one" },
+      onSelectionChange,
+    }));
+    await act(settle);
+    onSelectionChange.mockClear();
+
+    const buttons = [...container.querySelectorAll<HTMLButtonElement>(
+      "button[data-exploration-turn]",
+    )];
+    expect(buttons).toHaveLength(3);
+    expect(buttons[0]?.closest("ol")).not.toBeNull();
+
+    buttons[0]!.focus();
+    act(() => buttons[0]!.dispatchEvent(new KeyboardEvent("keydown", {
+      bubbles: true,
+      key: "ArrowDown",
+    })));
+    expect(document.activeElement).toBe(buttons[1]);
+
+    act(() => buttons[1]!.dispatchEvent(new KeyboardEvent("keydown", {
+      bubbles: true,
+      key: "End",
+    })));
+    expect(document.activeElement).toBe(buttons[2]);
+
+    act(() => buttons[2]!.dispatchEvent(new KeyboardEvent("keydown", {
+      bubbles: true,
+      key: "Home",
+    })));
+    expect(document.activeElement).toBe(buttons[0]);
+
+    act(() => buttons[0]!.dispatchEvent(new KeyboardEvent("keydown", {
+      bubbles: true,
+      key: "ArrowUp",
+    })));
+    expect(document.activeElement).toBe(buttons[0]);
+    expect(onSelectionChange).not.toHaveBeenCalled();
+  });
+
   it("preserves an unresolved exact selection instead of falling back to recent work", async () => {
     const recentTurn = turn();
     const harness = createTransport({
@@ -589,5 +567,29 @@ describe("Vibe autonomous exploration panel", () => {
     expect(container.textContent).not.toContain("来自手稿中的精确引用");
     expect(harness.transport.listAgentTurns).not.toHaveBeenCalled();
     expect(onSelectionChange).not.toHaveBeenCalled();
+    const recentConversation = container.querySelector<HTMLButtonElement>(
+      "button[data-exploration-conversation]",
+    );
+    expect(recentConversation?.tabIndex).toBe(0);
+    expect(recentConversation?.hasAttribute("aria-current")).toBe(false);
+  });
+
+  it("keeps a loaded conversation keyboard-reachable when its exact Turn is unresolved", async () => {
+    const recentTurn = turn();
+    const harness = createTransport({
+      conversations: [conversation()],
+      turns: [recentTurn],
+      details: [detail(recentTurn)],
+    });
+    const { container } = mount(baseProps(harness.transport, {
+      presentation: "focused",
+      selection: { conversationId: "conversation:one", turnId: "turn:missing" },
+      exactRefs: { conversationIds: ["conversation:one"], taskIds: ["turn:missing"] },
+    }));
+    await act(settle);
+
+    const visibleTurn = container.querySelector<HTMLButtonElement>("button[data-exploration-turn]");
+    expect(visibleTurn?.tabIndex).toBe(0);
+    expect(visibleTurn?.hasAttribute("aria-current")).toBe(false);
   });
 });

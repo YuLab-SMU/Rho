@@ -144,32 +144,32 @@ try {
   }
   if (!standard.stdout.includes('id="rsrPreviewEvidence"')) throw new Error("RSR browser preview evidence hook is missing");
 
-  const stressUrl = `http://127.0.0.1:${address.port}/?preview=bootstrap&project=${project}&health=ready&mode=vibe&stress=large`;
-  const stress = await dumpDom(stressUrl, 3000, [
+  const vibeStressUrl = `http://127.0.0.1:${address.port}/?preview=bootstrap&project=${project}&health=ready&mode=vibe&stress=large`;
+  const vibeStress = await dumpDom(vibeStressUrl, 3000, [
     "--force-device-scale-factor=2",
     "--window-size=1024,768",
   ]);
-  if (!stress.stdout.includes('data-rsr-ready="true"')) throw new Error("large RSR fixture did not reach ready state");
-  if (!stress.stdout.includes('"surfaceInstanceCount":') || !stress.stdout.includes('"activePageBlockCount":')) {
-    throw new Error("large RSR fixture did not expose bounded scale evidence");
+  if (!vibeStress.stdout.includes('data-rsr-ready="true"')) throw new Error("large Vibe fixture did not reach ready state");
+  if (!vibeStress.stdout.includes('"activePageBlockCount":')) {
+    throw new Error("large Vibe fixture did not expose manuscript scale evidence");
   }
-  const evidenceMatch = stress.stdout.match(/<pre id="rsrPreviewEvidence"[^>]*>([^<]+)<\/pre>/u);
+  const evidenceMatch = vibeStress.stdout.match(/<pre id="rsrPreviewEvidence"[^>]*>([^<]+)<\/pre>/u);
   const evidence = evidenceMatch == null ? null : JSON.parse(evidenceMatch[1]);
-  if (evidence?.surfaceInstanceCount < 100 || evidence?.activePageBlockCount < 184) {
-    throw new Error(`large RSR fixture is undersized: ${JSON.stringify(evidence)}`);
+  if (evidence?.activePageBlockCount < 184) {
+    throw new Error(`large Vibe manuscript fixture is undersized: ${JSON.stringify(evidence)}`);
   }
-  if (!stress.stdout.includes("مرحبا بالعالم") || !stress.stdout.includes("שלום עולם")) {
-    throw new Error("large RSR fixture lost multilingual Page text");
+  if (!vibeStress.stdout.includes("مرحبا بالعالم") || !vibeStress.stdout.includes("שלום עולם")) {
+    throw new Error("large Vibe fixture lost multilingual manuscript text");
   }
-  const mounted = (stress.stdout.match(/data-instance-id=/g) ?? []).length;
-  const released = (stress.stdout.match(/data-viewport-state="released"/g) ?? []).length;
-  if (mounted > 12 || released < 20) {
-    throw new Error(`viewport reclamation budget failed: mounted=${mounted}, released=${released}`);
+  const vibeMounted = (vibeStress.stdout.match(/data-instance-id=/g) ?? []).length;
+  if (vibeMounted !== 0) {
+    throw new Error(`Vibe mounted ${vibeMounted} Studio Surface instances instead of retaining the information-flow boundary`);
   }
-  if (stress.elapsedMs > 12_000) {
-    throw new Error(`large RSR fixture exceeded the local 12s readiness budget: ${stress.elapsedMs}ms`);
+  if (vibeStress.elapsedMs > 12_000) {
+    throw new Error(`large Vibe fixture exceeded the local 12s readiness budget: ${vibeStress.elapsedMs}ms`);
   }
-  process.stdout.write(`RSR browser smoke passed in ${browser}; large fixture ${stress.elapsedMs}ms, mounted ${mounted}, released ${released}\n`);
+
+  process.stdout.write(`RSR browser smoke passed in ${browser}; Vibe fixture ${vibeStress.elapsedMs}ms, mounted ${vibeMounted} Studio Surface instances\n`);
 } finally {
   await new Promise((resolveClose) => server.close(resolveClose));
 }

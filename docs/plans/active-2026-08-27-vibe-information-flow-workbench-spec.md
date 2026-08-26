@@ -1,13 +1,14 @@
 # Vibe Information-Flow Workbench
 
-Status: active; VIBE-1 parallel implementation authorized
+Status: active direction; VIBE-1 implemented and integration-reviewed
 
 Date: 2026-08-27
 Change class: D3 program; first implementation checkpoint VIBE-1 is D2/R2
 Owner: Vibe information-flow workbench
 Authorized by: product owner in the active Vibe design task on 2026-08-27
-Next mandatory stop: VIBE-1 integration review; no scientific-state schema work
-may begin at that checkpoint without a separately authorized D3 package
+Next mandatory stop: VIBE-2 requires separate product authorization; no
+scientific-state schema work may begin without a separately authorized D3/R3
+package
 
 ## Decision
 
@@ -499,6 +500,8 @@ separate D3/R3 package with migration and recovery evidence.
 
 - deterministic mock scenario with irregular real scientific content;
 - wide overview at representative desktop geometry;
+- intermediate overview with one complete active layer, two responsibility
+  previews, complete runtime labels, and no duplicate-path compression;
 - manuscript, exploration, and verification focus states;
 - 720px/200%-equivalent single-region behavior;
 - zero document-level horizontal overflow;
@@ -513,11 +516,30 @@ Feature lanes run their focused Vitest files plus typecheck/lint for affected
 files. Integration runs the shortest deterministic gate while iterating, then:
 
 ```bash
-npm --prefix desktop run rsr:quick -- --ui-test 'ui/src/app/(VibeWorkspace|vibe/.+)\\.test\\.tsx'
+npm --prefix desktop run rsr:quick -- \
+  --ui-test ui/src/app/App.test.tsx \
+  --ui-test ui/src/app/DomainSurfaceView.test.tsx \
+  --ui-test ui/src/app/RuntimeHistory.test.tsx \
+  --ui-test ui/src/app/VibeWorkspace.test.tsx \
+  --ui-test ui/src/app/vibe/core/VibeWorkspaceSurface.test.tsx \
+  --ui-test ui/src/app/vibe/core/vibe-failure.test.ts \
+  --ui-test ui/src/app/vibe/core/vibe-studio-target.test.ts \
+  --ui-test ui/src/app/vibe/core/vibe-verification-focus.test.ts \
+  --ui-test ui/src/app/vibe/core/vibe-verification-read-port.test.ts \
+  --ui-test ui/src/app/vibe/core/vibe-verification-transport.test.ts \
+  --ui-test ui/src/app/vibe/core/vibe-workspace-model.test.ts \
+  --ui-test ui/src/app/vibe/exploration/VibeExplorationPanel.test.tsx \
+  --ui-test ui/src/app/vibe/exploration/exploration-model.test.ts \
+  --ui-test ui/src/app/vibe/manuscript/VibeManuscriptLane.test.tsx \
+  --ui-test ui/src/app/vibe/manuscript/manuscript-page-session.test.ts \
+  --ui-test ui/src/app/vibe/manuscript/manuscript-prosemirror.test.ts \
+  --ui-test ui/src/app/vibe/verification/VerificationPane.test.tsx \
+  --ui-test ui/src/app/vibe/verification/verification-adapter.test.ts \
+  --ui-test ui/src/app/vibe/verification/verification-model.test.ts
 npm --prefix desktop run rsr:check:resume:stable
 npm --prefix desktop run rsr:build
 cargo build -p rho-desktop
-npm --prefix desktop run rsr:accept:visual
+npm --prefix desktop run rsr:accept:visual -- --scenarios s9
 ```
 
 Commands are evidence only when actually run. The integration handoff lists
@@ -561,7 +583,8 @@ VIBE-1 is complete only when:
    drift;
 2. the existing Page editing and project-isolation invariants remain green;
 3. exact correspondence and honest absence are both demonstrated;
-4. wide, focused, narrow, keyboard, error, and recovery states pass;
+4. wide, intermediate, focused, narrow, keyboard, error, and recovery states
+   pass;
 5. mock and real transport surfaces remain contract-compatible;
 6. automated visual evidence is reviewed frame by frame;
 7. an implementation review records every deviation or confirms none;
@@ -571,10 +594,87 @@ VIBE-1 is complete only when:
    branches; and
 10. release remains NO-GO unless a separate release contract says otherwise.
 
+## VIBE-1 Integration Review — 2026-08-27
+
+VIBE-1 is implemented and reviewed. The active document remains `active-`
+because the broader VIBE-2 direction is not authorized by this checkpoint.
+
+The accepted implementation:
+
+- replaces the generic full-canvas Page-builder presentation with one ordered
+  manuscript -> Agent exploration -> verification workspace, using 40/35/25 as
+  the wide preset and local-only overview/focus/narrow view state;
+- reuses the existing ProseMirror Page/CAS path and requires a successful
+  manuscript flush before mode changes, exact Studio navigation, or project
+  switches;
+- projects durable Agent conversation, Turn, activity, outcome, failure, and
+  attention truth without exposing raw reasoning or adding Vibe-owned cancel,
+  retry, approval, or execution mutations;
+- reads exact Run, Artifact, Plot, Check, and Evidence records through typed,
+  project-scoped adapters with independent loading/failure and stale-result
+  rejection; and
+- opens exact Studio targets only after revalidating the latest active Page,
+  block references, and Surface catalog, then restores the Page/block/region
+  once in-session when those identities still exist.
+
+Integration review resolved the following defects before acceptance:
+
+- Studio/Vibe mode changes, Page changes, and project switching now share the
+  manuscript flush and single-flight gate, including the reverse
+  Studio-to-Vibe project-switch race;
+- the manuscript becomes read-only while a transition is pending, and exact
+  Studio/Agent handoffs lock locally before preflight flush so edits cannot
+  cross the committed navigation boundary;
+- same-block target replacement fails closed against the latest exact refs;
+- a Vibe instance being left cannot consume its own future return token;
+- return state is consumed once and resets after Page/project navigation;
+- unresolved exact Agent selections retain a real roving keyboard tab stop
+  without being mislabeled as the current semantic selection;
+- the manuscript toolbar maintains a live roving tab stop when Undo or Save
+  becomes unavailable, and the ordered Turn list implements Arrow/Home/End
+  navigation;
+- Vibe-facing failures centrally redact project paths, internal identifiers,
+  UUIDs, and internal tokens before rendering or durable Agent projection;
+- unknown Run status fails closed as a generic unknown state instead of
+  exposing a raw vendor status; and
+- focused preview bands expose their region title and responsibility, while
+  the intermediate preset keeps one complete active lane plus two preview
+  bands and preserves the full runtime labels in the application status bar;
+  browser scale evidence now verifies large multilingual manuscripts in Vibe
+  without mounting Studio Surface instances or carrying forward the retired
+  Page-builder's released-renderer budget.
+
+No implementation deviation from the authority contract remains. VIBE-1 adds
+no schema, migration, durable scientific decision, manuscript revision graph,
+invalidation, Checkpoint, credential, permission, filesystem, network,
+approval, public protocol, or release authority.
+
+Recorded evidence for the reviewed candidate:
+
+- focused checkpoint: `rsr:quick` passed typecheck, lint, diff-check, 19 test
+  files, and 196 tests;
+- browser interaction: `rsr:test:interactions` passed realistic irregular
+  scientific content, keyboard region switching/edit/save, exact Artifact
+  Studio transition/return, intermediate preview-band and status-bar
+  preservation, narrow overflow, and existing Studio contracts;
+- build: `rsr:build` and `cargo build -p rho-desktop` passed for
+  `0.4.1-dev.21`;
+- visual harness self-test passed; and
+- final real-debug-app S9 evidence at
+  `target/visual-acceptance/2026-08-26T23-13-38.823Z` passed 6/6 deterministic
+  gates and 6/6 frame reviews with no pending verdict.
+
+The evidence is intentionally split: the real debug app frames verify the
+durable new-Page/unlinked empty states and wide/intermediate/focused/narrow
+visual system; the browser mock scenario verifies high-density scientific
+content and exact typed links. Neither source is reported as proving the
+other's facts. The unchanged-source final handoff separately reports the
+complete resumable RSR checkpoint.
+
 ## Version And Release Decision
 
-No version or `NEWS.md` change occurs during isolated feature construction.
-The integration checkpoint decides whether the user-visible Vibe replacement
-joins the current development candidate or mints the next synchronized desktop
-version. R package versions are unaffected. This work does not package, sign,
-publish, install, or release an application.
+The reviewed integration mints synchronized desktop candidate
+`0.4.1-dev.21`; `NEWS.md`, Cargo workspace packages, desktop package metadata,
+and Tauri configuration carry that version. R package versions are unaffected.
+This work does not package, sign, publish, install, or release an application.
+Release remains NO-GO.
