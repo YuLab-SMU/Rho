@@ -1,0 +1,137 @@
+/* Agent Surface (rho.agent): task-first information hierarchy for Studio.
+   Contract: docs/plans/active-2026-08-27-studio-agent-surface-ux-spec.md
+   Refines the base Agent rules in surfaces.css inside the same `surfaces`
+   layer; every value comes from tokens.css. Imported by AgentSurfaceView.tsx,
+   which the bundler orders before foundation.css, so every selector is scoped
+   under `section.rho-agent-surface` to stay order-independent. */
+
+@layer surfaces {
+  /* --- Toolbar: conversation context + quiet secondary actions --------------- */
+  section.rho-agent-surface .rho-agent-toolbar { align-items: center; }
+  section.rho-agent-surface .rho-agent-toolbar-action {
+    flex: 0 0 auto;
+    min-height: var(--rho-control-small);
+    padding: var(--rho-space-1) var(--rho-space-3);
+    border-color: transparent;
+    color: var(--rho-ink-2);
+    background: transparent;
+    font-size: var(--rho-text-caption);
+  }
+  section.rho-agent-surface .rho-agent-toolbar-action:hover:not(:disabled) { border-color: transparent; color: var(--rho-ink); background: var(--rho-fill); }
+  section.rho-agent-surface .rho-agent-toolbar-action:active:not(:disabled) { background: var(--rho-fill-2); }
+  section.rho-agent-surface .rho-agent-toolbar-action[aria-expanded="true"] { color: var(--rho-ink); background: var(--rho-fill-2); }
+
+  /* --- Timeline: reading order and truthful state copy ----------------------- */
+  section.rho-agent-surface .rho-agent-loading { margin: 0; padding: var(--rho-space-2) var(--rho-space-1); color: var(--rho-muted); font-size: var(--rho-text-ui); }
+
+  section.rho-agent-surface .rho-agent-section-label {
+    display: block;
+    color: var(--rho-muted);
+    font-size: var(--rho-text-caption);
+    font-weight: var(--rho-weight-medium);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  section.rho-agent-surface .rho-agent-goal { margin-top: var(--rho-space-2); }
+  section.rho-agent-surface .rho-agent-goal .rho-agent-prompt { margin-top: var(--rho-space-1); }
+
+  /* Text status chips: state is carried by words, color only supports them. */
+  section.rho-agent-surface .rho-agent-turn-status {
+    padding: 0 var(--rho-space-2);
+    border: var(--rho-border);
+    border-radius: var(--rho-radius-1);
+    font-size: var(--rho-text-caption);
+  }
+  section.rho-agent-surface .rho-agent-turn-status-running,
+  section.rho-agent-surface .rho-agent-turn-status-waiting { border-color: var(--rho-warn); color: var(--rho-warn); background: var(--rho-warn-tint); }
+  section.rho-agent-surface .rho-agent-turn-status-failed { border-color: var(--rho-danger); color: var(--rho-danger); background: var(--rho-danger-tint); }
+  section.rho-agent-surface .rho-agent-turn-status-cancelled { color: var(--rho-muted); background: var(--rho-fill); }
+
+  /* Failure and cancellation read differently from an ordinary answer. */
+  section.rho-agent-surface .rho-agent-turn-failure {
+    margin-top: var(--rho-space-3);
+    padding: var(--rho-space-2) var(--rho-space-3);
+    border: var(--rho-border);
+    border-left: 3px solid var(--rho-danger);
+    border-radius: var(--rho-radius-1);
+    background: var(--rho-danger-tint);
+  }
+  section.rho-agent-surface .rho-agent-turn-failure > strong { display: block; color: var(--rho-danger); font-size: var(--rho-text-ui); }
+  section.rho-agent-surface .rho-agent-turn-failure .rho-agent-turn-error { margin: var(--rho-space-1) 0 0; }
+  section.rho-agent-surface .rho-agent-turn-cancelled {
+    margin: var(--rho-space-3) 0 0;
+    padding: var(--rho-space-2) var(--rho-space-3);
+    border-left: 3px solid var(--rho-muted);
+    color: var(--rho-ink-2);
+    background: var(--rho-fill);
+    font-size: var(--rho-text-ui);
+  }
+
+  /* --- Decision blocks: approval and file change are structurally distinct --- */
+  section.rho-agent-surface .rho-agent-decision-header { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 var(--rho-space-2); min-width: 0; }
+  section.rho-agent-surface .rho-agent-decision-kind {
+    flex: 0 0 auto;
+    color: var(--rho-muted);
+    font-size: var(--rho-text-caption);
+    font-weight: var(--rho-weight-semibold);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  section.rho-agent-surface .rho-agent-decision-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: var(--rho-space-1); margin-top: var(--rho-space-2); }
+  section.rho-agent-surface .rho-agent-decision-actions button { min-height: var(--rho-control-small); padding: var(--rho-space-1) var(--rho-space-3); font-size: var(--rho-text-caption); }
+  section.rho-agent-surface .rho-agent-approval .rho-agent-decision-actions button { margin-right: 0; }
+
+  /* Approval keeps its warning treatment; a file change is a neutral,
+     ink-marked proposal instead of a second warning card. */
+  section.rho-agent-surface .rho-agent-file-proposal { border-left: 3px solid var(--rho-ink); }
+  section.rho-agent-surface .rho-agent-file-proposal > header { justify-content: normal; flex-wrap: wrap; }
+  section.rho-agent-surface .rho-agent-file-proposal > header code { margin-left: auto; }
+
+  /* Technical evidence stays available but visually secondary. */
+  section.rho-agent-surface .rho-agent-technical { margin-top: var(--rho-space-2); padding-top: var(--rho-space-1); border-top: var(--rho-border); }
+  section.rho-agent-surface .rho-agent-technical .rho-agent-code-review,
+  section.rho-agent-surface .rho-agent-technical .rho-agent-context-used { margin-top: var(--rho-space-1); }
+
+  /* --- Composer dock: run state and Stop sit with the primary input ---------- */
+  section.rho-agent-surface .rho-agent-composer > .rho-agent-running {
+    grid-column: 1 / -1;
+    margin: calc(-1 * var(--rho-space-3)) calc(-1 * var(--rho-space-3)) var(--rho-space-1);
+  }
+  section.rho-agent-surface .rho-agent-composer textarea { grid-column: 1 / -1; }
+
+  /* Segmented Ask/Plan/Act, aligned with the Studio mode-switch language. */
+  section.rho-agent-surface .rho-agent-mode { gap: 0; padding: var(--rho-space-1); border: var(--rho-border); border-radius: var(--rho-radius-1); background: var(--rho-panel); }
+  section.rho-agent-surface .rho-agent-mode button {
+    min-height: var(--rho-control-small);
+    padding: var(--rho-space-1) var(--rho-space-3);
+    border-color: transparent;
+    color: var(--rho-ink-2);
+    background: transparent;
+    font-size: var(--rho-text-caption);
+  }
+  section.rho-agent-surface .rho-agent-mode button:hover:not(:disabled) { border-color: transparent; color: var(--rho-ink); background: var(--rho-fill); }
+  section.rho-agent-surface .rho-agent-mode button[aria-pressed="true"] { font-weight: var(--rho-weight-semibold); }
+
+  /* The degraded banner must stay compact: the retry action wraps below the
+     copy instead of crushing it to zero width on narrow surfaces. */
+  section.rho-agent-surface .rho-agent-degraded-row { flex-wrap: wrap; }
+  section.rho-agent-surface .rho-agent-degraded-row > div { flex: 1 1 12rem; }
+
+  /* --- Narrow surfaces -------------------------------------------------------- */
+  @container (max-width: 420px) {
+    section.rho-agent-surface .rho-agent-capacity { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    section.rho-agent-surface .rho-agent-capacity > div { grid-column: 1 / -1; flex-wrap: wrap; }
+    section.rho-agent-surface .rho-agent-toolbar { flex-wrap: wrap; }
+    section.rho-agent-surface .rho-agent-toolbar select { flex: 1 1 100%; }
+    section.rho-agent-surface .rho-agent-composer { grid-template-columns: minmax(0, 1fr); }
+    section.rho-agent-surface .rho-agent-mode-hint { text-align: left; }
+    section.rho-agent-surface .rho-agent-turn { padding: var(--rho-space-3); }
+  }
+  @container (max-width: 300px) {
+    section.rho-agent-surface .rho-agent-capacity { grid-template-columns: minmax(0, 1fr); }
+    section.rho-agent-surface .rho-agent-context-controls { flex-wrap: wrap; }
+    section.rho-agent-surface .rho-agent-context-controls button { flex: 1 1 auto; }
+    section.rho-agent-surface .rho-agent-turn-meta > div { max-width: calc(100cqw - var(--rho-space-7)); }
+    section.rho-agent-surface .rho-agent-file-proposal > header code { flex: 1 1 100%; margin-left: 0; }
+  }
+}

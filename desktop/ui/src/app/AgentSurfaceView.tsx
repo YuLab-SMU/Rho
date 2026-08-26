@@ -14,6 +14,8 @@ import type {
   UiKernelTransport,
 } from "../transport";
 
+import "../styles/agent-surface.css";
+
 export interface AgentSurfaceViewState {
   readonly conversation_id: string | null;
   readonly mode: AgentMode;
@@ -95,7 +97,27 @@ function initialAgentSurfaceState(instance: SurfaceInstance): AgentSurfaceViewSt
   };
 }
 
-function AgentRunningRow({ startedAt, onStop }: { readonly startedAt: string; readonly onStop: () => void }) {
+function agentTurnStatusLabel(status: AgentTurnSummary["status"]): string {
+  switch (status) {
+    case "running": return "Running";
+    case "waiting": return "Waiting";
+    case "failed": return "Failed";
+    case "cancelled": return "Cancelled";
+    default: return status;
+  }
+}
+
+const AGENT_MODE_HINTS: Readonly<Record<AgentMode, string>> = {
+  ask: "Ask about this project",
+  plan: "Shape a reviewable approach",
+  act: "Work with project tools",
+};
+
+function AgentRunningRow({ status, startedAt, onStop }: {
+  readonly status: AgentTurnSummary["status"];
+  readonly startedAt: string;
+  readonly onStop: () => void;
+}) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -107,7 +129,9 @@ function AgentRunningRow({ startedAt, onStop }: { readonly startedAt: string; re
   return (
     <div className="rho-agent-running" role="status">
       <span className="rho-status-dot rho-status-degraded" aria-hidden="true" />
-      <span className="rho-agent-running-label">Agent running · {label}</span>
+      <span className="rho-agent-running-label">
+        {status === "waiting" ? "Waiting for a decision or response" : "Agent running"} · {label}
+      </span>
       <button type="button" onClick={onStop}>Stop</button>
     </div>
   );
@@ -350,6 +374,13 @@ export function AgentSurfaceView({
   };
   const displayMode = instance.mode_id ?? "conversation";
   const activeTurn = turns.find((turn) => turn.status === "running" || turn.status === "waiting");
+  const stopActiveTurn = activeTurn == null ? null : () => {
+    setBusy(true);
+    void transport.cancelAgentTurn(activeTurn.turn_id)
+      .then(() => refresh())
+      .catch(reportError)
+      .finally(() => setBusy(false));
+  };
   const diagnosticsText = runtimeDiagnostics == null ? "Agent runtime diagnostics are loading." : [
     "R",
     `  executable: ${runtimeDiagnostics.rscript ?? "not resolved"}`,
@@ -411,8 +442,8 @@ export function AgentSurfaceView({
             </option>
           ))}
         </select>
-        <button type="button" disabled={busy} onClick={() => void newConversation()}>New</button>
-        <button type="button" aria-expanded={capacityOpen} disabled={busy} onClick={() => {
+        <button type="button" className="rho-agent-toolbar-action" disabled={busy} onClick={() => void newConversation()}>New</button>
+        <button type="button" className="rho-agent-toolbar-action" aria-expanded={capacityOpen} disabled={busy} onClick={() => {
           const next = !capacityOpen;
           setCapacityOpen(next);
           if (next) void loadContextCapacity();
@@ -449,21 +480,17 @@ export function AgentSurfaceView({
           </div>
         </>}
       </form>}
-      {activeTurn != null && (
-        <AgentRunningRow startedAt={activeTurn.started_at} onStop={() => {
-          setBusy(true);
-          void transport.cancelAgentTurn(activeTurn.turn_id)
-            .then(() => refresh())
-            .catch(reportError)
-            .finally(() => setBusy(false));
-        }} />
+      {displayMode === "activity" && activeTurn != null && stopActiveTurn != null && (
+        <AgentRunningRow status={activeTurn.status} startedAt={activeTurn.started_at} onStop={stopActiveTurn} />
       )}
       {displayMode !== "composer" && (
         <div className="rho-agent-timeline" aria-busy={loading}>
-          {loading && <p>Loading conversation…</p>}
+          {loading && <p className="rho-agent-loading">Loading conversation…</p>}
           {!loading && turns.length === 0 && <div className="rho-agent-empty" role="status">
-            <strong>Ready for the first turn</strong>
-            <span>Choose Ask, Plan, or Act, then use the composer below.</span>
+            <strong>{view.conversation_id == null ? "No conversation yet" : "Ready for the first turn"}</strong>
+            <span>{view.conversation_id == null
+              ? "Write below and send; Rho opens a conversation and keeps the thread, run state, and decisions here."
+              : "Choose Ask, Plan, or Act, then use the composer below."}</span>
           </div>}
           {turns.map((turn) => {
             const detail = details.get(turn.turn_id);
@@ -471,44 +498,64 @@ export function AgentSurfaceView({
               const proposal = parseAgentFileProposal(event);
               return proposal == null ? [] : [{ event, proposal }];
             }) ?? [];
+            const waitingApprovals = detail?.approvals.filter((approval) => approval.status === "waiting") ?? [];
+            const codeEvents = detail?.events.filter((event) => event.code != null) ?? [];
+            const contextItems = detail?.context_items ?? [];
             return (
               <article className={`rho-agent-turn rho-agent-turn-${turn.status}`} data-turn-id={turn.turn_id} key={turn.turn_id}>
                 <header>
                   <strong>{turn.mode}</strong>
-                  {turn.status !== "completed" && <span className={`rho-agent-turn-status rho-agent-turn-status-${turn.status}`}>{turn.status}</span>}
+                  {turn.status !== "completed" && <span className={`rho-agent-turn-status rho-agent-turn-status-${turn.status}`}>{agentTurnStatusLabel(turn.status)}</span>}
                   <details className="rho-agent-turn-meta">
                     <summary aria-label={`Details for ${turn.mode} turn`}>Details</summary>
                     <div><span>Status</span><strong>{turn.status}</strong><span>Model</span><code>{turn.model}</code></div>
                   </details>
                 </header>
-                <p className="rho-agent-prompt">{turn.prompt_preview}</p>
+                <div className="rho-agent-goal">
+                  <span className="rho-agent-section-label">Goal</span>
+                  <p className="rho-agent-prompt">{turn.prompt_preview}</p>
+                </div>
                 {turn.final_message != null && <p className="rho-agent-answer">{turn.final_message}</p>}
-                {turn.error_message != null && <p className="rho-agent-turn-error">{turn.error_message}</p>}
-                {detail?.events.filter((event) => event.code != null).map((event) => (
-                  <details className="rho-agent-code-review" key={event.id}>
-                    <summary>{event.title}</summary><pre>{event.code}</pre>
-                  </details>
+                {turn.error_message != null && (
+                  <div className="rho-agent-turn-failure" role="alert">
+                    <strong>{turn.status === "cancelled"
+                      ? "Turn cancelled"
+                      : turn.status === "failed" ? "Turn failed" : "Turn ended with an error"}</strong>
+                    <p className="rho-agent-turn-error">{turn.error_message}</p>
+                  </div>
+                )}
+                {turn.status === "cancelled" && turn.error_message == null && (
+                  <p className="rho-agent-turn-cancelled">This turn was cancelled before completion. Retry runs it again.</p>
+                )}
+                {waitingApprovals.map((approval) => (
+                  <section className="rho-agent-approval" key={approval.request_id}>
+                    <header className="rho-agent-decision-header">
+                      <span className="rho-agent-decision-kind">Approval required</span>
+                      <strong>{approval.tool}</strong>
+                    </header>
+                    <pre>{approval.code ?? approval.arguments_json}</pre>
+                    <div className="rho-agent-decision-actions">
+                      <button type="button" onClick={() => void transport.respondAgentApproval({ request_id: approval.request_id, decision: "approve", reason: null }).then(() => refresh()).catch(reportError)}>Approve</button>
+                      <button type="button" onClick={() => void transport.respondAgentApproval({ request_id: approval.request_id, decision: "reject", reason: "Rejected in Agent Surface" }).then(() => refresh()).catch(reportError)}>Reject</button>
+                    </div>
+                  </section>
                 ))}
-                {(detail?.context_items?.length ?? 0) > 0 && <details className="rho-agent-context-used">
-                  <summary>Context used · {detail!.context_items!.length} {detail!.context_items!.length === 1 ? "source" : "sources"}</summary>
-                  <ol>{detail!.context_items!.map((item) => <li key={`${item.ordinal}:${item.source_kind}:${item.source_id ?? "current"}`}>
-                    <div><strong>{item.source_kind.replaceAll("_", " ")}</strong><span>{item.disposition}</span></div>
-                    {item.source_id != null && <code>{item.source_id}</code>}
-                    <small>{item.included_bytes.toLocaleString()} of {item.original_bytes.toLocaleString()} bytes · {item.trust_class}</small>
-                  </li>)}</ol>
-                </details>}
                 {proposals.map(({ event, proposal }) => {
                   const key = `${turn.turn_id}:${event.id}`;
                   const outcome = detail == null ? null : agentFileProposalOutcome(detail, event.id);
                   const rejected = view.file_decisions[key] === "rejected";
                   return (
                     <section className="rho-agent-file-proposal" data-proposal-key={key} key={key}>
-                      <header><strong>{proposal.operation.replaceAll("_", " ")}</strong><code>{proposal.path}</code></header>
+                      <header>
+                        <span className="rho-agent-decision-kind">File change</span>
+                        <strong>{proposal.operation.replaceAll("_", " ")}</strong>
+                        <code>{proposal.path}</code>
+                      </header>
                       <pre>{proposal.content}</pre>
                       {outcome != null && <span className="rho-agent-file-outcome">{outcome}</span>}
                       {rejected && outcome == null && <span className="rho-agent-file-outcome">rejected in this view</span>}
                       {outcome == null && !rejected && (
-                        <div>
+                        <div className="rho-agent-decision-actions">
                           <button type="button" disabled={busy || turn.status === "running" || turn.status === "waiting"} onClick={() => {
                             setBusy(true);
                             void applyFileProposal(turn, event.id, proposal)
@@ -546,13 +593,23 @@ export function AgentSurfaceView({
                     </section>
                   );
                 })}
-                {detail?.approvals.filter((approval) => approval.status === "waiting").map((approval) => (
-                  <div className="rho-agent-approval" key={approval.request_id}>
-                    <strong>{approval.tool}</strong><pre>{approval.code ?? approval.arguments_json}</pre>
-                    <button type="button" onClick={() => void transport.respondAgentApproval({ request_id: approval.request_id, decision: "approve", reason: null }).then(() => refresh()).catch(reportError)}>Approve</button>
-                    <button type="button" onClick={() => void transport.respondAgentApproval({ request_id: approval.request_id, decision: "reject", reason: "Rejected in Agent Surface" }).then(() => refresh()).catch(reportError)}>Reject</button>
+                {(codeEvents.length > 0 || contextItems.length > 0) && (
+                  <div className="rho-agent-technical">
+                    {codeEvents.map((event) => (
+                      <details className="rho-agent-code-review" key={event.id}>
+                        <summary>{event.title}</summary><pre>{event.code}</pre>
+                      </details>
+                    ))}
+                    {contextItems.length > 0 && <details className="rho-agent-context-used">
+                      <summary>Context used · {contextItems.length} {contextItems.length === 1 ? "source" : "sources"}</summary>
+                      <ol>{contextItems.map((item) => <li key={`${item.ordinal}:${item.source_kind}:${item.source_id ?? "current"}`}>
+                        <div><strong>{item.source_kind.replaceAll("_", " ")}</strong><span>{item.disposition}</span></div>
+                        {item.source_id != null && <code>{item.source_id}</code>}
+                        <small>{item.included_bytes.toLocaleString()} of {item.original_bytes.toLocaleString()} bytes · {item.trust_class}</small>
+                      </li>)}</ol>
+                    </details>}
                   </div>
-                ))}
+                )}
                 <footer>
                   <button type="button" onClick={() => void pinTask(turn).catch(reportError)}>Pin to Vibe</button>
                   {(turn.status === "failed" || turn.status === "cancelled") && <button type="button" onClick={() => void transport.retryAgentTurn(turn.turn_id).then(() => refresh()).catch(reportError)}>Retry</button>}
@@ -564,6 +621,9 @@ export function AgentSurfaceView({
       )}
       {displayMode !== "activity" && (
         <div className="rho-agent-composer">
+          {activeTurn != null && stopActiveTurn != null && (
+            <AgentRunningRow status={activeTurn.status} startedAt={activeTurn.started_at} onStop={stopActiveTurn} />
+          )}
           <div className="rho-agent-mode" role="group" aria-label="Agent mode">
             {(["ask", "plan", "act"] as const).map((mode) => (
               <button type="button" aria-pressed={view.mode === mode} key={mode} onClick={() => commitView({
@@ -573,11 +633,7 @@ export function AgentSurfaceView({
               })}>{mode}</button>
             ))}
           </div>
-          <small className="rho-agent-mode-hint">{{
-            ask: "Ask about this project",
-            plan: "Shape a reviewable approach",
-            act: "Work with project tools",
-          }[view.mode]}</small>
+          <small className="rho-agent-mode-hint">{AGENT_MODE_HINTS[view.mode]}</small>
           {runtimeOutputContext != null && <div className="rho-agent-context-chip" role="status">
             <div>
               <strong>Runtime output</strong>
