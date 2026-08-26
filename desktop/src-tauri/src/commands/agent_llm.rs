@@ -213,7 +213,7 @@ pub(crate) async fn agent_llm_cancel_test(state: State<'_, AppState>) -> Result<
 #[tauri::command]
 pub(crate) async fn agent_llm_catalog(state: State<'_, AppState>) -> Result<Value, String> {
     let config = runtime_config(&state).map_err(display_error)?;
-    let entries = service::catalog(&config.rscript).map_err(display_error)?;
+    let entries = service::catalog(&config.data_dir, &config.rscript).map_err(display_error)?;
     serde_json::to_value(entries).map_err(display_error)
 }
 

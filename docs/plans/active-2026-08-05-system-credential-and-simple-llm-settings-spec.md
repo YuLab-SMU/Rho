@@ -2121,3 +2121,25 @@ diff validation pass. An independent post-test comparison hashes every
 production line before `#[cfg(test)]` identically to upstream `main`, confirming
 the change is confined to test support. Push, exact-head hosted source CI,
 integration, and every candidate or installed gate remain separate.
+
+## CRED-REVEAL-1A Connection-Test Error Redaction Amendment — 2026-08-26
+
+The owner explicitly authorized the bounded CRED-REVEAL-1A repair through
+`active-2026-08-26-cred-reveal-1a-connection-test-redaction-spec.md`. The
+current `run_r_json` connection-test failure path can put credential-bearing raw
+R stderr into an `anyhow` error and then through `display_error` into a Tauri
+rejection. That violates this contract's existing rule that exact key values
+never cross back from Rust.
+
+CRED-REVEAL-1A owns only bounded connection-test child-output capture, raw
+diagnostic suppression, stable structured failure copy, sentinel regression,
+removal of all inherited sensitive and configured Provider credential/endpoint
+environment names before re-adding only the selected credential and required
+endpoint environment value, and preservation of settings/test truth on
+failure. The existing IPC command name, arguments, result, generated binding,
+browser mock, schema, selected-Provider resolution, exactly-one credential, no
+fallback, cancel/timeout, and UI authority do not change. The internal adapter
+may pass only the state-owned runtime `data_dir` to the existing catalog service
+so the validated Settings snapshot can supply the custom environment-name scrub
+list. This amendment does not permit a secret getter or redisplay;
+CRED-REVEAL-1B remains separately blocked.

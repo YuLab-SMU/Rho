@@ -1,7 +1,8 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::io::Read;
+use std::ffi::OsString;
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -9,7 +10,7 @@ use anyhow::{Context, Result, bail, ensure};
 use chrono::Utc;
 use rho_server::coordinator::{AgentRuntimeCapabilityRoute, AgentRuntimeModelProfile};
 use serde::{Deserialize, Serialize};
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::project::atomic_write;
 
@@ -32,6 +33,17 @@ const CONNECTION_TEST_TIMEOUT: Duration = Duration::from_secs(30);
 const MODEL_DISCOVERY_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_MODEL_DISCOVERY_BYTES: usize = 1024 * 1024;
 const MAX_DISCOVERED_MODELS: usize = 100;
+const MAX_R_PROBE_STDOUT_BYTES: usize = 1024 * 1024;
+const MAX_R_PROBE_STDERR_BYTES: usize = 64 * 1024;
+#[cfg(unix)]
+const R_PROBE_TERMINATION_GRACE: Duration = Duration::from_millis(250);
+const R_PROBE_PIPE_JOIN_TIMEOUT: Duration = Duration::from_secs(2);
+const CONNECTION_TEST_PROCESS_FAILURE: &str =
+    "Rho could not complete the Provider connection test.";
+const CONNECTION_TEST_PROTOCOL_FAILURE: &str =
+    "Rho received an invalid Provider connection-test response.";
+const CONNECTION_TEST_TIMEOUT_FAILURE: &str = "The Provider connection test timed out.";
+const CONNECTION_TEST_CANCELLED: &str = "Agent model test cancelled.";
 const PROCESS_POLL_INTERVAL: Duration = Duration::from_millis(50);
 #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 const CREDENTIAL_SERVICE: &str = "Rho Agent LLM";
@@ -746,6 +758,62 @@ pub struct AgentConnectionTestResponse {
     pub capabilities: AgentModelCapabilitiesV1,
     pub message: String,
     pub error_class: Option<String>,
+}
+
+struct SecretString(String);
+
+impl std::fmt::Debug for SecretString {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("<redacted>")
+    }
+}
+
+impl SecretString {
+    #[cfg(test)]
+    fn new(value: String) -> Self {
+        Self(value)
+    }
+
+    fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl<'de> Deserialize<'de> for SecretString {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        String::deserialize(deserializer).map(Self)
+    }
+}
+
+impl Drop for SecretString {
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawAgentModelCapabilitiesV1 {
+    tool_calling: SecretString,
+    reasoning: SecretString,
+    vision_input: SecretString,
+    source: SecretString,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawAgentConnectionTestResponse {
+    status: SecretString,
+    credential_status: SecretString,
+    model_resolved: bool,
+    latency_ms: Option<u64>,
+    capabilities: RawAgentModelCapabilitiesV1,
+    #[serde(rename = "message")]
+    _message: serde::de::IgnoredAny,
+    error_class: Option<SecretString>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1765,7 +1833,9 @@ pub fn clear_session_credentials() {
     clear_system_credential_session();
 }
 
-pub fn catalog(rscript: &Path) -> Result<Vec<AgentCatalogEntry>> {
+pub fn catalog(data_dir: &Path, rscript: &Path) -> Result<Vec<AgentCatalogEntry>> {
+    let settings = load_settings(data_dir)?;
+    let probe_environment_names = provider_probe_environment_names(&settings);
     let script = r#"
 if (!requireNamespace("aisdk", quietly = TRUE)) {
   stop("aisdk is unavailable")
@@ -1826,7 +1896,19 @@ rows <- lapply(seq_len(nrow(models)), function(i) {
 })
 cat(jsonlite::toJSON(unname(rows), auto_unbox = TRUE, null = "null"))
 "#;
-    run_r_json(rscript, script, &[], None, None, None, None)
+    run_r_json(
+        rscript,
+        script,
+        RProbeRequest {
+            args: &[],
+            user_environ: None,
+            stdin: None,
+            scrub_environment_names: &probe_environment_names,
+            environment_overrides: &[],
+            failure_disclosure: RProbeFailureDisclosure::BoundedDiagnostic,
+            test_control: None,
+        },
+    )
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1865,7 +1947,7 @@ pub fn discover_models(
             .iter()
             .find(|item| item.id == provider_id)
         {
-            if let Ok(entries) = catalog(rscript) {
+            if let Ok(entries) = catalog(data_dir, rscript) {
                 enrich_discovered_models(provider, &mut response.models, &entries);
             }
         }
@@ -2392,6 +2474,24 @@ pub fn test_model(
     model_id: &str,
     test_control: Option<&AgentModelTestControl>,
 ) -> Result<AgentLlmSettingsView> {
+    test_model_with_store(
+        data_dir,
+        rscript,
+        agent_package,
+        model_id,
+        test_control,
+        &SystemCredentialStore,
+    )
+}
+
+fn test_model_with_store(
+    data_dir: &Path,
+    rscript: &Path,
+    agent_package: &Path,
+    model_id: &str,
+    test_control: Option<&AgentModelTestControl>,
+    credential_store: &impl CredentialStore,
+) -> Result<AgentLlmSettingsView> {
     let settings = load_settings(data_dir)?;
     let test_model = settings
         .models
@@ -2403,40 +2503,27 @@ pub fn test_model(
         "Only language models use the text connection test. Image and embedding probes are not installed."
     );
     let resolved = resolve_model_with_settings(&settings, Some(model_id))?;
+    let probe_environment_names = provider_probe_environment_names(&settings);
     let credential_override = credential_override_with_store(
         data_dir,
         &settings,
         &resolved.provider_id,
-        &SystemCredentialStore,
+        credential_store,
         "credential_test_read",
+    )
+    .map_err(|_| anyhow::anyhow!("The configured credential source is unavailable."))?;
+    ensure!(
+        credential_override.is_some() || !resolved.runtime_profile.api_key_required,
+        "No API key is available for this provider."
     );
-    let result = match credential_override {
-        Err(_) => AgentConnectionTestResponse {
-            status: "error".to_string(),
-            credential_status: "unavailable".to_string(),
-            model_resolved: false,
-            latency_ms: None,
-            capabilities: inferred_capabilities(&resolved.runtime_profile),
-            message: "The configured credential source is unavailable.".to_string(),
-            error_class: Some("credential".to_string()),
-        },
-        Ok(None) if resolved.runtime_profile.api_key_required => AgentConnectionTestResponse {
-            status: "error".to_string(),
-            credential_status: "not_detected".to_string(),
-            model_resolved: false,
-            latency_ms: None,
-            capabilities: inferred_capabilities(&resolved.runtime_profile),
-            message: "No API key is available for this provider.".to_string(),
-            error_class: Some("credential".to_string()),
-        },
-        Ok(credential_override) => run_connection_test(
-            rscript,
-            agent_package,
-            &resolved.runtime_profile,
-            credential_override.as_ref(),
-            test_control,
-        )?,
-    };
+    let result = run_connection_test(
+        rscript,
+        agent_package,
+        &resolved.runtime_profile,
+        &probe_environment_names,
+        credential_override.as_ref(),
+        test_control,
+    )?;
     let _guard = settings_mutation_guard();
     let mut latest_settings = load_settings(data_dir)?;
     let latest_resolved = resolve_model_with_settings(&latest_settings, Some(model_id))?;
@@ -2638,6 +2725,25 @@ fn credential_override_with_store(
         .clone()
         .context("The provider has no API key environment name.")?;
     Ok(Some((env_name, value)))
+}
+
+fn provider_probe_environment_names(settings: &AgentLlmSettings) -> Vec<String> {
+    let mut names = settings
+        .providers
+        .iter()
+        .flat_map(|provider| {
+            [
+                provider.api_key_env.as_ref(),
+                provider.base_url_env.as_ref(),
+            ]
+            .into_iter()
+            .flatten()
+            .cloned()
+        })
+        .collect::<Vec<_>>();
+    names.sort();
+    names.dedup();
+    names
 }
 
 pub fn validate_settings(settings: &AgentLlmSettings) -> Result<()> {
@@ -3213,10 +3319,14 @@ fn update_model_after_test(
         ("vision_input", result.capabilities.vision_input.as_str()),
     ] {
         if model_capability(model, name).source != "user_declared" {
-            model.capabilities.insert(
-                name.to_string(),
-                capability_value(value, "provider_response"),
-            );
+            let source = if value == "unknown" {
+                "unknown"
+            } else {
+                "provider_response"
+            };
+            model
+                .capabilities
+                .insert(name.to_string(), capability_value(value, source));
         }
     }
     Ok(())
@@ -3592,19 +3702,558 @@ fn credential_presentation_for_provider(provider: &AgentProviderProfile) -> Cred
     }
 }
 
-fn inferred_capabilities(profile: &AgentRuntimeModelProfile) -> AgentModelCapabilitiesV1 {
-    AgentModelCapabilitiesV1 {
-        tool_calling: profile.tool_calling.clone(),
-        reasoning: "unknown".to_string(),
-        vision_input: "unknown".to_string(),
-        source: "unknown".to_string(),
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RProbeFailureDisclosure {
+    BoundedDiagnostic,
+    SuppressDiagnostic,
+}
+
+struct RProbeRequest<'a> {
+    args: &'a [String],
+    user_environ: Option<&'a str>,
+    stdin: Option<String>,
+    scrub_environment_names: &'a [String],
+    environment_overrides: &'a [(&'a str, &'a str)],
+    failure_disclosure: RProbeFailureDisclosure,
+    test_control: Option<&'a AgentModelTestControl>,
+}
+
+struct BoundedPipeOutput {
+    bytes: Zeroizing<Vec<u8>>,
+    truncated: bool,
+}
+
+fn drain_bounded<R: Read>(mut reader: R, limit: usize) -> io::Result<BoundedPipeOutput> {
+    // Allocate the fixed retention budget once. Growing a Zeroizing<Vec<_>>
+    // would let Vec free prior allocations without clearing their contents.
+    let mut bytes = Zeroizing::new(Vec::with_capacity(limit));
+    let mut truncated = false;
+    let mut chunk = Zeroizing::new([0_u8; 8 * 1024]);
+    loop {
+        let count = reader.read(&mut *chunk)?;
+        if count == 0 {
+            break;
+        }
+        let retained = limit.saturating_sub(bytes.len()).min(count);
+        bytes.extend_from_slice(&chunk[..retained]);
+        truncated |= retained < count;
     }
+    chunk.zeroize();
+    Ok(BoundedPipeOutput { bytes, truncated })
+}
+
+#[cfg(unix)]
+unsafe extern "C" {
+    #[link_name = "kill"]
+    fn unix_kill_process(pid: i32, signal: i32) -> i32;
+}
+
+#[cfg(unix)]
+fn signal_r_probe_process_group(pid: u32, signal: i32) -> Result<bool> {
+    let process_group = i32::try_from(pid).context("Rscript process id exceeds pid_t")?;
+    let result = unsafe { unix_kill_process(-process_group, signal) };
+    if result == 0 {
+        return Ok(true);
+    }
+    let error = io::Error::last_os_error();
+    if error.raw_os_error() == Some(3) {
+        Ok(false)
+    } else {
+        Err(error).with_context(|| format!("signalling Rscript process group {process_group}"))
+    }
+}
+
+#[cfg(unix)]
+fn r_probe_process_group_exists(pid: u32) -> Result<bool> {
+    signal_r_probe_process_group(pid, 0)
+}
+
+#[cfg(unix)]
+fn terminate_r_probe_process_group(pid: u32) -> Result<()> {
+    if !signal_r_probe_process_group(pid, 15)? {
+        return Ok(());
+    }
+    let deadline = Instant::now() + R_PROBE_TERMINATION_GRACE;
+    while Instant::now() < deadline {
+        if !r_probe_process_group_exists(pid)? {
+            return Ok(());
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let _ = signal_r_probe_process_group(pid, 9)?;
+    Ok(())
+}
+
+#[cfg(windows)]
+#[repr(C)]
+#[derive(Default)]
+struct JobObjectBasicLimitInformation {
+    per_process_user_time_limit: i64,
+    per_job_user_time_limit: i64,
+    limit_flags: u32,
+    minimum_working_set_size: usize,
+    maximum_working_set_size: usize,
+    active_process_limit: u32,
+    affinity: usize,
+    priority_class: u32,
+    scheduling_class: u32,
+}
+
+#[cfg(windows)]
+#[repr(C)]
+#[derive(Default)]
+struct JobObjectIoCounters {
+    read_operation_count: u64,
+    write_operation_count: u64,
+    other_operation_count: u64,
+    read_transfer_count: u64,
+    write_transfer_count: u64,
+    other_transfer_count: u64,
+}
+
+#[cfg(windows)]
+#[repr(C)]
+#[derive(Default)]
+struct JobObjectExtendedLimitInformation {
+    basic_limit_information: JobObjectBasicLimitInformation,
+    io_info: JobObjectIoCounters,
+    process_memory_limit: usize,
+    job_memory_limit: usize,
+    peak_process_memory_used: usize,
+    peak_job_memory_used: usize,
+}
+
+#[cfg(windows)]
+#[repr(C)]
+#[derive(Default)]
+struct ThreadEntry32 {
+    size: u32,
+    usage_count: u32,
+    thread_id: u32,
+    owner_process_id: u32,
+    base_priority: i32,
+    priority_delta: i32,
+    flags: u32,
+}
+
+#[cfg(windows)]
+#[link(name = "kernel32")]
+unsafe extern "system" {
+    fn CreateJobObjectW(
+        attributes: *const std::ffi::c_void,
+        name: *const u16,
+    ) -> *mut std::ffi::c_void;
+    fn SetInformationJobObject(
+        job: *mut std::ffi::c_void,
+        information_class: i32,
+        information: *const std::ffi::c_void,
+        information_length: u32,
+    ) -> i32;
+    fn AssignProcessToJobObject(job: *mut std::ffi::c_void, process: *mut std::ffi::c_void) -> i32;
+    fn CreateToolhelp32Snapshot(flags: u32, process_id: u32) -> *mut std::ffi::c_void;
+    fn Thread32First(snapshot: *mut std::ffi::c_void, entry: *mut ThreadEntry32) -> i32;
+    fn Thread32Next(snapshot: *mut std::ffi::c_void, entry: *mut ThreadEntry32) -> i32;
+    fn OpenThread(
+        desired_access: u32,
+        inherit_handle: i32,
+        thread_id: u32,
+    ) -> *mut std::ffi::c_void;
+    fn ResumeThread(thread: *mut std::ffi::c_void) -> u32;
+    fn TerminateJobObject(job: *mut std::ffi::c_void, exit_code: u32) -> i32;
+    fn CloseHandle(object: *mut std::ffi::c_void) -> i32;
+}
+
+#[cfg(windows)]
+struct WindowsOwnedHandle(*mut std::ffi::c_void);
+
+#[cfg(windows)]
+impl Drop for WindowsOwnedHandle {
+    fn drop(&mut self) {
+        unsafe {
+            CloseHandle(self.0);
+        }
+    }
+}
+
+#[cfg(windows)]
+struct WindowsRProbeJob {
+    handle: WindowsOwnedHandle,
+}
+
+#[cfg(windows)]
+impl WindowsRProbeJob {
+    fn new() -> Result<Self> {
+        const JOB_OBJECT_EXTENDED_LIMIT_INFORMATION: i32 = 9;
+        const JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE: u32 = 0x0000_2000;
+
+        let information_length =
+            u32::try_from(std::mem::size_of::<JobObjectExtendedLimitInformation>())
+                .context("Rscript Job Object configuration is too large")?;
+        let handle = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
+        ensure!(!handle.is_null(), "creating Rscript Job Object failed");
+        let handle = WindowsOwnedHandle(handle);
+        let mut information: JobObjectExtendedLimitInformation = unsafe { std::mem::zeroed() };
+        information.basic_limit_information.limit_flags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        let configured = unsafe {
+            SetInformationJobObject(
+                handle.0,
+                JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
+                std::ptr::addr_of!(information).cast(),
+                information_length,
+            )
+        };
+        if configured == 0 {
+            return Err(io::Error::last_os_error()).context("configuring Rscript Job Object");
+        }
+        Ok(Self { handle })
+    }
+
+    fn assign(&self, child: &Child) -> Result<()> {
+        use std::os::windows::io::AsRawHandle;
+        let assigned = unsafe {
+            AssignProcessToJobObject(
+                self.handle.0,
+                child.as_raw_handle().cast::<std::ffi::c_void>(),
+            )
+        };
+        if assigned == 0 {
+            Err(io::Error::last_os_error()).context("assigning Rscript to Job Object")
+        } else {
+            Ok(())
+        }
+    }
+
+    fn resume(&self, child: &Child) -> Result<()> {
+        const TH32CS_SNAPTHREAD: u32 = 0x0000_0004;
+        const THREAD_SUSPEND_RESUME: u32 = 0x0000_0002;
+        const ERROR_NO_MORE_FILES: i32 = 18;
+        const INVALID_HANDLE_VALUE: *mut std::ffi::c_void = (-1_isize) as *mut std::ffi::c_void;
+        const RESUME_FAILED: u32 = u32::MAX;
+
+        let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) };
+        ensure!(
+            snapshot != INVALID_HANDLE_VALUE,
+            "enumerating suspended Rscript threads failed"
+        );
+        let snapshot = WindowsOwnedHandle(snapshot);
+        let mut entry: ThreadEntry32 = unsafe { std::mem::zeroed() };
+        entry.size = u32::try_from(std::mem::size_of::<ThreadEntry32>())
+            .context("Rscript thread descriptor is too large")?;
+        if unsafe { Thread32First(snapshot.0, &mut entry) } == 0 {
+            return Err(io::Error::last_os_error())
+                .context("enumerating suspended Rscript threads");
+        }
+
+        let mut resumed = false;
+        loop {
+            if entry.owner_process_id == child.id() {
+                let thread = unsafe { OpenThread(THREAD_SUSPEND_RESUME, 0, entry.thread_id) };
+                ensure!(!thread.is_null(), "opening suspended Rscript thread failed");
+                let thread = WindowsOwnedHandle(thread);
+                let previous = unsafe { ResumeThread(thread.0) };
+                if previous == RESUME_FAILED {
+                    return Err(io::Error::last_os_error())
+                        .context("resuming suspended Rscript thread");
+                }
+                ensure!(
+                    previous == 1,
+                    "suspended Rscript thread had an unexpected suspend count"
+                );
+                resumed = true;
+            }
+
+            if unsafe { Thread32Next(snapshot.0, &mut entry) } == 0 {
+                let error = io::Error::last_os_error();
+                if error.raw_os_error() == Some(ERROR_NO_MORE_FILES) {
+                    break;
+                }
+                return Err(error).context("enumerating suspended Rscript threads");
+            }
+        }
+        ensure!(resumed, "the suspended Rscript thread was not found");
+        Ok(())
+    }
+
+    fn terminate(&self) -> Result<()> {
+        let terminated = unsafe { TerminateJobObject(self.handle.0, 1) };
+        if terminated == 0 {
+            Err(io::Error::last_os_error()).context("terminating Rscript Job Object")
+        } else {
+            Ok(())
+        }
+    }
+}
+
+struct RProbeProcessContainment {
+    #[cfg(windows)]
+    job: WindowsRProbeJob,
+}
+
+impl RProbeProcessContainment {
+    fn new() -> Result<Self> {
+        Ok(Self {
+            #[cfg(windows)]
+            job: WindowsRProbeJob::new()?,
+        })
+    }
+
+    fn attach_and_start(&self, child: &Child) -> Result<()> {
+        #[cfg(windows)]
+        {
+            self.job.assign(child)?;
+            self.job.resume(child)?;
+        }
+        #[cfg(not(windows))]
+        let _ = child;
+        Ok(())
+    }
+
+    fn terminate(&self, _pid: u32) -> Result<()> {
+        #[cfg(unix)]
+        terminate_r_probe_process_group(_pid)?;
+        #[cfg(windows)]
+        self.job.terminate()?;
+        #[cfg(not(any(unix, windows)))]
+        let _ = _pid;
+        Ok(())
+    }
+}
+
+fn configure_r_probe_process_containment(command: &mut Command) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_SUSPENDED: u32 = 0x0000_0004;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_SUSPENDED | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW);
+    }
+    #[cfg(not(any(unix, windows)))]
+    let _ = command;
+}
+
+fn join_r_probe_thread<T>(
+    thread: std::thread::JoinHandle<T>,
+    label: &'static str,
+) -> Result<std::thread::Result<T>> {
+    let deadline = Instant::now() + R_PROBE_PIPE_JOIN_TIMEOUT;
+    while !thread.is_finished() {
+        ensure!(Instant::now() < deadline, "timed out waiting for {label}");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    Ok(thread.join())
+}
+
+struct RProbeChildGuard<'a> {
+    child: Child,
+    pid: u32,
+    containment: RProbeProcessContainment,
+    test_control: Option<&'a AgentModelTestControl>,
+    reaped: bool,
+    containment_terminated: bool,
+    control_cleared: bool,
+}
+
+impl<'a> RProbeChildGuard<'a> {
+    fn new(
+        child: Child,
+        containment: RProbeProcessContainment,
+        test_control: Option<&'a AgentModelTestControl>,
+    ) -> Result<Self> {
+        let pid = child.id();
+        let guard = Self {
+            child,
+            pid,
+            containment,
+            test_control,
+            reaped: false,
+            containment_terminated: false,
+            control_cleared: false,
+        };
+        guard.containment.attach_and_start(&guard.child)?;
+        if let Some(control) = test_control {
+            let mut state = control
+                .lock()
+                .map_err(|_| anyhow::anyhow!("locking Agent model test state"))?;
+            state.pid = Some(pid);
+            state.cancel_requested = false;
+        }
+        Ok(guard)
+    }
+
+    fn try_wait(&mut self) -> Result<Option<std::process::ExitStatus>> {
+        let status = self
+            .child
+            .try_wait()
+            .context("checking Rscript JSON probe status")?;
+        if status.is_some() {
+            self.reaped = true;
+        }
+        Ok(status)
+    }
+
+    fn wait(&mut self, context: &'static str) -> Result<std::process::ExitStatus> {
+        let status = self.child.wait().context(context)?;
+        self.reaped = true;
+        Ok(status)
+    }
+
+    fn finish_control(&mut self) -> Result<bool> {
+        let Some(control) = self.test_control else {
+            self.control_cleared = true;
+            return Ok(false);
+        };
+        let mut state = control
+            .lock()
+            .map_err(|_| anyhow::anyhow!("locking Agent model test state"))?;
+        let cancelled = state.pid == Some(self.pid) && state.cancel_requested;
+        if state.pid == Some(self.pid) {
+            state.pid = None;
+            state.cancel_requested = false;
+        }
+        self.control_cleared = true;
+        Ok(cancelled)
+    }
+
+    fn terminate_process_tree(&mut self) -> Result<()> {
+        if self.containment_terminated {
+            return Ok(());
+        }
+        let termination = self.containment.terminate(self.pid);
+        if termination.is_ok() {
+            self.containment_terminated = true;
+        }
+        if !self.reaped {
+            let _ = self.child.kill();
+        }
+        termination
+    }
+}
+
+impl Drop for RProbeChildGuard<'_> {
+    fn drop(&mut self) {
+        let _ = self.terminate_process_tree();
+        if !self.reaped {
+            let _ = self.child.wait();
+            self.reaped = true;
+        }
+        if !self.control_cleared
+            && let Some(control) = self.test_control
+        {
+            let mut state = match control.lock() {
+                Ok(state) => state,
+                Err(poisoned) => {
+                    control.clear_poison();
+                    poisoned.into_inner()
+                }
+            };
+            if state.pid == Some(self.pid) {
+                state.pid = None;
+                state.cancel_requested = false;
+            }
+        }
+    }
+}
+
+fn connection_test_error_message(error_class: &str) -> &'static str {
+    match error_class {
+        "credential" => "The Provider rejected the configured credential.",
+        "timeout" => CONNECTION_TEST_TIMEOUT_FAILURE,
+        "endpoint" => "The Provider endpoint or model configuration was rejected.",
+        "network" => "Rho could not reach the Provider.",
+        _ => "The Provider connection test failed.",
+    }
+}
+
+fn normalize_connection_test_response(
+    response: RawAgentConnectionTestResponse,
+) -> Result<AgentConnectionTestResponse> {
+    ensure!(
+        matches!(response.status.as_str(), "ready" | "error"),
+        "{CONNECTION_TEST_PROTOCOL_FAILURE}"
+    );
+    ensure!(
+        matches!(
+            response.credential_status.as_str(),
+            "detected" | "not_detected" | "not_required"
+        ),
+        "{CONNECTION_TEST_PROTOCOL_FAILURE}"
+    );
+    ensure!(
+        [
+            response.capabilities.tool_calling.as_str(),
+            response.capabilities.reasoning.as_str(),
+            response.capabilities.vision_input.as_str(),
+        ]
+        .into_iter()
+        .all(|value| matches!(value, "yes" | "no" | "unknown")),
+        "{CONNECTION_TEST_PROTOCOL_FAILURE}"
+    );
+    ensure!(
+        matches!(
+            response.capabilities.source.as_str(),
+            "catalog" | "probe" | "unknown"
+        ),
+        "{CONNECTION_TEST_PROTOCOL_FAILURE}"
+    );
+    ensure!(
+        response.model_resolved == (response.status.as_str() == "ready"),
+        "{CONNECTION_TEST_PROTOCOL_FAILURE}"
+    );
+    ensure!(
+        response.status.as_str() != "ready"
+            || matches!(
+                response.credential_status.as_str(),
+                "detected" | "not_required"
+            ),
+        "{CONNECTION_TEST_PROTOCOL_FAILURE}"
+    );
+
+    let (message, error_class) = if response.status.as_str() == "ready" {
+        ("Connection succeeded.".to_string(), None)
+    } else {
+        let error_class = match response.error_class.as_ref().map(SecretString::as_str) {
+            Some(value)
+                if matches!(
+                    value,
+                    "credential" | "timeout" | "endpoint" | "network" | "provider"
+                ) =>
+            {
+                value
+            }
+            _ => "provider",
+        };
+        (
+            connection_test_error_message(error_class).to_string(),
+            Some(error_class.to_string()),
+        )
+    };
+    Ok(AgentConnectionTestResponse {
+        status: response.status.as_str().to_string(),
+        credential_status: response.credential_status.as_str().to_string(),
+        model_resolved: response.model_resolved,
+        latency_ms: response.latency_ms,
+        capabilities: AgentModelCapabilitiesV1 {
+            tool_calling: response.capabilities.tool_calling.as_str().to_string(),
+            reasoning: response.capabilities.reasoning.as_str().to_string(),
+            vision_input: response.capabilities.vision_input.as_str().to_string(),
+            source: response.capabilities.source.as_str().to_string(),
+        },
+        message,
+        error_class,
+    })
 }
 
 fn run_connection_test(
     rscript: &Path,
     agent_package: &Path,
     profile: &AgentRuntimeModelProfile,
+    probe_environment_names: &[String],
     credential_override: Option<&(String, String)>,
     test_control: Option<&AgentModelTestControl>,
 ) -> Result<AgentConnectionTestResponse> {
@@ -3620,112 +4269,365 @@ profile <- jsonlite::fromJSON(profile_json, simplifyVector = FALSE)
 result <- rho_test_model_profile(profile)
 cat(jsonlite::toJSON(result, auto_unbox = TRUE, null = "null"))
 "#;
-    run_r_json(
+    let base_url_override = profile
+        .base_url_env
+        .as_deref()
+        .and_then(|name| std::env::var(name).ok())
+        .map(Zeroizing::new);
+    let mut environment_overrides = Vec::with_capacity(2);
+    if let (Some(name), Some(value)) = (profile.base_url_env.as_deref(), &base_url_override) {
+        environment_overrides.push((name, value.as_str()));
+    }
+    if let Some((name, value)) = credential_override {
+        environment_overrides.push((name.as_str(), value.as_str()));
+    }
+    let args = [agent_package.to_string_lossy().replace('\\', "/")];
+    let response: RawAgentConnectionTestResponse = run_r_json(
         rscript,
         script,
-        &[agent_package.to_string_lossy().replace('\\', "/")],
-        None,
-        Some(serde_json::to_string(profile)?),
-        credential_override.map(|(name, value)| (name.as_str(), value.as_str())),
-        test_control,
+        RProbeRequest {
+            args: &args,
+            user_environ: None,
+            stdin: Some(serde_json::to_string(profile)?),
+            scrub_environment_names: probe_environment_names,
+            environment_overrides: &environment_overrides,
+            failure_disclosure: RProbeFailureDisclosure::SuppressDiagnostic,
+            test_control,
+        },
     )
+    .map_err(project_suppressed_r_probe_error)?;
+    normalize_connection_test_response(response).map_err(project_suppressed_r_probe_error)
 }
 
 fn run_r_json<T: for<'de> Deserialize<'de>>(
     rscript: &Path,
     script: &str,
-    args: &[String],
-    user_environ: Option<&str>,
-    stdin: Option<String>,
-    credential_override: Option<(&str, &str)>,
-    test_control: Option<&AgentModelTestControl>,
+    request: RProbeRequest<'_>,
 ) -> Result<T> {
     let script_file = write_r_probe_script(script)?;
     let mut command = Command::new(rscript);
     hide_console_window(&mut command);
-    configure_r_probe(&mut command, user_environ);
-    if let Some((name, value)) = credential_override {
-        command.env(name, value);
+    configure_r_probe(
+        &mut command,
+        request.user_environ,
+        request.scrub_environment_names,
+        std::env::vars_os().map(|(name, _)| name),
+        request.environment_overrides,
+    );
+    command.arg(script_file.path()).args(request.args);
+    run_r_json_command(
+        command,
+        request.stdin,
+        request.failure_disclosure,
+        request.test_control,
+    )
+}
+
+fn run_r_json_command<T: for<'de> Deserialize<'de>>(
+    command: Command,
+    stdin: Option<String>,
+    failure_disclosure: RProbeFailureDisclosure,
+    test_control: Option<&AgentModelTestControl>,
+) -> Result<T> {
+    let timeout = (failure_disclosure == RProbeFailureDisclosure::SuppressDiagnostic)
+        .then_some(CONNECTION_TEST_TIMEOUT);
+    run_r_json_command_with_timeout(command, stdin, failure_disclosure, test_control, timeout)
+}
+
+fn run_r_json_command_with_timeout<T: for<'de> Deserialize<'de>>(
+    command: Command,
+    stdin: Option<String>,
+    failure_disclosure: RProbeFailureDisclosure,
+    test_control: Option<&AgentModelTestControl>,
+    timeout: Option<Duration>,
+) -> Result<T> {
+    run_r_json_command_with_options(
+        command,
+        stdin,
+        failure_disclosure,
+        test_control,
+        timeout,
+        RProbeTestFault::default(),
+    )
+}
+
+#[cfg(test)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InjectedRProbeFault {
+    AfterSpawn,
+    AfterPipeSetup,
+    Reader,
+    TryWait,
+    Wait,
+}
+
+#[derive(Debug, Clone, Default)]
+struct RProbeTestFault {
+    #[cfg(test)]
+    injected: Option<InjectedRProbeFault>,
+    #[cfg(test)]
+    spawned_pid: Option<Arc<std::sync::atomic::AtomicU32>>,
+}
+
+#[cfg(test)]
+fn run_r_json_command_with_fault<T: for<'de> Deserialize<'de>>(
+    command: Command,
+    stdin: Option<String>,
+    failure_disclosure: RProbeFailureDisclosure,
+    test_control: Option<&AgentModelTestControl>,
+    timeout: Option<Duration>,
+    injected: InjectedRProbeFault,
+    spawned_pid: Arc<std::sync::atomic::AtomicU32>,
+) -> Result<T> {
+    run_r_json_command_with_options(
+        command,
+        stdin,
+        failure_disclosure,
+        test_control,
+        timeout,
+        RProbeTestFault {
+            injected: Some(injected),
+            spawned_pid: Some(spawned_pid),
+        },
+    )
+}
+
+fn run_r_json_command_with_options<T: for<'de> Deserialize<'de>>(
+    command: Command,
+    stdin: Option<String>,
+    failure_disclosure: RProbeFailureDisclosure,
+    test_control: Option<&AgentModelTestControl>,
+    timeout: Option<Duration>,
+    test_fault: RProbeTestFault,
+) -> Result<T> {
+    let result = run_r_json_command_with_options_unprojected(
+        command,
+        stdin,
+        failure_disclosure,
+        test_control,
+        timeout,
+        test_fault,
+    );
+    match failure_disclosure {
+        RProbeFailureDisclosure::BoundedDiagnostic => result,
+        RProbeFailureDisclosure::SuppressDiagnostic => {
+            result.map_err(project_suppressed_r_probe_error)
+        }
     }
-    command.arg(script_file.path()).args(args);
+}
+
+fn project_suppressed_r_probe_error(error: anyhow::Error) -> anyhow::Error {
+    let message = error.to_string();
+    match message.as_str() {
+        CONNECTION_TEST_PROCESS_FAILURE
+        | CONNECTION_TEST_PROTOCOL_FAILURE
+        | CONNECTION_TEST_TIMEOUT_FAILURE
+        | CONNECTION_TEST_CANCELLED => anyhow::anyhow!(message),
+        _ => anyhow::anyhow!(CONNECTION_TEST_PROCESS_FAILURE),
+    }
+}
+
+fn run_r_json_command_with_options_unprojected<T: for<'de> Deserialize<'de>>(
+    mut command: Command,
+    stdin: Option<String>,
+    failure_disclosure: RProbeFailureDisclosure,
+    test_control: Option<&AgentModelTestControl>,
+    timeout: Option<Duration>,
+    _test_fault: RProbeTestFault,
+) -> Result<T> {
     if stdin.is_some() {
         command.stdin(Stdio::piped());
     }
     command.stdout(Stdio::piped());
     command.stderr(Stdio::piped());
-    let mut child = command.spawn().context("spawning Rscript JSON probe")?;
-    let pid = child.id();
-    if let Some(control) = test_control {
-        let mut guard = control
-            .lock()
-            .map_err(|_| anyhow::anyhow!("locking Agent model test state"))?;
-        guard.pid = Some(pid);
-        guard.cancel_requested = false;
+    configure_r_probe_process_containment(&mut command);
+    let containment = RProbeProcessContainment::new()?;
+    let child = command.spawn().context("spawning Rscript JSON probe")?;
+    #[cfg(test)]
+    if let Some(spawned_pid) = &_test_fault.spawned_pid {
+        spawned_pid.store(child.id(), std::sync::atomic::Ordering::SeqCst);
     }
-    if let Some(stdin_payload) = stdin {
-        use std::io::Write;
-        let mut handle = child.stdin.take().context("opening Rscript stdin")?;
-        handle.write_all(stdin_payload.as_bytes())?;
+    let mut child = RProbeChildGuard::new(child, containment, test_control)?;
+    #[cfg(test)]
+    if _test_fault.injected == Some(InjectedRProbeFault::AfterSpawn) {
+        bail!("injected post-spawn setup failure")
     }
-    let mut stdout = child.stdout.take().context("opening Rscript stdout")?;
-    let mut stderr = child.stderr.take().context("opening Rscript stderr")?;
+    let stdin_handle = if stdin.is_some() {
+        Some(child.child.stdin.take().context("opening Rscript stdin")?)
+    } else {
+        None
+    };
+    let stdout = child
+        .child
+        .stdout
+        .take()
+        .context("opening Rscript stdout")?;
+    let stderr = child
+        .child
+        .stderr
+        .take()
+        .context("opening Rscript stderr")?;
+    #[cfg(test)]
+    let inject_reader_failure = _test_fault.injected == Some(InjectedRProbeFault::Reader);
+    #[cfg(not(test))]
+    let inject_reader_failure = false;
+    let (reader_error_sender, reader_error_receiver) = std::sync::mpsc::channel();
+    let stdout_error_sender = reader_error_sender.clone();
     let stdout_thread = std::thread::spawn(move || {
-        let mut bytes = Vec::new();
-        let _ = stdout.read_to_end(&mut bytes);
-        bytes
+        let result = if inject_reader_failure {
+            Err(io::Error::other("injected Rscript stdout reader failure"))
+        } else {
+            drain_bounded(stdout, MAX_R_PROBE_STDOUT_BYTES)
+        };
+        if result.is_err() {
+            let _ = stdout_error_sender.send(());
+        }
+        result
     });
+    let stderr_error_sender = reader_error_sender.clone();
     let stderr_thread = std::thread::spawn(move || {
-        let mut bytes = Vec::new();
-        let _ = stderr.read_to_end(&mut bytes);
-        bytes
+        let result = drain_bounded(stderr, MAX_R_PROBE_STDERR_BYTES);
+        if result.is_err() {
+            let _ = stderr_error_sender.send(());
+        }
+        result
     });
+    drop(reader_error_sender);
+    let stdin_thread = stdin_handle.zip(stdin).map(|(mut handle, stdin_payload)| {
+        std::thread::spawn(move || {
+            use std::io::Write;
+            let stdin_payload = Zeroizing::new(stdin_payload);
+            handle.write_all(stdin_payload.as_bytes())
+        })
+    });
+    #[cfg(test)]
+    if _test_fault.injected == Some(InjectedRProbeFault::AfterPipeSetup) {
+        bail!("injected post-pipe setup failure")
+    }
     let started = Instant::now();
     let mut timed_out = false;
+    let mut reader_failed = false;
     let status = loop {
-        if let Some(status) = child
-            .try_wait()
-            .context("checking Rscript JSON probe status")?
-        {
+        #[cfg(test)]
+        if _test_fault.injected == Some(InjectedRProbeFault::TryWait) {
+            bail!("injected process-status failure")
+        }
+        if let Some(status) = child.try_wait()? {
             break status;
         }
-        if test_control.is_some() && started.elapsed() >= CONNECTION_TEST_TIMEOUT {
+        if reader_error_receiver.try_recv().is_ok() {
+            reader_failed = true;
+            let _ = child.terminate_process_tree();
+            if child.try_wait()?.is_none() {
+                let _ = child.child.kill();
+            }
+            break child.wait("waiting after Rscript pipe-reader failure")?;
+        }
+        if timeout.is_some_and(|limit| started.elapsed() >= limit) {
             timed_out = true;
-            let _ = kill_process(pid);
-            break child
-                .wait()
-                .context("waiting for timed-out Rscript JSON probe")?;
+            let _ = child.terminate_process_tree();
+            #[cfg(test)]
+            if _test_fault.injected == Some(InjectedRProbeFault::Wait) {
+                bail!("injected process-wait failure")
+            }
+            if child.try_wait()?.is_none() {
+                let _ = child.child.kill();
+            }
+            break child.wait("waiting for timed-out Rscript JSON probe")?;
         }
         std::thread::sleep(PROCESS_POLL_INTERVAL);
     };
-    let stdout_bytes = stdout_thread
-        .join()
-        .map_err(|_| anyhow::anyhow!("joining Rscript stdout reader"))?;
-    let stderr_bytes = stderr_thread
-        .join()
-        .map_err(|_| anyhow::anyhow!("joining Rscript stderr reader"))?;
-    let was_cancelled = if let Some(control) = test_control {
-        let mut guard = control
-            .lock()
-            .map_err(|_| anyhow::anyhow!("locking Agent model test state"))?;
-        let cancelled = guard.cancel_requested;
-        guard.pid = None;
-        guard.cancel_requested = false;
-        cancelled
-    } else {
-        false
-    };
+    let termination_result = child.terminate_process_tree();
+    let was_cancelled = child.finish_control()?;
+    let stdin_result =
+        stdin_thread.map(|thread| join_r_probe_thread(thread, "Rscript stdin writer"));
+    let stdout_result = join_r_probe_thread(stdout_thread, "Rscript stdout reader");
+    let stderr_result = join_r_probe_thread(stderr_thread, "Rscript stderr reader");
     if was_cancelled {
-        bail!("Agent model test cancelled.");
+        bail!("{CONNECTION_TEST_CANCELLED}");
     }
     if timed_out {
-        bail!("Agent model test timed out after 30 seconds.");
+        bail!("{CONNECTION_TEST_TIMEOUT_FAILURE}");
     }
-    ensure!(
-        status.success(),
-        "R probe failed: {}",
-        String::from_utf8_lossy(&stderr_bytes)
-    );
-    serde_json::from_slice(&stdout_bytes).context("decoding R JSON probe result")
+    if let Err(error) = termination_result {
+        if failure_disclosure == RProbeFailureDisclosure::BoundedDiagnostic {
+            return Err(error);
+        }
+        bail!("{CONNECTION_TEST_PROCESS_FAILURE}")
+    }
+    if !status.success() && failure_disclosure == RProbeFailureDisclosure::SuppressDiagnostic {
+        bail!("{CONNECTION_TEST_PROCESS_FAILURE}")
+    }
+    if reader_failed && failure_disclosure == RProbeFailureDisclosure::SuppressDiagnostic {
+        bail!("{CONNECTION_TEST_PROCESS_FAILURE}")
+    }
+    if let Some(result) = stdin_result {
+        match result {
+            Ok(Ok(Ok(()))) => {}
+            Ok(Ok(Err(error)))
+                if failure_disclosure == RProbeFailureDisclosure::BoundedDiagnostic =>
+            {
+                return Err(error).context("writing Rscript stdin");
+            }
+            Ok(Err(_)) if failure_disclosure == RProbeFailureDisclosure::BoundedDiagnostic => {
+                bail!("joining Rscript stdin writer")
+            }
+            Err(error) if failure_disclosure == RProbeFailureDisclosure::BoundedDiagnostic => {
+                return Err(error);
+            }
+            _ => bail!("{CONNECTION_TEST_PROCESS_FAILURE}"),
+        }
+    }
+    let stdout = match stdout_result {
+        Ok(Ok(Ok(output))) => output,
+        Ok(Ok(Err(error))) if failure_disclosure == RProbeFailureDisclosure::BoundedDiagnostic => {
+            return Err(error).context("reading Rscript stdout");
+        }
+        Ok(Err(_)) if failure_disclosure == RProbeFailureDisclosure::BoundedDiagnostic => {
+            bail!("joining Rscript stdout reader")
+        }
+        Err(error) if failure_disclosure == RProbeFailureDisclosure::BoundedDiagnostic => {
+            return Err(error);
+        }
+        _ => bail!("{CONNECTION_TEST_PROCESS_FAILURE}"),
+    };
+    let stderr = match stderr_result {
+        Ok(Ok(Ok(output))) => output,
+        Ok(Ok(Err(error))) if failure_disclosure == RProbeFailureDisclosure::BoundedDiagnostic => {
+            return Err(error).context("reading Rscript stderr");
+        }
+        Ok(Err(_)) if failure_disclosure == RProbeFailureDisclosure::BoundedDiagnostic => {
+            bail!("joining Rscript stderr reader")
+        }
+        Err(error) if failure_disclosure == RProbeFailureDisclosure::BoundedDiagnostic => {
+            return Err(error);
+        }
+        _ => bail!("{CONNECTION_TEST_PROCESS_FAILURE}"),
+    };
+    if !status.success() {
+        let diagnostic = crate::startup_runtime::bounded_diagnostic(
+            String::from_utf8_lossy(&stderr.bytes).as_ref(),
+        );
+        let suffix = if stderr.truncated { " [truncated]" } else { "" };
+        bail!("R probe failed: {diagnostic}{suffix}")
+    }
+    if stdout.truncated {
+        match failure_disclosure {
+            RProbeFailureDisclosure::SuppressDiagnostic => {
+                bail!("{CONNECTION_TEST_PROTOCOL_FAILURE}")
+            }
+            RProbeFailureDisclosure::BoundedDiagnostic => {
+                bail!("R probe returned an oversized JSON response.")
+            }
+        }
+    }
+    match serde_json::from_slice(&stdout.bytes) {
+        Ok(value) => Ok(value),
+        Err(_) if failure_disclosure == RProbeFailureDisclosure::SuppressDiagnostic => {
+            bail!("{CONNECTION_TEST_PROTOCOL_FAILURE}")
+        }
+        Err(error) => Err(error).context("decoding R JSON probe result"),
+    }
 }
 
 fn write_r_probe_script(script: &str) -> Result<tempfile::NamedTempFile> {
@@ -3777,19 +4679,50 @@ fn kill_process(pid: u32) -> Result<()> {
     }
     #[cfg(unix)]
     {
-        let status = Command::new("kill")
-            .args(["-TERM", &pid.to_string()])
-            .status()
-            .context("cancelling Agent model test")?;
-        ensure!(status.success(), "Cancelling the Agent model test failed.");
+        let _ = signal_r_probe_process_group(pid, 15)
+            .context("cancelling Agent model test process group")?;
         return Ok(());
     }
     #[cfg(not(any(windows, unix)))]
     bail!("Cancelling an Agent model test is unsupported on this platform.")
 }
 
-fn configure_r_probe(command: &mut Command, _user_environ: Option<&str>) {
+fn configure_r_probe(
+    command: &mut Command,
+    _user_environ: Option<&str>,
+    scrub_environment_names: &[String],
+    inherited_environment_names: impl IntoIterator<Item = OsString>,
+    environment_overrides: &[(&str, &str)],
+) {
     command.arg("--vanilla");
+    configure_probe_environment(
+        command,
+        scrub_environment_names,
+        inherited_environment_names,
+        environment_overrides,
+    );
+}
+
+fn configure_probe_environment(
+    command: &mut Command,
+    scrub_environment_names: &[String],
+    inherited_environment_names: impl IntoIterator<Item = OsString>,
+    environment_overrides: &[(&str, &str)],
+) {
+    for name in inherited_environment_names {
+        if name
+            .to_str()
+            .is_some_and(rho_kernel::is_sensitive_environment_name)
+        {
+            command.env_remove(name);
+        }
+    }
+    for name in scrub_environment_names {
+        command.env_remove(name);
+    }
+    for (name, value) in environment_overrides {
+        command.env(name, value);
+    }
 }
 
 fn hide_console_window(_command: &mut Command) {
@@ -3807,10 +4740,65 @@ mod tests {
     use std::net::TcpListener;
     use std::sync::{
         Barrier,
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicU32, AtomicUsize, Ordering},
     };
     use std::thread;
     use tempfile::TempDir;
+
+    #[cfg(unix)]
+    fn process_is_alive(pid: u32) -> bool {
+        let Ok(pid) = i32::try_from(pid) else {
+            return false;
+        };
+        if unsafe { unix_kill_process(pid, 0) } == 0 {
+            return true;
+        }
+        io::Error::last_os_error().raw_os_error() != Some(3)
+    }
+
+    #[cfg(windows)]
+    fn process_is_alive(pid: u32) -> bool {
+        const SYNCHRONIZE: u32 = 0x0010_0000;
+        const WAIT_OBJECT_0: u32 = 0;
+        const WAIT_TIMEOUT: u32 = 258;
+        #[link(name = "kernel32")]
+        unsafe extern "system" {
+            fn OpenProcess(
+                desired_access: u32,
+                inherit_handle: i32,
+                process_id: u32,
+            ) -> *mut std::ffi::c_void;
+            fn WaitForSingleObject(handle: *mut std::ffi::c_void, milliseconds: u32) -> u32;
+        }
+
+        let handle = unsafe { OpenProcess(SYNCHRONIZE, 0, pid) };
+        if handle.is_null() {
+            let error = io::Error::last_os_error();
+            if error.raw_os_error() == Some(87) {
+                return false;
+            }
+            panic!("opening process {pid} failed: {error}");
+        }
+        let handle = WindowsOwnedHandle(handle);
+        match unsafe { WaitForSingleObject(handle.0, 0) } {
+            WAIT_OBJECT_0 => false,
+            WAIT_TIMEOUT => true,
+            status => panic!("waiting for process {pid} failed with status {status}"),
+        }
+    }
+
+    #[cfg(not(any(unix, windows)))]
+    fn process_is_alive(_pid: u32) -> bool {
+        false
+    }
+
+    fn assert_process_terminated(pid: u32, context: &str) {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while process_is_alive(pid) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(!process_is_alive(pid), "{context}: process {pid} survived");
+    }
 
     #[derive(Default)]
     struct MemoryCredentialStore {
@@ -5929,6 +6917,1204 @@ mod tests {
         assert!(request.starts_with("GET /v1/models HTTP/1.1\r\n"));
     }
 
+    fn probe_fixture_command(mode: &str, sentinel: &str) -> Command {
+        let mut command = Command::new(std::env::current_exe().unwrap());
+        command.args([
+            "--exact",
+            "agent_llm::tests::r_probe_process_fixture",
+            "--ignored",
+            "--nocapture",
+        ]);
+        command.env("RHO_PROBE_FIXTURE_MODE", mode);
+        command.env("RHO_PROBE_FIXTURE_SENTINEL", sentinel);
+        command
+    }
+
+    fn successful_probe_command(payload: &str) -> Command {
+        #[cfg(unix)]
+        let mut command = {
+            let mut command = Command::new("/bin/sh");
+            command.args(["-c", "printf '%s' \"$RHO_PROBE_SUCCESS_JSON\""]);
+            command
+        };
+        #[cfg(windows)]
+        let mut command = {
+            let mut command = Command::new("cmd.exe");
+            command.args([
+                "/D",
+                "/S",
+                "/C",
+                "<nul set /p \"=%RHO_PROBE_SUCCESS_JSON%\"",
+            ]);
+            command
+        };
+        command.env("RHO_PROBE_SUCCESS_JSON", payload);
+        command
+    }
+
+    fn successful_probe_file_command(payload_path: &Path) -> Command {
+        #[cfg(unix)]
+        let mut command = {
+            let mut command = Command::new("/bin/sh");
+            command.args(["-c", "cat -- \"$RHO_PROBE_SUCCESS_JSON_FILE\""]);
+            command
+        };
+        #[cfg(windows)]
+        let mut command = {
+            let mut command = Command::new("cmd.exe");
+            command.args(["/D", "/S", "/C", "type \"%RHO_PROBE_SUCCESS_JSON_FILE%\""]);
+            command
+        };
+        command.env("RHO_PROBE_SUCCESS_JSON_FILE", payload_path);
+        command
+    }
+
+    fn assert_probe_retry_succeeds(control: &AgentModelTestControl) {
+        let expected = serde_json::json!({"retry": "ready"});
+        let response = run_r_json_command::<serde_json::Value>(
+            successful_probe_command(&expected.to_string()),
+            None,
+            RProbeFailureDisclosure::SuppressDiagnostic,
+            Some(control),
+        )
+        .unwrap();
+        assert_eq!(response, expected);
+        let state = control.lock().unwrap();
+        assert!(state.pid.is_none());
+        assert!(!state.cancel_requested);
+    }
+
+    #[test]
+    #[ignore = "subprocess fixture invoked by connection-probe boundary tests"]
+    fn r_probe_process_fixture() {
+        let Some(mode) = std::env::var_os("RHO_PROBE_FIXTURE_MODE") else {
+            return;
+        };
+        let mode = mode.to_string_lossy();
+        let sentinel = std::env::var("RHO_PROBE_FIXTURE_SENTINEL").unwrap_or_default();
+        match mode.as_ref() {
+            "stderr_secret" => {
+                eprint!("raw-prefix\n{sentinel}\nraw-suffix");
+                std::process::exit(19);
+            }
+            "stderr_empty" => std::process::exit(20),
+            "stderr_invalid_utf8" => {
+                std::io::stderr().write_all(&[0xff, 0xfe, 0xfd]).unwrap();
+                std::process::exit(21);
+            }
+            "stderr_exact" => {
+                let mut output = vec![b'x'; MAX_R_PROBE_STDERR_BYTES];
+                let start = output.len() - sentinel.len();
+                output[start..].copy_from_slice(sentinel.as_bytes());
+                std::io::stderr().write_all(&output).unwrap();
+                std::process::exit(22);
+            }
+            "stderr_oversized" => {
+                let mut output = vec![b'x'; MAX_R_PROBE_STDERR_BYTES + 1];
+                output.extend_from_slice(sentinel.as_bytes());
+                std::io::stderr().write_all(&output).unwrap();
+                std::process::exit(23);
+            }
+            "stdout_invalid" => {
+                print!("not-json::{sentinel}");
+                std::io::stdout().flush().unwrap();
+                std::process::exit(0);
+            }
+            "stdout_oversized" => {
+                let mut output = vec![b'x'; MAX_R_PROBE_STDOUT_BYTES + 1];
+                output.extend_from_slice(sentinel.as_bytes());
+                std::io::stdout().write_all(&output).unwrap();
+                std::process::exit(0);
+            }
+            "exit_before_stdin" => std::process::exit(24),
+            "environment_json" => {
+                let values = [
+                    "GITHUB_TOKEN",
+                    "AMBIENT_ACCESS_TOKEN",
+                    "PROVIDER_A_CUSTOM_SECRET",
+                    "PROVIDER_A_ENDPOINT",
+                    "PROVIDER_B_CUSTOM_SECRET",
+                    "PROVIDER_B_ENDPOINT",
+                ]
+                .into_iter()
+                .map(|name| (name, std::env::var(name).ok()))
+                .collect::<BTreeMap<_, _>>();
+                let output = std::env::var_os("RHO_PROBE_FIXTURE_OUTPUT").unwrap();
+                std::fs::write(output, serde_json::to_vec(&values).unwrap()).unwrap();
+            }
+            "descendant_holds_pipe" => {
+                let descendant = probe_fixture_command("sleep", "unused").spawn().unwrap();
+                if let Some(output) = std::env::var_os("RHO_PROBE_FIXTURE_OUTPUT") {
+                    std::fs::write(output, descendant.id().to_string()).unwrap();
+                }
+            }
+            "production_connection_test" => {
+                let data_dir = PathBuf::from(std::env::var_os("RHO_PRODUCTION_DATA_DIR").unwrap());
+                let rscript = PathBuf::from(std::env::var_os("RHO_PRODUCTION_RSCRIPT").unwrap());
+                let calls_path = PathBuf::from(std::env::var_os("RHO_PRODUCTION_CALLS").unwrap());
+                let store = MemoryCredentialStore {
+                    entries: Mutex::new(HashMap::from([
+                        (
+                            "provider-a".to_string(),
+                            "rho-selected-credential-production-fixture".to_string(),
+                        ),
+                        (
+                            "provider-b".to_string(),
+                            "rho-other-credential-production-fixture".to_string(),
+                        ),
+                    ])),
+                    ..Default::default()
+                };
+                let view = test_model_with_store(
+                    &data_dir,
+                    &rscript,
+                    Path::new("/unused/rho.agent"),
+                    "model-deepseek-v4-flash",
+                    None,
+                    &store,
+                )
+                .unwrap();
+                let tested = view
+                    .models
+                    .iter()
+                    .find(|model| model.profile.id == "model-deepseek-v4-flash")
+                    .unwrap();
+                assert_eq!(tested.profile.last_test.as_ref().unwrap().status, "ready");
+                std::fs::write(
+                    calls_path,
+                    serde_json::to_vec(&*store.get_calls.lock().unwrap()).unwrap(),
+                )
+                .unwrap();
+            }
+            #[cfg(unix)]
+            "catalog_call" => {
+                let data_dir = PathBuf::from(std::env::var_os("RHO_CATALOG_DATA_DIR").unwrap());
+                let rscript = PathBuf::from(std::env::var_os("RHO_CATALOG_RSCRIPT").unwrap());
+                assert!(catalog(&data_dir, &rscript).unwrap().is_empty());
+            }
+            "sleep" => std::thread::sleep(Duration::from_secs(60)),
+            _ => std::process::exit(25),
+        }
+    }
+
+    #[test]
+    fn connection_probe_process_failures_never_return_child_diagnostics() {
+        let sentinel = "rho-bare-credential-sentinel-1a";
+        for mode in [
+            "stderr_secret",
+            "stderr_empty",
+            "stderr_invalid_utf8",
+            "stderr_exact",
+            "stderr_oversized",
+        ] {
+            let error = run_r_json_command::<serde_json::Value>(
+                probe_fixture_command(mode, sentinel),
+                None,
+                RProbeFailureDisclosure::SuppressDiagnostic,
+                None,
+            )
+            .unwrap_err();
+            let service_error = error.to_string();
+            let tauri_error = crate::startup_runtime::display_error(&error);
+            assert_eq!(service_error, CONNECTION_TEST_PROCESS_FAILURE);
+            assert_eq!(tauri_error, CONNECTION_TEST_PROCESS_FAILURE);
+            for forbidden in [
+                sentinel,
+                &sentinel[..10],
+                &sentinel[sentinel.len() - 10..],
+                "raw-prefix",
+                "raw-suffix",
+            ] {
+                assert!(!service_error.contains(forbidden), "mode={mode}");
+                assert!(!tauri_error.contains(forbidden), "mode={mode}");
+            }
+        }
+    }
+
+    #[test]
+    fn connection_probe_invalid_stdout_returns_only_fixed_protocol_error() {
+        let sentinel = "rho-stdout-sentinel-never-returned";
+        for mode in ["stdout_invalid", "stdout_oversized"] {
+            let error = run_r_json_command::<serde_json::Value>(
+                probe_fixture_command(mode, sentinel),
+                None,
+                RProbeFailureDisclosure::SuppressDiagnostic,
+                None,
+            )
+            .unwrap_err()
+            .to_string();
+            assert_eq!(
+                error,
+                "Rho received an invalid Provider connection-test response."
+            );
+            assert!(!error.contains(sentinel));
+        }
+    }
+
+    #[test]
+    fn connection_probe_decodes_and_normalizes_success_json() {
+        let discarded_message = "rho-ignored-message-sentinel\nwith\\escapes";
+        let raw_json = serde_json::json!({
+            "status": "ready",
+            "credential_status": "detected",
+            "model_resolved": true,
+            "latency_ms": 9,
+            "capabilities": {
+                "tool_calling": "yes",
+                "reasoning": "unknown",
+                "vision_input": "no",
+                "source": "probe"
+            },
+            "message": discarded_message,
+            "error_class": null
+        })
+        .to_string();
+        let raw: RawAgentConnectionTestResponse = run_r_json_command(
+            successful_probe_command(&raw_json),
+            None,
+            RProbeFailureDisclosure::SuppressDiagnostic,
+            None,
+        )
+        .unwrap();
+        let response = normalize_connection_test_response(raw).unwrap();
+        assert_eq!(response.status, "ready");
+        assert_eq!(response.message, "Connection succeeded.");
+        assert!(
+            !serde_json::to_string(&response)
+                .unwrap()
+                .contains(discarded_message)
+        );
+        assert!(response.error_class.is_none());
+    }
+
+    #[test]
+    fn probe_capture_keeps_exact_bounds_and_drains_the_remainder() {
+        for limit in [MAX_R_PROBE_STDOUT_BYTES, MAX_R_PROBE_STDERR_BYTES] {
+            let exact = drain_bounded(std::io::Cursor::new(vec![b'a'; limit]), limit).unwrap();
+            assert_eq!(exact.bytes.len(), limit);
+            assert!(exact.bytes.capacity() >= limit);
+            assert!(!exact.truncated);
+
+            let source = vec![b'b'; limit + 8 * 1024 + 1];
+            let mut cursor = std::io::Cursor::new(source.clone());
+            let oversized = drain_bounded(&mut cursor, limit).unwrap();
+            assert_eq!(oversized.bytes.len(), limit);
+            assert!(oversized.truncated);
+            assert_eq!(cursor.position(), source.len() as u64);
+        }
+    }
+
+    #[test]
+    fn probe_parent_exit_terminates_descendants_before_bounded_pipe_join() {
+        let evidence = TempDir::new().unwrap();
+        let evidence_path = evidence.path().join("descendant.pid");
+        let mut command = probe_fixture_command("descendant_holds_pipe", "unused");
+        command.env("RHO_PROBE_FIXTURE_OUTPUT", &evidence_path);
+        let started = Instant::now();
+        let error = run_r_json_command::<serde_json::Value>(
+            command,
+            None,
+            RProbeFailureDisclosure::SuppressDiagnostic,
+            None,
+        )
+        .unwrap_err()
+        .to_string();
+        assert_eq!(
+            error,
+            "Rho received an invalid Provider connection-test response."
+        );
+        assert!(started.elapsed() < R_PROBE_PIPE_JOIN_TIMEOUT);
+        let descendant_pid = std::fs::read_to_string(evidence_path)
+            .unwrap()
+            .trim()
+            .parse::<u32>()
+            .unwrap();
+        assert_process_terminated(descendant_pid, "contained probe descendant");
+    }
+
+    fn connection_response_fixture(error_class: Option<&str>) -> RawAgentConnectionTestResponse {
+        RawAgentConnectionTestResponse {
+            status: SecretString::new("error".to_string()),
+            credential_status: SecretString::new("detected".to_string()),
+            model_resolved: false,
+            latency_ms: Some(7),
+            capabilities: RawAgentModelCapabilitiesV1 {
+                tool_calling: SecretString::new("yes".to_string()),
+                reasoning: SecretString::new("unknown".to_string()),
+                vision_input: SecretString::new("no".to_string()),
+                source: SecretString::new("probe".to_string()),
+            },
+            _message: serde::de::IgnoredAny,
+            error_class: error_class.map(|value| SecretString::new(value.to_string())),
+        }
+    }
+
+    #[test]
+    fn structured_connection_failures_use_only_allowlisted_fixed_copy() {
+        let sentinel = "rho-structured-message-sentinel";
+        let arbitrary_long_message = format!("{sentinel}\n{}", "x".repeat(128 * 1024));
+        let expectations = [
+            (
+                "credential",
+                "The Provider rejected the configured credential.",
+                "credential",
+            ),
+            (
+                "timeout",
+                "The Provider connection test timed out.",
+                "timeout",
+            ),
+            (
+                "endpoint",
+                "The Provider endpoint or model configuration was rejected.",
+                "endpoint",
+            ),
+            ("network", "Rho could not reach the Provider.", "network"),
+            (
+                "provider",
+                "The Provider connection test failed.",
+                "provider",
+            ),
+            (
+                "rho-error-class-sentinel-never-returned",
+                "The Provider connection test failed.",
+                "provider",
+            ),
+        ];
+        for (error_class, expected_message, expected_error_class) in expectations {
+            let payload_directory = TempDir::new().unwrap();
+            let payload_path = payload_directory.path().join("structured-failure.json");
+            std::fs::write(
+                &payload_path,
+                serde_json::to_vec(&serde_json::json!({
+                    "status": "error",
+                    "credential_status": "detected",
+                    "model_resolved": false,
+                    "latency_ms": 7,
+                    "capabilities": {
+                        "tool_calling": "yes",
+                        "reasoning": "unknown",
+                        "vision_input": "no",
+                        "source": "probe"
+                    },
+                    "message": arbitrary_long_message,
+                    "error_class": error_class
+                }))
+                .unwrap(),
+            )
+            .unwrap();
+            let raw: RawAgentConnectionTestResponse = run_r_json_command(
+                successful_probe_file_command(&payload_path),
+                None,
+                RProbeFailureDisclosure::SuppressDiagnostic,
+                None,
+            )
+            .unwrap();
+            let response = normalize_connection_test_response(raw).unwrap();
+            assert_eq!(response.message, expected_message);
+            assert_eq!(response.error_class.as_deref(), Some(expected_error_class));
+            let serialized = serde_json::to_string(&response).unwrap();
+            assert!(!serialized.contains(sentinel));
+            assert!(
+                !serialized.contains(&arbitrary_long_message),
+                "error_class={error_class}"
+            );
+            if error_class != expected_error_class {
+                assert!(!serialized.contains(error_class));
+            }
+        }
+
+        let mut ready = connection_response_fixture(Some(sentinel));
+        ready.status = SecretString::new("ready".to_string());
+        ready.model_resolved = true;
+        let ready = normalize_connection_test_response(ready).unwrap();
+        assert_eq!(ready.message, "Connection succeeded.");
+        assert!(ready.error_class.is_none());
+        assert!(!serde_json::to_string(&ready).unwrap().contains(sentinel));
+
+        let mut invalid = connection_response_fixture(Some("provider"));
+        invalid.status = SecretString::new(sentinel.to_string());
+        let error = normalize_connection_test_response(invalid)
+            .unwrap_err()
+            .to_string();
+        assert_eq!(
+            error,
+            "Rho received an invalid Provider connection-test response."
+        );
+        assert!(!error.contains(sentinel));
+
+        let mut invalid_credential = connection_response_fixture(Some("provider"));
+        invalid_credential.credential_status = SecretString::new(sentinel.to_string());
+        let mut invalid_capability = connection_response_fixture(Some("provider"));
+        invalid_capability.capabilities.tool_calling = SecretString::new(sentinel.to_string());
+        let mut invalid_source = connection_response_fixture(Some("provider"));
+        invalid_source.capabilities.source = SecretString::new(sentinel.to_string());
+        let mut contradictory_ready = connection_response_fixture(None);
+        contradictory_ready.status = SecretString::new("ready".to_string());
+        contradictory_ready.model_resolved = true;
+        contradictory_ready.credential_status = SecretString::new("not_detected".to_string());
+        for invalid in [
+            invalid_credential,
+            invalid_capability,
+            invalid_source,
+            contradictory_ready,
+        ] {
+            let error = normalize_connection_test_response(invalid)
+                .unwrap_err()
+                .to_string();
+            assert_eq!(
+                error,
+                "Rho received an invalid Provider connection-test response."
+            );
+            assert!(!error.contains(sentinel));
+        }
+    }
+
+    #[test]
+    fn structured_connection_message_is_safe_before_settings_persistence() {
+        let sentinel = "rho-persistence-sentinel-never-stored";
+        let payload_directory = TempDir::new().unwrap();
+        let payload_path = payload_directory.path().join("structured-failure.json");
+        std::fs::write(
+            &payload_path,
+            serde_json::to_vec(&serde_json::json!({
+                "status": "error",
+                "credential_status": "detected",
+                "model_resolved": false,
+                "latency_ms": 7,
+                "capabilities": {
+                    "tool_calling": "yes",
+                    "reasoning": "unknown",
+                    "vision_input": "no",
+                    "source": "probe"
+                },
+                "message": format!("{sentinel}\n{}", "x".repeat(128 * 1024)),
+                "error_class": "credential"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let raw: RawAgentConnectionTestResponse = run_r_json_command(
+            successful_probe_file_command(&payload_path),
+            None,
+            RProbeFailureDisclosure::SuppressDiagnostic,
+            None,
+        )
+        .unwrap();
+        let response = normalize_connection_test_response(raw).unwrap();
+        let directory = TempDir::new().unwrap();
+        let mut settings = default_settings();
+        update_model_after_test(&mut settings, "model-deepseek-v4-flash", &response).unwrap();
+        save_settings(directory.path(), &settings).unwrap();
+        let serialized = std::fs::read_to_string(settings_path(directory.path())).unwrap();
+        assert!(!serialized.contains(sentinel));
+        assert!(serialized.contains("The Provider rejected the configured credential."));
+    }
+
+    #[test]
+    fn agent_probe_environment_keeps_only_selected_provider_values() {
+        let scrub = vec![
+            "PROVIDER_A_CUSTOM_SECRET".to_string(),
+            "PROVIDER_A_ENDPOINT".to_string(),
+            "PROVIDER_B_CUSTOM_SECRET".to_string(),
+            "PROVIDER_B_ENDPOINT".to_string(),
+        ];
+        let inherited = [
+            "GITHUB_TOKEN",
+            "AMBIENT_ACCESS_TOKEN",
+            "PROVIDER_A_CUSTOM_SECRET",
+            "PROVIDER_A_ENDPOINT",
+            "PROVIDER_B_CUSTOM_SECRET",
+            "PROVIDER_B_ENDPOINT",
+            "PATH",
+        ]
+        .into_iter()
+        .map(OsString::from)
+        .collect::<Vec<_>>();
+        let mut command = Command::new("Rscript");
+        configure_r_probe(
+            &mut command,
+            None,
+            &scrub,
+            inherited,
+            &[
+                ("PROVIDER_A_CUSTOM_SECRET", "selected-a"),
+                ("PROVIDER_A_ENDPOINT", "https://selected-a.example.test"),
+            ],
+        );
+        let projected = command
+            .get_envs()
+            .map(|(name, value)| {
+                (
+                    name.to_os_string(),
+                    value.map(std::ffi::OsStr::to_os_string),
+                )
+            })
+            .collect::<HashMap<_, _>>();
+        assert_eq!(
+            projected.get(&OsString::from("PROVIDER_A_CUSTOM_SECRET")),
+            Some(&Some(OsString::from("selected-a")))
+        );
+        assert_eq!(
+            projected.get(&OsString::from("PROVIDER_A_ENDPOINT")),
+            Some(&Some(OsString::from("https://selected-a.example.test")))
+        );
+        for removed in [
+            "GITHUB_TOKEN",
+            "AMBIENT_ACCESS_TOKEN",
+            "PROVIDER_B_CUSTOM_SECRET",
+            "PROVIDER_B_ENDPOINT",
+        ] {
+            assert_eq!(
+                projected.get(&OsString::from(removed)),
+                Some(&None),
+                "{removed} was not removed"
+            );
+        }
+        assert!(!projected.contains_key(&OsString::from("PATH")));
+    }
+
+    #[test]
+    fn probe_child_sees_only_selected_provider_environment() {
+        let scrub = vec![
+            "PROVIDER_A_CUSTOM_SECRET".to_string(),
+            "PROVIDER_A_ENDPOINT".to_string(),
+            "PROVIDER_B_CUSTOM_SECRET".to_string(),
+            "PROVIDER_B_ENDPOINT".to_string(),
+        ];
+        let inherited = [
+            "GITHUB_TOKEN",
+            "AMBIENT_ACCESS_TOKEN",
+            "PROVIDER_A_CUSTOM_SECRET",
+            "PROVIDER_A_ENDPOINT",
+            "PROVIDER_B_CUSTOM_SECRET",
+            "PROVIDER_B_ENDPOINT",
+        ];
+        let evidence = TempDir::new().unwrap();
+        let evidence_path = evidence.path().join("environment.json");
+        let mut command = probe_fixture_command("environment_json", "unused");
+        command.env("RHO_PROBE_FIXTURE_OUTPUT", &evidence_path);
+        for name in inherited {
+            command.env(name, format!("inherited-{name}"));
+        }
+        configure_probe_environment(
+            &mut command,
+            &scrub,
+            inherited.into_iter().map(OsString::from),
+            &[
+                ("PROVIDER_A_CUSTOM_SECRET", "selected-a"),
+                ("PROVIDER_A_ENDPOINT", "https://selected-a.example.test"),
+            ],
+        );
+        assert!(command.output().unwrap().status.success());
+        let observed: BTreeMap<String, Option<String>> =
+            serde_json::from_slice(&std::fs::read(evidence_path).unwrap()).unwrap();
+        assert_eq!(
+            observed.get("PROVIDER_A_CUSTOM_SECRET"),
+            Some(&Some("selected-a".to_string()))
+        );
+        assert_eq!(
+            observed.get("PROVIDER_A_ENDPOINT"),
+            Some(&Some("https://selected-a.example.test".to_string()))
+        );
+        for removed in [
+            "GITHUB_TOKEN",
+            "AMBIENT_ACCESS_TOKEN",
+            "PROVIDER_B_CUSTOM_SECRET",
+            "PROVIDER_B_ENDPOINT",
+        ] {
+            assert_eq!(observed.get(removed), Some(&None), "{removed} leaked");
+        }
+    }
+
+    #[test]
+    fn keyless_probe_child_inherits_no_sensitive_provider_environment() {
+        let scrub = vec![
+            "PROVIDER_A_CUSTOM_SECRET".to_string(),
+            "PROVIDER_A_ENDPOINT".to_string(),
+        ];
+        let inherited = [
+            "GITHUB_TOKEN",
+            "AMBIENT_ACCESS_TOKEN",
+            "PROVIDER_A_CUSTOM_SECRET",
+            "PROVIDER_A_ENDPOINT",
+        ];
+        let evidence = TempDir::new().unwrap();
+        let evidence_path = evidence.path().join("environment.json");
+        let mut command = probe_fixture_command("environment_json", "unused");
+        command.env("RHO_PROBE_FIXTURE_OUTPUT", &evidence_path);
+        for name in inherited {
+            command.env(name, format!("inherited-{name}"));
+        }
+        configure_probe_environment(
+            &mut command,
+            &scrub,
+            inherited.into_iter().map(OsString::from),
+            &[],
+        );
+        assert!(command.output().unwrap().status.success());
+        let observed: BTreeMap<String, Option<String>> =
+            serde_json::from_slice(&std::fs::read(evidence_path).unwrap()).unwrap();
+        for removed in inherited {
+            assert_eq!(observed.get(removed), Some(&None), "{removed} leaked");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn catalog_loads_settings_scrub_names_without_polluting_r_arguments() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let data_dir = TempDir::new().unwrap();
+        let fixture_dir = TempDir::new().unwrap();
+        let evidence_path = fixture_dir.path().join("catalog-environment.txt");
+        let rscript_path = fixture_dir.path().join("fake-rscript");
+        std::fs::write(
+            &rscript_path,
+            r#"#!/bin/sh
+{
+  printf 'argc=%s\n' "$#"
+  printf 'arg1=%s\n' "$1"
+  printf 'arg2=%s\n' "$2"
+  printf 'custom_value=%s\n' "${RHO_CATALOG_CUSTOM_VALUE-unset}"
+  printf 'custom_endpoint=%s\n' "${RHO_CATALOG_CUSTOM_ENDPOINT-unset}"
+  printf 'common_secret=%s\n' "${GITHUB_TOKEN-unset}"
+  printf 'ordinary=%s\n' "${RHO_CATALOG_ORDINARY-unset}"
+} > "$RHO_CATALOG_EVIDENCE"
+printf '[]'
+"#,
+        )
+        .unwrap();
+        let mut permissions = std::fs::metadata(&rscript_path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&rscript_path, permissions).unwrap();
+
+        let mut settings = default_settings();
+        settings.providers[0].api_key_env = Some("RHO_CATALOG_CUSTOM_VALUE".to_string());
+        settings.providers[0].base_url = None;
+        settings.providers[0].base_url_env = Some("RHO_CATALOG_CUSTOM_ENDPOINT".to_string());
+        save_settings(data_dir.path(), &settings).unwrap();
+
+        let mut fixture = probe_fixture_command("catalog_call", "unused");
+        fixture.env("RHO_CATALOG_DATA_DIR", data_dir.path());
+        fixture.env("RHO_CATALOG_RSCRIPT", &rscript_path);
+        fixture.env("RHO_CATALOG_EVIDENCE", &evidence_path);
+        fixture.env("RHO_CATALOG_CUSTOM_VALUE", "catalog-credential-sentinel");
+        fixture.env(
+            "RHO_CATALOG_CUSTOM_ENDPOINT",
+            "https://catalog-endpoint-sentinel.example.test",
+        );
+        fixture.env("GITHUB_TOKEN", "catalog-common-secret-sentinel");
+        fixture.env("RHO_CATALOG_ORDINARY", "ordinary-retained");
+        let output = fixture.output().unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let evidence = std::fs::read_to_string(evidence_path).unwrap();
+        assert!(evidence.contains("argc=2\n"));
+        assert!(evidence.contains("arg1=--vanilla\n"));
+        assert!(evidence.contains("arg2="));
+        assert!(evidence.contains("custom_value=unset\n"));
+        assert!(evidence.contains("custom_endpoint=unset\n"));
+        assert!(evidence.contains("common_secret=unset\n"));
+        assert!(evidence.contains("ordinary=ordinary-retained\n"));
+        for forbidden in [
+            "RHO_CATALOG_CUSTOM_VALUE",
+            "RHO_CATALOG_CUSTOM_ENDPOINT",
+            "catalog-credential-sentinel",
+            "catalog-endpoint-sentinel",
+            "catalog-common-secret-sentinel",
+        ] {
+            assert!(!evidence.contains(forbidden));
+        }
+    }
+
+    #[test]
+    fn selected_provider_probe_reads_no_other_credential() {
+        let directory = TempDir::new().unwrap();
+        let mut settings = default_settings();
+        let mut provider_b = settings.providers[0].clone();
+        provider_b.id = "provider-b".to_string();
+        provider_b.api_key_env = Some("PROVIDER_B_CUSTOM_SECRET".to_string());
+        provider_b.base_url_env = Some("PROVIDER_B_ENDPOINT".to_string());
+        provider_b.base_url = None;
+        settings.providers[0].api_key_env = Some("PROVIDER_A_CUSTOM_SECRET".to_string());
+        settings.providers[0].base_url_env = Some("PROVIDER_A_ENDPOINT".to_string());
+        settings.providers[0].base_url = None;
+        settings.providers.push(provider_b);
+        let store = MemoryCredentialStore {
+            entries: Mutex::new(HashMap::from([
+                (
+                    "provider-deepseek-existing".to_string(),
+                    "selected-secret-a".to_string(),
+                ),
+                ("provider-b".to_string(), "other-secret-b".to_string()),
+            ])),
+            ..Default::default()
+        };
+
+        let selected = credential_override_with_store(
+            directory.path(),
+            &settings,
+            "provider-deepseek-existing",
+            &store,
+            "credential_test_read",
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(selected.1, "selected-secret-a");
+        assert_eq!(
+            store.get_calls.lock().unwrap().as_slice(),
+            &["provider-deepseek-existing"]
+        );
+        assert_eq!(
+            provider_probe_environment_names(&settings),
+            vec![
+                "PROVIDER_A_CUSTOM_SECRET",
+                "PROVIDER_A_ENDPOINT",
+                "PROVIDER_B_CUSTOM_SECRET",
+                "PROVIDER_B_ENDPOINT",
+            ]
+        );
+    }
+
+    #[test]
+    fn production_connection_test_isolates_selected_provider_in_child() {
+        let data_dir = TempDir::new().unwrap();
+        let fixture_dir = TempDir::new().unwrap();
+        let evidence_path = fixture_dir.path().join("production-environment.txt");
+        let response_path = fixture_dir.path().join("production-response.json");
+        let calls_path = fixture_dir.path().join("credential-calls.json");
+        std::fs::write(
+            &response_path,
+            serde_json::to_vec(&serde_json::json!({
+                "status": "ready",
+                "credential_status": "detected",
+                "model_resolved": true,
+                "latency_ms": 5,
+                "capabilities": {
+                    "tool_calling": "yes",
+                    "reasoning": "unknown",
+                    "vision_input": "no",
+                    "source": "probe"
+                },
+                "message": "untrusted child success message",
+                "error_class": null
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        #[cfg(unix)]
+        let rscript_path = {
+            use std::os::unix::fs::PermissionsExt;
+            let path = fixture_dir.path().join("fake-rscript");
+            std::fs::write(
+                &path,
+                r#"#!/bin/sh
+{
+  printf 'selected_key=%s\n' "${PROVIDER_A_CUSTOM_SECRET-unset}"
+  printf 'selected_endpoint=%s\n' "${PROVIDER_A_ENDPOINT-unset}"
+  printf 'other_key=%s\n' "${PROVIDER_B_CUSTOM_SECRET-unset}"
+  printf 'other_endpoint=%s\n' "${PROVIDER_B_ENDPOINT-unset}"
+  printf 'common_secret=%s\n' "${GITHUB_TOKEN-unset}"
+} > "$RHO_PRODUCTION_EVIDENCE"
+cat -- "$RHO_PRODUCTION_RESPONSE"
+"#,
+            )
+            .unwrap();
+            let mut permissions = std::fs::metadata(&path).unwrap().permissions();
+            permissions.set_mode(0o755);
+            std::fs::set_permissions(&path, permissions).unwrap();
+            path
+        };
+        #[cfg(windows)]
+        let rscript_path = {
+            let path = fixture_dir.path().join("fake-rscript.cmd");
+            std::fs::write(
+                &path,
+                "@echo off\r\n(\r\necho selected_key=%PROVIDER_A_CUSTOM_SECRET%\r\necho selected_endpoint=%PROVIDER_A_ENDPOINT%\r\necho other_key=%PROVIDER_B_CUSTOM_SECRET%\r\necho other_endpoint=%PROVIDER_B_ENDPOINT%\r\necho common_secret=%GITHUB_TOKEN%\r\n)>\"%RHO_PRODUCTION_EVIDENCE%\"\r\ntype \"%RHO_PRODUCTION_RESPONSE%\"\r\n",
+            )
+            .unwrap();
+            path
+        };
+
+        let mut settings = default_settings();
+        settings.providers[0].id = "provider-a".to_string();
+        settings.providers[0].api_key_env = Some("PROVIDER_A_CUSTOM_SECRET".to_string());
+        settings.providers[0].base_url = None;
+        settings.providers[0].base_url_env = Some("PROVIDER_A_ENDPOINT".to_string());
+        for model in &mut settings.models {
+            model.provider_id = "provider-a".to_string();
+        }
+        let mut provider_b = settings.providers[0].clone();
+        provider_b.id = "provider-b".to_string();
+        provider_b.api_key_env = Some("PROVIDER_B_CUSTOM_SECRET".to_string());
+        provider_b.base_url_env = Some("PROVIDER_B_ENDPOINT".to_string());
+        settings.providers.push(provider_b);
+        save_settings(data_dir.path(), &settings).unwrap();
+
+        let mut fixture = probe_fixture_command("production_connection_test", "unused");
+        fixture.env("RHO_PRODUCTION_DATA_DIR", data_dir.path());
+        fixture.env("RHO_PRODUCTION_RSCRIPT", &rscript_path);
+        fixture.env("RHO_PRODUCTION_CALLS", &calls_path);
+        fixture.env("RHO_PRODUCTION_EVIDENCE", &evidence_path);
+        fixture.env("RHO_PRODUCTION_RESPONSE", &response_path);
+        fixture.env(
+            "PROVIDER_A_CUSTOM_SECRET",
+            "rho-inherited-selected-credential-must-be-replaced",
+        );
+        fixture.env(
+            "PROVIDER_A_ENDPOINT",
+            "https://selected-provider.example.test",
+        );
+        fixture.env(
+            "PROVIDER_B_CUSTOM_SECRET",
+            "rho-inherited-other-credential-must-be-removed",
+        );
+        fixture.env("PROVIDER_B_ENDPOINT", "https://other-provider.example.test");
+        fixture.env(
+            "GITHUB_TOKEN",
+            "rho-inherited-common-secret-must-be-removed",
+        );
+        let output = fixture.output().unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let evidence = std::fs::read_to_string(evidence_path).unwrap();
+        assert!(evidence.contains("selected_key=rho-selected-credential-production-fixture\n"));
+        assert!(evidence.contains("selected_endpoint=https://selected-provider.example.test\n"));
+        for forbidden in [
+            "rho-inherited-selected-credential-must-be-replaced",
+            "rho-inherited-other-credential-must-be-removed",
+            "rho-other-credential-production-fixture",
+            "https://other-provider.example.test",
+            "rho-inherited-common-secret-must-be-removed",
+        ] {
+            assert!(!evidence.contains(forbidden));
+        }
+        let calls: Vec<String> =
+            serde_json::from_slice(&std::fs::read(calls_path).unwrap()).unwrap();
+        assert_eq!(calls, vec!["provider-a"]);
+    }
+
+    #[test]
+    fn probe_failure_clears_test_control_and_allows_retry() {
+        let control = AgentModelTestControl::default();
+        let payload = "x".repeat(2 * 1024 * 1024);
+        let first = run_r_json_command::<serde_json::Value>(
+            probe_fixture_command("exit_before_stdin", "unused"),
+            Some(payload),
+            RProbeFailureDisclosure::SuppressDiagnostic,
+            Some(&control),
+        );
+        assert!(first.is_err());
+        {
+            let state = control.lock().unwrap();
+            assert!(state.pid.is_none());
+            assert!(!state.cancel_requested);
+        }
+        assert_probe_retry_succeeds(&control);
+    }
+
+    #[test]
+    fn injected_post_spawn_faults_reap_tree_clear_control_and_allow_retry() {
+        for fault in [
+            InjectedRProbeFault::AfterSpawn,
+            InjectedRProbeFault::AfterPipeSetup,
+            InjectedRProbeFault::Reader,
+            InjectedRProbeFault::TryWait,
+            InjectedRProbeFault::Wait,
+        ] {
+            let control = AgentModelTestControl::default();
+            let timeout = if fault == InjectedRProbeFault::Wait {
+                Some(Duration::from_millis(100))
+            } else {
+                Some(Duration::from_secs(1))
+            };
+            let spawned_pid = Arc::new(AtomicU32::new(0));
+            let started = Instant::now();
+            let error = run_r_json_command_with_fault::<serde_json::Value>(
+                probe_fixture_command("sleep", "unused"),
+                None,
+                RProbeFailureDisclosure::SuppressDiagnostic,
+                Some(&control),
+                timeout,
+                fault,
+                Arc::clone(&spawned_pid),
+            )
+            .unwrap_err()
+            .to_string();
+            assert_eq!(error, CONNECTION_TEST_PROCESS_FAILURE, "fault={fault:?}");
+            assert!(started.elapsed() < R_PROBE_PIPE_JOIN_TIMEOUT);
+            let spawned_pid = spawned_pid.load(Ordering::SeqCst);
+            assert_ne!(spawned_pid, 0, "fault={fault:?}");
+            assert_process_terminated(spawned_pid, &format!("fault={fault:?}"));
+            {
+                let state = control.lock().unwrap();
+                assert!(state.pid.is_none(), "fault={fault:?}");
+                assert!(!state.cancel_requested, "fault={fault:?}");
+            }
+
+            assert_probe_retry_succeeds(&control);
+        }
+    }
+
+    #[test]
+    fn post_spawn_test_control_lock_failure_reaps_child_and_allows_retry() {
+        let poisoned_control = AgentModelTestControl::default();
+        let poison_target = Arc::clone(&poisoned_control);
+        let poison_result = std::panic::catch_unwind(move || {
+            let _guard = poison_target.lock().unwrap();
+            panic!("poison test control");
+        });
+        assert!(poison_result.is_err());
+
+        let spawned_pid = Arc::new(AtomicU32::new(0));
+        let error = run_r_json_command_with_fault::<serde_json::Value>(
+            probe_fixture_command("sleep", "unused"),
+            None,
+            RProbeFailureDisclosure::SuppressDiagnostic,
+            Some(&poisoned_control),
+            Some(Duration::from_secs(1)),
+            InjectedRProbeFault::AfterSpawn,
+            Arc::clone(&spawned_pid),
+        )
+        .unwrap_err()
+        .to_string();
+        assert_eq!(error, CONNECTION_TEST_PROCESS_FAILURE);
+        let spawned_pid = spawned_pid.load(Ordering::SeqCst);
+        assert_ne!(spawned_pid, 0);
+        assert_process_terminated(spawned_pid, "post-spawn control-lock failure");
+        let state = poisoned_control.lock().unwrap();
+        assert!(state.pid.is_none());
+        assert!(!state.cancel_requested);
+        drop(state);
+
+        assert_probe_retry_succeeds(&poisoned_control);
+    }
+
+    #[test]
+    fn probe_timeout_reaps_child_clears_control_and_uses_fixed_copy() {
+        let control = AgentModelTestControl::default();
+        let error = run_r_json_command_with_timeout::<serde_json::Value>(
+            probe_fixture_command("sleep", "unused"),
+            None,
+            RProbeFailureDisclosure::SuppressDiagnostic,
+            Some(&control),
+            Some(Duration::from_millis(100)),
+        )
+        .unwrap_err()
+        .to_string();
+        assert_eq!(error, "The Provider connection test timed out.");
+        let state = control.lock().unwrap();
+        assert!(state.pid.is_none());
+        assert!(!state.cancel_requested);
+    }
+
+    #[test]
+    fn probe_cancellation_reaps_child_clears_control_and_allows_retry() {
+        let control = AgentModelTestControl::default();
+        let worker_control = Arc::clone(&control);
+        let worker = std::thread::spawn(move || {
+            run_r_json_command::<serde_json::Value>(
+                probe_fixture_command("sleep", "unused"),
+                None,
+                RProbeFailureDisclosure::SuppressDiagnostic,
+                Some(&worker_control),
+            )
+            .unwrap_err()
+            .to_string()
+        });
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while control.lock().unwrap().pid.is_none() {
+            assert!(Instant::now() < deadline, "probe child did not start");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(cancel_test(&control).unwrap());
+        assert_eq!(worker.join().unwrap(), "Agent model test cancelled.");
+        {
+            let state = control.lock().unwrap();
+            assert!(state.pid.is_none());
+            assert!(!state.cancel_requested);
+        }
+        assert_probe_retry_succeeds(&control);
+    }
+
+    #[test]
+    fn fatal_connection_probe_preserves_settings_bytes_and_revision() {
+        let directory = TempDir::new().unwrap();
+        let mut settings = default_settings();
+        settings.providers[0].api_key_required = false;
+        settings.models[0].last_test = Some(AgentModelTestResult {
+            status: "ready".to_string(),
+            checked_at: "2026-08-26T00:00:00Z".to_string(),
+            latency_ms: Some(11),
+            error_class: None,
+            message: Some("Previous result remains authoritative.".to_string()),
+        });
+        save_settings(directory.path(), &settings).unwrap();
+        let before = std::fs::read(settings_path(directory.path())).unwrap();
+        let revision = settings.revision;
+
+        let error = test_model(
+            directory.path(),
+            &std::env::current_exe().unwrap(),
+            Path::new("/unused/rho.agent"),
+            "model-deepseek-v4-flash",
+            None,
+        )
+        .unwrap_err()
+        .to_string();
+        assert_eq!(error, CONNECTION_TEST_PROCESS_FAILURE);
+        assert_eq!(
+            std::fs::read(settings_path(directory.path())).unwrap(),
+            before
+        );
+        assert_eq!(load_settings(directory.path()).unwrap().revision, revision);
+        assert_eq!(
+            load_settings(directory.path()).unwrap().models[0]
+                .last_test
+                .as_ref()
+                .unwrap()
+                .message
+                .as_deref(),
+            Some("Previous result remains authoritative.")
+        );
+    }
+
+    #[test]
+    fn missing_credential_is_resolved_before_child_launch() {
+        let directory = TempDir::new().unwrap();
+        let mut settings = default_settings();
+        let provider_id = "provider-missing-before-probe";
+        settings.providers[0].id = provider_id.to_string();
+        settings.providers[0].credential_source = CREDENTIAL_SOURCE_SESSION_ONLY.to_string();
+        for model in &mut settings.models {
+            model.provider_id = provider_id.to_string();
+        }
+        settings.models[0].last_test = Some(AgentModelTestResult {
+            status: "ready".to_string(),
+            checked_at: "2026-08-26T00:00:00Z".to_string(),
+            latency_ms: Some(11),
+            error_class: None,
+            message: Some("Previous result remains authoritative.".to_string()),
+        });
+        save_settings(directory.path(), &settings).unwrap();
+        let before = std::fs::read(settings_path(directory.path())).unwrap();
+        let revision = settings.revision;
+
+        let error = test_model(
+            directory.path(),
+            Path::new("/definitely/missing/rscript"),
+            Path::new("/unused/rho.agent"),
+            "model-deepseek-v4-flash",
+            None,
+        )
+        .unwrap_err()
+        .to_string();
+        assert_eq!(error, "No API key is available for this provider.");
+        assert_eq!(
+            std::fs::read(settings_path(directory.path())).unwrap(),
+            before
+        );
+        let after = load_settings(directory.path()).unwrap();
+        assert_eq!(after.revision, revision);
+        assert_eq!(
+            after.models[0]
+                .last_test
+                .as_ref()
+                .unwrap()
+                .message
+                .as_deref(),
+            Some("Previous result remains authoritative.")
+        );
+    }
+
+    #[test]
+    fn unknown_model_and_credential_source_failure_reject_before_child_launch() {
+        let directory = TempDir::new().unwrap();
+        let mut settings = default_settings();
+        let provider_id = "provider-source-failure-no-fallback";
+        let fallback_sentinel = "rho-session-fallback-must-not-be-read";
+        settings.providers[0].id = provider_id.to_string();
+        for model in &mut settings.models {
+            model.provider_id = provider_id.to_string();
+        }
+        settings.models[0].last_test = Some(AgentModelTestResult {
+            status: "ready".to_string(),
+            checked_at: "2026-08-26T00:00:00Z".to_string(),
+            latency_ms: Some(13),
+            error_class: None,
+            message: Some("Previous result remains authoritative.".to_string()),
+        });
+        save_settings(directory.path(), &settings).unwrap();
+        let before = std::fs::read(settings_path(directory.path())).unwrap();
+        let revision = settings.revision;
+        system_credential_session().set_session_credential(provider_id, fallback_sentinel);
+        let store = MemoryCredentialStore {
+            entries: Mutex::new(HashMap::from([(
+                "provider-not-selected".to_string(),
+                "unread-other-provider-value".to_string(),
+            )])),
+            fail_get: true,
+            ..Default::default()
+        };
+
+        let unknown = test_model_with_store(
+            directory.path(),
+            Path::new("/definitely/missing/rscript"),
+            Path::new("/unused/rho.agent"),
+            "model-not-configured",
+            None,
+            &store,
+        )
+        .unwrap_err()
+        .to_string();
+        assert_eq!(unknown, "Unknown model: model-not-configured");
+        assert!(store.get_calls.lock().unwrap().is_empty());
+
+        let unavailable = test_model_with_store(
+            directory.path(),
+            Path::new("/definitely/missing/rscript"),
+            Path::new("/unused/rho.agent"),
+            "model-deepseek-v4-flash",
+            None,
+            &store,
+        )
+        .unwrap_err()
+        .to_string();
+        assert_eq!(
+            unavailable,
+            "The configured credential source is unavailable."
+        );
+        assert_eq!(store.get_calls.lock().unwrap().as_slice(), &[provider_id]);
+        assert_eq!(
+            std::fs::read(settings_path(directory.path())).unwrap(),
+            before
+        );
+        let after = load_settings(directory.path()).unwrap();
+        assert_eq!(after.revision, revision);
+        assert_eq!(
+            after.models[0]
+                .last_test
+                .as_ref()
+                .unwrap()
+                .message
+                .as_deref(),
+            Some("Previous result remains authoritative.")
+        );
+        let audit = std::fs::read_to_string(credential_audit_path(directory.path())).unwrap();
+        assert!(!audit.contains(fallback_sentinel));
+        system_credential_session().clear_session_credential(provider_id);
+    }
+
     #[test]
     fn unknown_and_unsupported_discovery_preserve_authority() {
         let directory = TempDir::new().unwrap();
@@ -6033,7 +8219,13 @@ mod tests {
     #[test]
     fn agent_probes_always_ignore_user_environ() {
         let mut command = Command::new("Rscript");
-        configure_r_probe(&mut command, Some("C:/Users/test/.Renviron"));
+        configure_r_probe(
+            &mut command,
+            Some("C:/Users/test/.Renviron"),
+            &[],
+            Vec::<OsString>::new(),
+            &[],
+        );
         assert!(command.get_args().any(|value| value == "--vanilla"));
         assert!(
             command
@@ -6046,7 +8238,7 @@ mod tests {
     #[test]
     fn environment_free_probes_remain_vanilla() {
         let mut command = Command::new("Rscript");
-        configure_r_probe(&mut command, None);
+        configure_r_probe(&mut command, None, &[], Vec::<OsString>::new(), &[]);
         assert!(command.get_args().any(|value| value == "--vanilla"));
     }
 

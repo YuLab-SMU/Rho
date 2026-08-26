@@ -342,3 +342,22 @@ credential operation and are recorded through the existing startup log.
 - Installed-candidate acceptance, live-provider acceptance, and release
   decisions remain open under their existing release contracts; this change
   creates no release authority.
+
+## CRED-REVEAL-1A Child-Diagnostic Egress Amendment — 2026-08-26
+
+The owner explicitly authorized the bounded CRED-REVEAL-1A repair through
+`active-2026-08-26-cred-reveal-1a-connection-test-redaction-spec.md`. It closes
+the existing connection-test path that can return credential-bearing raw child
+stderr across the Rust/Tauri error boundary and requires a sentinel regression
+plus bounded structured failure projection. The same boundary removes inherited
+sensitive environment names and every configured Provider `api_key_env` and
+`base_url_env` before re-adding only the selected Provider values required by
+the probe, preventing another Provider's environment secret from entering the
+child.
+
+This amendment only tightens redaction and the existing selected-credential
+child-environment isolation. Credential sources, exact-source/no-fallback
+resolution, store behavior, CRED-SEC4 ordinary best-effort audit, and the rule
+that a stored value is never redisplayed remain unchanged. It adds no reveal
+audit or presentation read. Those authority changes belong only to a separately
+accepted and activated CRED-REVEAL-1B package.
