@@ -92,6 +92,46 @@ Stop and amend/review the contract before continuing when:
 - For project skill discovery, validate the `.rho/skills` root itself, not just manifest and referenced files.
   Checking only `manifest.json` and relative entries still leaves a hole if `.rho` or `.rho/skills` is a symlink into content outside the project root.
 
+## Parallel development lanes
+
+For multi-worktree parallel development, register each session's path
+ownership with `scripts/dev-lanes.mjs` before editing. Lane leases live in the
+git common dir (`.git/rho-dev-lanes/`), so every linked worktree sees the same
+registry and nothing is committed to the repository.
+
+Topology: 2–3 short-lived feature worktrees plus one integration worktree.
+Feature lanes own vertical slices (backend + transport + controller + UI +
+tests); the integration lane owns composition roots, lockfiles, version
+metadata, and NEWS, and runs the complete affected validation matrix once.
+
+```bash
+# in each feature worktree, before editing
+node scripts/dev-lanes.mjs start --id runtime-filter \
+  --own 'desktop/src-tauri/src/commands/runtime_control.rs' \
+  --own 'desktop/ui/src/app/controllers/console-*'
+
+# pre-commit in a lane
+node scripts/dev-lanes.mjs check --id runtime-filter --changed-auto
+
+# before integration merges a lane branch
+node scripts/dev-lanes.mjs merge-check --source work/runtime-filter
+
+# after the lane merges
+node scripts/dev-lanes.mjs finish --id runtime-filter
+```
+
+Hard rejects: owned-path overlap between active lanes (at `start`), feature
+lanes writing shared authority paths (`Cargo.lock`,
+`desktop/package-lock.json`, `NEWS.md`, `desktop/src-tauri/tauri.conf.json`,
+`desktop/src-tauri/src/main.rs`, `desktop/ui/src/app/App.tsx`), and textual
+merge conflicts. Only one integration lane may be active. A lane that must
+edit a shared authority file declares it with `--own` (overlap then keeps it
+single-writer); lockfiles still converge through the integration lane.
+
+Real Tauri debug windows stay exclusive to the integration/main checkout;
+feature worktrees run focused tests or their own Vite mock (`npm run rsr:dev
+--prefix desktop` picks a free port).
+
 ## Windows installer packaging
 
 Trigger phrases: "打包一下安装包", "打包安装包", "build installer", "package the installer"
