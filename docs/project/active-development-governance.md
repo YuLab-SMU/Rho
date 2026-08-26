@@ -334,6 +334,35 @@ credentials, live model providers, network access, clock timing, test order, or
 the current working directory unless the test is explicitly an integration
 probe with recorded prerequisites.
 
+### 7A. Fast Iteration Checkpoints
+
+Small development slices use two distinct validation loops. This separation is
+part of the evidence contract, not permission to weaken the final gate.
+
+1. During implementation, run only the focused regression tests and affected
+   package/type/lint checks. Use `node scripts/dev-checkpoint.mjs quick` to make
+   the selected UI tests and Rust packages explicit in the command record.
+2. Freeze the source snapshot before starting the complete affected matrix.
+   Contract review and entry-path review happen before this checkpoint so a
+   predictable late finding does not force repeated broad runs.
+3. Run the complete affected matrix once for that frozen snapshot. The RSR
+   portion may use `node scripts/dev-checkpoint.mjs rsr-final`, which records
+   successful named gates under ignored `target/` evidence.
+4. A transient failure may resume at the first incomplete gate only when the
+   repository fingerprint is unchanged and the saved gate command definition
+   still matches. Changing the stable/parallel Vitest option invalidates only
+   that command's saved result.
+5. Any tracked or untracked source change invalidates the saved final
+   checkpoint in full. After a late fix, run its focused regression first,
+   review the delta, then start one new complete affected matrix.
+6. Exact-app, visual, installed-candidate, R-package, Rust-workspace, release,
+   and platform gates remain separately required when the owning contract calls
+   for them. The RSR checkpoint must never label those unrun gates as passed.
+
+The checkpoint runner optimizes repeated orchestration and transient retries;
+it does not infer feature risk, choose acceptance scope, or replace the handoff
+record of commands that actually ran.
+
 ### 8. Review After Verification
 
 Verification passing is followed by a separate review pass:

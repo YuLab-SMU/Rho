@@ -2,7 +2,7 @@
 
 Status: active documentation coordination record
 
-Review date: 2026-08-26 (startup recovery and acceptance isolation reconciled)
+Review date: 2026-08-26 (fast-iteration checkpoint evidence reconciled)
 Scope: unfinished or acceptance-active specifications, plans, and release gates
 
 Real-application visual acceptance ownership: the executable workflow and
@@ -40,7 +40,7 @@ semantics.
 
 | Document | Status after review | Owns | May proceed when |
 | --- | --- | --- | --- |
-| `project/active-development-governance.md` | active | required proposal-to-release development lifecycle, risk/test depth, review, versioning, and evidence rules | applies continuously to all non-trivial work |
+| `project/active-development-governance.md` | active; D2/R2 fast-iteration checkpoint amendment authorized 2026-08-26 | required proposal-to-release development lifecycle, risk/test depth, review, versioning, evidence rules, and same-snapshot resumable RSR validation | applies continuously to all non-trivial work; checkpoint evidence is reusable only for an unchanged repository fingerprint and unchanged gate command |
 | `plans/implemented-2026-08-26-plugin-native-settings-surface-spec.md` | implemented D3/R3 SETTINGS-PLUG-1; `0.4.1-dev.20`, complete affected validation, exact debug-app Models/Components and singleton restore acceptance, and final contract review passed on 2026-08-26 | trusted first-party `rho.settings` Surface, closed module host, Models projection/revision-safe chat and capacity operations, read-only current component catalog, and unplaced-singleton restore | preserve RSR Surface/Command authority and all CRED-UX/CRED-SEC settings, revision, credential, redaction and recovery contracts; no workspace-plugin Settings injection, schema, new mutation/network/filesystem authority, or release scope |
 | `plans/implemented-2026-08-26-startup-unavailable-project-recovery-repair-spec.md` | implemented D1/R3 STARTUP-RECOVERY-1; `0.4.1-dev.19`, complete affected validation, fail-closed acceptance app-data isolation, and exact debug-app recovery passed on 2026-08-26 | truthful unavailable-project startup action through the existing picker plus debug-acceptance app-data isolation | preserve WP1/BH2 project truth and WP9 switch projection; acceptance isolation remains fail closed and debug-only; no schema, command, credential, release, or project-transition authority change |
 | `plans/implemented-2026-08-26-visual-acceptance-automation-spec.md` | implemented VA1 contract; debug bridge, fixed frontend vocabulary, cross-platform fixtures, S0/S1/S2/S3/S7/S8 scenarios, complete affected validation, and the fully reviewed 35-gate local baseline are complete | debug-only real-app visual acceptance lane and retirement of the consolidated human walkthrough | preserve release/profile fail-closed gates and evidence separation; the 12 PASS / 15 FAIL / 8 removed-gate SKIP baseline leaves product repairs in separate follow-up packages rather than silently expanding VA1 |
