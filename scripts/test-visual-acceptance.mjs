@@ -395,6 +395,16 @@ function reviewFrame(runDirectory, frame, verdict = "pass") {
   assert.match(bridgeSource, /RHO_ACCEPTANCE_OUTPUT/, "bridge requires an explicit output directory");
   assert.match(
     bridgeSource,
+    /fn resolve_app_data_dir[\s\S]{0,2200}?app-data/,
+    "an enabled bridge resolves run-local application data below its output root",
+  );
+  assert.match(
+    bridgeSource,
+    /acceptance app-data directory must not be a symlink/,
+    "run-local application data rejects symlink escape",
+  );
+  assert.match(
+    bridgeSource,
     /fn screenshot_not_implemented\(\) -> Response/,
     "the cross-platform screenshot fallback keeps a testable response shape",
   );
@@ -402,6 +412,11 @@ function reviewFrame(runDirectory, frame, verdict = "pass") {
     mainSource,
     /#\[cfg\(debug_assertions\)\][\s\S]{0,400}?acceptance_bridge/,
     "the bridge startup is compile-gated to debug builds",
+  );
+  assert.match(
+    mainSource,
+    /application_data_dir_override\(\)[\s\S]{0,500}?app_local_data_dir\(\)/,
+    "ordinary Tauri application data is only the non-acceptance fallback",
   );
   assert.match(
     workbenchSource,

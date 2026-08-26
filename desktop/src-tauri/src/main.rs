@@ -135,10 +135,15 @@ fn main() {
     let run_result = tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
-            let data_dir = app
-                .path()
-                .app_local_data_dir()
-                .context("resolving Rho application data directory")?;
+            let data_dir = match acceptance_bridge::application_data_dir_override()
+                .context("resolving isolated acceptance application data directory")?
+            {
+                Some(data_dir) => data_dir,
+                None => app
+                    .path()
+                    .app_local_data_dir()
+                    .context("resolving Rho application data directory")?,
+            };
             initialize_startup_log(&data_dir);
             write_startup_log("Rho desktop shell setup started");
             let ark = locate_ark(app)?;

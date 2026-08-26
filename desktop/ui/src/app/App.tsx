@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { UiKernelTransport, WorkspacePreparation } from "../transport";
+import type { ProjectSwitchResponse, UiKernelTransport, WorkspacePreparation } from "../transport";
 import { defaultTransport, WorkbenchApp } from "./WorkbenchApp";
+import { projectSwitchFailure } from "./controllers/project-switch-controller";
 
 interface AppProps {
   readonly transport?: UiKernelTransport;
@@ -12,6 +13,18 @@ type PreparationState =
   | { readonly status: "preparing" }
   | { readonly status: "ready"; readonly result: WorkspacePreparation }
   | { readonly status: "needs_attention"; readonly result: WorkspacePreparation };
+
+function projectRecoveryDetail(response: ProjectSwitchResponse): string {
+  if (response.unavailable != null) {
+    return `Selected project: ${response.unavailable.path}\nReason: ${response.unavailable.reason}`.slice(0, 2_048);
+  }
+  const detail = [
+    `project_pick_directory returned ${response.status}`,
+    response.reason_code,
+    response.message,
+  ].filter((value): value is string => value != null && value.length > 0).join("\n");
+  return detail.slice(0, 2_048);
+}
 
 export function App({ transport }: AppProps) {
   const resolvedTransport = transport ?? defaultTransport;
@@ -46,6 +59,67 @@ export function App({ transport }: AppProps) {
       });
     });
   }, [resolvedTransport]);
+  const chooseProject = useCallback(() => {
+    if (preparation.status !== "needs_attention" || !preparation.result.workspace_ready) return;
+    const previous = preparation;
+    const currentGeneration = generation.current + 1;
+    generation.current = currentGeneration;
+    setPreparation({ status: "preparing" });
+    void resolvedTransport.pickProjectDirectory().then((response) => {
+      if (generation.current !== currentGeneration) return;
+      if (response.status === "ready") {
+        setPreparation({
+          status: "ready",
+          result: {
+            status: "ready",
+            phase: "project_ready",
+            workspace_ready: true,
+            restored_project_status: "ready",
+            issue: null,
+          },
+        });
+        return;
+      }
+      if (response.status === "cancelled") {
+        setPreparation(previous);
+        return;
+      }
+      setPreparation({
+        status: "needs_attention",
+        result: {
+          status: "needs_attention",
+          phase: "project_selection_incomplete",
+          workspace_ready: true,
+          restored_project_status: response.status,
+          issue: {
+            code: "PROJECT_SELECTION_INCOMPLETE",
+            title: "The selected project could not be opened",
+            message: projectSwitchFailure(response, null)
+              ?? "Choose another project folder to continue.",
+            technical_detail: projectRecoveryDetail(response),
+          },
+        },
+      });
+    }).catch((error: unknown) => {
+      if (generation.current !== currentGeneration) return;
+      const detail = error instanceof Error ? error.message : String(error);
+      setPreparation({
+        status: "needs_attention",
+        result: {
+          status: "needs_attention",
+          phase: "project_selection_failed",
+          workspace_ready: true,
+          restored_project_status: null,
+          issue: {
+            code: "PROJECT_SELECTION_FAILED",
+            title: "The project picker could not open the selected project",
+            message: "Choose another project folder or retry startup.",
+            technical_detail: detail.slice(0, 2_048),
+          },
+        },
+      });
+    });
+  }, [preparation, resolvedTransport]);
   useEffect(() => {
     prepare();
     return () => { generation.current += 1; };
@@ -80,7 +154,9 @@ export function App({ transport }: AppProps) {
             {issue?.technical_detail != null && <details><summary>Technical details</summary><pre>{issue.technical_detail}</pre></details>}
             <div className="rho-preparation-actions">
               <button type="button" onClick={() => prepare()}>Retry</button>
-              <button type="button" onClick={() => prepare(true)}>Choose Rscript</button>
+              {preparation.result.workspace_ready
+                ? <button type="button" onClick={chooseProject}>Choose project</button>
+                : <button type="button" onClick={() => prepare(true)}>Choose Rscript</button>}
             </div>
           </div>
         </section>

@@ -59,6 +59,107 @@ describe("Studio foundation app", () => {
     return { container, transport };
   }
 
+  it("recovers an unavailable saved project through the project picker instead of Rscript", async () => {
+    const transport = createMockUiKernelTransport();
+    transport.prepareWorkspace = vi.fn(async () => ({
+      status: "needs_attention" as const,
+      phase: "project_restore_incomplete",
+      workspace_ready: true,
+      restored_project_status: "unavailable",
+      issue: {
+        code: "PROJECT_RESTORE_INCOMPLETE",
+        title: "The saved project could not be restored",
+        message: "Workspace R is available. Choose or reopen a project to continue.",
+        technical_detail: "Saved project: /missing/project\nReason: directory does not exist",
+      },
+    }));
+    const openProject = transport.openProject.bind(transport);
+    const pick = vi.fn(() => openProject("/projects/recovered"));
+    transport.pickProjectDirectory = pick;
+    const { container } = await renderApp(transport);
+
+    expect(container.textContent).toContain("The saved project could not be restored");
+    expect(container.textContent).toContain("Choose project");
+    expect(container.textContent).not.toContain("Choose Rscript");
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "Choose project")!
+        .click();
+      for (let index = 0; index < 20; index += 1) await Promise.resolve();
+    });
+    expect(pick).toHaveBeenCalledOnce();
+    expect(container.querySelector(".rho-studio-shell")).not.toBeNull();
+    expect(container.querySelector(".rho-statusbar")?.textContent).toContain("/projects/recovered");
+  });
+
+  it("keeps unavailable-project recovery after picker cancellation and reports picker failure", async () => {
+    const transport = createMockUiKernelTransport();
+    transport.prepareWorkspace = vi.fn(async () => ({
+      status: "needs_attention" as const,
+      phase: "project_restore_incomplete",
+      workspace_ready: true,
+      restored_project_status: "unavailable",
+      issue: {
+        code: "PROJECT_RESTORE_INCOMPLETE",
+        title: "The saved project could not be restored",
+        message: "Choose another project.",
+        technical_detail: null,
+      },
+    }));
+    const pick = vi.fn()
+      .mockResolvedValueOnce({
+        status: "cancelled",
+        project: null,
+        session: {},
+        unavailable: null,
+        blocker: null,
+        reason_code: null,
+        message: null,
+        restored_root: null,
+        restart_required: false,
+      })
+      .mockRejectedValueOnce(new Error("native picker failed"));
+    transport.pickProjectDirectory = pick;
+    const { container } = await renderApp(transport);
+    const chooseProject = () => [...container.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent === "Choose project")!;
+
+    await act(async () => { chooseProject().click(); await settle(); });
+    expect(container.textContent).toContain("The saved project could not be restored");
+    expect(chooseProject()).not.toBeNull();
+    await act(async () => { chooseProject().click(); await settle(); });
+    expect(container.textContent).toContain("PROJECT_SELECTION_FAILED");
+    expect(container.textContent).toContain("native picker failed");
+    expect(container.textContent).not.toContain("Choose Rscript");
+  });
+
+  it("retains Rscript selection only for runtime preparation failures", async () => {
+    const transport = createMockUiKernelTransport();
+    const prepare = vi.fn(async () => ({
+      status: "needs_attention" as const,
+      phase: "needs_attention",
+      workspace_ready: false,
+      restored_project_status: null,
+      issue: {
+        code: "R_NOT_FOUND",
+        title: "R was not found",
+        message: "Choose Rscript manually.",
+        technical_detail: null,
+      },
+    }));
+    transport.prepareWorkspace = prepare;
+    const { container } = await renderApp(transport);
+    expect(container.textContent).toContain("Choose Rscript");
+    expect(container.textContent).not.toContain("Choose project");
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "Choose Rscript")!
+        .click();
+      await settle();
+    });
+    expect(prepare).toHaveBeenLastCalledWith(true);
+  });
+
   async function showToolbarComponent(container: HTMLElement, label: string) {
     if ([...container.querySelectorAll<HTMLElement>("[data-toolbar-component]")]
       .some((component) => component.textContent?.includes(label))) return;

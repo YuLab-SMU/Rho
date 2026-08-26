@@ -842,6 +842,50 @@ describe("UI Kernel transport and external store", () => {
     expect(calls).toEqual(["startup_choose_rscript"]);
   });
 
+  it("projects an unavailable saved path and reason after Workspace R starts", async () => {
+    const calls: string[] = [];
+    const transport = createTauriUiKernelTransport(async <T,>(command: string) => {
+      calls.push(command);
+      if (command === "startup_bootstrap") return { phase: "runtime_ready", issue: null } as T;
+      if (command === "workspace_start") return { status: "idle" } as T;
+      if (command === "agent_runtime_retry") return { available: false } as T;
+      if (command === "project_restore_session") return {
+        status: "unavailable",
+        project: null,
+        session: {},
+        unavailable: {
+          path: "/tmp/deleted-acceptance-project",
+          reason: "Project directory does not exist",
+        },
+        blocker: null,
+        reason_code: null,
+        message: null,
+        restored_root: null,
+        restart_required: false,
+      } as T;
+      throw new Error(`unexpected command ${command}`);
+    }, async () => () => undefined);
+
+    await expect(transport.prepareWorkspace()).resolves.toEqual({
+      status: "needs_attention",
+      phase: "project_restore_incomplete",
+      workspace_ready: true,
+      restored_project_status: "unavailable",
+      issue: {
+        code: "PROJECT_RESTORE_INCOMPLETE",
+        title: "The saved project could not be restored",
+        message: "Workspace R is available. Choose or reopen a project to continue.",
+        technical_detail: "Saved project: /tmp/deleted-acceptance-project\nReason: Project directory does not exist",
+      },
+    });
+    expect(calls).toEqual([
+      "startup_bootstrap",
+      "workspace_start",
+      "agent_runtime_retry",
+      "project_restore_session",
+    ]);
+  });
+
   it("keeps the mock Surface command lane in lockstep with instance semantics", async () => {
     const transport = createMockUiKernelTransport();
     const store = new WorkbenchProjectionStore(transport);

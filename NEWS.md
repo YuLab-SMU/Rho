@@ -4,6 +4,20 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.1-dev.19 - 2026-08-26
+
+### Startup project recovery
+
+- When a saved project was moved or deleted, Rho now keeps the healthy
+  Workspace R session available and offers the native project picker directly
+  from the startup recovery screen. Cancelling the picker leaves recovery
+  available, while a failed selection remains visible instead of admitting an
+  unreconciled Workbench or incorrectly asking for Rscript.
+- Startup technical details now identify the unavailable saved path and
+  failure reason. Automated real-app visual acceptance runs use isolated
+  run-local application data, so disposable fixture projects can no longer
+  replace the developer's ordinary last-opened project or other local state.
+
 ## 0.4.1-dev.18 - 2026-08-26
 
 ### Agent LLM credential sources and store hardening

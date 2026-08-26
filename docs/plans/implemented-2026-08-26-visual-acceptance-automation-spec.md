@@ -59,6 +59,12 @@ currently exists.
   port and process identity to `$RHO_ACCEPTANCE_OUTPUT/bridge.json`, and
   refuses to start when `RHO_ACCEPTANCE_OUTPUT` is unset or not a writable
   directory.
+- Before any persistent desktop service is constructed, a bridge-enabled debug
+  launch uses `$RHO_ACCEPTANCE_OUTPUT/app-data` as its Tauri application-data
+  root. The canonical directory is shared by restarts within that run and must
+  be a real contained directory, not a symlink; invalid output, a regular file,
+  or escaped/symlinked app-data fails shell setup closed. Ordinary debug and
+  release launches do not receive this override.
 - The bridge supports exactly three operations:
   - `eval`: retains the bridge route/field name for compatibility but forwards
     only a JSON-encoded `AutomationRequest` to the frontend acceptance surface
@@ -205,3 +211,19 @@ has no application-version or `NEWS.md` impact because the listener and
 frontend automation surface are unavailable in release builds. Exact-candidate
 installation, distribution, signing, publication, and release decisions remain
 outside this completed contract.
+
+## STARTUP-RECOVERY-1 Isolation Amendment
+
+The 2026-08-26 VA1 baseline revealed that a real-app acceptance process used
+the developer's ordinary Tauri application-data directory. Project switches to
+disposable fixtures therefore replaced the developer's durable last-opened
+project; cleanup left ordinary startup pointing at a missing path. This was a
+harness persistence defect, not an authorized product-state mutation.
+
+`STARTUP-RECOVERY-1` closes that boundary with the compile-gated run-local
+`app-data` contract above. Five Rust regressions cover disabled isolation,
+contained creation, invalid output, a non-directory target, and symlink
+rejection. The registered harness self-test enforces resolution before the
+ordinary Tauri fallback, and the complete `0.4.1-dev.19` affected matrix plus
+an exact real-app startup-recovery workflow passed. This amendment does not
+rewrite the immutable VA1 35-gate baseline or change its FAIL disposition.

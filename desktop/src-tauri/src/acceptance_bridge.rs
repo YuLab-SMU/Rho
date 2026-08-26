@@ -6,8 +6,11 @@
 //! `127.0.0.1` port, writes `{"port": ..., "pid": ...}` to
 //! `$RHO_ACCEPTANCE_OUTPUT/bridge.json`, and serves a minimal HTTP interface
 //! (`GET /health`, `POST /eval`, `POST /screenshot`, `POST /window`) for
-//! automated acceptance drives. Release builds contain no listener code path;
-//! the `acceptance_bridge_result` command stays registered but is fail-closed.
+//! automated acceptance drives. The same validated output root owns an
+//! isolated `app-data` directory so acceptance project switches and restart
+//! state never mutate the ordinary Rho application-data directory. Release
+//! builds contain no listener or data-override code path; the
+//! `acceptance_bridge_result` command stays registered but is fail-closed.
 
 use serde_json::Value;
 
@@ -67,6 +70,49 @@ mod bridge {
             .is_ok();
         let _ = std::fs::remove_file(&probe);
         writable.then_some(path)
+    }
+
+    /// Resolve a bridge-run-local Tauri application-data directory. Once the
+    /// bridge flag is enabled, invalid configuration is an error: silently
+    /// falling back to the ordinary application-data directory would let an
+    /// acceptance run overwrite real project/session and Store state.
+    pub(super) fn resolve_app_data_dir(
+        bridge: Option<&str>,
+        output: Option<&str>,
+    ) -> std::io::Result<Option<PathBuf>> {
+        if bridge != Some("1") {
+            return Ok(None);
+        }
+        let output_dir = resolve_config(bridge, output).ok_or_else(|| {
+            invalid_data(
+                "RHO_ACCEPTANCE_OUTPUT must name an existing writable directory when the acceptance bridge is enabled",
+            )
+        })?;
+        let data_dir = output_dir.join("app-data");
+        match std::fs::symlink_metadata(&data_dir) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(invalid_data(
+                    "acceptance app-data directory must not be a symlink",
+                ));
+            }
+            Ok(metadata) if !metadata.is_dir() => {
+                return Err(invalid_data(
+                    "acceptance app-data path exists but is not a directory",
+                ));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == ErrorKind::NotFound => {
+                std::fs::create_dir(&data_dir)?;
+            }
+            Err(error) => return Err(error),
+        }
+        let canonical = std::fs::canonicalize(&data_dir)?;
+        if !canonical.starts_with(&output_dir) {
+            return Err(invalid_data(
+                "acceptance app-data directory escapes the output root",
+            ));
+        }
+        Ok(Some(canonical))
     }
 
     /// Create one bridge-owned file without following or replacing an
@@ -684,6 +730,66 @@ mod bridge {
         }
 
         #[test]
+        fn app_data_override_is_disabled_without_the_exact_bridge_flag() {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().to_str().unwrap();
+            assert_eq!(resolve_app_data_dir(None, Some(path)).unwrap(), None);
+            assert_eq!(resolve_app_data_dir(Some("0"), Some(path)).unwrap(), None);
+            assert_eq!(
+                resolve_app_data_dir(Some("true"), Some(path)).unwrap(),
+                None
+            );
+            assert!(!directory.path().join("app-data").exists());
+        }
+
+        #[test]
+        fn app_data_override_creates_a_contained_run_local_directory() {
+            let directory = tempfile::tempdir().unwrap();
+            let output = std::fs::canonicalize(directory.path()).unwrap();
+            let resolved =
+                resolve_app_data_dir(Some("1"), Some(directory.path().to_str().unwrap()))
+                    .unwrap()
+                    .unwrap();
+            assert_eq!(resolved, output.join("app-data"));
+            assert!(resolved.is_dir());
+            assert!(resolved.starts_with(output));
+        }
+
+        #[test]
+        fn app_data_override_fails_closed_for_invalid_output() {
+            let directory = tempfile::tempdir().unwrap();
+            let missing = directory.path().join("missing");
+            let error =
+                resolve_app_data_dir(Some("1"), Some(missing.to_str().unwrap())).unwrap_err();
+            assert_eq!(error.kind(), ErrorKind::InvalidData);
+            assert!(error.to_string().contains("RHO_ACCEPTANCE_OUTPUT"));
+        }
+
+        #[test]
+        fn app_data_override_rejects_a_non_directory_data_path() {
+            let directory = tempfile::tempdir().unwrap();
+            std::fs::write(directory.path().join("app-data"), b"not a directory").unwrap();
+            let error = resolve_app_data_dir(Some("1"), Some(directory.path().to_str().unwrap()))
+                .unwrap_err();
+            assert_eq!(error.kind(), ErrorKind::InvalidData);
+            assert!(error.to_string().contains("is not a directory"));
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn app_data_override_rejects_a_symlinked_data_directory() {
+            use std::os::unix::fs::symlink;
+
+            let directory = tempfile::tempdir().unwrap();
+            let outside = tempfile::tempdir().unwrap();
+            symlink(outside.path(), directory.path().join("app-data")).unwrap();
+            let error = resolve_app_data_dir(Some("1"), Some(directory.path().to_str().unwrap()))
+                .unwrap_err();
+            assert_eq!(error.kind(), ErrorKind::InvalidData);
+            assert!(error.to_string().contains("must not be a symlink"));
+        }
+
+        #[test]
         fn bridge_owned_files_never_replace_existing_targets() {
             let directory = tempfile::tempdir().unwrap();
             let target = directory.path().join("bridge.json");
@@ -862,6 +968,20 @@ pub(crate) fn start_if_enabled(app: &tauri::AppHandle) {
 #[tauri::command]
 pub(crate) fn acceptance_bridge_active() -> bool {
     bridge_active_impl()
+}
+
+/// Returns the isolated application-data directory for a debug acceptance
+/// run. Release builds and ordinary debug launches always return `None`.
+#[cfg(debug_assertions)]
+pub(crate) fn application_data_dir_override() -> std::io::Result<Option<std::path::PathBuf>> {
+    let bridge = std::env::var("RHO_ACCEPTANCE_BRIDGE").ok();
+    let output = std::env::var("RHO_ACCEPTANCE_OUTPUT").ok();
+    bridge::resolve_app_data_dir(bridge.as_deref(), output.as_deref())
+}
+
+#[cfg(not(debug_assertions))]
+pub(crate) fn application_data_dir_override() -> std::io::Result<Option<std::path::PathBuf>> {
+    Ok(None)
 }
 
 #[cfg(debug_assertions)]

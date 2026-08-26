@@ -198,7 +198,9 @@ export function createTauriUiKernelTransport(
             code: "PROJECT_RESTORE_INCOMPLETE",
             title: "The saved project could not be restored",
             message: "Workspace R is available. Choose or reopen a project to continue.",
-            technical_detail: `project_restore_session returned ${restoredStatus}`,
+            technical_detail: restored.unavailable == null
+              ? `project_restore_session returned ${restoredStatus}`
+              : `Saved project: ${restored.unavailable.path}\nReason: ${restored.unavailable.reason}`.slice(0, 2_048),
           },
         };
       } catch (error: unknown) {
