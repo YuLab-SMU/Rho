@@ -199,6 +199,7 @@ export function AgentSurfaceView({
   const [capacityDraft, setCapacityDraft] = useState({ context: "", reserve: "" });
   const [modelSwitchBusy, setModelSwitchBusy] = useState(false);
   const [modelQuery, setModelQuery] = useState("");
+  const [filesReviewOpen, setFilesReviewOpen] = useState(false);
 
   const contextPlanKey = JSON.stringify([
     view.composer.trim(),
@@ -239,6 +240,8 @@ export function AgentSurfaceView({
     viewRef.current = next;
     setView(next);
   }, [instance.instance_id]);
+
+  useEffect(() => { setFilesReviewOpen(false); }, [view.conversation_id]);
 
   useEffect(() => {
     let active = true;
@@ -437,6 +440,115 @@ export function AgentSurfaceView({
       .catch(reportError)
       .finally(() => setBusy(false));
   };
+  const allProposals = turns.flatMap((turn) => {
+    const detail = details.get(turn.turn_id);
+    return detail?.events.flatMap((event) => {
+      const proposal = parseAgentFileProposal(event);
+      return proposal == null ? [] : [{ turn, event, proposal }];
+    }) ?? [];
+  });
+  const proposalOutcomeFor = (turn: AgentTurnSummary, eventId: number) => {
+    const detail = details.get(turn.turn_id);
+    return detail == null ? null : agentFileProposalOutcome(detail, eventId);
+  };
+  const pendingProposals = allProposals.filter(({ turn, event }) =>
+    turn.status !== "running" && turn.status !== "waiting" &&
+    proposalOutcomeFor(turn, event.id) == null &&
+    view.file_decisions[`${turn.turn_id}:${event.id}`] !== "rejected");
+  const applyAllProposals = async () => {
+    if (busy || pendingProposals.length === 0) return;
+    setBusy(true);
+    let lastUndo: AgentFileUndoState | null = null;
+    try {
+      for (const { turn, event, proposal } of pendingProposals) {
+        try {
+          const { response, beforeContent } = await applyFileProposal(turn, event.id, proposal);
+          if (response.after_sha256 != null) {
+            lastUndo = {
+              turn_id: turn.turn_id,
+              proposal_event_id: event.id,
+              path: proposal.path,
+              expected_after_sha256: response.after_sha256,
+              before_content: beforeContent,
+              created: proposal.operation === "create",
+            };
+          }
+        } catch (error: unknown) {
+          reportError(error);
+        }
+      }
+      if (lastUndo != null) setFileUndo(lastUndo);
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+  const rejectAllProposals = () => {
+    if (pendingProposals.length === 0) return;
+    const next: Record<string, "rejected"> = { ...view.file_decisions };
+    for (const { turn, event } of pendingProposals) next[`${turn.turn_id}:${event.id}`] = "rejected";
+    commitView({ ...view, file_decisions: next });
+  };
+  const renderProposalRow = (
+    turn: AgentTurnSummary,
+    event: AgentTurnDetail["events"][number],
+    proposal: AgentFileProposal,
+  ) => {
+    const key = `${turn.turn_id}:${event.id}`;
+    const outcome = proposalOutcomeFor(turn, event.id);
+    const rejected = view.file_decisions[key] === "rejected";
+    return (
+      <section className="rho-agent-file-proposal" data-proposal-key={key} key={key}>
+        <header>
+          <span className="rho-agent-decision-kind">File change</span>
+          <strong>{proposal.operation.replaceAll("_", " ")}</strong>
+          <code>{proposal.path}</code>
+          {outcome != null && <span className="rho-agent-file-outcome">{outcome}</span>}
+          {rejected && outcome == null && <span className="rho-agent-file-outcome">rejected in this view</span>}
+          {outcome == null && !rejected && (
+            <div className="rho-agent-decision-actions">
+              <button type="button" disabled={busy || turn.status === "running" || turn.status === "waiting"} onClick={() => {
+                setBusy(true);
+                void applyFileProposal(turn, event.id, proposal)
+                  .then(({ response, beforeContent }) => {
+                    if (response.after_sha256 != null) {
+                      setFileUndo({
+                        turn_id: turn.turn_id,
+                        proposal_event_id: event.id,
+                        path: proposal.path,
+                        expected_after_sha256: response.after_sha256,
+                        before_content: beforeContent,
+                        created: proposal.operation === "create",
+                      });
+                    }
+                    return refresh();
+                  })
+                  .catch(reportError)
+                  .finally(() => setBusy(false));
+              }}>Apply</button>
+              <button type="button" onClick={() => commitView({
+                ...view,
+                file_decisions: { ...view.file_decisions, [key]: "rejected" },
+              })}>Reject</button>
+            </div>
+          )}
+          {fileUndo?.turn_id === turn.turn_id && fileUndo.proposal_event_id === event.id && (
+            <button type="button" disabled={busy} onClick={() => {
+              setBusy(true);
+              void undoFileProposal(fileUndo)
+                .then(() => { setFileUndo(null); return refresh(); })
+                .catch(reportError)
+                .finally(() => setBusy(false));
+            }}>Undo applied edit</button>
+          )}
+        </header>
+        <details className="rho-agent-file-content">
+          <summary>Proposed content</summary>
+          <pre>{proposal.content}</pre>
+        </details>
+      </section>
+    );
+  };
   const diagnosticsText = runtimeDiagnostics == null ? "Agent runtime diagnostics are loading." : [
     "R",
     `  executable: ${runtimeDiagnostics.rscript ?? "not resolved"}`,
@@ -540,7 +652,29 @@ export function AgentSurfaceView({
         <AgentRunningRow status={activeTurn.status} startedAt={activeTurn.started_at} onStop={stopActiveTurn} />
       )}
       {displayMode !== "composer" && (
-        <div className="rho-agent-timeline" aria-busy={loading}>
+        <div className="rho-agent-files-review" aria-label="Review proposed file changes" hidden={!filesReviewOpen}>
+          <header>
+            <button type="button" className="rho-agent-review-back" onClick={() => setFilesReviewOpen(false)}>← Conversation</button>
+            <strong>{allProposals.length} {allProposals.length === 1 ? "file" : "files"} changed</strong>
+            <div className="rho-agent-review-batch">
+              <button type="button" disabled={busy || pendingProposals.length === 0} onClick={() => void applyAllProposals()}>
+                Apply all{pendingProposals.length > 0 ? ` (${pendingProposals.length})` : ""}
+              </button>
+              <button type="button" disabled={busy || pendingProposals.length === 0} onClick={rejectAllProposals}>Reject all</button>
+            </div>
+          </header>
+          <p className="rho-agent-files-hint">Applying writes the proposed content to the project file. Batch actions cover the {pendingProposals.length} pending {pendingProposals.length === 1 ? "change" : "changes"}.</p>
+          {allProposals.length === 0 ? (
+            <p className="rho-agent-review-empty">No file changes were proposed in this conversation.</p>
+          ) : (
+            <ol className="rho-agent-review-list">
+              {allProposals.map(({ turn, event, proposal }) => renderProposalRow(turn, event, proposal))}
+            </ol>
+          )}
+        </div>
+      )}
+      {displayMode !== "composer" && (
+        <div className="rho-agent-timeline" aria-busy={loading} hidden={filesReviewOpen}>
           {loading && <p className="rho-agent-loading">Loading conversation…</p>}
           {!loading && turns.length === 0 && <div className="rho-agent-empty" role="status">
             <strong>{view.conversation_id == null ? "No conversation yet" : "Ready for the first turn"}</strong>
@@ -605,71 +739,11 @@ export function AgentSurfaceView({
                   </section>
                 ))}
                 {proposals.length > 0 && (
-                  <details className="rho-agent-files">
-                    <summary>
-                      <span className="rho-agent-files-count">{proposals.length} {proposals.length === 1 ? "file" : "files"} changed</span>
-                      <code className="rho-agent-files-path">{proposals[0]!.proposal.path}{proposals.length > 1 ? ` +${proposals.length - 1} more` : ""}</code>
-                    </summary>
-                    <div className="rho-agent-files-panel">
-                      <p className="rho-agent-files-hint">Applying writes the proposed content to the project file.</p>
-                      {proposals.map(({ event, proposal }) => {
-                  const key = `${turn.turn_id}:${event.id}`;
-                  const outcome = detail == null ? null : agentFileProposalOutcome(detail, event.id);
-                  const rejected = view.file_decisions[key] === "rejected";
-                  return (
-                    <section className="rho-agent-file-proposal" data-proposal-key={key} key={key}>
-                      <header>
-                        <span className="rho-agent-decision-kind">File change</span>
-                        <strong>{proposal.operation.replaceAll("_", " ")}</strong>
-                        <code>{proposal.path}</code>
-                        {outcome != null && <span className="rho-agent-file-outcome">{outcome}</span>}
-                        {rejected && outcome == null && <span className="rho-agent-file-outcome">rejected in this view</span>}
-                        {outcome == null && !rejected && (
-                          <div className="rho-agent-decision-actions">
-                            <button type="button" disabled={busy || turn.status === "running" || turn.status === "waiting"} onClick={() => {
-                              setBusy(true);
-                              void applyFileProposal(turn, event.id, proposal)
-                                .then(({ response, beforeContent }) => {
-                                  if (response.after_sha256 != null) {
-                                    setFileUndo({
-                                      turn_id: turn.turn_id,
-                                      proposal_event_id: event.id,
-                                      path: proposal.path,
-                                      expected_after_sha256: response.after_sha256,
-                                      before_content: beforeContent,
-                                      created: proposal.operation === "create",
-                                    });
-                                  }
-                                  return refresh();
-                                })
-                                .catch(reportError)
-                                .finally(() => setBusy(false));
-                            }}>Apply</button>
-                            <button type="button" onClick={() => commitView({
-                              ...view,
-                              file_decisions: { ...view.file_decisions, [key]: "rejected" },
-                            })}>Reject</button>
-                          </div>
-                        )}
-                        {fileUndo?.turn_id === turn.turn_id && fileUndo.proposal_event_id === event.id && (
-                          <button type="button" disabled={busy} onClick={() => {
-                            setBusy(true);
-                            void undoFileProposal(fileUndo)
-                              .then(() => { setFileUndo(null); return refresh(); })
-                              .catch(reportError)
-                              .finally(() => setBusy(false));
-                          }}>Undo applied edit</button>
-                        )}
-                      </header>
-                      <details className="rho-agent-file-content">
-                        <summary>Proposed content</summary>
-                        <pre>{proposal.content}</pre>
-                      </details>
-                    </section>
-                  );
-                      })}
-                    </div>
-                  </details>
+                  <button type="button" className="rho-agent-files-entry" onClick={() => setFilesReviewOpen(true)}>
+                    <span className="rho-agent-files-count">{proposals.length} {proposals.length === 1 ? "file" : "files"} changed</span>
+                    <code className="rho-agent-files-path">{proposals[0]!.proposal.path}{proposals.length > 1 ? ` +${proposals.length - 1} more` : ""}</code>
+                    <span className="rho-agent-files-review-link">Review</span>
+                  </button>
                 )}
                 {(activityEvents.length > 0 || contextItems.length > 0) && (
                   <div className="rho-agent-activity">

@@ -121,32 +121,48 @@
   section.rho-agent-surface .rho-agent-approval pre { max-height: 6rem; margin: var(--rho-space-2) 0 0; white-space: pre; overflow-x: auto; }
   section.rho-agent-surface .rho-agent-approval .rho-agent-decision-actions { margin-top: var(--rho-space-2); }
 
-  /* File changes collapse into one in-flow entry; expanding it opens an
-     inline review panel with one plain row per proposal. */
-  section.rho-agent-surface .rho-agent-files { margin-top: var(--rho-space-3); }
-  section.rho-agent-surface .rho-agent-files > summary {
+  /* File changes appear as one in-flow entry; clicking it opens the review
+     surface (no diff content or decision buttons inside the conversation). */
+  section.rho-agent-surface .rho-agent-files-entry {
     display: inline-flex;
     align-items: center;
     gap: var(--rho-space-2);
     max-width: 100%;
     min-height: var(--rho-control-small);
+    margin-top: var(--rho-space-3);
     padding: var(--rho-space-1) var(--rho-space-3);
     border: var(--rho-border);
     border-radius: var(--rho-radius-1);
     color: var(--rho-ink-2);
     background: var(--rho-paper);
     font-size: var(--rho-text-caption);
-    list-style: none;
-    cursor: pointer;
   }
-  section.rho-agent-surface .rho-agent-files > summary::-webkit-details-marker { display: none; }
-  section.rho-agent-surface .rho-agent-files > summary::before { content: "▸"; flex: 0 0 auto; color: var(--rho-muted); }
-  section.rho-agent-surface .rho-agent-files[open] > summary::before { content: "▾"; }
-  section.rho-agent-surface .rho-agent-files > summary:hover { border-color: var(--rho-line-strong); color: var(--rho-ink); }
+  section.rho-agent-surface .rho-agent-files-entry:hover:not(:disabled) { border-color: var(--rho-line-strong); color: var(--rho-ink); }
   section.rho-agent-surface .rho-agent-files-count { flex: 0 0 auto; color: var(--rho-ink); font-weight: var(--rho-weight-medium); }
   section.rho-agent-surface .rho-agent-files-path { min-width: 0; overflow: hidden; color: var(--rho-muted); font-size: var(--rho-text-caption); text-overflow: ellipsis; white-space: nowrap; }
-  section.rho-agent-surface .rho-agent-files-panel { margin-top: var(--rho-space-2); padding-left: var(--rho-space-3); border-left: var(--rho-border); }
+  section.rho-agent-surface .rho-agent-files-review-link { flex: 0 0 auto; color: var(--rho-muted); }
+  section.rho-agent-surface .rho-agent-files-entry:hover:not(:disabled) .rho-agent-files-review-link { color: var(--rho-ink); text-decoration: underline; }
+
+  /* Review surface: conversation-scoped list with batch decisions. */
+  section.rho-agent-surface .rho-agent-files-review { min-width: 0; min-height: 0; flex: 1 1 auto; width: 100%; max-width: 56rem; align-self: center; padding: var(--rho-space-3); overflow: auto; }
+  section.rho-agent-surface .rho-agent-files-review > header { display: flex; align-items: center; flex-wrap: wrap; gap: var(--rho-space-2); }
+  section.rho-agent-surface .rho-agent-files-review > header > strong { font-size: var(--rho-text-ui); }
+  section.rho-agent-surface .rho-agent-review-back {
+    min-height: var(--rho-control-small);
+    padding: 0 var(--rho-space-2);
+    border-color: transparent;
+    color: var(--rho-ink-2);
+    background: transparent;
+    font-size: var(--rho-text-caption);
+  }
+  section.rho-agent-surface .rho-agent-review-back:hover:not(:disabled) { border-color: transparent; color: var(--rho-ink); background: var(--rho-fill); }
+  section.rho-agent-surface .rho-agent-review-batch { display: flex; flex-wrap: wrap; gap: var(--rho-space-1); margin-left: auto; }
+  section.rho-agent-surface .rho-agent-review-batch button { min-height: var(--rho-control-small); padding: var(--rho-space-1) var(--rho-space-3); font-size: var(--rho-text-caption); }
   section.rho-agent-surface .rho-agent-files-hint { margin: 0; color: var(--rho-muted); font-size: var(--rho-text-caption); }
+  section.rho-agent-surface .rho-agent-files-review .rho-agent-files-hint { margin: var(--rho-space-2) 0 0; }
+  section.rho-agent-surface .rho-agent-review-empty { margin: var(--rho-space-3) 0 0; color: var(--rho-muted); font-size: var(--rho-text-ui); }
+  section.rho-agent-surface .rho-agent-review-list { display: grid; gap: var(--rho-space-2); margin: var(--rho-space-2) 0 0; padding: 0; list-style: none; }
+  section.rho-agent-surface .rho-agent-review-list .rho-agent-file-proposal { margin-top: 0; padding: var(--rho-space-2) var(--rho-space-3); border: var(--rho-border); border-radius: var(--rho-radius-1); background: var(--rho-paper); }
 
   section.rho-agent-surface .rho-agent-file-proposal { margin-top: var(--rho-space-2); padding: var(--rho-space-2) 0 0; border: none; border-top: var(--rho-border); border-radius: 0; background: transparent; }
   section.rho-agent-surface .rho-agent-file-proposal > header { display: flex; justify-content: normal; align-items: baseline; flex-wrap: wrap; gap: 0 var(--rho-space-2); }

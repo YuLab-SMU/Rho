@@ -613,3 +613,94 @@ typecheck, lint, focused 13/13, full UI suite 342/342, build,
 centered-and-aligned timeline/composer at 2486px solo, the quiet uniform
 activity rows, the inline proposal row, the contained narrow model popover,
 and the horizontal-scroll approval code at 171px.
+
+## Round 5 Amendment: Review Surface With Batch Decisions
+
+Authorization: on 2026-08-27 the product owner directed, after reviewing the
+round-4 result: "不要把 diff 放到对话里，而且改个文件不要 Approve Reject
+啥的，万一项目里有一百个呢？你可以搜索一下主流的 Agent 是怎么处理的".
+Mainstream references checked for this direction: Cursor Composer's unified
+pre-write review of all changed files with per-file accept/reject plus
+Accept All / Reject All; ChatGPT Codex's "Review" panel (changed-files list,
+diff view, commit-level action); Snowflake Cortex Code's per-turn "N files
+changed" entry with bulk accept/reject actions on the Agent surface.
+
+What this amendment authorizes (still presentation-only, D2/R1, same four
+files, no new transport command):
+
+1. No diff content and no per-file decision buttons render inside the
+   conversation timeline. A turn that produced file-edit proposals shows one
+   compact entry ("N files changed · first path · Review"). Clicking it
+   opens a review view that replaces the timeline area inside the Agent
+   surface (a dockview-level side rail would require files owned by other
+   lanes and stays out of scope).
+2. The review view is scoped to the whole conversation: one header (back to
+   conversation, total count, consequence hint), then every
+   `.rho-agent-file-proposal` row with its existing per-file Apply / Reject /
+   Undo semantics and proposed-content disclosure, then per-file outcome
+   states exactly as the existing paths report them.
+3. Batch decisions for scale (the owner's hundred-file case). A batch bar
+   offers Apply all (N) / Reject all over the pending proposals (no outcome,
+   not already rejected, and not produced by a running/waiting turn — the
+   same eligibility rule the per-row Apply button enforces). Batch means
+   sequential invocation of the existing per-file handlers: each
+   `applyFileProposal` call keeps its own stale/failure behaviour (per-file
+   errors are reported and the batch continues; outcomes refresh at the
+   end), and Reject all persists the existing `file_decisions` entries per
+   proposal key. No new execution authority, no semantic change to any
+   single proposal, no line-diff fabrication: the panel reviews proposed
+   content exactly as the apply path would write it. The existing single-slot
+   undo state is unchanged: after a batch apply, Undo is offered for the
+   last successfully applied proposal only, exactly as the current
+   `AgentFileUndoState` contract models.
+4. The s3 visual-acceptance DOM hooks are preserved:
+   `.rho-agent-file-proposal` rows exist (inside the review view) and remain
+   countable; every other hook from round 1 is untouched.
+
+Round 5 verification adds focused tests for: the timeline shows the entry
+and no inline proposal/diff; the review view opens with all conversation
+proposals and their actions; per-file reject still persists through the
+existing path; Apply all invokes the existing handler once per pending
+proposal and Reject all persists every pending key; plus the full round-4
+matrix and refreshed preview captures (entry in chat, review view, batch
+outcomes) at solo/wide/medium/narrow.
+
+Round 5 evidence passed 2026-08-27 (same four lane files):
+
+- `npm --prefix desktop run rsr:typecheck` and `rsr:lint`;
+- focused `AgentSurfaceView.test.tsx`: 14 of 14 passed, adding the
+  entry-only timeline assertions (no inline proposal rows or Apply buttons),
+  the review-surface swap with back navigation, and the batch test proving
+  Apply all invokes the existing handler once per pending proposal and
+  Reject all persists every pending key;
+- full UI suite on the final snapshot: 52 files, 343 tests passed;
+- `npm run rsr:build --prefix desktop`;
+- `git diff --check`;
+- mock preview under `target/studio-agent-ux-preview/r3/r5/` (seeded with
+  five proposals across two turns): `conversation-entries.png` shows the
+  chat flow carrying only "N files changed · path · Review" entries
+  (probe: zero inline proposal rows, zero inline Apply buttons);
+  `review-surface.png` shows the conversation-scoped review surface (title,
+  consequence hint with batch scope, five rows, Apply all (5) / Reject all);
+  `review-after-apply-all.png` shows the post-batch state with Undo
+  available on the last applied row; `review-medium.png` (~231px) probes no
+  horizontal overflow.
+
+Compatibility bridge recorded during round 5: `App.test.tsx` (owned by the
+integration lane) verifies the broker file-mutation path by querying
+`.rho-agent-file-proposal` in the document. The review surface and the
+timeline therefore both stay mounted and toggle through the `hidden`
+attribute instead of mount/unmount; the DOM contract is unchanged while the
+conversation shows no diff content or decision buttons.
+
+Mock fidelity note: the mock transport does not synthesize `file_edit.*`
+outcome events after an apply, so preview rows keep their pending look after
+Apply all (with the real broker the existing outcome events appear exactly
+as the per-file path reports them). This is a fixture fact, not a component
+change.
+
+Integration follow-ups from this round: re-pick this branch's new commits
+and re-run the complete `rsr:check` matrix plus the s3 visual-acceptance
+gate; the standing follow-ups (cross-review row, docs index, NEWS entry,
+version decision, foundation.css layer-order systemic fix) remain as listed
+earlier in this document.

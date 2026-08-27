@@ -1,14 +1,17 @@
-import { act } from "react";
+import { act, type ComponentProps } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
+  AgentFileMutationResponse,
   AgentTurnDetail,
   AgentTurnSummary,
   SurfaceInstance,
 } from "../transport";
 import { createMockUiKernelTransport } from "../transport/mock";
 import { AgentSurfaceView } from "./AgentSurfaceView";
+
+type ApplyFileProposalFn = ComponentProps<typeof AgentSurfaceView>["applyFileProposal"];
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
   .IS_REACT_ACT_ENVIRONMENT = true;
@@ -63,6 +66,7 @@ describe("Studio Agent Surface", () => {
   async function renderAgent(options: {
     readonly transport?: ReturnType<typeof createMockUiKernelTransport>;
     readonly health?: { readonly state: string; readonly label: string; readonly detail: string | null } | null;
+    readonly applyFileProposal?: ApplyFileProposalFn;
   } = {}) {
     const transport = options.transport ?? createMockUiKernelTransport();
     const surfaces = await transport.loadSurfaces();
@@ -87,9 +91,9 @@ describe("Studio Agent Surface", () => {
     };
     const persist = vi.fn(async () => undefined);
     const pinTask = vi.fn(async () => undefined);
-    const applyFileProposal = vi.fn(async () => {
+    const applyFileProposal = vi.fn(options.applyFileProposal ?? (async () => {
       throw new Error("applyFileProposal is not expected in this test");
-    });
+    }));
     const undoFileProposal = vi.fn(async () => undefined);
     const reportError = vi.fn();
     const setRuntimeOutputContext = vi.fn();
@@ -187,23 +191,15 @@ describe("Studio Agent Surface", () => {
     expect(answer.textContent).toContain("Start with the project structure");
     expect(goal.compareDocumentPosition(answer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-    // File changes appear as one in-flow entry, collapsed by default.
-    const files = container.querySelector<HTMLDetailsElement>(".rho-agent-files")!;
-    expect(files.open).toBe(false);
-    const filesSummary = files.querySelector(":scope > summary")!;
-    expect(filesSummary.textContent).toContain("1 file changed");
-    expect(filesSummary.textContent).toContain("analysis.R");
+    // File changes appear as one in-flow entry; the timeline itself carries
+    // no diff content and no per-file decision buttons.
+    const entry = container.querySelector(".rho-agent-timeline .rho-agent-files-entry")!;
+    expect(entry.textContent).toContain("1 file changed");
+    expect(entry.textContent).toContain("analysis.R");
+    expect(container.querySelector(".rho-agent-timeline .rho-agent-file-proposal")).toBeNull();
 
-    // Expanding the entry opens the inline review panel with the proposal row.
-    await click(filesSummary);
-    expect(files.open).toBe(true);
-    expect(files.textContent).toContain("Applying writes the proposed content to the project file.");
-    const proposal = files.querySelector(".rho-agent-file-proposal")!;
-    expect(proposal.querySelector(".rho-agent-decision-kind")!.textContent).toBe("File change");
-    const content = proposal.querySelector<HTMLDetailsElement>(".rho-agent-file-content")!;
-    expect(content.open).toBe(false);
     const activity = container.querySelector(".rho-agent-activity")!;
-    expect(proposal.compareDocumentPosition(activity) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(entry.compareDocumentPosition(activity) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     // Title-level activity narration is visible as one-line rows.
     const rows = [...activity.querySelectorAll(".rho-agent-activity-row")].map((row) => row.textContent);
@@ -216,6 +212,28 @@ describe("Studio Agent Surface", () => {
     expect(codeReview.querySelector("summary")!.textContent).toBe("Run summary statistics");
     const contextUsed = activity.querySelector<HTMLDetailsElement>(".rho-agent-context-used")!;
     expect(contextUsed.open).toBe(false);
+
+    // The entry swaps the timeline for the conversation-scoped review
+    // surface (both stay in the DOM for the shared broker-path contract;
+    // visibility toggles) with the proposal row, its collapsed content, and
+    // the batch bar.
+    await click(entry);
+    const timeline = container.querySelector<HTMLElement>(".rho-agent-timeline")!;
+    expect(timeline.hidden).toBe(true);
+    const review = container.querySelector<HTMLElement>(".rho-agent-files-review")!;
+    expect(review.hidden).toBe(false);
+    expect(review.textContent).toContain("1 file changed");
+    expect(review.textContent).toContain("Applying writes the proposed content to the project file.");
+    expect(review.textContent).toContain("Apply all");
+    expect(review.textContent).toContain("Reject all");
+    const proposal = review.querySelector(".rho-agent-file-proposal")!;
+    expect(proposal.querySelector(".rho-agent-decision-kind")!.textContent).toBe("File change");
+    const content = proposal.querySelector<HTMLDetailsElement>(".rho-agent-file-content")!;
+    expect(content.open).toBe(false);
+
+    // Back returns to the conversation timeline.
+    await click(review.querySelector(".rho-agent-review-back")!);
+    expect(container.querySelector<HTMLElement>(".rho-agent-timeline")!.hidden).toBe(false);
   });
 
   it("shows a truthful empty state for a conversation without turns", async () => {
@@ -514,6 +532,7 @@ describe("Studio Agent Surface", () => {
 
   it("persists a rejected file proposal without touching the apply path", async () => {
     const { container, persist, applyFileProposal } = await renderAgent();
+    await click(container.querySelector(".rho-agent-files-entry")!);
     const proposal = container.querySelector(".rho-agent-file-proposal")!;
     const reject = [...proposal.querySelectorAll("button")].find((button) => button.textContent === "Reject")!;
     await click(reject);
@@ -524,6 +543,70 @@ describe("Studio Agent Surface", () => {
     }));
     expect(proposal.textContent).toContain("rejected in this view");
     expect([...proposal.querySelectorAll("button")].some((button) => button.textContent === "Apply")).toBe(false);
+  });
+
+  it("applies and rejects batches through the existing per-file paths", async () => {
+    const transport = createMockUiKernelTransport();
+    const base = (await transport.getAgentTurnDetail("agent-turn:mock-1"))!;
+    const proposalEvent = (id: number, path: string) => ({
+      id,
+      turn_id: base.turn.turn_id,
+      timestamp: mockNow,
+      event_type: "tool.call_completed",
+      title: "Proposed file edit",
+      body: JSON.stringify({
+        kind: "rho.file_edit_proposal",
+        operation: "append",
+        path,
+        content: `\n# ${path}\n`,
+      }),
+      status: "completed",
+      tool: "propose_file_edit",
+      request_id: null,
+      code: null,
+      details_json: JSON.stringify({ success: true }),
+    });
+    transport.getAgentTurnDetail = async () => makeDetail(base.turn, {
+      events: [...base.events, proposalEvent(10, "b.R"), proposalEvent(11, "c.R")],
+      approvals: base.approvals,
+    });
+    const mutation: AgentFileMutationResponse = {
+      status: "applied",
+      path: "analysis.R",
+      content: null,
+      start: 0,
+      end: 0,
+      after_sha256: "f".repeat(64),
+      project: { root: "/mock/project", files: [], truncated: false },
+      workspace: {
+        workspace_id: "workspace:mock",
+        kernel_instance_id: "kernel:mock",
+        execution_seq: 1,
+        state_revision: 4,
+        project_revision: 1,
+      },
+    };
+    const applyFileProposal = vi.fn<ApplyFileProposalFn>(async () => ({ response: mutation, beforeContent: "" }));
+    const { container, persist } = await renderAgent({ transport, applyFileProposal });
+
+    await click(container.querySelector(".rho-agent-files-entry")!);
+    const batch = container.querySelector(".rho-agent-review-batch")!;
+    const applyAll = [...batch.querySelectorAll("button")].find((button) => button.textContent === "Apply all (3)")!;
+    await click(applyAll);
+
+    expect(applyFileProposal).toHaveBeenCalledTimes(3);
+    const appliedPaths = applyFileProposal.mock.calls.map((call) => call[2].path);
+    expect(appliedPaths).toEqual(["analysis.R", "b.R", "c.R"]);
+
+    const rejectAll = [...batch.querySelectorAll("button")].find((button) => button.textContent === "Reject all")!;
+    await click(rejectAll);
+    expect(persist).toHaveBeenLastCalledWith(expect.objectContaining({
+      file_decisions: {
+        "agent-turn:mock-1:3": "rejected",
+        "agent-turn:mock-1:10": "rejected",
+        "agent-turn:mock-1:11": "rejected",
+      },
+    }));
   });
 
   it("submits through the composer with unchanged runAgent arguments and clears the draft", async () => {
