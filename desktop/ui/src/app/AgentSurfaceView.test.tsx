@@ -150,6 +150,18 @@ describe("Studio Agent Surface", () => {
         request_id: null,
         code: "summary(dataset)",
         details_json: "{}",
+      }, {
+        id: 11,
+        turn_id: base.turn.turn_id,
+        timestamp: mockNow,
+        event_type: "tool.call_completed",
+        title: "Read project metadata",
+        body: null,
+        status: "completed",
+        tool: "read_project_metadata",
+        request_id: null,
+        code: null,
+        details_json: "{}",
       }],
       approvals: base.approvals,
       context_items: [{
@@ -179,12 +191,20 @@ describe("Studio Agent Surface", () => {
     expect(proposal.querySelector(".rho-agent-decision-kind")!.textContent).toBe("File change");
     const content = proposal.querySelector<HTMLDetailsElement>(".rho-agent-file-content")!;
     expect(content.open).toBe(false);
-    const activity = container.querySelector<HTMLDetailsElement>(".rho-agent-activity")!;
-    expect(activity.open).toBe(false);
-    expect(activity.querySelector(":scope > summary")!.textContent).toBe("1 tool event · 1 context source");
+    const activity = container.querySelector(".rho-agent-activity")!;
     expect(proposal.compareDocumentPosition(activity) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(activity.querySelector(".rho-agent-code-review")).not.toBeNull();
-    expect(activity.querySelector(".rho-agent-context-used")).not.toBeNull();
+
+    // Title-level activity narration is visible as one-line rows.
+    const rows = [...activity.querySelectorAll(".rho-agent-activity-row")].map((row) => row.textContent);
+    expect(rows).toEqual(["Read project metadata"]);
+
+    // Technical payloads stay collapsed: code behind its per-row disclosure,
+    // context byte evidence behind the context-used disclosure.
+    const codeReview = activity.querySelector<HTMLDetailsElement>(".rho-agent-code-review")!;
+    expect(codeReview.open).toBe(false);
+    expect(codeReview.querySelector("summary")!.textContent).toBe("Run summary statistics");
+    const contextUsed = activity.querySelector<HTMLDetailsElement>(".rho-agent-context-used")!;
+    expect(contextUsed.open).toBe(false);
   });
 
   it("shows a truthful empty state for a conversation without turns", async () => {
@@ -315,6 +335,58 @@ describe("Studio Agent Surface", () => {
     expect(menu.open).toBe(false);
     expect(menu.querySelector("summary")!.textContent).toContain("Alternate model");
     expect(container.querySelector(".rho-agent-context-preview")).toBeNull();
+  });
+
+  it("offers search, provider groups, and per-row metadata in a long model menu", async () => {
+    const transport = createMockUiKernelTransport();
+    const base = await transport.loadAgentLlmSettings();
+    const extra = Array.from({ length: 7 }, (_, index) => ({
+      ...base.models[0]!,
+      id: `mock-profile-extra-${index}`,
+      display_name: `Extra model ${index}`,
+      model_id: `extra-model-${index}`,
+      provider_display_name: index < 4 ? "Second Provider" : "Third Provider",
+      selected: false,
+    }));
+    transport.loadAgentLlmSettings = vi.fn(async () =>
+      structuredClone({ ...base, models: [...base.models, ...extra] }));
+    const { container } = await renderAgent({ transport });
+
+    const menu = container.querySelector<HTMLDetailsElement>(".rho-agent-model-menu")!;
+    await click(menu.querySelector("summary")!);
+    expect(menu.open).toBe(true);
+
+    // Eight switchable models: the search filter is shown.
+    const search = menu.querySelector<HTMLInputElement>(".rho-agent-model-search")!;
+    expect(search).not.toBeNull();
+
+    // Provider group headers appear in first-seen order.
+    expect([...menu.querySelectorAll(".rho-agent-model-group-label")].map((label) => label.textContent))
+      .toEqual(["Mock Provider", "Second Provider", "Third Provider"]);
+
+    // The active row carries the check, the mono model id, and metadata.
+    const active = menu.querySelector("div[role='menu'] button[aria-checked='true']")!;
+    expect(active.querySelector(".rho-agent-model-check")!.textContent).toBe("✓");
+    expect(active.querySelector(".rho-agent-model-id")!.textContent).toBe("mock-model");
+    expect(active.querySelector("small")!.textContent).toBe("33k context · ready");
+
+    // Search filters across name, id, and provider; groups re-render.
+    await typeInput(search, "third");
+    const filtered = [...menu.querySelectorAll("div[role='menu'] button")];
+    expect(filtered.length).toBe(3);
+    expect(filtered.every((button) => button.textContent!.includes("Extra model"))).toBe(true);
+    expect([...menu.querySelectorAll(".rho-agent-model-group-label")].map((label) => label.textContent))
+      .toEqual(["Third Provider"]);
+
+    await typeInput(search, "does-not-exist");
+    expect([...menu.querySelectorAll("div[role='menu'] button")].length).toBe(0);
+    expect(menu.textContent).toContain("No model matches the search.");
+
+    // Closing the menu resets the query.
+    await act(async () => { menu.open = false; await settle(); });
+    await click(menu.querySelector("summary")!);
+    expect(menu.querySelector<HTMLInputElement>(".rho-agent-model-search")!.value).toBe("");
+    expect([...menu.querySelectorAll("div[role='menu'] button")].length).toBe(8);
   });
 
   it("keeps Stop beside the composer for a running turn and cancels through the existing path", async () => {
