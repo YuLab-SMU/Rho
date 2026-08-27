@@ -1,7 +1,7 @@
 # Studio Agent Surface UX
 
-Status: active implementation contract; amended 2026-08-27 for round 2
-(lane `studio-agent-ux-2`)
+Status: active implementation contract; amended 2026-08-27 for round 3
+(lane `studio-agent-ux-3`)
 
 Date: 2026-08-27
 Authorization: the user explicitly authorized "优化 Studio 模式中的 Agent 组件
@@ -15,7 +15,8 @@ Risk class: R1 frontend presentation and local UI state; no durable, execution,
 approval, schema, or transport effect
 Work package: studio-agent-ux (lane `studio-agent-ux`,
 base `560dff98cf69662cea9672194a6593f09c2d1a6f`);
-round 2: lane `studio-agent-ux-2`, base `63914e14a1dd`
+round 2: lane `studio-agent-ux-2`, base `63914e14a1dd`;
+round 3: lane `studio-agent-ux-3`, base `c39924f0290c`
 Mandatory stop: after the restructured Agent Surface, focused tests,
 typecheck/lint, wide/medium/narrow mock preview, and contract review
 
@@ -387,3 +388,90 @@ the same four lane files):
   viewport; `empty-suggestions.png` shows the suggestion chips, and the
   preview probe verified a chip fills (never sends) the composer. Review
   context remains the first control and every s3 DOM hook is present.
+
+## Round 3 Amendment: Reference-Product Chat Patterns
+
+Authorization: on 2026-08-27 the product owner reviewed the round-2 result
+against two mature agent-chat products (a ChatGPT agent conversation view and
+the Alma chat composer/model picker, supplied as annotated screenshots) and
+directed: "just copy the model of these product for a agent chat module. this
+is the way". Round 3 adopts the recognizable interaction patterns from those
+references inside the same presentation-only boundary.
+
+What this amendment authorizes (still presentation-only, D2/R1, same four
+lane files):
+
+1. Chat-model popover upgrade (Alma pattern). The composer model chip's menu
+   gains: a search filter shown when the switchable list is long (more than
+   six models), provider group headers, a checkmark on the active row, and a
+   per-row metadata line with the monospace `model_id`, a compact context
+   size, and the existing selector status. Switching still goes through the
+   revision-checked `selectAgentChatModel` transport, still clears any
+   reviewed context preview, and still closes the menu on choice. Provider
+   configuration and credentials stay in Settings.
+2. Timeline activity as visible one-line narration rows (ChatGPT agent
+   pattern). Tool-event titles render as terse one-line rows so a running or
+   finished turn reads as a narration ("Run summary statistics") instead of a
+   collapsed blob. Technical payloads stay collapsed by default at the
+   payload level: executed code remains behind its per-row
+   `.rho-agent-code-review` disclosure and context-source byte evidence
+   remains behind the `.rho-agent-context-used` disclosure. Round-1 goal 6 is
+   refined accordingly: title-level narration is ordinary reading content;
+   code, model ids, revisions, and byte evidence are the technical detail
+   that stays collapsed.
+3. Empty state as a centered greeting block (Alma pattern) with the existing
+   truthful copy ("No conversation yet" / "Ready for the first turn" plus the
+   how-to-start line) and the fill-only suggestion chips.
+4. Composer control row polish: secondary actions (Review context first, the
+   visible segmented Ask/Plan/Act with its hint, the model chip) get a quiet
+   ghost treatment; the primary Send stays right-aligned. Every s3
+   visual-acceptance DOM hook from round 1 remains present and visible.
+
+Explicitly not adopted from the references, with reasons:
+
+- The Alma reasoning-effort popup pattern (mode hidden behind a chip) is not
+  applied to Ask/Plan/Act: the s3 visual-acceptance gate requires the three
+  mode buttons visible with `aria-pressed` and clicks them directly. The
+  segmented control stays visible.
+- Suggestion chips still fill and never send; the references' auto-send
+  behavior is not authorized.
+- No backend, schema, transport, credential, approval, or file-mutation
+  change; no files owned by other lanes are edited.
+
+Round 3 verification keeps the full round-2 matrix (focused tests, typecheck,
+lint, build, `git diff --check`, three-width mock preview under
+`target/studio-agent-ux-preview/r3/`) and adds focused tests for the model
+search/grouping/metadata rows and the visible activity narration rows.
+
+Round 3 evidence passed 2026-08-27 (lane `studio-agent-ux-3`, same four lane
+files):
+
+- `npm --prefix desktop run rsr:typecheck` and `rsr:lint`;
+- focused `AgentSurfaceView.test.tsx`: 13 of 13 passed, adding the long-menu
+  search/group/metadata test (provider group headers, checkmark on the active
+  row, mono `model_id`, "33k context · ready" metadata, query reset on
+  reopen) and the visible activity narration rows with code and context byte
+  evidence still collapsed;
+- full UI suite on the final snapshot: 52 files, 342 tests passed;
+- `npm run rsr:build --prefix desktop`;
+- `git diff --check`;
+- mock preview under `target/studio-agent-ux-preview/r3/` (headless Chrome
+  against the built bundle; capture script and `capture-probes.json` beside
+  the screenshots): `surface-wide.png` (~479px) and `composer-wide.png` show
+  the populated turn hierarchy and the single composer container with ghost
+  Review context, visible segmented Ask/Plan/Act with hint, model chip, and
+  primary Send; `model-menu.png` shows the Alma-style popover with provider
+  group header, active-row checkmark, mono model id, and context metadata,
+  probed `popoverInView: true` after right-anchoring; `empty-suggestions.png`
+  shows the centered greeting state and the probe verified a suggestion chip
+  fills and never sends; `capacity-disclosure.png` keeps Context capacity
+  behind its disclosure; `surface-medium.png` (~231px) and
+  `surface-narrow.png` (~171px, via the real dockview resize sash) probe
+  `surfaceOverflow: false`, `pageOverflow: false`, and the composer visible.
+
+Deviation recorded during round-3 preview: the model popover originally
+opened left-anchored and clipped out of the viewport when the surface was
+docked at the right edge; it is now right-anchored in the lane stylesheet so
+it opens leftward and stays in view. No s3 visual-acceptance DOM hook moved;
+the complete `rsr:check` matrix and the s3 gate remain with the integration
+lane as listed in the follow-ups above.

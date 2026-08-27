@@ -107,6 +107,15 @@ function agentTurnStatusLabel(status: AgentTurnSummary["status"]): string {
   }
 }
 
+function formatContextTokens(tokens: number): string {
+  if (tokens >= 1_000_000) {
+    const millions = tokens / 1_000_000;
+    return `${Number.isInteger(millions) ? millions.toFixed(0) : millions.toFixed(1)}M`;
+  }
+  if (tokens >= 1_000) return `${Math.round(tokens / 1_000)}k`;
+  return String(tokens);
+}
+
 const AGENT_MODE_HINTS: Readonly<Record<AgentMode, string>> = {
   ask: "Ask about this project",
   plan: "Shape a reviewable approach",
@@ -189,6 +198,7 @@ export function AgentSurfaceView({
   const [capacityModelId, setCapacityModelId] = useState("");
   const [capacityDraft, setCapacityDraft] = useState({ context: "", reserve: "" });
   const [modelSwitchBusy, setModelSwitchBusy] = useState(false);
+  const [modelQuery, setModelQuery] = useState("");
 
   const contextPlanKey = JSON.stringify([
     view.composer.trim(),
@@ -407,6 +417,18 @@ export function AgentSurfaceView({
     ?? (llmSettings == null ? "Loading model…" : "Chat model");
   const switchableModels = (llmSettings?.models ?? [])
     .filter((model) => model.enabled && model.model_type.value === "language");
+  const activeChatModelId = chatRoute?.model_id ?? llmSettings?.selected_model_id ?? null;
+  const normalizedModelQuery = modelQuery.trim().toLowerCase();
+  const filteredModels = normalizedModelQuery === "" ? switchableModels : switchableModels.filter((model) =>
+    model.display_name.toLowerCase().includes(normalizedModelQuery) ||
+    model.model_id.toLowerCase().includes(normalizedModelQuery) ||
+    model.provider_display_name.toLowerCase().includes(normalizedModelQuery));
+  const modelGroups = new Map<string, Array<(typeof switchableModels)[number]>>();
+  for (const model of filteredModels) {
+    const group = modelGroups.get(model.provider_display_name);
+    if (group == null) modelGroups.set(model.provider_display_name, [model]);
+    else group.push(model);
+  }
   const activeTurn = turns.find((turn) => turn.status === "running" || turn.status === "waiting");
   const stopActiveTurn = activeTurn == null ? null : () => {
     setBusy(true);
@@ -543,12 +565,7 @@ export function AgentSurfaceView({
             const proposalEventIds = new Set(proposals.map(({ event }) => event.id));
             const activityEvents = detail?.events.filter((event) =>
               (event.tool != null || event.code != null) && !proposalEventIds.has(event.id)) ?? [];
-            const codeEvents = detail?.events.filter((event) => event.code != null && !proposalEventIds.has(event.id)) ?? [];
             const contextItems = detail?.context_items ?? [];
-            const activitySummary = [
-              activityEvents.length > 0 ? `${activityEvents.length} tool ${activityEvents.length === 1 ? "event" : "events"}` : null,
-              contextItems.length > 0 ? `${contextItems.length} context ${contextItems.length === 1 ? "source" : "sources"}` : null,
-            ].filter((part) => part != null).join(" · ");
             return (
               <article className={`rho-agent-turn rho-agent-turn-${turn.status}`} data-turn-id={turn.turn_id} key={turn.turn_id}>
                 <header>
@@ -644,13 +661,14 @@ export function AgentSurfaceView({
                     </section>
                   );
                 })}
-                {activitySummary !== "" && (
-                  <details className="rho-agent-activity">
-                    <summary>{activitySummary}</summary>
-                    {codeEvents.map((event) => (
+                {(activityEvents.length > 0 || contextItems.length > 0) && (
+                  <div className="rho-agent-activity">
+                    {activityEvents.map((event) => event.code != null ? (
                       <details className="rho-agent-code-review" key={event.id}>
                         <summary>{event.title}</summary><pre>{event.code}</pre>
                       </details>
+                    ) : (
+                      <div className="rho-agent-activity-row" key={event.id}>{event.title}</div>
                     ))}
                     {contextItems.length > 0 && <details className="rho-agent-context-used">
                       <summary>Context used · {contextItems.length} {contextItems.length === 1 ? "source" : "sources"}</summary>
@@ -660,7 +678,7 @@ export function AgentSurfaceView({
                         <small>{item.included_bytes.toLocaleString()} of {item.original_bytes.toLocaleString()} bytes · {item.trust_class}</small>
                       </li>)}</ol>
                     </details>}
-                  </details>
+                  </div>
                 )}
                 <footer>
                   <button type="button" onClick={() => void pinTask(turn).catch(reportError)}>Pin to Vibe</button>
@@ -720,26 +738,54 @@ export function AgentSurfaceView({
             </div>
             <small className="rho-agent-mode-hint">{AGENT_MODE_HINTS[view.mode]}</small>
             <details className="rho-agent-model-menu">
-              <summary aria-label={`Chat model: ${chatModelLabel}`} aria-busy={modelSwitchBusy}>
+              <summary aria-label={`Chat model: ${chatModelLabel}`} aria-busy={modelSwitchBusy} onClick={(event) => {
+                const menu = event.currentTarget.closest("details");
+                if (menu != null && !menu.open) setModelQuery("");
+              }}>
                 <span>{chatModelLabel}</span>
               </summary>
               <div role="menu" aria-label="Chat model choices">
+                {switchableModels.length > 6 && (
+                  <input
+                    className="rho-agent-model-search"
+                    type="search"
+                    aria-label="Search chat models"
+                    placeholder="Search models…"
+                    value={modelQuery}
+                    onChange={(event) => setModelQuery(event.target.value)}
+                  />
+                )}
                 {switchableModels.length === 0 && <span className="rho-agent-model-empty">No language model is available.</span>}
-                {switchableModels.map((model) => (
-                  <button
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={model.id === (chatRoute?.model_id ?? llmSettings?.selected_model_id)}
-                    disabled={modelSwitchBusy}
-                    key={model.id}
-                    onClick={(event) => {
-                      event.currentTarget.closest("details")!.open = false;
-                      void selectChatModel(model.id);
-                    }}
-                  >
-                    <span>{model.display_name}</span>
-                    <small>{model.provider_display_name} · {model.selector_status.replaceAll("_", " ")}</small>
-                  </button>
+                {switchableModels.length > 0 && filteredModels.length === 0 && (
+                  <span className="rho-agent-model-empty">No model matches the search.</span>
+                )}
+                {[...modelGroups].map(([provider, models]) => (
+                  <div className="rho-agent-model-group" key={provider}>
+                    <div className="rho-agent-model-group-label">{provider}</div>
+                    {models.map((model) => {
+                      const active = model.id === activeChatModelId;
+                      return (
+                        <button
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={active}
+                          disabled={modelSwitchBusy}
+                          key={model.id}
+                          onClick={(event) => {
+                            event.currentTarget.closest("details")!.open = false;
+                            void selectChatModel(model.id);
+                          }}
+                        >
+                          <span className="rho-agent-model-row">
+                            <span className="rho-agent-model-check" aria-hidden="true">{active ? "✓" : ""}</span>
+                            <span className="rho-agent-model-name">{model.display_name}</span>
+                            <code className="rho-agent-model-id">{model.model_id}</code>
+                          </span>
+                          <small>{formatContextTokens(model.context_window_tokens)} context · {model.selector_status.replaceAll("_", " ")}</small>
+                        </button>
+                      );
+                    })}
+                  </div>
                 ))}
               </div>
             </details>
