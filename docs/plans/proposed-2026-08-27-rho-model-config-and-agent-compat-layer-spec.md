@@ -1,6 +1,6 @@
 # Rho Canonical Model Configuration and Agent-Tool Compatibility Layer
 
-Status: proposed design contract, revision 3. Seeded by the owner's
+Status: proposed design contract, revision 4. Seeded by the owner's
 2026-08-27 direction after a research pass over Codex CLI, Claude Code,
 opencode, Cursor, and DeepSeek Harness: Rho keeps its own independent model
 configuration system, and a compatibility layer projects it to aisdk today
@@ -106,7 +106,7 @@ relocating it.
 
 | Active contract | Amendment |
 | --- | --- |
-| CRED-UX (`active-2026-08-05-system-credential-and-simple-llm-settings-spec.md`) | settings file relocates to the XDG root and becomes YAML; redaction, revision discipline, and no-fallback rules retained |
+| CRED-UX (`active-2026-08-05-system-credential-and-simple-llm-settings-spec.md`) | settings file relocates to the resolved Rho home and becomes YAML; redaction, revision discipline, and no-fallback rules retained |
 | CRED-SEC (`active-2026-08-26-llm-credential-sources-and-store-hardening-spec.md`) | source semantics replaced: sources are session / environment / config-file literal; resolution precedence amended; audit retained |
 | CRED-VAULT-1 (`active-2026-08-26-rho-encrypted-credential-vault-spec.md`) | superseded in full by the owner's plaintext direction; the vault module and its files are abandoned in place and the code is deleted outright (no exporter, per the rapid-iteration ruling) |
 | CRED-REVEAL-1A | probe containment unchanged; scrub list derivation gains every `api_key_env` declared in the canonical registry |
@@ -159,7 +159,7 @@ silent (the gh-CLI lesson).
 
 - Rapid-iteration ruling: there is no V5→V6 migrator, no vault export flow,
   and no dual-run comparison. The new code reads and writes only
-  `config.yaml` under the XDG root.
+  `config.yaml` under the resolved Rho home.
 - The app-data `llm-profiles.json`, `agent-local-credentials.json`, and
   `agent-local-credentials.key` are never read, modified, or deleted by new
   code; the vault module and the V1–V5 schema/migration code are removed
@@ -221,8 +221,8 @@ silent (the gh-CLI lesson).
 - **COMPAT-0 (this proposal):** contract, plaintext-storage decision,
   location and precedence rules, export semantics, cross-review. Stop: no
   code.
-- **COMPAT-1 (plaintext store, direct adoption):** XDG root +
-  `RHO_CONFIG_HOME`, V6 YAML schema read/write with atomic writes and
+- **COMPAT-1 (plaintext store, direct adoption):** resolved Rho home +
+  `RHO_HOME`, V6 YAML schema read/write with atomic writes and
   permission discipline, session → environment → file resolution, turns /
   connection tests / Settings cut straight over to the new store, vault and
   V1–V5 code deleted, Settings effective-source and shadowing projection,

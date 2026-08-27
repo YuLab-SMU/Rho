@@ -4,8 +4,15 @@ Status: active implementation contract, authorized by the owner's
 2026-08-27 instruction `直接使用最新的方案` under the rapid-iteration ruling
 (no migration; the new scheme is adopted directly). Owning umbrella:
 `proposed-2026-08-27-rho-model-config-and-agent-compat-layer-spec.md`
-revision 3. This slice implements that proposal's COMPAT-1 package and
+revision 4. This slice implements that proposal's COMPAT-1 package and
 stops before any export-framework work.
+
+COMPAT-1B was explicitly activated by the owner's 2026-08-27 instruction
+`开始完成`. Its former `startup-info-integration` entry blocker is closed, and
+the single-writer integration lane `compat-1b-cutover` was registered from
+`a69fb4b8f3dd` before shared files were changed. The next mandatory stop is
+the complete affected validation, independent R3 review, and integration
+handoff; COMPAT-2 remains inactive.
 
 Date: 2026-08-27
 
@@ -30,8 +37,8 @@ COMPAT-1 is split into two stages:
   (or chosen) dependency lands in `desktop/src-tauri/Cargo.toml`; the
   resulting `Cargo.lock` build artifact converges through the integration
   lane at merge per `AGENTS.md`. No cutover wiring, no UI, no deletions.
-- **COMPAT-1B (cutover, integration lane, blocked until
-  `startup-info-integration` finishes):** turns / connection tests /
+- **COMPAT-1B (cutover, active integration lane; former
+  `startup-info-integration` blocker satisfied):** turns / connection tests /
   Settings read and write only the new store, vault and V1–V5 code are
   deleted from `main.rs` and `agent_llm.rs`, Settings gains the
   effective-source and shadowing projection, and mock parity plus document
@@ -51,9 +58,21 @@ COMPAT-1 is split into two stages:
   Windows); atomic writes (write-temp-then-rename) for every mutation.
 - Pre-existing loose permissions are surfaced truthfully in Settings with
   a repair affordance; never silently chmodded.
+- Permission repair is an explicit command pinned to the exact currently
+  resolved config path. A path-resolution change rejects the request as
+  stale. On Unix it applies `0700` to the resolved home and `0600` to the
+  existing file; other platforms use the existing best-effort hardening and
+  report any remaining issue truthfully.
 - A missing or unreadable `config.yaml` is the truthful empty state: no
   providers configured; Settings copy names the file path so re-entry is
   one paste away.
+- The Settings view carries a SHA-256 of the exact loaded file bytes (or an
+  explicit missing sentinel). Every Rho-owned config mutation supplies that
+  digest and the projected revision. The broker re-reads immediately under
+  the settings mutation lock and rejects a mismatch before atomic write, so
+  an external edit is never silently overwritten. Session-only mutations
+  revalidate the same identity because an external edit may remove or change
+  the target Provider.
 
 ### 1.2 V6 plaintext YAML schema
 
@@ -64,6 +83,11 @@ COMPAT-1 is split into two stages:
   - models: capability metadata and runtime options;
   - preferences and capability routes as in V5.
 - Session-only credential entry stays in-memory only; it is never written.
+- Credential writes name an explicit target: `config_file` or `session`.
+  `config_file` is the UI default and changes only the Provider's literal
+  `api_key`; `session` changes only the zeroizing process-session map. Replace
+  confirmation is scoped to the selected target slot, not merely to whichever
+  source currently wins.
 - New dependency: a maintained YAML crate (evaluate `serde_yml` first;
   record the choice in the lane's implementation notes).
 
@@ -72,6 +96,16 @@ COMPAT-1 is split into two stages:
 - Precedence per provider: session → environment (`api_key_env`, non-empty)
   → config-file literal → truthfully not-configured. Empty-string env is
   unset. No fallback, no guessing.
+- `environment` first means the non-empty desktop-process value. When it is
+  absent and startup has positively identified the user-level `~/.Renviron`,
+  Rho may ask the configured R executable for only the declared variable from
+  that exact file. The helper pins `R_ENVIRON_USER`, disables site and user R
+  profiles, never uses a project working directory, bounds output, and keeps
+  the normal probe scrub/redaction rules. Presence projection returns only a
+  boolean; an exact value is read only for the selected Provider's turn,
+  connection test, discovery, or explicit reveal. Project `.Renviron` files
+  are never credential authority. Both process and user-`.Renviron` values are
+  projected as `environment`; process environment wins when both exist.
 - Settings projection shows the effective source per provider and flags
   when an environment value shadows a file value.
 - Settings states plainly that credentials are stored in plaintext in
@@ -89,6 +123,11 @@ COMPAT-1 is split into two stages:
 - Audit journal (stays in app-data) keeps recording Rho-triggered
   credential reads and gains a one-time `config_store_adopted` event
   naming the new path.
+- `config_store_adopted` is de-duplicated across restarts under the audit-log
+  lock by scanning the bounded retained JSONL for the exact normalized config
+  path before append. Read/write failure remains non-blocking, is redacted in
+  the startup log, and is retried on a later successful store access; it never
+  causes a false durable-success claim.
 - Connection-test/model-discovery probes keep CRED-REVEAL-1A containment;
   the env-scrub derivation now covers every `api_key_env` declared in the
   canonical registry plus generic sensitive names.
@@ -127,7 +166,13 @@ COMPAT-1 is split into two stages:
   malformed YAML → truthful empty/repair state that never blocks project
   opening or non-Agent surfaces.
 - Precedence: each source winning in turn, empty-string env as unset,
-  shadowing display truthfulness, not-configured stays not-configured.
+  process-env over user-`.Renviron`, bounded exact user-`.Renviron` selected
+  reads, project-`.Renviron` exclusion, shadowing display truthfulness, and
+  not-configured stays not-configured.
+- Mutation concurrency: revision plus exact-byte SHA-256 success, stale
+  external edit rejection for every durable mutation, session-target
+  revalidation, target-specific replace confirmation, and atomic failure
+  preserving the prior file byte-for-byte.
 - Deletion honesty: legacy app-data files byte-identical after every
   operation; no code path references the vault or V1–V5 schema.
 - Redaction regression across resolution and reveal; CRED-REVEAL-1A
@@ -147,7 +192,8 @@ The integration lane selected `serde_norway` `0.9.42`, regenerated the shared
 `Cargo.lock`, passed `cargo check -p rho-desktop`, and passed all 28 focused
 `agent_config` tests with `--locked` on 2026-08-27.
 
-COMPAT-1B remains unimplemented. The current vault/V1-V5 runtime therefore
-remains authoritative until a new single-writer integration lane activates and
-verifies the cutover. No version, `NEWS.md`, candidate, migration, export, or
-release claim is made by COMPAT-1A.
+COMPAT-1B is now active in the registered `compat-1b-cutover` integration lane.
+Until its atomic cutover is implemented, verified, reviewed, committed, and
+merged, the current vault/V1-V5 runtime remains authoritative. No version,
+`NEWS.md`, candidate, migration, export, or release claim is made merely by
+activation; those facts are recorded only at the integration handoff.
