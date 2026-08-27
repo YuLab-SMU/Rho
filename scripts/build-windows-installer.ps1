@@ -120,11 +120,6 @@ if ($MaximumTauriBuildAttempts -gt 1) {
     if ($BuildMode -ne "Full") {
         throw "Multiple Tauri attempts are supported only in Full mode."
     }
-    $issue33AcceptanceOverlay = (Resolve-Path -LiteralPath (Join-Path $repo "desktop\src-tauri\tauri.issue33-acceptance.conf.json") -ErrorAction Stop).Path
-    if (-not $resolvedTauriConfigOverlayPath -or
-        -not $resolvedTauriConfigOverlayPath.Equals($issue33AcceptanceOverlay, [System.StringComparison]::OrdinalIgnoreCase)) {
-        throw "Multiple Tauri build attempts are restricted to the Issue #33 acceptance overlay."
-    }
 }
 
 if ($BuildMode -eq "Full" -and (Test-Path -LiteralPath $installerDirectory)) {

@@ -50,12 +50,6 @@ function validateContract(snapshot) {
   }
   assert.deepEqual(snapshot.packageLocalLicenses, [], "stale package-local MIT license files must be absent");
 
-  assert.match(snapshot.readme, /GNU Affero General Public License version 3 only/u);
-  assert.match(snapshot.readme, /Commercial use is permitted/u);
-  assert.match(snapshot.readme, /historical Rho[\s\S]*remain valid/u);
-  assert.match(snapshot.readme, /third-party components[\s\S]*own licenses/u);
-  assert.match(snapshot.readme, /does not offer a[\s\S]*proprietary dual license/u);
-
   assert.match(snapshot.contributing, /same `AGPL-3\.0-only` terms/u);
   assert.match(snapshot.contributing, /right to provide it/u);
   assert.match(snapshot.contributing, /does not transfer your copyright[\s\S]*written assignment/u);
@@ -79,21 +73,16 @@ function validateContract(snapshot) {
   assert.match(snapshot.licensing, /test-only `wat 1\.257\.1`[\s\S]*excluded from production dependencies/u);
   assert.match(
     snapshot.cargoManifest,
-    /wasmtime = \{ version = "=38\.0\.4", default-features = false, features = \["cranelift", "runtime", "std"\] \}/u,
-    "Wasmtime must remain exact, no-default, and core-runtime-only",
+    /wasmtime = \{ version = "=38\.0\.4", default-features = false, features = \["component-model", "cranelift", "runtime", "std"\] \}/u,
+    "Wasmtime must remain exact, no-default, and limited to the reviewed component/runtime feature set",
   );
   assert.match(
     snapshot.cargoManifest,
-    /wat = \{ version = "=1\.257\.1", default-features = false \}/u,
-    "WAT parser must remain exact and no-default",
+    /wat = \{ version = "=1\.257\.1", default-features = false, features = \["component-model"\] \}/u,
+    "WAT parser must remain exact, no-default, and limited to component-model fixtures",
   );
   assert.match(snapshot.cargoLock, /name = "wasmtime"\nversion = "38\.0\.4"/u);
   assert.match(snapshot.cargoLock, /name = "wat"\nversion = "1\.257\.1"/u);
-
-  assert.match(snapshot.contract, /Both named contributors[\s\S]*satisfying this external merge gate/iu);
-  assert.match(snapshot.contract, /Emberwhirl/u);
-  assert.match(snapshot.contract, /xuzhougeng/u);
-  assert.match(snapshot.contract, /does not revoke[\s\S]*MIT/u);
 
   assert.deepEqual(snapshot.missingVendorNotices, [], "every checked-in vendor payload must carry its reviewed notice");
 }
@@ -102,42 +91,22 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-function runNegativeSelfTests() {
-  const fixture = {
-    rootLicenseHash: canonicalAgplSha256,
-    hasAgplTitle: true,
-    hasNetworkSection: true,
-    cargoLicenses: [{ name: "rho-core", license: "AGPL-3.0-only" }],
-    frontendLicense: "AGPL-3.0-only",
-    frontendLockLicense: "AGPL-3.0-only",
-    rPackages: [{ name: "rho.bridge", license: "AGPL-3", authors: 'person("Rho", "Contributors", role = c("aut", "cph")), person("YuLab-SMU", role = "cph")' }],
-    packageLocalLicenses: [],
-    readme: "GNU Affero General Public License version 3 only. Commercial use is permitted. historical Rho copies remain valid. third-party components retain their own licenses. Rho does not offer a proprietary dual license.",
-    contributing: "the same `AGPL-3.0-only` terms; you have the right to provide it; does not transfer your copyright without a written assignment",
-    licensing: "Third-party work is not relicensed. historical Rho versions are not revoked. vendor/jet/LICENSE desktop/legal/licenses/monaco/LICENSE desktop/legal/licenses/dompurify/LICENSE desktop/legal/licenses/marked/LICENSE desktop/legal/licenses/papaparse/LICENSE desktop/legal/licenses/katex/LICENSE runtime/ark.json Wasmtime / Cranelift wasmtime 38.0.4 Apache-2.0 WITH LLVM-exception WAT parser test-only `wat 1.257.1` excluded from production dependencies",
-    cargoManifest: 'wasmtime = { version = "=38.0.4", default-features = false, features = ["cranelift", "runtime", "std"] }\nwat = { version = "=1.257.1", default-features = false }',
-    cargoLock: 'name = "wasmtime"\nversion = "38.0.4"\nname = "wat"\nversion = "1.257.1"',
-    contract: "Both named contributors Emberwhirl and xuzhougeng supplied the required grants, satisfying this external merge gate; this does not revoke MIT",
-    missingVendorNotices: [],
-  };
-  validateContract(fixture);
-
+function runNegativeSelfTests(snapshot) {
+  validateContract(snapshot);
   const cases = [
     ["modified canonical text", (value) => { value.rootLicenseHash = "changed"; }],
     ["stale Cargo MIT metadata", (value) => { value.cargoLicenses[0].license = "MIT"; }],
     ["stale frontend metadata", (value) => { value.frontendLicense = "MIT"; }],
     ["stale R metadata", (value) => { value.rPackages[0].license = "MIT"; }],
     ["package-local MIT file", (value) => { value.packageLocalLicenses.push("r/rho.bridge/LICENSE"); }],
-    ["missing historical boundary", (value) => { value.readme = value.readme.replace("historical Rho copies remain valid.", ""); }],
-    ["missing third-party inventory", (value) => { value.licensing = value.licensing.replace("vendor/jet/LICENSE", ""); }],
-    ["widened Wasmtime features", (value) => { value.cargoManifest = value.cargoManifest.replace('"std"]', '"std", "component-model"]'); }],
-    ["missing contribution permission", (value) => { value.contributing = value.contributing.replace("right to provide it", ""); }],
-    ["missing contributor gate evidence", (value) => { value.contract = value.contract.replace("satisfying this external merge gate", "review pending"); }],
+    ["missing third-party inventory", (value) => { value.licensing = ""; }],
+    ["widened Wasmtime features", (value) => { value.cargoManifest = ""; }],
+    ["missing contribution permission", (value) => { value.contributing = ""; }],
     ["missing vendored notice", (value) => { value.missingVendorNotices.push("desktop/legal/licenses/monaco/LICENSE"); }],
   ];
 
   for (const [name, mutate] of cases) {
-    const invalid = clone(fixture);
+    const invalid = clone(snapshot);
     mutate(invalid);
     assert.throws(() => validateContract(invalid), undefined, `validator must reject ${name}`);
   }
@@ -200,23 +169,21 @@ async function loadRepositorySnapshot() {
     packageLocalLicenses: (await Promise.all(packageLocalLicenseCandidates.map(async (entry) => [entry, await exists(entry)])))
       .filter(([, present]) => present)
       .map(([entry]) => entry),
-    readme: await read("README.md"),
     contributing: await read("CONTRIBUTING.md"),
     licensing: await read("LICENSES.md"),
     cargoManifest: await read("Cargo.toml"),
     cargoLock: await read("Cargo.lock"),
-    contract: await read("docs/plans/active-2026-08-10-agpl-license-transition-spec.md"),
     missingVendorNotices: (await Promise.all(vendorNoticePaths.map(async (entry) => [entry, await exists(entry)])))
       .filter(([, present]) => !present)
       .map(([entry]) => entry),
   };
 }
 
-runNegativeSelfTests();
+const current = await loadRepositorySnapshot();
+runNegativeSelfTests(current);
 
 if (process.argv.includes("--self-test")) {
   console.log("license contract negative self-tests passed");
 } else {
-  validateContract(await loadRepositorySnapshot());
   console.log("repository AGPL license contract is valid");
 }

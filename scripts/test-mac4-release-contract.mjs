@@ -4,14 +4,10 @@ import fs from "node:fs";
 const normalizeLineEndings = (text) => text.replace(/\r\n/g, "\n");
 const read = (file) => normalizeLineEndings(fs.readFileSync(file, "utf8"));
 const count = (text, pattern) => [...text.matchAll(pattern)].length;
-const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-const expectedVersion = "0.4.1-dev.13";
-const normalPublishVersion = "0.4.0";
-const normalPublishVersionPattern = escapeRegExp(normalPublishVersion);
 const cargo = read("Cargo.toml");
-const cargoVersion = cargo.match(/^version = "([^"]+)"/m)?.[1];
-assert.equal(cargoVersion, expectedVersion, "Cargo candidate version must be synchronized");
+const expectedVersion = cargo.match(/^version = "([^"]+)"/m)?.[1];
+assert.ok(expectedVersion, "Cargo candidate version must be readable");
 assert.equal(JSON.parse(read("desktop/src-tauri/tauri.conf.json")).version, expectedVersion);
 assert.equal(JSON.parse(read("desktop/package.json")).version, expectedVersion);
 const packageLock = JSON.parse(read("desktop/package-lock.json"));
@@ -58,11 +54,15 @@ assert.match(
 );
 assert.match(build, /name: Build Rho Candidate \/ Rehearsal/);
 assert.match(build, buildModePattern);
-assert.match(build, new RegExp(`release_tag:\\n[\\s\\S]*?default: v${normalPublishVersionPattern}`));
-assert.match(build, /release_name:\n[\s\S]*?default: Rho 0\.4\.0/);
+const buildInputs = build.match(/workflow_dispatch:\n\s+inputs:\n([\s\S]*?)\n\npermissions:/)?.[1];
+assert.ok(buildInputs, "Candidate workflow inputs are missing");
+assert.doesNotMatch(buildInputs, /release_(?:tag|name):/);
+assert.match(build, /version="\$\(node -e [^\n]+Cargo\.toml/);
+assert.match(build, /release_tag="v\$version"/);
+assert.match(build, /release_name="Rho \$version"/);
 assert.match(build, /candidate-release\.mjs --mode admission --build_mode "\$BUILD_MODE" --repository "\$GITHUB_REPOSITORY" --workflow_ref "\$GITHUB_REF" --default_branch "\$DEFAULT_BRANCH"/);
 assert.match(build, /release-notes\.mjs --test true/);
-assert.match(build, /release-notes\.mjs --mode validate --version "\$version" --tag "\$INPUT_RELEASE_TAG"/);
+assert.match(build, /release-notes\.mjs --mode validate --version "\$version" --tag "\$release_tag"/);
 assert.match(build, /commit="\$\(git rev-parse "\$\{INPUT_REF\}\^\{commit\}"\)"/);
 assert.match(build, /Requested commit \$commit is not the current default-branch commit \$default_commit/);
 assert.equal(count(build, /persist-credentials: false/g), 8, "Every candidate checkout must avoid persisted Git credentials");
@@ -228,10 +228,7 @@ assert.match(notaryContract, /aud: "appstoreconnect-v1"/);
 assert.match(notaryContract, /MAX_NOTARY_LOG_BYTES = 1024 \* 1024/);
 assert.match(notaryContract, /dsaEncoding: "ieee-p1363"/);
 assert.match(notaryContract, /EXACT_DEVELOPER_LOG_HOSTS = new Set\(\["notary-artifacts-prod\.s3\.amazonaws\.com"\]\)/);
-assert.match(
-  read(".github/workflows/candidate-publish.yml"),
-  new RegExp(`default: v${escapeRegExp(normalPublishVersion)}`),
-);
+assert.doesNotMatch(read(".github/workflows/candidate-publish.yml"), /release_tag:\n[\s\S]{0,160}\bdefault:/);
 assert.match(build, /draft: true/);
 assert.match(build, /const prerelease = version\.includes\("-"\)/);
 assert.match(build, /prerelease,/);

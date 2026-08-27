@@ -8,8 +8,8 @@ import type {
 import type { Unsubscribe } from "../transport/types";
 import { runtimeOutputChunkBlock } from "../app/runtime-output-presentation";
 
-// Acceptance automation surface for the debug-only visual acceptance bridge
-// (docs/plans/active-2026-08-26-visual-acceptance-automation-spec.md). The
+// Acceptance automation surface for the debug-only visual acceptance bridge.
+// The
 // bridge forwards `rho://acceptance-eval` payloads whose `js` field is a JSON
 // encoded AutomationRequest — never executable source. This module interprets
 // a fixed command vocabulary only; the page CSP forbids eval and none is used.

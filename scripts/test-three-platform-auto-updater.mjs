@@ -15,9 +15,11 @@ const linuxConfig = JSON.parse(read("desktop/src-tauri/tauri.linux.conf.json"));
 assert.deepEqual(candidatePlatformsForVersion("0.4.0-dev.42"), ["windows_x86_64", "macos_aarch64"]);
 assert.deepEqual(candidatePlatformsForVersion("0.4.0-dev.43"), ["windows_x86_64", "macos_aarch64", "linux_x86_64"]);
 assert.deepEqual(candidatePlatformsForVersion("0.4.0"), ["windows_x86_64", "macos_aarch64", "linux_x86_64"]);
+assert.deepEqual(candidatePlatformsForVersion("0.4.1-dev.22"), ["windows_x86_64", "macos_aarch64", "linux_x86_64"]);
 assert.deepEqual(nativeUpdaterPlatformsForVersion("0.4.0-dev.42"), ["windows_x86_64", "macos_aarch64"]);
 assert.deepEqual(nativeUpdaterPlatformsForVersion("0.4.0-dev.43"), ["windows_x86_64", "macos_aarch64", "linux_x86_64"]);
 assert.deepEqual(nativeUpdaterPlatformsForVersion("0.4.0"), ["windows_x86_64", "macos_aarch64", "linux_x86_64"]);
+assert.deepEqual(nativeUpdaterPlatformsForVersion("0.4.1-dev.22"), ["windows_x86_64", "macos_aarch64", "linux_x86_64"]);
 
 assert.equal(linuxConfig.bundle.createUpdaterArtifacts, true);
 assert.match(update, /\("linux", "x86_64"\)/);

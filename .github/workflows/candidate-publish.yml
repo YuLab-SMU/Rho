@@ -6,7 +6,6 @@ on:
       release_tag:
         description: Exact accepted draft tag
         required: true
-        default: v0.4.0
 
 permissions:
   contents: read
@@ -33,9 +32,6 @@ jobs:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            if (process.env.RELEASE_TAG === "v0.4.0-dev.41") {
-              throw new Error("The dev.41 native updater acceptance target may be published only by its dedicated protected workflow.");
-            }
             const matches = (await github.paginate(github.rest.repos.listReleases, {
               owner,
               repo,
@@ -88,38 +84,16 @@ jobs:
             }
             if (release.data.target_commitish !== process.env.EXPECTED_COMMIT) throw new Error("Draft commit changed before admission validation.");
             const version = process.env.RELEASE_TAG.replace(/^v/, "");
-            const releaseNotesPath = path.join(".github", "release-notes", `${process.env.RELEASE_TAG}.md`);
             const releaseNotesToolPath = path.join(process.cwd(), "scripts", "release-notes.mjs");
-            let expectedReleaseBody;
-            let releaseBodySha256;
-            if (fs.existsSync(releaseNotesPath) && fs.existsSync(releaseNotesToolPath)) {
-              const releaseNotesModule = await import(pathToFileURL(releaseNotesToolPath).href);
-              const releaseNotes = releaseNotesModule.loadReleaseNotes({
-                repositoryRoot: process.cwd(),
-                version,
-                releaseTag: process.env.RELEASE_TAG,
-              });
-              releaseNotesModule.requireExactReleaseBody(releaseNotes, release.data.body || "");
-              expectedReleaseBody = releaseNotes.body;
-              releaseBodySha256 = releaseNotes.sha256;
-            } else {
-              const legacy = {
-                release_id: 367934137,
-                tag_name: "v0.4.0-dev.27",
-                target_commitish: "aff83f01d2db8c241fe794fe5e5e4c80d2baf2a0",
-                body: "Immutable cross-platform candidate built from `aff83f01d2db8c241fe794fe5e5e4c80d2baf2a0`. Publication requires separate MAC5 acceptance evidence and GO.",
-              };
-              if (
-                release.data.id !== legacy.release_id
-                || release.data.tag_name !== legacy.tag_name
-                || release.data.target_commitish !== legacy.target_commitish
-                || release.data.body !== legacy.body
-              ) {
-                throw new Error("The exact candidate commit does not contain its reviewed versioned release notes file.");
-              }
-              expectedReleaseBody = legacy.body;
-              releaseBodySha256 = crypto.createHash("sha256").update(Buffer.from(legacy.body, "utf8")).digest("hex");
-            }
+            const releaseNotesModule = await import(pathToFileURL(releaseNotesToolPath).href);
+            const releaseNotes = releaseNotesModule.loadReleaseNotes({
+              repositoryRoot: process.cwd(),
+              version,
+              releaseTag: process.env.RELEASE_TAG,
+            });
+            releaseNotesModule.requireExactReleaseBody(releaseNotes, release.data.body || "");
+            const expectedReleaseBody = releaseNotes.body;
+            const releaseBodySha256 = releaseNotes.sha256;
             if (crypto.createHash("sha256").update(Buffer.from(expectedReleaseBody, "utf8")).digest("hex") !== releaseBodySha256) {
               throw new Error("Release body digest does not match the reviewed source.");
             }

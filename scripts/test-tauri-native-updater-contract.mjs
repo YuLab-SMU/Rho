@@ -13,13 +13,10 @@ const updater = read("scripts/tauri-native-updater.mjs");
 const signatureVerifier = read("crates/rho-updater-verifier/src/main.rs");
 const updateSource = read("desktop/src-tauri/src/update.rs");
 const backend = read("desktop/src-tauri/src/main.rs");
+const nativeUpdateShell = read("desktop/src-tauri/src/shell.rs");
 const config = JSON.parse(read("desktop/src-tauri/tauri.conf.json"));
 const windowsConfig = JSON.parse(read("desktop/src-tauri/tauri.windows.conf.json"));
 const macosConfig = JSON.parse(read("desktop/src-tauri/tauri.macos.conf.json"));
-const spec = read("docs/plans/active-2026-08-15-tauri-native-updater-spec.md");
-const checklist = read("docs/release/historical-0.4.0-stable-release-checklist.md");
-const crossReview = read("docs/project/active-document-cross-review.md");
-const notes = read(".github/release-notes/v0.4.0.md");
 
 const windows = build.match(/\n  windows-candidate:[\s\S]*?(?=\n  macos-submit:)/)?.[0];
 const macSubmit = build.match(/\n  macos-submit:[\s\S]*?(?=\n  macos-notary-wait:)/)?.[0];
@@ -32,13 +29,13 @@ assert.equal(macosConfig.bundle.createUpdaterArtifacts, true);
 assert.equal(config.plugins.updater.endpoints[0], "https://yulab-smu.top/Rho/updates/tauri/stable.json");
 assert.match(config.plugins.updater.pubkey, /^[A-Za-z0-9+/=]+$/);
 assert.match(backend, /tauri_plugin_updater::Builder::new\(\)\.build\(\)/);
-assert.match(backend, /app\s*\.updater_builder\(\)/);
-assert.match(backend, /async fn install_native_update\(/);
-assert.match(backend, /update::validate_native_update_candidate_metadata\(/);
-assert.match(backend, /download_and_verify_native_update/);
-assert.match(backend, /UPDATE_DOWNLOAD/);
-assert.match(backend, /install_verified_native_update/);
-assert.doesNotMatch(backend, /pending\.update\.install/);
+assert.match(nativeUpdateShell, /app\s*\.updater_builder\(\)/);
+assert.match(nativeUpdateShell, /async fn install_native_update\(/);
+assert.match(nativeUpdateShell, /update::validate_native_update_candidate_metadata\(/);
+assert.match(nativeUpdateShell, /download_and_verify_native_update/);
+assert.match(nativeUpdateShell, /UPDATE_DOWNLOAD/);
+assert.match(nativeUpdateShell, /install_verified_native_update/);
+assert.doesNotMatch(nativeUpdateShell, /pending\.update\.install/);
 assert.match(updateSource, /MAX_NATIVE_UPDATE_ARTIFACT_BYTES/);
 assert.match(updateSource, /parsed_native_update_signature/);
 assert.match(updateSource, /install_windows_native_update/);
@@ -99,22 +96,22 @@ for (const name of [
   "native_updater_evidence_asset",
   "native_updater_signatures",
 ]) assert.ok(publish.includes(name), `Publish admission omits ${name}`);
-assert.match(candidate, /NATIVE_UPDATER_REQUIRED_VERSIONS = new Set\(\["0\.4\.0-dev\.40", "0\.4\.0-dev\.42", "0\.4\.0-dev\.43", "0\.4\.0"\]\)/);
+assert.match(candidate, /NATIVE_UPDATER_CAPABILITY_VERSION = "0\.4\.0-dev\.40"/);
+assert.match(candidate, /nativeUpdaterRequired\(version\)[\s\S]*releaseVersionAtLeast\(version, NATIVE_UPDATER_CAPABILITY_VERSION\)/);
 assert.match(candidate, /validateNativeUpdaterReleaseAssets/);
 assert.match(updater, /TAURI_PUBLIC_KEY_ID = "173c902c085bfe5f"/);
+assert.match(updater, /THREE_PLATFORM_NATIVE_CAPABILITY_VERSION = "0\.4\.0-dev\.43"/);
 assert.match(updater, /validateNativeUpdaterReleaseAssets/);
 assert.match(updater, /native_updater_archive/);
+
+assert.doesNotMatch(build, /default:\s*(?:v0\.4\.0|Rho 0\.4\.0)|native-updater-acceptance|0\.4\.0-dev\.41/);
+assert.doesNotMatch(publish, /default:\s*v0\.4\.0|native-updater-acceptance|0\.4\.0-dev\.41/);
+assert.match(pages, /legacyReadOnlyIgnoredReleaseTags = new Set\(\["v0\.4\.0-dev\.41"\]\)/);
+assert.doesNotMatch(pages, /native-updater-acceptance-target|scripts\/native-updater-acceptance\.mjs/);
 
 assert.match(pages, /updates\/tauri\/development\.json/);
 assert.match(pages, /rho-\$\{version\}-tauri-native-updater-evidence\.json/);
 assert.match(pages, /Rho_\$\{version\}_aarch64\.app\.tar\.gz\.sig/);
 assert.match(pages, /Verify deployed native updater manifest/);
-
-assert.match(spec, /Status: active; `UPDATER-1A` source\/signing\/publication-contract work is/);
-assert.match(spec, /`UPDATER-1C-T1`, the bounded `dev\.41` acceptance transport/);
-assert.match(spec, /No updater signature may be reused after a byte-changing/);
-assert.match(checklist, /Final exact-candidate decision: `GO \/ RELEASED \/ LIVE`/);
-assert.match(crossReview, /may not own an\n   unbounded download or destructive default install/);
-assert.match(notes, /^Rho 0\.4\.0 brings the three-platform scientific workbench to the stable channel\./m);
 
 console.log("Tauri native updater contract tests passed.");

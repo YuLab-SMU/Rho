@@ -11,6 +11,14 @@ export function validateP24LifecycleContract(value) {
     "the current store schema must include the v14 plugin lifecycle foundation",
   );
   for (const marker of [
+    "mod plugin_lifecycle;",
+    "mod plugin_lifecycle_service;",
+    "pub use plugin_lifecycle::{",
+    "pub use plugin_lifecycle_service::{PluginLifecycleMutationService, PluginLifecycleQueryService};",
+    "migration::create_plugin_lifecycle_schema",
+    "migration::assert_plugin_lifecycle_schema",
+  ]) assert.ok(value.store.includes(marker), `rho-store lifecycle wiring lost ${marker}`);
+  for (const marker of [
     "create_plugin_lifecycle_schema",
     "assert_plugin_lifecycle_schema",
     "workspace_plugin_states",
@@ -54,26 +62,22 @@ export function validateP24LifecycleContract(value) {
     "required_project_root",
     "does not match service project",
   ]) assert.ok(value.service.includes(marker), `lifecycle service seam lost ${marker}`);
-  assert.match(value.spec, /Status: implemented and accepted for Phase 2 integration/);
-  assert.match(value.spec, /P2-4A local checkpoint — 2026-08-20/);
-  assert.match(value.crossReview, /plans\/implemented-2026-08-20-p2-4-plugin-lifecycle-recovery-upgrade-spec\.md/);
 }
 
 function fixture() {
   return {
-    store: "SCHEMA_VERSION: i64 = 14",
+    store: "SCHEMA_VERSION: i64 = 14\nmod plugin_lifecycle;\nmod plugin_lifecycle_service;\npub use plugin_lifecycle::{\npub use plugin_lifecycle_service::{PluginLifecycleMutationService, PluginLifecycleQueryService};\nmigration::create_plugin_lifecycle_schema\nmigration::assert_plugin_lifecycle_schema",
     migration: "create_plugin_lifecycle_schema\nworkspace_plugin_states\nworkspace_plugin_transitions\nworkspace_plugin_lifecycle_events\nworkspace_plugin_package_tombstones\nidx_workspace_plugin_transitions_one_active\npub(crate) fn assert_plugin_lifecycle_schema\ninvalid_plugin_lifecycle_authority",
     lifecycle: "WorkspacePluginState\nWorkspacePluginTransition\nWorkspacePluginLifecycleEvent\nWorkspacePluginPackageTombstone\nrequest_workspace_plugin_transition\nadvance_workspace_plugin_transition\nallocate_workspace_plugin_generation\ncomplete_workspace_plugin_uninstall\nexpected_old_digest\ncompletion_uncertain\nplugin lifecycle details contain a forbidden field\n#[cfg(test)]",
     service: "PluginLifecycleQueryService\nPluginLifecycleMutationService\nrequired_project_root\ndoes not match service project",
-    spec: "Status: implemented and accepted for Phase 2 integration\nP2-4A local checkpoint — 2026-08-20",
-    crossReview: "plans/implemented-2026-08-20-p2-4-plugin-lifecycle-recovery-upgrade-spec.md",
   };
 }
 
 if (process.argv.includes("--test")) {
   validateP24LifecycleContract(fixture());
   for (const [name, mutate] of [
-    ["schema version", (value) => { value.store = "SCHEMA_VERSION: i64 = 13"; }],
+    ["schema version", (value) => { value.store = value.store.replace("SCHEMA_VERSION: i64 = 14", "SCHEMA_VERSION: i64 = 13"); }],
+    ["module wiring", (value) => { value.store = value.store.replace("mod plugin_lifecycle_service;", ""); }],
     ["active transition uniqueness", (value) => { value.migration = value.migration.replace("idx_workspace_plugin_transitions_one_active", ""); }],
     ["raw handle", (value) => {
       value.migration = value.migration.replace(
@@ -94,8 +98,6 @@ if (process.argv.includes("--test")) {
     migration: read("crates/rho-store/src/migration.rs"),
     lifecycle: read("crates/rho-store/src/plugin_lifecycle.rs"),
     service: read("crates/rho-store/src/plugin_lifecycle_service.rs"),
-    spec: read("docs/plans/implemented-2026-08-20-p2-4-plugin-lifecycle-recovery-upgrade-spec.md"),
-    crossReview: read("docs/project/active-document-cross-review.md"),
   });
 }
 

@@ -3,6 +3,17 @@ import fs from "node:fs";
 
 const read = (path) => fs.readFileSync(path, "utf8");
 
+function readRustTree(directory) {
+  return fs.readdirSync(directory, { withFileTypes: true })
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .flatMap((entry) => {
+      const entryPath = `${directory}/${entry.name}`;
+      if (entry.isDirectory()) return [readRustTree(entryPath)];
+      return entry.isFile() && entry.name.endsWith(".rs") ? [read(entryPath)] : [];
+    })
+    .join("\n");
+}
+
 export function validateP24BoundaryTeardownContract(value) {
   for (const marker of [
     "WorkspacePluginBoundaryTeardownReport",
@@ -43,7 +54,16 @@ export function validateP24BoundaryTeardownContract(value) {
     '"boundary_enabled_intent_preserved": true',
     '"boundary_reactivated": true',
   ]) assert.ok(value.installed.includes(marker), `installed C2 smoke lost ${marker}`);
-  assert.match(value.spec, /P2-4C2 local checkpoint — 2026-08-20/);
+  const projectTeardown = /teardown_workspace_plugins_for_boundary\(\s*state,\s*&previous_normalized_root/.exec(
+    value.projectTransition,
+  );
+  const projectReconciliation = /reconcile_workspace_plugins_for_boundary\(state, &normalized_root, "project_switch"\)\.await;/.exec(
+    value.projectTransition,
+  );
+  assert.ok(
+    projectTeardown && projectReconciliation && projectTeardown.index < projectReconciliation.index,
+    "project switch must tear down the old plugin boundary before reconciling the new one",
+  );
   assert.doesNotMatch(
     value.commands,
     /\binstall_workspace_plugin\b/,
@@ -57,7 +77,7 @@ function fixture() {
     main: "teardown_workspace_plugins_for_boundary\nreconcile_workspace_plugins_for_boundary\n\"workspace_restarted\"\n\"broker_shutdown\"\n\"project_switched\"\n\"project_switch_restored\"\n\"workspace_plugin_boundary_teardown\"",
     store: "\"project_teardown\" | \"shutdown\"\n\"enabled\" | \"disabled\"\n\"enabled_or_disabled\"",
     installed: '"boundary_teardown_reused": true\n"boundary_enabled_intent_preserved": true\n"boundary_reactivated": true',
-    spec: "P2-4C2 local checkpoint — 2026-08-20",
+    projectTransition: "teardown_workspace_plugins_for_boundary(\nstate,\n&previous_normalized_root\nreconcile_workspace_plugins_for_boundary(state, &normalized_root, \"project_switch\").await;",
     commands: "disable_workspace_plugin",
   };
 }
@@ -70,6 +90,7 @@ if (process.argv.includes("--test")) {
     ["shutdown wiring", (value) => { value.main = value.main.replace('"broker_shutdown"', ""); }],
     ["store intent", (value) => { value.store = value.store.replace('"enabled" | "disabled"', '"disabled"'); }],
     ["installed", (value) => { value.installed = value.installed.replace('"boundary_reactivated": true', ""); }],
+    ["switch order", (value) => { value.projectTransition = value.projectTransition.replace("&previous_normalized_root", "&unbound_root"); }],
     ["later command", (value) => { value.commands += "\ninstall_workspace_plugin"; }],
   ]) {
     const value = fixture();
@@ -78,11 +99,16 @@ if (process.argv.includes("--test")) {
   }
 } else {
   validateP24BoundaryTeardownContract({
-    desktop: read("desktop/src-tauri/src/workspace_plugins.rs"),
-    main: read("desktop/src-tauri/src/main.rs"),
+    desktop: readRustTree("desktop/src-tauri/src/workspace_plugins"),
+    main: [
+      read("desktop/src-tauri/src/workspace_lifecycle.rs"),
+      read("desktop/src-tauri/src/commands/runtime_control.rs"),
+      read("desktop/src-tauri/src/project_transition.rs"),
+      read("desktop/src-tauri/src/application_lifecycle.rs"),
+    ].join("\n"),
     store: read("crates/rho-store/src/plugin_lifecycle.rs"),
-    installed: read("desktop/src-tauri/src/main.rs"),
-    spec: read("docs/plans/implemented-2026-08-20-p2-4-plugin-lifecycle-recovery-upgrade-spec.md"),
+    installed: read("desktop/src-tauri/src/smoke/plugin_host.rs"),
+    projectTransition: read("desktop/src-tauri/src/project_transition.rs"),
     commands: read("desktop/src-tauri/src/commands/plugins.rs"),
   });
 }

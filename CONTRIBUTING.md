@@ -2,7 +2,7 @@
 
 Thank you for helping improve Rho. Please open an issue or pull request that
 describes the problem, the proposed scope, and how the change was verified.
-Non-trivial work must follow the repository's active development governance.
+Keep the change focused and report the commands that actually ran.
 
 ## Contribution License
 
@@ -21,10 +21,9 @@ dependency/license review.
 Licensing a contribution on these terms does not transfer your copyright
 unless you separately agree to a written assignment.
 
-## Development Contract
+## Development
 
-Read [the development governance](docs/project/active-development-governance.md)
-before implementing a non-trivial change. In particular, use an authorized
-active contract, add tests in proportion to risk, preserve unrelated worktree
-changes, and report version, documentation, acceptance, and release status
-separately.
+Read the short [development guide](docs/DEVELOPMENT.md). Preserve unrelated
+working-tree changes, add the closest useful regression test, and update
+documentation only when it clarifies the current code. Planning and status stay
+with the issue or working branch; run evidence stays with the run.

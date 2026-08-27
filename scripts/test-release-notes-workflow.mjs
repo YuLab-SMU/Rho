@@ -7,25 +7,18 @@ const count = (text, pattern) => [...text.matchAll(pattern)].length;
 
 const build = read(".github/workflows/candidate-build-draft.yml");
 const publish = read(".github/workflows/candidate-publish.yml");
-const windows = read(".github/workflows/windows-manual-publish.yml");
 const updateSite = read(".github/workflows/update-site-publish.yml");
 const metadata = read("scripts/test-release-metadata.ps1");
 const readme = read(".github/release-notes/README.md");
 
 assert.match(readme, /\.github\/release-notes\/v<version>\.md/);
 assert.match(readme, /first line is a short plain-text summary/i);
-assert.match(readme, /Do not invent or backfill a historical file/);
-assert.equal(
-  fs.existsSync(".github/release-notes/v0.4.0-dev.27.md"),
-  false,
-  "The historical dev.27 candidate commit must not be backfilled with a fictional notes file",
-);
 
 const identity = build.match(/- name: Validate candidate identity and contract tools[\s\S]*?(?=\n  windows-candidate:)/)?.[0];
 assert.ok(identity, "Missing candidate identity job");
 assert.match(identity, /node scripts\/release-notes\.mjs --test true/);
 assert.match(identity, /if \[\[ "\$BUILD_MODE" == "candidate" \]\]/);
-assert.match(identity, /release-notes\.mjs --mode validate --version "\$version" --tag "\$INPUT_RELEASE_TAG"/);
+assert.match(identity, /release-notes\.mjs --mode validate --version "\$version" --tag "\$release_tag"/);
 
 const draft = build.match(/\n  draft-candidate:[\s\S]*$/)?.[0];
 assert.ok(draft, "Missing candidate Draft job");
@@ -43,17 +36,10 @@ assert.equal(count(draft, /uploadReleaseAsset/g), 1, "Release notes must not exp
 
 const publishDownload = publish.match(/- name: Download draft assets and assemble publish record[\s\S]*?- name: Enforce immutable candidate and explicit release decision/)?.[0];
 assert.ok(publishDownload, "Missing candidate publish admission step");
-assert.match(publishDownload, /\.github", "release-notes", `\$\{process\.env\.RELEASE_TAG\}\.md`/);
 assert.match(publishDownload, /loadReleaseNotes/);
 assert.match(publishDownload, /requireExactReleaseBody/);
-assert.match(publishDownload, /release_id: 367934137/);
-assert.match(publishDownload, /tag_name: "v0\.4\.0-dev\.27"/);
-assert.match(publishDownload, /target_commitish: "aff83f01d2db8c241fe794fe5e5e4c80d2baf2a0"/);
-assert.match(publishDownload, /release\.data\.id !== legacy\.release_id/);
-assert.match(publishDownload, /release\.data\.tag_name !== legacy\.tag_name/);
-assert.match(publishDownload, /release\.data\.target_commitish !== legacy\.target_commitish/);
-assert.match(publishDownload, /release\.data\.body !== legacy\.body/);
-assert.match(publishDownload, /does not contain its reviewed versioned release notes file/);
+assert.match(publishDownload, /releaseTag: process\.env\.RELEASE_TAG/);
+assert.doesNotMatch(publishDownload, /367934137|v0\.4\.0-dev\.27|const legacy|fs\.existsSync\(releaseNotesPath\)/);
 assert.match(publishDownload, /body_sha256: releaseBodySha256/);
 assert.match(publishDownload, /publisher: process\.env\.PUBLISH_ACTOR/);
 
@@ -67,28 +53,21 @@ assert.match(publishTransition, /reviewed body/);
 assert.equal(count(publishTransition, /updateRelease/g), 1, "Publication must retain one state transition");
 assert.doesNotMatch(publishTransition, /body:/, "Publication must not rewrite the reviewed body");
 
-const windowsPrepareIndex = windows.indexOf("Validate reviewed versioned release notes");
-const windowsBuildIndex = windows.indexOf("Verify source, build installer and run release smoke tests");
-assert.ok(windowsPrepareIndex >= 0 && windowsPrepareIndex < windowsBuildIndex, "Windows notes validation must precede its build");
-assert.match(windows, /release-notes\.mjs --mode prepare/);
-assert.match(windows, /body: releaseNotes\.body/g);
-assert.match(windows, /release\.data\.body !== releaseNotes\.body/);
-assert.doesNotMatch(windows, /GitHub-hosted windows-latest release build/);
-assert.doesNotMatch(windows, /const body = \[/);
-
 assert.match(
   updateSite,
   /summary: String\(release\.body \|\| ""\)\.split\("\\n"\)\.find\(\(line\) => line\.trim\(\)\)/,
   "Update Site must continue projecting the reviewed first non-empty body line as its summary",
 );
 assert.match(updateSite, /rho-\$\{version\}-acceptance\.json/);
-
-const conditionalNotes = read(".github/release-notes/v0.4.0-dev.39.md");
-assert.match(conditionalNotes, /^Rho 0\.4\.0-dev\.39 is a conditional evaluation prerelease/m);
-assert.match(conditionalNotes, /Windows clean-profile human installation[\s\S]*were not run/);
-assert.match(conditionalNotes, /Enabled-Gatekeeper macOS human launch was not run/);
-assert.match(conditionalNotes, /evaluation and testing, not a stable or production-ready release/);
-assert.match(conditionalNotes, /CONDITIONAL_GO/);
+assert.match(updateSite, /workflows: \["Publish Rho Candidate"\]/);
+assert.doesNotMatch(updateSite, /Windows Manual Publish/);
+assert.match(updateSite, /\["v0\.2\.0-dev\.12", \{ releaseId: 358099496, evidenceAsset: "rho-0\.2-release\.json" \}\]/);
+assert.match(updateSite, /release\.id === legacy\.releaseId && release\.prerelease === true/);
+assert.doesNotMatch(
+  updateSite,
+  /\|\| release\.assets\.find\(\(asset\) => asset\.name === "rho-0\.2-release\.json"\)/,
+  "Legacy evidence must not remain a fallback for new releases",
+);
 
 assert.match(metadata, /\.github\\release-notes\\README\.md/);
 assert.match(metadata, /scripts\\release-notes\.mjs/);

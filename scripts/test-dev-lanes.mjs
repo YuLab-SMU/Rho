@@ -51,7 +51,6 @@ try {
   write(repository, "src/agent/b.ts", "export const agent = 'base';\n");
   write(repository, "src/shared/value.ts", "export const value = 'base';\n");
   write(repository, "Cargo.lock", "baseline lock\n");
-  write(repository, "NEWS.md", "# Fixture NEWS\n");
   git(repository, ["add", "."]);
   git(repository, ["commit", "-m", "baseline"]);
   const base = git(repository, ["rev-parse", "HEAD"]);
@@ -101,9 +100,9 @@ try {
   // the single integration lane may write shared authority files
   lanes(repository, ["start", "--id", "integ", "--integration", "--own", "docs/**"]);
   const integration = JSON.parse(lanes(repository, [
-    "check", "--id", "integ", "--changed", "NEWS.md", "--changed", "Cargo.lock", "--json",
+    "check", "--id", "integ", "--changed", "Cargo.lock", "--json",
   ]).stdout);
-  assert.deepEqual(integration.integration_lane_paths, ["Cargo.lock", "NEWS.md"]);
+  assert.deepEqual(integration.integration_lane_paths, ["Cargo.lock"]);
   assert.deepEqual(integration.forbidden_shared_paths, []);
   lanes(repository, ["start", "--id", "integ-2", "--integration", "--own", "docs/more/**"], { expectFailure: true });
 

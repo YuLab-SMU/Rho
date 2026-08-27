@@ -70,8 +70,7 @@ $requiredFiles = @(
     "scripts\candidate-release.mjs",
     "scripts\release-notes.mjs",
     "scripts\test-release-notes-workflow.mjs",
-    "scripts\generate-update-site.mjs",
-    "docs\design\accepted-2026-07-25-about-and-update-check-design.md"
+    "scripts\generate-update-site.mjs"
 )
 if ($ReleaseTag) {
     $requiredFiles += ".github\release-notes\$ReleaseTag.md"
@@ -86,7 +85,6 @@ if ($missingFiles.Count -gt 0) {
 $updateSource = Get-Content -LiteralPath (Join-Path $repo "desktop\src-tauri\src\update.rs") -Raw
 $assetManifestPath = Join-Path $repo "desktop\dist\asset-manifest.json"
 $assetManifest = Get-Content -LiteralPath $assetManifestPath -Raw | ConvertFrom-Json
-$publishWorkflow = Get-Content -LiteralPath (Join-Path $repo ".github\workflows\windows-manual-publish.yml") -Raw
 $updateSiteWorkflowPath = Join-Path $repo ".github\workflows\update-site-publish.yml"
 $updateSiteWorkflow = Get-Content -LiteralPath $updateSiteWorkflowPath -Raw
 if (-not $updateSource.Contains('https://yulab-smu.top/Rho/')) {
@@ -98,9 +96,6 @@ if (-not $assetManifest.'index.html'.isEntry -or -not $assetManifest.'index.html
 $generatedEntry = Join-Path $repo ("desktop\dist\" + $assetManifest.'index.html'.file.Replace('/', '\'))
 if (-not (Test-Path -LiteralPath $generatedEntry -PathType Leaf)) {
     throw "Generated Surface Runtime entry is missing: $generatedEntry"
-}
-if ($publishWorkflow.Contains('publish_branch: gh-pages') -or $publishWorkflow.Contains('generate-update-site.mjs')) {
-    throw "Windows publish workflow must not publish the update site."
 }
 if (-not $updateSiteWorkflow.Contains('runs-on: ubuntu-latest') -or -not $updateSiteWorkflow.Contains('publish_branch: gh-pages')) {
     throw "Update site workflow does not publish from a GitHub-hosted Ubuntu runner to gh-pages."

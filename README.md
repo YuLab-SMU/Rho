@@ -1,126 +1,76 @@
 # Rho
 
-**Rho** stands for **R-centered Human–AI Orchestration**: an agent-native
-desktop workbench for R. It combines a persistent R workspace, project-aware
-code editing, scientific outputs, and an AI collaborator in one application.
-The user remains in control: editor, Console, and approved Agent actions all
-work with the same live Workspace R session.
+Rho — R-centered Human–AI Orchestration — is a local-first desktop workbench
+for R. It combines a persistent Workspace R session, project-aware editing,
+scientific outputs, and an AI collaborator in one application.
 
-## Features
+## What it does
 
-- **Project-aware R editing** with a Monaco editor, multiple documents, a real
-  file tree, source execution, and project/session restoration.
-- **One persistent Workspace R** powered by Ark, shared by manual Console work,
-  editor execution, and approved Agent actions.
-- **Scientific output surfaces** for Console output, Environment objects,
-  plots, Problems, and durable run history with provenance.
-- **Ask, Plan, and Act modes** for explanation, planning, and reviewed actions
-  against the current project and R session.
-- **Provider-first model settings** with model discovery, visible capability
-  evidence, explicit capability routing, optional Base URL overrides, and API
-  keys kept in the operating system credential store.
-- **Reviewable file changes** so Agent-proposed project edits can be inspected
-  before they are applied.
-- **Resizable, persistent workspace layout** for Files, editor, Agent,
-  Environment, Console, Plots, and Problems.
-- **Local-first runtime** with no Python, Jupyter Server, JupyterLab, or
-  Electron dependency.
+- edits and runs R code against one persistent Ark-backed Workspace R session;
+- presents Console output, Environment objects, plots, problems, and durable
+  run history with project provenance;
+- supports Ask, Plan, and reviewed Act workflows through a separate Agent R
+  process;
+- manages model providers, capabilities, routes, and credentials;
+- previews Agent file proposals before applying them;
+- hosts bounded project plugins and typed plugin surfaces;
+- exposes read-side workbench data through the local CLI and MCP server.
 
-## Installation
+The Rust desktop broker owns process lifecycle, projects, revisions,
+permissions, persistence, and transport. Workspace R owns live R execution and
+scientific objects. React owns presentation, not authority.
 
-Rho currently has development builds for Windows x64 and Apple Silicon macOS.
-It requires:
+## Requirements
 
-- Windows 10/11 with Microsoft Edge WebView2 Runtime, or Apple Silicon macOS
-  14 or later;
+- Windows 10/11 with WebView2, Apple Silicon macOS 14+, or a supported Linux
+  desktop environment;
 - R 4.4 or later;
-- `aisdk` 1.5.0 or later and a configured model only for Agent features; the
-  pinned
-  `aisdk.providers` package is additionally required when using DeepSeek,
-  Moonshot, Kimi Code, Stepfun, Volcengine, AiHubMix, xAI, OpenRouter, Bailian,
-  or NVIDIA.
+- `aisdk` and configured model credentials only for Agent features.
 
-Listed Apple Silicon macOS packages use Developer ID signing and notarization.
-Windows trust status is recorded per release. The published `0.4.0-dev.24`
-Windows package is unsigned; selected development prereleases may carry a
-SignPath Free Trial self-signed test signature only after their exact evidence
-passes. Starting with the fresh dev.42 candidate contract, both the Rho
-executable and outer NSIS installer must be signed and the installed executable
-must be verified. That test certificate is not publicly trusted or a SignPath Foundation production
-publisher, and Windows or SmartScreen may still warn. A Release page also
-identifies any conditional human-acceptance limitations; conditional builds are
-for evaluation, not stable or production-ready use. Unsigned local builds are
-for development review only. Verify the release SHA-256 and see the
-[Windows prototype guide](docs/implementation/implemented-windows-prototype.md)
-and the [macOS support specification](docs/plans/active-2026-08-05-macos-arm64-support-spec.md)
-for platform-specific status and prerequisites.
+## Develop
 
-## Quick Start
+```bash
+npm install --prefix desktop
+npm run rsr:dev --prefix desktop
+```
 
-1. Launch Rho and open an R project directory.
-2. Open or create an `.R` file, then run a selection, the current line, or the
-   complete file in Workspace R.
-3. Inspect results in Console, Environment, Plots, Problems, and Runs.
-4. Open **Model settings**, create a Provider connection, import or add a
-   model, then assign that model to the routes you intend to use.
-5. Use Ask or Plan for read-only help, or Act for actions that require review
-   and approval.
+Run the Rust desktop from a second terminal when needed:
 
-## Uninstallation
+```bash
+cargo run -p rho-desktop
+```
 
-- **Windows:** Open **Settings > Apps > Installed apps**, find **Rho**, choose
-  **Uninstall**, and follow the installer prompts.
-- **macOS:** Quit Rho, then move **Rho.app** from **Applications** to the
-  Trash.
+The fast workflow and affected-check discovery are documented in
+[Development](docs/DEVELOPMENT.md). Start with the compact
+[documentation map](docs/README.md) or the current
+[architecture](docs/ARCHITECTURE.md).
 
-Uninstalling the application does not automatically delete project files,
-local application data, logs, or operating-system credential-store entries.
-Remove Provider credentials from Model settings before uninstalling when
-possible, and review the [Privacy policy](PRIVACY.md) before deleting retained
-data manually.
+## Build
 
-## Architecture
+```bash
+npm run rsr:build --prefix desktop
+cargo build -p rho-desktop
+```
 
-Workspace R is authoritative for project execution and scientific objects.
-Agent R handles LLM orchestration, while the Rust broker owns transport,
-approvals, revisions, persistence, and process lifecycle. See the
-[architecture documentation](docs/architecture/implemented-aisdk-family-integration.md)
-for details, or use the [documentation index](docs/README.md) to browse design,
-implementation, project, bug-fix, and release documents.
+Platform packaging, signing, and candidate operations are mapped in
+[Build and release](docs/RELEASE.md). Generated artifacts and command output are
+the evidence for a particular build.
 
-## Project Status
+## Privacy and security
 
-Rho is under active development. Windows x64, Apple Silicon macOS, and Linux
-x86-64 packaging are implemented; macOS x64 remains in progress.
+Rho has no first-party background telemetry. Network-capable operations follow
+an explicit product action, such as using a model provider, resolving a DOI,
+managing an R environment, or running approved code. Read the
+[privacy policy](PRIVACY.md), report vulnerabilities through
+[SECURITY.md](SECURITY.md), and review [code signing](CODE_SIGNING_POLICY.md)
+before distributing a build.
 
-## Security, Privacy, And Signing
-
-Rho checks its fixed signed-update endpoint once after local startup becomes
-ready. It performs no first-party background telemetry. Other network-capable
-operations follow an explicit user action, such as connecting a model Provider,
-resolving a DOI, operating on a package environment, or running user/approved
-code. Review the complete
-[Privacy policy](PRIVACY.md), especially before configuring a custom Base URL
-or sharing diagnostics.
-
-Report vulnerabilities through the private process in the
-[Security policy](SECURITY.md), not through a public Issue. Windows and macOS
-trust status, signing scope, manual approval, and incident handling are defined
-in the [Code signing policy](CODE_SIGNING_POLICY.md).
+Uninstalling Rho does not automatically remove projects, local application
+data, logs, or stored provider credentials.
 
 ## License
 
-Rho-original source code, documentation, tests, and scripts are licensed under
-the [GNU Affero General Public License version 3 only](LICENSE)
-(`AGPL-3.0-only`), except where a file or directory carries a different
-notice. Copyright © 2026 YuLab-SMU and contributors.
-
-Commercial use is permitted. If you distribute a modified version, or let
-users interact with a modified version over a network, the AGPL requires the
-corresponding source to remain available under its terms. Rho does not offer a
-proprietary dual license.
-
-This change is prospective: licenses already granted for historical Rho
-versions or copies remain valid. Bundled and vendored third-party components
-retain their own licenses; see [Licensing and third-party notices](LICENSES.md).
-See [Contributing](CONTRIBUTING.md) before submitting changes.
+Rho-original source, documentation, tests, and scripts are licensed under
+[AGPL-3.0-only](LICENSE). Bundled dependencies retain their own licenses; see
+[LICENSES.md](LICENSES.md). Read [CONTRIBUTING.md](CONTRIBUTING.md) before
+submitting changes.

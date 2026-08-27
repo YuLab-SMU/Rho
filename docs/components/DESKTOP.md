@@ -1,0 +1,37 @@
+# Desktop application
+
+The desktop is a Tauri application with a React RSR frontend.
+
+## Backend
+
+`desktop/src-tauri/src/main.rs` constructs `AppState`, registers commands, and
+coordinates startup and shutdown. Commands are grouped under
+`desktop/src-tauri/src/commands/`; durable or long-lived behavior is delegated
+to stores, registries, project transition code, or the server coordinator.
+
+Important runtime owners include:
+
+- `application_*`, `startup_runtime`, and `workspace_lifecycle` for process
+  admission and recovery;
+- `project`, `project_transition`, and `resource_registry` for project and file
+  identity;
+- `runtime_registry`, `studio_runtime`, `surface_runtime`, and `ui_profile` for
+  desktop workbench state;
+- `agent_llm`, Agent commands, and `agent_credential_vault` for runtime model
+  settings and credentials;
+- `agent_config` for the private YAML schema and file-I/O helpers; production
+  settings paths do not call those helpers.
+
+## Frontend
+
+`desktop/ui/src/main.tsx` mounts `App`. The startup controller must reach a
+ready state before `WorkbenchApp` is mounted. Views consume typed transport
+facets under `transport/`; generated files in `transport/generated/` mirror
+Rust commands. `transport/mock.ts` supports deterministic browser development.
+
+Controllers under `app/controllers/` serialize project, Surface, Console, and
+Studio mutations. CSS is composed from the tokenized files under
+`ui/src/styles/`; `foundation.css` only orders those layers.
+
+`desktop/dist/` is generated output. Change `desktop/ui/`, rebuild it, and do
+not document generated bundles as source.

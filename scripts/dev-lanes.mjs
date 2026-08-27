@@ -4,8 +4,8 @@
 // common dir (shared by every linked worktree, never committed) and only
 // three conditions are hard rejects: real owned-path overlap between active
 // lanes, feature-lane writes to shared authority files, and textual merge
-// conflicts before integration. Overlap semantics reuse checkOverlap from
-// architecture-program.mjs.
+// conflicts before integration. Overlap semantics live in the standalone
+// path-ownership module.
 
 import { spawnSync, execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -13,7 +13,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { checkOverlap } from "./architecture-program.mjs";
+import { checkOverlap, normalizePath } from "./path-ownership.mjs";
 
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/u;
 
@@ -23,17 +23,12 @@ const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/u;
 const SHARED_AUTHORITY_PATHS = [
   "Cargo.lock",
   "desktop/package-lock.json",
-  "NEWS.md",
   "desktop/src-tauri/tauri.conf.json",
   "desktop/src-tauri/src/main.rs",
   "desktop/ui/src/app/App.tsx",
 ];
 
 class LaneError extends Error {}
-
-function normalizePath(value) {
-  return value.split(path.sep).join("/").replace(/^\.\//u, "");
-}
 
 function git(cwd, args) {
   return gitRaw(cwd, args).trim();

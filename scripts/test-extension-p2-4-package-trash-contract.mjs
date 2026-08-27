@@ -10,29 +10,36 @@ export function validateP24PackageTrashContract(value) {
     "PluginPackageMoveEvidence",
     "pub fn move_exact(",
     "pub fn restore_exact(",
+    "pub fn purge_exact(",
     "snapshot_workspace_plugin_package",
     "snapshot_workspace_plugin_cache_directory",
     "fs::rename",
     "source and trash both exist",
     "TrashFailurePoint::BeforeRename",
     "TrashFailurePoint::AfterRename",
+    "TrashFailurePoint::BeforePurgeRename",
+    "TrashFailurePoint::AfterPurgeRename",
+    "TrashFailurePoint::MidPurgeDelete",
+    "TrashFailurePoint::AfterPurgeDelete",
     "move_restore_and_replays_are_exact_and_idempotent",
     "symlinked_trash_root_and_restore_collision_are_rejected",
+    "exact_purge_is_bounded_idempotent_and_preserves_siblings",
+    "purge_interruptions_recover_from_exact_marker_and_ownership",
   ]) assert.ok(value.trash.includes(marker), `recoverable package move lost ${marker}`);
   assert.doesNotMatch(
     value.trash.split("#[cfg(test)]")[0],
-    /remove_dir_all|remove_file|reqwest|Command::new|GrantStore|WasmPluginHost|tauri::|rusqlite/,
-    "D1 gained delete, network, process, grant, Wasm, Tauri, or Store authority",
+    /reqwest|Command::new|GrantStore|WasmPluginHost|tauri::|rusqlite/,
+    "package ownership module gained network, process, grant, Wasm, Tauri, or Store authority",
   );
   assert.match(value.server, /pub mod plugin_package_trash/);
-  assert.match(value.spec, /P2-4D1 local checkpoint — 2026-08-20/);
+  assert.match(value.serverCargo, /rho-extension-runtime\s*=\s*\{\s*path/);
 }
 
 function fixture() {
   return {
-    trash: "PLUGIN_TRASH_DIRECTORY\nPluginPackageOwnershipOutcome\nPluginPackageMoveEvidence\npub fn move_exact(\npub fn restore_exact(\nsnapshot_workspace_plugin_package\nsnapshot_workspace_plugin_cache_directory\nfs::rename\nsource and trash both exist\nTrashFailurePoint::BeforeRename\nTrashFailurePoint::AfterRename\nmove_restore_and_replays_are_exact_and_idempotent\nsymlinked_trash_root_and_restore_collision_are_rejected\n#[cfg(test)]",
+    trash: "PLUGIN_TRASH_DIRECTORY\nPluginPackageOwnershipOutcome\nPluginPackageMoveEvidence\npub fn move_exact(\npub fn restore_exact(\npub fn purge_exact(\nsnapshot_workspace_plugin_package\nsnapshot_workspace_plugin_cache_directory\nfs::rename\nsource and trash both exist\nTrashFailurePoint::BeforeRename\nTrashFailurePoint::AfterRename\nTrashFailurePoint::BeforePurgeRename\nTrashFailurePoint::AfterPurgeRename\nTrashFailurePoint::MidPurgeDelete\nTrashFailurePoint::AfterPurgeDelete\nmove_restore_and_replays_are_exact_and_idempotent\nsymlinked_trash_root_and_restore_collision_are_rejected\nexact_purge_is_bounded_idempotent_and_preserves_siblings\npurge_interruptions_recover_from_exact_marker_and_ownership\n#[cfg(test)]",
     server: "pub mod plugin_package_trash;",
-    spec: "P2-4D1 local checkpoint — 2026-08-20",
+    serverCargo: 'rho-extension-runtime = { path = "../rho-extension-runtime" }',
   };
 }
 
@@ -42,8 +49,9 @@ if (process.argv.includes("--test")) {
     ["atomic rename", (value) => { value.trash = value.trash.replace("fs::rename", ""); }],
     ["exact readback", (value) => { value.trash = value.trash.replace("snapshot_workspace_plugin_cache_directory", ""); }],
     ["failure injection", (value) => { value.trash = value.trash.replace("TrashFailurePoint::AfterRename", ""); }],
-    ["delete authority", (value) => { value.trash = `remove_dir_all\n${value.trash}`; }],
-    ["checkpoint", (value) => { value.spec = value.spec.replace("P2-4D1 local checkpoint", ""); }],
+    ["ambient network", (value) => { value.trash = `reqwest::get\n${value.trash}`; }],
+    ["purge recovery", (value) => { value.trash = value.trash.replace("purge_interruptions_recover_from_exact_marker_and_ownership", ""); }],
+    ["server export", (value) => { value.server = value.server.replace("pub mod plugin_package_trash", ""); }],
   ]) {
     const value = fixture();
     mutate(value);
@@ -53,7 +61,7 @@ if (process.argv.includes("--test")) {
   validateP24PackageTrashContract({
     trash: read("crates/rho-server/src/plugin_package_trash.rs"),
     server: read("crates/rho-server/src/lib.rs"),
-    spec: read("docs/plans/implemented-2026-08-20-p2-4-plugin-lifecycle-recovery-upgrade-spec.md"),
+    serverCargo: read("crates/rho-server/Cargo.toml"),
   });
 }
 

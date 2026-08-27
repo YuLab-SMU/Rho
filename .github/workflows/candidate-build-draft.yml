@@ -15,20 +15,12 @@ on:
         description: Exact current default-branch commit or ref to build
         required: true
         default: main
-      release_tag:
-        description: Single-use release tag
-        required: true
-        default: v0.4.0
-      release_name:
-        description: Draft release title
-        required: true
-        default: Rho 0.4.0
 
 permissions:
   contents: read
 
 concurrency:
-  group: rho-${{ inputs.build_mode }}-${{ inputs.release_tag }}
+  group: rho-${{ inputs.build_mode }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -56,8 +48,6 @@ jobs:
           BUILD_MODE: ${{ inputs.build_mode }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           INPUT_REF: ${{ inputs.ref }}
-          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
-          INPUT_RELEASE_NAME: ${{ inputs.release_name }}
         run: |
           set -euo pipefail
           node scripts/candidate-release.mjs --mode admission --build_mode "$BUILD_MODE" --repository "$GITHUB_REPOSITORY" --workflow_ref "$GITHUB_REF" --default_branch "$DEFAULT_BRANCH"
@@ -68,17 +58,13 @@ jobs:
             exit 1
           fi
           version="$(node -e 'const fs=require("fs"); const value=fs.readFileSync("Cargo.toml", "utf8").match(/^version = "([^"]+)"/m); if(!value) process.exit(1); process.stdout.write(value[1])')"
-          expected_release_name="Rho $version"
-          if [[ "$version" == "0.4.0-dev.41" ]]; then
-            expected_release_name="Rho 0.4.0-dev.41 Native Updater Acceptance Target"
-          fi
-          test "$INPUT_RELEASE_NAME" = "$expected_release_name"
-          node scripts/candidate-release.mjs --mode identity --version "$version" --tag "$INPUT_RELEASE_TAG" --commit "$commit"
+          release_tag="v$version"
+          release_name="Rho $version"
+          node scripts/candidate-release.mjs --mode identity --version "$version" --tag "$release_tag" --commit "$commit"
           node scripts/candidate-release.mjs --test true
           node scripts/release-notes.mjs --test true
-          node scripts/native-updater-acceptance.mjs --test true
           if [[ "$BUILD_MODE" == "candidate" ]]; then
-            node scripts/release-notes.mjs --mode validate --version "$version" --tag "$INPUT_RELEASE_TAG"
+            node scripts/release-notes.mjs --mode validate --version "$version" --tag "$release_tag"
           fi
           node scripts/test-release-notes-workflow.mjs
           node scripts/generate-update-site.mjs --test true
@@ -88,8 +74,8 @@ jobs:
             echo "build_mode=$BUILD_MODE"
             echo "commit=$commit"
             echo "version=$version"
-            echo "release_tag=$INPUT_RELEASE_TAG"
-            echo "release_name=$INPUT_RELEASE_NAME"
+            echo "release_tag=$release_tag"
+            echo "release_name=$release_name"
           } >> "$GITHUB_OUTPUT"
 
   windows-candidate:

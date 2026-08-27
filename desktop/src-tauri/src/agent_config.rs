@@ -1,53 +1,24 @@
-//! COMPAT-1A: plaintext canonical model configuration store (schema V6).
+//! Plaintext model configuration schema and file I/O (schema V6).
 //!
-//! Owning contract:
-//! `docs/plans/active-2026-08-27-compat-1-plaintext-config-store-spec.md`
-//! (umbrella: `proposed-2026-08-27-rho-model-config-and-agent-compat-layer-spec.md`,
-//! revision 3).
+//! `agent_llm.rs` exposes this private module, but its runtime settings paths
+//! still use the app-data `llm-profiles.json` store. The tests here define the
+//! YAML schema, path resolution, parsing, and atomic-write behavior.
 //!
-//! This module is the V6 plaintext successor to the V5 app-data
-//! `llm-profiles.json` store in `agent_llm.rs`. COMPAT-1A ships the module
-//! and its in-module tests only, wired as a private submodule so no
-//! shared-authority path changes; the COMPAT-1B cutover (integration lane)
-//! points turns, connection tests, and Settings at this store and deletes
-//! the V1–V5 schema and vault code.
+//! Implementation notes:
 //!
-//! Recorded decisions for this slice:
-//!
-//! - YAML crate: `serde_norway` (0.9.42), the community-maintained
-//!   API-compatible fork of the archived `serde_yaml`. The contract's first
-//!   choice `serde_yml` proved unusable for this crate: its 0.0.13 release is
-//!   a self-declared unmaintained deprecation shim over `noyalib` whose every
-//!   re-exported item is `#[deprecated]`, so each call site would emit a
-//!   warning and fail this workspace's zero-new-warnings gate. Only this
-//!   module imports the YAML crate, so any later swap stays local to this
-//!   file.
-//! - Rho home, two user-level path styles (owner direction 2026-08-27,
-//!   following the codex / claude code / opencode dot-directory convention):
-//!   `~/.rho` is the primary, extensible Rho home that will later hold more
-//!   than configuration, while a pre-existing XDG-style `${XDG_CONFIG_HOME}/rho`
-//!   (or literal `~/.config/rho` when `XDG_CONFIG_HOME` is unset) is honored
-//!   when it already exists. `RHO_HOME` overrides both; when neither
-//!   directory exists the default is `~/.rho`, created on first write. The
-//!   home is never created at resolution time — only `save_config` creates
-//!   directories.
-//! - "Preferences" in the contract's content-model list: V5 persists no
-//!   standalone preferences section. The selected-model preference is the
-//!   `agent.chat` capability route (`AgentLlmSettingsView` documents the
-//!   route as the persisted authority), so the V6 schema carries it
-//!   unchanged inside `capability_routes` and no new section is invented.
-//! - The V5 `credential_source` provider field is deliberately dropped: the
-//!   owner's plaintext direction replaces stored source metadata with pure
-//!   presence-based resolution (session → environment → file literal), so
-//!   the field could only contradict the resolver.
+//! - `serde_norway` keeps YAML parsing local to this file.
+//! - `RHO_HOME` wins; otherwise an existing `~/.rho` wins over an existing
+//!   XDG configuration directory, and a new installation defaults to
+//!   `~/.rho`. Resolution does not create directories; saving does.
+//! - The selected model remains the `agent.chat` capability route inside
+//!   `capability_routes`; there is no separate preferences section.
+//! - Credentials resolve by presence (session → environment → file literal),
+//!   so persisted provider records carry no separate credential-source flag.
 //! - Load reasons and error contexts never include file contents. The file
 //!   is plaintext and may hold credentials, so reasons carry only I/O
-//!   diagnostics or parser locations, never parser messages that can embed
-//!   offending values. This keeps the redaction boundary identical to
-//!   `agent_llm.rs` even though the on-disk file is readable.
+//!   diagnostics or parser locations.
 
-// COMPAT-1A is deliberately unwired: outside tests nothing calls this module
-// yet. The COMPAT-1B cutover consumes the API and drops this allowance.
+// Production settings paths do not call this module yet.
 #![allow(dead_code)]
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -251,7 +222,7 @@ pub(crate) enum AgentConfigLoad {
     /// A V6 configuration parsed successfully.
     Loaded(AgentConfig),
     /// The file declares a different schema version; no upgrade or downgrade
-    /// is attempted in this slice.
+    /// is attempted.
     UnsupportedSchemaVersion { path: PathBuf, found: u64 },
     /// The file is unreadable, empty, oversized, not valid YAML, missing a
     /// numeric `schema_version`, or shaped unlike the V6 schema.

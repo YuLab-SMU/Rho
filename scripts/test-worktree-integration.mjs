@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { checkOverlap } from "./architecture-program.mjs";
+import { checkOverlap } from "./path-ownership.mjs";
 
 function git(cwd, args) {
   return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
@@ -49,7 +49,6 @@ try {
   write(repository, "src/runtime.ts", "export const runtime = 'base';\n");
   write(repository, "src/agent.ts", "export const agent = 'base';\n");
   write(repository, "Cargo.lock", "baseline lock\n");
-  write(repository, "NEWS.md", "# Fixture NEWS\n");
   git(repository, ["add", "."]);
   git(repository, ["commit", "-m", "baseline"]);
   const base = git(repository, ["rev-parse", "HEAD"]);
@@ -76,12 +75,11 @@ try {
   git(repository, ["switch", "-c", "integration", "runtime-package"]);
   git(repository, ["merge", "--no-ff", "agent-package", "-m", "integrate feature packages"]);
   write(repository, "Cargo.lock", "integration-owned lock\n");
-  write(repository, "NEWS.md", "# Fixture NEWS\n\nRuntime and Agent packages integrated.\n");
-  git(repository, ["add", "Cargo.lock", "NEWS.md"]);
-  git(repository, ["commit", "-m", "integration-owned shared files"]);
+  git(repository, ["add", "Cargo.lock"]);
+  git(repository, ["commit", "-m", "integration-owned lockfile"]);
   assert.deepEqual(
     git(repository, ["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"]).split("\n"),
-    ["Cargo.lock", "NEWS.md"],
+    ["Cargo.lock"],
   );
   const mergeCommit = git(repository, ["rev-parse", "HEAD^"]);
   assert.equal(git(repository, ["rev-list", "--parents", "-n", "1", mergeCommit]).split(" ").length, 3);

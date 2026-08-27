@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 export const NATIVE_UPDATER_PLATFORMS = ["windows_x86_64", "macos_aarch64", "linux_x86_64"];
 const LEGACY_NATIVE_UPDATER_PLATFORMS = ["windows_x86_64", "macos_aarch64"];
-const THREE_PLATFORM_NATIVE_VERSIONS = new Set(["0.4.0-dev.43", "0.4.0"]);
+const THREE_PLATFORM_NATIVE_CAPABILITY_VERSION = "0.4.0-dev.43";
 export const TAURI_PUBLIC_KEY_ID = "173c902c085bfe5f";
 
 const REPOSITORY = "https://github.com/YuLab-SMU/Rho";
@@ -21,9 +21,49 @@ function fail(message) {
 }
 
 export function nativeUpdaterPlatformsForVersion(version) {
-  return THREE_PLATFORM_NATIVE_VERSIONS.has(version)
+  return compareSemver(version, THREE_PLATFORM_NATIVE_CAPABILITY_VERSION) >= 0
     ? NATIVE_UPDATER_PLATFORMS
     : LEGACY_NATIVE_UPDATER_PLATFORMS;
+}
+
+function semverParts(version) {
+  const match = SEMVER.exec(version);
+  if (!match) fail(`Native updater version is not SemVer: ${version}`);
+  return {
+    core: match.slice(1, 4).map(Number),
+    prerelease: match[4]?.split(".") || [],
+  };
+}
+
+function compareSemverIdentifier(left, right) {
+  const leftNumeric = /^\d+$/.test(left);
+  const rightNumeric = /^\d+$/.test(right);
+  if (leftNumeric && rightNumeric) {
+    if (left.length !== right.length) return left.length - right.length;
+    return left < right ? -1 : left > right ? 1 : 0;
+  }
+  if (leftNumeric) return -1;
+  if (rightNumeric) return 1;
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function compareSemver(left, right) {
+  const leftParts = semverParts(left);
+  const rightParts = semverParts(right);
+  for (let index = 0; index < leftParts.core.length; index += 1) {
+    if (leftParts.core[index] !== rightParts.core[index]) {
+      return leftParts.core[index] - rightParts.core[index];
+    }
+  }
+  if (!leftParts.prerelease.length && rightParts.prerelease.length) return 1;
+  if (leftParts.prerelease.length && !rightParts.prerelease.length) return -1;
+  for (let index = 0; index < Math.max(leftParts.prerelease.length, rightParts.prerelease.length); index += 1) {
+    if (leftParts.prerelease[index] == null) return -1;
+    if (rightParts.prerelease[index] == null) return 1;
+    const compared = compareSemverIdentifier(leftParts.prerelease[index], rightParts.prerelease[index]);
+    if (compared) return compared;
+  }
+  return 0;
 }
 
 function parseArgs(argv) {
@@ -345,7 +385,13 @@ function expectFailure(action, pattern) {
 export function selfTest() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "rho-tauri-updater-"));
   try {
-    const version = "0.4.0-dev.40";
+    if (nativeUpdaterPlatformsForVersion("0.4.0-dev.42").length !== 2) {
+      fail("Historical native updater evidence no longer decodes its two-platform shape");
+    }
+    if (nativeUpdaterPlatformsForVersion("0.4.0-Dev.99").length !== 2) {
+      fail("Prerelease identifiers must use SemVer ordinal ordering");
+    }
+    const version = "0.4.1-dev.22";
     const releaseTag = `v${version}`;
     const commit = "a".repeat(40);
     const testPlatforms = nativeUpdaterPlatformsForVersion(version);
@@ -361,7 +407,11 @@ export function selfTest() {
         release_tag: releaseTag,
         commit,
         platform,
-        checks: platform === "macos_aarch64" ? [{ name: "native_updater_archive", status: "passed" }] : [],
+        checks: platform === "macos_aarch64"
+          ? [{ name: "native_updater_archive", status: "passed" }]
+          : platform === "linux_x86_64"
+            ? ["appimage", "apprun", "native_updater_signature"].map((name) => ({ name, status: "passed" }))
+            : [],
       })}\n`);
     }
     const evidencePath = path.join(root, `rho-${version}-tauri-native-updater-evidence.json`);
@@ -378,10 +428,13 @@ export function selfTest() {
       evidenceAsset: fileRecord(evidencePath, "native updater evidence", MAX_EVIDENCE_BYTES),
       candidateEvidence,
       assets: [
-        fileRecord(path.join(root, expectedFiles(version, "windows_x86_64").artifactName), "Windows updater artifact"),
-        fileRecord(path.join(root, expectedFiles(version, "windows_x86_64").signatureName), "Windows updater signature", MAX_SIGNATURE_BYTES),
-        fileRecord(path.join(root, expectedFiles(version, "macos_aarch64").artifactName), "macOS updater artifact"),
-        fileRecord(path.join(root, expectedFiles(version, "macos_aarch64").signatureName), "macOS updater signature", MAX_SIGNATURE_BYTES),
+        ...testPlatforms.flatMap((platform) => {
+          const names = expectedFiles(version, platform);
+          return [
+            fileRecord(path.join(root, names.artifactName), `${platform} updater artifact`),
+            fileRecord(path.join(root, names.signatureName), `${platform} updater signature`, MAX_SIGNATURE_BYTES),
+          ];
+        }),
         fileRecord(evidencePath, "native updater evidence", MAX_EVIDENCE_BYTES),
       ].map((record) => ({ name: record.name, size: record.size_bytes, sha256: record.sha256 })),
       signatureContents: Object.fromEntries(testPlatforms.map((platform) => [platform, signature])),
@@ -399,14 +452,17 @@ export function selfTest() {
       signatureContents: Object.fromEntries(testPlatforms.map((platform) => [platform, signature])),
       channel: "development",
     });
-    if (Object.keys(manifest.platforms).sort().join(",") !== "darwin-aarch64,windows-x86_64") {
+    if (Object.keys(manifest.platforms).sort().join(",") !== "darwin-aarch64,linux-x86_64,windows-x86_64") {
       fail("Native updater manifest platform projection is invalid");
     }
     expectFailure(() => validateNativeUpdaterEvidence({ ...evidence, public_key_id: "0".repeat(16) }), /header/);
     expectFailure(() => tauriManifestFromEvidence({
       release: { version, release_tag: releaseTag, commit, published_at: "2026-08-15T00:00:00Z", summary: "notes" },
       evidence,
-      signatureContents: { windows_x86_64: "not a signature", macos_aarch64: signature },
+      signatureContents: {
+        ...Object.fromEntries(testPlatforms.map((platform) => [platform, signature])),
+        windows_x86_64: "not a signature",
+      },
       channel: "development",
     }), /base64/);
   } finally {

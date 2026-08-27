@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "pages": [
+    {
+      "id": "DOCS",
+      "title": "Documentation map",
+      "document": "docs/README.md",
+      "area": "documentation"
+    },
+    {
+      "id": "ARCHITECTURE",
+      "title": "Architecture",
+      "document": "docs/ARCHITECTURE.md",
+      "area": "persistence-and-interfaces"
+    },
+    {
+      "id": "DEVELOPMENT",
+      "title": "Development loop",
+      "document": "docs/DEVELOPMENT.md",
+      "area": "development"
+    },
+    {
+      "id": "DESKTOP",
+      "title": "Desktop application",
+      "document": "docs/components/DESKTOP.md",
+      "area": "desktop"
+    },
+    {
+      "id": "R-RUNTIME",
+      "title": "R runtimes",
+      "document": "docs/components/R-RUNTIME.md",
+      "area": "r-runtime"
+    },
+    {
+      "id": "EXTENSIONS",
+      "title": "Extension and plugin runtime",
+      "document": "docs/components/EXTENSIONS.md",
+      "area": "extensions"
+    },
+    {
+      "id": "RELEASE",
+      "title": "Build and release operations",
+      "document": "docs/RELEASE.md",
+      "area": "release"
+    }
+  ]
+}

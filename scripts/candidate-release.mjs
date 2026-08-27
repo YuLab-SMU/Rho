@@ -13,7 +13,6 @@ import {
 
 export const CANDIDATE_PLATFORMS = ["windows_x86_64", "macos_aarch64", "linux_x86_64"];
 const LEGACY_CANDIDATE_PLATFORMS = ["windows_x86_64", "macos_aarch64"];
-const THREE_PLATFORM_CANDIDATE_VERSIONS = new Set(["0.4.0-dev.43", "0.4.0"]);
 export const MAX_EVIDENCE_BYTES = 256 * 1024;
 export const REHEARSAL_REPOSITORY = "YuLab-SMU/Rho_for_mac";
 export const CANDIDATE_REPOSITORY = "YuLab-SMU/Rho";
@@ -31,14 +30,14 @@ const TWO_STAGE_WINDOWS_SIGNING_CHECKS = [
   "signpath_installer_request_binding",
   "free_trial_self_signed",
 ];
-const TWO_STAGE_SIGNING_VERSIONS = new Set(["0.4.0-dev.42", "0.4.0-dev.43", "0.4.0"]);
+const THREE_PLATFORM_CAPABILITY_VERSION = "0.4.0-dev.43";
+const TWO_STAGE_SIGNING_CAPABILITY_VERSION = "0.4.0-dev.42";
+const NATIVE_UPDATER_CAPABILITY_VERSION = "0.4.0-dev.40";
+const AUTOMATED_ACCEPTANCE_CAPABILITY_VERSION = "0.4.0-dev.43";
 const SIGNPATH_FREE_TRIAL_MODULE_VERSION = "4.4.6";
 const SIGNPATH_FREE_TRIAL_MODULE_SHA256 = "4a732624a7214dc8290dbf81ed2714d6b509be319427c2d55fd0c679d13ab5ae";
-const UNSIGNED_CANDIDATE_COMPATIBILITY = new Set(["0.4.0-dev.27"]);
 const UNSIGNED_PUBLISHED_COMPATIBILITY = new Set(["0.4.0-dev.24"]);
 const CONDITIONAL_ACCEPTANCE_VERSIONS = new Set(["0.4.0-dev.39"]);
-const NATIVE_UPDATER_REQUIRED_VERSIONS = new Set(["0.4.0-dev.40", "0.4.0-dev.42", "0.4.0-dev.43", "0.4.0"]);
-const AUTOMATED_ACCEPTANCE_VERSIONS = new Set(["0.4.0-dev.43", "0.4.0"]);
 const CONDITIONAL_ACCEPTANCE_RISKS = [
   "macos_gatekeeper_human_launch_not_run",
   "windows_human_install_not_run",
@@ -102,14 +101,61 @@ const PUBLISHED_EVIDENCE_CHECK_EXCEPTIONS = {
   },
 };
 
+function releaseVersionParts(version) {
+  if (!RELEASE_VERSION_PATTERN.test(version)) fail(`Candidate version is not release SemVer: ${version}`);
+  const separator = version.indexOf("-");
+  const core = (separator < 0 ? version : version.slice(0, separator)).split(".").map(Number);
+  const prerelease = separator < 0 ? [] : version.slice(separator + 1).split(".");
+  return { core, prerelease };
+}
+
+function compareReleaseIdentifiers(left, right) {
+  const leftNumeric = /^\d+$/.test(left);
+  const rightNumeric = /^\d+$/.test(right);
+  if (leftNumeric && rightNumeric) {
+    if (left.length !== right.length) return left.length - right.length;
+    return left < right ? -1 : left > right ? 1 : 0;
+  }
+  if (leftNumeric) return -1;
+  if (rightNumeric) return 1;
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function compareReleaseVersions(left, right) {
+  const leftParts = releaseVersionParts(left);
+  const rightParts = releaseVersionParts(right);
+  for (let index = 0; index < leftParts.core.length; index += 1) {
+    if (leftParts.core[index] !== rightParts.core[index]) {
+      return leftParts.core[index] - rightParts.core[index];
+    }
+  }
+  if (!leftParts.prerelease.length && rightParts.prerelease.length) return 1;
+  if (leftParts.prerelease.length && !rightParts.prerelease.length) return -1;
+  for (let index = 0; index < Math.max(leftParts.prerelease.length, rightParts.prerelease.length); index += 1) {
+    if (leftParts.prerelease[index] == null) return -1;
+    if (rightParts.prerelease[index] == null) return 1;
+    const compared = compareReleaseIdentifiers(leftParts.prerelease[index], rightParts.prerelease[index]);
+    if (compared) return compared;
+  }
+  return 0;
+}
+
+function releaseVersionAtLeast(version, capabilityVersion) {
+  return compareReleaseVersions(version, capabilityVersion) >= 0;
+}
+
+function usesTwoStageWindowsSigning(version) {
+  return releaseVersionAtLeast(version, TWO_STAGE_SIGNING_CAPABILITY_VERSION);
+}
+
 function windowsSigningChecksForVersion(version) {
-  return TWO_STAGE_SIGNING_VERSIONS.has(version)
+  return usesTwoStageWindowsSigning(version)
     ? TWO_STAGE_WINDOWS_SIGNING_CHECKS
     : LEGACY_WINDOWS_SIGNING_CHECKS;
 }
 
 export function candidatePlatformsForVersion(version) {
-  return THREE_PLATFORM_CANDIDATE_VERSIONS.has(version)
+  return releaseVersionAtLeast(version, THREE_PLATFORM_CAPABILITY_VERSION)
     ? CANDIDATE_PLATFORMS
     : LEGACY_CANDIDATE_PLATFORMS;
 }
@@ -213,7 +259,7 @@ function validateChecks(platform, checks, version, publishedCompatibility = fals
       if (!hasSigning && names.has(required)) fail(`${platform} evidence has signing check ${required} without signing evidence`);
     }
     const requiredChecks = windowsSigningChecksForVersion(version);
-    const foreignChecks = TWO_STAGE_SIGNING_VERSIONS.has(version)
+    const foreignChecks = usesTwoStageWindowsSigning(version)
       ? LEGACY_WINDOWS_SIGNING_CHECKS
       : TWO_STAGE_WINDOWS_SIGNING_CHECKS;
     for (const foreign of foreignChecks) {
@@ -350,7 +396,7 @@ function validateTwoStageWindowsSigning(signing, artifact) {
 }
 
 function validateWindowsSigning(signing, artifact, version) {
-  if (TWO_STAGE_SIGNING_VERSIONS.has(version)) {
+  if (usesTwoStageWindowsSigning(version)) {
     return validateTwoStageWindowsSigning(signing, artifact);
   }
   return validateLegacyWindowsSigning(signing, artifact);
@@ -613,7 +659,7 @@ function requiredCandidateAssetRecords(candidateEvidence) {
 }
 
 function nativeUpdaterRequired(version) {
-  return NATIVE_UPDATER_REQUIRED_VERSIONS.has(version);
+  return releaseVersionAtLeast(version, NATIVE_UPDATER_CAPABILITY_VERSION);
 }
 
 function nativeUpdaterEvidenceName(version) {
@@ -760,7 +806,9 @@ export function createConditionalAcceptanceEvidence({
 
 export function createAutomatedAcceptanceEvidence({ candidateEvidencePath, outputPath }) {
   const candidate = validateAggregateEvidence(JSON.parse(fs.readFileSync(candidateEvidencePath, "utf8")));
-  if (!AUTOMATED_ACCEPTANCE_VERSIONS.has(candidate.version)) fail("Automated acceptance is not authorized for this version");
+  if (!releaseVersionAtLeast(candidate.version, AUTOMATED_ACCEPTANCE_CAPABILITY_VERSION)) {
+    fail("Automated acceptance is not authorized for this version");
+  }
   const candidateRecord = fileRecord(candidateEvidencePath);
   const expectedName = `rho-${candidate.version}-acceptance.json`;
   if (path.basename(outputPath) !== expectedName || path.resolve(path.dirname(outputPath)) !== path.resolve(path.dirname(candidateEvidencePath))) {
@@ -825,7 +873,7 @@ export function validatePublishRecord(record) {
       release_tag: candidate.release_tag,
       commit: candidate.commit,
       platform,
-      require_windows_signing: platform === "windows_x86_64" && !UNSIGNED_CANDIDATE_COMPATIBILITY.has(candidate.version),
+      require_windows_signing: platform === "windows_x86_64",
     });
   }
   assertExactKeys(record.candidate_evidence_asset, ["name", "size_bytes", "sha256"], "candidate evidence asset");
@@ -916,6 +964,24 @@ export function selfTest() {
     const version = "0.4.0-dev.39";
     const releaseTag = `v${version}`;
     const commit = "a".repeat(40);
+    if (!isDeepStrictEqual(candidatePlatformsForVersion("0.4.0-dev.42"), LEGACY_CANDIDATE_PLATFORMS)) {
+      fail("Historical two-platform candidate decoding changed");
+    }
+    if (!isDeepStrictEqual(candidatePlatformsForVersion("0.4.0-Dev.99"), LEGACY_CANDIDATE_PLATFORMS)) {
+      fail("Prerelease identifiers must use SemVer ordinal ordering");
+    }
+    if (!isDeepStrictEqual(candidatePlatformsForVersion("0.4.1-dev.22"), CANDIDATE_PLATFORMS)) {
+      fail("Current candidate versions must default to all supported platforms");
+    }
+    if (!usesTwoStageWindowsSigning("0.4.1-dev.22") || !nativeUpdaterRequired("0.4.1-dev.22")) {
+      fail("Current candidate versions must default to two-stage signing and native updater evidence");
+    }
+    if (releaseVersionAtLeast("0.4.0-dev.42", AUTOMATED_ACCEPTANCE_CAPABILITY_VERSION)) {
+      fail("Automated acceptance capability floor moved before its implementation");
+    }
+    if (!releaseVersionAtLeast("0.4.1-dev.22", AUTOMATED_ACCEPTANCE_CAPABILITY_VERSION)) {
+      fail("Current candidate versions must default to automated acceptance");
+    }
     validateBuildAdmission("rehearsal", REHEARSAL_REPOSITORY, "refs/heads/main", "main");
     validateBuildAdmission("candidate", CANDIDATE_REPOSITORY, "refs/heads/main", "main");
     expectFailure(

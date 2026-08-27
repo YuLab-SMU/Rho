@@ -1,134 +1,40 @@
-# Rho Documentation
+# Rho documentation
 
-Current implementation package:
-[SETTINGS-UX2A Provider-first Settings UI](plans/active-2026-08-26-settings-ux2-provider-flow-spec.md).
-Credential persistence package:
-[CRED-VAULT-1 Rho encrypted credential vault](plans/active-2026-08-26-rho-encrypted-credential-vault-spec.md).
+Rho documentation explains the code that exists now. Git stores history;
+command output reports what actually works. A document that disagrees with the
+source or a reproducible run is wrong and should be corrected or deleted.
 
-The documentation is organized by purpose so that design intent, implementation
-guidance, project tracking, and release evidence do not become mixed together.
+## Start here
 
-## Status Prefixes
+- [Architecture](ARCHITECTURE.md) — the shortest map of processes, authority,
+  persistence, and interfaces.
+- [Development](DEVELOPMENT.md) — the fast edit–run–inspect–commit loop.
+- [Desktop](components/DESKTOP.md), [R runtimes](components/R-RUNTIME.md), and
+  [extensions](components/EXTENSIONS.md) — deeper implementation maps.
+- [Documentation index](INDEX.md) — generated list of current pages.
+- [Source index](SOURCE-INDEX.md) — generated paths and checks by
+  domain.
+- [Build and release](RELEASE.md) — operator commands, loaded only when needed.
 
-Every substantive document starts with a lifecycle prefix. `README.md` index
-files are the only exception.
+## Page shapes
 
-| Prefix | Meaning |
-| --- | --- |
-| `implemented-` | The documented design, plan, or behavior is implemented in the current product baseline |
-| `active-` | The document is actively maintained or its work and acceptance gates are still underway |
-| `accepted-` | The architecture decision has been adopted and remains authoritative |
-| `proposed-` | The proposal is not yet approved or implemented |
-| `historical-` | The document is a completed snapshot retained for traceability rather than current execution |
+The documentation tree has only three useful shapes:
 
-The prefix describes lifecycle state, while the directory describes document
-type. For example, an implemented design remains under `design/` as
-`implemented-...`; moving it to another directory is unnecessary. Update both
-the filename prefix and the document's `Status:` field when its lifecycle
-changes.
+- an overview maps a system and its boundaries;
+- a component page explains behavior that source layout cannot make obvious;
+- an operator page gives reproducible commands.
 
-## Categories
+Plans and status live with the working issue or branch. Command output and
+artifacts live with the run that produced them. Git retains the evolution.
 
-| Directory | Contents |
-| --- | --- |
-| [`architecture/`](architecture/) | Stable system boundaries, integration architecture, and upstream change proposals |
-| [`decisions/`](decisions/) | Architecture Decision Records (ADRs) |
-| [`design/`](design/) | Feature specifications and implementation handoff designs |
-| [`implementation/`](implementation/) | Build environment, packaging, and current prototype operation details |
-| [`bug-fixes/`](bug-fixes/) | Review findings, defect analysis, and required repair plans |
-| [`plans/`](plans/) | Dated work-package and execution plans |
-| [`project/`](project/) | Roadmaps, milestone status, and project-level tracking |
-| [`release/`](release/) | Release gates, acceptance checklists, and release evidence |
+## Updating the map
 
-## Current Entry Points
+```bash
+node scripts/governance.mjs impact --changed-auto
+node scripts/governance.mjs generate
+node scripts/governance.mjs check
+```
 
-- Required development governance: [`project/active-development-governance.md`](project/active-development-governance.md)
-- Product direction: [`project/active-development-roadmap.md`](project/active-development-roadmap.md)
-- Active/proposed document authority and cross-review: [`project/active-document-cross-review.md`](project/active-document-cross-review.md)
-- Phase 0 implementation snapshot: [`project/historical-phase-0-status.md`](project/historical-phase-0-status.md)
-- Windows prototype guide: [`implementation/implemented-windows-prototype.md`](implementation/implemented-windows-prototype.md)
-- Windows build contract: [`implementation/implemented-windows-build-environment.md`](implementation/implemented-windows-build-environment.md)
-- Current release gates: [`release/active-0.2-release-checklist.md`](release/active-0.2-release-checklist.md)
-- `0.2.0` hardening contract: [`release/active-0.2.0-release-hardening-spec.md`](release/active-0.2.0-release-hardening-spec.md)
-- Accepted About and manual update-check V1: [`design/accepted-2026-07-25-about-and-update-check-design.md`](design/accepted-2026-07-25-about-and-update-check-design.md)
-- Active Tauri native updater enablement: [`plans/active-2026-08-15-tauri-native-updater-spec.md`](plans/active-2026-08-15-tauri-native-updater-spec.md)
-- Active dev.42 two-stage Free Trial signing: [`plans/active-2026-08-17-signpath-free-trial-two-stage-dev42-spec.md`](plans/active-2026-08-17-signpath-free-trial-two-stage-dev42-spec.md)
-- Active dev.42 candidate checklist: [`release/active-0.4.0-dev.42-two-stage-signing-checklist.md`](release/active-0.4.0-dev.42-two-stage-signing-checklist.md)
-- Implemented dev.43 three-platform automatic updater: [`plans/implemented-2026-08-17-three-platform-automatic-updater-dev43-spec.md`](plans/implemented-2026-08-17-three-platform-automatic-updater-dev43-spec.md)
-- Historical dev.43 release record: [`release/historical-0.4.0-dev.43-three-platform-updater-checklist.md`](release/historical-0.4.0-dev.43-three-platform-updater-checklist.md)
-- Implemented stable 0.4.0 release contract: [`plans/implemented-2026-08-17-stable-0.4.0-release-spec.md`](plans/implemented-2026-08-17-stable-0.4.0-release-spec.md)
-- Historical stable 0.4.0 release record: [`release/historical-0.4.0-stable-release-checklist.md`](release/historical-0.4.0-stable-release-checklist.md)
-- Implemented Phase 1 internal extension runtime architecture: [`design/implemented-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md`](design/implemented-2026-08-14-plugin-runtime-phase-1-internal-plugins-design.md)
-- Implemented P1-0 internal extension contracts: [`plans/implemented-2026-08-18-p1-0-extension-runtime-contracts-spec.md`](plans/implemented-2026-08-18-p1-0-extension-runtime-contracts-spec.md)
-- Implemented P1-1 internal extension lifecycle runtime: [`plans/implemented-2026-08-18-p1-1-extension-runtime-lifecycle-spec.md`](plans/implemented-2026-08-18-p1-1-extension-runtime-lifecycle-spec.md)
-- Implemented P1-2 project Run History source: [`plans/implemented-2026-08-18-p1-2-run-history-source-spec.md`](plans/implemented-2026-08-18-p1-2-run-history-source-spec.md)
-- Implemented P1-3 Workspace Snapshot and Project File Viewer migration: [`plans/implemented-2026-08-18-p1-3-workspace-snapshot-viewer-spec.md`](plans/implemented-2026-08-18-p1-3-workspace-snapshot-viewer-spec.md)
-- Implemented P1-4 default switch and Phase 1 acceptance: [`plans/implemented-2026-08-18-p1-4-default-acceptance-spec.md`](plans/implemented-2026-08-18-p1-4-default-acceptance-spec.md)
-- Implemented Rust fast-development CI: [`plans/implemented-2026-08-18-rust-fast-development-ci-spec.md`](plans/implemented-2026-08-18-rust-fast-development-ci-spec.md)
-- Bounded `dev.41` native-updater acceptance transport: [`release/active-0.4.0-dev.41-native-updater-acceptance-target-checklist.md`](release/active-0.4.0-dev.41-native-updater-acceptance-target-checklist.md)
-- Active SignPath application readiness: [`plans/active-2026-08-11-signpath-application-readiness-spec.md`](plans/active-2026-08-11-signpath-application-readiness-spec.md)
-- Active SignPath Free Trial Windows smoke: [`plans/active-2026-08-12-signpath-free-trial-smoke-spec.md`](plans/active-2026-08-12-signpath-free-trial-smoke-spec.md)
-- Implemented conditional-prerelease policy: [`plans/implemented-2026-08-13-conditional-prerelease-policy-spec.md`](plans/implemented-2026-08-13-conditional-prerelease-policy-spec.md)
-- Active AGPL transition and installed-license gate: [`plans/active-2026-08-10-agpl-license-transition-spec.md`](plans/active-2026-08-10-agpl-license-transition-spec.md)
-- Historical published `0.4.0-dev.39` conditional prerelease record: [`release/historical-0.4.0-dev.39-candidate-checklist.md`](release/historical-0.4.0-dev.39-candidate-checklist.md)
-- Immutable unpublished `0.4.0-dev.38` NO-GO ledger: [`release/active-0.4.0-dev.38-candidate-checklist.md`](release/active-0.4.0-dev.38-candidate-checklist.md)
-- Accepted `0.4.0-dev.37` source/Issue #33 Windows evidence: [`release/active-0.4.0-dev.37-candidate-checklist.md`](release/active-0.4.0-dev.37-candidate-checklist.md)
-- Proposed implemented-baseline hardening: [`plans/proposed-2026-07-26-implemented-baseline-hardening-plan.md`](plans/proposed-2026-07-26-implemented-baseline-hardening-plan.md)
-- Active BH1 project-scoped durable identity handoff: [`plans/active-2026-07-26-bh1-project-scoped-durable-identity-handoff.md`](plans/active-2026-07-26-bh1-project-scoped-durable-identity-handoff.md)
-- Proposed intuitive interaction and guided workflows: [`design/proposed-2026-07-26-intuitive-interaction-and-guided-workflows-design.md`](design/proposed-2026-07-26-intuitive-interaction-and-guided-workflows-design.md)
-- Proposed public Workbench Protocol, CLI, and MCP: [`design/proposed-2026-07-26-public-workbench-protocol-cli-mcp-design.md`](design/proposed-2026-07-26-public-workbench-protocol-cli-mcp-design.md)
-- Proposed reproducibility audit and run comparison: [`design/proposed-2026-07-26-reproducibility-audit-and-run-comparison-design.md`](design/proposed-2026-07-26-reproducibility-audit-and-run-comparison-design.md)
-- Partially implemented RStudio-inspired workflow direction and remaining gaps: [`design/proposed-2026-07-26-rstudio-inspired-workflow-design.md`](design/proposed-2026-07-26-rstudio-inspired-workflow-design.md)
-- Proposed Human/Agent workbench posture: [`plans/proposed-2026-07-20-human-agent-workbench-posture-design.md`](plans/proposed-2026-07-20-human-agent-workbench-posture-design.md)
-- Proposed interface modernization: [`plans/proposed-2026-07-26-interface-modernization-plan.md`](plans/proposed-2026-07-26-interface-modernization-plan.md)
-- Active remaining-work follow-up: [`plans/active-2026-08-02-remaining-work-follow-up.md`](plans/active-2026-08-02-remaining-work-follow-up.md)
-- Active Agent entry and Direct-surface polish: [`plans/active-2026-08-02-agent-entry-and-direct-surface-polish-spec.md`](plans/active-2026-08-02-agent-entry-and-direct-surface-polish-spec.md)
-- Active Agent-first intuitive modernization: [`plans/active-2026-08-02-agent-first-intuitive-modernization-spec.md`](plans/active-2026-08-02-agent-first-intuitive-modernization-spec.md)
-- Active Agent-first adaptive work surface: [`plans/active-2026-08-03-agent-first-adaptive-work-surface-spec.md`](plans/active-2026-08-03-agent-first-adaptive-work-surface-spec.md)
-- Active native context, diagnostics, and editor shortcuts repair: [`plans/active-2026-08-05-native-context-lint-problems-editor-shortcuts-spec.md`](plans/active-2026-08-05-native-context-lint-problems-editor-shortcuts-spec.md)
-- Active human-facing information projection: [`plans/active-2026-08-05-human-facing-information-projection-spec.md`](plans/active-2026-08-05-human-facing-information-projection-spec.md)
-- Implemented startup performance and truthful progress: [`plans/implemented-2026-08-05-startup-performance-spec.md`](plans/implemented-2026-08-05-startup-performance-spec.md)
-- Implemented visual acceptance automation: [`plans/implemented-2026-08-26-visual-acceptance-automation-spec.md`](plans/implemented-2026-08-26-visual-acceptance-automation-spec.md)
-- Active Vibe information-flow workbench: [`plans/active-2026-08-27-vibe-information-flow-workbench-spec.md`](plans/active-2026-08-27-vibe-information-flow-workbench-spec.md)
-- Implemented project-transition epoch repair: [`plans/implemented-2026-08-27-project-transition-epoch-repair-spec.md`](plans/implemented-2026-08-27-project-transition-epoch-repair-spec.md)
-- Active Agent result transport recovery: [`plans/active-2026-08-06-agent-result-transport-recovery-spec.md`](plans/active-2026-08-06-agent-result-transport-recovery-spec.md)
-- Active file proposal collapse: [`plans/active-2026-08-06-file-proposal-collapse-spec.md`](plans/active-2026-08-06-file-proposal-collapse-spec.md)
-- Active Act file apply and generated output capture: [`plans/active-2026-08-06-act-file-apply-and-generated-output-capture-spec.md`](plans/active-2026-08-06-act-file-apply-and-generated-output-capture-spec.md)
-- Active first-start user directory default: [`plans/active-2026-08-06-user-directory-first-start-spec.md`](plans/active-2026-08-06-user-directory-first-start-spec.md)
-- Active Agent output copy: [`plans/active-2026-08-06-agent-output-copy-spec.md`](plans/active-2026-08-06-agent-output-copy-spec.md)
-- Active generated output Review: [`plans/active-2026-08-06-generated-output-review-spec.md`](plans/active-2026-08-06-generated-output-review-spec.md)
-- Active current Project check: [`plans/active-2026-08-06-current-project-check-spec.md`](plans/active-2026-08-06-current-project-check-spec.md)
-- Active Plot payload normalization repair: [`plans/active-2026-08-04-plot-payload-normalization-repair-spec.md`](plans/active-2026-08-04-plot-payload-normalization-repair-spec.md)
-- Active guarded Git review: [`plans/active-2026-08-02-ws4-reviewable-git-mutations-spec.md`](plans/active-2026-08-02-ws4-reviewable-git-mutations-spec.md)
-- Verified adversarial Git hardening: [`plans/active-2026-08-03-ws4-adversarial-git-hardening-spec.md`](plans/active-2026-08-03-ws4-adversarial-git-hardening-spec.md)
-- Verified Git repository replacement handling: [`plans/active-2026-08-03-ws4-repository-replacement-spec.md`](plans/active-2026-08-03-ws4-repository-replacement-spec.md)
-- Active broker-owned Data Viewer query: [`plans/active-2026-08-03-ws3-broker-data-query-spec.md`](plans/active-2026-08-03-ws3-broker-data-query-spec.md)
-- Active Data Viewer type and missing-value presentation: [`plans/active-2026-08-03-ws3-type-missing-presentation-spec.md`](plans/active-2026-08-03-ws3-type-missing-presentation-spec.md)
-- Active render cancellation and restart reconciliation: [`plans/active-2026-08-03-render-cancellation-reconciliation-spec.md`](plans/active-2026-08-03-render-cancellation-reconciliation-spec.md)
-- Active render result to Artifact linkage: [`plans/active-2026-08-03-render-artifact-linkage-spec.md`](plans/active-2026-08-03-render-artifact-linkage-spec.md)
-- Active WS1 lockfile inventory and library comparison: [`plans/active-2026-08-03-ws1-lockfile-inventory-spec.md`](plans/active-2026-08-03-ws1-lockfile-inventory-spec.md)
-- Active WS1 dependency role and package source presentation: [`plans/active-2026-08-03-ws1-dependency-source-spec.md`](plans/active-2026-08-03-ws1-dependency-source-spec.md)
-- Active WS1 individual package mutation: [`plans/active-2026-08-03-ws1-package-mutation-spec.md`](plans/active-2026-08-03-ws1-package-mutation-spec.md)
-- Active WS2 local Help and package location: [`plans/active-2026-08-03-ws2-local-help-location-spec.md`](plans/active-2026-08-03-ws2-local-help-location-spec.md)
-- Active WS2 bounded project references: [`plans/active-2026-08-03-ws2-bounded-project-references-spec.md`](plans/active-2026-08-03-ws2-bounded-project-references-spec.md)
-- Active WS2 installed Help and reviewed example: [`plans/active-2026-08-03-ws2-installed-help-and-example-spec.md`](plans/active-2026-08-03-ws2-installed-help-and-example-spec.md)
-- Active WS2 deterministic diagnostics and reviewed quick fixes: [`plans/active-2026-08-03-ws2-diagnostic-grouping-quick-fix-spec.md`](plans/active-2026-08-03-ws2-diagnostic-grouping-quick-fix-spec.md)
-- Active WS2 Agent answers linked to Local Help: [`plans/active-2026-08-03-ws2-agent-local-help-link-spec.md`](plans/active-2026-08-03-ws2-agent-local-help-link-spec.md)
-- Active WS2 reviewable rename and extract edits: [`plans/active-2026-08-03-ws2-refactor-review-spec.md`](plans/active-2026-08-03-ws2-refactor-review-spec.md)
-- Deferred aisdk family proposals: [`architecture/proposed-aisdk-family-change-proposals.md`](architecture/proposed-aisdk-family-change-proposals.md)
-- Active `0.3.x` implementation handoff: [`plans/active-2026-07-25-0.3x-scientific-workflow-handoff.md`](plans/active-2026-07-25-0.3x-scientific-workflow-handoff.md)
-- Current `0.3.x` milestone verification: [`verification/0.3x-milestone/verification.md`](verification/0.3x-milestone/verification.md)
-- Implemented Agent work handoff: [`plans/implemented-0.2x-agent-handoff.md`](plans/implemented-0.2x-agent-handoff.md)
-- Accepted plugin-native Surface Runtime architecture: [`design/accepted-2026-08-21-plugin-native-surface-runtime-design.md`](design/accepted-2026-08-21-plugin-native-surface-runtime-design.md)
-- Active Studio design language and UX overhaul: [`design/active-2026-08-22-studio-design-language-and-ux-overhaul-design.md`](design/active-2026-08-22-studio-design-language-and-ux-overhaul-design.md)
-- Implemented Studio Agent Surface UX: [`plans/implemented-2026-08-27-studio-agent-surface-ux-spec.md`](plans/implemented-2026-08-27-studio-agent-surface-ux-spec.md)
-- Active COMPAT-1 plaintext canonical model-config slice: [`plans/active-2026-08-27-compat-1-plaintext-config-store-spec.md`](plans/active-2026-08-27-compat-1-plaintext-config-store-spec.md)
-- Proposed canonical model-config and Agent-tool compatibility direction: [`plans/proposed-2026-08-27-rho-model-config-and-agent-compat-layer-spec.md`](plans/proposed-2026-08-27-rho-model-config-and-agent-compat-layer-spec.md)
-- Proposed Provider-first Settings and repeatable native credential-view redesign: [`plans/proposed-2026-08-26-plugin-native-settings-experience-design-spec.md`](plans/proposed-2026-08-26-plugin-native-settings-experience-design-spec.md)
-- Active CRED-REVEAL-1A connection-test credential-redaction repair: [`plans/active-2026-08-26-cred-reveal-1a-connection-test-redaction-spec.md`](plans/active-2026-08-26-cred-reveal-1a-connection-test-redaction-spec.md)
-- Active CRED-REVEAL-1B macOS native secure credential view: [`plans/active-2026-08-27-cred-reveal-1b-native-secure-view-spec.md`](plans/active-2026-08-27-cred-reveal-1b-native-secure-view-spec.md)
-- Active Runtime output, Console, History, and Agent context closed loop: [`plans/active-2026-08-24-runtime-output-agent-context-closed-loop-spec.md`](plans/active-2026-08-24-runtime-output-agent-context-closed-loop-spec.md)
-- Implemented architecture modernization program and repository-local tracker: [`architecture/implemented-2026-08-24-architecture-modernization-program.md`](architecture/implemented-2026-08-24-architecture-modernization-program.md)
-
-Add new documents to the category that describes their purpose. Prefer a dated
-filename for time-bounded plans and keep durable decisions in ADRs.
+`governance/registry.json` lists the small set of current pages.
+`governance/source-map.json` maps code areas to paths and executable checks.
+`docs/INDEX.md` and `docs/SOURCE-INDEX.md` are generated from those files.

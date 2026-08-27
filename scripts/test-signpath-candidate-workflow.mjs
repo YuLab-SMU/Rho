@@ -14,8 +14,6 @@ function snapshot() {
     candidate: read("scripts/candidate-release.mjs"),
     generator: read("scripts/generate-update-site.mjs"),
     policy: read("CODE_SIGNING_POLICY.md"),
-    spec: read("docs/plans/active-2026-08-17-signpath-free-trial-two-stage-dev42-spec.md"),
-    checklist: read("docs/release/active-0.4.0-dev.42-two-stage-signing-checklist.md"),
     compatibility: read(".github/workflows/rust-compatibility.yml"),
   };
 }
@@ -32,6 +30,11 @@ function validate(value) {
   assert.ok(windows, "Windows candidate job is missing");
   assert.ok(rehearsal, "Rehearsal aggregation job is missing");
   assert.ok(draft, "Candidate Draft job is missing");
+  assert.doesNotMatch(value.workflow, /default:\s*(?:v0\.4\.0|Rho 0\.4\.0)/);
+  assert.doesNotMatch(value.workflow, /inputs\.release_(?:tag|name)|native-updater-acceptance|0\.4\.0-dev\.41/);
+  assert.match(value.workflow, /version="\$\(node -e '[^']*Cargo\.toml/);
+  assert.match(value.workflow, /release_tag="v\$version"/);
+  assert.match(value.workflow, /release_name="Rho \$version"/);
 
   const orderedSteps = [
     "Run complete Windows candidate validation",
@@ -169,6 +172,16 @@ function validate(value) {
   assert.match(value.buildScript, /"BundleOnly"[\s\S]*"bundle"[\s\S]*"--bundles", "nsis"/);
   assert.match(value.buildScript, /Release executable changed during BundleOnly/);
   assert.match(value.buildScript, /NoBundle mode must not produce an installer/);
+  assert.match(value.buildScript, /\[string\]\$TauriConfigOverlayPath = ""/);
+  assert.match(value.buildScript, /Resolved Tauri config overlay must be inside the repository/);
+  assert.match(value.buildScript, /\[ValidateRange\(1, 3\)\][\s\S]*\$MaximumTauriBuildAttempts = 1/);
+  assert.match(value.buildScript, /Multiple Tauri attempts are supported only in Full mode/);
+  assert.match(value.buildScript, /function Test-RhoTransientTauriBundleFailure/);
+  assert.match(value.buildScript, /failed to bundle project/);
+  assert.match(value.buildScript, /http status:[^\n]+408\|425\|429\|5\\d\{2\}/);
+  assert.match(value.buildScript, /for \(\$attempt = 1; \$attempt -le \$MaximumTauriBuildAttempts; \$attempt \+= 1\)/);
+  assert.match(value.buildScript, /-not \$transientBundleFailure -or \$attempt -ge \$MaximumTauriBuildAttempts/);
+  assert.doesNotMatch(value.buildScript, /Issue #?33|issue33|tauri\.issue33-acceptance/);
   assert.match(
     value.buildScript,
     /\$BuildMode -eq "Full"[\s\S]*Remove-Item -LiteralPath \$installerDirectory -Recurse -Force/,
@@ -181,7 +194,8 @@ function validate(value) {
 
   assert.match(value.candidate, /LEGACY_WINDOWS_SIGNING_CHECKS/);
   assert.match(value.candidate, /TWO_STAGE_WINDOWS_SIGNING_CHECKS/);
-  assert.match(value.candidate, /TWO_STAGE_SIGNING_VERSIONS = new Set\(\["0\.4\.0-dev\.42", "0\.4\.0-dev\.43", "0\.4\.0"\]\)/);
+  assert.match(value.candidate, /TWO_STAGE_SIGNING_CAPABILITY_VERSION = "0\.4\.0-dev\.42"/);
+  assert.match(value.candidate, /usesTwoStageWindowsSigning\(version\)/);
   assert.match(value.candidate, /schema_version/);
   for (const field of [
     "binary_request_id",
@@ -200,19 +214,14 @@ function validate(value) {
   assert.match(value.candidate, /Windows installed binary hash does not match the signed binary/);
   assert.match(value.candidate, /Windows binary hash changed during bundling/);
   assert.match(value.candidate, /Windows SignPath request IDs must be distinct/);
-  assert.match(value.candidate, /UNSIGNED_CANDIDATE_COMPATIBILITY = new Set\(\["0\.4\.0-dev\.27"\]\)/);
+  assert.doesNotMatch(value.candidate, /UNSIGNED_CANDIDATE_COMPATIBILITY|0\.4\.0-dev\.27/);
   assert.match(value.candidate, /UNSIGNED_PUBLISHED_COMPATIBILITY = new Set\(\["0\.4\.0-dev\.24"\]\)/);
 
   assert.match(value.generator, /Windows trust: Authenticode-signed with a SignPath Free Trial self-signed test certificate/);
   assert.match(value.generator, /It is not publicly trusted; Windows or SmartScreen may still warn/);
   assert.match(value.generator, /does not establish Foundation acceptance/);
-  assert.match(value.policy, /Free Trial test-signed prerelease boundary/);
+  assert.match(value.policy, /signs only Rho-owned artifacts/);
   assert.match(value.policy, /not\s+publicly trusted/);
-  assert.match(value.spec, /Status: active `SP-FT2-DEV42`/);
-  assert.match(value.spec, /build --no-bundle/);
-  assert.match(value.spec, /bundle --bundles nsis/);
-  assert.match(value.checklist, /Current release decision: `NO_RELEASE_DECISION`/);
-
   assert.equal(occurrences(value.compatibility, /node scripts\/test-signpath-candidate-workflow\.mjs --self-test/g), 1);
   assert.equal(occurrences(value.compatibility, /node scripts\/test-signpath-candidate-workflow\.mjs(?:\s|$)/g), 2);
   for (const trigger of [
@@ -220,8 +229,6 @@ function validate(value) {
     "scripts/tauri-bundle-type.mjs",
     "scripts/test-tauri-bundle-type.mjs",
     "scripts/test-signpath-candidate-workflow.mjs",
-    "docs/plans/active-2026-08-17-signpath-free-trial-two-stage-dev42-spec.md",
-    "docs/release/active-0.4.0-dev.42-two-stage-signing-checklist.md",
   ]) {
     assert.equal(
       occurrences(value.compatibility, new RegExp(`- "${escape(trigger)}"`, "g")),

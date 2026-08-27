@@ -36,14 +36,14 @@ const packageJson = JSON.parse(read("desktop/package.json"));
 assert.equal(packageJson.scripts["rsr:build"], "vite build --config ui/vite.config.mts");
 assert.match(packageJson.scripts["rsr:check"], /rsr:test:cutover/u);
 assert.match(packageJson.scripts["rsr:check"], /rsr:test:commands/u);
-assert.match(packageJson.scripts["rsr:check"], /rsr:test:architecture/u);
+assert.match(packageJson.scripts["rsr:check"], /rsr:test:governance/u);
 assert.equal(
   packageJson.scripts["rsr:test:commands"],
   "node ../scripts/test-tauri-command-inventory.mjs --test && node ../scripts/test-tauri-command-inventory.mjs",
 );
 assert.equal(
-  packageJson.scripts["rsr:test:architecture"],
-  "node ../scripts/test-architecture-program.mjs && node ../scripts/change-fragments.mjs validate --root .. && node ../scripts/architecture-program.mjs validate --root ..",
+  packageJson.scripts["rsr:test:governance"],
+  "node ../scripts/test-governance.mjs && node ../scripts/governance.mjs check",
 );
 assert.doesNotMatch(packageJson.description, /current Rho shell/u);
 
