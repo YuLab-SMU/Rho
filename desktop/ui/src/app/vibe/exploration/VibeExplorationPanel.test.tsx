@@ -184,11 +184,13 @@ describe("Vibe autonomous exploration panel", () => {
     return {
       projectId: "project:one",
       projectRoot: "/projects/rho",
+      pageId: "page:one",
       presentation: "overview",
       selection: { conversationId: null, turnId: null },
       exactRefs: { conversationIds: [], taskIds: [] },
       transport,
       onSelectionChange: vi.fn(),
+      onOpenHost: vi.fn(),
       onCompose: vi.fn(),
       onOpenAgent: vi.fn(),
       onError: vi.fn(),
@@ -210,7 +212,8 @@ describe("Vibe autonomous exploration panel", () => {
     const transport = createTransport().transport;
     transport.listAgentConversations = vi.fn(() => pending.promise);
     const onCompose = vi.fn();
-    const props = baseProps(transport, { onCompose });
+    const onOpenHost = vi.fn();
+    const props = baseProps(transport, { onCompose, onOpenHost });
     const { container } = mount(props);
 
     expect(container.textContent).toContain("正在读取最近的 Agent 工作");
@@ -223,6 +226,12 @@ describe("Vibe autonomous exploration panel", () => {
     expect(container.textContent).toContain("尚无自主探索");
     expect(container.querySelectorAll("[role='tab']")).toHaveLength(0);
     act(() => findButton(container, "开始探索").click());
+    expect(onOpenHost).toHaveBeenCalledOnce();
+    expect(onCompose).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("还没有 Agent 记录");
+    expect(container.textContent).toContain("在 Studio 中发起探索");
+    expect(container.textContent).not.toContain("开始探索");
+    act(() => findButton(container, "在 Studio 中发起探索").click());
     expect(onCompose).toHaveBeenCalledWith({ conversationId: null, turnId: null });
   });
 
@@ -258,6 +267,242 @@ describe("Vibe autonomous exploration panel", () => {
     expect(container.textContent).not.toContain("provider/private-model");
     expect(container.textContent).not.toContain("停止探索");
     expect(container.textContent).not.toContain("重试");
+  });
+
+  it("opens the complete public Agent record inside Vibe and enters Studio only from an explicit secondary action", async () => {
+    const summary = turn();
+    const publicEvent = event(2, "tool.call_completed", {
+      title: "Donor-aware aggregation completed",
+      body: "The public execution record is available.",
+      code: "aggregate_by_donor()",
+    });
+    const ignoredEvent = event(1, "agent.plugin_context", {
+      title: "Private plugin context",
+      body: "Must not render",
+    });
+    const harness = createTransport({
+      conversations: [conversation()],
+      turns: [summary],
+      details: [detail(summary, [ignoredEvent, publicEvent])],
+    });
+    const onOpenHost = vi.fn();
+    const onCompose = vi.fn();
+    const onOpenAgent = vi.fn();
+    const { container } = mount(baseProps(harness.transport, {
+      onOpenHost,
+      onCompose,
+      onOpenAgent,
+    }));
+    await act(settle);
+
+    act(() => findButton(container, "在 Vibe 中查看 Agent 记录").click());
+
+    expect(onOpenHost).toHaveBeenCalledOnce();
+    expect(onCompose).not.toHaveBeenCalled();
+    expect(onOpenAgent).not.toHaveBeenCalled();
+    const host = container.querySelector<HTMLElement>(".rho-vibe-agent-record-host");
+    const heading = host?.querySelector<HTMLHeadingElement>("h3");
+    expect(host).not.toBeNull();
+    expect(heading?.textContent).toContain("Compare cluster 3 and cluster 7");
+    expect(document.activeElement).toBe(heading);
+    expect(host?.textContent).toContain("Donor-aware aggregation completed");
+    expect(host?.textContent).toContain("查看执行代码");
+    expect(host?.textContent).not.toContain("Private plugin context");
+    expect(host?.textContent).not.toContain("Must not render");
+    expect(host?.textContent).not.toContain("secret-2");
+    expect(host?.textContent).not.toContain("批准");
+    expect(host?.textContent).not.toContain("自动批准");
+    expect(host?.textContent).not.toContain("应用文件");
+
+    act(() => findButton(container, "在 Studio 中深入检查").click());
+    expect(onOpenAgent).toHaveBeenCalledWith({
+      conversationId: "conversation:one",
+      turnId: "turn:one",
+    });
+    expect(onCompose).not.toHaveBeenCalled();
+  });
+
+  it("keeps the host open while navigating Turns and sends the exact current Turn to Studio", async () => {
+    const firstTurn = turn({ turn_id: "turn:one", prompt_preview: "First recorded task" });
+    const secondTurn = turn({ turn_id: "turn:two", prompt_preview: "Second recorded task" });
+    const harness = createTransport({
+      conversations: [conversation({ turn_count: 2 })],
+      turns: [firstTurn, secondTurn],
+      details: [detail(firstTurn), detail(secondTurn)],
+    });
+    const onSelectionChange = vi.fn();
+    const onOpenAgent = vi.fn();
+    const { container } = mount(baseProps(harness.transport, {
+      presentation: "focused",
+      selection: { conversationId: "conversation:one", turnId: "turn:one" },
+      onSelectionChange,
+      onOpenAgent,
+    }));
+    await act(settle);
+
+    act(() => findButton(container, "在 Vibe 中查看 Agent 记录").click());
+    const turnButtons = [...container.querySelectorAll<HTMLButtonElement>(
+      ".rho-vibe-agent-record-host button[data-exploration-turn]",
+    )];
+    expect(turnButtons).toHaveLength(2);
+    turnButtons[1]!.focus();
+    act(() => turnButtons[1]!.click());
+
+    expect(container.querySelector(".rho-vibe-agent-record-host")).not.toBeNull();
+    expect(container.textContent).toContain("Second recorded task");
+    expect(document.activeElement).toBe(turnButtons[1]);
+    expect(onSelectionChange).toHaveBeenLastCalledWith({
+      conversationId: "conversation:one",
+      turnId: "turn:two",
+    });
+    act(() => findButton(container, "在 Studio 中深入检查").click());
+    expect(onOpenAgent).toHaveBeenCalledWith({
+      conversationId: "conversation:one",
+      turnId: "turn:two",
+    });
+  });
+
+  it("fails closed inside the host when invalidation removes the exact selected Turn", async () => {
+    const summary = turn();
+    const harness = createTransport({
+      conversations: [conversation()],
+      turns: [summary],
+      details: [detail(summary)],
+    });
+    const selection = { conversationId: "conversation:one", turnId: "turn:one" };
+    const { container } = mount(baseProps(harness.transport, { selection }));
+    await act(settle);
+    act(() => findButton(container, "在 Vibe 中查看 Agent 记录").click());
+
+    harness.state.turns.set("conversation:one", []);
+    harness.state.details.delete("turn:one");
+    await act(async () => {
+      harness.emitInvalidated();
+      await settle();
+    });
+
+    expect(container.querySelector(".rho-vibe-agent-record-host")).not.toBeNull();
+    expect(container.textContent).toContain("所选 Turn 已不可用");
+    expect(container.textContent).toContain("不会用其他记录替代");
+    expect(container.textContent).not.toContain("在 Studio 中提出任务");
+    expect(container.textContent).not.toContain("在 Studio 中深入检查");
+  });
+
+  it("fails closed when invalidation removes the exact Turn from a legacy conversation", async () => {
+    const summary = turn();
+    const harness = createTransport({
+      conversations: [conversation({ legacy_unthreaded: true })],
+      turns: [summary],
+      details: [detail(summary)],
+    });
+    const selection = { conversationId: "conversation:one", turnId: "turn:one" };
+    const { container } = mount(baseProps(harness.transport, { selection }));
+    await act(settle);
+    act(() => findButton(container, "在 Vibe 中查看 Agent 记录").click());
+
+    expect(container.textContent).toContain("在 Studio 中发起新的探索");
+    harness.state.turns.set("conversation:one", []);
+    harness.state.details.delete("turn:one");
+    await act(async () => {
+      harness.emitInvalidated();
+      await settle();
+    });
+
+    expect(container.textContent).toContain("所选 Turn 已不可用");
+    expect(container.textContent).toContain("不会用其他记录替代");
+    expect(container.textContent).not.toContain("在 Studio 中发起新的探索");
+    expect(container.textContent).not.toContain("在 Studio 中深入检查");
+  });
+
+  it("keeps the host and focus stable while a refresh failure marks its public record stale", async () => {
+    const summary = turn();
+    const harness = createTransport({
+      conversations: [conversation()],
+      turns: [summary],
+      details: [detail(summary)],
+    });
+    const onError = vi.fn();
+    const { container } = mount(baseProps(harness.transport, { onError }));
+    await act(settle);
+    act(() => findButton(container, "在 Vibe 中查看 Agent 记录").click());
+    const heading = container.querySelector<HTMLHeadingElement>(".rho-vibe-agent-record-host h3")!;
+    expect(document.activeElement).toBe(heading);
+
+    harness.state.listFailure = new Error(
+      "Agent refresh failed at /Users/alice/private/agent.json for turn_id=turn:private-8.",
+    );
+    await act(async () => {
+      harness.emitInvalidated();
+      await settle();
+    });
+
+    expect(container.querySelector(".rho-vibe-agent-record-host")).not.toBeNull();
+    expect(container.textContent).toContain("记录可能不是最新");
+    expect(container.textContent).toContain("[local path]");
+    expect(container.textContent).toContain("[internal reference]");
+    expect(container.textContent).not.toContain("/Users/alice/private/agent.json");
+    expect(document.activeElement).toBe(heading);
+    expect(onError).toHaveBeenCalledOnce();
+  });
+
+  it("closes with Escape, restores its trigger, and clears on selection, Page, or project replacement", async () => {
+    const summary = turn();
+    const harness = createTransport({
+      conversations: [conversation()],
+      turns: [summary],
+      details: [detail(summary, [event(1, "tool.call_completed")])],
+    });
+    const props = baseProps(harness.transport);
+    const { container, root } = mount(props);
+    await act(settle);
+
+    act(() => findButton(container, "在 Vibe 中查看 Agent 记录").click());
+    const heading = container.querySelector<HTMLHeadingElement>(".rho-vibe-agent-record-host h3")!;
+    expect(document.activeElement).toBe(heading);
+
+    act(() => heading.dispatchEvent(new KeyboardEvent("keydown", {
+      bubbles: true,
+      key: "Escape",
+    })));
+    const restoredTrigger = findButton(container, "在 Vibe 中查看 Agent 记录");
+    expect(container.querySelector(".rho-vibe-agent-record-host")).toBeNull();
+    expect(document.activeElement).toBe(restoredTrigger);
+
+    act(() => restoredTrigger.click());
+    await act(async () => {
+      root.render(<VibeExplorationPanel {...props} projectId="project:two" />);
+      await settle();
+    });
+    expect(container.querySelector(".rho-vibe-agent-record-host")).toBeNull();
+
+    await act(async () => {
+      root.render(<VibeExplorationPanel {...props} />);
+      await settle();
+    });
+    act(() => findButton(container, "在 Vibe 中查看 Agent 记录").click());
+    await act(async () => {
+      root.render(<VibeExplorationPanel
+        {...props}
+        selection={{ conversationId: "conversation:missing", turnId: "turn:missing" }}
+      />);
+      await settle();
+    });
+    expect(container.querySelector(".rho-vibe-agent-record-host")).toBeNull();
+    expect(document.activeElement).toBe(
+      container.querySelector("button[data-exploration-conversation]"),
+    );
+
+    await act(async () => {
+      root.render(<VibeExplorationPanel {...props} pageId="page:two" />);
+      await settle();
+    });
+    act(() => findButton(container, "在 Vibe 中查看 Agent 记录").click());
+    expect(container.querySelector(".rho-vibe-agent-record-host")).not.toBeNull();
+    await act(async () => {
+      root.render(<VibeExplorationPanel {...props} pageId="page:three" />);
+      await settle();
+    });
+    expect(container.querySelector(".rho-vibe-agent-record-host")).toBeNull();
   });
 
   it("shows waiting attention and marks a manuscript relationship only for exact identifiers", async () => {

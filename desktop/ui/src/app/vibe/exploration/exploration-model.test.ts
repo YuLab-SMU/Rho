@@ -127,6 +127,54 @@ describe("Vibe exploration truth projection", () => {
     expect(JSON.stringify(activities)).not.toContain("untrusted plugin payload");
   });
 
+  it("reduces a trusted file proposal payload to a public fact without exposing its mutation content", () => {
+    const activities = projectExplorationActivities([
+      event(1, "tool.call_completed", {
+        title: "Proposed file edit",
+        tool: "propose_file_edit",
+        body: JSON.stringify({
+          kind: "rho.file_edit_proposal",
+          operation: "append",
+          path: "private-analysis.R",
+          content: "secret mutation content",
+        }),
+      }),
+    ]);
+
+    expect(activities).toHaveLength(1);
+    expect(activities[0]?.body).toBe(
+      "Agent 记录了一项文件修改建议；修改内容和应用操作仅在 Studio 中检查。",
+    );
+    expect(JSON.stringify(activities)).not.toContain("private-analysis.R");
+    expect(JSON.stringify(activities)).not.toContain("secret mutation content");
+  });
+
+  it("fails closed for oversized or malformed structured proposal activity", () => {
+    const oversized = projectExplorationActivities([
+      event(1, "tool.call_completed", {
+        title: "Proposed file edit",
+        tool: "propose_file_edit",
+        body: JSON.stringify({
+          kind: "rho.file_edit_proposal",
+          path: "private-analysis.R",
+          content: "secret".repeat(30_000),
+        }),
+      }),
+    ]);
+    const malformed = projectExplorationActivities([
+      event(2, "tool.call_completed", {
+        title: "Structured activity",
+        body: "{\"kind\":\"rho.file_edit_proposal\",\"content\":\"secret",
+      }),
+    ]);
+
+    expect(oversized[0]?.body).toContain("文件修改建议");
+    expect(JSON.stringify(oversized)).not.toContain("private-analysis.R");
+    expect(JSON.stringify(oversized)).not.toContain("secretsecret");
+    expect(malformed[0]?.body).toContain("格式不可用");
+    expect(JSON.stringify(malformed)).not.toContain("secret");
+  });
+
   it("uses the immutable public prompt as task without upgrading the final reply", () => {
     const summary = turn();
     const projected = projectExplorationTurn(summary, detail(summary, [

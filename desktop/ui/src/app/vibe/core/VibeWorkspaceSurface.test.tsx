@@ -229,7 +229,7 @@ describe("VibeWorkspaceSurface", () => {
     expect(host.querySelector(".ProseMirror")?.getAttribute("contenteditable")).toBe("true");
   });
 
-  it("locks manuscript mutations before an Agent handoff flush begins", async () => {
+  it("keeps a local Agent record in Vibe and locks manuscript only for the explicit Studio handoff", async () => {
     const page = focusedPage();
     const onOpenAgent = vi.fn<VibeWorkspaceSurfaceProps["onOpenAgent"]>()
       .mockResolvedValue(undefined);
@@ -287,8 +287,19 @@ describe("VibeWorkspaceSurface", () => {
 
     const startAgent = [...host.querySelectorAll<HTMLButtonElement>(".rho-vibe-exploration button")]
       .find((button) => button.textContent === "开始探索")!;
+    act(() => startAgent.click());
+
+    expect(onOpenAgent).not.toHaveBeenCalled();
+    expect(commitPage).not.toHaveBeenCalled();
+    expect(host.querySelector(".rho-vibe-workspace")?.getAttribute("data-layout")).toBe("focus-exploration");
+    expect(host.textContent).toContain("还没有 Agent 记录");
+    expect(host.querySelector(".rho-vibe-manuscript")?.getAttribute("aria-busy")).toBeNull();
+    expect(host.querySelector(".ProseMirror")?.getAttribute("contenteditable")).toBe("true");
+
+    const openStudio = [...host.querySelectorAll<HTMLButtonElement>(".rho-vibe-exploration button")]
+      .find((button) => button.textContent === "在 Studio 中发起探索")!;
     await act(async () => {
-      startAgent.click();
+      openStudio.click();
       await commitRequested;
       await settle();
     });
