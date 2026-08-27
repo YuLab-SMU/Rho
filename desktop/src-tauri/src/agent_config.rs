@@ -281,10 +281,7 @@ fn parse_config_bytes(path: &Path, bytes: &[u8]) -> AgentConfigLoad {
     if bytes.len() > MAX_CONFIG_BYTES {
         return AgentConfigLoad::Malformed {
             path: path.to_path_buf(),
-            reason: format!(
-                "the file exceeds the {} KiB limit",
-                MAX_CONFIG_BYTES / 1024
-            ),
+            reason: format!("the file exceeds the {} KiB limit", MAX_CONFIG_BYTES / 1024),
         };
     }
     if bytes.iter().all(|byte| byte.is_ascii_whitespace()) {
@@ -500,7 +497,10 @@ pub(crate) fn resolve_credential(
     session_value: Option<&str>,
     env: impl Fn(&str) -> Option<String>,
 ) -> AgentCredentialResolution {
-    let file_literal = provider.api_key.as_deref().filter(|value| !value.is_empty());
+    let file_literal = provider
+        .api_key
+        .as_deref()
+        .filter(|value| !value.is_empty());
     if let Some(value) = session_value.filter(|value| !value.is_empty()) {
         return AgentCredentialResolution {
             source: AgentCredentialSource::Session,
@@ -720,20 +720,14 @@ mod tests {
                 _ => None,
             },
             || Some(PathBuf::from("/home/alice")),
-            |path| {
-                path == Path::new("/xdg/rho") || path == Path::new("/home/alice/.config/rho")
-            },
+            |path| path == Path::new("/xdg/rho") || path == Path::new("/home/alice/.config/rho"),
         );
         assert_eq!(resolved, Some(PathBuf::from("/xdg/rho")));
     }
 
     #[test]
     fn rho_home_defaults_to_dot_rho_when_nothing_exists() {
-        let resolved = rho_home_with(
-            |_| None,
-            || Some(PathBuf::from("/home/alice")),
-            |_| false,
-        );
+        let resolved = rho_home_with(|_| None, || Some(PathBuf::from("/home/alice")), |_| false);
         assert_eq!(resolved, Some(PathBuf::from("/home/alice/.rho")));
         // No home directory at all: truthful None, callers decide policy.
         let resolved = rho_home_with(|_| None, || None, |_| false);
@@ -839,13 +833,13 @@ mod tests {
                 assert_eq!(loaded.revision, 41);
                 assert_eq!(loaded.providers.len(), 2);
                 assert_eq!(
-                    loaded.providers[0].api_key.as_ref().map(|value| value.as_str()),
+                    loaded.providers[0]
+                        .api_key
+                        .as_ref()
+                        .map(|value| value.as_str()),
                     Some("sk-file-literal")
                 );
-                assert_eq!(
-                    loaded.models[0].capabilities["function_call"].value,
-                    "yes"
-                );
+                assert_eq!(loaded.models[0].capabilities["function_call"].value, "yes");
                 assert_eq!(
                     loaded.capability_routes[1].required_model_capabilities,
                     vec!["function_call".to_string()]
@@ -1077,7 +1071,10 @@ mod tests {
             Some("env-key".to_string())
         });
         assert_eq!(resolution.source, AgentCredentialSource::Session);
-        assert_eq!(resolution.value.as_ref().map(|value| value.as_str()), Some("session-key"));
+        assert_eq!(
+            resolution.value.as_ref().map(|value| value.as_str()),
+            Some("session-key")
+        );
         assert!(!resolution.env_shadows_file);
     }
 
@@ -1087,7 +1084,10 @@ mod tests {
             Some("env-key".to_string())
         });
         assert_eq!(resolution.source, AgentCredentialSource::Environment);
-        assert_eq!(resolution.value.as_ref().map(|value| value.as_str()), Some("env-key"));
+        assert_eq!(
+            resolution.value.as_ref().map(|value| value.as_str()),
+            Some("env-key")
+        );
         assert!(resolution.env_shadows_file);
     }
 
@@ -1106,7 +1106,10 @@ mod tests {
     fn credential_resolution_file_literal_wins_when_nothing_else_exists() {
         let resolution = resolve_credential(&resolution_provider(), None, |_| None);
         assert_eq!(resolution.source, AgentCredentialSource::ConfigFile);
-        assert_eq!(resolution.value.as_ref().map(|value| value.as_str()), Some("file-key"));
+        assert_eq!(
+            resolution.value.as_ref().map(|value| value.as_str()),
+            Some("file-key")
+        );
         assert!(!resolution.env_shadows_file);
     }
 
@@ -1124,9 +1127,7 @@ mod tests {
 
     #[test]
     fn credential_resolution_treats_empty_environment_as_unset() {
-        let resolution = resolve_credential(&resolution_provider(), None, |_| {
-            Some(String::new())
-        });
+        let resolution = resolve_credential(&resolution_provider(), None, |_| Some(String::new()));
         assert_eq!(resolution.source, AgentCredentialSource::ConfigFile);
         assert!(!resolution.env_shadows_file);
         let provider = AgentConfigProvider {
@@ -1141,7 +1142,10 @@ mod tests {
     fn credential_resolution_treats_empty_session_value_as_unset() {
         let resolution = resolve_credential(&resolution_provider(), Some(""), |_| None);
         assert_eq!(resolution.source, AgentCredentialSource::ConfigFile);
-        assert_eq!(resolution.value.as_ref().map(|value| value.as_str()), Some("file-key"));
+        assert_eq!(
+            resolution.value.as_ref().map(|value| value.as_str()),
+            Some("file-key")
+        );
     }
 
     #[test]
@@ -1196,8 +1200,14 @@ mod tests {
         assert!(rendered.contains("[redacted]"));
         let resolution = resolve_credential(&provider, None, |_| Some("env-secret".to_string()));
         let rendered = format!("{resolution:?}");
-        assert!(!rendered.contains("env-secret"), "resolution Debug: {rendered}");
-        assert!(!rendered.contains("file-key"), "resolution Debug: {rendered}");
+        assert!(
+            !rendered.contains("env-secret"),
+            "resolution Debug: {rendered}"
+        );
+        assert!(
+            !rendered.contains("file-key"),
+            "resolution Debug: {rendered}"
+        );
         let config = fixture_config();
         let rendered = format!("{config:?}");
         assert!(
