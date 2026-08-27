@@ -35,6 +35,7 @@ import type {
 import type { AgentExecutionTransport } from "./agent-execution";
 import type { AgentRuntimeTransport } from "./agent-runtime";
 import type { AgentSettingsTransport } from "./agent-settings";
+import type { AgentEventsTransport } from "./agent-events";
 import type { AgentFileTransport } from "./agent-file";
 import type { PluginSurfaceTransport } from "./plugin-surface";
 import type { ProjectTransport } from "./project";

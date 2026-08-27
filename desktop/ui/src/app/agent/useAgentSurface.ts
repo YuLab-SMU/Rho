@@ -60,7 +60,9 @@ export function useAgentSurface({
   const viewRef = useRef(view);
   const [conversations, setConversations] = useState<readonly AgentConversationSummary[]>([]);
   const [turns, setTurns] = useState<readonly AgentTurnSummary[]>([]);
+  const turnsRef = useRef<readonly AgentTurnSummary[]>(turns);
   const [details, setDetails] = useState<ReadonlyMap<string, AgentTurnDetail>>(() => new Map());
+  const detailsRef = useRef<ReadonlyMap<string, AgentTurnDetail>>(details);
   const [busy, setBusy] = useState(false);
   const [fileUndo, setFileUndo] = useState<AgentFileUndoState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -99,11 +101,14 @@ export function useAgentSurface({
       turn.turn_id,
       await transport.getAgentTurnDetail(turn.turn_id),
     ] as const));
+    const nextDetails = new Map(loadedDetails.flatMap(([turnId, detail]) =>
+      detail == null ? [] : [[turnId, detail] as const]
+    ));
+    turnsRef.current = nextTurns;
+    detailsRef.current = nextDetails;
     setConversations(nextConversations);
     setTurns(nextTurns);
-    setDetails(new Map(loadedDetails.flatMap(([turnId, detail]) =>
-      detail == null ? [] : [[turnId, detail] as const]
-    )));
+    setDetails(nextDetails);
     if (selected !== viewRef.current.conversation_id) {
       const next = { ...viewRef.current, conversation_id: selected };
       viewRef.current = next;
@@ -152,27 +157,23 @@ export function useAgentSurface({
       const update = frame.turn_update;
       if (update != null) {
         if (update.status !== "running" && update.status !== "waiting") refreshNeeded = true;
-        setTurns((current) => {
-          let found = false;
-          const next = current.map((turn) => {
-            if (turn.turn_id !== frame.turn_id) return turn;
-            found = true;
-            return {
-              ...turn,
-              status: update.status as AgentTurnSummary["status"],
-              final_message: update.final_message ?? turn.final_message,
-              error_message: update.error_message,
-              terminal_reason: update.terminal_reason,
-            };
-          });
-          if (!found) refreshNeeded = true;
-          return next;
+        if (!turnsRef.current.some((turn) => turn.turn_id === frame.turn_id)) refreshNeeded = true;
+        const nextTurns = turnsRef.current.map((turn) => {
+          if (turn.turn_id !== frame.turn_id) return turn;
+          return {
+            ...turn,
+            status: update.status as AgentTurnSummary["status"],
+            final_message: update.final_message ?? turn.final_message,
+            error_message: update.error_message,
+            terminal_reason: update.terminal_reason,
+          };
         });
-        setDetails((current) => {
-          const detail = current.get(frame.turn_id);
-          if (detail == null) return current;
-          const next = new Map(current);
-          next.set(frame.turn_id, {
+        turnsRef.current = nextTurns;
+        setTurns(nextTurns);
+        const detail = detailsRef.current.get(frame.turn_id);
+        if (detail != null) {
+          const nextDetails = new Map(detailsRef.current);
+          nextDetails.set(frame.turn_id, {
             ...detail,
             turn: {
               ...detail.turn,
@@ -182,27 +183,26 @@ export function useAgentSurface({
               terminal_reason: update.terminal_reason,
             },
           });
-          return next;
-        });
+          detailsRef.current = nextDetails;
+          setDetails(nextDetails);
+        }
       }
       const incoming = frame.event;
       if (incoming != null) {
-        setDetails((current) => {
-          const detail = current.get(frame.turn_id);
-          if (detail == null) {
-            refreshNeeded = true;
-            return current;
-          }
-          if (detail.events.some((event) => event.id === incoming.id)) return current;
+        const detail = detailsRef.current.get(frame.turn_id);
+        if (detail == null) {
+          refreshNeeded = true;
+        } else if (!detail.events.some((event) => event.id === incoming.id)) {
           const maxId = detail.events.reduce((max, event) => Math.max(max, event.id), 0);
           if (incoming.id > maxId + 1) {
             refreshNeeded = true;
-            return current;
+          } else {
+            const nextDetails = new Map(detailsRef.current);
+            nextDetails.set(frame.turn_id, { ...detail, events: [...detail.events, incoming] });
+            detailsRef.current = nextDetails;
+            setDetails(nextDetails);
           }
-          const next = new Map(current);
-          next.set(frame.turn_id, { ...detail, events: [...detail.events, incoming] });
-          return next;
-        });
+        }
       }
       if (refreshNeeded) requestFrameRefresh();
     };

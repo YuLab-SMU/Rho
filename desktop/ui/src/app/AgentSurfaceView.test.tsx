@@ -654,6 +654,90 @@ describe("Studio Agent Surface", () => {
       .toContain("Mock ask response for: What changed since yesterday?");
   });
 
+  it("applies live turn frames and reconciles gaps and terminals through refresh", async () => {
+    const transport = createMockUiKernelTransport();
+    let currentTurn = makeTurn({
+      turn_id: "agent-turn:mock-live",
+      status: "running",
+      finished_at: null,
+      terminal_reason: null,
+      prompt_preview: "Inspect the runtime logs",
+    });
+    transport.listAgentTurns = async () => [currentTurn];
+    transport.getAgentTurnDetail = async () => makeDetail(currentTurn);
+    const listConversations = vi.fn(transport.listAgentConversations.bind(transport));
+    transport.listAgentConversations = listConversations;
+    const { container } = await renderAgent({ transport });
+    const baselineRefreshCalls = listConversations.mock.calls.length;
+
+    const frameEvent = (id: number, title: string) => ({
+      id,
+      turn_id: currentTurn.turn_id,
+      timestamp: mockNow,
+      event_type: "tool.call_completed",
+      title,
+      body: null,
+      status: "completed",
+      tool: "read_project_metadata",
+      request_id: null,
+      code: null,
+      details_json: "{}",
+    });
+
+    // An in-order activity frame lands incrementally, with no refresh.
+    await act(async () => {
+      transport.emitAgentTurnEvent({
+        turn_id: currentTurn.turn_id,
+        event: frameEvent(1, "Read project metadata"),
+        turn_update: null,
+        payload_truncated: false,
+      });
+      await settle();
+    });
+    expect(container.querySelector('[data-turn-id="agent-turn:mock-live"]')!.textContent)
+      .toContain("Read project metadata");
+    expect(listConversations.mock.calls.length).toBe(baselineRefreshCalls);
+
+    // A gap frame (id 3 after id 1) reconciles through the store refresh.
+    await act(async () => {
+      transport.emitAgentTurnEvent({
+        turn_id: currentTurn.turn_id,
+        event: frameEvent(3, "Run summary statistics"),
+        turn_update: null,
+        payload_truncated: false,
+      });
+      await settle();
+    });
+    expect(listConversations.mock.calls.length).toBeGreaterThan(baselineRefreshCalls);
+
+    // A terminal frame updates the running turn; the reconciling refresh
+    // then brings the canonical completed state from the store.
+    currentTurn = {
+      ...currentTurn,
+      status: "completed",
+      finished_at: mockNow,
+      final_message: "Done live.",
+      terminal_reason: "completed",
+    };
+    await act(async () => {
+      transport.emitAgentTurnEvent({
+        turn_id: currentTurn.turn_id,
+        event: null,
+        turn_update: {
+          status: "completed",
+          final_message: "Done live.",
+          error_message: null,
+          terminal_reason: "completed",
+        },
+        payload_truncated: false,
+      });
+      await settle();
+    });
+    const turn = container.querySelector('[data-turn-id="agent-turn:mock-live"]')!;
+    expect(turn.textContent).toContain("Done live.");
+    expect(turn.querySelector(".rho-agent-turn-status")).toBeNull();
+  });
+
   it("shows the degraded banner with dependency diagnostics when the runtime is not ready", async () => {
     const { container } = await renderAgent({
       health: { state: "needs_attention", label: "Agent dependencies need attention", detail: "aisdk is incompatible." },

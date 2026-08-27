@@ -189,3 +189,54 @@ tauri.ts, types.ts) while accepting earlier rounds. The owner-authorized
 AGX program proceeds on the `codex/studio-agent-ux` branch under the same
 recorded exception; integration re-pick plus a full acceptance rerun of the
 transport and agent slices is the recorded follow-up.
+
+## AGX-1 Implementation And Evidence (2026-08-27)
+
+Implemented end-to-end as contracted:
+
+- Store (`crates/rho-store`): `AgentTurnEventFrame` /
+  `AgentTurnUpdateFrame` projections (specta-typed, 4 KiB field bounds with
+  `payload_truncated`), a `broadcast` channel on `StoreExecutor`, and
+  emissions after durable `append_turn_event` / `finish_turn` succeed — the
+  durable row remains the source of truth (verified: a bounded frame still
+  leaves the full payload in the store).
+- Broker (`desktop/src-tauri`): `commands/agent_events.rs` forwards the
+  broadcast to `agent://turn-event` Tauri events, started once from
+  `start_agent_turn`; no coordinator or runner logic was touched.
+- Transport (`desktop/ui/src/transport`): `agent-events.ts` (frame types +
+  `subscribeAgentTurnEvents`), Tauri listen implementation, mock
+  subscription plus an `emitAgentTurnEvent` hook and a scripted
+  `?agent_live_demo=1` running-turn sequence for preview/review.
+- View-model (`desktop/ui/src/app/agent/useAgentSurface.ts`): frames apply
+  incrementally (decisions computed synchronously from refs — React
+  updaters are not relied on for side-effect decisions), unknown turns,
+  event-id gaps, and terminal updates reconcile through the throttled
+  store refresh; the durable detail stays canonical.
+
+Evidence:
+
+- `cargo test -p rho-store --lib agent_repository`: 4 of 4 passed,
+  including frames-after-durable-writes and bounded-frame/store-truth;
+- `cargo check -p rho-desktop` (includes the forwarder);
+- `npm --prefix desktop run rsr:typecheck` and `rsr:lint`;
+- focused `AgentSurfaceView.test.tsx`: 15 of 15 passed, adding the
+  live-frames test (in-order frame applies without refresh, gap frame
+  reconciles, terminal frame + canonical refresh lands);
+- full UI suite: 52 files, 344 tests passed;
+- `npm run rsr:build --prefix desktop`;
+- live preview capture under `target/agx1-live/`: the scripted running turn
+  renders `Running` with no rows at t0, gains "Read project metadata"
+  (t1), "Run summary statistics" (t2), and completes with the final answer
+  and no status chip (t3), while the composer shows "Agent running · mm:ss"
+  with Stop until completion.
+
+Worktree note: during AGX-1 the owner consolidated this feature worktree;
+the branch `codex/studio-agent-ux` preserved every draft as checkpoints
+(`5c5de62`, `ecc5ae7`, `86c9d2c`) and the worktree was re-created at the
+same path. No work was lost.
+
+Deferred within AGX-1 (recorded, not silent): token-level message deltas
+(final messages still arrive as one event when the runtime emits them) and
+`finished_at` on frames (canonical value lands via the reconciling
+refresh); both are candidates for a follow-up package if the owner wants
+token streaming.
