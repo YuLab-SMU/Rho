@@ -577,7 +577,6 @@ export function AgentSurfaceView({
                   </details>
                 </header>
                 <div className="rho-agent-goal">
-                  <span className="rho-agent-section-label">Goal</span>
                   <p className="rho-agent-prompt">{turn.prompt_preview}</p>
                 </div>
                 {turn.final_message != null && <p className="rho-agent-answer">{turn.final_message}</p>}
@@ -605,7 +604,15 @@ export function AgentSurfaceView({
                     </div>
                   </section>
                 ))}
-                {proposals.map(({ event, proposal }) => {
+                {proposals.length > 0 && (
+                  <details className="rho-agent-files">
+                    <summary>
+                      <span className="rho-agent-files-count">{proposals.length} {proposals.length === 1 ? "file" : "files"} changed</span>
+                      <code className="rho-agent-files-path">{proposals[0]!.proposal.path}{proposals.length > 1 ? ` +${proposals.length - 1} more` : ""}</code>
+                    </summary>
+                    <div className="rho-agent-files-panel">
+                      <p className="rho-agent-files-hint">Applying writes the proposed content to the project file.</p>
+                      {proposals.map(({ event, proposal }) => {
                   const key = `${turn.turn_id}:${event.id}`;
                   const outcome = detail == null ? null : agentFileProposalOutcome(detail, event.id);
                   const rejected = view.file_decisions[key] === "rejected";
@@ -660,7 +667,10 @@ export function AgentSurfaceView({
                       </details>
                     </section>
                   );
-                })}
+                      })}
+                    </div>
+                  </details>
+                )}
                 {(activityEvents.length > 0 || contextItems.length > 0) && (
                   <div className="rho-agent-activity">
                     {activityEvents.map((event) => event.code != null ? (

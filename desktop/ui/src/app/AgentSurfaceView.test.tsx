@@ -187,7 +187,18 @@ describe("Studio Agent Surface", () => {
     expect(answer.textContent).toContain("Start with the project structure");
     expect(goal.compareDocumentPosition(answer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-    const proposal = container.querySelector(".rho-agent-file-proposal")!;
+    // File changes appear as one in-flow entry, collapsed by default.
+    const files = container.querySelector<HTMLDetailsElement>(".rho-agent-files")!;
+    expect(files.open).toBe(false);
+    const filesSummary = files.querySelector(":scope > summary")!;
+    expect(filesSummary.textContent).toContain("1 file changed");
+    expect(filesSummary.textContent).toContain("analysis.R");
+
+    // Expanding the entry opens the inline review panel with the proposal row.
+    await click(filesSummary);
+    expect(files.open).toBe(true);
+    expect(files.textContent).toContain("Applying writes the proposed content to the project file.");
+    const proposal = files.querySelector(".rho-agent-file-proposal")!;
     expect(proposal.querySelector(".rho-agent-decision-kind")!.textContent).toBe("File change");
     const content = proposal.querySelector<HTMLDetailsElement>(".rho-agent-file-content")!;
     expect(content.open).toBe(false);

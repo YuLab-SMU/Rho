@@ -475,3 +475,107 @@ docked at the right edge; it is now right-anchored in the lane stylesheet so
 it opens leftward and stays in view. No s3 visual-acceptance DOM hook moved;
 the complete `rsr:check` matrix and the s3 gate remain with the integration
 lane as listed in the follow-ups above.
+
+## Round 4 Amendment: Chat-Native Agent Component
+
+Authorization: on 2026-08-27 the product owner reviewed the round-3 result
+against the collected reference screenshots (ChatGPT agent conversation with
+the file-change entry and its expanded Review/diff panel; the Alma chat
+composer, empty state, and model/reasoning/projects popovers) and directed a
+full rebuild of the Agent component in that image: "不仅仅是这里重构。整个
+Agent 组件，按照我给你收集的这么多作品的截图，重构" and, for file changes,
+"在合适的地方展示入口，点击入口展开 diff 面板".
+
+Governance exception (recorded per the governance exceptions clause): the
+lane registry rejected a `studio-agent-ux-4` registration because the
+`startup-info-integration` lane took ownership of this package's four files
+when it cherry-picked rounds 1-3 to its integration HEAD. The product owner
+nevertheless ordered this round with the collision on the record. Rule
+bypassed: lane-ownership hard reject for the four lane files on the
+`codex/studio-agent-ux` branch only. Reason: direct owner directive; the
+integration lane runs acceptance on its own cherry-picked snapshot in its own
+worktree, so new commits on the source branch cannot corrupt its in-flight
+evidence. Risk and compensation: the integrated result must be re-picked and
+the s3 visual-acceptance gate re-run after this round; that follow-up is
+recorded below. Expiration: this exception covers only this round's four-file
+diff on this branch.
+
+What this amendment authorizes (still presentation-only, D2/R1, same four
+files, all transport semantics and s3 DOM hooks unchanged):
+
+1. Chat-native timeline. Turn cards lose their box chrome (border,
+   background, padding card) and become a narrative flow: a compact muted
+   caption line (mode, textual run state, tiny Details disclosure), the user
+   goal as a chat-style user row (quiet filled block, no "GOAL" label), the
+   agent answer as plain prose, terse activity narration rows, and distinct
+   left-accent callouts for failure/cancellation. Per-turn secondary actions
+   (Pin to Vibe, Retry) become quiet ghost text buttons. Status is always
+   carried by words, never color alone.
+2. File changes as an in-flow entry with an expandable review panel. Each
+   turn with file-edit proposals shows one compact entry row ("N files
+   changed · first path") that expands inline into a review panel listing
+   every `.rho-agent-file-proposal` row (operation, path, outcome,
+   Apply/Reject/Undo) with the proposed content behind its per-row
+   disclosure. This mirrors the reference "entry → diff panel" interaction
+   inside the lane boundary: a dockview-level right rail would require
+   workbench files owned by other lanes and is not introduced. A real
+   line-diff is not fabricated: the proposal payload carries proposed
+   content, not the file's before-content, so the panel reviews the proposed
+   content exactly as the apply path would write it.
+3. Approval blocks keep their interruptive warning structure (kind, tool,
+   bounded code, Approve/Reject); they are the deliberate flow-breaking
+   decision and must not look like ordinary narration or file changes.
+4. The composer, toolbar, empty state, and model menu keep the round-2/3
+   reference patterns; only cohesion fixes are allowed.
+
+Round 4 verification: focused tests updated for the files entry/panel and the
+narrative order; typecheck, lint, full UI suite, build, `git diff --check`,
+and mock preview at solo-full width plus wide/medium/narrow, including the
+expanded review panel and the waiting-approval state.
+
+Round 4 evidence passed 2026-08-27 (same four lane files, on branch
+`codex/studio-agent-ux` under the recorded governance exception):
+
+- `npm --prefix desktop run rsr:typecheck` and `rsr:lint`;
+- focused `AgentSurfaceView.test.tsx`: 13 of 13 passed, including the files
+  entry collapsed by default, its expansion into the inline review panel with
+  the proposal row, actions, and consequence hint, and the goal-before-answer
+  narrative order;
+- full UI suite on the final snapshot: 52 files, 342 tests passed;
+- `npm run rsr:build --prefix desktop`;
+- `git diff --check`;
+- mock preview under `target/studio-agent-ux-preview/r3/r4/` (headless Chrome
+  against the built bundle; `capture-probes.json` beside the screenshots):
+  `solo-narrative.png` (~2486px solo surface) shows the unboxed narrative
+  flow — caption line, filled user-goal row, approval callout, activity rows,
+  ghost footer actions — with every waiting-turn section probed visible;
+  `files-panel.png` shows the "1 file changed · analysis.R" entry expanded
+  into the inline review panel; `surface-wide.png` (~479px),
+  `surface-medium.png` (~231px), and `surface-narrow.png` (~171px) probe no
+  horizontal overflow with the composer reachable.
+
+Deviation/fix recorded during round-4 preview: the built bundle dropped
+foundation.css's bare `@layer reset, tokens, …;` order statement during CSS
+minification, so first-mention order made `surfaces` the weakest layer and
+component-layer button chrome (`:where(button)`) defeated every layered
+ghost-button refinement (visible borders on New/Context, Review context, and
+turn footer actions in all rounds). `agent-surface.css` now re-declares the
+intended layer order before its `@layer surfaces` block; the minifier
+canonicalizes the bundle to that order (verified: surfaces layer last; ghost
+footer computes `border-color: transparent`). Integration follow-up: the
+systemic fix (preserve the explicit layer-order declaration through
+minification, or order component-imported CSS after foundation.css) belongs
+to the integration lane, which owns foundation.css.
+
+Also on record: the owner-reported "empty waiting turn card" at full width
+could not be reproduced headlessly at 485px, 560px, 2526px, or 2486px solo —
+every section of the waiting turn probed visible in round 4. If it recurs in
+a real browser, the exact browser and steps are needed; the round-4 markup
+rewrite replaces the affected structure regardless.
+
+Integration follow-ups from this round: re-pick this branch's new commit and
+re-run the complete `rsr:check` matrix plus the s3 visual-acceptance gate
+(this round landed under the recorded exception while the integration lane
+held the files); evaluate the foundation.css layer-order systemic fix above;
+the standing follow-ups (cross-review row, docs index, NEWS entry, version
+decision) remain as listed earlier in this document.

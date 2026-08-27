@@ -5,6 +5,14 @@
    which the bundler orders before foundation.css, so every selector is scoped
    under `section.rho-agent-surface` to stay order-independent. */
 
+/* The bundler places this component stylesheet before foundation.css, and the
+   CSS minifier drops foundation.css's bare `@layer …;` order statement, so in
+   the built bundle the first layer mention wins and `surfaces` would become
+   the weakest layer. Re-declaring the intended order here (identical to
+   foundation.css) keeps `surfaces` last; the duplicate is harmless because
+   only the first declaration counts. */
+@layer reset, tokens, base, components, workbench, surfaces;
+
 @layer surfaces {
   /* --- Toolbar: conversation context + quiet secondary actions --------------- */
   section.rho-agent-surface .rho-agent-toolbar { align-items: center; }
@@ -21,31 +29,49 @@
   section.rho-agent-surface .rho-agent-toolbar-action:active:not(:disabled) { background: var(--rho-fill-2); }
   section.rho-agent-surface .rho-agent-toolbar-action[aria-expanded="true"] { color: var(--rho-ink); background: var(--rho-fill-2); }
 
-  /* --- Timeline: reading order and truthful state copy ----------------------- */
+  /* --- Timeline: a chat narrative, not stacked cards ------------------------- */
   section.rho-agent-surface .rho-agent-loading { margin: 0; padding: var(--rho-space-2) var(--rho-space-1); color: var(--rho-muted); font-size: var(--rho-text-ui); }
 
-  section.rho-agent-surface .rho-agent-section-label {
-    display: block;
-    color: var(--rho-muted);
-    font-size: var(--rho-text-caption);
-    font-weight: var(--rho-weight-medium);
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+  /* Turns are unboxed narrative blocks separated by a hairline. */
+  section.rho-agent-surface .rho-agent-turn {
+    margin-bottom: 0;
+    padding: 0 0 var(--rho-space-4);
+    border: none;
+    border-bottom: var(--rho-border);
+    border-radius: 0;
+    background: transparent;
   }
-  section.rho-agent-surface .rho-agent-goal { margin-top: var(--rho-space-2); }
-  section.rho-agent-surface .rho-agent-goal .rho-agent-prompt { margin-top: var(--rho-space-1); }
+  section.rho-agent-surface .rho-agent-turn + .rho-agent-turn { margin-top: var(--rho-space-4); }
+  section.rho-agent-surface .rho-agent-turn:last-child { border-bottom: none; padding-bottom: 0; }
 
-  /* Text status chips: state is carried by words, color only supports them. */
+  /* Caption line: quiet mode label, textual run state, tiny Details. */
+  section.rho-agent-surface .rho-agent-turn > header { gap: var(--rho-space-2); }
+  section.rho-agent-surface .rho-agent-turn > header strong { color: var(--rho-muted); font-weight: var(--rho-weight-medium); }
+
+  /* Text status: state is carried by words, tint only supports them. */
   section.rho-agent-surface .rho-agent-turn-status {
     padding: 0 var(--rho-space-2);
-    border: var(--rho-border);
+    border: none;
     border-radius: var(--rho-radius-1);
     font-size: var(--rho-text-caption);
   }
   section.rho-agent-surface .rho-agent-turn-status-running,
-  section.rho-agent-surface .rho-agent-turn-status-waiting { border-color: var(--rho-warn); color: var(--rho-warn); background: var(--rho-warn-tint); }
-  section.rho-agent-surface .rho-agent-turn-status-failed { border-color: var(--rho-danger); color: var(--rho-danger); background: var(--rho-danger-tint); }
+  section.rho-agent-surface .rho-agent-turn-status-waiting { color: var(--rho-warn); background: var(--rho-warn-tint); }
+  section.rho-agent-surface .rho-agent-turn-status-failed { color: var(--rho-danger); background: var(--rho-danger-tint); }
   section.rho-agent-surface .rho-agent-turn-status-cancelled { color: var(--rho-muted); background: var(--rho-fill); }
+
+  /* The user goal reads as a chat user row: a quiet filled block, no label. */
+  section.rho-agent-surface .rho-agent-goal { margin-top: var(--rho-space-2); }
+  section.rho-agent-surface .rho-agent-goal .rho-agent-prompt {
+    margin: 0;
+    padding: var(--rho-space-2) var(--rho-space-3);
+    border-radius: var(--rho-radius-2);
+    color: var(--rho-ink);
+    background: var(--rho-fill);
+    font-size: var(--rho-text-body);
+    line-height: 1.5;
+    white-space: pre-wrap;
+  }
 
   /* Failure and cancellation read differently from an ordinary answer. */
   section.rho-agent-surface .rho-agent-turn-failure {
@@ -82,9 +108,34 @@
   section.rho-agent-surface .rho-agent-approval .rho-agent-decision-actions button { margin-right: 0; }
   section.rho-agent-surface .rho-agent-approval pre { max-height: 6rem; }
 
-  /* A file change is a compact one-line decision row; many proposals stay
-     scannable. The proposed content expands per row. */
-  section.rho-agent-surface .rho-agent-file-proposal { padding: var(--rho-space-2) var(--rho-space-3); border-left: 3px solid var(--rho-ink); }
+  /* File changes collapse into one in-flow entry; expanding it opens an
+     inline review panel with one plain row per proposal. */
+  section.rho-agent-surface .rho-agent-files { margin-top: var(--rho-space-3); }
+  section.rho-agent-surface .rho-agent-files > summary {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--rho-space-2);
+    max-width: 100%;
+    min-height: var(--rho-control-small);
+    padding: var(--rho-space-1) var(--rho-space-3);
+    border: var(--rho-border);
+    border-radius: var(--rho-radius-1);
+    color: var(--rho-ink-2);
+    background: var(--rho-paper);
+    font-size: var(--rho-text-caption);
+    list-style: none;
+    cursor: pointer;
+  }
+  section.rho-agent-surface .rho-agent-files > summary::-webkit-details-marker { display: none; }
+  section.rho-agent-surface .rho-agent-files > summary::before { content: "▸"; flex: 0 0 auto; color: var(--rho-muted); }
+  section.rho-agent-surface .rho-agent-files[open] > summary::before { content: "▾"; }
+  section.rho-agent-surface .rho-agent-files > summary:hover { border-color: var(--rho-line-strong); color: var(--rho-ink); }
+  section.rho-agent-surface .rho-agent-files-count { flex: 0 0 auto; color: var(--rho-ink); font-weight: var(--rho-weight-medium); }
+  section.rho-agent-surface .rho-agent-files-path { min-width: 0; overflow: hidden; color: var(--rho-muted); font-size: var(--rho-text-caption); text-overflow: ellipsis; white-space: nowrap; }
+  section.rho-agent-surface .rho-agent-files-panel { margin-top: var(--rho-space-2); padding-left: var(--rho-space-3); border-left: var(--rho-border); }
+  section.rho-agent-surface .rho-agent-files-hint { margin: 0; color: var(--rho-muted); font-size: var(--rho-text-caption); }
+
+  section.rho-agent-surface .rho-agent-file-proposal { margin-top: var(--rho-space-2); padding: var(--rho-space-2) 0 0; border: none; border-top: var(--rho-border); border-radius: 0; background: transparent; }
   section.rho-agent-surface .rho-agent-file-proposal > header { justify-content: normal; align-items: baseline; flex-wrap: wrap; }
   section.rho-agent-surface .rho-agent-file-proposal > header code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   section.rho-agent-surface .rho-agent-file-proposal .rho-agent-file-outcome { display: inline; margin: 0; }
@@ -104,6 +155,18 @@
     font: var(--rho-text-ui)/1.5 var(--rho-font-mono);
     white-space: pre-wrap;
   }
+
+  /* Per-turn secondary actions are quiet ghost text buttons. */
+  section.rho-agent-surface .rho-agent-turn > footer { justify-content: flex-start; margin-top: var(--rho-space-2); }
+  section.rho-agent-surface .rho-agent-turn > footer button {
+    min-height: var(--rho-control-small);
+    padding: 0 var(--rho-space-2);
+    border-color: transparent;
+    color: var(--rho-muted);
+    background: transparent;
+    font-size: var(--rho-text-caption);
+  }
+  section.rho-agent-surface .rho-agent-turn > footer button:hover:not(:disabled) { border-color: transparent; color: var(--rho-ink); background: var(--rho-fill); }
 
   /* Per-turn activity reads as terse one-line narration rows; code payloads
      and context byte evidence stay behind their own disclosures. */
@@ -276,7 +339,6 @@
     section.rho-agent-surface .rho-agent-capacity > div { grid-column: 1 / -1; flex-wrap: wrap; }
     section.rho-agent-surface .rho-agent-toolbar { flex-wrap: wrap; }
     section.rho-agent-surface .rho-agent-toolbar select { flex: 1 1 100%; }
-    section.rho-agent-surface .rho-agent-turn { padding: var(--rho-space-3); }
     section.rho-agent-surface .rho-agent-context-controls > .rho-primary-action { margin-left: 0; }
     section.rho-agent-surface .rho-agent-file-proposal .rho-agent-decision-actions { flex-basis: 100%; margin-left: 0; justify-content: flex-end; }
   }
