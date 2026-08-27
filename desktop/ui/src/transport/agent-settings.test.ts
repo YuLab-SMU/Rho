@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildAddedModelProfile,
+  CONSERVATIVE_CONTEXT_WINDOW_TOKENS,
+  CONSERVATIVE_RESERVED_OUTPUT_TOKENS,
   createTauriAgentSettingsTransport,
+  MODEL_CAPABILITY_NAMES,
   type AgentContextCapacityRequest,
   type AgentLlmSettingsView,
   type AgentSettingsTransport,
@@ -9,7 +13,7 @@ import {
 import { createMockUiKernelTransport } from "./mock";
 
 const settings = {
-  schema_version: 4,
+  schema_version: 5,
   revision: 9,
   selected_model_id: "model:fixture",
   providers: [{
@@ -23,9 +27,11 @@ const settings = {
     base_url_env: null,
     wire_api: "openai",
     disable_stream_options: false,
-    credential_source: "system_store",
+    credential_source: "rho_vault",
     credential_status: "unchecked",
     credential_effective_source: "unchecked",
+    effective_base_url: "https://example.invalid/v1",
+    base_url_source: "configured",
   }],
   models: [{
     id: "model:fixture",
@@ -96,6 +102,31 @@ describe("Agent settings generated transport", () => {
     await expect(transport.loadAgentLlmSettings()).resolves.toBe(settings);
     await expect(transport.selectAgentChatModel("model:alternate", 9)).resolves.toBe(settings);
     await expect(transport.setAgentContextCapacity(request)).resolves.toBe(settings);
+    const added = buildAddedModelProfile({
+      providerId: "provider:fixture",
+      modelId: "fixture-model",
+    });
+    expect(added).toMatchObject({
+      id: "model-fixture-model",
+      provider_id: "provider:fixture",
+      display_name: "fixture-model",
+      enabled: true,
+      model_type: { value: "unknown", source: "unknown" },
+      context_window_tokens: CONSERVATIVE_CONTEXT_WINDOW_TOKENS,
+      reserved_output_tokens: CONSERVATIVE_RESERVED_OUTPUT_TOKENS,
+      context_capacity_source: "conservative_default",
+      last_test: null,
+    });
+    expect(Object.keys(added.capabilities).sort()).toEqual([...MODEL_CAPABILITY_NAMES].sort());
+    await expect(transport.saveModel(added)).resolves.toBe(settings);
+    await expect(transport.deleteModel("model-fixture-model")).resolves.toBe(settings);
+    await expect(transport.setModelContextCapacity(request)).resolves.toBe(settings);
+    await expect(transport.declareModelCapability({
+      model_id: "model:fixture",
+      expected_revision: 9,
+      capability: "vision_input",
+      value: "yes",
+    })).resolves.toBe(settings);
     expect(calls).toEqual([
       { command: "agent_llm_settings" },
       {
@@ -103,6 +134,23 @@ describe("Agent settings generated transport", () => {
         args: { request: { modelId: "model:alternate", expectedRevision: 9 } },
       },
       { command: "agent_llm_set_context_capacity", args: { request } },
+      { command: "agent_llm_save_model", args: { model: added } },
+      {
+        command: "agent_llm_delete_model",
+        args: { request: { model_id: "model-fixture-model", replacement_model_id: null } },
+      },
+      { command: "agent_llm_set_context_capacity", args: { request } },
+      {
+        command: "agent_llm_declare_model_capability",
+        args: {
+          request: {
+            model_id: "model:fixture",
+            expected_revision: 9,
+            capability: "vision_input",
+            value: "yes",
+          },
+        },
+      },
     ]);
   });
 
@@ -117,7 +165,7 @@ describe("Agent settings generated transport", () => {
   it("keeps the mock presentation safe and assignable to the narrow facet", async () => {
     const transport: AgentSettingsTransport = createMockUiKernelTransport();
     const projected = await transport.loadAgentLlmSettings();
-    expect(projected.providers[0]).toMatchObject({ credential_status: "unchecked" });
+    expect(projected.providers[0]).toMatchObject({ credential_status: "detected" });
     expect(JSON.stringify(projected)).not.toContain("fixture-secret");
   });
 });

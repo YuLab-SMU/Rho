@@ -2,11 +2,19 @@
 
 Status: proposed design contract, revision 3; the owner rejected the initial
 route-first single-screen direction and then required repeatably revealable
-saved API keys on 2026-08-26. The owner's `开始施工` instruction separately
-activated only CRED-REVEAL-1A through
-`active-2026-08-26-cred-reveal-1a-connection-test-redaction-spec.md`. This
-broader Settings document remains proposed; CRED-REVEAL-1B, MODEL-AUTO-1,
-SETTINGS-UX1, and SETTINGS-UX2 are not active.
+saved API keys on 2026-08-26. The owner's `开始施工` instruction activated
+CRED-REVEAL-1A through
+`active-2026-08-26-cred-reveal-1a-connection-test-redaction-spec.md`, and the
+owner's `继续开发` instruction of 2026-08-27 activated CRED-REVEAL-1B through
+`active-2026-08-27-cred-reveal-1b-native-secure-view-spec.md`. That package was
+subsequently narrowed by the owner to the current local Darwin/macOS
+implementation; other native presenter platforms remain deferred. The owner's
+subsequent rapid-iteration correction activated the bounded Provider-first UI
+slice SETTINGS-UX2A through
+`active-2026-08-26-settings-ux2-provider-flow-spec.md`. This broader Settings
+document remains proposed; MODEL-AUTO-1 and the remaining SETTINGS-UX packages
+are not active. SETTINGS-UX2A may consume the outcome-only reveal command and
+the existing credential-save command only within its focused Connection flow.
 
 Date: 2026-08-26
 

@@ -1,6 +1,7 @@
 use crate::AppState;
 use crate::agent_llm::{
-    self as service, AgentCapabilityRoute, AgentContextCapacityRequest, AgentLlmSettingsView,
+    self as service, AgentCapabilityRoute, AgentContextCapacityRequest,
+    AgentLlmCredentialRevealView, AgentLlmSettingsView, AgentModelCapabilityDeclarationRequest,
     AgentModelCapabilityPatch, AgentModelDiscoveryResponse, AgentModelProfile,
     AgentProviderProfile, DeleteModelRequest, DeleteProviderRequest,
 };
@@ -15,6 +16,12 @@ pub(crate) struct AgentLlmSelectRequest {
     pub(crate) model_id: String,
     #[specta(type = rho_store::RuntimeOutputIpcNumber)]
     pub(crate) expected_revision: u64,
+}
+
+#[derive(Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct AgentLlmCredentialRevealRequest {
+    pub(crate) provider_id: String,
 }
 
 #[cfg_attr(test, specta::specta)]
@@ -44,7 +51,8 @@ pub(crate) async fn agent_llm_save_provider(
 ) -> Result<AgentLlmSettingsView, String> {
     let config = runtime_config(&state).map_err(display_error)?;
     let settings = service::save_provider(&config.data_dir, provider).map_err(display_error)?;
-    service::settings_view_from_settings(&config.data_dir, settings).map_err(display_error)
+    service::settings_view_from_settings(&config.data_dir, &config.rscript, settings)
+        .map_err(display_error)
 }
 
 #[tauri::command]
@@ -54,9 +62,11 @@ pub(crate) async fn agent_llm_delete_provider(
 ) -> Result<AgentLlmSettingsView, String> {
     let config = runtime_config(&state).map_err(display_error)?;
     let settings = service::delete_provider(&config.data_dir, &request).map_err(display_error)?;
-    service::settings_view_from_settings(&config.data_dir, settings).map_err(display_error)
+    service::settings_view_from_settings(&config.data_dir, &config.rscript, settings)
+        .map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn agent_llm_set_credential(
     provider_id: String,
@@ -80,6 +90,25 @@ pub(crate) async fn agent_llm_delete_credential(
     service::settings_view(&config.data_dir, &config.rscript).map_err(display_error)
 }
 
+/// CRED-REVEAL-1C: one explicit click runs one fresh exact-source read and
+/// resolves once with the outcome plus, on `revealed`, the stored value for
+/// inline display. No OS prompt, window-focus check, or revision pin.
+#[cfg_attr(test, specta::specta)]
+#[tauri::command]
+pub(crate) async fn agent_llm_view_credential(
+    request: AgentLlmCredentialRevealRequest,
+    state: State<'_, AppState>,
+) -> Result<AgentLlmCredentialRevealView, String> {
+    let config = runtime_config(&state).map_err(display_error)?;
+    let data_dir = config.data_dir.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        service::view_provider_credential(&data_dir, &request.provider_id)
+    })
+    .await
+    .map_err(display_error)
+}
+
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn agent_llm_save_model(
     model: AgentModelProfile,
@@ -87,7 +116,8 @@ pub(crate) async fn agent_llm_save_model(
 ) -> Result<AgentLlmSettingsView, String> {
     let config = runtime_config(&state).map_err(display_error)?;
     let settings = service::save_model(&config.data_dir, model).map_err(display_error)?;
-    service::settings_view_from_settings(&config.data_dir, settings).map_err(display_error)
+    service::settings_view_from_settings(&config.data_dir, &config.rscript, settings)
+        .map_err(display_error)
 }
 
 #[cfg_attr(test, specta::specta)]
@@ -99,9 +129,24 @@ pub(crate) async fn agent_llm_set_context_capacity(
     let config = runtime_config(&state).map_err(display_error)?;
     let settings =
         service::set_context_capacity(&config.data_dir, &request).map_err(display_error)?;
-    service::settings_view_from_settings(&config.data_dir, settings).map_err(display_error)
+    service::settings_view_from_settings(&config.data_dir, &config.rscript, settings)
+        .map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
+#[tauri::command]
+pub(crate) async fn agent_llm_declare_model_capability(
+    request: AgentModelCapabilityDeclarationRequest,
+    state: State<'_, AppState>,
+) -> Result<AgentLlmSettingsView, String> {
+    let config = runtime_config(&state).map_err(display_error)?;
+    let settings =
+        service::declare_model_capability(&config.data_dir, &request).map_err(display_error)?;
+    service::settings_view_from_settings(&config.data_dir, &config.rscript, settings)
+        .map_err(display_error)
+}
+
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn agent_llm_delete_model(
     request: DeleteModelRequest,
@@ -109,7 +154,8 @@ pub(crate) async fn agent_llm_delete_model(
 ) -> Result<AgentLlmSettingsView, String> {
     let config = runtime_config(&state).map_err(display_error)?;
     let settings = service::delete_model(&config.data_dir, &request).map_err(display_error)?;
-    service::settings_view_from_settings(&config.data_dir, settings).map_err(display_error)
+    service::settings_view_from_settings(&config.data_dir, &config.rscript, settings)
+        .map_err(display_error)
 }
 
 #[cfg_attr(test, specta::specta)]
@@ -130,7 +176,8 @@ pub(crate) async fn agent_llm_select_model(
         },
     )
     .map_err(display_error)?;
-    service::settings_view_from_settings(&config.data_dir, settings).map_err(display_error)
+    service::settings_view_from_settings(&config.data_dir, &config.rscript, settings)
+        .map_err(display_error)
 }
 
 #[tauri::command]
@@ -142,7 +189,8 @@ pub(crate) async fn agent_llm_save_capability_route(
     let config = runtime_config(&state).map_err(display_error)?;
     let settings = service::save_capability_route(&config.data_dir, expected_revision, route)
         .map_err(display_error)?;
-    service::settings_view_from_settings(&config.data_dir, settings).map_err(display_error)
+    service::settings_view_from_settings(&config.data_dir, &config.rscript, settings)
+        .map_err(display_error)
 }
 
 #[tauri::command]
@@ -155,7 +203,8 @@ pub(crate) async fn agent_llm_delete_capability_route(
     let settings =
         service::delete_capability_route(&config.data_dir, expected_revision, &capability)
             .map_err(display_error)?;
-    service::settings_view_from_settings(&config.data_dir, settings).map_err(display_error)
+    service::settings_view_from_settings(&config.data_dir, &config.rscript, settings)
+        .map_err(display_error)
 }
 
 #[tauri::command]
@@ -169,7 +218,8 @@ pub(crate) async fn agent_llm_declare_model_capabilities(
     let settings =
         service::declare_model_capabilities(&config.data_dir, expected_revision, &model_id, patch)
             .map_err(display_error)?;
-    service::settings_view_from_settings(&config.data_dir, settings).map_err(display_error)
+    service::settings_view_from_settings(&config.data_dir, &config.rscript, settings)
+        .map_err(display_error)
 }
 
 #[tauri::command]
@@ -180,6 +230,7 @@ pub(crate) async fn agent_llm_refresh_credentials(
     service::refresh_credentials_view(&config.data_dir, &config.rscript).map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn agent_llm_test_model(
     model_id: String,
@@ -217,6 +268,7 @@ pub(crate) async fn agent_llm_catalog(state: State<'_, AppState>) -> Result<Valu
     serde_json::to_value(entries).map_err(display_error)
 }
 
+#[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn agent_llm_discover_models(
     provider_id: String,

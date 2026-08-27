@@ -65,8 +65,12 @@ export type {
   AgentContextPlanPreview,
   AgentContextPreviewRequest,
   AgentContextCapacityRequest,
+  AgentLlmCredentialRevealView,
   AgentLlmSettingsView,
+  AgentModelDiscoveryResponse,
   AgentModelContextCapacity,
+  AgentModelCapabilityDeclarationRequest,
+  AgentModelProfile,
   AgentTurnEvent,
   AgentTurnSummary,
   RunAgentRequest,
@@ -175,3 +179,9 @@ export type {
   WorkspacePreparation,
   WorkspacePreparationIssue,
 } from "./types";
+export {
+  buildAddedModelProfile,
+  CONSERVATIVE_CONTEXT_WINDOW_TOKENS,
+  CONSERVATIVE_RESERVED_OUTPUT_TOKENS,
+  MODEL_CAPABILITY_NAMES,
+} from "./agent-settings";

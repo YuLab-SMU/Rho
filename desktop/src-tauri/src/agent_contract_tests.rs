@@ -206,7 +206,7 @@ fn agent_settings_fixture() -> AgentLlmSettingsView {
         base_url_env: None,
         wire_api: Some("openai".to_string()),
         disable_stream_options: Some(false),
-        credential_source: "system_store".to_string(),
+        credential_source: "rho_vault".to_string(),
     };
     let model = AgentModelProfile {
         id: "model:fixture".to_string(),
@@ -237,13 +237,15 @@ fn agent_settings_fixture() -> AgentLlmSettingsView {
         }),
     };
     AgentLlmSettingsView {
-        schema_version: 4,
+        schema_version: 5,
         revision: 9,
         selected_model_id: model.id.clone(),
         providers: vec![agent_llm::AgentProviderProfileView {
             profile: provider,
             credential_status: "unchecked".to_string(),
             credential_effective_source: "unchecked".to_string(),
+            effective_base_url: Some("https://example.invalid/v1".to_string()),
+            base_url_source: "configured".to_string(),
         }],
         models: vec![agent_llm::AgentModelProfileView {
             profile: model,
@@ -294,11 +296,8 @@ fn agent_settings_ipc_serialization_matches_generated_contract() {
     }))
     .unwrap();
 
-    assert_eq!(settings["schema_version"], 4);
-    assert_eq!(
-        settings["providers"][0]["credential_source"],
-        "system_store"
-    );
+    assert_eq!(settings["schema_version"], 5);
+    assert_eq!(settings["providers"][0]["credential_source"], "rho_vault");
     assert_eq!(
         settings["providers"][0]["credential_effective_source"],
         "unchecked"
@@ -498,8 +497,15 @@ fn agent_settings_typescript_export() {
     tauri_specta::Builder::<tauri::Wry>::new()
         .commands(tauri_specta::collect_commands![
             crate::commands::agent_llm::agent_llm_settings,
+            crate::commands::agent_llm::agent_llm_discover_models,
+            crate::commands::agent_llm::agent_llm_save_model,
             crate::commands::agent_llm::agent_llm_set_context_capacity,
+            crate::commands::agent_llm::agent_llm_declare_model_capability,
+            crate::commands::agent_llm::agent_llm_delete_model,
+            crate::commands::agent_llm::agent_llm_set_credential,
             crate::commands::agent_llm::agent_llm_select_model,
+            crate::commands::agent_llm::agent_llm_test_model,
+            crate::commands::agent_llm::agent_llm_view_credential,
         ])
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
         .export(specta_typescript::Typescript::default(), output_path)

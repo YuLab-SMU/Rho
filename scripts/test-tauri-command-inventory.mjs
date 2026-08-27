@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const EXPECTED_HANDLER_DIGEST = "3db01d5da7d300554a97525f840b885d9df3155063f0a3626dd66c306c4009fe";
+const EXPECTED_HANDLER_DIGEST = "8da804989c6cb338ca8e33590491c0ad3adc19dce2ebbfb9d21f97bbb8e256f3";
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const RUN_COMMANDS = [
@@ -80,6 +80,7 @@ const AGENT_LLM_COMMANDS = [
   "agent_llm_cancel_test",
   "agent_llm_catalog",
   "agent_llm_declare_model_capabilities",
+  "agent_llm_declare_model_capability",
   "agent_llm_delete_capability_route",
   "agent_llm_delete_credential",
   "agent_llm_delete_model",
@@ -94,6 +95,7 @@ const AGENT_LLM_COMMANDS = [
   "agent_llm_set_credential",
   "agent_llm_settings",
   "agent_llm_test_model",
+  "agent_llm_view_credential",
 ];
 
 const AGENT_CONVERSATION_COMMANDS = [

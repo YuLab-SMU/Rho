@@ -10,8 +10,20 @@ export type AgentSettingsInvoke = <T>(
 /** Commands */
 export const createAgentSettingsCommands = (__TAURI_INVOKE: AgentSettingsInvoke) => ({
 	agentLlmSettings: () => __TAURI_INVOKE<AgentLlmSettingsView>("agent_llm_settings"),
+	agentLlmDiscoverModels: (providerId: string) => __TAURI_INVOKE<AgentModelDiscoveryResponse>("agent_llm_discover_models", { providerId }),
+	agentLlmSaveModel: (model: AgentModelProfile) => __TAURI_INVOKE<AgentLlmSettingsView>("agent_llm_save_model", { model }),
 	agentLlmSetContextCapacity: (request: AgentContextCapacityRequest) => __TAURI_INVOKE<AgentLlmSettingsView>("agent_llm_set_context_capacity", { request }),
+	agentLlmDeclareModelCapability: (request: AgentModelCapabilityDeclarationRequest) => __TAURI_INVOKE<AgentLlmSettingsView>("agent_llm_declare_model_capability", { request }),
+	agentLlmDeleteModel: (request: DeleteModelRequest) => __TAURI_INVOKE<AgentLlmSettingsView>("agent_llm_delete_model", { request }),
+	agentLlmSetCredential: (providerId: string, credential: string, confirmReplace: boolean) => __TAURI_INVOKE<AgentLlmSettingsView>("agent_llm_set_credential", { providerId, credential, confirmReplace }),
 	agentLlmSelectModel: (request: AgentLlmSelectRequest) => __TAURI_INVOKE<AgentLlmSettingsView>("agent_llm_select_model", { request }),
+	agentLlmTestModel: (modelId: string) => __TAURI_INVOKE<AgentLlmSettingsView>("agent_llm_test_model", { modelId }),
+	/**
+	 *  CRED-REVEAL-1C: one explicit click runs one fresh exact-source read and
+	 *  resolves once with the outcome plus, on `revealed`, the stored value for
+	 *  inline display. No OS prompt, window-focus check, or revision pin.
+	 */
+	agentLlmViewCredential: (request: AgentLlmCredentialRevealRequest) => __TAURI_INVOKE<AgentLlmCredentialRevealView>("agent_llm_view_credential", { request }),
 });
 
 /* Types */
@@ -43,6 +55,29 @@ export type AgentContextCapacityRequest = {
 	reserved_output_tokens: number,
 };
 
+export type AgentDiscoveredModel = {
+	id: string,
+	display_name: string,
+	model_type: AgentCapabilityValue,
+	capabilities: { [key in string]: AgentCapabilityValue },
+};
+
+/**  Fixed four-word terminal vocabulary for `agent_llm_view_credential`. */
+export type AgentLlmCredentialRevealOutcome = "revealed" | "credential_missing" | "store_unavailable" | "source_ineligible";
+
+export type AgentLlmCredentialRevealRequest = {
+	providerId: string,
+};
+
+/**
+ *  The response carries the stored value only on `Revealed`; every failure
+ *  outcome resolves with `credential: None` and no store-layer detail.
+ */
+export type AgentLlmCredentialRevealView = {
+	outcome: AgentLlmCredentialRevealOutcome,
+	credential: string | null,
+};
+
 export type AgentLlmSelectRequest = {
 	modelId: string,
 	expectedRevision: number,
@@ -62,6 +97,22 @@ export type AgentLlmSettingsView = {
 	capability_routes: AgentCapabilityRouteView[],
 	user_environ: AgentUserEnvironInfo,
 	validation_error: string | null,
+};
+
+export type AgentModelCapabilityDeclarationRequest = {
+	model_id: string,
+	expected_revision: number,
+	capability: string,
+	value: string,
+};
+
+export type AgentModelDiscoveryResponse = {
+	status: string,
+	provider_id: string,
+	models: AgentDiscoveredModel[],
+	truncated: boolean,
+	message: string,
+	error_class: string | null,
 };
 
 export type AgentModelProfile = {
@@ -105,8 +156,8 @@ export type AgentProviderProfile = {
 	wire_api: string | null,
 	disable_stream_options: boolean | null,
 	/**
-	 *  Where this provider's API key lives: `system_store` (default),
-	 *  `environment`, `session_only`, or `file_fallback` (Linux opt-in).
+	 *  Where this provider's API key lives: `rho_vault` (default),
+	 *  `environment`, or `session_only`.
 	 */
 	credential_source: string,
 };
@@ -119,6 +170,12 @@ export type AgentProviderProfileView = {
 	 *  `credential_source` field on the profile itself.
 	 */
 	credential_effective_source: string,
+	/**
+	 *  Resolved endpoint shown in Settings. Reviewed Provider defaults are
+	 *  projected explicitly instead of appearing as an unexplained blank.
+	 */
+	effective_base_url: string | null,
+	base_url_source: string,
 } & AgentProviderProfile;
 
 export type AgentSelectedModelView = {
@@ -133,4 +190,9 @@ export type AgentSelectedModelView = {
 export type AgentUserEnvironInfo = {
 	path: string,
 	source: string,
+};
+
+export type DeleteModelRequest = {
+	model_id: string,
+	replacement_model_id: string | null,
 };
