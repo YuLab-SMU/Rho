@@ -58,10 +58,61 @@ function ModeMenu({ vm }: { readonly vm: AgentSurfaceVm }) {
             </div>
           ))}
         </div>
-        {view.mode === "act" && <label className="rho-agent-auto-approve">
-          <input type="checkbox" checked={view.auto_approve} onChange={(event) => commitView({ ...view, auto_approve: event.target.checked })} />
-          Auto-approve project tools for this conversation
-        </label>}
+      </div>
+    </details>
+  );
+}
+
+const POSTURE_OPTIONS = [{
+  id: "ask",
+  label: "Ask every time",
+  hint: "Every tool action waits for your approval.",
+}, {
+  id: "auto",
+  label: "Auto-approve project tools for this conversation",
+  hint: "Applies in Act mode. The broker still evaluates each action; approvals appear when required.",
+}] as const;
+
+function PostureMenu({ vm }: { readonly vm: AgentSurfaceVm }) {
+  const { view, commitView } = vm;
+  const postureLabel = view.auto_approve ? "Auto-approve tools" : "Ask every time";
+  return (
+    <details className="rho-agent-posture-menu">
+      <summary aria-label={`Permission posture: ${postureLabel}`}>
+        <span>{postureLabel}</span>
+      </summary>
+      <div role="menu" aria-label="Permission posture choices">
+        {view.mode !== "act" ? (<>
+          <div className="rho-agent-mode-option">
+            <button
+              type="button"
+              role="menuitemradio"
+              aria-checked="true"
+              onClick={(event) => {
+                event.currentTarget.closest("details")!.open = false;
+              }}
+            >Ask every time</button>
+            <small>Every tool action waits for your approval.</small>
+          </div>
+          <p className="rho-agent-posture-note">Auto-approve is available in Act mode.</p>
+        </>) : POSTURE_OPTIONS.map((option) => {
+          const active = (option.id === "auto") === view.auto_approve;
+          return (
+            <div className="rho-agent-mode-option" key={option.id}>
+              <button
+                type="button"
+                role="menuitemradio"
+                aria-checked={active}
+                className={option.id === "auto" ? "rho-agent-auto-approve" : undefined}
+                onClick={(event) => {
+                  event.currentTarget.closest("details")!.open = false;
+                  commitView({ ...view, auto_approve: option.id === "auto" });
+                }}
+              >{option.label}</button>
+              <small>{option.hint}</small>
+            </div>
+          );
+        })}
       </div>
     </details>
   );
@@ -182,6 +233,7 @@ export function AgentComposer({ vm }: { readonly vm: AgentSurfaceVm }) {
           <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8Z" /><circle cx="8" cy="8" r="2" /></svg><span className="rho-sr-only">Review context</span>
         </button>
         <ModeMenu vm={vm} />
+        <PostureMenu vm={vm} />
         <small className="rho-agent-mode-hint">{AGENT_MODE_HINTS[view.mode]}</small>
         <ModelMenu vm={vm} />
         <button type="button" className="rho-primary-action" disabled={busy || contextReviewBusy || health?.state !== "ready" || !view.composer.trim()} onClick={() => void submit()}>

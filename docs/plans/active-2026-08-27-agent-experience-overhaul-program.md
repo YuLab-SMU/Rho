@@ -364,3 +364,74 @@ Evidence:
 - preview capture under `target/agx3-diff/`: timeline entry only, then the
   open Diff disclosure shows `+2 −0`, `@@ -1 +1 @@`, two context lines, and
   two sign-led add lines.
+
+## AGX-4 Contract: Permission Posture (threat-model review — resolved)
+
+Mandatory stop 4 reviewed and resolved. Scope is deliberately honest: only
+the postures the broker enforces TODAY are exposed. There is no third
+"Full access" tier, because the broker has no such semantics; offering one
+would fabricate authority.
+
+Threat model and resolutions:
+
+- Authority: the chip toggles exactly the existing per-request
+  `auto_approve` flag (mode === "act" && auto_approve). The broker's
+  per-action approval evaluation is unchanged; approvals still appear as
+  the compact strip whenever the broker requires them. No new execution
+  authority is created and no approval path is removed.
+- Visibility (improvement over status quo): the current posture is always
+  visible on the composer row instead of buried in a popover checkbox, so
+  an elevated posture is never silently active.
+- No inference: posture is durable per-surface view state, persisted
+  through the existing view-state lane — never inferred from UI mode,
+  model identity, or natural-language intent. Switching the mode away from
+  Act keeps the existing reset semantics (the flag clears), so a stale
+  elevated posture cannot survive a mode change.
+- Per-item binding: every `runAgent` request carries the flag explicitly,
+  including queued follow-ups, which bind the posture captured at their
+  enqueue moment (recorded in the AGX-2 contract); there is no ambient or
+  global auto-approve state.
+- Negative coverage: posture outside Act is never sent (submit passes the
+  flag only when mode === "act"); the approval strip keeps working
+  identically regardless of posture; the chip never gates or hides the
+  Stop control.
+
+Implementation: one posture chip on the composer row (label = current
+posture) opening a popover with two options and exact consequence copy
+("Ask every time" / "Auto-approve project tools — applies in Act mode; the
+broker still evaluates each action"). The mode popover's auto-approve
+checkbox is replaced by this single control; persisted shape, broker
+semantics, and all approval paths unchanged.
+
+## AGX-4 Implementation And Evidence (2026-08-27)
+
+Implemented as contracted (only broker-enforced postures, no new tier):
+
+- Composer (`AgentComposer.tsx` + `agent-surface.css`): one always-visible
+  posture chip on the control row. In Ask/Plan it shows "Ask every time"
+  with the note "Auto-approve is available in Act mode" (no auto-approve
+  control rendered outside its only effective mode — the integration lane's
+  deliberate Act-only contract holds); in Act its popover offers both
+  postures with exact consequence copy ("Auto-approve project tools for
+  this conversation — applies in Act mode; the broker still evaluates each
+  action"). Elevating persists through the existing view-state lane; the
+  Act-mode reset clears it again. The mode popover's checkbox is replaced
+  by this single control. Below ~300px the popover opens inline in the
+  composer flow instead of floating (no clipping on right-docked surfaces).
+- Broker semantics, persisted shape, approval strip, and every approval
+  path are unchanged; no ambient or global auto-approve state exists —
+  every request (including queued follow-ups) carries the flag explicitly.
+
+Evidence:
+
+- `npm --prefix desktop run rsr:typecheck` and `rsr:lint`;
+- focused `AgentSurfaceView.test.tsx`: 17 of 17, with the posture
+  assertions (Act-gated option presence, elevate persists and relabels,
+  mode-switch reset, no auto-approve control outside Act);
+- full UI suite: 53 files, 353 tests passed, including the integration
+  lane's Act-only approval visibility test;
+- `npm run rsr:build --prefix desktop`;
+- preview capture under `target/agx4-posture/`: ask-mode chip with the Act
+  note and no option, act-mode popover with both options and the broker
+  consequence copy, elevated chip relabeled; the ≤300px inline-open popover
+  is fully contained.

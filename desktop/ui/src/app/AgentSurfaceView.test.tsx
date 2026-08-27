@@ -264,18 +264,28 @@ describe("Studio Agent Surface", () => {
     const actOption = modeButton("act").closest(".rho-agent-mode-option")!;
     expect(actOption.textContent).toContain("Work with project tools");
 
+    const posture = container.querySelector<HTMLDetailsElement>(".rho-agent-posture-menu")!;
+    expect(posture.querySelector("summary")!.textContent).toBe("Ask every time");
+    expect(posture.textContent).toContain("Auto-approve is available in Act mode");
+    expect(container.querySelector(".rho-agent-auto-approve")).toBeNull();
+
     await click(modeButton("act"));
     expect(persist).toHaveBeenLastCalledWith(expect.objectContaining({ mode: "act", auto_approve: false }));
     expect(modeButton("act").getAttribute("aria-pressed")).toBe("true");
     expect(menu.querySelector("summary")!.textContent).toBe("act");
 
-    // The Act-only auto-approve toggle lives inside the same popover.
-    const autoApprove = container.querySelector<HTMLInputElement>(".rho-agent-mode-menu .rho-agent-auto-approve input")!;
-    await click(autoApprove);
+    // In Act mode the chip offers both postures; elevating it is an
+    // explicit persisted choice, and the Act-mode reset clears it again.
+    const autoOption = [...posture.querySelectorAll("button")]
+      .find((button) => button.textContent === "Auto-approve project tools for this conversation")!;
+    expect(autoOption.closest(".rho-agent-mode-option")!.textContent).toContain("Applies in Act mode");
+    await click(autoOption);
     expect(persist).toHaveBeenLastCalledWith(expect.objectContaining({ mode: "act", auto_approve: true }));
+    expect(posture.querySelector("summary")!.textContent).toBe("Auto-approve tools");
 
     await click(modeButton("ask"));
     expect(persist).toHaveBeenLastCalledWith(expect.objectContaining({ mode: "ask", auto_approve: false }));
+    expect(posture.querySelector("summary")!.textContent).toBe("Ask every time");
     expect(container.querySelector(".rho-agent-auto-approve")).toBeNull();
 
     // Review context stays the control row's first child as an icon action.

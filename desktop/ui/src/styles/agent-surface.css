@@ -282,8 +282,10 @@
   /* Mode chip + popover (Alma Reasoning pattern): the three modes keep
      their exact semantics as options with one-line hints; the Act-only
      auto-approve toggle lives inside the same popover. */
-  section.rho-agent-surface .rho-agent-mode-menu { position: relative; flex: 0 0 auto; }
-  section.rho-agent-surface .rho-agent-mode-menu > summary {
+  section.rho-agent-surface .rho-agent-mode-menu,
+  section.rho-agent-surface .rho-agent-posture-menu { position: relative; flex: 0 0 auto; }
+  section.rho-agent-surface .rho-agent-mode-menu > summary,
+  section.rho-agent-surface .rho-agent-posture-menu > summary {
     display: flex;
     align-items: center;
     gap: var(--rho-space-1);
@@ -298,11 +300,16 @@
     cursor: pointer;
     text-transform: capitalize;
   }
-  section.rho-agent-surface .rho-agent-mode-menu > summary::-webkit-details-marker { display: none; }
-  section.rho-agent-surface .rho-agent-mode-menu > summary::after { content: "▾"; flex: 0 0 auto; color: var(--rho-muted); }
-  section.rho-agent-surface .rho-agent-mode-menu > summary:hover { border-color: var(--rho-line-strong); color: var(--rho-ink); }
-  section.rho-agent-surface .rho-agent-mode-menu[open] > summary { border-color: var(--rho-line-strong); color: var(--rho-ink); }
-  section.rho-agent-surface .rho-agent-mode-menu > div {
+  section.rho-agent-surface .rho-agent-mode-menu > summary::-webkit-details-marker,
+  section.rho-agent-surface .rho-agent-posture-menu > summary::-webkit-details-marker { display: none; }
+  section.rho-agent-surface .rho-agent-mode-menu > summary::after,
+  section.rho-agent-surface .rho-agent-posture-menu > summary::after { content: "▾"; flex: 0 0 auto; color: var(--rho-muted); }
+  section.rho-agent-surface .rho-agent-mode-menu > summary:hover,
+  section.rho-agent-surface .rho-agent-posture-menu > summary:hover { border-color: var(--rho-line-strong); color: var(--rho-ink); }
+  section.rho-agent-surface .rho-agent-mode-menu[open] > summary,
+  section.rho-agent-surface .rho-agent-posture-menu[open] > summary { border-color: var(--rho-line-strong); color: var(--rho-ink); }
+  section.rho-agent-surface .rho-agent-mode-menu > div,
+  section.rho-agent-surface .rho-agent-posture-menu > div {
     position: absolute;
     z-index: 4;
     bottom: calc(100% + var(--rho-space-1));
@@ -441,7 +448,8 @@
     /* The popover's wide-screen min-width would defeat the cap and clip out
        of a narrow surface, so it is dropped here. */
     section.rho-agent-surface .rho-agent-model-menu > div { min-width: 0; max-width: calc(100cqw - var(--rho-space-3)); }
-    section.rho-agent-surface .rho-agent-mode-menu > div { min-width: 0; max-width: calc(100cqw - var(--rho-space-3)); }
+    section.rho-agent-surface .rho-agent-mode-menu > div,
+  section.rho-agent-surface .rho-agent-posture-menu > div { min-width: 0; max-width: calc(100cqw - var(--rho-space-3)); }
     section.rho-agent-surface .rho-agent-file-proposal > header code { flex: 1 1 100%; }
     section.rho-agent-surface .rho-agent-context-controls > button { flex: 1 1 auto; }
     /* The full-width ghost action keeps its text left-aligned at narrow
@@ -501,4 +509,28 @@
   section.rho-agent-surface .rho-agent-diff-remove { background: var(--rho-danger-tint); }
   section.rho-agent-surface .rho-agent-diff-remove .rho-agent-diff-sign { color: var(--rho-danger); }
   section.rho-agent-surface .rho-agent-diff-note { margin: var(--rho-space-1) 0 0; color: var(--rho-muted); font-size: var(--rho-text-caption); }
+}
+
+@layer surfaces {
+  /* The posture chip sits right-of-center in the composer row, so its
+     popover anchors right (same containment as the model menu), and its
+     sentence-style label keeps its own capitalization. */
+  section.rho-agent-surface .rho-agent-posture-menu > summary { text-transform: none; }
+  section.rho-agent-surface .rho-agent-posture-menu > div { left: auto; right: 0; }
+}
+
+@layer surfaces {
+  /* Below ~300px the posture popover cannot stay inside a right-docked
+     surface as a float, so it opens inline in the composer flow instead. */
+  @container (max-width: 300px) {
+    section.rho-agent-surface .rho-agent-posture-menu { flex: 1 1 100%; }
+    section.rho-agent-surface .rho-agent-posture-menu > summary { width: max-content; }
+    section.rho-agent-surface .rho-agent-posture-menu > div {
+      position: static;
+      width: 100%;
+      max-width: none;
+      margin-top: var(--rho-space-1);
+      box-shadow: none;
+    }
+  }
 }
