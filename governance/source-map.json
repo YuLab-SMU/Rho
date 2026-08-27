@@ -86,12 +86,14 @@
         "scripts/run-rsr-debug.mjs",
         "scripts/serve-desktop-preview.mjs",
         "scripts/test-*-bindings.mjs",
+        "scripts/test-compat-*.mjs",
         "scripts/test-desktop-platform-config.mjs",
         "scripts/test-generated-transport-boundary.mjs",
         "scripts/test-rsr-*.mjs",
         "scripts/test-tauri-command-inventory.mjs",
         "scripts/test-visual-acceptance.mjs",
         "scripts/visual-acceptance.mjs",
+        "scripts/visual-acceptance/**",
         "test/acceptance-project/**"
       ],
       "checks": ["frontend", "rust.workspace"]

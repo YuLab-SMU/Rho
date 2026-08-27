@@ -13,9 +13,16 @@ const generatedPath = path.join(
 );
 const commandNames = [
   "agent_llm_declare_model_capability",
+  "agent_llm_declare_model_capabilities",
+  "agent_llm_delete_capability_route",
+  "agent_llm_delete_credential",
   "agent_llm_delete_model",
+  "agent_llm_delete_provider",
   "agent_llm_discover_models",
+  "agent_llm_repair_config_permissions",
+  "agent_llm_save_capability_route",
   "agent_llm_save_model",
+  "agent_llm_save_provider",
   "agent_llm_settings",
   "agent_llm_set_context_capacity",
   "agent_llm_set_credential",
@@ -72,23 +79,27 @@ try {
   assert.match(generated, /agentLlmDeclareModelCapability: \(request: AgentModelCapabilityDeclarationRequest\)/);
   assert.match(generated, /agentLlmDeleteModel: \(request: DeleteModelRequest\)/);
   assert.match(generated, /agentLlmDiscoverModels: \(providerId: string\)/);
-  assert.match(generated, /agentLlmSaveModel: \(model: AgentModelProfile\)/);
+  assert.match(generated, /agentLlmSaveModel: \(request: AgentModelSaveRequest\)/);
   assert.match(generated, /agentLlmSetContextCapacity: \(request: AgentContextCapacityRequest\)/);
-  assert.match(generated, /agentLlmSetCredential: \(providerId: string, credential: string, confirmReplace: boolean\)/);
+  assert.match(generated, /agentLlmSetCredential: \(request: AgentLlmCredentialWriteRequest\)/);
   assert.match(generated, /agentLlmSelectModel: \(request: AgentLlmSelectRequest\)/);
-  assert.match(generated, /agentLlmTestModel: \(modelId: string\)/);
+  assert.match(generated, /agentLlmTestModel: \(request: AgentModelTestRequest\)/);
   assert.match(generated, /agentLlmViewCredential: \(request: AgentLlmCredentialRevealRequest\)/);
+  assert.match(generated, /agentLlmRepairConfigPermissions: \(request: AgentConfigPermissionRepairRequest\)/);
   assert.match(
     generated,
-    /export type AgentLlmCredentialRevealView = \{\s*outcome: AgentLlmCredentialRevealOutcome,\s*credential: string \| null,?\s*\}/,
+    /export type AgentLlmCredentialRevealView = \{\s*outcome: AgentLlmCredentialRevealOutcome,\s*credential: string \| null,\s*source: string \| null,\s*env_shadows_file: boolean,?\s*\}/,
   );
-  assert.match(generated, /"revealed" \| "credential_missing" \| "store_unavailable" \| "source_ineligible"/);
+  assert.match(generated, /"revealed" \| "credential_missing" \| "credential_unavailable"/);
   assert.equal(
     count(generated, "credential: string | null"),
     1,
     "only the credential reveal view may carry a value field",
   );
-  assert.doesNotMatch(generated, /expectedRevision[\s\S]{0,200}agent_llm_view_credential/);
+  assert.match(
+    generated,
+    /export type AgentLlmCredentialRevealRequest = \{\s*providerId: string,?\s*\}/,
+  );
   assert.doesNotMatch(generated, /credential_value|credentialValue|revealed_secret|revealedSecret/);
   assert.match(generated, /export type AgentProviderProfileView = \{[\s\S]*?\} & AgentProviderProfile/);
   assert.match(generated, /export type AgentModelProfileView = \{[\s\S]*?\} & AgentModelProfile/);
@@ -114,6 +125,7 @@ try {
   }
   for (const method of [
     "loadAgentLlmSettings",
+    "repairAgentConfigPermissions",
     "discoverProviderModels",
     "setAgentContextCapacity",
     "saveProviderCredential",
@@ -138,6 +150,7 @@ try {
   assert.match(rust, /async fn agent_llm_select_model\([\s\S]{0,500}?\) -> Result<AgentLlmSettingsView, String>/);
   assert.match(rust, /async fn agent_llm_test_model\([\s\S]{0,900}?\) -> Result<AgentLlmSettingsView, String>/);
   assert.match(rust, /async fn agent_llm_view_credential\([\s\S]{0,1200}?\) -> Result<AgentLlmCredentialRevealView, String>/);
+  assert.match(rust, /async fn agent_llm_repair_config_permissions\([\s\S]{0,600}?\) -> Result<AgentLlmSettingsView, String>/);
 } finally {
   fs.rmSync(temporaryDirectory, { recursive: true, force: true });
 }

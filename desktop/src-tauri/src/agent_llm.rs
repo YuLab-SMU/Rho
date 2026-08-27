@@ -12,23 +12,16 @@ use rho_server::coordinator::{AgentRuntimeCapabilityRoute, AgentRuntimeModelProf
 use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, Zeroizing};
 
-use crate::agent_credential_vault::{self, CredentialVaultStatus};
 use crate::project::atomic_write;
 
 // Plaintext YAML model-configuration parser and file I/O. Runtime settings
 // are implemented in this module; the helpers have no production call sites.
 #[path = "agent_config.rs"]
 pub(crate) mod agent_config;
+#[path = "agent_config_environ.rs"]
+mod agent_config_environ;
 
-const SETTINGS_FILE_NAME: &str = "llm-profiles.json";
-const SETTINGS_V1_BACKUP_FILE_NAME: &str = "llm-profiles.v1.backup.json";
-const SETTINGS_V2_BACKUP_FILE_NAME: &str = "llm-profiles.v2.backup.json";
-const SETTINGS_V3_BACKUP_FILE_NAME: &str = "llm-profiles.v3.backup.json";
-const SETTINGS_V4_BACKUP_FILE_NAME: &str = "llm-profiles.v4.backup.json";
-const SETTINGS_SCHEMA_VERSION: u32 = 5;
-const CONSERVATIVE_CONTEXT_WINDOW_TOKENS: u64 = 32_768;
-const CONSERVATIVE_RESERVED_OUTPUT_TOKENS: u64 = 4_096;
-const MAX_SETTINGS_BYTES: usize = 256 * 1024;
+const SETTINGS_SCHEMA_VERSION: u32 = agent_config::CONFIG_SCHEMA_VERSION;
 const MAX_ID_LENGTH: usize = 120;
 const MAX_NAME_LENGTH: usize = 160;
 const MAX_MODEL_ID_LENGTH: usize = 240;
@@ -55,11 +48,15 @@ const PROCESS_POLL_INTERVAL: Duration = Duration::from_millis(50);
 const MAX_CREDENTIAL_BYTES: usize = 4_096;
 const MAX_CREDENTIAL_BYTES_LABEL: &str = "4096-byte";
 const CREDENTIAL_AUDIT_FILE_NAME: &str = "agent-credential-audit.jsonl";
+const CREDENTIAL_AUDIT_LOCK_FILE_NAME: &str = "agent-credential-audit.lock";
 const MAX_CREDENTIAL_AUDIT_BYTES: usize = 256 * 1024;
 const CREDENTIAL_AUDIT_KEEP_BYTES: usize = 128 * 1024;
+const MAX_CREDENTIAL_AUDIT_RECOVERY_BYTES: usize = 4 * 1024 * 1024;
+const MAX_CREDENTIAL_AUDIT_ROW_BYTES: usize = 8 * 1024;
 
 static SETTINGS_MUTATION_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 static CREDENTIAL_SESSION: OnceLock<CredentialSession> = OnceLock::new();
+static CONFIG_SNAPSHOTS: OnceLock<Mutex<HashMap<String, ConfigSnapshotRecord>>> = OnceLock::new();
 
 fn settings_mutation_guard() -> MutexGuard<'static, ()> {
     SETTINGS_MUTATION_LOCK
@@ -68,22 +65,26 @@ fn settings_mutation_guard() -> MutexGuard<'static, ()> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
+fn after_settings_mutation<T>(
+    guard: MutexGuard<'_, ()>,
+    refresh: impl FnOnce() -> Result<T>,
+) -> Result<T> {
+    drop(guard);
+    refresh()
+}
+
 trait CredentialStore {
-    fn get(&self, provider_id: &str) -> Result<Option<String>>;
-    fn set(&self, provider_id: &str, credential: &str) -> Result<()>;
-    fn delete(&self, provider_id: &str) -> Result<()>;
+    fn get(&self, provider_id: &str) -> Result<Option<Zeroizing<String>>>;
 }
 
-#[derive(Debug, Clone)]
-struct RhoCredentialVaultStore {
-    data_dir: PathBuf,
+#[derive(Debug, Clone, Copy)]
+struct ConfigCredentialStore<'a> {
+    config: &'a agent_config::AgentConfig,
 }
 
-impl RhoCredentialVaultStore {
-    fn new(data_dir: &Path) -> Self {
-        Self {
-            data_dir: data_dir.to_path_buf(),
-        }
+impl<'a> ConfigCredentialStore<'a> {
+    fn from_config(config: &'a agent_config::AgentConfig) -> Self {
+        Self { config }
     }
 }
 
@@ -95,12 +96,11 @@ struct CredentialSession {
 }
 
 impl CredentialSession {
-    fn session_credential(&self, provider_id: &str) -> Option<String> {
+    fn has_session_credential(&self, provider_id: &str) -> bool {
         self.session_only
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .get(provider_id)
-            .map(|credential| credential.as_str().to_string())
+            .contains_key(provider_id)
     }
 
     fn session_credential_zeroizing(&self, provider_id: &str) -> Option<Zeroizing<String>> {
@@ -140,100 +140,89 @@ fn credential_session() -> &'static CredentialSession {
     CREDENTIAL_SESSION.get_or_init(CredentialSession::default)
 }
 
-impl CredentialStore for RhoCredentialVaultStore {
-    fn get(&self, provider_id: &str) -> Result<Option<String>> {
-        agent_credential_vault::get(&self.data_dir, provider_id)
-    }
-
-    fn set(&self, provider_id: &str, credential: &str) -> Result<()> {
-        agent_credential_vault::set(&self.data_dir, provider_id, credential)
-    }
-
-    fn delete(&self, provider_id: &str) -> Result<()> {
-        agent_credential_vault::delete(&self.data_dir, provider_id)
+impl CredentialStore for ConfigCredentialStore<'_> {
+    fn get(&self, provider_id: &str) -> Result<Option<Zeroizing<String>>> {
+        Ok(self
+            .config
+            .providers
+            .iter()
+            .find(|provider| provider.id == provider_id)
+            .and_then(|provider| provider.api_key.as_deref())
+            .filter(|value| !value.is_empty())
+            .map(|value| Zeroizing::new(value.to_string())))
     }
 }
 
-const CREDENTIAL_SOURCE_RHO_VAULT: &str = "rho_vault";
-const LEGACY_CREDENTIAL_SOURCE_SYSTEM_STORE: &str = "system_store";
+const CREDENTIAL_SOURCE_CONFIG_FILE: &str = "config_file";
 const CREDENTIAL_SOURCE_ENVIRONMENT: &str = "environment";
-const CREDENTIAL_SOURCE_SESSION_ONLY: &str = "session_only";
-const LEGACY_CREDENTIAL_SOURCE_FILE_FALLBACK: &str = "file_fallback";
+const CREDENTIAL_SOURCE_SESSION: &str = "session";
+const CREDENTIAL_SOURCE_NOT_CONFIGURED: &str = "not_configured";
 
-fn is_supported_credential_source(source: &str) -> bool {
-    matches!(
-        source,
-        CREDENTIAL_SOURCE_RHO_VAULT
-            | CREDENTIAL_SOURCE_ENVIRONMENT
-            | CREDENTIAL_SOURCE_SESSION_ONLY
-    )
-}
-
-/// Resolves the effective credential for one provider from its configured
-/// source. There is no implicit fallback between sources: a missing or
-/// unavailable configured source yields `None` or an error, never a silent
-/// probe of another source.
-fn resolve_provider_credential(
-    _data_dir: &Path,
+fn resolve_provider_credential_with_runtime(
+    settings: &AgentLlmSettings,
     provider: &AgentProviderProfile,
     credential_store: &impl CredentialStore,
-) -> Result<Option<String>> {
-    match provider.credential_source.as_str() {
-        CREDENTIAL_SOURCE_RHO_VAULT => credential_store.get(&provider.id),
-        CREDENTIAL_SOURCE_ENVIRONMENT => environment_credential(provider),
-        CREDENTIAL_SOURCE_SESSION_ONLY => Ok(credential_session().session_credential(&provider.id)),
-        other => bail!("Unsupported credential source: {other}"),
+    rscript: Option<&Path>,
+    r_environ_user: Option<&Path>,
+) -> Result<(Option<Zeroizing<String>>, &'static str)> {
+    validate_settings(settings)?;
+    if let Some(value) = credential_session().session_credential_zeroizing(&provider.id) {
+        validate_resolved_credential(value.as_str())?;
+        return Ok((Some(value), CREDENTIAL_SOURCE_SESSION));
     }
-}
-
-/// Stores a credential through the provider's configured durable source.
-/// `environment` is read-only and rejected by the service layer before this
-/// dispatch; `session_only` writes only the in-memory session cache.
-fn store_provider_credential(
-    _data_dir: &Path,
-    provider: &AgentProviderProfile,
-    credential: &str,
-    credential_store: &impl CredentialStore,
-) -> Result<()> {
-    match provider.credential_source.as_str() {
-        CREDENTIAL_SOURCE_RHO_VAULT => credential_store.set(&provider.id, credential),
-        CREDENTIAL_SOURCE_SESSION_ONLY => {
-            credential_session().set_session_credential(&provider.id, credential);
-            Ok(())
+    if let Some(value) = environment_credential(provider)? {
+        validate_resolved_credential(&value)?;
+        return Ok((Some(value), CREDENTIAL_SOURCE_ENVIRONMENT));
+    }
+    if let (Some(rscript), Some(r_environ_user), Some(variable)) =
+        (rscript, r_environ_user, provider.api_key_env.as_deref())
+    {
+        let declared_sensitive_names = settings
+            .providers
+            .iter()
+            .filter_map(|provider| provider.api_key_env.clone())
+            .filter(|name| !name.is_empty())
+            .collect::<std::collections::BTreeSet<_>>();
+        if let Some(value) = agent_config_environ::read_user_environ_credential(
+            rscript,
+            r_environ_user,
+            variable,
+            &declared_sensitive_names,
+        )? {
+            validate_resolved_credential(value.as_str())?;
+            return Ok((Some(value), CREDENTIAL_SOURCE_ENVIRONMENT));
         }
-        CREDENTIAL_SOURCE_ENVIRONMENT => bail!(
-            "This provider reads its API key from an environment variable; manage it outside Rho."
-        ),
-        other => bail!("Unsupported credential source: {other}"),
     }
-}
-
-/// Deletes the credential held by the provider's configured source.
-/// `environment` has nothing to delete and is rejected earlier.
-fn delete_provider_credential(
-    _data_dir: &Path,
-    provider: &AgentProviderProfile,
-    credential_store: &impl CredentialStore,
-) -> Result<()> {
-    match provider.credential_source.as_str() {
-        CREDENTIAL_SOURCE_RHO_VAULT => credential_store.delete(&provider.id),
-        CREDENTIAL_SOURCE_SESSION_ONLY => {
-            credential_session().clear_session_credential(&provider.id);
-            Ok(())
+    Ok(match credential_store.get(&provider.id)? {
+        Some(value) => {
+            validate_resolved_credential(&value)?;
+            (Some(value), CREDENTIAL_SOURCE_CONFIG_FILE)
         }
-        CREDENTIAL_SOURCE_ENVIRONMENT => bail!(
-            "This provider reads its API key from an environment variable; manage it outside Rho."
-        ),
-        other => bail!("Unsupported credential source: {other}"),
-    }
+        None => (None, CREDENTIAL_SOURCE_NOT_CONFIGURED),
+    })
 }
 
-fn environment_credential(provider: &AgentProviderProfile) -> Result<Option<String>> {
+fn validate_resolved_credential(value: &str) -> Result<()> {
+    ensure!(
+        !value.is_empty()
+            && value.len() <= MAX_CREDENTIAL_BYTES
+            && !value.chars().any(char::is_control),
+        "The resolved Provider credential is invalid."
+    );
+    Ok(())
+}
+
+fn environment_credential(provider: &AgentProviderProfile) -> Result<Option<Zeroizing<String>>> {
     let Some(name) = provider.api_key_env.as_deref() else {
         return Ok(None);
     };
+    // `std::env::var` panics for names containing `=` or NUL. Keep that API
+    // behind the same validation boundary as every execution entry point so a
+    // syntactically valid but semantically invalid config.yaml remains an
+    // ordinary configuration error.
+    validate_env_name(Some(name), provider.api_key_required)?;
     match std::env::var(name) {
-        Ok(value) if !value.is_empty() => Ok(Some(value)),
+        Ok(value) if !value.is_empty() => Ok(Some(Zeroizing::new(value))),
         Ok(_) | Err(std::env::VarError::NotPresent) => Ok(None),
         Err(std::env::VarError::NotUnicode(_)) => {
             bail!("The environment variable {name} does not contain valid UTF-8.")
@@ -242,11 +231,13 @@ fn environment_credential(provider: &AgentProviderProfile) -> Result<Option<Stri
 }
 
 fn environment_credential_present(provider: &AgentProviderProfile) -> bool {
-    provider
-        .api_key_env
-        .as_deref()
-        .and_then(|name| std::env::var_os(name))
-        .is_some_and(|value| !value.is_empty())
+    let Some(name) = provider.api_key_env.as_deref() else {
+        return false;
+    };
+    if validate_env_name(Some(name), provider.api_key_required).is_err() {
+        return false;
+    }
+    std::env::var_os(name).is_some_and(|value| !value.is_empty())
 }
 
 fn credential_audit_path(data_dir: &Path) -> PathBuf {
@@ -268,9 +259,10 @@ fn record_credential_audit(
     if let Err(error) =
         append_credential_audit(data_dir, event, provider_id, source, outcome, detail)
     {
-        crate::startup_runtime::write_startup_log(&format!(
-            "agent_llm_credential_audit outcome=failed detail={error:#}"
-        ));
+        let _ = error;
+        crate::startup_runtime::write_startup_log(
+            "agent_llm_credential_audit outcome=failed detail=redacted",
+        );
     }
 }
 
@@ -283,10 +275,11 @@ fn append_credential_audit(
     detail: Option<&str>,
 ) -> Result<()> {
     let _audit_guard = reveal_audit_guard();
-    append_credential_audit_unlocked(data_dir, event, provider_id, source, outcome, detail)
+    let _process_guard = CrossProcessAuditLock::acquire(data_dir)?;
+    append_credential_audit_locked(data_dir, event, provider_id, source, outcome, detail)
 }
 
-fn append_credential_audit_unlocked(
+fn append_credential_audit_locked(
     data_dir: &Path,
     event: &str,
     provider_id: &str,
@@ -301,21 +294,254 @@ fn append_credential_audit_unlocked(
         "credential_source": source,
         "outcome": outcome,
         "detail": detail,
+        "config_schema_version": (event == "config_store_adopted")
+            .then_some(agent_config::CONFIG_SCHEMA_VERSION),
     }))?;
+    ensure!(
+        line.len() + 1 <= MAX_CREDENTIAL_AUDIT_ROW_BYTES,
+        "The redacted credential audit row exceeds its bounded size."
+    );
     let path = credential_audit_path(data_dir);
-    let mut bytes = match std::fs::read(&path) {
-        Ok(existing) => existing,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
-        Err(error) => {
-            return Err(anyhow::Error::new(error))
-                .with_context(|| format!("reading the credential audit log {}", path.display()));
-        }
-    };
+    let mut bytes = read_credential_audit_bounded(&path)?;
     bytes.extend_from_slice(line.as_bytes());
     bytes.push(b'\n');
-    rotate_credential_audit_bytes(&mut bytes);
+    rotate_credential_audit_bytes(&mut bytes)?;
     atomic_write(&path, &bytes)
         .with_context(|| format!("writing the credential audit log {}", path.display()))
+}
+
+fn record_config_store_adopted(data_dir: &Path, config_path: &Path) {
+    let _audit_guard = reveal_audit_guard();
+    let _process_guard = match CrossProcessAuditLock::acquire(data_dir) {
+        Ok(guard) => guard,
+        Err(_error) => {
+            crate::startup_runtime::write_startup_log(
+                "agent_config_store_adopted outcome=failed detail=redacted",
+            );
+            return;
+        }
+    };
+    let audit_path = credential_audit_path(data_dir);
+    let retained = match read_credential_audit_bounded(&audit_path) {
+        Ok(bytes) => bytes,
+        Err(_error) => {
+            crate::startup_runtime::write_startup_log(
+                "agent_config_store_adopted outcome=failed detail=redacted",
+            );
+            return;
+        }
+    };
+    let exact_path = match normalized_config_adoption_identity(config_path) {
+        Ok(path) => path,
+        Err(_error) => {
+            crate::startup_runtime::write_startup_log(
+                "agent_config_store_adopted outcome=failed detail=redacted",
+            );
+            return;
+        }
+    };
+    let already_recorded = retained
+        .split(|byte| *byte == b'\n')
+        .filter(|line| !line.is_empty())
+        .filter_map(|line| serde_json::from_slice::<serde_json::Value>(line).ok())
+        .any(|row| {
+            row.get("event").and_then(serde_json::Value::as_str) == Some("config_store_adopted")
+                && row.get("detail").and_then(serde_json::Value::as_str)
+                    == Some(exact_path.as_str())
+        });
+    if !already_recorded
+        && let Err(error) = append_credential_audit_locked(
+            data_dir,
+            "config_store_adopted",
+            "",
+            CREDENTIAL_SOURCE_CONFIG_FILE,
+            "ok",
+            Some(&exact_path),
+        )
+    {
+        let _ = error;
+        crate::startup_runtime::write_startup_log(
+            "agent_config_store_adopted outcome=failed detail=redacted",
+        );
+    }
+}
+
+struct CrossProcessAuditLock {
+    file: std::fs::File,
+}
+
+#[cfg(windows)]
+#[repr(C)]
+struct AuditOverlapped {
+    internal: usize,
+    internal_high: usize,
+    offset: u32,
+    offset_high: u32,
+    event: *mut std::ffi::c_void,
+}
+
+#[cfg(windows)]
+impl AuditOverlapped {
+    fn zeroed() -> Self {
+        Self {
+            internal: 0,
+            internal_high: 0,
+            offset: 0,
+            offset_high: 0,
+            event: std::ptr::null_mut(),
+        }
+    }
+}
+
+#[cfg(windows)]
+#[link(name = "kernel32")]
+unsafe extern "system" {
+    fn LockFileEx(
+        file: *mut std::ffi::c_void,
+        flags: u32,
+        reserved: u32,
+        bytes_low: u32,
+        bytes_high: u32,
+        overlapped: *mut AuditOverlapped,
+    ) -> i32;
+    fn UnlockFileEx(
+        file: *mut std::ffi::c_void,
+        reserved: u32,
+        bytes_low: u32,
+        bytes_high: u32,
+        overlapped: *mut AuditOverlapped,
+    ) -> i32;
+}
+
+impl CrossProcessAuditLock {
+    fn acquire(data_dir: &Path) -> Result<Self> {
+        std::fs::create_dir_all(data_dir).context("creating the credential audit directory")?;
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .open(data_dir.join(CREDENTIAL_AUDIT_LOCK_FILE_NAME))
+            .context("opening the credential audit lock")?;
+        #[cfg(unix)]
+        {
+            use std::os::fd::AsRawFd;
+            loop {
+                let result = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) };
+                if result == 0 {
+                    break;
+                }
+                let error = io::Error::last_os_error();
+                if error.kind() != io::ErrorKind::Interrupted {
+                    return Err(anyhow::Error::new(error))
+                        .context("locking the credential audit journal");
+                }
+            }
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::io::AsRawHandle;
+            const LOCKFILE_EXCLUSIVE_LOCK: u32 = 0x0000_0002;
+            let mut overlapped = AuditOverlapped::zeroed();
+            let result = unsafe {
+                LockFileEx(
+                    file.as_raw_handle(),
+                    LOCKFILE_EXCLUSIVE_LOCK,
+                    0,
+                    u32::MAX,
+                    u32::MAX,
+                    &mut overlapped,
+                )
+            };
+            if result == 0 {
+                return Err(anyhow::Error::new(io::Error::last_os_error()))
+                    .context("locking the credential audit journal");
+            }
+        }
+        Ok(Self { file })
+    }
+}
+
+impl Drop for CrossProcessAuditLock {
+    fn drop(&mut self) {
+        #[cfg(unix)]
+        {
+            use std::os::fd::AsRawFd;
+            let _ = unsafe { libc::flock(self.file.as_raw_fd(), libc::LOCK_UN) };
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::io::AsRawHandle;
+            let mut overlapped = AuditOverlapped::zeroed();
+            let _ = unsafe {
+                UnlockFileEx(
+                    self.file.as_raw_handle(),
+                    0,
+                    u32::MAX,
+                    u32::MAX,
+                    &mut overlapped,
+                )
+            };
+        }
+    }
+}
+
+fn read_credential_audit_bounded(path: &Path) -> Result<Vec<u8>> {
+    let metadata = match std::fs::metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(anyhow::Error::new(error)).context("inspecting audit journal"),
+    };
+    ensure!(
+        metadata.is_file(),
+        "The credential audit journal is not a file."
+    );
+    let byte_len = usize::try_from(metadata.len()).unwrap_or(usize::MAX);
+    ensure!(
+        byte_len <= MAX_CREDENTIAL_AUDIT_RECOVERY_BYTES,
+        "The credential audit journal exceeds its bounded recovery size."
+    );
+    let file = std::fs::File::open(path).context("opening audit journal")?;
+    let mut bytes = Vec::with_capacity(byte_len.min(MAX_CREDENTIAL_AUDIT_BYTES));
+    file.take((MAX_CREDENTIAL_AUDIT_RECOVERY_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)
+        .context("reading audit journal")?;
+    ensure!(
+        bytes.len() <= MAX_CREDENTIAL_AUDIT_RECOVERY_BYTES,
+        "The credential audit journal changed beyond its bounded recovery size."
+    );
+
+    // Drop corrupt/partial rows while retaining every valid historical
+    // adoption identity. This is bounded recovery, never an unbounded whole-
+    // journal allocation.
+    let mut recovered = Vec::with_capacity(bytes.len().min(MAX_CREDENTIAL_AUDIT_BYTES));
+    for line in bytes
+        .split(|byte| *byte == b'\n')
+        .filter(|line| !line.is_empty())
+    {
+        if line.len() > MAX_CREDENTIAL_AUDIT_ROW_BYTES
+            || serde_json::from_slice::<serde_json::Value>(line).is_err()
+        {
+            continue;
+        }
+        recovered.extend_from_slice(line);
+        recovered.push(b'\n');
+    }
+    Ok(recovered)
+}
+
+fn normalized_config_adoption_identity(path: &Path) -> Result<String> {
+    ensure!(
+        path.is_absolute(),
+        "The adopted configuration path is not absolute."
+    );
+    ensure!(
+        !path.components().any(|component| matches!(
+            component,
+            std::path::Component::CurDir | std::path::Component::ParentDir
+        )),
+        "The adopted configuration path is not normalized."
+    );
+    Ok(path.as_os_str().to_string_lossy().into_owned())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -326,83 +552,6 @@ pub struct AgentLlmSettings {
     pub providers: Vec<AgentProviderProfile>,
     pub models: Vec<AgentModelProfile>,
     pub capability_routes: Vec<AgentCapabilityRoute>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct AgentLlmSettingsV1 {
-    schema_version: u32,
-    selected_model_id: String,
-    providers: Vec<AgentProviderProfileV3>,
-    models: Vec<AgentModelProfileV1>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct AgentLlmSettingsV2 {
-    schema_version: u32,
-    revision: u64,
-    providers: Vec<AgentProviderProfileV3>,
-    models: Vec<AgentModelProfileV2>,
-    capability_routes: Vec<AgentCapabilityRoute>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct AgentLlmSettingsV3 {
-    schema_version: u32,
-    revision: u64,
-    providers: Vec<AgentProviderProfileV3>,
-    models: Vec<AgentModelProfile>,
-    capability_routes: Vec<AgentCapabilityRoute>,
-}
-
-/// Schema V4 introduced explicit credential sources. V5 replaces the
-/// `system_store` source metadata with Rho's encrypted vault.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct AgentLlmSettingsV4 {
-    schema_version: u32,
-    revision: u64,
-    providers: Vec<AgentProviderProfile>,
-    models: Vec<AgentModelProfile>,
-    capability_routes: Vec<AgentCapabilityRoute>,
-}
-
-/// Provider shape before schema V4 added the explicit credential source.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct AgentProviderProfileV3 {
-    id: String,
-    display_name: String,
-    kind: String,
-    registered_provider_id: Option<String>,
-    api_key_env: Option<String>,
-    api_key_required: bool,
-    base_url: Option<String>,
-    base_url_env: Option<String>,
-    wire_api: Option<String>,
-    disable_stream_options: Option<bool>,
-}
-
-impl AgentProviderProfileV3 {
-    /// Pre-V4 providers become Rho Vault providers without probing any legacy
-    /// operating-system credential store.
-    fn into_current(self) -> AgentProviderProfile {
-        AgentProviderProfile {
-            id: self.id,
-            display_name: self.display_name,
-            kind: self.kind,
-            registered_provider_id: self.registered_provider_id,
-            api_key_env: self.api_key_env,
-            api_key_required: self.api_key_required,
-            base_url: self.base_url,
-            base_url_env: self.base_url_env,
-            wire_api: self.wire_api,
-            disable_stream_options: self.disable_stream_options,
-            credential_source: CREDENTIAL_SOURCE_RHO_VAULT.to_string(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
@@ -418,9 +567,6 @@ pub struct AgentProviderProfile {
     pub base_url_env: Option<String>,
     pub wire_api: Option<String>,
     pub disable_stream_options: Option<bool>,
-    /// Where this provider's API key lives: `rho_vault` (default),
-    /// `environment`, or `session_only`.
-    pub credential_source: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
@@ -443,32 +589,7 @@ pub struct AgentModelProfile {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct AgentModelProfileV2 {
-    id: String,
-    provider_id: String,
-    display_name: String,
-    model_id: String,
-    enabled: bool,
-    model_type: AgentCapabilityValue,
-    capabilities: BTreeMap<String, AgentCapabilityValue>,
-    last_test: Option<AgentModelTestResult>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct AgentModelProfileV1 {
-    id: String,
-    provider_id: String,
-    display_name: String,
-    model_id: String,
-    enabled: bool,
-    capabilities: AgentModelCapabilitiesV1,
-    last_test: Option<AgentModelTestResult>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct AgentModelCapabilitiesV1 {
+pub struct AgentConnectionCapabilities {
     pub tool_calling: String,
     pub reasoning: String,
     pub vision_input: String,
@@ -482,7 +603,7 @@ pub struct AgentCapabilityValue {
     pub source: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(deny_unknown_fields)]
 pub struct AgentCapabilityRoute {
     pub capability: String,
@@ -491,7 +612,7 @@ pub struct AgentCapabilityRoute {
     pub required_model_capabilities: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(deny_unknown_fields)]
 pub struct AgentModelCapabilityPatch {
     pub model_type: Option<String>,
@@ -517,7 +638,7 @@ pub struct AgentConnectionTestResponse {
     pub credential_status: String,
     pub model_resolved: bool,
     pub latency_ms: Option<u64>,
-    pub capabilities: AgentModelCapabilitiesV1,
+    pub capabilities: AgentConnectionCapabilities,
     pub message: String,
     pub error_class: Option<String>,
 }
@@ -531,11 +652,6 @@ impl std::fmt::Debug for SecretString {
 }
 
 impl SecretString {
-    #[cfg(test)]
-    fn new(value: String) -> Self {
-        Self(value)
-    }
-
     fn as_str(&self) -> &str {
         &self.0
     }
@@ -558,7 +674,7 @@ impl Drop for SecretString {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct RawAgentModelCapabilitiesV1 {
+struct RawAgentConnectionCapabilities {
     tool_calling: SecretString,
     reasoning: SecretString,
     vision_input: SecretString,
@@ -572,7 +688,7 @@ struct RawAgentConnectionTestResponse {
     credential_status: SecretString,
     model_resolved: bool,
     latency_ms: Option<u64>,
-    capabilities: RawAgentModelCapabilitiesV1,
+    capabilities: RawAgentConnectionCapabilities,
     #[serde(rename = "message")]
     _message: serde::de::IgnoredAny,
     error_class: Option<SecretString>,
@@ -624,14 +740,38 @@ pub struct AgentProviderProfileView {
     #[serde(flatten)]
     pub profile: AgentProviderProfile,
     pub credential_status: String,
-    /// Presentation-only description of where the effective credential was
-    /// observed. The persisted configured source is the flattened
-    /// `credential_source` field on the profile itself.
+    /// Presentation-only description of the effective presence-based source.
     pub credential_effective_source: String,
+    pub env_shadows_file: bool,
+    pub session_credential_present: bool,
+    pub config_file_credential_present: bool,
     /// Resolved endpoint shown in Settings. Reviewed Provider defaults are
     /// projected explicitly instead of appearing as an unexplained blank.
     pub effective_base_url: Option<String>,
     pub base_url_source: String,
+}
+
+#[derive(Debug, Clone, Serialize, specta::Type)]
+pub struct AgentConfigPermissionIssueView {
+    pub subject: String,
+    pub path: String,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
+    pub actual_mode: u64,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
+    pub expected_mode: u64,
+}
+
+#[derive(Debug, Clone, Serialize, specta::Type)]
+pub struct AgentConfigStoreView {
+    pub home_path: Option<String>,
+    pub config_path: Option<String>,
+    pub status: String,
+    pub detail: Option<String>,
+    #[specta(type = Option<rho_store::RuntimeOutputIpcNumber>)]
+    pub found_schema_version: Option<u64>,
+    /// Opaque process-local capability; never a raw content digest.
+    pub config_snapshot_id: String,
+    pub permission_issues: Vec<AgentConfigPermissionIssueView>,
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -676,7 +816,7 @@ pub struct AgentLlmSettingsView {
     pub schema_version: u32,
     #[specta(type = rho_store::RuntimeOutputIpcNumber)]
     pub revision: u64,
-    /// Compatibility projection for the existing composer. The persisted V2
+    /// Compatibility projection for the existing composer. The canonical
     /// authority is the `agent.chat` route, not this derived field.
     pub selected_model_id: String,
     pub providers: Vec<AgentProviderProfileView>,
@@ -684,6 +824,7 @@ pub struct AgentLlmSettingsView {
     pub selected_model: Option<AgentSelectedModelView>,
     pub capability_routes: Vec<AgentCapabilityRouteView>,
     pub user_environ: AgentUserEnvironInfo,
+    pub config_store: AgentConfigStoreView,
     pub validation_error: Option<String>,
 }
 
@@ -700,25 +841,78 @@ pub struct ResolvedAgentModel {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
-#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DeleteModelRequest {
     pub model_id: String,
     pub replacement_model_id: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct DeleteProviderRequest {
-    pub provider_id: String,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
     pub expected_revision: u64,
+    pub expected_config_snapshot_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
-#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DeleteProviderRequest {
+    pub provider_id: String,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
+    pub expected_revision: u64,
+    pub expected_config_snapshot_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AgentProviderSaveRequest {
+    pub provider: AgentProviderProfile,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
+    pub expected_revision: u64,
+    pub expected_config_snapshot_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AgentLlmCredentialDeleteRequest {
+    pub provider_id: String,
+    pub target: AgentCredentialWriteTarget,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
+    pub expected_revision: u64,
+    pub expected_config_snapshot_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AgentCapabilityRouteSaveRequest {
+    pub route: AgentCapabilityRoute,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
+    pub expected_revision: u64,
+    pub expected_config_snapshot_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AgentCapabilityRouteDeleteRequest {
+    pub capability: String,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
+    pub expected_revision: u64,
+    pub expected_config_snapshot_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AgentModelCapabilitiesRequest {
+    pub model_id: String,
+    pub patch: AgentModelCapabilityPatch,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
+    pub expected_revision: u64,
+    pub expected_config_snapshot_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AgentContextCapacityRequest {
     pub model_id: String,
     #[specta(type = rho_store::RuntimeOutputIpcNumber)]
     pub expected_revision: u64,
+    pub expected_config_snapshot_id: String,
     #[specta(type = rho_store::RuntimeOutputIpcNumber)]
     pub context_window_tokens: u64,
     #[specta(type = rho_store::RuntimeOutputIpcNumber)]
@@ -726,13 +920,69 @@ pub struct AgentContextCapacityRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
-#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AgentModelCapabilityDeclarationRequest {
     pub model_id: String,
     #[specta(type = rho_store::RuntimeOutputIpcNumber)]
     pub expected_revision: u64,
+    pub expected_config_snapshot_id: String,
     pub capability: String,
     pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AgentModelSaveRequest {
+    pub model: AgentModelProfile,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
+    pub expected_revision: u64,
+    pub expected_config_snapshot_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AgentModelTestRequest {
+    pub model_id: String,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
+    pub expected_revision: u64,
+    pub expected_config_snapshot_id: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, specta::Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentCredentialWriteTarget {
+    ConfigFile,
+    Session,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AgentLlmCredentialWriteRequest {
+    pub provider_id: String,
+    pub credential: String,
+    pub target: AgentCredentialWriteTarget,
+    pub confirm_replace: bool,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
+    pub expected_revision: u64,
+    pub expected_config_snapshot_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AgentConfigPermissionRepairRequest {
+    pub expected_config_path: String,
+    #[specta(type = rho_store::RuntimeOutputIpcNumber)]
+    pub expected_revision: u64,
+    pub expected_config_snapshot_id: String,
+}
+
+#[derive(Debug, Clone)]
+struct ConfigSnapshotRecord {
+    home: PathBuf,
+    config_path: PathBuf,
+    content_identity: String,
+    permission_identity: String,
+    revision: u64,
 }
 
 #[derive(Debug, Default)]
@@ -742,26 +992,6 @@ pub struct AgentModelTestState {
 }
 
 pub type AgentModelTestControl = Arc<Mutex<AgentModelTestState>>;
-
-pub fn settings_path(data_dir: &Path) -> PathBuf {
-    data_dir.join(SETTINGS_FILE_NAME)
-}
-
-pub fn settings_v1_backup_path(data_dir: &Path) -> PathBuf {
-    data_dir.join(SETTINGS_V1_BACKUP_FILE_NAME)
-}
-
-pub fn settings_v2_backup_path(data_dir: &Path) -> PathBuf {
-    data_dir.join(SETTINGS_V2_BACKUP_FILE_NAME)
-}
-
-pub fn settings_v3_backup_path(data_dir: &Path) -> PathBuf {
-    data_dir.join(SETTINGS_V3_BACKUP_FILE_NAME)
-}
-
-pub fn settings_v4_backup_path(data_dir: &Path) -> PathBuf {
-    data_dir.join(SETTINGS_V4_BACKUP_FILE_NAME)
-}
 
 fn capability_value(value: &str, source: &str) -> AgentCapabilityValue {
     AgentCapabilityValue {
@@ -820,341 +1050,525 @@ fn increment_revision(settings: &mut AgentLlmSettings) -> Result<()> {
     Ok(())
 }
 
-pub fn default_settings() -> AgentLlmSettings {
-    let mut capabilities = unknown_capabilities();
-    for (name, value) in [
-        ("function_call", "yes"),
-        ("reasoning", "yes"),
-        ("vision_input", "no"),
-        ("image_output", "no"),
-        ("image_edit", "no"),
-        ("audio_input", "no"),
-        ("audio_output", "no"),
-        ("structured_output", "yes"),
-        ("web_search", "no"),
-    ] {
-        capabilities.insert(name.to_string(), capability_value(value, "aisdk_catalog"));
-    }
+fn config_to_settings(config: &agent_config::AgentConfig) -> AgentLlmSettings {
     AgentLlmSettings {
-        schema_version: SETTINGS_SCHEMA_VERSION,
-        revision: 1,
-        providers: vec![AgentProviderProfile {
-            id: "provider-deepseek-existing".to_string(),
-            display_name: "DeepSeek".to_string(),
-            kind: "registered".to_string(),
-            registered_provider_id: Some("deepseek".to_string()),
-            api_key_env: Some("DEEPSEEK_API_KEY".to_string()),
-            api_key_required: true,
-            base_url: None,
-            base_url_env: None,
-            wire_api: None,
-            disable_stream_options: None,
-            credential_source: CREDENTIAL_SOURCE_RHO_VAULT.to_string(),
-        }],
-        models: vec![AgentModelProfile {
-            id: "model-deepseek-v4-flash".to_string(),
-            provider_id: "provider-deepseek-existing".to_string(),
-            display_name: "DeepSeek V4 Flash".to_string(),
-            model_id: "deepseek-v4-flash".to_string(),
-            enabled: true,
-            model_type: capability_value("language", "aisdk_catalog"),
-            capabilities,
-            context_window_tokens: CONSERVATIVE_CONTEXT_WINDOW_TOKENS,
-            reserved_output_tokens: CONSERVATIVE_RESERVED_OUTPUT_TOKENS,
-            context_capacity_source: "conservative_default".to_string(),
-            last_test: None,
-        }],
-        capability_routes: vec![AgentCapabilityRoute {
-            capability: "agent.chat".to_string(),
-            model_id: "model-deepseek-v4-flash".to_string(),
-            model_type: "language".to_string(),
-            required_model_capabilities: Vec::new(),
-        }],
+        schema_version: agent_config::CONFIG_SCHEMA_VERSION,
+        revision: config.revision,
+        providers: config
+            .providers
+            .iter()
+            .map(|provider| AgentProviderProfile {
+                id: provider.id.clone(),
+                display_name: provider.display_name.clone(),
+                kind: provider.kind.clone(),
+                registered_provider_id: provider.registered_provider_id.clone(),
+                api_key_env: provider.api_key_env.clone(),
+                api_key_required: provider.api_key_required,
+                base_url: provider.base_url.clone(),
+                base_url_env: provider.base_url_env.clone(),
+                wire_api: provider.wire_api.clone(),
+                disable_stream_options: provider.disable_stream_options,
+            })
+            .collect(),
+        models: config
+            .models
+            .iter()
+            .map(|model| AgentModelProfile {
+                id: model.id.clone(),
+                provider_id: model.provider_id.clone(),
+                display_name: model.display_name.clone(),
+                model_id: model.model_id.clone(),
+                enabled: model.enabled,
+                model_type: AgentCapabilityValue {
+                    value: model.model_type.value.clone(),
+                    source: model.model_type.source.clone(),
+                },
+                capabilities: model
+                    .capabilities
+                    .iter()
+                    .map(|(name, value)| {
+                        (
+                            name.clone(),
+                            AgentCapabilityValue {
+                                value: value.value.clone(),
+                                source: value.source.clone(),
+                            },
+                        )
+                    })
+                    .collect(),
+                context_window_tokens: model.context_window_tokens,
+                reserved_output_tokens: model.reserved_output_tokens,
+                context_capacity_source: model.context_capacity_source.clone(),
+                last_test: model.last_test.as_ref().map(|result| AgentModelTestResult {
+                    status: result.status.clone(),
+                    checked_at: result.checked_at.clone(),
+                    latency_ms: result.latency_ms,
+                    error_class: result.error_class.clone(),
+                    message: result.message.clone(),
+                }),
+            })
+            .collect(),
+        capability_routes: config
+            .capability_routes
+            .iter()
+            .map(|route| AgentCapabilityRoute {
+                capability: route.capability.clone(),
+                model_id: route.model_id.clone(),
+                model_type: route.model_type.clone(),
+                required_model_capabilities: route.required_model_capabilities.clone(),
+            })
+            .collect(),
     }
+}
+
+fn apply_settings_to_config(config: &mut agent_config::AgentConfig, settings: &AgentLlmSettings) {
+    let file_credentials = config
+        .providers
+        .iter_mut()
+        .filter_map(|provider| {
+            provider
+                .api_key
+                .take()
+                .map(|key| (provider.id.clone(), key))
+        })
+        .collect::<HashMap<_, _>>();
+    config.schema_version = agent_config::CONFIG_SCHEMA_VERSION;
+    config.revision = settings.revision;
+    config.providers = settings
+        .providers
+        .iter()
+        .map(|provider| agent_config::AgentConfigProvider {
+            id: provider.id.clone(),
+            display_name: provider.display_name.clone(),
+            kind: provider.kind.clone(),
+            registered_provider_id: provider.registered_provider_id.clone(),
+            api_key_env: provider.api_key_env.clone(),
+            api_key_required: provider.api_key_required,
+            base_url: provider.base_url.clone(),
+            base_url_env: provider.base_url_env.clone(),
+            wire_api: provider.wire_api.clone(),
+            disable_stream_options: provider.disable_stream_options,
+            api_key: file_credentials.get(&provider.id).cloned(),
+            extra: BTreeMap::new(),
+        })
+        .collect();
+    config.models = settings
+        .models
+        .iter()
+        .map(|model| agent_config::AgentConfigModel {
+            id: model.id.clone(),
+            provider_id: model.provider_id.clone(),
+            display_name: model.display_name.clone(),
+            model_id: model.model_id.clone(),
+            enabled: model.enabled,
+            model_type: agent_config::AgentConfigCapabilityValue {
+                value: model.model_type.value.clone(),
+                source: model.model_type.source.clone(),
+                extra: BTreeMap::new(),
+            },
+            capabilities: model
+                .capabilities
+                .iter()
+                .map(|(name, value)| {
+                    (
+                        name.clone(),
+                        agent_config::AgentConfigCapabilityValue {
+                            value: value.value.clone(),
+                            source: value.source.clone(),
+                            extra: BTreeMap::new(),
+                        },
+                    )
+                })
+                .collect(),
+            context_window_tokens: model.context_window_tokens,
+            reserved_output_tokens: model.reserved_output_tokens,
+            context_capacity_source: model.context_capacity_source.clone(),
+            last_test: model.last_test.as_ref().map(|result| {
+                agent_config::AgentConfigModelTestResult {
+                    status: result.status.clone(),
+                    checked_at: result.checked_at.clone(),
+                    latency_ms: result.latency_ms,
+                    error_class: result.error_class.clone(),
+                    message: result.message.clone(),
+                    extra: BTreeMap::new(),
+                }
+            }),
+            extra: BTreeMap::new(),
+        })
+        .collect();
+    config.capability_routes = settings
+        .capability_routes
+        .iter()
+        .map(|route| agent_config::AgentConfigCapabilityRoute {
+            capability: route.capability.clone(),
+            model_id: route.model_id.clone(),
+            model_type: route.model_type.clone(),
+            required_model_capabilities: route.required_model_capabilities.clone(),
+            extra: BTreeMap::new(),
+        })
+        .collect();
+}
+
+fn empty_config() -> agent_config::AgentConfig {
+    agent_config::AgentConfig {
+        schema_version: agent_config::CONFIG_SCHEMA_VERSION,
+        revision: 0,
+        providers: Vec::new(),
+        models: Vec::new(),
+        capability_routes: Vec::new(),
+        extra: BTreeMap::new(),
+    }
+}
+
+struct LoadedV6Document {
+    config: agent_config::AgentConfig,
+}
+
+fn load_v6_document(data_dir: &Path) -> Result<LoadedV6Document> {
+    let home = agent_config::rho_home()?;
+    let snapshot = agent_config::read_config_snapshot(&home)?;
+    // Adoption means that the canonical path was safely inspectable, not just
+    // that environment/path resolution produced a string.  In particular, do
+    // not permanently adopt a symlink, wrong-type object, or unreadable path.
+    record_config_store_adopted(data_dir, &agent_config::config_file_path(&home));
+    match snapshot.load {
+        agent_config::AgentConfigLoad::Loaded(config) => Ok(LoadedV6Document { config }),
+        agent_config::AgentConfigLoad::Missing { path } => bail!(
+            "No canonical model configuration exists at {}.",
+            path.display()
+        ),
+        agent_config::AgentConfigLoad::UnsupportedSchemaVersion { path, found } => {
+            bail!(
+                "The canonical model configuration at {} uses unsupported schema version {found}.",
+                path.display()
+            )
+        }
+        agent_config::AgentConfigLoad::Malformed { path, reason } => {
+            bail!(
+                "The canonical model configuration at {} is unavailable: {reason}.",
+                path.display()
+            )
+        }
+    }
+}
+
+fn config_snapshot_store() -> &'static Mutex<HashMap<String, ConfigSnapshotRecord>> {
+    CONFIG_SNAPSHOTS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn mint_config_snapshot(record: ConfigSnapshotRecord) -> String {
+    let token = uuid::Uuid::new_v4().to_string();
+    let mut snapshots = config_snapshot_store()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if snapshots.len() >= 128 {
+        // Opaque capabilities are intentionally short-lived. Random eviction
+        // keeps the registry bounded without exposing timing or content data.
+        if let Some(oldest) = snapshots.keys().next().cloned() {
+            snapshots.remove(&oldest);
+        }
+    }
+    snapshots.insert(token.clone(), record);
+    token
+}
+
+fn config_permission_views(
+    issues: &[agent_config::ConfigPermissionIssue],
+) -> Vec<AgentConfigPermissionIssueView> {
+    issues
+        .iter()
+        .map(|issue| AgentConfigPermissionIssueView {
+            subject: match issue.subject {
+                agent_config::ConfigPermissionSubject::RhoHome => "rho_home",
+                agent_config::ConfigPermissionSubject::ConfigFile => "config_file",
+            }
+            .to_string(),
+            path: issue.path.display().to_string(),
+            actual_mode: u64::from(issue.actual_mode),
+            expected_mode: u64::from(issue.expected_mode),
+        })
+        .collect()
+}
+
+fn inspect_config_store(
+    data_dir: &Path,
+) -> Result<(AgentConfigStoreView, Option<agent_config::AgentConfig>)> {
+    let home = match agent_config::rho_home() {
+        Ok(home) => home,
+        Err(_error) => {
+            return Ok((
+                AgentConfigStoreView {
+                    home_path: None,
+                    config_path: None,
+                    status: "home_unavailable".to_string(),
+                    detail: Some(
+                        "The canonical Rho home could not be resolved safely.".to_string(),
+                    ),
+                    found_schema_version: None,
+                    config_snapshot_id: uuid::Uuid::new_v4().to_string(),
+                    permission_issues: Vec::new(),
+                },
+                None,
+            ));
+        }
+    };
+    let config_path = agent_config::config_file_path(&home);
+    let snapshot = match agent_config::read_config_snapshot(&home) {
+        Ok(snapshot) => snapshot,
+        Err(_error) => {
+            return Ok((
+                AgentConfigStoreView {
+                    home_path: Some(home.display().to_string()),
+                    config_path: Some(config_path.display().to_string()),
+                    status: "unavailable".to_string(),
+                    detail: Some(
+                        "The canonical model configuration could not be read safely.".to_string(),
+                    ),
+                    found_schema_version: None,
+                    // An unregistered capability makes every mutation fail
+                    // closed while still giving the UI an opaque snapshot.
+                    config_snapshot_id: uuid::Uuid::new_v4().to_string(),
+                    permission_issues: Vec::new(),
+                },
+                None,
+            ));
+        }
+    };
+    let permission_state = match agent_config::permission_state(&home) {
+        Ok(state) => state,
+        Err(_error) => {
+            return Ok((
+                AgentConfigStoreView {
+                    home_path: Some(home.display().to_string()),
+                    config_path: Some(config_path.display().to_string()),
+                    status: "unavailable".to_string(),
+                    detail: Some(
+                        "The canonical model configuration metadata could not be inspected safely."
+                            .to_string(),
+                    ),
+                    found_schema_version: None,
+                    config_snapshot_id: uuid::Uuid::new_v4().to_string(),
+                    permission_issues: Vec::new(),
+                },
+                None,
+            ));
+        }
+    };
+    record_config_store_adopted(data_dir, &config_path);
+    let content_identity = snapshot.content_identity;
+    let load = snapshot.load;
+    let (status, detail, found_schema_version, revision, config) = match load {
+        agent_config::AgentConfigLoad::Loaded(config) => (
+            "loaded".to_string(),
+            config.has_unknown_fields().then(|| {
+                "This file contains fields this Rho version does not own; durable Settings edits are disabled.".to_string()
+            }),
+            Some(u64::from(config.schema_version)),
+            config.revision,
+            Some(config),
+        ),
+        agent_config::AgentConfigLoad::Missing { .. } => (
+            "missing".to_string(),
+            None,
+            None,
+            0,
+            None,
+        ),
+        agent_config::AgentConfigLoad::UnsupportedSchemaVersion { found, .. } => (
+            "unsupported_schema_version".to_string(),
+            None,
+            Some(found),
+            0,
+            None,
+        ),
+        agent_config::AgentConfigLoad::Malformed { reason, .. } => (
+            "malformed".to_string(),
+            Some(reason),
+            None,
+            0,
+            None,
+        ),
+    };
+    let config_snapshot_id = mint_config_snapshot(ConfigSnapshotRecord {
+        home: home.clone(),
+        config_path: config_path.clone(),
+        content_identity,
+        permission_identity: permission_state.identity,
+        revision,
+    });
+    Ok((
+        AgentConfigStoreView {
+            home_path: Some(home.display().to_string()),
+            config_path: Some(config_path.display().to_string()),
+            status,
+            detail,
+            found_schema_version,
+            config_snapshot_id,
+            permission_issues: config_permission_views(&permission_state.issues),
+        },
+        config,
+    ))
+}
+
+#[derive(Debug)]
+struct VerifiedConfigMutation {
+    token: String,
+    record: ConfigSnapshotRecord,
+    config: Option<agent_config::AgentConfig>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ConfigMutationPolicy {
+    DurableYaml,
+    SessionOnly,
+    PermissionRepair,
+}
+
+fn verify_config_mutation(
+    expected_revision: u64,
+    expected_config_snapshot_id: &str,
+    policy: ConfigMutationPolicy,
+) -> Result<VerifiedConfigMutation> {
+    let record = config_snapshot_store()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .get(expected_config_snapshot_id)
+        .cloned()
+        .context("The model configuration snapshot expired. Reload Settings and try again.")?;
+    ensure!(
+        record.revision == expected_revision,
+        "Model settings changed while this editor was open. Reload and try again."
+    );
+    ensure!(
+        agent_config::rho_home()? == record.home,
+        "The canonical model configuration path changed. Reload Settings and try again."
+    );
+    let permissions = agent_config::permission_state(&record.home)?;
+    ensure!(
+        permissions.identity == record.permission_identity,
+        "The canonical model configuration permissions changed. Reload Settings and try again."
+    );
+    if policy == ConfigMutationPolicy::DurableYaml {
+        ensure!(
+            permissions.issues.is_empty(),
+            "The canonical model configuration has loose permissions. Use the explicit repair action before saving."
+        );
+    }
+    let snapshot = agent_config::read_config_snapshot(&record.home)?;
+    ensure!(
+        snapshot.content_identity == record.content_identity,
+        "The canonical model configuration changed outside Rho. Reload Settings and try again."
+    );
+    let config = match snapshot.load {
+        agent_config::AgentConfigLoad::Loaded(config) => {
+            if policy == ConfigMutationPolicy::DurableYaml {
+                ensure!(
+                    !config.has_unknown_fields(),
+                    "The canonical model configuration contains unsupported fields. Edit it directly before using Settings mutations."
+                );
+            }
+            Some(config)
+        }
+        agent_config::AgentConfigLoad::Missing { .. } => None,
+        agent_config::AgentConfigLoad::UnsupportedSchemaVersion { .. }
+            if policy == ConfigMutationPolicy::PermissionRepair =>
+        {
+            None
+        }
+        agent_config::AgentConfigLoad::UnsupportedSchemaVersion { .. } => {
+            bail!("The canonical model configuration uses an unsupported schema version.")
+        }
+        agent_config::AgentConfigLoad::Malformed { .. }
+            if policy == ConfigMutationPolicy::PermissionRepair =>
+        {
+            None
+        }
+        agent_config::AgentConfigLoad::Malformed { reason, .. } => {
+            bail!("The canonical model configuration is unavailable: {reason}.")
+        }
+    };
+    Ok(VerifiedConfigMutation {
+        token: expected_config_snapshot_id.to_string(),
+        record,
+        config,
+    })
+}
+
+fn consume_config_snapshot(token: &str) {
+    config_snapshot_store()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .remove(token);
+}
+
+fn commit_settings_mutation(
+    mutation: VerifiedConfigMutation,
+    settings: &AgentLlmSettings,
+) -> Result<()> {
+    commit_settings_mutation_with(mutation, settings, |home, config, expected_identity| {
+        agent_config::save_config_cas(home, config, expected_identity).map(|_| ())
+    })
+}
+
+fn commit_settings_mutation_with<F>(
+    mutation: VerifiedConfigMutation,
+    settings: &AgentLlmSettings,
+    write: F,
+) -> Result<()>
+where
+    F: FnOnce(&Path, &agent_config::AgentConfig, &str) -> Result<()>,
+{
+    // Every durable mutation crosses one final whole-document invariant. A
+    // locally valid model/provider edit must not persist a document whose
+    // existing capability routes that evidence has made incompatible.
+    validate_settings(settings)?;
+    let mut config = mutation.config.unwrap_or_else(empty_config);
+    apply_settings_to_config(&mut config, settings);
+    write(
+        &mutation.record.home,
+        &config,
+        &mutation.record.content_identity,
+    )?;
+    consume_config_snapshot(&mutation.token);
+    Ok(())
 }
 
 pub fn load_settings(data_dir: &Path) -> Result<AgentLlmSettings> {
-    let path = settings_path(data_dir);
-    if !path.exists() {
-        let settings = default_settings();
-        validate_settings(&settings)?;
-        return Ok(settings);
-    }
-    let bytes = std::fs::read(&path)
-        .with_context(|| format!("reading Agent LLM settings {}", path.display()))?;
-    ensure!(
-        bytes.len() <= MAX_SETTINGS_BYTES,
-        "Agent LLM settings exceed the 256 KiB limit."
-    );
-    let envelope: serde_json::Value = serde_json::from_slice(&bytes)
-        .with_context(|| format!("decoding Agent LLM settings {}", path.display()))?;
-    let schema_version = envelope
-        .get("schema_version")
-        .and_then(serde_json::Value::as_u64)
-        .context("Agent LLM settings are missing a numeric schema_version.")?;
-    let settings = match schema_version {
-        1 => {
-            let legacy: AgentLlmSettingsV1 = serde_json::from_value(envelope)
-                .with_context(|| format!("decoding V1 Agent LLM settings {}", path.display()))?;
-            validate_settings_v1(&legacy)?;
-            migrate_settings_v1(legacy)?
-        }
-        2 => {
-            let legacy: AgentLlmSettingsV2 = serde_json::from_value(envelope)
-                .with_context(|| format!("decoding V2 Agent LLM settings {}", path.display()))?;
-            migrate_settings_v2(legacy)?
-        }
-        3 => {
-            let legacy: AgentLlmSettingsV3 = serde_json::from_value(envelope)
-                .with_context(|| format!("decoding V3 Agent LLM settings {}", path.display()))?;
-            migrate_settings_v3(legacy)?
-        }
-        4 => {
-            let legacy: AgentLlmSettingsV4 = serde_json::from_value(envelope)
-                .with_context(|| format!("decoding V4 Agent LLM settings {}", path.display()))?;
-            migrate_settings_v4(legacy)?
-        }
-        5 => serde_json::from_value(envelope)
-            .with_context(|| format!("decoding V5 Agent LLM settings {}", path.display()))?,
-        _ => bail!("Unsupported Agent LLM schema version."),
-    };
+    let loaded = load_v6_document(data_dir)?;
+    let settings = config_to_settings(&loaded.config);
     validate_settings(&settings)?;
     Ok(settings)
 }
 
-pub fn save_settings(data_dir: &Path, settings: &AgentLlmSettings) -> Result<()> {
-    save_settings_with(data_dir, settings, |path, bytes| atomic_write(path, bytes))
-}
-
-fn save_settings_with<F>(data_dir: &Path, settings: &AgentLlmSettings, write: F) -> Result<()>
-where
-    F: FnMut(&Path, &[u8]) -> Result<()>,
-{
-    save_settings_with_components(
-        data_dir,
-        settings,
-        |value| serde_json::to_vec_pretty(value).map_err(Into::into),
-        write,
-    )
-}
-
-fn save_settings_with_components<S, F>(
-    data_dir: &Path,
-    settings: &AgentLlmSettings,
-    serialize: S,
-    mut write: F,
-) -> Result<()>
-where
-    S: FnOnce(&AgentLlmSettings) -> Result<Vec<u8>>,
-    F: FnMut(&Path, &[u8]) -> Result<()>,
-{
-    validate_settings(settings)?;
-    let path = settings_path(data_dir);
-    let bytes = serialize(settings)?;
-    ensure!(
-        bytes.len() <= MAX_SETTINGS_BYTES,
-        "Agent LLM settings exceed the 256 KiB limit."
-    );
-
-    if path.exists() {
-        let current = std::fs::read(&path)
-            .with_context(|| format!("reading Agent LLM settings {}", path.display()))?;
-        ensure!(
-            current.len() <= MAX_SETTINGS_BYTES,
-            "Existing Agent LLM settings exceed the 256 KiB limit."
-        );
-        let envelope: serde_json::Value = serde_json::from_slice(&current)
-            .with_context(|| format!("decoding Agent LLM settings {}", path.display()))?;
-        let version = envelope
-            .get("schema_version")
-            .and_then(serde_json::Value::as_u64)
-            .context("Agent LLM settings are missing a numeric schema_version.")?;
-        if matches!(version, 1 | 2 | 3 | 4) {
-            let backup_path = match version {
-                1 => settings_v1_backup_path(data_dir),
-                2 => settings_v2_backup_path(data_dir),
-                3 => settings_v3_backup_path(data_dir),
-                _ => settings_v4_backup_path(data_dir),
-            };
-            if backup_path.exists() {
-                let existing = std::fs::read(&backup_path).with_context(|| {
-                    format!(
-                        "reading Agent LLM migration backup {}",
-                        backup_path.display()
-                    )
-                })?;
-                ensure!(
-                    existing == current,
-                    "The existing Agent LLM migration backup does not match the source."
-                );
-            } else {
-                write(&backup_path, &current).with_context(|| {
-                    format!(
-                        "writing Agent LLM migration backup {}",
-                        backup_path.display()
-                    )
-                })?;
-            }
-        } else {
-            ensure!(version == 5, "Unsupported Agent LLM schema version.");
-        }
-    }
-
-    write(&path, &bytes).with_context(|| format!("writing Agent LLM settings {}", path.display()))
-}
-
-fn migrate_settings_v1(legacy: AgentLlmSettingsV1) -> Result<AgentLlmSettings> {
-    let selected_model_id = legacy.selected_model_id.clone();
-    let models = legacy
-        .models
-        .into_iter()
-        .map(|model| {
-            let source = match model.capabilities.source.as_str() {
-                "catalog" => "aisdk_catalog",
-                "declared" => "user_declared",
-                "probe" => "provider_response",
-                _ => "unknown",
-            };
-            let mut capabilities = unknown_capabilities();
-            capabilities.insert(
-                "function_call".to_string(),
-                capability_value(&model.capabilities.tool_calling, source),
-            );
-            capabilities.insert(
-                "reasoning".to_string(),
-                capability_value(&model.capabilities.reasoning, source),
-            );
-            capabilities.insert(
-                "vision_input".to_string(),
-                capability_value(&model.capabilities.vision_input, source),
-            );
-            AgentModelProfile {
-                id: model.id,
-                provider_id: model.provider_id,
-                display_name: model.display_name,
-                model_id: model.model_id,
-                enabled: model.enabled,
-                model_type: capability_value("unknown", "unknown"),
-                capabilities,
-                context_window_tokens: CONSERVATIVE_CONTEXT_WINDOW_TOKENS,
-                reserved_output_tokens: CONSERVATIVE_RESERVED_OUTPUT_TOKENS,
-                context_capacity_source: "conservative_default".to_string(),
-                last_test: model.last_test,
-            }
-        })
-        .collect::<Vec<_>>();
-    let settings = AgentLlmSettings {
-        schema_version: SETTINGS_SCHEMA_VERSION,
-        revision: 0,
-        providers: legacy
-            .providers
-            .into_iter()
-            .map(AgentProviderProfileV3::into_current)
-            .collect(),
-        models,
-        capability_routes: vec![AgentCapabilityRoute {
-            capability: "agent.chat".to_string(),
-            model_id: selected_model_id,
-            model_type: "language".to_string(),
-            required_model_capabilities: Vec::new(),
-        }],
-    };
-    validate_settings(&settings)?;
-    Ok(settings)
-}
-
-fn migrate_settings_v2(legacy: AgentLlmSettingsV2) -> Result<AgentLlmSettings> {
-    ensure!(legacy.schema_version == 2, "Expected Agent LLM schema V2.");
-    let settings = AgentLlmSettings {
-        schema_version: SETTINGS_SCHEMA_VERSION,
-        revision: legacy.revision,
-        providers: legacy
-            .providers
-            .into_iter()
-            .map(AgentProviderProfileV3::into_current)
-            .collect(),
-        models: legacy
-            .models
-            .into_iter()
-            .map(|model| AgentModelProfile {
-                id: model.id,
-                provider_id: model.provider_id,
-                display_name: model.display_name,
-                model_id: model.model_id,
-                enabled: model.enabled,
-                model_type: model.model_type,
-                capabilities: model.capabilities,
-                context_window_tokens: CONSERVATIVE_CONTEXT_WINDOW_TOKENS,
-                reserved_output_tokens: CONSERVATIVE_RESERVED_OUTPUT_TOKENS,
-                context_capacity_source: "conservative_default".to_string(),
-                last_test: model.last_test,
-            })
-            .collect(),
-        capability_routes: legacy.capability_routes,
-    };
-    validate_settings(&settings)?;
-    Ok(settings)
-}
-
-fn migrate_settings_v3(legacy: AgentLlmSettingsV3) -> Result<AgentLlmSettings> {
-    ensure!(legacy.schema_version == 3, "Expected Agent LLM schema V3.");
-    let settings = AgentLlmSettings {
-        schema_version: SETTINGS_SCHEMA_VERSION,
-        revision: legacy.revision,
-        providers: legacy
-            .providers
-            .into_iter()
-            .map(AgentProviderProfileV3::into_current)
-            .collect(),
-        models: legacy.models,
-        capability_routes: legacy.capability_routes,
-    };
-    validate_settings(&settings)?;
-    Ok(settings)
-}
-
-fn migrate_settings_v4(legacy: AgentLlmSettingsV4) -> Result<AgentLlmSettings> {
-    ensure!(legacy.schema_version == 4, "Expected Agent LLM schema V4.");
-    let settings = AgentLlmSettings {
-        schema_version: SETTINGS_SCHEMA_VERSION,
-        revision: legacy.revision,
-        providers: legacy
-            .providers
-            .into_iter()
-            .map(|mut provider| {
-                if provider.credential_source == LEGACY_CREDENTIAL_SOURCE_SYSTEM_STORE {
-                    provider.credential_source = CREDENTIAL_SOURCE_RHO_VAULT.to_string();
-                }
-                provider
-            })
-            .collect(),
-        models: legacy.models,
-        capability_routes: legacy.capability_routes,
-    };
-    validate_settings(&settings)?;
-    Ok(settings)
-}
-
-pub fn save_provider(data_dir: &Path, provider: AgentProviderProfile) -> Result<AgentLlmSettings> {
-    let _provider_op_lock = credential_operation_lock(&provider.id);
+pub fn save_provider(
+    _data_dir: &Path,
+    request: &AgentProviderSaveRequest,
+) -> Result<AgentLlmSettings> {
+    let _provider_op_lock = credential_operation_lock(&request.provider.id);
     let _guard = settings_mutation_guard();
-    let mut settings = load_settings(data_dir)?;
-    let audited_provider_id = provider.id.clone();
+    let mutation = verify_config_mutation(
+        request.expected_revision,
+        &request.expected_config_snapshot_id,
+        ConfigMutationPolicy::DurableYaml,
+    )?;
+    validate_provider(&request.provider)?;
+    let mut settings = mutation
+        .config
+        .as_ref()
+        .map(config_to_settings)
+        .unwrap_or_else(|| config_to_settings(&empty_config()));
     if let Some(slot) = settings
         .providers
         .iter_mut()
-        .find(|item| item.id == provider.id)
+        .find(|provider| provider.id == request.provider.id)
     {
-        *slot = provider;
+        *slot = request.provider.clone();
     } else {
-        settings.providers.push(provider);
+        settings.providers.push(request.provider.clone());
     }
     increment_revision(&mut settings)?;
-    save_settings(data_dir, &settings)?;
-    // Every successful Provider profile write invalidates a staged reveal;
-    // source/key-requirement changes are the critical cases, while advancing
-    // on all profile writes makes the boundary conservative and auditable.
-    advance_credential_generation(&audited_provider_id);
+    validate_settings(&settings)?;
+    commit_settings_mutation(mutation, &settings)?;
     Ok(settings)
 }
 
@@ -1162,41 +1576,35 @@ pub fn delete_provider(
     data_dir: &Path,
     request: &DeleteProviderRequest,
 ) -> Result<AgentLlmSettings> {
-    delete_provider_with_store(data_dir, request, &RhoCredentialVaultStore::new(data_dir))
-}
-
-fn delete_provider_with_store(
-    data_dir: &Path,
-    request: &DeleteProviderRequest,
-    credential_store: &impl CredentialStore,
-) -> Result<AgentLlmSettings> {
-    delete_provider_with_store_and_save(data_dir, request, credential_store, save_settings)
-}
-
-fn delete_provider_with_store_and_save<F>(
-    data_dir: &Path,
-    request: &DeleteProviderRequest,
-    credential_store: &impl CredentialStore,
-    save: F,
-) -> Result<AgentLlmSettings>
-where
-    F: FnOnce(&Path, &AgentLlmSettings) -> Result<()>,
-{
     let _provider_op_lock = credential_operation_lock(&request.provider_id);
     let _guard = settings_mutation_guard();
-    let mut settings = load_settings(data_dir)?;
-    ensure!(
-        settings.revision == request.expected_revision,
-        "Model settings changed while this provider delete confirmation was open. Reload and review the updated impact."
-    );
-    let provider_id = request.provider_id.as_str();
-    validate_bounded(provider_id, "Provider ID", MAX_ID_LENGTH)?;
-    let provider = settings
+    let mutation = verify_config_mutation(
+        request.expected_revision,
+        &request.expected_config_snapshot_id,
+        ConfigMutationPolicy::DurableYaml,
+    )?;
+    let config = mutation
+        .config
+        .as_ref()
+        .context("Create config.yaml before deleting a provider.")?;
+    let file_credential_present = config
         .providers
         .iter()
-        .find(|provider| provider.id == provider_id)
-        .with_context(|| format!("Unknown provider: {provider_id}"))?
-        .clone();
+        .find(|provider| provider.id == request.provider_id)
+        .and_then(|provider| provider.api_key.as_deref())
+        .is_some_and(|value| !value.is_empty());
+    let session_credential_present =
+        credential_session().has_session_credential(&request.provider_id);
+    let mut settings = config_to_settings(config);
+    let provider_id = request.provider_id.as_str();
+    validate_bounded(provider_id, "Provider ID", MAX_ID_LENGTH)?;
+    ensure!(
+        settings
+            .providers
+            .iter()
+            .any(|provider| provider.id == provider_id),
+        "Unknown provider: {provider_id}"
+    );
     let model_ids = settings
         .models
         .iter()
@@ -1220,101 +1628,89 @@ where
         .retain(|provider| provider.id != provider_id);
     increment_revision(&mut settings)?;
     validate_settings(&settings)?;
-    // Environment-sourced credentials are managed outside Rho; deleting the
-    // provider never touches them.
-    let manages_credential =
-        provider.api_key_required && provider.credential_source != CREDENTIAL_SOURCE_ENVIRONMENT;
-    let previous_credential = if manages_credential {
-        resolve_provider_credential(data_dir, &provider, credential_store)?
-    } else {
-        None
-    };
-    if manages_credential {
-        delete_provider_credential(data_dir, &provider, credential_store)?;
-    }
-    if let Err(save_error) = save(data_dir, &settings) {
-        let recovery = if let Some(credential) = previous_credential.as_deref() {
-            if let Err(restore_error) =
-                store_provider_credential(data_dir, &provider, credential, credential_store)
-            {
-                return Err(anyhow::anyhow!(
-                    "Provider metadata could not be saved ({save_error:#}), and its credential could not be restored ({restore_error:#})."
-                ));
-            }
-            "Provider metadata could not be saved; its credential was restored"
-        } else {
-            "Provider metadata could not be saved; no credential needed restoration"
-        };
-        return Err(save_error.context(recovery));
-    }
-    if manages_credential {
+    commit_settings_mutation(mutation, &settings)?;
+    credential_session().clear_session_credential(provider_id);
+    if file_credential_present || session_credential_present {
         record_credential_audit(
             data_dir,
             "provider_credential_delete",
             provider_id,
-            &provider.credential_source,
+            "config_file_and_session",
             "ok",
             None,
         );
     }
-    advance_credential_generation(provider_id);
     Ok(settings)
 }
 
-pub fn set_credential(
-    data_dir: &Path,
-    provider_id: &str,
-    credential: &str,
-    confirm_replace: bool,
-) -> Result<()> {
-    set_credential_with_store(
-        data_dir,
-        provider_id,
-        credential,
-        confirm_replace,
-        &RhoCredentialVaultStore::new(data_dir),
-    )
-}
-
-fn set_credential_with_store(
-    data_dir: &Path,
-    provider_id: &str,
-    credential: &str,
-    confirm_replace: bool,
-    credential_store: &impl CredentialStore,
-) -> Result<()> {
-    let _provider_op_lock = credential_operation_lock(provider_id);
+pub fn set_credential(data_dir: &Path, request: &AgentLlmCredentialWriteRequest) -> Result<()> {
+    let _provider_op_lock = credential_operation_lock(&request.provider_id);
     let _guard = settings_mutation_guard();
-    let settings = load_settings(data_dir)?;
-    let provider = settings
+    let mut mutation = verify_config_mutation(
+        request.expected_revision,
+        &request.expected_config_snapshot_id,
+        match request.target {
+            AgentCredentialWriteTarget::ConfigFile => ConfigMutationPolicy::DurableYaml,
+            AgentCredentialWriteTarget::Session => ConfigMutationPolicy::SessionOnly,
+        },
+    )?;
+    let config = mutation
+        .config
+        .as_mut()
+        .context("Create config.yaml with this provider before saving its API key.")?;
+    let provider = config
         .providers
-        .iter()
-        .find(|provider| provider.id == provider_id)
-        .with_context(|| format!("Unknown provider: {provider_id}"))?;
+        .iter_mut()
+        .find(|provider| provider.id == request.provider_id)
+        .with_context(|| format!("Unknown provider: {}", request.provider_id))?;
     ensure!(
         provider.api_key_required,
         "This provider does not require an API key."
     );
     ensure!(
-        provider.credential_source != CREDENTIAL_SOURCE_ENVIRONMENT,
-        "This provider reads its API key from an environment variable; manage it outside Rho."
+        !request.credential.is_empty(),
+        "Enter an API key before saving."
     );
-    ensure!(!credential.is_empty(), "Enter an API key before saving.");
     ensure!(
-        !credential.chars().any(char::is_control),
+        !request.credential.chars().any(char::is_control),
         "The API key contains control characters or line breaks. Paste the key exactly as issued."
     );
     ensure!(
-        credential.len() <= MAX_CREDENTIAL_BYTES,
+        request.credential.len() <= MAX_CREDENTIAL_BYTES,
         "The API key exceeds the {MAX_CREDENTIAL_BYTES_LABEL} storage limit."
     );
-    let existing = resolve_provider_credential(data_dir, provider, credential_store)?;
-    let replacing = existing.is_some();
+    let replacing = match request.target {
+        AgentCredentialWriteTarget::Session => {
+            credential_session().has_session_credential(&request.provider_id)
+        }
+        AgentCredentialWriteTarget::ConfigFile => provider
+            .api_key
+            .as_deref()
+            .is_some_and(|value| !value.is_empty()),
+    };
     ensure!(
-        confirm_replace || !replacing,
-        "An API key is already saved for this provider. Confirm replacement to overwrite it."
+        request.confirm_replace || !replacing,
+        "An API key already exists in that target. Confirm replacement to overwrite it."
     );
-    let result = store_provider_credential(data_dir, provider, credential, credential_store);
+    match request.target {
+        AgentCredentialWriteTarget::Session => {
+            credential_session().set_session_credential(&request.provider_id, &request.credential);
+            consume_config_snapshot(&mutation.token);
+        }
+        AgentCredentialWriteTarget::ConfigFile => {
+            provider.api_key = Some(Zeroizing::new(request.credential.clone()));
+            config.revision = config
+                .revision
+                .checked_add(1)
+                .context("Agent LLM settings revision overflowed.")?;
+            agent_config::save_config_cas(
+                &mutation.record.home,
+                config,
+                &mutation.record.content_identity,
+            )?;
+            consume_config_snapshot(&mutation.token);
+        }
+    }
     record_credential_audit(
         data_dir,
         if replacing {
@@ -1322,64 +1718,83 @@ fn set_credential_with_store(
         } else {
             "credential_set"
         },
-        provider_id,
-        &provider.credential_source,
-        if result.is_ok() { "ok" } else { "failed" },
+        &request.provider_id,
+        match request.target {
+            AgentCredentialWriteTarget::ConfigFile => CREDENTIAL_SOURCE_CONFIG_FILE,
+            AgentCredentialWriteTarget::Session => CREDENTIAL_SOURCE_SESSION,
+        },
+        "ok",
         None,
     );
-    if result.is_ok() {
-        advance_credential_generation(provider_id);
-    }
-    result
+    Ok(())
 }
 
-pub fn delete_credential(data_dir: &Path, provider_id: &str) -> Result<()> {
-    delete_credential_with_store(
-        data_dir,
-        provider_id,
-        &RhoCredentialVaultStore::new(data_dir),
-    )
-}
-
-fn delete_credential_with_store(
-    data_dir: &Path,
-    provider_id: &str,
-    credential_store: &impl CredentialStore,
-) -> Result<()> {
-    let _provider_op_lock = credential_operation_lock(provider_id);
+pub fn delete_credential(data_dir: &Path, request: &AgentLlmCredentialDeleteRequest) -> Result<()> {
+    let _provider_op_lock = credential_operation_lock(&request.provider_id);
     let _guard = settings_mutation_guard();
-    let settings = load_settings(data_dir)?;
-    let provider = settings
+    let mut mutation = verify_config_mutation(
+        request.expected_revision,
+        &request.expected_config_snapshot_id,
+        match request.target {
+            AgentCredentialWriteTarget::ConfigFile => ConfigMutationPolicy::DurableYaml,
+            AgentCredentialWriteTarget::Session => ConfigMutationPolicy::SessionOnly,
+        },
+    )?;
+    let config = mutation
+        .config
+        .as_mut()
+        .context("Create config.yaml before deleting a credential.")?;
+    let provider = config
         .providers
-        .iter()
-        .find(|provider| provider.id == provider_id)
-        .with_context(|| format!("Unknown provider: {provider_id}"))?;
-    ensure!(
-        provider.api_key_required,
-        "This provider does not require an API key."
-    );
-    ensure!(
-        provider.credential_source != CREDENTIAL_SOURCE_ENVIRONMENT,
-        "This provider reads its API key from an environment variable; manage it outside Rho."
-    );
-    let result = delete_provider_credential(data_dir, provider, credential_store);
+        .iter_mut()
+        .find(|provider| provider.id == request.provider_id)
+        .with_context(|| format!("Unknown provider: {}", request.provider_id))?;
+    match request.target {
+        AgentCredentialWriteTarget::Session => {
+            credential_session().clear_session_credential(&request.provider_id);
+            consume_config_snapshot(&mutation.token);
+        }
+        AgentCredentialWriteTarget::ConfigFile => {
+            provider.api_key = None;
+            config.revision = config
+                .revision
+                .checked_add(1)
+                .context("Agent LLM settings revision overflowed.")?;
+            agent_config::save_config_cas(
+                &mutation.record.home,
+                config,
+                &mutation.record.content_identity,
+            )?;
+            consume_config_snapshot(&mutation.token);
+        }
+    }
     record_credential_audit(
         data_dir,
         "credential_delete",
-        provider_id,
-        &provider.credential_source,
-        if result.is_ok() { "ok" } else { "failed" },
+        &request.provider_id,
+        match request.target {
+            AgentCredentialWriteTarget::ConfigFile => CREDENTIAL_SOURCE_CONFIG_FILE,
+            AgentCredentialWriteTarget::Session => CREDENTIAL_SOURCE_SESSION,
+        },
+        "ok",
         None,
     );
-    if result.is_ok() {
-        advance_credential_generation(provider_id);
-    }
-    result
+    Ok(())
 }
 
-pub fn save_model(data_dir: &Path, model: AgentModelProfile) -> Result<AgentLlmSettings> {
+pub fn save_model(_data_dir: &Path, request: &AgentModelSaveRequest) -> Result<AgentLlmSettings> {
     let _guard = settings_mutation_guard();
-    let mut settings = load_settings(data_dir)?;
+    let mutation = verify_config_mutation(
+        request.expected_revision,
+        &request.expected_config_snapshot_id,
+        ConfigMutationPolicy::DurableYaml,
+    )?;
+    let mut settings = mutation
+        .config
+        .as_ref()
+        .map(config_to_settings)
+        .unwrap_or_else(|| config_to_settings(&empty_config()));
+    let model = request.model.clone();
     if let Some(existing) = settings.models.iter().find(|item| item.id == model.id) {
         ensure!(
             existing.model_type == model.model_type && existing.capabilities == model.capabilities,
@@ -1401,32 +1816,26 @@ pub fn save_model(data_dir: &Path, model: AgentModelProfile) -> Result<AgentLlmS
         settings.models.push(model);
     }
     increment_revision(&mut settings)?;
-    save_settings(data_dir, &settings)?;
+    validate_settings(&settings)?;
+    commit_settings_mutation(mutation, &settings)?;
     Ok(settings)
 }
 
 pub fn set_context_capacity(
-    data_dir: &Path,
+    _data_dir: &Path,
     request: &AgentContextCapacityRequest,
 ) -> Result<AgentLlmSettings> {
     let _guard = settings_mutation_guard();
-    set_context_capacity_with_save(data_dir, request, save_settings)
-}
-
-fn set_context_capacity_with_save<F>(
-    data_dir: &Path,
-    request: &AgentContextCapacityRequest,
-    save: F,
-) -> Result<AgentLlmSettings>
-where
-    F: FnOnce(&Path, &AgentLlmSettings) -> Result<()>,
-{
-    let mut settings = load_settings(data_dir)?;
-    ensure!(
-        settings.revision == request.expected_revision,
-        "Model settings changed while this context capacity editor was open. Reload and try again."
-    );
-    validate_bounded(&request.model_id, "Model ID", MAX_ID_LENGTH)?;
+    let mutation = verify_config_mutation(
+        request.expected_revision,
+        &request.expected_config_snapshot_id,
+        ConfigMutationPolicy::DurableYaml,
+    )?;
+    let mut settings = mutation
+        .config
+        .as_ref()
+        .map(config_to_settings)
+        .context("Create config.yaml before editing model capacity.")?;
     let model = settings
         .models
         .iter_mut()
@@ -1437,32 +1846,36 @@ where
     model.context_capacity_source = "user_declared".to_string();
     validate_model(model)?;
     increment_revision(&mut settings)?;
-    save(data_dir, &settings)?;
+    commit_settings_mutation(mutation, &settings)?;
     Ok(settings)
 }
 
 pub fn declare_model_capability(
-    data_dir: &Path,
+    _data_dir: &Path,
     request: &AgentModelCapabilityDeclarationRequest,
 ) -> Result<AgentLlmSettings> {
     let _guard = settings_mutation_guard();
-    declare_model_capability_with_save(data_dir, request, save_settings)
+    let mutation = verify_config_mutation(
+        request.expected_revision,
+        &request.expected_config_snapshot_id,
+        ConfigMutationPolicy::DurableYaml,
+    )?;
+    let mut settings = mutation
+        .config
+        .as_ref()
+        .map(config_to_settings)
+        .context("Create config.yaml before declaring model capabilities.")?;
+
+    apply_model_capability_declaration(&mut settings, request)?;
+    increment_revision(&mut settings)?;
+    commit_settings_mutation(mutation, &settings)?;
+    Ok(settings)
 }
 
-fn declare_model_capability_with_save<F>(
-    data_dir: &Path,
+fn apply_model_capability_declaration(
+    settings: &mut AgentLlmSettings,
     request: &AgentModelCapabilityDeclarationRequest,
-    save: F,
-) -> Result<AgentLlmSettings>
-where
-    F: FnOnce(&Path, &AgentLlmSettings) -> Result<()>,
-{
-    let mut settings = load_settings(data_dir)?;
-    ensure!(
-        settings.revision == request.expected_revision,
-        "Model settings changed while this capability editor was open. Reload and try again."
-    );
-    validate_bounded(&request.model_id, "Model ID", MAX_ID_LENGTH)?;
+) -> Result<()> {
     let model = settings
         .models
         .iter_mut()
@@ -1492,15 +1905,21 @@ where
             capability_value(&request.value, "user_declared"),
         );
     }
-    validate_model(model)?;
-    increment_revision(&mut settings)?;
-    save(data_dir, &settings)?;
-    Ok(settings)
+    validate_model(model)
 }
 
-pub fn delete_model(data_dir: &Path, request: &DeleteModelRequest) -> Result<AgentLlmSettings> {
+pub fn delete_model(_data_dir: &Path, request: &DeleteModelRequest) -> Result<AgentLlmSettings> {
     let _guard = settings_mutation_guard();
-    let mut settings = load_settings(data_dir)?;
+    let mutation = verify_config_mutation(
+        request.expected_revision,
+        &request.expected_config_snapshot_id,
+        ConfigMutationPolicy::DurableYaml,
+    )?;
+    let mut settings = mutation
+        .config
+        .as_ref()
+        .map(config_to_settings)
+        .context("Create config.yaml before deleting models.")?;
     let _existing = settings
         .models
         .iter()
@@ -1516,33 +1935,28 @@ pub fn delete_model(data_dir: &Path, request: &DeleteModelRequest) -> Result<Age
     );
     settings.models.retain(|model| model.id != request.model_id);
     increment_revision(&mut settings)?;
-    save_settings(data_dir, &settings)?;
+    validate_settings(&settings)?;
+    commit_settings_mutation(mutation, &settings)?;
     Ok(settings)
 }
 
 pub fn save_capability_route(
-    data_dir: &Path,
+    _data_dir: &Path,
     expected_revision: u64,
+    expected_config_snapshot_id: &str,
     route: AgentCapabilityRoute,
 ) -> Result<AgentLlmSettings> {
     let _guard = settings_mutation_guard();
-    save_capability_route_with_save(data_dir, expected_revision, route, save_settings)
-}
-
-fn save_capability_route_with_save<F>(
-    data_dir: &Path,
-    expected_revision: u64,
-    route: AgentCapabilityRoute,
-    save: F,
-) -> Result<AgentLlmSettings>
-where
-    F: FnOnce(&Path, &AgentLlmSettings) -> Result<()>,
-{
-    let mut settings = load_settings(data_dir)?;
-    ensure!(
-        settings.revision == expected_revision,
-        "Model settings changed while this route editor was open. Reload and try again."
-    );
+    let mutation = verify_config_mutation(
+        expected_revision,
+        expected_config_snapshot_id,
+        ConfigMutationPolicy::DurableYaml,
+    )?;
+    let mut settings = mutation
+        .config
+        .as_ref()
+        .map(config_to_settings)
+        .context("Create config.yaml before selecting a model.")?;
     validate_route_candidate(&settings, &route, true)?;
     if let Some(slot) = settings
         .capability_routes
@@ -1561,92 +1975,70 @@ where
         .capability_routes
         .sort_by(|left, right| left.capability.cmp(&right.capability));
     increment_revision(&mut settings)?;
-    save(data_dir, &settings)?;
+    commit_settings_mutation(mutation, &settings)?;
     Ok(settings)
 }
 
 pub fn delete_capability_route(
-    data_dir: &Path,
-    expected_revision: u64,
-    capability: &str,
+    _data_dir: &Path,
+    request: &AgentCapabilityRouteDeleteRequest,
 ) -> Result<AgentLlmSettings> {
     let _guard = settings_mutation_guard();
-    delete_capability_route_with_save(data_dir, expected_revision, capability, save_settings)
-}
-
-fn delete_capability_route_with_save<F>(
-    data_dir: &Path,
-    expected_revision: u64,
-    capability: &str,
-    save: F,
-) -> Result<AgentLlmSettings>
-where
-    F: FnOnce(&Path, &AgentLlmSettings) -> Result<()>,
-{
-    let mut settings = load_settings(data_dir)?;
+    let mutation = verify_config_mutation(
+        request.expected_revision,
+        &request.expected_config_snapshot_id,
+        ConfigMutationPolicy::DurableYaml,
+    )?;
+    let mut settings = mutation
+        .config
+        .as_ref()
+        .map(config_to_settings)
+        .context("Create config.yaml before deleting a capability route.")?;
+    validate_capability_name(&request.capability)?;
     ensure!(
-        settings.revision == expected_revision,
-        "Model settings changed while this route editor was open. Reload and try again."
-    );
-    validate_capability_name(capability)?;
-    ensure!(
-        capability != "agent.chat",
+        request.capability != "agent.chat",
         "The required agent.chat route cannot be removed."
     );
     let before = settings.capability_routes.len();
     settings
         .capability_routes
-        .retain(|route| route.capability != capability);
+        .retain(|route| route.capability != request.capability);
     ensure!(
         settings.capability_routes.len() != before,
-        "Unknown capability route: {capability}"
+        "Unknown capability route: {}",
+        request.capability
     );
     increment_revision(&mut settings)?;
-    save(data_dir, &settings)?;
+    validate_settings(&settings)?;
+    commit_settings_mutation(mutation, &settings)?;
     Ok(settings)
 }
 
 pub fn declare_model_capabilities(
-    data_dir: &Path,
-    expected_revision: u64,
-    model_id: &str,
-    patch: AgentModelCapabilityPatch,
+    _data_dir: &Path,
+    request: &AgentModelCapabilitiesRequest,
 ) -> Result<AgentLlmSettings> {
-    let _guard = settings_mutation_guard();
-    declare_model_capabilities_with_save(
-        data_dir,
-        expected_revision,
-        model_id,
-        patch,
-        save_settings,
-    )
-}
-
-fn declare_model_capabilities_with_save<F>(
-    data_dir: &Path,
-    expected_revision: u64,
-    model_id: &str,
-    patch: AgentModelCapabilityPatch,
-    save: F,
-) -> Result<AgentLlmSettings>
-where
-    F: FnOnce(&Path, &AgentLlmSettings) -> Result<()>,
-{
     ensure!(
-        patch.model_type.is_some() || !patch.capabilities.is_empty(),
+        request.patch.model_type.is_some() || !request.patch.capabilities.is_empty(),
         "Declare at least one model type or capability value."
     );
-    let mut settings = load_settings(data_dir)?;
-    ensure!(
-        settings.revision == expected_revision,
-        "Model settings changed while this capability editor was open. Reload and try again."
-    );
+    let _guard = settings_mutation_guard();
+    let mutation = verify_config_mutation(
+        request.expected_revision,
+        &request.expected_config_snapshot_id,
+        ConfigMutationPolicy::DurableYaml,
+    )?;
+    let mut settings = mutation
+        .config
+        .as_ref()
+        .map(config_to_settings)
+        .context("Create config.yaml before declaring model capabilities.")?;
     let model = settings
         .models
         .iter_mut()
-        .find(|model| model.id == model_id)
-        .with_context(|| format!("Unknown model: {model_id}"))?;
-    if let Some(model_type) = patch.model_type {
+        .find(|model| model.id == request.model_id)
+        .with_context(|| format!("Unknown model: {}", request.model_id))?;
+    if let Some(model_type) = &request.patch.model_type {
         ensure!(
             matches!(
                 model_type.as_str(),
@@ -1654,9 +2046,9 @@ where
             ),
             "Model type must be language, embedding, image or unknown."
         );
-        model.model_type = capability_value(&model_type, "user_declared");
+        model.model_type = capability_value(model_type, "user_declared");
     }
-    for (name, value) in patch.capabilities {
+    for (name, value) in &request.patch.capabilities {
         ensure!(
             capability_names().contains(&name.as_str()),
             "Unsupported model capability: {name}"
@@ -1667,60 +2059,144 @@ where
         );
         model
             .capabilities
-            .insert(name, capability_value(&value, "user_declared"));
+            .insert(name.clone(), capability_value(value, "user_declared"));
     }
+    validate_model(model)?;
     increment_revision(&mut settings)?;
-    save(data_dir, &settings)?;
+    validate_settings(&settings)?;
+    commit_settings_mutation(mutation, &settings)?;
     Ok(settings)
 }
 
-pub fn settings_view(data_dir: &Path, rscript: &Path) -> Result<AgentLlmSettingsView> {
+pub fn settings_view(
+    data_dir: &Path,
+    rscript: &Path,
+    r_environ_user: Option<&Path>,
+) -> Result<AgentLlmSettingsView> {
     let _guard = settings_mutation_guard();
-    let settings = load_settings(data_dir)?;
-    settings_view_from_settings(data_dir, rscript, settings)
+    let (config_store, config) = inspect_config_store(data_dir)?;
+    let mut settings =
+        config
+            .as_ref()
+            .map(config_to_settings)
+            .unwrap_or_else(|| AgentLlmSettings {
+                schema_version: agent_config::CONFIG_SCHEMA_VERSION,
+                revision: 0,
+                providers: Vec::new(),
+                models: Vec::new(),
+                capability_routes: Vec::new(),
+            });
+    let validation_error = config.as_ref().and_then(|_| {
+        validate_settings(&settings)
+            .err()
+            .map(|error| format!("{error:#}"))
+    });
+    if let Some(validation_error) = validation_error {
+        return Ok(build_invalid_settings_view(
+            settings,
+            system_credential_info(),
+            config.as_ref(),
+            config_store,
+            validation_error,
+        ));
+    }
+    if let Some(entries) = catalog_cached(data_dir, rscript).ok() {
+        project_catalog_capacity(&mut settings, &entries);
+    }
+    let statuses = credential_status_map(
+        &settings.providers,
+        config.as_ref(),
+        rscript,
+        r_environ_user,
+    );
+    Ok(build_settings_view(
+        settings,
+        system_credential_info(),
+        statuses,
+        config_store,
+    ))
 }
 
 pub fn settings_view_from_settings(
     data_dir: &Path,
     rscript: &Path,
-    settings: AgentLlmSettings,
-) -> Result<AgentLlmSettingsView> {
-    settings_view_from_settings_with(data_dir, settings, || {
-        catalog_cached(data_dir, rscript).ok()
-    })
-}
-
-fn settings_view_from_settings_with<F>(
-    data_dir: &Path,
+    r_environ_user: Option<&Path>,
     mut settings: AgentLlmSettings,
-    catalog: F,
-) -> Result<AgentLlmSettingsView>
-where
-    F: FnOnce() -> Option<Arc<Vec<AgentCatalogEntry>>>,
-{
-    // Presentation-only projection: durable settings are never rewritten here;
-    // the runtime execution budget keeps reading the persisted profile.
-    if let Some(entries) = catalog() {
+) -> Result<AgentLlmSettingsView> {
+    // A committed mutation must never be reported as a save failure merely
+    // because a presentation refresh is unavailable. `inspect_config_store`
+    // projects unsafe/unreadable state without returning an I/O error; when a
+    // later writer has already changed the document (even without advancing
+    // its revision), prefer that one fresh snapshot so the returned view is
+    // not a mixed old/new authority.
+    let _guard = settings_mutation_guard();
+    let (config_store, config) = inspect_config_store(data_dir)?;
+    if let Some(config) = config.as_ref() {
+        settings = config_to_settings(config);
+    }
+    if let Err(error) = validate_settings(&settings) {
+        return Ok(build_invalid_settings_view(
+            settings,
+            system_credential_info(),
+            config.as_ref(),
+            config_store,
+            format!("{error:#}"),
+        ));
+    }
+    if let Some(entries) = catalog_cached(data_dir, rscript).ok() {
         project_catalog_capacity(&mut settings, &entries);
     }
-    Ok(settings_view_from_settings_projection(data_dir, settings))
+    let statuses = credential_status_map(
+        &settings.providers,
+        config.as_ref(),
+        rscript,
+        r_environ_user,
+    );
+    Ok(build_settings_view(
+        settings,
+        system_credential_info(),
+        statuses,
+        config_store,
+    ))
 }
 
-fn settings_view_from_settings_projection(
+pub fn refresh_credentials_view(
     data_dir: &Path,
-    settings: AgentLlmSettings,
-) -> AgentLlmSettingsView {
-    let statuses = credential_status_map(data_dir, &settings.providers);
-    build_settings_view(settings, system_credential_info(), statuses)
+    rscript: &Path,
+    r_environ_user: Option<&Path>,
+) -> Result<AgentLlmSettingsView> {
+    settings_view(data_dir, rscript, r_environ_user)
 }
 
-pub fn refresh_credentials_view(data_dir: &Path, rscript: &Path) -> Result<AgentLlmSettingsView> {
-    settings_view(data_dir, rscript)
+pub fn repair_config_permissions(
+    data_dir: &Path,
+    rscript: &Path,
+    r_environ_user: Option<&Path>,
+    request: &AgentConfigPermissionRepairRequest,
+) -> Result<AgentLlmSettingsView> {
+    let _guard = settings_mutation_guard();
+    let mutation = verify_config_mutation(
+        request.expected_revision,
+        &request.expected_config_snapshot_id,
+        ConfigMutationPolicy::PermissionRepair,
+    )?;
+    let expected_path = PathBuf::from(&request.expected_config_path);
+    ensure!(
+        expected_path == mutation.record.config_path,
+        "The canonical model configuration path changed. Reload Settings and try again."
+    );
+    agent_config::repair_permissions(
+        &mutation.record.home,
+        &expected_path,
+        &mutation.record.content_identity,
+    )?;
+    consume_config_snapshot(&mutation.token);
+    drop(_guard);
+    settings_view(data_dir, rscript, r_environ_user)
 }
 
 pub fn clear_session_credentials() {
     credential_session().clear();
-    agent_credential_vault::clear_all_sessions();
 }
 
 pub fn catalog(data_dir: &Path, rscript: &Path) -> Result<Vec<AgentCatalogEntry>> {
@@ -1867,11 +2343,6 @@ where
     Ok(entries)
 }
 
-#[cfg(test)]
-fn catalog_cache_clear() {
-    catalog_cache_store().lock().unwrap().clear();
-}
-
 fn catalog_entry_for_model<'a>(
     provider_key: &str,
     provider_model_id: &str,
@@ -1923,17 +2394,24 @@ fn project_catalog_capacity(settings: &mut AgentLlmSettings, entries: &[AgentCat
 pub fn discover_models(
     data_dir: &Path,
     rscript: &Path,
+    r_environ_user: Option<&Path>,
     provider_id: &str,
 ) -> Result<AgentModelDiscoveryResponse> {
+    let loaded = load_v6_document(data_dir)?;
+    let settings = config_to_settings(&loaded.config);
+    validate_settings(&settings)?;
     let client = model_discovery_client()?;
+    let credential_store = ConfigCredentialStore::from_config(&loaded.config);
     let mut response = discover_models_with_store(
         data_dir,
+        &settings,
         provider_id,
-        &RhoCredentialVaultStore::new(data_dir),
+        &credential_store,
+        Some(rscript),
+        r_environ_user,
         &client,
     )?;
     if response.status == "ready" && !response.models.is_empty() {
-        let settings = load_settings(data_dir)?;
         if let Some(provider) = settings
             .providers
             .iter()
@@ -1973,11 +2451,13 @@ fn model_discovery_client() -> Result<reqwest::blocking::Client> {
 
 fn discover_models_with_store(
     data_dir: &Path,
+    settings: &AgentLlmSettings,
     provider_id: &str,
     credential_store: &impl CredentialStore,
+    rscript: Option<&Path>,
+    r_environ_user: Option<&Path>,
     client: &reqwest::blocking::Client,
 ) -> Result<AgentModelDiscoveryResponse> {
-    let settings = load_settings(data_dir)?;
     let provider = settings
         .providers
         .iter()
@@ -1995,24 +2475,30 @@ fn discover_models_with_store(
     };
 
     let credential = if provider.api_key_required {
-        match resolve_provider_credential(data_dir, provider, credential_store) {
-            Ok(Some(value)) => {
+        match resolve_provider_credential_with_runtime(
+            &settings,
+            provider,
+            credential_store,
+            rscript,
+            r_environ_user,
+        ) {
+            Ok((Some(value), source)) => {
                 record_credential_audit(
                     data_dir,
                     "credential_discovery_read",
                     provider_id,
-                    &provider.credential_source,
+                    source,
                     "detected",
                     None,
                 );
                 Some(value)
             }
-            Ok(None) => {
+            Ok((None, source)) => {
                 record_credential_audit(
                     data_dir,
                     "credential_discovery_read",
                     provider_id,
-                    &provider.credential_source,
+                    source,
                     "not_detected",
                     None,
                 );
@@ -2030,7 +2516,7 @@ fn discover_models_with_store(
                     data_dir,
                     "credential_discovery_read",
                     provider_id,
-                    &provider.credential_source,
+                    CREDENTIAL_SOURCE_NOT_CONFIGURED,
                     "unavailable",
                     None,
                 );
@@ -2251,8 +2737,9 @@ fn provider_base_url_presentation(provider: &AgentProviderProfile) -> (Option<St
         return (Some(base_url.clone()), "configured".to_string());
     }
     if let Some(environment_name) = &provider.base_url_env {
-        let resolved = std::env::var(environment_name)
+        let resolved = validate_env_name(Some(environment_name), false)
             .ok()
+            .and_then(|_| std::env::var(environment_name).ok())
             .filter(|value| validate_base_url(Some(value)).is_ok());
         return (
             resolved.or_else(|| Some(format!("${environment_name}"))),
@@ -2475,45 +2962,49 @@ fn model_discovery_result(
 pub fn test_model(
     data_dir: &Path,
     rscript: &Path,
+    r_environ_user: Option<&Path>,
     agent_package: &Path,
-    model_id: &str,
+    request: &AgentModelTestRequest,
     test_control: Option<&AgentModelTestControl>,
 ) -> Result<AgentLlmSettingsView> {
-    test_model_with_store(
-        data_dir,
-        rscript,
-        agent_package,
-        model_id,
-        test_control,
-        &RhoCredentialVaultStore::new(data_dir),
-    )
-}
-
-fn test_model_with_store(
-    data_dir: &Path,
-    rscript: &Path,
-    agent_package: &Path,
-    model_id: &str,
-    test_control: Option<&AgentModelTestControl>,
-    credential_store: &impl CredentialStore,
-) -> Result<AgentLlmSettingsView> {
-    let settings = load_settings(data_dir)?;
+    let initial = {
+        let _guard = settings_mutation_guard();
+        verify_config_mutation(
+            request.expected_revision,
+            &request.expected_config_snapshot_id,
+            ConfigMutationPolicy::DurableYaml,
+        )?
+    };
+    let settings = initial
+        .config
+        .as_ref()
+        .map(config_to_settings)
+        .context("Create config.yaml before testing a model.")?;
+    validate_settings(&settings)?;
     let test_model = settings
         .models
         .iter()
-        .find(|model| model.id == model_id)
-        .with_context(|| format!("Unknown model: {model_id}"))?;
+        .find(|model| model.id == request.model_id)
+        .with_context(|| format!("Unknown model: {}", request.model_id))?;
     ensure!(
         test_model.model_type.value == "language",
         "Only language models use the text connection test. Image and embedding probes are not installed."
     );
-    let resolved = resolve_model_with_settings(&settings, Some(model_id))?;
+    let resolved = resolve_model_with_settings(&settings, Some(&request.model_id))?;
     let probe_environment_names = provider_probe_environment_names(&settings);
+    let credential_store = ConfigCredentialStore::from_config(
+        initial
+            .config
+            .as_ref()
+            .context("Create config.yaml before testing a model.")?,
+    );
     let credential_override = credential_override_with_store(
         data_dir,
         &settings,
         &resolved.provider_id,
-        credential_store,
+        &credential_store,
+        Some(rscript),
+        r_environ_user,
         "credential_test_read",
     )
     .map_err(|_| anyhow::anyhow!("The configured credential source is unavailable."))?;
@@ -2530,17 +3021,28 @@ fn test_model_with_store(
         test_control,
     )?;
     let _guard = settings_mutation_guard();
-    let mut latest_settings = load_settings(data_dir)?;
-    let latest_resolved = resolve_model_with_settings(&latest_settings, Some(model_id))?;
+    let latest = verify_config_mutation(
+        request.expected_revision,
+        &request.expected_config_snapshot_id,
+        ConfigMutationPolicy::DurableYaml,
+    )?;
+    let mut latest_settings = latest
+        .config
+        .as_ref()
+        .map(config_to_settings)
+        .context("The canonical model configuration disappeared during the connection test.")?;
+    validate_settings(&latest_settings)?;
+    let latest_resolved = resolve_model_with_settings(&latest_settings, Some(&request.model_id))?;
     ensure!(
-        latest_settings.revision == settings.revision
-            && latest_resolved.runtime_profile == resolved.runtime_profile,
+        latest_resolved.runtime_profile == resolved.runtime_profile,
         "The model configuration changed during the connection test; the test result was not saved."
     );
-    update_model_after_test(&mut latest_settings, model_id, &result)?;
+    update_model_after_test(&mut latest_settings, &request.model_id, &result)?;
     increment_revision(&mut latest_settings)?;
-    save_settings(data_dir, &latest_settings)?;
-    settings_view_from_settings(data_dir, rscript, latest_settings)
+    commit_settings_mutation(latest, &latest_settings)?;
+    // `settings_view` acquires this same non-reentrant process mutex. The CAS
+    // has committed, so release the mutation guard before the read-back.
+    after_settings_mutation(_guard, || settings_view(data_dir, rscript, r_environ_user))
 }
 
 pub fn resolve_model_for_turn(
@@ -2564,35 +3066,49 @@ pub fn resolve_model_for_task(
 
 pub fn resolve_model_and_credential_for_turn(
     data_dir: &Path,
+    rscript: &Path,
+    r_environ_user: Option<&Path>,
     requested_model_id: Option<&str>,
     mode: &str,
 ) -> Result<(ResolvedAgentModel, Option<(String, String)>)> {
     let _guard = settings_mutation_guard();
-    let settings = load_settings(data_dir)?;
+    let loaded = load_v6_document(data_dir)?;
+    let settings = config_to_settings(&loaded.config);
+    validate_settings(&settings)?;
+    let credential_store = ConfigCredentialStore::from_config(&loaded.config);
     resolve_model_and_credential_for_turn_with_store(
         data_dir,
         &settings,
         requested_model_id,
         mode,
-        &RhoCredentialVaultStore::new(data_dir),
+        &credential_store,
+        Some(rscript),
+        r_environ_user,
     )
 }
 
 pub fn resolve_model_and_credential_for_task(
     data_dir: &Path,
+    rscript: &Path,
+    r_environ_user: Option<&Path>,
     requested_model_id: Option<&str>,
     mode: &str,
     task_kind: &str,
 ) -> Result<(ResolvedAgentModel, Option<(String, String)>)> {
     let _guard = settings_mutation_guard();
-    let settings = load_settings(data_dir)?;
+    let loaded = load_v6_document(data_dir)?;
+    let settings = config_to_settings(&loaded.config);
+    validate_settings(&settings)?;
+    let credential_store = ConfigCredentialStore::from_config(&loaded.config);
     resolve_model_and_credential_for_task_with_store(
         data_dir,
         &settings,
         requested_model_id,
         mode,
         task_kind,
-        &RhoCredentialVaultStore::new(data_dir),
+        &credential_store,
+        Some(rscript),
+        r_environ_user,
     )
 }
 
@@ -2603,6 +3119,8 @@ fn resolve_model_and_credential_for_task_with_store(
     mode: &str,
     task_kind: &str,
     credential_store: &impl CredentialStore,
+    rscript: Option<&Path>,
+    r_environ_user: Option<&Path>,
 ) -> Result<(ResolvedAgentModel, Option<(String, String)>)> {
     let resolved =
         resolve_model_for_task_with_settings(settings, requested_model_id, mode, task_kind)?;
@@ -2611,6 +3129,8 @@ fn resolve_model_and_credential_for_task_with_store(
         settings,
         &resolved.provider_id,
         credential_store,
+        rscript,
+        r_environ_user,
         "credential_turn_inject",
     )?;
     ensure!(
@@ -2644,6 +3164,8 @@ fn resolve_model_and_credential_for_turn_with_store(
     requested_model_id: Option<&str>,
     mode: &str,
     credential_store: &impl CredentialStore,
+    rscript: Option<&Path>,
+    r_environ_user: Option<&Path>,
 ) -> Result<(ResolvedAgentModel, Option<(String, String)>)> {
     let resolved = resolve_model_for_turn_with_settings(settings, requested_model_id, mode)?;
     let credential = credential_override_with_store(
@@ -2651,6 +3173,8 @@ fn resolve_model_and_credential_for_turn_with_store(
         settings,
         &resolved.provider_id,
         credential_store,
+        rscript,
+        r_environ_user,
         "credential_turn_inject",
     )?;
     Ok((resolved, credential))
@@ -2661,6 +3185,7 @@ fn resolve_model_for_turn_with_settings(
     requested_model_id: Option<&str>,
     mode: &str,
 ) -> Result<ResolvedAgentModel> {
+    validate_settings(settings)?;
     ensure!(
         matches!(mode, "ask" | "plan" | "act"),
         "Unsupported Agent mode."
@@ -2699,6 +3224,8 @@ fn credential_override_with_store(
     settings: &AgentLlmSettings,
     provider_id: &str,
     credential_store: &impl CredentialStore,
+    rscript: Option<&Path>,
+    r_environ_user: Option<&Path>,
     audit_event: &str,
 ) -> Result<Option<(String, String)>> {
     let provider = settings
@@ -2709,27 +3236,38 @@ fn credential_override_with_store(
     if !provider.api_key_required {
         return Ok(None);
     }
-    let resolved = resolve_provider_credential(data_dir, provider, credential_store);
+    let resolved = resolve_provider_credential_with_runtime(
+        settings,
+        provider,
+        credential_store,
+        rscript,
+        r_environ_user,
+    );
+    let source = resolved
+        .as_ref()
+        .map(|(_, source)| *source)
+        .unwrap_or(CREDENTIAL_SOURCE_NOT_CONFIGURED);
     record_credential_audit(
         data_dir,
         audit_event,
         provider_id,
-        &provider.credential_source,
+        source,
         match &resolved {
-            Ok(Some(_)) => "detected",
-            Ok(None) => "not_detected",
+            Ok((Some(_), _)) => "detected",
+            Ok((None, _)) => "not_detected",
             Err(_) => "unavailable",
         },
         None,
     );
-    let Some(value) = resolved? else {
+    let (value, _) = resolved?;
+    let Some(value) = value else {
         return Ok(None);
     };
     let env_name = provider
         .api_key_env
         .clone()
         .context("The provider has no API key environment name.")?;
-    Ok(Some((env_name, value)))
+    Ok(Some((env_name, value.as_str().to_string())))
 }
 
 fn provider_probe_environment_names(settings: &AgentLlmSettings) -> Vec<String> {
@@ -2811,54 +3349,6 @@ pub fn validate_settings(settings: &AgentLlmSettings) -> Result<()> {
             == 1,
         "Exactly one agent.chat route is required."
     );
-    Ok(())
-}
-
-fn validate_settings_v1(settings: &AgentLlmSettingsV1) -> Result<()> {
-    ensure!(
-        settings.schema_version == 1,
-        "Expected Agent LLM schema V1."
-    );
-    validate_bounded(
-        &settings.selected_model_id,
-        "Selected model ID",
-        MAX_ID_LENGTH,
-    )?;
-    ensure!(
-        !settings.providers.is_empty(),
-        "At least one provider is required."
-    );
-    ensure!(
-        !settings.models.is_empty(),
-        "At least one model is required."
-    );
-    let mut provider_ids = HashSet::new();
-    for provider in &settings.providers {
-        validate_provider_v3(provider)?;
-        ensure!(
-            provider_ids.insert(&provider.id),
-            "Provider IDs must be unique."
-        );
-    }
-    let mut model_ids = HashSet::new();
-    for model in &settings.models {
-        validate_bounded(&model.id, "Model ID", MAX_ID_LENGTH)?;
-        validate_bounded(&model.provider_id, "Provider reference", MAX_ID_LENGTH)?;
-        validate_bounded(&model.display_name, "Model display name", MAX_NAME_LENGTH)?;
-        validate_bounded(&model.model_id, "Provider model ID", MAX_MODEL_ID_LENGTH)?;
-        validate_capabilities_v1(&model.capabilities)?;
-        ensure!(model_ids.insert(&model.id), "Model IDs must be unique.");
-        ensure!(
-            provider_ids.contains(&model.provider_id),
-            "Each model must reference an existing provider."
-        );
-    }
-    let selected = settings
-        .models
-        .iter()
-        .find(|model| model.id == settings.selected_model_id)
-        .context("Selected model must exist.")?;
-    ensure!(selected.enabled, "Selected model must remain enabled.");
     Ok(())
 }
 
@@ -2981,6 +3471,7 @@ fn build_settings_view(
     settings: AgentLlmSettings,
     user_environ: AgentUserEnvironInfo,
     statuses: HashMap<String, CredentialPresentation>,
+    config_store: AgentConfigStoreView,
 ) -> AgentLlmSettingsView {
     let selected_model_id = chat_model_id(&settings).unwrap_or_default().to_string();
     let provider_map = settings
@@ -3001,6 +3492,9 @@ fn build_settings_view(
             AgentProviderProfileView {
                 credential_status: credential.status,
                 credential_effective_source: credential.source,
+                env_shadows_file: credential.env_shadows_file,
+                session_credential_present: credential.session_present,
+                config_file_credential_present: credential.config_file_present,
                 effective_base_url,
                 base_url_source,
                 profile,
@@ -3047,7 +3541,159 @@ fn build_settings_view(
         selected_model,
         capability_routes,
         user_environ,
+        config_store,
         validation_error: None,
+    }
+}
+
+/// Projects a parseable V6 document that failed semantic validation. This
+/// path deliberately does not probe process/user environments, resolve
+/// credentials, or call helpers whose `unreachable!` branches rely on a
+/// complete validated capability vocabulary. The raw profiles remain visible
+/// beside `validation_error` so the operator can repair config.yaml directly.
+fn build_invalid_settings_view(
+    settings: AgentLlmSettings,
+    user_environ: AgentUserEnvironInfo,
+    config: Option<&agent_config::AgentConfig>,
+    config_store: AgentConfigStoreView,
+    validation_error: String,
+) -> AgentLlmSettingsView {
+    let selected_model_id = settings
+        .capability_routes
+        .iter()
+        .find(|route| route.capability == "agent.chat")
+        .map(|route| route.model_id.clone())
+        .unwrap_or_default();
+    let provider_map = settings
+        .providers
+        .iter()
+        .map(|provider| (provider.id.clone(), provider.display_name.clone()))
+        .collect::<HashMap<_, _>>();
+    let providers = settings
+        .providers
+        .iter()
+        .cloned()
+        .map(|profile| {
+            let session_present = credential_session().has_session_credential(&profile.id);
+            let config_file_present = config
+                .and_then(|config| {
+                    config
+                        .providers
+                        .iter()
+                        .find(|provider| provider.id == profile.id)
+                })
+                .and_then(|provider| provider.api_key.as_deref())
+                .is_some_and(|value| !value.is_empty());
+            let (effective_base_url, base_url_source) = if let Some(base_url) = &profile.base_url {
+                (Some(base_url.clone()), "configured".to_string())
+            } else if let Some(environment_name) = &profile.base_url_env {
+                (
+                    Some(format!("${environment_name}")),
+                    "environment".to_string(),
+                )
+            } else {
+                match provider_default_base_url(&profile) {
+                    Some(base_url) => (Some(base_url.to_string()), "provider_default".to_string()),
+                    None => (None, "not_configured".to_string()),
+                }
+            };
+            AgentProviderProfileView {
+                credential_status: if profile.api_key_required {
+                    "unavailable"
+                } else {
+                    "not_required"
+                }
+                .to_string(),
+                credential_effective_source: if profile.api_key_required {
+                    "unchecked"
+                } else {
+                    "not_required"
+                }
+                .to_string(),
+                env_shadows_file: false,
+                session_credential_present: session_present,
+                config_file_credential_present: config_file_present,
+                effective_base_url,
+                base_url_source,
+                profile,
+            }
+        })
+        .collect::<Vec<_>>();
+    let models = settings
+        .models
+        .iter()
+        .cloned()
+        .map(|profile| AgentModelProfileView {
+            provider_display_name: provider_map
+                .get(&profile.provider_id)
+                .cloned()
+                .unwrap_or_else(|| "Provider".to_string()),
+            selected: profile.id == selected_model_id,
+            selector_status: "Error".to_string(),
+            act_enabled: false,
+            profile,
+        })
+        .collect::<Vec<_>>();
+    let selected_model =
+        models
+            .iter()
+            .find(|model| model.selected)
+            .map(|model| AgentSelectedModelView {
+                id: model.profile.id.clone(),
+                display_name: model.profile.display_name.clone(),
+                provider_display_name: model.provider_display_name.clone(),
+                selector_status: model.selector_status.clone(),
+                tool_calling: model
+                    .profile
+                    .capabilities
+                    .get("function_call")
+                    .map(|value| value.value.clone())
+                    .unwrap_or_else(|| "unknown".to_string()),
+                act_enabled: false,
+            });
+    let capability_routes = settings
+        .capability_routes
+        .iter()
+        .map(|route| {
+            let model = settings
+                .models
+                .iter()
+                .find(|model| model.id == route.model_id);
+            let provider = model.and_then(|model| {
+                settings
+                    .providers
+                    .iter()
+                    .find(|provider| provider.id == model.provider_id)
+            });
+            AgentCapabilityRouteView {
+                capability: route.capability.clone(),
+                label: route.capability.clone(),
+                description: "Invalid configuration; edit config.yaml and reload Settings."
+                    .to_string(),
+                model_id: Some(route.model_id.clone()),
+                model_display_name: model.map(|model| model.display_name.clone()),
+                provider_display_name: provider.map(|provider| provider.display_name.clone()),
+                model_type: route.model_type.clone(),
+                required_model_capabilities: route.required_model_capabilities.clone(),
+                configured: true,
+                inherited_from: None,
+                compatibility: "invalid_config".to_string(),
+                credential_status: "unavailable".to_string(),
+                consumer_status: "unavailable".to_string(),
+            }
+        })
+        .collect();
+    AgentLlmSettingsView {
+        schema_version: settings.schema_version,
+        revision: settings.revision,
+        selected_model_id,
+        providers,
+        models,
+        selected_model,
+        capability_routes,
+        user_environ,
+        config_store,
+        validation_error: Some(validation_error),
     }
 }
 
@@ -3340,10 +3986,6 @@ fn update_model_after_test(
     Ok(())
 }
 
-fn validate_provider_v3(provider: &AgentProviderProfileV3) -> Result<()> {
-    validate_provider(&provider.clone().into_current())
-}
-
 fn validate_provider(provider: &AgentProviderProfile) -> Result<()> {
     validate_bounded(&provider.id, "Provider ID", MAX_ID_LENGTH)?;
     validate_bounded(
@@ -3383,21 +4025,6 @@ fn validate_provider(provider: &AgentProviderProfile) -> Result<()> {
     validate_env_name(provider.api_key_env.as_deref(), provider.api_key_required)?;
     validate_env_name(provider.base_url_env.as_deref(), false)?;
     validate_base_url(provider.base_url.as_deref())?;
-    ensure!(
-        is_supported_credential_source(&provider.credential_source),
-        "Unsupported credential source."
-    );
-    #[cfg(not(target_os = "linux"))]
-    ensure!(
-        provider.credential_source != LEGACY_CREDENTIAL_SOURCE_FILE_FALLBACK,
-        "File-based credential storage is only available on Linux."
-    );
-    if provider.credential_source == CREDENTIAL_SOURCE_ENVIRONMENT && provider.api_key_required {
-        ensure!(
-            provider.api_key_env.is_some(),
-            "Environment-sourced credentials require an API key environment name."
-        );
-    }
     ensure!(
         !(provider.base_url.is_some() && provider.base_url_env.is_some()),
         "Use either Base URL or Base URL environment, not both."
@@ -3496,27 +4123,6 @@ fn validate_capability_value(value: &AgentCapabilityValue, model_type: bool) -> 
     Ok(())
 }
 
-fn validate_capabilities_v1(capabilities: &AgentModelCapabilitiesV1) -> Result<()> {
-    for value in [
-        capabilities.tool_calling.as_str(),
-        capabilities.reasoning.as_str(),
-        capabilities.vision_input.as_str(),
-    ] {
-        ensure!(
-            matches!(value, "yes" | "no" | "unknown"),
-            "Capability values must be yes, no or unknown."
-        );
-    }
-    ensure!(
-        matches!(
-            capabilities.source.as_str(),
-            "catalog" | "declared" | "probe" | "unknown"
-        ),
-        "Capability source must be catalog, declared, probe or unknown."
-    );
-    Ok(())
-}
-
 fn validate_bounded(value: &str, label: &str, max: usize) -> Result<()> {
     ensure!(!value.trim().is_empty(), "{label} must not be empty.");
     ensure!(value.chars().count() <= max, "{label} is too long.");
@@ -3586,52 +4192,100 @@ fn validate_base_url(value: Option<&str>) -> Result<()> {
 struct CredentialPresentation {
     status: String,
     source: String,
+    env_shadows_file: bool,
+    session_present: bool,
+    config_file_present: bool,
 }
 
 fn credential_status_map(
-    data_dir: &Path,
     providers: &[AgentProviderProfile],
+    config: Option<&agent_config::AgentConfig>,
+    rscript: &Path,
+    r_environ_user: Option<&Path>,
 ) -> HashMap<String, CredentialPresentation> {
+    let declared_sensitive_names = providers
+        .iter()
+        .filter_map(|provider| provider.api_key_env.clone())
+        .filter(|name| !name.is_empty())
+        .collect::<std::collections::BTreeSet<_>>();
+    let user_presence_variables = if r_environ_user.is_some() {
+        providers
+            .iter()
+            .filter(|provider| {
+                provider.api_key_required
+                    && !credential_session().has_session_credential(&provider.id)
+                    && !environment_credential_present(provider)
+            })
+            .filter_map(|provider| provider.api_key_env.clone())
+            .filter(|name| !name.is_empty())
+            .collect::<std::collections::BTreeSet<_>>()
+    } else {
+        std::collections::BTreeSet::new()
+    };
+    let user_environment_presence = match r_environ_user {
+        Some(r_environ_user) => agent_config_environ::user_environ_credentials_present(
+            rscript,
+            r_environ_user,
+            &user_presence_variables,
+            &declared_sensitive_names,
+        ),
+        None => Ok(BTreeMap::new()),
+    };
     providers
         .iter()
         .map(|provider| {
-            let presentation = if !provider.api_key_required {
-                credential_presentation_for_provider(provider)
+            let session_present = credential_session().has_session_credential(&provider.id);
+            let process_environment_present = environment_credential_present(provider);
+            let queried_user_environment = provider
+                .api_key_env
+                .as_ref()
+                .is_some_and(|name| user_presence_variables.contains(name));
+            let user_environment_present = provider
+                .api_key_env
+                .as_ref()
+                .and_then(|name| user_environment_presence.as_ref().ok()?.get(name))
+                .copied()
+                .unwrap_or(false);
+            let user_environment_unavailable =
+                queried_user_environment && user_environment_presence.is_err();
+            let environment_present = process_environment_present || user_environment_present;
+            let config_file_present = config
+                .and_then(|config| {
+                    config
+                        .providers
+                        .iter()
+                        .find(|candidate| candidate.id == provider.id)
+                })
+                .and_then(|provider| provider.api_key.as_deref())
+                .is_some_and(|value| !value.is_empty());
+            let source = if !provider.api_key_required {
+                "not_required"
+            } else if session_present {
+                CREDENTIAL_SOURCE_SESSION
+            } else if environment_present {
+                CREDENTIAL_SOURCE_ENVIRONMENT
+            } else if user_environment_unavailable {
+                CREDENTIAL_SOURCE_NOT_CONFIGURED
+            } else if config_file_present {
+                CREDENTIAL_SOURCE_CONFIG_FILE
             } else {
-                match provider.credential_source.as_str() {
-                    CREDENTIAL_SOURCE_RHO_VAULT => {
-                        let status = agent_credential_vault::status(data_dir, &provider.id);
-                        CredentialPresentation {
-                            status: match status {
-                                CredentialVaultStatus::Missing => "not_detected",
-                                CredentialVaultStatus::Saved => "detected",
-                                CredentialVaultStatus::Unavailable => "unavailable",
-                            }
-                            .to_string(),
-                            source: "rho_vault".to_string(),
-                        }
-                    }
-                    CREDENTIAL_SOURCE_ENVIRONMENT => CredentialPresentation {
-                        status: if environment_credential_present(provider) {
-                            "detected".to_string()
-                        } else {
-                            "not_detected".to_string()
-                        },
-                        source: "environment".to_string(),
-                    },
-                    CREDENTIAL_SOURCE_SESSION_ONLY => CredentialPresentation {
-                        status: if credential_session()
-                            .session_credential(&provider.id)
-                            .is_some()
-                        {
-                            "detected".to_string()
-                        } else {
-                            "not_detected".to_string()
-                        },
-                        source: "session".to_string(),
-                    },
-                    _ => credential_presentation_for_provider(provider),
+                CREDENTIAL_SOURCE_NOT_CONFIGURED
+            };
+            let presentation = CredentialPresentation {
+                status: if !provider.api_key_required {
+                    "not_required"
+                } else if user_environment_unavailable {
+                    "unavailable"
+                } else if session_present || environment_present || config_file_present {
+                    "detected"
+                } else {
+                    "not_detected"
                 }
+                .to_string(),
+                source: source.to_string(),
+                env_shadows_file: environment_present && config_file_present && !session_present,
+                session_present,
+                config_file_present,
             };
             (provider.id.clone(), presentation)
         })
@@ -3685,6 +4339,9 @@ fn credential_presentation_for_provider(provider: &AgentProviderProfile) -> Cred
         } else {
             "not_required".to_string()
         },
+        env_shadows_file: false,
+        session_present: false,
+        config_file_present: false,
     }
 }
 
@@ -4224,7 +4881,7 @@ fn normalize_connection_test_response(
         credential_status: response.credential_status.as_str().to_string(),
         model_resolved: response.model_resolved,
         latency_ms: response.latency_ms,
-        capabilities: AgentModelCapabilitiesV1 {
+        capabilities: AgentConnectionCapabilities {
             tool_calling: response.capabilities.tool_calling.as_str().to_string(),
             reasoning: response.capabilities.reasoning.as_str().to_string(),
             vision_input: response.capabilities.vision_input.as_str().to_string(),
@@ -4356,6 +5013,7 @@ struct RProbeTestFault {
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 fn run_r_json_command_with_fault<T: for<'de> Deserialize<'de>>(
     command: Command,
     stdin: Option<String>,
@@ -4731,14 +5389,13 @@ fn hide_console_window(_command: &mut Command) {
 // grant; every View click runs the full flow again.
 // ---------------------------------------------------------------------------
 
-/// Fixed four-word terminal vocabulary for `agent_llm_view_credential`.
+/// Fixed terminal vocabulary for `agent_llm_view_credential`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentLlmCredentialRevealOutcome {
     Revealed,
     CredentialMissing,
-    StoreUnavailable,
-    SourceIneligible,
+    CredentialUnavailable,
 }
 
 /// The response carries the stored value only on `Revealed`; every failure
@@ -4747,12 +5404,13 @@ pub enum AgentLlmCredentialRevealOutcome {
 pub struct AgentLlmCredentialRevealView {
     pub outcome: AgentLlmCredentialRevealOutcome,
     pub credential: Option<String>,
+    pub source: Option<String>,
+    pub env_shadows_file: bool,
 }
 
 const REVEAL_AUDIT_EVENT: &str = "credential_reveal";
 
 static REVEAL_AUDIT_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-static CREDENTIAL_GENERATIONS: OnceLock<Mutex<HashMap<String, u64>>> = OnceLock::new();
 static CREDENTIAL_OPERATION_STATE: OnceLock<(Mutex<HashSet<String>>, Condvar)> = OnceLock::new();
 
 fn reveal_audit_guard() -> MutexGuard<'static, ()> {
@@ -4760,34 +5418,6 @@ fn reveal_audit_guard() -> MutexGuard<'static, ()> {
         .get_or_init(|| Mutex::new(()))
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
-}
-
-fn credential_generation_entries() -> &'static Mutex<HashMap<String, u64>> {
-    CREDENTIAL_GENERATIONS.get_or_init(Default::default)
-}
-
-/// Monotonic token capturing Rho-owned credential state for one Provider.
-/// Mutation paths advance it after every successful Rho-owned write; CRED-
-/// REVEAL-1C no longer consults it, so only tests read the value.
-#[cfg(test)]
-fn credential_generation(provider_id: &str) -> u64 {
-    credential_generation_entries()
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .get(provider_id)
-        .copied()
-        .unwrap_or(0)
-}
-
-/// Called only after a Rho-owned credential mutation fully succeeded.
-pub(crate) fn advance_credential_generation(provider_id: &str) {
-    let mut entries = credential_generation_entries()
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    entries
-        .entry(provider_id.to_string())
-        .and_modify(|generation| *generation = generation.saturating_add(1))
-        .or_insert(1);
 }
 
 fn credential_operation_state() -> &'static (Mutex<HashSet<String>>, Condvar) {
@@ -4839,63 +5469,72 @@ fn credential_operation_lock(provider_id: &str) -> CredentialOperationGuard {
 
 /// Rotates oversized audit bytes down to the keep bound on a newline
 /// boundary. Shared by both audit writers so rotation behavior is identical.
-fn rotate_credential_audit_bytes(bytes: &mut Vec<u8>) {
-    if bytes.len() > MAX_CREDENTIAL_AUDIT_BYTES {
-        let tail_start = bytes.len() - CREDENTIAL_AUDIT_KEEP_BYTES;
-        // The byte vector always ends with the just-appended row's newline.
-        // Exclude that terminator from the alignment search: if an older
-        // corrupt/legacy oversized line contains no newline, selecting the
-        // final terminator would otherwise discard the new durable row too.
-        let alignment_end = bytes.len().saturating_sub(1);
-        let aligned = bytes[tail_start..alignment_end]
+fn rotate_credential_audit_bytes(bytes: &mut Vec<u8>) -> Result<()> {
+    if bytes.len() <= MAX_CREDENTIAL_AUDIT_BYTES {
+        return Ok(());
+    }
+    let adoption_rows = bytes
+        .split(|byte| *byte == b'\n')
+        .filter(|line| !line.is_empty())
+        .filter_map(|line| {
+            let row = serde_json::from_slice::<serde_json::Value>(line).ok()?;
+            (row.get("event").and_then(serde_json::Value::as_str) == Some("config_store_adopted"))
+                .then(|| {
+                let schema = row
+                    .get("config_schema_version")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or(u64::from(agent_config::CONFIG_SCHEMA_VERSION));
+                let path = row.get("detail").and_then(serde_json::Value::as_str)?;
+                Some(((schema, path.to_string()), line.to_vec()))
+            })?
+        })
+        .collect::<BTreeMap<_, _>>();
+    let adoption_bytes = adoption_rows
+        .values()
+        .map(|line| line.len() + 1)
+        .sum::<usize>();
+    ensure!(
+        adoption_bytes + MAX_CREDENTIAL_AUDIT_ROW_BYTES <= MAX_CREDENTIAL_AUDIT_BYTES,
+        "The credential audit adoption-identity capacity is exhausted."
+    );
+
+    let tail_budget = CREDENTIAL_AUDIT_KEEP_BYTES.min(MAX_CREDENTIAL_AUDIT_BYTES - adoption_bytes);
+    let unaligned = bytes.len().saturating_sub(tail_budget);
+    let tail_start = if unaligned == 0 {
+        0
+    } else {
+        bytes[unaligned..]
             .iter()
             .position(|byte| *byte == b'\n')
-            .map(|offset| tail_start + offset + 1)
-            .unwrap_or(tail_start);
-        let kept = bytes.split_off(aligned);
-        *bytes = kept;
-    }
-}
-
-/// `load_settings` correctly rejects unknown source values. The reveal
-/// contract nevertheless distinguishes that fail-closed case from an
-/// unavailable settings store, so inspect only the bounded V5 metadata needed
-/// to classify the target Provider after validation fails. Settings never
-/// contain credential values.
-fn target_provider_has_ineligible_persisted_source(data_dir: &Path, provider_id: &str) -> bool {
-    let Ok(bytes) = std::fs::read(settings_path(data_dir)) else {
-        return false;
+            .map(|offset| unaligned + offset + 1)
+            .unwrap_or(bytes.len())
     };
-    if bytes.len() > MAX_SETTINGS_BYTES {
-        return false;
+    let mut rotated = Vec::with_capacity(MAX_CREDENTIAL_AUDIT_BYTES);
+    for line in adoption_rows.values() {
+        rotated.extend_from_slice(line);
+        rotated.push(b'\n');
     }
-    let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
-        return false;
-    };
-    if value
-        .get("schema_version")
-        .and_then(serde_json::Value::as_u64)
-        != Some(5)
+    for line in bytes[tail_start..]
+        .split(|byte| *byte == b'\n')
+        .filter(|line| !line.is_empty())
     {
-        return false;
+        let is_adoption = serde_json::from_slice::<serde_json::Value>(line)
+            .ok()
+            .is_some_and(|row| {
+                row.get("event").and_then(serde_json::Value::as_str) == Some("config_store_adopted")
+            });
+        if is_adoption {
+            continue;
+        }
+        ensure!(
+            rotated.len() + line.len() + 1 <= MAX_CREDENTIAL_AUDIT_BYTES,
+            "The credential audit tail exceeds its bounded rotation size."
+        );
+        rotated.extend_from_slice(line);
+        rotated.push(b'\n');
     }
-    value
-        .get("providers")
-        .and_then(serde_json::Value::as_array)
-        .and_then(|providers| {
-            providers.iter().find(|provider| {
-                provider.get("id").and_then(serde_json::Value::as_str) == Some(provider_id)
-            })
-        })
-        .and_then(|provider| {
-            provider
-                .get("credential_source")
-                .and_then(serde_json::Value::as_str)
-        })
-        .is_some_and(|source| {
-            source == LEGACY_CREDENTIAL_SOURCE_FILE_FALLBACK
-                || !is_supported_credential_source(source)
-        })
+    *bytes = rotated;
+    Ok(())
 }
 
 /// CRED-REVEAL-1C entry point behind `agent_llm_view_credential`: one
@@ -4904,50 +5543,75 @@ fn target_provider_has_ineligible_persisted_source(data_dir: &Path, provider_id:
 /// source, outcome, and time only — never the value.
 pub(crate) fn view_provider_credential(
     data_dir: &Path,
+    rscript: &Path,
+    r_environ_user: Option<&Path>,
     provider_id: &str,
 ) -> AgentLlmCredentialRevealView {
-    let refuse = |outcome: AgentLlmCredentialRevealOutcome| AgentLlmCredentialRevealView {
-        outcome,
-        credential: None,
+    let refuse = |outcome: AgentLlmCredentialRevealOutcome| {
+        record_credential_audit(
+            data_dir,
+            REVEAL_AUDIT_EVENT,
+            provider_id,
+            CREDENTIAL_SOURCE_NOT_CONFIGURED,
+            match outcome {
+                AgentLlmCredentialRevealOutcome::Revealed => "revealed",
+                AgentLlmCredentialRevealOutcome::CredentialMissing => "credential_missing",
+                AgentLlmCredentialRevealOutcome::CredentialUnavailable => "credential_unavailable",
+            },
+            None,
+        );
+        AgentLlmCredentialRevealView {
+            outcome,
+            credential: None,
+            source: None,
+            env_shadows_file: false,
+        }
     };
     if provider_id.is_empty()
         || provider_id.len() > MAX_ID_LENGTH
         || provider_id.chars().any(char::is_control)
     {
-        return refuse(AgentLlmCredentialRevealOutcome::SourceIneligible);
+        return refuse(AgentLlmCredentialRevealOutcome::CredentialUnavailable);
     }
-    let settings = match load_settings(data_dir) {
-        Ok(settings) => settings,
-        Err(_) if target_provider_has_ineligible_persisted_source(data_dir, provider_id) => {
-            return refuse(AgentLlmCredentialRevealOutcome::SourceIneligible);
-        }
-        Err(_) => return refuse(AgentLlmCredentialRevealOutcome::StoreUnavailable),
+    let loaded = match load_v6_document(data_dir) {
+        Ok(loaded) => loaded,
+        Err(_) => return refuse(AgentLlmCredentialRevealOutcome::CredentialUnavailable),
     };
+    let settings = config_to_settings(&loaded.config);
+    if validate_settings(&settings).is_err() {
+        return refuse(AgentLlmCredentialRevealOutcome::CredentialUnavailable);
+    }
     let Some(provider) = settings.providers.iter().find(|p| p.id == provider_id) else {
-        return refuse(AgentLlmCredentialRevealOutcome::SourceIneligible);
+        return refuse(AgentLlmCredentialRevealOutcome::CredentialUnavailable);
     };
-    if !provider.api_key_required || !is_supported_credential_source(&provider.credential_source) {
-        return refuse(AgentLlmCredentialRevealOutcome::SourceIneligible);
+    if !provider.api_key_required {
+        return refuse(AgentLlmCredentialRevealOutcome::CredentialUnavailable);
     }
-    // `environment` is refused before its variable is ever read; the legacy
-    // file fallback has no display path.
-    if matches!(
-        provider.credential_source.as_str(),
-        CREDENTIAL_SOURCE_ENVIRONMENT | LEGACY_CREDENTIAL_SOURCE_FILE_FALLBACK
+    let file_present = loaded
+        .config
+        .providers
+        .iter()
+        .find(|provider| provider.id == provider_id)
+        .and_then(|provider| provider.api_key.as_deref())
+        .is_some_and(|value| !value.is_empty());
+    let store = ConfigCredentialStore::from_config(&loaded.config);
+    let (secret, source) = match resolve_provider_credential_with_runtime(
+        &settings,
+        provider,
+        &store,
+        Some(rscript),
+        r_environ_user,
     ) {
-        return refuse(AgentLlmCredentialRevealOutcome::SourceIneligible);
-    }
-    let secret = match fresh_reveal_read(data_dir, provider_id, &provider.credential_source) {
-        Ok(Some(secret)) => secret,
-        Ok(None) => return refuse(AgentLlmCredentialRevealOutcome::CredentialMissing),
-        Err(_) => return refuse(AgentLlmCredentialRevealOutcome::StoreUnavailable),
+        Ok((Some(secret), source)) => (secret, source),
+        Ok((None, _)) => return refuse(AgentLlmCredentialRevealOutcome::CredentialMissing),
+        Err(_) => return refuse(AgentLlmCredentialRevealOutcome::CredentialUnavailable),
     };
     // CRED-SEC4 best-effort: an audit failure never blocks or alters a view.
     record_credential_audit(
         data_dir,
         REVEAL_AUDIT_EVENT,
         provider_id,
-        &provider.credential_source,
+        source,
         "revealed",
         None,
     );
@@ -4956,4595 +5620,264 @@ pub(crate) fn view_provider_credential(
     AgentLlmCredentialRevealView {
         outcome: AgentLlmCredentialRevealOutcome::Revealed,
         credential: Some(credential),
-    }
-}
-
-/// Fresh exact-source read for one explicit View click. Never consults the
-/// runtime read-through cache: `rho_vault` reads and decrypts the vault entry
-/// directly and `session_only` reads the live session entry.
-fn fresh_reveal_read(
-    data_dir: &Path,
-    provider_id: &str,
-    source: &str,
-) -> Result<Option<Zeroizing<String>>> {
-    match source {
-        CREDENTIAL_SOURCE_RHO_VAULT => agent_credential_vault::get(data_dir, provider_id)
-            .map(|value| value.map(Zeroizing::new)),
-        CREDENTIAL_SOURCE_SESSION_ONLY => {
-            Ok(credential_session().session_credential_zeroizing(provider_id))
-        }
-        other => bail!("Unsupported credential source for viewing: {other}"),
+        source: Some(source.to_string()),
+        env_shadows_file: source == CREDENTIAL_SOURCE_ENVIRONMENT && file_present,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write as _;
-    use std::net::TcpListener;
-    use std::sync::{
-        Barrier,
-        atomic::{AtomicU32, AtomicUsize, Ordering},
-    };
-    use std::thread;
-    use tempfile::TempDir;
 
-    #[cfg(unix)]
-    fn process_is_alive(pid: u32) -> bool {
-        let Ok(pid) = i32::try_from(pid) else {
-            return false;
-        };
-        if unsafe { unix_kill_process(pid, 0) } == 0 {
-            return true;
-        }
-        io::Error::last_os_error().raw_os_error() != Some(3)
-    }
+    use std::cell::Cell;
 
-    #[cfg(windows)]
-    fn process_is_alive(pid: u32) -> bool {
-        const SYNCHRONIZE: u32 = 0x0010_0000;
-        const WAIT_OBJECT_0: u32 = 0;
-        const WAIT_TIMEOUT: u32 = 258;
-        #[link(name = "kernel32")]
-        unsafe extern "system" {
-            fn OpenProcess(
-                desired_access: u32,
-                inherit_handle: i32,
-                process_id: u32,
-            ) -> *mut std::ffi::c_void;
-            fn WaitForSingleObject(handle: *mut std::ffi::c_void, milliseconds: u32) -> u32;
-        }
-
-        let handle = unsafe { OpenProcess(SYNCHRONIZE, 0, pid) };
-        if handle.is_null() {
-            let error = io::Error::last_os_error();
-            if error.raw_os_error() == Some(87) {
-                return false;
-            }
-            panic!("opening process {pid} failed: {error}");
-        }
-        let handle = WindowsOwnedHandle(handle);
-        match unsafe { WaitForSingleObject(handle.0, 0) } {
-            WAIT_OBJECT_0 => false,
-            WAIT_TIMEOUT => true,
-            status => panic!("waiting for process {pid} failed with status {status}"),
-        }
-    }
-
-    #[cfg(not(any(unix, windows)))]
-    fn process_is_alive(_pid: u32) -> bool {
-        false
-    }
-
-    fn assert_process_terminated(pid: u32, context: &str) {
-        let deadline = Instant::now() + Duration::from_secs(2);
-        while process_is_alive(pid) && Instant::now() < deadline {
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        assert!(!process_is_alive(pid), "{context}: process {pid} survived");
-    }
-
-    #[derive(Default)]
-    struct MemoryCredentialStore {
-        entries: Mutex<HashMap<String, String>>,
-        get_calls: Mutex<Vec<String>>,
-        set_calls: Mutex<Vec<String>>,
-        delete_calls: Mutex<Vec<String>>,
-        fail_get: bool,
-        fail_set: bool,
-        fail_delete: bool,
-    }
-
-    impl CredentialStore for MemoryCredentialStore {
-        fn get(&self, provider_id: &str) -> Result<Option<String>> {
-            self.get_calls.lock().unwrap().push(provider_id.to_string());
-            ensure!(!self.fail_get, "injected credential read failure");
-            Ok(self.entries.lock().unwrap().get(provider_id).cloned())
-        }
-
-        fn set(&self, provider_id: &str, credential: &str) -> Result<()> {
-            self.set_calls.lock().unwrap().push(provider_id.to_string());
-            ensure!(!self.fail_set, "injected credential write failure");
-            self.entries
-                .lock()
-                .unwrap()
-                .insert(provider_id.to_string(), credential.to_string());
-            Ok(())
-        }
-
-        fn delete(&self, provider_id: &str) -> Result<()> {
-            self.delete_calls
-                .lock()
-                .unwrap()
-                .push(provider_id.to_string());
-            ensure!(!self.fail_delete, "injected credential delete failure");
-            self.entries.lock().unwrap().remove(provider_id);
-            Ok(())
-        }
-    }
-
-    static REVEAL_REGRESSION_LOCK: Mutex<()> = Mutex::new(());
-    static REVEAL_FIXTURE_SEQUENCE: AtomicUsize = AtomicUsize::new(1);
-
-    fn reveal_regression_guard() -> MutexGuard<'static, ()> {
-        REVEAL_REGRESSION_LOCK
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-    }
-
-    fn reveal_fixture(source: &str) -> (TempDir, String, u64) {
-        let directory = TempDir::new().unwrap();
-        let sequence = REVEAL_FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-        let provider_id = format!("provider-reveal-{sequence}");
-        let mut settings = default_settings();
-        let old_provider_id = settings.providers[0].id.clone();
-        settings.providers[0].id = provider_id.clone();
-        settings.providers[0].display_name = format!("Reveal Provider {sequence}");
-        settings.providers[0].credential_source = source.to_string();
-        for model in &mut settings.models {
-            if model.provider_id == old_provider_id {
-                model.provider_id = provider_id.clone();
-            }
-        }
-        validate_settings(&settings).unwrap();
-        let revision = settings.revision;
-        save_settings(directory.path(), &settings).unwrap();
-        (directory, provider_id, revision)
-    }
-
-    fn spawn_discovery_server(
-        status: &str,
-        extra_headers: &[(&str, &str)],
-        body: String,
-        delay: Duration,
-    ) -> (String, thread::JoinHandle<String>) {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let address = listener.local_addr().unwrap();
-        let status = status.to_string();
-        let headers = extra_headers
+    fn semantic_invalid_settings() -> AgentLlmSettings {
+        let mut capabilities = capability_names()
             .iter()
-            .map(|(name, value)| ((*name).to_string(), (*value).to_string()))
-            .collect::<Vec<_>>();
-        let handle = thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
-            let request = read_discovery_request(&mut stream);
-            if !delay.is_zero() {
-                thread::sleep(delay);
-            }
-            let mut response = format!(
-                "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n",
-                body.len()
-            );
-            for (name, value) in headers {
-                response.push_str(&format!("{name}: {value}\r\n"));
-            }
-            response.push_str("\r\n");
-            let _ = stream.write_all(response.as_bytes());
-            let _ = stream.write_all(body.as_bytes());
-            String::from_utf8_lossy(&request).into_owned()
-        });
-        (format!("http://{address}/v1"), handle)
-    }
-
-    fn read_discovery_request(stream: &mut std::net::TcpStream) -> Vec<u8> {
-        stream
-            .set_read_timeout(Some(Duration::from_secs(2)))
-            .unwrap();
-        let mut request = Vec::new();
-        let mut chunk = [0_u8; 1024];
-        while request.len() < 16 * 1024 {
-            let count = stream.read(&mut chunk).unwrap_or(0);
-            if count == 0 {
-                break;
-            }
-            request.extend_from_slice(&chunk[..count]);
-            if request.windows(4).any(|window| window == b"\r\n\r\n") {
-                break;
-            }
-        }
-        request
-    }
-
-    fn spawn_stalled_discovery_server() -> (String, thread::JoinHandle<String>) {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let address = listener.local_addr().unwrap();
-        let handle = thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
-            let request = read_discovery_request(&mut stream);
-            stream
-                .set_read_timeout(Some(Duration::from_secs(5)))
-                .unwrap();
-            let mut closed = [0_u8; 1];
-            let _ = stream.read(&mut closed);
-            String::from_utf8_lossy(&request).into_owned()
-        });
-        (format!("http://{address}/v1"), handle)
-    }
-
-    fn save_custom_discovery_provider(directory: &TempDir, base_url: String) {
-        let mut settings = default_settings();
-        let provider = &mut settings.providers[0];
-        provider.kind = "openai_compatible".to_string();
-        provider.registered_provider_id = None;
-        provider.base_url = Some(base_url);
-        provider.base_url_env = None;
-        provider.wire_api = Some("chat_completions".to_string());
-        save_settings(directory.path(), &settings).unwrap();
-    }
-
-    fn store_with_discovery_secret(secret: &str) -> MemoryCredentialStore {
-        MemoryCredentialStore {
-            entries: Mutex::new(HashMap::from([(
-                "provider-deepseek-existing".to_string(),
-                secret.to_string(),
-            )])),
-            ..Default::default()
-        }
-    }
-
-    fn provider_removal_fixture() -> AgentLlmSettings {
-        let mut settings = default_settings();
-        let mut remaining_provider = settings.providers[0].clone();
-        remaining_provider.id = "provider-remaining".to_string();
-        remaining_provider.display_name = "Remaining Provider".to_string();
-        let mut remaining_model = settings.models[0].clone();
-        remaining_model.id = "model-remaining-chat".to_string();
-        remaining_model.provider_id = remaining_provider.id.clone();
-        remaining_model.display_name = "Remaining Chat Model".to_string();
-        remaining_model.model_id = "remaining-chat-model".to_string();
-        let mut second_target_model = settings.models[0].clone();
-        second_target_model.id = "model-target-vision".to_string();
-        second_target_model.display_name = "Target Vision Model".to_string();
-        second_target_model.model_id = "target-vision-model".to_string();
-        settings.providers.push(remaining_provider);
-        settings.models.push(second_target_model);
-        settings.models.push(remaining_model);
-        settings.capability_routes[0].model_id = "model-remaining-chat".to_string();
-        settings.capability_routes.push(AgentCapabilityRoute {
-            capability: "agent.act".to_string(),
-            model_id: "model-deepseek-v4-flash".to_string(),
-            model_type: "language".to_string(),
-            required_model_capabilities: vec!["function_call".to_string()],
-        });
-        validate_settings(&settings).unwrap();
-        settings
-    }
-
-    #[test]
-    fn context_capacity_update_is_revision_safe_validated_and_recovers_after_save_failure() {
-        let directory = TempDir::new().unwrap();
-        let settings = default_settings();
-        let model_id = settings.models[0].id.clone();
-        save_settings(directory.path(), &settings).unwrap();
-
-        let updated = set_context_capacity(
-            directory.path(),
-            &AgentContextCapacityRequest {
-                model_id: model_id.clone(),
-                expected_revision: settings.revision,
-                context_window_tokens: 131_072,
-                reserved_output_tokens: 8_192,
-            },
-        )
-        .unwrap();
-        assert_eq!(updated.revision, settings.revision + 1);
-        assert_eq!(updated.models[0].context_window_tokens, 131_072);
-        assert_eq!(updated.models[0].reserved_output_tokens, 8_192);
-        assert_eq!(updated.models[0].context_capacity_source, "user_declared");
-
-        let stale = set_context_capacity(
-            directory.path(),
-            &AgentContextCapacityRequest {
-                model_id: model_id.clone(),
-                expected_revision: settings.revision,
-                context_window_tokens: 65_536,
-                reserved_output_tokens: 4_096,
-            },
-        )
-        .unwrap_err();
-        assert!(stale.to_string().contains("changed"));
-
-        let invalid = set_context_capacity(
-            directory.path(),
-            &AgentContextCapacityRequest {
-                model_id: model_id.clone(),
-                expected_revision: updated.revision,
-                context_window_tokens: 4_096,
-                reserved_output_tokens: 4_096,
-            },
-        )
-        .unwrap_err();
-        assert!(
-            invalid
-                .to_string()
-                .contains("smaller than the context window")
-        );
-
-        let before_failure = std::fs::read(settings_path(directory.path())).unwrap();
-        let failed = set_context_capacity_with_save(
-            directory.path(),
-            &AgentContextCapacityRequest {
-                model_id: model_id.clone(),
-                expected_revision: updated.revision,
-                context_window_tokens: 262_144,
-                reserved_output_tokens: 16_384,
-            },
-            |_path, _settings| anyhow::bail!("injected settings write failure"),
-        )
-        .unwrap_err();
-        assert!(
-            failed
-                .to_string()
-                .contains("injected settings write failure")
-        );
-        assert_eq!(
-            std::fs::read(settings_path(directory.path())).unwrap(),
-            before_failure
-        );
-
-        let recovered = set_context_capacity(
-            directory.path(),
-            &AgentContextCapacityRequest {
-                model_id,
-                expected_revision: updated.revision,
-                context_window_tokens: 262_144,
-                reserved_output_tokens: 16_384,
-            },
-        )
-        .unwrap();
-        assert_eq!(recovered.revision, updated.revision + 1);
-        assert_eq!(recovered.models[0].context_window_tokens, 262_144);
-        assert_eq!(recovered.models[0].reserved_output_tokens, 16_384);
-    }
-
-    #[test]
-    fn model_capability_declaration_sets_one_attribute_and_is_revision_safe() {
-        let directory = TempDir::new().unwrap();
-        let settings = default_settings();
-        let model_id = settings.models[0].id.clone();
-        save_settings(directory.path(), &settings).unwrap();
-
-        let updated = declare_model_capability(
-            directory.path(),
-            &AgentModelCapabilityDeclarationRequest {
-                model_id: model_id.clone(),
-                expected_revision: settings.revision,
-                capability: "vision_input".to_string(),
-                value: "yes".to_string(),
-            },
-        )
-        .unwrap();
-        assert_eq!(updated.revision, settings.revision + 1);
-        let model = &updated.models[0];
-        assert_eq!(model.capabilities["vision_input"].value, "yes");
-        assert_eq!(model.capabilities["vision_input"].source, "user_declared");
-        for (name, value) in &model.capabilities {
-            if name != "vision_input" {
-                assert_eq!(value, &settings.models[0].capabilities[name]);
-            }
-        }
-        assert_eq!(model.model_type, settings.models[0].model_type);
-        assert_eq!(
-            model.context_window_tokens,
-            settings.models[0].context_window_tokens
-        );
-        assert_eq!(model.enabled, settings.models[0].enabled);
-
-        let mut unrouted = model.clone();
-        unrouted.id = "model-unrouted-edit".to_string();
-        unrouted.model_id = "unrouted-edit".to_string();
-        let with_unrouted = save_model(directory.path(), unrouted).unwrap();
-
-        let retyped = declare_model_capability(
-            directory.path(),
-            &AgentModelCapabilityDeclarationRequest {
-                model_id: "model-unrouted-edit".to_string(),
-                expected_revision: with_unrouted.revision,
-                capability: "model_type".to_string(),
-                value: "image".to_string(),
-            },
-        )
-        .unwrap();
-        assert_eq!(retyped.revision, with_unrouted.revision + 1);
-        let retyped_model = retyped
-            .models
-            .iter()
-            .find(|model| model.id == "model-unrouted-edit")
-            .unwrap();
-        assert_eq!(retyped_model.model_type.value, "image");
-        assert_eq!(retyped_model.model_type.source, "user_declared");
-        assert_eq!(retyped_model.capabilities, updated.models[0].capabilities);
-
-        let routed_retype = declare_model_capability(
-            directory.path(),
-            &AgentModelCapabilityDeclarationRequest {
-                model_id: model_id.clone(),
-                expected_revision: retyped.revision,
-                capability: "model_type".to_string(),
-                value: "image".to_string(),
-            },
-        )
-        .unwrap_err();
-        assert!(
-            routed_retype
-                .to_string()
-                .contains("incompatible with this route")
-        );
-
-        let redeclared = declare_model_capability(
-            directory.path(),
-            &AgentModelCapabilityDeclarationRequest {
-                model_id: model_id.clone(),
-                expected_revision: retyped.revision,
-                capability: "vision_input".to_string(),
-                value: "unknown".to_string(),
-            },
-        )
-        .unwrap();
-        assert_eq!(
-            redeclared.models[0].capabilities["vision_input"].value,
-            "unknown"
-        );
-        assert_eq!(
-            redeclared.models[0].capabilities["vision_input"].source,
-            "user_declared"
-        );
-    }
-
-    #[test]
-    fn model_capability_declaration_rejects_stale_unknown_and_out_of_vocabulary() {
-        let directory = TempDir::new().unwrap();
-        let settings = default_settings();
-        let model_id = settings.models[0].id.clone();
-        save_settings(directory.path(), &settings).unwrap();
-
-        let stale = declare_model_capability(
-            directory.path(),
-            &AgentModelCapabilityDeclarationRequest {
-                model_id: model_id.clone(),
-                expected_revision: settings.revision + 1,
-                capability: "reasoning".to_string(),
-                value: "yes".to_string(),
-            },
-        )
-        .unwrap_err();
-        assert!(stale.to_string().contains("changed"));
-
-        let unknown = declare_model_capability(
-            directory.path(),
-            &AgentModelCapabilityDeclarationRequest {
-                model_id: "model-does-not-exist".to_string(),
-                expected_revision: settings.revision,
-                capability: "reasoning".to_string(),
-                value: "yes".to_string(),
-            },
-        )
-        .unwrap_err();
-        assert!(unknown.to_string().contains("Unknown model"));
-
-        let bad_capability = declare_model_capability(
-            directory.path(),
-            &AgentModelCapabilityDeclarationRequest {
-                model_id: model_id.clone(),
-                expected_revision: settings.revision,
-                capability: "time_travel".to_string(),
-                value: "yes".to_string(),
-            },
-        )
-        .unwrap_err();
-        assert!(
-            bad_capability
-                .to_string()
-                .contains("Unsupported model capability")
-        );
-
-        let bad_value = declare_model_capability(
-            directory.path(),
-            &AgentModelCapabilityDeclarationRequest {
-                model_id: model_id.clone(),
-                expected_revision: settings.revision,
-                capability: "reasoning".to_string(),
-                value: "language".to_string(),
-            },
-        )
-        .unwrap_err();
-        assert!(bad_value.to_string().contains("yes, no or unknown"));
-
-        let bad_type_value = declare_model_capability(
-            directory.path(),
-            &AgentModelCapabilityDeclarationRequest {
-                model_id: model_id.clone(),
-                expected_revision: settings.revision,
-                capability: "model_type".to_string(),
-                value: "yes".to_string(),
-            },
-        )
-        .unwrap_err();
-        assert!(
-            bad_type_value
-                .to_string()
-                .contains("language, embedding, image or unknown")
-        );
-
-        let persisted = load_settings(directory.path()).unwrap();
-        assert_eq!(persisted.revision, settings.revision);
-        assert_eq!(persisted.models.len(), settings.models.len());
-        let persisted_json = serde_json::to_value(&persisted).unwrap();
-        let settings_json = serde_json::to_value(&settings).unwrap();
-        assert_eq!(persisted_json, settings_json);
-    }
-
-    #[test]
-    fn model_capability_declaration_write_failure_preserves_disk_state_and_recovers() {
-        let directory = TempDir::new().unwrap();
-        let settings = default_settings();
-        let model_id = settings.models[0].id.clone();
-        save_settings(directory.path(), &settings).unwrap();
-        let before_failure = std::fs::read(settings_path(directory.path())).unwrap();
-
-        let failed = declare_model_capability_with_save(
-            directory.path(),
-            &AgentModelCapabilityDeclarationRequest {
-                model_id: model_id.clone(),
-                expected_revision: settings.revision,
-                capability: "audio_input".to_string(),
-                value: "no".to_string(),
-            },
-            |_path, _settings| anyhow::bail!("injected settings write failure"),
-        )
-        .unwrap_err();
-        assert!(
-            failed
-                .to_string()
-                .contains("injected settings write failure")
-        );
-        assert_eq!(
-            std::fs::read(settings_path(directory.path())).unwrap(),
-            before_failure
-        );
-
-        let recovered = declare_model_capability(
-            directory.path(),
-            &AgentModelCapabilityDeclarationRequest {
-                model_id,
-                expected_revision: settings.revision,
-                capability: "audio_input".to_string(),
-                value: "no".to_string(),
-            },
-        )
-        .unwrap();
-        assert_eq!(recovered.revision, settings.revision + 1);
-        assert_eq!(recovered.models[0].capabilities["audio_input"].value, "no");
-    }
-
-    #[test]
-    fn save_model_adds_new_model_and_keeps_type_and_capability_evidence_immutable() {
-        let directory = TempDir::new().unwrap();
-        let settings = default_settings();
-        save_settings(directory.path(), &settings).unwrap();
-
-        let mut added = settings.models[0].clone();
-        added.id = "model-manual-new".to_string();
-        added.display_name = "Manual Model".to_string();
-        added.model_id = "manual-model".to_string();
-        added.model_type = capability_value("unknown", "unknown");
-        added.capabilities = unknown_capabilities();
-        let saved = save_model(directory.path(), added.clone()).unwrap();
-        assert_eq!(saved.revision, settings.revision + 1);
-        assert_eq!(saved.models.len(), settings.models.len() + 1);
-        let persisted_added = saved
-            .models
-            .iter()
-            .find(|model| model.id == "model-manual-new")
-            .unwrap();
-        assert_eq!(
-            serde_json::to_value(persisted_added).unwrap(),
-            serde_json::to_value(&added).unwrap()
-        );
-
-        let mut renamed = added.clone();
-        renamed.display_name = "Manual Model Renamed".to_string();
-        let renamed_saved = save_model(directory.path(), renamed).unwrap();
-        assert_eq!(renamed_saved.revision, saved.revision + 1);
-        assert_eq!(
-            renamed_saved
-                .models
-                .iter()
-                .find(|model| model.id == "model-manual-new")
-                .map(|model| model.display_name.as_str()),
-            Some("Manual Model Renamed")
-        );
-
-        let mut retyped = added.clone();
-        retyped.model_type = capability_value("language", "user_declared");
-        let retype_error = save_model(directory.path(), retyped).unwrap_err();
-        assert!(
-            retype_error
-                .to_string()
-                .contains("capability declaration command")
-        );
-
-        let mut recapability = added.clone();
-        recapability.capabilities.insert(
-            "reasoning".to_string(),
-            capability_value("yes", "user_declared"),
-        );
-        let capability_error = save_model(directory.path(), recapability).unwrap_err();
-        assert!(
-            capability_error
-                .to_string()
-                .contains("capability declaration command")
-        );
-
-        let deleted = delete_model(
-            directory.path(),
-            &DeleteModelRequest {
-                model_id: "model-manual-new".to_string(),
-                replacement_model_id: None,
-            },
-        )
-        .unwrap();
-        assert_eq!(deleted.models.len(), settings.models.len());
-        assert!(
-            deleted
-                .models
-                .iter()
-                .all(|model| model.id != "model-manual-new")
-        );
-    }
-
-    fn catalog_capacity_entry(
-        provider_model_id: &str,
-        context_window: Option<u64>,
-        max_output: Option<u64>,
-    ) -> AgentCatalogEntry {
-        AgentCatalogEntry {
-            provider: "deepseek".to_string(),
-            id: provider_model_id.to_string(),
-            display_name: "Catalog Model".to_string(),
-            description: None,
-            model_type: capability_value("language", "aisdk_catalog"),
-            capabilities: unknown_capabilities(),
-            context_window_tokens: context_window,
-            max_output_tokens: max_output,
-        }
-    }
-
-    #[test]
-    fn catalog_capacity_projection_shows_catalog_values_without_touching_durable_state() {
-        let directory = TempDir::new().unwrap();
-        let settings = default_settings();
-        save_settings(directory.path(), &settings).unwrap();
-        let durable_before = std::fs::read(settings_path(directory.path())).unwrap();
-
-        let view = settings_view_from_settings_with(directory.path(), settings.clone(), || {
-            Some(Arc::new(vec![catalog_capacity_entry(
-                "deepseek-v4-flash",
-                Some(131_072),
-                Some(8_192),
-            )]))
-        })
-        .unwrap();
-        let projected = &view.models[0].profile;
-        assert_eq!(projected.context_window_tokens, 131_072);
-        assert_eq!(projected.reserved_output_tokens, 8_192);
-        assert_eq!(projected.context_capacity_source, "catalog");
-
-        // Durable settings are never rewritten by the projection.
-        assert_eq!(
-            std::fs::read(settings_path(directory.path())).unwrap(),
-            durable_before
-        );
-        let persisted = load_settings(directory.path()).unwrap();
-        assert_eq!(
-            persisted.models[0].context_window_tokens,
-            CONSERVATIVE_CONTEXT_WINDOW_TOKENS
-        );
-        assert_eq!(
-            persisted.models[0].context_capacity_source,
-            "conservative_default"
-        );
-
-        // The runtime execution budget keeps reading the durable profile.
-        let resolved = resolve_model_for_turn(directory.path(), None, "ask").unwrap();
-        assert_eq!(
-            resolved.runtime_profile.context_window_tokens,
-            CONSERVATIVE_CONTEXT_WINDOW_TOKENS
-        );
-        assert_eq!(
-            resolved.runtime_profile.reserved_output_tokens,
-            CONSERVATIVE_RESERVED_OUTPUT_TOKENS
-        );
-        assert_eq!(
-            resolved.runtime_profile.context_capacity_source,
-            "conservative_default"
-        );
-    }
-
-    #[test]
-    fn catalog_capacity_projection_requires_exact_match_and_both_values() {
-        let directory = TempDir::new().unwrap();
-        let settings = default_settings();
-        save_settings(directory.path(), &settings).unwrap();
-
-        let no_match = settings_view_from_settings_with(directory.path(), settings.clone(), || {
-            Some(Arc::new(vec![catalog_capacity_entry(
-                "other-model",
-                Some(131_072),
-                Some(8_192),
-            )]))
-        })
-        .unwrap();
-        assert_eq!(
-            no_match.models[0].profile.context_capacity_source,
-            "conservative_default"
-        );
-        assert_eq!(
-            no_match.models[0].profile.context_window_tokens,
-            CONSERVATIVE_CONTEXT_WINDOW_TOKENS
-        );
-
-        let single_value =
-            settings_view_from_settings_with(directory.path(), settings.clone(), || {
-                Some(Arc::new(vec![catalog_capacity_entry(
-                    "deepseek-v4-flash",
-                    Some(131_072),
-                    None,
-                )]))
-            })
-            .unwrap();
-        assert_eq!(
-            single_value.models[0].profile.context_capacity_source,
-            "conservative_default"
-        );
-        assert_eq!(
-            single_value.models[0].profile.context_window_tokens,
-            CONSERVATIVE_CONTEXT_WINDOW_TOKENS
-        );
-
-        let user_declared_settings = {
-            let mut declared = settings.clone();
-            declared.models[0].context_capacity_source = "user_declared".to_string();
-            declared
-        };
-        let declared_view =
-            settings_view_from_settings_with(directory.path(), user_declared_settings, || {
-                Some(Arc::new(vec![catalog_capacity_entry(
-                    "deepseek-v4-flash",
-                    Some(131_072),
-                    Some(8_192),
-                )]))
-            })
-            .unwrap();
-        assert_eq!(
-            declared_view.models[0].profile.context_capacity_source,
-            "user_declared"
-        );
-        assert_eq!(
-            declared_view.models[0].profile.context_window_tokens,
-            CONSERVATIVE_CONTEXT_WINDOW_TOKENS
-        );
-    }
-
-    #[test]
-    fn catalog_probe_failure_leaves_settings_view_conservative() {
-        let directory = TempDir::new().unwrap();
-        let settings = default_settings();
-        save_settings(directory.path(), &settings).unwrap();
-        let view = settings_view_from_settings_with(directory.path(), settings, || None).unwrap();
-        assert_eq!(
-            view.models[0].profile.context_capacity_source,
-            "conservative_default"
-        );
-        assert_eq!(
-            view.models[0].profile.context_window_tokens,
-            CONSERVATIVE_CONTEXT_WINDOW_TOKENS
-        );
-    }
-
-    #[test]
-    fn catalog_cache_runs_probe_once_and_never_caches_failures() {
-        catalog_cache_clear();
-        let directory = TempDir::new().unwrap();
-        let settings = default_settings();
-        save_settings(directory.path(), &settings).unwrap();
-        let rscript = Path::new("/test/catalog-cache-once-rscript");
-        let runs = std::cell::Cell::new(0_u32);
-        let probe = |_: &Path, _: &Path| {
-            runs.set(runs.get() + 1);
-            Ok(vec![catalog_capacity_entry(
-                "deepseek-v4-flash",
-                Some(131_072),
-                Some(8_192),
-            )])
-        };
-
-        let first = settings_view_from_settings_with(directory.path(), settings.clone(), || {
-            catalog_cached_with(directory.path(), rscript, probe).ok()
-        })
-        .unwrap();
-        let second = settings_view_from_settings_with(directory.path(), settings.clone(), || {
-            catalog_cached_with(directory.path(), rscript, probe).ok()
-        })
-        .unwrap();
-        assert_eq!(runs.get(), 1);
-        assert_eq!(first.models[0].profile.context_capacity_source, "catalog");
-        assert_eq!(second.models[0].profile.context_capacity_source, "catalog");
-
-        let failing_rscript = Path::new("/test/catalog-cache-failing-rscript");
-        let failures = std::cell::Cell::new(0_u32);
-        let failing_probe = |_: &Path, _: &Path| -> Result<Vec<AgentCatalogEntry>> {
-            failures.set(failures.get() + 1);
-            anyhow::bail!("injected catalog probe failure")
-        };
-        assert!(catalog_cached_with(directory.path(), failing_rscript, failing_probe).is_err());
-        assert!(catalog_cached_with(directory.path(), failing_rscript, failing_probe).is_err());
-        assert_eq!(failures.get(), 2);
-        catalog_cache_clear();
-    }
-
-    fn delete_provider_request(settings: &AgentLlmSettings) -> DeleteProviderRequest {
-        DeleteProviderRequest {
-            provider_id: "provider-deepseek-existing".to_string(),
-            expected_revision: settings.revision,
-        }
-    }
-
-    fn reveal_audit_rows(directory: &TempDir) -> Vec<serde_json::Value> {
-        match std::fs::read_to_string(credential_audit_path(directory.path())) {
-            Ok(log) => log
-                .lines()
-                .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
-                .collect(),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
-            Err(error) => panic!("reading the reveal audit log failed: {error}"),
-        }
-    }
-
-    #[test]
-    fn credential_reveal_rho_vault_returns_exact_value_with_fresh_read_per_call() {
-        let _serial = reveal_regression_guard();
-        let (directory, provider_id, _) = reveal_fixture(CREDENTIAL_SOURCE_RHO_VAULT);
-        let sentinel = format!(
-            "rho-reveal-vault-{}",
-            REVEAL_FIXTURE_SEQUENCE.load(Ordering::Relaxed)
-        );
-        agent_credential_vault::set(directory.path(), &provider_id, &sentinel).unwrap();
-        let settings_before = std::fs::read(settings_path(directory.path())).unwrap();
-
-        let first = view_provider_credential(directory.path(), &provider_id);
-        assert_eq!(first.outcome, AgentLlmCredentialRevealOutcome::Revealed);
-        assert_eq!(first.credential.as_deref(), Some(sentinel.as_str()));
-
-        // A second click re-reads the store: a replaced value shows up
-        // immediately, proving no read-through cache serves the view.
-        let replacement = format!("{sentinel}-replaced");
-        agent_credential_vault::set(directory.path(), &provider_id, &replacement).unwrap();
-        let second = view_provider_credential(directory.path(), &provider_id);
-        assert_eq!(second.outcome, AgentLlmCredentialRevealOutcome::Revealed);
-        assert_eq!(second.credential.as_deref(), Some(replacement.as_str()));
-
-        // Settings bytes never change because a View happened.
-        assert_eq!(
-            std::fs::read(settings_path(directory.path())).unwrap(),
-            settings_before
-        );
-    }
-
-    #[test]
-    fn credential_reveal_session_only_reads_the_live_entry() {
-        let _serial = reveal_regression_guard();
-        let (directory, provider_id, _) = reveal_fixture(CREDENTIAL_SOURCE_SESSION_ONLY);
-        let sentinel = format!("rho-reveal-session-{provider_id}");
-        credential_session().set_session_credential(&provider_id, &sentinel);
-
-        let view = view_provider_credential(directory.path(), &provider_id);
-        assert_eq!(view.outcome, AgentLlmCredentialRevealOutcome::Revealed);
-        assert_eq!(view.credential.as_deref(), Some(sentinel.as_str()));
-
-        let rotated = format!("{sentinel}-rotated");
-        credential_session().set_session_credential(&provider_id, &rotated);
-        let view = view_provider_credential(directory.path(), &provider_id);
-        assert_eq!(view.credential.as_deref(), Some(rotated.as_str()));
-
-        credential_session().clear_session_credential(&provider_id);
-        let view = view_provider_credential(directory.path(), &provider_id);
-        assert_eq!(
-            view.outcome,
-            AgentLlmCredentialRevealOutcome::CredentialMissing
-        );
-        assert_eq!(view.credential, None);
-    }
-
-    #[test]
-    fn credential_reveal_rejects_ineligible_sources_and_ids_before_any_read() {
-        let _serial = reveal_regression_guard();
-
-        // `environment` is refused before its variable is read: the sentinel
-        // variable is set, yet the outcome is source_ineligible and no audit
-        // row or read happens.
-        let (directory, provider_id, _) = reveal_fixture(CREDENTIAL_SOURCE_ENVIRONMENT);
-        let env_name = format!(
-            "RHO_REVEAL_TEST_{}",
-            REVEAL_FIXTURE_SEQUENCE.load(Ordering::Relaxed)
-        );
-        let mut settings = load_settings(directory.path()).unwrap();
-        settings.providers[0].api_key_env = Some(env_name.clone());
-        save_settings(directory.path(), &settings).unwrap();
-        let sentinel = format!("rho-reveal-env-{provider_id}");
-        unsafe { std::env::set_var(&env_name, &sentinel) };
-        let view = view_provider_credential(directory.path(), &provider_id);
-        unsafe { std::env::remove_var(&env_name) };
-        assert_eq!(
-            view.outcome,
-            AgentLlmCredentialRevealOutcome::SourceIneligible
-        );
-        assert_eq!(view.credential, None);
-        assert!(reveal_audit_rows(&directory).is_empty());
-
-        // Persisted out-of-vocabulary and legacy file fallback sources fail
-        // closed as ineligible even though load_settings rejects them.
-        for persisted_source in [
-            LEGACY_CREDENTIAL_SOURCE_FILE_FALLBACK,
-            "future_unknown_store",
-        ] {
-            let (directory, provider_id, _) = reveal_fixture(CREDENTIAL_SOURCE_RHO_VAULT);
-            let path = settings_path(directory.path());
-            let mut document: serde_json::Value =
-                serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-            let provider = document["providers"]
-                .as_array_mut()
-                .unwrap()
-                .iter_mut()
-                .find(|provider| provider["id"] == provider_id)
-                .unwrap();
-            provider["credential_source"] = serde_json::json!(persisted_source);
-            atomic_write(&path, &serde_json::to_vec_pretty(&document).unwrap()).unwrap();
-            let view = view_provider_credential(directory.path(), &provider_id);
-            assert_eq!(
-                view.outcome,
-                AgentLlmCredentialRevealOutcome::SourceIneligible,
-                "{persisted_source}"
-            );
-            assert_eq!(view.credential, None);
-        }
-
-        // A provider that does not require an API key has nothing to view.
-        let (directory, provider_id, _) = reveal_fixture(CREDENTIAL_SOURCE_RHO_VAULT);
-        let mut settings = load_settings(directory.path()).unwrap();
-        settings.providers[0].api_key_required = false;
-        save_settings(directory.path(), &settings).unwrap();
-        let view = view_provider_credential(directory.path(), &provider_id);
-        assert_eq!(
-            view.outcome,
-            AgentLlmCredentialRevealOutcome::SourceIneligible
-        );
-
-        // Malformed and unknown provider IDs are ineligible without touching
-        // the store.
-        let too_long = "p".repeat(MAX_ID_LENGTH + 1);
-        for bad in ["", "rho\tbad", too_long.as_str(), "provider-does-not-exist"] {
-            let view = view_provider_credential(directory.path(), bad);
-            assert_eq!(
-                view.outcome,
-                AgentLlmCredentialRevealOutcome::SourceIneligible,
-                "{bad:?}"
-            );
-            assert_eq!(view.credential, None);
-        }
-    }
-
-    #[test]
-    fn credential_reveal_missing_entries_and_store_failures_are_distinct() {
-        let _serial = reveal_regression_guard();
-
-        // rho_vault with no entry resolves credential_missing.
-        let (directory, provider_id, _) = reveal_fixture(CREDENTIAL_SOURCE_RHO_VAULT);
-        let view = view_provider_credential(directory.path(), &provider_id);
-        assert_eq!(
-            view.outcome,
-            AgentLlmCredentialRevealOutcome::CredentialMissing
-        );
-        assert_eq!(view.credential, None);
-
-        // A corrupted vault resolves store_unavailable, never a value.
-        agent_credential_vault::set(directory.path(), &provider_id, "rho-reveal-corrupt-secret")
-            .unwrap();
-        atomic_write(
-            &directory
-                .path()
-                .join(agent_credential_vault::VAULT_FILE_NAME),
-            b"not-a-vault",
-        )
-        .unwrap();
-        let view = view_provider_credential(directory.path(), &provider_id);
-        assert_eq!(
-            view.outcome,
-            AgentLlmCredentialRevealOutcome::StoreUnavailable
-        );
-        assert_eq!(view.credential, None);
-
-        // Unreadable settings resolve store_unavailable.
-        let (directory, provider_id, _) = reveal_fixture(CREDENTIAL_SOURCE_RHO_VAULT);
-        atomic_write(&settings_path(directory.path()), b"{not json").unwrap();
-        let view = view_provider_credential(directory.path(), &provider_id);
-        assert_eq!(
-            view.outcome,
-            AgentLlmCredentialRevealOutcome::StoreUnavailable
-        );
-        assert_eq!(view.credential, None);
-    }
-
-    #[test]
-    fn credential_reveal_audit_row_is_bounded_redacted_and_best_effort() {
-        let _serial = reveal_regression_guard();
-        let (directory, provider_id, _) = reveal_fixture(CREDENTIAL_SOURCE_RHO_VAULT);
-        let sentinel = format!("rho-reveal-audit-{provider_id}");
-        agent_credential_vault::set(directory.path(), &provider_id, &sentinel).unwrap();
-
-        let view = view_provider_credential(directory.path(), &provider_id);
-        assert_eq!(view.outcome, AgentLlmCredentialRevealOutcome::Revealed);
-
-        let log = std::fs::read_to_string(credential_audit_path(directory.path())).unwrap();
-        assert!(!log.contains(&sentinel));
-        let rows = reveal_audit_rows(&directory);
-        let row = rows.last().unwrap();
-        assert_eq!(row["event"], "credential_reveal");
-        assert_eq!(row["provider_id"], provider_id.as_str());
-        assert_eq!(row["credential_source"], CREDENTIAL_SOURCE_RHO_VAULT);
-        assert_eq!(row["outcome"], "revealed");
-        assert_eq!(row["detail"], serde_json::Value::Null);
-        assert!(row["recorded_at"].is_string());
-        let keys = row
-            .as_object()
-            .unwrap()
-            .keys()
-            .cloned()
-            .collect::<HashSet<_>>();
-        assert_eq!(
-            keys,
-            HashSet::from([
-                "credential_source".to_string(),
-                "detail".to_string(),
-                "event".to_string(),
-                "outcome".to_string(),
-                "provider_id".to_string(),
-                "recorded_at".to_string(),
-            ])
-        );
-
-        // Best-effort: an unwritable audit log never blocks or alters a view.
-        let (directory, provider_id, _) = reveal_fixture(CREDENTIAL_SOURCE_RHO_VAULT);
-        let sentinel = format!("rho-reveal-audit-failure-{provider_id}");
-        agent_credential_vault::set(directory.path(), &provider_id, &sentinel).unwrap();
-        std::fs::create_dir(credential_audit_path(directory.path())).unwrap();
-        let view = view_provider_credential(directory.path(), &provider_id);
-        assert_eq!(view.outcome, AgentLlmCredentialRevealOutcome::Revealed);
-        assert_eq!(view.credential.as_deref(), Some(sentinel.as_str()));
-    }
-
-    #[test]
-    fn credential_reveal_view_serialization_carries_value_only_on_revealed() {
-        let _serial = reveal_regression_guard();
-        let sentinel = format!(
-            "rho-transport-{}-secret",
-            REVEAL_FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed)
-        );
-        let revealed = serde_json::to_value(AgentLlmCredentialRevealView {
-            outcome: AgentLlmCredentialRevealOutcome::Revealed,
-            credential: Some(sentinel.clone()),
-        })
-        .unwrap();
-        let object = revealed.as_object().unwrap();
-        assert_eq!(object.len(), 2);
-        assert_eq!(revealed["outcome"], "revealed");
-        assert_eq!(revealed["credential"], sentinel.as_str());
-
-        for (outcome, word) in [
-            (
-                AgentLlmCredentialRevealOutcome::CredentialMissing,
-                "credential_missing",
-            ),
-            (
-                AgentLlmCredentialRevealOutcome::StoreUnavailable,
-                "store_unavailable",
-            ),
-            (
-                AgentLlmCredentialRevealOutcome::SourceIneligible,
-                "source_ineligible",
-            ),
-        ] {
-            let encoded = serde_json::to_value(AgentLlmCredentialRevealView {
-                outcome,
-                credential: None,
-            })
-            .unwrap();
-            assert_eq!(encoded["outcome"], word);
-            assert!(encoded["credential"].is_null());
-            assert!(!encoded.to_string().contains(&sentinel));
-        }
-
-        let (directory, _provider_id, _) = reveal_fixture(CREDENTIAL_SOURCE_RHO_VAULT);
-        let settings_bytes = std::fs::read(settings_path(directory.path())).unwrap();
-        assert!(!String::from_utf8_lossy(&settings_bytes).contains(&sentinel));
-        let generated = include_str!("../../ui/src/transport/generated/agent-settings.ts");
-        let facet = include_str!("../../ui/src/transport/agent-settings.ts");
-        let mock = include_str!("../../ui/src/transport/mock.ts");
-        for surface in [generated, facet, mock] {
-            assert!(!surface.contains(&sentinel));
-            assert!(!surface.contains("credential_value"));
-            assert!(!surface.contains("revealed_secret"));
-        }
-    }
-
-    #[test]
-    fn credential_generation_advances_only_after_successful_rho_owned_mutations() {
-        let _serial = reveal_regression_guard();
-        let (directory, provider_id, _) = reveal_fixture(CREDENTIAL_SOURCE_RHO_VAULT);
-        let initial = credential_generation(&provider_id);
-        let failed_set = MemoryCredentialStore {
-            fail_set: true,
-            ..Default::default()
-        };
-        assert!(
-            set_credential_with_store(
-                directory.path(),
-                &provider_id,
-                "failed-set-secret",
-                false,
-                &failed_set,
-            )
-            .is_err()
-        );
-        assert_eq!(credential_generation(&provider_id), initial);
-
-        let successful_store = MemoryCredentialStore::default();
-        set_credential_with_store(
-            directory.path(),
-            &provider_id,
-            "successful-set-secret",
-            false,
-            &successful_store,
-        )
-        .unwrap();
-        assert_eq!(credential_generation(&provider_id), initial + 1);
-
-        let failed_delete = MemoryCredentialStore {
-            fail_delete: true,
-            ..Default::default()
-        };
-        assert!(
-            delete_credential_with_store(directory.path(), &provider_id, &failed_delete).is_err()
-        );
-        assert_eq!(credential_generation(&provider_id), initial + 1);
-        delete_credential_with_store(directory.path(), &provider_id, &successful_store).unwrap();
-        assert_eq!(credential_generation(&provider_id), initial + 2);
-
-        let mut provider = load_settings(directory.path()).unwrap().providers[0].clone();
-        provider.display_name.push_str(" Updated");
-        save_provider(directory.path(), provider).unwrap();
-        assert_eq!(credential_generation(&provider_id), initial + 3);
-
-        let mut second = load_settings(directory.path()).unwrap().providers[0].clone();
-        second.id = format!("{provider_id}-deletable");
-        second.display_name = "Deletable Reveal Provider".to_string();
-        let saved = save_provider(directory.path(), second.clone()).unwrap();
-        let second_generation = credential_generation(&second.id);
-        assert_eq!(second_generation, 1);
-        let request = DeleteProviderRequest {
-            provider_id: second.id.clone(),
-            expected_revision: saved.revision,
-        };
-        let failed = delete_provider_with_store_and_save(
-            directory.path(),
-            &request,
-            &MemoryCredentialStore::default(),
-            |_path, _settings| bail!("injected provider save failure"),
-        );
-        assert!(failed.is_err());
-        assert_eq!(credential_generation(&second.id), second_generation);
-        delete_provider_with_store(
-            directory.path(),
-            &request,
-            &MemoryCredentialStore::default(),
-        )
-        .unwrap();
-        assert_eq!(credential_generation(&second.id), second_generation + 1);
-    }
-
-    #[test]
-    fn default_migration_preserves_deepseek_flash() {
-        let settings = default_settings();
-        assert_eq!(chat_model_id(&settings).unwrap(), "model-deepseek-v4-flash");
-        assert_eq!(settings.schema_version, SETTINGS_SCHEMA_VERSION);
-        assert_eq!(settings.models[0].context_window_tokens, 32_768);
-        assert_eq!(
-            settings.models[0].context_capacity_source,
-            "conservative_default"
-        );
-        assert_eq!(settings.models[0].model_id, "deepseek-v4-flash");
-        assert_eq!(
-            settings.providers[0].registered_provider_id.as_deref(),
-            Some("deepseek")
-        );
-    }
-
-    #[test]
-    fn settings_round_trip_without_overwriting_defaults() {
-        let directory = TempDir::new().unwrap();
-        let settings = default_settings();
-        save_settings(directory.path(), &settings).unwrap();
-        let loaded = load_settings(directory.path()).unwrap();
-        assert_eq!(
-            chat_model_id(&loaded).unwrap(),
-            chat_model_id(&settings).unwrap()
-        );
-        assert_eq!(loaded.models[0].display_name, "DeepSeek V4 Flash");
-    }
-
-    fn legacy_v3_providers() -> Vec<AgentProviderProfileV3> {
-        default_settings()
-            .providers
-            .into_iter()
-            .map(|provider| AgentProviderProfileV3 {
-                id: provider.id,
-                display_name: provider.display_name,
-                kind: provider.kind,
-                registered_provider_id: provider.registered_provider_id,
-                api_key_env: provider.api_key_env,
-                api_key_required: provider.api_key_required,
-                base_url: provider.base_url,
-                base_url_env: provider.base_url_env,
-                wire_api: provider.wire_api,
-                disable_stream_options: provider.disable_stream_options,
-            })
-            .collect()
-    }
-
-    fn legacy_settings_bytes() -> Vec<u8> {
-        serde_json::to_vec_pretty(&AgentLlmSettingsV1 {
-            schema_version: 1,
-            selected_model_id: "model-deepseek-v4-flash".to_string(),
-            providers: legacy_v3_providers(),
-            models: vec![AgentModelProfileV1 {
-                id: "model-deepseek-v4-flash".to_string(),
-                provider_id: "provider-deepseek-existing".to_string(),
-                display_name: "DeepSeek V4 Flash".to_string(),
-                model_id: "deepseek-v4-flash".to_string(),
+            .map(|name| ((*name).to_string(), capability_value("unknown", "unknown")))
+            .collect::<BTreeMap<_, _>>();
+        capabilities.remove("function_call");
+        AgentLlmSettings {
+            schema_version: SETTINGS_SCHEMA_VERSION,
+            revision: 7,
+            providers: vec![AgentProviderProfile {
+                id: "invalid-provider-test".to_string(),
+                display_name: "Invalid provider".to_string(),
+                kind: "openai".to_string(),
+                registered_provider_id: None,
+                // Rust's environment APIs panic on `=`. This value must never
+                // cross the semantic validation boundary.
+                api_key_env: Some("INVALID=API_KEY".to_string()),
+                api_key_required: true,
+                base_url: None,
+                base_url_env: Some("INVALID=BASE_URL".to_string()),
+                wire_api: None,
+                disable_stream_options: None,
+            }],
+            models: vec![AgentModelProfile {
+                id: "invalid-model-test".to_string(),
+                provider_id: "invalid-provider-test".to_string(),
+                display_name: "Invalid model".to_string(),
+                model_id: "invalid-model".to_string(),
                 enabled: true,
-                capabilities: AgentModelCapabilitiesV1 {
-                    tool_calling: "yes".to_string(),
-                    reasoning: "yes".to_string(),
-                    vision_input: "no".to_string(),
-                    source: "catalog".to_string(),
-                },
+                model_type: capability_value("language", "user_declared"),
+                capabilities,
+                context_window_tokens: 8_192,
+                reserved_output_tokens: 1_024,
+                context_capacity_source: "user_declared".to_string(),
                 last_test: None,
             }],
-        })
-        .unwrap()
-    }
-
-    fn legacy_v2_settings_bytes() -> Vec<u8> {
-        let settings = default_settings();
-        serde_json::to_vec_pretty(&AgentLlmSettingsV2 {
-            schema_version: 2,
-            revision: settings.revision,
-            providers: legacy_v3_providers(),
-            models: settings
-                .models
-                .into_iter()
-                .map(|model| AgentModelProfileV2 {
-                    id: model.id,
-                    provider_id: model.provider_id,
-                    display_name: model.display_name,
-                    model_id: model.model_id,
-                    enabled: model.enabled,
-                    model_type: model.model_type,
-                    capabilities: model.capabilities,
-                    last_test: model.last_test,
-                })
-                .collect(),
-            capability_routes: settings.capability_routes,
-        })
-        .unwrap()
-    }
-
-    #[test]
-    fn v2_capacity_migration_is_conservative_backed_up_and_recoverable() {
-        let directory = TempDir::new().unwrap();
-        let legacy = legacy_v2_settings_bytes();
-        let path = settings_path(directory.path());
-        std::fs::write(&path, &legacy).unwrap();
-
-        let projected = load_settings(directory.path()).unwrap();
-        assert_eq!(projected.schema_version, SETTINGS_SCHEMA_VERSION);
-        assert_eq!(projected.models[0].context_window_tokens, 32_768);
-        assert_eq!(projected.models[0].reserved_output_tokens, 4_096);
-        assert_eq!(
-            projected.models[0].context_capacity_source,
-            "conservative_default"
-        );
-        assert_eq!(std::fs::read(&path).unwrap(), legacy);
-        assert!(!settings_v2_backup_path(directory.path()).exists());
-
-        let failure = save_settings_with(directory.path(), &projected, |target, bytes| {
-            if target == settings_v2_backup_path(directory.path()) {
-                atomic_write(target, bytes)
-            } else {
-                bail!("injected V3 settings write failure")
-            }
-        });
-        assert!(failure.is_err());
-        assert_eq!(std::fs::read(&path).unwrap(), legacy);
-        assert_eq!(
-            std::fs::read(settings_v2_backup_path(directory.path())).unwrap(),
-            legacy
-        );
-
-        save_settings(directory.path(), &projected).unwrap();
-        assert_eq!(
-            load_settings(directory.path()).unwrap().schema_version,
-            SETTINGS_SCHEMA_VERSION
-        );
-    }
-
-    #[test]
-    fn v1_read_projects_without_rewrite_then_first_mutation_backs_up_and_migrates() {
-        let directory = TempDir::new().unwrap();
-        let legacy = legacy_settings_bytes();
-        std::fs::write(settings_path(directory.path()), &legacy).unwrap();
-
-        let projected = load_settings(directory.path()).unwrap();
-        assert_eq!(projected.schema_version, SETTINGS_SCHEMA_VERSION);
-        assert_eq!(projected.revision, 0);
-        assert_eq!(projected.models[0].model_type.value, "unknown");
-        assert_eq!(
-            projected.models[0].capabilities["function_call"].source,
-            "aisdk_catalog"
-        );
-        assert_eq!(
-            std::fs::read(settings_path(directory.path())).unwrap(),
-            legacy
-        );
-        assert!(!settings_v1_backup_path(directory.path()).exists());
-
-        let migrated = declare_model_capabilities(
-            directory.path(),
-            0,
-            "model-deepseek-v4-flash",
-            AgentModelCapabilityPatch {
-                model_type: Some("language".to_string()),
-                capabilities: BTreeMap::new(),
-            },
-        )
-        .unwrap();
-        assert_eq!(migrated.revision, 1);
-        assert_eq!(
-            std::fs::read(settings_v1_backup_path(directory.path())).unwrap(),
-            legacy
-        );
-        let reopened = load_settings(directory.path()).unwrap();
-        assert_eq!(reopened.schema_version, SETTINGS_SCHEMA_VERSION);
-        assert_eq!(reopened.revision, 1);
-        assert_eq!(reopened.models[0].model_type.source, "user_declared");
-    }
-
-    #[test]
-    fn v1_migration_backup_and_v3_write_failures_leave_recoverable_source() {
-        let directory = TempDir::new().unwrap();
-        let legacy = legacy_settings_bytes();
-        let path = settings_path(directory.path());
-        std::fs::write(&path, &legacy).unwrap();
-        let projected = load_settings(directory.path()).unwrap();
-
-        let result = save_settings_with(directory.path(), &projected, |target, _| {
-            if target == settings_v1_backup_path(directory.path()) {
-                bail!("injected backup failure")
-            }
-            unreachable!("V3 write must not run after backup failure")
-        });
-        assert!(result.is_err());
-        assert_eq!(std::fs::read(&path).unwrap(), legacy);
-        assert!(!settings_v1_backup_path(directory.path()).exists());
-
-        let result = save_settings_with(directory.path(), &projected, |target, bytes| {
-            if target == settings_v1_backup_path(directory.path()) {
-                atomic_write(target, bytes)
-            } else {
-                bail!("injected V3 write failure")
-            }
-        });
-        assert!(result.is_err());
-        assert_eq!(std::fs::read(&path).unwrap(), legacy);
-        assert_eq!(
-            std::fs::read(settings_v1_backup_path(directory.path())).unwrap(),
-            legacy
-        );
-        assert_eq!(
-            load_settings(directory.path()).unwrap().schema_version,
-            SETTINGS_SCHEMA_VERSION
-        );
-    }
-
-    #[test]
-    fn corrupt_unsupported_and_oversized_settings_fail_closed() {
-        let directory = TempDir::new().unwrap();
-        let path = settings_path(directory.path());
-        std::fs::write(&path, b"not json").unwrap();
-        assert!(load_settings(directory.path()).is_err());
-        std::fs::write(&path, br#"{"schema_version":99}"#).unwrap();
-        assert!(load_settings(directory.path()).is_err());
-        std::fs::write(&path, vec![b'x'; MAX_SETTINGS_BYTES + 1]).unwrap();
-        let error = load_settings(directory.path()).unwrap_err().to_string();
-        assert!(error.contains("256 KiB"));
-    }
-
-    #[test]
-    fn route_mutations_enforce_revision_contract_and_model_dependencies() {
-        let directory = TempDir::new().unwrap();
-        save_settings(directory.path(), &default_settings()).unwrap();
-        let revision = load_settings(directory.path()).unwrap().revision;
-        let route = AgentCapabilityRoute {
-            capability: "agent.act".to_string(),
-            model_id: "model-deepseek-v4-flash".to_string(),
-            model_type: "language".to_string(),
-            required_model_capabilities: vec!["function_call".to_string()],
-        };
-        let routed = save_capability_route(directory.path(), revision, route).unwrap();
-        assert_eq!(routed.revision, revision + 1);
-        assert!(
-            save_capability_route(
-                directory.path(),
-                revision,
-                routed.capability_routes[0].clone(),
-            )
-            .is_err()
-        );
-
-        let mut disabled = routed.models[0].clone();
-        disabled.enabled = false;
-        assert!(save_model(directory.path(), disabled).is_err());
-        assert!(
-            delete_model(
-                directory.path(),
-                &DeleteModelRequest {
-                    model_id: "model-deepseek-v4-flash".to_string(),
-                    replacement_model_id: None,
-                },
-            )
-            .is_err()
-        );
-        let without_act =
-            delete_capability_route(directory.path(), routed.revision, "agent.act").unwrap();
-        assert_eq!(without_act.revision, routed.revision + 1);
-        assert!(
-            delete_capability_route(directory.path(), without_act.revision, "agent.chat",).is_err()
-        );
-    }
-
-    #[test]
-    fn route_mutation_write_failures_preserve_disk_state_and_recover() {
-        let directory = TempDir::new().unwrap();
-        save_settings(directory.path(), &default_settings()).unwrap();
-        let original = std::fs::read(settings_path(directory.path())).unwrap();
-        let revision = load_settings(directory.path()).unwrap().revision;
-        let act_route = AgentCapabilityRoute {
-            capability: "agent.act".to_string(),
-            model_id: "model-deepseek-v4-flash".to_string(),
-            model_type: "language".to_string(),
-            required_model_capabilities: vec!["function_call".to_string()],
-        };
-
-        let result = save_capability_route_with_save(
-            directory.path(),
-            revision,
-            act_route.clone(),
-            |data_dir, settings| {
-                save_settings_with_components(
-                    data_dir,
-                    settings,
-                    |_| bail!("injected serialization failure"),
-                    |_, _| unreachable!("write must not run after serialization failure"),
-                )
-            },
-        );
-        assert!(result.unwrap_err().to_string().contains("serialization"));
-        assert_eq!(
-            std::fs::read(settings_path(directory.path())).unwrap(),
-            original
-        );
-
-        let result = save_capability_route_with_save(
-            directory.path(),
-            revision,
-            act_route.clone(),
-            |_, _| bail!("injected route write failure"),
-        );
-        assert!(result.unwrap_err().to_string().contains("injected"));
-        assert_eq!(
-            std::fs::read(settings_path(directory.path())).unwrap(),
-            original
-        );
-
-        let routed = save_capability_route(directory.path(), revision, act_route).unwrap();
-        let routed_bytes = std::fs::read(settings_path(directory.path())).unwrap();
-        let result = delete_capability_route_with_save(
-            directory.path(),
-            routed.revision,
-            "agent.act",
-            |_, _| bail!("injected route delete failure"),
-        );
-        assert!(result.unwrap_err().to_string().contains("injected"));
-        assert_eq!(
-            std::fs::read(settings_path(directory.path())).unwrap(),
-            routed_bytes
-        );
-
-        let result = declare_model_capabilities_with_save(
-            directory.path(),
-            routed.revision,
-            "model-deepseek-v4-flash",
-            AgentModelCapabilityPatch {
-                model_type: None,
-                capabilities: BTreeMap::from([("reasoning".to_string(), "no".to_string())]),
-            },
-            |_, _| bail!("injected capability write failure"),
-        );
-        assert!(result.unwrap_err().to_string().contains("injected"));
-        assert_eq!(
-            std::fs::read(settings_path(directory.path())).unwrap(),
-            routed_bytes
-        );
-
-        let incompatible = declare_model_capabilities(
-            directory.path(),
-            routed.revision,
-            "model-deepseek-v4-flash",
-            AgentModelCapabilityPatch {
-                model_type: None,
-                capabilities: BTreeMap::from([("function_call".to_string(), "no".to_string())]),
-            },
-        );
-        assert!(incompatible.is_err());
-        assert_eq!(
-            std::fs::read(settings_path(directory.path())).unwrap(),
-            routed_bytes
-        );
-
-        let recovered = declare_model_capabilities(
-            directory.path(),
-            routed.revision,
-            "model-deepseek-v4-flash",
-            AgentModelCapabilityPatch {
-                model_type: None,
-                capabilities: BTreeMap::from([("reasoning".to_string(), "no".to_string())]),
-            },
-        )
-        .unwrap();
-        assert_eq!(recovered.revision, routed.revision + 1);
-        assert_eq!(recovered.models[0].capabilities["reasoning"].value, "no");
-    }
-
-    #[test]
-    fn simultaneous_route_writes_accept_exactly_one_revision() {
-        let directory = TempDir::new().unwrap();
-        save_settings(directory.path(), &default_settings()).unwrap();
-        let revision = load_settings(directory.path()).unwrap().revision;
-        let data_dir = Arc::new(directory.path().to_path_buf());
-        let barrier = Arc::new(Barrier::new(3));
-        let routes = [
-            AgentCapabilityRoute {
-                capability: "agent.act".to_string(),
-                model_id: "model-deepseek-v4-flash".to_string(),
-                model_type: "language".to_string(),
-                required_model_capabilities: vec!["function_call".to_string()],
-            },
-            AgentCapabilityRoute {
-                capability: "analysis.summarize".to_string(),
-                model_id: "model-deepseek-v4-flash".to_string(),
+            capability_routes: vec![AgentCapabilityRoute {
+                capability: "agent.chat".to_string(),
+                model_id: "invalid-model-test".to_string(),
                 model_type: "language".to_string(),
                 required_model_capabilities: Vec::new(),
-            },
-        ];
-        let handles = routes
-            .into_iter()
-            .map(|route| {
-                let data_dir = Arc::clone(&data_dir);
-                let barrier = Arc::clone(&barrier);
-                thread::spawn(move || {
-                    barrier.wait();
-                    save_capability_route(&data_dir, revision, route)
-                })
-            })
-            .collect::<Vec<_>>();
-
-        barrier.wait();
-        let outcomes = handles
-            .into_iter()
-            .map(|handle| handle.join().unwrap())
-            .collect::<Vec<_>>();
-        assert_eq!(outcomes.iter().filter(|outcome| outcome.is_ok()).count(), 1);
-        assert_eq!(
-            outcomes.iter().filter(|outcome| outcome.is_err()).count(),
-            1
-        );
-        let reopened = load_settings(directory.path()).unwrap();
-        assert_eq!(reopened.revision, revision + 1);
-        assert_eq!(reopened.capability_routes.len(), 2);
-    }
-
-    #[test]
-    fn two_provider_routes_resolve_one_effective_credential_per_turn() {
-        let directory = TempDir::new().unwrap();
-        let mut settings = default_settings();
-        let mut provider = settings.providers[0].clone();
-        provider.id = "provider-act".to_string();
-        provider.display_name = "Act Provider".to_string();
-        provider.registered_provider_id = Some("openai".to_string());
-        provider.api_key_env = Some("OPENAI_API_KEY".to_string());
-        settings.providers.push(provider);
-        let mut model = settings.models[0].clone();
-        model.id = "model-act".to_string();
-        model.provider_id = "provider-act".to_string();
-        model.display_name = "Act Model".to_string();
-        model.model_id = "gpt-act".to_string();
-        settings.models.push(model);
-        settings.capability_routes.push(AgentCapabilityRoute {
-            capability: "agent.act".to_string(),
-            model_id: "model-act".to_string(),
-            model_type: "language".to_string(),
-            required_model_capabilities: vec!["function_call".to_string()],
-        });
-        validate_settings(&settings).unwrap();
-        let store = MemoryCredentialStore {
-            entries: Mutex::new(HashMap::from([
-                (
-                    "provider-deepseek-existing".to_string(),
-                    "chat-secret".to_string(),
-                ),
-                ("provider-act".to_string(), "act-secret".to_string()),
-            ])),
-            ..Default::default()
-        };
-
-        let (chat, chat_credential) = resolve_model_and_credential_for_turn_with_store(
-            directory.path(),
-            &settings,
-            None,
-            "ask",
-            &store,
-        )
-        .unwrap();
-        assert_eq!(chat.route_capability, "agent.chat");
-        assert_eq!(chat.provider_id, "provider-deepseek-existing");
-        assert_eq!(
-            chat.credential_environment_names,
-            ["DEEPSEEK_API_KEY", "OPENAI_API_KEY"]
-        );
-        assert_eq!(chat_credential.unwrap().1, "chat-secret");
-
-        let (act, act_credential) = resolve_model_and_credential_for_turn_with_store(
-            directory.path(),
-            &settings,
-            None,
-            "act",
-            &store,
-        )
-        .unwrap();
-        assert_eq!(act.route_capability, "agent.act");
-        assert_eq!(act.provider_id, "provider-act");
-        assert_eq!(act_credential.unwrap().1, "act-secret");
-        assert!(resolve_model_for_turn_with_settings(&settings, Some("model-act"), "ask").is_err());
-        assert!(
-            resolve_model_for_turn_with_settings(
-                &settings,
-                Some("model-deepseek-v4-flash"),
-                "act",
-            )
-            .is_err()
-        );
-        assert_eq!(
-            store.get_calls.lock().unwrap().as_slice(),
-            &["provider-deepseek-existing", "provider-act"]
-        );
-        assert!(!serde_json::to_string(&settings).unwrap().contains("secret"));
-    }
-
-    #[test]
-    fn problem_repair_uses_only_the_tool_route_credential_in_read_only_mode() {
-        let directory = TempDir::new().unwrap();
-        let mut settings = default_settings();
-        let mut provider = settings.providers[0].clone();
-        provider.id = "provider-repair".to_string();
-        provider.display_name = "Repair Provider".to_string();
-        provider.registered_provider_id = Some("openai".to_string());
-        provider.api_key_env = Some("OPENAI_API_KEY".to_string());
-        settings.providers.push(provider);
-        let mut model = settings.models[0].clone();
-        model.id = "model-repair".to_string();
-        model.provider_id = "provider-repair".to_string();
-        model.display_name = "Repair Model".to_string();
-        model.model_id = "repair-model".to_string();
-        settings.models.push(model);
-        settings.capability_routes.push(AgentCapabilityRoute {
-            capability: "agent.act".to_string(),
-            model_id: "model-repair".to_string(),
-            model_type: "language".to_string(),
-            required_model_capabilities: vec!["function_call".to_string()],
-        });
-        let store = MemoryCredentialStore {
-            entries: Mutex::new(HashMap::from([
-                (
-                    "provider-deepseek-existing".to_string(),
-                    "chat-secret".to_string(),
-                ),
-                ("provider-repair".to_string(), "repair-secret".to_string()),
-            ])),
-            ..Default::default()
-        };
-
-        let preview =
-            resolve_model_for_task_with_settings(&settings, None, "ask", "problem_repair").unwrap();
-        assert_eq!(preview.route_capability, "agent.act");
-        assert_eq!(preview.provider_id, "provider-repair");
-        assert!(store.get_calls.lock().unwrap().is_empty());
-
-        let (resolved, credential) = resolve_model_and_credential_for_task_with_store(
-            directory.path(),
-            &settings,
-            None,
-            "ask",
-            "problem_repair",
-            &store,
-        )
-        .unwrap();
-        assert_eq!(resolved.route_capability, "agent.act");
-        assert_eq!(resolved.provider_id, "provider-repair");
-        assert_eq!(credential.unwrap().1, "repair-secret");
-        assert_eq!(
-            store.get_calls.lock().unwrap().as_slice(),
-            &["provider-repair"]
-        );
-        assert!(
-            resolve_model_and_credential_for_task_with_store(
-                directory.path(),
-                &settings,
-                None,
-                "act",
-                "problem_repair",
-                &store,
-            )
-            .is_err()
-        );
-        assert_eq!(
-            store.get_calls.lock().unwrap().as_slice(),
-            &["provider-repair"]
-        );
-        assert!(
-            resolve_model_and_credential_for_task_with_store(
-                directory.path(),
-                &settings,
-                Some("model-deepseek-v4-flash"),
-                "ask",
-                "problem_repair",
-                &store,
-            )
-            .is_err()
-        );
-        assert_eq!(
-            store.get_calls.lock().unwrap().as_slice(),
-            &["provider-repair"]
-        );
-    }
-
-    #[test]
-    fn problem_repair_blocks_chat_only_unknown_and_missing_credential_routes() {
-        let directory = TempDir::new().unwrap();
-        let mut settings = default_settings();
-        settings.models[0].capabilities.insert(
-            "function_call".to_string(),
-            capability_value("no", "user_declared"),
-        );
-        let store = MemoryCredentialStore::default();
-        assert!(
-            resolve_model_and_credential_for_task_with_store(
-                directory.path(),
-                &settings,
-                None,
-                "ask",
-                "problem_repair",
-                &store,
-            )
-            .is_err()
-        );
-
-        settings.models[0].capabilities.insert(
-            "function_call".to_string(),
-            capability_value("unknown", "unknown"),
-        );
-        assert!(
-            resolve_model_and_credential_for_task_with_store(
-                directory.path(),
-                &settings,
-                None,
-                "ask",
-                "problem_repair",
-                &store,
-            )
-            .is_err()
-        );
-
-        settings.models[0].capabilities.insert(
-            "function_call".to_string(),
-            capability_value("yes", "user_declared"),
-        );
-        let error = resolve_model_and_credential_for_task_with_store(
-            directory.path(),
-            &settings,
-            None,
-            "ask",
-            "problem_repair",
-            &store,
-        )
-        .unwrap_err();
-        assert!(error.to_string().contains("credential is missing"));
-
-        settings.providers[0].api_key_required = false;
-        let (resolved, credential) = resolve_model_and_credential_for_task_with_store(
-            directory.path(),
-            &settings,
-            None,
-            "ask",
-            "problem_repair",
-            &store,
-        )
-        .unwrap();
-        assert_eq!(resolved.route_capability, "agent.chat");
-        assert!(credential.is_none());
-    }
-
-    #[test]
-    fn act_fallback_is_visible_and_requires_chat_function_call_compatibility() {
-        let settings = default_settings();
-        let act = resolve_model_for_turn_with_settings(&settings, None, "act").unwrap();
-        assert_eq!(act.route_capability, "agent.chat");
-        let statuses = HashMap::from([(
-            "provider-deepseek-existing".to_string(),
-            CredentialPresentation {
-                status: "detected".to_string(),
-                source: "system".to_string(),
-            },
-        )]);
-        let view = build_settings_view(settings.clone(), system_credential_info(), statuses);
-        let act_view = view
-            .capability_routes
-            .iter()
-            .find(|route| route.capability == "agent.act")
-            .unwrap();
-        assert_eq!(act_view.inherited_from.as_deref(), Some("agent.chat"));
-        assert_eq!(act_view.compatibility, "compatible");
-
-        let mut incompatible = settings;
-        incompatible.models[0].capabilities.insert(
-            "function_call".to_string(),
-            capability_value("no", "user_declared"),
-        );
-        assert!(resolve_model_for_turn_with_settings(&incompatible, None, "act").is_err());
-    }
-
-    #[test]
-    fn credential_store_sets_replaces_deletes_and_isolates_providers() {
-        let directory = TempDir::new().unwrap();
-        let mut settings = default_settings();
-        let mut second = settings.providers[0].clone();
-        second.id = "provider-second".to_string();
-        second.display_name = "Second".to_string();
-        settings.providers.push(second);
-        save_settings(directory.path(), &settings).unwrap();
-        let store = MemoryCredentialStore::default();
-
-        set_credential_with_store(
-            directory.path(),
-            "provider-deepseek-existing",
-            "first-secret",
-            false,
-            &store,
-        )
-        .unwrap();
-        set_credential_with_store(
-            directory.path(),
-            "provider-second",
-            "second-secret",
-            false,
-            &store,
-        )
-        .unwrap();
-        // CRED-SEC5: an unconfirmed replace is rejected and preserves the value.
-        assert!(
-            set_credential_with_store(
-                directory.path(),
-                "provider-deepseek-existing",
-                "replacement-secret",
-                false,
-                &store,
-            )
-            .is_err()
-        );
-        assert_eq!(
-            store.get("provider-deepseek-existing").unwrap().as_deref(),
-            Some("first-secret")
-        );
-        set_credential_with_store(
-            directory.path(),
-            "provider-deepseek-existing",
-            "replacement-secret",
-            true,
-            &store,
-        )
-        .unwrap();
-
-        assert_eq!(
-            store.get("provider-deepseek-existing").unwrap().as_deref(),
-            Some("replacement-secret")
-        );
-        assert_eq!(
-            store.get("provider-second").unwrap().as_deref(),
-            Some("second-secret")
-        );
-        delete_credential_with_store(directory.path(), "provider-deepseek-existing", &store)
-            .unwrap();
-        delete_credential_with_store(directory.path(), "provider-deepseek-existing", &store)
-            .unwrap();
-        assert_eq!(store.get("provider-deepseek-existing").unwrap(), None);
-        assert_eq!(
-            store.get("provider-second").unwrap().as_deref(),
-            Some("second-secret")
-        );
-    }
-
-    #[test]
-    fn credential_validation_rejects_unknown_empty_oversize_and_key_optional_provider() {
-        let directory = TempDir::new().unwrap();
-        let store = MemoryCredentialStore::default();
-        assert!(
-            set_credential_with_store(directory.path(), "missing", "secret", false, &store)
-                .is_err()
-        );
-        assert!(
-            set_credential_with_store(
-                directory.path(),
-                "provider-deepseek-existing",
-                "",
-                false,
-                &store,
-            )
-            .is_err()
-        );
-        assert!(
-            set_credential_with_store(
-                directory.path(),
-                "provider-deepseek-existing",
-                &"x".repeat(MAX_CREDENTIAL_BYTES + 1),
-                false,
-                &store,
-            )
-            .is_err()
-        );
-        let mut settings = default_settings();
-        settings.providers[0].api_key_required = false;
-        settings.providers[0].api_key_env = None;
-        save_settings(directory.path(), &settings).unwrap();
-        assert!(
-            set_credential_with_store(
-                directory.path(),
-                "provider-deepseek-existing",
-                "secret",
-                false,
-                &store,
-            )
-            .is_err()
-        );
-        assert!(store.entries.lock().unwrap().is_empty());
-    }
-
-    #[test]
-    fn settings_projection_never_exposes_provider_credentials() {
-        let directory = TempDir::new().unwrap();
-        let settings = default_settings();
-        let store = MemoryCredentialStore {
-            entries: Mutex::new(HashMap::from([(
-                "provider-deepseek-existing".to_string(),
-                "secret-that-must-not-be-read".to_string(),
-            )])),
-            ..Default::default()
-        };
-        let view = settings_view_from_settings_projection(directory.path(), settings);
-        let provider = view
-            .providers
-            .iter()
-            .find(|provider| provider.profile.id == "provider-deepseek-existing")
-            .unwrap();
-
-        assert_eq!(provider.credential_status, "not_detected");
-        assert_eq!(provider.credential_effective_source, "rho_vault");
-        assert!(store.get_calls.lock().unwrap().is_empty());
-    }
-
-    #[test]
-    fn local_store_projects_exact_non_secret_credential_states_after_restart() {
-        let directory = TempDir::new().unwrap();
-        agent_credential_vault::set(
-            directory.path(),
-            "provider-deepseek-existing",
-            "saved-secret",
-        )
-        .unwrap();
-        agent_credential_vault::clear_session_for_test(directory.path());
-        let mut settings = default_settings();
-        for (id, required) in [
-            ("provider-missing", true),
-            ("provider-unavailable", true),
-            ("provider-optional", false),
-        ] {
-            let mut provider = settings.providers[0].clone();
-            provider.id = id.to_string();
-            provider.api_key_required = required;
-            provider.api_key_env = required.then(|| format!("{}_KEY", id.to_ascii_uppercase()));
-            settings.providers.push(provider);
-        }
-        let statuses = credential_status_map(directory.path(), &settings.providers);
-
-        assert_eq!(statuses["provider-deepseek-existing"].status, "detected");
-        assert_eq!(statuses["provider-deepseek-existing"].source, "rho_vault");
-        assert_eq!(statuses["provider-missing"].status, "not_detected");
-        assert_eq!(statuses["provider-missing"].source, "rho_vault");
-        assert_eq!(statuses["provider-unavailable"].status, "not_detected");
-        assert_eq!(statuses["provider-unavailable"].source, "rho_vault");
-        assert_eq!(statuses["provider-optional"].status, "not_required");
-        assert_eq!(statuses["provider-optional"].source, "not_required");
-    }
-
-    #[test]
-    fn credential_write_failure_preserves_existing_secret() {
-        let directory = TempDir::new().unwrap();
-        save_settings(directory.path(), &default_settings()).unwrap();
-        let store = MemoryCredentialStore {
-            entries: Mutex::new(HashMap::from([(
-                "provider-deepseek-existing".to_string(),
-                "existing-secret".to_string(),
-            )])),
-            fail_set: true,
-            fail_delete: true,
-            ..Default::default()
-        };
-
-        assert!(
-            set_credential_with_store(
-                directory.path(),
-                "provider-deepseek-existing",
-                "replacement-secret",
-                true,
-                &store,
-            )
-            .is_err()
-        );
-        assert_eq!(
-            store.get("provider-deepseek-existing").unwrap().as_deref(),
-            Some("existing-secret")
-        );
-    }
-
-    #[test]
-    fn provider_deletion_cascades_owned_dependencies_and_survives_reopen() {
-        let directory = TempDir::new().unwrap();
-        let settings = provider_removal_fixture();
-        save_settings(directory.path(), &settings).unwrap();
-        let store = MemoryCredentialStore {
-            entries: Mutex::new(HashMap::from([
-                (
-                    "provider-deepseek-existing".to_string(),
-                    "target-secret".to_string(),
-                ),
-                (
-                    "provider-remaining".to_string(),
-                    "remaining-secret".to_string(),
-                ),
-            ])),
-            ..Default::default()
-        };
-        let request = delete_provider_request(&settings);
-
-        let removed = delete_provider_with_store(directory.path(), &request, &store).unwrap();
-
-        assert_eq!(removed.revision, settings.revision + 1);
-        assert_eq!(removed.providers.len(), 1);
-        assert_eq!(removed.providers[0].id, "provider-remaining");
-        assert_eq!(removed.models.len(), 1);
-        assert_eq!(removed.models[0].id, "model-remaining-chat");
-        assert_eq!(removed.capability_routes.len(), 1);
-        assert_eq!(removed.capability_routes[0].capability, "agent.chat");
-        assert_eq!(
-            removed.capability_routes[0].model_id,
-            "model-remaining-chat"
-        );
-        assert_eq!(store.get("provider-deepseek-existing").unwrap(), None);
-        assert_eq!(
-            store.get("provider-remaining").unwrap().as_deref(),
-            Some("remaining-secret")
-        );
-        assert_eq!(
-            store.delete_calls.lock().unwrap().as_slice(),
-            ["provider-deepseek-existing"]
-        );
-
-        let reopened = load_settings(directory.path()).unwrap();
-        assert_eq!(reopened.revision, removed.revision);
-        assert_eq!(reopened.providers[0].id, "provider-remaining");
-        assert_eq!(reopened.models[0].id, "model-remaining-chat");
-        assert_eq!(reopened.capability_routes[0].capability, "agent.chat");
-
-        let late = delete_provider_with_store(directory.path(), &request, &store).unwrap_err();
-        assert!(late.to_string().contains("changed"));
-        assert_eq!(
-            store.delete_calls.lock().unwrap().as_slice(),
-            ["provider-deepseek-existing"]
-        );
-    }
-
-    #[test]
-    fn provider_deletion_handles_a_provider_without_models_or_a_stored_credential() {
-        let directory = TempDir::new().unwrap();
-        let mut settings = default_settings();
-        let mut empty_provider = settings.providers[0].clone();
-        empty_provider.id = "provider-empty".to_string();
-        empty_provider.display_name = "Empty Provider".to_string();
-        settings.providers.push(empty_provider);
-        save_settings(directory.path(), &settings).unwrap();
-        let store = MemoryCredentialStore::default();
-
-        let removed = delete_provider_with_store(
-            directory.path(),
-            &DeleteProviderRequest {
-                provider_id: "provider-empty".to_string(),
-                expected_revision: settings.revision,
-            },
-            &store,
-        )
-        .unwrap();
-
-        assert_eq!(removed.revision, settings.revision + 1);
-        assert_eq!(removed.providers.len(), 1);
-        assert_eq!(removed.providers[0].id, "provider-deepseek-existing");
-        assert_eq!(removed.models.len(), 1);
-        assert_eq!(removed.capability_routes.len(), 1);
-        assert_eq!(
-            store.delete_calls.lock().unwrap().as_slice(),
-            ["provider-empty"]
-        );
-        validate_settings(&load_settings(directory.path()).unwrap()).unwrap();
-    }
-
-    #[test]
-    fn provider_deletion_rejects_stale_unknown_and_chat_ownership_before_credential_access() {
-        let directory = TempDir::new().unwrap();
-        let settings = provider_removal_fixture();
-        save_settings(directory.path(), &settings).unwrap();
-        let original = std::fs::read(settings_path(directory.path())).unwrap();
-        let store = MemoryCredentialStore {
-            entries: Mutex::new(HashMap::from([(
-                "provider-deepseek-existing".to_string(),
-                "target-secret".to_string(),
-            )])),
-            fail_get: true,
-            ..Default::default()
-        };
-
-        let stale = delete_provider_with_store(
-            directory.path(),
-            &DeleteProviderRequest {
-                provider_id: "provider-deepseek-existing".to_string(),
-                expected_revision: settings.revision + 1,
-            },
-            &store,
-        )
-        .unwrap_err();
-        assert!(stale.to_string().contains("changed"));
-        assert!(store.get_calls.lock().unwrap().is_empty());
-
-        let unknown = delete_provider_with_store(
-            directory.path(),
-            &DeleteProviderRequest {
-                provider_id: "provider-missing".to_string(),
-                expected_revision: settings.revision,
-            },
-            &store,
-        )
-        .unwrap_err();
-        assert!(unknown.to_string().contains("Unknown provider"));
-        assert!(store.get_calls.lock().unwrap().is_empty());
-
-        for invalid_provider_id in [String::new(), "x".repeat(MAX_ID_LENGTH + 1)] {
-            let malformed = delete_provider_with_store(
-                directory.path(),
-                &DeleteProviderRequest {
-                    provider_id: invalid_provider_id,
-                    expected_revision: settings.revision,
-                },
-                &store,
-            )
-            .unwrap_err();
-            assert!(
-                malformed.to_string().contains("must not be empty")
-                    || malformed.to_string().contains("too long")
-            );
-        }
-        assert!(store.get_calls.lock().unwrap().is_empty());
-
-        let mut chat_owned = settings.clone();
-        chat_owned.capability_routes[0].model_id = "model-deepseek-v4-flash".to_string();
-        save_settings(directory.path(), &chat_owned).unwrap();
-        let chat_original = std::fs::read(settings_path(directory.path())).unwrap();
-        let chat_blocked = delete_provider_with_store(
-            directory.path(),
-            &delete_provider_request(&chat_owned),
-            &store,
-        )
-        .unwrap_err();
-        assert!(chat_blocked.to_string().contains("Assign Chat"));
-        assert!(store.get_calls.lock().unwrap().is_empty());
-        assert!(store.delete_calls.lock().unwrap().is_empty());
-        assert_eq!(
-            store
-                .entries
-                .lock()
-                .unwrap()
-                .get("provider-deepseek-existing")
-                .map(String::as_str),
-            Some("target-secret")
-        );
-        assert_ne!(chat_original, original);
-        assert_eq!(
-            std::fs::read(settings_path(directory.path())).unwrap(),
-            chat_original
-        );
-        assert_eq!(load_settings(directory.path()).unwrap().providers.len(), 2);
-    }
-
-    #[test]
-    fn provider_deletion_credential_failures_preserve_metadata_and_secret() {
-        let directory = TempDir::new().unwrap();
-        let settings = provider_removal_fixture();
-        save_settings(directory.path(), &settings).unwrap();
-        let original = std::fs::read(settings_path(directory.path())).unwrap();
-        let request = delete_provider_request(&settings);
-        let read_failure = MemoryCredentialStore {
-            entries: Mutex::new(HashMap::from([(
-                "provider-deepseek-existing".to_string(),
-                "target-secret".to_string(),
-            )])),
-            fail_get: true,
-            ..Default::default()
-        };
-
-        let error =
-            delete_provider_with_store(directory.path(), &request, &read_failure).unwrap_err();
-        assert!(error.to_string().contains("credential read failure"));
-        assert!(read_failure.delete_calls.lock().unwrap().is_empty());
-        assert_eq!(
-            read_failure
-                .entries
-                .lock()
-                .unwrap()
-                .get("provider-deepseek-existing")
-                .map(String::as_str),
-            Some("target-secret")
-        );
-        assert_eq!(
-            std::fs::read(settings_path(directory.path())).unwrap(),
-            original
-        );
-
-        let delete_failure = MemoryCredentialStore {
-            entries: Mutex::new(HashMap::from([(
-                "provider-deepseek-existing".to_string(),
-                "target-secret".to_string(),
-            )])),
-            fail_delete: true,
-            ..Default::default()
-        };
-        let error =
-            delete_provider_with_store(directory.path(), &request, &delete_failure).unwrap_err();
-        assert!(error.to_string().contains("credential delete failure"));
-        assert_eq!(delete_failure.delete_calls.lock().unwrap().len(), 1);
-        assert_eq!(
-            delete_failure
-                .entries
-                .lock()
-                .unwrap()
-                .get("provider-deepseek-existing")
-                .map(String::as_str),
-            Some("target-secret")
-        );
-        assert_eq!(
-            std::fs::read(settings_path(directory.path())).unwrap(),
-            original
-        );
-    }
-
-    #[test]
-    fn provider_metadata_failure_restores_deleted_credential_and_allows_retry() {
-        let directory = TempDir::new().unwrap();
-        let settings = provider_removal_fixture();
-        save_settings(directory.path(), &settings).unwrap();
-        let original = std::fs::read(settings_path(directory.path())).unwrap();
-        let request = delete_provider_request(&settings);
-        let store = MemoryCredentialStore {
-            entries: Mutex::new(HashMap::from([
-                (
-                    "provider-deepseek-existing".to_string(),
-                    "target-secret".to_string(),
-                ),
-                (
-                    "provider-remaining".to_string(),
-                    "remaining-secret".to_string(),
-                ),
-            ])),
-            ..Default::default()
-        };
-
-        let result =
-            delete_provider_with_store_and_save(directory.path(), &request, &store, |_, _| {
-                bail!("injected metadata write failure")
-            });
-
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("its credential was restored")
-        );
-        assert_eq!(
-            store.get("provider-deepseek-existing").unwrap().as_deref(),
-            Some("target-secret")
-        );
-        assert_eq!(
-            std::fs::read(settings_path(directory.path())).unwrap(),
-            original
-        );
-        assert_eq!(store.delete_calls.lock().unwrap().len(), 1);
-        assert_eq!(store.set_calls.lock().unwrap().len(), 1);
-
-        let recovered = delete_provider_with_store(directory.path(), &request, &store).unwrap();
-        assert_eq!(recovered.providers[0].id, "provider-remaining");
-        assert_eq!(store.get("provider-deepseek-existing").unwrap(), None);
-        assert_eq!(
-            store.get("provider-remaining").unwrap().as_deref(),
-            Some("remaining-secret")
-        );
-    }
-
-    #[test]
-    fn provider_metadata_and_credential_restore_failure_reports_partial_recovery_truthfully() {
-        let directory = TempDir::new().unwrap();
-        let settings = provider_removal_fixture();
-        save_settings(directory.path(), &settings).unwrap();
-        let original = std::fs::read(settings_path(directory.path())).unwrap();
-        let store = MemoryCredentialStore {
-            entries: Mutex::new(HashMap::from([(
-                "provider-deepseek-existing".to_string(),
-                "target-secret".to_string(),
-            )])),
-            fail_set: true,
-            ..Default::default()
-        };
-
-        let error = delete_provider_with_store_and_save(
-            directory.path(),
-            &delete_provider_request(&settings),
-            &store,
-            |_, _| bail!("injected metadata write failure"),
-        )
-        .unwrap_err();
-
-        assert!(error.to_string().contains("could not be restored"));
-        assert!(!error.to_string().contains("target-secret"));
-        assert_eq!(
-            std::fs::read(settings_path(directory.path())).unwrap(),
-            original
-        );
-        assert!(
-            load_settings(directory.path())
-                .unwrap()
-                .providers
-                .iter()
-                .any(|provider| provider.id == "provider-deepseek-existing")
-        );
-        assert!(
-            !store
-                .entries
-                .lock()
-                .unwrap()
-                .contains_key("provider-deepseek-existing")
-        );
-        assert_eq!(store.delete_calls.lock().unwrap().len(), 1);
-        assert_eq!(store.set_calls.lock().unwrap().len(), 1);
-    }
-
-    #[test]
-    fn simultaneous_provider_deletions_accept_exactly_one_revision() {
-        let directory = TempDir::new().unwrap();
-        let settings = provider_removal_fixture();
-        save_settings(directory.path(), &settings).unwrap();
-        let data_dir = Arc::new(directory.path().to_path_buf());
-        let request = Arc::new(delete_provider_request(&settings));
-        let store = Arc::new(MemoryCredentialStore {
-            entries: Mutex::new(HashMap::from([(
-                "provider-deepseek-existing".to_string(),
-                "target-secret".to_string(),
-            )])),
-            ..Default::default()
-        });
-        let barrier = Arc::new(Barrier::new(3));
-        let handles = (0..2)
-            .map(|_| {
-                let data_dir = Arc::clone(&data_dir);
-                let request = Arc::clone(&request);
-                let store = Arc::clone(&store);
-                let barrier = Arc::clone(&barrier);
-                thread::spawn(move || {
-                    barrier.wait();
-                    delete_provider_with_store(data_dir.as_path(), request.as_ref(), &*store)
-                })
-            })
-            .collect::<Vec<_>>();
-
-        barrier.wait();
-        let outcomes = handles
-            .into_iter()
-            .map(|handle| handle.join().unwrap())
-            .collect::<Vec<_>>();
-
-        assert_eq!(outcomes.iter().filter(|outcome| outcome.is_ok()).count(), 1);
-        assert_eq!(
-            outcomes.iter().filter(|outcome| outcome.is_err()).count(),
-            1
-        );
-        assert_eq!(store.get_calls.lock().unwrap().len(), 1);
-        assert_eq!(store.delete_calls.lock().unwrap().len(), 1);
-        let reopened = load_settings(directory.path()).unwrap();
-        assert_eq!(reopened.revision, settings.revision + 1);
-        assert_eq!(reopened.providers[0].id, "provider-remaining");
-    }
-
-    #[test]
-    fn credential_value_never_enters_settings_or_runtime_profile() {
-        let directory = TempDir::new().unwrap();
-        save_settings(directory.path(), &default_settings()).unwrap();
-        let store = MemoryCredentialStore::default();
-        let secret = "credential-value-that-must-not-persist";
-        set_credential_with_store(
-            directory.path(),
-            "provider-deepseek-existing",
-            secret,
-            false,
-            &store,
-        )
-        .unwrap();
-
-        let settings = load_settings(directory.path()).unwrap();
-        let resolved = resolve_model_with_settings(&settings, None).unwrap();
-        let credential = credential_override_with_store(
-            directory.path(),
-            &settings,
-            &resolved.provider_id,
-            &store,
-            "credential_test_read",
-        )
-        .unwrap();
-        assert_eq!(
-            credential.as_ref().map(|(_, value)| value.as_str()),
-            Some(secret)
-        );
-        assert!(!serde_json::to_string(&settings).unwrap().contains(secret));
-        assert!(
-            !serde_json::to_string(&resolved.runtime_profile)
-                .unwrap()
-                .contains(secret)
-        );
-        assert!(
-            !std::fs::read_to_string(settings_path(directory.path()))
-                .unwrap()
-                .contains(secret)
-        );
-    }
-
-    #[test]
-    fn duplicate_provider_ids_are_rejected() {
-        let mut settings = default_settings();
-        settings.providers.push(settings.providers[0].clone());
-        assert!(validate_settings(&settings).is_err());
-    }
-
-    #[test]
-    fn selected_model_must_exist_and_be_enabled() {
-        let mut settings = default_settings();
-        settings.capability_routes[0].model_id = "missing".to_string();
-        assert!(validate_settings(&settings).is_err());
-        let mut settings = default_settings();
-        settings.models[0].enabled = false;
-        assert!(validate_settings(&settings).is_err());
-    }
-
-    #[test]
-    fn environment_variable_names_are_validated() {
-        let mut settings = default_settings();
-        settings.providers[0].api_key_env = Some("1BAD".to_string());
-        assert!(validate_settings(&settings).is_err());
-    }
-
-    #[test]
-    fn base_urls_reject_secret_like_query_parameters() {
-        let mut settings = default_settings();
-        settings.providers[0].kind = "openai_compatible".to_string();
-        settings.providers[0].registered_provider_id = None;
-        settings.providers[0].base_url = Some("https://example.test/v1?api_key=secret".to_string());
-        settings.providers[0].wire_api = Some("chat_completions".to_string());
-        settings.providers[0].api_key_env = Some("OPENAI_API_KEY".to_string());
-        assert!(validate_settings(&settings).is_err());
-    }
-
-    #[test]
-    fn reviewed_builtin_and_registered_providers_accept_optional_base_urls() {
-        let mut settings = default_settings();
-        settings.providers[0].base_url =
-            Some("https://gateway.example.test/deepseek/v1".to_string());
-        settings.providers[0].wire_api = Some("chat_completions".to_string());
-        assert!(validate_settings(&settings).is_ok());
-
-        settings.providers[0].registered_provider_id = Some("unlisted-provider".to_string());
-        let error = validate_settings(&settings).unwrap_err().to_string();
-        assert!(error.contains("reviewed registered providers"));
-
-        settings.providers[0].kind = "openai".to_string();
-        settings.providers[0].registered_provider_id = None;
-        assert!(validate_settings(&settings).is_ok());
-    }
-
-    #[test]
-    fn provider_view_projects_reviewed_default_and_configured_base_urls() {
-        let mut provider = default_settings().providers.remove(0);
-        assert_eq!(
-            provider_base_url_presentation(&provider),
-            (
-                Some("https://api.deepseek.com".to_string()),
-                "provider_default".to_string()
-            )
-        );
-
-        provider.base_url = Some("https://gateway.example.test/v1".to_string());
-        assert_eq!(
-            provider_base_url_presentation(&provider),
-            (
-                Some("https://gateway.example.test/v1".to_string()),
-                "configured".to_string()
-            )
-        );
-    }
-
-    #[test]
-    fn discovery_targets_cover_builtin_and_literal_custom_providers() {
-        let mut provider = default_settings().providers.remove(0);
-        let deepseek = model_discovery_target(&provider).unwrap().unwrap();
-        assert_eq!(deepseek.url.as_str(), "https://api.deepseek.com/models");
-        assert_eq!(deepseek.format, ModelDiscoveryFormat::OpenAi);
-        assert_eq!(deepseek.auth, ModelDiscoveryAuth::Bearer);
-
-        provider.kind = "anthropic".to_string();
-        provider.registered_provider_id = None;
-        let anthropic = model_discovery_target(&provider).unwrap().unwrap();
-        assert_eq!(anthropic.url.path(), "/v1/models");
-        assert_eq!(anthropic.url.query(), Some("limit=100"));
-        assert_eq!(anthropic.format, ModelDiscoveryFormat::Anthropic);
-        assert_eq!(anthropic.auth, ModelDiscoveryAuth::Anthropic);
-
-        provider.kind = "gemini".to_string();
-        let gemini = model_discovery_target(&provider).unwrap().unwrap();
-        assert_eq!(gemini.url.path(), "/v1beta/models");
-        assert_eq!(gemini.url.query(), Some("pageSize=100"));
-        assert_eq!(gemini.format, ModelDiscoveryFormat::Gemini);
-        assert_eq!(gemini.auth, ModelDiscoveryAuth::Gemini);
-
-        provider.kind = "openai_compatible".to_string();
-        provider.base_url = Some("https://example.test/api/v1?tenant=one".to_string());
-        provider.wire_api = Some("chat_completions".to_string());
-        let custom = model_discovery_target(&provider).unwrap().unwrap();
-        assert_eq!(
-            custom.url.as_str(),
-            "https://example.test/api/v1/models?tenant=one"
-        );
-
-        provider.base_url = None;
-        provider.base_url_env = Some("CUSTOM_BASE_URL".to_string());
-        assert!(model_discovery_target(&provider).unwrap().is_none());
-
-        provider = default_settings().providers.remove(0);
-        provider.base_url = Some("https://gateway.example.test/team/v1".to_string());
-        let overridden = model_discovery_target(&provider).unwrap().unwrap();
-        assert_eq!(
-            overridden.url.as_str(),
-            "https://gateway.example.test/team/v1/models"
-        );
-
-        provider.base_url = None;
-        provider.base_url_env = Some("DEEPSEEK_BASE_URL".to_string());
-        assert!(model_discovery_target(&provider).unwrap().is_none());
-
-        for registered_provider_id in [
-            "deepseek",
-            "moonshot",
-            "kimi",
-            "stepfun",
-            "volcengine",
-            "aihubmix",
-            "xai",
-            "openrouter",
-            "bailian",
-            "nvidia",
-        ] {
-            provider = default_settings().providers.remove(0);
-            provider.registered_provider_id = Some(registered_provider_id.to_string());
-            let target = model_discovery_target(&provider).unwrap().unwrap();
-            assert!(target.url.path().ends_with("/models"));
-            assert!(target.url.username().is_empty());
-            assert!(target.url.password().is_none());
+            }],
         }
     }
 
-    #[test]
-    fn discovery_parsers_filter_dedupe_sort_and_bound_models() {
-        let mut data = (0..105)
-            .map(|index| {
-                serde_json::json!({
-                    "id": format!("model-{index:03}"),
-                    "display_name": format!("Model {index:03}")
-                })
-            })
-            .collect::<Vec<_>>();
-        data.push(serde_json::json!({ "id": "model-001", "display_name": "Duplicate" }));
-        data.push(serde_json::json!({ "id": "bad\nmodel", "display_name": "Bad" }));
-        let bytes = serde_json::to_vec(&serde_json::json!({ "data": data })).unwrap();
-        let (models, truncated) =
-            parse_discovered_models(ModelDiscoveryFormat::OpenAi, &bytes).unwrap();
-        assert_eq!(models.len(), MAX_DISCOVERED_MODELS);
-        assert!(truncated);
-        assert_eq!(models.first().unwrap().id, "model-000");
-        assert_eq!(models.last().unwrap().id, "model-099");
-        assert!(models.iter().all(|model| model.id != "bad\nmodel"));
-        assert!(models.iter().all(|model| {
-            model.model_type.source == "unknown"
-                && model
-                    .capabilities
-                    .values()
-                    .all(|value| value.source == "unknown")
-        }));
-
-        assert!(
-            parse_discovered_models(ModelDiscoveryFormat::OpenAi, br#"{"models":[]}"#).is_err()
-        );
-        assert!(parse_discovered_models(ModelDiscoveryFormat::OpenAi, b"not json").is_err());
-    }
-
-    #[test]
-    fn gemini_discovery_keeps_generation_models_and_reports_pagination() {
-        let bytes = serde_json::to_vec(&serde_json::json!({
-            "models": [
-                {
-                    "name": "models/gemini-z",
-                    "baseModelId": "gemini-z",
-                    "displayName": "Gemini Z",
-                    "supportedGenerationMethods": ["generateContent"],
-                    "thinking": true
-                },
-                {
-                    "name": "models/text-embedding",
-                    "displayName": "Embedding",
-                    "supportedGenerationMethods": ["embedContent"]
-                },
-                {
-                    "name": "models/gemini-a",
-                    "displayName": "Gemini A",
-                    "supportedActions": ["generateContent"],
-                    "thinking": false
-                }
-            ],
-            "nextPageToken": "next-page"
-        }))
-        .unwrap();
-        let (models, truncated) =
-            parse_discovered_models(ModelDiscoveryFormat::Gemini, &bytes).unwrap();
-        assert!(truncated);
-        assert_eq!(models.len(), 2);
-        assert_eq!(models[0].id, "gemini-a");
-        assert_eq!(models[0].capabilities["reasoning"].value, "no");
-        assert_eq!(
-            models[0].capabilities["reasoning"].source,
-            "provider_response"
-        );
-        assert_eq!(models[1].id, "gemini-z");
-        assert_eq!(models[1].capabilities["reasoning"].value, "yes");
-    }
-
-    #[test]
-    fn anthropic_discovery_uses_human_display_names() {
-        let bytes = br#"{
-            "data": [
-                {"id":"claude-example","display_name":"Claude Example"}
-            ],
-            "has_more": false
-        }"#;
-        let (models, truncated) =
-            parse_discovered_models(ModelDiscoveryFormat::Anthropic, bytes).unwrap();
-        assert!(!truncated);
-        assert_eq!(models[0].id, "claude-example");
-        assert_eq!(models[0].display_name, "Claude Example");
-    }
-
-    #[test]
-    fn discovery_sends_only_the_expected_auth_header_and_never_mutates_settings() {
-        let directory = TempDir::new().unwrap();
-        let secret = "discovery-secret-never-returned";
-        let body = serde_json::json!({
-            "data": [
-                {"id":"z-model"},
-                {"id":"a-model"}
-            ]
-        })
-        .to_string();
-        let (base_url, server) = spawn_discovery_server("200 OK", &[], body, Duration::ZERO);
-        save_custom_discovery_provider(&directory, base_url);
-        let before = std::fs::read(settings_path(directory.path())).unwrap();
-        let store = store_with_discovery_secret(secret);
-
-        let response = discover_models_with_store(
-            directory.path(),
-            "provider-deepseek-existing",
-            &store,
-            &model_discovery_client().unwrap(),
-        )
-        .unwrap();
-        let request = server.join().unwrap();
-
-        assert_eq!(response.status, "ready");
-        assert_eq!(response.models[0].id, "a-model");
-        assert!(request.starts_with("GET /v1/models HTTP/1.1\r\n"));
-        assert!(
-            request
-                .to_ascii_lowercase()
-                .contains(&format!("authorization: bearer {secret}").to_ascii_lowercase())
-        );
-        assert!(!serde_json::to_string(&response).unwrap().contains(secret));
-        assert_eq!(
-            std::fs::read(settings_path(directory.path())).unwrap(),
-            before
-        );
-    }
-
-    #[test]
-    fn missing_discovery_credential_rejects_before_network_access() {
-        let directory = TempDir::new().unwrap();
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        listener.set_nonblocking(true).unwrap();
-        save_custom_discovery_provider(
-            &directory,
-            format!("http://{}/v1", listener.local_addr().unwrap()),
-        );
-        let response = discover_models_with_store(
-            directory.path(),
-            "provider-deepseek-existing",
-            &MemoryCredentialStore::default(),
-            &model_discovery_client().unwrap(),
-        )
-        .unwrap();
-        assert_eq!(response.status, "error");
-        assert_eq!(response.error_class.as_deref(), Some("credential"));
-        assert!(matches!(
-            listener.accept(),
-            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock
-        ));
-    }
-
-    #[test]
-    fn discovery_redacts_provider_error_bodies_and_refuses_redirects() {
-        let directory = TempDir::new().unwrap();
-        let secret = "credential-that-must-not-leak";
-        let (base_url, server) = spawn_discovery_server(
-            "401 Unauthorized",
-            &[],
-            format!("provider echoed {secret}"),
-            Duration::ZERO,
-        );
-        save_custom_discovery_provider(&directory, base_url);
-        let store = store_with_discovery_secret(secret);
-        let response = discover_models_with_store(
-            directory.path(),
-            "provider-deepseek-existing",
-            &store,
-            &model_discovery_client().unwrap(),
-        )
-        .unwrap();
-        server.join().unwrap();
-        let serialized = serde_json::to_string(&response).unwrap();
-        assert_eq!(response.error_class.as_deref(), Some("auth"));
-        assert!(!serialized.contains(secret));
-        assert!(!serialized.contains("provider echoed"));
-
-        let redirect_target = TcpListener::bind("127.0.0.1:0").unwrap();
-        redirect_target.set_nonblocking(true).unwrap();
-        let location = format!("http://{}/models", redirect_target.local_addr().unwrap());
-        let (base_url, server) = spawn_discovery_server(
-            "302 Found",
-            &[("Location", location.as_str())],
-            String::new(),
-            Duration::ZERO,
-        );
-        save_custom_discovery_provider(&directory, base_url);
-        let response = discover_models_with_store(
-            directory.path(),
-            "provider-deepseek-existing",
-            &store,
-            &model_discovery_client().unwrap(),
-        )
-        .unwrap();
-        server.join().unwrap();
-        assert_eq!(response.status, "unsupported");
-        assert!(matches!(
-            redirect_target.accept(),
-            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock
-        ));
-    }
-
-    #[test]
-    fn discovery_bounds_oversized_responses_and_timeouts() {
-        let directory = TempDir::new().unwrap();
-        let secret = "bounded-secret";
-        let (base_url, server) = spawn_discovery_server(
-            "200 OK",
-            &[],
-            "x".repeat(MAX_MODEL_DISCOVERY_BYTES + 1),
-            Duration::ZERO,
-        );
-        save_custom_discovery_provider(&directory, base_url);
-        let store = store_with_discovery_secret(secret);
-        let response = discover_models_with_store(
-            directory.path(),
-            "provider-deepseek-existing",
-            &store,
-            &model_discovery_client().unwrap(),
-        )
-        .unwrap();
-        server.join().unwrap();
-        assert_eq!(response.error_class.as_deref(), Some("response"));
-        assert!(response.message.contains("1 MiB"));
-
-        let (base_url, server) = spawn_stalled_discovery_server();
-        save_custom_discovery_provider(&directory, base_url);
-        let short_client = reqwest::blocking::Client::builder()
-            .timeout(Duration::from_millis(250))
-            .redirect(reqwest::redirect::Policy::none())
-            .no_proxy()
-            .build()
-            .unwrap();
-        let response = discover_models_with_store(
-            directory.path(),
-            "provider-deepseek-existing",
-            &store,
-            &short_client,
-        )
-        .unwrap();
-        assert_eq!(response.error_class.as_deref(), Some("timeout"));
-        assert!(!serde_json::to_string(&response).unwrap().contains(secret));
-        drop(short_client);
-        let request = server.join().unwrap();
-        assert!(request.starts_with("GET /v1/models HTTP/1.1\r\n"));
-    }
-
-    fn probe_fixture_command(mode: &str, sentinel: &str) -> Command {
-        let mut command = Command::new(std::env::current_exe().unwrap());
-        command.args([
-            "--exact",
-            "agent_llm::tests::r_probe_process_fixture",
-            "--ignored",
-            "--nocapture",
-        ]);
-        command.env("RHO_PROBE_FIXTURE_MODE", mode);
-        command.env("RHO_PROBE_FIXTURE_SENTINEL", sentinel);
-        command
-    }
-
-    fn successful_probe_command(payload: &str) -> Command {
-        #[cfg(unix)]
-        let mut command = {
-            let mut command = Command::new("/bin/sh");
-            command.args(["-c", "printf '%s' \"$RHO_PROBE_SUCCESS_JSON\""]);
-            command
-        };
-        #[cfg(windows)]
-        let mut command = {
-            let mut command = Command::new("cmd.exe");
-            command.args([
-                "/D",
-                "/S",
-                "/C",
-                "<nul set /p \"=%RHO_PROBE_SUCCESS_JSON%\"",
-            ]);
-            command
-        };
-        command.env("RHO_PROBE_SUCCESS_JSON", payload);
-        command
-    }
-
-    fn successful_probe_file_command(payload_path: &Path) -> Command {
-        #[cfg(unix)]
-        let mut command = {
-            let mut command = Command::new("/bin/sh");
-            command.args(["-c", "cat -- \"$RHO_PROBE_SUCCESS_JSON_FILE\""]);
-            command
-        };
-        #[cfg(windows)]
-        let mut command = {
-            let mut command = Command::new("cmd.exe");
-            command.args(["/D", "/S", "/C", "type \"%RHO_PROBE_SUCCESS_JSON_FILE%\""]);
-            command
-        };
-        command.env("RHO_PROBE_SUCCESS_JSON_FILE", payload_path);
-        command
-    }
-
-    fn assert_probe_retry_succeeds(control: &AgentModelTestControl) {
-        let expected = serde_json::json!({"retry": "ready"});
-        let response = run_r_json_command::<serde_json::Value>(
-            successful_probe_command(&expected.to_string()),
-            None,
-            RProbeFailureDisclosure::SuppressDiagnostic,
-            Some(control),
-        )
-        .unwrap();
-        assert_eq!(response, expected);
-        let state = control.lock().unwrap();
-        assert!(state.pid.is_none());
-        assert!(!state.cancel_requested);
-    }
-
-    #[test]
-    #[ignore = "subprocess fixture invoked by connection-probe boundary tests"]
-    fn r_probe_process_fixture() {
-        let Some(mode) = std::env::var_os("RHO_PROBE_FIXTURE_MODE") else {
-            return;
-        };
-        let mode = mode.to_string_lossy();
-        let sentinel = std::env::var("RHO_PROBE_FIXTURE_SENTINEL").unwrap_or_default();
-        match mode.as_ref() {
-            "stderr_secret" => {
-                eprint!("raw-prefix\n{sentinel}\nraw-suffix");
-                std::process::exit(19);
-            }
-            "stderr_empty" => std::process::exit(20),
-            "stderr_invalid_utf8" => {
-                std::io::stderr().write_all(&[0xff, 0xfe, 0xfd]).unwrap();
-                std::process::exit(21);
-            }
-            "stderr_exact" => {
-                let mut output = vec![b'x'; MAX_R_PROBE_STDERR_BYTES];
-                let start = output.len() - sentinel.len();
-                output[start..].copy_from_slice(sentinel.as_bytes());
-                std::io::stderr().write_all(&output).unwrap();
-                std::process::exit(22);
-            }
-            "stderr_oversized" => {
-                let mut output = vec![b'x'; MAX_R_PROBE_STDERR_BYTES + 1];
-                output.extend_from_slice(sentinel.as_bytes());
-                std::io::stderr().write_all(&output).unwrap();
-                std::process::exit(23);
-            }
-            "stdout_invalid" => {
-                print!("not-json::{sentinel}");
-                std::io::stdout().flush().unwrap();
-                std::process::exit(0);
-            }
-            "stdout_oversized" => {
-                let mut output = vec![b'x'; MAX_R_PROBE_STDOUT_BYTES + 1];
-                output.extend_from_slice(sentinel.as_bytes());
-                std::io::stdout().write_all(&output).unwrap();
-                std::process::exit(0);
-            }
-            "exit_before_stdin" => std::process::exit(24),
-            "environment_json" => {
-                let values = [
-                    "GITHUB_TOKEN",
-                    "AMBIENT_ACCESS_TOKEN",
-                    "PROVIDER_A_CUSTOM_SECRET",
-                    "PROVIDER_A_ENDPOINT",
-                    "PROVIDER_B_CUSTOM_SECRET",
-                    "PROVIDER_B_ENDPOINT",
-                ]
-                .into_iter()
-                .map(|name| (name, std::env::var(name).ok()))
-                .collect::<BTreeMap<_, _>>();
-                let output = std::env::var_os("RHO_PROBE_FIXTURE_OUTPUT").unwrap();
-                std::fs::write(output, serde_json::to_vec(&values).unwrap()).unwrap();
-            }
-            "descendant_holds_pipe" => {
-                let descendant = probe_fixture_command("sleep", "unused").spawn().unwrap();
-                if let Some(output) = std::env::var_os("RHO_PROBE_FIXTURE_OUTPUT") {
-                    std::fs::write(output, descendant.id().to_string()).unwrap();
-                }
-            }
-            "production_connection_test" => {
-                let data_dir = PathBuf::from(std::env::var_os("RHO_PRODUCTION_DATA_DIR").unwrap());
-                let rscript = PathBuf::from(std::env::var_os("RHO_PRODUCTION_RSCRIPT").unwrap());
-                let calls_path = PathBuf::from(std::env::var_os("RHO_PRODUCTION_CALLS").unwrap());
-                let store = MemoryCredentialStore {
-                    entries: Mutex::new(HashMap::from([
-                        (
-                            "provider-a".to_string(),
-                            "rho-selected-credential-production-fixture".to_string(),
-                        ),
-                        (
-                            "provider-b".to_string(),
-                            "rho-other-credential-production-fixture".to_string(),
-                        ),
-                    ])),
-                    ..Default::default()
-                };
-                let view = test_model_with_store(
-                    &data_dir,
-                    &rscript,
-                    Path::new("/unused/rho.agent"),
-                    "model-deepseek-v4-flash",
-                    None,
-                    &store,
-                )
-                .unwrap();
-                let tested = view
-                    .models
-                    .iter()
-                    .find(|model| model.profile.id == "model-deepseek-v4-flash")
-                    .unwrap();
-                assert_eq!(tested.profile.last_test.as_ref().unwrap().status, "ready");
-                std::fs::write(
-                    calls_path,
-                    serde_json::to_vec(&*store.get_calls.lock().unwrap()).unwrap(),
-                )
-                .unwrap();
-            }
-            #[cfg(unix)]
-            "catalog_call" => {
-                let data_dir = PathBuf::from(std::env::var_os("RHO_CATALOG_DATA_DIR").unwrap());
-                let rscript = PathBuf::from(std::env::var_os("RHO_CATALOG_RSCRIPT").unwrap());
-                assert!(catalog(&data_dir, &rscript).unwrap().is_empty());
-            }
-            "sleep" => std::thread::sleep(Duration::from_secs(60)),
-            _ => std::process::exit(25),
+    fn test_config_store_view() -> AgentConfigStoreView {
+        AgentConfigStoreView {
+            home_path: Some("/test/.rho".to_string()),
+            config_path: Some("/test/.rho/config.yaml".to_string()),
+            status: "loaded".to_string(),
+            detail: None,
+            found_schema_version: Some(u64::from(SETTINGS_SCHEMA_VERSION)),
+            config_snapshot_id: "opaque-test-snapshot".to_string(),
+            permission_issues: Vec::new(),
         }
     }
 
-    #[test]
-    fn connection_probe_process_failures_never_return_child_diagnostics() {
-        let sentinel = "rho-bare-credential-sentinel-1a";
-        for mode in [
-            "stderr_secret",
-            "stderr_empty",
-            "stderr_invalid_utf8",
-            "stderr_exact",
-            "stderr_oversized",
-        ] {
-            let error = run_r_json_command::<serde_json::Value>(
-                probe_fixture_command(mode, sentinel),
-                None,
-                RProbeFailureDisclosure::SuppressDiagnostic,
-                None,
-            )
-            .unwrap_err();
-            let service_error = error.to_string();
-            let tauri_error = crate::startup_runtime::display_error(&error);
-            assert_eq!(service_error, CONNECTION_TEST_PROCESS_FAILURE);
-            assert_eq!(tauri_error, CONNECTION_TEST_PROCESS_FAILURE);
-            for forbidden in [
-                sentinel,
-                &sentinel[..10],
-                &sentinel[sentinel.len() - 10..],
-                "raw-prefix",
-                "raw-suffix",
-            ] {
-                assert!(!service_error.contains(forbidden), "mode={mode}");
-                assert!(!tauri_error.contains(forbidden), "mode={mode}");
-            }
-        }
-    }
-
-    #[test]
-    fn connection_probe_invalid_stdout_returns_only_fixed_protocol_error() {
-        let sentinel = "rho-stdout-sentinel-never-returned";
-        for mode in ["stdout_invalid", "stdout_oversized"] {
-            let error = run_r_json_command::<serde_json::Value>(
-                probe_fixture_command(mode, sentinel),
-                None,
-                RProbeFailureDisclosure::SuppressDiagnostic,
-                None,
-            )
-            .unwrap_err()
-            .to_string();
-            assert_eq!(
-                error,
-                "Rho received an invalid Provider connection-test response."
-            );
-            assert!(!error.contains(sentinel));
-        }
-    }
-
-    #[test]
-    fn connection_probe_decodes_and_normalizes_success_json() {
-        let discarded_message = "rho-ignored-message-sentinel\nwith\\escapes";
-        let raw_json = serde_json::json!({
-            "status": "ready",
-            "credential_status": "detected",
-            "model_resolved": true,
-            "latency_ms": 9,
-            "capabilities": {
-                "tool_calling": "yes",
-                "reasoning": "unknown",
-                "vision_input": "no",
-                "source": "probe"
-            },
-            "message": discarded_message,
-            "error_class": null
-        })
-        .to_string();
-        let raw: RawAgentConnectionTestResponse = run_r_json_command(
-            successful_probe_command(&raw_json),
-            None,
-            RProbeFailureDisclosure::SuppressDiagnostic,
-            None,
-        )
-        .unwrap();
-        let response = normalize_connection_test_response(raw).unwrap();
-        assert_eq!(response.status, "ready");
-        assert_eq!(response.message, "Connection succeeded.");
-        assert!(
-            !serde_json::to_string(&response)
-                .unwrap()
-                .contains(discarded_message)
-        );
-        assert!(response.error_class.is_none());
-    }
-
-    #[test]
-    fn probe_capture_keeps_exact_bounds_and_drains_the_remainder() {
-        for limit in [MAX_R_PROBE_STDOUT_BYTES, MAX_R_PROBE_STDERR_BYTES] {
-            let exact = drain_bounded(std::io::Cursor::new(vec![b'a'; limit]), limit).unwrap();
-            assert_eq!(exact.bytes.len(), limit);
-            assert!(exact.bytes.capacity() >= limit);
-            assert!(!exact.truncated);
-
-            let source = vec![b'b'; limit + 8 * 1024 + 1];
-            let mut cursor = std::io::Cursor::new(source.clone());
-            let oversized = drain_bounded(&mut cursor, limit).unwrap();
-            assert_eq!(oversized.bytes.len(), limit);
-            assert!(oversized.truncated);
-            assert_eq!(cursor.position(), source.len() as u64);
-        }
-    }
-
-    #[test]
-    fn probe_parent_exit_terminates_descendants_before_bounded_pipe_join() {
-        let evidence = TempDir::new().unwrap();
-        let evidence_path = evidence.path().join("descendant.pid");
-        let mut command = probe_fixture_command("descendant_holds_pipe", "unused");
-        command.env("RHO_PROBE_FIXTURE_OUTPUT", &evidence_path);
-        let started = Instant::now();
-        let error = run_r_json_command::<serde_json::Value>(
-            command,
-            None,
-            RProbeFailureDisclosure::SuppressDiagnostic,
-            None,
-        )
-        .unwrap_err()
-        .to_string();
-        assert_eq!(
-            error,
-            "Rho received an invalid Provider connection-test response."
-        );
-        assert!(started.elapsed() < R_PROBE_PIPE_JOIN_TIMEOUT);
-        let descendant_pid = std::fs::read_to_string(evidence_path)
-            .unwrap()
-            .trim()
-            .parse::<u32>()
-            .unwrap();
-        assert_process_terminated(descendant_pid, "contained probe descendant");
-    }
-
-    fn connection_response_fixture(error_class: Option<&str>) -> RawAgentConnectionTestResponse {
-        RawAgentConnectionTestResponse {
-            status: SecretString::new("error".to_string()),
-            credential_status: SecretString::new("detected".to_string()),
-            model_resolved: false,
-            latency_ms: Some(7),
-            capabilities: RawAgentModelCapabilitiesV1 {
-                tool_calling: SecretString::new("yes".to_string()),
-                reasoning: SecretString::new("unknown".to_string()),
-                vision_input: SecretString::new("no".to_string()),
-                source: SecretString::new("probe".to_string()),
-            },
-            _message: serde::de::IgnoredAny,
-            error_class: error_class.map(|value| SecretString::new(value.to_string())),
-        }
-    }
-
-    #[test]
-    fn structured_connection_failures_use_only_allowlisted_fixed_copy() {
-        let sentinel = "rho-structured-message-sentinel";
-        let arbitrary_long_message = format!("{sentinel}\n{}", "x".repeat(128 * 1024));
-        let expectations = [
-            (
-                "credential",
-                "The Provider rejected the configured credential.",
-                "credential",
-            ),
-            (
-                "timeout",
-                "The Provider connection test timed out.",
-                "timeout",
-            ),
-            (
-                "endpoint",
-                "The Provider endpoint or model configuration was rejected.",
-                "endpoint",
-            ),
-            ("network", "Rho could not reach the Provider.", "network"),
-            (
-                "provider",
-                "The Provider connection test failed.",
-                "provider",
-            ),
-            (
-                "rho-error-class-sentinel-never-returned",
-                "The Provider connection test failed.",
-                "provider",
-            ),
-        ];
-        for (error_class, expected_message, expected_error_class) in expectations {
-            let payload_directory = TempDir::new().unwrap();
-            let payload_path = payload_directory.path().join("structured-failure.json");
-            std::fs::write(
-                &payload_path,
-                serde_json::to_vec(&serde_json::json!({
-                    "status": "error",
-                    "credential_status": "detected",
-                    "model_resolved": false,
-                    "latency_ms": 7,
-                    "capabilities": {
-                        "tool_calling": "yes",
-                        "reasoning": "unknown",
-                        "vision_input": "no",
-                        "source": "probe"
-                    },
-                    "message": arbitrary_long_message,
-                    "error_class": error_class
-                }))
-                .unwrap(),
-            )
-            .unwrap();
-            let raw: RawAgentConnectionTestResponse = run_r_json_command(
-                successful_probe_file_command(&payload_path),
-                None,
-                RProbeFailureDisclosure::SuppressDiagnostic,
-                None,
-            )
-            .unwrap();
-            let response = normalize_connection_test_response(raw).unwrap();
-            assert_eq!(response.message, expected_message);
-            assert_eq!(response.error_class.as_deref(), Some(expected_error_class));
-            let serialized = serde_json::to_string(&response).unwrap();
-            assert!(!serialized.contains(sentinel));
-            assert!(
-                !serialized.contains(&arbitrary_long_message),
-                "error_class={error_class}"
-            );
-            if error_class != expected_error_class {
-                assert!(!serialized.contains(error_class));
-            }
-        }
-
-        let mut ready = connection_response_fixture(Some(sentinel));
-        ready.status = SecretString::new("ready".to_string());
-        ready.model_resolved = true;
-        let ready = normalize_connection_test_response(ready).unwrap();
-        assert_eq!(ready.message, "Connection succeeded.");
-        assert!(ready.error_class.is_none());
-        assert!(!serde_json::to_string(&ready).unwrap().contains(sentinel));
-
-        let mut invalid = connection_response_fixture(Some("provider"));
-        invalid.status = SecretString::new(sentinel.to_string());
-        let error = normalize_connection_test_response(invalid)
-            .unwrap_err()
-            .to_string();
-        assert_eq!(
-            error,
-            "Rho received an invalid Provider connection-test response."
-        );
-        assert!(!error.contains(sentinel));
-
-        let mut invalid_credential = connection_response_fixture(Some("provider"));
-        invalid_credential.credential_status = SecretString::new(sentinel.to_string());
-        let mut invalid_capability = connection_response_fixture(Some("provider"));
-        invalid_capability.capabilities.tool_calling = SecretString::new(sentinel.to_string());
-        let mut invalid_source = connection_response_fixture(Some("provider"));
-        invalid_source.capabilities.source = SecretString::new(sentinel.to_string());
-        let mut contradictory_ready = connection_response_fixture(None);
-        contradictory_ready.status = SecretString::new("ready".to_string());
-        contradictory_ready.model_resolved = true;
-        contradictory_ready.credential_status = SecretString::new("not_detected".to_string());
-        for invalid in [
-            invalid_credential,
-            invalid_capability,
-            invalid_source,
-            contradictory_ready,
-        ] {
-            let error = normalize_connection_test_response(invalid)
-                .unwrap_err()
-                .to_string();
-            assert_eq!(
-                error,
-                "Rho received an invalid Provider connection-test response."
-            );
-            assert!(!error.contains(sentinel));
-        }
-    }
-
-    #[test]
-    fn structured_connection_message_is_safe_before_settings_persistence() {
-        let sentinel = "rho-persistence-sentinel-never-stored";
-        let payload_directory = TempDir::new().unwrap();
-        let payload_path = payload_directory.path().join("structured-failure.json");
-        std::fs::write(
-            &payload_path,
-            serde_json::to_vec(&serde_json::json!({
-                "status": "error",
-                "credential_status": "detected",
-                "model_resolved": false,
-                "latency_ms": 7,
-                "capabilities": {
-                    "tool_calling": "yes",
-                    "reasoning": "unknown",
-                    "vision_input": "no",
-                    "source": "probe"
-                },
-                "message": format!("{sentinel}\n{}", "x".repeat(128 * 1024)),
-                "error_class": "credential"
-            }))
-            .unwrap(),
-        )
-        .unwrap();
-        let raw: RawAgentConnectionTestResponse = run_r_json_command(
-            successful_probe_file_command(&payload_path),
-            None,
-            RProbeFailureDisclosure::SuppressDiagnostic,
-            None,
-        )
-        .unwrap();
-        let response = normalize_connection_test_response(raw).unwrap();
-        let directory = TempDir::new().unwrap();
-        let mut settings = default_settings();
-        update_model_after_test(&mut settings, "model-deepseek-v4-flash", &response).unwrap();
-        save_settings(directory.path(), &settings).unwrap();
-        let serialized = std::fs::read_to_string(settings_path(directory.path())).unwrap();
-        assert!(!serialized.contains(sentinel));
-        assert!(serialized.contains("The Provider rejected the configured credential."));
-    }
-
-    #[test]
-    fn agent_probe_environment_keeps_only_selected_provider_values() {
-        let scrub = vec![
-            "PROVIDER_A_CUSTOM_SECRET".to_string(),
-            "PROVIDER_A_ENDPOINT".to_string(),
-            "PROVIDER_B_CUSTOM_SECRET".to_string(),
-            "PROVIDER_B_ENDPOINT".to_string(),
-        ];
-        let inherited = [
-            "GITHUB_TOKEN",
-            "AMBIENT_ACCESS_TOKEN",
-            "PROVIDER_A_CUSTOM_SECRET",
-            "PROVIDER_A_ENDPOINT",
-            "PROVIDER_B_CUSTOM_SECRET",
-            "PROVIDER_B_ENDPOINT",
-            "PATH",
-        ]
-        .into_iter()
-        .map(OsString::from)
-        .collect::<Vec<_>>();
-        let mut command = Command::new("Rscript");
-        configure_r_probe(
-            &mut command,
-            None,
-            &scrub,
-            inherited,
-            &[
-                ("PROVIDER_A_CUSTOM_SECRET", "selected-a"),
-                ("PROVIDER_A_ENDPOINT", "https://selected-a.example.test"),
-            ],
-        );
-        let projected = command
-            .get_envs()
-            .map(|(name, value)| {
-                (
-                    name.to_os_string(),
-                    value.map(std::ffi::OsStr::to_os_string),
-                )
-            })
-            .collect::<HashMap<_, _>>();
-        assert_eq!(
-            projected.get(&OsString::from("PROVIDER_A_CUSTOM_SECRET")),
-            Some(&Some(OsString::from("selected-a")))
-        );
-        assert_eq!(
-            projected.get(&OsString::from("PROVIDER_A_ENDPOINT")),
-            Some(&Some(OsString::from("https://selected-a.example.test")))
-        );
-        for removed in [
-            "GITHUB_TOKEN",
-            "AMBIENT_ACCESS_TOKEN",
-            "PROVIDER_B_CUSTOM_SECRET",
-            "PROVIDER_B_ENDPOINT",
-        ] {
-            assert_eq!(
-                projected.get(&OsString::from(removed)),
-                Some(&None),
-                "{removed} was not removed"
-            );
-        }
-        assert!(!projected.contains_key(&OsString::from("PATH")));
-    }
-
-    #[test]
-    fn probe_child_sees_only_selected_provider_environment() {
-        let scrub = vec![
-            "PROVIDER_A_CUSTOM_SECRET".to_string(),
-            "PROVIDER_A_ENDPOINT".to_string(),
-            "PROVIDER_B_CUSTOM_SECRET".to_string(),
-            "PROVIDER_B_ENDPOINT".to_string(),
-        ];
-        let inherited = [
-            "GITHUB_TOKEN",
-            "AMBIENT_ACCESS_TOKEN",
-            "PROVIDER_A_CUSTOM_SECRET",
-            "PROVIDER_A_ENDPOINT",
-            "PROVIDER_B_CUSTOM_SECRET",
-            "PROVIDER_B_ENDPOINT",
-        ];
-        let evidence = TempDir::new().unwrap();
-        let evidence_path = evidence.path().join("environment.json");
-        let mut command = probe_fixture_command("environment_json", "unused");
-        command.env("RHO_PROBE_FIXTURE_OUTPUT", &evidence_path);
-        for name in inherited {
-            command.env(name, format!("inherited-{name}"));
-        }
-        configure_probe_environment(
-            &mut command,
-            &scrub,
-            inherited.into_iter().map(OsString::from),
-            &[
-                ("PROVIDER_A_CUSTOM_SECRET", "selected-a"),
-                ("PROVIDER_A_ENDPOINT", "https://selected-a.example.test"),
-            ],
-        );
-        assert!(command.output().unwrap().status.success());
-        let observed: BTreeMap<String, Option<String>> =
-            serde_json::from_slice(&std::fs::read(evidence_path).unwrap()).unwrap();
-        assert_eq!(
-            observed.get("PROVIDER_A_CUSTOM_SECRET"),
-            Some(&Some("selected-a".to_string()))
-        );
-        assert_eq!(
-            observed.get("PROVIDER_A_ENDPOINT"),
-            Some(&Some("https://selected-a.example.test".to_string()))
-        );
-        for removed in [
-            "GITHUB_TOKEN",
-            "AMBIENT_ACCESS_TOKEN",
-            "PROVIDER_B_CUSTOM_SECRET",
-            "PROVIDER_B_ENDPOINT",
-        ] {
-            assert_eq!(observed.get(removed), Some(&None), "{removed} leaked");
-        }
-    }
-
-    #[test]
-    fn keyless_probe_child_inherits_no_sensitive_provider_environment() {
-        let scrub = vec![
-            "PROVIDER_A_CUSTOM_SECRET".to_string(),
-            "PROVIDER_A_ENDPOINT".to_string(),
-        ];
-        let inherited = [
-            "GITHUB_TOKEN",
-            "AMBIENT_ACCESS_TOKEN",
-            "PROVIDER_A_CUSTOM_SECRET",
-            "PROVIDER_A_ENDPOINT",
-        ];
-        let evidence = TempDir::new().unwrap();
-        let evidence_path = evidence.path().join("environment.json");
-        let mut command = probe_fixture_command("environment_json", "unused");
-        command.env("RHO_PROBE_FIXTURE_OUTPUT", &evidence_path);
-        for name in inherited {
-            command.env(name, format!("inherited-{name}"));
-        }
-        configure_probe_environment(
-            &mut command,
-            &scrub,
-            inherited.into_iter().map(OsString::from),
-            &[],
-        );
-        assert!(command.output().unwrap().status.success());
-        let observed: BTreeMap<String, Option<String>> =
-            serde_json::from_slice(&std::fs::read(evidence_path).unwrap()).unwrap();
-        for removed in inherited {
-            assert_eq!(observed.get(removed), Some(&None), "{removed} leaked");
-        }
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn catalog_loads_settings_scrub_names_without_polluting_r_arguments() {
-        use std::os::unix::fs::PermissionsExt;
-
-        let data_dir = TempDir::new().unwrap();
-        let fixture_dir = TempDir::new().unwrap();
-        let evidence_path = fixture_dir.path().join("catalog-environment.txt");
-        let rscript_path = fixture_dir.path().join("fake-rscript");
-        std::fs::write(
-            &rscript_path,
-            r#"#!/bin/sh
-{
-  printf 'argc=%s\n' "$#"
-  printf 'arg1=%s\n' "$1"
-  printf 'arg2=%s\n' "$2"
-  printf 'custom_value=%s\n' "${RHO_CATALOG_CUSTOM_VALUE-unset}"
-  printf 'custom_endpoint=%s\n' "${RHO_CATALOG_CUSTOM_ENDPOINT-unset}"
-  printf 'common_secret=%s\n' "${GITHUB_TOKEN-unset}"
-  printf 'ordinary=%s\n' "${RHO_CATALOG_ORDINARY-unset}"
-} > "$RHO_CATALOG_EVIDENCE"
-printf '[]'
-"#,
-        )
-        .unwrap();
-        let mut permissions = std::fs::metadata(&rscript_path).unwrap().permissions();
-        permissions.set_mode(0o755);
-        std::fs::set_permissions(&rscript_path, permissions).unwrap();
-
-        let mut settings = default_settings();
-        settings.providers[0].api_key_env = Some("RHO_CATALOG_CUSTOM_VALUE".to_string());
-        settings.providers[0].base_url = None;
-        settings.providers[0].base_url_env = Some("RHO_CATALOG_CUSTOM_ENDPOINT".to_string());
-        save_settings(data_dir.path(), &settings).unwrap();
-
-        let mut fixture = probe_fixture_command("catalog_call", "unused");
-        fixture.env("RHO_CATALOG_DATA_DIR", data_dir.path());
-        fixture.env("RHO_CATALOG_RSCRIPT", &rscript_path);
-        fixture.env("RHO_CATALOG_EVIDENCE", &evidence_path);
-        fixture.env("RHO_CATALOG_CUSTOM_VALUE", "catalog-credential-sentinel");
-        fixture.env(
-            "RHO_CATALOG_CUSTOM_ENDPOINT",
-            "https://catalog-endpoint-sentinel.example.test",
-        );
-        fixture.env("GITHUB_TOKEN", "catalog-common-secret-sentinel");
-        fixture.env("RHO_CATALOG_ORDINARY", "ordinary-retained");
-        let output = fixture.output().unwrap();
-        assert!(
-            output.status.success(),
-            "{}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-
-        let evidence = std::fs::read_to_string(evidence_path).unwrap();
-        assert!(evidence.contains("argc=2\n"));
-        assert!(evidence.contains("arg1=--vanilla\n"));
-        assert!(evidence.contains("arg2="));
-        assert!(evidence.contains("custom_value=unset\n"));
-        assert!(evidence.contains("custom_endpoint=unset\n"));
-        assert!(evidence.contains("common_secret=unset\n"));
-        assert!(evidence.contains("ordinary=ordinary-retained\n"));
-        for forbidden in [
-            "RHO_CATALOG_CUSTOM_VALUE",
-            "RHO_CATALOG_CUSTOM_ENDPOINT",
-            "catalog-credential-sentinel",
-            "catalog-endpoint-sentinel",
-            "catalog-common-secret-sentinel",
-        ] {
-            assert!(!evidence.contains(forbidden));
-        }
-    }
-
-    #[test]
-    fn selected_provider_probe_reads_no_other_credential() {
-        let directory = TempDir::new().unwrap();
-        let mut settings = default_settings();
-        let mut provider_b = settings.providers[0].clone();
-        provider_b.id = "provider-b".to_string();
-        provider_b.api_key_env = Some("PROVIDER_B_CUSTOM_SECRET".to_string());
-        provider_b.base_url_env = Some("PROVIDER_B_ENDPOINT".to_string());
-        provider_b.base_url = None;
-        settings.providers[0].api_key_env = Some("PROVIDER_A_CUSTOM_SECRET".to_string());
-        settings.providers[0].base_url_env = Some("PROVIDER_A_ENDPOINT".to_string());
-        settings.providers[0].base_url = None;
-        settings.providers.push(provider_b);
-        let store = MemoryCredentialStore {
-            entries: Mutex::new(HashMap::from([
-                (
-                    "provider-deepseek-existing".to_string(),
-                    "selected-secret-a".to_string(),
-                ),
-                ("provider-b".to_string(), "other-secret-b".to_string()),
-            ])),
-            ..Default::default()
-        };
-
-        let selected = credential_override_with_store(
-            directory.path(),
-            &settings,
-            "provider-deepseek-existing",
-            &store,
-            "credential_test_read",
-        )
-        .unwrap()
-        .unwrap();
-        assert_eq!(selected.1, "selected-secret-a");
-        assert_eq!(
-            store.get_calls.lock().unwrap().as_slice(),
-            &["provider-deepseek-existing"]
-        );
-        assert_eq!(
-            provider_probe_environment_names(&settings),
-            vec![
-                "PROVIDER_A_CUSTOM_SECRET",
-                "PROVIDER_A_ENDPOINT",
-                "PROVIDER_B_CUSTOM_SECRET",
-                "PROVIDER_B_ENDPOINT",
-            ]
-        );
-    }
-
-    #[test]
-    fn production_connection_test_isolates_selected_provider_in_child() {
-        let data_dir = TempDir::new().unwrap();
-        let fixture_dir = TempDir::new().unwrap();
-        let evidence_path = fixture_dir.path().join("production-environment.txt");
-        let response_path = fixture_dir.path().join("production-response.json");
-        let calls_path = fixture_dir.path().join("credential-calls.json");
-        std::fs::write(
-            &response_path,
-            serde_json::to_vec(&serde_json::json!({
-                "status": "ready",
-                "credential_status": "detected",
-                "model_resolved": true,
-                "latency_ms": 5,
-                "capabilities": {
-                    "tool_calling": "yes",
-                    "reasoning": "unknown",
-                    "vision_input": "no",
-                    "source": "probe"
-                },
-                "message": "untrusted child success message",
-                "error_class": null
-            }))
-            .unwrap(),
-        )
-        .unwrap();
-
-        #[cfg(unix)]
-        let rscript_path = {
-            use std::os::unix::fs::PermissionsExt;
-            let path = fixture_dir.path().join("fake-rscript");
-            std::fs::write(
-                &path,
-                r#"#!/bin/sh
-{
-  printf 'selected_key=%s\n' "${PROVIDER_A_CUSTOM_SECRET-unset}"
-  printf 'selected_endpoint=%s\n' "${PROVIDER_A_ENDPOINT-unset}"
-  printf 'other_key=%s\n' "${PROVIDER_B_CUSTOM_SECRET-unset}"
-  printf 'other_endpoint=%s\n' "${PROVIDER_B_ENDPOINT-unset}"
-  printf 'common_secret=%s\n' "${GITHUB_TOKEN-unset}"
-} >> "$RHO_PRODUCTION_EVIDENCE"
-cat -- "$RHO_PRODUCTION_RESPONSE"
-"#,
-            )
-            .unwrap();
-            let mut permissions = std::fs::metadata(&path).unwrap().permissions();
-            permissions.set_mode(0o755);
-            std::fs::set_permissions(&path, permissions).unwrap();
-            path
-        };
-        #[cfg(windows)]
-        let rscript_path = {
-            let path = fixture_dir.path().join("fake-rscript.cmd");
-            std::fs::write(
-                &path,
-                "@echo off\r\n(\r\necho selected_key=%PROVIDER_A_CUSTOM_SECRET%\r\necho selected_endpoint=%PROVIDER_A_ENDPOINT%\r\necho other_key=%PROVIDER_B_CUSTOM_SECRET%\r\necho other_endpoint=%PROVIDER_B_ENDPOINT%\r\necho common_secret=%GITHUB_TOKEN%\r\n)>>\"%RHO_PRODUCTION_EVIDENCE%\"\r\ntype \"%RHO_PRODUCTION_RESPONSE%\"\r\n",
-            )
-            .unwrap();
-            path
-        };
-
-        let mut settings = default_settings();
-        settings.providers[0].id = "provider-a".to_string();
-        settings.providers[0].api_key_env = Some("PROVIDER_A_CUSTOM_SECRET".to_string());
-        settings.providers[0].base_url = None;
-        settings.providers[0].base_url_env = Some("PROVIDER_A_ENDPOINT".to_string());
-        for model in &mut settings.models {
-            model.provider_id = "provider-a".to_string();
-        }
-        let mut provider_b = settings.providers[0].clone();
-        provider_b.id = "provider-b".to_string();
-        provider_b.api_key_env = Some("PROVIDER_B_CUSTOM_SECRET".to_string());
-        provider_b.base_url_env = Some("PROVIDER_B_ENDPOINT".to_string());
-        settings.providers.push(provider_b);
-        save_settings(data_dir.path(), &settings).unwrap();
-
-        let mut fixture = probe_fixture_command("production_connection_test", "unused");
-        fixture.env("RHO_PRODUCTION_DATA_DIR", data_dir.path());
-        fixture.env("RHO_PRODUCTION_RSCRIPT", &rscript_path);
-        fixture.env("RHO_PRODUCTION_CALLS", &calls_path);
-        fixture.env("RHO_PRODUCTION_EVIDENCE", &evidence_path);
-        fixture.env("RHO_PRODUCTION_RESPONSE", &response_path);
-        fixture.env(
-            "PROVIDER_A_CUSTOM_SECRET",
-            "rho-inherited-selected-credential-must-be-replaced",
-        );
-        fixture.env(
-            "PROVIDER_A_ENDPOINT",
-            "https://selected-provider.example.test",
-        );
-        fixture.env(
-            "PROVIDER_B_CUSTOM_SECRET",
-            "rho-inherited-other-credential-must-be-removed",
-        );
-        fixture.env("PROVIDER_B_ENDPOINT", "https://other-provider.example.test");
-        fixture.env(
-            "GITHUB_TOKEN",
-            "rho-inherited-common-secret-must-be-removed",
-        );
-        let output = fixture.output().unwrap();
-        assert!(
-            output.status.success(),
-            "{}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-
-        let evidence = std::fs::read_to_string(evidence_path).unwrap();
-        assert!(evidence.contains("selected_key=rho-selected-credential-production-fixture\n"));
-        assert!(evidence.contains("selected_endpoint=https://selected-provider.example.test\n"));
-        for forbidden in [
-            "rho-inherited-selected-credential-must-be-replaced",
-            "rho-inherited-other-credential-must-be-removed",
-            "rho-other-credential-production-fixture",
-            "https://other-provider.example.test",
-            "rho-inherited-common-secret-must-be-removed",
-        ] {
-            assert!(!evidence.contains(forbidden));
-        }
-        let calls: Vec<String> =
-            serde_json::from_slice(&std::fs::read(calls_path).unwrap()).unwrap();
-        assert_eq!(calls, vec!["provider-a"]);
-    }
-
-    #[test]
-    fn probe_failure_clears_test_control_and_allows_retry() {
-        let control = AgentModelTestControl::default();
-        let payload = "x".repeat(2 * 1024 * 1024);
-        let first = run_r_json_command::<serde_json::Value>(
-            probe_fixture_command("exit_before_stdin", "unused"),
-            Some(payload),
-            RProbeFailureDisclosure::SuppressDiagnostic,
-            Some(&control),
-        );
-        assert!(first.is_err());
-        {
-            let state = control.lock().unwrap();
-            assert!(state.pid.is_none());
-            assert!(!state.cancel_requested);
-        }
-        assert_probe_retry_succeeds(&control);
-    }
-
-    #[test]
-    fn injected_post_spawn_faults_reap_tree_clear_control_and_allow_retry() {
-        for fault in [
-            InjectedRProbeFault::AfterSpawn,
-            InjectedRProbeFault::AfterPipeSetup,
-            InjectedRProbeFault::Reader,
-            InjectedRProbeFault::TryWait,
-            InjectedRProbeFault::Wait,
-        ] {
-            let control = AgentModelTestControl::default();
-            let timeout = if fault == InjectedRProbeFault::Wait {
-                Some(Duration::from_millis(100))
-            } else {
-                Some(Duration::from_secs(1))
-            };
-            let spawned_pid = Arc::new(AtomicU32::new(0));
-            let started = Instant::now();
-            let error = run_r_json_command_with_fault::<serde_json::Value>(
-                probe_fixture_command("sleep", "unused"),
-                None,
-                RProbeFailureDisclosure::SuppressDiagnostic,
-                Some(&control),
-                timeout,
-                fault,
-                Arc::clone(&spawned_pid),
-            )
-            .unwrap_err()
-            .to_string();
-            assert_eq!(error, CONNECTION_TEST_PROCESS_FAILURE, "fault={fault:?}");
-            assert!(started.elapsed() < R_PROBE_PIPE_JOIN_TIMEOUT);
-            let spawned_pid = spawned_pid.load(Ordering::SeqCst);
-            assert_ne!(spawned_pid, 0, "fault={fault:?}");
-            assert_process_terminated(spawned_pid, &format!("fault={fault:?}"));
-            {
-                let state = control.lock().unwrap();
-                assert!(state.pid.is_none(), "fault={fault:?}");
-                assert!(!state.cancel_requested, "fault={fault:?}");
-            }
-
-            assert_probe_retry_succeeds(&control);
-        }
-    }
-
-    #[test]
-    fn post_spawn_test_control_lock_failure_reaps_child_and_allows_retry() {
-        let poisoned_control = AgentModelTestControl::default();
-        let poison_target = Arc::clone(&poisoned_control);
-        let poison_result = std::panic::catch_unwind(move || {
-            let _guard = poison_target.lock().unwrap();
-            panic!("poison test control");
-        });
-        assert!(poison_result.is_err());
-
-        let spawned_pid = Arc::new(AtomicU32::new(0));
-        let error = run_r_json_command_with_fault::<serde_json::Value>(
-            probe_fixture_command("sleep", "unused"),
-            None,
-            RProbeFailureDisclosure::SuppressDiagnostic,
-            Some(&poisoned_control),
-            Some(Duration::from_secs(1)),
-            InjectedRProbeFault::AfterSpawn,
-            Arc::clone(&spawned_pid),
-        )
-        .unwrap_err()
-        .to_string();
-        assert_eq!(error, CONNECTION_TEST_PROCESS_FAILURE);
-        let spawned_pid = spawned_pid.load(Ordering::SeqCst);
-        assert_ne!(spawned_pid, 0);
-        assert_process_terminated(spawned_pid, "post-spawn control-lock failure");
-        let state = poisoned_control.lock().unwrap();
-        assert!(state.pid.is_none());
-        assert!(!state.cancel_requested);
-        drop(state);
-
-        assert_probe_retry_succeeds(&poisoned_control);
-    }
-
-    #[test]
-    fn probe_timeout_reaps_child_clears_control_and_uses_fixed_copy() {
-        let control = AgentModelTestControl::default();
-        let error = run_r_json_command_with_timeout::<serde_json::Value>(
-            probe_fixture_command("sleep", "unused"),
-            None,
-            RProbeFailureDisclosure::SuppressDiagnostic,
-            Some(&control),
-            Some(Duration::from_millis(100)),
-        )
-        .unwrap_err()
-        .to_string();
-        assert_eq!(error, "The Provider connection test timed out.");
-        let state = control.lock().unwrap();
-        assert!(state.pid.is_none());
-        assert!(!state.cancel_requested);
-    }
-
-    #[test]
-    fn probe_cancellation_reaps_child_clears_control_and_allows_retry() {
-        let control = AgentModelTestControl::default();
-        let worker_control = Arc::clone(&control);
-        let worker = std::thread::spawn(move || {
-            run_r_json_command::<serde_json::Value>(
-                probe_fixture_command("sleep", "unused"),
-                None,
-                RProbeFailureDisclosure::SuppressDiagnostic,
-                Some(&worker_control),
-            )
-            .unwrap_err()
-            .to_string()
-        });
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while control.lock().unwrap().pid.is_none() {
-            assert!(Instant::now() < deadline, "probe child did not start");
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        assert!(cancel_test(&control).unwrap());
-        assert_eq!(worker.join().unwrap(), "Agent model test cancelled.");
-        {
-            let state = control.lock().unwrap();
-            assert!(state.pid.is_none());
-            assert!(!state.cancel_requested);
-        }
-        assert_probe_retry_succeeds(&control);
-    }
-
-    #[test]
-    fn fatal_connection_probe_preserves_settings_bytes_and_revision() {
-        let directory = TempDir::new().unwrap();
-        let mut settings = default_settings();
-        settings.providers[0].api_key_required = false;
-        settings.models[0].last_test = Some(AgentModelTestResult {
-            status: "ready".to_string(),
-            checked_at: "2026-08-26T00:00:00Z".to_string(),
-            latency_ms: Some(11),
-            error_class: None,
-            message: Some("Previous result remains authoritative.".to_string()),
-        });
-        save_settings(directory.path(), &settings).unwrap();
-        let before = std::fs::read(settings_path(directory.path())).unwrap();
-        let revision = settings.revision;
-
-        let error = test_model(
-            directory.path(),
-            &std::env::current_exe().unwrap(),
-            Path::new("/unused/rho.agent"),
-            "model-deepseek-v4-flash",
-            None,
-        )
-        .unwrap_err()
-        .to_string();
-        assert_eq!(error, CONNECTION_TEST_PROCESS_FAILURE);
-        assert_eq!(
-            std::fs::read(settings_path(directory.path())).unwrap(),
-            before
-        );
-        assert_eq!(load_settings(directory.path()).unwrap().revision, revision);
-        assert_eq!(
-            load_settings(directory.path()).unwrap().models[0]
-                .last_test
-                .as_ref()
-                .unwrap()
-                .message
-                .as_deref(),
-            Some("Previous result remains authoritative.")
-        );
-    }
-
-    #[test]
-    fn missing_credential_is_resolved_before_child_launch() {
-        let directory = TempDir::new().unwrap();
-        let mut settings = default_settings();
-        let provider_id = "provider-missing-before-probe";
-        settings.providers[0].id = provider_id.to_string();
-        settings.providers[0].credential_source = CREDENTIAL_SOURCE_SESSION_ONLY.to_string();
-        for model in &mut settings.models {
-            model.provider_id = provider_id.to_string();
-        }
-        settings.models[0].last_test = Some(AgentModelTestResult {
-            status: "ready".to_string(),
-            checked_at: "2026-08-26T00:00:00Z".to_string(),
-            latency_ms: Some(11),
-            error_class: None,
-            message: Some("Previous result remains authoritative.".to_string()),
-        });
-        save_settings(directory.path(), &settings).unwrap();
-        let before = std::fs::read(settings_path(directory.path())).unwrap();
-        let revision = settings.revision;
-
-        let error = test_model(
-            directory.path(),
-            Path::new("/definitely/missing/rscript"),
-            Path::new("/unused/rho.agent"),
-            "model-deepseek-v4-flash",
-            None,
-        )
-        .unwrap_err()
-        .to_string();
-        assert_eq!(error, "No API key is available for this provider.");
-        assert_eq!(
-            std::fs::read(settings_path(directory.path())).unwrap(),
-            before
-        );
-        let after = load_settings(directory.path()).unwrap();
-        assert_eq!(after.revision, revision);
-        assert_eq!(
-            after.models[0]
-                .last_test
-                .as_ref()
-                .unwrap()
-                .message
-                .as_deref(),
-            Some("Previous result remains authoritative.")
-        );
-    }
-
-    #[test]
-    fn unknown_model_and_credential_source_failure_reject_before_child_launch() {
-        let directory = TempDir::new().unwrap();
-        let mut settings = default_settings();
-        let provider_id = "provider-source-failure-no-fallback";
-        let fallback_sentinel = "rho-session-fallback-must-not-be-read";
-        settings.providers[0].id = provider_id.to_string();
-        for model in &mut settings.models {
-            model.provider_id = provider_id.to_string();
-        }
-        settings.models[0].last_test = Some(AgentModelTestResult {
-            status: "ready".to_string(),
-            checked_at: "2026-08-26T00:00:00Z".to_string(),
-            latency_ms: Some(13),
-            error_class: None,
-            message: Some("Previous result remains authoritative.".to_string()),
-        });
-        save_settings(directory.path(), &settings).unwrap();
-        let before = std::fs::read(settings_path(directory.path())).unwrap();
-        let revision = settings.revision;
-        credential_session().set_session_credential(provider_id, fallback_sentinel);
-        let store = MemoryCredentialStore {
-            entries: Mutex::new(HashMap::from([(
-                "provider-not-selected".to_string(),
-                "unread-other-provider-value".to_string(),
-            )])),
-            fail_get: true,
-            ..Default::default()
-        };
-
-        let unknown = test_model_with_store(
-            directory.path(),
-            Path::new("/definitely/missing/rscript"),
-            Path::new("/unused/rho.agent"),
-            "model-not-configured",
-            None,
-            &store,
-        )
-        .unwrap_err()
-        .to_string();
-        assert_eq!(unknown, "Unknown model: model-not-configured");
-        assert!(store.get_calls.lock().unwrap().is_empty());
-
-        let unavailable = test_model_with_store(
-            directory.path(),
-            Path::new("/definitely/missing/rscript"),
-            Path::new("/unused/rho.agent"),
-            "model-deepseek-v4-flash",
-            None,
-            &store,
-        )
-        .unwrap_err()
-        .to_string();
-        assert_eq!(
-            unavailable,
-            "The configured credential source is unavailable."
-        );
-        assert_eq!(store.get_calls.lock().unwrap().as_slice(), &[provider_id]);
-        assert_eq!(
-            std::fs::read(settings_path(directory.path())).unwrap(),
-            before
-        );
-        let after = load_settings(directory.path()).unwrap();
-        assert_eq!(after.revision, revision);
-        assert_eq!(
-            after.models[0]
-                .last_test
-                .as_ref()
-                .unwrap()
-                .message
-                .as_deref(),
-            Some("Previous result remains authoritative.")
-        );
-        let audit = std::fs::read_to_string(credential_audit_path(directory.path())).unwrap();
-        assert!(!audit.contains(fallback_sentinel));
-        credential_session().clear_session_credential(provider_id);
-    }
-
-    #[test]
-    fn unknown_and_unsupported_discovery_preserve_authority() {
-        let directory = TempDir::new().unwrap();
-        save_settings(directory.path(), &default_settings()).unwrap();
-        let store = store_with_discovery_secret("secret");
-        assert!(
-            discover_models_with_store(
-                directory.path(),
-                "unknown-provider",
-                &store,
-                &model_discovery_client().unwrap(),
-            )
-            .is_err()
-        );
-
-        let mut settings = default_settings();
-        settings.providers[0].registered_provider_id = Some("unlisted-provider".to_string());
-        save_settings(directory.path(), &settings).unwrap();
-        let response = discover_models_with_store(
-            directory.path(),
-            "provider-deepseek-existing",
-            &store,
-            &model_discovery_client().unwrap(),
-        )
-        .unwrap();
-        assert_eq!(response.status, "unsupported");
-        assert!(response.models.is_empty());
-    }
-
-    #[test]
-    fn catalog_enrichment_requires_an_exact_provider_and_model_match() {
-        let mut settings = default_settings();
-        let provider = settings.providers.remove(0);
-        let mut models = vec![
-            AgentDiscoveredModel {
-                id: "deepseek-v4-flash".to_string(),
-                display_name: "DeepSeek V4 Flash".to_string(),
-                model_type: capability_value("unknown", "unknown"),
-                capabilities: unknown_capabilities(),
-            },
-            AgentDiscoveredModel {
-                id: "unlisted-model".to_string(),
-                display_name: "Unlisted".to_string(),
-                model_type: capability_value("unknown", "unknown"),
-                capabilities: unknown_capabilities(),
-            },
-        ];
-        let mut catalog_capabilities = unknown_capabilities();
-        catalog_capabilities.insert(
+    fn routed_settings() -> AgentLlmSettings {
+        let mut capabilities = unknown_capabilities();
+        capabilities.insert(
             "function_call".to_string(),
             capability_value("yes", "aisdk_catalog"),
         );
-        let entries = vec![AgentCatalogEntry {
-            provider: "deepseek".to_string(),
-            id: "deepseek-v4-flash".to_string(),
-            display_name: "DeepSeek V4 Flash".to_string(),
-            description: None,
-            model_type: capability_value("language", "aisdk_catalog"),
-            capabilities: catalog_capabilities,
-            context_window_tokens: Some(131_072),
-            max_output_tokens: Some(8_192),
-        }];
+        AgentLlmSettings {
+            schema_version: SETTINGS_SCHEMA_VERSION,
+            revision: 3,
+            providers: vec![AgentProviderProfile {
+                id: "provider-route-invariant".to_string(),
+                display_name: "Route invariant provider".to_string(),
+                kind: "openai".to_string(),
+                registered_provider_id: None,
+                api_key_env: None,
+                api_key_required: false,
+                base_url: None,
+                base_url_env: None,
+                wire_api: None,
+                disable_stream_options: None,
+            }],
+            models: vec![AgentModelProfile {
+                id: "model-route-invariant".to_string(),
+                provider_id: "provider-route-invariant".to_string(),
+                display_name: "Route invariant model".to_string(),
+                model_id: "route-invariant-model".to_string(),
+                enabled: true,
+                model_type: capability_value("language", "aisdk_catalog"),
+                capabilities,
+                context_window_tokens: 8_192,
+                reserved_output_tokens: 1_024,
+                context_capacity_source: "catalog".to_string(),
+                last_test: None,
+            }],
+            capability_routes: vec![
+                AgentCapabilityRoute {
+                    capability: "agent.chat".to_string(),
+                    model_id: "model-route-invariant".to_string(),
+                    model_type: "language".to_string(),
+                    required_model_capabilities: Vec::new(),
+                },
+                AgentCapabilityRoute {
+                    capability: "agent.act".to_string(),
+                    model_id: "model-route-invariant".to_string(),
+                    model_type: "language".to_string(),
+                    required_model_capabilities: vec!["function_call".to_string()],
+                },
+            ],
+        }
+    }
 
-        enrich_discovered_models(&provider, &mut models, &entries);
-        assert_eq!(models[0].model_type.value, "language");
-        // The catalog capacity fields stay presentation-only for configured
-        // models; discovery enrichment only projects type/capability evidence.
-        assert_eq!(
-            models[0].capabilities["function_call"].source,
-            "aisdk_catalog"
+    fn verified_mutation_for(settings: &AgentLlmSettings) -> VerifiedConfigMutation {
+        let mut config = empty_config();
+        apply_settings_to_config(&mut config, settings);
+        VerifiedConfigMutation {
+            token: "route-invariant-snapshot".to_string(),
+            record: ConfigSnapshotRecord {
+                home: PathBuf::from("/test/.rho"),
+                config_path: PathBuf::from("/test/.rho/config.yaml"),
+                content_identity: "route-invariant-content".to_string(),
+                permission_identity: "route-invariant-permissions".to_string(),
+                revision: settings.revision,
+            },
+            config: Some(config),
+        }
+    }
+
+    fn assert_commit_rejected_before_write(
+        mutation: VerifiedConfigMutation,
+        settings: &AgentLlmSettings,
+    ) {
+        let write_attempted = Cell::new(false);
+        let result = commit_settings_mutation_with(
+            mutation,
+            settings,
+            |_home, _config, _expected_identity| {
+                write_attempted.set(true);
+                Ok(())
+            },
         );
-        assert_eq!(models[1].model_type.value, "unknown");
+        assert!(result.is_err());
         assert!(
-            models[1]
-                .capabilities
-                .values()
-                .all(|capability| capability.source == "unknown")
+            !write_attempted.get(),
+            "an invalid whole-document route state must be rejected before persistence"
         );
     }
 
     #[test]
-    fn text_connection_test_rejects_non_language_models_before_probe() {
-        let directory = TempDir::new().unwrap();
-        let mut settings = default_settings();
-        let mut image_model = settings.models[0].clone();
-        image_model.id = "model-image".to_string();
-        image_model.model_id = "image-model".to_string();
-        image_model.display_name = "Image model".to_string();
-        image_model.model_type = capability_value("image", "user_declared");
-        image_model.capabilities = unknown_capabilities();
-        settings.models.push(image_model);
-        save_settings(directory.path(), &settings).unwrap();
-
-        let error = test_model(
-            directory.path(),
-            Path::new("/missing/Rscript"),
-            Path::new("/missing/rho.agent"),
-            "model-image",
-            None,
-        )
-        .unwrap_err()
-        .to_string();
-        assert!(error.contains("Only language models"));
-    }
-
-    #[test]
-    fn agent_probes_always_ignore_user_environ() {
-        let mut command = Command::new("Rscript");
-        configure_r_probe(
-            &mut command,
-            Some("C:/Users/test/.Renviron"),
-            &[],
-            Vec::<OsString>::new(),
-            &[],
-        );
-        assert!(command.get_args().any(|value| value == "--vanilla"));
-        assert!(
-            command
-                .get_envs()
-                .find(|(name, _)| *name == "R_ENVIRON_USER")
-                .is_none()
-        );
-    }
-
-    #[test]
-    fn environment_free_probes_remain_vanilla() {
-        let mut command = Command::new("Rscript");
-        configure_r_probe(&mut command, None, &[], Vec::<OsString>::new(), &[]);
-        assert!(command.get_args().any(|value| value == "--vanilla"));
-    }
-
-    #[test]
-    fn writes_agent_probe_code_to_a_utf8_r_script() {
-        let script_text = "cat('Agent UTF-8: 中文')\n";
-        let script = write_r_probe_script(script_text).unwrap();
-        assert_eq!(
-            script.path().extension().and_then(|value| value.to_str()),
-            Some("R")
-        );
-        assert_eq!(std::fs::read_to_string(script.path()).unwrap(), script_text);
-    }
-
-    #[test]
-    fn resolves_requested_model_without_fallback() {
-        let settings = default_settings();
-        let resolved =
-            resolve_model_with_settings(&settings, Some("model-deepseek-v4-flash")).unwrap();
-        assert_eq!(resolved.effective_model_ref, "deepseek:deepseek-v4-flash");
-        assert_eq!(resolved.runtime_profile.tool_calling, "yes");
-    }
-
-    fn legacy_v3_settings_bytes() -> Vec<u8> {
-        let settings = default_settings();
-        serde_json::to_vec_pretty(&AgentLlmSettingsV3 {
-            schema_version: 3,
-            revision: settings.revision,
-            providers: legacy_v3_providers(),
-            models: settings.models,
-            capability_routes: settings.capability_routes,
-        })
-        .unwrap()
-    }
-
-    #[test]
-    fn v3_credential_source_migration_defaults_to_system_store_with_backup() {
-        let directory = TempDir::new().unwrap();
-        let legacy = legacy_v3_settings_bytes();
-        std::fs::write(settings_path(directory.path()), &legacy).unwrap();
-
-        // A read-only open migrates in memory without rewriting the source.
-        let loaded = load_settings(directory.path()).unwrap();
-        assert_eq!(loaded.schema_version, SETTINGS_SCHEMA_VERSION);
-        assert_eq!(
-            loaded.providers[0].credential_source,
-            CREDENTIAL_SOURCE_RHO_VAULT
-        );
-        assert_eq!(
-            std::fs::read(settings_path(directory.path())).unwrap(),
-            legacy
-        );
-        assert!(!settings_v3_backup_path(directory.path()).exists());
-
-        // The first explicit mutation writes a byte-identical V3 backup.
-        let provider = loaded.providers[0].clone();
-        let saved = save_provider(directory.path(), provider).unwrap();
-        assert_eq!(saved.revision, loaded.revision + 1);
-        assert_eq!(
-            std::fs::read(settings_v3_backup_path(directory.path())).unwrap(),
-            legacy
-        );
-        let on_disk = load_settings(directory.path()).unwrap();
-        assert_eq!(on_disk.schema_version, SETTINGS_SCHEMA_VERSION);
-        assert_eq!(
-            on_disk.providers[0].credential_source,
-            CREDENTIAL_SOURCE_RHO_VAULT
-        );
-    }
-
-    #[test]
-    fn v4_settings_migrates_system_store_to_rho_vault_with_byte_identical_backup() {
-        let directory = TempDir::new().unwrap();
-        let mut settings = default_settings();
-        settings.providers[0].credential_source = LEGACY_CREDENTIAL_SOURCE_SYSTEM_STORE.to_string();
-        let mut environment_provider = settings.providers[0].clone();
-        environment_provider.id = "provider-env".to_string();
-        environment_provider.display_name = "Environment Provider".to_string();
-        environment_provider.credential_source = CREDENTIAL_SOURCE_ENVIRONMENT.to_string();
-        let mut session_provider = settings.providers[0].clone();
-        session_provider.id = "provider-session".to_string();
-        session_provider.display_name = "Session Provider".to_string();
-        session_provider.credential_source = CREDENTIAL_SOURCE_SESSION_ONLY.to_string();
-        settings.providers.push(environment_provider);
-        settings.providers.push(session_provider);
-        let legacy = serde_json::to_vec_pretty(&AgentLlmSettingsV4 {
-            schema_version: 4,
-            revision: settings.revision,
-            providers: settings.providers,
-            models: settings.models,
-            capability_routes: settings.capability_routes,
-        })
-        .unwrap();
-        std::fs::write(settings_path(directory.path()), &legacy).unwrap();
-
-        let loaded = load_settings(directory.path()).unwrap();
-        assert_eq!(loaded.schema_version, SETTINGS_SCHEMA_VERSION);
-        assert_eq!(
-            loaded
-                .providers
-                .iter()
-                .map(|provider| provider.credential_source.as_str())
-                .collect::<Vec<_>>(),
-            [
-                CREDENTIAL_SOURCE_RHO_VAULT,
-                CREDENTIAL_SOURCE_ENVIRONMENT,
-                CREDENTIAL_SOURCE_SESSION_ONLY
-            ]
-        );
-        assert_eq!(
-            std::fs::read(settings_path(directory.path())).unwrap(),
-            legacy
-        );
-        assert!(!settings_v4_backup_path(directory.path()).exists());
-
-        let saved = save_provider(directory.path(), loaded.providers[0].clone()).unwrap();
-        assert_eq!(saved.schema_version, SETTINGS_SCHEMA_VERSION);
-        assert_eq!(
-            std::fs::read(settings_v4_backup_path(directory.path())).unwrap(),
-            legacy
-        );
-    }
-
-    #[test]
-    fn unsupported_or_platform_gated_credential_sources_are_rejected() {
-        let mut settings = default_settings();
-        settings.providers[0].credential_source = "plaintext_file".to_string();
-        assert!(validate_settings(&settings).is_err());
-
-        let mut settings = default_settings();
-        settings.providers[0].credential_source =
-            LEGACY_CREDENTIAL_SOURCE_FILE_FALLBACK.to_string();
-        assert!(validate_settings(&settings).is_err());
-
-        let mut settings = default_settings();
-        settings.providers[0].credential_source = CREDENTIAL_SOURCE_ENVIRONMENT.to_string();
-        settings.providers[0].api_key_env = None;
-        assert!(validate_settings(&settings).is_err());
-    }
-
-    #[test]
-    fn environment_source_resolves_process_environment_without_touching_stores() {
-        let directory = TempDir::new().unwrap();
-        let variable = "RHO_TEST_CRED_SEC1_ENVIRONMENT_KEY";
-        let mut settings = default_settings();
-        settings.providers[0].credential_source = CREDENTIAL_SOURCE_ENVIRONMENT.to_string();
-        settings.providers[0].api_key_env = Some(variable.to_string());
-        save_settings(directory.path(), &settings).unwrap();
-        let store = MemoryCredentialStore::default();
-
-        unsafe { std::env::remove_var(variable) };
-        let resolved = resolve_model_with_settings(&settings, None).unwrap();
-        let missing = credential_override_with_store(
-            directory.path(),
-            &settings,
-            &resolved.provider_id,
-            &store,
-            "credential_test_read",
-        )
-        .unwrap();
-        assert!(missing.is_none());
-        let statuses = credential_status_map(directory.path(), &settings.providers);
-        assert_eq!(
-            statuses["provider-deepseek-existing"].status,
-            "not_detected"
-        );
-        assert_eq!(statuses["provider-deepseek-existing"].source, "environment");
-
-        unsafe { std::env::set_var(variable, "env-secret") };
-        let detected = credential_override_with_store(
-            directory.path(),
-            &settings,
-            &resolved.provider_id,
-            &store,
-            "credential_test_read",
-        )
-        .unwrap();
-        assert_eq!(
-            detected
-                .as_ref()
-                .map(|(name, value)| (name.as_str(), value.as_str())),
-            Some((variable, "env-secret"))
-        );
-        let statuses = credential_status_map(directory.path(), &settings.providers);
-        assert_eq!(statuses["provider-deepseek-existing"].status, "detected");
-        assert_eq!(statuses["provider-deepseek-existing"].source, "environment");
-        unsafe { std::env::remove_var(variable) };
-
-        // The environment source never touches the system store or cache.
-        assert!(store.get_calls.lock().unwrap().is_empty());
-        assert!(store.set_calls.lock().unwrap().is_empty());
-
-        // Environment-managed credentials reject set/delete in Rho.
-        assert!(
-            set_credential_with_store(
-                directory.path(),
-                "provider-deepseek-existing",
-                "secret",
-                false,
-                &store,
-            )
-            .is_err()
-        );
-        assert!(
-            delete_credential_with_store(directory.path(), "provider-deepseek-existing", &store)
-                .is_err()
-        );
-        assert!(store.set_calls.lock().unwrap().is_empty());
-        assert!(store.delete_calls.lock().unwrap().is_empty());
-    }
-
-    #[test]
-    fn session_only_credentials_never_touch_durable_stores() {
-        let directory = TempDir::new().unwrap();
-        let provider_id = "provider-session-only-test";
-        let mut settings = default_settings();
-        let mut provider = settings.providers[0].clone();
-        provider.id = provider_id.to_string();
-        provider.display_name = "Session Only Provider".to_string();
-        provider.credential_source = CREDENTIAL_SOURCE_SESSION_ONLY.to_string();
-        settings.providers.push(provider);
-        save_settings(directory.path(), &settings).unwrap();
-        let store = MemoryCredentialStore::default();
-
-        set_credential_with_store(
-            directory.path(),
-            provider_id,
-            "session-secret",
-            false,
-            &store,
-        )
-        .unwrap();
-        assert!(store.set_calls.lock().unwrap().is_empty());
-        assert!(store.get_calls.lock().unwrap().is_empty());
-
-        let resolved = resolve_provider_credential(
-            directory.path(),
-            settings.providers.last().unwrap(),
-            &store,
-        )
-        .unwrap();
-        assert_eq!(resolved.as_deref(), Some("session-secret"));
-        let statuses = credential_status_map(directory.path(), &settings.providers);
-        assert_eq!(statuses[provider_id].status, "detected");
-        assert_eq!(statuses[provider_id].source, "session");
-        assert!(store.get_calls.lock().unwrap().is_empty());
-
-        // Refreshing presentation state must not wipe session-only
-        // credentials; only explicit delete or app shutdown removes them.
-        refresh_credentials_view(directory.path(), Path::new("unused-rscript")).unwrap();
-        let statuses = credential_status_map(directory.path(), &settings.providers);
-        assert_eq!(statuses[provider_id].status, "detected");
-        assert_eq!(statuses[provider_id].source, "session");
-
-        delete_credential_with_store(directory.path(), provider_id, &store).unwrap();
-        assert!(store.delete_calls.lock().unwrap().is_empty());
-        let statuses = credential_status_map(directory.path(), &settings.providers);
-        assert_eq!(statuses[provider_id].status, "not_detected");
-    }
-
-    #[test]
-    fn credential_entry_validation_rejects_control_characters_and_enforces_caps() {
-        let directory = TempDir::new().unwrap();
-        save_settings(directory.path(), &default_settings()).unwrap();
-        let store = MemoryCredentialStore::default();
-        for bad in [
-            "sk-abc\n123",
-            "sk-abc\r\n123",
-            "sk-abc\t123",
-            "sk-ab\u{0}cd",
-        ] {
+    fn committed_refresh_releases_non_reentrant_settings_lock() {
+        let lock = Mutex::new(());
+        let guard = lock.lock().unwrap();
+        let refreshed = after_settings_mutation(guard, || {
             assert!(
-                set_credential_with_store(
-                    directory.path(),
-                    "provider-deepseek-existing",
-                    bad,
-                    false,
-                    &store,
-                )
-                .is_err(),
-                "control-character credential must be rejected"
+                lock.try_lock().is_ok(),
+                "the read-back refresh must run after the mutation guard is released"
             );
-        }
-        set_credential_with_store(
-            directory.path(),
-            "provider-deepseek-existing",
-            &"x".repeat(MAX_CREDENTIAL_BYTES),
-            false,
-            &store,
-        )
+            Ok("refreshed")
+        })
         .unwrap();
-        assert!(
-            store
-                .entries
-                .lock()
-                .unwrap()
-                .contains_key("provider-deepseek-existing")
-        );
-        delete_credential_with_store(directory.path(), "provider-deepseek-existing", &store)
-            .unwrap();
+        assert_eq!(refreshed, "refreshed");
     }
 
     #[test]
-    fn credential_audit_records_redacted_events_and_stays_bounded() {
-        let directory = TempDir::new().unwrap();
-        save_settings(directory.path(), &default_settings()).unwrap();
-        let store = MemoryCredentialStore::default();
-        let secret = "audit-sentinel-secret-value";
-        set_credential_with_store(
-            directory.path(),
-            "provider-deepseek-existing",
-            secret,
-            false,
-            &store,
-        )
-        .unwrap();
-        delete_credential_with_store(directory.path(), "provider-deepseek-existing", &store)
-            .unwrap();
+    fn parseable_semantic_invalid_v6_has_a_safe_settings_projection() {
+        let invalid = semantic_invalid_settings();
+        let mut config = empty_config();
+        apply_settings_to_config(&mut config, &invalid);
+        let yaml = serde_norway::to_string(&config).unwrap();
+        let parsed: agent_config::AgentConfig = serde_norway::from_str(&yaml).unwrap();
+        let settings = config_to_settings(&parsed);
+        let validation_error = validate_settings(&settings).unwrap_err().to_string();
 
-        let log = std::fs::read_to_string(credential_audit_path(directory.path())).unwrap();
-        assert!(!log.contains(secret));
-        let events = log
-            .lines()
-            .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
-            .collect::<Vec<_>>();
-        assert_eq!(events.len(), 2);
-        assert_eq!(events[0]["event"], "credential_set");
-        assert_eq!(events[0]["credential_source"], "rho_vault");
-        assert_eq!(events[0]["outcome"], "ok");
-        assert_eq!(events[0]["provider_id"], "provider-deepseek-existing");
-        assert!(events[0]["recorded_at"].is_string());
-        assert_eq!(events[1]["event"], "credential_delete");
+        let view = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            build_invalid_settings_view(
+                settings,
+                system_credential_info(),
+                Some(&parsed),
+                test_config_store_view(),
+                validation_error,
+            )
+        }))
+        .expect("invalid Settings projection must not panic");
 
-        // The log stays within its byte budget and keeps parseable lines.
-        for _ in 0..400 {
-            record_credential_audit(
-                directory.path(),
-                "credential_turn_inject",
-                "provider-deepseek-existing",
-                "rho_vault",
-                "detected",
-                None,
-            );
-        }
-        let bytes = std::fs::read(credential_audit_path(directory.path())).unwrap();
-        assert!(bytes.len() <= MAX_CREDENTIAL_AUDIT_BYTES);
-        let text = String::from_utf8(bytes).unwrap();
-        assert!(
-            text.lines()
-                .all(|line| serde_json::from_str::<serde_json::Value>(line).is_ok())
+        assert!(view.validation_error.is_some());
+        assert_eq!(view.providers[0].credential_status, "unavailable");
+        assert!(!view.models[0].act_enabled);
+        assert_eq!(
+            view.selected_model.as_ref().unwrap().tool_calling,
+            "unknown"
         );
-        assert!(!text.contains(secret));
+    }
+
+    #[test]
+    fn invalid_environment_name_is_rejected_before_runtime_resolution() {
+        let settings = semantic_invalid_settings();
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            resolve_model_for_turn_with_settings(&settings, None, "ask")
+        }))
+        .expect("runtime validation must return an error instead of panicking");
+        assert!(result.is_err());
+
+        let provider = &settings.providers[0];
+        let direct_probe = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            environment_credential(provider)
+        }))
+        .expect("environment validation must guard std::env APIs");
+        assert!(direct_probe.is_err());
+        assert!(!environment_credential_present(provider));
+    }
+
+    #[test]
+    fn capability_declaration_cannot_persist_a_broken_chat_route() {
+        let mut settings = routed_settings();
+        validate_settings(&settings).unwrap();
+        let mutation = verified_mutation_for(&settings);
+        let request = AgentModelCapabilityDeclarationRequest {
+            model_id: "model-route-invariant".to_string(),
+            expected_revision: settings.revision,
+            expected_config_snapshot_id: mutation.token.clone(),
+            capability: "model_type".to_string(),
+            value: "embedding".to_string(),
+        };
+
+        apply_model_capability_declaration(&mut settings, &request).unwrap();
+        increment_revision(&mut settings).unwrap();
+        assert_commit_rejected_before_write(mutation, &settings);
+    }
+
+    #[test]
+    fn connection_test_evidence_cannot_persist_a_broken_act_route() {
+        let mut settings = routed_settings();
+        validate_settings(&settings).unwrap();
+        let mutation = verified_mutation_for(&settings);
+        let result = AgentConnectionTestResponse {
+            status: "ready".to_string(),
+            credential_status: "not_required".to_string(),
+            model_resolved: true,
+            latency_ms: Some(1),
+            capabilities: AgentConnectionCapabilities {
+                tool_calling: "no".to_string(),
+                reasoning: "unknown".to_string(),
+                vision_input: "unknown".to_string(),
+                source: "probe".to_string(),
+            },
+            message: "Connection succeeded.".to_string(),
+            error_class: None,
+        };
+
+        update_model_after_test(&mut settings, "model-route-invariant", &result).unwrap();
+        increment_revision(&mut settings).unwrap();
+        assert_commit_rejected_before_write(mutation, &settings);
     }
 }

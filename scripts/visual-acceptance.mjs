@@ -42,6 +42,8 @@ export const EVIDENCE_SCHEMA = "rho_visual_acceptance_v2";
 export const LEGACY_EVIDENCE_SCHEMA = "rho_visual_acceptance_v1";
 const REVIEW_SCHEMA = "rho_visual_acceptance_visual_review_v2";
 const COMMIT_SCHEMA = "rho_visual_acceptance_ledger_commit_v1";
+const ACCEPTANCE_RHO_HOME_DIRECTORY = "rho-home";
+const ACCEPTANCE_MISSING_CREDENTIAL_PREFIX = "RHO_VISUAL_ACCEPTANCE_MISSING_";
 export const STARTUP_TERMINAL_MESSAGE_PREFIX = "Runtime bootstrap failed:";
 export const STARTUP_LOG_MAX_BYTES = 1024 * 1024;
 
@@ -49,7 +51,7 @@ export const SCENARIOS = Object.freeze([
   { id: "s0", file: "s0-startup.mjs", title: "Startup, project open, first-view file tree" },
   { id: "s1", file: "s1-workbench-tour.mjs", title: "Workbench tour: Console, Environment, Data Viewer, Plots, Runs, Problems" },
   { id: "s2", file: "s2-qc-workflow.mjs", title: "Single-cell QC workflow with deterministic expectations" },
-  { id: "s3", file: "s3-agent.mjs", title: "Agent Ask/Plan/Act (truthful SKIP without credentials)" },
+  { id: "s3", file: "s3-agent.mjs", title: "Agent Ask/Plan/Act (canonical V6 route; truthful SKIP without credentials)" },
   { id: "s7", file: "s7-git-review.mjs", title: "Reviewable Git mutations and conflict banner" },
   { id: "s8", file: "s8-persistence-boundaries.mjs", title: "Persistence, project switching, and boundary projects" },
   { id: "s9", file: "s9-vibe.mjs", title: "Vibe information flow: wide/intermediate overview, focus modes, and narrow reading" },
@@ -57,15 +59,92 @@ export const SCENARIOS = Object.freeze([
 
 export class AcceptanceError extends Error {}
 
+export function acceptanceMissingCredentialEnvironmentName(output) {
+  const suffix = createHash("sha256")
+    .update(path.resolve(output))
+    .digest("hex")
+    .slice(0, 24)
+    .toUpperCase();
+  return `${ACCEPTANCE_MISSING_CREDENTIAL_PREFIX}${suffix}`;
+}
+
+function hermeticAgentConfigYaml(credentialEnvironmentName) {
+  const unknownCapability = "{ value: unknown, source: unknown }";
+  return `schema_version: 6
+revision: 1
+providers:
+  - id: visual-acceptance-openai
+    display_name: Visual acceptance OpenAI
+    kind: openai
+    api_key_env: ${credentialEnvironmentName}
+    api_key_required: true
+models:
+  - id: visual-acceptance-model
+    provider_id: visual-acceptance-openai
+    display_name: Visual acceptance model
+    model_id: gpt-4.1-mini
+    enabled: true
+    model_type: { value: language, source: user_declared }
+    capabilities:
+      function_call: ${unknownCapability}
+      reasoning: ${unknownCapability}
+      vision_input: ${unknownCapability}
+      image_output: ${unknownCapability}
+      image_edit: ${unknownCapability}
+      audio_input: ${unknownCapability}
+      audio_output: ${unknownCapability}
+      structured_output: ${unknownCapability}
+      web_search: ${unknownCapability}
+    context_window_tokens: 131072
+    reserved_output_tokens: 8192
+    context_capacity_source: user_declared
+capability_routes:
+  - capability: agent.chat
+    model_id: visual-acceptance-model
+    model_type: language
+    required_model_capabilities: []
+`;
+}
+
+export function createHermeticAgentConfig(output) {
+  const secureOutput = ensureSecureDirectory(output);
+  const rhoHome = path.join(secureOutput, ACCEPTANCE_RHO_HOME_DIRECTORY);
+  try {
+    fs.mkdirSync(rhoHome, { mode: 0o700 });
+  } catch (error) {
+    if (error.code === "EEXIST") {
+      throw new AcceptanceError(`hermetic Rho home already exists; refusing reuse: ${rhoHome}`);
+    }
+    throw error;
+  }
+  fs.chmodSync(rhoHome, 0o700);
+  ensureSecureDirectory(rhoHome);
+
+  const credentialEnvironmentName = acceptanceMissingCredentialEnvironmentName(output);
+  const configPath = path.join(rhoHome, "config.yaml");
+  writeExclusiveArtifact(configPath, hermeticAgentConfigYaml(credentialEnvironmentName));
+  fs.chmodSync(configPath, 0o600);
+  secureContainedPath(rhoHome, configPath);
+  return { rhoHome, configPath, credentialEnvironmentName };
+}
+
 export function acceptanceLaunchEnvironment(output, {
   parentEnvironment = process.env,
   rscript = null,
 } = {}) {
+  const rhoHome = path.join(path.resolve(output), ACCEPTANCE_RHO_HOME_DIRECTORY);
   const environment = {
     ...parentEnvironment,
     RHO_ACCEPTANCE_BRIDGE: "1",
     RHO_ACCEPTANCE_OUTPUT: output,
+    // Keep the canonical model configuration hermetic: real-app acceptance
+    // must never inspect or mutate the operator's actual Rho home.
+    RHO_HOME: rhoHome,
   };
+  // The fixture deliberately routes through this exact variable. Remove any
+  // caller value so the product must report the canonical missing-credential
+  // outcome instead of contacting a provider with ambient authority.
+  delete environment[acceptanceMissingCredentialEnvironmentName(output)];
   if (rscript != null) environment.RHO_RSCRIPT = rscript;
   return environment;
 }
@@ -1121,6 +1200,7 @@ async function runLane(options) {
   const appIdentity = readExecutableIdentity(appPath);
   createExclusiveEvidenceOutput(output);
   ensureSecureDirectory(path.join(output, "screenshots"), { create: true });
+  createHermeticAgentConfig(output);
 
   const evidence = createEvidence(output, appPath, frontendBuildId, distIdentity, appIdentity);
   const selected = options.scenarios ?? SCENARIOS.map((scenario) => scenario.id);

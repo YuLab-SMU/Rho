@@ -1,12 +1,18 @@
 import {
   createAgentSettingsCommands,
+  type AgentConfigPermissionRepairRequest as AgentConfigPermissionRepairRequestWire,
   type AgentContextCapacityRequest as AgentContextCapacityRequestWire,
+  type AgentLlmCredentialWriteRequest as AgentLlmCredentialWriteRequestWire,
   type AgentLlmCredentialRevealView as AgentLlmCredentialRevealViewWire,
+  type AgentLlmSelectRequest as AgentLlmSelectRequestWire,
   type AgentLlmSettingsView as AgentLlmSettingsViewWire,
   type AgentModelCapabilityDeclarationRequest as AgentModelCapabilityDeclarationRequestWire,
   type AgentModelDiscoveryResponse as AgentModelDiscoveryResponseWire,
   type AgentModelProfile as AgentModelProfileWire,
   type AgentModelProfileView as AgentModelProfileViewWire,
+  type AgentModelSaveRequest as AgentModelSaveRequestWire,
+  type AgentModelTestRequest as AgentModelTestRequestWire,
+  type DeleteModelRequest as DeleteModelRequestWire,
   type AgentSettingsInvoke,
 } from "./generated/agent-settings";
 
@@ -23,8 +29,14 @@ export type AgentLlmSettingsView = DeepReadonly<AgentLlmSettingsViewWire>;
 export type AgentLlmCredentialRevealView = DeepReadonly<AgentLlmCredentialRevealViewWire>;
 export type AgentModelDiscoveryResponse = DeepReadonly<AgentModelDiscoveryResponseWire>;
 export type AgentContextCapacityRequest = DeepReadonly<AgentContextCapacityRequestWire>;
+export type AgentConfigPermissionRepairRequest = DeepReadonly<AgentConfigPermissionRepairRequestWire>;
 export type AgentModelProfile = AgentModelProfileWire;
 export type AgentModelCapabilityDeclarationRequest = AgentModelCapabilityDeclarationRequestWire;
+export type AgentLlmCredentialWriteRequest = AgentLlmCredentialWriteRequestWire;
+export type AgentLlmSelectRequest = AgentLlmSelectRequestWire;
+export type AgentModelSaveRequest = AgentModelSaveRequestWire;
+export type AgentModelTestRequest = AgentModelTestRequestWire;
+export type DeleteModelRequest = DeleteModelRequestWire;
 
 /**
  * The nine pinned capability attributes, mirroring `capability_names()` in
@@ -94,22 +106,18 @@ export function buildAddedModelProfile(input: {
 
 export interface AgentSettingsTransport {
   loadAgentLlmSettings(): Promise<AgentLlmSettingsView>;
-  selectAgentChatModel(
-    modelId: string,
-    expectedRevision: number,
+  repairAgentConfigPermissions(
+    request: AgentConfigPermissionRepairRequest,
   ): Promise<AgentLlmSettingsView>;
+  selectAgentChatModel(request: AgentLlmSelectRequest): Promise<AgentLlmSettingsView>;
   setAgentContextCapacity(
     request: AgentContextCapacityRequest,
   ): Promise<AgentLlmSettingsView>;
-  saveProviderCredential(
-    providerId: string,
-    credential: string,
-    confirmReplace: boolean,
-  ): Promise<AgentLlmSettingsView>;
+  saveProviderCredential(request: AgentLlmCredentialWriteRequest): Promise<AgentLlmSettingsView>;
   discoverProviderModels(providerId: string): Promise<AgentModelDiscoveryResponse>;
-  testProviderModel(modelId: string): Promise<AgentLlmSettingsView>;
-  saveModel(model: AgentModelProfile): Promise<AgentLlmSettingsView>;
-  deleteModel(modelId: string): Promise<AgentLlmSettingsView>;
+  testProviderModel(request: AgentModelTestRequest): Promise<AgentLlmSettingsView>;
+  saveModel(request: AgentModelSaveRequest): Promise<AgentLlmSettingsView>;
+  deleteModel(request: DeleteModelRequest): Promise<AgentLlmSettingsView>;
   setModelContextCapacity(
     request: AgentContextCapacityRequest,
   ): Promise<AgentLlmSettingsView>;
@@ -127,20 +135,15 @@ export function createTauriAgentSettingsTransport(
   const commands = createAgentSettingsCommands(invoke);
   return {
     loadAgentLlmSettings: () => commands.agentLlmSettings(),
-    selectAgentChatModel: (modelId, expectedRevision) => commands.agentLlmSelectModel({
-      modelId,
-      expectedRevision,
-    }),
+    repairAgentConfigPermissions: (request) =>
+      commands.agentLlmRepairConfigPermissions(request),
+    selectAgentChatModel: (request) => commands.agentLlmSelectModel(request),
     setAgentContextCapacity: (request) => commands.agentLlmSetContextCapacity(request),
-    saveProviderCredential: (providerId, credential, confirmReplace) =>
-      commands.agentLlmSetCredential(providerId, credential, confirmReplace),
+    saveProviderCredential: (request) => commands.agentLlmSetCredential(request),
     discoverProviderModels: (providerId) => commands.agentLlmDiscoverModels(providerId),
-    testProviderModel: (modelId) => commands.agentLlmTestModel(modelId),
-    saveModel: (model) => commands.agentLlmSaveModel(model),
-    deleteModel: (modelId) => commands.agentLlmDeleteModel({
-      model_id: modelId,
-      replacement_model_id: null,
-    }),
+    testProviderModel: (request) => commands.agentLlmTestModel(request),
+    saveModel: (request) => commands.agentLlmSaveModel(request),
+    deleteModel: (request) => commands.agentLlmDeleteModel(request),
     setModelContextCapacity: (request) => commands.agentLlmSetContextCapacity(request),
     declareModelCapability: (request) => commands.agentLlmDeclareModelCapability(request),
     viewProviderCredential: (providerId) =>

@@ -2,7 +2,11 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { AgentLlmSettingsView, SurfaceInstance } from "../transport";
+import type {
+  AgentLlmCredentialRevealView,
+  AgentLlmSettingsView,
+  SurfaceInstance,
+} from "../transport";
 import { createMockUiKernelTransport } from "../transport/mock";
 import {
   SettingsSurfaceView,
@@ -121,6 +125,67 @@ describe("Provider-first Settings Surface", () => {
     expect(container.querySelector("input[type='password']")).toBeNull();
   });
 
+  it("shows the canonical path and plaintext boundary without exposing its snapshot token", async () => {
+    const { container } = await renderSettings();
+    expect(container.textContent).toContain("/mock/home/.rho/config.yaml");
+    expect(container.textContent).toContain("API keys saved to this file are readable");
+    expect(container.textContent).not.toContain("mock-config-snapshot-1");
+  });
+
+  it("keeps missing and malformed config states inside the truthful empty Settings view", async () => {
+    for (const state of [
+      { status: "missing" as const, detail: null },
+      { status: "malformed" as const, detail: "the file is not valid V6 YAML (line 3, column 2)" },
+    ]) {
+      const transport = createMockUiKernelTransport();
+      const base = await transport.loadAgentLlmSettings();
+      transport.loadAgentLlmSettings = vi.fn(async () => ({
+        ...base,
+        providers: [],
+        models: [],
+        config_store: { ...base.config_store, ...state },
+      }));
+      const { container } = await renderSettings({ transport });
+      expect(container.textContent).toContain("No Providers");
+      expect(container.textContent).toContain("/mock/home/.rho/config.yaml");
+      expect(container.textContent).not.toContain("Providers unavailable");
+      if (state.detail != null) expect(container.textContent).toContain(state.detail);
+    }
+  });
+
+  it("repairs only the projected config path and reloads the returned permission truth", async () => {
+    const transport = createMockUiKernelTransport();
+    const base = await transport.loadAgentLlmSettings();
+    const current: AgentLlmSettingsView = {
+      ...base,
+      config_store: {
+        ...base.config_store,
+        permission_issues: [{
+          subject: "config_file",
+          path: base.config_store.config_path!,
+          actual_mode: 0o644,
+          expected_mode: 0o600,
+        }],
+      },
+    };
+    transport.loadAgentLlmSettings = vi.fn(async () => structuredClone(current));
+    transport.repairAgentConfigPermissions = vi.fn(async () => ({
+      ...current,
+      config_store: { ...current.config_store, permission_issues: [] },
+    }));
+
+    const { container } = await renderSettings({ transport });
+    expect(container.textContent).toContain("0644; expected 0600");
+    await click(button(container, "Repair permissions"));
+    expect(transport.repairAgentConfigPermissions).toHaveBeenCalledWith({
+      expectedConfigPath: base.config_store.config_path,
+      expectedRevision: base.revision,
+      expectedConfigSnapshotId: base.config_store.config_snapshot_id,
+    });
+    expect(container.textContent).toContain("Config permissions repaired.");
+    expect(container.textContent).not.toContain("0644; expected 0600");
+  });
+
   it("keeps the Provider list visible beside connection, API key, and inline models", async () => {
     const { container } = await renderSettings();
     expect(container.textContent).toContain("Mock Provider");
@@ -193,7 +258,7 @@ describe("Provider-first Settings Surface", () => {
     expect(transport.discoverProviderModels).toHaveBeenCalledTimes(2);
   });
 
-  it("goes directly to Add API key without vault setup or unlock screens", async () => {
+  it("goes directly to Add API key without an intermediate credential-store screen", async () => {
     const transport = createMockUiKernelTransport();
     const base = await transport.loadAgentLlmSettings();
     const current: AgentLlmSettingsView = {
@@ -201,7 +266,8 @@ describe("Provider-first Settings Surface", () => {
       providers: base.providers.map((provider) => ({
         ...provider,
         credential_status: "not_detected",
-        credential_effective_source: "rho_vault",
+        credential_effective_source: "not_configured",
+        config_file_credential_present: false,
       })),
     };
     transport.loadAgentLlmSettings = vi.fn(async () => structuredClone(current));
@@ -228,26 +294,26 @@ describe("Provider-first Settings Surface", () => {
     expect(container.querySelector(".rho-settings-secret-mask")?.textContent).toBe("••••••••••••••••");
     expect(container.textContent).toContain("View");
     expect(container.textContent).toContain("Replace");
-    expect(container.textContent).not.toContain("mock-saved-api-key");
+    expect(container.textContent).not.toContain("mock-config_file-api-key");
 
     await click(button(container, "View"));
     expect(transport.viewProviderCredential).toHaveBeenCalledTimes(1);
     expect(transport.viewProviderCredential).toHaveBeenCalledWith("mock-provider");
-    expect(container.querySelector(".rho-settings-secret-mask")?.textContent).toBe("mock-saved-api-key");
+    expect(container.querySelector(".rho-settings-secret-mask")?.textContent).toBe("mock-config_file-api-key");
     expect(container.textContent).toContain("Hide");
     expect(container.textContent).not.toContain("••••••••••••••••");
     expect(container.querySelector("input")).toBeNull();
 
     await click(button(container, "Hide"));
     expect(container.querySelector(".rho-settings-secret-mask")?.textContent).toBe("••••••••••••••••");
-    expect(container.textContent).not.toContain("mock-saved-api-key");
+    expect(container.textContent).not.toContain("mock-config_file-api-key");
     expect(container.textContent).toContain("View");
   });
 
   it("keeps the fixed mask and disables View while a single view request is pending", async () => {
     const transport = createMockUiKernelTransport();
-    let resolveReveal: ((value: { readonly outcome: "revealed"; readonly credential: string }) => void) | null = null;
-    transport.viewProviderCredential = vi.fn(() => new Promise<{ readonly outcome: "revealed"; readonly credential: string }>((resolve) => {
+    let resolveReveal: ((value: AgentLlmCredentialRevealView) => void) | null = null;
+    transport.viewProviderCredential = vi.fn(() => new Promise<AgentLlmCredentialRevealView>((resolve) => {
       resolveReveal = resolve;
     }));
     const { container } = await renderSettings({ transport });
@@ -259,10 +325,15 @@ describe("Provider-first Settings Surface", () => {
     expect(transport.viewProviderCredential).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      resolveReveal?.({ outcome: "revealed", credential: "mock-saved-api-key" });
+      resolveReveal?.({
+        outcome: "revealed",
+        credential: "mock-config_file-api-key",
+        source: "config_file",
+        env_shadows_file: false,
+      });
       await settle();
     });
-    expect(container.querySelector(".rho-settings-secret-mask")?.textContent).toBe("mock-saved-api-key");
+    expect(container.querySelector(".rho-settings-secret-mask")?.textContent).toBe("mock-config_file-api-key");
     expect(button(container, "Hide").disabled).toBe(false);
   });
 
@@ -272,25 +343,25 @@ describe("Provider-first Settings Surface", () => {
     await openProvider(container);
 
     await click(button(container, "View"));
-    expect(container.textContent).toContain("mock-saved-api-key");
+    expect(container.textContent).toContain("mock-config_file-api-key");
     await click(button(container, "Details"));
-    expect(container.textContent).not.toContain("mock-saved-api-key");
+    expect(container.textContent).not.toContain("mock-config_file-api-key");
     await click(container.querySelector<HTMLButtonElement>(".rho-settings-back")!);
     expect(container.querySelector(".rho-settings-secret-mask")?.textContent).toBe("••••••••••••••••");
 
     await click(button(container, "View"));
-    expect(container.textContent).toContain("mock-saved-api-key");
+    expect(container.textContent).toContain("mock-config_file-api-key");
     await act(async () => {
       window.dispatchEvent(new Event("blur"));
       await settle();
     });
     expect(container.querySelector(".rho-settings-secret-mask")?.textContent).toBe("••••••••••••••••");
-    expect(container.textContent).not.toContain("mock-saved-api-key");
+    expect(container.textContent).not.toContain("mock-config_file-api-key");
 
     await click(button(container, "View"));
-    expect(container.textContent).toContain("mock-saved-api-key");
+    expect(container.textContent).toContain("mock-config_file-api-key");
     await click(button(container, "Replace"));
-    expect(container.textContent).not.toContain("mock-saved-api-key");
+    expect(container.textContent).not.toContain("mock-config_file-api-key");
     expect(container.querySelector("input[type='password']")).not.toBeNull();
   });
 
@@ -299,18 +370,24 @@ describe("Provider-first Settings Surface", () => {
     const { container } = await renderSettings({ transport });
     await openProvider(container);
 
-    transport.viewProviderCredential = vi.fn(async () => ({ outcome: "credential_missing" as const, credential: null }));
+    transport.viewProviderCredential = vi.fn(async () => ({
+      outcome: "credential_missing" as const,
+      credential: null,
+      source: null,
+      env_shadows_file: false,
+    }));
     await click(button(container, "View"));
     expect(container.textContent).toContain("No saved API key was found. Add it again.");
     expect(container.querySelector(".rho-settings-secret-mask")?.textContent).toBe("••••••••••••••••");
 
-    transport.viewProviderCredential = vi.fn(async () => ({ outcome: "store_unavailable" as const, credential: null }));
+    transport.viewProviderCredential = vi.fn(async () => ({
+      outcome: "credential_unavailable" as const,
+      credential: null,
+      source: null,
+      env_shadows_file: false,
+    }));
     await click(button(container, "View"));
-    expect(container.textContent).toContain("The credential store is unavailable.");
-
-    transport.viewProviderCredential = vi.fn(async () => ({ outcome: "source_ineligible" as const, credential: null }));
-    await click(button(container, "View"));
-    expect(container.textContent).toContain("This credential source cannot be viewed.");
+    expect(container.textContent).toContain("The effective API key could not be read.");
     expect(container.querySelector(".rho-settings-secret-mask")?.textContent).toBe("••••••••••••••••");
     expect(container.querySelector("input")).toBeNull();
   });
@@ -335,7 +412,7 @@ describe("Provider-first Settings Surface", () => {
     expect(container.textContent).not.toContain("32,768 tokens");
     expect(container.textContent).not.toContain("4,096 tokens");
     expect(container.textContent).toContain("function call");
-    expect(container.textContent).toContain("supported");
+    expect(container.textContent).toContain("yes");
     expect(container.textContent).toContain("Reviewed catalog evidence");
     expect(container.textContent).toContain("Capability evidence");
     expect(container.textContent).toContain("Read only");
@@ -404,7 +481,8 @@ describe("Provider-first Settings Surface", () => {
       providers: base.providers.map((provider) => ({
         ...provider,
         credential_status: "not_detected",
-        credential_effective_source: "none",
+        credential_effective_source: "not_configured",
+        config_file_credential_present: false,
       })),
     };
     transport.loadAgentLlmSettings = vi.fn(async () => structuredClone(current));
@@ -421,11 +499,15 @@ describe("Provider-first Settings Surface", () => {
       message: "Loaded 1 available model.",
       error_class: null,
     }));
-    transport.testProviderModel = vi.fn(async (modelId) => {
+    transport.testProviderModel = vi.fn(async (request) => {
       current = {
         ...current,
         revision: current.revision + 1,
-        models: current.models.map((model) => model.id === modelId ? {
+        config_store: {
+          ...current.config_store,
+          config_snapshot_id: `${current.config_store.config_snapshot_id}:test`,
+        },
+        models: current.models.map((model) => model.id === request.modelId ? {
           ...model,
           last_test: {
             status: "ready",
@@ -438,17 +520,22 @@ describe("Provider-first Settings Surface", () => {
       };
       return structuredClone(current);
     });
-    transport.saveProviderCredential = vi.fn(async (providerId, _credential, confirmReplace) => {
+    transport.saveProviderCredential = vi.fn(async (request) => {
       current = {
         ...current,
         revision: current.revision + 1,
-        providers: current.providers.map((provider) => provider.id === providerId ? {
+        config_store: {
+          ...current.config_store,
+          config_snapshot_id: `${current.config_store.config_snapshot_id}:credential`,
+        },
+        providers: current.providers.map((provider) => provider.id === request.providerId ? {
           ...provider,
           credential_status: "detected",
-          credential_effective_source: "system",
+          credential_effective_source: "config_file",
+          config_file_credential_present: true,
         } : provider),
       };
-      expect(confirmReplace).toBe(false);
+      expect(request.confirmReplace).toBe(false);
       return structuredClone(current);
     });
 
@@ -460,17 +547,32 @@ describe("Provider-first Settings Surface", () => {
     const addInput = container.querySelector<HTMLInputElement>("input[type='password']")!;
     await inputValue(addInput, "rho-add-sentinel");
     await click(button(container, "Save & verify"));
-    expect(transport.saveProviderCredential).toHaveBeenCalledWith("mock-provider", "rho-add-sentinel", false);
+    expect(transport.saveProviderCredential).toHaveBeenCalledWith({
+      providerId: "mock-provider",
+      credential: "rho-add-sentinel",
+      target: "config_file",
+      confirmReplace: false,
+      expectedRevision: base.revision,
+      expectedConfigSnapshotId: base.config_store.config_snapshot_id,
+    });
     expect(container.textContent).not.toContain("rho-add-sentinel");
     expect(container.textContent).toContain("API key verified");
     expect(container.textContent).toContain("37 ms");
     expect(transport.discoverProviderModels).toHaveBeenCalledWith("mock-provider");
-    expect(transport.testProviderModel).toHaveBeenCalledWith("mock-profile");
+    expect(transport.testProviderModel).toHaveBeenCalledWith(expect.objectContaining({ modelId: "mock-profile" }));
 
-    transport.saveProviderCredential = vi.fn(async (providerId, _credential, confirmReplace) => {
-      expect(providerId).toBe("mock-provider");
-      expect(confirmReplace).toBe(true);
-      current = { ...current, revision: current.revision + 1 };
+    transport.saveProviderCredential = vi.fn(async (request) => {
+      expect(request.providerId).toBe("mock-provider");
+      expect(request.target).toBe("config_file");
+      expect(request.confirmReplace).toBe(true);
+      current = {
+        ...current,
+        revision: current.revision + 1,
+        config_store: {
+          ...current.config_store,
+          config_snapshot_id: `${current.config_store.config_snapshot_id}:replacement`,
+        },
+      };
       return structuredClone(current);
     });
     await click(button(container, "Replace"));
@@ -478,9 +580,65 @@ describe("Provider-first Settings Surface", () => {
     expect(replaceInput.value).toBe("");
     await inputValue(replaceInput, "rho-replace-sentinel");
     await click(button(container, "Save & verify"));
-    expect(transport.saveProviderCredential).toHaveBeenCalledWith("mock-provider", "rho-replace-sentinel", true);
+    expect(transport.saveProviderCredential).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: "mock-provider",
+      credential: "rho-replace-sentinel",
+      target: "config_file",
+      confirmReplace: true,
+    }));
     expect(container.textContent).not.toContain("rho-replace-sentinel");
     expect(container.textContent).toContain("API key verified");
+  });
+
+  it("can target the process session without writing the config-file slot", async () => {
+    const transport = createMockUiKernelTransport();
+    transport.saveProviderCredential = vi.fn(transport.saveProviderCredential);
+    const { container } = await renderSettings({ transport });
+    await openProvider(container);
+    await click(button(container, "Replace"));
+    const target = container.querySelector<HTMLSelectElement>("#rho-settings-credential-target")!;
+    await selectValue(target, "session");
+    expect(container.textContent).toContain("never written to disk");
+    await inputValue(container.querySelector<HTMLInputElement>("input[type='password']")!, "rho-session-sentinel");
+    await click(button(container, "Save & verify"));
+    expect(transport.saveProviderCredential).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: "mock-provider",
+      credential: "rho-session-sentinel",
+      target: "session",
+      confirmReplace: false,
+    }));
+    expect(container.textContent).not.toContain("rho-session-sentinel");
+  });
+
+  it("defaults every credential editor to config.yaml even when a session key is effective", async () => {
+    const transport = createMockUiKernelTransport();
+    const base = await transport.loadAgentLlmSettings();
+    const current: AgentLlmSettingsView = {
+      ...base,
+      providers: base.providers.map((provider) => ({
+        ...provider,
+        credential_effective_source: "session",
+        session_credential_present: true,
+        config_file_credential_present: false,
+      })),
+    };
+    transport.loadAgentLlmSettings = vi.fn(async () => structuredClone(current));
+    transport.testProviderModel = vi.fn(async () => structuredClone(current));
+    transport.saveProviderCredential = vi.fn(async () => structuredClone(current));
+
+    const { container } = await renderSettings({ transport });
+    await openProvider(container);
+    await click(button(container, "Add API key"));
+    const target = container.querySelector<HTMLSelectElement>("#rho-settings-credential-target")!;
+    expect(target.value).toBe("config_file");
+
+    await selectValue(target, "session");
+    await inputValue(container.querySelector<HTMLInputElement>("input[type='password']")!, "rho-session-replace");
+    await click(button(container, "Save & verify"));
+    expect(transport.saveProviderCredential).toHaveBeenCalledWith(expect.objectContaining({
+      target: "session",
+      confirmReplace: true,
+    }));
   });
 
   it("clears a failed replacement draft, reloads durable truth, and keeps other Providers isolated", async () => {
@@ -491,7 +649,8 @@ describe("Provider-first Settings Surface", () => {
       id: "second-provider",
       display_name: "Second Provider",
       credential_status: "not_detected",
-      credential_effective_source: "none",
+      credential_effective_source: "not_configured",
+      config_file_credential_present: false,
     };
     const current: AgentLlmSettingsView = { ...base, providers: [...base.providers, second] };
     transport.loadAgentLlmSettings = vi.fn(async () => structuredClone(current));
@@ -515,26 +674,37 @@ describe("Provider-first Settings Surface", () => {
     expect(container.querySelector(".rho-settings-row[aria-current='true']")?.textContent).toContain("Second Provider");
   });
 
-  it("never offers View or Replace for an environment-managed credential", async () => {
+  it("shows environment precedence, shadowing, and an explicit reveal", async () => {
     const transport = createMockUiKernelTransport();
     const base = await transport.loadAgentLlmSettings();
     const current: AgentLlmSettingsView = {
       ...base,
       providers: base.providers.map((provider) => ({
         ...provider,
-        credential_source: "environment",
         credential_status: "detected",
         credential_effective_source: "environment",
+        env_shadows_file: true,
+        session_credential_present: false,
+        config_file_credential_present: true,
       })),
     };
     transport.loadAgentLlmSettings = vi.fn(async () => structuredClone(current));
     transport.testProviderModel = vi.fn(async () => structuredClone(current));
+    transport.viewProviderCredential = vi.fn(async () => ({
+      outcome: "revealed",
+      credential: "mock-environment-api-key",
+      source: "environment",
+      env_shadows_file: true,
+    } satisfies AgentLlmCredentialRevealView));
     const { container } = await renderSettings({ transport });
     await openProvider(container);
-    expect(container.textContent).toContain("Rho does not own this value");
-    expect(container.textContent).not.toContain("Saved locally on this Mac");
-    expect(container.textContent).not.toContain("Replace");
+    expect(container.textContent).toContain("Environment · MOCK_API_KEY is effective");
+    expect(container.textContent).toContain("shadows the API key saved in config.yaml");
+    expect(container.textContent).toContain("View");
+    expect(container.textContent).toContain("Replace");
     expect(container.querySelector("input[type='password']")).toBeNull();
+    await click(button(container, "View"));
+    expect(container.textContent).toContain("mock-environment-api-key");
   });
 
   it("recovers a failed Provider read and keeps Components project-local and read-only", async () => {
@@ -598,7 +768,8 @@ describe("Provider-first Settings Surface", () => {
     await click(button(container, "Add"));
 
     expect(transport.saveModel).toHaveBeenCalledTimes(1);
-    const profile = (transport.saveModel as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    const saveRequest = (transport.saveModel as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    const profile = saveRequest.model;
     expect(profile).toMatchObject({
       id: "model-other-model",
       provider_id: "mock-provider",
@@ -647,7 +818,8 @@ describe("Provider-first Settings Surface", () => {
     await click(button(container, "Add"));
 
     expect(transport.saveModel).toHaveBeenCalledTimes(1);
-    const profile = (transport.saveModel as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    const saveRequest = (transport.saveModel as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    const profile = saveRequest.model;
     expect(profile).toMatchObject({
       id: "model-manual-model",
       provider_id: "mock-provider",
@@ -756,27 +928,28 @@ describe("Provider-first Settings Surface", () => {
       "declareModelCapability",
       "declareModelCapability",
     ]);
-    const profile = (transport.saveModel as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    const profile = (transport.saveModel as ReturnType<typeof vi.fn>).mock.calls[0]![0].model;
     expect(profile).toMatchObject({
       id: "mock-profile",
       display_name: "Renamed mock",
       model_id: "mock-model",
       enabled: true,
-      model_type: { value: "language", source: "catalog" },
-      capabilities: { function_call: { value: "supported", source: "catalog" } },
+      model_type: { value: "language", source: "aisdk_catalog" },
+      capabilities: { function_call: { value: "yes", source: "aisdk_catalog" } },
     });
     expect(transport.setModelContextCapacity).toHaveBeenCalledWith({
-      model_id: "mock-profile",
-      expected_revision: 3,
-      context_window_tokens: 64_000,
-      reserved_output_tokens: 8_192,
+      modelId: "mock-profile",
+      expectedRevision: 3,
+      expectedConfigSnapshotId: "mock-config-snapshot-3",
+      contextWindowTokens: 64_000,
+      reservedOutputTokens: 8_192,
     });
     const declares = (transport.declareModelCapability as ReturnType<typeof vi.fn>).mock.calls
       .map((call) => call[0]);
     expect(declares).toEqual([
-      { model_id: "mock-profile", expected_revision: 4, capability: "model_type", value: "embedding" },
-      { model_id: "mock-profile", expected_revision: 5, capability: "reasoning", value: "yes" },
-      { model_id: "mock-profile", expected_revision: 6, capability: "vision_input", value: "yes" },
+      { modelId: "mock-profile", expectedRevision: 4, expectedConfigSnapshotId: "mock-config-snapshot-4", capability: "model_type", value: "embedding" },
+      { modelId: "mock-profile", expectedRevision: 5, expectedConfigSnapshotId: "mock-config-snapshot-5", capability: "reasoning", value: "yes" },
+      { modelId: "mock-profile", expectedRevision: 6, expectedConfigSnapshotId: "mock-config-snapshot-6", capability: "vision_input", value: "yes" },
     ]);
     expect(container.querySelector("[role='dialog']")).toBeNull();
     expect(container.textContent).toContain("Model options saved.");
@@ -846,7 +1019,10 @@ describe("Provider-first Settings Surface", () => {
     expect(container.textContent).toContain("This cannot be undone.");
     await click(button(container, "Confirm delete"));
 
-    expect(transport.deleteModel).toHaveBeenCalledWith("mock-profile");
+    expect(transport.deleteModel).toHaveBeenCalledWith(expect.objectContaining({
+      modelId: "mock-profile",
+      replacementModelId: null,
+    }));
     expect(container.textContent).toContain("Reassign or remove this model's capability routes before deleting it.");
     expect(container.textContent).toContain("Saved settings were reloaded.");
     expect(container.textContent).toContain("Capability evidence");
@@ -890,7 +1066,8 @@ describe("Provider-first Settings Surface", () => {
     };
     transport.loadAgentLlmSettings = vi.fn(async () => structuredClone(current));
     transport.testProviderModel = vi.fn(async () => structuredClone(current));
-    transport.saveModel = vi.fn(async (profile) => {
+    transport.saveModel = vi.fn(async (request) => {
+      const { model: profile } = request;
       current = {
         ...current,
         revision: current.revision + 1,
@@ -902,10 +1079,10 @@ describe("Provider-first Settings Surface", () => {
       current = {
         ...current,
         revision: current.revision + 1,
-        models: current.models.map((model) => model.id === request.model_id ? {
+        models: current.models.map((model) => model.id === request.modelId ? {
           ...model,
-          context_window_tokens: request.context_window_tokens,
-          reserved_output_tokens: request.reserved_output_tokens,
+          context_window_tokens: request.contextWindowTokens,
+          reserved_output_tokens: request.reservedOutputTokens,
           context_capacity_source: "user_declared",
         } : model),
       };
@@ -937,10 +1114,11 @@ describe("Provider-first Settings Surface", () => {
     await click(button(dialog()!, "Save"));
     expect(transport.setModelContextCapacity).toHaveBeenCalledTimes(1);
     expect(transport.setModelContextCapacity).toHaveBeenCalledWith({
-      model_id: "mock-profile",
-      expected_revision: 2,
-      context_window_tokens: 1_000_000,
-      reserved_output_tokens: 384_001,
+      modelId: "mock-profile",
+      expectedRevision: 2,
+      expectedConfigSnapshotId: base.config_store.config_snapshot_id,
+      contextWindowTokens: 1_000_000,
+      reservedOutputTokens: 384_001,
     });
     expect(dialog()).toBeNull();
 

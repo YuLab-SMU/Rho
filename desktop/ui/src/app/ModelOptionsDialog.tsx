@@ -39,6 +39,7 @@ const DECLARATION_ORDER: readonly string[] = ["model_type", ...MODEL_CAPABILITY_
 export function ModelOptionsDialog({
   model,
   revision,
+  configSnapshotId,
   transport,
   applyView,
   onFeedback,
@@ -46,6 +47,7 @@ export function ModelOptionsDialog({
 }: {
   readonly model: ConfiguredModel;
   readonly revision: number;
+  readonly configSnapshotId: string;
   readonly transport: UiKernelTransport;
   readonly applyView: (view: AgentLlmSettingsView) => void;
   readonly onFeedback: (feedback: { readonly status: "success" | "error"; readonly message: string }) => void;
@@ -139,6 +141,7 @@ export function ModelOptionsDialog({
     setBusy(true);
     try {
       let currentRevision = revision;
+      let currentConfigSnapshotId = configSnapshotId;
       if (detailsChanged) {
         const profile: AgentModelProfile = {
           id: model.id,
@@ -155,29 +158,38 @@ export function ModelOptionsDialog({
           context_capacity_source: model.context_capacity_source,
           last_test: model.last_test == null ? null : { ...model.last_test },
         };
-        const next = await transport.saveModel(profile);
-        applyView(next);
-        currentRevision = next.revision;
-      }
-      if (capacityTouched) {
-        const next = await transport.setModelContextCapacity({
-          model_id: model.id,
-          expected_revision: currentRevision,
-          context_window_tokens: windowTokens,
-          reserved_output_tokens: outputTokens,
+        const next = await transport.saveModel({
+          model: profile,
+          expectedRevision: currentRevision,
+          expectedConfigSnapshotId: currentConfigSnapshotId,
         });
         applyView(next);
         currentRevision = next.revision;
+        currentConfigSnapshotId = next.config_store.config_snapshot_id;
+      }
+      if (capacityTouched) {
+        const next = await transport.setModelContextCapacity({
+          modelId: model.id,
+          expectedRevision: currentRevision,
+          expectedConfigSnapshotId: currentConfigSnapshotId,
+          contextWindowTokens: windowTokens,
+          reservedOutputTokens: outputTokens,
+        });
+        applyView(next);
+        currentRevision = next.revision;
+        currentConfigSnapshotId = next.config_store.config_snapshot_id;
       }
       for (const capability of changedCapabilities) {
         const next = await transport.declareModelCapability({
-          model_id: model.id,
-          expected_revision: currentRevision,
+          modelId: model.id,
+          expectedRevision: currentRevision,
+          expectedConfigSnapshotId: currentConfigSnapshotId,
           capability,
           value: capabilityValues[capability]!,
         });
         applyView(next);
         currentRevision = next.revision;
+        currentConfigSnapshotId = next.config_store.config_snapshot_id;
       }
       onFeedback({ status: "success", message: "Model options saved." });
       onClose();

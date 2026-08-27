@@ -762,9 +762,19 @@ export function createMockUiKernelTransport(
   const workbenchListeners = new Set<() => void>();
   const agentNow = "2026-08-22T12:00:00Z";
   const agentProjectRoot = current.project.display_path;
+  let agentConfigSnapshotGeneration = 1;
   let agentLlmSettings: AgentLlmSettingsView = {
-    schema_version: 5,
+    schema_version: 6,
     revision: 1,
+    config_store: {
+      home_path: "/mock/home/.rho",
+      config_path: "/mock/home/.rho/config.yaml",
+      status: "loaded",
+      detail: null,
+      found_schema_version: 6,
+      config_snapshot_id: "mock-config-snapshot-1",
+      permission_issues: [],
+    },
     selected_model_id: "mock-profile",
     providers: [{
       id: "mock-provider",
@@ -775,11 +785,13 @@ export function createMockUiKernelTransport(
       api_key_required: true,
       base_url: "https://example.invalid/v1",
       base_url_env: null,
-      wire_api: "openai",
+      wire_api: "chat_completions",
       disable_stream_options: false,
-      credential_source: "rho_vault",
       credential_status: "detected",
-      credential_effective_source: "rho_vault",
+      credential_effective_source: "config_file",
+      env_shadows_file: false,
+      session_credential_present: false,
+      config_file_credential_present: true,
       effective_base_url: "https://example.invalid/v1",
       base_url_source: "configured",
     }],
@@ -789,9 +801,17 @@ export function createMockUiKernelTransport(
       display_name: "Mock model",
       model_id: "mock-model",
       enabled: true,
-      model_type: { value: "language", source: "catalog" },
+      model_type: { value: "language", source: "aisdk_catalog" },
       capabilities: {
-        function_call: { value: "supported", source: "catalog" },
+        function_call: { value: "yes", source: "aisdk_catalog" },
+        reasoning: { value: "unknown", source: "unknown" },
+        vision_input: { value: "unknown", source: "unknown" },
+        image_output: { value: "unknown", source: "unknown" },
+        image_edit: { value: "unknown", source: "unknown" },
+        audio_input: { value: "unknown", source: "unknown" },
+        audio_output: { value: "unknown", source: "unknown" },
+        structured_output: { value: "unknown", source: "unknown" },
+        web_search: { value: "unknown", source: "unknown" },
       },
       selected: true,
       context_window_tokens: 32_768,
@@ -807,7 +827,7 @@ export function createMockUiKernelTransport(
       display_name: "Mock model",
       provider_display_name: "Mock Provider",
       selector_status: "ready",
-      tool_calling: "supported",
+      tool_calling: "yes",
       act_enabled: true,
     },
     capability_routes: [{
@@ -1487,24 +1507,37 @@ export function createMockUiKernelTransport(
       left[name]?.value === right[name]?.value && left[name]?.source === right[name]?.source
     );
   };
-  const applyContextCapacity = (request: AgentContextCapacityRequest): AgentLlmSettingsView => {
-    if (request.expected_revision !== agentLlmSettings.revision) {
-      throw new Error("Model settings changed while this context capacity editor was open. Reload and try again.");
+  const assertAgentConfigGate = (request: {
+    readonly expectedRevision: number;
+    readonly expectedConfigSnapshotId: string;
+  }) => {
+    if (request.expectedRevision !== agentLlmSettings.revision
+        || request.expectedConfigSnapshotId !== agentLlmSettings.config_store.config_snapshot_id) {
+      throw new Error("Model settings or config.yaml changed while this editor was open. Reload and try again.");
     }
-    if (request.context_window_tokens < 4_096
-        || request.reserved_output_tokens < 256
-        || request.reserved_output_tokens >= request.context_window_tokens) {
+  };
+  const nextAgentConfigSnapshotId = () =>
+    `mock-config-snapshot-${++agentConfigSnapshotGeneration}`;
+  const applyContextCapacity = (request: AgentContextCapacityRequest): AgentLlmSettingsView => {
+    assertAgentConfigGate(request);
+    if (request.contextWindowTokens < 4_096
+        || request.reservedOutputTokens < 256
+        || request.reservedOutputTokens >= request.contextWindowTokens) {
       throw new Error("Reserved output tokens must be at least 256 and smaller than the context window.");
     }
-    const model = agentLlmSettings.models.find((candidate) => candidate.id === request.model_id);
-    if (model == null) throw new Error(`Unknown model: ${request.model_id}`);
+    const model = agentLlmSettings.models.find((candidate) => candidate.id === request.modelId);
+    if (model == null) throw new Error(`Unknown model: ${request.modelId}`);
     agentLlmSettings = {
       ...agentLlmSettings,
       revision: agentLlmSettings.revision + 1,
-      models: agentLlmSettings.models.map((candidate) => candidate.id === request.model_id ? {
+      config_store: {
+        ...agentLlmSettings.config_store,
+        config_snapshot_id: nextAgentConfigSnapshotId(),
+      },
+      models: agentLlmSettings.models.map((candidate) => candidate.id === request.modelId ? {
         ...candidate,
-        context_window_tokens: request.context_window_tokens,
-        reserved_output_tokens: request.reserved_output_tokens,
+        context_window_tokens: request.contextWindowTokens,
+        reserved_output_tokens: request.reservedOutputTokens,
         context_capacity_source: "user_declared",
       } : candidate),
     };
@@ -2909,13 +2942,18 @@ export function createMockUiKernelTransport(
         error_class: provider.credential_status === "detected" ? null : "credential_missing",
       };
     },
-    async testProviderModel(modelId) {
-      const model = agentLlmSettings.models.find((candidate) => candidate.id === modelId);
+    async testProviderModel(request) {
+      assertAgentConfigGate(request);
+      const model = agentLlmSettings.models.find((candidate) => candidate.id === request.modelId);
       if (model == null) throw new Error("Model changed while the connection test was running.");
       agentLlmSettings = {
         ...agentLlmSettings,
         revision: agentLlmSettings.revision + 1,
-        models: agentLlmSettings.models.map((candidate) => candidate.id === modelId ? {
+        config_store: {
+          ...agentLlmSettings.config_store,
+          config_snapshot_id: nextAgentConfigSnapshotId(),
+        },
+        models: agentLlmSettings.models.map((candidate) => candidate.id === request.modelId ? {
           ...candidate,
           last_test: {
             status: "ready",
@@ -2935,36 +2973,89 @@ export function createMockUiKernelTransport(
       const provider = agentLlmSettings.providers.find((candidate) => candidate.id === providerId);
       if (provider == null) throw new Error("Provider changed while this credential screen was open.");
       return provider.credential_status === "detected"
-        ? { outcome: "revealed", credential: "mock-saved-api-key" }
-        : { outcome: "credential_missing", credential: null };
+        ? {
+          outcome: "revealed",
+          credential: `mock-${provider.credential_effective_source}-api-key`,
+          source: provider.credential_effective_source,
+          env_shadows_file: provider.env_shadows_file,
+        }
+        : {
+          outcome: "credential_missing",
+          credential: null,
+          source: null,
+          env_shadows_file: false,
+        };
     },
-    async saveProviderCredential(providerId, credential, confirmReplace) {
-      void credential;
-      void confirmReplace;
-      const provider = agentLlmSettings.providers.find((candidate) => candidate.id === providerId);
+    async saveProviderCredential(request) {
+      void request.credential;
+      assertAgentConfigGate(request);
+      const provider = agentLlmSettings.providers.find((candidate) => candidate.id === request.providerId);
       if (provider == null) throw new Error("Provider changed while this credential screen was open.");
+      const replacing = request.target === "session"
+        ? provider.session_credential_present
+        : provider.config_file_credential_present;
+      if (replacing && !request.confirmReplace) {
+        throw new Error("An API key is already saved in that target. Confirm replacement to overwrite it.");
+      }
+      const durable = request.target === "config_file";
       agentLlmSettings = {
         ...agentLlmSettings,
-        revision: agentLlmSettings.revision + 1,
-        providers: agentLlmSettings.providers.map((candidate) => candidate.id === providerId ? {
-          ...candidate,
-          credential_status: "detected",
-          credential_effective_source: candidate.credential_source === "session_only" ? "session" : "rho_vault",
-        } : candidate),
+        revision: durable ? agentLlmSettings.revision + 1 : agentLlmSettings.revision,
+        // Every accepted request consumes its opaque snapshot capability,
+        // including session-only writes whose durable revision is unchanged.
+        config_store: {
+          ...agentLlmSettings.config_store,
+          config_snapshot_id: nextAgentConfigSnapshotId(),
+        },
+        providers: agentLlmSettings.providers.map((candidate) => {
+          if (candidate.id !== request.providerId) return candidate;
+          const environmentEffective = candidate.credential_effective_source === "environment";
+          const sessionPresent = request.target === "session" || candidate.session_credential_present;
+          const filePresent = request.target === "config_file" || candidate.config_file_credential_present;
+          return {
+            ...candidate,
+            credential_status: "detected",
+            credential_effective_source: sessionPresent
+              ? "session"
+              : environmentEffective
+                ? "environment"
+                : "config_file",
+            session_credential_present: sessionPresent,
+            config_file_credential_present: filePresent,
+            env_shadows_file: !sessionPresent && environmentEffective && filePresent,
+          };
+        }),
       };
       return structuredClone(agentLlmSettings);
     },
-    async selectAgentChatModel(modelId: string, expectedRevision: number) {
-      if (expectedRevision !== agentLlmSettings.revision) {
-        throw new Error("Model settings changed while this model selector was open. Reload and try again.");
+    async repairAgentConfigPermissions(request) {
+      assertAgentConfigGate(request);
+      if (request.expectedConfigPath !== agentLlmSettings.config_store.config_path) {
+        throw new Error("The resolved config.yaml path changed. Reload before repairing permissions.");
       }
-      const model = agentLlmSettings.models.find((candidate) => candidate.id === modelId);
+      agentLlmSettings = {
+        ...agentLlmSettings,
+        config_store: {
+          ...agentLlmSettings.config_store,
+          config_snapshot_id: nextAgentConfigSnapshotId(),
+          permission_issues: [],
+        },
+      };
+      return structuredClone(agentLlmSettings);
+    },
+    async selectAgentChatModel(request) {
+      assertAgentConfigGate(request);
+      const model = agentLlmSettings.models.find((candidate) => candidate.id === request.modelId);
       if (model == null || !model.enabled || model.model_type.value !== "language") {
         throw new Error("Choose an enabled language model for Chat.");
       }
       agentLlmSettings = {
         ...agentLlmSettings,
         revision: agentLlmSettings.revision + 1,
+        config_store: {
+          ...agentLlmSettings.config_store,
+          config_snapshot_id: nextAgentConfigSnapshotId(),
+        },
         selected_model_id: model.id,
         selected_model: {
           id: model.id,
@@ -3001,7 +3092,9 @@ export function createMockUiKernelTransport(
     async setModelContextCapacity(request) {
       return applyContextCapacity(request);
     },
-    async saveModel(model) {
+    async saveModel(request) {
+      assertAgentConfigGate(request);
+      const { model } = request;
       const existing = agentLlmSettings.models.find((candidate) => candidate.id === model.id);
       if (existing != null) {
         if (existing.model_type.value !== model.model_type.value
@@ -3025,31 +3118,38 @@ export function createMockUiKernelTransport(
       agentLlmSettings = {
         ...agentLlmSettings,
         revision: agentLlmSettings.revision + 1,
+        config_store: {
+          ...agentLlmSettings.config_store,
+          config_snapshot_id: nextAgentConfigSnapshotId(),
+        },
         models: existing == null
           ? [...agentLlmSettings.models, viewModel]
           : agentLlmSettings.models.map((candidate) => candidate.id === model.id ? viewModel : candidate),
       };
       return structuredClone(agentLlmSettings);
     },
-    async deleteModel(modelId) {
-      const model = agentLlmSettings.models.find((candidate) => candidate.id === modelId);
-      if (model == null) throw new Error(`Unknown model: ${modelId}`);
-      if (agentLlmSettings.capability_routes.some((route) => route.model_id === modelId)) {
+    async deleteModel(request) {
+      assertAgentConfigGate(request);
+      const model = agentLlmSettings.models.find((candidate) => candidate.id === request.modelId);
+      if (model == null) throw new Error(`Unknown model: ${request.modelId}`);
+      if (agentLlmSettings.capability_routes.some((route) => route.model_id === request.modelId)) {
         throw new Error("Reassign or remove this model's capability routes before deleting it.");
       }
       agentLlmSettings = {
         ...agentLlmSettings,
         revision: agentLlmSettings.revision + 1,
-        models: agentLlmSettings.models.filter((candidate) => candidate.id !== modelId),
+        config_store: {
+          ...agentLlmSettings.config_store,
+          config_snapshot_id: nextAgentConfigSnapshotId(),
+        },
+        models: agentLlmSettings.models.filter((candidate) => candidate.id !== request.modelId),
       };
       return structuredClone(agentLlmSettings);
     },
     async declareModelCapability(request) {
-      if (request.expected_revision !== agentLlmSettings.revision) {
-        throw new Error("Model settings changed while this capability editor was open. Reload and try again.");
-      }
-      const model = agentLlmSettings.models.find((candidate) => candidate.id === request.model_id);
-      if (model == null) throw new Error(`Unknown model: ${request.model_id}`);
+      assertAgentConfigGate(request);
+      const model = agentLlmSettings.models.find((candidate) => candidate.id === request.modelId);
+      if (model == null) throw new Error(`Unknown model: ${request.modelId}`);
       let modelType = model.model_type;
       let capabilities = model.capabilities;
       if (request.capability === "model_type") {
@@ -3072,7 +3172,11 @@ export function createMockUiKernelTransport(
       agentLlmSettings = {
         ...agentLlmSettings,
         revision: agentLlmSettings.revision + 1,
-        models: agentLlmSettings.models.map((candidate) => candidate.id === request.model_id ? {
+        config_store: {
+          ...agentLlmSettings.config_store,
+          config_snapshot_id: nextAgentConfigSnapshotId(),
+        },
+        models: agentLlmSettings.models.map((candidate) => candidate.id === request.modelId ? {
           ...candidate,
           model_type: modelType,
           capabilities,

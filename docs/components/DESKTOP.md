@@ -17,10 +17,13 @@ Important runtime owners include:
   identity;
 - `runtime_registry`, `studio_runtime`, `surface_runtime`, and `ui_profile` for
   desktop workbench state;
-- `agent_llm`, Agent commands, and `agent_credential_vault` for runtime model
-  settings and credentials;
-- `agent_config` for the private YAML schema and file-I/O helpers; production
-  settings paths do not call those helpers.
+- `agent_llm` and Agent commands for model settings, selection, tests, and
+  credential projection;
+- `agent_config` for the canonical `<Rho home>/config.yaml` model registry,
+  atomic mutation, and permission checks. `RHO_HOME` overrides discovery;
+  otherwise an existing `~/.rho` wins over the XDG variant, and new installs
+  default to `~/.rho`. Credentials resolve session → environment → config
+  literal without a second vault authority.
 
 ## Frontend
 

@@ -64,6 +64,7 @@ type Feedback =
   | { readonly status: "working" | "success" | "error"; readonly message: string };
 
 type ProviderView = AgentLlmSettingsView["providers"][number];
+type CredentialWriteTarget = "config_file" | "session";
 
 const FIXED_CREDENTIAL_MASK = "••••••••••••••••";
 
@@ -126,46 +127,76 @@ function providerReadiness(provider: ProviderView): string {
   if (!provider.api_key_required) return "Ready";
   if (provider.credential_status === "detected") return "Ready";
   if (provider.credential_status === "not_detected") return "Needs API key";
-  if (provider.credential_status === "vault_locked_saved") return "Ready";
-  if (provider.credential_status === "vault_not_initialized"
-      || provider.credential_status === "vault_locked_missing") return "Needs API key";
   if (provider.credential_status === "unavailable") return "Credential unavailable";
   return "Not checked";
 }
 
 function credentialSourceLabel(provider: ProviderView): string {
-  switch (provider.credential_source) {
-    case "rho_vault": return "Saved locally";
-    case "session_only": return "This session";
+  switch (provider.credential_effective_source) {
+    case "session": return "This session";
     case "environment": return provider.api_key_env == null
       ? "Environment"
       : `Environment · ${provider.api_key_env}`;
-    default: return "Unsupported source";
+    case "config_file": return "config.yaml";
+    case "not_configured": return "Not configured";
+    default: return "Not configured";
   }
 }
 
-function isAppManagedCredential(provider: ProviderView): boolean {
-  return provider.credential_source === "rho_vault"
-    || provider.credential_source === "session_only";
+function credentialLooksSaved(provider: ProviderView): boolean {
+  return provider.credential_status === "detected";
 }
 
-function credentialLooksSaved(provider: ProviderView): boolean {
-  return isAppManagedCredential(provider)
-    && provider.credential_status === "detected";
+function targetHasCredential(provider: ProviderView, target: CredentialWriteTarget): boolean {
+  return target === "session"
+    ? provider.session_credential_present
+    : provider.config_file_credential_present;
 }
 
 function revealOutcomeMessage(outcome: AgentLlmCredentialRevealView["outcome"]): string {
   switch (outcome) {
     case "credential_missing":
       return "No saved API key was found. Add it again.";
-    case "store_unavailable":
-      return "The credential store is unavailable.";
-    case "source_ineligible":
-      return "This credential source cannot be viewed.";
+    case "credential_unavailable":
+      return "The effective API key could not be read.";
     case "revealed":
       // A revealed outcome without a value is degenerate; treat it as missing.
       return "No saved API key was found. Add it again.";
   }
+}
+
+function configStoreStatusLabel(status: AgentLlmSettingsView["config_store"]["status"]): string {
+  switch (status) {
+    case "loaded": return "Loaded";
+    case "missing": return "Missing";
+    case "malformed": return "Needs repair";
+    case "unsupported_schema_version": return "Unsupported schema";
+    case "home_unavailable": return "Home unavailable";
+    default: return "Unavailable";
+  }
+}
+
+function configStoreDetail(store: AgentLlmSettingsView["config_store"]): string {
+  switch (store.status) {
+    case "loaded":
+      return "Provider settings and saved API keys use this canonical file.";
+    case "missing":
+      return "No configuration file was found. Create or paste config.yaml at this exact path, then refresh.";
+    case "malformed":
+      return store.detail ?? "The configuration file is not valid V6 YAML. Fix it, then refresh.";
+    case "unsupported_schema_version":
+      return store.found_schema_version == null
+        ? "The configuration file uses an unsupported schema version."
+        : `Schema version ${store.found_schema_version} is not supported; Rho expects version 6.`;
+    case "home_unavailable":
+      return "Rho could not resolve a user home for config.yaml.";
+    default:
+      return store.detail ?? "The configuration file is unavailable.";
+  }
+}
+
+function permissionMode(value: number): string {
+  return value.toString(8).padStart(4, "0");
 }
 
 function BackButton({ label, onClick }: { readonly label: string; readonly onClick: () => void }) {
@@ -196,6 +227,7 @@ function ProvidersSettingsModule({
   const [feedback, setFeedback] = useState<Feedback>({ status: "idle", message: null });
   const [credentialDraft, setCredentialDraft] = useState("");
   const [credentialMode, setCredentialMode] = useState<"add" | "replace" | null>(null);
+  const [credentialTarget, setCredentialTarget] = useState<CredentialWriteTarget>("config_file");
   const [discovery, setDiscovery] = useState<DiscoveryState>({ status: "idle" });
   const [testingModelId, setTestingModelId] = useState<string | null>(null);
   const [revealedCredential, setRevealedCredential] = useState<{ readonly providerId: string; readonly value: string } | null>(null);
@@ -222,6 +254,7 @@ function ProvidersSettingsModule({
     if (page.kind !== "overview" && provider == null) {
       setCredentialDraft("");
       setCredentialMode(null);
+      setCredentialTarget("config_file");
       setRevealedCredential(null);
       setFeedback({ status: "error", message: "That Provider is no longer available." });
       setPage({ kind: "overview" });
@@ -232,6 +265,7 @@ function ProvidersSettingsModule({
     const clearDraft = () => {
       setCredentialDraft("");
       setCredentialMode(null);
+      setCredentialTarget("config_file");
       setRevealedCredential(null);
     };
     window.addEventListener("blur", clearDraft);
@@ -252,6 +286,7 @@ function ProvidersSettingsModule({
       && page.providerId === next.providerId;
     setCredentialDraft("");
     setCredentialMode(null);
+    setCredentialTarget("config_file");
     setRevealedCredential(null);
     if (!returningFromModel) setDiscovery({ status: "idle" });
     if (!returningFromModel && next.kind !== "model") automaticRefreshProvider.current = null;
@@ -322,7 +357,11 @@ function ProvidersSettingsModule({
           && automaticTestModelId != null) {
         setTestingModelId(automaticTestModelId);
         try {
-          const next = await transport.testProviderModel(automaticTestModelId);
+          const next = await transport.testProviderModel({
+            modelId: automaticTestModelId,
+            expectedRevision: view.revision,
+            expectedConfigSnapshotId: view.config_store.config_snapshot_id,
+          });
           if (!cancelled) applyView(next);
         } finally {
           if (!cancelled) setTestingModelId(null);
@@ -344,13 +383,26 @@ function ProvidersSettingsModule({
       }
     });
     return () => { cancelled = true; };
-  }, [page.kind, provider?.id, provider?.credential_status, automaticTestModelId, transport, applyView]);
+  }, [
+    page.kind,
+    provider?.id,
+    provider?.credential_status,
+    automaticTestModelId,
+    view.revision,
+    view.config_store.config_snapshot_id,
+    transport,
+    applyView,
+  ]);
 
   const testModel = async (modelId: string, announce = true) => {
     if (testingModelId != null) return null;
     setTestingModelId(modelId);
     try {
-      const next = await transport.testProviderModel(modelId);
+      const next = await transport.testProviderModel({
+        modelId,
+        expectedRevision: view.revision,
+        expectedConfigSnapshotId: view.config_store.config_snapshot_id,
+      });
       applyView(next);
       const result = next.models.find((model) => model.id === modelId)?.last_test ?? null;
       if (announce) {
@@ -400,12 +452,28 @@ function ProvidersSettingsModule({
     const draft = credentialDraft;
     setFeedback({ status: "working", message: mode === "replace" ? "Replacing API key…" : "Saving API key…" });
     try {
-      const next = await transport.saveProviderCredential(target.id, draft, mode === "replace");
+      const next = await transport.saveProviderCredential({
+        providerId: target.id,
+        credential: draft,
+        target: credentialTarget,
+        confirmReplace: mode === "replace",
+        expectedRevision: view.revision,
+        expectedConfigSnapshotId: view.config_store.config_snapshot_id,
+      });
       setCredentialDraft("");
       setCredentialMode(null);
+      setCredentialTarget("config_file");
       setRevealedCredential(null);
       applyView(next);
-      setFeedback({ status: "working", message: "API key saved. Checking Provider and refreshing models…" });
+      const projectedProvider = next.providers.find((candidate) => candidate.id === target.id);
+      const fileIsShadowed = credentialTarget === "config_file"
+        && projectedProvider?.credential_effective_source === "environment";
+      setFeedback({
+        status: "working",
+        message: fileIsShadowed
+          ? "API key saved to config.yaml. The environment value remains effective; checking that value and refreshing models…"
+          : "API key saved. Checking Provider and refreshing models…",
+      });
       const response = await refreshModels(target.id, false);
       if (response?.status !== "ready") {
         setFeedback({
@@ -417,14 +485,26 @@ function ProvidersSettingsModule({
       const firstModel = next.models.find((model) => model.provider_id === target.id
         && model.enabled && model.model_type.value === "language");
       if (firstModel == null) {
-        setFeedback({ status: "success", message: `API key verified · ${response.models.length} models available.` });
+        setFeedback({
+          status: "success",
+          message: fileIsShadowed
+            ? `API key saved to config.yaml · the environment value remains effective · ${response.models.length} models available.`
+            : `API key verified · ${response.models.length} models available.`,
+        });
         return;
       }
-      const tested = await testModel(firstModel.id, false);
+      const tested = await transport.testProviderModel({
+        modelId: firstModel.id,
+        expectedRevision: next.revision,
+        expectedConfigSnapshotId: next.config_store.config_snapshot_id,
+      });
+      applyView(tested);
       const result = tested?.models.find((model) => model.id === firstModel.id)?.last_test ?? null;
       setFeedback(result?.status === "ready" ? {
         status: "success",
-        message: `API key verified · ${formatLatency(result.latency_ms)} · ${response.models.length} models available.`,
+        message: fileIsShadowed
+          ? `API key saved to config.yaml · the environment value remains effective · ${response.models.length} models available.`
+          : `API key verified · ${formatLatency(result.latency_ms)} · ${response.models.length} models available.`,
       } : {
         status: "error",
         message: result?.message ?? "The API key was saved, but the connection test failed.",
@@ -456,6 +536,28 @@ function ProvidersSettingsModule({
     }
   };
 
+  const repairConfigPermissions = async () => {
+    if (feedback.status === "working" || view.config_store.config_path == null) return;
+    setFeedback({ status: "working", message: "Repairing config permissions…" });
+    try {
+      const next = await transport.repairAgentConfigPermissions({
+        expectedConfigPath: view.config_store.config_path,
+        expectedRevision: view.revision,
+        expectedConfigSnapshotId: view.config_store.config_snapshot_id,
+      });
+      applyView(next);
+      setFeedback(next.config_store.permission_issues.length === 0 ? {
+        status: "success",
+        message: "Config permissions repaired.",
+      } : {
+        status: "error",
+        message: "Some config permissions still need attention.",
+      });
+    } catch (error: unknown) {
+      await reloadDurableTruth(boundedMessage(error, "Config permissions could not be repaired."));
+    }
+  };
+
   const addDiscoveredModel = async (
     target: ProviderView,
     discovered: AgentModelDiscoveryResponse["models"][number],
@@ -463,11 +565,15 @@ function ProvidersSettingsModule({
     if (modelMutation != null) return;
     setModelMutation("add");
     try {
-      const next = await transport.saveModel(buildAddedModelProfile({
-        providerId: target.id,
-        modelId: discovered.id,
-        discovered,
-      }));
+      const next = await transport.saveModel({
+        model: buildAddedModelProfile({
+          providerId: target.id,
+          modelId: discovered.id,
+          discovered,
+        }),
+        expectedRevision: view.revision,
+        expectedConfigSnapshotId: view.config_store.config_snapshot_id,
+      });
       applyView(next);
       setFeedback({ status: "success", message: `${discovered.display_name} was added to ${target.display_name}.` });
     } catch (error: unknown) {
@@ -483,11 +589,15 @@ function ProvidersSettingsModule({
     if (modelId === "") return;
     setModelMutation("manual");
     try {
-      const next = await transport.saveModel(buildAddedModelProfile({
-        providerId: target.id,
-        modelId,
-        displayName: manualAddDraft.displayName,
-      }));
+      const next = await transport.saveModel({
+        model: buildAddedModelProfile({
+          providerId: target.id,
+          modelId,
+          displayName: manualAddDraft.displayName,
+        }),
+        expectedRevision: view.revision,
+        expectedConfigSnapshotId: view.config_store.config_snapshot_id,
+      });
       applyView(next);
       setManualAddDraft({ modelId: "", displayName: "" });
       setManualAddOpen(false);
@@ -505,7 +615,12 @@ function ProvidersSettingsModule({
     if (modelMutation != null) return;
     setModelMutation("delete");
     try {
-      const next = await transport.deleteModel(model.id);
+      const next = await transport.deleteModel({
+        modelId: model.id,
+        replacementModelId: null,
+        expectedRevision: view.revision,
+        expectedConfigSnapshotId: view.config_store.config_snapshot_id,
+      });
       applyView(next);
       navigate({ kind: "provider", providerId: target.id });
       setFeedback({ status: "success", message: `${model.display_name} was deleted.` });
@@ -527,9 +642,11 @@ function ProvidersSettingsModule({
     />;
   } else {
     const providerModels = view.models.filter((model) => model.provider_id === provider.id);
-    const appManaged = isAppManagedCredential(provider);
     const saved = credentialLooksSaved(provider);
-    const unavailable = provider.credential_status === "unavailable";
+    // Durable config is intentionally the safe editor default on every open.
+    // Session credentials are written only after an explicit target change.
+    const preferredCredentialTarget: CredentialWriteTarget = "config_file";
+    const preferredTargetHasCredential = targetHasCredential(provider, preferredCredentialTarget);
     const discoveryResponse = discovery.status === "complete" ? discovery.response : null;
     const discoveredModels = discoveryResponse?.status === "ready" ? discoveryResponse.models : [];
     const discoveredIds = new Set(discoveredModels.map((model) => model.id));
@@ -655,6 +772,7 @@ function ProvidersSettingsModule({
         {modelOptionsOpen && configuredModel != null && <ModelOptionsDialog
           model={configuredModel}
           revision={view.revision}
+          configSnapshotId={view.config_store.config_snapshot_id}
           transport={transport}
           applyView={applyView}
           onFeedback={setFeedback}
@@ -684,9 +802,7 @@ function ProvidersSettingsModule({
         </section>
         <section className="rho-settings-provider-block" aria-labelledby="rho-settings-credential-heading">
           <header><div><span className="rho-eyebrow">Authentication</span><h3 id="rho-settings-credential-heading">API key</h3></div><span>{keyState}</span></header>
-          {!provider.api_key_required ? <p>API key not required.</p> : !appManaged ? (
-            <p>{provider.credential_status === "detected" ? "Detected" : "Not detected"}. Rho does not own this value, so it cannot be viewed here.</p>
-          ) : unavailable ? <p role="alert">Local API key storage is unavailable.</p> : credentialMode != null ? (
+          {!provider.api_key_required ? <p>API key not required.</p> : credentialMode != null ? (
             <form className="rho-settings-inline-credential" onSubmit={(event) => { event.preventDefault(); void saveCredential(provider, credentialMode); }}>
               <label htmlFor="rho-settings-api-key">{credentialMode === "replace" ? "Replacement API key" : "API key"}</label>
               <div>
@@ -700,9 +816,25 @@ function ProvidersSettingsModule({
                   onChange={(event) => setCredentialDraft(event.target.value)}
                 />
                 <button type="submit" disabled={feedback.status === "working"}>{feedback.status === "working" ? "Checking…" : "Save & verify"}</button>
-                <button type="button" onClick={() => { setCredentialDraft(""); setCredentialMode(null); }}>Cancel</button>
+                <button type="button" onClick={() => { setCredentialDraft(""); setCredentialMode(null); setCredentialTarget("config_file"); }}>Cancel</button>
               </div>
-              <small>Saving immediately checks the Provider, measures latency, and refreshes models.</small>
+              <label htmlFor="rho-settings-credential-target">Save target</label>
+              <select
+                id="rho-settings-credential-target"
+                value={credentialTarget}
+                disabled={feedback.status === "working"}
+                onChange={(event) => {
+                  const nextTarget = event.target.value as CredentialWriteTarget;
+                  setCredentialTarget(nextTarget);
+                  setCredentialMode(targetHasCredential(provider, nextTarget) ? "replace" : "add");
+                }}
+              >
+                <option value="config_file">config.yaml (plaintext)</option>
+                <option value="session">This session only</option>
+              </select>
+              <small>{credentialTarget === "session"
+                ? "This value stays in memory until Rho exits and is never written to disk."
+                : `This value is written in plaintext to ${view.config_store.config_path ?? "config.yaml"}. Saving immediately checks the effective credential and refreshes models.`}</small>
             </form>
           ) : saved ? <>
             <div className="rho-settings-secret-row">
@@ -716,12 +848,21 @@ function ProvidersSettingsModule({
               ) : (
                 <button type="button" disabled={viewingCredential || feedback.status === "working" || testingModelId != null} onClick={() => void viewCredential(provider)}>View</button>
               )}
-              <button type="button" disabled={feedback.status === "working" || testingModelId != null} onClick={() => { setRevealedCredential(null); setCredentialMode("replace"); }}>Replace</button>
+              <button type="button" disabled={feedback.status === "working" || testingModelId != null} onClick={() => {
+                setRevealedCredential(null);
+                setCredentialTarget(preferredCredentialTarget);
+                setCredentialMode(preferredTargetHasCredential ? "replace" : "add");
+              }}>{preferredTargetHasCredential ? "Replace" : "Add API key"}</button>
             </div>
-            <small>{credentialSourceLabel(provider)} on this Mac.</small>
+            <small>{credentialSourceLabel(provider)} is effective.{provider.env_shadows_file
+              ? " The environment value shadows the API key saved in config.yaml."
+              : ""}</small>
           </> : <div className="rho-settings-missing-credential">
             <p>Add an API key to connect, validate it, and load this Provider's models.</p>
-            <button type="button" onClick={() => setCredentialMode("add")}>Add API key</button>
+            <button type="button" onClick={() => {
+              setCredentialTarget("config_file");
+              setCredentialMode(provider.config_file_credential_present ? "replace" : "add");
+            }}>Add API key</button>
           </div>}
         </section>
         <section className="rho-settings-section rho-settings-provider-model-section" aria-labelledby="rho-settings-models-heading">
@@ -826,8 +967,34 @@ function ProvidersSettingsModule({
         <div><span className="rho-eyebrow">Settings</span><h2>Providers</h2></div>
         <button type="button" onClick={refresh}>Refresh</button>
       </header>
+      <section className={`rho-settings-config-store rho-settings-config-store-${view.config_store.status}`} aria-label="Rho model configuration">
+        <header>
+          <div><strong>config.yaml</strong><code>{view.config_store.config_path ?? "Path unavailable"}</code></div>
+          <span>{configStoreStatusLabel(view.config_store.status)}</span>
+        </header>
+        <p>{configStoreDetail(view.config_store)}</p>
+        <p><strong>Plaintext:</strong> API keys saved to this file are readable by anyone who can read the file.</p>
+        {view.config_store.permission_issues.length > 0 && <div className="rho-settings-config-permissions" role="alert">
+          <strong>Loose permissions detected</strong>
+          <ul>{view.config_store.permission_issues.map((issue) => <li key={`${issue.subject}:${issue.path}`}>
+            <code>{issue.path}</code> is {permissionMode(issue.actual_mode)}; expected {permissionMode(issue.expected_mode)}.
+          </li>)}</ul>
+          <button
+            type="button"
+            disabled={feedback.status === "working" || view.config_store.config_path == null}
+            onClick={() => void repairConfigPermissions()}
+          >Repair permissions</button>
+        </div>}
+      </section>
       {view.providers.length === 0 ? (
-        <SurfaceTaskState tone="empty" title="No Providers" detail="Add Provider is not available in this iteration." role="status" />
+        <SurfaceTaskState
+          tone={view.config_store.status === "malformed" || view.config_store.status === "unsupported_schema_version" ? "attention" : "empty"}
+          title="No Providers"
+          detail={view.config_store.config_path == null
+            ? "No canonical model configuration is available."
+            : `Add Provider is not available in this iteration. Edit ${view.config_store.config_path}, then refresh.`}
+          role="status"
+        />
       ) : <div className="rho-settings-row-list" aria-label="Configured Providers">
         {view.providers.map((item) => {
           const modelCount = view.models.filter((model) => model.provider_id === item.id).length;

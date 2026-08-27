@@ -204,9 +204,8 @@ fn agent_settings_fixture() -> AgentLlmSettingsView {
         api_key_required: true,
         base_url: Some("https://example.invalid/v1".to_string()),
         base_url_env: None,
-        wire_api: Some("openai".to_string()),
+        wire_api: Some("chat_completions".to_string()),
         disable_stream_options: Some(false),
-        credential_source: "rho_vault".to_string(),
     };
     let model = AgentModelProfile {
         id: "model:fixture".to_string(),
@@ -216,15 +215,30 @@ fn agent_settings_fixture() -> AgentLlmSettingsView {
         enabled: true,
         model_type: agent_llm::AgentCapabilityValue {
             value: "language".to_string(),
-            source: "catalog".to_string(),
+            source: "aisdk_catalog".to_string(),
         },
-        capabilities: std::collections::BTreeMap::from([(
-            "function_call".to_string(),
-            agent_llm::AgentCapabilityValue {
-                value: "supported".to_string(),
-                source: "catalog".to_string(),
-            },
-        )]),
+        capabilities: [
+            ("function_call", "yes", "aisdk_catalog"),
+            ("reasoning", "unknown", "unknown"),
+            ("vision_input", "unknown", "unknown"),
+            ("image_output", "unknown", "unknown"),
+            ("image_edit", "unknown", "unknown"),
+            ("audio_input", "unknown", "unknown"),
+            ("audio_output", "unknown", "unknown"),
+            ("structured_output", "unknown", "unknown"),
+            ("web_search", "unknown", "unknown"),
+        ]
+        .into_iter()
+        .map(|(name, value, source)| {
+            (
+                name.to_string(),
+                agent_llm::AgentCapabilityValue {
+                    value: value.to_string(),
+                    source: source.to_string(),
+                },
+            )
+        })
+        .collect(),
         context_window_tokens: 128_000,
         reserved_output_tokens: 8_192,
         context_capacity_source: "catalog".to_string(),
@@ -237,13 +251,16 @@ fn agent_settings_fixture() -> AgentLlmSettingsView {
         }),
     };
     AgentLlmSettingsView {
-        schema_version: 5,
+        schema_version: 6,
         revision: 9,
         selected_model_id: model.id.clone(),
         providers: vec![agent_llm::AgentProviderProfileView {
             profile: provider,
             credential_status: "unchecked".to_string(),
             credential_effective_source: "unchecked".to_string(),
+            env_shadows_file: false,
+            session_credential_present: false,
+            config_file_credential_present: false,
             effective_base_url: Some("https://example.invalid/v1".to_string()),
             base_url_source: "configured".to_string(),
         }],
@@ -259,7 +276,7 @@ fn agent_settings_fixture() -> AgentLlmSettingsView {
             display_name: "Fixture Model".to_string(),
             provider_display_name: "Fixture Provider".to_string(),
             selector_status: "ready".to_string(),
-            tool_calling: "supported".to_string(),
+            tool_calling: "yes".to_string(),
             act_enabled: true,
         }),
         capability_routes: vec![agent_llm::AgentCapabilityRouteView {
@@ -281,6 +298,15 @@ fn agent_settings_fixture() -> AgentLlmSettingsView {
             path: "/Users/fixture/.Renviron".to_string(),
             source: "not_used_for_agent_credentials".to_string(),
         },
+        config_store: agent_llm::AgentConfigStoreView {
+            home_path: Some("/Users/fixture/.rho".to_string()),
+            config_path: Some("/Users/fixture/.rho/config.yaml".to_string()),
+            status: "loaded".to_string(),
+            detail: None,
+            found_schema_version: Some(6),
+            config_snapshot_id: "opaque-fixture".to_string(),
+            permission_issues: Vec::new(),
+        },
         validation_error: None,
     }
 }
@@ -289,15 +315,16 @@ fn agent_settings_fixture() -> AgentLlmSettingsView {
 fn agent_settings_ipc_serialization_matches_generated_contract() {
     let settings = serde_json::to_value(agent_settings_fixture()).unwrap();
     let request: AgentContextCapacityRequest = serde_json::from_value(serde_json::json!({
-        "model_id": "model:fixture",
-        "expected_revision": 9,
-        "context_window_tokens": 262144,
-        "reserved_output_tokens": 16384
+        "modelId": "model:fixture",
+        "expectedRevision": 9,
+        "expectedConfigSnapshotId": "opaque-fixture",
+        "contextWindowTokens": 262144,
+        "reservedOutputTokens": 16384
     }))
     .unwrap();
 
-    assert_eq!(settings["schema_version"], 5);
-    assert_eq!(settings["providers"][0]["credential_source"], "rho_vault");
+    assert_eq!(settings["schema_version"], 6);
+    assert!(settings["providers"][0].get("credential_source").is_none());
     assert_eq!(
         settings["providers"][0]["credential_effective_source"],
         "unchecked"
@@ -308,7 +335,7 @@ fn agent_settings_ipc_serialization_matches_generated_contract() {
     assert_eq!(settings["models"][0]["context_window_tokens"], 128_000);
     assert_eq!(
         settings["models"][0]["capabilities"]["function_call"]["value"],
-        "supported"
+        "yes"
     );
     assert_eq!(settings["capability_routes"][0]["capability"], "agent.chat");
     assert!(settings["validation_error"].is_null());
@@ -497,15 +524,22 @@ fn agent_settings_typescript_export() {
     tauri_specta::Builder::<tauri::Wry>::new()
         .commands(tauri_specta::collect_commands![
             crate::commands::agent_llm::agent_llm_settings,
+            crate::commands::agent_llm::agent_llm_save_provider,
+            crate::commands::agent_llm::agent_llm_delete_provider,
             crate::commands::agent_llm::agent_llm_discover_models,
             crate::commands::agent_llm::agent_llm_save_model,
             crate::commands::agent_llm::agent_llm_set_context_capacity,
             crate::commands::agent_llm::agent_llm_declare_model_capability,
             crate::commands::agent_llm::agent_llm_delete_model,
             crate::commands::agent_llm::agent_llm_set_credential,
+            crate::commands::agent_llm::agent_llm_delete_credential,
             crate::commands::agent_llm::agent_llm_select_model,
+            crate::commands::agent_llm::agent_llm_save_capability_route,
+            crate::commands::agent_llm::agent_llm_delete_capability_route,
+            crate::commands::agent_llm::agent_llm_declare_model_capabilities,
             crate::commands::agent_llm::agent_llm_test_model,
             crate::commands::agent_llm::agent_llm_view_credential,
+            crate::commands::agent_llm::agent_llm_repair_config_permissions,
         ])
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
         .export(specta_typescript::Typescript::default(), output_path)

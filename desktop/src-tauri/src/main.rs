@@ -1,7 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod acceptance_bridge;
-mod agent_credential_vault;
 mod agent_llm;
 mod application_lifecycle;
 mod application_state;
@@ -74,8 +73,6 @@ use commands::workspace::{
 };
 
 use std::collections::HashMap;
-#[cfg(windows)]
-use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock as SyncRwLock};
 
@@ -379,6 +376,7 @@ fn main() {
             commands::agent_llm::agent_llm_delete_capability_route,
             commands::agent_llm::agent_llm_declare_model_capabilities,
             commands::agent_llm::agent_llm_refresh_credentials,
+            commands::agent_llm::agent_llm_repair_config_permissions,
             commands::agent_llm::agent_llm_test_model,
             commands::agent_llm::agent_llm_cancel_test,
             commands::agent_llm::agent_llm_catalog,

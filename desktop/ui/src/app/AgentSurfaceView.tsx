@@ -483,10 +483,11 @@ export function AgentSurfaceView({
     setCapacityBusy(true);
     try {
       const settings = await transport.setAgentContextCapacity({
-        model_id: capacityModelId,
-        expected_revision: llmSettings.revision,
-        context_window_tokens: contextWindow,
-        reserved_output_tokens: reservedOutput,
+        modelId: capacityModelId,
+        expectedRevision: llmSettings.revision,
+        expectedConfigSnapshotId: llmSettings.config_store.config_snapshot_id,
+        contextWindowTokens: contextWindow,
+        reservedOutputTokens: reservedOutput,
       });
       if (!activationIsCurrent(activationVersion)) return;
       setLlmSettings(settings);
@@ -506,7 +507,11 @@ export function AgentSurfaceView({
     if (mutation == null) return;
     setModelSwitchBusy(true);
     try {
-      const settings = await transport.selectAgentChatModel(modelId, llmSettings.revision);
+      const settings = await transport.selectAgentChatModel({
+        modelId,
+        expectedRevision: llmSettings.revision,
+        expectedConfigSnapshotId: llmSettings.config_store.config_snapshot_id,
+      });
       if (!activationIsCurrent(activationVersion)) return;
       setLlmSettings(settings);
       setContextPreview(null);
@@ -883,7 +888,7 @@ export function AgentSurfaceView({
               const model = llmSettings.models.find((item) => item.id === capacityModelId);
               const provider = model == null ? null : llmSettings.providers.find((item) => item.id === model.provider_id);
               if (provider == null) return null;
-              const source = provider.credential_source.replaceAll("_", " ");
+              const source = provider.credential_effective_source.replaceAll("_", " ");
               const status = provider.credential_status.replaceAll("_", " ");
               return `credential: ${status} · source: ${source}`;
             })()}</small>

@@ -335,6 +335,8 @@ async fn start_agent_turn(
     let (resolved_model, credential_override) = if task_kind == "problem_repair" {
         agent_llm::resolve_model_and_credential_for_task(
             &config.data_dir,
+            &config.rscript,
+            config.r_environ_user.as_deref(),
             model_id.as_deref(),
             &mode,
             &task_kind,
@@ -342,6 +344,8 @@ async fn start_agent_turn(
     } else {
         agent_llm::resolve_model_and_credential_for_turn(
             &config.data_dir,
+            &config.rscript,
+            config.r_environ_user.as_deref(),
             model_id.as_deref(),
             &mode,
         )

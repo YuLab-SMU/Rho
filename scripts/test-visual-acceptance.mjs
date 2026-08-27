@@ -20,9 +20,11 @@ import {
   STARTUP_LOG_MAX_BYTES,
   STARTUP_TERMINAL_MESSAGE_PREFIX,
   acceptanceLaunchEnvironment,
+  acceptanceMissingCredentialEnvironmentName,
   acquireAppLock,
   acquireRunWriterLock,
   consecutivePngHashesMatch,
+  createHermeticAgentConfig,
   dispatchRealDebugAction,
   finalizeStatus,
   assertExecutableIdentity,
@@ -753,19 +755,63 @@ const canonicalTemporaryRoot = fs.realpathSync(os.tmpdir());
   }
 }
 
-// The intentionally bad Rscript fixture is child-local. A following ordinary
-// launch explicitly removes it without mutating the caller's environment.
+// The V6 Agent fixture is isolated from the operator's Rho home, contains no
+// literal credential, and points at a run-specific environment name that the
+// child launch always removes.
 {
-  const parentEnvironment = { KEEP_ME: "yes", RHO_RSCRIPT: "/caller/rscript" };
-  const bad = acceptanceLaunchEnvironment("/tmp/rho-acceptance", {
+  const temporary = fs.mkdtempSync(path.join(canonicalTemporaryRoot, "rho-agent-config-"));
+  try {
+    const expectedEnvironmentName = acceptanceMissingCredentialEnvironmentName(temporary);
+    const fixture = createHermeticAgentConfig(temporary);
+    assert.equal(fixture.rhoHome, path.join(temporary, "rho-home"));
+    assert.equal(fixture.configPath, path.join(fixture.rhoHome, "config.yaml"));
+    assert.equal(fixture.credentialEnvironmentName, expectedEnvironmentName);
+    const yaml = fs.readFileSync(fixture.configPath, "utf8");
+    assert.match(yaml, /^schema_version: 6$/mu);
+    assert.match(yaml, /^revision: 1$/mu);
+    assert.match(yaml, /^  - capability: agent\.chat$/mu);
+    assert.match(yaml, new RegExp(`^    api_key_env: ${expectedEnvironmentName}$`, "mu"));
+    assert.doesNotMatch(yaml, /^\s*api_key:/mu, "the fixture must not persist a literal credential");
+    if (process.platform !== "win32") {
+      assert.equal(fs.statSync(fixture.rhoHome).mode & 0o777, 0o700);
+      assert.equal(fs.statSync(fixture.configPath).mode & 0o777, 0o600);
+    }
+    assert.throws(
+      () => createHermeticAgentConfig(temporary),
+      /hermetic Rho home already exists; refusing reuse/,
+      "an acceptance run must not reuse or overwrite a canonical config fixture",
+    );
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
+}
+
+// The intentionally bad Rscript fixture and missing Agent credential are
+// child-local. A following ordinary launch must not mutate its source env.
+{
+  const output = "/tmp/rho-acceptance";
+  const missingCredentialEnvironmentName = acceptanceMissingCredentialEnvironmentName(output);
+  const parentEnvironment = {
+    KEEP_ME: "yes",
+    RHO_RSCRIPT: "/caller/rscript",
+    [missingCredentialEnvironmentName]: "ambient-secret-must-not-survive",
+  };
+  const bad = acceptanceLaunchEnvironment(output, {
     parentEnvironment,
     rscript: process.execPath,
   });
-  const normal = acceptanceLaunchEnvironment("/tmp/rho-acceptance", { parentEnvironment });
+  const normal = acceptanceLaunchEnvironment(output, { parentEnvironment });
   assert.equal(bad.RHO_RSCRIPT, process.execPath);
   assert.equal(normal.RHO_RSCRIPT, "/caller/rscript");
+  assert.equal(normal.RHO_HOME, "/tmp/rho-acceptance/rho-home");
   assert.equal(normal.KEEP_ME, "yes");
+  assert.equal(normal[missingCredentialEnvironmentName], undefined);
   assert.equal(parentEnvironment.RHO_RSCRIPT, "/caller/rscript", "launch env construction must not mutate its source");
+  assert.equal(
+    parentEnvironment[missingCredentialEnvironmentName],
+    "ambient-secret-must-not-survive",
+    "credential scrubbing must not mutate the caller's environment",
+  );
 }
 
 function evidenceRecord(runDirectory, { scenarios = [], gates = [], error = null } = {}) {

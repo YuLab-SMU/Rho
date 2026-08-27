@@ -807,6 +807,38 @@
     border-right: var(--rho-border);
     background: var(--rho-panel);
   }
+  .rho-settings-config-store {
+    display: grid;
+    min-width: 0;
+    gap: var(--rho-space-2);
+    padding: var(--rho-space-3);
+    border: var(--rho-border);
+    border-radius: var(--rho-radius-1);
+    color: var(--rho-ink-2);
+    background: var(--rho-paper);
+    font-size: var(--rho-text-ui);
+  }
+  .rho-settings-config-store > header {
+    display: flex;
+    min-width: 0;
+    align-items: start;
+    justify-content: space-between;
+    gap: var(--rho-space-3);
+  }
+  .rho-settings-config-store > header > div { display: grid; min-width: 0; gap: var(--rho-space-1); }
+  .rho-settings-config-store > header strong { color: var(--rho-ink); }
+  .rho-settings-config-store > header code,
+  .rho-settings-config-permissions code { overflow-wrap: anywhere; color: var(--rho-muted); font-size: var(--rho-text-caption); }
+  .rho-settings-config-store > header > span { flex: 0 0 auto; color: var(--rho-muted); font-size: var(--rho-text-caption); }
+  .rho-settings-config-store > p { margin: 0; line-height: 1.5; }
+  .rho-settings-config-store-missing,
+  .rho-settings-config-store-malformed,
+  .rho-settings-config-store-unsupported_schema_version,
+  .rho-settings-config-store-home_unavailable { border-left: var(--rho-border-strong); border-left-color: var(--rho-warn); }
+  .rho-settings-config-permissions { display: grid; gap: var(--rho-space-2); padding-top: var(--rho-space-2); border-top: var(--rho-border); }
+  .rho-settings-config-permissions > strong { color: var(--rho-danger); }
+  .rho-settings-config-permissions ul { display: grid; gap: var(--rho-space-1); margin: 0; padding-left: var(--rho-space-5); }
+  .rho-settings-config-permissions button { width: fit-content; }
   .rho-settings-providers-detail {
     display: grid;
     min-width: min(100%, var(--rho-context-min));
@@ -874,6 +906,7 @@
   .rho-settings-inline-credential label { color: var(--rho-ink-2); font-size: var(--rho-text-ui); font-weight: var(--rho-weight-medium); }
   .rho-settings-inline-credential > div { display: flex; min-width: 0; flex-wrap: wrap; gap: var(--rho-space-2); }
   .rho-settings-inline-credential input { min-width: min(100%, var(--rho-context-min)); flex: 1 1 var(--rho-context-min); }
+  .rho-settings-inline-credential select { width: min(100%, var(--rho-nav-max)); min-height: var(--rho-target-min); }
   .rho-settings-inline-credential small { color: var(--rho-muted); line-height: 1.4; }
   .rho-settings-secret-row { display: flex; min-width: 0; flex-wrap: wrap; gap: var(--rho-space-2); }
   .rho-settings-secret-row .rho-settings-secret-mask { min-width: min(100%, var(--rho-context-min)); flex: 1 1 var(--rho-context-min); }

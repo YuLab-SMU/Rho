@@ -404,10 +404,11 @@ describe("Studio Agent Surface", () => {
       await settle();
     });
     expect(setCapacity).toHaveBeenCalledWith({
-      model_id: "mock-profile",
-      expected_revision: 1,
-      context_window_tokens: 65_536,
-      reserved_output_tokens: 8_192,
+      modelId: "mock-profile",
+      expectedRevision: 1,
+      expectedConfigSnapshotId: "mock-config-snapshot-1",
+      contextWindowTokens: 65_536,
+      reservedOutputTokens: 8_192,
     });
   });
 
@@ -423,15 +424,20 @@ describe("Studio Agent Surface", () => {
     };
     let current = { ...base, models: [...base.models, alternate] };
     transport.loadAgentLlmSettings = vi.fn(async () => structuredClone(current));
-    transport.selectAgentChatModel = vi.fn(async (modelId, expectedRevision) => {
-      expect(expectedRevision).toBe(current.revision);
+    transport.selectAgentChatModel = vi.fn(async (request) => {
+      expect(request.expectedRevision).toBe(current.revision);
+      expect(request.expectedConfigSnapshotId).toBe(current.config_store.config_snapshot_id);
       current = {
         ...current,
         revision: current.revision + 1,
-        selected_model_id: modelId,
+        config_store: {
+          ...current.config_store,
+          config_snapshot_id: `${current.config_store.config_snapshot_id}:select`,
+        },
+        selected_model_id: request.modelId,
         capability_routes: current.capability_routes.map((route) =>
           route.capability === "agent.chat"
-            ? { ...route, model_id: modelId, model_display_name: "Alternate model" }
+            ? { ...route, model_id: request.modelId, model_display_name: "Alternate model" }
             : route),
       };
       return structuredClone(current);
@@ -452,7 +458,11 @@ describe("Studio Agent Surface", () => {
       .find((button) => button.textContent!.includes("Alternate model"))!;
     await click(option);
 
-    expect(transport.selectAgentChatModel).toHaveBeenCalledWith("mock-profile-alternate", base.revision);
+    expect(transport.selectAgentChatModel).toHaveBeenCalledWith({
+      modelId: "mock-profile-alternate",
+      expectedRevision: base.revision,
+      expectedConfigSnapshotId: base.config_store.config_snapshot_id,
+    });
     expect(menu.open).toBe(false);
     expect(menu.querySelector("summary")!.textContent).toContain("Alternate model");
     expect(container.querySelector(".rho-agent-context-preview")).toBeNull();

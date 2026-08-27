@@ -5064,10 +5064,11 @@ describe("Studio foundation app", () => {
       await settle();
     });
     expect(saveCapacity).toHaveBeenCalledWith({
-      model_id: "mock-profile",
-      expected_revision: 1,
-      context_window_tokens: 131_072,
-      reserved_output_tokens: 8_192,
+      modelId: "mock-profile",
+      expectedRevision: 1,
+      expectedConfigSnapshotId: "mock-config-snapshot-1",
+      contextWindowTokens: 131_072,
+      reservedOutputTokens: 8_192,
     });
     expect(capacity.textContent).toContain("user declared");
 

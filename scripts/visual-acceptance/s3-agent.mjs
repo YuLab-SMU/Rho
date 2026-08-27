@@ -1,14 +1,14 @@
 // S3: one bounded, read-only Agent Ask through the current agent.chat route.
 //
-// Credential availability is detected through the product path, not an
-// operator assertion or a secret-bearing environment dump. The scenario first
-// renders the Agent surface, reviews the context for one Ask-mode prompt, and
-// submits that prompt. A precise missing-credential / unavailable-credential-
-// store outcome becomes an auditable SKIP with the terminal status and bounded,
-// redacted product error. Authentication rejection, quota, network, endpoint,
-// model, and other product errors stay failures. A usable credential therefore
-// exercises one real restricted turn; an absent credential never becomes a
-// fabricated pass.
+// Agent availability is detected through the product path, not an operator
+// assertion or a secret-bearing environment dump. The scenario first renders
+// the Agent surface, reviews the context for one Ask-mode prompt, and submits
+// that prompt through a canonical V6 config and agent.chat route. The fixture's
+// declared credential environment name is deliberately absent, so only a
+// precise missing-credential / unavailable-credential-source outcome becomes
+// an auditable SKIP with bounded, redacted product evidence. Authentication
+// rejection, quota, network, endpoint, malformed configuration, and other
+// product errors stay failures. Absence never becomes a fabricated pass.
 //
 // This module is intentionally self-contained (no helpers.mjs import) because
 // helpers.mjs is owned by another parallel lane.
@@ -153,17 +153,42 @@ function terminalStatus(turn) {
   return matched?.[1] ?? "unknown";
 }
 
-function missingCredentialReason(message) {
+function unavailableCredentialReason(message) {
   const text = String(message);
   const missing = [
-    /credential was not received from the system credential store/i,
+    // The rendered failed-turn detail is length-bounded and can end mid-word;
+    // match the stable product prefix without requiring the clipped suffix.
+    /credential was not received from the system credent/i,
     /system credential store is unavailable/i,
     /provider credential is missing/i,
     /no api key is available/i,
     /api key (?:is )?(?:missing|not configured|not available|not detected)/i,
     /credential (?:is )?(?:missing|not configured|not available|not detected)/i,
   ].find((pattern) => pattern.test(text));
-  return missing == null ? null : redactEvidence(text);
+  if (missing != null) {
+    return {
+      category: "credential_not_available",
+      credential_state: "not_available",
+      configuration_state: "available",
+      evidence: redactEvidence(text),
+    };
+  }
+  return null;
+}
+
+function unavailableDetection(message, evidenceSource, extra = {}) {
+  const reason = unavailableCredentialReason(message);
+  if (reason == null) return null;
+  return {
+    agent_state: "not_available",
+    credential_state: reason.credential_state,
+    configuration_state: reason.configuration_state,
+    unavailable_category: reason.category,
+    evidence_source: evidenceSource,
+    terminal_status: "not_started",
+    product_error: reason.evidence,
+    ...extra,
+  };
 }
 
 async function waitForRestrictedAsk(ctx, beforeTurnKeys, previousActionError) {
@@ -197,15 +222,11 @@ async function runCredentialDetection(ctx) {
     return null;
   }, { timeoutMs: 60_000 });
   if (context.error) {
-    const missing = missingCredentialReason(context.error);
-    if (missing != null) {
-      return {
-        credential_state: "not_available",
-        evidence_source: "current agent.chat context resolution",
-        terminal_status: "not_started",
-        product_error: missing,
-      };
-    }
+    const unavailable = unavailableDetection(
+      context.error,
+      "current agent.chat context resolution",
+    );
+    if (unavailable != null) return unavailable;
     throw new AssertionFailure(`Agent context review failed: ${redactEvidence(context.error)}`);
   }
 
@@ -217,16 +238,12 @@ async function runCredentialDetection(ctx) {
 
   const outcome = await waitForRestrictedAsk(ctx, beforeTurnKeys, previousActionError);
   if (outcome.kind === "submission_error") {
-    const missing = missingCredentialReason(outcome.message);
-    if (missing != null) {
-      return {
-        credential_state: "not_available",
-        evidence_source: "current agent.chat turn admission",
-        terminal_status: "not_started",
-        context_preview: truncate(context.preview, 300),
-        product_error: missing,
-      };
-    }
+    const unavailable = unavailableDetection(
+      outcome.message,
+      "current agent.chat turn admission",
+      { context_preview: truncate(context.preview, 300) },
+    );
+    if (unavailable != null) return unavailable;
     throw new AssertionFailure(`Agent Ask submission failed: ${redactEvidence(outcome.message)}`);
   }
 
@@ -238,7 +255,9 @@ async function runCredentialDetection(ctx) {
       throw new AssertionFailure("restricted Agent Ask completed but rendered no final answer");
     }
     return {
+      agent_state: "usable",
       credential_state: "usable",
+      configuration_state: "available",
       evidence_source: "completed restricted Ask on current agent.chat route",
       terminal_status: status,
       context_preview: truncate(context.preview, 300),
@@ -246,16 +265,15 @@ async function runCredentialDetection(ctx) {
       final_answer: truncate(finalAnswer, 500),
     };
   }
-  const missing = missingCredentialReason(outcome.terminal.text);
-  if (missing != null) {
-    return {
-      credential_state: "not_available",
-      evidence_source: "current agent.chat terminal turn",
+  const unavailable = unavailableDetection(
+    outcome.terminal.text,
+    "current agent.chat terminal turn",
+    {
       terminal_status: status,
       context_preview: truncate(context.preview, 300),
-      product_error: missing,
-    };
-  }
+    },
+  );
+  if (unavailable != null) return unavailable;
   throw new AssertionFailure(
     `restricted Agent Ask ended ${status}: ${redactEvidence(outcome.terminal.text)}`,
   );
@@ -313,13 +331,16 @@ export default async function s3(ctx) {
     detection = await runCredentialDetection(ctx);
     return {
       ...detection,
-      detection_contract: "one Ask-mode prompt; no tools, code execution, file mutation, credential value, or ambient environment inspection",
+      detection_contract: "fresh isolated Rho home with a canonical V6 agent.chat route and an intentionally absent declared credential; one Ask-mode prompt; no tools, code execution, file mutation, credential value, or ambient environment inspection",
     };
   });
 
-  if (detection?.credential_state !== "usable") {
+  if (detection?.agent_state !== "usable") {
     const reason = [
-      "current agent.chat credential is not available",
+      "current agent.chat credential is not available in the hermetic acceptance home",
+      `category=${detection?.unavailable_category ?? "unknown"}`,
+      `configuration=${detection?.configuration_state ?? "unknown"}`,
+      `credential=${detection?.credential_state ?? "unknown"}`,
       `source=${detection?.evidence_source ?? "unknown"}`,
       `terminal=${detection?.terminal_status ?? "unknown"}`,
       `evidence=${detection?.product_error ?? "no credential evidence returned"}`,

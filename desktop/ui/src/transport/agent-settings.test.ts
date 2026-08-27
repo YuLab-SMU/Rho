@@ -13,7 +13,7 @@ import {
 import { createMockUiKernelTransport } from "./mock";
 
 const settings = {
-  schema_version: 5,
+  schema_version: 6,
   revision: 9,
   selected_model_id: "model:fixture",
   providers: [{
@@ -25,11 +25,13 @@ const settings = {
     api_key_required: true,
     base_url: "https://example.invalid/v1",
     base_url_env: null,
-    wire_api: "openai",
+    wire_api: "chat_completions",
     disable_stream_options: false,
-    credential_source: "rho_vault",
     credential_status: "unchecked",
-    credential_effective_source: "unchecked",
+    credential_effective_source: "not_configured",
+    env_shadows_file: false,
+    session_credential_present: false,
+    config_file_credential_present: false,
     effective_base_url: "https://example.invalid/v1",
     base_url_source: "configured",
   }],
@@ -39,9 +41,17 @@ const settings = {
     display_name: "Fixture Model",
     model_id: "fixture-model",
     enabled: true,
-    model_type: { value: "language", source: "catalog" },
+    model_type: { value: "language", source: "aisdk_catalog" },
     capabilities: {
-      function_call: { value: "supported", source: "catalog" },
+      function_call: { value: "yes", source: "aisdk_catalog" },
+      reasoning: { value: "unknown", source: "unknown" },
+      vision_input: { value: "unknown", source: "unknown" },
+      image_output: { value: "unknown", source: "unknown" },
+      image_edit: { value: "unknown", source: "unknown" },
+      audio_input: { value: "unknown", source: "unknown" },
+      audio_output: { value: "unknown", source: "unknown" },
+      structured_output: { value: "unknown", source: "unknown" },
+      web_search: { value: "unknown", source: "unknown" },
     },
     context_window_tokens: 128_000,
     reserved_output_tokens: 8_192,
@@ -57,7 +67,7 @@ const settings = {
     display_name: "Fixture Model",
     provider_display_name: "Fixture Provider",
     selector_status: "ready",
-    tool_calling: "supported",
+    tool_calling: "yes",
     act_enabled: true,
   },
   capability_routes: [{
@@ -79,14 +89,24 @@ const settings = {
     path: "/Users/fixture/.Renviron",
     source: "not_used_for_agent_credentials",
   },
+  config_store: {
+    home_path: "/Users/fixture/.rho",
+    config_path: "/Users/fixture/.rho/config.yaml",
+    status: "loaded",
+    detail: null,
+    found_schema_version: 6,
+    config_snapshot_id: "config-snapshot:9",
+    permission_issues: [],
+  },
   validation_error: null,
 } satisfies AgentLlmSettingsView;
 
 const request = {
-  model_id: settings.selected_model_id,
-  expected_revision: settings.revision,
-  context_window_tokens: 262_144,
-  reserved_output_tokens: 16_384,
+  modelId: settings.selected_model_id,
+  expectedRevision: settings.revision,
+  expectedConfigSnapshotId: settings.config_store.config_snapshot_id,
+  contextWindowTokens: 262_144,
+  reservedOutputTokens: 16_384,
 } satisfies AgentContextCapacityRequest;
 
 describe("Agent settings generated transport", () => {
@@ -100,7 +120,16 @@ describe("Agent settings generated transport", () => {
     );
 
     await expect(transport.loadAgentLlmSettings()).resolves.toBe(settings);
-    await expect(transport.selectAgentChatModel("model:alternate", 9)).resolves.toBe(settings);
+    await expect(transport.repairAgentConfigPermissions({
+      expectedConfigPath: settings.config_store.config_path!,
+      expectedRevision: settings.revision,
+      expectedConfigSnapshotId: settings.config_store.config_snapshot_id,
+    })).resolves.toBe(settings);
+    await expect(transport.selectAgentChatModel({
+      modelId: "model:alternate",
+      expectedRevision: 9,
+      expectedConfigSnapshotId: "config-snapshot:9",
+    })).resolves.toBe(settings);
     await expect(transport.setAgentContextCapacity(request)).resolves.toBe(settings);
     const added = buildAddedModelProfile({
       providerId: "provider:fixture",
@@ -118,34 +147,66 @@ describe("Agent settings generated transport", () => {
       last_test: null,
     });
     expect(Object.keys(added.capabilities).sort()).toEqual([...MODEL_CAPABILITY_NAMES].sort());
-    await expect(transport.saveModel(added)).resolves.toBe(settings);
-    await expect(transport.deleteModel("model-fixture-model")).resolves.toBe(settings);
+    await expect(transport.saveModel({
+      model: added,
+      expectedRevision: 9,
+      expectedConfigSnapshotId: "config-snapshot:9",
+    })).resolves.toBe(settings);
+    await expect(transport.deleteModel({
+      modelId: "model-fixture-model",
+      replacementModelId: null,
+      expectedRevision: 9,
+      expectedConfigSnapshotId: "config-snapshot:9",
+    })).resolves.toBe(settings);
     await expect(transport.setModelContextCapacity(request)).resolves.toBe(settings);
     await expect(transport.declareModelCapability({
-      model_id: "model:fixture",
-      expected_revision: 9,
+      modelId: "model:fixture",
+      expectedRevision: 9,
+      expectedConfigSnapshotId: "config-snapshot:9",
       capability: "vision_input",
       value: "yes",
     })).resolves.toBe(settings);
     expect(calls).toEqual([
       { command: "agent_llm_settings" },
       {
+        command: "agent_llm_repair_config_permissions",
+        args: { request: {
+          expectedConfigPath: "/Users/fixture/.rho/config.yaml",
+          expectedRevision: 9,
+          expectedConfigSnapshotId: "config-snapshot:9",
+        } },
+      },
+      {
         command: "agent_llm_select_model",
-        args: { request: { modelId: "model:alternate", expectedRevision: 9 } },
+        args: { request: {
+          modelId: "model:alternate",
+          expectedRevision: 9,
+          expectedConfigSnapshotId: "config-snapshot:9",
+        } },
       },
       { command: "agent_llm_set_context_capacity", args: { request } },
-      { command: "agent_llm_save_model", args: { model: added } },
+      { command: "agent_llm_save_model", args: { request: {
+        model: added,
+        expectedRevision: 9,
+        expectedConfigSnapshotId: "config-snapshot:9",
+      } } },
       {
         command: "agent_llm_delete_model",
-        args: { request: { model_id: "model-fixture-model", replacement_model_id: null } },
+        args: { request: {
+          modelId: "model-fixture-model",
+          replacementModelId: null,
+          expectedRevision: 9,
+          expectedConfigSnapshotId: "config-snapshot:9",
+        } },
       },
       { command: "agent_llm_set_context_capacity", args: { request } },
       {
         command: "agent_llm_declare_model_capability",
         args: {
           request: {
-            model_id: "model:fixture",
-            expected_revision: 9,
+            modelId: "model:fixture",
+            expectedRevision: 9,
+            expectedConfigSnapshotId: "config-snapshot:9",
             capability: "vision_input",
             value: "yes",
           },
@@ -159,7 +220,11 @@ describe("Agent settings generated transport", () => {
       throw new Error("Model settings changed while this editor was open");
     });
     await expect(transport.setAgentContextCapacity(request)).rejects.toThrow("settings changed");
-    await expect(transport.selectAgentChatModel("model:fixture", 8)).rejects.toThrow("settings changed");
+    await expect(transport.selectAgentChatModel({
+      modelId: "model:fixture",
+      expectedRevision: 8,
+      expectedConfigSnapshotId: "config-snapshot:9",
+    })).rejects.toThrow("settings changed");
   });
 
   it("keeps the mock presentation safe and assignable to the narrow facet", async () => {
