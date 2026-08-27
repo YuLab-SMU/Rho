@@ -294,6 +294,7 @@ async fn start_agent_turn(
     app: AppHandle,
     state: &AppState,
 ) -> Result<AgentTurnStartResponse, String> {
+    crate::commands::agent_events::ensure_agent_turn_event_forwarder(&app, state).await;
     if prompt.trim().is_empty() {
         return Err("Agent prompt is empty".to_string());
     }

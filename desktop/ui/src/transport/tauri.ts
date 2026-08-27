@@ -7,6 +7,7 @@ import type {
 } from "./types";
 import { invalidationEvents } from "./invalidation-contract";
 import { createTauriAgentConversationTransport } from "./agent-conversation";
+import { createTauriAgentEventsTransport } from "./agent-events";
 import { createTauriAgentExecutionTransport } from "./agent-execution";
 import { createTauriAgentRuntimeTransport } from "./agent-runtime";
 import { createTauriAgentSettingsTransport } from "./agent-settings";
@@ -250,6 +251,7 @@ export function createTauriUiKernelTransport(
     ...createTauriAgentConversationTransport(invoke),
     ...createTauriAgentTurnDetailTransport(invoke),
     ...createTauriAgentExecutionTransport(invoke),
+    ...createTauriAgentEventsTransport(listen),
     ...agentRuntimeTransport,
     ...createTauriAgentSettingsTransport(invoke),
     ...createTauriAgentFileTransport(invoke),

@@ -7,6 +7,7 @@ import type {
   AgentLlmSettingsView,
   AgentRuntimeDiagnostics,
   AgentTurnDetail,
+  AgentTurnEventFrame,
   AgentTurnSummary,
   RuntimeOutputReference,
   SurfaceInstance,
@@ -133,6 +134,80 @@ export function useAgentSurface({
     const unsubscribe = transport.subscribeAgentInvalidated(() => void load());
     return () => { active = false; unsubscribe(); };
   }, [refresh, reportError, transport]);
+
+  // Live turn frames: apply projections incrementally; the store stays the
+  // source of truth, so gaps, unknown turns, and terminal updates reconcile
+  // through the existing refresh path (throttled).
+  const frameRefreshThrottleRef = useRef(0);
+  const requestFrameRefresh = useCallback(() => {
+    const now = Date.now();
+    if (now - frameRefreshThrottleRef.current < 400) return;
+    frameRefreshThrottleRef.current = now;
+    void refresh().catch(reportError);
+  }, [refresh, reportError]);
+
+  useEffect(() => {
+    const applyFrame = (frame: AgentTurnEventFrame) => {
+      let refreshNeeded = false;
+      const update = frame.turn_update;
+      if (update != null) {
+        if (update.status !== "running" && update.status !== "waiting") refreshNeeded = true;
+        setTurns((current) => {
+          let found = false;
+          const next = current.map((turn) => {
+            if (turn.turn_id !== frame.turn_id) return turn;
+            found = true;
+            return {
+              ...turn,
+              status: update.status as AgentTurnSummary["status"],
+              final_message: update.final_message ?? turn.final_message,
+              error_message: update.error_message,
+              terminal_reason: update.terminal_reason,
+            };
+          });
+          if (!found) refreshNeeded = true;
+          return next;
+        });
+        setDetails((current) => {
+          const detail = current.get(frame.turn_id);
+          if (detail == null) return current;
+          const next = new Map(current);
+          next.set(frame.turn_id, {
+            ...detail,
+            turn: {
+              ...detail.turn,
+              status: update.status as AgentTurnSummary["status"],
+              final_message: update.final_message ?? detail.turn.final_message,
+              error_message: update.error_message,
+              terminal_reason: update.terminal_reason,
+            },
+          });
+          return next;
+        });
+      }
+      const incoming = frame.event;
+      if (incoming != null) {
+        setDetails((current) => {
+          const detail = current.get(frame.turn_id);
+          if (detail == null) {
+            refreshNeeded = true;
+            return current;
+          }
+          if (detail.events.some((event) => event.id === incoming.id)) return current;
+          const maxId = detail.events.reduce((max, event) => Math.max(max, event.id), 0);
+          if (incoming.id > maxId + 1) {
+            refreshNeeded = true;
+            return current;
+          }
+          const next = new Map(current);
+          next.set(frame.turn_id, { ...detail, events: [...detail.events, incoming] });
+          return next;
+        });
+      }
+      if (refreshNeeded) requestFrameRefresh();
+    };
+    return transport.subscribeAgentTurnEvents(applyFrame);
+  }, [transport, requestFrameRefresh]);
 
   useEffect(() => {
     let active = true;

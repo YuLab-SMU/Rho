@@ -204,6 +204,12 @@ export type {
 } from "./agent-settings";
 
 export type {
+  AgentEventsTransport,
+  AgentTurnEventFrame,
+  AgentTurnUpdateFrame,
+} from "./agent-events";
+
+export type {
   AgentFileApplyRequest,
   AgentFileMutationResponse,
   AgentFileTransport,
@@ -311,7 +317,7 @@ export interface WorkspacePreparation {
   readonly issue: WorkspacePreparationIssue | null;
 }
 
-export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTransport, ProfileTransport, AgentConversationTransport, AgentTurnDetailTransport, AgentExecutionTransport, AgentRuntimeTransport, AgentSettingsTransport, AgentFileTransport, PluginSurfaceTransport, ProjectTransport, KernelTransport, CheckTransport, WorkbenchProjectionTransport {
+export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTransport, ProfileTransport, AgentConversationTransport, AgentTurnDetailTransport, AgentExecutionTransport, AgentEventsTransport, AgentRuntimeTransport, AgentSettingsTransport, AgentFileTransport, PluginSurfaceTransport, ProjectTransport, KernelTransport, CheckTransport, WorkbenchProjectionTransport {
   readonly source: UiSnapshotSource;
   prepareWorkspace(chooseRscript?: boolean): Promise<WorkspacePreparation>;
   subscribeInvalidated(listener: () => void): Unsubscribe;

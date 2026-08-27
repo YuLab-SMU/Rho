@@ -568,4 +568,81 @@ mod tests {
             1
         );
     }
+
+    #[tokio::test]
+    async fn agent_turn_frames_emit_after_durable_writes() {
+        let directory = TempDir::new().unwrap();
+        let database = directory.path().join("rho.sqlite");
+        let executor = StoreExecutor::open(&database).await.unwrap();
+        let repository = executor.agent_repository();
+        let mut frames = executor.agent_turn_events().subscribe();
+
+        repository
+            .create_turn_with_conversation(conversation("D:/projects/A"), turn("D:/projects/A"))
+            .await
+            .unwrap();
+        repository
+            .append_turn_event(event("turn-a", "First activity"))
+            .await
+            .unwrap();
+        repository
+            .finish_turn(AgentTurnFinish {
+                turn_id: "turn-a".to_string(),
+                status: "completed".to_string(),
+                terminal_reason: Some("completed".to_string()),
+                workspace_id_after: Some("workspace-a".to_string()),
+                state_revision_after: Some(2),
+                project_revision_after: Some(3),
+                final_message: Some("All done".to_string()),
+                error_message: None,
+            })
+            .await
+            .unwrap();
+
+        let first = frames.try_recv().unwrap();
+        assert_eq!(first.turn_id, "turn-a");
+        let event = first.event.expect("event frame carries the persisted record");
+        assert_eq!(event.title, "First activity");
+        assert!(event.id > 0);
+        assert!(!first.payload_truncated);
+
+        let second = frames.try_recv().unwrap();
+        assert_eq!(second.turn_id, "turn-a");
+        let update = second.turn_update.expect("finish frame carries the turn update");
+        assert_eq!(update.status, "completed");
+        assert_eq!(update.final_message.as_deref(), Some("All done"));
+        assert_eq!(update.terminal_reason.as_deref(), Some("completed"));
+    }
+
+    #[tokio::test]
+    async fn agent_turn_frame_bounds_large_fields_but_store_keeps_truth() {
+        let directory = TempDir::new().unwrap();
+        let database = directory.path().join("rho.sqlite");
+        let executor = StoreExecutor::open(&database).await.unwrap();
+        let repository = executor.agent_repository();
+        let mut frames = executor.agent_turn_events().subscribe();
+
+        repository
+            .create_turn_with_conversation(conversation("D:/projects/A"), turn("D:/projects/A"))
+            .await
+            .unwrap();
+        let mut large = event("turn-a", "Large payload");
+        large.body = Some("b".repeat(6_000));
+        large.code = Some("c".repeat(5_000));
+        repository.append_turn_event(large).await.unwrap();
+
+        let frame = frames.try_recv().unwrap();
+        assert!(frame.payload_truncated);
+        let event = frame.event.unwrap();
+        assert_eq!(event.body.as_deref().map(str::len), Some(4_096));
+        assert_eq!(event.code.as_deref().map(str::len), Some(4_096));
+
+        let persisted = repository
+            .get_turn_detail("D:/projects/A".to_string(), "turn-a".to_string())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(persisted.events[0].body.as_deref().map(str::len), Some(6_000));
+        assert_eq!(persisted.events[0].code.as_deref().map(str::len), Some(5_000));
+    }
 }

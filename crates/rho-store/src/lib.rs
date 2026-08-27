@@ -1650,7 +1650,7 @@ where
                 "SELECT id, turn_id, timestamp, event_type, title, body, status, tool, request_id, code, details_json
                  FROM agent_turn_events WHERE id = ?1",
                 params![event_id],
-                decode_agent_turn_event,
+                agent::decode_agent_turn_event,
             )
             .optional()
             .map_err(StoreError::from)

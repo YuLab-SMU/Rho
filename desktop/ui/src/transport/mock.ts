@@ -3,6 +3,7 @@ import { projectConsoleEvents } from "../app/console-output";
 import { projectLabel } from "./normalize";
 import { applySceneEdit, collectSceneInstances, reconcileStudio } from "./studio-model";
 import { applyVibePageMutation, exportVibePage } from "./vibe-model";
+import type { AgentTurnEventFrame } from "./agent-events";
 import type {
   AgentApprovalDecisionRequest,
   AgentConversationSummary,
@@ -137,6 +138,7 @@ export interface MockUiKernelTransport extends UiKernelTransport {
   publishResources(snapshot: ResourceRegistrySnapshot): void;
   publishUiProfile(snapshot: ProjectUiProfileSnapshot): void;
   queueRuntimeEvents(events: readonly RuntimeOutputEvent[]): void;
+  emitAgentTurnEvent(frame: AgentTurnEventFrame): void;
 }
 
 export function createMockUiKernelTransport(
@@ -536,6 +538,10 @@ export function createMockUiKernelTransport(
   const runtimeListeners = new Set<() => void>();
   const resourceListeners = new Set<() => void>();
   const agentListeners = new Set<() => void>();
+  const agentTurnEventListeners = new Set<(frame: AgentTurnEventFrame) => void>();
+  const emitAgentTurnEvent = (frame: AgentTurnEventFrame) => {
+    for (const listener of agentTurnEventListeners) listener(frame);
+  };
   const workbenchListeners = new Set<() => void>();
   const agentNow = "2026-08-22T12:00:00Z";
   const agentProjectRoot = current.project.display_path;
@@ -1235,6 +1241,118 @@ export function createMockUiKernelTransport(
     restored_root: null,
     restart_required: false,
   });
+  // Scripted live-turn demo (?agent_live_demo=1): a running turn grows
+  // activity rows and completes through the same frame channel the real
+  // broker drives, so preview and review runs can watch the live path.
+  if (search.get("agent_live_demo") === "1") {
+    const liveTurnId = "agent-turn:mock-live-1";
+    const liveStartedAt = new Date().toISOString();
+    const liveTurn: AgentTurnSummary = {
+      turn_id: liveTurnId,
+      conversation_id: "agent-conversation:mock-shared",
+      project_root: agentProjectRoot,
+      mode: "act",
+      status: "running",
+      started_at: liveStartedAt,
+      finished_at: null,
+      prompt_preview: "Profile the dataset live and report its shape",
+      model: "mock/provider-model",
+      workspace_id_before: "workspace:mock",
+      state_revision_before: 4,
+      project_revision_before: 1,
+      workspace_id_after: null,
+      state_revision_after: null,
+      project_revision_after: null,
+      final_message: null,
+      error_message: null,
+      pending_request_id: null,
+      retry_of_turn_id: null,
+      terminal_reason: null,
+    };
+    agentTurns.unshift(liveTurn);
+    agentDetails.set(liveTurnId, { turn: liveTurn, events: [], approvals: [], context_items: [] });
+    const liveConversationIndex = agentConversations.findIndex(
+      (candidate) => candidate.conversation_id === "agent-conversation:mock-shared",
+    );
+    if (liveConversationIndex >= 0) {
+      const conversation = agentConversations[liveConversationIndex]!;
+      agentConversations[liveConversationIndex] = {
+        ...conversation,
+        updated_at: liveStartedAt,
+        turn_count: conversation.turn_count + 1,
+        status: "running",
+        latest_turn_id: liveTurnId,
+        latest_mode: "act",
+        latest_prompt_preview: liveTurn.prompt_preview,
+        terminal_reason: null,
+      };
+    }
+    let liveEventId = 0;
+    const appendLiveEvent = (eventType: string, title: string, tool: string | null, code: string | null) => {
+      liveEventId += 1;
+      const detail = agentDetails.get(liveTurnId)!;
+      const record: AgentTurnEvent = {
+        id: liveEventId,
+        turn_id: liveTurnId,
+        timestamp: new Date().toISOString(),
+        event_type: eventType,
+        title,
+        body: null,
+        status: "completed",
+        tool,
+        request_id: null,
+        code,
+        details_json: "{}",
+      };
+      agentDetails.set(liveTurnId, { ...detail, events: [...detail.events, record] });
+      emitAgentTurnEvent({ turn_id: liveTurnId, event: record, turn_update: null, payload_truncated: false });
+      notifyAgent();
+    };
+    setTimeout(() => appendLiveEvent("tool.call_completed", "Read project metadata", "read_project_metadata", null), 900);
+    setTimeout(() => appendLiveEvent("tool.call_completed", "Run summary statistics", "execute_r_code", "summary(dataset)"), 1900);
+    setTimeout(() => {
+      const finishedAt = new Date().toISOString();
+      const finalMessage = "The dataset has 32 rows and 11 columns; no missing values in the keyed columns.";
+      const completedTurn: AgentTurnSummary = {
+        ...liveTurn,
+        status: "completed",
+        finished_at: finishedAt,
+        final_message: finalMessage,
+        workspace_id_after: "workspace:mock",
+        state_revision_after: 4,
+        project_revision_after: 1,
+        terminal_reason: "completed",
+      };
+      const turnIndex = agentTurns.findIndex((candidate) => candidate.turn_id === liveTurnId);
+      if (turnIndex >= 0) agentTurns[turnIndex] = completedTurn;
+      const detail = agentDetails.get(liveTurnId)!;
+      const finalEvent: AgentTurnEvent = {
+        id: 3,
+        turn_id: liveTurnId,
+        timestamp: finishedAt,
+        event_type: "agent.final_message",
+        title: "Rho",
+        body: finalMessage,
+        status: "completed",
+        tool: null,
+        request_id: null,
+        code: null,
+        details_json: "{}",
+      };
+      agentDetails.set(liveTurnId, { ...detail, turn: completedTurn, events: [...detail.events, finalEvent] });
+      const conversation = agentConversations[liveConversationIndex];
+      if (liveConversationIndex >= 0 && conversation != null) {
+        agentConversations[liveConversationIndex] = { ...conversation, status: "completed", updated_at: finishedAt, terminal_reason: "completed" };
+      }
+      emitAgentTurnEvent({
+        turn_id: liveTurnId,
+        event: finalEvent,
+        turn_update: { status: "completed", final_message: finalMessage, error_message: null, terminal_reason: "completed" },
+        payload_truncated: false,
+      });
+      notifyAgent();
+    }, 2900);
+  }
   return {
     source: "mock",
     async prepareWorkspace() {
@@ -2812,6 +2930,13 @@ export function createMockUiKernelTransport(
     subscribeAgentInvalidated(listener: () => void): Unsubscribe {
       agentListeners.add(listener);
       return () => agentListeners.delete(listener);
+    },
+    subscribeAgentTurnEvents(listener: (frame: AgentTurnEventFrame) => void): Unsubscribe {
+      agentTurnEventListeners.add(listener);
+      return () => agentTurnEventListeners.delete(listener);
+    },
+    emitAgentTurnEvent(frame: AgentTurnEventFrame): void {
+      emitAgentTurnEvent(frame);
     },
     async loadDomainSurface(surfaceId) {
       const fixtures: Readonly<Record<string, DomainSurfaceData["items"]>> = {

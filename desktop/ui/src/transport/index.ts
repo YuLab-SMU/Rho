@@ -68,6 +68,8 @@ export type {
   AgentLlmSettingsView,
   AgentModelContextCapacity,
   AgentTurnEvent,
+  AgentTurnEventFrame,
+  AgentTurnUpdateFrame,
   AgentTurnSummary,
   RunAgentRequest,
   RunAgentResponse,
