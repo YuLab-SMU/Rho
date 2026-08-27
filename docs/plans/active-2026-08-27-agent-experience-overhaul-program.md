@@ -302,3 +302,65 @@ Evidence:
   scripted live turn runs shows the "Queued · prompt · ×" row (composer
   already cleared); after the live turn completes, the queued item starts
   as a normal completed turn and the queue empties.
+
+## AGX-3 Contract: True Diff Review (payload-compatibility review — resolved)
+
+Mandatory stop 3 reviewed and resolved WITHOUT a serialized change:
+
+- The proposal payload (`rho.file_edit_proposal`) is unchanged; no
+  migration, no fixtures for new fields, no R-side filesystem authority.
+  Adding before-content to the payload was rejected: it would give the
+  model-facing R adapter new read authority and would freeze the diff
+  against proposal-time content anyway.
+- The review surface instead computes the diff against the CURRENT file
+  content — the honest "what would change if applied now" — through the
+  existing confined Resource read lane (`loadResources` → `resolveResource`
+  → `readResource` with `shared_document` consistency, the exact call shape
+  the apply path uses). The component already holds the full
+  `UiKernelTransport`, so no new command, prop, or broker surface is added.
+- Fallbacks (truthful copy, never silent): resource unavailable or not
+  ready → "Current content unavailable; showing the proposed content";
+  `create` operations → all-lines-added diff without a read; legacy
+  proposals behave identically because the before-content is read live, not
+  stored.
+- Bounds: diff rendering is line-based with hunk context (±3 lines); files
+  larger than the diff budget (2,000 lines before+after) fall back to the
+  raw proposed-content view with the reason stated.
+- No new dependency: the line diff is a compact in-repo implementation with
+  focused unit tests.
+
+## AGX-3 Implementation And Evidence (2026-08-27)
+
+Implemented as contracted (no serialized change, no new authority):
+
+- `desktop/ui/src/app/agent/diff.ts`: compact LCS line diff with ±3-line
+  hunks and the 2,000-total-line budget (over budget the caller falls back
+  with the reason shown); no new dependency.
+- View-model: `loadProposalDiff` fetches current content lazily through the
+  existing confined Resource lane (`loadResources` → `resolveResource` →
+  `readResource`/`shared_document`, the apply path's exact call shape),
+  cached per proposal key with loading/ready/unavailable states.
+- Review surface: each proposal row keeps the plain proposed-content view
+  until its disclosure opens (DOM text contract preserved), then swaps to
+  the hunk view — summary counts, `@@` headers, sign-led add/remove lines
+  with tint support. Append/create compute the after-state; selection-based
+  operations fall back to the proposed content with the reason stated;
+  unreadable files fall back the same way.
+- Mock/demo: the existing mock resource lane serves `analysis.R`, so the
+  review surface renders a real two-context-line plus two-add-line diff
+  with no fixture changes.
+
+Evidence:
+
+- `npm --prefix desktop run rsr:typecheck` and `rsr:lint`;
+- `agent/diff.test.ts`: 7 of 7 (all-add, all-remove, context, split/merge
+  hunks, trailing-newline, budget);
+- focused `AgentSurfaceView.test.tsx`: 17 of 17, adding the resource-lane
+  diff test (context lines from current content, proposal lines as adds);
+- full UI suite: 52 files, 353 tests passed, including the integration
+  lane's broker-path proposal test via the preserved pre-open text
+  contract;
+- `npm run rsr:build --prefix desktop`;
+- preview capture under `target/agx3-diff/`: timeline entry only, then the
+  open Diff disclosure shows `+2 −0`, `@@ -1 +1 @@`, two context lines, and
+  two sign-led add lines.

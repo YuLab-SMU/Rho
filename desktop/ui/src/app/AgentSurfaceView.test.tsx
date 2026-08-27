@@ -808,6 +808,19 @@ describe("Studio Agent Surface", () => {
     expect(queueRows().length).toBe(0);
   });
 
+  it("renders the proposal diff against current content through the resource lane", async () => {
+    const { container } = await renderAgent();
+    await click(container.querySelector(".rho-agent-files-entry")!);
+    await click(container.querySelector(".rho-agent-file-content > summary")!);
+    const diff = container.querySelector(".rho-agent-diff")!;
+    expect(diff).not.toBeNull();
+    expect(diff.querySelector(".rho-agent-diff-summary")!.textContent).toMatch(/^\+\d+ −\d+$/);
+    const contextLines = [...diff.querySelectorAll(".rho-agent-diff-context")].map((line) => line.textContent);
+    expect(contextLines.some((text) => text!.includes("library(ggplot2)"))).toBe(true);
+    const addedLines = [...diff.querySelectorAll(".rho-agent-diff-add")].map((line) => line.textContent);
+    expect(addedLines.some((text) => text!.includes("# Reviewed by Agent"))).toBe(true);
+  });
+
   it("shows the degraded banner with dependency diagnostics when the runtime is not ready", async () => {
     const { container } = await renderAgent({
       health: { state: "needs_attention", label: "Agent dependencies need attention", detail: "aisdk is incompatible." },

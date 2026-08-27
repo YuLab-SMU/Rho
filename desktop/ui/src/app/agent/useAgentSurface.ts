@@ -36,6 +36,11 @@ export interface AgentQueueItem {
   readonly queued_at: string;
 }
 
+export type AgentProposalDiffState =
+  | { readonly status: "loading" }
+  | { readonly status: "unavailable" }
+  | { readonly status: "ready"; readonly before: string };
+
 export interface AgentSurfaceViewProps {
   readonly instance: SurfaceInstance;
   readonly transport: UiKernelTransport;
@@ -89,6 +94,8 @@ export function useAgentSurface({
   const [modelSwitchBusy, setModelSwitchBusy] = useState(false);
   const [modelQuery, setModelQuery] = useState("");
   const [filesReviewOpen, setFilesReviewOpen] = useState(false);
+  const [proposalDiffs, setProposalDiffs] = useState<ReadonlyMap<string, AgentProposalDiffState>>(() => new Map());
+  const proposalDiffsRef = useRef(proposalDiffs);
   const [queue, setQueue] = useState<readonly AgentQueueItem[]>([]);
   const queueRef = useRef<readonly AgentQueueItem[]>(queue);
   const queueSequenceRef = useRef(0);
@@ -589,6 +596,59 @@ export function useAgentSurface({
       .catch(reportError)
       .finally(() => setBusy(false));
   };
+  const loadProposalDiff = async (turn: AgentTurnSummary, eventId: number, proposal: AgentFileProposal) => {
+    const key = proposalKey(turn.turn_id, eventId);
+    if (proposalDiffsRef.current.has(key)) return;
+    const store = (state: AgentProposalDiffState) => {
+      const next = new Map(proposalDiffsRef.current);
+      next.set(key, state);
+      proposalDiffsRef.current = next;
+      setProposalDiffs(next);
+    };
+    store({ status: "loading" });
+    try {
+      let before = "";
+      if (proposal.operation !== "create") {
+        const registry = await transport.loadResources();
+        const matches = (candidate: { readonly resource_provider_id: string; readonly resource_kind: string; readonly resource_id: string }) =>
+          candidate.resource_provider_id === "rho.project-files" &&
+          candidate.resource_kind === "project_file" &&
+          candidate.resource_id === proposal.path;
+        let descriptor = registry.resources.find(matches);
+        if (descriptor == null) {
+          const resolved = await transport.resolveResource({
+            project_id: registry.project_id,
+            resource_provider_id: "rho.project-files",
+            resource_kind: "project_file",
+            resource_id: proposal.path,
+            expected_project_revision: registry.project_revision,
+            expected_snapshot_revision: registry.snapshot_revision,
+          });
+          descriptor = resolved.resources.find(matches);
+        }
+        if (descriptor == null || descriptor.status !== "ready") {
+          store({ status: "unavailable" });
+          return;
+        }
+        const content = await transport.readResource({
+          target: {
+            project_id: registry.project_id,
+            resource_provider_id: descriptor.resource_provider_id,
+            resource_kind: descriptor.resource_kind,
+            resource_id: descriptor.resource_id,
+            expected_project_revision: registry.project_revision,
+            expected_resource_revision: descriptor.resource_revision,
+          },
+          consistency: "shared_document",
+        });
+        before = content.content;
+      }
+      store({ status: "ready", before });
+    } catch (error: unknown) {
+      reportError(error);
+      store({ status: "unavailable" });
+    }
+  };
   const clearRuntimeOutputContext = () => {
     setRuntimeOutputContext(null);
     setContextPreview(null);
@@ -673,6 +733,8 @@ export function useAgentSurface({
     queue,
     cancelQueued,
     moveQueuedUp,
+    proposalDiffs,
+    loadProposalDiff,
     allProposals,
     pendingProposals,
     proposalOutcomeFor,

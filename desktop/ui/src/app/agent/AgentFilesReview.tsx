@@ -1,5 +1,65 @@
+import { useMemo } from "react";
+
+import { computeLineDiff } from "./diff";
 import { proposalKey, type AgentProposalRef } from "./proposals";
 import type { AgentSurfaceVm } from "./useAgentSurface";
+
+function DiffView({ before, after }: {
+  readonly before: string;
+  readonly after: string;
+}) {
+  const diff = useMemo(() => computeLineDiff(before, after), [before, after]);
+  if (diff == null) return (<>
+    <p className="rho-agent-diff-note">This file is too large to diff here; showing the proposed content.</p>
+    <pre>{after}</pre>
+  </>);
+  if (diff.hunks.length === 0) return <p className="rho-agent-diff-note">No line changes.</p>;
+  return (
+    <div className="rho-agent-diff" role="group" aria-label="Proposed diff">
+      <div className="rho-agent-diff-summary">+{diff.additions} −{diff.removals}</div>
+      {diff.hunks.map((hunk, hunkIndex) => (
+        <div className="rho-agent-diff-hunk" key={hunkIndex}>
+          {hunkIndex > 0 && <div className="rho-agent-diff-gap" aria-hidden="true">⋮</div>}
+          <div className="rho-agent-diff-hunk-header">@@ -{hunk.beforeStart} +{hunk.afterStart} @@</div>
+          <div className="rho-agent-diff-lines">{hunk.lines.map((line, lineIndex) => (
+            <div className={`rho-agent-diff-line rho-agent-diff-${line.kind}`} key={lineIndex}>
+              <span className="rho-agent-diff-sign" aria-hidden="true">{line.kind === "add" ? "+" : line.kind === "remove" ? "−" : " "}</span>
+              <span className="rho-agent-diff-text">{line.text}</span>
+            </div>
+          ))}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ProposalDiff({ item, vm }: {
+  readonly item: AgentProposalRef;
+  readonly vm: AgentSurfaceVm;
+}) {
+  const { turn, event, proposal } = item;
+  const key = proposalKey(turn.turn_id, event.id);
+  const computable = proposal.operation === "append" || proposal.operation === "create";
+  const diffState = vm.proposalDiffs.get(key);
+  if (!computable) return (<>
+    <p className="rho-agent-diff-note">This operation depends on the editor selection, so the final content can only be shown as the proposed content.</p>
+    <pre>{proposal.content}</pre>
+  </>);
+  if (diffState == null) {
+    // Not yet opened: keep the plain proposed-content view (and its text in
+    // the DOM) until the user asks for the diff.
+    return <pre>{proposal.content}</pre>;
+  }
+  if (diffState.status === "loading") {
+    return <p className="rho-agent-diff-note">Loading current content…</p>;
+  }
+  if (diffState.status === "unavailable") return (<>
+    <p className="rho-agent-diff-note">Current content is unavailable; showing the proposed content.</p>
+    <pre>{proposal.content}</pre>
+  </>);
+  const after = proposal.operation === "append" ? diffState.before + proposal.content : proposal.content;
+  return <DiffView before={diffState.before} after={after} />;
+}
 
 function ProposalRow({ item, vm }: {
   readonly item: AgentProposalRef;
@@ -28,9 +88,11 @@ function ProposalRow({ item, vm }: {
           <button type="button" disabled={busy} onClick={undoProposal}>Undo applied edit</button>
         )}
       </header>
-      <details className="rho-agent-file-content">
-        <summary>Proposed content</summary>
-        <pre>{proposal.content}</pre>
+      <details className="rho-agent-file-content" onToggle={(toggleEvent) => {
+        if (toggleEvent.currentTarget.open) void vm.loadProposalDiff(turn, event.id, proposal);
+      }}>
+        <summary onClick={() => void vm.loadProposalDiff(turn, event.id, proposal)}>Diff</summary>
+        <ProposalDiff item={item} vm={vm} />
       </details>
     </section>
   );

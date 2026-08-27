@@ -478,3 +478,27 @@
   }
   section.rho-agent-surface .rho-agent-queue-actions button:hover:not(:disabled) { border-color: transparent; color: var(--rho-ink); background: var(--rho-fill-2); }
 }
+
+@layer surfaces {
+  /* Diff review: mono hunks, sign-led lines, tint only as support. */
+  section.rho-agent-surface .rho-agent-diff { margin-top: var(--rho-space-1); }
+  section.rho-agent-surface .rho-agent-diff-summary { color: var(--rho-muted); font: var(--rho-text-caption)/1.5 var(--rho-font-mono); }
+  section.rho-agent-surface .rho-agent-diff-hunk-header { color: var(--rho-muted); font: var(--rho-text-caption)/1.5 var(--rho-font-mono); }
+  section.rho-agent-surface .rho-agent-diff-gap { color: var(--rho-muted); text-align: center; }
+  section.rho-agent-surface .rho-agent-diff-lines {
+    margin: 0;
+    padding: var(--rho-space-1) 0;
+    border: var(--rho-border);
+    border-radius: var(--rho-radius-1);
+    background: var(--rho-paper);
+    font: var(--rho-text-ui)/1.5 var(--rho-font-mono);
+  }
+  section.rho-agent-surface .rho-agent-diff-line { display: flex; gap: var(--rho-space-1); min-width: 0; padding: 0 var(--rho-space-2); }
+  section.rho-agent-surface .rho-agent-diff-sign { flex: 0 0 auto; width: 1em; color: var(--rho-muted); }
+  section.rho-agent-surface .rho-agent-diff-text { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  section.rho-agent-surface .rho-agent-diff-add { background: var(--rho-ok-tint); }
+  section.rho-agent-surface .rho-agent-diff-add .rho-agent-diff-sign { color: var(--rho-ok); }
+  section.rho-agent-surface .rho-agent-diff-remove { background: var(--rho-danger-tint); }
+  section.rho-agent-surface .rho-agent-diff-remove .rho-agent-diff-sign { color: var(--rho-danger); }
+  section.rho-agent-surface .rho-agent-diff-note { margin: var(--rho-space-1) 0 0; color: var(--rho-muted); font-size: var(--rho-text-caption); }
+}
