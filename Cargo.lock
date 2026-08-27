@@ -4100,6 +4100,7 @@ dependencies = [
  "block2",
  "chacha20poly1305",
  "chrono",
+ "dirs",
  "flate2",
  "minisign-verify",
  "notify",
@@ -4121,6 +4122,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
+ "serde_norway",
  "sha2",
  "specta",
  "specta-typescript",
@@ -4643,6 +4645,19 @@ dependencies = [
  "serde",
  "serde_core",
  "zmij",
+]
+
+[[package]]
+name = "serde_norway"
+version = "0.9.42"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e408f29489b5fd500fab51ff1484fc859bb655f32c671f307dcd733b72e8168c"
+dependencies = [
+ "indexmap 2.14.0",
+ "itoa",
+ "ryu",
+ "serde",
+ "unsafe-libyaml-norway",
 ]
 
 [[package]]
@@ -5926,6 +5941,12 @@ dependencies = [
  "crypto-common 0.2.2",
  "ctutils",
 ]
+
+[[package]]
+name = "unsafe-libyaml-norway"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b39abd59bf32521c7f2301b52d05a6a2c975b6003521cbd0c6dc1582f0a22104"
 
 [[package]]
 name = "untrusted"
