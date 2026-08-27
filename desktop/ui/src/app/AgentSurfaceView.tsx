@@ -730,12 +730,15 @@ export function AgentSurfaceView({
                     <header className="rho-agent-decision-header">
                       <span className="rho-agent-decision-kind">Approval required</span>
                       <strong>{approval.tool}</strong>
+                      <div className="rho-agent-decision-actions">
+                        <button type="button" onClick={() => void transport.respondAgentApproval({ request_id: approval.request_id, decision: "approve", reason: null }).then(() => refresh()).catch(reportError)}>Approve</button>
+                        <button type="button" onClick={() => void transport.respondAgentApproval({ request_id: approval.request_id, decision: "reject", reason: "Rejected in Agent Surface" }).then(() => refresh()).catch(reportError)}>Reject</button>
+                      </div>
                     </header>
-                    <pre>{approval.code ?? approval.arguments_json}</pre>
-                    <div className="rho-agent-decision-actions">
-                      <button type="button" onClick={() => void transport.respondAgentApproval({ request_id: approval.request_id, decision: "approve", reason: null }).then(() => refresh()).catch(reportError)}>Approve</button>
-                      <button type="button" onClick={() => void transport.respondAgentApproval({ request_id: approval.request_id, decision: "reject", reason: "Rejected in Agent Surface" }).then(() => refresh()).catch(reportError)}>Reject</button>
-                    </div>
+                    <details className="rho-agent-approval-code">
+                      <summary>Code under review</summary>
+                      <pre>{approval.code ?? approval.arguments_json}</pre>
+                    </details>
                   </section>
                 ))}
                 {proposals.length > 0 && (
@@ -803,23 +806,42 @@ export function AgentSurfaceView({
             }}
             placeholder="Ask Rho about this project…"
           />
-          {view.mode === "act" && <label className="rho-agent-auto-approve">
-            <input type="checkbox" checked={view.auto_approve} onChange={(event) => commitView({ ...view, auto_approve: event.target.checked })} />
-            Auto-approve project tools for this conversation
-          </label>}
           <div className="rho-agent-context-controls">
-            <button type="button" disabled={busy || contextReviewBusy || health?.state !== "ready" || !view.composer.trim()} onClick={() => void reviewContext()}>
-              {contextReviewBusy ? "Reviewing…" : "Review context"}
+            <button type="button" className="rho-agent-icon-action" aria-label="Review context" title="Review context" aria-busy={contextReviewBusy} disabled={busy || contextReviewBusy || health?.state !== "ready" || !view.composer.trim()} onClick={() => void reviewContext()}>
+              <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8Z" /><circle cx="8" cy="8" r="2" /></svg><span className="rho-sr-only">Review context</span>
             </button>
-            <div className="rho-agent-mode" role="group" aria-label="Agent mode">
-              {(["ask", "plan", "act"] as const).map((mode) => (
-                <button type="button" aria-pressed={view.mode === mode} key={mode} onClick={() => commitView({
-                  ...view,
-                  mode,
-                  auto_approve: mode === "act" ? view.auto_approve : false,
-                })}>{mode}</button>
-              ))}
-            </div>
+            <details className="rho-agent-mode-menu">
+              <summary aria-label={`Agent mode: ${view.mode}`}>
+                <span>{view.mode}</span>
+              </summary>
+              <div role="menu" aria-label="Agent mode choices">
+                <div className="rho-agent-mode" role="group" aria-label="Agent mode">
+                  {(["ask", "plan", "act"] as const).map((mode) => (
+                    <div className="rho-agent-mode-option" key={mode}>
+                      <button
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={view.mode === mode}
+                        aria-pressed={view.mode === mode}
+                        onClick={(event) => {
+                          event.currentTarget.closest("details")!.open = false;
+                          commitView({
+                            ...view,
+                            mode,
+                            auto_approve: mode === "act" ? view.auto_approve : false,
+                          });
+                        }}
+                      >{mode}</button>
+                      <small>{AGENT_MODE_HINTS[mode]}</small>
+                    </div>
+                  ))}
+                </div>
+                {view.mode === "act" && <label className="rho-agent-auto-approve">
+                  <input type="checkbox" checked={view.auto_approve} onChange={(event) => commitView({ ...view, auto_approve: event.target.checked })} />
+                  Auto-approve project tools for this conversation
+                </label>}
+              </div>
+            </details>
             <small className="rho-agent-mode-hint">{AGENT_MODE_HINTS[view.mode]}</small>
             <details className="rho-agent-model-menu">
               <summary aria-label={`Chat model: ${chatModelLabel}`} aria-busy={modelSwitchBusy} onClick={(event) => {

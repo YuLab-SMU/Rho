@@ -119,7 +119,14 @@
   /* Code keeps mono lines and scrolls horizontally instead of breaking
      mid-token on narrow surfaces. */
   section.rho-agent-surface .rho-agent-approval pre { max-height: 6rem; margin: var(--rho-space-2) 0 0; white-space: pre; overflow-x: auto; }
-  section.rho-agent-surface .rho-agent-approval .rho-agent-decision-actions { margin-top: var(--rho-space-2); }
+  /* Approval is a compact decision strip: actions inline-right in the
+     header, the code under review behind a quiet disclosure. */
+  section.rho-agent-surface .rho-agent-approval { padding: var(--rho-space-2) var(--rho-space-3); }
+  section.rho-agent-surface .rho-agent-approval .rho-agent-decision-header { align-items: center; }
+  section.rho-agent-surface .rho-agent-approval .rho-agent-decision-actions { margin: 0 0 0 auto; }
+  section.rho-agent-surface .rho-agent-approval-code { margin-top: var(--rho-space-1); }
+  section.rho-agent-surface .rho-agent-approval-code > summary { cursor: pointer; color: var(--rho-muted); font-size: var(--rho-text-caption); }
+  section.rho-agent-surface .rho-agent-approval-code > summary:hover { color: var(--rho-ink); }
 
   /* File changes appear as one in-flow entry; clicking it opens the review
      surface (no diff content or decision buttons inside the conversation). */
@@ -265,19 +272,71 @@
   section.rho-agent-surface .rho-agent-context-controls > button:first-child:not(.rho-primary-action):active:not(:disabled) { background: var(--rho-fill-2); }
   section.rho-agent-surface .rho-agent-context-controls > .rho-primary-action { margin-left: auto; font-size: var(--rho-text-ui); }
 
-  /* Segmented Ask/Plan/Act, aligned with the Studio mode-switch language. */
-  section.rho-agent-surface .rho-agent-mode { flex: 0 0 auto; gap: 0; padding: var(--rho-space-1); border: var(--rho-border); border-radius: var(--rho-radius-1); background: var(--rho-panel); }
-  section.rho-agent-surface .rho-agent-mode button {
-    flex: 0 0 auto;
+  /* Icon action (Review context): a quiet icon button, first in the row.
+     The visually-hidden label keeps the accessible name and the shared
+     text-based DOM contract while the button renders icon-only. */
+  section.rho-agent-surface .rho-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; clip-path: inset(50%); }
+  section.rho-agent-surface .rho-agent-icon-action { display: inline-flex; align-items: center; justify-content: center; width: var(--rho-control-small); min-width: var(--rho-control-small); padding: 0; }
+  section.rho-agent-surface .rho-agent-icon-action svg { display: block; width: 14px; height: 14px; }
+
+  /* Mode chip + popover (Alma Reasoning pattern): the three modes keep
+     their exact semantics as options with one-line hints; the Act-only
+     auto-approve toggle lives inside the same popover. */
+  section.rho-agent-surface .rho-agent-mode-menu { position: relative; flex: 0 0 auto; }
+  section.rho-agent-surface .rho-agent-mode-menu > summary {
+    display: flex;
+    align-items: center;
+    gap: var(--rho-space-1);
     min-height: var(--rho-control-small);
-    padding: var(--rho-space-1) var(--rho-space-3);
+    padding: var(--rho-space-1) var(--rho-space-2);
+    border: var(--rho-border);
+    border-radius: var(--rho-radius-1);
+    color: var(--rho-ink-2);
+    background: var(--rho-paper);
+    font-size: var(--rho-text-caption);
+    list-style: none;
+    cursor: pointer;
+    text-transform: capitalize;
+  }
+  section.rho-agent-surface .rho-agent-mode-menu > summary::-webkit-details-marker { display: none; }
+  section.rho-agent-surface .rho-agent-mode-menu > summary::after { content: "▾"; flex: 0 0 auto; color: var(--rho-muted); }
+  section.rho-agent-surface .rho-agent-mode-menu > summary:hover { border-color: var(--rho-line-strong); color: var(--rho-ink); }
+  section.rho-agent-surface .rho-agent-mode-menu[open] > summary { border-color: var(--rho-line-strong); color: var(--rho-ink); }
+  section.rho-agent-surface .rho-agent-mode-menu > div {
+    position: absolute;
+    z-index: 4;
+    bottom: calc(100% + var(--rho-space-1));
+    left: 0;
+    display: grid;
+    width: max-content;
+    min-width: 14rem;
+    max-width: 18rem;
+    gap: var(--rho-space-1);
+    padding: var(--rho-space-1);
+    border: var(--rho-border);
+    border-radius: var(--rho-radius-1);
+    background: var(--rho-paper);
+    box-shadow: var(--rho-shadow-float);
+  }
+  section.rho-agent-surface .rho-agent-mode-menu .rho-agent-mode { display: grid; gap: 0; padding: 0; border: none; background: transparent; }
+  section.rho-agent-surface .rho-agent-mode-menu .rho-agent-mode-option { display: grid; gap: 0; }
+  section.rho-agent-surface .rho-agent-mode-menu .rho-agent-mode-option > button {
+    justify-content: flex-start;
+    min-height: 0;
+    padding: var(--rho-space-2) var(--rho-space-3) 0;
     border-color: transparent;
     color: var(--rho-ink-2);
     background: transparent;
-    font-size: var(--rho-text-caption);
+    font-size: var(--rho-text-ui);
+    font-weight: var(--rho-weight-regular);
+    text-align: left;
+    text-transform: capitalize;
   }
-  section.rho-agent-surface .rho-agent-mode button:hover:not(:disabled) { border-color: transparent; color: var(--rho-ink); background: var(--rho-fill); }
-  section.rho-agent-surface .rho-agent-mode button[aria-pressed="true"] { font-weight: var(--rho-weight-semibold); }
+  section.rho-agent-surface .rho-agent-mode-menu .rho-agent-mode-option > button:hover:not(:disabled) { border-color: transparent; color: var(--rho-ink); background: var(--rho-fill); }
+  section.rho-agent-surface .rho-agent-mode-menu .rho-agent-mode-option > button[aria-checked="true"] { color: var(--rho-ink); font-weight: var(--rho-weight-semibold); }
+  section.rho-agent-surface .rho-agent-mode-menu .rho-agent-mode-option > button[aria-checked="true"]::before { content: "✓ "; color: var(--rho-ink); }
+  section.rho-agent-surface .rho-agent-mode-menu .rho-agent-mode-option > small { padding: 0 var(--rho-space-3) var(--rho-space-2); color: var(--rho-muted); font-size: var(--rho-text-caption); }
+  section.rho-agent-surface .rho-agent-mode-menu .rho-agent-auto-approve { display: flex; align-items: center; gap: var(--rho-space-2); margin-top: 0; padding: var(--rho-space-2) var(--rho-space-3); border-top: var(--rho-border); color: var(--rho-ink-2); font-size: var(--rho-text-caption); }
   section.rho-agent-surface .rho-agent-mode-hint { flex: 0 1 auto; min-width: 0; overflow: hidden; color: var(--rho-muted); text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 
   /* Chat-model chip: revision-checked switching through the existing route. */
@@ -382,6 +441,7 @@
     /* The popover's wide-screen min-width would defeat the cap and clip out
        of a narrow surface, so it is dropped here. */
     section.rho-agent-surface .rho-agent-model-menu > div { min-width: 0; max-width: calc(100cqw - var(--rho-space-3)); }
+    section.rho-agent-surface .rho-agent-mode-menu > div { min-width: 0; max-width: calc(100cqw - var(--rho-space-3)); }
     section.rho-agent-surface .rho-agent-file-proposal > header code { flex: 1 1 100%; }
     section.rho-agent-surface .rho-agent-context-controls > button { flex: 1 1 auto; }
     /* The full-width ghost action keeps its text left-aligned at narrow

@@ -253,20 +253,34 @@ describe("Studio Agent Surface", () => {
 
   it("switches Ask/Plan/Act, persists mode, and resets auto-approve outside Act", async () => {
     const { container, persist } = await renderAgent();
+
+    // The modes live in one compact chip whose popover carries the options
+    // with their one-line hints (Alma Reasoning pattern).
+    const menu = container.querySelector<HTMLDetailsElement>(".rho-agent-mode-menu")!;
+    expect(menu.open).toBe(false);
+    expect(menu.querySelector("summary")!.textContent).toBe("ask");
     const modeButton = (label: string) => [...container.querySelectorAll(".rho-agent-mode button")]
       .find((button) => button.textContent === label)!;
+    const actOption = modeButton("act").closest(".rho-agent-mode-option")!;
+    expect(actOption.textContent).toContain("Work with project tools");
 
     await click(modeButton("act"));
     expect(persist).toHaveBeenLastCalledWith(expect.objectContaining({ mode: "act", auto_approve: false }));
     expect(modeButton("act").getAttribute("aria-pressed")).toBe("true");
+    expect(menu.querySelector("summary")!.textContent).toBe("act");
 
-    const autoApprove = container.querySelector<HTMLInputElement>(".rho-agent-auto-approve input")!;
+    // The Act-only auto-approve toggle lives inside the same popover.
+    const autoApprove = container.querySelector<HTMLInputElement>(".rho-agent-mode-menu .rho-agent-auto-approve input")!;
     await click(autoApprove);
     expect(persist).toHaveBeenLastCalledWith(expect.objectContaining({ mode: "act", auto_approve: true }));
 
     await click(modeButton("ask"));
     expect(persist).toHaveBeenLastCalledWith(expect.objectContaining({ mode: "ask", auto_approve: false }));
     expect(container.querySelector(".rho-agent-auto-approve")).toBeNull();
+
+    // Review context stays the control row's first child as an icon action.
+    const reviewContext = container.querySelector(".rho-agent-context-controls > button:first-child")!;
+    expect(reviewContext.getAttribute("aria-label")).toBe("Review context");
   });
 
   it("keeps context capacity behind its disclosure and rejects fractional token counts", async () => {
@@ -482,7 +496,10 @@ describe("Studio Agent Surface", () => {
       .toContain("Waiting for a decision or response");
     const approval = container.querySelector(".rho-agent-approval")!;
     expect(approval.querySelector(".rho-agent-decision-kind")!.textContent).toBe("Approval required");
-    expect(approval.querySelector("pre")!.textContent).toContain("install.packages('demo')");
+    // The code under review stays visible yet collapsed inside the strip.
+    const approvalCode = approval.querySelector<HTMLDetailsElement>(".rho-agent-approval-code")!;
+    expect(approvalCode.open).toBe(false);
+    expect(approvalCode.querySelector("pre")!.textContent).toContain("install.packages('demo')");
     expect(container.querySelector(".rho-agent-file-proposal")).toBeNull();
 
     const approve = [...approval.querySelectorAll("button")].find((button) => button.textContent === "Approve")!;

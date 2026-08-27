@@ -704,3 +704,122 @@ and re-run the complete `rsr:check` matrix plus the s3 visual-acceptance
 gate; the standing follow-ups (cross-review row, docs index, NEWS entry,
 version decision, foundation.css layer-order systemic fix) remain as listed
 earlier in this document.
+
+## Round 6 Amendment: Reference-Faithful Composer And Decision Strip
+
+Authorization: on 2026-08-27 the product owner, after supplying annotated
+reference sets (ChatGPT agent conversation with the files-changed entry and
+its Review panel; the Alma composer, model/reasoning/projects/tools
+popovers, and suggestion pills) and marking the approval card, the visible
+Ask/Plan/Act segmented control, and the text Review-context button as
+"都没用", directed: "先描述我给你的每一个图，然后再做我们自己的". The
+round-6 description of every reference image and the element-by-element
+synthesis were reviewed with the owner before implementation.
+
+What this amendment authorizes (still presentation-only, D2/R1, same four
+files, all transport semantics and persisted state unchanged):
+
+1. Approval becomes a compact decision strip (Alma/ChatGPT density): one
+   header row — "Approval required" kind, tool name, Approve/Reject actions
+   — with the code under review behind a default-collapsed disclosure. The
+   decision stays one click away and state is carried by words, not the old
+   full-height warning card with always-visible code.
+2. Ask/Plan/Act follows the Alma Reasoning pattern: one mode chip showing
+   the current mode opens a popover with the three options and their
+   one-line explanations (the existing hint copy). The Act-only
+   auto-approve checkbox moves into that popover (Projects-popover toggle
+   pattern) with its persisted semantics unchanged. The
+   `.rho-agent-mode button[aria-pressed]` elements and the
+   `.rho-agent-mode-hint` element remain in the DOM.
+3. Review context becomes an icon button (Alma eye pattern) with the
+   unchanged aria-label; it stays the composer control row's first child,
+   so the s3 hook position is unchanged.
+4. Explicitly not built: Alma's tools picker and projects picker popovers —
+   Rho's Agent has no per-tool toggles or per-surface project selection;
+   that engineering configuration stays in Settings.
+
+Recorded integration follow-up (s3): with the three mode buttons inside a
+closed popover they are no longer "均可见" per the s3 frame criteria, and an
+s3 flow that starts from a persisted non-Ask mode would click a hidden
+button. The integration lane must either open the mode popover inside the
+s3 script or update that criterion; every other s3 DOM hook
+(`.rho-agent-mode button`, `.rho-agent-mode-hint`,
+`.rho-agent-context-controls button:first-child`, `.rho-primary-action`,
+`.rho-agent-context-preview`, turn/answer/approval/proposal classes) is
+unchanged in the DOM.
+
+Round 6 verification: focused tests for the mode popover (switching,
+auto-approve only in Act, hint element), the icon Review-context position,
+and the approval strip with collapsed code; full round-5 matrix; refreshed
+preview captures (composer icon row, mode popover open, approval strip) at
+solo/wide/medium/narrow.
+
+## Round 7 Amendment: Architectural Rebuild Of The Agent Surface Module
+
+Authorization: on 2026-08-27 the product owner rejected the presentation-layer
+rounds as insufficient — "你这个改法还是换汤不换药，我要的是重构整个
+Agent 模块，而不是看起来像之类的。重构，重新设计，不只是外表的" — and
+ordered a structural rebuild of the Agent surface module.
+
+Governance exception (extension of the round-4 record): the lane registry
+rejected `studio-agent-ux-7` because `startup-info-integration` owns the
+package's existing four files. The same recorded exception applies, extended
+to the new module paths below on the `codex/studio-agent-ux` branch only;
+integration re-pick plus acceptance rerun remains the recorded follow-up.
+
+What this amendment authorizes (D2 bounded rework; R1 — no behavior change
+by construction):
+
+1. Decompose the ~900-line `AgentSurfaceView.tsx` monolith into a
+   view-model hook plus single-responsibility presentation components under
+   `desktop/ui/src/app/agent/`:
+   - `proposals.ts` — pure file-proposal parsing/outcome helpers and types;
+   - `view-state.ts` — persisted view-state shape, initial-state, copy
+     constants, small pure formatters;
+   - `useAgentSurface.ts` — the view-model: data loading, subscriptions,
+     refresh, composer/mode/model/capacity/context-preview actions,
+     approval response, file proposal apply/undo/reject and the batch lane;
+   - `AgentToolbar.tsx`, `AgentTimeline.tsx`, `AgentTurn.tsx`,
+     `AgentFilesReview.tsx`, `AgentComposer.tsx` — presentation regions with
+     explicit, typed props.
+2. `desktop/ui/src/app/AgentSurfaceView.tsx` remains the public composition
+   root with an unchanged module contract: the `AgentSurfaceView` component
+   with the same props, and the `AgentSurfaceViewState`,
+   `AgentFileProposal`, and `AgentFileUndoState` exports consumed by
+   `SurfaceView.tsx` (which is not edited).
+3. Invariants that prove "no behavior change": every transport call and its
+   arguments, the persisted view-state shape, all DOM hooks used by the s3
+   visual-acceptance gate and the shared App-level tests, the hidden-DOM
+   compatibility bridges, and the complete focused + full UI test suites
+   pass unchanged. CSS class names and `styles/agent-surface.css` are
+   untouched by this round.
+4. Out of scope (unchanged from the original brief): backend, schema,
+   Provider, credentials, approval/execution semantics, transport commands,
+   and files owned by other lanes.
+
+Round 7 verification: the full round-6 matrix (focused 14, full suite,
+typecheck, lint, build, `git diff --check`) with zero test edits beyond
+path/import adjustments if any; a preview smoke capture confirming the
+rendered surface is pixel-equivalent to the round-6 result.
+
+Round 6 evidence passed 2026-08-27 (same four lane files):
+
+- `npm --prefix desktop run rsr:typecheck` and `rsr:lint`;
+- focused `AgentSurfaceView.test.tsx`: 14 of 14 passed, adding the mode-chip
+  popover assertions (closed chip shows the current mode, options carry
+  one-line hints, Act-only auto-approve inside the popover), the icon
+  Review-context first-child contract, and the approval strip with collapsed
+  code;
+- full UI suite on the final snapshot: 52 files, 343 tests passed —
+  including the two App-level context-review flows, kept green through the
+  visually-hidden "Review context" label inside the icon button (same
+  DOM-contract bridge pattern as the hidden review surface);
+- `npm run rsr:build --prefix desktop`;
+- `git diff --check`;
+- mock preview under `target/studio-agent-ux-preview/r3/r6/`:
+  `approval-strip.png` (header row with inline actions, code collapsed, 80px
+  vs the old full-height card), `composer-icon-row.png` (icon Review context,
+  mode chip, hint, model chip, Send), `mode-popover.png` /
+  `mode-popover-act.png` (options with hints and check; Act reveals the
+  auto-approve toggle; popover probed in view), `surface-medium.png` (~231px
+  no overflow).
