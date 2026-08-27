@@ -1,7 +1,8 @@
 # Studio Agent Surface UX
 
-Status: implemented D2/R1 presentation contract; rounds 1-3 complete and
-merged-candidate automated/visual verification passed in `0.4.1-dev.22`
+Status: implemented D2/R1 presentation contract; active D2/R2
+STUDIO-AGENT-UX-R1 integration release-blocker repair; prior automated/visual
+results remain historical while a new exact candidate is pending
 
 Date: 2026-08-27
 Authorization: the user explicitly authorized "优化 Studio 模式中的 Agent 组件
@@ -21,6 +22,49 @@ Mandatory stop: satisfied 2026-08-27 by the restructured Agent Surface,
 focused and complete merged validation, wide/medium/narrow mock preview,
 formal S3 review, candidate/NEWS reconciliation, and contract review. Any
 further round requires separate authorization.
+
+## STUDIO-AGENT-UX-R1 Integration Release-Blocker Repair
+
+The owner directed the final parallel integration to continue without reducing
+construction quality. Independent review then found that a bounded
+Conversation list can temporarily or permanently omit the durable preferred
+Conversation, while render-state `busy` alone cannot exclude two mutations
+dispatched in the same browser event batch. This activates a D2/R2 frontend
+enforcement repair before a new exact candidate may be accepted.
+
+The repair preserves Agent, Surface Runtime, and Project UI Profile authority:
+
+- a read-side list refresh never clears or persists a missing durable
+  Conversation preference. Initial and invalidation refreshes show one explicit
+  checking/unavailable projection, block Review and Send, and recover only when
+  the user explicitly selects `No conversation` or a listed Conversation;
+- Review and Send construct their request from one current view and Runtime-
+  output snapshot after the exact selected Conversation has passed the latest
+  validation generation; removing Runtime output updates that snapshot before
+  any same-event request can observe it;
+- one synchronous component-local mutation token guards conversation selection,
+  New, Review, Send, model/capacity settings, Stop, runtime retry,
+  approval/retry follow-up, file Reject/Apply/Undo, and Pin before the first
+  await. View commits, blur persistence, and the matching controls consult the
+  same token, so same-event double dispatch cannot admit two workflows, use a
+  rejected proposal, duplicate a Vibe reference, or persist a stale render
+  snapshot;
+- a failed Conversation refresh leaves an explicit, retryable, fail-closed
+  state rather than an endless loading projection. While exact Conversation
+  validation is pending or failed, stale Turn mutations remain blocked;
+- activation replacement invalidates late work. The repair introduces no new
+  Conversation, execution, approval, file, credential, persistence, schema,
+  command, transport, project-transition, or Surface authority.
+
+Focused regressions must cover pre-settle validation, invalidation racing Send,
+unavailable preference plus explicit recovery, model/capacity and Runtime-
+output request races, Reject/Apply ordering, duplicate Pin, same-event dual
+entry for every guarded workflow, non-conversation view mutation racing an
+admitted workflow, activation/unmount replacement, refresh rejection and later
+explicit recovery. Closure also
+requires typecheck, lint, complete affected tests, independent adversarial
+review, a newly built exact debug binary, and fresh immutable v2 S0/S3/S9
+evidence. The `3fb169...` and `4c9d9b...` binaries remain historical only.
 
 ## Problem
 
@@ -499,7 +543,7 @@ Across S0/S3/S9 the run finished 35/35 deterministic gates and 31/31 reviewed
 frames with no pending or failed verdict.
 
 Lifecycle documentation did not change the frozen product sources or frontend
-assets. The exact current debug binary has SHA-256
+assets. At that later historical checkpoint, the exact frozen debug binary had SHA-256
 `4c9d9b18920d97c0aaea309b61d1bde6ade603f1d3c268d8e3a395f55d02a1cf`.
 Its immutable confirmation run at
 `target/visual-acceptance/dev22-final-1f476c14-4c9d9b18-s0-s3-s9-r2/`
@@ -507,8 +551,9 @@ finished `PASS`: S3 passed 3/3 gates and both captured original-resolution
 frames, while the S0 first-view frame again proved the compressed Agent
 composer has no overlap or clipping. Across S0/S3/S9 the run passed 35/35
 gates and 31/31 frame reviews. The earlier `3fb169...` run remains the
-historical pre-documentation frozen-product PASS and is not presented as the
-current binary.
+historical pre-documentation frozen-product PASS. Both runs now remain
+historical pre-VA1-INTEGRITY-1 evidence and are not presented as the current
+binary; a new exact v2 candidate remains pending.
 
 This closes rounds 1-3 without changing Conversation/Turn, approval,
 file-mutation, execution, credential, Surface identity/focus, or release

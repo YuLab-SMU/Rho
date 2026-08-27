@@ -445,15 +445,17 @@ pending failure. The earlier immutable Keychain-blocked and pre-repair runs
 remain failed evidence and were not reclassified.
 
 Lifecycle documentation did not change the frozen product sources or frontend
-assets. The exact current debug binary has SHA-256
+assets. At that later historical checkpoint, the exact frozen debug binary had SHA-256
 `4c9d9b18920d97c0aaea309b61d1bde6ade603f1d3c268d8e3a395f55d02a1cf`.
 Its immutable S0/S3/S9 confirmation run at
 `target/visual-acceptance/dev22-final-1f476c14-4c9d9b18-s0-s3-s9-r2/`
 finished `PASS` with 35/35 gates and 31/31 reviewed frames. This confirms the
-current binary's named presentation scenarios only; the
+historical binary's named presentation scenarios only; the
 PROJECT-TRANSITION-EPOCH-1 behavioral closure remains bound to the focused and
 complete frozen-product test evidence above. The earlier `3fb169...` run
-remains historical PASS evidence rather than a claim about the current binary.
+remains historical pre-documentation PASS evidence. Both runs now remain
+historical pre-VA1-INTEGRITY-1 evidence rather than a claim about the current
+candidate; a new exact v2 candidate remains pending.
 
 Application version authorities and `NEWS.md` are synchronized at
 `0.4.1-dev.22`; R package versions remain unchanged. This verification closes

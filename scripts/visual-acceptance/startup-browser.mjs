@@ -7,12 +7,25 @@
 // browser or manufactures timer-driven stage transitions.
 
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+
+import {
+  assertCollectorOutputOpen,
+  assertDirectoryIdentity,
+  assertFrontendBuildId,
+  createExclusiveEvidenceOutput,
+  currentSourceFrontendBuildId,
+  ensureSecureDirectory,
+  readDirectoryIdentity,
+  readFrontendBuildId,
+  writeExclusiveArtifact,
+} from "./helpers.mjs";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const requireFromDesktop = createRequire(path.join(repositoryRoot, "desktop", "package.json"));
@@ -358,14 +371,26 @@ export async function captureStartupBrowserFrames({
   output,
   onRecord = () => undefined,
   distRoot = outputRoot,
+  expectedBuildId = null,
+  expectedDistIdentity = null,
 } = {}) {
   validateStartupBrowserFrameMatrix();
   if (typeof output !== "string" || output.length === 0) throw new Error("startup browser output is required");
   if (!fs.existsSync(path.join(distRoot, "index.html"))) {
     throw new Error(`built RSR frontend is missing: ${path.join(distRoot, "index.html")}`);
   }
+  assertCollectorOutputOpen(output);
+  const distBuildId = readFrontendBuildId(distRoot);
+  const distIdentity = readDirectoryIdentity(distRoot);
+  if (expectedDistIdentity != null) {
+    assertDirectoryIdentity(expectedDistIdentity, distIdentity, "startup browser dist bytes");
+  }
+  const currentSourceBuildId = currentSourceFrontendBuildId(repositoryRoot);
+  const boundBuildId = expectedBuildId ?? currentSourceBuildId;
+  assertFrontendBuildId(boundBuildId, currentSourceBuildId, "startup browser current source");
+  assertFrontendBuildId(boundBuildId, distBuildId, "startup browser dist");
   const screenshots = path.join(output, "screenshots");
-  fs.mkdirSync(screenshots, { recursive: true });
+  ensureSecureDirectory(screenshots, { create: true });
   const server = staticServer(distRoot);
   await new Promise((resolve, reject) => {
     server.once("error", reject);
@@ -416,11 +441,16 @@ export async function captureStartupBrowserFrames({
             ? "Logical viewport is 720x450; PNG captures the complete vertical scrollable page."
             : "PNG captures the logical viewport only.",
           source: "desktop/dist browser mock",
+          frontend_build_id: boundBuildId,
+          dist_identity_start: distIdentity,
         },
       };
       try {
         const query = new URLSearchParams({ startup_frame: frame.state });
         await page.goto(`http://127.0.0.1:${address.port}/?${query}`, { waitUntil: "domcontentloaded" });
+        const renderedBuildId = await page.locator("html").getAttribute("data-rsr-build-id");
+        assertFrontendBuildId(boundBuildId, renderedBuildId, `${frame.name} browser document`);
+        record.detail.rendered_frontend_build_id = renderedBuildId;
         record.detail.assertions = await inspectStartupFrame(page, frame);
         if (browserErrors.length > 0) throw new Error(`browser emitted errors: ${browserErrors.join(" | ")}`);
       } catch (error) {
@@ -429,12 +459,13 @@ export async function captureStartupBrowserFrames({
         record.error = error instanceof Error ? error.message : String(error);
       }
       try {
-        await page.screenshot({
-          path: screenshot,
+        const screenshotBytes = await page.screenshot({
           animations: "disabled",
           fullPage: frame.capture_mode === "full_scrollable_page",
         });
-        record.screenshot_bytes = fs.statSync(screenshot).size;
+        writeExclusiveArtifact(screenshot, screenshotBytes);
+        record.screenshot_bytes = screenshotBytes.length;
+        record.screenshot_sha256 = createHash("sha256").update(screenshotBytes).digest("hex");
         record.screenshot_capture_status = "PASS";
       } catch (error) {
         record.screenshot_capture_status = "FAIL";
@@ -451,6 +482,19 @@ export async function captureStartupBrowserFrames({
     await browser?.close();
     await new Promise((resolve) => server.close(resolve));
   }
+  assertFrontendBuildId(
+    boundBuildId,
+    currentSourceFrontendBuildId(repositoryRoot),
+    "startup browser final source",
+  );
+  assertFrontendBuildId(
+    boundBuildId,
+    readFrontendBuildId(distRoot),
+    "startup browser final dist",
+  );
+  const finalDistIdentity = readDirectoryIdentity(distRoot);
+  assertDirectoryIdentity(distIdentity, finalDistIdentity, "startup browser final dist bytes");
+  for (const record of records) record.detail.dist_identity_final = finalDistIdentity;
   const failed = records.filter((record) => record.status === "FAIL");
   if (failed.length > 0) {
     throw new Error(`startup browser acceptance failed for ${failed.map((record) => record.name).join(", ")}`);
@@ -461,12 +505,21 @@ export async function captureStartupBrowserFrames({
 async function main() {
   const outputIndex = process.argv.indexOf("--output");
   if (outputIndex < 0 || process.argv[outputIndex + 1] == null) {
-    throw new Error("usage: startup-browser.mjs --output <existing-or-new-directory>");
+    throw new Error("usage: startup-browser.mjs --output <new-directory>");
   }
   const output = path.resolve(process.argv[outputIndex + 1]);
-  fs.mkdirSync(output, { recursive: true });
-  const records = await captureStartupBrowserFrames({ output });
-  fs.writeFileSync(path.join(output, "startup-browser-evidence.json"), `${JSON.stringify(records, null, 2)}\n`);
+  if (fs.existsSync(output)) {
+    throw new Error(`startup browser output already exists; evidence is immutable: ${output}`);
+  }
+  const expectedBuildId = currentSourceFrontendBuildId(repositoryRoot);
+  assertFrontendBuildId(expectedBuildId, readFrontendBuildId(outputRoot), "startup browser dist");
+  const expectedDistIdentity = readDirectoryIdentity(outputRoot);
+  createExclusiveEvidenceOutput(output);
+  const records = await captureStartupBrowserFrames({ output, expectedBuildId, expectedDistIdentity });
+  writeExclusiveArtifact(
+    path.join(output, "startup-browser-evidence.json"),
+    `${JSON.stringify(records, null, 2)}\n`,
+  );
   process.stdout.write(`Captured ${records.length} startup browser/mock frames in ${output}\n`);
 }
 

@@ -1,7 +1,8 @@
 # Visual Acceptance Automation
 
 Status: implemented VA1 contract; the historical full baseline remains FAIL;
-the focused `0.4.1-dev.22` S0/S3/S9 development run records PASS
+VA1-INTEGRITY-1 corrective slice active; prior `0.4.1-dev.22` S0/S3/S9 runs
+remain immutable historical evidence while a new exact candidate is pending
 
 Date: 2026-08-26
 Authorization: user directed on 2026-08-26 to remove the human-executed
@@ -213,6 +214,53 @@ frontend automation surface are unavailable in release builds. Exact-candidate
 installation, distribution, signing, publication, and release decisions remain
 outside this completed contract.
 
+## 2026-08-27 VA1-INTEGRITY-1 Corrective Contract
+
+Authorization: the owner directed the parallel Vibe integration to continue
+without reducing construction quality. The final independent evidence audit
+then identified downgrade, concurrent-write, artifact-containment, and exact-
+candidate binding defects. Those findings activate this bounded D1/R3
+acceptance-tooling repair before any new candidate may be called current or
+opened for acceptance.
+
+VA1-INTEGRITY-1 owns evidence integrity only:
+
+- every new run uses the explicit `rho_visual_acceptance_v2` schema. Historical
+  v1 ledgers are readable, immutable records; review and finalize reject them
+  without rewriting or reclassifying them. Removing v2 identity fields is a
+  corrupt v2 ledger, never a legacy downgrade;
+- one exclusive run writer owns collection, review, or finalization at a time.
+  Review begins only after collection records `finished_at`; ledger revisions
+  are compare-and-set, and evidence, review manifest, and report publication is
+  atomic so concurrent reviewers cannot lose verdicts or restore stale PASS;
+- the run binds the declared source identity, the exact recursive bytes of a
+  real symlink-free production `dist`, the build identity observed inside the
+  launched real app and browser collector, and the exact debug executable
+  SHA-256 and size. Each identity is checked before and after its evidence
+  mutation. A changed binary or frontend asset fails closed and leaves no
+  current PASS claim;
+- the output root, `screenshots`, ledgers, reports, and every frame are checked
+  with `lstat`/canonical containment. Symlinked or escaped ancestors and
+  descendants are rejected, final artifact creation is exclusive, and an
+  equal-size replacement is still detected by SHA-256;
+- narrow-layout truth checks the host, every ancestor through the document,
+  and every descendant for an unintended vertical scroll owner after fonts
+  settle. It changes no product layout, focus, or responsive authority.
+
+Behavioral self-tests must cover legacy immutability and downgrade rejection,
+live-run and concurrent-review exclusion, stale revision recovery, symlinked
+artifact paths, source/dist/app/binary replacement including equal-size bytes,
+post-mutation identity checks, exclusive frame publication, and descendant
+scroll ownership. Exact-candidate installation, product mutation semantics,
+bridge vocabulary, signing, publication, and release authority do not move.
+
+The existing `3fb169...` and `4c9d9b...` binaries and their immutable v1 runs
+remain historical pre-repair evidence. Source and harness changes made for the
+final integration invalidate their claim to be the current candidate. Closure
+requires a newly staged repository fingerprint, a newly built exact debug
+binary, and a fresh immutable v2 S0/S3/S9 run with every deterministic gate and
+individual original-resolution frame review complete.
+
 ## 2026-08-27 Real-App Foreground Determinism Amendment
 
 An immutable `0.4.1-dev.22` S0/S3/S9 run exposed an orchestration defect after
@@ -250,9 +298,9 @@ records development PASS only for the three named scenarios and their owning
 product contracts; it does not rewrite the broader historical VA1 baseline or
 make an installed-candidate or release decision.
 
-Post-documentation exact-binary reconciliation: lifecycle documentation did
-not change the frozen product sources or frontend assets. A later debug rebuild
-produced the exact current binary SHA-256
+Historical post-documentation exact-binary reconciliation: lifecycle
+documentation did not change the frozen product sources or frontend assets. A
+later debug rebuild produced the exact frozen debug binary SHA-256
 `4c9d9b18920d97c0aaea309b61d1bde6ade603f1d3c268d8e3a395f55d02a1cf`.
 After explicit macOS Keychain authorization, the immutable run at
 `target/visual-acceptance/dev22-final-1f476c14-4c9d9b18-s0-s3-s9-r2/`
@@ -261,7 +309,9 @@ passed original-resolution review; and deterministic failures, visual
 failures, and pending verdicts were zero. The first `4c9d9b...` attempt at the
 same stem without `-r2` remains `FAIL` because its browser/mock dependency was
 unavailable; the earlier `3fb169...` run remains the historical
-pre-documentation frozen-product PASS. No run was reclassified.
+pre-documentation frozen-product PASS. Both successful runs are now historical
+pre-VA1-INTEGRITY-1 evidence rather than a current-candidate claim. No run was
+reclassified; a new exact v2 candidate remains pending.
 
 ## STARTUP-RECOVERY-1 Isolation Amendment
 

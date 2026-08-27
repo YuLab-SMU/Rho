@@ -1,10 +1,303 @@
-// Shared helpers for the visual acceptance scenario modules. Every helper
-// only uses the fixed automation vocabulary exposed on `ctx`; nothing here
-// reaches around the bridge.
+// Shared helpers for the visual acceptance scenario modules and their bounded
+// browser collectors. Runtime actions still use only the fixed automation
+// vocabulary exposed on `ctx`; filesystem helpers only protect local evidence
+// identity and immutability.
 
+import { createHash, randomBytes } from "node:crypto";
+import fs from "node:fs";
 import path from "node:path";
 
+import { computeBuildIdentity } from "../rsr-build-identity.mjs";
+
 export class AssertionFailure extends Error {}
+
+const FRONTEND_BUILD_ID_PATTERN = /^[a-f0-9]{12}$/u;
+const SHA256_PATTERN = /^[a-f0-9]{64}$/u;
+
+function within(root, candidate) {
+  return candidate === root || candidate.startsWith(`${root}${path.sep}`);
+}
+
+function existingPathComponents(candidate) {
+  const resolved = path.resolve(candidate);
+  const parsed = path.parse(resolved);
+  const relative = resolved.slice(parsed.root.length).split(path.sep).filter(Boolean);
+  const components = [parsed.root];
+  let cursor = parsed.root;
+  for (const part of relative) {
+    cursor = path.join(cursor, part);
+    components.push(cursor);
+  }
+  return components;
+}
+
+export function ensureSecureDirectory(directory, { create = false } = {}) {
+  const resolved = path.resolve(directory);
+  for (const component of existingPathComponents(resolved)) {
+    let stat;
+    try {
+      stat = fs.lstatSync(component);
+    } catch (error) {
+      if (error.code !== "ENOENT" || !create) {
+        throw new AssertionFailure(`secure directory is unavailable: ${component}: ${error.message}`);
+      }
+      try {
+        fs.mkdirSync(component);
+      } catch (mkdirError) {
+        if (mkdirError.code !== "EEXIST") throw mkdirError;
+      }
+      stat = fs.lstatSync(component);
+    }
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      throw new AssertionFailure(`secure directory component must be a real directory: ${component}`);
+    }
+  }
+  const real = fs.realpathSync(resolved);
+  if (real !== resolved) {
+    throw new AssertionFailure(`secure directory resolves outside its lexical path: ${resolved}`);
+  }
+  return resolved;
+}
+
+export function secureContainedPath(root, candidate, {
+  allowMissing = false,
+  expectedType = "file",
+} = {}) {
+  const secureRoot = ensureSecureDirectory(root);
+  const resolved = path.resolve(candidate);
+  if (!within(secureRoot, resolved) || resolved === secureRoot) {
+    throw new AssertionFailure(`evidence path escapes its secure root: ${candidate}`);
+  }
+  const relative = path.relative(secureRoot, resolved).split(path.sep).filter(Boolean);
+  let cursor = secureRoot;
+  for (const [index, part] of relative.entries()) {
+    cursor = path.join(cursor, part);
+    const final = index === relative.length - 1;
+    let stat;
+    try {
+      stat = fs.lstatSync(cursor);
+    } catch (error) {
+      if (error.code === "ENOENT" && allowMissing) {
+        if (!final) throw new AssertionFailure(`evidence path ancestor is missing: ${cursor}`);
+        return resolved;
+      }
+      throw new AssertionFailure(`evidence path is unavailable: ${cursor}: ${error.message}`);
+    }
+    if (stat.isSymbolicLink()) {
+      throw new AssertionFailure(`evidence path must not contain symlinks: ${cursor}`);
+    }
+    if (!final && !stat.isDirectory()) {
+      throw new AssertionFailure(`evidence path ancestor is not a directory: ${cursor}`);
+    }
+    if (final && expectedType === "file" && !stat.isFile()) {
+      throw new AssertionFailure(`evidence path is not a regular file: ${cursor}`);
+    }
+    if (final && expectedType === "directory" && !stat.isDirectory()) {
+      throw new AssertionFailure(`evidence path is not a directory: ${cursor}`);
+    }
+  }
+  const real = fs.realpathSync(resolved);
+  if (!within(fs.realpathSync(secureRoot), real)) {
+    throw new AssertionFailure(`evidence path resolves outside its secure root: ${candidate}`);
+  }
+  return resolved;
+}
+
+function readStableRegularFile(file, label) {
+  let descriptor;
+  try {
+    const lexical = path.resolve(file);
+    const stat = fs.lstatSync(lexical);
+    if (stat.isSymbolicLink() || !stat.isFile()) {
+      throw new AssertionFailure(`${label} must be a real regular file: ${lexical}`);
+    }
+    descriptor = fs.openSync(lexical, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+    const before = fs.fstatSync(descriptor);
+    const bytes = fs.readFileSync(descriptor);
+    const after = fs.fstatSync(descriptor);
+    if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size
+        || before.mtimeMs !== after.mtimeMs || bytes.length !== after.size) {
+      throw new AssertionFailure(`${label} changed while being read: ${lexical}`);
+    }
+    const current = fs.lstatSync(lexical);
+    if (!current.isFile() || current.dev !== after.dev || current.ino !== after.ino) {
+      throw new AssertionFailure(`${label} path changed while being read: ${lexical}`);
+    }
+    return bytes;
+  } finally {
+    if (descriptor != null) fs.closeSync(descriptor);
+  }
+}
+
+export function readDirectoryIdentity(root) {
+  const secureRoot = ensureSecureDirectory(root);
+  const files = [];
+  const visit = (directory, relativeRoot = "") => {
+    const entries = fs.readdirSync(directory, { withFileTypes: true })
+      .sort((left, right) => left.name.localeCompare(right.name, "en"));
+    for (const entry of entries) {
+      const absolute = path.join(directory, entry.name);
+      const relative = path.posix.join(relativeRoot, entry.name);
+      const stat = fs.lstatSync(absolute);
+      if (stat.isSymbolicLink()) {
+        throw new AssertionFailure(`frontend dist must not contain symlinks: ${relative}`);
+      }
+      if (stat.isDirectory()) {
+        visit(absolute, relative);
+      } else if (stat.isFile()) {
+        files.push({ relative, bytes: readStableRegularFile(absolute, "frontend dist asset") });
+      } else {
+        throw new AssertionFailure(`frontend dist contains an unsupported entry: ${relative}`);
+      }
+    }
+  };
+  visit(secureRoot);
+  const hash = createHash("sha256");
+  let bytes = 0;
+  for (const file of files) {
+    const name = Buffer.from(file.relative, "utf8");
+    const length = Buffer.alloc(8);
+    length.writeBigUInt64BE(BigInt(file.bytes.length));
+    hash.update(Buffer.from("file\0"));
+    hash.update(name);
+    hash.update(Buffer.from("\0"));
+    hash.update(length);
+    hash.update(file.bytes);
+    bytes += file.bytes.length;
+  }
+  return { files: files.length, bytes, sha256: hash.digest("hex") };
+}
+
+export function assertDirectoryIdentity(expected, actual, label = "directory") {
+  const valid = (identity) => Number.isSafeInteger(identity?.files) && identity.files >= 1
+    && Number.isSafeInteger(identity?.bytes) && identity.bytes > 0
+    && typeof identity?.sha256 === "string" && SHA256_PATTERN.test(identity.sha256);
+  if (!valid(expected)) throw new AssertionFailure(`${label}: expected byte identity is invalid`);
+  if (!valid(actual)) throw new AssertionFailure(`${label}: observed byte identity is invalid`);
+  if (expected.files !== actual.files || expected.bytes !== actual.bytes || expected.sha256 !== actual.sha256) {
+    throw new AssertionFailure(
+      `${label} changed (expected ${expected.sha256}/${expected.files}/${expected.bytes}, got ${actual.sha256}/${actual.files}/${actual.bytes})`,
+    );
+  }
+  return actual;
+}
+
+export function readFrontendBuildId(distRoot) {
+  const secureRoot = ensureSecureDirectory(distRoot);
+  const identityFile = secureContainedPath(secureRoot, path.join(secureRoot, "build-identity.json"));
+  let stat;
+  try {
+    stat = fs.lstatSync(identityFile);
+  } catch (error) {
+    throw new AssertionFailure(`frontend build identity is unreadable: ${error.message}`);
+  }
+  if (!stat.isFile()) {
+    throw new AssertionFailure("frontend build identity must be a regular file");
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(fs.readFileSync(identityFile, "utf8"));
+  } catch (error) {
+    throw new AssertionFailure(`frontend build identity is invalid JSON: ${error.message}`);
+  }
+  if (typeof parsed?.build_id !== "string" || !FRONTEND_BUILD_ID_PATTERN.test(parsed.build_id)) {
+    throw new AssertionFailure("frontend build identity must contain a 12-character lowercase SHA prefix");
+  }
+  return parsed.build_id;
+}
+
+export function currentSourceFrontendBuildId(repositoryRoot) {
+  return computeBuildIdentity(repositoryRoot).id;
+}
+
+export function assertFrontendBuildId(expected, actual, label = "frontend") {
+  if (typeof expected !== "string" || !FRONTEND_BUILD_ID_PATTERN.test(expected)) {
+    throw new AssertionFailure(`${label}: expected frontend build identity is invalid`);
+  }
+  if (typeof actual !== "string" || !FRONTEND_BUILD_ID_PATTERN.test(actual)) {
+    throw new AssertionFailure(`${label}: reported frontend build identity is invalid`);
+  }
+  if (actual !== expected) {
+    throw new AssertionFailure(
+      `${label}: frontend build identity mismatch (expected ${expected}, got ${actual})`,
+    );
+  }
+  return actual;
+}
+
+export function createExclusiveEvidenceOutput(output) {
+  const resolved = path.resolve(output);
+  ensureSecureDirectory(path.dirname(resolved), { create: true });
+  try {
+    fs.mkdirSync(resolved);
+  } catch (error) {
+    if (error.code === "EEXIST") {
+      throw new AssertionFailure(`evidence output already exists; evidence is immutable: ${resolved}`);
+    }
+    throw error;
+  }
+  ensureSecureDirectory(resolved);
+  return resolved;
+}
+
+export function assertCollectorOutputOpen(output) {
+  const secureOutput = ensureSecureDirectory(output);
+  const evidenceFile = path.join(secureOutput, "evidence.json");
+  if (!fs.existsSync(evidenceFile)) return;
+  secureContainedPath(secureOutput, evidenceFile);
+  let evidence;
+  try {
+    evidence = JSON.parse(fs.readFileSync(evidenceFile, "utf8"));
+  } catch (error) {
+    throw new AssertionFailure(`collector run evidence is unreadable: ${error.message}`);
+  }
+  if (evidence?.finished_at != null) {
+    throw new AssertionFailure(`collector cannot append to finalized evidence: ${output}`);
+  }
+}
+
+export function writeExclusiveArtifact(file, bytes) {
+  const parent = ensureSecureDirectory(path.dirname(file));
+  const resolved = secureContainedPath(parent, file, { allowMissing: true });
+  let descriptor;
+  try {
+    descriptor = fs.openSync(
+      resolved,
+      fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL
+        | (fs.constants.O_NOFOLLOW ?? 0),
+      0o600,
+    );
+    fs.writeFileSync(descriptor, bytes);
+    fs.fsyncSync(descriptor);
+  } catch (error) {
+    if (error.code === "EEXIST") {
+      throw new AssertionFailure(`collector artifact already exists; refusing overwrite: ${resolved}`);
+    }
+    throw error;
+  } finally {
+    if (descriptor != null) fs.closeSync(descriptor);
+  }
+  secureContainedPath(parent, resolved);
+}
+
+export function writeAtomicArtifact(root, file, bytes) {
+  const secureRoot = ensureSecureDirectory(root);
+  const resolved = path.resolve(file);
+  if (!within(secureRoot, resolved) || resolved === secureRoot) {
+    throw new AssertionFailure(`atomic artifact escapes its secure root: ${file}`);
+  }
+  ensureSecureDirectory(path.dirname(resolved));
+  if (fs.existsSync(resolved)) secureContainedPath(secureRoot, resolved);
+  const temporary = `${resolved}.tmp-${process.pid}-${randomBytes(8).toString("hex")}`;
+  writeExclusiveArtifact(temporary, bytes);
+  try {
+    fs.renameSync(temporary, resolved);
+  } finally {
+    try { fs.unlinkSync(temporary); } catch (error) { if (error.code !== "ENOENT") throw error; }
+  }
+  secureContainedPath(secureRoot, resolved);
+  return resolved;
+}
 
 export function truncate(value, max = 300) {
   const text = String(value);

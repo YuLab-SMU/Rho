@@ -7,6 +7,7 @@
 // desktop/dist output and never widens the debug bridge vocabulary.
 
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import fs from "node:fs";
 import { createRequire } from "node:module";
@@ -19,6 +20,17 @@ import {
   VIBE_AGENT_HOST_VIEWPORT,
   sameAgentPublicRecord,
 } from "./s9-vibe.mjs";
+import {
+  assertCollectorOutputOpen,
+  assertDirectoryIdentity,
+  assertFrontendBuildId,
+  createExclusiveEvidenceOutput,
+  currentSourceFrontendBuildId,
+  ensureSecureDirectory,
+  readDirectoryIdentity,
+  readFrontendBuildId,
+  writeExclusiveArtifact,
+} from "./helpers.mjs";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const requireFromDesktop = createRequire(path.join(repositoryRoot, "desktop", "package.json"));
@@ -152,21 +164,30 @@ async function hostedPublicRecord(page) {
   };
 }
 
+export function classifyNarrowVibeScrollOwners(candidates) {
+  assert.ok(Array.isArray(candidates), "narrow Vibe scroll candidates are required");
+  const documentCandidates = candidates.filter((candidate) => candidate.kind === "document");
+  assert.equal(documentCandidates.length, 1, "narrow Vibe must measure one document scrolling element");
+  const overflows = (candidate) => candidate.scrollHeight > candidate.clientHeight + 1;
+  const scrolling = candidates.filter((candidate) => overflows(candidate)
+    && (candidate.kind === "document" || /(auto|scroll)/.test(candidate.overflowY)));
+  return {
+    pageVerticalOverflow: overflows(documentCandidates[0]),
+    scrollOwnerCount: scrolling.length,
+    hostIsOnlyScrollOwner: scrolling.length === 1 && scrolling[0].kind === "host",
+  };
+}
+
 async function inspectNarrowShortGeometry(page, host) {
-  const geometry = await host.evaluate((element) => {
-    const candidates = [
-      element,
-      element.closest(".rho-vibe-exploration"),
-      element.closest(".rho-vibe-region-body"),
-      element.closest(".rho-vibe-region"),
-      element.closest(".rho-vibe-regions"),
-      element.closest(".rho-vibe-workspace"),
-    ].filter((candidate) => candidate != null);
-    const scrolling = candidates.filter((candidate) => {
-      const overflowY = getComputedStyle(candidate).overflowY;
-      return /(auto|scroll)/.test(overflowY)
-        && candidate.scrollHeight > candidate.clientHeight + 1;
-    });
+  const rawGeometry = await host.evaluate((element) => {
+    const ancestorChain = [];
+    for (let candidate = element; candidate != null; candidate = candidate.parentElement) {
+      ancestorChain.push(candidate);
+    }
+    const descendants = [...element.querySelectorAll("*")];
+    const candidates = [...new Set(
+      [...ancestorChain, ...descendants, document.scrollingElement].filter((candidate) => candidate != null),
+    )];
     element.scrollTop = element.scrollHeight;
     const hostRect = element.getBoundingClientRect();
     const footer = element.querySelector(".rho-vibe-agent-record-actions");
@@ -183,15 +204,30 @@ async function inspectNarrowShortGeometry(page, host) {
       hostHorizontalOverflow: element.scrollWidth - element.clientWidth,
       hostScrollable: element.scrollHeight > element.clientHeight + 1,
       hostScrollTop: element.scrollTop,
-      scrollOwnerCount: scrolling.length,
-      hostIsOnlyScrollOwner: scrolling.length === 1 && scrolling[0] === element,
+      scrollCandidates: candidates.map((candidate) => ({
+        kind: candidate === element
+          ? "host"
+          : candidate === document.scrollingElement
+            ? "document"
+            : element.contains(candidate)
+              ? "descendant"
+            : "ancestor",
+        overflowY: getComputedStyle(candidate).overflowY,
+        scrollHeight: candidate.scrollHeight,
+        clientHeight: candidate.clientHeight,
+      })),
       footerVisible: footerRect != null && withinHostAndViewport(footerRect),
       buttonsReachable: buttons.length === 2
         && buttons.every((button) => withinHostAndViewport(button.getBoundingClientRect())),
     };
   });
+  const geometry = {
+    ...rawGeometry,
+    ...classifyNarrowVibeScrollOwners(rawGeometry.scrollCandidates),
+  };
   assert.deepEqual(geometry.viewport, VIBE_AGENT_HOST_VIEWPORT);
   assert.ok(geometry.documentHorizontalOverflow <= 2, "narrow host must not create page-level horizontal overflow");
+  assert.equal(geometry.pageVerticalOverflow, false, "narrow host must not create page-level vertical overflow");
   assert.ok(geometry.hostHorizontalOverflow <= 2, "narrow host must not overflow its own inline axis");
   assert.equal(geometry.hostScrollable, true, "short-height exact record must scroll inside its host");
   assert.ok(geometry.hostScrollTop > 0, "short-height host must reach its footer by local scrolling");
@@ -296,6 +332,7 @@ async function inspectExactAgentHost(page, frame) {
     assert.equal(publicText.includes(privateText), false, `public host leaked ${privateText}`);
   }
 
+  await page.evaluate(() => document.fonts.ready);
   const rootGeometry = await page.evaluate(() => ({
     documentHorizontalOverflow: document.documentElement.scrollWidth - window.innerWidth,
     viewport: { width: window.innerWidth, height: window.innerHeight },
@@ -304,7 +341,6 @@ async function inspectExactAgentHost(page, frame) {
   const narrowShort = frame.geometry === "narrow_short"
     ? await inspectNarrowShortGeometry(page, host)
     : null;
-  await page.evaluate(() => document.fonts.ready);
   return {
     source,
     projected,
@@ -338,14 +374,26 @@ export async function captureVibeAgentBrowserFrames({
   output,
   onRecord = () => undefined,
   distRoot = outputRoot,
+  expectedBuildId = null,
+  expectedDistIdentity = null,
 } = {}) {
   validateVibeAgentBrowserFrameMatrix();
   if (typeof output !== "string" || output.length === 0) throw new Error("Vibe Agent browser output is required");
   if (!fs.existsSync(path.join(distRoot, "index.html"))) {
     throw new Error(`built RSR frontend is missing: ${path.join(distRoot, "index.html")}`);
   }
+  assertCollectorOutputOpen(output);
+  const distBuildId = readFrontendBuildId(distRoot);
+  const distIdentity = readDirectoryIdentity(distRoot);
+  if (expectedDistIdentity != null) {
+    assertDirectoryIdentity(expectedDistIdentity, distIdentity, "Vibe Agent browser dist bytes");
+  }
+  const currentSourceBuildId = currentSourceFrontendBuildId(repositoryRoot);
+  const boundBuildId = expectedBuildId ?? currentSourceBuildId;
+  assertFrontendBuildId(boundBuildId, currentSourceBuildId, "Vibe Agent browser current source");
+  assertFrontendBuildId(boundBuildId, distBuildId, "Vibe Agent browser dist");
   const screenshots = path.join(output, "screenshots");
-  fs.mkdirSync(screenshots, { recursive: true });
+  ensureSecureDirectory(screenshots, { create: true });
   const server = staticServer(distRoot);
   await new Promise((resolve, reject) => {
     server.once("error", reject);
@@ -391,6 +439,8 @@ export async function captureVibeAgentBrowserFrames({
           viewport: frame.viewport,
           geometry: frame.geometry,
           source: "desktop/dist browser mock",
+          frontend_build_id: boundBuildId,
+          dist_identity_start: distIdentity,
           evidence_boundary:
             "exact Conversation/Turn and arbitrary DOM geometry are browser_mock facts; fresh real app-data is reviewed separately",
         },
@@ -403,6 +453,9 @@ export async function captureVibeAgentBrowserFrames({
         await page.goto(`http://127.0.0.1:${address.port}/?${query}`, {
           waitUntil: "domcontentloaded",
         });
+        const renderedBuildId = await page.locator("html").getAttribute("data-rsr-build-id");
+        assertFrontendBuildId(boundBuildId, renderedBuildId, `${frame.name} browser document`);
+        record.detail.rendered_frontend_build_id = renderedBuildId;
         record.detail.assertions = await inspectExactAgentHost(page, frame);
         if (browserErrors.length > 0) throw new Error(`browser emitted errors: ${browserErrors.join(" | ")}`);
       } catch (error) {
@@ -411,8 +464,10 @@ export async function captureVibeAgentBrowserFrames({
         record.error = error instanceof Error ? error.message : String(error);
       }
       try {
-        await page.screenshot({ path: screenshot, animations: "disabled" });
-        record.screenshot_bytes = fs.statSync(screenshot).size;
+        const screenshotBytes = await page.screenshot({ animations: "disabled" });
+        writeExclusiveArtifact(screenshot, screenshotBytes);
+        record.screenshot_bytes = screenshotBytes.length;
+        record.screenshot_sha256 = createHash("sha256").update(screenshotBytes).digest("hex");
         record.screenshot_capture_status = "PASS";
       } catch (error) {
         record.screenshot_capture_status = "FAIL";
@@ -429,6 +484,19 @@ export async function captureVibeAgentBrowserFrames({
     await browser?.close();
     await new Promise((resolve) => server.close(resolve));
   }
+  assertFrontendBuildId(
+    boundBuildId,
+    currentSourceFrontendBuildId(repositoryRoot),
+    "Vibe Agent browser final source",
+  );
+  assertFrontendBuildId(
+    boundBuildId,
+    readFrontendBuildId(distRoot),
+    "Vibe Agent browser final dist",
+  );
+  const finalDistIdentity = readDirectoryIdentity(distRoot);
+  assertDirectoryIdentity(distIdentity, finalDistIdentity, "Vibe Agent browser final dist bytes");
+  for (const record of records) record.detail.dist_identity_final = finalDistIdentity;
   const failed = records.filter((record) => record.status === "FAIL");
   if (failed.length > 0) {
     throw new Error(`Vibe Agent browser acceptance failed for ${failed.map((record) => record.name).join(", ")}`);
@@ -439,12 +507,21 @@ export async function captureVibeAgentBrowserFrames({
 async function main() {
   const outputIndex = process.argv.indexOf("--output");
   if (outputIndex < 0 || process.argv[outputIndex + 1] == null) {
-    throw new Error("usage: vibe-agent-browser.mjs --output <existing-or-new-directory>");
+    throw new Error("usage: vibe-agent-browser.mjs --output <new-directory>");
   }
   const output = path.resolve(process.argv[outputIndex + 1]);
-  fs.mkdirSync(output, { recursive: true });
-  const records = await captureVibeAgentBrowserFrames({ output });
-  fs.writeFileSync(path.join(output, "vibe-agent-browser-evidence.json"), `${JSON.stringify(records, null, 2)}\n`);
+  if (fs.existsSync(output)) {
+    throw new Error(`Vibe Agent browser output already exists; evidence is immutable: ${output}`);
+  }
+  const expectedBuildId = currentSourceFrontendBuildId(repositoryRoot);
+  assertFrontendBuildId(expectedBuildId, readFrontendBuildId(outputRoot), "Vibe Agent browser dist");
+  const expectedDistIdentity = readDirectoryIdentity(outputRoot);
+  createExclusiveEvidenceOutput(output);
+  const records = await captureVibeAgentBrowserFrames({ output, expectedBuildId, expectedDistIdentity });
+  writeExclusiveArtifact(
+    path.join(output, "vibe-agent-browser-evidence.json"),
+    `${JSON.stringify(records, null, 2)}\n`,
+  );
   process.stdout.write(`Captured ${records.length} Vibe Agent browser/mock frames in ${output}\n`);
 }
 

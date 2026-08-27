@@ -960,14 +960,15 @@ passing original-resolution review. That new evidence closes WP8-R1 without
 reclassifying the earlier clipped frame.
 
 Lifecycle documentation did not change the frozen product sources or frontend
-assets. The exact current debug binary has SHA-256
+assets. At that later historical checkpoint, the exact frozen debug binary had SHA-256
 `4c9d9b18920d97c0aaea309b61d1bde6ade603f1d3c268d8e3a395f55d02a1cf`.
 Its immutable confirmation run at
 `target/visual-acceptance/dev22-final-1f476c14-4c9d9b18-s0-s3-s9-r2/`
 also passed 35/35 gates and 31/31 original-resolution frame reviews; its S0
 first-view gate reconfirmed WP8-R1 at 1024x680. The `3fb169...` run remains the
-historical pre-documentation frozen-product PASS and is not presented as the
-current binary.
+historical pre-documentation frozen-product PASS. Both runs now remain
+historical pre-VA1-INTEGRITY-1 evidence and are not presented as the current
+binary; a new exact v2 candidate remains pending.
 
 ### WP9 — quick project switching from the Rho menu (implemented and verified 2026-08-22)
 

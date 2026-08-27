@@ -22,6 +22,9 @@ this file records behavior included in a versioned build candidate.
 - Vibe's primary Agent entries now expand a read-only record inside the
   exploration region, keeping the current manuscript and mode in place while
   showing the exact durable task, public activity, status, and outcome.
+- Failed, interrupted, and cancelled Agent activity in Vibe now hides rejected
+  implementation code and redacts local paths, internal identities, and common
+  credential forms while preserving safe scientific failure explanations.
 - Trusted Agent controls remain in Studio. Explicit secondary actions enter the
   existing Agent Surface with the established save-before-leave, focus, and
   one-shot return behavior; narrow and short windows keep the record and those
@@ -36,6 +39,12 @@ this file records behavior included in a versioned build candidate.
 - Conversation, context, Ask/Plan/Act, and model controls use a compact
   composer-centered hierarchy that remains usable at very narrow Surface
   widths without changing Agent execution, approval, or file-mutation rules.
+- A saved Conversation that is outside the bounded recent list now remains an
+  explicit unavailable selection until the user chooses another conversation;
+  Rho blocks context review and Send instead of clearing it during refresh.
+- Agent conversation, run, approval, retry, file-apply, and undo actions now
+  synchronously exclude same-event duplicate workflows, so a rapid second
+  gesture cannot persist stale composer state or admit a competing mutation.
 - At compressed Navigator widths, Files, History, Artifacts, and file search
   remain directly reachable; closing search with Escape restores focus to its
   trigger instead of dropping keyboard users to the document body.

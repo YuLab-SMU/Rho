@@ -7,6 +7,7 @@
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -14,26 +15,35 @@ import { fileURLToPath } from "node:url";
 
 import {
   EVIDENCE_SCHEMA,
+  LEGACY_EVIDENCE_SCHEMA,
   SCENARIOS,
   STARTUP_LOG_MAX_BYTES,
   STARTUP_TERMINAL_MESSAGE_PREFIX,
   acceptanceLaunchEnvironment,
   acquireAppLock,
+  acquireRunWriterLock,
   consecutivePngHashesMatch,
   dispatchRealDebugAction,
   finalizeStatus,
+  assertExecutableIdentity,
   parseStartupJsonl,
   pngSha256,
+  readExecutableIdentity,
   readStartupJsonl,
+  releaseRunWriterLock,
   reconcileScenarioStatuses,
+  readCommittedEvidence,
+  refreshLedger,
   releaseAppLock,
   renderReport,
+  reviewableFrameProblem,
   runEvidenceClassCheck,
   runForegroundedRealDebugOperation,
   scenarioResults,
   startupRecordTokenIsPresent,
   summarizeEvidence,
   terminalStartupRecord,
+  mutateCompletedRun,
 } from "./visual-acceptance.mjs";
 import {
   STARTUP_BROWSER_FRAME_MATRIX,
@@ -41,6 +51,7 @@ import {
   STARTUP_BROWSER_LABELS,
   STARTUP_BROWSER_STATES,
   STARTUP_BROWSER_VIEWPORTS,
+  captureStartupBrowserFrames,
   validateStartupBrowserFrameMatrix,
 } from "./visual-acceptance/startup-browser.mjs";
 import {
@@ -54,14 +65,162 @@ import {
   enterVibeAfterProjectSwitch,
   sameAgentPublicRecord,
 } from "./visual-acceptance/s9-vibe.mjs";
-import { acceptedProjectReady } from "./visual-acceptance/helpers.mjs";
+import {
+  acceptedProjectReady,
+  assertDirectoryIdentity,
+  assertFrontendBuildId,
+  createExclusiveEvidenceOutput,
+  currentSourceFrontendBuildId,
+  ensureSecureDirectory,
+  readDirectoryIdentity,
+  readFrontendBuildId,
+  secureContainedPath,
+  writeExclusiveArtifact,
+} from "./visual-acceptance/helpers.mjs";
 import {
   VIBE_AGENT_BROWSER_FRAME_MATRIX,
+  captureVibeAgentBrowserFrames,
+  classifyNarrowVibeScrollOwners,
   validateVibeAgentBrowserFrameMatrix,
 } from "./visual-acceptance/vibe-agent-browser.mjs";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const driverFile = path.join(repositoryRoot, "scripts", "visual-acceptance.mjs");
+const canonicalTemporaryRoot = fs.realpathSync(os.tmpdir());
+
+// The real app and every browser/mock collector bind to one deterministic
+// desktop/dist identity. Missing, malformed, or mismatched identities fail
+// before evidence can be combined.
+{
+  const temporary = fs.mkdtempSync(path.join(canonicalTemporaryRoot, "rho-frontend-build-id-"));
+  try {
+    fs.writeFileSync(
+      path.join(temporary, "build-identity.json"),
+      `${JSON.stringify({ build_id: "0123456789ab" })}\n`,
+    );
+    assert.equal(readFrontendBuildId(temporary), "0123456789ab");
+    assert.equal(
+      assertFrontendBuildId("0123456789ab", "0123456789ab", "self-test app"),
+      "0123456789ab",
+    );
+    assert.throws(
+      () => assertFrontendBuildId("0123456789ab", "abcdefabcdef", "self-test app"),
+      /frontend build identity mismatch.*0123456789ab.*abcdefabcdef/,
+    );
+    fs.writeFileSync(
+      path.join(temporary, "build-identity.json"),
+      `${JSON.stringify({ build_id: "not-a-build" })}\n`,
+    );
+    assert.throws(() => readFrontendBuildId(temporary), /12-character lowercase SHA prefix/);
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
+}
+
+// Browser/mock evidence binds every recursive dist asset byte, not only the
+// self-declared build ID. Equal-size replacement and any symlink fail closed.
+{
+  const temporary = fs.mkdtempSync(path.join(canonicalTemporaryRoot, "rho-dist-byte-identity-"));
+  const dist = path.join(temporary, "dist");
+  try {
+    ensureSecureDirectory(path.join(dist, "assets"), { create: true });
+    fs.writeFileSync(path.join(dist, "index.html"), "<html>alpha</html>\n");
+    fs.writeFileSync(path.join(dist, "assets", "app.js"), "export const value = 'a';\n");
+    const first = readDirectoryIdentity(dist);
+    assert.deepEqual(assertDirectoryIdentity(first, readDirectoryIdentity(dist), "self-test dist"), first);
+    fs.writeFileSync(path.join(dist, "assets", "app.js"), "export const value = 'b';\n");
+    const replaced = readDirectoryIdentity(dist);
+    assert.equal(replaced.bytes, first.bytes, "dist tamper fixture preserves total byte count");
+    assert.throws(
+      () => assertDirectoryIdentity(first, replaced, "self-test dist"),
+      /self-test dist changed/,
+    );
+    fs.symlinkSync(path.join(dist, "index.html"), path.join(dist, "assets", "linked.html"));
+    assert.throws(() => readDirectoryIdentity(dist), /must not contain symlinks/);
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
+}
+
+// Evidence roots and descendants are lexical, real directories/files only.
+// A symlinked ancestor cannot redirect a run, and a symlinked frame never
+// becomes reviewable even when its target has the expected bytes.
+{
+  const temporary = fs.mkdtempSync(path.join(canonicalTemporaryRoot, "rho-secure-evidence-path-"));
+  try {
+    const realParent = path.join(temporary, "real-parent");
+    fs.mkdirSync(realParent);
+    const linkedParent = path.join(temporary, "linked-parent");
+    fs.symlinkSync(realParent, linkedParent);
+    assert.throws(
+      () => createExclusiveEvidenceOutput(path.join(linkedParent, "run")),
+      /must be a real directory/,
+    );
+
+    const run = path.join(temporary, "run");
+    createExclusiveEvidenceOutput(run);
+    ensureSecureDirectory(path.join(run, "screenshots"), { create: true });
+    const external = path.join(temporary, "external.png");
+    const png = Buffer.concat([Buffer.from("89504e470d0a1a0a", "hex"), Buffer.from("linked-frame")]);
+    fs.writeFileSync(external, png);
+    fs.symlinkSync(external, path.join(run, "screenshots", "frame.png"));
+    assert.match(
+      reviewableFrameProblem(run, {
+        screenshot_capture_status: "PASS",
+        screenshot_bytes: png.length,
+        screenshot_sha256: createHash("sha256").update(png).digest("hex"),
+        screenshot: "screenshots/frame.png",
+        criteria: ["visible"],
+      }),
+      /must not contain symlinks/,
+    );
+    assert.throws(
+      () => secureContainedPath(run, path.join(run, "screenshots", "frame.png")),
+      /must not contain symlinks/,
+    );
+
+    const linkedScreenshotsRun = path.join(temporary, "linked-screenshots-run");
+    createExclusiveEvidenceOutput(linkedScreenshotsRun);
+    const externalScreenshots = path.join(temporary, "external-screenshots");
+    fs.mkdirSync(externalScreenshots);
+    fs.writeFileSync(path.join(externalScreenshots, "frame.png"), png);
+    fs.symlinkSync(externalScreenshots, path.join(linkedScreenshotsRun, "screenshots"));
+    assert.match(
+      reviewableFrameProblem(linkedScreenshotsRun, {
+        screenshot_capture_status: "PASS",
+        screenshot_bytes: png.length,
+        screenshot_sha256: createHash("sha256").update(png).digest("hex"),
+        screenshot: "screenshots/frame.png",
+        criteria: ["visible"],
+      }),
+      /must be a real directory/,
+    );
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
+}
+
+// The mutable target/debug path is evidence only while its exact bytes remain
+// the same. Equal-size replacement is still detected by SHA-256.
+{
+  const temporary = fs.mkdtempSync(path.join(canonicalTemporaryRoot, "rho-app-identity-"));
+  const binary = path.join(temporary, "rho-desktop");
+  try {
+    fs.writeFileSync(binary, Buffer.from("exact-debug-binary-a"));
+    const expected = readExecutableIdentity(binary);
+    assert.equal(expected.bytes, 20);
+    assert.deepEqual(assertExecutableIdentity(expected, readExecutableIdentity(binary)), expected);
+    fs.writeFileSync(binary, Buffer.from("exact-debug-binary-b"));
+    const replacement = readExecutableIdentity(binary);
+    assert.equal(replacement.bytes, expected.bytes);
+    assert.throws(
+      () => assertExecutableIdentity(expected, replacement, "self-test binary"),
+      /self-test binary changed/,
+    );
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
+}
 
 // Real-debug DOM actions must never overtake the bounded, fail-closed exact-app
 // foreground confirmation. This pure ordering test launches neither app nor
@@ -215,6 +374,39 @@ const driverFile = path.join(repositoryRoot, "scripts", "visual-acceptance.mjs")
     false,
     "a changed Turn status fails closed",
   );
+
+  const localOnly = classifyNarrowVibeScrollOwners([
+    { kind: "host", overflowY: "auto", scrollHeight: 900, clientHeight: 300 },
+    { kind: "ancestor", overflowY: "hidden", scrollHeight: 450, clientHeight: 300 },
+    { kind: "document", overflowY: "visible", scrollHeight: 450, clientHeight: 450 },
+  ]);
+  assert.deepEqual(localOnly, {
+    pageVerticalOverflow: false,
+    scrollOwnerCount: 1,
+    hostIsOnlyScrollOwner: true,
+  });
+  const pageOverflow = classifyNarrowVibeScrollOwners([
+    { kind: "host", overflowY: "auto", scrollHeight: 900, clientHeight: 300 },
+    { kind: "document", overflowY: "visible", scrollHeight: 452, clientHeight: 450 },
+  ]);
+  assert.equal(pageOverflow.pageVerticalOverflow, true);
+  assert.equal(pageOverflow.scrollOwnerCount, 2, "page overflow is a second vertical scroll owner");
+  assert.equal(pageOverflow.hostIsOnlyScrollOwner, false, "page overflow fails the local single-owner contract");
+  const canvasOverflow = classifyNarrowVibeScrollOwners([
+    { kind: "host", overflowY: "auto", scrollHeight: 900, clientHeight: 300 },
+    { kind: "ancestor", overflowY: "auto", scrollHeight: 452, clientHeight: 450 },
+    { kind: "document", overflowY: "visible", scrollHeight: 450, clientHeight: 450 },
+  ]);
+  assert.equal(canvasOverflow.pageVerticalOverflow, false);
+  assert.equal(canvasOverflow.scrollOwnerCount, 2, "an overflowing canvas ancestor is a second scroll owner");
+  assert.equal(canvasOverflow.hostIsOnlyScrollOwner, false);
+  const descendantOverflow = classifyNarrowVibeScrollOwners([
+    { kind: "host", overflowY: "auto", scrollHeight: 900, clientHeight: 300 },
+    { kind: "descendant", overflowY: "scroll", scrollHeight: 310, clientHeight: 200 },
+    { kind: "document", overflowY: "visible", scrollHeight: 450, clientHeight: 450 },
+  ]);
+  assert.equal(descendantOverflow.scrollOwnerCount, 2, "an overflowing host descendant is a second scroll owner");
+  assert.equal(descendantOverflow.hostIsOnlyScrollOwner, false);
 }
 
 // S9 must never turn an arbitrary stale mutation into a broad retry, and the
@@ -503,7 +695,7 @@ const driverFile = path.join(repositoryRoot, "scripts", "visual-acceptance.mjs")
 // runtime record by a stable token, tolerates only a concurrently-written tail,
 // and proves consecutive frame equality from PNG bytes rather than timers.
 {
-  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "rho-startup-jsonl-"));
+  const temporary = fs.mkdtempSync(path.join(canonicalTemporaryRoot, "rho-startup-jsonl-"));
   const logFile = path.join(temporary, "startup.jsonl");
   const frameA = path.join(temporary, "a.png");
   const frameB = path.join(temporary, "b.png");
@@ -579,6 +771,7 @@ const driverFile = path.join(repositoryRoot, "scripts", "visual-acceptance.mjs")
 function evidenceRecord(runDirectory, { scenarios = [], gates = [], error = null } = {}) {
   return {
     schema: EVIDENCE_SCHEMA,
+    ledger_revision: 0,
     status: "FAIL",
     started_at: "2026-08-26T00:00:00.000Z",
     finished_at: null,
@@ -593,22 +786,78 @@ function evidenceRecord(runDirectory, { scenarios = [], gates = [], error = null
 
 function writeEvidence(runDirectory, evidence) {
   fs.mkdirSync(path.join(runDirectory, "screenshots"), { recursive: true });
-  fs.writeFileSync(path.join(runDirectory, "evidence.json"), `${JSON.stringify(evidence, null, 2)}\n`);
+  evidence.finished_at ??= "2026-08-26T00:01:00.000Z";
+  refreshLedger(runDirectory, evidence);
 }
 
-function reviewFrame(runDirectory, frame, verdict = "pass") {
-  return JSON.parse(execFileSync(process.execPath, [
+async function reviewFrame(runDirectory, frame, verdict = "pass") {
+  let reviewedGate;
+  const evidence = await mutateCompletedRun(runDirectory, `self-test:${frame}`, (mutable) => {
+    const matching = mutable.gates.filter((gate) => gate.screenshot === `screenshots/${frame}.png`);
+    if (matching.length !== 1) throw new Error(`no unique gate captured frame ${frame}`);
+    const [gate] = matching;
+    const frameFile = path.join(runDirectory, gate.screenshot);
+    if (!fs.existsSync(frameFile)) throw new Error("frame is not reviewable: screenshot artifact is unreadable");
+    if (!Array.isArray(gate.criteria) || gate.criteria.length === 0) throw new Error("frame is not reviewable: criteria missing");
+    if (gate.screenshot_capture_status !== "PASS") throw new Error(`frame is not reviewable: capture status ${gate.screenshot_capture_status}`);
+    gate.visual_status = verdict.toUpperCase();
+    gate.visual_note = "self-test review";
+    gate.status = gate.deterministic_status === "FAIL" || gate.visual_status === "FAIL" ? "FAIL" : "PASS";
+    reviewedGate = gate;
+  }, { verifyCandidate: () => undefined });
+  return {
+    visual_status: reviewedGate.visual_status,
+    run_status: evidence.status,
+    scenarios: scenarioResults(evidence),
+  };
+}
+
+// v1 remains readable historical evidence but is immutable. Removing the
+// schema or the v2 identity fields cannot downgrade a ledger into that path.
+{
+  const temporary = fs.mkdtempSync(path.join(canonicalTemporaryRoot, "rho-visual-schema-"));
+  const invoke = (command, run, extra = []) => execFileSync(process.execPath, [
     driverFile,
-    "record-review",
+    command,
     "--run",
-    runDirectory,
-    "--frame",
-    frame,
-    "--verdict",
-    verdict,
-    "--note",
-    "self-test review",
-  ], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }));
+    run,
+    ...extra,
+  ], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  try {
+    for (const [name, evidence, expected] of [
+      ["legacy", { schema: LEGACY_EVIDENCE_SCHEMA, finished_at: "2026-08-27T00:00:00.000Z" }, /v1 evidence is read-only|exit/i],
+      ["missing-schema", { finished_at: "2026-08-27T00:00:00.000Z" }, /unsupported or missing.*schema|exit/i],
+    ]) {
+      const run = path.join(temporary, name);
+      fs.mkdirSync(run);
+      const evidenceFile = path.join(run, "evidence.json");
+      fs.writeFileSync(evidenceFile, `${JSON.stringify(evidence)}\n`);
+      const before = fs.readFileSync(evidenceFile);
+      assert.throws(
+        () => invoke("finalize", run),
+        expected,
+        `${name} finalize must reject without mutation`,
+      );
+      assert.deepEqual(fs.readFileSync(evidenceFile), before);
+      assert.equal(fs.existsSync(path.join(run, ".writer.lock")), false);
+    }
+
+    const incompleteRun = path.join(temporary, "incomplete-v2");
+    const incomplete = evidenceRecord(incompleteRun, {
+      scenarios: [{ id: "s1", title: "tour", status: "PASS", duration_ms: 1, error: null }],
+      gates: [{ scenario: "s1", name: "ok", deterministic_status: "PASS", visual_status: "N/A", status: "PASS", screenshot: null, criteria: [] }],
+    });
+    incomplete.frontend_build_identity = null;
+    incomplete.debug_app_identity = null;
+    writeEvidence(incompleteRun, incomplete);
+    const beforeCommit = fs.readFileSync(path.join(incompleteRun, "ledger-commit.json"));
+    const beforeEvidence = fs.readFileSync(path.join(incompleteRun, "evidence.json"));
+    assert.throws(() => invoke("finalize", incompleteRun), /identity evidence is incomplete|exit/i);
+    assert.deepEqual(fs.readFileSync(path.join(incompleteRun, "ledger-commit.json")), beforeCommit);
+    assert.deepEqual(fs.readFileSync(path.join(incompleteRun, "evidence.json")), beforeEvidence);
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
 }
 
 // scenario registry is complete and every module exists
@@ -730,7 +979,7 @@ function reviewFrame(runDirectory, frame, verdict = "pass") {
 
 // run directories are immutable: a caller must choose a fresh evidence root
 {
-  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "rho-visual-existing-run-"));
+  const temporary = fs.mkdtempSync(path.join(canonicalTemporaryRoot, "rho-visual-existing-run-"));
   try {
     assert.throws(
       () => execFileSync(process.execPath, [
@@ -743,6 +992,109 @@ function reviewFrame(runDirectory, frame, verdict = "pass") {
       ], { stdio: ["ignore", "pipe", "pipe"] }),
       /output directory already exists|exit/i,
     );
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
+}
+
+// Standalone browser collectors claim a fresh root atomically, integrated
+// collectors reject finalized ledgers, and screenshot writes are exclusive so
+// a rerun cannot replace a frame that was already reviewed.
+{
+  const temporary = fs.mkdtempSync(path.join(canonicalTemporaryRoot, "rho-visual-collector-integrity-"));
+  const distRoot = path.join(temporary, "dist");
+  fs.mkdirSync(distRoot);
+  fs.writeFileSync(path.join(distRoot, "index.html"), "<!doctype html><html></html>\n");
+  fs.writeFileSync(
+    path.join(distRoot, "build-identity.json"),
+    `${JSON.stringify({ build_id: "0123456789ab" })}\n`,
+  );
+  try {
+    const claimed = path.join(temporary, "claimed");
+    createExclusiveEvidenceOutput(claimed);
+    assert.throws(
+      () => createExclusiveEvidenceOutput(claimed),
+      /output already exists.*immutable/,
+    );
+
+    const reviewedFrame = path.join(claimed, "reviewed.png");
+    writeExclusiveArtifact(reviewedFrame, Buffer.from("reviewed evidence"));
+    assert.throws(
+      () => writeExclusiveArtifact(reviewedFrame, Buffer.from("replacement bytes")),
+      /artifact already exists.*refusing overwrite/,
+    );
+    assert.equal(fs.readFileSync(reviewedFrame, "utf8"), "reviewed evidence");
+
+    const finalized = path.join(temporary, "finalized");
+    fs.mkdirSync(finalized);
+    fs.writeFileSync(
+      path.join(finalized, "evidence.json"),
+      `${JSON.stringify({ finished_at: "2026-08-27T00:00:00.000Z" })}\n`,
+    );
+    await assert.rejects(
+      captureStartupBrowserFrames({ output: finalized, distRoot, expectedBuildId: "0123456789ab" }),
+      /cannot append to finalized evidence/,
+    );
+    await assert.rejects(
+      captureVibeAgentBrowserFrames({ output: finalized, distRoot, expectedBuildId: "0123456789ab" }),
+      /cannot append to finalized evidence/,
+    );
+
+    const mismatch = path.join(temporary, "build-mismatch");
+    fs.mkdirSync(mismatch);
+    await assert.rejects(
+      captureStartupBrowserFrames({
+        output: mismatch,
+        distRoot,
+        expectedBuildId: "abcdefabcdef",
+      }),
+      /frontend build identity mismatch/,
+      "collector must reject a dist build that differs from the real-app-bound build before Chromium launch",
+    );
+
+    const exactDist = readDirectoryIdentity(distRoot);
+    const originalIndex = fs.readFileSync(path.join(distRoot, "index.html"));
+    const changedIndex = Buffer.from(originalIndex);
+    changedIndex[changedIndex.length - 2] ^= 0x01;
+    fs.writeFileSync(path.join(distRoot, "index.html"), changedIndex);
+    const changedDist = readDirectoryIdentity(distRoot);
+    assert.equal(changedDist.bytes, exactDist.bytes, "collector tamper preserves exact dist byte count");
+    const byteMismatch = path.join(temporary, "byte-mismatch");
+    fs.mkdirSync(byteMismatch);
+    await assert.rejects(
+      captureStartupBrowserFrames({
+        output: byteMismatch,
+        distRoot,
+        expectedBuildId: "0123456789ab",
+        expectedDistIdentity: exactDist,
+      }),
+      /dist bytes changed/,
+      "collector must reject changed dist bytes before Chromium launch",
+    );
+    fs.writeFileSync(path.join(distRoot, "index.html"), originalIndex);
+
+    const staleDist = path.join(temporary, "stale-dist");
+    fs.mkdirSync(staleDist);
+    assert.notEqual(currentSourceFrontendBuildId(repositoryRoot), "0123456789ab");
+    await assert.rejects(
+      captureVibeAgentBrowserFrames({ output: staleDist, distRoot }),
+      /frontend build identity mismatch/,
+      "standalone collector must reject desktop/dist built from stale frontend source",
+    );
+
+    for (const collector of ["startup-browser.mjs", "vibe-agent-browser.mjs"]) {
+      const existing = path.join(temporary, `existing-${collector}`);
+      fs.mkdirSync(existing);
+      assert.throws(
+        () => execFileSync(process.execPath, [
+          path.join(repositoryRoot, "scripts", "visual-acceptance", collector),
+          "--output",
+          existing,
+        ], { stdio: ["ignore", "pipe", "pipe"] }),
+        /output already exists|exit/i,
+        `${collector} must reject an existing standalone output root before launching Chromium`,
+      );
+    }
   } finally {
     fs.rmSync(temporary, { recursive: true, force: true });
   }
@@ -766,7 +1118,7 @@ function reviewFrame(runDirectory, frame, verdict = "pass") {
 // criteria. Capture failure is irreversible, and finalization revalidates a
 // previously reviewed artifact so deleting it cannot leave a false PASS.
 {
-  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "rho-visual-review-"));
+  const temporary = fs.mkdtempSync(path.join(canonicalTemporaryRoot, "rho-visual-review-"));
   const png = Buffer.concat([
     Buffer.from("89504e470d0a1a0a", "hex"),
     Buffer.from("self-test-frame"),
@@ -785,6 +1137,7 @@ function reviewFrame(runDirectory, frame, verdict = "pass") {
       error: null,
       screenshot: "screenshots/frame.png",
       screenshot_bytes: png.length,
+      screenshot_sha256: createHash("sha256").update(png).digest("hex"),
       criteria: ["the component is visible"],
       ...overrides,
     }],
@@ -792,8 +1145,8 @@ function reviewFrame(runDirectory, frame, verdict = "pass") {
   try {
     const missingRun = path.join(temporary, "missing");
     writeEvidence(missingRun, makeEvidence(missingRun));
-    assert.throws(
-      () => reviewFrame(missingRun, "frame"),
+    await assert.rejects(
+      reviewFrame(missingRun, "frame"),
       /not reviewable|unreadable|exit/i,
       "a missing screenshot cannot be reviewed into PASS",
     );
@@ -801,8 +1154,8 @@ function reviewFrame(runDirectory, frame, verdict = "pass") {
     const failedRun = path.join(temporary, "capture-failed");
     writeEvidence(failedRun, makeEvidence(failedRun, { screenshot_capture_status: "FAIL" }));
     fs.writeFileSync(path.join(failedRun, "screenshots", "frame.png"), png);
-    assert.throws(
-      () => reviewFrame(failedRun, "frame"),
+    await assert.rejects(
+      reviewFrame(failedRun, "frame"),
       /not reviewable|capture status|exit/i,
       "an explicit capture failure cannot be overwritten by review",
     );
@@ -810,8 +1163,8 @@ function reviewFrame(runDirectory, frame, verdict = "pass") {
     const noCriteriaRun = path.join(temporary, "no-criteria");
     writeEvidence(noCriteriaRun, makeEvidence(noCriteriaRun, { criteria: [] }));
     fs.writeFileSync(path.join(noCriteriaRun, "screenshots", "frame.png"), png);
-    assert.throws(
-      () => reviewFrame(noCriteriaRun, "frame"),
+    await assert.rejects(
+      reviewFrame(noCriteriaRun, "frame"),
       /not reviewable|criteria|exit/i,
       "a frame without visual criteria cannot be reviewed",
     );
@@ -820,25 +1173,136 @@ function reviewFrame(runDirectory, frame, verdict = "pass") {
     writeEvidence(validRun, makeEvidence(validRun));
     const frameFile = path.join(validRun, "screenshots", "frame.png");
     fs.writeFileSync(frameFile, png);
-    const review = reviewFrame(validRun, "frame");
+    const review = await reviewFrame(validRun, "frame");
     assert.equal(review.visual_status, "PASS");
     assert.equal(review.run_status, "PASS");
     assert.deepEqual(review.scenarios, [{ id: "s1", status: "PASS", duration_ms: 1, error: null }]);
     const manifest = JSON.parse(fs.readFileSync(path.join(validRun, "visual-review-manifest.json"), "utf8"));
+    assert.equal(manifest.schema, "rho_visual_acceptance_visual_review_v2");
+    assert.equal(manifest.ledger_revision, readCommittedEvidence(validRun).evidence.ledger_revision);
     assert.equal(manifest.frames[0].evidence_class, "browser_mock");
+    assert.equal(manifest.frames[0].screenshot_sha256, createHash("sha256").update(png).digest("hex"));
 
-    fs.rmSync(frameFile);
-    const finalized = JSON.parse(execFileSync(process.execPath, [
-      driverFile,
-      "finalize",
-      "--run",
+    const tampered = Buffer.from(png);
+    tampered[tampered.length - 1] ^= 0xff;
+    assert.equal(tampered.length, png.length, "tamper fixture preserves the recorded byte count");
+    fs.writeFileSync(frameFile, tampered);
+    const finalized = await mutateCompletedRun(
       validRun,
-    ], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }));
-    assert.equal(finalized.status, "FAIL", "a reviewed frame removed before finalize invalidates the run");
-    assert.deepEqual(finalized.scenarios, [{ id: "s1", status: "FAIL", duration_ms: 1, error: null }]);
-    const invalidated = JSON.parse(fs.readFileSync(path.join(validRun, "evidence.json"), "utf8"));
+      "self-test-finalize",
+      () => undefined,
+      { verifyCandidate: () => undefined },
+    );
+    assert.equal(finalized.status, "FAIL", "same-size screenshot tampering before finalize invalidates the run");
+    assert.deepEqual(scenarioResults(finalized), [{ id: "s1", status: "FAIL", duration_ms: 1, error: null }]);
+    const invalidated = readCommittedEvidence(validRun).evidence;
     assert.equal(invalidated.gates[0].screenshot_capture_status, "FAIL");
     assert.equal(invalidated.gates[0].visual_status, "FAIL");
+    assert.match(invalidated.gates[0].error, /SHA-256 mismatch/);
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
+}
+
+// Completed-run mutations are serialized at the run root. Two concurrent
+// reviews preserve both verdicts, a live run rejects review immediately, and
+// a candidate replacement after the atomic ledger write forces a new FAIL
+// revision instead of leaving the just-written PASS behind.
+{
+  const temporary = fs.mkdtempSync(path.join(canonicalTemporaryRoot, "rho-visual-run-writer-"));
+  const png = Buffer.concat([Buffer.from("89504e470d0a1a0a", "hex"), Buffer.from("concurrent")]);
+  const gate = (name) => ({
+    scenario: "s1",
+    name,
+    evidence_class: "browser_mock",
+    deterministic_status: "PASS",
+    screenshot_capture_status: "PASS",
+    visual_status: "PENDING",
+    visual_note: null,
+    status: "PENDING",
+    error: null,
+    screenshot: `screenshots/${name}.png`,
+    screenshot_bytes: png.length,
+    screenshot_sha256: createHash("sha256").update(png).digest("hex"),
+    criteria: ["visible"],
+  });
+  try {
+    const concurrentRun = path.join(temporary, "concurrent");
+    const concurrent = evidenceRecord(concurrentRun, {
+      scenarios: [{ id: "s1", title: "tour", status: "PENDING", duration_ms: 1, error: null }],
+      gates: [gate("a"), gate("b")],
+    });
+    writeEvidence(concurrentRun, concurrent);
+    fs.writeFileSync(path.join(concurrentRun, "screenshots", "a.png"), png);
+    fs.writeFileSync(path.join(concurrentRun, "screenshots", "b.png"), png);
+    await Promise.all(["a", "b"].map((name, index) => mutateCompletedRun(
+      concurrentRun,
+      `concurrent-review:${name}`,
+      async (mutable) => {
+        if (index === 0) await new Promise((resolve) => setTimeout(resolve, 40));
+        const target = mutable.gates.find((candidate) => candidate.name === name);
+        target.visual_status = "PASS";
+        target.status = "PASS";
+      },
+      { verifyCandidate: () => undefined },
+    )));
+    const concurrentResult = readCommittedEvidence(concurrentRun).evidence;
+    assert.deepEqual(concurrentResult.gates.map((item) => item.visual_status), ["PASS", "PASS"]);
+    assert.equal(concurrentResult.ledger_revision, 3, "initial commit plus two serialized reviews");
+    assert.equal(concurrentResult.status, "PASS");
+    assert.equal(fs.existsSync(path.join(concurrentRun, ".writer.lock")), false);
+
+    const liveRun = path.join(temporary, "live");
+    createExclusiveEvidenceOutput(liveRun);
+    ensureSecureDirectory(path.join(liveRun, "screenshots"), { create: true });
+    const live = evidenceRecord(liveRun, {
+      scenarios: [{ id: "s1", title: "tour", status: "PASS", duration_ms: 0, error: null }],
+      gates: [{ scenario: "s1", name: "live", deterministic_status: "PASS", visual_status: "N/A", status: "PASS", screenshot: null, criteria: [] }],
+    });
+    refreshLedger(liveRun, live);
+    const liveLock = await acquireRunWriterLock(liveRun, "live-owner");
+    await assert.rejects(
+      mutateCompletedRun(liveRun, "early-review", () => undefined, { verifyCandidate: () => undefined }),
+      /still live.*finished_at/,
+    );
+    releaseRunWriterLock(liveLock);
+    assert.equal(readCommittedEvidence(liveRun).evidence.ledger_revision, 1);
+
+    for (const commandKind of ["record-review", "finalize"]) {
+      const raceRun = path.join(temporary, `post-write-${commandKind}`);
+      const raced = evidenceRecord(raceRun, {
+        scenarios: [{ id: "s1", title: "tour", status: "PASS", duration_ms: 1, error: null }],
+        gates: [{ scenario: "s1", name: "ok", deterministic_status: "PASS", visual_status: "N/A", status: "PASS", screenshot: null, criteria: [] }],
+      });
+      writeEvidence(raceRun, raced);
+      let verification = 0;
+      await assert.rejects(
+        mutateCompletedRun(
+          raceRun,
+          `race:${commandKind}`,
+          (mutable) => { mutable.gates[0].visual_note = commandKind; },
+          {
+            verifyCandidate: () => {
+              verification += 1;
+              if (verification === 2) throw new Error("exact debug app was replaced after write");
+            },
+          },
+        ),
+        /candidate identity changed after ledger mutation/,
+      );
+      const failed = readCommittedEvidence(raceRun).evidence;
+      assert.equal(failed.status, "FAIL", `${commandKind} replacement race leaves durable FAIL`);
+      assert.match(failed.error, /exact debug app was replaced after write/);
+      assert.equal(failed.ledger_revision, 3, "attempted mutation plus fail-closed repair are separate committed revisions");
+    }
+
+    const tornRun = path.join(temporary, "torn");
+    writeEvidence(tornRun, evidenceRecord(tornRun, {
+      scenarios: [{ id: "s1", title: "tour", status: "PASS", duration_ms: 1, error: null }],
+      gates: [{ scenario: "s1", name: "ok", deterministic_status: "PASS", visual_status: "N/A", status: "PASS", screenshot: null, criteria: [] }],
+    }));
+    fs.appendFileSync(path.join(tornRun, "report.md"), "tampered\n");
+    assert.throws(() => readCommittedEvidence(tornRun), /report\.md does not match its commit/);
   } finally {
     fs.rmSync(temporary, { recursive: true, force: true });
   }
@@ -847,7 +1311,7 @@ function reviewFrame(runDirectory, frame, verdict = "pass") {
 // Lock recovery protects the mkdir -> owner.json creation window, never
 // steals a live PID, and reclaims orphaned/corrupt records after the grace.
 {
-  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "rho-visual-lock-"));
+  const temporary = fs.mkdtempSync(path.join(canonicalTemporaryRoot, "rho-visual-lock-"));
   const lockDirectory = path.join(temporary, "window.lock");
   const lockOptions = { lockDirectory, timeoutMs: 25, pollIntervalMs: 5 };
   try {
@@ -888,7 +1352,7 @@ function reviewFrame(runDirectory, frame, verdict = "pass") {
 
 // fixture generation equivalence (real generation, temporary root)
 {
-  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "rho-visual-fixtures-"));
+  const temporary = fs.mkdtempSync(path.join(canonicalTemporaryRoot, "rho-visual-fixtures-"));
   const output = path.join(temporary, "fixtures");
   try {
     execFileSync(process.execPath, [
@@ -1016,6 +1480,8 @@ function reviewFrame(runDirectory, frame, verdict = "pass") {
   assert.match(residualBranch, /residualFixtureBlocksKeepApp = true/, "--keep-app cannot preserve a failed fixture as a normal app");
   assert.match(residualBranch, /throw new AcceptanceError/, "a residual fixture blocks the ready-path launch");
   assert.match(runLaneSource, /transferAppLock\(`termination-pending:\$\{state\.child\.pid\}`/, "the finalizer transfers lock ownership when the residual PID still survives");
+  assert.match(runLaneSource, /verifyCurrentCandidateIdentities\(evidence\)/, "run finalization rechecks source, dist, and exact app bytes");
+  assert.match(runLaneSource, /assertExecutableIdentity\([\s\S]{0,220}?readExecutableIdentity\(appPath\)/, "every debug-app spawn is bound to the recorded binary identity");
 
   const readStart = driverSource.indexOf("export function readStartupJsonl");
   const readEnd = driverSource.indexOf("export function terminalStartupRecord", readStart);
@@ -1096,6 +1562,9 @@ function reviewFrame(runDirectory, frame, verdict = "pass") {
   }
   assert.match(vibeAgentBrowserSource, /Auto-approve project tools for this conversation/, "browser/mock checks the real trusted auto-approve label");
   assert.match(vibeAgentBrowserSource, /element\.scrollTop = element\.scrollHeight/, "720×450 evidence scrolls the local host to its footer");
+  assert.match(vibeAgentBrowserSource, /candidate = candidate\.parentElement/, "720×450 evidence inspects the full host ancestor chain");
+  assert.match(vibeAgentBrowserSource, /document\.scrollingElement/, "720×450 evidence includes page-level vertical overflow");
+  assert.match(vibeAgentBrowserSource, /element\.querySelectorAll\("\*"\)/, "720×450 evidence includes descendant vertical scroll owners");
   assert.match(vibeAgentBrowserSource, /hostIsOnlyScrollOwner/, "720×450 evidence requires the host to be the only scroll owner");
   assert.match(vibeAgentBrowserSource, /footerVisible/, "720×450 evidence requires the footer inside host and viewport bounds");
   assert.match(vibeAgentBrowserSource, /buttonsReachable/, "720×450 evidence requires both Studio secondary targets in bounds");
@@ -1105,6 +1574,12 @@ function reviewFrame(runDirectory, frame, verdict = "pass") {
   assert.ok(
     geometryIndex >= 0 && screenshotIndex > geometryIndex,
     "browser/mock screenshot is captured after the footer-reached geometry/focus assertions",
+  );
+  const fontsReadyIndex = vibeAgentBrowserSource.indexOf("await page.evaluate(() => document.fonts.ready)");
+  const rootGeometryIndex = vibeAgentBrowserSource.indexOf("const rootGeometry = await page.evaluate", fontsReadyIndex);
+  assert.ok(
+    fontsReadyIndex >= 0 && rootGeometryIndex > fontsReadyIndex,
+    "Vibe geometry settles fonts before measuring scroll ownership and capturing the frame",
   );
   assert.doesNotMatch(vibeAgentBrowserSource, /__rhoAutomation|acceptance-eval|\/eval\b/, "browser/mock does not widen the real-app bridge vocabulary");
 

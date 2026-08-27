@@ -22,6 +22,9 @@ export function buildIdentityInputs(root = repositoryRoot) {
     join(desktopRoot, "package.json"),
     join(desktopRoot, "package-lock.json"),
     join(desktopRoot, "ui", "index.html"),
+    join(desktopRoot, "ui", "tsconfig.json"),
+    join(desktopRoot, "ui", "tsconfig.app.json"),
+    join(desktopRoot, "ui", "tsconfig.node.json"),
     join(desktopRoot, "ui", "vite.config.mts"),
     join(root, "scripts", "rsr-build-identity.mjs"),
   ];

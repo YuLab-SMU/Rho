@@ -1,5 +1,5 @@
 /* Agent Surface (rho.agent): task-first information hierarchy for Studio.
-   Contract: docs/plans/active-2026-08-27-studio-agent-surface-ux-spec.md
+   Contract: docs/plans/implemented-2026-08-27-studio-agent-surface-ux-spec.md
    Refines the base Agent rules in surfaces.css inside the same `surfaces`
    layer; every value comes from tokens.css. Imported by AgentSurfaceView.tsx,
    which the bundler orders before foundation.css, so every selector is scoped

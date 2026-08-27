@@ -50,6 +50,11 @@ interface AgentRefreshOperation {
   readonly promise: Promise<void>;
 }
 
+interface AgentConversationValidation {
+  readonly conversationId: string | null;
+  readonly status: "pending" | "available" | "unavailable";
+}
+
 function parseAgentFileProposal(event: AgentTurnDetail["events"][number]): AgentFileProposal | null {
   if (event.event_type !== "tool.call_completed" || event.tool !== "propose_file_edit") return null;
   const parse = (value: string | null) => {
@@ -127,6 +132,12 @@ function formatContextTokens(tokens: number): string {
   return String(tokens);
 }
 
+function agentErrorMessage(error: unknown): string {
+  return error instanceof Error && error.message.trim() !== ""
+    ? error.message
+    : "The conversation list could not be refreshed.";
+}
+
 const AGENT_MODE_HINTS: Readonly<Record<AgentMode, string>> = {
   ask: "Ask about this project",
   plan: "Shape a reviewable approach",
@@ -139,9 +150,10 @@ const AGENT_SUGGESTIONS: readonly string[] = [
   "Draft a reproducible analysis plan",
 ];
 
-function AgentRunningRow({ status, startedAt, onStop }: {
+function AgentRunningRow({ status, startedAt, disabled, onStop }: {
   readonly status: AgentTurnSummary["status"];
   readonly startedAt: string;
+  readonly disabled: boolean;
   readonly onStop: () => void;
 }) {
   const [now, setNow] = useState(() => Date.now());
@@ -158,7 +170,7 @@ function AgentRunningRow({ status, startedAt, onStop }: {
       <span className="rho-agent-running-label">
         {status === "waiting" ? "Waiting for a decision or response" : "Agent running"} · {label}
       </span>
-      <button type="button" onClick={onStop}>Stop</button>
+      <button type="button" disabled={disabled} onClick={onStop}>Stop</button>
     </div>
   );
 }
@@ -206,6 +218,7 @@ export function AgentSurfaceView({
   const [busy, setBusy] = useState(false);
   const [fileUndo, setFileUndo] = useState<AgentFileUndoState | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const [runtimeDiagnostics, setRuntimeDiagnostics] = useState<AgentRuntimeDiagnostics | null>(null);
   const [contextPreview, setContextPreview] = useState<{
     readonly key: string;
@@ -221,13 +234,38 @@ export function AgentSurfaceView({
   const [modelQuery, setModelQuery] = useState("");
   const activationVersionRef = useRef(0);
   const refreshGenerationRef = useRef(0);
-  const conversationWorkflowRef = useRef<symbol | null>(null);
+  const mutationRef = useRef<symbol | null>(null);
+  const runtimeOutputContextRef = useRef(runtimeOutputContext);
+  runtimeOutputContextRef.current = runtimeOutputContext;
+  const conversationValidationRef = useRef<AgentConversationValidation>({
+    conversationId: view.conversation_id,
+    status: "pending",
+  });
+  const [conversationValidation, setConversationValidation] = useState<AgentConversationValidation>(
+    conversationValidationRef.current,
+  );
+  const beginMutation = (label: string) => {
+    if (mutationRef.current != null) return null;
+    const token = Symbol(label);
+    mutationRef.current = token;
+    setBusy(true);
+    return token;
+  };
+  const endMutation = (token: symbol) => {
+    if (mutationRef.current !== token) return;
+    mutationRef.current = null;
+    setBusy(false);
+  };
   useLayoutEffect(() => {
     const version = activationVersionRef.current + 1;
     activationVersionRef.current = version;
+    mutationRef.current = null;
+    setBusy(false);
+    setContextReviewBusy(false);
     return () => {
       if (activationVersionRef.current === version) activationVersionRef.current = version + 1;
       refreshGenerationRef.current += 1;
+      mutationRef.current = null;
     };
   }, [
     instance.activation_generation,
@@ -244,15 +282,19 @@ export function AgentSurfaceView({
     [activationIsCurrent],
   );
 
-  const contextPlanKey = JSON.stringify([
-    view.composer.trim(),
-    view.mode,
-    view.conversation_id,
-    runtimeOutputContext?.execution_id ?? null,
-    runtimeOutputContext?.start_sequence ?? null,
-    runtimeOutputContext?.end_sequence ?? null,
-    runtimeOutputContext?.range_sha256 ?? null,
+  const buildContextPlanKey = (
+    state: AgentSurfaceViewState,
+    runtimeSnapshot: RuntimeOutputReference | null,
+  ) => JSON.stringify([
+    state.composer.trim(),
+    state.mode,
+    state.conversation_id,
+    runtimeSnapshot?.execution_id ?? null,
+    runtimeSnapshot?.start_sequence ?? null,
+    runtimeSnapshot?.end_sequence ?? null,
+    runtimeSnapshot?.range_sha256 ?? null,
   ]);
+  const contextPlanKey = buildContextPlanKey(view, runtimeOutputContextRef.current);
 
   const refresh = useCallback((
     activationVersion: number,
@@ -267,26 +309,48 @@ export function AgentSurfaceView({
     const refreshGeneration = refreshGenerationRef.current + 1;
     refreshGenerationRef.current = refreshGeneration;
     const token = { activationVersion, generation: refreshGeneration };
+    const pendingValidation: AgentConversationValidation = {
+      conversationId: preferredConversationId,
+      status: "pending",
+    };
+    conversationValidationRef.current = pendingValidation;
+    setConversationValidation(pendingValidation);
+    setLoading(true);
+    setRefreshError(null);
     const promise = (async () => {
-      const nextConversations = await transport.listAgentConversations(50);
-      if (!refreshIsCurrent(token)) return;
-      const preferredIsAvailable = nextConversations.some(
-        (conversation) => conversation.conversation_id === preferredConversationId,
-      );
-      const selected = preferredIsAvailable ? preferredConversationId : null;
-      const nextTurns = selected == null ? [] : await transport.listAgentTurns(selected, 50);
-      if (!refreshIsCurrent(token)) return;
-      const loadedDetails = await Promise.all(nextTurns.slice(0, 20).map(async (turn) => [
-        turn.turn_id,
-        await transport.getAgentTurnDetail(turn.turn_id),
-      ] as const));
-      if (!refreshIsCurrent(token)) return;
-      setConversations(nextConversations);
-      setTurns(nextTurns);
-      setDetails(new Map(loadedDetails.flatMap(([turnId, detail]) =>
-        detail == null ? [] : [[turnId, detail] as const]
-      )));
-      setLoading(false);
+      try {
+        const nextConversations = await transport.listAgentConversations(50);
+        if (!refreshIsCurrent(token)) return;
+        const preferredIsAvailable = nextConversations.some(
+          (conversation) => conversation.conversation_id === preferredConversationId,
+        );
+        const selected = preferredIsAvailable ? preferredConversationId : null;
+        const nextTurns = selected == null ? [] : await transport.listAgentTurns(selected, 50);
+        if (!refreshIsCurrent(token)) return;
+        const loadedDetails = await Promise.all(nextTurns.slice(0, 20).map(async (turn) => [
+          turn.turn_id,
+          await transport.getAgentTurnDetail(turn.turn_id),
+        ] as const));
+        if (!refreshIsCurrent(token)) return;
+        setConversations(nextConversations);
+        setTurns(nextTurns);
+        setDetails(new Map(loadedDetails.flatMap(([turnId, detail]) =>
+          detail == null ? [] : [[turnId, detail] as const]
+        )));
+        const settledValidation: AgentConversationValidation = {
+          conversationId: preferredConversationId,
+          status: preferredConversationId == null || preferredIsAvailable ? "available" : "unavailable",
+        };
+        conversationValidationRef.current = settledValidation;
+        setConversationValidation(settledValidation);
+        setLoading(false);
+      } catch (error: unknown) {
+        if (refreshIsCurrent(token)) {
+          setLoading(false);
+          setRefreshError(agentErrorMessage(error));
+        }
+        throw error;
+      }
     })();
     return { token, promise };
   }, [activationIsCurrent, refreshIsCurrent, transport]);
@@ -306,6 +370,12 @@ export function AgentSurfaceView({
     const next = initialAgentSurfaceState(instance);
     viewRef.current = next;
     setView(next);
+    const pendingValidation: AgentConversationValidation = {
+      conversationId: next.conversation_id,
+      status: "pending",
+    };
+    conversationValidationRef.current = pendingValidation;
+    setConversationValidation(pendingValidation);
   }, [
     instance.activation_generation,
     instance.instance_id,
@@ -331,7 +401,16 @@ export function AgentSurfaceView({
       refreshGenerationRef.current += 1;
       unsubscribe();
     };
-  }, [refresh, refreshIsCurrent, reportError, transport]);
+  }, [
+    instance.activation_generation,
+    instance.instance_id,
+    instance.project_id,
+    instance.surface_revision,
+    refresh,
+    refreshIsCurrent,
+    reportError,
+    transport,
+  ]);
 
   useEffect(() => {
     let active = true;
@@ -349,9 +428,16 @@ export function AgentSurfaceView({
     return () => { active = false; };
   }, [reportError, transport]);
 
-  const commitView = (next: AgentSurfaceViewState, durable = true) => {
-    if (next.composer !== viewRef.current.composer || next.mode !== viewRef.current.mode ||
-        next.conversation_id !== viewRef.current.conversation_id) setContextPreview(null);
+  const viewStateWriteBlocked = busy || contextReviewBusy;
+  const commitView = (
+    update: (current: AgentSurfaceViewState) => AgentSurfaceViewState,
+    durable = true,
+  ) => {
+    if (viewStateWriteBlocked || mutationRef.current != null) return;
+    const current = viewRef.current;
+    const next = update(current);
+    if (next.composer !== current.composer || next.mode !== current.mode ||
+        next.conversation_id !== current.conversation_id) setContextPreview(null);
     viewRef.current = next;
     setView(next);
     if (durable) void persist(next).catch(reportError);
@@ -366,6 +452,8 @@ export function AgentSurfaceView({
   };
   const loadContextCapacity = async () => {
     const activationVersion = activationVersionRef.current;
+    const mutation = beginMutation("agent-context-capacity-load");
+    if (mutation == null) return;
     setCapacityBusy(true);
     try {
       const settings = await transport.loadAgentLlmSettings();
@@ -378,6 +466,7 @@ export function AgentSurfaceView({
       if (activationIsCurrent(activationVersion)) reportError(error);
     } finally {
       if (activationIsCurrent(activationVersion)) setCapacityBusy(false);
+      endMutation(mutation);
     }
   };
   const saveContextCapacity = async () => {
@@ -389,6 +478,8 @@ export function AgentSurfaceView({
       return;
     }
     const activationVersion = activationVersionRef.current;
+    const mutation = beginMutation("agent-context-capacity-save");
+    if (mutation == null) return;
     setCapacityBusy(true);
     try {
       const settings = await transport.setAgentContextCapacity({
@@ -405,11 +496,14 @@ export function AgentSurfaceView({
       if (activationIsCurrent(activationVersion)) reportError(error);
     } finally {
       if (activationIsCurrent(activationVersion)) setCapacityBusy(false);
+      endMutation(mutation);
     }
   };
   const selectChatModel = async (modelId: string) => {
     if (llmSettings == null || modelSwitchBusy) return;
     const activationVersion = activationVersionRef.current;
+    const mutation = beginMutation("agent-chat-model-select");
+    if (mutation == null) return;
     setModelSwitchBusy(true);
     try {
       const settings = await transport.selectAgentChatModel(modelId, llmSettings.revision);
@@ -420,18 +514,18 @@ export function AgentSurfaceView({
       if (activationIsCurrent(activationVersion)) reportError(error);
     } finally {
       if (activationIsCurrent(activationVersion)) setModelSwitchBusy(false);
+      endMutation(mutation);
     }
   };
   const selectConversation = async (
     conversationId: string,
     activationVersion = activationVersionRef.current,
   ) => {
-    const workflow = Symbol("agent-conversation-selection");
-    conversationWorkflowRef.current = workflow;
+    const mutation = beginMutation("agent-conversation-selection");
+    if (mutation == null) return;
     refreshGenerationRef.current += 1;
     const selectedConversationId = conversationId === "" ? null : conversationId;
     const next = { ...viewRef.current, conversation_id: selectedConversationId };
-    setBusy(true);
     try {
       await persist(next);
       if (!activationIsCurrent(activationVersion)) return;
@@ -441,16 +535,14 @@ export function AgentSurfaceView({
     } catch (error: unknown) {
       if (activationIsCurrent(activationVersion)) reportError(error);
     } finally {
-      if (conversationWorkflowRef.current === workflow) conversationWorkflowRef.current = null;
-      if (activationIsCurrent(activationVersion)) setBusy(false);
+      endMutation(mutation);
     }
   };
   const newConversation = async () => {
     const activationVersion = activationVersionRef.current;
-    const workflow = Symbol("agent-conversation-workflow");
-    conversationWorkflowRef.current = workflow;
+    const mutation = beginMutation("agent-conversation-workflow");
+    if (mutation == null) return;
     refreshGenerationRef.current += 1;
-    setBusy(true);
     try {
       const next = await createConversation(viewRef.current);
       if (!activationIsCurrent(activationVersion)) return;
@@ -469,56 +561,114 @@ export function AgentSurfaceView({
         }
       }
     } finally {
-      if (conversationWorkflowRef.current === workflow) conversationWorkflowRef.current = null;
-      if (activationIsCurrent(activationVersion)) setBusy(false);
+      endMutation(mutation);
+    }
+  };
+  const conversationRequestIsAvailable = (state: AgentSurfaceViewState) => {
+    const validation = conversationValidationRef.current;
+    return validation.status === "available"
+      && validation.conversationId === state.conversation_id;
+  };
+  const turnMutationIsAvailable = (turn: AgentTurnSummary) => {
+    const current = viewRef.current;
+    return current.conversation_id === turn.conversation_id
+      && conversationRequestIsAvailable(current);
+  };
+  const rejectFileProposal = async (turn: AgentTurnSummary, key: string) => {
+    if (!turnMutationIsAvailable(turn) || viewRef.current.file_decisions[key] === "rejected") return;
+    const activationVersion = activationVersionRef.current;
+    const mutation = beginMutation("agent-file-reject");
+    if (mutation == null) return;
+    try {
+      if (!turnMutationIsAvailable(turn) || viewRef.current.file_decisions[key] === "rejected") return;
+      const current = viewRef.current;
+      const next = {
+        ...current,
+        file_decisions: { ...current.file_decisions, [key]: "rejected" as const },
+      };
+      await persist(next);
+      if (!activationIsCurrent(activationVersion)) return;
+      const latest = viewRef.current;
+      const adopted = {
+        ...latest,
+        file_decisions: { ...latest.file_decisions, [key]: "rejected" as const },
+      };
+      viewRef.current = adopted;
+      setView(adopted);
+    } catch (error: unknown) {
+      if (activationIsCurrent(activationVersion)) reportError(error);
+    } finally {
+      endMutation(mutation);
+    }
+  };
+  const pinTurn = async (turn: AgentTurnSummary) => {
+    if (!turnMutationIsAvailable(turn)) return;
+    const activationVersion = activationVersionRef.current;
+    const mutation = beginMutation("agent-pin-vibe");
+    if (mutation == null) return;
+    try {
+      if (!turnMutationIsAvailable(turn)) return;
+      await pinTask(turn);
+    } catch (error: unknown) {
+      if (activationIsCurrent(activationVersion)) reportError(error);
+    } finally {
+      endMutation(mutation);
     }
   };
   const reviewContext = async () => {
     const activationVersion = activationVersionRef.current;
-    const prompt = view.composer.trim();
-    if (!prompt || contextReviewBusy || busy || health?.state !== "ready") return;
+    const current = viewRef.current;
+    const runtimeSnapshot = runtimeOutputContextRef.current;
+    const prompt = current.composer.trim();
+    if (!prompt || contextReviewBusy || busy || health?.state !== "ready" ||
+        !conversationRequestIsAvailable(current)) return;
+    const mutation = beginMutation("agent-context-review");
+    if (mutation == null) return;
     setContextReviewBusy(true);
     try {
       const plan = await transport.previewAgentContext({
         prompt,
-        mode: view.mode,
+        mode: current.mode,
         task_kind: "agent_turn",
         model_id: null,
         editor_context: null,
-        conversation_id: view.conversation_id,
-        runtime_output_context: runtimeOutputContext,
+        conversation_id: current.conversation_id,
+        runtime_output_context: runtimeSnapshot,
       });
       if (!activationIsCurrent(activationVersion)) return;
-      setContextPreview({ key: contextPlanKey, plan });
+      setContextPreview({ key: buildContextPlanKey(current, runtimeSnapshot), plan });
     } catch (error: unknown) {
       if (activationIsCurrent(activationVersion)) reportError(error);
     } finally {
       if (activationIsCurrent(activationVersion)) setContextReviewBusy(false);
+      endMutation(mutation);
     }
   };
   const submit = async () => {
     const activationVersion = activationVersionRef.current;
-    const prompt = view.composer.trim();
-    if (!prompt || busy || health?.state !== "ready") return;
-    const reviewedPlan = contextPreview?.key === contextPlanKey ? contextPreview.plan : null;
-    if (runtimeOutputContext != null && reviewedPlan == null) {
+    const current = viewRef.current;
+    const runtimeSnapshot = runtimeOutputContextRef.current;
+    const prompt = current.composer.trim();
+    if (!prompt || busy || health?.state !== "ready" || !conversationRequestIsAvailable(current)) return;
+    const currentContextPlanKey = buildContextPlanKey(current, runtimeSnapshot);
+    const reviewedPlan = contextPreview?.key === currentContextPlanKey ? contextPreview.plan : null;
+    if (runtimeSnapshot != null && reviewedPlan == null) {
       await reviewContext();
       return;
     }
-    const workflow = Symbol("agent-turn-workflow");
-    conversationWorkflowRef.current = workflow;
+    const mutation = beginMutation("agent-turn-workflow");
+    if (mutation == null) return;
     refreshGenerationRef.current += 1;
-    setBusy(true);
     try {
-      const next = await runConversation(viewRef.current, {
+      const next = await runConversation(current, {
         prompt,
-        mode: view.mode,
+        mode: current.mode,
         task_kind: "agent_turn",
         model_id: null,
-        auto_approve: view.mode === "act" && view.auto_approve,
+        auto_approve: current.mode === "act" && current.auto_approve,
         editor_context: null,
-        conversation_id: view.conversation_id,
-        runtime_output_context: runtimeOutputContext,
+        conversation_id: current.conversation_id,
+        runtime_output_context: runtimeSnapshot,
         context_plan_digest: reviewedPlan?.plan_digest ?? null,
       });
       if (!activationIsCurrent(activationVersion)) return;
@@ -539,8 +689,7 @@ export function AgentSurfaceView({
         }
       }
     } finally {
-      if (conversationWorkflowRef.current === workflow) conversationWorkflowRef.current = null;
-      if (activationIsCurrent(activationVersion)) setBusy(false);
+      endMutation(mutation);
     }
   };
   const displayMode = instance.mode_id ?? "conversation";
@@ -563,23 +712,61 @@ export function AgentSurfaceView({
     else group.push(model);
   }
   const activeTurn = turns.find((turn) => turn.status === "running" || turn.status === "waiting");
+  const validationMatchesView = conversationValidation.conversationId === view.conversation_id;
+  const conversationValidationPending = !validationMatchesView || conversationValidation.status === "pending";
+  const selectedConversationUnavailable = validationMatchesView
+    && conversationValidation.status === "unavailable";
+  const selectedConversationListed = view.conversation_id == null || conversations.some(
+    (conversation) => conversation.conversation_id === view.conversation_id,
+  );
+  const showSyntheticConversation = view.conversation_id != null && !selectedConversationListed;
+  const conversationRequestBlocked = conversationValidationPending || selectedConversationUnavailable;
+  const turnMutationRenderBlocked = (turn: AgentTurnSummary) => busy
+    || conversationRequestBlocked
+    || view.conversation_id !== turn.conversation_id;
   const stopActiveTurn = activeTurn == null ? null : () => {
+    if (!turnMutationIsAvailable(activeTurn)) return;
     const activationVersion = activationVersionRef.current;
-    setBusy(true);
-    void transport.cancelAgentTurn(activeTurn.turn_id)
-      .then(() => refreshCurrent(activationVersion))
-      .catch((error: unknown) => {
+    const mutation = beginMutation("agent-turn-cancel");
+    if (mutation == null) return;
+    if (!turnMutationIsAvailable(activeTurn)) {
+      endMutation(mutation);
+      return;
+    }
+    void (async () => {
+      try {
+        await transport.cancelAgentTurn(activeTurn.turn_id);
+        await refreshCurrent(activationVersion);
+      } catch (error: unknown) {
         if (activationIsCurrent(activationVersion)) reportError(error);
-      })
-      .finally(() => {
-        if (activationIsCurrent(activationVersion)) setBusy(false);
-      });
+      } finally {
+        endMutation(mutation);
+      }
+    })();
   };
-  const runAndRefresh = async (operation: () => Promise<unknown>) => {
+  const runAndRefresh = async (
+    turn: AgentTurnSummary,
+    operation: () => Promise<unknown>,
+  ) => {
+    if (!turnMutationIsAvailable(turn)) return;
     const activationVersion = activationVersionRef.current;
+    const mutation = beginMutation("agent-turn-follow-up");
+    if (mutation == null) return;
     try {
+      if (!turnMutationIsAvailable(turn)) return;
       await operation();
       if (activationIsCurrent(activationVersion)) await refreshCurrent(activationVersion);
+    } catch (error: unknown) {
+      if (activationIsCurrent(activationVersion)) reportError(error);
+    } finally {
+      endMutation(mutation);
+    }
+  };
+  const retryRefresh = async () => {
+    if (mutationRef.current != null || conversationValidationRef.current.status === "pending") return;
+    const activationVersion = activationVersionRef.current;
+    try {
+      await refreshCurrent(activationVersion, viewRef.current.conversation_id);
     } catch (error: unknown) {
       if (activationIsCurrent(activationVersion)) reportError(error);
     }
@@ -616,19 +803,20 @@ export function AgentSurfaceView({
             </div>
             <button type="button" disabled={busy} onClick={() => {
               const activationVersion = activationVersionRef.current;
-              setBusy(true);
-              void transport.retryAgentRuntime()
-                .then((diagnostics) => {
+              const mutation = beginMutation("agent-runtime-retry");
+              if (mutation == null) return;
+              void (async () => {
+                try {
+                  const diagnostics = await transport.retryAgentRuntime();
                   if (!activationIsCurrent(activationVersion)) return;
                   setRuntimeDiagnostics(diagnostics);
-                  return refreshCurrent(activationVersion);
-                })
-                .catch((error: unknown) => {
+                  await refreshCurrent(activationVersion);
+                } catch (error: unknown) {
                   if (activationIsCurrent(activationVersion)) reportError(error);
-                })
-                .finally(() => {
-                  if (activationIsCurrent(activationVersion)) setBusy(false);
-                });
+                } finally {
+                  endMutation(mutation);
+                }
+              })();
             }}>Retry Agent runtime</button>
           </div>
           <details className="rho-agent-runtime-diagnostics">
@@ -648,6 +836,11 @@ export function AgentSurfaceView({
           onChange={(event) => void selectConversation(event.target.value)}
         >
           <option value="">No conversation</option>
+          {showSyntheticConversation && <option value={view.conversation_id!} disabled>
+            {conversationValidationPending
+              ? "Checking selected conversation…"
+              : "Selected conversation unavailable"}
+          </option>}
           {conversations.map((conversation) => (
             <option value={conversation.conversation_id} key={conversation.conversation_id}>
               {conversation.title} · {conversation.turn_count}
@@ -656,6 +849,7 @@ export function AgentSurfaceView({
         </select>
         <button type="button" className="rho-agent-toolbar-action" disabled={busy} onClick={() => void newConversation()}>New</button>
         <button type="button" className="rho-agent-toolbar-action" aria-expanded={capacityOpen} disabled={busy} onClick={() => {
+          if (mutationRef.current != null) return;
           const next = !capacityOpen;
           setCapacityOpen(next);
           if (next) void loadContextCapacity();
@@ -667,15 +861,21 @@ export function AgentSurfaceView({
       }}>
         {llmSettings == null ? <span>{capacityBusy ? "Loading model capacity…" : "Model capacity is unavailable."}</span> : <>
           <label>Model
-            <select value={capacityModelId} disabled={capacityBusy} onChange={(event) => selectCapacityModel(event.target.value)}>
+            <select value={capacityModelId} disabled={busy || capacityBusy} onChange={(event) => {
+              if (mutationRef.current == null) selectCapacityModel(event.target.value);
+            }}>
               {llmSettings.models.map((model) => <option value={model.id} key={model.id}>{model.display_name}</option>)}
             </select>
           </label>
           <label>Context window
-            <input aria-label="Context window tokens" type="number" min="4096" step="1" disabled={capacityBusy} value={capacityDraft.context} onChange={(event) => setCapacityDraft({ ...capacityDraft, context: event.target.value })} />
+            <input aria-label="Context window tokens" type="number" min="4096" step="1" disabled={busy || capacityBusy} value={capacityDraft.context} onChange={(event) => {
+              if (mutationRef.current == null) setCapacityDraft({ ...capacityDraft, context: event.target.value });
+            }} />
           </label>
           <label>Reserve for reply
-            <input aria-label="Reserved output tokens" type="number" min="256" step="1" disabled={capacityBusy} value={capacityDraft.reserve} onChange={(event) => setCapacityDraft({ ...capacityDraft, reserve: event.target.value })} />
+            <input aria-label="Reserved output tokens" type="number" min="256" step="1" disabled={busy || capacityBusy} value={capacityDraft.reserve} onChange={(event) => {
+              if (mutationRef.current == null) setCapacityDraft({ ...capacityDraft, reserve: event.target.value });
+            }} />
           </label>
           <div>
             <small>{llmSettings.models.find((model) => model.id === capacityModelId)?.context_capacity_source.replaceAll("_", " ")}</small>
@@ -687,25 +887,48 @@ export function AgentSurfaceView({
               const status = provider.credential_status.replaceAll("_", " ");
               return `credential: ${status} · source: ${source}`;
             })()}</small>
-            <button type="button" disabled={capacityBusy} onClick={() => void loadContextCapacity()}>Reload</button>
-            <button type="submit" className="rho-primary-action" disabled={capacityBusy || !capacityModelId}>{capacityBusy ? "Saving…" : "Save"}</button>
+            <button type="button" disabled={busy || capacityBusy} onClick={() => void loadContextCapacity()}>Reload</button>
+            <button type="submit" className="rho-primary-action" disabled={busy || capacityBusy || !capacityModelId}>{capacityBusy ? "Saving…" : "Save"}</button>
           </div>
         </>}
       </form>}
       {displayMode === "activity" && activeTurn != null && stopActiveTurn != null && (
-        <AgentRunningRow status={activeTurn.status} startedAt={activeTurn.started_at} onStop={stopActiveTurn} />
+        <AgentRunningRow
+          status={activeTurn.status}
+          startedAt={activeTurn.started_at}
+          disabled={turnMutationRenderBlocked(activeTurn)}
+          onStop={stopActiveTurn}
+        />
       )}
       {displayMode !== "composer" && (
         <div className="rho-agent-timeline" aria-busy={loading}>
           {loading && <p className="rho-agent-loading">Loading conversation…</p>}
-          {!loading && turns.length === 0 && <div className="rho-agent-empty" role="status">
-            <strong>{view.conversation_id == null ? "No conversation yet" : "Ready for the first turn"}</strong>
-            <span>{view.conversation_id == null
-              ? "Write below and send; Rho opens a conversation and keeps the thread, run state, and decisions here."
-              : "Choose Ask, Plan, or Act, then use the composer below."}</span>
+          {!loading && refreshError != null && <div className="rho-agent-empty" role="alert">
+            <strong>Conversation refresh failed</strong>
+            <span>{refreshError}</span>
+            <button
+              type="button"
+              disabled={busy || conversationValidationRef.current.status === "pending"}
+              onClick={() => void retryRefresh()}
+            >Retry refresh</button>
+          </div>}
+          {!loading && refreshError == null && turns.length === 0 && <div className="rho-agent-empty" role="status">
+            <strong>{selectedConversationUnavailable
+              ? "Selected conversation unavailable"
+              : view.conversation_id == null ? "No conversation yet" : "Ready for the first turn"}</strong>
+            <span>{selectedConversationUnavailable
+              ? "Choose No conversation or a listed conversation before reviewing context or sending."
+              : view.conversation_id == null
+                ? "Write below and send; Rho opens a conversation and keeps the thread, run state, and decisions here."
+                : "Choose Ask, Plan, or Act, then use the composer below."}</span>
             <div className="rho-agent-suggestions">
               {AGENT_SUGGESTIONS.map((suggestion) => (
-                <button type="button" key={suggestion} onClick={() => commitView({ ...view, composer: suggestion }, false)}>
+                <button
+                  type="button"
+                  disabled={viewStateWriteBlocked}
+                  key={suggestion}
+                  onClick={() => commitView((current) => ({ ...current, composer: suggestion }), false)}
+                >
                   {suggestion}
                 </button>
               ))}
@@ -756,8 +979,8 @@ export function AgentSurfaceView({
                     </header>
                     <pre>{approval.code ?? approval.arguments_json}</pre>
                     <div className="rho-agent-decision-actions">
-                      <button type="button" onClick={() => void runAndRefresh(() => transport.respondAgentApproval({ request_id: approval.request_id, decision: "approve", reason: null }))}>Approve</button>
-                      <button type="button" onClick={() => void runAndRefresh(() => transport.respondAgentApproval({ request_id: approval.request_id, decision: "reject", reason: "Rejected in Agent Surface" }))}>Reject</button>
+                      <button type="button" disabled={turnMutationRenderBlocked(turn)} onClick={() => void runAndRefresh(turn, () => transport.respondAgentApproval({ request_id: approval.request_id, decision: "approve", reason: null }))}>Approve</button>
+                      <button type="button" disabled={turnMutationRenderBlocked(turn)} onClick={() => void runAndRefresh(turn, () => transport.respondAgentApproval({ request_id: approval.request_id, decision: "reject", reason: "Rejected in Agent Surface" }))}>Reject</button>
                     </div>
                   </section>
                 ))}
@@ -775,11 +998,18 @@ export function AgentSurfaceView({
                         {rejected && outcome == null && <span className="rho-agent-file-outcome">rejected in this view</span>}
                         {outcome == null && !rejected && (
                           <div className="rho-agent-decision-actions">
-                            <button type="button" disabled={busy || turn.status === "running" || turn.status === "waiting"} onClick={() => {
+                            <button type="button" disabled={turnMutationRenderBlocked(turn) || turn.status === "running" || turn.status === "waiting"} onClick={() => {
+                              if (!turnMutationIsAvailable(turn) || viewRef.current.file_decisions[key] === "rejected") return;
                               const activationVersion = activationVersionRef.current;
-                              setBusy(true);
-                              void applyFileProposal(turn, event.id, proposal)
-                                .then(({ response, beforeContent }) => {
+                              const mutation = beginMutation("agent-file-apply");
+                              if (mutation == null) return;
+                              if (!turnMutationIsAvailable(turn) || viewRef.current.file_decisions[key] === "rejected") {
+                                endMutation(mutation);
+                                return;
+                              }
+                              void (async () => {
+                                try {
+                                  const { response, beforeContent } = await applyFileProposal(turn, event.id, proposal);
                                   if (!activationIsCurrent(activationVersion)) return;
                                   if (response.after_sha256 != null) {
                                     setFileUndo({
@@ -791,37 +1021,43 @@ export function AgentSurfaceView({
                                       created: proposal.operation === "create",
                                     });
                                   }
-                                  return refreshCurrent(activationVersion);
-                                })
-                                .catch((error: unknown) => {
+                                  await refreshCurrent(activationVersion);
+                                } catch (error: unknown) {
                                   if (activationIsCurrent(activationVersion)) reportError(error);
-                                })
-                                .finally(() => {
-                                  if (activationIsCurrent(activationVersion)) setBusy(false);
-                                });
+                                } finally {
+                                  endMutation(mutation);
+                                }
+                              })();
                             }}>Apply</button>
-                            <button type="button" onClick={() => commitView({
-                              ...view,
-                              file_decisions: { ...view.file_decisions, [key]: "rejected" },
-                            })}>Reject</button>
+                            <button
+                              type="button"
+                              disabled={turnMutationRenderBlocked(turn)}
+                              onClick={() => void rejectFileProposal(turn, key)}
+                            >Reject</button>
                           </div>
                         )}
                         {fileUndo?.turn_id === turn.turn_id && fileUndo.proposal_event_id === event.id && (
-                          <button type="button" disabled={busy} onClick={() => {
+                          <button type="button" disabled={turnMutationRenderBlocked(turn)} onClick={() => {
+                            if (!turnMutationIsAvailable(turn)) return;
                             const activationVersion = activationVersionRef.current;
-                            setBusy(true);
-                            void undoFileProposal(fileUndo)
-                              .then(() => {
+                            const mutation = beginMutation("agent-file-undo");
+                            if (mutation == null) return;
+                            if (!turnMutationIsAvailable(turn)) {
+                              endMutation(mutation);
+                              return;
+                            }
+                            void (async () => {
+                              try {
+                                await undoFileProposal(fileUndo);
                                 if (!activationIsCurrent(activationVersion)) return;
                                 setFileUndo(null);
-                                return refreshCurrent(activationVersion);
-                              })
-                              .catch((error: unknown) => {
+                                await refreshCurrent(activationVersion);
+                              } catch (error: unknown) {
                                 if (activationIsCurrent(activationVersion)) reportError(error);
-                              })
-                              .finally(() => {
-                                if (activationIsCurrent(activationVersion)) setBusy(false);
-                              });
+                              } finally {
+                                endMutation(mutation);
+                              }
+                            })();
                           }}>Undo applied edit</button>
                         )}
                       </header>
@@ -852,8 +1088,8 @@ export function AgentSurfaceView({
                   </div>
                 )}
                 <footer>
-                  <button type="button" onClick={() => void pinTask(turn).catch(reportError)}>Pin to Vibe</button>
-                  {(turn.status === "failed" || turn.status === "cancelled") && <button type="button" onClick={() => void runAndRefresh(() => transport.retryAgentTurn(turn.turn_id))}>Retry</button>}
+                  <button type="button" disabled={turnMutationRenderBlocked(turn)} onClick={() => void pinTurn(turn)}>Pin to Vibe</button>
+                  {(turn.status === "failed" || turn.status === "cancelled") && <button type="button" disabled={turnMutationRenderBlocked(turn)} onClick={() => void runAndRefresh(turn, () => transport.retryAgentTurn(turn.turn_id))}>Retry</button>}
                 </footer>
               </article>
             );
@@ -863,7 +1099,12 @@ export function AgentSurfaceView({
       {displayMode !== "activity" && (
         <div className="rho-agent-composer">
           {activeTurn != null && stopActiveTurn != null && (
-            <AgentRunningRow status={activeTurn.status} startedAt={activeTurn.started_at} onStop={stopActiveTurn} />
+            <AgentRunningRow
+              status={activeTurn.status}
+              startedAt={activeTurn.started_at}
+              disabled={turnMutationRenderBlocked(activeTurn)}
+              onStop={stopActiveTurn}
+            />
           )}
           {runtimeOutputContext != null && <div className="rho-agent-context-chip" role="status">
             <div>
@@ -872,6 +1113,7 @@ export function AgentSurfaceView({
               <small>{runtimeOutputContext.payload_bytes.toLocaleString()} bytes · {runtimeOutputContext.range_sha256.slice(0, 10)}</small>
             </div>
             <button type="button" aria-label="Remove Runtime output from Agent context" onClick={() => {
+              runtimeOutputContextRef.current = null;
               setRuntimeOutputContext(null);
               setContextPreview(null);
             }}>×</button>
@@ -879,9 +1121,12 @@ export function AgentSurfaceView({
           <textarea
             aria-label={`Agent prompt ${instance.instance_id}`}
             value={view.composer}
-            disabled={busy}
-            onChange={(event) => commitView({ ...view, composer: event.target.value }, false)}
-            onBlur={() => void persist(view).catch(reportError)}
+            disabled={viewStateWriteBlocked}
+            onChange={(event) => commitView((current) => ({ ...current, composer: event.target.value }), false)}
+            onBlur={() => {
+              if (viewStateWriteBlocked || mutationRef.current != null) return;
+              void persist(viewRef.current).catch(reportError);
+            }}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
@@ -891,25 +1136,40 @@ export function AgentSurfaceView({
             placeholder="Ask Rho about this project…"
           />
           {view.mode === "act" && <label className="rho-agent-auto-approve">
-            <input type="checkbox" checked={view.auto_approve} onChange={(event) => commitView({ ...view, auto_approve: event.target.checked })} />
+            <input
+              type="checkbox"
+              checked={view.auto_approve}
+              disabled={viewStateWriteBlocked}
+              onChange={(event) => commitView((current) => ({ ...current, auto_approve: event.target.checked }))}
+            />
             Auto-approve project tools for this conversation
           </label>}
           <div className="rho-agent-context-controls">
-            <button type="button" disabled={busy || contextReviewBusy || health?.state !== "ready" || !view.composer.trim()} onClick={() => void reviewContext()}>
+            <button type="button" disabled={busy || contextReviewBusy || conversationRequestBlocked || health?.state !== "ready" || !view.composer.trim()} onClick={() => void reviewContext()}>
               {contextReviewBusy ? "Reviewing…" : "Review context"}
             </button>
             <div className="rho-agent-mode" role="group" aria-label="Agent mode">
               {(["ask", "plan", "act"] as const).map((mode) => (
-                <button type="button" aria-pressed={view.mode === mode} key={mode} onClick={() => commitView({
-                  ...view,
-                  mode,
-                  auto_approve: mode === "act" ? view.auto_approve : false,
-                })}>{mode}</button>
+                <button
+                  type="button"
+                  aria-pressed={view.mode === mode}
+                  disabled={viewStateWriteBlocked}
+                  key={mode}
+                  onClick={() => commitView((current) => ({
+                    ...current,
+                    mode,
+                    auto_approve: mode === "act" ? current.auto_approve : false,
+                  }))}
+                >{mode}</button>
               ))}
             </div>
             <small className="rho-agent-mode-hint">{AGENT_MODE_HINTS[view.mode]}</small>
             <details className="rho-agent-model-menu">
-              <summary aria-label={`Chat model: ${chatModelLabel}`} aria-busy={modelSwitchBusy} onClick={(event) => {
+              <summary aria-label={`Chat model: ${chatModelLabel}`} aria-busy={modelSwitchBusy} aria-disabled={busy || modelSwitchBusy} onClick={(event) => {
+                if (mutationRef.current != null || busy || modelSwitchBusy) {
+                  event.preventDefault();
+                  return;
+                }
                 const menu = event.currentTarget.closest("details");
                 if (menu != null && !menu.open) setModelQuery("");
               }}>
@@ -923,6 +1183,7 @@ export function AgentSurfaceView({
                     aria-label="Search chat models"
                     placeholder="Search models…"
                     value={modelQuery}
+                    disabled={busy || modelSwitchBusy}
                     onChange={(event) => setModelQuery(event.target.value)}
                   />
                 )}
@@ -940,7 +1201,7 @@ export function AgentSurfaceView({
                           type="button"
                           role="menuitemradio"
                           aria-checked={active}
-                          disabled={modelSwitchBusy}
+                          disabled={busy || modelSwitchBusy}
                           key={model.id}
                           onClick={(event) => {
                             event.currentTarget.closest("details")!.open = false;
@@ -960,7 +1221,7 @@ export function AgentSurfaceView({
                 ))}
               </div>
             </details>
-            <button type="button" className="rho-primary-action" disabled={busy || contextReviewBusy || health?.state !== "ready" || !view.composer.trim()} onClick={() => void submit()}>
+            <button type="button" className="rho-primary-action" disabled={busy || contextReviewBusy || conversationRequestBlocked || health?.state !== "ready" || !view.composer.trim()} onClick={() => void submit()}>
               {busy ? "Working…" : runtimeOutputContext != null && contextPreview?.key !== contextPlanKey ? "Review before send" : "Send"}
             </button>
           </div>

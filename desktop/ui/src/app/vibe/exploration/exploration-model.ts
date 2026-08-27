@@ -112,6 +112,22 @@ function publicActivityBody(event: AgentTurnEvent): string | null {
   return boundedPublicText(rawBody);
 }
 
+function isFailureActivity(event: AgentTurnEvent): boolean {
+  return event.event_type === "tool.call_failed" ||
+    event.event_type === "desktop.agent_failed" ||
+    event.event_type === "agent.interrupted" ||
+    event.event_type === "agent.cancelled";
+}
+
+function publicFailureActivityText(
+  value: string | null | undefined,
+  fallback: string,
+  limit: number,
+): string | null {
+  const bounded = boundedPublicText(value, limit);
+  return bounded == null ? null : vibeFailureMessage(bounded, fallback);
+}
+
 export function projectExplorationStatus(
   status: string,
   terminalReason: string | null,
@@ -175,14 +191,26 @@ export function projectExplorationActivities(
     .sort((left, right) => left.id - right.id)
     .flatMap((event) => {
       if (!PUBLIC_AGENT_EVENT_TYPES.has(event.event_type)) return [];
+      const failureActivity = isFailureActivity(event);
+      const body = publicActivityBody(event);
       return [{
         key: `${event.turn_id}:${event.id}`,
         kind: activityKind(event),
-        title: boundedPublicText(event.title, 240) ?? "Agent 活动",
-        body: publicActivityBody(event),
+        title: failureActivity
+          ? publicFailureActivityText(event.title, "Agent 活动失败。", 240) ?? "Agent 活动失败。"
+          : boundedPublicText(event.title, 240) ?? "Agent 活动",
+        body: failureActivity
+          ? publicFailureActivityText(body, "Agent 失败详情暂时不可用。", 1_200)
+          : body,
         timestamp: event.timestamp,
-        status: event.status,
-        code: boundedPublicText(event.code, 16_000),
+        status: failureActivity
+          ? publicFailureActivityText(event.status, "failed", 120) ?? "failed"
+          : event.status,
+        // Vibe may disclose explicitly public code for successful activity, but
+        // failure records can contain the rejected implementation payload.
+        // Keep that payload in the trusted Studio surface instead of trying to
+        // infer which fragments are safe to reveal here.
+        code: failureActivity ? null : boundedPublicText(event.code, 16_000),
       } satisfies ExplorationActivityView];
     });
 }

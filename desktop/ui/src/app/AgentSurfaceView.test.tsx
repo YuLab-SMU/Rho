@@ -4,13 +4,20 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
   AgentConversationSummary,
+  AgentFileMutationResponse,
   AgentTurnDetail,
   AgentTurnSummary,
+  RuntimeOutputReference,
   RunAgentRequest,
   SurfaceInstance,
 } from "../transport";
 import { createMockUiKernelTransport } from "../transport/mock";
-import { AgentSurfaceView, type AgentSurfaceViewState } from "./AgentSurfaceView";
+import {
+  AgentSurfaceView,
+  type AgentFileProposal,
+  type AgentFileUndoState,
+  type AgentSurfaceViewState,
+} from "./AgentSurfaceView";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
   .IS_REACT_ACT_ENVIRONMENT = true;
@@ -98,10 +105,24 @@ describe("Studio Agent Surface", () => {
     readonly health?: { readonly state: string; readonly label: string; readonly detail: string | null } | null;
     readonly instance?: SurfaceInstance;
     readonly persist?: (viewState: AgentSurfaceViewState) => Promise<void>;
+    readonly createConversation?: (
+      current: AgentSurfaceViewState,
+    ) => Promise<AgentSurfaceViewState>;
     readonly runConversation?: (
       current: AgentSurfaceViewState,
       request: RunAgentRequest,
     ) => Promise<AgentSurfaceViewState>;
+    readonly applyFileProposal?: (
+      turn: AgentTurnSummary,
+      eventId: number,
+      proposal: AgentFileProposal,
+    ) => Promise<{
+      readonly response: AgentFileMutationResponse;
+      readonly beforeContent: string;
+    }>;
+    readonly undoFileProposal?: (request: AgentFileUndoState) => Promise<void>;
+    readonly pinTask?: (turn: AgentTurnSummary) => Promise<void>;
+    readonly runtimeOutputContext?: RuntimeOutputReference | null;
     readonly reportError?: (error: unknown) => void;
   } = {}) {
     const transport = options.transport ?? createMockUiKernelTransport();
@@ -126,11 +147,11 @@ describe("Studio Agent Surface", () => {
       lifecycle_state: "active",
     };
     const persist = options.persist ?? vi.fn(async () => undefined);
-    const pinTask = vi.fn(async () => undefined);
-    const applyFileProposal = vi.fn(async () => {
+    const pinTask = options.pinTask ?? vi.fn(async () => undefined);
+    const applyFileProposal = options.applyFileProposal ?? vi.fn(async () => {
       throw new Error("applyFileProposal is not expected in this test");
     });
-    const undoFileProposal = vi.fn(async () => undefined);
+    const undoFileProposal = options.undoFileProposal ?? vi.fn(async () => undefined);
     const reportError = options.reportError ?? vi.fn();
     const setRuntimeOutputContext = vi.fn();
     const container = document.createElement("div");
@@ -152,6 +173,7 @@ describe("Studio Agent Surface", () => {
         request: RunAgentRequest,
       ) => Promise<AgentSurfaceViewState>;
       readonly persist?: (viewState: AgentSurfaceViewState) => Promise<void>;
+      readonly runtimeOutputContext?: RuntimeOutputReference | null;
       readonly reportError?: (error: unknown) => void;
     } = {}) => {
       const renderTransport = overrides.transport ?? transport;
@@ -180,15 +202,18 @@ describe("Studio Agent Surface", () => {
           applyFileProposal={applyFileProposal}
           undoFileProposal={undoFileProposal}
           reportError={overrides.reportError ?? reportError}
-          runtimeOutputContext={null}
+          runtimeOutputContext={overrides.runtimeOutputContext === undefined
+            ? options.runtimeOutputContext ?? null
+            : overrides.runtimeOutputContext}
           setRuntimeOutputContext={setRuntimeOutputContext}
         />);
         await settle();
       });
     };
-    await renderView(options.runConversation == null
-      ? {}
-      : { runConversation: options.runConversation });
+    await renderView({
+      ...(options.createConversation == null ? {} : { createConversation: options.createConversation }),
+      ...(options.runConversation == null ? {} : { runConversation: options.runConversation }),
+    });
     return {
       container,
       instance,
@@ -200,6 +225,7 @@ describe("Studio Agent Surface", () => {
       root,
       setRuntimeOutputContext,
       transport,
+      undoFileProposal,
     };
   }
 
@@ -484,7 +510,7 @@ describe("Studio Agent Surface", () => {
     expect([...menu.querySelectorAll("div[role='menu'] button")].length).toBe(8);
   });
 
-  it("keeps Stop beside the composer for a running turn and cancels through the existing path", async () => {
+  it("admits Stop once and blocks same-event view snapshots", async () => {
     const transport = createMockUiKernelTransport();
     const runningTurn = makeTurn({
       turn_id: "agent-turn:mock-running",
@@ -495,18 +521,36 @@ describe("Studio Agent Surface", () => {
     });
     transport.listAgentTurns = async () => [runningTurn];
     transport.getAgentTurnDetail = async () => makeDetail(runningTurn);
-    const cancelAgentTurn = vi.fn(transport.cancelAgentTurn.bind(transport));
+    const cancelGate = deferred<Awaited<ReturnType<typeof transport.cancelAgentTurn>>>();
+    const cancelAgentTurn = vi.fn(() => cancelGate.promise);
     transport.cancelAgentTurn = cancelAgentTurn;
-    const { container } = await renderAgent({ transport });
+    const { container, persist } = await renderAgent({ transport });
 
     const statusRow = container.querySelector(".rho-agent-composer .rho-agent-running")!;
     expect(statusRow.textContent).toContain("Agent running");
     const stop = [...statusRow.querySelectorAll("button")].find((button) => button.textContent === "Stop")!;
-    await click(stop);
+    const plan = [...container.querySelectorAll<HTMLButtonElement>('.rho-agent-mode button')]
+      .find((button) => button.textContent === "plan")!;
+    await act(async () => {
+      stop.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      stop.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      plan.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await settle();
+    });
     expect(cancelAgentTurn).toHaveBeenCalledWith("agent-turn:mock-running");
+    expect(cancelAgentTurn).toHaveBeenCalledOnce();
+    expect(stop.disabled).toBe(true);
+    expect(plan.disabled).toBe(true);
+    expect(persist).not.toHaveBeenCalled();
+
+    await act(async () => {
+      cancelGate.resolve({ status: "cancelled", turn_id: runningTurn.turn_id });
+      await settle();
+    });
+    expect(persist).not.toHaveBeenCalled();
   });
 
-  it("names the wait next to a distinct approval decision and responds through the existing path", async () => {
+  it("names the wait and admits an approval response only once", async () => {
     const transport = createMockUiKernelTransport();
     const waitingTurn = makeTurn({
       turn_id: "agent-turn:mock-waiting",
@@ -536,13 +580,10 @@ describe("Studio Agent Surface", () => {
         continuation_outcome: null,
       }],
     });
-    const respondAgentApproval = vi.fn(async () => ({
-      status: "delivered" as const,
-      request_id: "approval-request:mock-1",
-      turn_id: waitingTurn.turn_id,
-    }));
+    const approvalGate = deferred<Awaited<ReturnType<typeof transport.respondAgentApproval>>>();
+    const respondAgentApproval = vi.fn(() => approvalGate.promise);
     transport.respondAgentApproval = respondAgentApproval;
-    const { container } = await renderAgent({ transport });
+    const { container, persist } = await renderAgent({ transport });
 
     expect(container.querySelector(".rho-agent-composer .rho-agent-running")!.textContent)
       .toContain("Waiting for a decision or response");
@@ -552,12 +593,33 @@ describe("Studio Agent Surface", () => {
     expect(container.querySelector(".rho-agent-file-proposal")).toBeNull();
 
     const approve = [...approval.querySelectorAll("button")].find((button) => button.textContent === "Approve")!;
-    await click(approve);
+    const plan = [...container.querySelectorAll<HTMLButtonElement>('.rho-agent-mode button')]
+      .find((button) => button.textContent === "plan")!;
+    await act(async () => {
+      approve.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      approve.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      plan.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await settle();
+    });
     expect(respondAgentApproval).toHaveBeenCalledWith({
       request_id: "approval-request:mock-1",
       decision: "approve",
       reason: null,
     });
+    expect(respondAgentApproval).toHaveBeenCalledOnce();
+    expect(approve.disabled).toBe(true);
+    expect(plan.disabled).toBe(true);
+    expect(persist).not.toHaveBeenCalled();
+
+    await act(async () => {
+      approvalGate.resolve({
+        status: "delivered",
+        request_id: "approval-request:mock-1",
+        turn_id: waitingTurn.turn_id,
+      });
+      await settle();
+    });
+    expect(persist).not.toHaveBeenCalled();
   });
 
   it("renders failed and cancelled turns with distinct truthful copy", async () => {
@@ -596,6 +658,52 @@ describe("Studio Agent Surface", () => {
     }
   });
 
+  it("admits turn Retry once and blocks same-event view decisions", async () => {
+    const transport = createMockUiKernelTransport();
+    const failedTurn = makeTurn({
+      turn_id: "agent-turn:retry-guard",
+      status: "failed",
+      terminal_reason: "provider_error",
+      prompt_preview: "Retry exactly once",
+      error_message: "Provider rejected the request.",
+    });
+    transport.listAgentTurns = vi.fn(async () => [failedTurn]);
+    transport.getAgentTurnDetail = vi.fn(async () => makeDetail(failedTurn));
+    const retryGate = deferred<Awaited<ReturnType<typeof transport.retryAgentTurn>>>();
+    const retryAgentTurn = vi.fn(() => retryGate.promise);
+    transport.retryAgentTurn = retryAgentTurn;
+    const { container, persist } = await renderAgent({ transport });
+    const retry = [...container.querySelectorAll<HTMLButtonElement>(
+      '[data-turn-id="agent-turn:retry-guard"] footer button',
+    )].find((button) => button.textContent === "Retry")!;
+    const plan = [...container.querySelectorAll<HTMLButtonElement>('.rho-agent-mode button')]
+      .find((button) => button.textContent === "plan")!;
+
+    await act(async () => {
+      retry.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      retry.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      plan.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await settle();
+    });
+    expect(retryAgentTurn).toHaveBeenCalledOnce();
+    expect(retry.disabled).toBe(true);
+    expect(plan.disabled).toBe(true);
+    expect(persist).not.toHaveBeenCalled();
+
+    await act(async () => {
+      retryGate.resolve({
+        status: "started",
+        turn_id: "agent-turn:retry-created",
+        conversation_id: failedTurn.conversation_id,
+        retry_of_turn_id: failedTurn.turn_id,
+        auto_approve: false,
+        task_kind: "agent_turn",
+      });
+      await settle();
+    });
+    expect(persist).not.toHaveBeenCalled();
+  });
+
   it("persists a rejected file proposal without touching the apply path", async () => {
     const { container, persist, applyFileProposal } = await renderAgent();
     const proposal = container.querySelector(".rho-agent-file-proposal")!;
@@ -608,6 +716,126 @@ describe("Studio Agent Surface", () => {
     }));
     expect(proposal.textContent).toContain("rejected in this view");
     expect([...proposal.querySelectorAll("button")].some((button) => button.textContent === "Apply")).toBe(false);
+  });
+
+  it("admits Apply and Undo once each and blocks same-event view decisions", async () => {
+    const transport = createMockUiKernelTransport();
+    const mutationResponse = await transport.applyAgentFileEdit({
+      turn_id: "agent-turn:mock-1",
+      proposal_event_id: 3,
+      path: "analysis.R",
+      expected_disk_sha256: null,
+      before_content: "before",
+    });
+    const applyGate = deferred<{
+      readonly response: AgentFileMutationResponse;
+      readonly beforeContent: string;
+    }>();
+    const undoGate = deferred<void>();
+    const applyFileProposal = vi.fn(() => applyGate.promise);
+    const undoFileProposal = vi.fn(() => undoGate.promise);
+    const { container, persist } = await renderAgent({
+      applyFileProposal,
+      transport,
+      undoFileProposal,
+    });
+    const proposal = container.querySelector(".rho-agent-file-proposal")!;
+    const apply = [...proposal.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent === "Apply")!;
+    const reject = [...proposal.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent === "Reject")!;
+    const plan = [...container.querySelectorAll<HTMLButtonElement>('.rho-agent-mode button')]
+      .find((button) => button.textContent === "plan")!;
+
+    await act(async () => {
+      apply.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      apply.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      plan.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      reject.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await settle();
+    });
+    expect(applyFileProposal).toHaveBeenCalledOnce();
+    expect(apply.disabled).toBe(true);
+    expect(plan.disabled).toBe(true);
+    expect(reject.disabled).toBe(true);
+    expect(persist).not.toHaveBeenCalled();
+
+    await act(async () => {
+      applyGate.resolve({ response: mutationResponse, beforeContent: "before" });
+      await settle();
+    });
+    const undo = [...proposal.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent === "Undo applied edit")!;
+    expect(undo).not.toBeNull();
+
+    await act(async () => {
+      undo.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      undo.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      plan.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      reject.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await settle();
+    });
+    expect(undoFileProposal).toHaveBeenCalledOnce();
+    expect(undo.disabled).toBe(true);
+    expect(plan.disabled).toBe(true);
+    expect(reject.disabled).toBe(true);
+    expect(persist).not.toHaveBeenCalled();
+
+    await act(async () => {
+      undoGate.resolve();
+      await settle();
+    });
+    expect(persist).not.toHaveBeenCalled();
+  });
+
+  it("admits context review once and blocks same-event mode and file decisions", async () => {
+    const transport = createMockUiKernelTransport();
+    const preview = await transport.previewAgentContext({
+      prompt: "Review this context once",
+      mode: "ask",
+      task_kind: "agent_turn",
+      model_id: null,
+      editor_context: null,
+      conversation_id: "agent-conversation:mock-shared",
+      runtime_output_context: null,
+    });
+    const previewGate = deferred<typeof preview>();
+    const previewAgentContext = vi.fn(() => previewGate.promise);
+    transport.previewAgentContext = previewAgentContext;
+    const { container, persist } = await renderAgent({ transport });
+    await typeInput(
+      container.querySelector<HTMLTextAreaElement>(".rho-agent-composer textarea")!,
+      "Review this context once",
+    );
+    const review = [...container.querySelectorAll<HTMLButtonElement>(".rho-agent-context-controls button")]
+      .find((button) => button.textContent === "Review context")!;
+    const plan = [...container.querySelectorAll<HTMLButtonElement>('.rho-agent-mode button')]
+      .find((button) => button.textContent === "plan")!;
+    const reject = [...container.querySelectorAll<HTMLButtonElement>(".rho-agent-file-proposal button")]
+      .find((button) => button.textContent === "Reject")!;
+
+    await act(async () => {
+      review.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      review.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      plan.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      reject.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await settle();
+    });
+
+    expect(previewAgentContext).toHaveBeenCalledOnce();
+    expect(review.disabled).toBe(true);
+    expect(plan.disabled).toBe(true);
+    expect(reject.disabled).toBe(true);
+    expect(persist).not.toHaveBeenCalled();
+
+    await act(async () => {
+      previewGate.resolve(preview);
+      await settle();
+    });
+    expect(container.querySelector<HTMLButtonElement>('.rho-agent-mode button[aria-pressed="true"]')!.textContent)
+      .toBe("ask");
+    expect(container.querySelector(".rho-agent-file-outcome")).toBeNull();
+    expect(persist).not.toHaveBeenCalled();
   });
 
   it("submits the unchanged Agent request only through the composition-root capability", async () => {
@@ -732,6 +960,233 @@ describe("Studio Agent Surface", () => {
     expect(textarea.value).toBe("");
     expect(persist).not.toHaveBeenCalled();
     expect(reportError).not.toHaveBeenCalled();
+  });
+
+  it("preserves a missing bounded-list preference, blocks Send, and recovers after explicit clear", async () => {
+    const transport = createMockUiKernelTransport();
+    const visibleConversation = makeConversation({
+      conversation_id: "agent-conversation:visible",
+      title: "Visible bounded result",
+      turn_count: 0,
+      status: "idle",
+      terminal_reason: null,
+    });
+    transport.listAgentConversations = vi.fn(async () => [visibleConversation]);
+    transport.listAgentTurns = vi.fn(async () => []);
+    const persist = vi.fn(async () => undefined);
+    const runConversation = vi.fn(async (current: AgentSurfaceViewState) => ({
+      ...current,
+      composer: "",
+    }));
+    const surfaces = await transport.loadSurfaces();
+    const instance: SurfaceInstance = {
+      instance_id: "surface-instance:agent-test",
+      surface_id: "rho.agent",
+      project_id: surfaces.project_id,
+      origin: { kind: "application", component_id: "rho.agent" },
+      activation_generation: 1,
+      surface_revision: 1,
+      mode_id: "conversation",
+      resource_binding: null,
+      runtime_binding: null,
+      view_group_id: null,
+      view_state: {
+        conversation_id: "agent-conversation:outside-bounded-result",
+        mode: "ask",
+        composer: "Do not target a hidden conversation",
+        auto_approve: false,
+      },
+      lifecycle_state: "active",
+    };
+    const { container } = await renderAgent({ instance, persist, runConversation, transport });
+    const picker = container.querySelector<HTMLSelectElement>(
+      'select[aria-label="Conversation for surface-instance:agent-test"]',
+    )!;
+    const send = container.querySelector<HTMLButtonElement>(
+      ".rho-agent-context-controls .rho-primary-action",
+    )!;
+
+    expect([...picker.options].map((option) => option.value)).toContain(visibleConversation.conversation_id);
+    expect(picker.value).toBe("agent-conversation:outside-bounded-result");
+    expect(picker.selectedOptions[0]?.textContent).toBe("Selected conversation unavailable");
+    expect(container.querySelector(".rho-agent-empty")!.textContent)
+      .toContain("Choose No conversation or a listed conversation");
+    expect(send.disabled).toBe(true);
+    expect(persist).not.toHaveBeenCalled();
+
+    await act(async () => {
+      send.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await settle();
+    });
+    expect(runConversation).not.toHaveBeenCalled();
+    expect(persist).not.toHaveBeenCalled();
+
+    await selectInput(picker, "");
+    expect(persist).toHaveBeenCalledOnce();
+    expect(persist).toHaveBeenCalledWith(expect.objectContaining({ conversation_id: null }));
+    expect(picker.value).toBe("");
+    expect(send.disabled).toBe(false);
+
+    await click(send);
+
+    expect(runConversation).toHaveBeenCalledWith(expect.objectContaining({
+      conversation_id: null,
+    }), expect.objectContaining({
+      conversation_id: null,
+      prompt: "Do not target a hidden conversation",
+    }));
+    expect(persist).toHaveBeenCalledOnce();
+  });
+
+  it("blocks Review and Send before the initial bounded-list validation settles", async () => {
+    const transport = createMockUiKernelTransport();
+    const preferredConversation = makeConversation({
+      conversation_id: "agent-conversation:initial-validation",
+      title: "Initial validation target",
+      turn_count: 0,
+      status: "idle",
+      terminal_reason: null,
+    });
+    const listGate = deferred<readonly AgentConversationSummary[]>();
+    let listCall = 0;
+    transport.listAgentConversations = vi.fn(() => {
+      listCall += 1;
+      return listCall === 1 ? listGate.promise : Promise.resolve([preferredConversation]);
+    });
+    transport.listAgentTurns = vi.fn(async () => []);
+    const previewAgentContext = vi.spyOn(transport, "previewAgentContext");
+    const runConversation = vi.fn(async (current: AgentSurfaceViewState) => ({
+      ...current,
+      composer: "",
+    }));
+    const surfaces = await transport.loadSurfaces();
+    const instance: SurfaceInstance = {
+      instance_id: "surface-instance:agent-test",
+      surface_id: "rho.agent",
+      project_id: surfaces.project_id,
+      origin: { kind: "application", component_id: "rho.agent" },
+      activation_generation: 1,
+      surface_revision: 1,
+      mode_id: "conversation",
+      resource_binding: null,
+      runtime_binding: null,
+      view_group_id: null,
+      view_state: {
+        conversation_id: preferredConversation.conversation_id,
+        mode: "ask",
+        composer: "Wait for the bounded list",
+        auto_approve: false,
+      },
+      lifecycle_state: "active",
+    };
+    const { container } = await renderAgent({ instance, runConversation, transport });
+    const send = container.querySelector<HTMLButtonElement>(
+      ".rho-agent-context-controls .rho-primary-action",
+    )!;
+    const review = [...container.querySelectorAll<HTMLButtonElement>(".rho-agent-context-controls button")]
+      .find((button) => button.textContent === "Review context")!;
+    const picker = container.querySelector<HTMLSelectElement>(
+      'select[aria-label="Conversation for surface-instance:agent-test"]',
+    )!;
+
+    expect(send.disabled).toBe(true);
+    expect(review.disabled).toBe(true);
+    expect(picker.selectedOptions[0]?.textContent).toBe("Checking selected conversation…");
+    await act(async () => {
+      send.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      review.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await settle();
+    });
+    expect(runConversation).not.toHaveBeenCalled();
+    expect(previewAgentContext).not.toHaveBeenCalled();
+
+    await act(async () => {
+      listGate.resolve([preferredConversation]);
+      await settle();
+    });
+    expect(send.disabled).toBe(false);
+    expect(review.disabled).toBe(false);
+
+    await click(send);
+    expect(runConversation).toHaveBeenCalledWith(expect.objectContaining({
+      conversation_id: preferredConversation.conversation_id,
+      composer: "Wait for the bounded list",
+      mode: "ask",
+    }), expect.objectContaining({
+      conversation_id: preferredConversation.conversation_id,
+      prompt: "Wait for the bounded list",
+      mode: "ask",
+    }));
+  });
+
+  it("blocks a same-event Send when invalidation starts a new bounded-list validation", async () => {
+    const transport = createMockUiKernelTransport();
+    const preferredConversation = makeConversation({
+      conversation_id: "agent-conversation:invalidation-race",
+      title: "Invalidation race target",
+      turn_count: 0,
+      status: "idle",
+      terminal_reason: null,
+    });
+    const invalidationGate = deferred<readonly AgentConversationSummary[]>();
+    let listCall = 0;
+    transport.listAgentConversations = vi.fn(() => {
+      listCall += 1;
+      return listCall === 1 ? Promise.resolve([preferredConversation]) : invalidationGate.promise;
+    });
+    transport.listAgentTurns = vi.fn(async () => []);
+    let invalidate: (() => void) | null = null;
+    transport.subscribeAgentInvalidated = vi.fn((listener) => {
+      invalidate = listener;
+      return () => undefined;
+    });
+    const runConversation = vi.fn(async (current: AgentSurfaceViewState) => current);
+    const persist = vi.fn(async () => undefined);
+    const surfaces = await transport.loadSurfaces();
+    const instance: SurfaceInstance = {
+      instance_id: "surface-instance:agent-test",
+      surface_id: "rho.agent",
+      project_id: surfaces.project_id,
+      origin: { kind: "application", component_id: "rho.agent" },
+      activation_generation: 1,
+      surface_revision: 1,
+      mode_id: "conversation",
+      resource_binding: null,
+      runtime_binding: null,
+      view_group_id: null,
+      view_state: {
+        conversation_id: preferredConversation.conversation_id,
+        mode: "ask",
+        composer: "Do not race invalidation",
+        auto_approve: false,
+      },
+      lifecycle_state: "active",
+    };
+    const { container } = await renderAgent({ instance, persist, runConversation, transport });
+    const send = container.querySelector<HTMLButtonElement>(
+      ".rho-agent-context-controls .rho-primary-action",
+    )!;
+    expect(send.disabled).toBe(false);
+
+    await act(async () => {
+      invalidate?.();
+      send.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await settle();
+    });
+    expect(runConversation).not.toHaveBeenCalled();
+    expect(send.disabled).toBe(true);
+
+    await act(async () => {
+      invalidationGate.resolve([]);
+      await settle();
+    });
+    const picker = container.querySelector<HTMLSelectElement>(
+      'select[aria-label="Conversation for surface-instance:agent-test"]',
+    )!;
+    expect(picker.value).toBe(preferredConversation.conversation_id);
+    expect(picker.selectedOptions[0]?.textContent).toBe("Selected conversation unavailable");
+    expect(send.disabled).toBe(true);
+    expect(persist).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -1151,6 +1606,252 @@ describe("Studio Agent Surface", () => {
     expect(persist).toHaveBeenLastCalledWith(expect.objectContaining({ conversation_id: null }));
   });
 
+  it("blocks stale view snapshots while an explicit conversation selection is pending", async () => {
+    const oldConversation = makeConversation({
+      conversation_id: "agent-conversation:selection-old",
+      title: "Old selection",
+      turn_count: 0,
+      status: "idle",
+      terminal_reason: null,
+    });
+    const selectedConversation = makeConversation({
+      conversation_id: "agent-conversation:selection-new",
+      title: "New selection",
+      turn_count: 0,
+      status: "idle",
+      terminal_reason: null,
+    });
+    const transport = createMockUiKernelTransport();
+    transport.listAgentConversations = vi.fn(async () => [oldConversation, selectedConversation]);
+    transport.listAgentTurns = vi.fn(async () => []);
+    const createAgentConversation = vi.spyOn(transport, "createAgentConversation");
+    const persistGate = deferred<void>();
+    const persist = vi.fn(() => persistGate.promise);
+    const surfaces = await transport.loadSurfaces();
+    const instance: SurfaceInstance = {
+      instance_id: "surface-instance:agent-test",
+      surface_id: "rho.agent",
+      project_id: surfaces.project_id,
+      origin: { kind: "application", component_id: "rho.agent" },
+      activation_generation: 1,
+      surface_revision: 1,
+      mode_id: "conversation",
+      resource_binding: null,
+      runtime_binding: null,
+      view_group_id: null,
+      view_state: {
+        conversation_id: oldConversation.conversation_id,
+        mode: "act",
+        composer: "",
+        auto_approve: true,
+      },
+      lifecycle_state: "active",
+    };
+    const { container } = await renderAgent({ instance, persist, transport });
+    const picker = container.querySelector<HTMLSelectElement>(
+      'select[aria-label="Conversation for surface-instance:agent-test"]',
+    )!;
+    const plan = [...container.querySelectorAll<HTMLButtonElement>('.rho-agent-mode button')]
+      .find((button) => button.textContent === "plan")!;
+    const autoApprove = container.querySelector<HTMLInputElement>(".rho-agent-auto-approve input")!;
+    const suggestion = container.querySelector<HTMLButtonElement>(".rho-agent-suggestions button")!;
+    const newButton = [...container.querySelectorAll<HTMLButtonElement>(".rho-agent-toolbar-action")]
+      .find((button) => button.textContent === "New")!;
+    const pickerValueSetter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!;
+
+    await act(async () => {
+      pickerValueSetter.call(picker, selectedConversation.conversation_id);
+      picker.dispatchEvent(new Event("change", { bubbles: true }));
+      picker.dispatchEvent(new Event("change", { bubbles: true }));
+      newButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      plan.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      autoApprove.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      suggestion.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await settle();
+    });
+
+    expect(persist).toHaveBeenCalledOnce();
+    expect(createAgentConversation).not.toHaveBeenCalled();
+    expect(persist).toHaveBeenCalledWith(expect.objectContaining({
+      conversation_id: selectedConversation.conversation_id,
+      mode: "act",
+      auto_approve: true,
+    }));
+    expect(plan.disabled).toBe(true);
+    expect(autoApprove.disabled).toBe(true);
+    expect(suggestion.disabled).toBe(true);
+
+    await act(async () => {
+      persistGate.resolve();
+      await settle();
+    });
+
+    expect(picker.value).toBe(selectedConversation.conversation_id);
+    expect(container.querySelector<HTMLButtonElement>('.rho-agent-mode button[aria-pressed="true"]')!.textContent)
+      .toBe("act");
+    expect(persist).toHaveBeenCalledOnce();
+  });
+
+  it("blocks stale mode and file-decision snapshots while New is pending", async () => {
+    const transport = createMockUiKernelTransport();
+    const oldConversation = (await transport.listAgentConversations())[0]!;
+    const createdConversation = makeConversation({
+      conversation_id: "agent-conversation:new-workflow-target",
+      title: "New workflow target",
+      turn_count: 0,
+      status: "idle",
+      terminal_reason: null,
+    });
+    let conversations: readonly AgentConversationSummary[] = [oldConversation];
+    transport.listAgentConversations = vi.fn(async () => conversations);
+    const createGate = deferred<AgentSurfaceViewState>();
+    const createConversation = vi.fn(() => createGate.promise);
+    const runConversation = vi.fn(async (current: AgentSurfaceViewState) => current);
+    const persist = vi.fn(async () => undefined);
+    const { container } = await renderAgent({ createConversation, persist, runConversation, transport });
+    const newButton = [...container.querySelectorAll<HTMLButtonElement>(".rho-agent-toolbar-action")]
+      .find((button) => button.textContent === "New")!;
+    const plan = [...container.querySelectorAll<HTMLButtonElement>('.rho-agent-mode button')]
+      .find((button) => button.textContent === "plan")!;
+    const reject = [...container.querySelectorAll<HTMLButtonElement>(".rho-agent-file-proposal button")]
+      .find((button) => button.textContent === "Reject")!;
+    const textarea = container.querySelector<HTMLTextAreaElement>(".rho-agent-composer textarea")!;
+    await typeInput(textarea, "Do not admit Send while New is pending");
+    const send = container.querySelector<HTMLButtonElement>(
+      ".rho-agent-context-controls .rho-primary-action",
+    )!;
+
+    await act(async () => {
+      newButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      newButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      send.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      plan.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      reject.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await settle();
+    });
+
+    expect(createConversation).toHaveBeenCalledWith(expect.objectContaining({
+      conversation_id: oldConversation.conversation_id,
+      mode: "ask",
+    }));
+    expect(createConversation).toHaveBeenCalledOnce();
+    expect(runConversation).not.toHaveBeenCalled();
+    expect(plan.disabled).toBe(true);
+    expect(reject.disabled).toBe(true);
+    expect(persist).not.toHaveBeenCalled();
+
+    conversations = [createdConversation, oldConversation];
+    await act(async () => {
+      createGate.resolve({
+        conversation_id: createdConversation.conversation_id,
+        mode: "ask",
+        composer: "",
+        auto_approve: false,
+        file_decisions: {},
+      });
+      await settle();
+    });
+
+    expect(container.querySelector<HTMLSelectElement>(
+      'select[aria-label="Conversation for surface-instance:agent-test"]',
+    )!.value).toBe(createdConversation.conversation_id);
+    expect(container.querySelector<HTMLButtonElement>('.rho-agent-mode button[aria-pressed="true"]')!.textContent)
+      .toBe("ask");
+    expect(persist).not.toHaveBeenCalled();
+  });
+
+  it("blocks a stale mode snapshot while Send is pending", async () => {
+    const transport = createMockUiKernelTransport();
+    const oldConversation = makeConversation({
+      conversation_id: "agent-conversation:send-workflow-old",
+      title: "Send workflow old",
+      turn_count: 0,
+      status: "idle",
+      terminal_reason: null,
+    });
+    const sentConversation = makeConversation({
+      conversation_id: "agent-conversation:send-workflow-target",
+      title: "Send workflow target",
+      turn_count: 0,
+      status: "idle",
+      terminal_reason: null,
+    });
+    let conversations: readonly AgentConversationSummary[] = [oldConversation];
+    transport.listAgentConversations = vi.fn(async () => conversations);
+    transport.listAgentTurns = vi.fn(async () => []);
+    const runGate = deferred<AgentSurfaceViewState>();
+    const runConversation = vi.fn(() => runGate.promise);
+    const createConversation = vi.fn(async (current: AgentSurfaceViewState) => current);
+    const persist = vi.fn(async () => undefined);
+    const surfaces = await transport.loadSurfaces();
+    const instance: SurfaceInstance = {
+      instance_id: "surface-instance:agent-test",
+      surface_id: "rho.agent",
+      project_id: surfaces.project_id,
+      origin: { kind: "application", component_id: "rho.agent" },
+      activation_generation: 1,
+      surface_revision: 1,
+      mode_id: "conversation",
+      resource_binding: null,
+      runtime_binding: null,
+      view_group_id: null,
+      view_state: {
+        conversation_id: oldConversation.conversation_id,
+        mode: "ask",
+        composer: "Send without restoring the old identity",
+        auto_approve: false,
+      },
+      lifecycle_state: "active",
+    };
+    const { container } = await renderAgent({ createConversation, instance, persist, runConversation, transport });
+    const send = container.querySelector<HTMLButtonElement>(
+      ".rho-agent-context-controls .rho-primary-action",
+    )!;
+    const plan = [...container.querySelectorAll<HTMLButtonElement>('.rho-agent-mode button')]
+      .find((button) => button.textContent === "plan")!;
+    const newButton = [...container.querySelectorAll<HTMLButtonElement>(".rho-agent-toolbar-action")]
+      .find((button) => button.textContent === "New")!;
+
+    await act(async () => {
+      send.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      send.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      newButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      plan.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await settle();
+    });
+
+    expect(runConversation).toHaveBeenCalledWith(expect.objectContaining({
+      conversation_id: oldConversation.conversation_id,
+      mode: "ask",
+    }), expect.objectContaining({
+      conversation_id: oldConversation.conversation_id,
+      mode: "ask",
+    }));
+    expect(runConversation).toHaveBeenCalledOnce();
+    expect(createConversation).not.toHaveBeenCalled();
+    expect(plan.disabled).toBe(true);
+    expect(persist).not.toHaveBeenCalled();
+
+    conversations = [sentConversation, oldConversation];
+    await act(async () => {
+      runGate.resolve({
+        conversation_id: sentConversation.conversation_id,
+        mode: "ask",
+        composer: "",
+        auto_approve: false,
+        file_decisions: {},
+      });
+      await settle();
+    });
+
+    expect(container.querySelector<HTMLSelectElement>(
+      'select[aria-label="Conversation for surface-instance:agent-test"]',
+    )!.value).toBe(sentConversation.conversation_id);
+    expect(container.querySelector<HTMLButtonElement>('.rho-agent-mode button[aria-pressed="true"]')!.textContent)
+      .toBe("ask");
+    expect(persist).not.toHaveBeenCalled();
+  });
+
   it("keeps a deferred New action live across an unrelated same-activation callback rerender", async () => {
     const sharedConversation = makeConversation({
       conversation_id: "agent-conversation:mock-shared",
@@ -1345,18 +2046,47 @@ describe("Studio Agent Surface", () => {
     expect(reportError).not.toHaveBeenCalled();
   });
 
-  it("shows the degraded banner with dependency diagnostics when the runtime is not ready", async () => {
-    const { container } = await renderAgent({
+  it("shows degraded diagnostics and admits runtime retry only once", async () => {
+    const transport = createMockUiKernelTransport();
+    const diagnosticsResult = await transport.getAgentRuntimeDiagnostics();
+    const retryGate = deferred<typeof diagnosticsResult>();
+    const retryAgentRuntime = vi.fn(() => retryGate.promise);
+    transport.retryAgentRuntime = retryAgentRuntime;
+    const { container, persist } = await renderAgent({
       health: { state: "needs_attention", label: "Agent dependencies need attention", detail: "aisdk is incompatible." },
+      transport,
     });
     const banner = container.querySelector(".rho-agent-degraded")!;
     expect(banner.textContent).toContain("Agent dependencies need attention");
     expect(banner.textContent).toContain("aisdk is incompatible.");
-    expect([...banner.querySelectorAll("button")].some((button) => button.textContent === "Retry Agent runtime")).toBe(true);
+    const retry = [...banner.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent === "Retry Agent runtime")!;
     const diagnostics = banner.querySelector<HTMLDetailsElement>(".rho-agent-runtime-diagnostics")!;
     expect(diagnostics.querySelector("summary")!.textContent).toBe("Dependency details");
     expect(diagnostics.querySelector("pre")!.textContent).toContain("aisdk");
     const send = container.querySelector<HTMLButtonElement>(".rho-agent-context-controls .rho-primary-action")!;
     expect(send.disabled).toBe(true);
+    const plan = [...container.querySelectorAll<HTMLButtonElement>('.rho-agent-mode button')]
+      .find((button) => button.textContent === "plan")!;
+    const reject = [...container.querySelectorAll<HTMLButtonElement>(".rho-agent-file-proposal button")]
+      .find((button) => button.textContent === "Reject")!;
+    await act(async () => {
+      retry.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      retry.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      plan.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      reject.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await settle();
+    });
+    expect(retryAgentRuntime).toHaveBeenCalledOnce();
+    expect(retry.disabled).toBe(true);
+    expect(plan.disabled).toBe(true);
+    expect(reject.disabled).toBe(true);
+    expect(persist).not.toHaveBeenCalled();
+
+    await act(async () => {
+      retryGate.resolve(diagnosticsResult);
+      await settle();
+    });
+    expect(persist).not.toHaveBeenCalled();
   });
 });

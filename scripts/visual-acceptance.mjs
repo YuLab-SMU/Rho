@@ -14,7 +14,7 @@
 //   node scripts/visual-acceptance.mjs finalize --run <dir>
 
 import { spawn, execFile, execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -22,11 +22,26 @@ import { fileURLToPath } from "node:url";
 
 import { captureStartupBrowserFrames } from "./visual-acceptance/startup-browser.mjs";
 import { captureVibeAgentBrowserFrames } from "./visual-acceptance/vibe-agent-browser.mjs";
+import {
+  assertDirectoryIdentity,
+  assertFrontendBuildId,
+  createExclusiveEvidenceOutput,
+  currentSourceFrontendBuildId,
+  ensureSecureDirectory,
+  readDirectoryIdentity,
+  readFrontendBuildId,
+  secureContainedPath,
+  writeAtomicArtifact,
+  writeExclusiveArtifact,
+} from "./visual-acceptance/helpers.mjs";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const scenarioDirectory = path.join(repositoryRoot, "scripts", "visual-acceptance");
 
-export const EVIDENCE_SCHEMA = "rho_visual_acceptance_v1";
+export const EVIDENCE_SCHEMA = "rho_visual_acceptance_v2";
+export const LEGACY_EVIDENCE_SCHEMA = "rho_visual_acceptance_v1";
+const REVIEW_SCHEMA = "rho_visual_acceptance_visual_review_v2";
+const COMMIT_SCHEMA = "rho_visual_acceptance_ledger_commit_v1";
 export const STARTUP_TERMINAL_MESSAGE_PREFIX = "Runtime bootstrap failed:";
 export const STARTUP_LOG_MAX_BYTES = 1024 * 1024;
 
@@ -138,6 +153,50 @@ export function pngSha256(file) {
 
 export function consecutivePngHashesMatch(previousHash, currentHash) {
   return typeof previousHash === "string" && previousHash.length > 0 && previousHash === currentHash;
+}
+
+export function readExecutableIdentity(file) {
+  let descriptor;
+  try {
+    descriptor = fs.openSync(file, "r");
+    const before = fs.fstatSync(descriptor);
+    if (!before.isFile()) throw new AcceptanceError("application binary is not a regular file");
+    const bytes = fs.readFileSync(descriptor);
+    const after = fs.fstatSync(descriptor);
+    if (
+      before.dev !== after.dev || before.ino !== after.ino ||
+      before.size !== after.size || before.mtimeMs !== after.mtimeMs ||
+      bytes.length !== after.size
+    ) {
+      throw new AcceptanceError("application binary changed while its identity was being read");
+    }
+    const current = fs.lstatSync(file);
+    if (!current.isFile() || current.dev !== after.dev || current.ino !== after.ino) {
+      throw new AcceptanceError("application binary path changed while its identity was being read");
+    }
+    return {
+      bytes: bytes.length,
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+    };
+  } catch (error) {
+    if (error instanceof AcceptanceError) throw error;
+    throw new AcceptanceError(`application binary identity is unreadable: ${error.message}`);
+  } finally {
+    if (descriptor != null) fs.closeSync(descriptor);
+  }
+}
+
+export function assertExecutableIdentity(expected, actual, label = "application binary") {
+  const valid = (identity) => Number.isSafeInteger(identity?.bytes) && identity.bytes > 0
+    && typeof identity?.sha256 === "string" && /^[a-f0-9]{64}$/u.test(identity.sha256);
+  if (!valid(expected)) throw new AcceptanceError(`${label}: expected identity is invalid`);
+  if (!valid(actual)) throw new AcceptanceError(`${label}: observed identity is invalid`);
+  if (actual.bytes !== expected.bytes || actual.sha256 !== expected.sha256) {
+    throw new AcceptanceError(
+      `${label} changed (expected ${expected.sha256}/${expected.bytes}, got ${actual.sha256}/${actual.bytes})`,
+    );
+  }
+  return actual;
 }
 
 function nowIso() {
@@ -267,19 +326,110 @@ export async function runEvidenceClassCheck({ evidenceClass, pid, activate, chec
   throw new AcceptanceError(`unsupported visual evidence class: ${evidenceClass}`);
 }
 
-function createEvidence(output, appPath) {
+function createEvidence(output, appPath, frontendBuildId, distIdentity, appIdentity) {
   return {
     schema: EVIDENCE_SCHEMA,
+    ledger_revision: 0,
     status: "FAIL",
     started_at: nowIso(),
     finished_at: null,
     output,
     app: appPath,
     platform: `${process.platform}-${process.arch}`,
+    frontend_build_identity: {
+      source_build_id: frontendBuildId,
+      dist_build_id: frontendBuildId,
+      real_debug_app_build_id: null,
+      browser_mock_build_id: null,
+      final_source_build_id: null,
+      final_dist_build_id: null,
+      dist_identity_start: distIdentity,
+      dist_identity_final: null,
+      verified_at: null,
+    },
+    debug_app_identity: {
+      ...appIdentity,
+      verified_at: null,
+    },
     scenarios: [],
     gates: [],
     error: null,
   };
+}
+
+function appendEvidenceError(evidence, error) {
+  const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
+  evidence.error = evidence.error == null ? message : `${evidence.error}\n${message}`;
+}
+
+function assertMutableEvidenceSchema(evidence) {
+  if (evidence?.schema === LEGACY_EVIDENCE_SCHEMA) {
+    throw new AcceptanceError("rho_visual_acceptance_v1 evidence is read-only and cannot be reviewed or finalized");
+  }
+  if (evidence?.schema !== EVIDENCE_SCHEMA) {
+    throw new AcceptanceError(`unsupported or missing visual acceptance schema: ${String(evidence?.schema)}`);
+  }
+  if (!Number.isSafeInteger(evidence.ledger_revision) || evidence.ledger_revision < 0) {
+    throw new AcceptanceError("v2 evidence ledger revision is missing or invalid");
+  }
+  return evidence;
+}
+
+function verifyCurrentCandidateIdentities(evidence, {
+  requireLaunchedApp = false,
+  recordVerification = true,
+} = {}) {
+  assertMutableEvidenceSchema(evidence);
+  if (evidence.frontend_build_identity == null || evidence.debug_app_identity == null) {
+    throw new AcceptanceError("candidate identity evidence is incomplete");
+  }
+  const expectedBuildId = evidence.frontend_build_identity?.source_build_id;
+  const currentSourceBuildId = currentSourceFrontendBuildId(repositoryRoot);
+  assertFrontendBuildId(expectedBuildId, currentSourceBuildId, "current source at evidence verification");
+  const currentDistBuildId = readFrontendBuildId(path.join(repositoryRoot, "desktop", "dist"));
+  assertFrontendBuildId(expectedBuildId, currentDistBuildId, "desktop/dist at evidence verification");
+  const currentDistIdentity = readDirectoryIdentity(path.join(repositoryRoot, "desktop", "dist"));
+  assertDirectoryIdentity(
+    evidence.frontend_build_identity?.dist_identity_start,
+    currentDistIdentity,
+    "desktop/dist exact bytes at evidence verification",
+  );
+  if (requireLaunchedApp) {
+    assertFrontendBuildId(
+      expectedBuildId,
+      evidence.frontend_build_identity?.real_debug_app_build_id,
+      "recorded real debug app",
+    );
+  }
+  const expectedAppIdentity = evidence.debug_app_identity;
+  const currentAppIdentity = readExecutableIdentity(evidence.app);
+  assertExecutableIdentity(expectedAppIdentity, currentAppIdentity, "exact debug application");
+  if (recordVerification) {
+    const verifiedAt = nowIso();
+    evidence.frontend_build_identity.final_source_build_id = currentSourceBuildId;
+    evidence.frontend_build_identity.final_dist_build_id = currentDistBuildId;
+    evidence.frontend_build_identity.dist_identity_final = currentDistIdentity;
+    evidence.frontend_build_identity.verified_at = verifiedAt;
+    evidence.debug_app_identity.verified_at = verifiedAt;
+  }
+  return evidence;
+}
+
+function recordBrowserBuildIdentity(evidence, record) {
+  const renderedBuildId = record.detail?.rendered_frontend_build_id;
+  if (renderedBuildId == null) return;
+  const expectedBuildId = evidence.frontend_build_identity.source_build_id;
+  assertFrontendBuildId(expectedBuildId, renderedBuildId, `${record.name} recorded browser`);
+  const recorded = evidence.frontend_build_identity.browser_mock_build_id;
+  if (recorded != null) {
+    assertFrontendBuildId(recorded, renderedBuildId, `${record.name} browser sequence`);
+  }
+  evidence.frontend_build_identity.browser_mock_build_id = renderedBuildId;
+  assertDirectoryIdentity(
+    evidence.frontend_build_identity.dist_identity_start,
+    record.detail?.dist_identity_start,
+    `${record.name} browser dist bytes`,
+  );
 }
 
 export function summarizeEvidence(evidence) {
@@ -343,8 +493,12 @@ export function renderReport(evidence) {
     "# Rho Visual Acceptance Report",
     "",
     `- status: ${evidence.status}`,
+    `- ledger revision: ${evidence.ledger_revision ?? "legacy"}`,
     `- app: ${evidence.app}`,
+    `- app SHA-256: ${evidence.debug_app_identity?.sha256 ?? "unrecorded"}`,
+    `- app bytes: ${evidence.debug_app_identity?.bytes ?? "unrecorded"}`,
     `- platform: ${evidence.platform}`,
+    `- frontend build: ${evidence.frontend_build_identity?.dist_build_id ?? "unrecorded"}`,
     `- started: ${evidence.started_at}`,
     `- finished: ${evidence.finished_at ?? "in progress"}`,
     `- scenarios: ${evidence.scenarios.length}`,
@@ -374,10 +528,86 @@ export function renderReport(evidence) {
   return `${lines.join("\n")}\n`;
 }
 
-function refreshLedger(runDirectory, evidence) {
-  writeJson(path.join(runDirectory, "evidence.json"), evidence);
+function jsonBytes(value) {
+  return Buffer.from(`${JSON.stringify(value, null, 2)}\n`, "utf8");
+}
+
+function bytesSha256(bytes) {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+function ledgerPaths(runDirectory) {
+  const root = ensureSecureDirectory(runDirectory);
+  return {
+    root,
+    evidence: path.join(root, "evidence.json"),
+    manifest: path.join(root, "visual-review-manifest.json"),
+    report: path.join(root, "report.md"),
+    commit: path.join(root, "ledger-commit.json"),
+  };
+}
+
+function readSecureFile(root, file) {
+  const secured = secureContainedPath(root, file);
+  return fs.readFileSync(secured);
+}
+
+function readUncommittedEvidence(runDirectory) {
+  const paths = ledgerPaths(runDirectory);
+  const evidence = JSON.parse(readSecureFile(paths.root, paths.evidence).toString("utf8"));
+  return { evidence, paths };
+}
+
+export function readCommittedEvidence(runDirectory) {
+  const { evidence, paths } = readUncommittedEvidence(runDirectory);
+  if (evidence?.schema === LEGACY_EVIDENCE_SCHEMA) {
+    return { evidence, legacy: true };
+  }
+  assertMutableEvidenceSchema(evidence);
+  let commit;
+  try {
+    commit = JSON.parse(readSecureFile(paths.root, paths.commit).toString("utf8"));
+  } catch (error) {
+    throw new AcceptanceError(`v2 evidence has no readable committed ledger: ${error.message}`);
+  }
+  if (commit?.schema !== COMMIT_SCHEMA || commit.revision !== evidence.ledger_revision) {
+    throw new AcceptanceError("v2 evidence ledger commit revision is inconsistent");
+  }
+  const expectedFiles = ["evidence.json", "visual-review-manifest.json", "report.md"];
+  for (const name of expectedFiles) {
+    const expected = commit.files?.[name];
+    if (typeof expected !== "string" || !/^[a-f0-9]{64}$/u.test(expected)) {
+      throw new AcceptanceError(`v2 evidence ledger commit is missing ${name}`);
+    }
+    const actual = bytesSha256(readSecureFile(paths.root, path.join(paths.root, name)));
+    if (actual !== expected) throw new AcceptanceError(`v2 evidence ledger ${name} does not match its commit`);
+  }
+  const manifest = JSON.parse(readSecureFile(paths.root, paths.manifest).toString("utf8"));
+  if (manifest?.schema !== REVIEW_SCHEMA || manifest.ledger_revision !== evidence.ledger_revision) {
+    throw new AcceptanceError("v2 evidence review manifest revision is inconsistent");
+  }
+  return { evidence, legacy: false };
+}
+
+export function refreshLedger(runDirectory, evidence) {
+  assertMutableEvidenceSchema(evidence);
+  const paths = ledgerPaths(runDirectory);
+  let committedRevision = 0;
+  if (fs.existsSync(paths.commit) || fs.existsSync(paths.evidence)) {
+    if (!fs.existsSync(paths.commit) || !fs.existsSync(paths.evidence)) {
+      throw new AcceptanceError("v2 evidence ledger is partially present");
+    }
+    committedRevision = readCommittedEvidence(paths.root).evidence.ledger_revision;
+  }
+  if (evidence.ledger_revision !== committedRevision) {
+    throw new AcceptanceError(
+      `v2 evidence ledger compare-and-swap failed (memory=${evidence.ledger_revision}, committed=${committedRevision})`,
+    );
+  }
+  evidence.ledger_revision = committedRevision + 1;
   const manifest = {
-    schema: "rho_visual_acceptance_visual_review_v1",
+    schema: REVIEW_SCHEMA,
+    ledger_revision: evidence.ledger_revision,
     frames: evidence.gates
       .filter((gate) => gate.screenshot != null)
       .map((gate) => ({
@@ -389,12 +619,29 @@ function refreshLedger(runDirectory, evidence) {
         screenshot_capture_status: gate.screenshot_capture_status
           ?? (gate.screenshot_bytes > 0 ? "PASS" : "UNKNOWN"),
         screenshot_bytes: gate.screenshot_bytes ?? null,
+        screenshot_sha256: gate.screenshot_sha256 ?? null,
         visual_status: gate.visual_status,
         visual_note: gate.visual_note,
       })),
   };
-  writeJson(path.join(runDirectory, "visual-review-manifest.json"), manifest);
-  fs.writeFileSync(path.join(runDirectory, "report.md"), renderReport(evidence));
+  const artifacts = {
+    "evidence.json": jsonBytes(evidence),
+    "visual-review-manifest.json": jsonBytes(manifest),
+    "report.md": Buffer.from(renderReport(evidence), "utf8"),
+  };
+  // The commit marker is written last. A process interruption can therefore
+  // leave only a detectable inconsistent revision, never a silently accepted
+  // mixture of evidence, review manifest, and report.
+  writeAtomicArtifact(paths.root, paths.manifest, artifacts["visual-review-manifest.json"]);
+  writeAtomicArtifact(paths.root, paths.report, artifacts["report.md"]);
+  writeAtomicArtifact(paths.root, paths.evidence, artifacts["evidence.json"]);
+  const commit = {
+    schema: COMMIT_SCHEMA,
+    revision: evidence.ledger_revision,
+    files: Object.fromEntries(Object.entries(artifacts).map(([name, bytes]) => [name, bytesSha256(bytes)])),
+  };
+  writeAtomicArtifact(paths.root, paths.commit, jsonBytes(commit));
+  return evidence;
 }
 
 function appendGateError(gate, message) {
@@ -409,12 +656,21 @@ function resolvedFramePath(runDirectory, screenshot) {
   if (typeof screenshot !== "string" || screenshot.length === 0) {
     return { error: "frame has no screenshot path" };
   }
-  const screenshotRoot = path.resolve(runDirectory, "screenshots");
+  let screenshotRoot;
+  try {
+    screenshotRoot = ensureSecureDirectory(path.resolve(runDirectory, "screenshots"));
+  } catch (error) {
+    return { error: error.message };
+  }
   const framePath = path.resolve(runDirectory, screenshot);
   if (framePath !== screenshotRoot && !framePath.startsWith(`${screenshotRoot}${path.sep}`)) {
     return { error: `screenshot path escapes the run directory: ${screenshot}` };
   }
-  return { framePath };
+  try {
+    return { framePath: secureContainedPath(screenshotRoot, framePath) };
+  } catch (error) {
+    return { error: error.message };
+  }
 }
 
 export function reviewableFrameProblem(runDirectory, gate) {
@@ -440,18 +696,17 @@ export function reviewableFrameProblem(runDirectory, gate) {
   if (stat.size !== gate.screenshot_bytes) {
     return `screenshot byte count mismatch (evidence=${gate.screenshot_bytes}, file=${stat.size})`;
   }
-  const pngSignature = Buffer.alloc(8);
-  let descriptor;
+  if (typeof gate.screenshot_sha256 !== "string" || !/^[a-f0-9]{64}$/u.test(gate.screenshot_sha256)) {
+    return "screenshot SHA-256 is missing or invalid";
+  }
+  let actualSha256;
   try {
-    descriptor = fs.openSync(resolved.framePath, "r");
-    if (fs.readSync(descriptor, pngSignature, 0, pngSignature.length, 0) !== pngSignature.length ||
-        !pngSignature.equals(Buffer.from("89504e470d0a1a0a", "hex"))) {
-      return "screenshot artifact is not a PNG";
-    }
+    actualSha256 = pngSha256(resolved.framePath);
   } catch (error) {
     return `screenshot artifact cannot be inspected: ${error.message}`;
-  } finally {
-    if (descriptor != null) fs.closeSync(descriptor);
+  }
+  if (actualSha256 !== gate.screenshot_sha256) {
+    return `screenshot SHA-256 mismatch (evidence=${gate.screenshot_sha256}, file=${actualSha256})`;
   }
   return null;
 }
@@ -489,6 +744,97 @@ export function finalizeStatus(evidence, runDirectory = null) {
     ? "PASS"
     : "FAIL";
   return evidence;
+}
+
+const RUN_WRITER_LOCK = ".writer.lock";
+const RUN_WRITER_ORPHAN_GRACE_MS = 30_000;
+
+function runWriterOwner(lockDirectory) {
+  const ownerFile = path.join(lockDirectory, "owner.json");
+  try {
+    const stat = fs.lstatSync(ownerFile);
+    if (stat.isSymbolicLink() || !stat.isFile()) return { kind: "corrupt" };
+    const value = JSON.parse(fs.readFileSync(ownerFile, "utf8"));
+    return Number.isInteger(value.pid) && value.pid > 0 && typeof value.token === "string"
+      ? { kind: "valid", value }
+      : { kind: "corrupt" };
+  } catch {
+    return { kind: "corrupt" };
+  }
+}
+
+function removeKnownRunWriterLock(lockDirectory) {
+  const entries = fs.readdirSync(lockDirectory);
+  if (entries.some((entry) => entry !== "owner.json")) {
+    throw new AcceptanceError("run writer lock contains unexpected entries and cannot be reclaimed safely");
+  }
+  try { fs.unlinkSync(path.join(lockDirectory, "owner.json")); } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  fs.rmdirSync(lockDirectory);
+}
+
+function reclaimRunWriterLock(runDirectory, lockDirectory) {
+  const quarantine = path.join(
+    runDirectory,
+    `.writer.stale-${process.pid}-${Date.now()}-${randomBytes(4).toString("hex")}`,
+  );
+  try {
+    fs.renameSync(lockDirectory, quarantine);
+  } catch (error) {
+    if (error.code === "ENOENT") return false;
+    throw error;
+  }
+  removeKnownRunWriterLock(quarantine);
+  return true;
+}
+
+export async function acquireRunWriterLock(runDirectory, owner, {
+  timeoutMs = 30_000,
+  orphanGraceMs = RUN_WRITER_ORPHAN_GRACE_MS,
+  pollIntervalMs = 25,
+} = {}) {
+  const root = ensureSecureDirectory(runDirectory);
+  const lockDirectory = path.join(root, RUN_WRITER_LOCK);
+  const token = `${process.pid}-${randomBytes(16).toString("hex")}`;
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      fs.mkdirSync(lockDirectory);
+      try {
+        writeExclusiveArtifact(
+          path.join(lockDirectory, "owner.json"),
+          jsonBytes({ owner, pid: process.pid, token, at: nowIso() }),
+        );
+      } catch (error) {
+        try { removeKnownRunWriterLock(lockDirectory); } catch { /* retain fail-closed lock */ }
+        throw error;
+      }
+      return { lockDirectory, token };
+    } catch (error) {
+      if (error.code !== "EEXIST") throw error;
+      secureContainedPath(root, lockDirectory, { expectedType: "directory" });
+      const record = runWriterOwner(lockDirectory);
+      const reclaimable = record.kind === "valid"
+        ? processIsDefinitelyGone(record.value.pid)
+        : orphanLockAgeMs(lockDirectory) >= orphanGraceMs;
+      if (reclaimable) {
+        reclaimRunWriterLock(root, lockDirectory);
+        continue;
+      }
+      if (Date.now() >= deadline) throw new AcceptanceError("run writer lock wait timed out");
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    }
+  }
+}
+
+export function releaseRunWriterLock(lock) {
+  if (lock == null) return;
+  const record = runWriterOwner(lock.lockDirectory);
+  if (record.kind !== "valid" || record.value.pid !== process.pid || record.value.token !== lock.token) {
+    throw new AcceptanceError("run writer lock ownership changed; refusing release");
+  }
+  removeKnownRunWriterLock(lock.lockDirectory);
 }
 
 // The real application window is an exclusive resource: several acceptance
@@ -645,6 +991,7 @@ function runtimeAttentionGateRecord() {
 
 async function capturePreReadyRuntimeAttention({
   appPath,
+  appIdentity,
   output,
   stdoutLog,
   stderrLog,
@@ -652,7 +999,7 @@ async function capturePreReadyRuntimeAttention({
   const record = runtimeAttentionGateRecord();
   const descriptorFile = path.join(output, "bridge.json");
   const logFile = path.join(output, "app-data", "logs", "startup.jsonl");
-  const screenshotRoot = path.resolve(output, "screenshots");
+  const screenshotRoot = ensureSecureDirectory(path.resolve(output, "screenshots"), { create: true });
   const finalFrame = path.join(screenshotRoot, "s0-startup-runtime-attention.png");
   const probeFiles = [];
   let child = null;
@@ -664,6 +1011,11 @@ async function capturePreReadyRuntimeAttention({
     if (process.release?.name !== "node" || !fs.statSync(process.execPath).isFile()) {
       throw new AcceptanceError("the pre-ready non-R fixture must be the current Node executable");
     }
+    assertExecutableIdentity(
+      appIdentity,
+      readExecutableIdentity(appPath),
+      "pre-ready exact debug application",
+    );
     fs.rmSync(descriptorFile, { force: true });
     child = spawn(appPath, [], {
       env: acceptanceLaunchEnvironment(output, { rscript: process.execPath }),
@@ -702,13 +1054,15 @@ async function capturePreReadyRuntimeAttention({
       if (probeFile !== screenshotRoot && !probeFile.startsWith(`${screenshotRoot}${path.sep}`)) {
         throw new AcceptanceError("startup screenshot probe escaped the acceptance output");
       }
+      secureContainedPath(screenshotRoot, probeFile);
       probeFiles.push(probeFile);
       const hash = pngSha256(probeFile);
       if (!startupRecordTokenIsPresent(readStartupJsonl(logFile), terminal.token)) {
         throw new AcceptanceError("runtime terminal startup record disappeared after screenshot capture");
       }
       if (consecutivePngHashesMatch(previousHash, hash)) {
-        fs.renameSync(probeFile, finalFrame);
+        writeExclusiveArtifact(finalFrame, fs.readFileSync(probeFile));
+        fs.unlinkSync(probeFile);
         probeFiles.pop();
         stable = {
           hash,
@@ -726,6 +1080,7 @@ async function capturePreReadyRuntimeAttention({
       throw new AcceptanceError("runtime-attention frontend did not produce two consecutive equal PNG hashes");
     }
     record.screenshot_bytes = stable.bytes;
+    record.screenshot_sha256 = stable.hash;
     record.screenshot_capture_status = "PASS";
     record.detail = { ...record.detail, ...stable };
   } catch (error) {
@@ -755,24 +1110,32 @@ async function runLane(options) {
   const output = path.resolve(options.output
     ?? path.join(repositoryRoot, "target", "visual-acceptance", nowIso().replaceAll(":", "-")));
   const appPath = path.resolve(options.app);
-  if (!fs.existsSync(appPath)) throw new AcceptanceError(`application binary not found: ${appPath}`);
   if (fs.existsSync(output)) {
     throw new AcceptanceError(`output directory already exists; acceptance evidence is immutable: ${output}`);
   }
-  fs.mkdirSync(output, { recursive: true });
+  const distRoot = path.join(repositoryRoot, "desktop", "dist");
+  const frontendBuildId = currentSourceFrontendBuildId(repositoryRoot);
+  const distBuildId = readFrontendBuildId(distRoot);
+  assertFrontendBuildId(frontendBuildId, distBuildId, "desktop/dist against current source");
+  const distIdentity = readDirectoryIdentity(distRoot);
+  const appIdentity = readExecutableIdentity(appPath);
+  createExclusiveEvidenceOutput(output);
+  ensureSecureDirectory(path.join(output, "screenshots"), { create: true });
 
-  const evidence = createEvidence(output, appPath);
+  const evidence = createEvidence(output, appPath, frontendBuildId, distIdentity, appIdentity);
   const selected = options.scenarios ?? SCENARIOS.map((scenario) => scenario.id);
   const lockOwner = `${(options.scenarios ?? []).join("+") || "all"}:${process.pid}`;
-  const state = { child: null, bridge: null };
+  const state = { child: null, bridge: null, frontendBuildId: null };
   let stdoutLog = null;
   let stderrLog = null;
   let lockHeld = false;
+  let runWriterLock = null;
   let preserveChildAndLock = false;
   let residualFixtureBlocksKeepApp = false;
   const fixturesRoot = path.resolve(options.fixtures ?? path.join(output, "fixtures"));
 
   try {
+    runWriterLock = await acquireRunWriterLock(output, `live-run:${process.pid}`);
     await acquireAppLock(lockOwner);
     lockHeld = true;
     execFileSync(process.execPath, [
@@ -787,6 +1150,7 @@ async function runLane(options) {
     if (selected.includes("s0")) {
       const { record: runtimeAttention, residualChild } = await capturePreReadyRuntimeAttention({
         appPath,
+        appIdentity,
         output,
         stdoutLog,
         stderrLog,
@@ -809,6 +1173,11 @@ async function runLane(options) {
     const launch = async (windowSize = null) => {
       const descriptorFile = path.join(output, "bridge.json");
       fs.rmSync(descriptorFile, { force: true });
+      assertExecutableIdentity(
+        appIdentity,
+        readExecutableIdentity(appPath),
+        "ready-path exact debug application",
+      );
       const child = spawn(appPath, [], {
         env: acceptanceLaunchEnvironment(output),
         stdio: ["ignore", "pipe", "pipe"],
@@ -833,15 +1202,22 @@ async function runLane(options) {
       await activateApp(child.pid);
       await new Promise((resolve) => setTimeout(resolve, 12_000));
       await activateApp(child.pid);
-      await waitFor("frontend automation surface", async () => {
+      const ready = await waitFor("frontend automation surface", async () => {
         await activateApp(child.pid);
         try {
           const value = await bridge.command({ command: "ready" });
-          return value != null && typeof value === "object" ? true : null;
+          return value != null && typeof value === "object" ? value : null;
         } catch {
           return null;
         }
       }, { timeoutMs: 400_000, intervalMs: 2_000 });
+      const appBuildId = ready?.evidence?.buildId;
+      assertFrontendBuildId(frontendBuildId, appBuildId, "real debug app");
+      if (state.frontendBuildId != null) {
+        assertFrontendBuildId(state.frontendBuildId, appBuildId, "restarted real debug app");
+      }
+      state.frontendBuildId = appBuildId;
+      evidence.frontend_build_identity.real_debug_app_build_id = appBuildId;
       state.bridge = bridge;
       return bridge;
     };
@@ -870,7 +1246,11 @@ async function runLane(options) {
       },
       captureStartupBrowserFrames: async () => captureStartupBrowserFrames({
         output,
+        distRoot,
+        expectedBuildId: frontendBuildId,
+        expectedDistIdentity: distIdentity,
         onRecord: (record) => {
+          recordBrowserBuildIdentity(evidence, record);
           const problem = reviewableFrameProblem(output, record);
           if (problem != null) {
             record.screenshot_capture_status = "FAIL";
@@ -884,7 +1264,11 @@ async function runLane(options) {
       }),
       captureVibeAgentBrowserFrames: async () => captureVibeAgentBrowserFrames({
         output,
+        distRoot,
+        expectedBuildId: frontendBuildId,
+        expectedDistIdentity: distIdentity,
         onRecord: (record) => {
+          recordBrowserBuildIdentity(evidence, record);
           const problem = reviewableFrameProblem(output, record);
           if (problem != null) {
             record.screenshot_capture_status = "FAIL";
@@ -948,6 +1332,9 @@ async function runLane(options) {
             await activateApp(state.child?.pid);
             const shot = await state.bridge.screenshot(screenshot);
             record.screenshot_bytes = shot.bytes;
+            const resolved = resolvedFramePath(output, record.screenshot);
+            if (resolved.error != null) throw new AcceptanceError(resolved.error);
+            record.screenshot_sha256 = pngSha256(resolved.framePath);
             record.screenshot_capture_status = "PASS";
             const problem = reviewableFrameProblem(output, record);
             if (problem != null) throw new AcceptanceError(problem);
@@ -1005,12 +1392,24 @@ async function runLane(options) {
       }
     }
   } catch (error) {
-    if (evidence.error == null) evidence.error = error.stack ?? error.message;
+    if (evidence.error == null) appendEvidenceError(evidence, error);
   } finally {
     try {
+      try {
+        verifyCurrentCandidateIdentities(evidence);
+      } catch (error) {
+        appendEvidenceError(evidence, error);
+      }
       evidence.finished_at = nowIso();
       finalizeStatus(evidence, output);
       refreshLedger(output, evidence);
+      try {
+        verifyCurrentCandidateIdentities(evidence, { recordVerification: false });
+      } catch (error) {
+        appendEvidenceError(evidence, error);
+        finalizeStatus(evidence, output);
+        refreshLedger(output, evidence);
+      }
       if (
         options.keepApp && !residualFixtureBlocksKeepApp && state.child != null &&
         state.child.exitCode == null && state.child.signalCode == null
@@ -1028,6 +1427,8 @@ async function runLane(options) {
           else transferAppLock(`termination-pending:${state.child.pid}`, state.child.pid);
         }
       }
+      releaseRunWriterLock(runWriterLock);
+      runWriterLock = null;
     }
   }
   return evidence;
@@ -1069,6 +1470,47 @@ function parseOptions(argv) {
   return options;
 }
 
+export async function mutateCompletedRun(runDirectory, owner, mutation, {
+  verifyCandidate = verifyCurrentCandidateIdentities,
+} = {}) {
+  const root = ensureSecureDirectory(runDirectory);
+  // A command invoked while the live runner owns this directory must fail
+  // immediately instead of waiting behind it and silently changing meaning.
+  const preliminary = readUncommittedEvidence(root).evidence;
+  assertMutableEvidenceSchema(preliminary);
+  if (preliminary.finished_at == null) {
+    throw new AcceptanceError("visual acceptance run is still live; review/finalize requires finished_at");
+  }
+  const lock = await acquireRunWriterLock(root, owner);
+  try {
+    const committed = readCommittedEvidence(root);
+    if (committed.legacy) {
+      throw new AcceptanceError("rho_visual_acceptance_v1 evidence is read-only");
+    }
+    const evidence = committed.evidence;
+    if (evidence.finished_at == null) {
+      throw new AcceptanceError("visual acceptance run is still live; review/finalize requires finished_at");
+    }
+    verifyCandidate(evidence, { requireLaunchedApp: true, recordVerification: true });
+    await mutation(evidence);
+    finalizeStatus(evidence, root);
+    refreshLedger(root, evidence);
+    try {
+      verifyCandidate(evidence, { requireLaunchedApp: true, recordVerification: false });
+    } catch (error) {
+      appendEvidenceError(evidence, error);
+      finalizeStatus(evidence, root);
+      refreshLedger(root, evidence);
+      throw new AcceptanceError(
+        `candidate identity changed after ledger mutation; run forced to FAIL: ${error.message}`,
+      );
+    }
+    return evidence;
+  } finally {
+    releaseRunWriterLock(lock);
+  }
+}
+
 async function main() {
   const options = parseOptions(process.argv.slice(2));
   if (options.command === "run") {
@@ -1086,26 +1528,27 @@ async function main() {
   if (options.command === "record-review") {
     if (options.run == null || options.frame == null) throw new AcceptanceError("record-review requires --run and --frame");
     if (!["pass", "fail"].includes(options.verdict ?? "")) throw new AcceptanceError("--verdict must be pass or fail");
-    const evidenceFile = path.join(options.run, "evidence.json");
-    const evidence = JSON.parse(fs.readFileSync(evidenceFile, "utf8"));
-    const matchingGates = evidence.gates.filter(
-      (candidate) => candidate.screenshot === `screenshots/${options.frame}.png`,
-    );
-    if (matchingGates.length === 0) throw new AcceptanceError(`no gate captured frame ${options.frame}`);
-    if (matchingGates.length > 1) throw new AcceptanceError(`frame ${options.frame} is ambiguous across gates`);
-    const [gate] = matchingGates;
-    const reviewProblem = reviewableFrameProblem(options.run, gate);
-    if (reviewProblem != null) {
-      throw new AcceptanceError(`frame ${options.frame} is not reviewable: ${reviewProblem}`);
-    }
-    gate.visual_status = options.verdict.toUpperCase();
-    gate.visual_note = options.note;
-    gate.status = gate.deterministic_status === "FAIL" || gate.visual_status === "FAIL" ? "FAIL" : "PASS";
-    finalizeStatus(evidence, options.run);
-    refreshLedger(options.run, evidence);
+    const runDirectory = path.resolve(options.run);
+    let reviewedGate = null;
+    const evidence = await mutateCompletedRun(runDirectory, `record-review:${options.frame}`, (mutable) => {
+      const matchingGates = mutable.gates.filter(
+        (candidate) => candidate.screenshot === `screenshots/${options.frame}.png`,
+      );
+      if (matchingGates.length === 0) throw new AcceptanceError(`no gate captured frame ${options.frame}`);
+      if (matchingGates.length > 1) throw new AcceptanceError(`frame ${options.frame} is ambiguous across gates`);
+      const [gate] = matchingGates;
+      const reviewProblem = reviewableFrameProblem(runDirectory, gate);
+      if (reviewProblem != null) {
+        throw new AcceptanceError(`frame ${options.frame} is not reviewable: ${reviewProblem}`);
+      }
+      gate.visual_status = options.verdict.toUpperCase();
+      gate.visual_note = options.note;
+      gate.status = gate.deterministic_status === "FAIL" || gate.visual_status === "FAIL" ? "FAIL" : "PASS";
+      reviewedGate = gate;
+    });
     process.stdout.write(`${JSON.stringify({
       frame: options.frame,
-      visual_status: gate.visual_status,
+      visual_status: reviewedGate.visual_status,
       run_status: evidence.status,
       scenarios: scenarioResults(evidence),
     }, null, 2)}\n`);
@@ -1114,9 +1557,7 @@ async function main() {
   if (options.command === "finalize") {
     if (options.run == null) throw new AcceptanceError("finalize requires --run");
     const runDirectory = path.resolve(options.run);
-    const evidence = JSON.parse(fs.readFileSync(path.join(runDirectory, "evidence.json"), "utf8"));
-    finalizeStatus(evidence, runDirectory);
-    refreshLedger(runDirectory, evidence);
+    const evidence = await mutateCompletedRun(runDirectory, "finalize", () => undefined);
     process.stdout.write(`${JSON.stringify({
       status: evidence.status,
       scenarios: scenarioResults(evidence),

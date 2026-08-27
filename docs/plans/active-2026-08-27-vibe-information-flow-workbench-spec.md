@@ -1,8 +1,9 @@
 # Vibe Information-Flow Workbench
 
 Status: active direction; VIBE-1 implemented and integration-reviewed;
-VIBE-1R implemented, merged, and merged-candidate automated/visual verification
-passed in `0.4.1-dev.22`
+VIBE-1R implemented; active D1/R2 VIBE-1R-REDACTION-1 release-blocker repair;
+prior automated/visual results remain historical while a new exact candidate is
+pending
 
 Date: 2026-08-27
 Change class: D3 program; first implementation checkpoint VIBE-1 is D2/R2
@@ -11,6 +12,32 @@ Authorized by: product owner in the active Vibe design task on 2026-08-27
 Next mandatory stop: VIBE-1R is closed. VIBE-2 still requires separate product
 authorization, and no scientific-state schema work may begin without a
 separately authorized D3/R3 package
+
+## VIBE-1R-REDACTION-1 Public Failure Projection Repair
+
+Independent final review found that Vibe correctly bounded ordinary public
+Agent activity but could project raw failure title/body/status or rejected
+implementation code into the focus-preserving record host. The owner-directed
+quality gate activates this D1/R2 privacy and presentation repair before a new
+exact candidate may be accepted.
+
+Every public failure, interrupted, and cancelled event uses the common Vibe
+failure presenter for title, body, and status. The presenter fails closed over
+local POSIX, drive-letter, slash-form Windows and UNC paths including Unicode
+and space-bearing segments; raw scheme URIs; quoted or unquoted JSON-shaped
+sensitive fields; typed/internal identities and UUIDs; and assigned, Bearer, or
+recognizable credential tokens.
+Failure code is always `null` in Vibe because a rejected payload cannot be
+proved public fragment by fragment. Explicitly public successful activity code
+remains available, and ordinary safe scientific narration remains readable.
+
+This repair changes no Agent event authority, trusted Studio disclosure,
+Conversation/Turn schema, transport, execution, approval, file mutation,
+credential storage, project identity, or Vibe-owned persistence. Regressions
+must cover each failure event family, every projected field, representative
+POSIX/Windows/UNC/URI/JSON/identity/secret forms, rejected code, and
+preservation of safe scientific text and ratios. Closure requires focused and complete affected tests,
+typecheck/lint, independent adversarial review, and fresh exact v2 S9 evidence.
 
 ## Decision
 
@@ -756,15 +783,16 @@ frames prove the real debug-app composition and empty-host boundary. No
 evidence class is reported as proving the other's facts.
 
 Lifecycle documentation did not change the frozen product sources or frontend
-assets. The exact current debug binary has SHA-256
+assets. At that later historical checkpoint, the exact frozen debug binary had SHA-256
 `4c9d9b18920d97c0aaea309b61d1bde6ade603f1d3c268d8e3a395f55d02a1cf`.
 Its immutable confirmation run at
 `target/visual-acceptance/dev22-final-1f476c14-4c9d9b18-s0-s3-s9-r2/`
 finished `PASS`: 35/35 gates and 31/31 original-resolution frame reviews, with
 S9 passing 9/9 gates and 9/9 frames across the real debug and browser/mock
 evidence classes. The earlier `3fb169...` run remains the historical
-pre-documentation frozen-product PASS and is not presented as the current
-binary.
+pre-documentation frozen-product PASS. Both runs now remain historical
+pre-VA1-INTEGRITY-1 evidence and are not presented as the current binary; a
+new exact v2 candidate remains pending.
 
 This closes VIBE-1R only. It adds no VIBE-2 authorization, scientific-state
 schema, new Agent authority, or release decision.

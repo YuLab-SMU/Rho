@@ -382,9 +382,9 @@ Final merged-candidate reconciliation recorded 2026-08-27:
   this later run is the final merged development-snapshot automated and exact-
   debug-app evidence and does not rewrite it.
 
-Post-documentation exact-binary reconciliation: lifecycle documentation did
-not change the frozen product sources or frontend assets. The exact current
-debug binary has SHA-256
+Historical post-documentation exact-binary reconciliation: lifecycle
+documentation did not change the frozen product sources or frontend assets. At
+that later checkpoint, the exact frozen debug binary had SHA-256
 `4c9d9b18920d97c0aaea309b61d1bde6ade603f1d3c268d8e3a395f55d02a1cf`;
 the aggregate checkout fingerprint at that run's launch was
 `1f476c14e742530cbd543859cabb3e2017a810b3f1534cff8614ed8eb88b9461`.
@@ -393,8 +393,10 @@ The immutable run at
 finished `PASS`: S0/S3/S9 passed 35/35 gates and 31/31 original-resolution
 frame reviews with no deterministic, visual, or pending failure. S0 passed
 23/23 gates and 20/20 reviewed frames. The `3fb169...` run above remains the
-historical frozen-product PASS; this current-binary confirmation supplements
-rather than reclassifies it.
+historical pre-documentation frozen-product PASS; the `4c9d9b...` confirmation
+supplements rather than reclassifies it. Both are now historical
+pre-VA1-INTEGRITY-1 evidence, not the current candidate; a new exact v2
+candidate remains pending.
 
 This closes final merged-candidate validation for STARTUP-INFO-1. It does not
 perform installation, signing, distribution, or release GO/NO-GO.

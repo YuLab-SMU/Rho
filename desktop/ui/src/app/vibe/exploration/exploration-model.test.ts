@@ -113,7 +113,10 @@ describe("Vibe exploration truth projection", () => {
     const activities = projectExplorationActivities([
       event(4, "tool.call_failed", { title: "R command failed", code: "stop('fit failed')" }),
       event(2, "agent.user_prompt", { body: "private user request" }),
-      event(3, "tool.call_started", { title: "Run donor aggregation" }),
+      event(3, "tool.call_started", {
+        title: "Run donor aggregation",
+        code: "aggregate_by_donor()",
+      }),
       event(1, "agent.plugin_context", { body: "untrusted plugin payload" }),
     ]);
 
@@ -122,9 +125,76 @@ describe("Vibe exploration truth projection", () => {
       "R command failed",
     ]);
     expect(activities.map((activity) => activity.kind)).toEqual(["execution", "attention"]);
-    expect(activities[1]?.code).toBe("stop('fit failed')");
+    expect(activities[0]?.code).toBe("aggregate_by_donor()");
+    expect(activities[1]?.code).toBeNull();
     expect(JSON.stringify(activities)).not.toContain("private_reasoning");
     expect(JSON.stringify(activities)).not.toContain("untrusted plugin payload");
+  });
+
+  it("redacts every public failure field and fails closed for rejected implementation code", () => {
+    const activities = projectExplorationActivities([
+      event(1, "tool.call_failed", {
+        title: "R command failed for resource:abc123 at s3://private-bucket/run-7",
+        body: "{\"conversation_id\":\"opaque-secret-7\",\"password\":\"hunter2\"," +
+          "\"path\":\"/研究/李 四/私密/model.R\"}",
+        status: "failed {\"profile_id\":\"opaque-secret-9\"}",
+        code: "source('/Users/alice/private/rho/secret.R'); api_key <- 'sk-local-only'",
+      }),
+      event(2, "desktop.agent_failed", {
+        title: "Model fit failed",
+        body: "One donor had no usable cells; the recorded fit stopped.",
+        status: "failed",
+        code: null,
+      }),
+      event(3, "agent.interrupted", {
+        title: "Interrupted resource:abc123",
+        body: "State remained at \\\\研究服务器\\共享 数据\\李 四\\结果.csv for profile:abc123.",
+        status: "interrupted",
+        code: "resume_internal_state()",
+      }),
+      event(4, "agent.cancelled", {
+        title: "Cancelled request:private-4",
+        body: "The user cancelled this run.",
+        status: "cancelled",
+        code: "cancel_internal_state()",
+      }),
+    ]);
+
+    expect(activities[0]).toMatchObject({
+      title: "R command failed for [internal reference] at [internal reference]",
+      status: "failed {[internal reference]}",
+      code: null,
+    });
+    expect(activities[0]?.body).toContain("[internal reference]");
+    expect(activities[0]?.body).toContain("[secret]");
+    expect(activities[0]?.body).toContain("[local path]");
+    expect(JSON.stringify(activities[0])).not.toContain("/Users/alice");
+    expect(JSON.stringify(activities[0])).not.toContain("opaque-secret-7");
+    expect(JSON.stringify(activities[0])).not.toContain("opaque-secret-9");
+    expect(JSON.stringify(activities[0])).not.toContain("hunter2");
+    expect(JSON.stringify(activities[0])).not.toContain("李 四");
+    expect(JSON.stringify(activities[0])).not.toContain("private-bucket");
+    expect(JSON.stringify(activities[0])).not.toContain("sk-local-only");
+    expect(activities[1]).toMatchObject({
+      title: "Model fit failed",
+      body: "One donor had no usable cells; the recorded fit stopped.",
+      status: "failed",
+      code: null,
+    });
+    expect(activities[2]).toMatchObject({
+      title: "Interrupted [internal reference]",
+      body: "State remained at [local path] for [internal reference].",
+      status: "interrupted",
+      code: null,
+    });
+    expect(activities[3]).toMatchObject({
+      title: "Cancelled [internal reference]",
+      body: "The user cancelled this run.",
+      status: "cancelled",
+      code: null,
+    });
+    expect(JSON.stringify(activities)).not.toContain("resume_internal_state");
+    expect(JSON.stringify(activities)).not.toContain("cancel_internal_state");
   });
 
   it("reduces a trusted file proposal payload to a public fact without exposing its mutation content", () => {
