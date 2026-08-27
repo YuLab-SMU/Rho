@@ -435,3 +435,46 @@ Evidence:
   note and no option, act-mode popover with both options and the broker
   consequence copy, elevated chip relabeled; the ≤300px inline-open popover
   is fully contained.
+
+## AGX-5 Program Close-out (2026-08-27, this branch)
+
+All four pillars are implemented and verified on `codex/studio-agent-ux`:
+
+1. **Live** — AGX-1 `f62ad09`: store-broadcast turn frames →
+   `agent://turn-event` → transport subscription → view-model incremental
+   application with store reconciliation; turns narrate as they run.
+2. **Continuous** — AGX-2 `dc53d6c`: sequential composer work queue
+   (enqueue while running, move-up/cancel, single-flight dispatch on
+   terminal through the unchanged runAgent path; stop never consumes the
+   queue).
+3. **Reviewable** — AGX-3 `b377ac6`: true line diffs against current
+   content through the existing confined Resource read lane, in-repo LCS
+   diff with hunks; no serialized change, no new authority.
+4. **Calm authority** — AGX-4 `4713e81`: always-visible permission posture
+   chip exposing only broker-enforced postures (no fabricated tier),
+   Act-gated option, persisted and reset per the existing semantics.
+
+Final consolidated matrix on the branch: `cargo test -p rho-store --lib
+agent_repository` 4/4; `cargo check -p rho-desktop`; `rsr:typecheck`;
+`rsr:lint`; full UI suite 53 files / 353 tests passed;
+`rsr:build`; `git diff --check`. Per-package preview captures under
+`target/agx1-live/`, `target/agx2-queue/`, `target/agx3-diff/`,
+`target/agx4-posture/`.
+
+Recorded deferrals (explicit, not silent): token-level message deltas and
+`finished_at` on frames (AGX-1 follow-up candidates); durable broker-side
+queue (AGX-2 is UI-session by contract); diff for selection-based
+operations falls back by design.
+
+Remaining with the integration lane (not blocking this branch): re-pick
+the full branch including AGX packages; run the complete `rsr:check`
+matrix; re-baseline the s3 visual-acceptance gate for the live model and
+the round-6 mode-visibility criterion (`.rho-agent-mode button` now lives
+in the mode popover); real-app visual acceptance; NEWS and the version
+decision at the named candidate; cross-review row and docs index entries
+for this document and the surface spec; the foundation.css layer-order
+systemic fix recorded in the surface spec.
+
+Program status: AGX-1 through AGX-4 implemented and verified; AGX-5's
+branch-local consolidation complete; program remains ACTIVE until the
+integration items above are done.
