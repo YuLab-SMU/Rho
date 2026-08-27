@@ -1,5 +1,10 @@
 # Rho Documentation
 
+Current implementation package:
+[SETTINGS-UX2A Provider-first Settings UI](plans/active-2026-08-26-settings-ux2-provider-flow-spec.md).
+Credential persistence package:
+[CRED-VAULT-1 Rho encrypted credential vault](plans/active-2026-08-26-rho-encrypted-credential-vault-spec.md).
+
 The documentation is organized by purpose so that design intent, implementation
 guidance, project tracking, and release evidence do not become mixed together.
 
@@ -114,6 +119,7 @@ changes.
 - Active Studio design language and UX overhaul: [`design/active-2026-08-22-studio-design-language-and-ux-overhaul-design.md`](design/active-2026-08-22-studio-design-language-and-ux-overhaul-design.md)
 - Proposed Provider-first Settings and repeatable native credential-view redesign: [`plans/proposed-2026-08-26-plugin-native-settings-experience-design-spec.md`](plans/proposed-2026-08-26-plugin-native-settings-experience-design-spec.md)
 - Active CRED-REVEAL-1A connection-test credential-redaction repair: [`plans/active-2026-08-26-cred-reveal-1a-connection-test-redaction-spec.md`](plans/active-2026-08-26-cred-reveal-1a-connection-test-redaction-spec.md)
+- Active CRED-REVEAL-1B macOS native secure credential view: [`plans/active-2026-08-27-cred-reveal-1b-native-secure-view-spec.md`](plans/active-2026-08-27-cred-reveal-1b-native-secure-view-spec.md)
 - Active Runtime output, Console, History, and Agent context closed loop: [`plans/active-2026-08-24-runtime-output-agent-context-closed-loop-spec.md`](plans/active-2026-08-24-runtime-output-agent-context-closed-loop-spec.md)
 - Implemented architecture modernization program and repository-local tracker: [`architecture/implemented-2026-08-24-architecture-modernization-program.md`](architecture/implemented-2026-08-24-architecture-modernization-program.md)
 

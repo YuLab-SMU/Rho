@@ -5,12 +5,97 @@ Status: active documentation coordination record
 Review date: 2026-08-26 (fast-iteration checkpoint evidence reconciled)
 Scope: unfinished or acceptance-active specifications, plans, and release gates
 
+## 2026-08-26 CRED-VAULT-1 OS-store removal
+
+Interaction simplification amendment: the user-facing vault password,
+initialization, and restart unlock flow are superseded. Rho opens its
+current-user-only local credential store automatically. Provider Settings owns
+only direct Add, View, and Replace actions and must not expose a separate Vault
+screen.
+
+`active-2026-08-26-rho-encrypted-credential-vault-spec.md` becomes the sole
+authority for app-managed credential persistence and V4→V5 source migration.
+It does not change environment/session-only ownership, runtime selection,
+project scope, or CRED-REVEAL-1B's native presentation boundary. Old OS-store
+data is outside migration authority and remains untouched. SETTINGS-UX2A owns
+only transient password/draft presentation. The migration, persistence,
+reveal, audit, and UI sequencing responsibilities are therefore single-owner.
+
+## 2026-08-26 SETTINGS-UX2A Provider-first visible iteration
+
+`active-2026-08-26-settings-ux2-provider-flow-spec.md` changes only the trusted
+Settings projection and generated facade for the existing credential-save and
+native-reveal commands. The Agent LLM settings file/revision remains the sole
+durable authority; CRED-REVEAL-1B remains the sole plaintext-egress authority;
+the Surface Runtime still owns singleton identity/view-state persistence; and
+the Studio design language still owns visual tokens. MODEL-AUTO-1 is not
+implemented or implied. No schema, migration, credential-store, resolver,
+project, approval, or release-authority conflict was found.
+
 Real-application visual acceptance ownership: the executable workflow and
 candidate-level evidence template are `test/acceptance-project/VISUAL-ACCEPTANCE.md`
 and `test/acceptance-project/acceptance-results/CANDIDATE-RESULT-TEMPLATE.md`.
 The former `MANUAL-ACCEPTANCE.md` is a stable retirement notice only. This
 development evidence does not replace exact-release-candidate, distribution,
 signing, clean-install, or package-specific gates owned elsewhere.
+
+## 2026-08-27 VIBE-1 Information-flow workbench
+
+`active-2026-08-27-vibe-information-flow-workbench-spec.md` owns one bounded
+D2/R2 frontend checkpoint inside a separately staged D3 Vibe direction. It
+replaces the generic full-canvas Page-builder presentation with three semantic
+regions—working manuscript, Agent autonomous exploration, and verification /
+draft interpretation—while preserving ordered Vibe document flow and the
+focused-document narrow contract. The 40/35/25 desktop layout is a presentation
+preset, not a second Studio Scene graph or three permanent Surface instances.
+
+The accepted Surface Runtime retains Studio/Vibe composition, Surface identity,
+Profile/Page CAS, and project isolation. The Studio design contract retains
+tokens, density, keyboard, 200%-zoom, and visual acceptance. Agent contracts
+retain Conversation/Turn/event/approval/execution truth; Runtime Output retains
+Run/output and Agent-context authority; Check and Evidence retain their current
+project-rule and structural-link scope. VIBE-1 adds no schema, migration,
+scientific Claim decision, immutable manuscript revision, invalidation,
+Checkpoint, credential, network, filesystem, approval, plugin, public protocol,
+version, candidate, or release authority.
+
+Correspondence may use only exact typed Page references, exact Agent Surface
+conversation state, and relationships already returned by an authority. It may
+not match by time, title, prompt, filename, or proximity. Generic domain detail,
+Agent tool failure, Run completion, Artifact provenance completeness, clean
+project Check, or linked Evidence Claim cannot be relabelled as a scientific
+observation, route pivot, support decision, or verified conclusion. Missing
+relations remain visibly unlinked. Formal scientific state requires a later
+separately authorized D3/R3 package.
+
+## 2026-08-27 STARTUP-INFO-1 Truthful startup ledger
+
+`active-2026-08-05-startup-performance-spec.md` owns the authorized D2/R3
+STARTUP-INFO-1 workflow. It adds a presentation-only observer around the
+existing ordered runtime bootstrap, Workspace R start, and ready-project restore
+await boundaries, then projects those facts as a three-stage startup ledger.
+The callback is not readiness authority: `WorkspacePreparation` and the current
+RSR ready-before-Workbench admission remain authoritative, and no later stage
+may appear after an earlier failure.
+
+STARTUP-RECOVERY-1 retains contextual `Choose Rscript`, `Choose project`, Retry,
+picker cancellation, and failure semantics. The Studio design contract retains
+visual tokens, status presentation, focus-treatment appearance, target
+geometry, and reduced-motion styling. The accepted plugin-native Surface
+Runtime design retains focus authority, keyboard and document order,
+accessible roles and behavior, and responsive reflow. Project identity,
+last-project persistence, Runtime, Workspace R, Surface, Agent, credential,
+approval, execution, and release authorities do not move. No schema, command,
+Tauri event, filesystem, network, credential, approval, execution, or public
+protocol is added.
+
+The startup shell exits before `WorkbenchApp` and Vibe mount, so STARTUP-INFO-1
+does not overlap VIBE-1 information-flow state or composition. Its feature lane
+may implement only the observer, pure model, ledger view, token-only
+`workbench.css`, mock parity, and focused tests. `App.tsx`, this matrix, version
+metadata, and `NEWS.md` remain blocked until the current Vibe integration lane
+finishes; STARTUP-INFO-1B must then obtain a new single-writer integration lane
+before wiring or candidate/version work.
 
 ## Purpose
 
@@ -41,9 +126,12 @@ semantics.
 | Document | Status after review | Owns | May proceed when |
 | --- | --- | --- | --- |
 | `project/active-development-governance.md` | active; D2/R2 fast-iteration checkpoint amendment authorized 2026-08-26 | required proposal-to-release development lifecycle, risk/test depth, review, versioning, evidence rules, and same-snapshot resumable RSR validation | applies continuously to all non-trivial work; checkpoint evidence is reusable only for an unchanged repository fingerprint and unchanged gate command |
+| `plans/active-2026-08-27-vibe-information-flow-workbench-spec.md` | active D3 direction with owner-authorized VIBE-1 D2/R2 checkpoint; parallel construction authorized 2026-08-27 | truthful three-region Vibe information hierarchy, local focus/layout projection, exact-reference correspondence, working-manuscript editor extraction, bounded Agent durable-truth projection, typed Run/Artifact/Plot/Check/Evidence projection, Studio transition intent, and VIBE-1 frontend/visual evidence | preserve Page/Profile, Agent, Runtime Output, Check/Evidence, Surface Runtime, Studio token, project-isolation, revision/CAS and release owners; VIBE-1 may not invent scientific routes/observations/support/acceptance, infer links, add schema/persistence/authority, or begin formal revision/invalidation/decision/Checkpoint work; stop after VIBE-1 integration review |
+| `plans/active-2026-08-05-startup-performance-spec.md` | active; STARTUP-PERF WP1/WP2 implemented and owner-authorized STARTUP-INFO-1 D2/R3 feature slice active | presentation-only progress observation around existing runtime/Workspace/project awaits, pure three-stage startup ledger, bounded returned facts, truthful attention/recovery projection, mock parity, and focused startup evidence | preserve RSR ready-before-Workbench, STARTUP-RECOVERY-1 actions, project/generation guards, Studio tokens and all backend authorities; feature lane cannot edit `App.tsx`, this matrix, versions or `NEWS.md`; STARTUP-INFO-1B waits for Vibe integration release and a new single-writer integration lane; no timer/percentage/ETA, schema, command/event, authority, installer or release expansion |
 | `plans/implemented-2026-08-26-plugin-native-settings-surface-spec.md` | implemented D3/R3 SETTINGS-PLUG-1; `0.4.1-dev.20`, complete affected validation, exact debug-app Models/Components and singleton restore acceptance, and final contract review passed on 2026-08-26 | trusted first-party `rho.settings` Surface, closed module host, Models projection/revision-safe chat and capacity operations, read-only current component catalog, and unplaced-singleton restore | preserve RSR Surface/Command authority and all CRED-UX/CRED-SEC settings, revision, credential, redaction and recovery contracts; no workspace-plugin Settings injection, schema, new mutation/network/filesystem authority, or release scope |
-| `plans/active-2026-08-26-cred-reveal-1a-connection-test-redaction-spec.md` | active D1/R3 CRED-REVEAL-1A; explicitly authorized by owner instruction `开始施工` on 2026-08-26; mandatory stop before 1B | selected-Provider connection-test child stdout/stderr bounds, raw stderr suppression, stable non-secret structured failure projection, removal of inherited sensitive/all-Provider credential and endpoint environment names before selected-only re-addition, fail-safe process-tree reap/test-control cleanup, sentinel/state-preservation regression, and post-test credential review; the existing command adapter may pass state-owned runtime `data_dir` internally only to obtain the validated catalog scrub list | no View UI, secret getter, IPC command name/arguments/result, binding/mock, presenter, OS auth, reveal audit, schema/source/store/network/model-selection/route authority, version, candidate, or release change; current CRED-UX/CRED-SEC no-redisplay and exact-source/no-fallback rules remain authoritative; 1B remains inactive |
-| `plans/proposed-2026-08-26-plugin-native-settings-experience-design-spec.md` | proposed revision-3 D3/R3 design contract; SETTINGS-DESIGN-3 accepted; only CRED-REVEAL-1A is active through its focused handoff, while 1B/MODEL-AUTO-1/SETTINGS-UX1/UX2 remain inactive | proposed primary `Providers / Components` information architecture, secondary soft Model preference, backend-owned deterministic pre-execution Provider/model selection, focused Provider/Connection/Add-or-Replace child screens, mode-specific first-save and replacement recovery, fixed-mask View entry plus an OS-native secure presenter for app-managed credentials, flat Components catalog, and staged CRED-REVEAL-1/MODEL-AUTO-1/SETTINGS-UX1/UX2 gates | current CRED-UX explicit-route authority, schema, no-fallback resolver, migrations, presentation-safe view, and current CRED-SEC no-redisplay/source/redaction rules remain unchanged until their separate D3/R3 amendments are implemented and accepted; product code cannot expose View until accepted CRED-REVEAL-1A connection-test error redaction and CRED-REVEAL-1B focused-window admission/revalidation, fresh OS verification on every attempt, per-Provider credential-operation locking/generation, exact-source eligibility, environment rejection before read, system-store direct reads, first-package file-fallback rejection, blocking durable fail-closed pre-display audit, awaited native close and Rho-owned-buffer clearing, failure recovery, platform acceptance, and no fallback all pass, and the secret must never return through a Settings view, Tauri IPC, generated binding, WebView, React, DOM, mock, or browser state; route UI cannot be hidden/replaced and Providers cannot become the default/fallback until MODEL-AUTO-1 is implemented, fully verified, integrated, contract-reviewed, and accepted, or until one checked-in integration boundary accepts its resolver, lossless migration, persistence, and Settings successor together while the old route UI remains reachable through that boundary; no secret or selected UI row/view state may become runtime/layout authority; RSR retains Surface/Command/view-state authority, Studio retains tokens, existing multi-Provider routes are never guessed into a Provider, and no version/release/publication is implied |
+| `plans/active-2026-08-26-cred-reveal-1a-connection-test-redaction-spec.md` | completed D1/R3 CRED-REVEAL-1A; explicitly authorized by owner instruction `开始施工` on 2026-08-26; implementation, automated verification, and two independent R3 reviews passed | selected-Provider connection-test child stdout/stderr bounds, raw stderr suppression, stable non-secret structured failure projection, removal of inherited sensitive/all-Provider credential and endpoint environment names before selected-only re-addition, fail-safe process-tree reap/test-control cleanup, sentinel/state-preservation regression, and post-test credential review; the existing command adapter may pass state-owned runtime `data_dir` internally only to obtain the validated catalog scrub list | no View UI, secret getter, IPC command name/arguments/result, binding/mock, presenter, OS auth, reveal audit, schema/source/store/network/model-selection/route authority, version, candidate, or release change within 1A itself; its mandatory stop was resolved by the owner's separate 2026-08-27 activation of CRED-REVEAL-1B |
+| `plans/active-2026-08-27-cred-reveal-1b-native-secure-view-spec.md` | active D3/R3 CRED-REVEAL-1B; explicitly authorized by owner instruction `继续开发` and narrowed by the owner on 2026-08-27 to the current local Darwin/macOS platform, with synchronized amendments to both credential authority documents | one backend-complete repeatable secure-view flow: bounded `agent_llm_view_credential` IPC returning only a fixed ten-word outcome vocabulary, focused-window admission/revalidation, per-view fresh OS user verification and fresh direct exact-source reads bypassing the runtime cache, per-Provider credential-generation tracking advanced by Rho-owned mutations, blocking fail-closed durable `credential_reveal_authorized` audit before display, in-process macOS LocalAuthentication/AppKit presenter owning Close/Escape/focus-loss/app-quit clearing of Rho-owned plaintext, concurrent-duplicate refusal, and exact source eligibility (system_store/session_only eligible; environment rejected before read; file_fallback excluded); other platforms fail closed and their native presenters are deferred | no Settings UI, mask row, View/Replace buttons, clipboard/copy affordances, persistent grants, auto-read, secret across IPC/bindings/mock/log/DOM in any form, Windows/Linux reveal presenter work, second settings store, schema/migration edits, source fallback, route/model-selection authority, MODEL-AUTO-1/SETTINGS-UX1/SETTINGS-UX2 work, or version/NEWS/candidate/release claims; owner-run macOS installed-app acceptance with a disposable credential stays open before any release claim |
+| `plans/proposed-2026-08-26-plugin-native-settings-experience-design-spec.md` | proposed revision-3 D3/R3 design contract; SETTINGS-DESIGN-3 accepted; CRED-REVEAL-1A completed through its focused handoff and CRED-REVEAL-1B active through its own 2026-08-27 handoff, while MODEL-AUTO-1/SETTINGS-UX1/UX2 remain inactive | proposed primary `Providers / Components` information architecture, secondary soft Model preference, backend-owned deterministic pre-execution Provider/model selection, focused Provider/Connection/Add-or-Replace child screens, mode-specific first-save and replacement recovery, fixed-mask View entry plus an OS-native secure presenter for app-managed credentials, flat Components catalog, and staged CRED-REVEAL-1/MODEL-AUTO-1/SETTINGS-UX1/UX2 gates | current CRED-UX explicit-route authority, schema, no-fallback resolver, migrations, presentation-safe view, and current CRED-SEC no-redisplay/source/redaction rules remain unchanged until their separate D3/R3 amendments are implemented and accepted; product code cannot expose View until accepted CRED-REVEAL-1A connection-test error redaction and CRED-REVEAL-1B focused-window admission/revalidation, fresh OS verification on every attempt, per-Provider credential-operation locking/generation, exact-source eligibility, environment rejection before read, system-store direct reads, first-package file-fallback rejection, blocking durable fail-closed pre-display audit, awaited native close and Rho-owned-buffer clearing, failure recovery, platform acceptance, and no fallback all pass, and the secret must never return through a Settings view, Tauri IPC, generated binding, WebView, React, DOM, mock, or browser state; route UI cannot be hidden/replaced and Providers cannot become the default/fallback until MODEL-AUTO-1 is implemented, fully verified, integrated, contract-reviewed, and accepted, or until one checked-in integration boundary accepts its resolver, lossless migration, persistence, and Settings successor together while the old route UI remains reachable through that boundary; no secret or selected UI row/view state may become runtime/layout authority; RSR retains Surface/Command/view-state authority, Studio retains tokens, existing multi-Provider routes are never guessed into a Provider, and no version/release/publication is implied |
 | `plans/implemented-2026-08-26-startup-unavailable-project-recovery-repair-spec.md` | implemented D1/R3 STARTUP-RECOVERY-1; `0.4.1-dev.19`, complete affected validation, fail-closed acceptance app-data isolation, and exact debug-app recovery passed on 2026-08-26 | truthful unavailable-project startup action through the existing picker plus debug-acceptance app-data isolation | preserve WP1/BH2 project truth and WP9 switch projection; acceptance isolation remains fail closed and debug-only; no schema, command, credential, release, or project-transition authority change |
 | `plans/implemented-2026-08-26-visual-acceptance-automation-spec.md` | implemented VA1 contract; debug bridge, fixed frontend vocabulary, cross-platform fixtures, S0/S1/S2/S3/S7/S8 scenarios, complete affected validation, and the fully reviewed 35-gate local baseline are complete | debug-only real-app visual acceptance lane and retirement of the consolidated human walkthrough | preserve release/profile fail-closed gates and evidence separation; the 12 PASS / 15 FAIL / 8 removed-gate SKIP baseline leaves product repairs in separate follow-up packages rather than silently expanding VA1 |
 | `plans/active-2026-08-10-agpl-license-transition-spec.md` | active; LIC-1 and LIC-2 implementation, affected validation, UI/bundle review, exact-head hosted validation, and protected integration complete; exact candidate and installed distribution acceptance remain open | prospective `AGPL-3.0-only` source-license boundary, synchronized repository metadata, contribution terms, third-party exclusions, fixed installed resource copies, About legal notice, and transition gates | preserve the integrated license/resource boundary; SignPath readiness may reference but not redefine it; exact candidate and installed acceptance remain release-owned |
@@ -79,7 +167,7 @@ an additive BH4-aligned authority, keeps `auto_prune_enabled=false`, adds no
 automatic deletion, and prevents in-memory defaults from drifting across
 restart or project switch. No Agent approval, Run outcome, UI Profile, plugin,
 credential, network, installer, or release authority moves to that table.
-| `plans/active-2026-08-26-llm-credential-sources-and-store-hardening-spec.md` | active D3 credentials contract; CRED-SEC1 through CRED-SEC5 implementation authorized as one whole upgrade project by the project owner on 2026-08-26 | per-provider explicit credential source (system store / environment / session-only / Linux opt-in file fallback), settings schema V2→V3 migration, credential-access audit events, entry-time validation, and overwrite confirmation | amends only the credential-source sections of `plans/active-2026-08-05-system-credential-and-simple-llm-settings-spec.md`; provider/model/route authority, revision discipline, redaction layers, and no-fallback rules stay with the CRED-UX contract; no `.Renviron` reintroduction, no silent store downgrade, no OAuth, no per-project credentials, no release authority |
+| `plans/active-2026-08-26-llm-credential-sources-and-store-hardening-spec.md` | active D3 credentials contract, amended by CRED-VAULT-1 on 2026-08-26 | explicit `rho_vault` / environment / session-only source authority, credential-access audit events, entry-time validation, overwrite confirmation, and exact-source no-fallback behavior; historical `system_store` and `file_fallback` implementation clauses are superseded | CRED-VAULT-1 solely owns encrypted persistence and V4→V5 migration; provider/model/route authority, revision discipline, and redaction layers stay with CRED-UX; no OS-store read/migration/delete, plaintext fallback, `.Renviron` reintroduction, OAuth, per-project credentials, or release authority |
 | `plans/implemented-2026-08-21-agent-dependency-diagnostics-fault-isolation-spec.md` | ADI-1 implemented and locally accepted 2026-08-21; structured probe fixtures, 274-test desktop suite, live local R probe, deterministic browser states, and exact checkout debug-app workflow pass; CI/multi-platform excluded | selected-R dependency probe result model and Agent UI projection only | #94 retains manifest/private-library/provisioning/source/network authority; #93 retains Ark/Workspace supervisor and recovery; Provider settings retain credential/network health; no package mutation or Workspace disablement |
 | `design/active-2026-08-19-plugin-runtime-phase-2-5-agent-authored-evolution-design.md` | active design; Phase 2 prerequisite is now accepted, but executable Phase 2.5 remains separately unauthorized; bounded P2.5-0-through-P2.5-6 pure-contract review-remediation remains implemented evidence only | Agent-authored and self-evolving project plugins: experience trace, recipe/Skill promotion, candidate builder, protected evaluation, lineage, standing policy, repair/rollback, capability gardener; current slice owns only pure predicates and negative tests | package digest remains executable identity; builder cannot self-authorize; no real observation, schema, Agent call, build, execution, production grant, activation, autonomous evolution, or UI; first-party promotion remains ordinary repository/release governance |
 | `plans/active-2026-08-05-macos-arm64-support-spec.md` | active broader platform plan; MAC1-MAC5 complete for published Apple Silicon candidate `0.4.0-dev.24`; protected Release and live development manifest pass without asset replacement | Apple Silicon macOS 14+ platform adapters, Ark/R integration, Keychain extension, additive macOS update artifact, signed DMG handoff, repository-bound rehearsal lane, async notarization orchestration, and MAC5 publication admission | preserve immutable release evidence; macOS x64 and Linux x64 remain open milestone scope |
