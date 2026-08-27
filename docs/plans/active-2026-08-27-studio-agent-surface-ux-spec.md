@@ -1,16 +1,21 @@
 # Studio Agent Surface UX
 
-Status: active implementation contract
+Status: active implementation contract; amended 2026-08-27 for round 2
+(lane `studio-agent-ux-2`)
 
 Date: 2026-08-27
 Authorization: the user explicitly authorized "优化 Studio 模式中的 Agent 组件
 （rho.agent Surface）" on 2026-08-27 with the bounded work-package brief pasted
-into the `codex/studio-agent-ux` feature worktree session.
+into the `codex/studio-agent-ux` feature worktree session. Round 2 was
+explicitly authorized by the product owner on 2026-08-27 after reviewing the
+round-1 result against mature agent-chat references (see the Round 2
+Amendment section).
 Change class: D2 bounded user workflow (presentation only)
 Risk class: R1 frontend presentation and local UI state; no durable, execution,
 approval, schema, or transport effect
 Work package: studio-agent-ux (lane `studio-agent-ux`,
-base `560dff98cf69662cea9672194a6593f09c2d1a6f`)
+base `560dff98cf69662cea9672194a6593f09c2d1a6f`);
+round 2: lane `studio-agent-ux-2`, base `63914e14a1dd`
 Mandatory stop: after the restructured Agent Surface, focused tests,
 typecheck/lint, wide/medium/narrow mock preview, and contract review
 
@@ -312,3 +317,73 @@ waiting, failed, and cancelled states are covered by the focused tests.
 The complete `rsr:check` matrix, the s3 visual-acceptance gate, NEWS,
 cross-review/index entries, and version decisions remain with the
 integration lane as listed above.
+
+## Round 2 Amendment: Composer-Centric Density And In-Surface Model Switching
+
+Authorization: after reviewing the round-1 result against mature agent-chat
+references (Alma/Codex-style composer-centric design), the product owner
+directed on 2026-08-27 that:
+
+- the chat model selector moves into the Agent surface so the user can
+  switch at any time ("把模型能力或 Provider 配置塞进 Agent 主界面，方便用户
+  随时切换");
+- file-change presentation must scale to many proposals ("Agent 的更改可能
+  是海量的"), learning from the summary-plus-review pattern instead of one
+  large card per proposal;
+- the round-1 product boundaries (no model controls in the surface, explicit
+  full-card proposals) are relaxed to references where relaxing them
+  improves usability ("之前的边界……不是硬边界，只是参考").
+
+What this amendment authorizes (still presentation-only, D2/R1):
+
+1. A compact chat-model chip in the composer control row. It reads the
+   existing `loadAgentLlmSettings`, lists enabled language models, and
+   switches through the existing revision-checked `selectAgentChatModel`
+   transport. Provider configuration, credentials, and capability-route
+   management remain in Settings; the chip only switches the existing
+   agent.chat route's model. Switching clears any reviewed context preview.
+2. A single composer container: the run/wait status row with Stop stays at
+   its top, then the textarea, then one control row holding Review context
+   (first), the compact Ask/Plan/Act selector with its caption hint, the
+   model chip, and the primary Send/Review action. Every s3
+   visual-acceptance DOM hook from round 1 remains present.
+3. The empty state offers suggestion chips that fill (never send) the
+   composer.
+4. Per-turn tool/code events and context evidence collapse into one inline
+   activity summary line ("N tool events · M context sources") that expands;
+   file-edit proposal events are excluded because they render as decision
+   rows.
+5. File-change proposals become compact one-line decision rows (kind,
+   operation, path, outcome, explicit Apply/Reject/Undo) with the proposed
+   content behind a per-row disclosure, so many proposals stay scannable.
+   Apply/Reject visibility and semantics are unchanged; approval blocks keep
+   their distinct warning treatment with bounded code height.
+
+Still not authorized: backend, schema, or transport changes; credential or
+Provider editing in the surface; auto-send from suggestion chips; any change
+to approval or file-mutation semantics; editing files owned by other lanes.
+
+Round 2 verification adds: model listing and switching through the
+revision-checked path with preview invalidation, suggestion-chip fill,
+collapsed-by-default proposal content and activity summary, plus the full
+round-1 matrix (focused tests, typecheck, lint, build, three-width preview).
+
+Round 2 evidence passed 2026-08-27 (lane `studio-agent-ux-2`, implemented in
+the same four lane files):
+
+- `npm --prefix desktop run rsr:typecheck` and `rsr:lint`;
+- focused `AgentSurfaceView.test.tsx`: 12 of 12 passed, including the new
+  revision-checked model-switch test with preview invalidation, the
+  suggestion-chip fill, the collapsed-by-default proposal content, and the
+  inline activity summary;
+- full UI suite: 341 tests passed;
+- `npm run rsr:build --prefix desktop`;
+- `git diff --check`;
+- mock preview under `target/studio-agent-ux-preview/r2/`: `surface-wide.png`
+  (~600px), `surface-medium.png` (~260px), `surface-narrow.png` (~167px) show
+  the single composer container with the model chip, compact proposal rows,
+  and no horizontal overflow; `composer-wide.png` is the composer close-up;
+  `model-menu.png` shows the upward-opening model popover inside the
+  viewport; `empty-suggestions.png` shows the suggestion chips, and the
+  preview probe verified a chip fills (never sends) the composer. Review
+  context remains the first control and every s3 DOM hook is present.
