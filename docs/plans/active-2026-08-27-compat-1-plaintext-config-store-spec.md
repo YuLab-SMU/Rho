@@ -54,6 +54,11 @@ COMPAT-1 is split into two stages:
   `~/.rho` (created on first write). Empty-string overrides count as
   unset. `~/.rho` is the primary, extensible home (revision 4 of the
   umbrella proposal); `~/.config/rho` is the respected XDG variant.
+- A non-empty `RHO_HOME` must be an absolute path and is used literally,
+  without shell or tilde expansion; an invalid override is a truthful
+  configuration error and never falls through. When `XDG_CONFIG_HOME` is
+  non-empty, only `${XDG_CONFIG_HOME}/rho` is the XDG candidate; Rho does not
+  additionally probe literal `~/.config/rho`.
 - Home directory `0700`, files `0600` (best-effort ACL hardening on
   Windows); atomic writes (write-temp-then-rename) for every mutation.
 - Pre-existing loose permissions are surfaced truthfully in Settings with
@@ -63,16 +68,24 @@ COMPAT-1 is split into two stages:
   stale. On Unix it applies `0700` to the resolved home and `0600` to the
   existing file; other platforms use the existing best-effort hardening and
   report any remaining issue truthfully.
+- Missing objects are created securely by the first successful write.
+  Pre-existing loose or uninspectable objects remain read-only: every durable
+  Rho mutation fails closed until the explicit repair succeeds. Ordinary Save
+  never silently doubles as permission repair, and repair never recurses into
+  parents or unrelated files.
 - A missing or unreadable `config.yaml` is the truthful empty state: no
   providers configured; Settings copy names the file path so re-entry is
   one paste away.
-- The Settings view carries a SHA-256 of the exact loaded file bytes (or an
-  explicit missing sentinel). Every Rho-owned config mutation supplies that
-  digest and the projected revision. The broker re-reads immediately under
-  the settings mutation lock and rejects a mismatch before atomic write, so
-  an external edit is never silently overwritten. Session-only mutations
-  revalidate the same identity because an external edit may remove or change
-  the target Provider.
+- The Settings view carries a backend-minted opaque `config_snapshot_id`
+  bound in process memory to the normalized path, exact loaded bytes or
+  missing state, schema revision, and permission identity. No deterministic
+  digest of the secret-bearing file crosses IPC. Every Rho-owned config
+  mutation supplies that token and the projected revision. The broker
+  re-resolves and re-reads under the settings mutation lock, then rejects any
+  path, identity, byte, load-state, or revision mismatch before atomic write,
+  so an observed external edit is never silently overwritten. Session-only
+  mutations revalidate the same identity because an external edit may remove
+  or change the target Provider.
 
 ### 1.2 V6 plaintext YAML schema
 
@@ -82,6 +95,10 @@ COMPAT-1 is split into two stages:
     optional literal `api_key`, capability metadata;
   - models: capability metadata and runtime options;
   - preferences and capability routes as in V5.
+- Unknown fields remain load/turn compatible. A Rho mutation must preserve
+  them structurally or fail closed with a manual-edit instruction; it may
+  normalize YAML formatting and comments, but must never silently delete an
+  unknown field.
 - Session-only credential entry stays in-memory only; it is never written.
 - Credential writes name an explicit target: `config_file` or `session`.
   `config_file` is the UI default and changes only the Provider's literal
@@ -124,10 +141,12 @@ COMPAT-1 is split into two stages:
   credential reads and gains a one-time `config_store_adopted` event
   naming the new path.
 - `config_store_adopted` is de-duplicated across restarts under the audit-log
-  lock by scanning the bounded retained JSONL for the exact normalized config
-  path before append. Read/write failure remains non-blocking, is redacted in
-  the startup log, and is retried on a later successful store access; it never
-  causes a false durable-success claim.
+  lock for the identity `schema 6 + normalized resolved config path`. Missing
+  or malformed content still adopts that path as the new authority; an
+  unavailable home does not. Retention preserves adoption identities so
+  rotation cannot manufacture a duplicate. Read/write failure remains
+  non-blocking, is redacted in the startup log, and is retried on a later
+  store access; it never causes a false durable-success claim.
 - Connection-test/model-discovery probes keep CRED-REVEAL-1A containment;
   the env-scrub derivation now covers every `api_key_env` declared in the
   canonical registry plus generic sensitive names.
@@ -169,7 +188,7 @@ COMPAT-1 is split into two stages:
   process-env over user-`.Renviron`, bounded exact user-`.Renviron` selected
   reads, project-`.Renviron` exclusion, shadowing display truthfulness, and
   not-configured stays not-configured.
-- Mutation concurrency: revision plus exact-byte SHA-256 success, stale
+- Mutation concurrency: revision plus opaque exact-byte snapshot success, stale
   external edit rejection for every durable mutation, session-target
   revalidation, target-specific replace confirmation, and atomic failure
   preserving the prior file byte-for-byte.
