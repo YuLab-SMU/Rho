@@ -311,7 +311,7 @@ describe("Studio foundation app", () => {
       await settle();
     });
     expect(container.querySelectorAll("[data-surface-id='rho.settings']")).toHaveLength(1);
-    expect(container.querySelector("[data-surface-id='rho.settings']")?.textContent).toContain("Model routing");
+    expect(container.querySelector("[data-surface-id='rho.settings']")?.textContent).toContain("Providers");
 
     const setInput = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
     await act(async () => {

@@ -36,6 +36,7 @@ import { surfaceDisplayLabel } from "../surface-ux";
 
 const PANEL_COMPONENT = "rho-surface";
 const PANEL_TAB_COMPONENT = "rho-surface-tab";
+const CONSOLE_SURFACE_ID = "rho.console";
 const MINIMUM_PANE_EXTENT = 56;
 
 interface DockviewSurfaceParams {
@@ -133,6 +134,27 @@ function nodeSignature(node: LayoutNode): string {
   return signature(nodeInstanceIds(node));
 }
 
+function scenePanelTitles(
+  node: LayoutNode,
+  instances: ReadonlyMap<string, SurfaceInstance>,
+): ReadonlyMap<string, string> {
+  const instanceIds = nodeInstanceIds(node);
+  const consoleCount = instanceIds.filter((instanceId) =>
+    instances.get(instanceId)?.surface_id === CONSOLE_SURFACE_ID
+  ).length;
+  let consoleOrdinal = 0;
+  return new Map(instanceIds.map((instanceId) => {
+    const instance = instances.get(instanceId);
+    if (instance == null) return [instanceId, instanceId] as const;
+    const label = surfaceDisplayLabel(instance.surface_id);
+    if (instance.surface_id !== CONSOLE_SURFACE_ID || consoleCount < 2) {
+      return [instanceId, label] as const;
+    }
+    consoleOrdinal += 1;
+    return [instanceId, `${label} · ${consoleOrdinal}`] as const;
+  }));
+}
+
 function basisExtent(basis: LayoutBasis): number {
   switch (basis.kind) {
     case "fixed": return Math.max(MINIMUM_PANE_EXTENT, basis.logical_pixels);
@@ -171,6 +193,7 @@ function paneGroupId(node: Extract<LayoutNode, { kind: "surface" | "stack" }>): 
 function serializePane(
   node: Extract<LayoutNode, { kind: "surface" | "stack" }>,
   instances: ReadonlyMap<string, SurfaceInstance>,
+  titles: ReadonlyMap<string, string>,
   panels: SerializedDockview["panels"],
   size?: number,
 ): SerializedNode {
@@ -181,7 +204,9 @@ function serializePane(
       id: instanceId,
       contentComponent: PANEL_COMPONENT,
       tabComponent: PANEL_TAB_COMPONENT,
-      title: instance == null ? instanceId : surfaceDisplayLabel(instance.surface_id),
+      title: titles.get(instanceId) ?? (instance == null
+        ? instanceId
+        : surfaceDisplayLabel(instance.surface_id)),
       renderer: "onlyWhenVisible",
       params: {
         instanceId,
@@ -208,16 +233,18 @@ function serializeNode(
   node: LayoutNode,
   impliedAxis: LayoutAxis,
   instances: ReadonlyMap<string, SurfaceInstance>,
+  titles: ReadonlyMap<string, string>,
   panels: SerializedDockview["panels"],
   size?: number,
 ): SerializedNode {
-  if (node.kind !== "container") return serializePane(node, instances, panels, size);
+  if (node.kind !== "container") return serializePane(node, instances, titles, panels, size);
   const branch: SerializedNode = {
     type: "branch",
     data: node.children.map((child) => serializeNode(
       child.child,
       oppositeAxis(node.axis),
       instances,
+      titles,
       panels,
       basisExtent(child.basis),
     )),
@@ -241,7 +268,7 @@ export function sceneToDockview(
   if (nodeInstanceIds(node).length === 0) return null;
   const panels: SerializedDockview["panels"] = {};
   const rootAxis = node.kind === "container" ? node.axis : "horizontal";
-  const root = serializeNode(node, rootAxis, instances, panels);
+  const root = serializeNode(node, rootAxis, instances, scenePanelTitles(node, instances), panels);
   return {
     grid: {
       root,

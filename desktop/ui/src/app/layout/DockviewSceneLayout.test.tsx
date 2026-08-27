@@ -43,8 +43,79 @@ describe("controlled Dockview Scene adapter", () => {
       "instance:file-source",
       "instance:navigator",
     ]);
+    expect(serialized!.panels["instance:console-a"]?.title).toBe("R Console · 1");
+    expect(serialized!.panels["instance:console-b"]?.title).toBe("R Console · 2");
     expect(dockviewToScene(serialized!, root, allocator())).toEqual(root);
     expect(root).toEqual(before);
+  });
+
+  it("keeps one placed Console unsuffixed", () => {
+    const root: LayoutNode = {
+      kind: "surface",
+      node_id: "console-only",
+      instance_id: "instance:console-a",
+    };
+
+    const serialized = sceneToDockview(root, fixtureInstances());
+
+    expect(serialized?.panels["instance:console-a"]?.title).toBe("R Console");
+    expect(root).toEqual({
+      kind: "surface",
+      node_id: "console-only",
+      instance_id: "instance:console-a",
+    });
+  });
+
+  it("numbers repeated Consoles once across separate panes and stacks", () => {
+    const root: LayoutNode = {
+      kind: "container",
+      node_id: "root",
+      axis: "horizontal",
+      children: [
+        {
+          child: {
+            kind: "surface",
+            node_id: "console-b-pane",
+            instance_id: "instance:console-b",
+          },
+          basis: { kind: "fraction", weight: 1 },
+          resizable: true,
+          collapse_priority: null,
+        },
+        {
+          child: {
+            kind: "stack",
+            node_id: "mixed-stack",
+            active_instance_id: "instance:console-a",
+            instances: ["instance:environment", "instance:console-a"],
+          },
+          basis: { kind: "fraction", weight: 1 },
+          resizable: true,
+          collapse_priority: null,
+        },
+      ],
+    };
+    const before = structuredClone(root);
+
+    const serialized = sceneToDockview(root, fixtureInstances());
+
+    expect(serialized?.panels["instance:console-b"]?.title).toBe("R Console · 1");
+    expect(serialized?.panels["instance:console-a"]?.title).toBe("R Console · 2");
+    expect(serialized?.panels["instance:environment"]?.title).toBe("Environment");
+    expect(dockviewToScene(serialized!, root, allocator())).toEqual(root);
+    expect(root).toEqual(before);
+  });
+
+  it("keeps the missing-instance identity explicit", () => {
+    const root: LayoutNode = {
+      kind: "surface",
+      node_id: "missing",
+      instance_id: "instance:missing",
+    };
+
+    const serialized = sceneToDockview(root, fixtureInstances());
+
+    expect(serialized?.panels["instance:missing"]?.title).toBe("instance:missing");
   });
 
   it("uses a transparent grid shim when adjacent Rho containers repeat an axis", () => {

@@ -199,9 +199,19 @@ export type {
 
 export type {
   AgentContextCapacityRequest,
+  AgentLlmCredentialRevealView,
   AgentLlmSettingsView,
+  AgentModelCapabilityDeclarationRequest,
+  AgentModelDiscoveryResponse,
   AgentModelContextCapacity,
+  AgentModelProfile,
   AgentSettingsTransport,
+} from "./agent-settings";
+export {
+  buildAddedModelProfile,
+  CONSERVATIVE_CONTEXT_WINDOW_TOKENS,
+  CONSERVATIVE_RESERVED_OUTPUT_TOKENS,
+  MODEL_CAPABILITY_NAMES,
 } from "./agent-settings";
 
 export type {

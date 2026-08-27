@@ -8,17 +8,25 @@ export function runtimeOutputChunkBlock(chunk: RuntimeOutputChunk): ConsoleProje
       : kind === "error" ? "Error"
         : null;
   if (chunk.storage_kind === "record_ref") {
-    const referenceKind = chunk.reference_kind ?? "artifact";
+    const referenceKind = chunk.reference_kind;
+    const referenceId = chunk.reference_id;
+    const hasUsableReference = (referenceKind === "plot" || referenceKind === "artifact")
+      && typeof referenceId === "string"
+      && referenceId.trim().length > 0;
     return {
       kind: "value",
-      label: referenceKind === "plot" ? "Plot" : "Artifact",
-      text: chunk.reference_id ?? "Referenced output is unavailable.",
-      ...(chunk.reference_id == null ? {} : { reference: {
+      label: referenceKind === "plot" ? "Plot"
+        : referenceKind === "artifact" ? "Artifact"
+          : "Output",
+      text: hasUsableReference
+        ? "Ready to inspect."
+        : "Referenced output is unavailable.",
+      ...(hasUsableReference ? { reference: {
         kind: referenceKind,
-        id: chunk.reference_id,
+        id: referenceId,
         media_type: chunk.media_type,
         sha256: chunk.payload_sha256,
-      } }),
+      } } : {}),
     };
   }
   if (chunk.storage_kind === "tombstone") {

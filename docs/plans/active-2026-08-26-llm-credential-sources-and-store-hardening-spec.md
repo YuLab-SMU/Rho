@@ -1,5 +1,10 @@
 # LLM Credential Sources And Store Hardening
 
+> 2026-08-26 amendment: CRED-VAULT-1 replaces the app-managed
+> `system_store`/OS-keyring implementation with password-unlocked
+> `rho_vault`. Old OS-store values are not read, migrated, deleted, or used as
+> fallback. Environment and session-only source semantics remain separate.
+
 Status: active; the project owner explicitly authorized the complete upgrade
 project (CRED-SEC1 through CRED-SEC5) on 2026-08-26 with the instruction to
 complete the whole upgrade autonomously, and this document was renamed from
@@ -361,3 +366,59 @@ resolution, store behavior, CRED-SEC4 ordinary best-effort audit, and the rule
 that a stored value is never redisplayed remain unchanged. It adds no reveal
 audit or presentation read. Those authority changes belong only to a separately
 accepted and activated CRED-REVEAL-1B package.
+
+## CRED-REVEAL-1B Native Secure Reveal Amendment — 2026-08-27
+
+The owner explicitly activated CRED-REVEAL-1B on 2026-08-27 through
+`plans/active-2026-08-27-cred-reveal-1b-native-secure-view-spec.md`. This
+amendment changes exactly four rules for that flow alone; every other rule in
+this contract remains unchanged:
+
+1. No-redisplay: stored values remain non-redisplayable except through the new
+   bounded repeatable native secure-view flow — explicit user action each
+   time, fresh OS user-presence verification, focused-window admission and
+   revalidation, revision/generation checks at every boundary, and an OS-owned
+   in-process presenter holding the only plaintext copy, cleared by Rho before
+   close is reported. No ambient projection, auto-read, clipboard action,
+   persistent grant, or WebView return is authorized.
+2. Direct store read: system-store reveals use a fresh direct keyring read on
+   each attempt rather than the runtime read-through cache, which stays empty
+   across the flow and untouched in behavior everywhere else. Session-only
+   reads read the live zeroized entry only.
+3. Blocking fail-closed reveal audit: the pre-display
+   `credential_reveal_authorized` event is durably appended, flushed, and
+   serialized against rotation under its own lock; write/rotate/flush/sync
+   failure fails closed (zeroize, never display) instead of using best-effort
+   CRED-SEC4 semantics. Ordinary best-effort audit stays as-is elsewhere.
+4. Native plaintext lifetime: plaintext exists only inside Rho process memory
+   between the verified direct read and presenter-close zeroization, never in
+   helper processes, argv, environment, stdin, clipboard, drag/services, title,
+   window metadata, logs, crash contexts, or screenshots taken by Rho.
+
+Source eligibility for reveal is exact: `system_store` eligible after
+verification via direct read; `session_only` conditionally eligible while its
+entry exists; `environment` never revealable and rejected before any read;
+`file_fallback` excluded in this first package pending a later gate covering
+path identity, permissions, ownership, and platform-auth rules. Unknown or
+invalid persisted sources fail closed. Sources still resolve with
+no-fallback/exact-source semantics everywhere else; nothing here changes set/
+replace/delete confirmation contracts, redaction of settings bytes, store
+schema, or keyring service naming.
+
+## CRED-REVEAL-1C Simple Inline View Amendment — 2026-08-27
+
+The owner explicitly activated CRED-REVEAL-1C on 2026-08-27 through
+`plans/active-2026-08-27-cred-reveal-1c-simple-inline-view-spec.md` after the
+owner-run macOS trial rejected the 1B flow (its LocalAuthentication dialog
+tripped its own focused-window revalidation, resolving every View as `stale`).
+For the reveal flow this amendment revokes the CRED-REVEAL-1B amendment above
+in full: no OS user-presence verification, no focused-window admission or
+revalidation, no native presenter, no blocking fail-closed audit, and no
+outcome-only response. Reveal becomes a bounded, explicitly user-triggered
+read: exact source eligibility (`rho_vault` and `session_only` eligible,
+`environment` never, unknown fail-closed), one fresh exact-source read per
+call, best-effort CRED-SEC4 `credential_reveal` audit, and an inline WebView
+display with no Rho clipboard affordance. The response carries the plaintext
+value on success; every other rule in this contract (metadata/credential
+separation, no silent fallback, secret/config separation, redaction of
+settings bytes) is unchanged.

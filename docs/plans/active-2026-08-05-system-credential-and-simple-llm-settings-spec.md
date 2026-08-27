@@ -1,5 +1,12 @@
 # System Credential And Simple LLM Settings
 
+> 2026-08-26 authority amendment: CRED-VAULT-1 supersedes every active
+> operating-system credential-store, Keychain-cache, and plaintext fallback
+> requirement in this historical rolling document. App-managed credentials
+> now use only the password-unlocked `rho_vault`; old OS-store values remain
+> untouched and unreachable. Provider/model/route and redaction requirements
+> not concerned with durable credential storage remain active.
+
 Status: active; CRED-UX1 authorized by the project owner on 2026-08-05 and
 implemented; the separately owned macOS Keychain adapter was implemented and
 verified in MAC3 on 2026-08-05; CRED-UX2 was explicitly authorized by the
@@ -2143,3 +2150,48 @@ may pass only the state-owned runtime `data_dir` to the existing catalog service
 so the validated Settings snapshot can supply the custom environment-name scrub
 list. This amendment does not permit a secret getter or redisplay;
 CRED-REVEAL-1B remains separately blocked.
+
+## CRED-REVEAL-1B Native Secure View Amendment — 2026-08-27
+
+The owner explicitly activated CRED-REVEAL-1B through the `继续开发`
+instruction of 2026-08-27, following the completed CRED-REVEAL-1A checkpoint,
+through
+`plans/active-2026-08-27-cred-reveal-1b-native-secure-view-spec.md`. This
+amendment authorizes exactly one bounded Settings-facing reveal command,
+`agent_llm_view_credential`, whose result contains only a terminal non-secret
+outcome from a fixed ten-word vocabulary; no secret material may cross IPC in
+any form.
+
+The command validates provider identity, configured source, expected settings
+revision, per-Provider credential-generation state, and focused-main-window
+admission, performs fresh OS-owned user verification on every attempt, takes
+one direct current-source read that bypasses the Agent runtime read-through
+cache, writes a blocking fail-closed durable `credential_reveal_authorized`
+audit row before display, and hands plaintext to an in-process OS-native
+presenter that owns Close/Escape/focus-loss/app-quit clearing before the
+pending command completes with one outcome. Environment sources are rejected
+before any read; file fallback is ineligible in this first package;
+`session_only` requires its live entry plus the same fresh verification.
+There is no source fallback and no persistent grant.
+
+Explicit typed-route persistence, route/model resolution authority, schema,
+store schemas, credential-source definitions, overwrite confirmation, existing
+audit events, mock fixtures, and all other command surfaces remain unchanged.
+The presentation-safe view keeps returning observation-derived status only.
+Keyless providers gain no reveal surface in this package; exposing View
+actions in UI belongs to SETTINGS-UX2 under separate authorization.
+
+## CRED-REVEAL-1C Simple Inline View Amendment — 2026-08-27
+
+The owner explicitly activated CRED-REVEAL-1C on 2026-08-27 through
+`plans/active-2026-08-27-cred-reveal-1c-simple-inline-view-spec.md`, after the
+owner-run macOS trial rejected the 1B flow (its own OS verification dialog
+tripped the focused-window revalidation, resolving every View as `stale`). The
+CRED-REVEAL-1B amendment above is revoked for the reveal flow: the Settings
+reveal command keeps the name `agent_llm_view_credential` but no longer takes
+an expected revision, performs no OS user-presence verification and no
+focused-window checks, uses no native presenter, writes only a best-effort
+`credential_reveal` audit row, and its result carries the plaintext credential
+on success (outcomes `revealed | credential_missing | store_unavailable |
+source_ineligible`). Exact source eligibility and no-fallback semantics are
+unchanged.

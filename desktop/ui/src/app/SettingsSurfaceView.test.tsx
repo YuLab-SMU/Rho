@@ -13,10 +13,42 @@ import {
   .IS_REACT_ACT_ENVIRONMENT = true;
 
 async function settle() {
-  for (let index = 0; index < 8; index += 1) await Promise.resolve();
+  for (let index = 0; index < 10; index += 1) await Promise.resolve();
 }
 
-describe("plugin-native Settings Surface", () => {
+function button(container: HTMLElement, label: string): HTMLButtonElement {
+  const match = [...container.querySelectorAll<HTMLButtonElement>("button")]
+    .find((candidate) => candidate.textContent?.trim() === label || candidate.textContent?.includes(label));
+  if (match == null) throw new Error(`Missing button: ${label}`);
+  return match;
+}
+
+async function click(target: HTMLButtonElement) {
+  await act(async () => {
+    target.click();
+    await settle();
+  });
+}
+
+async function inputValue(target: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+  await act(async () => {
+    setter.call(target, value);
+    target.dispatchEvent(new Event("input", { bubbles: true }));
+    await settle();
+  });
+}
+
+async function selectValue(target: HTMLSelectElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!;
+  await act(async () => {
+    setter.call(target, value);
+    target.dispatchEvent(new Event("change", { bubbles: true }));
+    await settle();
+  });
+}
+
+describe("Provider-first Settings Surface", () => {
   const roots: Array<ReturnType<typeof createRoot>> = [];
 
   afterEach(() => {
@@ -64,163 +96,461 @@ describe("plugin-native Settings Surface", () => {
     return { container, persist, reportError, root, transport, instance };
   }
 
-  it("uses a closed module registry and falls back from malformed view state", () => {
+  async function openProvider(container: HTMLElement) {
+    await click(button(container, "Mock Provider"));
+    expect(container.textContent).toContain("Endpoint");
+    expect(container.textContent).toContain("API key");
+    expect(container.textContent).toContain("Models");
+  }
+
+  it("uses Providers as the default and legacy fallback with only Components beside it", async () => {
     expect(settingsModuleFromViewState({ module_id: "components" })).toBe("components");
-    expect(settingsModuleFromViewState({ module_id: "workspace-secret" })).toBe("models");
-    expect(settingsModuleFromViewState({ module_id: 42 })).toBe("models");
-    expect(settingsModuleFromViewState(null)).toBe("models");
+    expect(settingsModuleFromViewState({ module_id: "providers" })).toBe("providers");
+    expect(settingsModuleFromViewState({ module_id: "models" })).toBe("providers");
+    expect(settingsModuleFromViewState({ module_id: "workspace-secret" })).toBe("providers");
+    expect(settingsModuleFromViewState(null)).toBe("providers");
+
+    const { container } = await renderSettings({ viewState: { module_id: "models" } });
+    expect([...container.querySelectorAll("[role='tab']")].map((tab) => tab.textContent)).toEqual([
+      "ProvidersConnect services Rho can use.",
+      "ComponentsInspect trusted application and project components.",
+    ]);
+    expect(container.textContent).toContain("Providers");
+    expect(container.textContent).not.toContain("Capability routes");
+    expect(container.textContent).not.toContain("Use for Chat");
+    expect(container.querySelector("input[type='password']")).toBeNull();
   });
 
-  it("assigns Chat and capacity through the displayed revision without exposing credential input", async () => {
+  it("keeps the Provider list visible beside connection, API key, and inline models", async () => {
+    const { container } = await renderSettings();
+    expect(container.textContent).toContain("Mock Provider");
+    expect(container.textContent).toContain("Select a Provider");
+    expect(container.textContent).not.toContain("mock-model");
+
+    await openProvider(container);
+    expect(container.textContent).toContain("https://example.invalid/v1");
+    expect(container.textContent).toContain("Connection");
+    expect(container.textContent).toContain("Latency");
+    expect(container.textContent).toContain("View");
+    expect(container.textContent).not.toContain("Select a Provider");
+    expect(container.textContent).toContain("mock-model");
+    expect(container.textContent).toContain("Available");
+    expect(container.textContent).toContain("Details");
+    expect(container.textContent).not.toContain("New API key");
+    expect(container.textContent).not.toContain("Capability routes");
+    expect([...container.querySelectorAll<HTMLButtonElement>(".rho-settings-row")]).toHaveLength(1);
+    expect(container.querySelector(".rho-settings-row")?.getAttribute("aria-current")).toBe("true");
+  });
+
+  it("shows the resolved Provider default, latest latency, availability, and refreshes models", async () => {
     const transport = createMockUiKernelTransport();
     const base = await transport.loadAgentLlmSettings();
-    const alternate = {
-      ...base.models[0]!,
-      id: "mock-profile-alternate",
-      display_name: "Alternate model",
-      model_id: "alternate-model",
-      selected: false,
-      context_window_tokens: 65_536,
-      reserved_output_tokens: 8_192,
-    };
-    let current: AgentLlmSettingsView = { ...base, models: [...base.models, alternate] };
-    transport.loadAgentLlmSettings = vi.fn(async () => structuredClone(current));
-    transport.selectAgentChatModel = vi.fn(async (modelId, expectedRevision) => {
-      expect(expectedRevision).toBe(current.revision);
-      const model = current.models.find((candidate) => candidate.id === modelId)!;
-      current = {
-        ...current,
-        revision: current.revision + 1,
-        selected_model_id: model.id,
-        selected_model: {
-          id: model.id,
-          display_name: model.display_name,
-          provider_display_name: model.provider_display_name,
-          selector_status: model.selector_status,
-          tool_calling: model.capabilities.function_call?.value ?? "unknown",
-          act_enabled: model.act_enabled,
+    const current: AgentLlmSettingsView = {
+      ...base,
+      providers: base.providers.map((provider) => ({
+        ...provider,
+        kind: "registered",
+        registered_provider_id: "deepseek",
+        base_url: null,
+        effective_base_url: "https://api.deepseek.com",
+        base_url_source: "provider_default",
+      })),
+      models: base.models.map((model) => ({
+        ...model,
+        last_test: {
+          status: "ready",
+          checked_at: "2026-08-26T12:00:00Z",
+          latency_ms: 86,
+          error_class: null,
+          message: "Connection ready.",
         },
-        models: current.models.map((candidate) => ({ ...candidate, selected: candidate.id === model.id })),
-        capability_routes: current.capability_routes.map((route) => route.capability === "agent.chat" ? {
-          ...route,
-          model_id: model.id,
-          model_display_name: model.display_name,
-          provider_display_name: model.provider_display_name,
-        } : route),
-      };
-      return structuredClone(current);
+      })),
+    };
+    transport.loadAgentLlmSettings = vi.fn(async () => structuredClone(current));
+    transport.discoverProviderModels = vi.fn(async (providerId) => ({
+      status: "ready",
+      provider_id: providerId,
+      models: [{
+        id: "mock-model",
+        display_name: "Mock model",
+        model_type: { value: "language", source: "catalog" },
+        capabilities: {},
+      }],
+      truncated: false,
+      message: "Loaded 1 available model.",
+      error_class: null,
+    }));
+
+    const { container } = await renderSettings({ transport });
+    await openProvider(container);
+    expect(container.textContent).toContain("https://api.deepseek.com");
+    expect(container.textContent).toContain("provider default");
+    expect(container.textContent).toContain("86 ms");
+    expect(container.textContent).toContain("Available");
+    expect(transport.discoverProviderModels).toHaveBeenCalledWith("mock-provider");
+    expect(transport.discoverProviderModels).toHaveBeenCalledTimes(1);
+    await click(button(container, "Refresh models"));
+    expect(transport.discoverProviderModels).toHaveBeenCalledTimes(2);
+  });
+
+  it("goes directly to Add API key without vault setup or unlock screens", async () => {
+    const transport = createMockUiKernelTransport();
+    const base = await transport.loadAgentLlmSettings();
+    const current: AgentLlmSettingsView = {
+      ...base,
+      providers: base.providers.map((provider) => ({
+        ...provider,
+        credential_status: "not_detected",
+        credential_effective_source: "rho_vault",
+      })),
+    };
+    transport.loadAgentLlmSettings = vi.fn(async () => structuredClone(current));
+
+    const { container } = await renderSettings({ transport });
+    await openProvider(container);
+    expect(container.textContent).toContain("Add API key");
+    expect(container.textContent).toContain("Models");
+    expect(container.textContent).not.toContain("Rho Vault");
+    expect(container.textContent).not.toContain("Unlock");
+    expect(container.querySelector("input[type='password']")).toBeNull();
+    await click(button(container, "Add API key"));
+    expect(container.querySelector("input[type='password']")).not.toBeNull();
+    expect(container.textContent).toContain("Save & verify");
+    expect(container.textContent).toContain("Models");
+  });
+
+  it("reveals the saved API key inline on View and restores the fixed mask on Hide", async () => {
+    const transport = createMockUiKernelTransport();
+    transport.viewProviderCredential = vi.fn(transport.viewProviderCredential);
+    const { container } = await renderSettings({ transport });
+    await openProvider(container);
+
+    expect(container.querySelector(".rho-settings-secret-mask")?.textContent).toBe("••••••••••••••••");
+    expect(container.textContent).toContain("View");
+    expect(container.textContent).toContain("Replace");
+    expect(container.textContent).not.toContain("mock-saved-api-key");
+
+    await click(button(container, "View"));
+    expect(transport.viewProviderCredential).toHaveBeenCalledTimes(1);
+    expect(transport.viewProviderCredential).toHaveBeenCalledWith("mock-provider");
+    expect(container.querySelector(".rho-settings-secret-mask")?.textContent).toBe("mock-saved-api-key");
+    expect(container.textContent).toContain("Hide");
+    expect(container.textContent).not.toContain("••••••••••••••••");
+    expect(container.querySelector("input")).toBeNull();
+
+    await click(button(container, "Hide"));
+    expect(container.querySelector(".rho-settings-secret-mask")?.textContent).toBe("••••••••••••••••");
+    expect(container.textContent).not.toContain("mock-saved-api-key");
+    expect(container.textContent).toContain("View");
+  });
+
+  it("keeps the fixed mask and disables View while a single view request is pending", async () => {
+    const transport = createMockUiKernelTransport();
+    let resolveReveal: ((value: { readonly outcome: "revealed"; readonly credential: string }) => void) | null = null;
+    transport.viewProviderCredential = vi.fn(() => new Promise<{ readonly outcome: "revealed"; readonly credential: string }>((resolve) => {
+      resolveReveal = resolve;
+    }));
+    const { container } = await renderSettings({ transport });
+    await openProvider(container);
+
+    await click(button(container, "View"));
+    expect(button(container, "View").disabled).toBe(true);
+    expect(container.querySelector(".rho-settings-secret-mask")?.textContent).toBe("••••••••••••••••");
+    expect(transport.viewProviderCredential).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveReveal?.({ outcome: "revealed", credential: "mock-saved-api-key" });
+      await settle();
     });
-    transport.setAgentContextCapacity = vi.fn(async (request) => {
-      expect(request.expected_revision).toBe(current.revision);
+    expect(container.querySelector(".rho-settings-secret-mask")?.textContent).toBe("mock-saved-api-key");
+    expect(button(container, "Hide").disabled).toBe(false);
+  });
+
+  it("clears a revealed API key on navigation, window blur, and entering Replace", async () => {
+    const transport = createMockUiKernelTransport();
+    const { container } = await renderSettings({ transport });
+    await openProvider(container);
+
+    await click(button(container, "View"));
+    expect(container.textContent).toContain("mock-saved-api-key");
+    await click(button(container, "Details"));
+    expect(container.textContent).not.toContain("mock-saved-api-key");
+    await click(container.querySelector<HTMLButtonElement>(".rho-settings-back")!);
+    expect(container.querySelector(".rho-settings-secret-mask")?.textContent).toBe("••••••••••••••••");
+
+    await click(button(container, "View"));
+    expect(container.textContent).toContain("mock-saved-api-key");
+    await act(async () => {
+      window.dispatchEvent(new Event("blur"));
+      await settle();
+    });
+    expect(container.querySelector(".rho-settings-secret-mask")?.textContent).toBe("••••••••••••••••");
+    expect(container.textContent).not.toContain("mock-saved-api-key");
+
+    await click(button(container, "View"));
+    expect(container.textContent).toContain("mock-saved-api-key");
+    await click(button(container, "Replace"));
+    expect(container.textContent).not.toContain("mock-saved-api-key");
+    expect(container.querySelector("input[type='password']")).not.toBeNull();
+  });
+
+  it("maps View failure outcomes to truthful banners without revealing a value", async () => {
+    const transport = createMockUiKernelTransport();
+    const { container } = await renderSettings({ transport });
+    await openProvider(container);
+
+    transport.viewProviderCredential = vi.fn(async () => ({ outcome: "credential_missing" as const, credential: null }));
+    await click(button(container, "View"));
+    expect(container.textContent).toContain("No saved API key was found. Add it again.");
+    expect(container.querySelector(".rho-settings-secret-mask")?.textContent).toBe("••••••••••••••••");
+
+    transport.viewProviderCredential = vi.fn(async () => ({ outcome: "store_unavailable" as const, credential: null }));
+    await click(button(container, "View"));
+    expect(container.textContent).toContain("The credential store is unavailable.");
+
+    transport.viewProviderCredential = vi.fn(async () => ({ outcome: "source_ineligible" as const, credential: null }));
+    await click(button(container, "View"));
+    expect(container.textContent).toContain("This credential source cannot be viewed.");
+    expect(container.querySelector(".rho-settings-secret-mask")?.textContent).toBe("••••••••••••••••");
+    expect(container.querySelector("input")).toBeNull();
+  });
+
+  it("refreshes once on Provider entry and exposes each model's read-only detail page", async () => {
+    const transport = createMockUiKernelTransport();
+    const discover = transport.discoverProviderModels.bind(transport);
+    const test = transport.testProviderModel.bind(transport);
+    transport.discoverProviderModels = vi.fn(discover);
+    transport.testProviderModel = vi.fn(test);
+    const { container } = await renderSettings({ transport });
+
+    await openProvider(container);
+    expect(transport.discoverProviderModels).toHaveBeenCalledTimes(1);
+    expect(transport.testProviderModel).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain("48 ms");
+
+    await click(button(container, "Details"));
+    expect(container.textContent).toContain("Identity");
+    expect(container.textContent).toContain("mock-model");
+    expect(container.textContent).toContain("The Provider did not report context or output limits");
+    expect(container.textContent).not.toContain("32,768 tokens");
+    expect(container.textContent).not.toContain("4,096 tokens");
+    expect(container.textContent).toContain("function call");
+    expect(container.textContent).toContain("supported");
+    expect(container.textContent).toContain("Reviewed catalog evidence");
+    expect(container.textContent).toContain("Capability evidence");
+    expect(container.textContent).toContain("Read only");
+
+    await click(container.querySelector<HTMLButtonElement>(".rho-settings-back")!);
+    expect(container.textContent).toContain("Mock model");
+    expect(transport.discoverProviderModels).toHaveBeenCalledTimes(1);
+    expect(transport.testProviderModel).toHaveBeenCalledTimes(1);
+  });
+
+  it("never presents internal fallbacks or unverified local declarations as model facts", async () => {
+    const transport = createMockUiKernelTransport();
+    const base = await transport.loadAgentLlmSettings();
+    const current: AgentLlmSettingsView = {
+      ...base,
+      models: base.models.map((model) => ({
+        ...model,
+        model_type: { value: "language", source: "user_declared" },
+        capabilities: {
+          audio_input: { value: "no", source: "user_declared" },
+          function_call: { value: "yes", source: "provider_response" },
+        },
+        context_window_tokens: 32_768,
+        reserved_output_tokens: 4_096,
+        context_capacity_source: "conservative_default",
+        last_test: {
+          status: "ready",
+          checked_at: "2026-08-26T12:00:00Z",
+          latency_ms: 91,
+          error_class: null,
+          message: "Connection succeeded.",
+        },
+      })),
+    };
+    transport.loadAgentLlmSettings = vi.fn(async () => structuredClone(current));
+    transport.discoverProviderModels = vi.fn(async (providerId) => ({
+      status: "ready",
+      provider_id: providerId,
+      models: current.models.map((model) => ({
+        id: model.model_id,
+        display_name: model.display_name,
+        model_type: { value: "unknown", source: "unknown" },
+        capabilities: {},
+      })),
+      truncated: false,
+      message: "Loaded available models.",
+      error_class: null,
+    }));
+
+    const { container } = await renderSettings({ transport });
+    await openProvider(container);
+    await click(button(container, "Details"));
+
+    expect(container.textContent).toContain("Not reported");
+    expect(container.textContent).not.toContain("32,768 tokens");
+    expect(container.textContent).toContain("audio inputnoUnverified local metadata");
+    expect(container.textContent).toContain("function callyesProvider test evidence");
+    expect(container.textContent).not.toContain("Provider metadata");
+  });
+
+  it("adds then replaces an API key without retaining either plaintext in the page", async () => {
+    const transport = createMockUiKernelTransport();
+    const base = await transport.loadAgentLlmSettings();
+    let current: AgentLlmSettingsView = {
+      ...base,
+      providers: base.providers.map((provider) => ({
+        ...provider,
+        credential_status: "not_detected",
+        credential_effective_source: "none",
+      })),
+    };
+    transport.loadAgentLlmSettings = vi.fn(async () => structuredClone(current));
+    transport.discoverProviderModels = vi.fn(async (providerId) => ({
+      status: "ready",
+      provider_id: providerId,
+      models: current.models.filter((model) => model.provider_id === providerId).map((model) => ({
+        id: model.model_id,
+        display_name: model.display_name,
+        model_type: model.model_type,
+        capabilities: model.capabilities,
+      })),
+      truncated: false,
+      message: "Loaded 1 available model.",
+      error_class: null,
+    }));
+    transport.testProviderModel = vi.fn(async (modelId) => {
       current = {
         ...current,
         revision: current.revision + 1,
-        models: current.models.map((model) => model.id === request.model_id ? {
+        models: current.models.map((model) => model.id === modelId ? {
           ...model,
-          context_window_tokens: request.context_window_tokens,
-          reserved_output_tokens: request.reserved_output_tokens,
-          context_capacity_source: "user_declared",
+          last_test: {
+            status: "ready",
+            checked_at: "2026-08-26T12:00:00Z",
+            latency_ms: 37,
+            error_class: null,
+            message: "Connection ready.",
+          },
         } : model),
       };
       return structuredClone(current);
     });
+    transport.saveProviderCredential = vi.fn(async (providerId, _credential, confirmReplace) => {
+      current = {
+        ...current,
+        revision: current.revision + 1,
+        providers: current.providers.map((provider) => provider.id === providerId ? {
+          ...provider,
+          credential_status: "detected",
+          credential_effective_source: "system",
+        } : provider),
+      };
+      expect(confirmReplace).toBe(false);
+      return structuredClone(current);
+    });
+
     const { container } = await renderSettings({ transport });
+    await openProvider(container);
+    expect(container.textContent).toContain("Add API key");
+    expect(container.textContent).not.toContain("Saved locally on this Mac");
+    await click(button(container, "Add API key"));
+    const addInput = container.querySelector<HTMLInputElement>("input[type='password']")!;
+    await inputValue(addInput, "rho-add-sentinel");
+    await click(button(container, "Save & verify"));
+    expect(transport.saveProviderCredential).toHaveBeenCalledWith("mock-provider", "rho-add-sentinel", false);
+    expect(container.textContent).not.toContain("rho-add-sentinel");
+    expect(container.textContent).toContain("API key verified");
+    expect(container.textContent).toContain("37 ms");
+    expect(transport.discoverProviderModels).toHaveBeenCalledWith("mock-provider");
+    expect(transport.testProviderModel).toHaveBeenCalledWith("mock-profile");
 
-    expect(container.textContent).toContain("system store");
-    expect(container.querySelector("input[type='password']")).toBeNull();
-    await act(async () => {
-      [...container.querySelectorAll<HTMLButtonElement>("button")]
-        .find((button) => button.textContent === "Use for Chat")!.click();
-      await settle();
+    transport.saveProviderCredential = vi.fn(async (providerId, _credential, confirmReplace) => {
+      expect(providerId).toBe("mock-provider");
+      expect(confirmReplace).toBe(true);
+      current = { ...current, revision: current.revision + 1 };
+      return structuredClone(current);
     });
-    expect(transport.selectAgentChatModel).toHaveBeenCalledWith("mock-profile-alternate", 1);
-    expect(container.querySelector("[aria-current='true']")?.textContent).toContain("Alternate model");
-
-    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
-    const setSelect = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!;
-    await act(async () => {
-      const model = container.querySelector<HTMLSelectElement>("[aria-label='Capacity model']")!;
-      setSelect.call(model, "mock-profile-alternate");
-      model.dispatchEvent(new Event("change", { bubbles: true }));
-      await settle();
-      const context = container.querySelector<HTMLInputElement>("[aria-label='Settings context window tokens']")!;
-      const reserved = container.querySelector<HTMLInputElement>("[aria-label='Settings reserved output tokens']")!;
-      setValue.call(context, "131072");
-      context.dispatchEvent(new Event("input", { bubbles: true }));
-      setValue.call(reserved, "16384");
-      reserved.dispatchEvent(new Event("input", { bubbles: true }));
-      container.querySelector<HTMLButtonElement>(".rho-settings-capacity button[type='submit']")!.click();
-      await settle();
-    });
-    expect(transport.setAgentContextCapacity).toHaveBeenCalledWith({
-      model_id: "mock-profile-alternate",
-      expected_revision: 2,
-      context_window_tokens: 131_072,
-      reserved_output_tokens: 16_384,
-    });
-    expect(container.textContent).toContain("user declared");
-
-    await act(async () => {
-      const context = container.querySelector<HTMLInputElement>("[aria-label='Settings context window tokens']")!;
-      const reserved = container.querySelector<HTMLInputElement>("[aria-label='Settings reserved output tokens']")!;
-      setValue.call(context, "4096");
-      context.dispatchEvent(new Event("input", { bubbles: true }));
-      setValue.call(reserved, "4096");
-      reserved.dispatchEvent(new Event("input", { bubbles: true }));
-      container.querySelector<HTMLButtonElement>(".rho-settings-capacity button[type='submit']")!.click();
-      await settle();
-    });
-    expect(container.querySelector(".rho-settings-capacity [role='alert']")?.textContent).toContain("smaller than context");
-    expect(transport.setAgentContextCapacity).toHaveBeenCalledTimes(1);
+    await click(button(container, "Replace"));
+    const replaceInput = container.querySelector<HTMLInputElement>("input[type='password']")!;
+    expect(replaceInput.value).toBe("");
+    await inputValue(replaceInput, "rho-replace-sentinel");
+    await click(button(container, "Save & verify"));
+    expect(transport.saveProviderCredential).toHaveBeenCalledWith("mock-provider", "rho-replace-sentinel", true);
+    expect(container.textContent).not.toContain("rho-replace-sentinel");
+    expect(container.textContent).toContain("API key verified");
   });
 
-  it("reloads durable truth after a stale mutation and keeps the failure visible", async () => {
+  it("clears a failed replacement draft, reloads durable truth, and keeps other Providers isolated", async () => {
     const transport = createMockUiKernelTransport();
     const base = await transport.loadAgentLlmSettings();
-    const alternate = { ...base.models[0]!, id: "alternate", display_name: "Alternate", model_id: "alternate", selected: false };
-    const initial: AgentLlmSettingsView = { ...base, models: [...base.models, alternate] };
-    const reloaded: AgentLlmSettingsView = { ...initial, revision: 7 };
-    transport.loadAgentLlmSettings = vi.fn()
-      .mockResolvedValueOnce(initial)
-      .mockResolvedValueOnce(reloaded);
-    transport.selectAgentChatModel = vi.fn(async () => {
-      throw new Error("Model settings changed while this selector was open");
+    const second = {
+      ...base.providers[0]!,
+      id: "second-provider",
+      display_name: "Second Provider",
+      credential_status: "not_detected",
+      credential_effective_source: "none",
+    };
+    const current: AgentLlmSettingsView = { ...base, providers: [...base.providers, second] };
+    transport.loadAgentLlmSettings = vi.fn(async () => structuredClone(current));
+    transport.testProviderModel = vi.fn(async () => structuredClone(current));
+    transport.saveProviderCredential = vi.fn(async () => {
+      throw new Error("Provider settings changed while saving");
     });
     const { container } = await renderSettings({ transport });
-    await act(async () => {
-      [...container.querySelectorAll<HTMLButtonElement>("button")]
-        .find((button) => button.textContent === "Use for Chat")!.click();
-      await settle();
-    });
+    await openProvider(container);
+    await click(button(container, "Replace"));
+    const input = container.querySelector<HTMLInputElement>("input[type='password']")!;
+    await inputValue(input, "rho-failure-sentinel");
+    await click(button(container, "Save & verify"));
+    expect(input.value).toBe("");
+    expect(container.textContent).not.toContain("rho-failure-sentinel");
+    expect(container.textContent).toContain("Saved settings were reloaded");
     expect(transport.loadAgentLlmSettings).toHaveBeenCalledTimes(2);
-    expect(container.querySelector("[role='alert']")?.textContent).toContain("settings changed");
-    expect(container.textContent).toContain("revision 7");
-    expect(container.querySelector("[aria-current='true']")?.textContent).toContain("Mock model");
+    await click(button(container, "Second Provider"));
+    expect(container.textContent).toContain("Add API key");
+    expect(container.textContent).not.toContain("API key replaced");
+    expect(container.querySelector(".rho-settings-row[aria-current='true']")?.textContent).toContain("Second Provider");
   });
 
-  it("recovers a failed read and keeps component origins project-local and read-only", async () => {
+  it("never offers View or Replace for an environment-managed credential", async () => {
+    const transport = createMockUiKernelTransport();
+    const base = await transport.loadAgentLlmSettings();
+    const current: AgentLlmSettingsView = {
+      ...base,
+      providers: base.providers.map((provider) => ({
+        ...provider,
+        credential_source: "environment",
+        credential_status: "detected",
+        credential_effective_source: "environment",
+      })),
+    };
+    transport.loadAgentLlmSettings = vi.fn(async () => structuredClone(current));
+    transport.testProviderModel = vi.fn(async () => structuredClone(current));
+    const { container } = await renderSettings({ transport });
+    await openProvider(container);
+    expect(container.textContent).toContain("Rho does not own this value");
+    expect(container.textContent).not.toContain("Saved locally on this Mac");
+    expect(container.textContent).not.toContain("Replace");
+    expect(container.querySelector("input[type='password']")).toBeNull();
+  });
+
+  it("recovers a failed Provider read and keeps Components project-local and read-only", async () => {
     const transport = createMockUiKernelTransport("plugin=surface");
     const settings = await createMockUiKernelTransport().loadAgentLlmSettings();
     transport.loadAgentLlmSettings = vi.fn()
       .mockRejectedValueOnce(new Error("settings file unavailable"))
-      .mockResolvedValueOnce({ ...settings, providers: [], models: [], selected_model: null });
+      .mockResolvedValueOnce({ ...settings, providers: [], models: [] });
     const { container, persist, root, instance } = await renderSettings({ transport, viewState: { module_id: "unknown" } });
     expect(container.textContent).toContain("settings file unavailable");
-    await act(async () => {
-      [...container.querySelectorAll<HTMLButtonElement>("button")]
-        .find((button) => button.textContent === "Retry")!.click();
-      await settle();
-    });
-    expect(container.textContent).toContain("No enabled language model");
-    await act(async () => {
-      [...container.querySelectorAll<HTMLButtonElement>("[role='tab']")]
-        .find((button) => button.textContent?.includes("Components"))!.click();
-      await settle();
-    });
+    await click(button(container, "Retry"));
+    expect(container.textContent).toContain("No Providers");
+    await click(button(container, "Components"));
     expect(persist).toHaveBeenCalledWith({ module_id: "components" });
     expect(container.textContent).toContain("rho.settings");
     expect(container.textContent).toContain("org.example.analysis");
-    expect(container.textContent).toContain("Current project");
     expect(container.querySelector(".rho-settings-components input")).toBeNull();
 
     const projectB = createMockUiKernelTransport("project=/projects/b");
@@ -237,5 +567,430 @@ describe("plugin-native Settings Surface", () => {
     });
     expect(container.textContent).not.toContain("org.example.analysis");
     expect(container.textContent).toContain("Current project");
+  });
+
+  it("adds a discovered remote model with its evidence and removes the remote row", async () => {
+    const transport = createMockUiKernelTransport();
+    transport.discoverProviderModels = vi.fn(async (providerId) => ({
+      status: "ready",
+      provider_id: providerId,
+      models: [{
+        id: "mock-model",
+        display_name: "Mock model",
+        model_type: { value: "language", source: "catalog" },
+        capabilities: { function_call: { value: "supported", source: "catalog" } },
+      }, {
+        id: "other-model",
+        display_name: "Other model",
+        model_type: { value: "language", source: "provider_response" },
+        capabilities: { vision_input: { value: "yes", source: "provider_response" } },
+      }],
+      truncated: false,
+      message: "Loaded 2 available models.",
+      error_class: null,
+    }));
+    transport.saveModel = vi.fn(transport.saveModel);
+    const { container } = await renderSettings({ transport });
+    await openProvider(container);
+
+    expect(container.textContent).toContain("Other model");
+    expect(container.textContent).toContain("Available from Provider");
+    await click(button(container, "Add"));
+
+    expect(transport.saveModel).toHaveBeenCalledTimes(1);
+    const profile = (transport.saveModel as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(profile).toMatchObject({
+      id: "model-other-model",
+      provider_id: "mock-provider",
+      display_name: "Other model",
+      model_id: "other-model",
+      enabled: true,
+      model_type: { value: "language", source: "provider_response" },
+      context_window_tokens: 32_768,
+      reserved_output_tokens: 4_096,
+      context_capacity_source: "conservative_default",
+      last_test: null,
+    });
+    expect(profile.capabilities.vision_input).toEqual({ value: "yes", source: "provider_response" });
+    expect(profile.capabilities.reasoning).toEqual({ value: "unknown", source: "unknown" });
+    expect(Object.keys(profile.capabilities)).toHaveLength(9);
+    expect(container.textContent).toContain("Other model was added to Mock Provider.");
+    expect(container.querySelector(".rho-settings-model-remote")).toBeNull();
+    const articles = [...container.querySelectorAll(".rho-settings-model-list article")];
+    expect(articles.some((article) => article.textContent?.includes("Other model")
+      && !article.classList.contains("rho-settings-model-remote"))).toBe(true);
+  });
+
+  it("opens manual ID entry on failed discovery and persists honest unknown evidence", async () => {
+    const transport = createMockUiKernelTransport();
+    transport.discoverProviderModels = vi.fn(async (providerId) => ({
+      status: "error",
+      provider_id: providerId,
+      models: [],
+      truncated: false,
+      message: "The API key was not accepted.",
+      error_class: "credential_missing",
+    }));
+    transport.saveModel = vi.fn(transport.saveModel);
+    const { container } = await renderSettings({ transport });
+    await openProvider(container);
+
+    const modelIdInput = container.querySelector<HTMLInputElement>("#rho-settings-manual-model-id");
+    expect(modelIdInput).not.toBeNull();
+
+    await inputValue(modelIdInput!, "mock-model");
+    expect(container.textContent).toContain("This model ID is already configured for this Provider.");
+    expect(button(container, "Add").disabled).toBe(true);
+
+    await inputValue(modelIdInput!, "manual-model");
+    expect(container.textContent).not.toContain("already configured");
+    await click(button(container, "Add"));
+
+    expect(transport.saveModel).toHaveBeenCalledTimes(1);
+    const profile = (transport.saveModel as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(profile).toMatchObject({
+      id: "model-manual-model",
+      provider_id: "mock-provider",
+      display_name: "manual-model",
+      model_id: "manual-model",
+      enabled: true,
+      model_type: { value: "unknown", source: "unknown" },
+      context_capacity_source: "conservative_default",
+      last_test: null,
+    });
+    for (const capability of Object.values(profile.capabilities) as Array<{ value: string; source: string }>) {
+      expect(capability).toEqual({ value: "unknown", source: "unknown" });
+    }
+    expect(container.textContent).toContain("manual-model was added to Mock Provider.");
+    expect(container.querySelector("#rho-settings-manual-model-id")).toBeNull();
+  });
+
+  it("opens the Model options dialog prefilled and closes on Cancel and Escape without transport calls", async () => {
+    const transport = createMockUiKernelTransport();
+    transport.saveModel = vi.fn(transport.saveModel);
+    transport.setModelContextCapacity = vi.fn(transport.setModelContextCapacity);
+    transport.declareModelCapability = vi.fn(transport.declareModelCapability);
+    const { container } = await renderSettings({ transport });
+    await openProvider(container);
+    await click(button(container, "Details"));
+    await click(button(container, "Edit"));
+
+    const dialog = () => container.querySelector<HTMLElement>("[role='dialog']");
+    expect(dialog()).not.toBeNull();
+    expect(dialog()!.getAttribute("aria-modal")).toBe("true");
+    expect(dialog()!.textContent).toContain("Model options");
+    const fields = dialog()!.querySelectorAll<HTMLInputElement>(".rho-settings-dialog-fields input");
+    expect(fields[0]!.value).toBe("Mock model");
+    expect(fields[1]!.value).toBe("mock-model");
+    expect(fields[2]!.checked).toBe(true);
+    expect(dialog()!.textContent).toContain("function call (auto)");
+    expect(dialog()!.textContent).toContain("vision input (unknown)");
+    const vision = dialog()!.querySelector<HTMLInputElement>("input[aria-label='Declare vision input']")!;
+    expect(vision.indeterminate).toBe(true);
+    expect(vision.checked).toBe(false);
+    const numbers = dialog()!.querySelectorAll<HTMLInputElement>(".rho-settings-dialog-capacity input");
+    expect(numbers[0]!.value).toBe("");
+    expect(numbers[0]!.placeholder).toBe("Not reported");
+
+    await inputValue(fields[0]!, "Discarded name");
+    await click(button(dialog()!, "Cancel"));
+    expect(dialog()).toBeNull();
+    expect(transport.saveModel).not.toHaveBeenCalled();
+    expect(transport.setModelContextCapacity).not.toHaveBeenCalled();
+    expect(transport.declareModelCapability).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain("Discarded name");
+
+    await click(button(container, "Edit"));
+    expect(dialog()).not.toBeNull();
+    expect(dialog()!.querySelector<HTMLInputElement>(".rho-settings-dialog-fields input")!.value).toBe("Mock model");
+    await act(async () => {
+      dialog()!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await settle();
+    });
+    expect(dialog()).toBeNull();
+    expect(transport.saveModel).not.toHaveBeenCalled();
+  });
+
+  it("saves details, capacity, and declarations in one ordered batched Save", async () => {
+    const transport = createMockUiKernelTransport();
+    const order: string[] = [];
+    const saveModelImpl = transport.saveModel;
+    transport.saveModel = vi.fn(async (model) => {
+      order.push("saveModel");
+      return saveModelImpl(model);
+    });
+    const capacityImpl = transport.setModelContextCapacity;
+    transport.setModelContextCapacity = vi.fn(async (request) => {
+      order.push("setModelContextCapacity");
+      return capacityImpl(request);
+    });
+    const declareImpl = transport.declareModelCapability;
+    transport.declareModelCapability = vi.fn(async (request) => {
+      order.push("declareModelCapability");
+      return declareImpl(request);
+    });
+    const { container } = await renderSettings({ transport });
+    await openProvider(container);
+    await click(button(container, "Details"));
+    await click(button(container, "Edit"));
+
+    const dialog = () => container.querySelector<HTMLElement>("[role='dialog']")!;
+    const displayInput = dialog().querySelector<HTMLInputElement>(".rho-settings-dialog-fields input")!;
+    await inputValue(displayInput, "Renamed mock");
+    const reasoning = dialog().querySelector<HTMLInputElement>("input[aria-label='Declare reasoning']")!;
+    const vision = dialog().querySelector<HTMLInputElement>("input[aria-label='Declare vision input']")!;
+    await act(async () => { reasoning.click(); await settle(); });
+    await act(async () => { vision.click(); await settle(); });
+    expect(reasoning.checked).toBe(true);
+    expect(reasoning.indeterminate).toBe(false);
+    await selectValue(dialog().querySelector<HTMLSelectElement>("select[aria-label='Declare model type']")!, "embedding");
+    const numbers = dialog().querySelectorAll<HTMLInputElement>(".rho-settings-dialog-capacity input");
+    await inputValue(numbers[0]!, "64000");
+    await inputValue(numbers[1]!, "8192");
+    await click(button(dialog(), "Save"));
+
+    expect(order).toEqual([
+      "saveModel",
+      "setModelContextCapacity",
+      "declareModelCapability",
+      "declareModelCapability",
+      "declareModelCapability",
+    ]);
+    const profile = (transport.saveModel as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(profile).toMatchObject({
+      id: "mock-profile",
+      display_name: "Renamed mock",
+      model_id: "mock-model",
+      enabled: true,
+      model_type: { value: "language", source: "catalog" },
+      capabilities: { function_call: { value: "supported", source: "catalog" } },
+    });
+    expect(transport.setModelContextCapacity).toHaveBeenCalledWith({
+      model_id: "mock-profile",
+      expected_revision: 3,
+      context_window_tokens: 64_000,
+      reserved_output_tokens: 8_192,
+    });
+    const declares = (transport.declareModelCapability as ReturnType<typeof vi.fn>).mock.calls
+      .map((call) => call[0]);
+    expect(declares).toEqual([
+      { model_id: "mock-profile", expected_revision: 4, capability: "model_type", value: "embedding" },
+      { model_id: "mock-profile", expected_revision: 5, capability: "reasoning", value: "yes" },
+      { model_id: "mock-profile", expected_revision: 6, capability: "vision_input", value: "yes" },
+    ]);
+    expect(container.querySelector("[role='dialog']")).toBeNull();
+    expect(container.textContent).toContain("Model options saved.");
+    expect(container.textContent).toContain("Renamed mock");
+    expect(container.textContent).toContain("64,000 tokens");
+  });
+
+  it("keeps the dialog open on a failed step, skips later steps, reloads truth, and retries", async () => {
+    const transport = createMockUiKernelTransport();
+    transport.setModelContextCapacity = vi.fn(transport.setModelContextCapacity);
+    const declareImpl = transport.declareModelCapability;
+    let failDeclare = true;
+    transport.declareModelCapability = vi.fn(async (request) => {
+      if (failDeclare) {
+        throw new Error("Model settings changed while this capability editor was open. Reload and try again.");
+      }
+      return declareImpl(request);
+    });
+    transport.loadAgentLlmSettings = vi.fn(transport.loadAgentLlmSettings);
+    const { container } = await renderSettings({ transport });
+    await openProvider(container);
+    await click(button(container, "Details"));
+    await click(button(container, "Edit"));
+
+    const dialog = () => container.querySelector<HTMLElement>("[role='dialog']")!;
+    const numbers = dialog().querySelectorAll<HTMLInputElement>(".rho-settings-dialog-capacity input");
+    await inputValue(numbers[0]!, "64000");
+    await inputValue(numbers[1]!, "8192");
+    await act(async () => {
+      dialog().querySelector<HTMLInputElement>("input[aria-label='Declare reasoning']")!.click();
+      await settle();
+    });
+    await act(async () => {
+      dialog().querySelector<HTMLInputElement>("input[aria-label='Declare vision input']")!.click();
+      await settle();
+    });
+    const loadsBefore = (transport.loadAgentLlmSettings as ReturnType<typeof vi.fn>).mock.calls.length;
+    await click(button(dialog(), "Save"));
+
+    expect(dialog()).not.toBeNull();
+    expect(dialog().textContent).toContain("Model settings changed while this capability editor was open.");
+    expect(transport.setModelContextCapacity).toHaveBeenCalledTimes(1);
+    expect(transport.declareModelCapability).toHaveBeenCalledTimes(1);
+    expect((transport.loadAgentLlmSettings as ReturnType<typeof vi.fn>).mock.calls.length)
+      .toBe(loadsBefore + 1);
+
+    failDeclare = false;
+    await click(button(dialog(), "Save"));
+    expect(dialog()).toBeNull();
+    expect(container.textContent).toContain("Model options saved.");
+    const declares = (transport.declareModelCapability as ReturnType<typeof vi.fn>).mock.calls
+      .map((call) => call[0]);
+    expect(declares).toHaveLength(3);
+    expect(declares[1]).toMatchObject({ capability: "reasoning", value: "yes" });
+    expect(declares[2]).toMatchObject({ capability: "vision_input", value: "yes" });
+  });
+
+  it("surfaces the route guard on confirmed delete and reloads durable truth", async () => {
+    const transport = createMockUiKernelTransport();
+    transport.deleteModel = vi.fn(transport.deleteModel);
+    transport.loadAgentLlmSettings = vi.fn(transport.loadAgentLlmSettings);
+    const { container } = await renderSettings({ transport });
+    await openProvider(container);
+    await click(button(container, "Details"));
+
+    await click(button(container, "Delete this model"));
+    expect(container.textContent).toContain("This cannot be undone.");
+    await click(button(container, "Confirm delete"));
+
+    expect(transport.deleteModel).toHaveBeenCalledWith("mock-profile");
+    expect(container.textContent).toContain("Reassign or remove this model's capability routes before deleting it.");
+    expect(container.textContent).toContain("Saved settings were reloaded.");
+    expect(container.textContent).toContain("Capability evidence");
+  });
+
+  it("presents catalog-projected capacity as reported model facts", async () => {
+    const transport = createMockUiKernelTransport();
+    const base = await transport.loadAgentLlmSettings();
+    const current: AgentLlmSettingsView = {
+      ...base,
+      models: base.models.map((model) => ({
+        ...model,
+        context_window_tokens: 1_000_000,
+        reserved_output_tokens: 384_000,
+        context_capacity_source: "catalog",
+      })),
+    };
+    transport.loadAgentLlmSettings = vi.fn(async () => structuredClone(current));
+    transport.testProviderModel = vi.fn(async () => structuredClone(current));
+    const { container } = await renderSettings({ transport });
+    await openProvider(container);
+    await click(button(container, "Details"));
+
+    expect(container.textContent).toContain("1,000,000 tokens");
+    expect(container.textContent).toContain("384,000 tokens");
+    expect(container.textContent).not.toContain("Not reported");
+    expect(container.textContent).not.toContain("internal safety fallback");
+  });
+
+  it("prefills catalog capacity in the dialog and only saves capacity when the pair changes", async () => {
+    const transport = createMockUiKernelTransport();
+    const base = await transport.loadAgentLlmSettings();
+    let current: AgentLlmSettingsView = {
+      ...base,
+      models: base.models.map((model) => ({
+        ...model,
+        context_window_tokens: 1_000_000,
+        reserved_output_tokens: 384_000,
+        context_capacity_source: "catalog",
+      })),
+    };
+    transport.loadAgentLlmSettings = vi.fn(async () => structuredClone(current));
+    transport.testProviderModel = vi.fn(async () => structuredClone(current));
+    transport.saveModel = vi.fn(async (profile) => {
+      current = {
+        ...current,
+        revision: current.revision + 1,
+        models: current.models.map((model) => model.id === profile.id ? { ...model, ...profile } : model),
+      };
+      return structuredClone(current);
+    });
+    transport.setModelContextCapacity = vi.fn(async (request) => {
+      current = {
+        ...current,
+        revision: current.revision + 1,
+        models: current.models.map((model) => model.id === request.model_id ? {
+          ...model,
+          context_window_tokens: request.context_window_tokens,
+          reserved_output_tokens: request.reserved_output_tokens,
+          context_capacity_source: "user_declared",
+        } : model),
+      };
+      return structuredClone(current);
+    });
+    transport.declareModelCapability = vi.fn(transport.declareModelCapability);
+    const { container } = await renderSettings({ transport });
+    await openProvider(container);
+    await click(button(container, "Details"));
+    await click(button(container, "Edit"));
+
+    const dialog = () => container.querySelector<HTMLElement>("[role='dialog']");
+    const numbers = () => dialog()!.querySelectorAll<HTMLInputElement>(".rho-settings-dialog-capacity input");
+    expect(numbers()[0]!.value).toBe("1000000");
+    expect(numbers()[1]!.value).toBe("384000");
+
+    // Unchanged prefilled capacity: Save persists details only.
+    await inputValue(dialog()!.querySelector<HTMLInputElement>(".rho-settings-dialog-fields input")!, "Renamed mock");
+    await click(button(dialog()!, "Save"));
+    expect(transport.saveModel).toHaveBeenCalledTimes(1);
+    expect(transport.setModelContextCapacity).not.toHaveBeenCalled();
+    expect(transport.declareModelCapability).not.toHaveBeenCalled();
+    expect(dialog()).toBeNull();
+
+    // Editing one value declares the pair with the latest revision.
+    await click(button(container, "Edit"));
+    expect(numbers()[0]!.value).toBe("1000000");
+    await inputValue(numbers()[1]!, "384001");
+    await click(button(dialog()!, "Save"));
+    expect(transport.setModelContextCapacity).toHaveBeenCalledTimes(1);
+    expect(transport.setModelContextCapacity).toHaveBeenCalledWith({
+      model_id: "mock-profile",
+      expected_revision: 2,
+      context_window_tokens: 1_000_000,
+      reserved_output_tokens: 384_001,
+    });
+    expect(dialog()).toBeNull();
+
+    // A half-cleared pair is rejected with the paired-field message, in-dialog.
+    await click(button(container, "Edit"));
+    await inputValue(numbers()[1]!, "");
+    await click(button(dialog()!, "Save"));
+    expect(dialog()).not.toBeNull();
+    expect(dialog()!.textContent).toContain(
+      "Capacity is declared as a pair — enter both context window and max output limits.",
+    );
+    expect(transport.setModelContextCapacity).toHaveBeenCalledTimes(1);
+  });
+
+  it("deletes an unrouted model after confirmation and returns to the Provider", async () => {
+    const transport = createMockUiKernelTransport();
+    transport.discoverProviderModels = vi.fn(async (providerId) => ({
+      status: "ready",
+      provider_id: providerId,
+      models: [{
+        id: "mock-model",
+        display_name: "Mock model",
+        model_type: { value: "language", source: "catalog" },
+        capabilities: { function_call: { value: "supported", source: "catalog" } },
+      }, {
+        id: "other-model",
+        display_name: "Other model",
+        model_type: { value: "language", source: "provider_response" },
+        capabilities: {},
+      }],
+      truncated: false,
+      message: "Loaded 2 available models.",
+      error_class: null,
+    }));
+    const { container } = await renderSettings({ transport });
+    await openProvider(container);
+    await click(button(container, "Add"));
+    expect(container.textContent).toContain("Other model was added to Mock Provider.");
+
+    const otherRow = [...container.querySelectorAll(".rho-settings-model-list article")]
+      .find((article) => article.textContent?.includes("Other model"))!;
+    await click(otherRow.querySelector<HTMLButtonElement>("button")!);
+    expect(container.textContent).toContain("Identity");
+    await click(button(container, "Delete this model"));
+    await click(button(container, "Confirm delete"));
+
+    expect(container.textContent).toContain("Other model was deleted.");
+    expect(container.textContent).toContain("Models");
+    expect(container.textContent).not.toContain("Identity");
+    const remaining = await transport.loadAgentLlmSettings();
+    expect(remaining.models.map((model) => model.id)).toEqual(["mock-profile"]);
   });
 });

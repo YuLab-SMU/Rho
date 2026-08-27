@@ -26,7 +26,9 @@ repository = "https://github.com/YuLab-SMU/Rho"
 
 [workspace.dependencies]
 anyhow = "1.0"
+argon2 = { version = "0.5.3", features = ["std", "zeroize"] }
 arc-swap = { version = "1.9", default-features = false }
+chacha20poly1305 = { version = "0.11.0", features = ["zeroize"] }
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
 jet_core = { path = "vendor/jet/crates/core" }
@@ -51,4 +53,4 @@ wasmtime = { version = "=38.0.4", default-features = false, features = ["compone
 wat = { version = "=1.257.1", default-features = false, features = ["component-model"] }
 wit-component = { version = "=0.239.0", default-features = false }
 wit-parser = "=0.239.0"
-zeroize = "1.9"
+zeroize = { version = "1.9", features = ["serde"] }

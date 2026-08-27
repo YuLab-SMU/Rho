@@ -7,6 +7,7 @@ import type {
   AgentApprovalDecisionRequest,
   AgentConversationSummary,
   AgentContextCapacityRequest,
+  AgentLlmCredentialRevealView,
   AgentLlmSettingsView,
   AgentMode,
   AgentRuntimeDiagnostics,
@@ -88,6 +89,7 @@ import type {
   WorkspacePreparationProgress,
   WorkspacePreparationProgressListener,
 } from "./types";
+import { MODEL_CAPABILITY_NAMES } from "./agent-settings";
 import { INVALIDATION_TOPICS } from "./invalidation-contract";
 import type { EvidenceClaim } from "./evidence";
 import type {
@@ -761,7 +763,7 @@ export function createMockUiKernelTransport(
   const agentNow = "2026-08-22T12:00:00Z";
   const agentProjectRoot = current.project.display_path;
   let agentLlmSettings: AgentLlmSettingsView = {
-    schema_version: 4,
+    schema_version: 5,
     revision: 1,
     selected_model_id: "mock-profile",
     providers: [{
@@ -775,9 +777,11 @@ export function createMockUiKernelTransport(
       base_url_env: null,
       wire_api: "openai",
       disable_stream_options: false,
-      credential_source: "system_store",
-      credential_status: "unchecked",
-      credential_effective_source: "unchecked",
+      credential_source: "rho_vault",
+      credential_status: "detected",
+      credential_effective_source: "rho_vault",
+      effective_base_url: "https://example.invalid/v1",
+      base_url_source: "configured",
     }],
     models: [{
       id: "mock-profile",
@@ -1473,6 +1477,39 @@ export function createMockUiKernelTransport(
     restored_root: null,
     restart_required: false,
   });
+  // SETTINGS-UX2B mock parity helpers mirroring desktop/src-tauri/src/agent_llm.rs.
+  const sameCapabilityEvidence = (
+    left: AgentLlmSettingsView["models"][number]["capabilities"],
+    right: AgentLlmSettingsView["models"][number]["capabilities"],
+  ): boolean => {
+    const names = new Set([...Object.keys(left), ...Object.keys(right)]);
+    return [...names].every((name) =>
+      left[name]?.value === right[name]?.value && left[name]?.source === right[name]?.source
+    );
+  };
+  const applyContextCapacity = (request: AgentContextCapacityRequest): AgentLlmSettingsView => {
+    if (request.expected_revision !== agentLlmSettings.revision) {
+      throw new Error("Model settings changed while this context capacity editor was open. Reload and try again.");
+    }
+    if (request.context_window_tokens < 4_096
+        || request.reserved_output_tokens < 256
+        || request.reserved_output_tokens >= request.context_window_tokens) {
+      throw new Error("Reserved output tokens must be at least 256 and smaller than the context window.");
+    }
+    const model = agentLlmSettings.models.find((candidate) => candidate.id === request.model_id);
+    if (model == null) throw new Error(`Unknown model: ${request.model_id}`);
+    agentLlmSettings = {
+      ...agentLlmSettings,
+      revision: agentLlmSettings.revision + 1,
+      models: agentLlmSettings.models.map((candidate) => candidate.id === request.model_id ? {
+        ...candidate,
+        context_window_tokens: request.context_window_tokens,
+        reserved_output_tokens: request.reserved_output_tokens,
+        context_capacity_source: "user_declared",
+      } : candidate),
+    };
+    return structuredClone(agentLlmSettings);
+  };
   return {
     source: "mock",
     async prepareWorkspace(
@@ -2851,6 +2888,72 @@ export function createMockUiKernelTransport(
     async loadAgentLlmSettings() {
       return structuredClone(agentLlmSettings);
     },
+    async discoverProviderModels(providerId) {
+      const provider = agentLlmSettings.providers.find((candidate) => candidate.id === providerId);
+      if (provider == null) throw new Error("Provider changed while models were refreshing.");
+      return {
+        status: provider.credential_status === "detected" ? "ready" : "error",
+        provider_id: providerId,
+        models: agentLlmSettings.models
+          .filter((model) => model.provider_id === providerId)
+          .map((model) => ({
+            id: model.model_id,
+            display_name: model.display_name,
+            model_type: structuredClone(model.model_type),
+            capabilities: structuredClone(model.capabilities),
+          })),
+        truncated: false,
+        message: provider.credential_status === "detected"
+          ? "Loaded available models."
+          : "The API key was not accepted.",
+        error_class: provider.credential_status === "detected" ? null : "credential_missing",
+      };
+    },
+    async testProviderModel(modelId) {
+      const model = agentLlmSettings.models.find((candidate) => candidate.id === modelId);
+      if (model == null) throw new Error("Model changed while the connection test was running.");
+      agentLlmSettings = {
+        ...agentLlmSettings,
+        revision: agentLlmSettings.revision + 1,
+        models: agentLlmSettings.models.map((candidate) => candidate.id === modelId ? {
+          ...candidate,
+          last_test: {
+            status: "ready",
+            checked_at: agentNow,
+            latency_ms: 48,
+            error_class: null,
+            message: "Connection ready.",
+          },
+        } : candidate),
+      };
+      return structuredClone(agentLlmSettings);
+    },
+    async viewProviderCredential(providerId): Promise<AgentLlmCredentialRevealView> {
+      // CRED-REVEAL-1C browser/mock parity: one click resolves one labelled
+      // mock value (never a real secret shape) for a detected credential, and
+      // fails closed with the same outcome vocabulary as the real command.
+      const provider = agentLlmSettings.providers.find((candidate) => candidate.id === providerId);
+      if (provider == null) throw new Error("Provider changed while this credential screen was open.");
+      return provider.credential_status === "detected"
+        ? { outcome: "revealed", credential: "mock-saved-api-key" }
+        : { outcome: "credential_missing", credential: null };
+    },
+    async saveProviderCredential(providerId, credential, confirmReplace) {
+      void credential;
+      void confirmReplace;
+      const provider = agentLlmSettings.providers.find((candidate) => candidate.id === providerId);
+      if (provider == null) throw new Error("Provider changed while this credential screen was open.");
+      agentLlmSettings = {
+        ...agentLlmSettings,
+        revision: agentLlmSettings.revision + 1,
+        providers: agentLlmSettings.providers.map((candidate) => candidate.id === providerId ? {
+          ...candidate,
+          credential_status: "detected",
+          credential_effective_source: candidate.credential_source === "session_only" ? "session" : "rho_vault",
+        } : candidate),
+      };
+      return structuredClone(agentLlmSettings);
+    },
     async selectAgentChatModel(modelId: string, expectedRevision: number) {
       if (expectedRevision !== agentLlmSettings.revision) {
         throw new Error("Model settings changed while this model selector was open. Reload and try again.");
@@ -2893,24 +2996,87 @@ export function createMockUiKernelTransport(
       return structuredClone(agentLlmSettings);
     },
     async setAgentContextCapacity(request: AgentContextCapacityRequest) {
-      if (request.expected_revision !== agentLlmSettings.revision) {
-        throw new Error("Model settings changed while this context capacity editor was open. Reload and try again.");
+      return applyContextCapacity(request);
+    },
+    async setModelContextCapacity(request) {
+      return applyContextCapacity(request);
+    },
+    async saveModel(model) {
+      const existing = agentLlmSettings.models.find((candidate) => candidate.id === model.id);
+      if (existing != null) {
+        if (existing.model_type.value !== model.model_type.value
+            || existing.model_type.source !== model.model_type.source
+            || !sameCapabilityEvidence(existing.capabilities, model.capabilities)) {
+          throw new Error("Use the capability declaration command to change model evidence.");
+        }
+        if (!model.enabled && existing.enabled
+            && agentLlmSettings.capability_routes.some((route) => route.model_id === model.id)) {
+          throw new Error("Reassign this model's capability routes before disabling it.");
+        }
       }
-      if (request.context_window_tokens < 4_096
-          || request.reserved_output_tokens < 256
-          || request.reserved_output_tokens >= request.context_window_tokens) {
-        throw new Error("Reserved output tokens must be at least 256 and smaller than the context window.");
+      const provider = agentLlmSettings.providers.find((candidate) => candidate.id === model.provider_id);
+      const viewModel: AgentLlmSettingsView["models"][number] = {
+        ...structuredClone(model),
+        provider_display_name: provider?.display_name ?? model.provider_id,
+        selected: existing?.selected ?? agentLlmSettings.selected_model_id === model.id,
+        selector_status: existing?.selector_status ?? "ready",
+        act_enabled: model.enabled && model.capabilities.function_call?.value === "yes",
+      };
+      agentLlmSettings = {
+        ...agentLlmSettings,
+        revision: agentLlmSettings.revision + 1,
+        models: existing == null
+          ? [...agentLlmSettings.models, viewModel]
+          : agentLlmSettings.models.map((candidate) => candidate.id === model.id ? viewModel : candidate),
+      };
+      return structuredClone(agentLlmSettings);
+    },
+    async deleteModel(modelId) {
+      const model = agentLlmSettings.models.find((candidate) => candidate.id === modelId);
+      if (model == null) throw new Error(`Unknown model: ${modelId}`);
+      if (agentLlmSettings.capability_routes.some((route) => route.model_id === modelId)) {
+        throw new Error("Reassign or remove this model's capability routes before deleting it.");
+      }
+      agentLlmSettings = {
+        ...agentLlmSettings,
+        revision: agentLlmSettings.revision + 1,
+        models: agentLlmSettings.models.filter((candidate) => candidate.id !== modelId),
+      };
+      return structuredClone(agentLlmSettings);
+    },
+    async declareModelCapability(request) {
+      if (request.expected_revision !== agentLlmSettings.revision) {
+        throw new Error("Model settings changed while this capability editor was open. Reload and try again.");
       }
       const model = agentLlmSettings.models.find((candidate) => candidate.id === request.model_id);
       if (model == null) throw new Error(`Unknown model: ${request.model_id}`);
+      let modelType = model.model_type;
+      let capabilities = model.capabilities;
+      if (request.capability === "model_type") {
+        if (!["language", "embedding", "image", "unknown"].includes(request.value)) {
+          throw new Error("Model type must be language, embedding, image or unknown.");
+        }
+        modelType = { value: request.value, source: "user_declared" };
+      } else {
+        if (!(MODEL_CAPABILITY_NAMES as readonly string[]).includes(request.capability)) {
+          throw new Error(`Unsupported model capability: ${request.capability}`);
+        }
+        if (!["yes", "no", "unknown"].includes(request.value)) {
+          throw new Error("Capability values must be yes, no or unknown.");
+        }
+        capabilities = {
+          ...capabilities,
+          [request.capability]: { value: request.value, source: "user_declared" },
+        };
+      }
       agentLlmSettings = {
         ...agentLlmSettings,
         revision: agentLlmSettings.revision + 1,
         models: agentLlmSettings.models.map((candidate) => candidate.id === request.model_id ? {
           ...candidate,
-          context_window_tokens: request.context_window_tokens,
-          reserved_output_tokens: request.reserved_output_tokens,
-          context_capacity_source: "user_declared",
+          model_type: modelType,
+          capabilities,
+          act_enabled: candidate.enabled && capabilities.function_call?.value === "yes",
         } : candidate),
       };
       return structuredClone(agentLlmSettings);

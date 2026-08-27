@@ -11,12 +11,15 @@ serde_json.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+argon2.workspace = true
 base64 = "0.22"
+chacha20poly1305.workspace = true
 chrono.workspace = true
 flate2 = "1"
 minisign-verify = "0.2"
 notify = "8.2"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+rand.workspace = true
 rho-core = { path = "../../crates/rho-core" }
 rho-extension-runtime = { path = "../../crates/rho-extension-runtime" }
 rho-kernel = { path = "../../crates/rho-kernel" }
@@ -38,26 +41,16 @@ tokio.workspace = true
 uuid.workspace = true
 zeroize.workspace = true
 
-[target.'cfg(windows)'.dependencies]
-keyring = { version = "4.1.6", default-features = false, features = ["v1", "windows-native-keyring-store"] }
-
 [target.'cfg(target_os = "macos")'.dependencies]
-keyring = { version = "4.1.6", default-features = false, features = ["v1"] }
 # Debug-only acceptance bridge viewport capture. Versions match the committed
 # Cargo.lock transitive set (wry 0.55.1 / tauri 2.11.5) with default features
 # off, so no new dependency graph entries are introduced; only reachable from
 # cfg(debug_assertions) code.
 block2 = "0.6.2"
 objc2 = "0.6.4"
-objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSBitmapImageRep", "NSImage", "NSImageRep"] }
-objc2-foundation = { version = "0.3.2", default-features = false, features = ["NSData", "NSDictionary", "NSError"] }
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSAlert", "NSApplication", "NSBitmapImageRep", "NSButton", "NSControl", "NSImage", "NSImageRep", "NSResponder", "NSScrollView", "NSTextField", "NSView", "NSWindow", "objc2-core-foundation"] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["NSData", "NSDictionary", "NSError", "NSNotification", "NSOperation", "NSString", "objc2-core-foundation"] }
 objc2-web-kit = { version = "0.3.2", default-features = false, features = ["WKSnapshotConfiguration", "WKWebView", "block2", "objc2-app-kit"] }
-
-[target.'cfg(target_os = "linux")'.dependencies]
-# LIN6: the keyring 4.1.6 `v1` feature selects zbus-secret-service-keyring-store
-# on Linux (Secret Service over DBus). Same library and version as Windows/macOS;
-# all backend crates are already resolved in the committed Cargo.lock.
-keyring = { version = "4.1.6", default-features = false, features = ["v1"] }
 
 [dev-dependencies]
 rusqlite.workspace = true

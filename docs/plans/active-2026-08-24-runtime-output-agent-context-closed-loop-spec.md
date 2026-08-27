@@ -870,3 +870,141 @@ interaction workflow in section 16, and the Windows Rust matrix has not been
 run from this macOS worktree. No `.app`, installer, signing, publication,
 updater, or public-release action was performed. The development decision
 therefore remains `INCOMPLETE` and release remains `NO-GO`.
+
+## 22. CONSOLE-REF-1 Friendly Rich-output References — Authorized 2026-08-27
+
+Status: active bounded repair, explicitly authorized by the user on 2026-08-27
+
+Change class and risk: D1 / R1. This is a shared Console/History presentation
+correction over an existing typed reference. It does not change Runtime output
+storage, transport, identity, search, retention, persistence, or authority.
+
+### Reproduction And Invariant
+
+`runtimeOutputChunkBlock()` currently copies a `record_ref` chunk's opaque
+`reference_id` into the ordinary result text. A generated Plot therefore reads
+as, for example, `Plot`, `plot:42`, `Open Plot`. The ID is required internally
+to open the exact record, but it does not answer what happened or what the user
+can do next. It also contradicts the human-facing projection rule and Studio
+WP13's default-transcript exclusion of Artifact/reference identities.
+
+The invariant for this repair is:
+
+- a valid Plot or Artifact reference with a non-empty ID renders the truthful generic state
+  `Ready to inspect.` plus the existing exact `Open Plot` / `Open Artifact`
+  action;
+- the typed reference object retains the exact kind, ID, media type, and digest
+  for exact-record consumers such as History; Console retains its existing
+  kind-routed Plot/Artifact surface action without gaining lookup authority;
+- the ordinary Console/History result text and the Console's local text filter
+  never receive the opaque reference ID; and
+- a malformed reference with a missing/blank ID or unsupported/missing kind
+  remains non-actionable and says
+  `Referenced output is unavailable.` rather than claiming readiness.
+
+### Scope, Non-goals, And Cross-review
+
+The slice changes only the shared frontend output-projection helper and its
+focused tests. Console and History already consume that helper, so their copy
+cannot drift. It deliberately does not change JSX, CSS, design tokens, focus,
+responsive geometry, follow-tail, paging, durable search, transcript anchors,
+Agent context, Plot/Artifact identity, Tauri commands, mock commands, schemas,
+filesystem/network access, credentials, or permissions.
+
+The durable search index and result preview are outside this package: the
+existing backend/mock path can match and preview a reference ID when a user
+explicitly searches for it. That is not the default mounted-result projection
+or its local filter, and removing it requires a separately authorized package
+over Store, mock transport, and Console search-result rendering.
+
+Cross-review found no ownership collision:
+
+- sections 7.3 and 9 of this contract retain typed rich-output identity,
+  Console/History shared projection, replay, and action authority;
+- `active-2026-08-05-human-facing-information-projection-spec.md` owns the rule
+  that ordinary UI excludes opaque identities while internal selection and
+  commands retain them;
+- Studio WP13 retains the human-readable Console transcript and raw-ID
+  exclusion; this repair changes no Studio layout or visual token;
+- the Console/Logs separation and focus-stability contracts retain routing,
+  focus, scroll, and execution semantics unchanged; and
+- proposed interaction or RStudio-inspired documents are design input only and
+  are not implemented by this package.
+
+### Acceptance And Stop Point
+
+Focused regression evidence must cover Plot and Artifact references, exact
+internal reference preservation, missing/blank IDs, missing/unsupported kinds,
+and absence of the opaque ID from ordinary projection text. Adjacent Console
+projection and instance-controller tests, TypeScript typecheck/lint, the
+complete affected `npm --prefix desktop run rsr:check`, production frontend
+build, browser/mock interaction checks, visual-acceptance harness self-test,
+lane validation, and `git diff --check` must remain green.
+
+Because this package changes copy without changing layout or styles, local
+visual review checks the existing desktop and narrow Console surfaces for
+regression. The real Tauri visual-acceptance run remains integration-lane-only
+under the repository's exclusive-window rule and must be recorded against the
+named integrated candidate; it is not fabricated from this feature worktree.
+
+The user-visible correction requires an application version/NEWS entry when it
+enters the next named distributable development candidate. This feature lane
+does not write the integration-owned version authorities or `NEWS.md`.
+`rho.bridge` and `rho.agent` versions remain unchanged. Release remains
+`NO-GO`. Stop after implementation, verification, contract review, lane check,
+and one scoped commit; the separately observed Console search-state, focus-ring,
+and narrow-pane defects require their own non-overlapping authorized packages.
+
+### Review Evidence And Integration-owned Open Gates
+
+The implementation-first regression failed on the prior `plot:42` copy and
+passed after the projection change. After independent review strengthened the
+fail-closed boundary, the focused projection suite passed 3/3 tests and the
+quick checkpoint passed typecheck, lint, 22/22 focused and adjacent tests, and
+`git diff --check`. The independent review confirmed the D1/R1 classification,
+shared Console/History helper path, retained typed identity, and lane scope; its
+malformed-reference and over-broad action/search findings were resolved in this
+package or recorded above as an explicit non-goal.
+
+The central `active-document-cross-review.md` matrix and application
+version/NEWS authorities are currently leased to the active integration lane,
+so this feature lane must not create a competing writer. Before integration,
+that lane must register CONSOLE-REF-1 against the existing Runtime Output row,
+bind the change to a named development candidate, and synchronize application
+version metadata plus `NEWS.md`. Until those integration-owned facts and the
+named-candidate real-Tauri visual run are complete, milestone acceptance and
+release remain `NO-GO` even when this scoped feature verification is green.
+
+Actual implemented behavior matches this package: the shared projection helper
+emits friendly ready/unavailable copy, accepts only `plot` or `artifact` with a
+non-blank string ID, preserves the exact typed reference for consumers, and
+does not change Console routing, transport, persistence, authority, CSS, or
+mock commands. No contract deviation was accepted. The durable-search preview
+and separately observed search-state, focus-ring, and narrow-pane findings
+remain outside scope as recorded above.
+
+Feature-lane verification completed before this evidence transcription:
+
+- `node scripts/dev-checkpoint.mjs rsr-final --stable-ui` passed every named
+  frontend gate, including all generated-binding and architecture contracts,
+  51 Vitest files / 349 tests, production build and asset/cutover checks,
+  system-Chrome smoke, real browser interactions including narrow layout, dev
+  checkpoint/lane self-tests, and the visual-acceptance harness self-test;
+- `cargo build -p rho-desktop` completed the macOS debug build;
+- `node scripts/dev-lanes.mjs check --id console-reference-copy
+  --changed-auto --json` reported no collision, undeclared path,
+  integration-owned path, or forbidden shared path; and
+- local mock review captured `target/console-ref-1/desktop.png` and
+  `target/console-ref-1/narrow.png`; both Console elements had 0 px horizontal
+  overflow. These screenshots are layout-regression evidence only: the mock
+  cannot synthesize a typed rich-output reference without changing its
+  contract. The 760 px frame also retains a pre-existing collapsed-Surface
+  recovery control close to the composer, so no broad responsive-acceptance
+  claim is made by this package.
+
+This evidence-only source edit invalidates the saved RSR checkpoint under
+governance section 7A. A fresh `rsr-final --stable-ui` over the final frozen
+tree is therefore the last automated gate before commit, and its fingerprint
+and result belong in the implementation handoff. The real-Tauri visual run,
+central cross-review registration, candidate version/NEWS synchronization, and
+release decision remain the integration-owned open gates above.

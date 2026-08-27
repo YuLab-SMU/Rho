@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod acceptance_bridge;
+mod agent_credential_vault;
 mod agent_llm;
 mod application_lifecycle;
 mod application_state;
@@ -368,8 +369,10 @@ fn main() {
             commands::agent_llm::agent_llm_delete_provider,
             commands::agent_llm::agent_llm_set_credential,
             commands::agent_llm::agent_llm_delete_credential,
+            commands::agent_llm::agent_llm_view_credential,
             commands::agent_llm::agent_llm_save_model,
             commands::agent_llm::agent_llm_set_context_capacity,
+            commands::agent_llm::agent_llm_declare_model_capability,
             commands::agent_llm::agent_llm_delete_model,
             commands::agent_llm::agent_llm_select_model,
             commands::agent_llm::agent_llm_save_capability_route,
