@@ -113,6 +113,12 @@ const AGENT_MODE_HINTS: Readonly<Record<AgentMode, string>> = {
   act: "Work with project tools",
 };
 
+const AGENT_SUGGESTIONS: readonly string[] = [
+  "Summarize this project's structure",
+  "Check the runtime health and report issues",
+  "Draft a reproducible analysis plan",
+];
+
 function AgentRunningRow({ status, startedAt, onStop }: {
   readonly status: AgentTurnSummary["status"];
   readonly startedAt: string;
@@ -182,6 +188,7 @@ export function AgentSurfaceView({
   const [llmSettings, setLlmSettings] = useState<AgentLlmSettingsView | null>(null);
   const [capacityModelId, setCapacityModelId] = useState("");
   const [capacityDraft, setCapacityDraft] = useState({ context: "", reserve: "" });
+  const [modelSwitchBusy, setModelSwitchBusy] = useState(false);
 
   const contextPlanKey = JSON.stringify([
     view.composer.trim(),
@@ -245,6 +252,14 @@ export function AgentSurfaceView({
     return () => { active = false; };
   }, [health?.state, reportError, transport]);
 
+  useEffect(() => {
+    let active = true;
+    void transport.loadAgentLlmSettings()
+      .then((settings) => { if (active) setLlmSettings(settings); })
+      .catch((error: unknown) => { if (active) reportError(error); });
+    return () => { active = false; };
+  }, [reportError, transport]);
+
   const commitView = (next: AgentSurfaceViewState, durable = true) => {
     if (next.composer !== viewRef.current.composer || next.mode !== viewRef.current.mode ||
         next.conversation_id !== viewRef.current.conversation_id) setContextPreview(null);
@@ -297,6 +312,19 @@ export function AgentSurfaceView({
       reportError(error);
     } finally {
       setCapacityBusy(false);
+    }
+  };
+  const selectChatModel = async (modelId: string) => {
+    if (llmSettings == null || modelSwitchBusy) return;
+    setModelSwitchBusy(true);
+    try {
+      const settings = await transport.selectAgentChatModel(modelId, llmSettings.revision);
+      setLlmSettings(settings);
+      setContextPreview(null);
+    } catch (error: unknown) {
+      reportError(error);
+    } finally {
+      setModelSwitchBusy(false);
     }
   };
   const selectConversation = async (conversationId: string) => {
@@ -373,6 +401,12 @@ export function AgentSurfaceView({
     }
   };
   const displayMode = instance.mode_id ?? "conversation";
+  const chatRoute = llmSettings?.capability_routes.find((route) => route.capability === "agent.chat");
+  const chatModelLabel = chatRoute?.model_display_name
+    ?? llmSettings?.selected_model?.display_name
+    ?? (llmSettings == null ? "Loading model…" : "Chat model");
+  const switchableModels = (llmSettings?.models ?? [])
+    .filter((model) => model.enabled && model.model_type.value === "language");
   const activeTurn = turns.find((turn) => turn.status === "running" || turn.status === "waiting");
   const stopActiveTurn = activeTurn == null ? null : () => {
     setBusy(true);
@@ -491,6 +525,13 @@ export function AgentSurfaceView({
             <span>{view.conversation_id == null
               ? "Write below and send; Rho opens a conversation and keeps the thread, run state, and decisions here."
               : "Choose Ask, Plan, or Act, then use the composer below."}</span>
+            <div className="rho-agent-suggestions">
+              {AGENT_SUGGESTIONS.map((suggestion) => (
+                <button type="button" key={suggestion} onClick={() => commitView({ ...view, composer: suggestion }, false)}>
+                  {suggestion}
+                </button>
+              ))}
+            </div>
           </div>}
           {turns.map((turn) => {
             const detail = details.get(turn.turn_id);
@@ -499,8 +540,15 @@ export function AgentSurfaceView({
               return proposal == null ? [] : [{ event, proposal }];
             }) ?? [];
             const waitingApprovals = detail?.approvals.filter((approval) => approval.status === "waiting") ?? [];
-            const codeEvents = detail?.events.filter((event) => event.code != null) ?? [];
+            const proposalEventIds = new Set(proposals.map(({ event }) => event.id));
+            const activityEvents = detail?.events.filter((event) =>
+              (event.tool != null || event.code != null) && !proposalEventIds.has(event.id)) ?? [];
+            const codeEvents = detail?.events.filter((event) => event.code != null && !proposalEventIds.has(event.id)) ?? [];
             const contextItems = detail?.context_items ?? [];
+            const activitySummary = [
+              activityEvents.length > 0 ? `${activityEvents.length} tool ${activityEvents.length === 1 ? "event" : "events"}` : null,
+              contextItems.length > 0 ? `${contextItems.length} context ${contextItems.length === 1 ? "source" : "sources"}` : null,
+            ].filter((part) => part != null).join(" · ");
             return (
               <article className={`rho-agent-turn rho-agent-turn-${turn.status}`} data-turn-id={turn.turn_id} key={turn.turn_id}>
                 <header>
@@ -550,51 +598,55 @@ export function AgentSurfaceView({
                         <span className="rho-agent-decision-kind">File change</span>
                         <strong>{proposal.operation.replaceAll("_", " ")}</strong>
                         <code>{proposal.path}</code>
-                      </header>
-                      <pre>{proposal.content}</pre>
-                      {outcome != null && <span className="rho-agent-file-outcome">{outcome}</span>}
-                      {rejected && outcome == null && <span className="rho-agent-file-outcome">rejected in this view</span>}
-                      {outcome == null && !rejected && (
-                        <div className="rho-agent-decision-actions">
-                          <button type="button" disabled={busy || turn.status === "running" || turn.status === "waiting"} onClick={() => {
+                        {outcome != null && <span className="rho-agent-file-outcome">{outcome}</span>}
+                        {rejected && outcome == null && <span className="rho-agent-file-outcome">rejected in this view</span>}
+                        {outcome == null && !rejected && (
+                          <div className="rho-agent-decision-actions">
+                            <button type="button" disabled={busy || turn.status === "running" || turn.status === "waiting"} onClick={() => {
+                              setBusy(true);
+                              void applyFileProposal(turn, event.id, proposal)
+                                .then(({ response, beforeContent }) => {
+                                  if (response.after_sha256 != null) {
+                                    setFileUndo({
+                                      turn_id: turn.turn_id,
+                                      proposal_event_id: event.id,
+                                      path: proposal.path,
+                                      expected_after_sha256: response.after_sha256,
+                                      before_content: beforeContent,
+                                      created: proposal.operation === "create",
+                                    });
+                                  }
+                                  return refresh();
+                                })
+                                .catch(reportError)
+                                .finally(() => setBusy(false));
+                            }}>Apply</button>
+                            <button type="button" onClick={() => commitView({
+                              ...view,
+                              file_decisions: { ...view.file_decisions, [key]: "rejected" },
+                            })}>Reject</button>
+                          </div>
+                        )}
+                        {fileUndo?.turn_id === turn.turn_id && fileUndo.proposal_event_id === event.id && (
+                          <button type="button" disabled={busy} onClick={() => {
                             setBusy(true);
-                            void applyFileProposal(turn, event.id, proposal)
-                              .then(({ response, beforeContent }) => {
-                                if (response.after_sha256 != null) {
-                                  setFileUndo({
-                                    turn_id: turn.turn_id,
-                                    proposal_event_id: event.id,
-                                    path: proposal.path,
-                                    expected_after_sha256: response.after_sha256,
-                                    before_content: beforeContent,
-                                    created: proposal.operation === "create",
-                                  });
-                                }
-                                return refresh();
-                              })
+                            void undoFileProposal(fileUndo)
+                              .then(() => { setFileUndo(null); return refresh(); })
                               .catch(reportError)
                               .finally(() => setBusy(false));
-                          }}>Apply</button>
-                          <button type="button" onClick={() => commitView({
-                            ...view,
-                            file_decisions: { ...view.file_decisions, [key]: "rejected" },
-                          })}>Reject</button>
-                        </div>
-                      )}
-                      {fileUndo?.turn_id === turn.turn_id && fileUndo.proposal_event_id === event.id && (
-                        <button type="button" disabled={busy} onClick={() => {
-                          setBusy(true);
-                          void undoFileProposal(fileUndo)
-                            .then(() => { setFileUndo(null); return refresh(); })
-                            .catch(reportError)
-                            .finally(() => setBusy(false));
-                        }}>Undo applied edit</button>
-                      )}
+                          }}>Undo applied edit</button>
+                        )}
+                      </header>
+                      <details className="rho-agent-file-content">
+                        <summary>Proposed content</summary>
+                        <pre>{proposal.content}</pre>
+                      </details>
                     </section>
                   );
                 })}
-                {(codeEvents.length > 0 || contextItems.length > 0) && (
-                  <div className="rho-agent-technical">
+                {activitySummary !== "" && (
+                  <details className="rho-agent-activity">
+                    <summary>{activitySummary}</summary>
                     {codeEvents.map((event) => (
                       <details className="rho-agent-code-review" key={event.id}>
                         <summary>{event.title}</summary><pre>{event.code}</pre>
@@ -608,7 +660,7 @@ export function AgentSurfaceView({
                         <small>{item.included_bytes.toLocaleString()} of {item.original_bytes.toLocaleString()} bytes · {item.trust_class}</small>
                       </li>)}</ol>
                     </details>}
-                  </div>
+                  </details>
                 )}
                 <footer>
                   <button type="button" onClick={() => void pinTask(turn).catch(reportError)}>Pin to Vibe</button>
@@ -624,16 +676,6 @@ export function AgentSurfaceView({
           {activeTurn != null && stopActiveTurn != null && (
             <AgentRunningRow status={activeTurn.status} startedAt={activeTurn.started_at} onStop={stopActiveTurn} />
           )}
-          <div className="rho-agent-mode" role="group" aria-label="Agent mode">
-            {(["ask", "plan", "act"] as const).map((mode) => (
-              <button type="button" aria-pressed={view.mode === mode} key={mode} onClick={() => commitView({
-                ...view,
-                mode,
-                auto_approve: mode === "act" ? view.auto_approve : false,
-              })}>{mode}</button>
-            ))}
-          </div>
-          <small className="rho-agent-mode-hint">{AGENT_MODE_HINTS[view.mode]}</small>
           {runtimeOutputContext != null && <div className="rho-agent-context-chip" role="status">
             <div>
               <strong>Runtime output</strong>
@@ -667,6 +709,40 @@ export function AgentSurfaceView({
             <button type="button" disabled={busy || contextReviewBusy || health?.state !== "ready" || !view.composer.trim()} onClick={() => void reviewContext()}>
               {contextReviewBusy ? "Reviewing…" : "Review context"}
             </button>
+            <div className="rho-agent-mode" role="group" aria-label="Agent mode">
+              {(["ask", "plan", "act"] as const).map((mode) => (
+                <button type="button" aria-pressed={view.mode === mode} key={mode} onClick={() => commitView({
+                  ...view,
+                  mode,
+                  auto_approve: mode === "act" ? view.auto_approve : false,
+                })}>{mode}</button>
+              ))}
+            </div>
+            <small className="rho-agent-mode-hint">{AGENT_MODE_HINTS[view.mode]}</small>
+            <details className="rho-agent-model-menu">
+              <summary aria-label={`Chat model: ${chatModelLabel}`} aria-busy={modelSwitchBusy}>
+                <span>{chatModelLabel}</span>
+              </summary>
+              <div role="menu" aria-label="Chat model choices">
+                {switchableModels.length === 0 && <span className="rho-agent-model-empty">No language model is available.</span>}
+                {switchableModels.map((model) => (
+                  <button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={model.id === (chatRoute?.model_id ?? llmSettings?.selected_model_id)}
+                    disabled={modelSwitchBusy}
+                    key={model.id}
+                    onClick={(event) => {
+                      event.currentTarget.closest("details")!.open = false;
+                      void selectChatModel(model.id);
+                    }}
+                  >
+                    <span>{model.display_name}</span>
+                    <small>{model.provider_display_name} · {model.selector_status.replaceAll("_", " ")}</small>
+                  </button>
+                ))}
+              </div>
+            </details>
             <button type="button" className="rho-primary-action" disabled={busy || contextReviewBusy || health?.state !== "ready" || !view.composer.trim()} onClick={() => void submit()}>
               {busy ? "Working…" : runtimeOutputContext != null && contextPreview?.key !== contextPlanKey ? "Review before send" : "Send"}
             </button>

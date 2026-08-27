@@ -177,12 +177,14 @@ describe("Studio Agent Surface", () => {
 
     const proposal = container.querySelector(".rho-agent-file-proposal")!;
     expect(proposal.querySelector(".rho-agent-decision-kind")!.textContent).toBe("File change");
-    const technical = container.querySelector(".rho-agent-technical")!;
-    expect(proposal.compareDocumentPosition(technical) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const codeReview = technical.querySelector<HTMLDetailsElement>(".rho-agent-code-review")!;
-    expect(codeReview.open).toBe(false);
-    const contextUsed = technical.querySelector<HTMLDetailsElement>(".rho-agent-context-used")!;
-    expect(contextUsed.open).toBe(false);
+    const content = proposal.querySelector<HTMLDetailsElement>(".rho-agent-file-content")!;
+    expect(content.open).toBe(false);
+    const activity = container.querySelector<HTMLDetailsElement>(".rho-agent-activity")!;
+    expect(activity.open).toBe(false);
+    expect(activity.querySelector(":scope > summary")!.textContent).toBe("1 tool event · 1 context source");
+    expect(proposal.compareDocumentPosition(activity) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(activity.querySelector(".rho-agent-code-review")).not.toBeNull();
+    expect(activity.querySelector(".rho-agent-context-used")).not.toBeNull();
   });
 
   it("shows a truthful empty state for a conversation without turns", async () => {
@@ -193,6 +195,11 @@ describe("Studio Agent Surface", () => {
     expect(empty.textContent).toContain("Ready for the first turn");
     expect(empty.textContent).toContain("composer");
     expect(container.querySelector(".rho-agent-composer textarea")).not.toBeNull();
+
+    const chip = empty.querySelector<HTMLButtonElement>(".rho-agent-suggestions button")!;
+    const suggestion = chip.textContent!;
+    await click(chip);
+    expect(container.querySelector<HTMLTextAreaElement>(".rho-agent-composer textarea")!.value).toBe(suggestion);
   });
 
   it("switches Ask/Plan/Act, persists mode, and resets auto-approve outside Act", async () => {
@@ -261,6 +268,53 @@ describe("Studio Agent Surface", () => {
       context_window_tokens: 65_536,
       reserved_output_tokens: 8_192,
     });
+  });
+
+  it("switches the chat model through the revision-checked route and clears the reviewed preview", async () => {
+    const transport = createMockUiKernelTransport();
+    const base = await transport.loadAgentLlmSettings();
+    const alternate = {
+      ...base.models[0]!,
+      id: "mock-profile-alternate",
+      display_name: "Alternate model",
+      model_id: "alternate-model",
+      selected: false,
+    };
+    let current = { ...base, models: [...base.models, alternate] };
+    transport.loadAgentLlmSettings = vi.fn(async () => structuredClone(current));
+    transport.selectAgentChatModel = vi.fn(async (modelId, expectedRevision) => {
+      expect(expectedRevision).toBe(current.revision);
+      current = {
+        ...current,
+        revision: current.revision + 1,
+        selected_model_id: modelId,
+        capability_routes: current.capability_routes.map((route) =>
+          route.capability === "agent.chat"
+            ? { ...route, model_id: modelId, model_display_name: "Alternate model" }
+            : route),
+      };
+      return structuredClone(current);
+    });
+    const { container } = await renderAgent({ transport });
+
+    const menu = container.querySelector<HTMLDetailsElement>(".rho-agent-model-menu")!;
+    expect(menu.querySelector("summary")!.textContent).toContain("Mock model");
+
+    const textarea = container.querySelector<HTMLTextAreaElement>(".rho-agent-composer textarea")!;
+    await typeInput(textarea, "Check this project");
+    await click(container.querySelector(".rho-agent-context-controls button:first-child")!);
+    expect(container.querySelector(".rho-agent-context-preview")).not.toBeNull();
+
+    await click(menu.querySelector("summary")!);
+    expect(menu.open).toBe(true);
+    const option = [...menu.querySelectorAll("div[role='menu'] button")]
+      .find((button) => button.textContent!.includes("Alternate model"))!;
+    await click(option);
+
+    expect(transport.selectAgentChatModel).toHaveBeenCalledWith("mock-profile-alternate", base.revision);
+    expect(menu.open).toBe(false);
+    expect(menu.querySelector("summary")!.textContent).toContain("Alternate model");
+    expect(container.querySelector(".rho-agent-context-preview")).toBeNull();
   });
 
   it("keeps Stop beside the composer for a running turn and cancels through the existing path", async () => {
