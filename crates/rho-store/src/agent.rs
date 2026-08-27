@@ -232,3 +232,69 @@ pub(crate) fn decode_approval_request(row: &Row<'_>) -> rusqlite::Result<Approva
         continuation_outcome: row.get(15)?,
     })
 }
+
+/// Live projection of one Agent turn mutation for UI subscribers.
+///
+/// Frames are emitted after the corresponding durable append/finish succeeds;
+/// they are a replayable notification layer, never the source of truth. Text
+/// payloads are byte-bounded at emission time and flagged when truncated so
+/// subscribers can refetch the canonical record via the detail query.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct AgentTurnUpdateFrame {
+    pub status: String,
+    pub final_message: Option<String>,
+    pub error_message: Option<String>,
+    pub terminal_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct AgentTurnEventFrame {
+    pub turn_id: String,
+    pub event: Option<AgentTurnEvent>,
+    pub turn_update: Option<AgentTurnUpdateFrame>,
+    pub payload_truncated: bool,
+}
+
+pub(crate) const AGENT_TURN_FRAME_FIELD_MAX_BYTES: usize = 4096;
+
+pub(crate) fn bound_frame_field(value: Option<String>) -> (Option<String>, bool) {
+    match value {
+        Some(text) if text.len() > AGENT_TURN_FRAME_FIELD_MAX_BYTES => {
+            let mut end = AGENT_TURN_FRAME_FIELD_MAX_BYTES;
+            while end > 0 && !text.is_char_boundary(end) {
+                end -= 1;
+            }
+            (Some(text[..end].to_string()), true)
+        }
+        other => (other, false),
+    }
+}
+
+impl AgentTurnEventFrame {
+    pub fn from_event(event: AgentTurnEvent) -> Self {
+        let (body, body_truncated) = bound_frame_field(event.body);
+        let (code, code_truncated) = bound_frame_field(event.code);
+        Self {
+            turn_id: event.turn_id.clone(),
+            event: Some(AgentTurnEvent { body, code, ..event }),
+            turn_update: None,
+            payload_truncated: body_truncated || code_truncated,
+        }
+    }
+
+    pub fn from_finish(turn_id: String, finish: &AgentTurnFinish) -> Self {
+        let (final_message, final_truncated) = bound_frame_field(finish.final_message.clone());
+        let (error_message, error_truncated) = bound_frame_field(finish.error_message.clone());
+        Self {
+            turn_id,
+            event: None,
+            turn_update: Some(AgentTurnUpdateFrame {
+                status: finish.status.clone(),
+                final_message,
+                error_message,
+                terminal_reason: finish.terminal_reason.clone(),
+            }),
+            payload_truncated: final_truncated || error_truncated,
+        }
+    }
+}

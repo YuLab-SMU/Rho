@@ -71,6 +71,7 @@ where
 pub struct StoreExecutor {
     connection: tokio_rusqlite::Connection,
     migration_outcome: MigrationOutcome,
+    agent_turn_events: tokio::sync::broadcast::Sender<crate::AgentTurnEventFrame>,
 }
 
 impl StoreExecutor {
@@ -85,14 +86,23 @@ impl StoreExecutor {
             connection,
             migration_outcome,
         } = store;
+        let (agent_turn_events, _) = tokio::sync::broadcast::channel(256);
         Ok(Self {
             connection: (*connection).into(),
             migration_outcome,
+            agent_turn_events,
         })
     }
 
     pub fn migration_outcome(&self) -> &MigrationOutcome {
         &self.migration_outcome
+    }
+
+    /// Live projection channel for Agent turn mutations. Producers send after
+    /// the durable write succeeds; subscribers must tolerate lag and refetch
+    /// canonical state via the detail queries when they fall behind.
+    pub fn agent_turn_events(&self) -> tokio::sync::broadcast::Sender<crate::AgentTurnEventFrame> {
+        self.agent_turn_events.clone()
     }
 
     pub(crate) async fn call<R, F>(&self, operation: F) -> Result<R, StoreExecutorError>

@@ -183,9 +183,23 @@ impl AgentRepository {
         &self,
         event: AgentTurnEventDraft,
     ) -> Result<i64, StoreExecutorError> {
-        self.executor
+        let event_id = self
+            .executor
             .call(move |connection| Store::borrowed(connection).append_agent_turn_event(&event))
-            .await
+            .await?;
+        // Live projection only: the durable row above remains the source of
+        // truth; subscribers refetch the canonical record when they lag.
+        if let Some(record) = self
+            .executor
+            .call(move |connection| Store::borrowed(connection).get_agent_turn_event(event_id))
+            .await?
+        {
+            let _ = self
+                .executor
+                .agent_turn_events()
+                .send(crate::AgentTurnEventFrame::from_event(record));
+        }
+        Ok(event_id)
     }
 
     pub async fn record_context_items(
@@ -285,9 +299,13 @@ impl AgentRepository {
     }
 
     pub async fn finish_turn(&self, finish: AgentTurnFinish) -> Result<(), StoreExecutorError> {
+        let frame = crate::AgentTurnEventFrame::from_finish(finish.turn_id.clone(), &finish);
         self.executor
             .call(move |connection| Store::borrowed(connection).finish_agent_turn(&finish))
-            .await
+            .await?;
+        // Live projection only: the durable row above remains the source of truth.
+        let _ = self.executor.agent_turn_events().send(frame);
+        Ok(())
     }
 
     pub async fn list_approval_requests(
