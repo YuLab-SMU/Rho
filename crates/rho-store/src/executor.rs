@@ -71,6 +71,7 @@ where
 pub struct StoreExecutor {
     connection: tokio_rusqlite::Connection,
     migration_outcome: MigrationOutcome,
+    agent_turn_events: tokio::sync::broadcast::Sender<crate::AgentTurnEventFrame>,
 }
 
 impl StoreExecutor {
@@ -85,14 +86,47 @@ impl StoreExecutor {
             connection,
             migration_outcome,
         } = store;
+        let (agent_turn_events, _) = tokio::sync::broadcast::channel(256);
         Ok(Self {
             connection: (*connection).into(),
             migration_outcome,
+            agent_turn_events,
         })
     }
 
     pub fn migration_outcome(&self) -> &MigrationOutcome {
         &self.migration_outcome
+    }
+
+    /// Live notification channel for durable Agent turn mutations. Lagging
+    /// subscribers must refetch canonical state from the repository.
+    pub fn agent_turn_events(&self) -> tokio::sync::broadcast::Sender<crate::AgentTurnEventFrame> {
+        self.agent_turn_events.clone()
+    }
+
+    /// Publish a previously committed Agent turn event as a live projection.
+    ///
+    /// This is intentionally best-effort: callers invoke it only after their
+    /// transaction/service write succeeds, and a projection lookup or channel
+    /// failure must never reverse that authoritative success.
+    pub async fn publish_agent_turn_event(&self, event_id: i64) {
+        let projection = self
+            .call(move |connection| {
+                let store = Store::borrowed(connection);
+                let Some(event) = store.get_agent_turn_event(event_id)? else {
+                    return Ok(None);
+                };
+                let Some(project_root) = store.agent_turn_project_root(&event.turn_id)? else {
+                    return Ok(None);
+                };
+                Ok(Some((project_root, event)))
+            })
+            .await;
+        if let Ok(Some((project_root, event))) = projection {
+            let _ = self
+                .agent_turn_events
+                .send(crate::AgentTurnEventFrame::from_event(project_root, event));
+        }
     }
 
     pub(crate) async fn call<R, F>(&self, operation: F) -> Result<R, StoreExecutorError>

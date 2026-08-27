@@ -43,8 +43,9 @@ mod workbench;
 
 pub use agent::{
     AgentConversationDraft, AgentConversationSummary, AgentConversationTurn, AgentTurnDetail,
-    AgentTurnDraft, AgentTurnEvent, AgentTurnEventDraft, AgentTurnFinish, AgentTurnSummary,
-    ApprovalDecisionRecord, ApprovalRequestDraft, ApprovalRequestSummary,
+    AgentTurnDraft, AgentTurnEvent, AgentTurnEventDraft, AgentTurnEventFrame, AgentTurnFinish,
+    AgentTurnSummary, AgentTurnUpdateFrame, ApprovalDecisionRecord, ApprovalRequestDraft,
+    ApprovalRequestSummary,
 };
 pub use agent_repository::AgentRepository;
 pub use artifact::{
@@ -1641,6 +1642,35 @@ where
             ],
         )?;
         Ok(self.connection.last_insert_rowid())
+    }
+
+    pub(crate) fn get_agent_turn_event(
+        &self,
+        event_id: i64,
+    ) -> Result<Option<AgentTurnEvent>, StoreError> {
+        self.connection
+            .query_row(
+                "SELECT id, turn_id, timestamp, event_type, title, body, status, tool, request_id, code, details_json
+                 FROM agent_turn_events WHERE id = ?1",
+                params![event_id],
+                agent::decode_agent_turn_event,
+            )
+            .optional()
+            .map_err(StoreError::from)
+    }
+
+    pub(crate) fn agent_turn_project_root(
+        &self,
+        turn_id: &str,
+    ) -> Result<Option<String>, StoreError> {
+        self.connection
+            .query_row(
+                "SELECT project_root FROM agent_turns WHERE turn_id = ?1",
+                params![turn_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(StoreError::from)
     }
 
     pub fn create_approval_request(

@@ -30,6 +30,7 @@ import type {
 import { AgentSurfaceView } from "./AgentSurfaceView";
 import type {
   AgentFileProposal,
+  AgentFileProposalReview,
   AgentFileUndoState,
   AgentSurfaceViewState,
 } from "./AgentSurfaceView";
@@ -122,6 +123,7 @@ interface SurfaceViewProps {
   readonly runAgentConversation: (
     current: AgentSurfaceViewState,
     request: RunAgentRequest,
+    onAccepted?: (conversationId: string) => void,
   ) => Promise<AgentSurfaceViewState>;
   readonly persistAgentViewState: (viewState: AgentSurfaceViewState) => Promise<void>;
   readonly persistSurfaceViewState: (viewState: unknown) => Promise<void>;
@@ -130,6 +132,7 @@ interface SurfaceViewProps {
     turn: AgentTurnSummary,
     eventId: number,
     proposal: AgentFileProposal,
+    review?: AgentFileProposalReview,
   ) => Promise<{ readonly response: AgentFileMutationResponse; readonly beforeContent: string }>;
   readonly undoAgentFileProposal: (request: AgentFileUndoState) => Promise<void>;
   readonly openNavigatorFile: (descriptor: ResourceDescriptor) => Promise<void>;

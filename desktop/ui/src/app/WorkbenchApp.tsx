@@ -1941,12 +1941,13 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
           throw error;
         }
       }}
-      runAgentConversation={async (currentViewState, request) => {
+      runAgentConversation={async (currentViewState, request, onAccepted) => {
         const workflowScope = hostScope;
         reportProjectWorkflowAction(workflowScope, null);
         try {
           return await withMutationAdmission(workflowScope.projectId, undefined, async (lease) => {
             const response = await pluginTransport.runAgent(request);
+            onAccepted?.(response.conversation_id);
             await store.refresh();
             const nextViewState = {
               ...currentViewState,
@@ -1983,12 +1984,21 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
         reportActionError(null);
       }}
       pinAgentTask={pinAgentTask}
-      applyAgentFileProposal={async (turn, eventId, proposal) => {
+      applyAgentFileProposal={async (turn, eventId, proposal, review) => {
         if (resources == null) throw new Error("Resource Registry is not ready.");
         return withMutationAdmission(resources.project_id, undefined, async (lease) => {
         let beforeContent = "";
         let expectedDiskSha256: string | null = null;
-        if (proposal.operation !== "create") {
+        if (review != null) {
+          if (proposal.operation !== "append" && proposal.operation !== "create") {
+            throw new Error("Only append and create proposals support a reviewed diff identity.");
+          }
+          beforeContent = review.before_content;
+          expectedDiskSha256 = review.expected_disk_sha256;
+          if (proposal.operation !== "create" && expectedDiskSha256 == null) {
+            throw new Error(`Agent proposal target ${proposal.path} has no reviewed disk digest.`);
+          }
+        } else if (proposal.operation !== "create") {
           let descriptor = resources.resources.find((candidate) =>
             candidate.resource_provider_id === "rho.project-files" &&
             candidate.resource_kind === "project_file" &&

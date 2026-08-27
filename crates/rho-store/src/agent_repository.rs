@@ -183,9 +183,15 @@ impl AgentRepository {
         &self,
         event: AgentTurnEventDraft,
     ) -> Result<i64, StoreExecutorError> {
-        self.executor
+        let event_id = self
+            .executor
             .call(move |connection| Store::borrowed(connection).append_agent_turn_event(&event))
-            .await
+            .await?;
+
+        // The insert above is authoritative. Publishing is deliberately
+        // best-effort so it cannot turn a successful append into a failure.
+        self.executor.publish_agent_turn_event(event_id).await;
+        Ok(event_id)
     }
 
     pub async fn record_context_items(
@@ -285,9 +291,31 @@ impl AgentRepository {
     }
 
     pub async fn finish_turn(&self, finish: AgentTurnFinish) -> Result<(), StoreExecutorError> {
+        let projection_finish = finish.clone();
+        let projection_turn_id = finish.turn_id.clone();
         self.executor
             .call(move |connection| Store::borrowed(connection).finish_agent_turn(&finish))
-            .await
+            .await?;
+
+        // As with append, finishing is already committed at this point. A
+        // failed projection query is recoverable by the existing invalidation
+        // path and must not be surfaced as a failed finish.
+        let project_root = self
+            .executor
+            .call(move |connection| {
+                Store::borrowed(connection).agent_turn_project_root(&projection_turn_id)
+            })
+            .await;
+        if let Ok(Some(project_root)) = project_root {
+            let _ =
+                self.executor
+                    .agent_turn_events()
+                    .send(crate::AgentTurnEventFrame::from_finish(
+                        project_root,
+                        &projection_finish,
+                    ));
+        }
+        Ok(())
     }
 
     pub async fn list_approval_requests(
@@ -380,7 +408,7 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
-    use crate::StoreError;
+    use crate::{ApprovalRequestDraft, StoreError};
 
     fn conversation(project_root: &str) -> AgentConversationDraft {
         AgentConversationDraft {
@@ -549,5 +577,184 @@ mod tests {
                 .len(),
             1
         );
+    }
+
+    #[tokio::test]
+    async fn agent_turn_frames_follow_durable_writes_and_carry_normalized_project_root() {
+        let directory = TempDir::new().unwrap();
+        let database = directory.path().join("rho.sqlite");
+        let executor = StoreExecutor::open(&database).await.unwrap();
+        let repository = executor.agent_repository();
+        let mut frames = executor.agent_turn_events().subscribe();
+
+        repository
+            .create_turn_with_conversation(
+                conversation("D:\\projects\\A\\"),
+                turn("D:\\projects\\A\\"),
+            )
+            .await
+            .unwrap();
+        repository
+            .append_turn_event(event("turn-a", "First activity"))
+            .await
+            .unwrap();
+
+        let append_frame = frames.try_recv().unwrap();
+        assert_eq!(append_frame.project_root, "D:/projects/A");
+        assert_eq!(append_frame.turn_id, "turn-a");
+        let persisted_after_append = repository
+            .get_turn_detail("D:/projects/A".to_string(), "turn-a".to_string())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(persisted_after_append.events.len(), 1);
+        assert_eq!(
+            append_frame.event.unwrap().id,
+            persisted_after_append.events[0].id
+        );
+
+        repository
+            .finish_turn(AgentTurnFinish {
+                turn_id: "turn-a".to_string(),
+                status: "completed".to_string(),
+                terminal_reason: Some("completed".to_string()),
+                workspace_id_after: Some("workspace-a".to_string()),
+                state_revision_after: Some(2),
+                project_revision_after: Some(3),
+                final_message: Some("All done".to_string()),
+                error_message: None,
+            })
+            .await
+            .unwrap();
+
+        let finish_frame = frames.try_recv().unwrap();
+        assert_eq!(finish_frame.project_root, "D:/projects/A");
+        assert_eq!(finish_frame.turn_id, "turn-a");
+        let update = finish_frame.turn_update.unwrap();
+        assert_eq!(update.status, "completed");
+        assert_eq!(update.final_message.as_deref(), Some("All done"));
+        assert_eq!(update.terminal_reason.as_deref(), Some("completed"));
+        let persisted_after_finish = repository
+            .get_turn_detail("D:/projects/A".to_string(), "turn-a".to_string())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(persisted_after_finish.turn.status, "completed");
+    }
+
+    #[tokio::test]
+    async fn agent_turn_frame_is_bounded_while_store_keeps_full_details() {
+        let directory = TempDir::new().unwrap();
+        let database = directory.path().join("rho.sqlite");
+        let executor = StoreExecutor::open(&database).await.unwrap();
+        let repository = executor.agent_repository();
+        let mut frames = executor.agent_turn_events().subscribe();
+
+        repository
+            .create_turn_with_conversation(conversation("D:/projects/A"), turn("D:/projects/A"))
+            .await
+            .unwrap();
+        let full_details = format!("{{\"payload\":\"{}\"}}", "x".repeat(100_000));
+        let mut large = event("turn-a", "Large payload");
+        large.event_type = "e".repeat(8_000);
+        large.title = "t".repeat(8_000);
+        large.body = Some("b".repeat(8_000));
+        large.status = "s".repeat(8_000);
+        large.tool = Some("tool".repeat(2_000));
+        large.request_id = Some("request".repeat(2_000));
+        large.code = Some("c".repeat(8_000));
+        large.details_json = full_details.clone();
+        repository.append_turn_event(large).await.unwrap();
+
+        let frame = frames.try_recv().unwrap();
+        assert!(frame.payload_truncated);
+        assert!(
+            frame.event.is_none(),
+            "over-budget payload keeps identity only"
+        );
+        assert_eq!(frame.project_root, "D:/projects/A");
+        assert_eq!(frame.turn_id, "turn-a");
+        assert!(
+            serde_json::to_vec(&frame).unwrap().len() <= crate::agent::AGENT_TURN_FRAME_MAX_BYTES
+        );
+        let persisted = repository
+            .get_turn_detail("D:/projects/A".to_string(), "turn-a".to_string())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(persisted.events[0].details_json, full_details);
+        assert_eq!(
+            persisted.events[0].body.as_deref().map(str::len),
+            Some(8_000)
+        );
+        assert_eq!(
+            persisted.events[0].code.as_deref().map(str::len),
+            Some(8_000)
+        );
+    }
+
+    #[tokio::test]
+    async fn service_written_approval_request_publishes_before_response() {
+        let directory = TempDir::new().unwrap();
+        let executor = StoreExecutor::open(directory.path().join("rho.sqlite"))
+            .await
+            .unwrap();
+        let repository = executor.agent_repository();
+        let mut frames = executor.agent_turn_events().subscribe();
+        repository
+            .create_turn_with_conversation(
+                conversation("D:\\projects\\A\\"),
+                turn("D:\\projects\\A\\"),
+            )
+            .await
+            .unwrap();
+
+        let approval = ApprovalRequestDraft {
+            request_id: "approval-a".to_string(),
+            turn_id: "turn-a".to_string(),
+            project_root: "D:/projects/A".to_string(),
+            tool: "run_r".to_string(),
+            policy: "required".to_string(),
+            arguments_json: "{}".to_string(),
+            code: Some("mean(x)".to_string()),
+            workspace_id: "workspace-a".to_string(),
+            state_revision: 2,
+            project_revision: 3,
+        };
+        let waiting_event = AgentTurnEventDraft {
+            turn_id: "turn-a".to_string(),
+            event_type: "approval.requested".to_string(),
+            title: "Approval requested · run_r".to_string(),
+            body: Some("Workspace remains unchanged pending review.".to_string()),
+            status: "running".to_string(),
+            tool: Some("run_r".to_string()),
+            request_id: Some("approval-a".to_string()),
+            code: Some("mean(x)".to_string()),
+            details_json: "{}".to_string(),
+        };
+        let event_id = executor
+            .run_service(move |store| {
+                store.create_approval_request(&approval)?;
+                store.update_agent_turn_status("turn-a", "waiting")?;
+                store.append_agent_turn_event(&waiting_event)
+            })
+            .await
+            .unwrap();
+        executor.publish_agent_turn_event(event_id).await;
+
+        let frame = frames.try_recv().unwrap();
+        assert_eq!(frame.project_root, "D:/projects/A");
+        assert_eq!(frame.turn_id, "turn-a");
+        assert_eq!(frame.event.unwrap().event_type, "approval.requested");
+        let pending = repository
+            .list_approval_requests(
+                "D:/projects/A".to_string(),
+                None,
+                Some("waiting".to_string()),
+            )
+            .await
+            .unwrap();
+        assert_eq!(pending.len(), 1);
+        assert!(pending[0].decision.is_none());
     }
 }

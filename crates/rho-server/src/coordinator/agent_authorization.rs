@@ -226,12 +226,13 @@ async fn handle_tool_approval_required(
                 "project_root": request.project_root
             }))?,
         };
-        run_workspace_store_service(&executor, move |store| {
+        let waiting_event_id = run_workspace_store_service(&executor, move |store| {
             store.update_agent_turn_status(&waiting_turn_id, "waiting")?;
-            store.append_agent_turn_event(&waiting_event)?;
-            Ok(())
+            let event_id = store.append_agent_turn_event(&waiting_event)?;
+            Ok(event_id)
         })
         .await?;
+        executor.publish_agent_turn_event(waiting_event_id).await;
         drop(context_guard);
 
         let response = receiver.await.unwrap_or(ApprovalResponseInput {
@@ -284,14 +285,15 @@ async fn handle_tool_approval_required(
                     code: None,
                     details_json: serde_json::to_string(&json!({"reason": reason}))?,
                 };
-                run_workspace_store_service(&executor, move |store| {
+                let stale_event_id = run_workspace_store_service(&executor, move |store| {
                     store
                         .decide_environment_operation_request(&stale_request_id, &stale_decision)?;
                     store.update_agent_turn_status(&running_turn_id, "running")?;
-                    store.append_agent_turn_event(&stale_event)?;
-                    Ok(())
+                    let event_id = store.append_agent_turn_event(&stale_event)?;
+                    Ok(event_id)
                 })
                 .await?;
+                executor.publish_agent_turn_event(stale_event_id).await;
                 return Ok(json!({
                     "approved": false,
                     "request_id": request.request_id,
@@ -322,16 +324,17 @@ async fn handle_tool_approval_required(
                     "arguments": approved_arguments
                 }))?,
             };
-            run_workspace_store_service(&executor, move |store| {
+            let approved_event_id = run_workspace_store_service(&executor, move |store| {
                 store.decide_environment_operation_request(
                     &approved_request_id,
                     &approved_decision,
                 )?;
                 store.update_agent_turn_status(&running_turn_id, "running")?;
-                store.append_agent_turn_event(&approved_event)?;
-                Ok(())
+                let event_id = store.append_agent_turn_event(&approved_event)?;
+                Ok(event_id)
             })
             .await?;
+            executor.publish_agent_turn_event(approved_event_id).await;
             approved_mutations.insert(
                 request.request_id.clone(),
                 ApprovedMutation {
@@ -388,13 +391,14 @@ async fn handle_tool_approval_required(
                 "reason": response.reason
             }))?,
         };
-        run_workspace_store_service(&executor, move |store| {
+        let terminal_event_id = run_workspace_store_service(&executor, move |store| {
             store.decide_environment_operation_request(&terminal_request_id, &terminal_decision)?;
             store.update_agent_turn_status(&running_turn_id, "running")?;
-            store.append_agent_turn_event(&terminal_event)?;
-            Ok(())
+            let event_id = store.append_agent_turn_event(&terminal_event)?;
+            Ok(event_id)
         })
         .await?;
+        executor.publish_agent_turn_event(terminal_event_id).await;
         return Ok(json!({
             "approved": false,
             "request_id": request.request_id,
@@ -449,13 +453,14 @@ async fn handle_tool_approval_required(
             code: code.clone(),
             details_json: serde_json::to_string(&json!({"policy": "act_session_authorized"}))?,
         };
-        run_workspace_store_service(&executor, move |store| {
+        let approved_event_id = run_workspace_store_service(&executor, move |store| {
             store.resolve_approval_request(&approved_request_id, &approved_decision)?;
             store.update_agent_turn_status(&running_turn_id, "running")?;
-            store.append_agent_turn_event(&approved_event)?;
-            Ok(())
+            let event_id = store.append_agent_turn_event(&approved_event)?;
+            Ok(event_id)
         })
         .await?;
+        executor.publish_agent_turn_event(approved_event_id).await;
         approved_mutations.insert(
             request_id.clone(),
             ApprovedMutation {
@@ -487,12 +492,13 @@ async fn handle_tool_approval_required(
         code: code.clone(),
         details_json: serde_json::to_string(&incoming.payload)?,
     };
-    run_workspace_store_service(&executor, move |store| {
+    let waiting_event_id = run_workspace_store_service(&executor, move |store| {
         store.update_agent_turn_status(&waiting_turn_id, "waiting")?;
-        store.append_agent_turn_event(&waiting_event)?;
-        Ok(())
+        let event_id = store.append_agent_turn_event(&waiting_event)?;
+        Ok(event_id)
     })
     .await?;
+    executor.publish_agent_turn_event(waiting_event_id).await;
 
     drop(context_guard);
     let response = receiver.await.unwrap_or(ApprovalResponseInput {
@@ -529,13 +535,14 @@ async fn handle_tool_approval_required(
             code,
             details_json: serde_json::to_string(&json!({"reason": reason}))?,
         };
-        run_workspace_store_service(&executor, move |store| {
+        let stale_event_id = run_workspace_store_service(&executor, move |store| {
             store.resolve_approval_request(&stale_request_id, &stale_decision)?;
             store.update_agent_turn_status(&running_turn_id, "running")?;
-            store.append_agent_turn_event(&stale_event)?;
-            Ok(())
+            let event_id = store.append_agent_turn_event(&stale_event)?;
+            Ok(event_id)
         })
         .await?;
+        executor.publish_agent_turn_event(stale_event_id).await;
         return Ok(json!({
             "approved": false,
             "request_id": request_id,
@@ -601,13 +608,14 @@ async fn handle_tool_approval_required(
             "continuation_outcome": continuation
         }))?,
     };
-    run_workspace_store_service(&executor, move |store| {
+    let terminal_event_id = run_workspace_store_service(&executor, move |store| {
         store.resolve_approval_request(&terminal_request_id, &terminal_decision)?;
         store.update_agent_turn_status(&running_turn_id, "running")?;
-        store.append_agent_turn_event(&terminal_event)?;
-        Ok(())
+        let event_id = store.append_agent_turn_event(&terminal_event)?;
+        Ok(event_id)
     })
     .await?;
+    executor.publish_agent_turn_event(terminal_event_id).await;
     if approved {
         approved_mutations.insert(
             request_id.clone(),

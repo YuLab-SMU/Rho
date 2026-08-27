@@ -12,6 +12,11 @@ export type { ProfileTransport } from "./profile";
 export type { AgentConversationTransport } from "./agent-conversation";
 export type { AgentTurnDetailTransport } from "./agent-turn";
 export type { AgentExecutionTransport } from "./agent-execution";
+export type {
+  AgentEventsTransport,
+  AgentTurnEventFrame,
+  AgentTurnUpdateFrame,
+} from "./agent-events";
 export type { AgentRuntimeTransport } from "./agent-runtime";
 export type { AgentSettingsTransport } from "./agent-settings";
 export type { AgentFileTransport } from "./agent-file";

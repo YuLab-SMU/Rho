@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type {
   AgentConversationSummary,
@@ -8,12 +8,14 @@ import type {
   AgentMode,
   AgentRuntimeDiagnostics,
   AgentTurnDetail,
+  AgentTurnEventFrame,
   AgentTurnSummary,
   RuntimeOutputReference,
   RunAgentRequest,
   SurfaceInstance,
   UiKernelTransport,
 } from "../transport";
+import { computeLineDiff } from "./agent/diff";
 
 import "../styles/agent-surface.css";
 
@@ -39,6 +41,28 @@ export interface AgentFileUndoState {
   readonly before_content: string;
   readonly created: boolean;
 }
+
+export interface AgentFileProposalReview {
+  readonly before_content: string;
+  readonly expected_disk_sha256: string | null;
+}
+
+interface AgentQueueItem {
+  readonly id: string;
+  readonly conversation_id: string;
+  readonly prompt: string;
+  readonly request: RunAgentRequest;
+  readonly queued_at: string;
+}
+
+type AgentProposalDiffState =
+  | { readonly status: "loading" }
+  | { readonly status: "unavailable" }
+  | {
+      readonly status: "ready";
+      readonly before: string;
+      readonly expected_disk_sha256: string | null;
+    };
 
 interface AgentRefreshToken {
   readonly activationVersion: number;
@@ -174,6 +198,63 @@ function AgentRunningRow({ status, startedAt, disabled, onStop }: {
     </div>
   );
 }
+
+function AgentLineDiff({ before, after }: {
+  readonly before: string;
+  readonly after: string;
+}) {
+  const diff = useMemo(() => computeLineDiff(before, after), [before, after]);
+  if (diff == null) return (<>
+    <p className="rho-agent-diff-note">This file is too large to diff here; showing the proposed content.</p>
+    <pre>{after}</pre>
+  </>);
+  if (diff.hunks.length === 0) return <p className="rho-agent-diff-note">No line changes.</p>;
+  return (
+    <div className="rho-agent-diff" role="group" aria-label="Proposed diff">
+      <div className="rho-agent-diff-summary">+{diff.additions} −{diff.removals}</div>
+      {diff.hunks.map((hunk, hunkIndex) => (
+        <div className="rho-agent-diff-hunk" key={hunkIndex}>
+          {hunkIndex > 0 && <div className="rho-agent-diff-gap" aria-hidden="true">⋮</div>}
+          <div className="rho-agent-diff-hunk-header">@@ -{hunk.beforeStart} +{hunk.afterStart} @@</div>
+          <div className="rho-agent-diff-lines">{hunk.lines.map((line, lineIndex) => (
+            <div className={`rho-agent-diff-line rho-agent-diff-${line.kind}`} key={lineIndex}>
+              <span className="rho-agent-diff-sign" aria-hidden="true">{line.kind === "add" ? "+" : line.kind === "remove" ? "−" : " "}</span>
+              <span className="rho-agent-diff-text">{line.text}</span>
+            </div>
+          ))}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AgentProposalDiff({ proposal, state }: {
+  readonly proposal: AgentFileProposal;
+  readonly state: AgentProposalDiffState | undefined;
+}) {
+  if (proposal.operation !== "append" && proposal.operation !== "create") return (<>
+    <p className="rho-agent-diff-note">This edit depends on the current editor selection, so only the proposed content can be shown.</p>
+    <pre>{proposal.content}</pre>
+  </>);
+  if (state == null) return <pre>{proposal.content}</pre>;
+  if (state.status === "loading") return <p className="rho-agent-diff-note">Loading current content…</p>;
+  if (state.status === "unavailable") return (<>
+    <p className="rho-agent-diff-note">Current content is unavailable; showing the proposed content.</p>
+    <pre>{proposal.content}</pre>
+  </>);
+  const after = proposal.operation === "append" ? state.before + proposal.content : proposal.content;
+  return <AgentLineDiff before={state.before} after={after} />;
+}
+
+const POSTURE_OPTIONS = [{
+  id: "ask",
+  label: "Ask every time",
+  hint: "Every tool action waits for your approval.",
+}, {
+  id: "auto",
+  label: "Auto-approve project tools for this conversation",
+  hint: "Applies in Act mode. The broker still evaluates every action and asks when required.",
+}] as const;
 export function AgentSurfaceView({
   instance,
   transport,
@@ -197,6 +278,7 @@ export function AgentSurfaceView({
   readonly runConversation: (
     current: AgentSurfaceViewState,
     request: RunAgentRequest,
+    onAccepted?: (conversationId: string) => void,
   ) => Promise<AgentSurfaceViewState>;
   readonly persist: (viewState: AgentSurfaceViewState) => Promise<void>;
   readonly pinTask: (turn: AgentTurnSummary) => Promise<void>;
@@ -204,6 +286,7 @@ export function AgentSurfaceView({
     turn: AgentTurnSummary,
     eventId: number,
     proposal: AgentFileProposal,
+    review?: AgentFileProposalReview,
   ) => Promise<{ readonly response: AgentFileMutationResponse; readonly beforeContent: string }>;
   readonly undoFileProposal: (request: AgentFileUndoState) => Promise<void>;
   readonly reportError: (error: unknown) => void;
@@ -213,8 +296,11 @@ export function AgentSurfaceView({
   const [view, setView] = useState(() => initialAgentSurfaceState(instance));
   const viewRef = useRef(view);
   const [conversations, setConversations] = useState<readonly AgentConversationSummary[]>([]);
+  const conversationsRef = useRef<readonly AgentConversationSummary[]>([]);
   const [turns, setTurns] = useState<readonly AgentTurnSummary[]>([]);
+  const turnsRef = useRef<readonly AgentTurnSummary[]>([]);
   const [details, setDetails] = useState<ReadonlyMap<string, AgentTurnDetail>>(() => new Map());
+  const detailsRef = useRef<ReadonlyMap<string, AgentTurnDetail>>(new Map());
   const [busy, setBusy] = useState(false);
   const [fileUndo, setFileUndo] = useState<AgentFileUndoState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -232,6 +318,18 @@ export function AgentSurfaceView({
   const [capacityDraft, setCapacityDraft] = useState({ context: "", reserve: "" });
   const [modelSwitchBusy, setModelSwitchBusy] = useState(false);
   const [modelQuery, setModelQuery] = useState("");
+  const [queue, setQueue] = useState<readonly AgentQueueItem[]>([]);
+  const queueRef = useRef<readonly AgentQueueItem[]>([]);
+  const queueSequenceRef = useRef(0);
+  const dispatchingRef = useRef(false);
+  const dispatchHaltedRef = useRef(false);
+  const dispatchReconcileRef = useRef(false);
+  const [proposalDiffs, setProposalDiffs] = useState<ReadonlyMap<string, AgentProposalDiffState>>(
+    () => new Map(),
+  );
+  const proposalDiffsRef = useRef<ReadonlyMap<string, AgentProposalDiffState>>(new Map());
+  const frameRefreshScheduledRef = useRef(false);
+  const lastFrameEventIdRef = useRef<number | null>(null);
   const activationVersionRef = useRef(0);
   const refreshGenerationRef = useRef(0);
   const mutationRef = useRef<symbol | null>(null);
@@ -260,6 +358,21 @@ export function AgentSurfaceView({
     const version = activationVersionRef.current + 1;
     activationVersionRef.current = version;
     mutationRef.current = null;
+    conversationsRef.current = [];
+    turnsRef.current = [];
+    detailsRef.current = new Map();
+    queueRef.current = [];
+    dispatchingRef.current = false;
+    dispatchHaltedRef.current = false;
+    dispatchReconcileRef.current = false;
+    proposalDiffsRef.current = new Map();
+    frameRefreshScheduledRef.current = false;
+    lastFrameEventIdRef.current = null;
+    setConversations([]);
+    setTurns([]);
+    setDetails(new Map());
+    setQueue([]);
+    setProposalDiffs(new Map());
     setBusy(false);
     setContextReviewBusy(false);
     return () => {
@@ -332,17 +445,22 @@ export function AgentSurfaceView({
           await transport.getAgentTurnDetail(turn.turn_id),
         ] as const));
         if (!refreshIsCurrent(token)) return;
+        const nextDetails = new Map(loadedDetails.flatMap(([turnId, detail]) =>
+          detail == null ? [] : [[turnId, detail] as const]
+        ));
+        conversationsRef.current = nextConversations;
+        turnsRef.current = nextTurns;
+        detailsRef.current = nextDetails;
         setConversations(nextConversations);
         setTurns(nextTurns);
-        setDetails(new Map(loadedDetails.flatMap(([turnId, detail]) =>
-          detail == null ? [] : [[turnId, detail] as const]
-        )));
+        setDetails(nextDetails);
         const settledValidation: AgentConversationValidation = {
           conversationId: preferredConversationId,
           status: preferredConversationId == null || preferredIsAvailable ? "available" : "unavailable",
         };
         conversationValidationRef.current = settledValidation;
         setConversationValidation(settledValidation);
+        dispatchReconcileRef.current = false;
         setLoading(false);
       } catch (error: unknown) {
         if (refreshIsCurrent(token)) {
@@ -409,6 +527,126 @@ export function AgentSurfaceView({
     refresh,
     refreshIsCurrent,
     reportError,
+    transport,
+  ]);
+
+  const requestFrameRefresh = useCallback((activationVersion: number) => {
+    if (!activationIsCurrent(activationVersion) || frameRefreshScheduledRef.current) return;
+    frameRefreshScheduledRef.current = true;
+    queueMicrotask(() => {
+      frameRefreshScheduledRef.current = false;
+      if (!activationIsCurrent(activationVersion)) return;
+      void refreshCurrent(activationVersion, viewRef.current.conversation_id).catch((error: unknown) => {
+        if (activationIsCurrent(activationVersion)) reportError(error);
+      });
+    });
+  }, [activationIsCurrent, refreshCurrent, reportError]);
+
+  useEffect(() => {
+    const activationVersion = activationVersionRef.current;
+    const applyFrame = (frame: AgentTurnEventFrame) => {
+      if (!activationIsCurrent(activationVersion)) return;
+      const incoming = frame.event;
+      if (incoming != null) {
+        const previousEventId = lastFrameEventIdRef.current;
+        if (previousEventId != null && incoming.id > previousEventId + 1) {
+          requestFrameRefresh(activationVersion);
+        }
+        lastFrameEventIdRef.current = Math.max(previousEventId ?? incoming.id, incoming.id);
+      }
+      const requestsDecision = incoming?.event_type === "approval.requested"
+        || incoming?.event_type === "environment.requested";
+
+      const projectedTurn = turnsRef.current.find((turn) => turn.turn_id === frame.turn_id);
+      const selectedRoot = conversationsRef.current.find(
+        (conversation) => conversation.conversation_id === viewRef.current.conversation_id,
+      )?.project_root;
+      const belongsToLoadedProject = selectedRoot === frame.project_root
+        || conversationsRef.current.some((conversation) => conversation.project_root === frame.project_root);
+      const projectMembershipUnknown = conversationsRef.current.length === 0;
+      if (projectedTurn == null || projectedTurn.project_root !== frame.project_root) {
+        if ((belongsToLoadedProject || projectMembershipUnknown)
+            && (frame.payload_truncated || requestsDecision)) {
+          requestFrameRefresh(activationVersion);
+        }
+        return;
+      }
+      if (frame.payload_truncated) {
+        requestFrameRefresh(activationVersion);
+        return;
+      }
+
+      // Approval requests mutate canonical detail outside the event row itself.
+      // Always refetch so the waiting status and decision surface arrive before
+      // the backend blocks waiting for the user's response.
+      let reconcile = requestsDecision;
+      const update = frame.turn_update;
+      if (update != null) {
+        const nextTurns = turnsRef.current.map((turn) => turn.turn_id === frame.turn_id ? {
+          ...turn,
+          status: update.status as AgentTurnSummary["status"],
+          final_message: update.final_message ?? turn.final_message,
+          error_message: update.error_message,
+          terminal_reason: update.terminal_reason,
+        } : turn);
+        turnsRef.current = nextTurns;
+        setTurns(nextTurns);
+        const detail = detailsRef.current.get(frame.turn_id);
+        if (detail == null) {
+          reconcile = true;
+        } else {
+          const nextDetails = new Map(detailsRef.current);
+          nextDetails.set(frame.turn_id, {
+            ...detail,
+            turn: {
+              ...detail.turn,
+              status: update.status as AgentTurnSummary["status"],
+              final_message: update.final_message ?? detail.turn.final_message,
+              error_message: update.error_message,
+              terminal_reason: update.terminal_reason,
+            },
+          });
+          detailsRef.current = nextDetails;
+          setDetails(nextDetails);
+        }
+        if (update.status !== "running" && update.status !== "waiting") reconcile = true;
+      }
+
+      if (incoming != null) {
+        const detail = detailsRef.current.get(frame.turn_id);
+        if (detail == null) {
+          reconcile = true;
+        } else if (!detail.events.some((event) => event.id === incoming.id)) {
+          const maxId = detail.events.reduce((maximum, event) => Math.max(maximum, event.id), 0);
+          if (incoming.id <= maxId) {
+            reconcile = true;
+          } else {
+            const nextDetails = new Map(detailsRef.current);
+            nextDetails.set(frame.turn_id, { ...detail, events: [...detail.events, incoming] });
+            detailsRef.current = nextDetails;
+            setDetails(nextDetails);
+          }
+        }
+      }
+      if (reconcile) requestFrameRefresh(activationVersion);
+    };
+    return transport.subscribeAgentTurnEvents(applyFrame);
+  }, [
+    activationIsCurrent,
+    instance.activation_generation,
+    instance.instance_id,
+    instance.project_id,
+    requestFrameRefresh,
+    transport,
+  ]);
+
+  useEffect(() => transport.subscribeResourcesInvalidated(() => {
+    proposalDiffsRef.current = new Map();
+    setProposalDiffs(new Map());
+  }), [
+    instance.activation_generation,
+    instance.instance_id,
+    instance.project_id,
     transport,
   ]);
 
@@ -606,6 +844,82 @@ export function AgentSurfaceView({
       endMutation(mutation);
     }
   };
+  const storeProposalDiff = (key: string, state: AgentProposalDiffState | undefined) => {
+    const next = new Map(proposalDiffsRef.current);
+    if (state == null) next.delete(key);
+    else next.set(key, state);
+    proposalDiffsRef.current = next;
+    setProposalDiffs(next);
+  };
+  const loadProposalDiff = async (
+    turn: AgentTurnSummary,
+    eventId: number,
+    proposal: AgentFileProposal,
+  ) => {
+    const key = `${turn.turn_id}:${eventId}`;
+    if (proposalDiffsRef.current.has(key) || !turnMutationIsAvailable(turn)) return;
+    const activationVersion = activationVersionRef.current;
+    storeProposalDiff(key, { status: "loading" });
+    try {
+      if (proposal.operation === "create") {
+        if (activationIsCurrent(activationVersion) && turnMutationIsAvailable(turn)) {
+          storeProposalDiff(key, {
+            status: "ready",
+            before: "",
+            expected_disk_sha256: null,
+          });
+        }
+        return;
+      }
+      const registry = await transport.loadResources();
+      const matches = (candidate: {
+        readonly resource_provider_id: string;
+        readonly resource_kind: string;
+        readonly resource_id: string;
+      }) => candidate.resource_provider_id === "rho.project-files"
+        && candidate.resource_kind === "project_file"
+        && candidate.resource_id === proposal.path;
+      let descriptor = registry.resources.find(matches);
+      if (descriptor == null) {
+        const resolved = await transport.resolveResource({
+          project_id: registry.project_id,
+          resource_provider_id: "rho.project-files",
+          resource_kind: "project_file",
+          resource_id: proposal.path,
+          expected_project_revision: registry.project_revision,
+          expected_snapshot_revision: registry.snapshot_revision,
+        });
+        descriptor = resolved.resources.find(matches);
+      }
+      if (descriptor == null || descriptor.status !== "ready" || descriptor.content_sha256 == null) {
+        if (activationIsCurrent(activationVersion)) storeProposalDiff(key, { status: "unavailable" });
+        return;
+      }
+      const content = await transport.readResource({
+        target: {
+          project_id: registry.project_id,
+          resource_provider_id: descriptor.resource_provider_id,
+          resource_kind: descriptor.resource_kind,
+          resource_id: descriptor.resource_id,
+          expected_project_revision: registry.project_revision,
+          expected_resource_revision: descriptor.resource_revision,
+        },
+        consistency: "shared_document",
+      });
+      if (activationIsCurrent(activationVersion) && turnMutationIsAvailable(turn)) {
+        storeProposalDiff(key, {
+          status: "ready",
+          before: content.content,
+          expected_disk_sha256: descriptor.content_sha256,
+        });
+      }
+    } catch (error: unknown) {
+      if (activationIsCurrent(activationVersion)) {
+        reportError(error);
+        storeProposalDiff(key, { status: "unavailable" });
+      }
+    }
+  };
   const pinTurn = async (turn: AgentTurnSummary) => {
     if (!turnMutationIsAvailable(turn)) return;
     const activationVersion = activationVersionRef.current;
@@ -661,25 +975,73 @@ export function AgentSurfaceView({
       await reviewContext();
       return;
     }
+    const request: RunAgentRequest = {
+      prompt,
+      mode: current.mode,
+      task_kind: "agent_turn",
+      model_id: null,
+      auto_approve: current.mode === "act" && current.auto_approve,
+      editor_context: null,
+      conversation_id: current.conversation_id,
+      runtime_output_context: runtimeSnapshot,
+      context_plan_digest: reviewedPlan?.plan_digest ?? null,
+    };
+    const turnActive = turnsRef.current.some((turn) =>
+      turn.conversation_id === current.conversation_id
+      && (turn.status === "running" || turn.status === "waiting"));
+    const conversationQueued = current.conversation_id != null && queueRef.current.some(
+      (item) => item.conversation_id === current.conversation_id,
+    );
+    if (current.conversation_id != null && (turnActive || conversationQueued || dispatchingRef.current)) {
+      queueSequenceRef.current += 1;
+      const item: AgentQueueItem = {
+        id: `queue-${queueSequenceRef.current}`,
+        conversation_id: current.conversation_id,
+        prompt,
+        request,
+        queued_at: new Date().toISOString(),
+      };
+      const nextQueue = [...queueRef.current, item];
+      queueRef.current = nextQueue;
+      setQueue(nextQueue);
+      dispatchHaltedRef.current = false;
+      const next = { ...current, composer: "" };
+      viewRef.current = next;
+      setView(next);
+      void persist(next).catch(reportError);
+      runtimeOutputContextRef.current = null;
+      setRuntimeOutputContext(null);
+      setContextPreview(null);
+      return;
+    }
     const mutation = beginMutation("agent-turn-workflow");
     if (mutation == null) return;
     refreshGenerationRef.current += 1;
+    let acceptedConversationId: string | null = null;
+    const adoptAcceptedConversation = (conversationId: string) => {
+      acceptedConversationId = conversationId;
+      if (!activationIsCurrent(activationVersion)) return;
+      refreshGenerationRef.current += 1;
+      const accepted = { ...viewRef.current, conversation_id: conversationId, composer: "" };
+      viewRef.current = accepted;
+      setView(accepted);
+      const pendingValidation: AgentConversationValidation = {
+        conversationId,
+        status: "pending",
+      };
+      conversationValidationRef.current = pendingValidation;
+      setConversationValidation(pendingValidation);
+      runtimeOutputContextRef.current = null;
+      setRuntimeOutputContext(null);
+      setContextPreview(null);
+    };
     try {
-      const next = await runConversation(current, {
-        prompt,
-        mode: current.mode,
-        task_kind: "agent_turn",
-        model_id: null,
-        auto_approve: current.mode === "act" && current.auto_approve,
-        editor_context: null,
-        conversation_id: current.conversation_id,
-        runtime_output_context: runtimeSnapshot,
-        context_plan_digest: reviewedPlan?.plan_digest ?? null,
-      });
+      const next = await runConversation(current, request, adoptAcceptedConversation);
       if (!activationIsCurrent(activationVersion)) return;
       refreshGenerationRef.current += 1;
       viewRef.current = next;
       setView(next);
+      runtimeOutputContextRef.current = null;
       setRuntimeOutputContext(null);
       setContextPreview(null);
       await refreshCurrent(activationVersion, next.conversation_id);
@@ -688,7 +1050,10 @@ export function AgentSurfaceView({
         reportError(error);
         refreshGenerationRef.current += 1;
         try {
-          await refreshCurrent(activationVersion, viewRef.current.conversation_id);
+          await refreshCurrent(
+            activationVersion,
+            acceptedConversationId ?? viewRef.current.conversation_id,
+          );
         } catch (refreshError: unknown) {
           if (activationIsCurrent(activationVersion)) reportError(refreshError);
         }
@@ -697,6 +1062,109 @@ export function AgentSurfaceView({
       endMutation(mutation);
     }
   };
+  const cancelQueued = (id: string) => {
+    const next = queueRef.current.filter((item) => item.id !== id);
+    queueRef.current = next;
+    setQueue(next);
+    dispatchHaltedRef.current = false;
+  };
+  const moveQueuedUp = (id: string) => {
+    const index = queueRef.current.findIndex((item) => item.id === id);
+    if (index < 0) return;
+    const conversationId = queueRef.current[index]!.conversation_id;
+    let previous = index - 1;
+    while (previous >= 0 && queueRef.current[previous]!.conversation_id !== conversationId) previous -= 1;
+    if (previous < 0) return;
+    const next = [...queueRef.current];
+    [next[previous], next[index]] = [next[index]!, next[previous]!];
+    queueRef.current = next;
+    setQueue(next);
+    dispatchHaltedRef.current = false;
+  };
+
+  useEffect(() => {
+    const activationVersion = activationVersionRef.current;
+    const current = viewRef.current;
+    if (dispatchingRef.current || dispatchHaltedRef.current || dispatchReconcileRef.current) return;
+    if (mutationRef.current != null || health?.state !== "ready" || !conversationRequestIsAvailable(current)) return;
+    if (current.conversation_id == null) return;
+    if (turnsRef.current.some((turn) => turn.conversation_id === current.conversation_id
+      && (turn.status === "running" || turn.status === "waiting"))) return;
+    const headIndex = queueRef.current.findIndex(
+      (item) => item.conversation_id === current.conversation_id,
+    );
+    if (headIndex < 0) return;
+    const head = queueRef.current[headIndex]!;
+    const mutation = beginMutation("agent-queue-dispatch");
+    if (mutation == null) return;
+    refreshGenerationRef.current += 1;
+    dispatchingRef.current = true;
+    const remaining = [...queueRef.current];
+    remaining.splice(headIndex, 1);
+    queueRef.current = remaining;
+    setQueue(remaining);
+    let accepted = false;
+    void (async () => {
+      try {
+        const currentAtDispatch = viewRef.current;
+        const preservedComposer = currentAtDispatch.composer;
+        const next = await runConversation(currentAtDispatch, head.request, () => {
+          accepted = true;
+        });
+        accepted = true;
+        if (!activationIsCurrent(activationVersion)) return;
+        const adopted = { ...next, composer: preservedComposer };
+        viewRef.current = adopted;
+        setView(adopted);
+        setContextPreview(null);
+        if (preservedComposer !== next.composer) {
+          try {
+            await persist(adopted);
+          } catch (error: unknown) {
+            if (activationIsCurrent(activationVersion)) reportError(error);
+          }
+        }
+        try {
+          await refreshCurrent(activationVersion, head.conversation_id);
+        } catch (error: unknown) {
+          if (activationIsCurrent(activationVersion)) {
+            dispatchReconcileRef.current = true;
+            reportError(error);
+          }
+        }
+      } catch (error: unknown) {
+        if (!activationIsCurrent(activationVersion)) return;
+        if (!accepted) {
+          const restored = [...queueRef.current];
+          restored.splice(Math.min(headIndex, restored.length), 0, head);
+          queueRef.current = restored;
+          setQueue(restored);
+          dispatchHaltedRef.current = true;
+        } else {
+          dispatchReconcileRef.current = true;
+          requestFrameRefresh(activationVersion);
+        }
+        reportError(error);
+      } finally {
+        dispatchingRef.current = false;
+        endMutation(mutation);
+      }
+    })();
+  }, [
+    activationIsCurrent,
+    busy,
+    conversationValidation.conversationId,
+    conversationValidation.status,
+    health?.state,
+    persist,
+    queue,
+    refreshCurrent,
+    reportError,
+    requestFrameRefresh,
+    runConversation,
+    turns,
+    view.conversation_id,
+  ]);
   const displayMode = instance.mode_id ?? "conversation";
   const chatRoute = llmSettings?.capability_routes.find((route) => route.capability === "agent.chat");
   const chatModelLabel = chatRoute?.model_display_name
@@ -717,6 +1185,10 @@ export function AgentSurfaceView({
     else group.push(model);
   }
   const activeTurn = turns.find((turn) => turn.status === "running" || turn.status === "waiting");
+  const currentQueue = view.conversation_id == null
+    ? []
+    : queue.filter((item) => item.conversation_id === view.conversation_id);
+  const postureLabel = view.auto_approve ? "Auto-approve tools" : "Ask every time";
   const validationMatchesView = conversationValidation.conversationId === view.conversation_id;
   const conversationValidationPending = !validationMatchesView || conversationValidation.status === "pending";
   const selectedConversationUnavailable = validationMatchesView
@@ -768,7 +1240,7 @@ export function AgentSurfaceView({
     }
   };
   const retryRefresh = async () => {
-    if (mutationRef.current != null || conversationValidationRef.current.status === "pending") return;
+    if (mutationRef.current != null || loading) return;
     const activationVersion = activationVersionRef.current;
     try {
       await refreshCurrent(activationVersion, viewRef.current.conversation_id);
@@ -849,6 +1321,7 @@ export function AgentSurfaceView({
           {conversations.map((conversation) => (
             <option value={conversation.conversation_id} key={conversation.conversation_id}>
               {conversation.title} · {conversation.turn_count}
+              {conversation.status === "waiting" ? " · Needs attention" : ""}
             </option>
           ))}
         </select>
@@ -913,7 +1386,7 @@ export function AgentSurfaceView({
             <span>{refreshError}</span>
             <button
               type="button"
-              disabled={busy || conversationValidationRef.current.status === "pending"}
+              disabled={busy || loading}
               onClick={() => void retryRefresh()}
             >Retry refresh</button>
           </div>}
@@ -993,6 +1466,7 @@ export function AgentSurfaceView({
                   const key = `${turn.turn_id}:${event.id}`;
                   const outcome = detail == null ? null : agentFileProposalOutcome(detail, event.id);
                   const rejected = view.file_decisions[key] === "rejected";
+                  const diffState = proposalDiffs.get(key);
                   return (
                     <section className="rho-agent-file-proposal" data-proposal-key={key} key={key}>
                       <header>
@@ -1014,7 +1488,19 @@ export function AgentSurfaceView({
                               }
                               void (async () => {
                                 try {
-                                  const { response, beforeContent } = await applyFileProposal(turn, event.id, proposal);
+                                  const review = diffState?.status === "ready"
+                                    && (proposal.operation === "append" || proposal.operation === "create")
+                                    ? {
+                                        before_content: diffState.before,
+                                        expected_disk_sha256: diffState.expected_disk_sha256,
+                                      }
+                                    : undefined;
+                                  const { response, beforeContent } = await applyFileProposal(
+                                    turn,
+                                    event.id,
+                                    proposal,
+                                    review,
+                                  );
                                   if (!activationIsCurrent(activationVersion)) return;
                                   if (response.after_sha256 != null) {
                                     setFileUndo({
@@ -1026,9 +1512,13 @@ export function AgentSurfaceView({
                                       created: proposal.operation === "create",
                                     });
                                   }
+                                  storeProposalDiff(key, undefined);
                                   await refreshCurrent(activationVersion);
                                 } catch (error: unknown) {
-                                  if (activationIsCurrent(activationVersion)) reportError(error);
+                                  if (activationIsCurrent(activationVersion)) {
+                                    storeProposalDiff(key, undefined);
+                                    reportError(error);
+                                  }
                                 } finally {
                                   endMutation(mutation);
                                 }
@@ -1066,9 +1556,13 @@ export function AgentSurfaceView({
                           }}>Undo applied edit</button>
                         )}
                       </header>
-                      <details className="rho-agent-file-content">
-                        <summary>Proposed content</summary>
-                        <pre>{proposal.content}</pre>
+                      <details className="rho-agent-file-content" onToggle={(toggleEvent) => {
+                        if (toggleEvent.currentTarget.open) {
+                          void loadProposalDiff(turn, event.id, proposal);
+                        }
+                      }}>
+                        <summary onClick={() => void loadProposalDiff(turn, event.id, proposal)}>Diff</summary>
+                        <AgentProposalDiff proposal={proposal} state={diffState} />
                       </details>
                     </section>
                   );
@@ -1111,6 +1605,32 @@ export function AgentSurfaceView({
               onStop={stopActiveTurn}
             />
           )}
+          {currentQueue.length > 0 && (
+            <ol className="rho-agent-queue" aria-label="Queued follow-ups">
+              {currentQueue.map((item, index) => (
+                <li className="rho-agent-queue-item" key={item.id}>
+                  <span className="rho-agent-queue-label">Queued</span>
+                  <span className="rho-agent-queue-prompt" title={item.prompt}>{item.prompt}</span>
+                  <span className="rho-agent-queue-actions">
+                    {index > 0 && (
+                      <button
+                        type="button"
+                        aria-label="Move queued message up"
+                        disabled={busy}
+                        onClick={() => moveQueuedUp(item.id)}
+                      >↑</button>
+                    )}
+                    <button
+                      type="button"
+                      aria-label="Cancel queued message"
+                      disabled={busy}
+                      onClick={() => cancelQueued(item.id)}
+                    >×</button>
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
           {runtimeOutputContext != null && <div className="rho-agent-context-chip" role="status">
             <div>
               <strong>Runtime output</strong>
@@ -1140,15 +1660,6 @@ export function AgentSurfaceView({
             }}
             placeholder="Ask Rho about this project…"
           />
-          {view.mode === "act" && <label className="rho-agent-auto-approve">
-            <input
-              type="checkbox"
-              checked={view.auto_approve}
-              disabled={viewStateWriteBlocked}
-              onChange={(event) => commitView((current) => ({ ...current, auto_approve: event.target.checked }))}
-            />
-            Auto-approve project tools for this conversation
-          </label>}
           <div className="rho-agent-context-controls">
             <button type="button" disabled={busy || contextReviewBusy || conversationRequestBlocked || health?.state !== "ready" || !view.composer.trim()} onClick={() => void reviewContext()}>
               {contextReviewBusy ? "Reviewing…" : "Review context"}
@@ -1168,6 +1679,50 @@ export function AgentSurfaceView({
                 >{mode}</button>
               ))}
             </div>
+            <details className="rho-agent-posture-menu">
+              <summary
+                aria-label={`Permission posture: ${postureLabel}`}
+                aria-disabled={viewStateWriteBlocked}
+                onClick={(event) => {
+                  if (viewStateWriteBlocked) event.preventDefault();
+                }}
+              ><span>{postureLabel}</span></summary>
+              <div role="menu" aria-label="Permission posture choices">
+                {view.mode !== "act" ? (<>
+                  <div className="rho-agent-posture-option">
+                    <button
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked="true"
+                      disabled={viewStateWriteBlocked}
+                      onClick={(event) => {
+                        event.currentTarget.closest("details")!.open = false;
+                      }}
+                    >Ask every time</button>
+                    <small>Every tool action waits for your approval.</small>
+                  </div>
+                  <p className="rho-agent-posture-note">Auto-approve is available in Act mode.</p>
+                </>) : POSTURE_OPTIONS.map((option) => {
+                  const active = (option.id === "auto") === view.auto_approve;
+                  return (
+                    <div className="rho-agent-posture-option" key={option.id}>
+                      <button
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={active}
+                        className={option.id === "auto" ? "rho-agent-auto-approve" : undefined}
+                        disabled={viewStateWriteBlocked}
+                        onClick={(event) => {
+                          event.currentTarget.closest("details")!.open = false;
+                          commitView((current) => ({ ...current, auto_approve: option.id === "auto" }));
+                        }}
+                      >{option.label}</button>
+                      <small>{option.hint}</small>
+                    </div>
+                  );
+                })}
+              </div>
+            </details>
             <small className="rho-agent-mode-hint">{AGENT_MODE_HINTS[view.mode]}</small>
             <details className="rho-agent-model-menu">
               <summary aria-label={`Chat model: ${chatModelLabel}`} aria-busy={modelSwitchBusy} aria-disabled={busy || modelSwitchBusy} onClick={(event) => {

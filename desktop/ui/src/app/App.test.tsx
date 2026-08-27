@@ -1660,7 +1660,7 @@ describe("Studio foundation app", () => {
     expect(container.querySelector(".rho-action-error")).toBeNull();
   });
 
-  it("keeps a no-conversation Agent Send truthful across revisioned persist failure and recovery", async () => {
+  it("keeps an accepted no-conversation Agent Send exactly once across persist failure and recovery", async () => {
     const transport = createMockUiKernelTransport();
     const initialKernel = await transport.loadSnapshot();
     transport.publish({
@@ -1783,8 +1783,8 @@ describe("Studio foundation app", () => {
     });
     expect(run).toHaveBeenCalledOnce();
     expect(run.mock.calls[0]?.[0].conversation_id).toBeNull();
-    expect(currentPicker().value).toBe("");
-    expect(currentComposer().value).toBe("Start a durable Agent task");
+    expect(currentPicker().value).toBe(createdConversationIds[0]);
+    expect(currentComposer().value).toBe("");
     const firstPersist = update.mock.calls.find(([request]) => (
       request.target.instance_id === initialAgent.instance_id
       && request.mutation.kind === "set_view_state"
@@ -1803,30 +1803,32 @@ describe("Studio foundation app", () => {
       await vi.waitFor(() => expect(container.querySelector(".rho-action-error")?.textContent)
         .toContain("Agent Send selection persist stale for test."));
     });
-    expect(currentPicker().value).toBe("");
-    expect(currentComposer().value).toBe("Start a durable Agent task");
+    expect(currentPicker().value).toBe(createdConversationIds[0]);
+    expect(currentComposer().value).toBe("");
     expect([...currentPicker().options].map((option) => option.value))
       .toContain(createdConversationIds[0]);
     expect((await transport.loadSurfaces()).catalog.instances.find(
       (instance) => instance.instance_id === initialAgent.instance_id,
     )?.view_state).toMatchObject({ conversation_id: null });
 
+    const sendAfterFailure = currentAgent().querySelector<HTMLButtonElement>(
+      ".rho-agent-context-controls .rho-primary-action",
+    )!;
+    expect(sendAfterFailure.disabled).toBe(true);
     await act(async () => {
-      currentAgent().querySelector<HTMLButtonElement>(
-        ".rho-agent-context-controls .rho-primary-action",
-      )!.click();
-      await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(2));
-      await vi.waitFor(() => expect(currentPicker().value).toBe(createdConversationIds[1]));
+      sendAfterFailure.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await settle();
     });
+    expect(run).toHaveBeenCalledOnce();
     expect(update.mock.calls.filter(([request]) => (
       request.target.instance_id === initialAgent.instance_id
       && request.mutation.kind === "set_view_state"
       && typeof (request.mutation.view_state as { conversation_id?: unknown }).conversation_id
         === "string"
-    ))).toHaveLength(2);
+    ))).toHaveLength(1);
     expect(currentComposer().value).toBe("");
-    expect(container.querySelector(".rho-action-error")).toBeNull();
+    expect(container.querySelector(".rho-action-error")?.textContent)
+      .toContain("Agent Send selection persist stale for test.");
   });
 
   it.each([

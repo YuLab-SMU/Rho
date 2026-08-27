@@ -232,3 +232,165 @@ pub(crate) fn decode_approval_request(row: &Row<'_>) -> rusqlite::Result<Approva
         continuation_outcome: row.get(15)?,
     })
 }
+
+/// Live projection of one durable Agent turn mutation for UI subscribers.
+///
+/// Frames are notifications, never the source of truth. Every mutable text
+/// field is byte-bounded and the complete serialized frame is constrained to
+/// a small budget. A subscriber that sees `payload_truncated` must refetch the
+/// canonical turn detail.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct AgentTurnUpdateFrame {
+    pub status: String,
+    pub final_message: Option<String>,
+    pub error_message: Option<String>,
+    pub terminal_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct AgentTurnEventFrame {
+    pub project_root: String,
+    pub turn_id: String,
+    pub event: Option<AgentTurnEvent>,
+    pub turn_update: Option<AgentTurnUpdateFrame>,
+    pub payload_truncated: bool,
+}
+
+pub(crate) const AGENT_TURN_FRAME_MAX_BYTES: usize = 32 * 1024;
+// 2 KiB per identity leaves enough room below the 32 KiB total budget even
+// when JSON escaping expands every byte into a six-byte escape sequence.
+const AGENT_TURN_FRAME_ID_MAX_BYTES: usize = 2 * 1024;
+const AGENT_TURN_FRAME_FIELD_MAX_BYTES: usize = 4 * 1024;
+
+fn bound_frame_text(value: String, max_bytes: usize) -> (String, bool) {
+    if value.len() <= max_bytes {
+        return (value, false);
+    }
+    let mut end = max_bytes;
+    while end > 0 && !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    (value[..end].to_string(), true)
+}
+
+fn bound_optional_frame_text(value: Option<String>, max_bytes: usize) -> (Option<String>, bool) {
+    match value {
+        Some(value) => {
+            let (value, truncated) = bound_frame_text(value, max_bytes);
+            (Some(value), truncated)
+        }
+        None => (None, false),
+    }
+}
+
+impl AgentTurnEventFrame {
+    pub fn from_event(project_root: String, event: AgentTurnEvent) -> Self {
+        let (project_root, root_truncated) =
+            bound_frame_text(project_root, AGENT_TURN_FRAME_ID_MAX_BYTES);
+        let (turn_id, turn_id_truncated) =
+            bound_frame_text(event.turn_id.clone(), AGENT_TURN_FRAME_ID_MAX_BYTES);
+        let (event_turn_id, event_turn_id_truncated) =
+            bound_frame_text(event.turn_id, AGENT_TURN_FRAME_ID_MAX_BYTES);
+        let (timestamp, timestamp_truncated) =
+            bound_frame_text(event.timestamp, AGENT_TURN_FRAME_FIELD_MAX_BYTES);
+        let (event_type, event_type_truncated) =
+            bound_frame_text(event.event_type, AGENT_TURN_FRAME_FIELD_MAX_BYTES);
+        let (title, title_truncated) =
+            bound_frame_text(event.title, AGENT_TURN_FRAME_FIELD_MAX_BYTES);
+        let (body, body_truncated) =
+            bound_optional_frame_text(event.body, AGENT_TURN_FRAME_FIELD_MAX_BYTES);
+        let (status, status_truncated) =
+            bound_frame_text(event.status, AGENT_TURN_FRAME_FIELD_MAX_BYTES);
+        let (tool, tool_truncated) =
+            bound_optional_frame_text(event.tool, AGENT_TURN_FRAME_FIELD_MAX_BYTES);
+        let (request_id, request_id_truncated) =
+            bound_optional_frame_text(event.request_id, AGENT_TURN_FRAME_FIELD_MAX_BYTES);
+        let (code, code_truncated) =
+            bound_optional_frame_text(event.code, AGENT_TURN_FRAME_FIELD_MAX_BYTES);
+        let (details_json, details_truncated) =
+            bound_frame_text(event.details_json, AGENT_TURN_FRAME_FIELD_MAX_BYTES);
+        let payload_truncated = root_truncated
+            || turn_id_truncated
+            || event_turn_id_truncated
+            || timestamp_truncated
+            || event_type_truncated
+            || title_truncated
+            || body_truncated
+            || status_truncated
+            || tool_truncated
+            || request_id_truncated
+            || code_truncated
+            || details_truncated;
+        Self {
+            project_root,
+            turn_id,
+            event: Some(AgentTurnEvent {
+                id: event.id,
+                turn_id: event_turn_id,
+                timestamp,
+                event_type,
+                title,
+                body,
+                status,
+                tool,
+                request_id,
+                code,
+                details_json,
+            }),
+            turn_update: None,
+            payload_truncated,
+        }
+        .within_budget()
+    }
+
+    pub fn from_finish(project_root: String, finish: &AgentTurnFinish) -> Self {
+        let (project_root, root_truncated) =
+            bound_frame_text(project_root, AGENT_TURN_FRAME_ID_MAX_BYTES);
+        let (turn_id, turn_id_truncated) =
+            bound_frame_text(finish.turn_id.clone(), AGENT_TURN_FRAME_ID_MAX_BYTES);
+        let (status, status_truncated) =
+            bound_frame_text(finish.status.clone(), AGENT_TURN_FRAME_FIELD_MAX_BYTES);
+        let (final_message, final_truncated) = bound_optional_frame_text(
+            finish.final_message.clone(),
+            AGENT_TURN_FRAME_FIELD_MAX_BYTES,
+        );
+        let (error_message, error_truncated) = bound_optional_frame_text(
+            finish.error_message.clone(),
+            AGENT_TURN_FRAME_FIELD_MAX_BYTES,
+        );
+        let (terminal_reason, terminal_truncated) = bound_optional_frame_text(
+            finish.terminal_reason.clone(),
+            AGENT_TURN_FRAME_FIELD_MAX_BYTES,
+        );
+        Self {
+            project_root,
+            turn_id,
+            event: None,
+            turn_update: Some(AgentTurnUpdateFrame {
+                status,
+                final_message,
+                error_message,
+                terminal_reason,
+            }),
+            payload_truncated: root_truncated
+                || turn_id_truncated
+                || status_truncated
+                || final_truncated
+                || error_truncated
+                || terminal_truncated,
+        }
+        .within_budget()
+    }
+
+    fn within_budget(mut self) -> Self {
+        let over_budget = serde_json::to_vec(&self)
+            .map(|serialized| serialized.len() > AGENT_TURN_FRAME_MAX_BYTES)
+            .unwrap_or(true);
+        if over_budget {
+            self.event = None;
+            self.turn_update = None;
+            self.payload_truncated = true;
+        }
+        self
+    }
+}

@@ -4,6 +4,8 @@
    which the bundler orders before foundation.css, so every selector is scoped
    under `section.rho-agent-surface` to stay order-independent. */
 
+@layer reset, tokens, base, components, workbench, surfaces;
+
 @layer surfaces {
   /* --- Toolbar: conversation context + quiet secondary actions --------------- */
   section.rho-agent-surface .rho-agent-toolbar { align-items: center; }
@@ -159,6 +161,30 @@
   }
   section.rho-agent-surface .rho-agent-composer textarea:focus-visible { outline: none; }
 
+  section.rho-agent-surface .rho-agent-queue {
+    grid-column: 1 / -1;
+    display: grid;
+    gap: var(--rho-space-1);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  section.rho-agent-surface .rho-agent-queue-item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--rho-space-2);
+    padding: var(--rho-space-1) var(--rho-space-2);
+    border: var(--rho-border);
+    border-radius: var(--rho-radius-1);
+    background: var(--rho-fill);
+    font-size: var(--rho-text-caption);
+  }
+  section.rho-agent-surface .rho-agent-queue-label { color: var(--rho-muted); font-weight: var(--rho-weight-semibold); text-transform: uppercase; }
+  section.rho-agent-surface .rho-agent-queue-prompt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  section.rho-agent-surface .rho-agent-queue-actions { display: flex; gap: var(--rho-space-1); }
+  section.rho-agent-surface .rho-agent-queue-actions button { min-width: var(--rho-control-small); min-height: var(--rho-control-small); padding: 0; }
+
   section.rho-agent-surface .rho-agent-context-controls { align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: var(--rho-space-2); }
   section.rho-agent-surface .rho-agent-context-controls > button { min-height: var(--rho-control-small); padding: var(--rho-space-1) var(--rho-space-3); font-size: var(--rho-text-caption); }
   /* Review context is a quiet ghost action; Send stays the only solid control. */
@@ -181,6 +207,54 @@
   section.rho-agent-surface .rho-agent-mode button:hover:not(:disabled) { border-color: transparent; color: var(--rho-ink); background: var(--rho-fill); }
   section.rho-agent-surface .rho-agent-mode button[aria-pressed="true"] { font-weight: var(--rho-weight-semibold); }
   section.rho-agent-surface .rho-agent-mode-hint { flex: 0 1 auto; min-width: 0; overflow: hidden; color: var(--rho-muted); text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+
+  section.rho-agent-surface .rho-agent-posture-menu { position: relative; flex: 0 0 auto; }
+  section.rho-agent-surface .rho-agent-posture-menu > summary {
+    display: flex;
+    align-items: center;
+    gap: var(--rho-space-1);
+    min-height: var(--rho-control-small);
+    padding: var(--rho-space-1) var(--rho-space-2);
+    border: var(--rho-border);
+    border-radius: var(--rho-radius-1);
+    color: var(--rho-ink-2);
+    background: var(--rho-paper);
+    font-size: var(--rho-text-caption);
+    list-style: none;
+    cursor: pointer;
+  }
+  section.rho-agent-surface .rho-agent-posture-menu > summary::-webkit-details-marker { display: none; }
+  section.rho-agent-surface .rho-agent-posture-menu > summary::after { content: "▾"; color: var(--rho-muted); }
+  section.rho-agent-surface .rho-agent-posture-menu > summary:hover,
+  section.rho-agent-surface .rho-agent-posture-menu[open] > summary { border-color: var(--rho-line-strong); color: var(--rho-ink); }
+  section.rho-agent-surface .rho-agent-posture-menu > div {
+    position: absolute;
+    z-index: 4;
+    bottom: calc(100% + var(--rho-space-1));
+    left: 0;
+    display: grid;
+    width: var(--rho-toolbar-popover-width);
+    max-width: calc(100cqw - var(--rho-space-7));
+    gap: var(--rho-space-1);
+    padding: var(--rho-space-1);
+    border: var(--rho-border);
+    border-radius: var(--rho-radius-1);
+    background: var(--rho-paper);
+    box-shadow: var(--rho-shadow-float);
+  }
+  section.rho-agent-surface .rho-agent-posture-option { display: grid; }
+  section.rho-agent-surface .rho-agent-posture-option > button {
+    min-height: var(--rho-control-small);
+    padding: var(--rho-space-2) var(--rho-space-3);
+    border-color: transparent;
+    color: var(--rho-ink-2);
+    background: transparent;
+    text-align: left;
+  }
+  section.rho-agent-surface .rho-agent-posture-option > button:hover:not(:disabled) { color: var(--rho-ink); background: var(--rho-fill); }
+  section.rho-agent-surface .rho-agent-posture-option > button[aria-checked="true"] { color: var(--rho-ink); font-weight: var(--rho-weight-semibold); }
+  section.rho-agent-surface .rho-agent-posture-option > small,
+  section.rho-agent-surface .rho-agent-posture-note { margin: 0; padding: 0 var(--rho-space-3) var(--rho-space-2); color: var(--rho-muted); font-size: var(--rho-text-caption); }
 
   /* Chat-model chip: revision-checked switching through the existing route. */
   section.rho-agent-surface .rho-agent-model-menu { position: relative; flex: 0 0 auto; }
@@ -263,6 +337,17 @@
   section.rho-agent-surface .rho-agent-model-menu > div > button[aria-checked="true"] { color: var(--rho-ink); font-weight: var(--rho-weight-semibold); }
   section.rho-agent-surface .rho-agent-model-menu > div > button > small { overflow: hidden; color: var(--rho-muted); font-size: var(--rho-text-caption); text-overflow: ellipsis; white-space: nowrap; }
   section.rho-agent-surface .rho-agent-model-empty { padding: var(--rho-space-2) var(--rho-space-3); color: var(--rho-muted); font-size: var(--rho-text-caption); }
+
+  section.rho-agent-surface .rho-agent-diff-note { margin: var(--rho-space-2) 0; color: var(--rho-muted); font-size: var(--rho-text-caption); }
+  section.rho-agent-surface .rho-agent-diff { margin-top: var(--rho-space-2); border: var(--rho-border); border-radius: var(--rho-radius-1); overflow: hidden; font-family: var(--rho-font-mono); font-size: var(--rho-text-caption); }
+  section.rho-agent-surface .rho-agent-diff-summary,
+  section.rho-agent-surface .rho-agent-diff-hunk-header { padding: var(--rho-space-1) var(--rho-space-2); color: var(--rho-muted); background: var(--rho-fill); }
+  section.rho-agent-surface .rho-agent-diff-gap { padding: 0 var(--rho-space-2); color: var(--rho-muted); }
+  section.rho-agent-surface .rho-agent-diff-line { display: grid; grid-template-columns: var(--rho-space-4) minmax(0, 1fr); }
+  section.rho-agent-surface .rho-agent-diff-add { background: var(--rho-ok-tint); }
+  section.rho-agent-surface .rho-agent-diff-remove { background: var(--rho-danger-tint); }
+  section.rho-agent-surface .rho-agent-diff-sign { padding-left: var(--rho-space-1); color: var(--rho-muted); user-select: none; }
+  section.rho-agent-surface .rho-agent-diff-text { min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
 
   /* The degraded banner must stay compact: the retry action wraps below the
      copy instead of crushing it to zero width on narrow surfaces. */

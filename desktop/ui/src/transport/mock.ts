@@ -90,6 +90,7 @@ import type {
   WorkspacePreparationProgressListener,
 } from "./types";
 import { MODEL_CAPABILITY_NAMES } from "./agent-settings";
+import type { AgentTurnEventFrame } from "./agent-events";
 import { INVALIDATION_TOPICS } from "./invalidation-contract";
 import type { EvidenceClaim } from "./evidence";
 import type {
@@ -203,6 +204,7 @@ export interface MockUiKernelTransport extends UiKernelTransport {
   publishResources(snapshot: ResourceRegistrySnapshot): void;
   publishUiProfile(snapshot: ProjectUiProfileSnapshot): void;
   queueRuntimeEvents(events: readonly RuntimeOutputEvent[]): void;
+  emitAgentTurnEvent(frame: AgentTurnEventFrame): void;
 }
 
 export function createMockUiKernelTransport(
@@ -759,6 +761,7 @@ export function createMockUiKernelTransport(
   const runtimeListeners = new Set<() => void>();
   const resourceListeners = new Set<() => void>();
   const agentListeners = new Set<() => void>();
+  const agentTurnEventListeners = new Set<(frame: AgentTurnEventFrame) => void>();
   const workbenchListeners = new Set<() => void>();
   const agentNow = "2026-08-22T12:00:00Z";
   const agentProjectRoot = current.project.display_path;
@@ -2917,6 +2920,14 @@ export function createMockUiKernelTransport(
     },
     async getAgentTurnDetail(turnId) {
       return structuredClone(agentDetails.get(turnId) ?? null);
+    },
+    subscribeAgentTurnEvents(listener: (frame: AgentTurnEventFrame) => void): Unsubscribe {
+      agentTurnEventListeners.add(listener);
+      return () => agentTurnEventListeners.delete(listener);
+    },
+    emitAgentTurnEvent(frame: AgentTurnEventFrame): void {
+      const snapshot = structuredClone(frame);
+      for (const listener of agentTurnEventListeners) listener(snapshot);
     },
     async loadAgentLlmSettings() {
       return structuredClone(agentLlmSettings);

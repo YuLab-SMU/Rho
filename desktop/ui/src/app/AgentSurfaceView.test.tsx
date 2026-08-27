@@ -15,6 +15,7 @@ import { createMockUiKernelTransport } from "../transport/mock";
 import {
   AgentSurfaceView,
   type AgentFileProposal,
+  type AgentFileProposalReview,
   type AgentFileUndoState,
   type AgentSurfaceViewState,
 } from "./AgentSurfaceView";
@@ -111,11 +112,13 @@ describe("Studio Agent Surface", () => {
     readonly runConversation?: (
       current: AgentSurfaceViewState,
       request: RunAgentRequest,
+      onAccepted?: (conversationId: string) => void,
     ) => Promise<AgentSurfaceViewState>;
     readonly applyFileProposal?: (
       turn: AgentTurnSummary,
       eventId: number,
       proposal: AgentFileProposal,
+      review?: AgentFileProposalReview,
     ) => Promise<{
       readonly response: AgentFileMutationResponse;
       readonly beforeContent: string;
@@ -171,6 +174,7 @@ describe("Studio Agent Surface", () => {
       readonly runConversation?: (
         current: AgentSurfaceViewState,
         request: RunAgentRequest,
+        onAccepted?: (conversationId: string) => void,
       ) => Promise<AgentSurfaceViewState>;
       readonly persist?: (viewState: AgentSurfaceViewState) => Promise<void>;
       readonly runtimeOutputContext?: RuntimeOutputReference | null;
@@ -184,8 +188,9 @@ describe("Studio Agent Surface", () => {
         await renderPersist(next);
         return next;
       });
-      const runConversation = overrides.runConversation ?? (async (current, request) => {
+      const runConversation = overrides.runConversation ?? (async (current, request, onAccepted) => {
         const response = await renderTransport.runAgent(request);
+        onAccepted?.(response.conversation_id);
         const next = { ...current, conversation_id: response.conversation_id, composer: "" };
         await renderPersist(next);
         return next;
@@ -352,13 +357,17 @@ describe("Studio Agent Surface", () => {
     expect(persist).toHaveBeenLastCalledWith(expect.objectContaining({ mode: "act", auto_approve: false }));
     expect(modeButton("act").getAttribute("aria-pressed")).toBe("true");
 
-    const autoApprove = container.querySelector<HTMLInputElement>(".rho-agent-auto-approve input")!;
+    const posture = container.querySelector<HTMLDetailsElement>(".rho-agent-posture-menu")!;
+    await click(posture.querySelector("summary")!);
+    const autoApprove = posture.querySelector<HTMLButtonElement>(".rho-agent-auto-approve")!;
     await click(autoApprove);
     expect(persist).toHaveBeenLastCalledWith(expect.objectContaining({ mode: "act", auto_approve: true }));
 
     await click(modeButton("ask"));
     expect(persist).toHaveBeenLastCalledWith(expect.objectContaining({ mode: "ask", auto_approve: false }));
     expect(container.querySelector(".rho-agent-auto-approve")).toBeNull();
+    expect(container.querySelector(".rho-agent-posture-note")!.textContent)
+      .toContain("Auto-approve is available in Act mode");
   });
 
   it("keeps context capacity behind its disclosure and rejects fractional token counts", async () => {
@@ -878,10 +887,543 @@ describe("Studio Agent Surface", () => {
       conversation_id: "agent-conversation:mock-shared",
       runtime_output_context: null,
       context_plan_digest: null,
-    });
+    }, expect.any(Function));
     expect(rawRunAgent).not.toHaveBeenCalled();
     expect(setRuntimeOutputContext).toHaveBeenCalledWith(null);
     expect(container.querySelector<HTMLTextAreaElement>(".rho-agent-composer textarea")!.value).toBe("");
+  });
+
+  it("projects scoped live frames and reconciles truncated and terminal payloads from canonical detail", async () => {
+    const transport = createMockUiKernelTransport();
+    const conversation = makeConversation({
+      conversation_id: "agent-conversation:mock-shared",
+      project_root: "/mock/project",
+    });
+    let currentTurn = makeTurn({
+      turn_id: "agent-turn:live",
+      status: "running",
+      finished_at: null,
+      terminal_reason: null,
+      prompt_preview: "Inspect the runtime logs",
+    });
+    const firstEvent: AgentTurnDetail["events"][number] = {
+      id: 1,
+      turn_id: currentTurn.turn_id,
+      timestamp: mockNow,
+      event_type: "tool.call_completed",
+      title: "Read project metadata",
+      body: null,
+      status: "completed",
+      tool: "read_project_metadata",
+      request_id: null,
+      code: null,
+      details_json: "{}",
+    };
+    let canonicalEvents: AgentTurnDetail["events"] = [];
+    const listConversations = vi.fn(async () => [conversation]);
+    transport.listAgentConversations = listConversations;
+    transport.listAgentTurns = vi.fn(async () => [currentTurn]);
+    transport.getAgentTurnDetail = vi.fn(async () => makeDetail(currentTurn, {
+      events: canonicalEvents,
+    }));
+    const { container } = await renderAgent({ transport });
+    const baselineRefreshCalls = listConversations.mock.calls.length;
+
+    await act(async () => {
+      transport.emitAgentTurnEvent({
+        project_root: currentTurn.project_root,
+        turn_id: currentTurn.turn_id,
+        event: firstEvent,
+        turn_update: null,
+        payload_truncated: false,
+      });
+      await settle();
+    });
+    expect(container.querySelector('[data-turn-id="agent-turn:live"]')!.textContent)
+      .toContain("Read project metadata");
+    expect(listConversations).toHaveBeenCalledTimes(baselineRefreshCalls);
+
+    await act(async () => {
+      transport.emitAgentTurnEvent({
+        project_root: "/mock/other-project",
+        turn_id: currentTurn.turn_id,
+        event: { ...firstEvent, id: 2, title: "Other project secret" },
+        turn_update: null,
+        payload_truncated: false,
+      });
+      await settle();
+    });
+    expect(container.textContent).not.toContain("Other project secret");
+
+    const canonicalEvent = { ...firstEvent, id: 3, title: "Canonical complete payload" };
+    canonicalEvents = [firstEvent, canonicalEvent];
+    await act(async () => {
+      transport.emitAgentTurnEvent({
+        project_root: currentTurn.project_root,
+        turn_id: currentTurn.turn_id,
+        event: { ...canonicalEvent, title: "CUT" },
+        turn_update: null,
+        payload_truncated: true,
+      });
+      await settle();
+    });
+    expect(listConversations.mock.calls.length).toBeGreaterThan(baselineRefreshCalls);
+    expect(container.textContent).toContain("Canonical complete payload");
+    expect(container.textContent).not.toContain("CUT");
+
+    currentTurn = {
+      ...currentTurn,
+      status: "completed",
+      finished_at: mockNow,
+      final_message: "Done live.",
+      terminal_reason: "completed",
+    };
+    await act(async () => {
+      transport.emitAgentTurnEvent({
+        project_root: currentTurn.project_root,
+        turn_id: currentTurn.turn_id,
+        event: null,
+        turn_update: {
+          status: "completed",
+          final_message: "Done live.",
+          error_message: null,
+          terminal_reason: "completed",
+        },
+        payload_truncated: false,
+      });
+      await settle();
+    });
+    expect(container.querySelector('[data-turn-id="agent-turn:live"]')!.textContent)
+      .toContain("Done live.");
+  });
+
+  it.each(["approval.requested", "environment.requested"])(
+    "reconciles %s before the backend waits for a response",
+    async (eventType) => {
+      const transport = createMockUiKernelTransport();
+      const conversation = makeConversation({
+        conversation_id: "agent-conversation:mock-shared",
+        project_root: "/mock/project",
+      });
+      let currentTurn = makeTurn({
+        turn_id: `agent-turn:${eventType}`,
+        status: "running",
+        finished_at: null,
+        terminal_reason: null,
+      });
+      let currentDetail = makeDetail(currentTurn);
+      const listConversations = vi.fn(async () => [conversation]);
+      const getTurnDetail = vi.fn(async () => currentDetail);
+      transport.listAgentConversations = listConversations;
+      transport.listAgentTurns = vi.fn(async () => [currentTurn]);
+      transport.getAgentTurnDetail = getTurnDetail;
+      const { container } = await renderAgent({ transport });
+      const baselineRefreshCalls = listConversations.mock.calls.length;
+      const approval = {
+        request_id: "approval-request:live",
+        turn_id: currentTurn.turn_id,
+        project_root: currentTurn.project_root,
+        tool: "execute_r_code",
+        policy: "approval_required",
+        status: "waiting",
+        decision: null,
+        reason: null,
+        arguments_json: JSON.stringify({ code: "install.packages('demo')" }),
+        code: "install.packages('demo')",
+        workspace_id: "workspace:mock",
+        state_revision: 4,
+        project_revision: 1,
+        requested_at: mockNow,
+        responded_at: null,
+        continuation_outcome: null,
+      } as const;
+      currentTurn = { ...currentTurn, status: "waiting" };
+      currentDetail = makeDetail(currentTurn, {
+        approvals: eventType === "approval.requested" ? [approval] : [],
+      });
+
+      await act(async () => {
+        transport.emitAgentTurnEvent({
+          project_root: currentTurn.project_root,
+          turn_id: currentTurn.turn_id,
+          event: {
+            id: 20,
+            turn_id: currentTurn.turn_id,
+            timestamp: mockNow,
+            event_type: eventType,
+            title: "Review required",
+            body: null,
+            status: "running",
+            tool: "execute_r_code",
+            request_id: approval.request_id,
+            code: approval.code,
+            details_json: "{}",
+          },
+          turn_update: null,
+          payload_truncated: false,
+        });
+        await settle();
+      });
+
+      expect(listConversations.mock.calls.length).toBeGreaterThan(baselineRefreshCalls);
+      expect(getTurnDetail.mock.calls.length).toBeGreaterThan(1);
+      expect(container.querySelector('[data-turn-id="agent-turn:' + eventType + '"] .rho-agent-turn-status')!.textContent)
+        .toBe("Waiting");
+      if (eventType === "approval.requested") {
+        expect(container.querySelector(".rho-agent-approval")!.textContent)
+          .toContain("install.packages('demo')");
+      }
+    },
+  );
+
+  it.each(["approval.requested", "environment.requested"])(
+    "surfaces a background conversation %s without projecting it into the selected conversation",
+    async (eventType) => {
+      const transport = createMockUiKernelTransport();
+      const conversationA = makeConversation({
+        conversation_id: "agent-conversation:attention-a",
+        project_root: "/mock/project",
+        title: "Conversation A",
+        status: "running",
+        terminal_reason: null,
+      });
+      const conversationB = makeConversation({
+        conversation_id: "agent-conversation:selected-b",
+        project_root: "/mock/project",
+        title: "Conversation B",
+        status: "running",
+        terminal_reason: null,
+      });
+      let conversations: readonly AgentConversationSummary[] = [conversationA, conversationB];
+      const turnA = makeTurn({
+        turn_id: `agent-turn:attention-${eventType}`,
+        conversation_id: conversationA.conversation_id,
+        status: "waiting",
+        finished_at: null,
+        terminal_reason: null,
+      });
+      const turnB = makeTurn({
+        turn_id: "agent-turn:selected-b",
+        conversation_id: conversationB.conversation_id,
+        status: "running",
+        finished_at: null,
+        terminal_reason: null,
+      });
+      const approval = {
+        request_id: "approval-request:attention-a",
+        turn_id: turnA.turn_id,
+        project_root: turnA.project_root,
+        tool: "execute_r_code",
+        policy: "approval_required",
+        status: "waiting",
+        decision: null,
+        reason: null,
+        arguments_json: JSON.stringify({ code: "secret_from_a()" }),
+        code: "secret_from_a()",
+        workspace_id: "workspace:mock",
+        state_revision: 4,
+        project_revision: 1,
+        requested_at: mockNow,
+        responded_at: null,
+        continuation_outcome: null,
+      } as const;
+      const requestedEvent: AgentTurnDetail["events"][number] = {
+        id: 30,
+        turn_id: turnA.turn_id,
+        timestamp: mockNow,
+        event_type: eventType,
+        title: "Conversation A decision",
+        body: null,
+        status: "running",
+        tool: approval.tool,
+        request_id: approval.request_id,
+        code: approval.code,
+        details_json: "{}",
+      };
+      let canonicalEvents: AgentTurnDetail["events"] = [requestedEvent];
+      transport.listAgentConversations = vi.fn(async () => conversations);
+      transport.listAgentTurns = vi.fn(async (conversationId) =>
+        conversationId === conversationA.conversation_id ? [turnA] : [turnB]);
+      transport.getAgentTurnDetail = vi.fn(async (turnId) => {
+        if (turnId === turnA.turn_id) {
+          return makeDetail(turnA, {
+            events: canonicalEvents,
+            approvals: eventType === "approval.requested" ? [approval] : [],
+          });
+        }
+        return makeDetail(turnB);
+      });
+      const surfaces = await transport.loadSurfaces();
+      const instance: SurfaceInstance = {
+        instance_id: "surface-instance:agent-background-attention",
+        surface_id: "rho.agent",
+        project_id: surfaces.project_id,
+        origin: { kind: "application", component_id: "rho.agent" },
+        activation_generation: 1,
+        surface_revision: 1,
+        mode_id: "conversation",
+        resource_binding: null,
+        runtime_binding: null,
+        view_group_id: null,
+        view_state: {
+          conversation_id: conversationB.conversation_id,
+          mode: "ask",
+          composer: "",
+          auto_approve: false,
+        },
+        lifecycle_state: "active",
+      };
+      const { container } = await renderAgent({ instance, transport });
+      conversations = [{
+        ...conversationA,
+        status: "waiting",
+        pending_request_id: eventType === "approval.requested" ? approval.request_id : null,
+      }, conversationB];
+
+      await act(async () => {
+        transport.emitAgentTurnEvent({
+          project_root: turnA.project_root,
+          turn_id: turnA.turn_id,
+          event: requestedEvent,
+          turn_update: null,
+          payload_truncated: false,
+        });
+        await settle();
+      });
+
+      expect(container.querySelector('[data-turn-id="agent-turn:selected-b"]')!.textContent)
+        .not.toContain("Conversation A decision");
+      const picker = container.querySelector<HTMLSelectElement>(
+        'select[aria-label="Conversation for surface-instance:agent-background-attention"]',
+      )!;
+      expect([...picker.options].find((option) => option.value === conversationA.conversation_id)!.textContent)
+        .toContain("Needs attention");
+
+      await selectInput(picker, conversationA.conversation_id);
+      expect(container.querySelector(`[data-turn-id="${turnA.turn_id}"]`)!.textContent)
+        .toContain("Conversation A decision");
+      if (eventType === "approval.requested") {
+        expect(container.querySelector(".rho-agent-approval")!.textContent)
+          .toContain("secret_from_a()");
+      }
+
+      conversations = [conversationA, conversationB];
+      await selectInput(picker, "");
+      expect([...picker.options].find((option) => option.value === conversationA.conversation_id)!.textContent)
+        .not.toContain("Needs attention");
+
+      const requestWhileUnselected = {
+        ...requestedEvent,
+        id: 31,
+        title: "Conversation A decision while none selected",
+      };
+      canonicalEvents = [requestedEvent, requestWhileUnselected];
+      conversations = [{
+        ...conversationA,
+        status: "waiting",
+        pending_request_id: eventType === "approval.requested" ? approval.request_id : null,
+      }, conversationB];
+      await act(async () => {
+        transport.emitAgentTurnEvent({
+          project_root: turnA.project_root,
+          turn_id: turnA.turn_id,
+          event: requestWhileUnselected,
+          turn_update: null,
+          payload_truncated: false,
+        });
+        await settle();
+      });
+
+      expect(container.querySelector(".rho-agent-turn")).toBeNull();
+      expect([...picker.options].find((option) => option.value === conversationA.conversation_id)!.textContent)
+        .toContain("Needs attention");
+      await selectInput(picker, conversationA.conversation_id);
+      expect(container.querySelector(`[data-turn-id="${turnA.turn_id}"]`)!.textContent)
+        .toContain("Conversation A decision while none selected");
+    },
+  );
+
+  it("keeps queued Act work bound to its original conversation and dispatches through admission", async () => {
+    const transport = createMockUiKernelTransport();
+    const conversationA = makeConversation({
+      conversation_id: "agent-conversation:mock-shared",
+      project_root: "/mock/project",
+      title: "Conversation A",
+    });
+    const conversationB = makeConversation({
+      conversation_id: "agent-conversation:b",
+      project_root: "/mock/project",
+      title: "Conversation B",
+      turn_count: 0,
+      status: "idle",
+      terminal_reason: null,
+    });
+    let currentTurn = makeTurn({
+      turn_id: "agent-turn:queue-running",
+      status: "running",
+      finished_at: null,
+      terminal_reason: null,
+    });
+    transport.listAgentConversations = vi.fn(async () => [conversationA, conversationB]);
+    transport.listAgentTurns = vi.fn(async (conversationId) =>
+      conversationId === conversationA.conversation_id ? [currentTurn] : []);
+    transport.getAgentTurnDetail = vi.fn(async (turnId) =>
+      turnId === currentTurn.turn_id ? makeDetail(currentTurn) : null);
+    const rawRunAgent = vi.spyOn(transport, "runAgent");
+    const runConversation = vi.fn(async (
+      current: AgentSurfaceViewState,
+      request: RunAgentRequest,
+      onAccepted?: (conversationId: string) => void,
+    ) => {
+      onAccepted?.(request.conversation_id!);
+      return { ...current, conversation_id: request.conversation_id, composer: "" };
+    });
+    const { container } = await renderAgent({ runConversation, transport });
+    const modeButton = (label: string) => [...container.querySelectorAll<HTMLButtonElement>(".rho-agent-mode button")]
+      .find((button) => button.textContent === label)!;
+    await click(modeButton("act"));
+    const posture = container.querySelector<HTMLDetailsElement>(".rho-agent-posture-menu")!;
+    await click(posture.querySelector("summary")!);
+    await click(posture.querySelector(".rho-agent-auto-approve")!);
+
+    const composer = container.querySelector<HTMLTextAreaElement>(".rho-agent-composer textarea")!;
+    await typeInput(composer, "Follow up in A");
+    await click(container.querySelector(".rho-agent-context-controls .rho-primary-action")!);
+    expect(container.querySelector(".rho-agent-queue")!.textContent).toContain("Follow up in A");
+    expect(runConversation).not.toHaveBeenCalled();
+
+    const picker = container.querySelector<HTMLSelectElement>(
+      'select[aria-label="Conversation for surface-instance:agent-test"]',
+    )!;
+    await selectInput(picker, conversationB.conversation_id);
+    currentTurn = {
+      ...currentTurn,
+      status: "completed",
+      finished_at: mockNow,
+      terminal_reason: "completed",
+    };
+    await act(async () => {
+      transport.emitAgentTurnEvent({
+        project_root: currentTurn.project_root,
+        turn_id: currentTurn.turn_id,
+        event: null,
+        turn_update: {
+          status: "completed",
+          final_message: "A finished",
+          error_message: null,
+          terminal_reason: "completed",
+        },
+        payload_truncated: false,
+      });
+      await settle();
+    });
+    expect(runConversation).not.toHaveBeenCalled();
+    expect(container.querySelector(".rho-agent-queue")).toBeNull();
+
+    await selectInput(picker, conversationA.conversation_id);
+    await act(async () => { await settle(); });
+    expect(runConversation).toHaveBeenCalledOnce();
+    expect(runConversation).toHaveBeenCalledWith(
+      expect.objectContaining({ conversation_id: conversationA.conversation_id }),
+      expect.objectContaining({
+        prompt: "Follow up in A",
+        conversation_id: conversationA.conversation_id,
+        mode: "act",
+        auto_approve: true,
+      }),
+      expect.any(Function),
+    );
+    expect(rawRunAgent).not.toHaveBeenCalled();
+  });
+
+  it("does not restore or repeat a queued request after broker admission succeeds", async () => {
+    const transport = createMockUiKernelTransport();
+    let currentTurn = makeTurn({
+      turn_id: "agent-turn:queue-admitted",
+      status: "running",
+      finished_at: null,
+      terminal_reason: null,
+    });
+    transport.listAgentTurns = vi.fn(async () => [currentTurn]);
+    transport.getAgentTurnDetail = vi.fn(async () => makeDetail(currentTurn));
+    const runConversation = vi.fn(async (
+      _current: AgentSurfaceViewState,
+      request: RunAgentRequest,
+      onAccepted?: (conversationId: string) => void,
+    ): Promise<AgentSurfaceViewState> => {
+      onAccepted?.(request.conversation_id!);
+      throw new Error("surface persistence failed after admission");
+    });
+    const { container, reportError } = await renderAgent({ runConversation, transport });
+    await typeInput(container.querySelector<HTMLTextAreaElement>(".rho-agent-composer textarea")!, "Run once");
+    await click(container.querySelector(".rho-agent-context-controls .rho-primary-action")!);
+    expect(container.querySelectorAll(".rho-agent-queue-item")).toHaveLength(1);
+
+    currentTurn = {
+      ...currentTurn,
+      status: "completed",
+      finished_at: mockNow,
+      terminal_reason: "completed",
+    };
+    await act(async () => {
+      transport.emitAgentTurnEvent({
+        project_root: currentTurn.project_root,
+        turn_id: currentTurn.turn_id,
+        event: null,
+        turn_update: {
+          status: "completed",
+          final_message: "First done",
+          error_message: null,
+          terminal_reason: "completed",
+        },
+        payload_truncated: false,
+      });
+      await settle();
+    });
+    await act(async () => { await settle(); });
+    expect(runConversation).toHaveBeenCalledOnce();
+    expect(container.querySelectorAll(".rho-agent-queue-item")).toHaveLength(0);
+    expect(reportError).toHaveBeenCalledWith(expect.objectContaining({
+      message: "surface persistence failed after admission",
+    }));
+  });
+
+  it("renders a real proposal diff and binds Apply to the reviewed disk digest", async () => {
+    const transport = createMockUiKernelTransport();
+    const applyFileProposal = vi.fn(async (
+      turn: AgentTurnSummary,
+      eventId: number,
+      proposal: AgentFileProposal,
+      review?: AgentFileProposalReview,
+    ) => ({
+      response: await transport.applyAgentFileEdit({
+        turn_id: turn.turn_id,
+        proposal_event_id: eventId,
+        path: proposal.path,
+        expected_disk_sha256: review?.expected_disk_sha256 ?? null,
+        before_content: review?.before_content ?? "",
+      }),
+      beforeContent: review?.before_content ?? "",
+    }));
+    const { container } = await renderAgent({ applyFileProposal, transport });
+    const proposal = container.querySelector(".rho-agent-file-proposal")!;
+    await click(proposal.querySelector(".rho-agent-file-content > summary")!);
+    const diff = proposal.querySelector(".rho-agent-diff")!;
+    expect(diff).not.toBeNull();
+    expect(diff.querySelector(".rho-agent-diff-summary")!.textContent).toMatch(/^\+\d+ −\d+$/);
+    expect(diff.textContent).toContain("library(ggplot2)");
+    expect(diff.textContent).toContain("# Reviewed by Agent");
+
+    await click([...proposal.querySelectorAll("button")].find((button) => button.textContent === "Apply")!);
+    expect(applyFileProposal).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(Number),
+      expect.objectContaining({ operation: "append", path: "analysis.R" }),
+      expect.objectContaining({
+        before_content: expect.stringContaining("library(ggplot2)"),
+        expected_disk_sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+      }),
+    );
   });
 
   it("keeps a no-conversation Send local until its admitted identity workflow succeeds", async () => {
@@ -950,7 +1492,7 @@ describe("Studio Agent Surface", () => {
     }), expect.objectContaining({
       conversation_id: null,
       prompt: "Start from this prompt",
-    }));
+    }), expect.any(Function));
     expect(rawRunAgent).not.toHaveBeenCalled();
     expect(persist).not.toHaveBeenCalled();
     expect(picker.value).toBe("");
@@ -970,6 +1512,149 @@ describe("Studio Agent Surface", () => {
     expect(textarea.value).toBe("");
     expect(persist).not.toHaveBeenCalled();
     expect(reportError).not.toHaveBeenCalled();
+  });
+
+  it("keeps an accepted direct Send exactly once when post-admission persistence and refresh fail", async () => {
+    const transport = createMockUiKernelTransport();
+    const acceptedConversationId = "agent-conversation:accepted-before-failure";
+    const acceptedConversation = makeConversation({
+      conversation_id: acceptedConversationId,
+      title: "Accepted conversation",
+      status: "waiting",
+      terminal_reason: null,
+      pending_request_id: "approval-request:accepted",
+    });
+    const waitingTurn = makeTurn({
+      turn_id: "agent-turn:accepted-before-failure",
+      conversation_id: acceptedConversationId,
+      status: "waiting",
+      finished_at: null,
+      terminal_reason: null,
+    });
+    const approval = {
+      request_id: "approval-request:accepted",
+      turn_id: waitingTurn.turn_id,
+      project_root: waitingTurn.project_root,
+      tool: "execute_r_code",
+      policy: "approval_required",
+      status: "waiting",
+      decision: null,
+      reason: null,
+      arguments_json: JSON.stringify({ code: "approved_once()" }),
+      code: "approved_once()",
+      workspace_id: "workspace:mock",
+      state_revision: 4,
+      project_revision: 1,
+      requested_at: mockNow,
+      responded_at: null,
+      continuation_outcome: null,
+    } as const;
+    let conversationCalls = 0;
+    let canonicalAvailable = false;
+    transport.listAgentConversations = vi.fn(async () => {
+      conversationCalls += 1;
+      if (conversationCalls === 1) return [];
+      if (!canonicalAvailable) throw new Error("canonical refresh failed after admission");
+      return [acceptedConversation];
+    });
+    transport.listAgentTurns = vi.fn(async () => canonicalAvailable ? [waitingTurn] : []);
+    transport.getAgentTurnDetail = vi.fn(async () => makeDetail(waitingTurn, {
+      events: [],
+      approvals: [approval],
+    }));
+    const runConversation = vi.fn(async (
+      _current: AgentSurfaceViewState,
+      _request: RunAgentRequest,
+      onAccepted?: (conversationId: string) => void,
+    ): Promise<AgentSurfaceViewState> => {
+      onAccepted?.(acceptedConversationId);
+      throw new Error("surface persistence failed after admission");
+    });
+    const surfaces = await transport.loadSurfaces();
+    const instance: SurfaceInstance = {
+      instance_id: "surface-instance:agent-accepted-failure",
+      surface_id: "rho.agent",
+      project_id: surfaces.project_id,
+      origin: { kind: "application", component_id: "rho.agent" },
+      activation_generation: 1,
+      surface_revision: 1,
+      mode_id: "conversation",
+      resource_binding: null,
+      runtime_binding: null,
+      view_group_id: null,
+      view_state: {
+        conversation_id: null,
+        mode: "ask",
+        composer: "",
+        auto_approve: false,
+      },
+      lifecycle_state: "active",
+    };
+    const { container, reportError } = await renderAgent({ instance, runConversation, transport });
+    const textarea = container.querySelector<HTMLTextAreaElement>(".rho-agent-composer textarea")!;
+    const send = container.querySelector<HTMLButtonElement>(
+      ".rho-agent-context-controls .rho-primary-action",
+    )!;
+    await typeInput(textarea, "Run this exactly once");
+    await click(send);
+
+    expect(runConversation).toHaveBeenCalledOnce();
+    expect(runConversation).toHaveBeenCalledWith(
+      expect.objectContaining({ conversation_id: null, composer: "Run this exactly once" }),
+      expect.objectContaining({ conversation_id: null, prompt: "Run this exactly once" }),
+      expect.any(Function),
+    );
+    expect(container.querySelector<HTMLSelectElement>(
+      'select[aria-label="Conversation for surface-instance:agent-accepted-failure"]',
+    )!.value).toBe(acceptedConversationId);
+    expect(textarea.value).toBe("");
+    expect(reportError).toHaveBeenCalledWith(expect.objectContaining({
+      message: "surface persistence failed after admission",
+    }));
+    expect(reportError).toHaveBeenCalledWith(expect.objectContaining({
+      message: "canonical refresh failed after admission",
+    }));
+    const retry = [...container.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent === "Retry refresh")!;
+    expect(retry.disabled).toBe(false);
+
+    await typeInput(textarea, "Run this exactly once");
+    expect(send.disabled).toBe(true);
+    await act(async () => {
+      send.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await settle();
+    });
+    expect(runConversation).toHaveBeenCalledOnce();
+
+    canonicalAvailable = true;
+    await act(async () => {
+      transport.emitAgentTurnEvent({
+        project_root: waitingTurn.project_root,
+        turn_id: waitingTurn.turn_id,
+        event: {
+          id: 41,
+          turn_id: waitingTurn.turn_id,
+          timestamp: mockNow,
+          event_type: "approval.requested",
+          title: "Approval requested after refresh failure",
+          body: null,
+          status: "running",
+          tool: approval.tool,
+          request_id: approval.request_id,
+          code: approval.code,
+          details_json: "{}",
+        },
+        turn_update: null,
+        payload_truncated: false,
+      });
+      await settle();
+    });
+    expect(container.querySelector(".rho-agent-approval")!.textContent)
+      .toContain("approved_once()");
+    expect(container.querySelector<HTMLSelectElement>(
+      'select[aria-label="Conversation for surface-instance:agent-accepted-failure"]',
+    )!.selectedOptions[0]!.textContent).toContain("Needs attention");
+    expect(runConversation).toHaveBeenCalledOnce();
   });
 
   it("preserves a missing bounded-list preference, blocks Send, and recovers after explicit clear", async () => {
@@ -1044,7 +1729,7 @@ describe("Studio Agent Surface", () => {
     }), expect.objectContaining({
       conversation_id: null,
       prompt: "Do not target a hidden conversation",
-    }));
+    }), expect.any(Function));
     expect(persist).toHaveBeenCalledOnce();
   });
 
@@ -1126,7 +1811,7 @@ describe("Studio Agent Surface", () => {
       conversation_id: preferredConversation.conversation_id,
       prompt: "Wait for the bounded list",
       mode: "ask",
-    }));
+    }), expect.any(Function));
   });
 
   it("blocks a same-event Send when invalidation starts a new bounded-list validation", async () => {
@@ -1663,7 +2348,7 @@ describe("Studio Agent Surface", () => {
     )!;
     const plan = [...container.querySelectorAll<HTMLButtonElement>('.rho-agent-mode button')]
       .find((button) => button.textContent === "plan")!;
-    const autoApprove = container.querySelector<HTMLInputElement>(".rho-agent-auto-approve input")!;
+    const autoApprove = container.querySelector<HTMLButtonElement>(".rho-agent-auto-approve")!;
     const suggestion = container.querySelector<HTMLButtonElement>(".rho-agent-suggestions button")!;
     const newButton = [...container.querySelectorAll<HTMLButtonElement>(".rho-agent-toolbar-action")]
       .find((button) => button.textContent === "New")!;
@@ -1836,7 +2521,7 @@ describe("Studio Agent Surface", () => {
     }), expect.objectContaining({
       conversation_id: oldConversation.conversation_id,
       mode: "ask",
-    }));
+    }), expect.any(Function));
     expect(runConversation).toHaveBeenCalledOnce();
     expect(createConversation).not.toHaveBeenCalled();
     expect(plan.disabled).toBe(true);
