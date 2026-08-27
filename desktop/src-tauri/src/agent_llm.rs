@@ -15,6 +15,12 @@ use zeroize::{Zeroize, Zeroizing};
 use crate::agent_credential_vault::{self, CredentialVaultStatus};
 use crate::project::atomic_write;
 
+// COMPAT-1A: V6 plaintext canonical model configuration store. Module-only
+// slice; the COMPAT-1B cutover wires turns, connection tests, and Settings
+// to it. See the module header for the owning contract.
+#[path = "agent_config.rs"]
+pub(crate) mod agent_config;
+
 const SETTINGS_FILE_NAME: &str = "llm-profiles.json";
 const SETTINGS_V1_BACKUP_FILE_NAME: &str = "llm-profiles.v1.backup.json";
 const SETTINGS_V2_BACKUP_FILE_NAME: &str = "llm-profiles.v2.backup.json";
