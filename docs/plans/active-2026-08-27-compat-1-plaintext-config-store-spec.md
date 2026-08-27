@@ -136,3 +136,18 @@ COMPAT-1 is split into two stages:
   body.
 - Focused backend tests, Settings UI source/shadowing tests, mock parity,
   and `scripts/test-rsr-contract.mjs` per the RSR contract.
+
+## 5. Recovery Integration Status
+
+COMPAT-1A is present in the recovered integration line through feature commit
+`c5c67c1` and merge commit `106c7c6`. It adds only the private
+`agent_llm::agent_config` module and its YAML dependency; it does not wire the
+module into turn resolution, Settings, probes, audit, or legacy-store removal.
+The integration lane selected `serde_norway` `0.9.42`, regenerated the shared
+`Cargo.lock`, passed `cargo check -p rho-desktop`, and passed all 28 focused
+`agent_config` tests with `--locked` on 2026-08-27.
+
+COMPAT-1B remains unimplemented. The current vault/V1-V5 runtime therefore
+remains authoritative until a new single-writer integration lane activates and
+verifies the cutover. No version, `NEWS.md`, candidate, migration, export, or
+release claim is made by COMPAT-1A.

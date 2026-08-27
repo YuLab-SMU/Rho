@@ -122,6 +122,8 @@ changes.
 - Accepted plugin-native Surface Runtime architecture: [`design/accepted-2026-08-21-plugin-native-surface-runtime-design.md`](design/accepted-2026-08-21-plugin-native-surface-runtime-design.md)
 - Active Studio design language and UX overhaul: [`design/active-2026-08-22-studio-design-language-and-ux-overhaul-design.md`](design/active-2026-08-22-studio-design-language-and-ux-overhaul-design.md)
 - Implemented Studio Agent Surface UX: [`plans/implemented-2026-08-27-studio-agent-surface-ux-spec.md`](plans/implemented-2026-08-27-studio-agent-surface-ux-spec.md)
+- Active COMPAT-1 plaintext canonical model-config slice: [`plans/active-2026-08-27-compat-1-plaintext-config-store-spec.md`](plans/active-2026-08-27-compat-1-plaintext-config-store-spec.md)
+- Proposed canonical model-config and Agent-tool compatibility direction: [`plans/proposed-2026-08-27-rho-model-config-and-agent-compat-layer-spec.md`](plans/proposed-2026-08-27-rho-model-config-and-agent-compat-layer-spec.md)
 - Proposed Provider-first Settings and repeatable native credential-view redesign: [`plans/proposed-2026-08-26-plugin-native-settings-experience-design-spec.md`](plans/proposed-2026-08-26-plugin-native-settings-experience-design-spec.md)
 - Active CRED-REVEAL-1A connection-test credential-redaction repair: [`plans/active-2026-08-26-cred-reveal-1a-connection-test-redaction-spec.md`](plans/active-2026-08-26-cred-reveal-1a-connection-test-redaction-spec.md)
 - Active CRED-REVEAL-1B macOS native secure credential view: [`plans/active-2026-08-27-cred-reveal-1b-native-secure-view-spec.md`](plans/active-2026-08-27-cred-reveal-1b-native-secure-view-spec.md)
