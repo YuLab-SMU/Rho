@@ -579,3 +579,37 @@ re-run the complete `rsr:check` matrix plus the s3 visual-acceptance gate
 held the files); evaluate the foundation.css layer-order systemic fix above;
 the standing follow-ups (cross-review row, docs index, NEWS entry, version
 decision) remain as listed earlier in this document.
+
+## Round 4 Polish Passes (visual-render iterations)
+
+Authorization: the product owner directed on 2026-08-27 that the result must
+go through visual rendering and be polished over multiple render–review
+rounds ("还要经过视觉渲染，根据渲染结果多打磨几轮").
+
+Two review rounds against fresh headless-Chrome renders (detail crops plus
+solo/wide/medium/narrow surfaces) produced these presentation-only fixes,
+all inside `agent-surface.css`:
+
+1. Readable measure: toolbar, timeline, capacity form, and composer cap at
+   56rem and center on very wide surfaces (flex `width` + `max-width` +
+   `align-self`; auto inline margins were avoided because they disable flex
+   stretch and shrink the boxes to their content — caught by a layout probe
+   showing a 510px timeline beside an 896px composer).
+2. `Context used` disclosure quieted to match the neighbouring narration
+   rows (no box, caption-weight summary).
+3. Approval block tightened (code block margins) and its mono code scrolls
+   horizontally instead of breaking mid-token on narrow surfaces.
+4. File-proposal rows lay out as a real flex row so Apply/Reject stay
+   inline-right at any width.
+5. Narrow model popover no longer clips out of the surface (its wide-screen
+   `min-width` defeated the container-query cap; dropped under 300px).
+6. Narrow composer: the ghost Review-context action hugs the left instead of
+   stretching into a centered pseudo-solid button.
+
+Polish evidence (same matrix as round 4, re-run on the final snapshot):
+typecheck, lint, focused 13/13, full UI suite 342/342, build,
+`git diff --check`; probes and screenshots under
+`target/studio-agent-ux-preview/r3/r4/` and `…/r3/polish/` record 896px
+centered-and-aligned timeline/composer at 2486px solo, the quiet uniform
+activity rows, the inline proposal row, the contained narrow model popover,
+and the horizontal-scroll approval code at 171px.

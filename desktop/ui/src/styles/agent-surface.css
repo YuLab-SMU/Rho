@@ -32,6 +32,16 @@
   /* --- Timeline: a chat narrative, not stacked cards ------------------------- */
   section.rho-agent-surface .rho-agent-loading { margin: 0; padding: var(--rho-space-2) var(--rho-space-1); color: var(--rho-muted); font-size: var(--rho-text-ui); }
 
+  /* Conversation content keeps a readable measure and centers when the
+     surface is very wide, instead of stretching one-line rows to thousands
+     of pixels. The cap is inert at column widths. width+max-width+align-self
+     is used instead of auto inline margins, which would disable flex stretch
+     and shrink the boxes to their content. */
+  section.rho-agent-surface .rho-agent-toolbar,
+  section.rho-agent-surface .rho-agent-timeline,
+  section.rho-agent-surface .rho-agent-capacity { width: 100%; max-width: 56rem; align-self: center; }
+  section.rho-agent-surface .rho-agent-composer { width: calc(100% - var(--rho-space-3)); max-width: 56rem; align-self: center; margin-block: var(--rho-space-2); margin-inline: 0; }
+
   /* Turns are unboxed narrative blocks separated by a hairline. */
   section.rho-agent-surface .rho-agent-turn {
     margin-bottom: 0;
@@ -106,7 +116,10 @@
   section.rho-agent-surface .rho-agent-decision-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: var(--rho-space-1); margin-top: var(--rho-space-2); }
   section.rho-agent-surface .rho-agent-decision-actions button { min-height: var(--rho-control-small); padding: var(--rho-space-1) var(--rho-space-3); font-size: var(--rho-text-caption); }
   section.rho-agent-surface .rho-agent-approval .rho-agent-decision-actions button { margin-right: 0; }
-  section.rho-agent-surface .rho-agent-approval pre { max-height: 6rem; }
+  /* Code keeps mono lines and scrolls horizontally instead of breaking
+     mid-token on narrow surfaces. */
+  section.rho-agent-surface .rho-agent-approval pre { max-height: 6rem; margin: var(--rho-space-2) 0 0; white-space: pre; overflow-x: auto; }
+  section.rho-agent-surface .rho-agent-approval .rho-agent-decision-actions { margin-top: var(--rho-space-2); }
 
   /* File changes collapse into one in-flow entry; expanding it opens an
      inline review panel with one plain row per proposal. */
@@ -136,7 +149,7 @@
   section.rho-agent-surface .rho-agent-files-hint { margin: 0; color: var(--rho-muted); font-size: var(--rho-text-caption); }
 
   section.rho-agent-surface .rho-agent-file-proposal { margin-top: var(--rho-space-2); padding: var(--rho-space-2) 0 0; border: none; border-top: var(--rho-border); border-radius: 0; background: transparent; }
-  section.rho-agent-surface .rho-agent-file-proposal > header { justify-content: normal; align-items: baseline; flex-wrap: wrap; }
+  section.rho-agent-surface .rho-agent-file-proposal > header { display: flex; justify-content: normal; align-items: baseline; flex-wrap: wrap; gap: 0 var(--rho-space-2); }
   section.rho-agent-surface .rho-agent-file-proposal > header code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   section.rho-agent-surface .rho-agent-file-proposal .rho-agent-file-outcome { display: inline; margin: 0; }
   section.rho-agent-surface .rho-agent-file-proposal .rho-agent-decision-actions { flex-wrap: nowrap; margin: 0 0 0 auto; }
@@ -184,6 +197,11 @@
   section.rho-agent-surface .rho-agent-activity .rho-agent-context-used { margin-top: 0; }
   section.rho-agent-surface .rho-agent-activity .rho-agent-code-review > summary { cursor: pointer; color: var(--rho-ink-2); font-size: var(--rho-text-caption); }
   section.rho-agent-surface .rho-agent-activity .rho-agent-code-review > summary:hover { color: var(--rho-ink); }
+  /* Context evidence is a quiet disclosure row like its neighbours, not a
+     boxed bold panel. */
+  section.rho-agent-surface .rho-agent-activity .rho-agent-context-used { padding: 0; border: none; border-radius: 0; background: transparent; }
+  section.rho-agent-surface .rho-agent-activity .rho-agent-context-used > summary { cursor: pointer; color: var(--rho-ink-2); font-size: var(--rho-text-caption); font-weight: var(--rho-weight-regular); }
+  section.rho-agent-surface .rho-agent-activity .rho-agent-context-used > summary:hover { color: var(--rho-ink); }
 
   /* Empty state: a centered greeting block with the truthful how-to copy. */
   section.rho-agent-surface .rho-agent-empty { justify-items: center; padding: var(--rho-space-7) var(--rho-space-5); text-align: center; }
@@ -345,8 +363,13 @@
   @container (max-width: 300px) {
     section.rho-agent-surface .rho-agent-capacity { grid-template-columns: minmax(0, 1fr); }
     section.rho-agent-surface .rho-agent-turn-meta > div { max-width: calc(100cqw - var(--rho-space-7)); }
-    section.rho-agent-surface .rho-agent-model-menu > div { max-width: calc(100cqw - var(--rho-space-7)); }
+    /* The popover's wide-screen min-width would defeat the cap and clip out
+       of a narrow surface, so it is dropped here. */
+    section.rho-agent-surface .rho-agent-model-menu > div { min-width: 0; max-width: calc(100cqw - var(--rho-space-3)); }
     section.rho-agent-surface .rho-agent-file-proposal > header code { flex: 1 1 100%; }
     section.rho-agent-surface .rho-agent-context-controls > button { flex: 1 1 auto; }
+    /* The full-width ghost action keeps its text left-aligned at narrow
+       widths instead of reading as a centered solid button. */
+    section.rho-agent-surface .rho-agent-context-controls > button:first-child:not(.rho-primary-action) { flex: 0 0 auto; }
   }
 }
