@@ -16,11 +16,77 @@ import {
   waitUntil,
 } from "./helpers.mjs";
 
+export const VIBE_AGENT_HOST_VIEWPORT = Object.freeze({ width: 720, height: 450 });
+
+export const VIBE_AGENT_HOST_SELECTORS = Object.freeze({
+  exploration: '.rho-vibe-region[data-region="exploration"] .rho-vibe-exploration',
+  detail: '.rho-vibe-region[data-region="exploration"] .rho-vibe-exploration-detail',
+  trigger: '.rho-vibe-region[data-region="exploration"] [data-agent-record-trigger="record"]',
+  startTrigger: '.rho-vibe-region[data-region="exploration"] [data-agent-record-trigger="start"]',
+  host: '.rho-vibe-region[data-region="exploration"] .rho-vibe-agent-record-host',
+  mountedAgentSurface: '[data-surface-id="rho.agent"]',
+});
+
+function normalizedPublicText(value) {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+export function sameAgentPublicRecord(source, host) {
+  const exactFields = ["heading", "statusKind", "statusText", "task", "outcome", "error"];
+  if (exactFields.some((field) => normalizedPublicText(source[field]) !== normalizedPublicText(host[field]))) {
+    return false;
+  }
+  const latestActivity = normalizedPublicText(source.latestActivity);
+  return latestActivity.length === 0
+    || host.activities.some((activity) => normalizedPublicText(activity) === latestActivity);
+}
+
+async function firstText(ctx, selector) {
+  const matches = await ctx.query(selector);
+  return normalizedPublicText(matches[0]?.text);
+}
+
+function agentSurfaceCount(snapshot) {
+  return snapshot.surfaces.filter((surface) => surface.surface_id === "rho.agent").length;
+}
+
+async function assertAgentHostBoundary(ctx, expectedCatalogCount) {
+  const ready = await ctx.ready();
+  assertEqual(ready.activeMode, "vibe", "Agent record host application mode");
+  const workspaceSurfaces = await ctx.query(VIBE_AGENT_HOST_SELECTORS.mountedAgentSurface, { all: true });
+  assertEqual(workspaceSurfaces.length, 0, "mounted Studio Agent surfaces while the Vibe host is open");
+  const snapshot = await ctx.snapshot();
+  assertEqual(
+    agentSurfaceCount(snapshot),
+    expectedCatalogCount,
+    "Agent SurfaceInstance count after the local host entry",
+  );
+  const trustedControls = await ctx.query(
+    `${VIBE_AGENT_HOST_SELECTORS.host} textarea, `
+      + `${VIBE_AGENT_HOST_SELECTORS.host} .rho-agent-approval, `
+      + `${VIBE_AGENT_HOST_SELECTORS.host} .rho-agent-file-proposal, `
+      + `${VIBE_AGENT_HOST_SELECTORS.host} [data-surface-id]`,
+    { all: true },
+  );
+  assertEqual(trustedControls.length, 0, "trusted Agent controls inside the Vibe record host");
+  const boundary = await firstText(ctx, `${VIBE_AGENT_HOST_SELECTORS.host} .rho-vibe-agent-record-boundary`);
+  if (!boundary.includes("只读公开记录") || !boundary.includes("Studio")) {
+    throw new AssertionFailure("Vibe Agent host did not expose its read-only/Studio authority boundary.");
+  }
+  return snapshot;
+}
+
 async function assertWorkspaceState(ctx, expectedLayout, expectedRegion) {
   const layout = await ctx.query(".rho-vibe-workspace", { attribute: "data-layout" });
   const active = await ctx.query(".rho-vibe-workspace", { attribute: "data-active-region" });
   assertEqual(layout[0]?.value, expectedLayout, "Vibe layout mode");
   assertEqual(active[0]?.value, expectedRegion, "Vibe active information layer");
+  const actionErrors = await ctx.query(".rho-action-error", { all: true });
+  if (actionErrors.length > 0) {
+    throw new AssertionFailure(
+      `Vibe frame retained a Workbench action error: ${normalizedPublicText(actionErrors[0]?.text)}`,
+    );
+  }
 }
 
 async function settleVibe(ctx) {
@@ -46,17 +112,8 @@ async function chooseRegion(ctx, region) {
   await sleep(300);
 }
 
-async function enterVibeAfterProjectSwitch(ctx) {
-  try {
-    await ctx.act({ kind: "set_mode", mode: "vibe" });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (!message.includes("stale revision")) throw error;
-    // Workbench's rejected mutation refreshes the Profile store before the
-    // bridge receives this error. One retry therefore uses the reconciled
-    // revision; a second rejection remains a real gate failure.
-    await ctx.act({ kind: "set_mode", mode: "vibe" });
-  }
+export async function enterVibeAfterProjectSwitch(ctx) {
+  await ctx.act({ kind: "set_mode", mode: "vibe" });
   await waitUntil("Vibe mode active", async () => {
     const current = await ctx.ready();
     return current.activeMode === "vibe" ? current : null;
@@ -129,6 +186,74 @@ export default async function s9(ctx) {
     });
   }
 
+  await ctx.gate("s9", "empty-agent-record-host", async () => {
+    // S3 may have created a truthful Agent record for workingProject earlier
+    // in a full-lane run. Use the separate Unicode fixture project so this
+    // real-app frame deterministically owns only the honest no-record state.
+    const ready = await openProject(ctx, ctx.fixtures.unicodeProject);
+    await waitReady(ctx);
+    await enterVibeAfterProjectSwitch(ctx);
+    await settleVibe(ctx);
+    await ctx.setWindow(1440, 900);
+    await chooseRegion(ctx, "exploration");
+    await waitForSelector(ctx, VIBE_AGENT_HOST_SELECTORS.startTrigger, 30_000);
+    const recordTriggers = await ctx.query(VIBE_AGENT_HOST_SELECTORS.trigger, { all: true });
+    if (recordTriggers.length !== 0) {
+      throw new AssertionFailure(
+        "Fresh real-debug S9 unexpectedly contained an Agent record; its exact-record evidence belongs to browser_mock.",
+      );
+    }
+    const before = await ctx.snapshot();
+    const agentCatalogCount = agentSurfaceCount(before);
+    const mountedBefore = await ctx.query(VIBE_AGENT_HOST_SELECTORS.mountedAgentSurface, { all: true });
+    assertEqual(mountedBefore.length, 0, "mounted Studio Agent surfaces before the local host entry");
+
+    await ctx.act({ kind: "click", selector: VIBE_AGENT_HOST_SELECTORS.startTrigger });
+    await waitForSelector(ctx, VIBE_AGENT_HOST_SELECTORS.host, 20_000);
+    await waitForSelector(ctx, `${VIBE_AGENT_HOST_SELECTORS.exploration}[data-agent-host-open="true"]`, 20_000);
+    await assertWorkspaceState(ctx, "focus-exploration", "exploration");
+    await assertAgentHostBoundary(ctx, agentCatalogCount);
+
+    const heading = await firstText(ctx, `${VIBE_AGENT_HOST_SELECTORS.host} h3`);
+    assertEqual(heading, "准备新的探索", "fresh real-debug Agent host heading");
+    const emptyState = await firstText(ctx, `${VIBE_AGENT_HOST_SELECTORS.host} .rho-vibe-agent-record-empty`);
+    if (!emptyState.includes("还没有 Agent 记录") || !emptyState.includes("明确进入 Studio")) {
+      throw new AssertionFailure("Fresh real-debug Agent host did not preserve the honest no-record state.");
+    }
+    const secondaryActions = await ctx.query(
+      `${VIBE_AGENT_HOST_SELECTORS.host} .rho-vibe-agent-record-actions button`,
+      { all: true },
+    );
+    const labels = secondaryActions.map((action) => normalizedPublicText(action.text));
+    assertEqual(
+      labels.join(","),
+      "在 Studio 中发起探索",
+      "fresh-host explicit Studio secondary action",
+    );
+    return {
+      evidence_class: "real_debug_app",
+      project_path: ready.projectPath,
+      active_mode: "vibe",
+      layout: "focus-exploration",
+      mounted_studio_agent_surfaces: 0,
+      agent_surface_instance_count_before: agentCatalogCount,
+      agent_surface_instance_count_after: agentCatalogCount,
+      record_state: "empty",
+      heading,
+      studio_secondary_actions: labels,
+      evidence_boundary:
+        "fresh isolated real-app data proves only the state-specific empty host; exact Conversation/Turn and geometry are browser_mock facts",
+    };
+  }, {
+    screenshot: "s9-vibe-empty-agent-record-host",
+    criteria: [
+      "fresh isolated app-data 下，`开始探索` 在自主探索层内打开诚实的空 Agent host，应用仍处于 Vibe，未伪造 Conversation、Turn、活动或结果",
+      "画面中没有 Studio canvas、rho.agent Surface、composer、approval、file apply/undo、credential、设置或其他可信 mutation controls",
+      "只读边界明确说明可信操作仍在 Studio；唯一离开动作清楚标为 `在 Studio 中发起探索`",
+      "1440×900 下空 host 使用探索层的可用空间，header、空态与 footer 构成连续阅读面，无页级横向滚动、重叠或装饰性卡片墙",
+    ],
+  });
+
   await ctx.gate("s9", "narrow-verification", async () => {
     await ctx.setWindow(720, 700);
     await chooseRegion(ctx, "verification");
@@ -147,4 +272,9 @@ export default async function s9(ctx) {
       "窄屏保持科学编辑工作台的密度，不退化为聊天界面、卡片列表或居中 hero",
     ],
   });
+
+  // Fresh real app-data has no authoritative Conversation/Turn to project.
+  // The exact-record and arbitrary geometry facts therefore come from the
+  // separately labelled browser/mock fixture, never from this real-app frame.
+  await ctx.captureVibeAgentBrowserFrames();
 }

@@ -64,6 +64,11 @@ export type UiProfileStoreSnapshot = DomainStoreSnapshot<ProjectUiProfileSnapsho
 
 const LOADING: WorkbenchStoreSnapshot = Object.freeze({ status: "loading" });
 
+export type WorkbenchMutationLease = Readonly<{
+  projectId: string;
+  admissionEpoch: number;
+}>;
+
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) return error.message.slice(0, 512);
   return "Rho could not load the Workbench projection.";
@@ -90,6 +95,10 @@ export class WorkbenchProjectionStore {
   #refreshing: Promise<void> | undefined;
   #refreshQueued = false;
   readonly #mutations = new Set<Promise<unknown>>();
+  readonly #admittedOperations = new Set<Promise<unknown>>();
+  readonly #liveMutationLeases = new WeakSet<WorkbenchMutationLease>();
+  #mutationAdmissionOpen = true;
+  #mutationAdmissionEpoch = 0;
 
   constructor(transport: UiKernelTransport) {
     this.#transport = transport;
@@ -216,7 +225,19 @@ export class WorkbenchProjectionStore {
     return result;
   }
 
-  #mutate<T>(projectId: string, operation: () => Promise<T>): Promise<T> {
+  #mutate<T>(
+    projectId: string,
+    operation: () => Promise<T>,
+    lease?: WorkbenchMutationLease,
+  ): Promise<T> {
+    if (lease == null) {
+      return this.admitMutation(projectId, (admitted) => (
+        this.#mutate(projectId, operation, admitted)
+      ));
+    }
+    if (!this.#liveMutationLeases.has(lease) || lease.projectId !== projectId) {
+      return Promise.reject(new Error("The Workbench mutation admission is no longer valid."));
+    }
     const mutation = this.#performMutation(projectId, operation);
     this.#mutations.add(mutation);
     void mutation.then(
@@ -227,109 +248,178 @@ export class WorkbenchProjectionStore {
   }
 
   async settled(): Promise<void> {
-    while (this.#mutations.size > 0) {
-      await Promise.all([...this.#mutations]);
+    while (this.#admittedOperations.size > 0 || this.#mutations.size > 0) {
+      await Promise.allSettled([
+        ...this.#admittedOperations,
+        ...this.#mutations,
+      ]);
     }
   }
 
-  open(request: OpenSurfaceRequest) {
-    return this.#mutate(request.project_id, () => this.#transport.openSurface(request));
+  admitMutation<T>(
+    projectId: string,
+    operation: (lease: WorkbenchMutationLease) => Promise<T>,
+  ): Promise<T> {
+    if (!this.#mutationAdmissionOpen) {
+      return Promise.reject(new Error("Project transition is in progress."));
+    }
+    this.#assertProject(projectId);
+    const lease = Object.freeze({
+      projectId,
+      admissionEpoch: this.#mutationAdmissionEpoch,
+    });
+    this.#liveMutationLeases.add(lease);
+    let admitted: Promise<T>;
+    try {
+      admitted = Promise.resolve(operation(lease));
+    } catch (error: unknown) {
+      admitted = Promise.reject(error);
+    }
+    const tracked = admitted.finally(() => {
+      this.#liveMutationLeases.delete(lease);
+    });
+    this.#admittedOperations.add(tracked);
+    void tracked.then(
+      () => this.#admittedOperations.delete(tracked),
+      () => this.#admittedOperations.delete(tracked),
+    );
+    return tracked;
   }
 
-  update(request: UpdateSurfaceRequest) {
-    return this.#mutate(request.target.project_id, () => this.#transport.updateSurface(request));
+  closeMutationAdmission(): void {
+    if (!this.#mutationAdmissionOpen) return;
+    this.#mutationAdmissionOpen = false;
+    this.#mutationAdmissionEpoch += 1;
   }
 
-  close(request: SurfaceInstanceRequest) {
-    return this.#mutate(request.project_id, () => this.#transport.closeSurface(request));
+  openMutationAdmission(): void {
+    this.#mutationAdmissionOpen = true;
   }
 
-  suspend(request: SurfaceInstanceRequest) {
-    return this.#mutate(request.project_id, () => this.#transport.suspendSurface(request));
+  readonly isMutationAdmissionOpen = (): boolean => this.#mutationAdmissionOpen;
+
+  open(request: OpenSurfaceRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(request.project_id, () => this.#transport.openSurface(request), lease);
   }
 
-  resume(request: SurfaceInstanceRequest) {
-    return this.#mutate(request.project_id, () => this.#transport.resumeSurface(request));
+  update(request: UpdateSurfaceRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(
+      request.target.project_id,
+      () => this.#transport.updateSurface(request),
+      lease,
+    );
   }
 
-  apply(request: SceneEditRequest) {
-    return this.#mutate(request.project_id, () => this.#transport.applyStudio(request));
+  close(request: SurfaceInstanceRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(request.project_id, () => this.#transport.closeSurface(request), lease);
   }
 
-  undo(request: StudioRevisionRequest) {
-    return this.#mutate(request.project_id, () => this.#transport.undoStudio(request));
+  suspend(request: SurfaceInstanceRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(
+      request.project_id,
+      () => this.#transport.suspendSurface(request),
+      lease,
+    );
   }
 
-  redo(request: StudioRevisionRequest) {
-    return this.#mutate(request.project_id, () => this.#transport.redoStudio(request));
+  resume(request: SurfaceInstanceRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(
+      request.project_id,
+      () => this.#transport.resumeSurface(request),
+      lease,
+    );
   }
 
-  setMode(request: UiProfileSetModeRequest) {
-    return this.#mutate(request.target.project_id, () => this.#transport.setUiProfileMode(request));
+  apply(request: SceneEditRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(
+      request.project_id,
+      () => this.#transport.applyStudio(request),
+      lease,
+    );
   }
 
-  selectScene(request: UiProfileSelectSceneRequest) {
-    return this.#mutate(request.target.project_id, () => this.#transport.selectUiProfileScene(request));
+  undo(request: StudioRevisionRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(
+      request.project_id,
+      () => this.#transport.undoStudio(request),
+      lease,
+    );
   }
 
-  selectPage(request: UiProfileSelectPageRequest) {
-    return this.#mutate(request.target.project_id, () => this.#transport.selectUiProfilePage(request));
+  redo(request: StudioRevisionRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(
+      request.project_id,
+      () => this.#transport.redoStudio(request),
+      lease,
+    );
   }
 
-  applyPage(request: VibePageMutationRequest) {
-    return this.#mutate(request.target.project_id, () => this.#transport.applyVibePage(request));
+  setMode(request: UiProfileSetModeRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(request.target.project_id, () => this.#transport.setUiProfileMode(request), lease);
+  }
+
+  selectScene(request: UiProfileSelectSceneRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(request.target.project_id, () => this.#transport.selectUiProfileScene(request), lease);
+  }
+
+  selectPage(request: UiProfileSelectPageRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(request.target.project_id, () => this.#transport.selectUiProfilePage(request), lease);
+  }
+
+  applyPage(request: VibePageMutationRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(request.target.project_id, () => this.#transport.applyVibePage(request), lease);
   }
 
   exportPage(request: VibePageExportRequest) {
     return this.#transport.exportVibePage(request);
   }
 
-  duplicateScene(request: UiProfileSceneLabelRequest) {
-    return this.#mutate(request.target.project_id, () => this.#transport.duplicateUiProfileScene(request));
+  duplicateScene(request: UiProfileSceneLabelRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(request.target.project_id, () => this.#transport.duplicateUiProfileScene(request), lease);
   }
 
-  saveScene(request: UiProfileSceneTargetRequest) {
-    return this.#mutate(request.target.project_id, () => this.#transport.saveUiProfileScene(request));
+  saveScene(request: UiProfileSceneTargetRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(request.target.project_id, () => this.#transport.saveUiProfileScene(request), lease);
   }
 
-  renameScene(request: UiProfileSceneLabelRequest) {
-    return this.#mutate(request.target.project_id, () => this.#transport.renameUiProfileScene(request));
+  renameScene(request: UiProfileSceneLabelRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(request.target.project_id, () => this.#transport.renameUiProfileScene(request), lease);
   }
 
-  deleteScene(request: UiProfileSceneTargetRequest) {
-    return this.#mutate(request.target.project_id, () => this.#transport.deleteUiProfileScene(request));
+  deleteScene(request: UiProfileSceneTargetRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(request.target.project_id, () => this.#transport.deleteUiProfileScene(request), lease);
   }
 
-  resetScene(request: UiProfileSceneTargetRequest) {
-    return this.#mutate(request.target.project_id, () => this.#transport.resetUiProfileScene(request));
+  resetScene(request: UiProfileSceneTargetRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(request.target.project_id, () => this.#transport.resetUiProfileScene(request), lease);
   }
 
-  create(request: RuntimeCreateRequest) {
-    return this.#mutate(request.project_id, () => this.#transport.createRuntime(request));
+  create(request: RuntimeCreateRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(request.project_id, () => this.#transport.createRuntime(request), lease);
   }
 
-  interrupt(request: RuntimeInstanceRequest) {
-    return this.#mutate(request.project_id, () => this.#transport.interruptRuntime(request));
+  interrupt(request: RuntimeInstanceRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(request.project_id, () => this.#transport.interruptRuntime(request), lease);
   }
 
-  restart(request: RuntimeInstanceRequest) {
-    return this.#mutate(request.project_id, () => this.#transport.restartRuntime(request));
+  restart(request: RuntimeInstanceRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(request.project_id, () => this.#transport.restartRuntime(request), lease);
   }
 
-  stop(request: RuntimeInstanceRequest) {
-    return this.#mutate(request.project_id, () => this.#transport.stopRuntime(request));
+  stop(request: RuntimeInstanceRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(request.project_id, () => this.#transport.stopRuntime(request), lease);
   }
 
-  attach(request: RuntimeAttachmentRequest) {
-    return this.#mutate(request.surface.project_id, () => this.#transport.attachRuntime(request));
+  attach(request: RuntimeAttachmentRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(request.surface.project_id, () => this.#transport.attachRuntime(request), lease);
   }
 
-  detach(request: RuntimeDetachRequest) {
-    return this.#mutate(request.surface.project_id, () => this.#transport.detachRuntime(request));
+  detach(request: RuntimeDetachRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(request.surface.project_id, () => this.#transport.detachRuntime(request), lease);
   }
 
-  startExecution(request: RuntimeExecuteRequest) {
-    return this.#mutate(request.runtime.project_id, () => this.#transport.startRuntimeExecution(request));
+  startExecution(request: RuntimeExecuteRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(request.runtime.project_id, () => this.#transport.startRuntimeExecution(request), lease);
   }
 
   getExecution(executionId: string) {
@@ -366,31 +456,31 @@ export class WorkbenchProjectionStore {
     return this.#transport.followRuntimeOutput(executionId, afterSequence, listener);
   }
 
-  resolve(request: ResourceResolveRequest) {
-    return this.#mutate(request.project_id, () => this.#transport.resolveResource(request));
+  resolve(request: ResourceResolveRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(request.project_id, () => this.#transport.resolveResource(request), lease);
   }
 
   read(request: ResourceReadRequest) {
     return this.#transport.readResource(request);
   }
 
-  updateDraft(request: ResourceDraftRequest) {
-    return this.#mutate(request.target.project_id, () => this.#transport.updateResourceDraft(request));
+  updateDraft(request: ResourceDraftRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(request.target.project_id, () => this.#transport.updateResourceDraft(request), lease);
   }
 
-  save(request: ResourceSaveRequest) {
-    return this.#mutate(request.target.project_id, () => this.#transport.saveResource(request));
+  save(request: ResourceSaveRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(request.target.project_id, () => this.#transport.saveResource(request), lease);
   }
 
-  reload(request: ResourceReloadRequest) {
-    return this.#mutate(request.target.project_id, () => this.#transport.reloadResource(request));
+  reload(request: ResourceReloadRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(request.target.project_id, () => this.#transport.reloadResource(request), lease);
   }
 
-  rename(request: ResourceRenameRequest) {
-    return this.#mutate(request.target.project_id, () => this.#transport.renameResource(request));
+  rename(request: ResourceRenameRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(request.target.project_id, () => this.#transport.renameResource(request), lease);
   }
 
-  delete(request: ResourceDeleteRequest) {
-    return this.#mutate(request.target.project_id, () => this.#transport.deleteResource(request));
+  delete(request: ResourceDeleteRequest, lease?: WorkbenchMutationLease) {
+    return this.#mutate(request.target.project_id, () => this.#transport.deleteResource(request), lease);
   }
 }

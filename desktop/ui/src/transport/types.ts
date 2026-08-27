@@ -321,9 +321,48 @@ export interface WorkspacePreparation {
   readonly issue: WorkspacePreparationIssue | null;
 }
 
+export type WorkspacePreparationStage = "runtime" | "workspace" | "project";
+export type WorkspacePreparationProgressState = "active" | "complete";
+
+export type WorkspacePreparationProgress =
+  | {
+      readonly stage: "runtime";
+      readonly state: "active";
+    }
+  | {
+      readonly stage: "runtime";
+      readonly state: "complete";
+      readonly r_version?: string;
+    }
+  | {
+      readonly stage: "workspace";
+      readonly state: "active";
+    }
+  | {
+      readonly stage: "workspace";
+      readonly state: "complete";
+      readonly workspace_pid?: number;
+    }
+  | {
+      readonly stage: "project";
+      readonly state: "active";
+    }
+  | {
+      readonly stage: "project";
+      readonly state: "complete";
+      readonly project_root?: string;
+    };
+
+export type WorkspacePreparationProgressListener = (
+  snapshot: WorkspacePreparationProgress,
+) => void;
+
 export interface UiKernelTransport extends SurfaceStudioTransport, ResourceTransport, ProfileTransport, AgentConversationTransport, AgentTurnDetailTransport, AgentExecutionTransport, AgentRuntimeTransport, AgentSettingsTransport, AgentFileTransport, PluginSurfaceTransport, ProjectTransport, KernelTransport, CheckTransport, WorkbenchProjectionTransport, HistoryReadTransport, EvidenceReadTransport {
   readonly source: UiSnapshotSource;
-  prepareWorkspace(chooseRscript?: boolean): Promise<WorkspacePreparation>;
+  prepareWorkspace(
+    chooseRscript?: boolean,
+    onProgress?: WorkspacePreparationProgressListener,
+  ): Promise<WorkspacePreparation>;
   subscribeInvalidated(listener: () => void): Unsubscribe;
   subscribeSurfacesInvalidated(listener: () => void): Unsubscribe;
   subscribePluginSurfacesInvalidated(listener: () => void): Unsubscribe;

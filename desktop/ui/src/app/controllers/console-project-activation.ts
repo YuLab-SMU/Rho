@@ -1,13 +1,14 @@
 import { useEffect } from "react";
 
 import type { ConsoleExecutionRouter } from "./console-execution-router";
+import type { ConsoleExecutionActivation } from "./console-execution-router";
 
 export function useConsoleProjectActivation(
   router: ConsoleExecutionRouter,
-  projectId: string | null,
+  activation: ConsoleExecutionActivation | null,
 ): void {
   useEffect(() => {
-    router.activateProject(projectId);
-  }, [projectId, router]);
+    router.activate(activation);
+  }, [activation, router]);
   useEffect(() => () => router.dispose(), [router]);
 }

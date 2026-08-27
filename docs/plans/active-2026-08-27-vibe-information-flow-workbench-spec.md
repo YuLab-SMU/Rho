@@ -1,14 +1,14 @@
 # Vibe Information-Flow Workbench
 
 Status: active direction; VIBE-1 implemented and integration-reviewed;
-VIBE-1R focus-preserving Agent host explicitly authorized
+VIBE-1R implemented, merged, and merged-candidate automated/visual verification
+passed in `0.4.1-dev.22`
 
 Date: 2026-08-27
 Change class: D3 program; first implementation checkpoint VIBE-1 is D2/R2
 Owner: Vibe information-flow workbench
 Authorized by: product owner in the active Vibe design task on 2026-08-27
-Next mandatory stop: VIBE-1R may integrate only after central cross-review and
-focused/real-app acceptance; VIBE-2 still requires separate product
+Next mandatory stop: VIBE-1R is closed. VIBE-2 still requires separate product
 authorization, and no scientific-state schema work may begin without a
 separately authorized D3/R3 package
 
@@ -717,7 +717,7 @@ Recorded evidence for the reviewed candidate:
 - build: `rsr:build` and `cargo build -p rho-desktop` passed for
   `0.4.1-dev.21`;
 - visual harness self-test passed; and
-- final real-debug-app S9 evidence at
+- pre-VIBE-1R VIBE-1 real-debug-app S9 checkpoint at
   `target/visual-acceptance/2026-08-26T23-13-38.823Z` passed 6/6 deterministic
   gates and 6/6 frame reviews with no pending verdict.
 
@@ -728,10 +728,51 @@ content and exact typed links. Neither source is reported as proving the
 other's facts. The unchanged-source final handoff separately reports the
 complete resumable RSR checkpoint.
 
+## VIBE-1R Integration Review — 2026-08-27
+
+VIBE-1R is implemented and verified inside the merged `0.4.1-dev.22`
+candidate. Primary entry opens the focus-preserving read-only record host in
+Vibe without a manuscript flush, mode switch, Surface placement, or return-token
+consumption. The host fails closed on stale exact identity and exposes only the
+durable public task, activity, status, and outcome. The full trusted Agent
+Surface and every approval, credential, execution, and file-mutation control
+remain Studio-only behind explicitly labelled secondary actions.
+
+The pre-documentation frozen product snapshot had repository fingerprint
+`df64bc7de536667641f7aa96c6fcfa5c99a83713701af999c000dcd1b9311dcb`.
+Its complete stable `rsr:check` passed 76 Vitest files / 578 tests, production
+build, browser smoke, real interaction acceptance, and the visual-harness
+self-test. The exact frozen debug binary had SHA-256
+`3fb1693239d2b2f64f1966284dd1dd485fe41afa890b67abf6969a63a8650465`.
+
+The immutable merged S0/S3/S9 run at
+`target/visual-acceptance/dev22-final-df64bc7d-3fb16932-s0-s3-s9/` finished
+`PASS`: 35/35 deterministic gates, 31/31 reviewed frames, and no deterministic,
+visual, or pending failure. S9 covered wide, intermediate, focused, narrow,
+empty-record, exact browser/mock record, and narrow-short record reachability;
+its own result was 9/9 gates and 9/9 reviewed frames.
+The browser/mock frames prove exact populated record projection; the real debug
+frames prove the real debug-app composition and empty-host boundary. No
+evidence class is reported as proving the other's facts.
+
+Lifecycle documentation did not change the frozen product sources or frontend
+assets. The exact current debug binary has SHA-256
+`4c9d9b18920d97c0aaea309b61d1bde6ade603f1d3c268d8e3a395f55d02a1cf`.
+Its immutable confirmation run at
+`target/visual-acceptance/dev22-final-1f476c14-4c9d9b18-s0-s3-s9-r2/`
+finished `PASS`: 35/35 gates and 31/31 original-resolution frame reviews, with
+S9 passing 9/9 gates and 9/9 frames across the real debug and browser/mock
+evidence classes. The earlier `3fb169...` run remains the historical
+pre-documentation frozen-product PASS and is not presented as the current
+binary.
+
+This closes VIBE-1R only. It adds no VIBE-2 authorization, scientific-state
+schema, new Agent authority, or release decision.
+
 ## Version And Release Decision
 
-The reviewed integration mints synchronized desktop candidate
-`0.4.1-dev.21`; `NEWS.md`, Cargo workspace packages, desktop package metadata,
-and Tauri configuration carry that version. R package versions are unaffected.
-This work does not package, sign, publish, install, or release an application.
-Release remains NO-GO.
+VIBE-1 minted synchronized desktop candidate `0.4.1-dev.21`. The reviewed
+VIBE-1R integration is recorded in synchronized candidate `0.4.1-dev.22` and
+its `NEWS.md` entry. R package versions are unaffected. This work does not
+package, sign, publish, install, or release an application. Release remains
+NO-GO.

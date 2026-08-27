@@ -70,6 +70,7 @@
   }
   .rho-surface-chrome {
     display: flex;
+    min-width: 0;
     align-items: center;
     justify-content: space-between;
     gap: var(--rho-space-2);
@@ -169,11 +170,14 @@
   .rho-navigator-tabs {
     display: flex;
     flex: 1 1 auto;
+    flex-wrap: wrap;
     min-width: 0;
+    align-content: flex-start;
     gap: var(--rho-space-1);
     padding: var(--rho-space-1) var(--rho-space-2) 0;
   }
   .rho-navigator-tabs button {
+    flex: 0 0 auto;
     min-height: var(--rho-target-min);
     padding: var(--rho-space-2) var(--rho-space-3);
     border-color: transparent;
@@ -189,7 +193,7 @@
     font-weight: var(--rho-weight-semibold);
     background: var(--rho-paper);
   }
-  .rho-navigator-search-toggle { align-self: center; margin-inline-end: var(--rho-space-2); }
+  .rho-navigator-search-toggle { flex: 0 0 auto; align-self: center; margin-inline-end: var(--rho-space-2); }
   .rho-navigator-search {
     display: flex;
     padding: var(--rho-space-2) var(--rho-space-3);

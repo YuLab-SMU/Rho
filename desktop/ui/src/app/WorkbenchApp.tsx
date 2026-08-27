@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -16,6 +17,7 @@ import {
   commandsForPlacement,
   createUiKernelTransport,
 } from "../transport";
+import type { WorkbenchMutationLease } from "../transport/workbench-store";
 import type {
   AgentTurnSummary,
   PluginSurfaceDocumentRequest,
@@ -57,6 +59,7 @@ import {
   createVerificationAdapter,
   type VerificationScope,
 } from "./vibe/verification";
+import type { FileMutationWorkflow } from "./FileResourceView";
 import { SurfaceView } from "./SurfaceView";
 import type { SourceExecutionSubmission } from "./source-execution";
 import { ToolbarCustomizer } from "./ToolbarCustomizer";
@@ -79,6 +82,12 @@ import { ConsoleExecutionRouter } from "./controllers/console-execution-router";
 import type { ConsoleExecutionEndpoint } from "./controllers/console-execution-router";
 import { useConsoleProjectActivation } from "./controllers/console-project-activation";
 import { ProjectSwitchController } from "./controllers/project-switch-controller";
+import {
+  ProjectTransitionEpochController,
+  type ProjectActionScope,
+  type ProjectActivationScope,
+  type ProjectTransitionEpochToken,
+} from "./controllers/project-transition-epoch-controller";
 import type { ConsoleViewState } from "./controllers/console-instance-controller";
 import { ConsoleRequirementController } from "./controllers/console-requirement-controller";
 import { StudioMutationController } from "./controllers/studio-mutation-controller";
@@ -100,8 +109,53 @@ interface WorkbenchAppProps {
   readonly transport?: UiKernelTransport;
 }
 
+interface ScopedActionError {
+  readonly message: string;
+  readonly scope: ProjectActionScope;
+}
+
 function boundedFailureMessage(error: unknown, fallback: string): string {
   return workbenchFailureMessage(error, fallback);
+}
+
+export async function settleWorkbenchMutationQueues(
+  controllerQueues: readonly Promise<void>[],
+  settleStore: () => Promise<void>,
+): Promise<void> {
+  const controllerResults = await Promise.allSettled(controllerQueues);
+  let storeFailure: unknown = null;
+  try {
+    await settleStore();
+  } catch (error: unknown) {
+    storeFailure = error;
+  }
+  const controllerFailure = controllerResults.find(
+    (result): result is PromiseRejectedResult => result.status === "rejected",
+  );
+  if (controllerFailure != null) throw controllerFailure.reason;
+  if (storeFailure != null) throw storeFailure;
+}
+
+export async function runRevocableFileMutationWorkflow<T>(
+  operation: (workflow: FileMutationWorkflow) => Promise<T>,
+  ports: FileMutationWorkflow,
+): Promise<T> {
+  let open = true;
+  const runIfOpen = <Result,>(action: () => Promise<Result>): Promise<Result> => (
+    open
+      ? action()
+      : Promise.reject(new Error("The File workflow capability has expired."))
+  );
+  const workflow: FileMutationWorkflow = {
+    updateDraft: (content, value) => runIfOpen(() => ports.updateDraft(content, value)),
+    save: (content) => runIfOpen(() => ports.save(content)),
+    runSourceExecution: (execution) => runIfOpen(() => ports.runSourceExecution(execution)),
+  };
+  try {
+    return await operation(workflow);
+  } finally {
+    open = false;
+  }
 }
 
 export const defaultTransport = createUiKernelTransport();
@@ -149,9 +203,76 @@ function resourceTarget(
   };
 }
 
+function sameProjectActionScope(
+  left: ProjectActionScope | null,
+  right: ProjectActionScope | null,
+): boolean {
+  return left?.epoch === right?.epoch
+    && left?.projectId === right?.projectId
+    && left?.projectRevision === right?.projectRevision;
+}
+
+const ADMISSION_GUARDED_TRANSPORT_METHODS = new Set<PropertyKey>([
+  "retryRun",
+  "updateRuntimeOutputPolicy",
+  "pruneRuntimeOutput",
+  "deleteRuntimeExecution",
+  "createAgentConversation",
+  "runAgent",
+  "retryAgentTurn",
+  "cancelAgentTurn",
+  "respondAgentApproval",
+  "retryAgentRuntime",
+  "applyAgentFileEdit",
+  "undoAgentFileEdit",
+  "dispatchPluginSurfaceEvent",
+  "runCheckProject",
+  "setSelection",
+]);
+
+function createAdmissionGuardedTransport(
+  transport: UiKernelTransport,
+  store: WorkbenchProjectionStore,
+  controller: ProjectTransitionEpochController,
+  scope: ProjectActionScope | null,
+): UiKernelTransport {
+  const methods = new Map<PropertyKey, unknown>();
+  return new Proxy(transport, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver);
+      if (typeof value !== "function") return value;
+      const cached = methods.get(property);
+      if (cached != null) return cached;
+      const bound = value.bind(target) as (...args: unknown[]) => unknown;
+      const method = ADMISSION_GUARDED_TRANSPORT_METHODS.has(property)
+        ? (...args: unknown[]) => {
+            if (scope == null || !controller.accepts(scope)) {
+              return Promise.reject(new Error("The project action belongs to an inactive transition epoch."));
+            }
+            const current = store.getSnapshot();
+            if (current.status !== "ready") {
+              return Promise.reject(new Error("Workbench is not ready."));
+            }
+            if (
+              current.snapshot.project_id !== scope.projectId
+              || current.snapshot.kernel.context.project_revision !== scope.projectRevision
+            ) {
+              return Promise.reject(new Error("The project action scope is stale."));
+            }
+            return store.admitMutation(scope.projectId, () => (
+              Promise.resolve(bound(...args))
+            ));
+          }
+        : bound;
+      methods.set(property, method);
+      return method;
+    },
+  }) as UiKernelTransport;
+}
+
 
 export function WorkbenchApp({ transport }: WorkbenchAppProps) {
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<ScopedActionError | null>(null);
   const [resourcePath, setResourcePath] = useState("analysis.R");
   const [commandQuery, setCommandQuery] = useState("");
   const [commandSearchOpen, setCommandSearchOpen] = useState(false);
@@ -178,17 +299,21 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
   const rhoMenuTriggerRef = useRef<HTMLElement>(null);
   const vibeWorkspaceRef = useRef<VibeWorkspaceSurfaceHandle>(null);
   const vibeReturnPointRef = useRef<VibeReturnPoint | null>(null);
-  const vibeTransitionRef = useRef<Promise<void> | null>(null);
+  const vibeTransitionRef = useRef<Promise<unknown> | null>(null);
   const vibeIdentityRef = useRef<string | null>(null);
   const vibeProjectRef = useRef<string | null>(null);
   const verificationScopeRef = useRef<VerificationScope | null>(null);
-  const [vibeProjectEpoch, setVibeProjectEpoch] = useState(0);
   const [vibeTransitionBusy, setVibeTransitionBusy] = useState(false);
   const [vibeEditingLocked, setVibeEditingLocked] = useState(false);
   const consumeVibeReturnPoint = useCallback((point: VibeReturnPoint) => {
     if (vibeReturnPointRef.current === point) vibeReturnPointRef.current = null;
   }, []);
   const projectSwitchController = useMemo(() => new ProjectSwitchController(), []);
+  const projectTransitionEpochController = useMemo(
+    () => new ProjectTransitionEpochController(),
+    [],
+  );
+  const [renderedActionScope, setRenderedActionScope] = useState<ProjectActionScope | null>(null);
   const traceProjectRef = useRef<string | null>(null);
   const consoleExecutionRouter = useMemo(() => new ConsoleExecutionRouter(), []);
   const draftCache = useRef(new Map<string, string>()).current;
@@ -205,6 +330,22 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
     () => transport == null ? defaultStore : new WorkbenchProjectionStore(transport),
     [transport],
   );
+  const admittedPluginTransport = useMemo(
+    () => createAdmissionGuardedTransport(
+      pluginTransport,
+      store,
+      projectTransitionEpochController,
+      renderedActionScope,
+    ),
+    [
+      pluginTransport,
+      projectTransitionEpochController,
+      renderedActionScope?.epoch,
+      renderedActionScope?.projectId,
+      renderedActionScope?.projectRevision,
+      store,
+    ],
+  );
   const surfaceStore = store;
   const studioStore = store;
   const runtimeStore = store;
@@ -220,6 +361,52 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
   const profileSnapshot = projection?.profile ?? null;
   const profile = profileSnapshot?.profile ?? null;
   const projectionProjectId = snapshot?.project.project_id ?? null;
+  const projectionActivation: ProjectActivationScope | null = projection == null
+    ? null
+    : {
+        projectId: projection.project_id,
+        projectRevision: projection.kernel.context.project_revision,
+        projectionGeneration: projection.projection_generation,
+      };
+  useLayoutEffect(() => {
+    if (projectionActivation == null) return;
+    const nextScope = !projectTransitionEpochController.isInitialized()
+      ? projectTransitionEpochController.initialize(projectionActivation)
+      : projectTransitionEpochController.isAdmissionOpen()
+        ? projectTransitionEpochController.observeActivation(projectionActivation)
+        : null;
+    setRenderedActionScope((current) => (
+      sameProjectActionScope(current, nextScope) ? current : nextScope
+    ));
+  }, [
+    projectTransitionEpochController,
+    projectionActivation?.projectId,
+    projectionActivation?.projectRevision,
+    projectionActivation?.projectionGeneration,
+  ]);
+  const reportActionError = useMemo(() => {
+    const capturedScope = renderedActionScope;
+    return (message: string | null) => {
+      if (!projectTransitionEpochController.accepts(capturedScope)) return;
+      if (message == null) {
+        setActionError((current) => current != null
+          && projectTransitionEpochController.accepts(current.scope)
+          ? null
+          : current);
+        return;
+      }
+      if (capturedScope != null) setActionError({ message, scope: capturedScope });
+    };
+  }, [
+    projectTransitionEpochController,
+    renderedActionScope?.epoch,
+    renderedActionScope?.projectId,
+    renderedActionScope?.projectRevision,
+  ]);
+  const reportActionErrorRef = useRef(reportActionError);
+  useLayoutEffect(() => {
+    reportActionErrorRef.current = reportActionError;
+  }, [reportActionError]);
   const vibeIdentity = projectionProjectId == null
     ? null
     : `${projectionProjectId}:${profile?.active_vibe_page_id ?? "no-page"}`;
@@ -230,16 +417,32 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
       vibeProjectRef.current = projectionProjectId;
       vibeReturnPointRef.current = null;
     }
-    setVibeProjectEpoch((current) => current + 1);
   }, [projectionProjectId, vibeIdentity]);
-  verificationScopeRef.current = snapshot == null || profile == null
-    ? null
-    : {
-        projectId: snapshot.project.project_id,
-        projectRoot: snapshot.project.display_path,
-        projectRevision: snapshot.context.project_revision,
-        epoch: vibeProjectEpoch,
-      };
+  useLayoutEffect(() => {
+    verificationScopeRef.current = snapshot == null
+      || profile == null
+      || renderedActionScope == null
+      || !projectTransitionEpochController.accepts(renderedActionScope)
+      || snapshot.project.project_id !== renderedActionScope.projectId
+      || profile.project_id !== renderedActionScope.projectId
+      || snapshot.context.project_revision !== renderedActionScope.projectRevision
+        ? null
+        : {
+            projectId: renderedActionScope.projectId,
+            projectRoot: snapshot.project.display_path,
+            projectRevision: renderedActionScope.projectRevision,
+            epoch: renderedActionScope.epoch,
+          };
+  }, [
+    profile?.project_id,
+    projectTransitionEpochController,
+    renderedActionScope?.epoch,
+    renderedActionScope?.projectId,
+    renderedActionScope?.projectRevision,
+    snapshot?.context.project_revision,
+    snapshot?.project.display_path,
+    snapshot?.project.project_id,
+  ]);
   const vibeVerificationPort = useMemo(() => createVibeVerificationReadPort({
     transport: pluginTransport,
     currentScope: () => verificationScopeRef.current,
@@ -248,7 +451,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
     () => createVerificationAdapter(vibeVerificationPort),
     [vibeVerificationPort],
   );
-  useConsoleProjectActivation(consoleExecutionRouter, projectionProjectId);
+  useConsoleProjectActivation(consoleExecutionRouter, renderedActionScope);
   useEffect(() => {
     if (projectionProjectId != null && traceProjectRef.current !== projectionProjectId) {
       workbenchOperationTrace.reset();
@@ -345,12 +548,12 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
       command.definition.command_id.toLocaleLowerCase().includes(query);
   }), [commandQuery, snapshot]);
   const run = (operation: Promise<unknown>, operationName = "workbench.action") => {
-    setActionError(null);
+    reportActionError(null);
     void workbenchOperationTrace.run(
       operationName,
       () => operation,
       { fallback: "Studio operation failed.", scope: "workbench" },
-    ).catch((error: unknown) => setActionError(workbenchFailureMessage(error, "Studio operation failed.")));
+    ).catch((error: unknown) => reportActionError(workbenchFailureMessage(error, "Studio operation failed.")));
   };
   const allocateLayoutNodeId = useCallback(
     () => `layout-node:${crypto.randomUUID().replaceAll("-", "")}`,
@@ -358,18 +561,24 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
   );
   const studioMutationController = useMemo(() => new StudioMutationController({
     getStudio: studioStore.getStudioSnapshot,
-    apply: (request) => studioStore.apply(request),
-    undo: (request) => studioStore.undo(request),
-    redo: (request) => studioStore.redo(request),
-    report: setActionError,
+    admit: (projectId, operation) => store.admitMutation(projectId, operation),
+    apply: (request, lease) => studioStore.apply(request, lease),
+    undo: (request, lease) => studioStore.undo(request, lease),
+    redo: (request, lease) => studioStore.redo(request, lease),
+    captureReport: () => reportActionErrorRef.current,
     allocateLayoutNodeId,
-  }), [allocateLayoutNodeId, studioStore]);
+  }), [allocateLayoutNodeId, store, studioStore]);
   const surfaceMutationController = useMemo(() => new SurfaceInstanceMutationController({
     getSurfaces: surfaceStore.getSurfaceSnapshot,
-    update: (request) => surfaceStore.update(request),
-    suspend: (request) => surfaceStore.suspend(request),
-    resume: (request) => surfaceStore.resume(request),
-  }), [surfaceStore]);
+    admit: (projectId, operation) => store.admitMutation(projectId, operation),
+    update: (request, lease) => surfaceStore.update(request, lease),
+    suspend: (request, lease) => surfaceStore.suspend(request, lease),
+    resume: (request, lease) => surfaceStore.resume(request, lease),
+  }), [store, surfaceStore]);
+  const settleCurrentWorkbenchMutationQueues = () => settleWorkbenchMutationQueues([
+    studioMutationController.settled(),
+    surfaceMutationController.settled(),
+  ], () => store.settled());
   const previewToolbarLayout = (layout: ToolbarLayout) => {
     if (toolbarProjectId == null) return;
     setToolbarPreference((current) => ({
@@ -388,7 +597,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
     } catch {
       status = "unavailable";
       detail = "Toolbar changed for this session, but the preference could not be saved.";
-      setActionError(detail);
+      reportActionError(detail);
     }
     setToolbarPreference({ projectId: toolbarProjectId, layout, status, detail });
   };
@@ -399,8 +608,71 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
     project_id: profile.project_id,
     expected_profile_revision: profile.revision,
   };
-  const duplicate = async (instance: SurfaceInstance) => {
+  const assertRenderedActionScope = (): ProjectActionScope => {
+    const scope = renderedActionScope;
+    if (scope == null || !projectTransitionEpochController.accepts(scope)) {
+      throw new Error("The project action belongs to an inactive transition epoch.");
+    }
+    const current = store.getSnapshot();
+    if (
+      current.status !== "ready"
+      || current.snapshot.project_id !== scope.projectId
+      || current.snapshot.kernel.context.project_revision !== scope.projectRevision
+    ) {
+      throw new Error("The project action scope is stale.");
+    }
+    return scope;
+  };
+  const withMutationAdmission = <T,>(
+    projectId: string,
+    lease: WorkbenchMutationLease | undefined,
+    operation: (admitted: WorkbenchMutationLease) => Promise<T>,
+  ): Promise<T> => {
+    if (lease != null) return operation(lease);
+    let scope: ProjectActionScope;
+    try {
+      scope = assertRenderedActionScope();
+    } catch (error: unknown) {
+      return Promise.reject(error);
+    }
+    if (scope.projectId !== projectId) {
+      return Promise.reject(new Error("The project action belongs to another project."));
+    }
+    return store.admitMutation(projectId, operation);
+  };
+  const reportProjectWorkflowAction = (
+    sourceScope: ProjectActionScope,
+    message: string | null,
+  ) => {
+    if (!projectTransitionEpochController.isAdmissionOpen()) return;
+    let currentScope: ProjectActionScope;
+    try {
+      currentScope = projectTransitionEpochController.observeActivation(
+        currentProjectActivation(),
+      );
+    } catch {
+      return;
+    }
+    if (
+      currentScope.epoch !== sourceScope.epoch
+      || currentScope.projectId !== sourceScope.projectId
+      || currentScope.projectRevision < sourceScope.projectRevision
+    ) return;
+    if (message == null) {
+      setActionError((current) => current != null
+        && projectTransitionEpochController.accepts(current.scope)
+        ? null
+        : current);
+    } else {
+      setActionError({ message, scope: currentScope });
+    }
+  };
+  const duplicate = async (
+    instance: SurfaceInstance,
+    admissionLease?: WorkbenchMutationLease,
+  ) => {
     if (surfaces == null || studio == null) return;
+    return withMutationAdmission(surfaces.project_id, admissionLease, async (lease) => {
     const before = new Set(surfaces.catalog.instances.map((candidate) => candidate.instance_id));
     const opened = await surfaceStore.open({
       surface_id: instance.surface_id,
@@ -414,7 +686,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
       placement_intent: "beside",
       expected_project_revision: surfaces.project_revision,
       expected_layout_revision: studio.scene.layout_revision,
-    });
+    }, lease);
     const created = opened.catalog.instances.find((candidate) => !before.has(candidate.instance_id));
     if (created == null) throw new Error("Surface Runtime did not return the duplicated instance.");
     if (studio.scene.root.kind !== "container") return;
@@ -429,10 +701,15 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
         instance_id: created.instance_id,
         basis: { kind: "fraction", weight: 1 },
       },
+    }, lease);
     });
   };
-  const openConsole = async (runtime: RuntimeDescriptor) => {
+  const openConsole = async (
+    runtime: RuntimeDescriptor,
+    admissionLease?: WorkbenchMutationLease,
+  ) => {
     if (surfaces == null || studio == null) return;
+    return withMutationAdmission(surfaces.project_id, admissionLease, async (lease) => {
     const before = new Set(surfaces.catalog.instances.map((candidate) => candidate.instance_id));
     const opened = await surfaceStore.open({
       surface_id: "rho.console",
@@ -461,7 +738,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
       placement_intent: "beside",
       expected_project_revision: surfaces.project_revision,
       expected_layout_revision: studio.scene.layout_revision,
-    });
+    }, lease);
     const created = opened.catalog.instances.find((candidate) => !before.has(candidate.instance_id));
     if (created == null) throw new Error("Surface Runtime did not return the new Console.");
     if (studio.scene.root.kind !== "container") return;
@@ -476,6 +753,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
         instance_id: created.instance_id,
         basis: { kind: "fraction", weight: 1 },
       },
+    }, lease);
     });
   };
   const openResource = async (
@@ -483,11 +761,13 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
     surfaceId: "rho.file-source" | "rho.file-preview",
     modeId: "source" | "preview" | "diff" | "outline",
     placement?: { readonly container_node_id: string; readonly child_index: number },
+    admissionLease?: WorkbenchMutationLease,
   ) => {
     if (surfaces == null || studio == null) return;
     if (descriptor.status !== "ready") {
       throw new Error(`Resource ${descriptor.resource_id} is ${descriptor.status}.`);
     }
+    return withMutationAdmission(surfaces.project_id, admissionLease, async (lease) => {
     const before = new Set(surfaces.catalog.instances.map((candidate) => candidate.instance_id));
     const opened = await surfaceStore.open({
       surface_id: surfaceId,
@@ -506,7 +786,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
       placement_intent: "beside",
       expected_project_revision: surfaces.project_revision,
       expected_layout_revision: studio.scene.layout_revision,
-    });
+    }, lease);
     const created = opened.catalog.instances.find((candidate) => !before.has(candidate.instance_id));
     if (created == null) throw new Error("Surface Runtime did not return the new file view.");
     if (studio.scene.root.kind !== "container") return;
@@ -521,6 +801,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
         instance_id: created.instance_id,
         basis: { kind: "fraction", weight: 1 },
       },
+    }, lease);
     });
   };
   const navigatorPlacement = (): { readonly container_node_id: string; readonly child_index: number } | undefined => {
@@ -581,10 +862,12 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
   const openFactory = async (
     factory: SurfaceFactoryRegistration,
     viewStateOverride?: unknown,
+    admissionLease?: WorkbenchMutationLease,
   ) => {
     if (surfaces == null || studio == null) {
       throw new Error("Surface Runtime is not ready.");
     }
+    return withMutationAdmission(surfaces.project_id, admissionLease, async (lease) => {
     const definition = factory.definition;
     const before = new Set(surfaces.catalog.instances.map((candidate) => candidate.instance_id));
     const primaryRuntime = runtimes?.instances.find((runtime) => runtime.primary_scientific_runtime);
@@ -616,7 +899,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
       placement_intent: "current",
       expected_project_revision: surfaces.project_revision,
       expected_layout_revision: studio.scene.layout_revision,
-    });
+    }, lease);
     const created = opened.catalog.instances.find((candidate) => !before.has(candidate.instance_id));
     if (created == null) throw new Error(`${definition.label} did not create a Surface instance.`);
     if (profile?.active_mode === "studio" && studio.scene.root.kind === "container") {
@@ -633,7 +916,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
             ? { kind: "intrinsic" }
             : { kind: "minmax", min_logical_pixels: 220, max_logical_pixels: 1_200, weight: 1 },
         },
-      });
+      }, lease);
       return created;
     }
     await profileStore.refresh();
@@ -686,8 +969,9 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
       page_id: page.page_id,
       expected_page_revision: page.page_revision,
       mutation: { kind: "replace_sections", sections, focused_block_id: block.block_id },
-    });
+    }, lease);
     return created;
+    });
   };
   const currentProfileSnapshot = () => {
     const current = profileStore.getProfileSnapshot();
@@ -705,28 +989,55 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
     return current.snapshot;
   };
   const setWorkspaceModeReconciled = async (mode: "studio" | "vibe") => {
-    const before = currentProfileSnapshot().profile;
-    if (before.active_mode === mode) return;
+    const sourceScope = projectTransitionEpochController.observeActivation(
+      currentProjectActivation(),
+    );
+    const rejectGesture = (error: unknown): never => {
+      reportProjectWorkflowAction(
+        sourceScope,
+        workbenchFailureMessage(error, "Workspace mode change failed."),
+      );
+      throw error;
+    };
+    try {
+      await settleCurrentWorkbenchMutationQueues();
+    } catch (error: unknown) {
+      return rejectGesture(error);
+    }
+    let currentScope: ProjectActionScope;
+    try {
+      currentScope = projectTransitionEpochController.observeActivation(
+        currentProjectActivation(),
+      );
+    } catch (error: unknown) {
+      return rejectGesture(error);
+    }
+    if (
+      currentScope.epoch !== sourceScope.epoch
+      || currentScope.projectId !== sourceScope.projectId
+    ) {
+      return rejectGesture(new Error(
+        "The workspace mode gesture belongs to a replaced project activation.",
+      ));
+    }
+    const latest = currentProfileSnapshot().profile;
+    if (latest.project_id !== sourceScope.projectId) {
+      return rejectGesture(new Error("The workspace mode gesture belongs to another project."));
+    }
+    if (latest.active_mode === mode) return;
     try {
       await profileStore.setMode({
         target: {
-          project_id: before.project_id,
-          expected_profile_revision: before.revision,
+          project_id: latest.project_id,
+          expected_profile_revision: latest.revision,
         },
         mode,
       });
     } catch (error: unknown) {
-      await profileStore.refresh().catch(() => undefined);
-      const reconciled = profileStore.getProfileSnapshot();
-      if (
-        reconciled.status === "ready"
-        && reconciled.snapshot.profile.project_id === before.project_id
-        && reconciled.snapshot.profile.active_mode === mode
-      ) return;
-      throw error;
+      rejectGesture(error);
     }
   };
-  const runVibeTransition = (operation: () => Promise<void>): Promise<void> => {
+  const runVibeTransition = <T,>(operation: () => Promise<T>): Promise<T> => {
     if (vibeTransitionRef.current != null) {
       return Promise.reject(new Error("Another Vibe transition is still in progress."));
     }
@@ -961,7 +1272,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
     let conversationId = selection.conversationId;
     if (conversationId == null) {
       if (!compose) throw new Error("No exact Agent conversation is selected.");
-      const created = await pluginTransport.createAgentConversation();
+      const created = await admittedPluginTransport.createAgentConversation();
       const currentRoot = verificationScopeRef.current?.projectRoot;
       if (created.project_root !== currentRoot) {
         throw new Error("Agent created a conversation for another project.");
@@ -1056,12 +1367,15 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
         (candidate) => candidate.definition.surface_id === "rho.agent",
       );
       if (factory == null) throw new Error("Agent Surface factory is unavailable.");
-      const conversation = await pluginTransport.createAgentConversation();
-      await openFactory(factory, {
-        conversation_id: conversation.conversation_id,
-        mode: "ask",
-        composer: "",
-        auto_approve: false,
+      if (surfaces == null) throw new Error("Surface Runtime is unavailable.");
+      await withMutationAdmission(surfaces.project_id, undefined, async (lease) => {
+        const conversation = await pluginTransport.createAgentConversation();
+        await openFactory(factory, {
+          conversation_id: conversation.conversation_id,
+          mode: "ask",
+          composer: "",
+          auto_approve: false,
+        }, lease);
       });
       setCommandSearchOpen(false);
       return;
@@ -1078,6 +1392,11 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
     if (snapshot == null || surfaces == null || studio == null) {
       throw new Error("Check project is unavailable until the project Surface Runtime is ready.");
     }
+    const checkScope = assertRenderedActionScope();
+    if (checkScope.projectId !== snapshot.project.project_id) {
+      throw new Error("The Check action belongs to another project.");
+    }
+    await withMutationAdmission(checkScope.projectId, undefined, async (lease) => {
     const before = new Set(surfaces.catalog.instances.map((candidate) => candidate.instance_id));
     const response = await pluginTransport.runCheckProject({
       project_id: snapshot.project.project_id,
@@ -1095,7 +1414,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
       placement_intent: "beside",
       expected_project_revision: surfaces.project_revision,
       expected_layout_revision: studio.scene.layout_revision,
-    });
+    }, lease);
     const created = opened.catalog.instances.find((candidate) => !before.has(candidate.instance_id));
     if (created == null) throw new Error("Check completed, but its result Surface was not created.");
     if (profile?.active_mode === "studio" && studio.scene.root.kind === "container") {
@@ -1110,11 +1429,14 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
           instance_id: created.instance_id,
           basis: { kind: "minmax", min_logical_pixels: 280, max_logical_pixels: 900, weight: 1 },
         },
-      });
+      }, lease);
     } else if (profile?.active_mode === "vibe") {
       await profileStore.refresh();
       const latest = profileStore.getProfileSnapshot();
       if (latest.status !== "ready") throw new Error("Vibe Page Profile is unavailable after Check.");
+      if (latest.snapshot.profile.project_id !== checkScope.projectId) {
+        throw new Error("The Check result belongs to another project.");
+      }
       const activePage = latest.snapshot.profile.vibe_pages.find(
         (page) => page.page_id === latest.snapshot.profile.active_vibe_page_id,
       );
@@ -1162,97 +1484,126 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
           sections,
           focused_block_id: activePage.focused_block_id,
         },
-      });
+      }, lease);
     }
+    });
     setCommandSearchOpen(false);
   };
   const pinAgentTask = async (turn: AgentTurnSummary) => {
-    await profileStore.refresh();
-    const latest = profileStore.getProfileSnapshot();
-    if (latest.status !== "ready") throw new Error("The Project UI Profile is unavailable.");
-    const latestProfile = latest.snapshot.profile;
-    const activePage = latestProfile.vibe_pages.find(
-      (page) => page.page_id === latestProfile.active_vibe_page_id,
-    );
-    if (activePage == null) throw new Error("The active Vibe Page is unavailable.");
-    const block = {
-      block_id: `vibe-block:${crypto.randomUUID().replaceAll("-", "")}`,
-      content: {
-        kind: "task_ref" as const,
-        task_id: turn.turn_id,
-        label: `${turn.mode.toUpperCase()} · ${turn.prompt_preview.slice(0, 96)}`,
-      },
-    };
-    const sections = activePage.sections.length === 0
-      ? [{
-          section_id: `vibe-section:${crypto.randomUUID().replaceAll("-", "")}`,
-          heading: "Agent tasks",
-          layout: { kind: "flow" as const },
-          blocks: [block],
-        }]
-      : activePage.sections.map((section, index) => {
-          if (index !== activePage.sections.length - 1) return section;
-          if (section.layout.kind === "flow") {
-            return { ...section, blocks: [...section.blocks, block] };
-          }
-          const nextRow = section.layout.placements.reduce(
-            (maximum, placement) => Math.max(maximum, placement.row_start),
-            0,
-          ) + 1;
-          return {
-            ...section,
-            blocks: [...section.blocks, block],
-            layout: {
-              ...section.layout,
-              placements: [...section.layout.placements, {
-                block_id: block.block_id,
-                row_start: nextRow,
-                column_start: 1,
-                column_span: 12,
-              }],
-            },
-          };
-        });
-    await profileStore.applyPage({
-      target: {
-        project_id: latestProfile.project_id,
-        expected_profile_revision: latestProfile.revision,
-      },
-      page_id: activePage.page_id,
-      expected_page_revision: activePage.page_revision,
-      mutation: {
-        kind: "replace_sections",
-        sections,
-        focused_block_id: block.block_id,
-      },
+    if (profile == null) throw new Error("The Project UI Profile is unavailable.");
+    const sourceScope = assertRenderedActionScope();
+    if (sourceScope.projectId !== profile.project_id) {
+      throw new Error("The Agent task belongs to another project.");
+    }
+    const sourceProjectId = sourceScope.projectId;
+    return withMutationAdmission(sourceProjectId, undefined, async (lease) => {
+      await profileStore.refresh();
+      const latest = profileStore.getProfileSnapshot();
+      if (latest.status !== "ready") throw new Error("The Project UI Profile is unavailable.");
+      const latestProfile = latest.snapshot.profile;
+      if (latestProfile.project_id !== sourceProjectId) {
+        throw new Error("The Agent task belongs to a previous project activation.");
+      }
+      const activePage = latestProfile.vibe_pages.find(
+        (page) => page.page_id === latestProfile.active_vibe_page_id,
+      );
+      if (activePage == null) throw new Error("The active Vibe Page is unavailable.");
+      const block = {
+        block_id: `vibe-block:${crypto.randomUUID().replaceAll("-", "")}`,
+        content: {
+          kind: "task_ref" as const,
+          task_id: turn.turn_id,
+          label: `${turn.mode.toUpperCase()} · ${turn.prompt_preview.slice(0, 96)}`,
+        },
+      };
+      const sections = activePage.sections.length === 0
+        ? [{
+            section_id: `vibe-section:${crypto.randomUUID().replaceAll("-", "")}`,
+            heading: "Agent tasks",
+            layout: { kind: "flow" as const },
+            blocks: [block],
+          }]
+        : activePage.sections.map((section, index) => {
+            if (index !== activePage.sections.length - 1) return section;
+            if (section.layout.kind === "flow") {
+              return { ...section, blocks: [...section.blocks, block] };
+            }
+            const nextRow = section.layout.placements.reduce(
+              (maximum, placement) => Math.max(maximum, placement.row_start),
+              0,
+            ) + 1;
+            return {
+              ...section,
+              blocks: [...section.blocks, block],
+              layout: {
+                ...section.layout,
+                placements: [...section.layout.placements, {
+                  block_id: block.block_id,
+                  row_start: nextRow,
+                  column_start: 1,
+                  column_span: 12,
+                }],
+              },
+            };
+          });
+      await profileStore.applyPage({
+        target: {
+          project_id: latestProfile.project_id,
+          expected_profile_revision: latestProfile.revision,
+        },
+        page_id: activePage.page_id,
+        expected_page_revision: activePage.page_revision,
+        mutation: {
+          kind: "replace_sections",
+          sections,
+          focused_block_id: block.block_id,
+        },
+      }, lease);
     });
   };
-  const consoleRequirementController = useMemo(() => new ConsoleRequirementController({
-    getSurfaces: surfaceStore.getSurfaceSnapshot,
-    getStudio: studioStore.getStudioSnapshot,
-    getRuntimes: runtimeStore.getRuntimeSnapshot,
-    getProfile: profileStore.getProfileSnapshot,
-    attachRuntime: (request) => runtimeStore.attach(request),
-    refreshSurfaces: () => surfaceStore.refresh(),
-    openSurface: (request) => surfaceStore.open(request),
-    applyStudio: (request) => studioStore.apply(request),
-    waitForRenderer: (instanceId) => consoleExecutionRouter.waitFor(instanceId),
-    markPreferred: (instanceId) => consoleExecutionRouter.markPreferred(instanceId),
-    allocateLayoutNodeId,
-  }), [allocateLayoutNodeId, consoleExecutionRouter, profileStore, runtimeStore, studioStore, surfaceStore]);
+  const createConsoleRequirementController = (lease: WorkbenchMutationLease) => (
+    new ConsoleRequirementController({
+      getSurfaces: surfaceStore.getSurfaceSnapshot,
+      getStudio: studioStore.getStudioSnapshot,
+      getRuntimes: runtimeStore.getRuntimeSnapshot,
+      getProfile: profileStore.getProfileSnapshot,
+      attachRuntime: (request) => runtimeStore.attach(request, lease),
+      refreshSurfaces: () => surfaceStore.refresh(),
+      openSurface: (request) => surfaceStore.open(request, lease),
+      applyStudio: (request) => studioStore.apply(request, lease),
+      waitForRenderer: (instanceId) => consoleExecutionRouter.waitFor(instanceId),
+      markPreferred: (instanceId) => consoleExecutionRouter.markPreferred(instanceId),
+      allocateLayoutNodeId,
+    })
+  );
   const runSourceExecution = async (
     sourceInstanceId: string,
     execution: SourceExecutionSubmission,
+    admissionLease?: WorkbenchMutationLease,
+    report: (message: string | null) => void = reportActionError,
   ): Promise<boolean> => consoleExecutionRouter.run(
     sourceInstanceId,
     execution,
-    () => consoleRequirementController.resolve(sourceInstanceId),
-    setActionError,
+    () => {
+      const current = surfaceStore.getSurfaceSnapshot();
+      if (current.status !== "ready") {
+        return Promise.reject(new Error("Surface Runtime is unavailable."));
+      }
+      return withMutationAdmission(current.snapshot.project_id, admissionLease, (lease) => (
+        createConsoleRequirementController(lease).resolve(sourceInstanceId)
+      ));
+    },
+    report,
   );
   const surfaceView = (
     instance: SurfaceInstance,
     embedded = false,
   ) => {
+    const hostScope = renderedActionScope;
+    if (
+      hostScope == null
+      || !projectTransitionEpochController.accepts(hostScope)
+    ) return null;
     const boundDescriptor = resources?.resources.find((descriptor) =>
       descriptor.resource_provider_id === instance.resource_binding?.resource_provider_id &&
       descriptor.resource_kind === instance.resource_binding?.resource_kind &&
@@ -1277,7 +1628,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
               : null,
           };
     return <SurfaceView
-      key={instance.instance_id}
+      key={`${hostScope.epoch}:${instance.project_id}:${instance.instance_id}:${instance.activation_generation}`}
       instance={instance}
       focused={!embedded && studio?.scene.focused_surface_instance_id === instance.instance_id}
       setFocus={() => {
@@ -1315,55 +1666,97 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
           runtime: runtimeRequest(runtime, runtimes.project_revision),
           surface: instanceRequest(instance, surfaces.project_revision),
         });
-        await surfaceStore.refresh();
       }}
       detachRuntime={async () => {
         if (surfaces == null) return;
         await runtimeStore.detach({
           surface: instanceRequest(instance, surfaces.project_revision),
         });
-        await surfaceStore.refresh();
       }}
       startRuntimeExecution={async (runtime, code, sourceContext) => {
         await store.settled();
-        const runtimeState = runtimeStore.getRuntimeSnapshot();
-        const surfaceState = surfaceStore.getSurfaceSnapshot();
-        if (runtimeState.status !== "ready" || surfaceState.status !== "ready") {
-          throw new Error("Runtime Registry or Surface Runtime is not ready.");
+        const currentScope = projectTransitionEpochController.isAdmissionOpen()
+          ? projectTransitionEpochController.observeActivation(currentProjectActivation())
+          : null;
+        if (
+          currentScope == null
+          || currentScope.epoch !== hostScope.epoch
+          || currentScope.projectId !== hostScope.projectId
+          || currentScope.projectRevision < hostScope.projectRevision
+        ) {
+          throw new Error("The Console execution belongs to a previous project activation.");
         }
-        const currentRuntime = runtimeState.snapshot.instances.find((candidate) =>
-          candidate.runtime_instance_id === runtime.runtime_instance_id &&
-          candidate.activation_generation === runtime.activation_generation
-        );
-        const currentConsole = surfaceState.snapshot.catalog.instances.find(
-          (candidate) => candidate.instance_id === instance.instance_id,
-        );
-        if (currentRuntime == null || currentConsole == null) {
-          throw new Error("The Console or Runtime changed before execution could start.");
+        setActionError((current) => current != null
+          && projectTransitionEpochController.accepts(current.scope)
+          ? null
+          : current);
+        try {
+          return await store.admitMutation(currentScope.projectId, async (lease) => {
+            const runtimeState = runtimeStore.getRuntimeSnapshot();
+            const surfaceState = surfaceStore.getSurfaceSnapshot();
+            if (
+              runtimeState.status !== "ready"
+              || surfaceState.status !== "ready"
+              || runtimeState.snapshot.project_id !== currentScope.projectId
+              || surfaceState.snapshot.project_id !== currentScope.projectId
+              || runtimeState.snapshot.project_revision !== currentScope.projectRevision
+              || surfaceState.snapshot.project_revision !== currentScope.projectRevision
+            ) {
+              throw new Error("Runtime Registry or Surface Runtime is not ready for this project.");
+            }
+            const currentRuntime = runtimeState.snapshot.instances.find((candidate) =>
+              candidate.runtime_instance_id === runtime.runtime_instance_id
+              && candidate.activation_generation === runtime.activation_generation
+            );
+            const currentConsole = surfaceState.snapshot.catalog.instances.find(
+              (candidate) => candidate.instance_id === instance.instance_id,
+            );
+            if (currentRuntime == null || currentConsole == null) {
+              throw new Error("The Console or Runtime changed before execution could start.");
+            }
+            const result = await workbenchOperationTrace.run(
+              "runtime.execution.start",
+              () => runtimeStore.startExecution({
+                runtime: runtimeRequest(currentRuntime, runtimeState.snapshot.project_revision),
+                console_instance_id: currentConsole.instance_id,
+                expected_console_revision: currentConsole.surface_revision,
+                code,
+                ...(sourceContext == null ? {} : { source_context: sourceContext }),
+              }, lease),
+              {
+                fallback: "Runtime operation failed.",
+                defaultKind: "runtime_infrastructure",
+                scope: "surface",
+              },
+            );
+            await runtimeStore.refresh();
+            return result;
+          });
+        } catch (error: unknown) {
+          if (projectTransitionEpochController.accepts(currentScope)) {
+            setActionError({
+              message: workbenchFailureMessage(error, "Runtime operation failed."),
+              scope: currentScope,
+            });
+          }
+          throw error;
         }
-        const result = await workbenchOperationTrace.run(
-          "runtime.execution.start",
-          () => runtimeStore.startExecution({
-            runtime: runtimeRequest(currentRuntime, runtimeState.snapshot.project_revision),
-            console_instance_id: currentConsole.instance_id,
-            expected_console_revision: currentConsole.surface_revision,
-            code,
-            ...(sourceContext == null ? {} : { source_context: sourceContext }),
-          }),
-          {
-            fallback: "Runtime operation failed.",
-            defaultKind: "runtime_infrastructure",
-            scope: "surface",
-          },
-        );
-        await runtimeStore.refresh();
-        return result;
       }}
       followRuntimeOutput={async (executionId, afterSequence, listener) => {
+        if (!projectTransitionEpochController.accepts(hostScope)) {
+          throw new Error("The Runtime output follow belongs to a previous project activation.");
+        }
         try {
-          await runtimeStore.followOutput(executionId, afterSequence, listener);
+          await runtimeStore.followOutput(executionId, afterSequence, (frame) => {
+            if (
+              projectTransitionEpochController.accepts(hostScope)
+              && frame.project_id === hostScope.projectId
+            ) listener(frame);
+          });
         } finally {
-          await runtimeStore.refresh();
+          if (projectTransitionEpochController.accepts(hostScope)) {
+            await runtimeStore.refresh();
+          }
         }
       }}
       listRuntimeExecutions={async () => (
@@ -1382,7 +1775,6 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
       restartRuntime={async (runtime) => {
         if (runtimes == null) return;
         await runtimeStore.restart(runtimeRequest(runtime, runtimes.project_revision));
-        await surfaceStore.refresh();
       }}
       persistConsole={async (viewState) => {
         await surfaceMutationController.update(instance.instance_id, {
@@ -1392,7 +1784,6 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
       }}
       registerConsoleExecution={registerConsoleExecution}
       markConsolePreferred={markConsolePreferred}
-      runSourceExecution={runSourceExecution}
       resources={resources}
       readResource={async (descriptor, consistency, resourceRevision) => {
         if (resources == null) throw new Error("Resource Registry is not ready.");
@@ -1409,12 +1800,55 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
           content: value,
         });
       }}
-      saveResource={async (content) => {
+      withFileMutation={async (operation) => {
         if (resources == null) throw new Error("Resource Registry is not ready.");
-        return resourceStore.save({
-          target: resourceTarget(content.descriptor, resources.project_revision),
-          expected_document_revision: content.document_revision,
-        });
+        const projectId = resources.project_id;
+        const workflowScope = assertRenderedActionScope();
+        const reportWorkflowAction = (message: string | null) => {
+          reportProjectWorkflowAction(workflowScope, message);
+        };
+        reportWorkflowAction(null);
+        try {
+          return await withMutationAdmission(projectId, undefined, (lease) => {
+          const currentResourceProjectRevision = () => {
+            const current = resourceStore.getResourceSnapshot();
+            if (
+              current.status !== "ready"
+              || current.snapshot.project_id !== projectId
+              || current.snapshot.project_revision < resources.project_revision
+            ) {
+              throw new Error("Resource Registry changed before the File workflow could continue.");
+            }
+            return current.snapshot.project_revision;
+          };
+          return runRevocableFileMutationWorkflow(operation, {
+            updateDraft: (content, value) => resourceStore.updateDraft({
+              target: resourceTarget(
+                content.descriptor,
+                currentResourceProjectRevision(),
+              ),
+              expected_document_revision: content.document_revision,
+              content: value,
+            }, lease),
+            save: (content) => resourceStore.save({
+              target: resourceTarget(
+                content.descriptor,
+                currentResourceProjectRevision(),
+              ),
+              expected_document_revision: content.document_revision,
+            }, lease),
+            runSourceExecution: (execution) => runSourceExecution(
+              instance.instance_id,
+              execution,
+              lease,
+              reportWorkflowAction,
+            ),
+          });
+          });
+        } catch (error: unknown) {
+          reportWorkflowAction(boundedFailureMessage(error, "File operation failed."));
+          throw error;
+        }
       }}
       reloadResource={async (content, discardDirty) => {
         if (resources == null) throw new Error("Resource Registry is not ready.");
@@ -1433,7 +1867,6 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
           expected_document_revision: content?.document_revision ?? null,
           new_resource_id: nextId,
         });
-        await surfaceStore.refresh();
       }}
       deleteResource={async (content, discardDirty) => {
         if (resources == null || boundDescriptor == null) {
@@ -1468,8 +1901,8 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
           view_state: viewState,
         });
       }}
-      reportError={(error) => setActionError(boundedFailureMessage(error, "Runtime operation failed."))}
-      pluginTransport={pluginTransport}
+      reportError={(error) => reportActionError(boundedFailureMessage(error, "Runtime operation failed."))}
+      pluginTransport={admittedPluginTransport}
       surfaceFactories={surfaces?.catalog.factories ?? []}
       pluginDocumentRequest={pluginDocumentRequest}
       projectRevision={surfaces?.project_revision ?? 0}
@@ -1483,24 +1916,79 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
         await openResource(descriptor, "rho.file-source", "source");
       }}
       agentHealth={snapshot?.health.agent ?? null}
+      createAgentConversation={async (currentViewState) => {
+        const workflowScope = hostScope;
+        reportProjectWorkflowAction(workflowScope, null);
+        try {
+          return await withMutationAdmission(workflowScope.projectId, undefined, async (lease) => {
+            const conversation = await pluginTransport.createAgentConversation();
+            await store.refresh();
+            const nextViewState = {
+              ...currentViewState,
+              conversation_id: conversation.conversation_id,
+            };
+            await surfaceMutationController.updateExact(instance, {
+              kind: "set_view_state",
+              view_state: nextViewState,
+            }, lease);
+            return nextViewState;
+          });
+        } catch (error: unknown) {
+          reportProjectWorkflowAction(
+            workflowScope,
+            boundedFailureMessage(error, "Agent conversation could not be created or selected."),
+          );
+          throw error;
+        }
+      }}
+      runAgentConversation={async (currentViewState, request) => {
+        const workflowScope = hostScope;
+        reportProjectWorkflowAction(workflowScope, null);
+        try {
+          return await withMutationAdmission(workflowScope.projectId, undefined, async (lease) => {
+            const response = await pluginTransport.runAgent(request);
+            await store.refresh();
+            const nextViewState = {
+              ...currentViewState,
+              conversation_id: response.conversation_id,
+              composer: "",
+            };
+            await surfaceMutationController.updateExact(instance, {
+              kind: "set_view_state",
+              view_state: nextViewState,
+            }, lease);
+            return nextViewState;
+          });
+        } catch (error: unknown) {
+          reportProjectWorkflowAction(
+            workflowScope,
+            boundedFailureMessage(error, "Agent turn could not start or select its conversation."),
+          );
+          throw error;
+        }
+      }}
       persistAgentViewState={async (viewState) => {
-        await surfaceMutationController.update(instance.instance_id, {
+        assertRenderedActionScope();
+        await surfaceMutationController.updateExact(instance, {
           kind: "set_view_state",
           view_state: viewState,
         });
       }}
       persistSurfaceViewState={async (viewState) => {
+        assertRenderedActionScope();
         await surfaceMutationController.update(instance.instance_id, {
           kind: "set_view_state",
           view_state: viewState,
         });
+        reportActionError(null);
       }}
       pinAgentTask={pinAgentTask}
       applyAgentFileProposal={async (turn, eventId, proposal) => {
+        if (resources == null) throw new Error("Resource Registry is not ready.");
+        return withMutationAdmission(resources.project_id, undefined, async (lease) => {
         let beforeContent = "";
         let expectedDiskSha256: string | null = null;
         if (proposal.operation !== "create") {
-          if (resources == null) throw new Error("Resource Registry is not ready.");
           let descriptor = resources.resources.find((candidate) =>
             candidate.resource_provider_id === "rho.project-files" &&
             candidate.resource_kind === "project_file" &&
@@ -1514,7 +2002,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
               resource_id: proposal.path,
               expected_project_revision: resources.project_revision,
               expected_snapshot_revision: resources.snapshot_revision,
-            });
+            }, lease);
             descriptor = resolved.resources.find((candidate) =>
               candidate.resource_provider_id === "rho.project-files" &&
               candidate.resource_kind === "project_file" &&
@@ -1543,16 +2031,25 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
         });
         await Promise.all([resourceStore.refresh(), surfaceStore.refresh()]);
         return { response, beforeContent };
+        });
       }}
       undoAgentFileProposal={async (request) => {
-        await pluginTransport.undoAgentFileEdit(request);
-        await Promise.all([resourceStore.refresh(), surfaceStore.refresh()]);
+        if (resources == null) throw new Error("Resource Registry is not ready.");
+        await withMutationAdmission(resources.project_id, undefined, async () => {
+          await pluginTransport.undoAgentFileEdit(request);
+          await Promise.all([resourceStore.refresh(), surfaceStore.refresh()]);
+        });
       }}
       embedded={embedded}
       openNavigatorFile={openNavigatorFile}
       openSurfaceById={openSurfaceById}
       agentRuntimeOutputContext={agentRuntimeOutputContext}
-      setAgentRuntimeOutputContext={setAgentRuntimeOutputContext}
+      setAgentRuntimeOutputContext={(reference) => {
+        if (!projectTransitionEpochController.accepts(hostScope)) return false;
+        if (reference != null && reference.project_id !== hostScope.projectId) return false;
+        setAgentRuntimeOutputContext(reference);
+        return true;
+      }}
     />;
   };
   const activeVibePage = profile?.vibe_pages.find(
@@ -1564,8 +2061,26 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
     operationTraceCount: workbenchOperationTrace.snapshot().length,
     source: state.status === "ready" ? state.source : null,
     project: snapshot?.project.display_path ?? null,
+    projectRevision: snapshot?.context.project_revision ?? null,
     layoutRevision: studio?.scene.layout_revision ?? null,
     surfaceInstanceCount: surfaces?.catalog.instances.length ?? 0,
+    agentInstances: surfaces?.catalog.instances
+      .filter((instance) => instance.surface_id === "rho.agent")
+      .map((instance) => {
+        const viewState = instance.view_state;
+        const conversationId = typeof viewState === "object"
+          && viewState != null
+          && "conversation_id" in viewState
+          && typeof viewState.conversation_id === "string"
+            ? viewState.conversation_id
+            : null;
+        return {
+          id: instance.instance_id,
+          generation: instance.activation_generation,
+          surfaceRevision: instance.surface_revision,
+          conversationId,
+        };
+      }) ?? [],
     studioInstances: studio == null ? [] : [...instances.keys()],
     unplaced: studio?.unplaced_instance_ids ?? [],
     recursiveLayout: studio?.scene.root.kind ?? null,
@@ -1597,16 +2112,46 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
     if (rhoMenuRef.current != null) rhoMenuRef.current.open = false;
   };
   const refreshProjectProjections = () => store.refresh();
+  const currentProjectActivation = (): ProjectActivationScope => {
+    const current = store.getSnapshot();
+    if (current.status !== "ready") throw new Error("The Workbench projection is unavailable.");
+    return {
+      projectId: current.snapshot.project_id,
+      projectRevision: current.snapshot.kernel.context.project_revision,
+      projectionGeneration: current.snapshot.projection_generation,
+    };
+  };
   const performProjectSwitch = async (
     operation: () => Promise<ProjectSwitchResponse>,
     targetPath: string | null,
   ) => {
-    const perform = () => projectSwitchController.perform(operation, targetPath, {
+    let transitionToken: ProjectTransitionEpochToken | null = null;
+    let brokerResponse: ProjectSwitchResponse | null = null;
+    let sourceProjectId: string | null = null;
+    const perform = () => projectSwitchController.perform(async () => {
+      if (transitionToken == null) throw new Error("Project transition admission did not start.");
+      await settleCurrentWorkbenchMutationQueues();
+      projectTransitionEpochController.captureSettledSource(
+        transitionToken,
+        currentProjectActivation(),
+      );
+      brokerResponse = await operation();
+      return brokerResponse;
+    }, targetPath, {
       start: (target) => {
+        const sourceActivation = currentProjectActivation();
+        sourceProjectId = sourceActivation.projectId;
+        transitionToken = projectTransitionEpochController.begin(sourceActivation);
+        consoleExecutionRouter.activate(null);
+        store.closeMutationAdmission();
+        setRenderedActionScope(null);
         setProjectSwitching(true);
         setProjectSwitchTarget(target);
         setProjectSwitchError(null);
         setActionError(null);
+        setAgentRuntimeOutputContext(null);
+        verificationScopeRef.current = null;
+        vibeReturnPointRef.current = null;
       },
       accept: async () => {
         draftCache.clear();
@@ -1615,6 +2160,8 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
         closeRhoMenu();
       },
       refreshRestored: async () => {
+        draftCache.clear();
+        consoleSessionCache.clear();
         await refreshProjectProjections();
       },
       report: setProjectSwitchError,
@@ -1623,12 +2170,69 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
         setProjectSwitchTarget(null);
       },
     });
-    await runVibeTransition(async () => {
+    return runVibeTransition(async () => {
       const current = profileStore.getProfileSnapshot();
       if (current.status === "ready" && current.snapshot.profile.active_mode === "vibe") {
         await prepareVibeReturnPoint();
       }
-      await perform();
+      const status = await perform();
+      const token = transitionToken;
+      if (token == null) return status;
+      let reopened = false;
+      try {
+        if (brokerResponse?.restart_required === true || brokerResponse?.status === "fatal") {
+          projectTransitionEpochController.seal(token);
+          setProjectSwitchError((current) => {
+            const restartMessage = "Restart Rho before continuing project work; the transition cannot safely reopen this session.";
+            if (current == null) return restartMessage;
+            return current.includes(restartMessage) ? current : `${current} ${restartMessage}`;
+          });
+        } else if (status === "ready") {
+          const activation = currentProjectActivation();
+          const acceptedScope = projectTransitionEpochController.acceptReady(token, activation);
+          setRenderedActionScope(acceptedScope);
+          if (sourceProjectId != null && activation.projectId !== sourceProjectId) {
+            workbenchOperationTrace.reset();
+            traceProjectRef.current = activation.projectId;
+          }
+          reopened = true;
+        } else if (status === "failed_restored") {
+          const activation = currentProjectActivation();
+          setRenderedActionScope(projectTransitionEpochController.acceptRestored(token, activation));
+          reopened = true;
+        } else if (
+          status === "blocked"
+          || status === "cancelled"
+          || status === "unavailable"
+        ) {
+          const activation = currentProjectActivation();
+          setRenderedActionScope(projectTransitionEpochController.acceptNoChange(token, activation));
+          reopened = true;
+        } else if (status === "fatal") {
+          await refreshProjectProjections();
+          const recovered = currentProjectActivation();
+          if (brokerResponse?.status === "failed_restored") {
+            setRenderedActionScope(projectTransitionEpochController.acceptRestored(token, recovered));
+          } else {
+            setRenderedActionScope(projectTransitionEpochController.recoverPrevious(token, recovered));
+          }
+          reopened = true;
+        }
+        if (reopened) store.openMutationAdmission();
+      } catch (error: unknown) {
+        try {
+          projectTransitionEpochController.seal(token);
+        } catch {
+          // A consumed token means a coherent activation already reopened.
+        }
+        const message = workbenchFailureMessage(
+          error,
+          "Project transition truth could not be reconciled. Restart Rho before continuing.",
+        );
+        setProjectSwitchError(message);
+        throw error instanceof Error ? error : new Error(message);
+      }
+      return status;
     });
   };
   // Acceptance automation (debug-only bridge): keep a per-render host so the
@@ -1641,7 +2245,10 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
       getEvidence: () => evidence,
       actions: {
         openProject: async (path) => {
-          await performProjectSwitch(() => pluginTransport.openProject(path), path);
+          const status = await performProjectSwitch(() => pluginTransport.openProject(path), path);
+          if (status !== "ready") {
+            throw new Error(`Project switch did not complete: ${status}.`);
+          }
         },
         openSurface: openSurfaceByIdAsync,
         focusInstance: (instanceId) => focusAutomationInstance(instanceId).then(() => undefined),
@@ -1930,7 +2537,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
                   void performProjectSwitch(
                     () => pluginTransport.pickProjectDirectory(),
                     null,
-                  ).catch((error: unknown) => setActionError(workbenchFailureMessage(
+                  ).catch((error: unknown) => reportActionError(workbenchFailureMessage(
                     error,
                     "The current Vibe manuscript could not be saved before switching projects.",
                   )));
@@ -1961,7 +2568,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
                         void performProjectSwitch(
                           () => pluginTransport.openProject(path),
                           path,
-                        ).catch((error: unknown) => setActionError(workbenchFailureMessage(
+                        ).catch((error: unknown) => reportActionError(workbenchFailureMessage(
                           error,
                           "The current Vibe manuscript could not be saved before switching projects.",
                         )));
@@ -1977,9 +2584,6 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
                     </button>
                   ))}
                 </div>
-              )}
-              {projectSwitchError != null && (
-                <p className="rho-project-switch-error" role="alert">{projectSwitchError}</p>
               )}
               {projectHistory.status === "unavailable" && projectHistory.detail != null && (
                 <p className="rho-project-history-status" role="status">{projectHistory.detail}</p>
@@ -2081,6 +2685,9 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
           <div className="rho-toolbar-command-overlay">{commandSearch}</div>
         )}
       </header>
+      {projectSwitchError != null && (
+        <p className="rho-project-switch-error" role="alert">{projectSwitchError}</p>
+      )}
       <div className="rho-studio-main">
       <div className={`rho-studio-workspace ${inspectorOpen ? "rho-inspector-open" : "rho-inspector-closed"}`}>
         {inspectorOpen && <aside className="rho-studio-inspector">
@@ -2239,20 +2846,28 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
               <button type="button" onClick={() => void navigator.clipboard?.writeText(profileSnapshot.recovery_detail ?? "")}>Copy diagnostics</button>
             </div>
           )}
-          {actionError != null && <p className="rho-action-error" role="alert">{actionError}</p>}
-          {snapshot == null || profile == null || surfaces == null || studio == null || !projectProjectionsCoherent
+          {actionError != null && projectTransitionEpochController.accepts(actionError.scope) && (
+            <p className="rho-action-error" role="alert">{actionError.message}</p>
+          )}
+          {snapshot == null
+            || profile == null
+            || surfaces == null
+            || studio == null
+            || !projectProjectionsCoherent
+            || renderedActionScope == null
+            || !projectTransitionEpochController.accepts(renderedActionScope)
             ? <div className="rho-studio-loading">{projectSwitching ? "Switching project…" : "Loading the project UI Profile…"}</div>
             : profile.active_mode === "vibe"
               ? activeVibePage == null
                 ? <div className="rho-studio-loading">The active Vibe Page is unavailable.</div>
                 : <VibeWorkspaceSurface
-                    key={`${profile.project_id}:${activeVibePage.page_id}`}
+                    key={`${renderedActionScope.epoch}:${profile.project_id}:${activeVibePage.page_id}`}
                     ref={vibeWorkspaceRef}
                     page={activeVibePage}
                     profileRevision={profile.revision}
                     projectRoot={snapshot.project.display_path}
                     projectRevision={snapshot.context.project_revision}
-                    projectEpoch={vibeProjectEpoch}
+                    projectEpoch={renderedActionScope.epoch}
                     transitionBusy={vibeEditingLocked}
                     instances={instances}
                     restoredReturnPoint={vibeReturnPointRef.current}
@@ -2263,7 +2878,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
                     verificationAdapter={vibeVerificationAdapter}
                     onOpenStudio={openVibeTargetInStudio}
                     onOpenAgent={openVibeAgentInStudio}
-                    reportError={(error) => setActionError(vibeFailureMessage(
+                    reportError={(error) => reportActionError(vibeFailureMessage(
                       error,
                       "Vibe Page operation failed.",
                     ))}

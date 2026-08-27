@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   DomainSurfaceItem,
@@ -127,6 +127,11 @@ export function RuntimeHistory({
   const [policyOpen, setPolicyOpen] = useState(false);
   const [policyBusy, setPolicyBusy] = useState(false);
   const [policyDraft, setPolicyDraft] = useState({ captureMiB: "", warningMiB: "", rows: "" });
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const installPolicy = (next: RuntimeOutputPolicyView) => {
     setPolicyView(next);
@@ -357,11 +362,12 @@ export function RuntimeHistory({
         contextRange.start,
         contextRange.end,
       );
+      if (!mountedRef.current) return;
       useInAgent(reference);
     } catch (cause: unknown) {
-      reportError(cause);
+      if (mountedRef.current) reportError(cause);
     } finally {
-      setContextBusy(false);
+      if (mountedRef.current) setContextBusy(false);
     }
   };
 

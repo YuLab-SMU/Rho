@@ -84,6 +84,9 @@ import type {
   VibePage,
   VibeSection,
   Unsubscribe,
+  WorkspacePreparation,
+  WorkspacePreparationProgress,
+  WorkspacePreparationProgressListener,
 } from "./types";
 import { INVALIDATION_TOPICS } from "./invalidation-contract";
 import type { EvidenceClaim } from "./evidence";
@@ -111,6 +114,60 @@ const generatedResources =
   fixture.resource_registry_snapshot as unknown as ResourceRegistrySnapshot;
 const generatedProfile =
   fixture.project_ui_profile_snapshot as unknown as ProjectUiProfileSnapshot;
+
+const STARTUP_PROGRESS_TEXT_BYTE_LIMIT = 512;
+const utf8Encoder = new TextEncoder();
+
+function wellFormedProgressText(value: string): string {
+  let result = "";
+  for (let index = 0; index < value.length; index += 1) {
+    const unit = value.charCodeAt(index);
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        result += value.slice(index, index + 2);
+        index += 1;
+      } else {
+        result += "\ufffd";
+      }
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+      result += "\ufffd";
+    } else {
+      result += value[index];
+    }
+  }
+  return result;
+}
+
+function boundedProgressText(value: string): string {
+  const normalized = wellFormedProgressText(value);
+  if (utf8Encoder.encode(normalized).byteLength <= STARTUP_PROGRESS_TEXT_BYTE_LIMIT) {
+    return normalized;
+  }
+  const suffix = "…";
+  const budget = STARTUP_PROGRESS_TEXT_BYTE_LIMIT - utf8Encoder.encode(suffix).byteLength;
+  let bounded = "";
+  let byteLength = 0;
+  for (const character of normalized) {
+    const characterBytes = utf8Encoder.encode(character).byteLength;
+    if (byteLength + characterBytes > budget) break;
+    bounded += character;
+    byteLength += characterBytes;
+  }
+  return `${bounded}${suffix}`;
+}
+
+function emitPreparationProgress(
+  listener: WorkspacePreparationProgressListener | undefined,
+  snapshot: WorkspacePreparationProgress,
+) {
+  if (listener == null) return;
+  try {
+    listener(Object.freeze(snapshot));
+  } catch {
+    // Browser/mock progress is observational, matching the Tauri boundary.
+  }
+}
 
 function copySnapshot(snapshot: UiKernelSnapshot): UiKernelSnapshot {
   return structuredClone(snapshot);
@@ -151,6 +208,15 @@ export function createMockUiKernelTransport(
 ): MockUiKernelTransport {
   const search =
     typeof searchInput === "string" ? new URLSearchParams(searchInput) : searchInput;
+  const requestedStartupFrame = search.get("startup_frame");
+  const startupFrame = [
+    "runtime-active",
+    "workspace-active",
+    "project-active",
+    "project-attention",
+  ].includes(requestedStartupFrame ?? "")
+    ? requestedStartupFrame
+    : null;
   const scenarioTrace = {
     runtimeExecuteAttempts: [] as Array<{ readonly code: string; readonly sourcePath: string | null }>,
     runtimeExecuteSuccesses: 0,
@@ -191,6 +257,17 @@ export function createMockUiKernelTransport(
     if (invalidationRules.includes(`duplicate:${topic}`)) queueMicrotask(emit);
   };
   const snapshot = copySnapshot(generatedSnapshot);
+  const agentRuntimeReady = search.get("agent_runtime") === "ready";
+  if (agentRuntimeReady) {
+    (snapshot.health as {
+      agent: { state: string; label: string; detail: string | null };
+    }).agent = {
+      state: "ready",
+      label: "Agent runtime ready",
+      detail: null,
+    };
+    (snapshot.context as { agent_health: string }).agent_health = "ready";
+  }
   const requestedProject = search.get("project");
   if (requestedProject != null && requestedProject.length > 0) {
     const project = snapshot.project as {
@@ -751,14 +828,14 @@ export function createMockUiKernelTransport(
     validation_error: null,
   };
   let agentRuntimeDiagnostics: AgentRuntimeDiagnostics = {
-    available: false,
-    status: "needs_attention",
+    available: agentRuntimeReady,
+    status: agentRuntimeReady ? "ready" : "needs_attention",
     rscript: "/opt/R/4.6.1/bin/Rscript",
     r_version: "4.6.1",
-    aisdk_version: "1.4.12",
-    provider_adapters_available: false,
-    provider_health: "not_checked",
-    dependencies: [{
+    aisdk_version: agentRuntimeReady ? "1.5.0" : "1.4.12",
+    provider_adapters_available: agentRuntimeReady,
+    provider_health: agentRuntimeReady ? "ready" : "not_checked",
+    dependencies: agentRuntimeReady ? [] : [{
       package: "aisdk",
       status: "incompatible_version",
       installed_version: "1.4.12",
@@ -775,7 +852,9 @@ export function createMockUiKernelTransport(
       detail: "Registered Provider adapters are unavailable.",
       remediation: "Install aisdk.providers in the isolated Agent dependency environment.",
     }],
-    error: "Agent dependencies need attention. Workspace R remains available.",
+    error: agentRuntimeReady
+      ? null
+      : "Agent dependencies need attention. Workspace R remains available.",
   };
   let nextConversation = 2;
   let nextTurn = 2;
@@ -1343,6 +1422,21 @@ export function createMockUiKernelTransport(
     }]));
     return bundle;
   };
+  const activateProjectBundle = (
+    source: MockProjectBundle,
+    projectRevision: number,
+  ): MockProjectBundle => {
+    const bundle = structuredClone(source);
+    bundle.current = {
+      ...bundle.current,
+      context: { ...bundle.current.context, project_revision: projectRevision },
+    };
+    bundle.surfaces = { ...bundle.surfaces, project_revision: projectRevision };
+    bundle.studio = { ...bundle.studio, project_revision: projectRevision };
+    bundle.runtimes = { ...bundle.runtimes, project_revision: projectRevision };
+    bundle.resources = { ...bundle.resources, project_revision: projectRevision };
+    return bundle;
+  };
   const installProjectBundle = (bundle: MockProjectBundle) => {
     current = copySnapshot(bundle.current);
     surfaces = copySurfaces(bundle.surfaces);
@@ -1381,7 +1475,52 @@ export function createMockUiKernelTransport(
   });
   return {
     source: "mock",
-    async prepareWorkspace() {
+    async prepareWorkspace(
+      chooseRscript = false,
+      onProgress?: WorkspacePreparationProgressListener,
+    ) {
+      void chooseRscript;
+      emitPreparationProgress(onProgress, { stage: "runtime", state: "active" });
+      if (startupFrame === "runtime-active") {
+        return await new Promise<WorkspacePreparation>(() => undefined);
+      }
+      emitPreparationProgress(onProgress, {
+        stage: "runtime",
+        state: "complete",
+        r_version: "4.5.1",
+      });
+      emitPreparationProgress(onProgress, { stage: "workspace", state: "active" });
+      if (startupFrame === "workspace-active") {
+        return await new Promise<WorkspacePreparation>(() => undefined);
+      }
+      emitPreparationProgress(onProgress, {
+        stage: "workspace",
+        state: "complete",
+        workspace_pid: 4_242,
+      });
+      emitPreparationProgress(onProgress, { stage: "project", state: "active" });
+      if (startupFrame === "project-active") {
+        return await new Promise<WorkspacePreparation>(() => undefined);
+      }
+      if (startupFrame === "project-attention") {
+        return {
+          status: "needs_attention",
+          phase: "project_restore_incomplete",
+          workspace_ready: true,
+          restored_project_status: "unavailable",
+          issue: {
+            code: "PROJECT_RESTORE_INCOMPLETE",
+            title: "The saved project could not be restored",
+            message: "Workspace R is ready. Choose or reopen a project to continue.",
+            technical_detail: "The deterministic browser fixture holds project recovery for review.",
+          },
+        } as const;
+      }
+      emitPreparationProgress(onProgress, {
+        stage: "project",
+        state: "complete",
+        project_root: boundedProgressText(current.project.display_path),
+      });
       return {
         status: "ready",
         phase: "project_ready",
@@ -1398,7 +1537,12 @@ export function createMockUiKernelTransport(
         throw new Error("Mock project path is invalid.");
       }
       projectBundles.set(activeProjectPath, captureProjectBundle());
-      const next = projectBundles.get(path) ?? reprojectBundle(initialProjectBundle, path);
+      const stored = projectBundles.get(path) ?? reprojectBundle(initialProjectBundle, path);
+      const nextProjectRevision = Math.max(
+        current.context.project_revision,
+        stored.current.context.project_revision,
+      ) + 1;
+      const next = activateProjectBundle(stored, nextProjectRevision);
       installProjectBundle(next);
       activeProjectPath = path;
       projectBundles.set(path, captureProjectBundle());
@@ -2234,23 +2378,32 @@ export function createMockUiKernelTransport(
       return { execution: admitted, committed_through: 0 };
     },
     async getRuntimeExecution(executionId: string): Promise<RuntimeExecution> {
-      const execution = runtimeExecutionRecords.find((candidate) => candidate.execution_id === executionId);
+      const projectRoot = current.project.display_path;
+      const execution = runtimeExecutionRecords.find((candidate) => (
+        candidate.execution_id === executionId && candidate.project_root === projectRoot
+      ));
       if (execution == null) throw new Error("Mock Runtime execution was not found.");
       return structuredClone(execution);
     },
     async listRuntimeExecutions(limit = 50, before?: RuntimeExecutionCursor): Promise<readonly RuntimeExecution[]> {
-      const start = before == null ? 0 : Math.max(0, runtimeExecutionRecords.findIndex((execution) => (
+      const projectRoot = current.project.display_path;
+      const scoped = runtimeExecutionRecords.filter((execution) => execution.project_root === projectRoot);
+      const start = before == null ? 0 : Math.max(0, scoped.findIndex((execution) => (
         execution.started_at === before.started_at && execution.execution_id === before.execution_id
       )) + 1);
-      return structuredClone(runtimeExecutionRecords.slice(start, start + Math.max(1, Math.min(100, limit))));
+      return structuredClone(scoped.slice(start, start + Math.max(1, Math.min(100, limit))));
     },
     async loadRuntimeOutputPage(request: RuntimeOutputPageRequest): Promise<RuntimeOutputPage> {
-      const execution = runtimeExecutionRecords.find((candidate) => candidate.execution_id === request.execution_id);
+      const projectRoot = current.project.display_path;
+      const execution = runtimeExecutionRecords.find((candidate) => (
+        candidate.execution_id === request.execution_id && candidate.project_root === projectRoot
+      ));
       if (execution == null) throw new Error("Mock Runtime execution was not found.");
       const after = request.after_sequence ?? 0;
       const before = request.before_sequence;
       const pageSize = request.page_size ?? 100;
-      const all = runtimeOutputChunks.get(request.execution_id) ?? [];
+      const all = (runtimeOutputChunks.get(request.execution_id) ?? [])
+        .filter((chunk) => chunk.project_root === projectRoot);
       const chunks = before == null
         ? all.filter((chunk) => chunk.sequence > after).slice(0, pageSize)
         : all.filter((chunk) => chunk.sequence < before).slice(-pageSize);
@@ -2274,8 +2427,10 @@ export function createMockUiKernelTransport(
     async searchRuntimeOutput(request: RuntimeOutputSearchRequest): Promise<RuntimeOutputSearchResult> {
       const query = request.query.trim().toLowerCase();
       if (!query) throw new Error("Runtime output search query cannot be empty.");
+      const projectRoot = current.project.display_path;
       const scoped = runtimeExecutionRecords.filter((execution) => (
-        (request.console_instance_id == null || execution.console_instance_id === request.console_instance_id)
+        execution.project_root === projectRoot
+        && (request.console_instance_id == null || execution.console_instance_id === request.console_instance_id)
         && (request.started_after == null || execution.started_at > request.started_after)
       ));
       const hits = scoped.flatMap((execution) => {
@@ -2415,10 +2570,14 @@ export function createMockUiKernelTransport(
       return { outcome: "applied", deleted_output_chunk_count: count };
     },
     async followRuntimeOutput(executionId, afterSequence, listener): Promise<void> {
-      const execution = runtimeExecutionRecords.find((candidate) => candidate.execution_id === executionId);
+      const projectRoot = current.project.display_path;
+      const projectId = current.project.project_id;
+      const execution = runtimeExecutionRecords.find((candidate) => (
+        candidate.execution_id === executionId && candidate.project_root === projectRoot
+      ));
       if (execution == null) throw new Error("Mock Runtime execution was not found.");
       const chunks = (runtimeOutputChunks.get(executionId) ?? [])
-        .filter((chunk) => chunk.sequence > afterSequence);
+        .filter((chunk) => chunk.project_root === projectRoot && chunk.sequence > afterSequence);
       if (search.get("delay") === "runtime-execute") {
         const delayMs = Math.max(1, Math.min(2_000, Number(search.get("delay_ms") ?? "250")));
         await new Promise((resolveDelay) => setTimeout(resolveDelay, delayMs));
@@ -2426,7 +2585,7 @@ export function createMockUiKernelTransport(
       if (chunks.length > 0) {
         const frame: RuntimeOutputFollowFrame = {
           type: "chunks",
-          project_id: runtimes.project_id,
+          project_id: projectId,
           execution_id: executionId,
           first_sequence: chunks[0]!.sequence,
           last_sequence: chunks.at(-1)!.sequence,
@@ -2437,7 +2596,7 @@ export function createMockUiKernelTransport(
       }
       listener({
         type: "terminal",
-        project_id: runtimes.project_id,
+        project_id: projectId,
         execution_id: executionId,
         committed_through: execution.last_sequence,
         execution: structuredClone(execution),
@@ -2663,7 +2822,7 @@ export function createMockUiKernelTransport(
     async createAgentConversation() {
       const conversation: AgentConversationSummary = {
         conversation_id: `agent-conversation:mock-${nextConversation++}`,
-        project_root: agentProjectRoot,
+        project_root: current.project.display_path,
         title: "New conversation",
         created_at: agentNow,
         updated_at: agentNow,
@@ -2819,7 +2978,7 @@ export function createMockUiKernelTransport(
       const turn: AgentTurnSummary = {
         turn_id: turnId,
         conversation_id: conversation.conversation_id,
-        project_root: agentProjectRoot,
+        project_root: current.project.display_path,
         mode: request.mode,
         status: "completed",
         started_at: startedAt,

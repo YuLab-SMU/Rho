@@ -4,6 +4,54 @@ This file records user-visible changes by release. It is intentionally
 separate from the architecture plan: the plan describes intended work, while
 this file records behavior included in a versioned build candidate.
 
+## 0.4.1-dev.22 - 2026-08-27
+
+### Truthful startup preparation
+
+- Rho now opens with a three-stage ledger for the R runtime, Workspace R, and
+  project restore. Each transition follows the real startup command boundary,
+  preserves bounded facts already established, and avoids invented percentages
+  or completion estimates; genuinely long preparation shows elapsed wall time.
+- Runtime, Workspace, and project failures retain the last truthful state and
+  expose only their applicable recovery actions. Keyboard focus, narrow-window
+  reflow, reduced-motion, forced-colors, retry, project-picker cancellation,
+  and stale-operation handling remain explicit throughout preparation.
+
+### Focus-preserving Vibe Agent records
+
+- Vibe's primary Agent entries now expand a read-only record inside the
+  exploration region, keeping the current manuscript and mode in place while
+  showing the exact durable task, public activity, status, and outcome.
+- Trusted Agent controls remain in Studio. Explicit secondary actions enter the
+  existing Agent Surface with the established save-before-leave, focus, and
+  one-shot return behavior; narrow and short windows keep the record and those
+  exits keyboard-reachable without horizontal overflow.
+
+### Studio Agent workbench
+
+- The Studio Agent Surface now presents conversations in task-reading order,
+  keeps the composer and run state together, separates approvals, file changes,
+  failures, and ordinary answers, and moves technical details behind bounded
+  disclosures.
+- Conversation, context, Ask/Plan/Act, and model controls use a compact
+  composer-centered hierarchy that remains usable at very narrow Surface
+  widths without changing Agent execution, approval, or file-mutation rules.
+- At compressed Navigator widths, Files, History, Artifacts, and file search
+  remain directly reachable; closing search with Escape restores focus to its
+  trigger instead of dropping keyboard users to the document body.
+
+### Project-transition integrity
+
+- Project changes now close new Workbench mutation admission, let already
+  admitted Studio, Surface, File, Runtime, and Agent workflows settle, and
+  isolate late results and errors from the newly opened or same-root re-opened
+  project.
+- Studio/Vibe mode changes wait for current controller and Store work, read the
+  latest Project UI Profile, and make at most one revision-checked mode write.
+  Current-activation failures remain visible, late work from a closed
+  activation is isolated, and a later explicit action remains the recovery
+  boundary.
+
 ## 0.4.1-dev.21 - 2026-08-27
 
 ### Vibe information-flow workbench

@@ -8,6 +8,27 @@ import {
 import type { WorkbenchProjectionInvoke } from "./generated/workbench-projection";
 
 describe("Workbench projection transport", () => {
+  it("keeps the explicit ready-Agent browser fixture internally coherent", async () => {
+    const transport = createMockUiKernelTransport("?agent_runtime=ready");
+    const projection = await transport.loadWorkbenchProjection();
+    const diagnostics = await transport.getAgentRuntimeDiagnostics();
+
+    expect(projection.kernel.health.agent).toEqual({
+      state: "ready",
+      label: "Agent runtime ready",
+      detail: null,
+    });
+    expect(projection.kernel.context.agent_health).toBe("ready");
+    expect(diagnostics).toMatchObject({
+      available: true,
+      status: "ready",
+      provider_adapters_available: true,
+      provider_health: "ready",
+      dependencies: [],
+      error: null,
+    });
+  });
+
   it("returns one coherent mock projection with a monotonic generation", async () => {
     const transport = createMockUiKernelTransport();
     const first = await transport.loadWorkbenchProjection();
@@ -46,6 +67,8 @@ describe("Workbench projection transport", () => {
 
     expect(projectB.project_id).not.toBe(firstA.project_id);
     expect(secondA.project_id).toBe(firstA.project_id);
+    expect(secondA.kernel.context.project_revision)
+      .toBeGreaterThan(firstA.kernel.context.project_revision);
     expect(secondA.projection_generation).toBeGreaterThan(projectB.projection_generation);
     for (const projection of [firstA, projectB, secondA]) {
       expect(projection.surfaces.project_id).toBe(projection.project_id);
@@ -53,7 +76,62 @@ describe("Workbench projection transport", () => {
       expect(projection.runtimes.project_id).toBe(projection.project_id);
       expect(projection.resources.project_id).toBe(projection.project_id);
       expect(projection.profile.profile.project_id).toBe(projection.project_id);
+      expect([
+        projection.kernel.context.project_revision,
+        projection.surfaces.project_revision,
+        projection.studio.project_revision,
+        projection.runtimes.project_revision,
+        projection.resources.project_revision,
+      ]).toEqual(Array(5).fill(projection.revisions.project_revision));
     }
+  });
+
+  it("advances only the coherent project-revision vector on a same-root activation", async () => {
+    const projectPath = "/tmp/project-a";
+    const transport = createMockUiKernelTransport(`?project=${encodeURIComponent(projectPath)}`);
+    const before = await transport.loadWorkbenchProjection();
+    const conversationsBefore = await transport.listAgentConversations();
+    const turnsBefore = await transport.listAgentTurns(conversationsBefore[0]!.conversation_id);
+
+    await transport.openProject(projectPath);
+    const after = await transport.loadWorkbenchProjection();
+    const conversationsAfter = await transport.listAgentConversations();
+    const turnsAfter = await transport.listAgentTurns(conversationsAfter[0]!.conversation_id);
+
+    expect(after.project_id).toBe(before.project_id);
+    expect(after.revisions.project_revision).toBe(before.revisions.project_revision + 1);
+    expect([
+      after.kernel.context.project_revision,
+      after.surfaces.project_revision,
+      after.studio.project_revision,
+      after.runtimes.project_revision,
+      after.resources.project_revision,
+    ]).toEqual(Array(5).fill(after.revisions.project_revision));
+    expect({
+      kernel: after.kernel.snapshot_revision,
+      surfaces: after.surfaces.snapshot_revision,
+      studio: after.studio.snapshot_revision,
+      runtimes: after.runtimes.snapshot_revision,
+      resources: after.resources.snapshot_revision,
+      layout: after.studio.scene.layout_revision,
+      profile: after.profile.profile.revision,
+      pages: after.profile.profile.vibe_pages.map((page) => page.page_revision),
+      instances: after.surfaces.catalog.instances.map((instance) => instance.surface_revision),
+      resourceRecords: after.resources.resources.map((resource) => resource.resource_revision),
+    }).toEqual({
+      kernel: before.kernel.snapshot_revision,
+      surfaces: before.surfaces.snapshot_revision,
+      studio: before.studio.snapshot_revision,
+      runtimes: before.runtimes.snapshot_revision,
+      resources: before.resources.snapshot_revision,
+      layout: before.studio.scene.layout_revision,
+      profile: before.profile.profile.revision,
+      pages: before.profile.profile.vibe_pages.map((page) => page.page_revision),
+      instances: before.surfaces.catalog.instances.map((instance) => instance.surface_revision),
+      resourceRecords: before.resources.resources.map((resource) => resource.resource_revision),
+    });
+    expect(conversationsAfter).toEqual(conversationsBefore);
+    expect(turnsAfter).toEqual(turnsBefore);
   });
 
   it("rejects a mixed project or mismatched revision vector at the Tauri boundary", async () => {

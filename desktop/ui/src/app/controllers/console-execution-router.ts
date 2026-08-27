@@ -11,6 +11,12 @@ export interface ConsoleExecutionEndpoint {
   readonly submitSource: (execution: SourceExecutionSubmission) => ConsoleExecutionAdmission;
 }
 
+export interface ConsoleExecutionActivation {
+  readonly epoch: number;
+  readonly projectId: string;
+  readonly projectRevision: number;
+}
+
 interface ConsoleExecutionWaiter {
   readonly resolve: (endpoint: ConsoleExecutionEndpoint) => void;
   readonly reject: (error: Error) => void;
@@ -23,7 +29,7 @@ export class ConsoleExecutionRouter {
   readonly #waiters = new Map<string, Set<ConsoleExecutionWaiter>>();
   readonly #preparations = new Map<string, Promise<ConsoleExecutionEndpoint>>();
   #preferredInstanceId: string | null = null;
-  #projectId: string | null = null;
+  #activation: ConsoleExecutionActivation | null = null;
 
   constructor(timeoutMs = 4_000) {
     this.#timeoutMs = timeoutMs;
@@ -50,13 +56,31 @@ export class ConsoleExecutionRouter {
     this.#preferredInstanceId = instanceId;
   }
 
-  activateProject(projectId: string | null): void {
-    if (projectId == null || this.#projectId === projectId) return;
-    if (this.#projectId != null) this.reset();
-    this.#projectId = projectId;
+  activate(activation: ConsoleExecutionActivation | null): void {
+    if (activation == null) {
+      this.reset();
+      return;
+    }
+    const current = this.#activation;
+    if (
+      current != null
+      && (
+        current.epoch !== activation.epoch
+        || current.projectId !== activation.projectId
+        || activation.projectRevision < current.projectRevision
+      )
+    ) {
+      this.reset();
+    }
+    this.#activation = activation;
   }
 
   waitFor(instanceId: string): Promise<ConsoleExecutionEndpoint> {
+    if (this.#activation == null) {
+      return Promise.reject(new Error(
+        "The project changed before the R Console renderer became ready.",
+      ));
+    }
     const mounted = this.#endpoints.get(instanceId);
     if (mounted != null) return Promise.resolve(mounted);
     return new Promise<ConsoleExecutionEndpoint>((resolve, reject) => {
@@ -83,6 +107,11 @@ export class ConsoleExecutionRouter {
     prepare: () => Promise<ConsoleExecutionEndpoint>,
     report: (message: string | null) => void,
   ): Promise<boolean> {
+    const activation = this.#activation;
+    if (activation == null) {
+      report("The project changed before the R Console action could start.");
+      return false;
+    }
     const endpoints = [...this.#endpoints.values()];
     const preferred = this.#preferredInstanceId == null
       ? null
@@ -99,6 +128,14 @@ export class ConsoleExecutionRouter {
         report(workbenchFailureMessage(cause, "The R Console could not be prepared."));
         return false;
       }
+      if (!this.#accepts(activation)) {
+        report("The project changed while the R Console was being prepared.");
+        return false;
+      }
+    }
+    if (!this.#accepts(activation)) {
+      report("The project changed before the R Console could accept this code.");
+      return false;
     }
     const admission = target.submitSource(execution);
     if (!admission.accepted) {
@@ -111,6 +148,7 @@ export class ConsoleExecutionRouter {
   }
 
   reset(reason = "The project changed while the R Console was being prepared."): void {
+    this.#activation = null;
     this.#preferredInstanceId = null;
     this.#endpoints.clear();
     this.#preparations.clear();
@@ -125,7 +163,12 @@ export class ConsoleExecutionRouter {
 
   dispose(): void {
     this.reset("The workbench closed while the R Console was being prepared.");
-    this.#projectId = null;
+  }
+
+  #accepts(activation: ConsoleExecutionActivation): boolean {
+    return this.#activation?.epoch === activation.epoch
+      && this.#activation.projectId === activation.projectId
+      && this.#activation.projectRevision >= activation.projectRevision;
   }
 
   #prepareOnce(

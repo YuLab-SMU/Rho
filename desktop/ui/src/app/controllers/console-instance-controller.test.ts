@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { RuntimeDescriptor, RuntimeExecution, RuntimeExecutionStartResponse, RuntimeOutputChunk, SurfaceInstance } from "../../transport";
+import type {
+  RuntimeDescriptor,
+  RuntimeExecution,
+  RuntimeExecutionStartResponse,
+  RuntimeOutputChunk,
+  RuntimeOutputFollowFrame,
+  SurfaceInstance,
+} from "../../transport";
 import type { ConsoleInstancePorts, ConsoleViewState } from "./console-instance-controller";
 import {
   CONSOLE_VIEW_STATE_VERSION,
@@ -198,6 +205,168 @@ describe("Console instance controller", () => {
     expect(controller.submit("retry()", true).accepted).toBe(true);
     await controller.settled();
     expect(controller.getSnapshot().state.history).toEqual(["retry()"]);
+  });
+
+  it("keeps each async execution failure bound to the ports captured at admission", async () => {
+    let rejectA: ((reason?: unknown) => void) | undefined;
+    const reportA = vi.fn();
+    const reportB = vi.fn();
+    const controller = new ConsoleInstanceController(EMPTY_STATE);
+    controller.configure(ports({
+      start: vi.fn(() => new Promise<RuntimeExecutionStartResponse>((_resolve, reject) => {
+        rejectA = reject;
+      })),
+      reportError: reportA,
+    }));
+    expect(controller.submit("project_a()", true).accepted).toBe(true);
+
+    controller.configure(ports({
+      start: vi.fn().mockRejectedValue(new Error("project B failure")),
+      reportError: reportB,
+    }));
+    rejectA?.(new Error("project A failure"));
+    await controller.settled();
+    expect(reportA).toHaveBeenCalledWith(expect.objectContaining({ message: "project A failure" }));
+    expect(reportB).not.toHaveBeenCalled();
+
+    expect(controller.submit("project_b()", true).accepted).toBe(true);
+    await controller.settled();
+    expect(reportB).toHaveBeenCalledWith(expect.objectContaining({ message: "project B failure" }));
+  });
+
+  it("keeps serialized persistence failures bound to the initiating ports", async () => {
+    let rejectA: ((reason?: unknown) => void) | undefined;
+    const reportA = vi.fn();
+    const reportB = vi.fn();
+    const controller = new ConsoleInstanceController(EMPTY_STATE);
+    controller.configure(ports({
+      persist: vi.fn(() => new Promise<void>((_resolve, reject) => { rejectA = reject; })),
+      reportError: reportA,
+    }));
+    const first = controller.commit({ ...EMPTY_STATE, filter: "project-a" });
+    controller.configure(ports({
+      persist: vi.fn().mockRejectedValue(new Error("project B persist failure")),
+      reportError: reportB,
+    }));
+    const second = controller.commit({ ...EMPTY_STATE, filter: "project-b" });
+    await vi.waitFor(() => expect(rejectA).toBeTypeOf("function"));
+    rejectA?.(new Error("project A persist failure"));
+    await Promise.all([first, second]);
+    expect(reportA).toHaveBeenCalledWith(expect.objectContaining({ message: "project A persist failure" }));
+    expect(reportB).toHaveBeenCalledWith(expect.objectContaining({ message: "project B persist failure" }));
+  });
+
+  it("drops late follow frames and rejection after disposal without poisoning a fresh controller", async () => {
+    let staleListener: ((frame: RuntimeOutputFollowFrame) => void) | undefined;
+    let rejectStaleFollow: ((reason?: unknown) => void) | undefined;
+    const staleFollow = vi.fn((_executionId, _after, listener) => {
+      staleListener = listener;
+      return new Promise<void>((_resolve, reject) => { rejectStaleFollow = reject; });
+    });
+    const stalePersist = vi.fn(async () => undefined);
+    const staleReportError = vi.fn();
+    const staleSnapshotListener = vi.fn();
+    const staleController = new ConsoleInstanceController(EMPTY_STATE);
+    staleController.configure(ports({
+      follow: staleFollow,
+      persist: stalePersist,
+      reportError: staleReportError,
+    }));
+    const unsubscribe = staleController.subscribe(staleSnapshotListener);
+
+    expect(staleController.submit("project_a_follow()", true)).toEqual({ accepted: true, message: null });
+    await vi.waitFor(() => expect(staleListener).toBeTypeOf("function"));
+    expect(stalePersist).toHaveBeenCalledTimes(1);
+    const snapshotAtDispose = staleController.getSnapshot();
+    const listenerCallsAtDispose = staleSnapshotListener.mock.calls.length;
+    const persistCallsAtDispose = stalePersist.mock.calls.length;
+
+    staleController.dispose();
+    unsubscribe();
+    const staleExecutionId = "execution:project_a_follow()";
+    const lateChunk = { ...chunk(1, "must not reach the next host"), execution_id: staleExecutionId };
+    staleListener?.({
+      type: "chunks",
+      project_id: "project:a",
+      execution_id: staleExecutionId,
+      first_sequence: 1,
+      last_sequence: 1,
+      chunks: [lateChunk],
+    });
+    staleListener?.({
+      type: "terminal",
+      project_id: "project:a",
+      execution_id: staleExecutionId,
+      committed_through: 1,
+      execution: {
+        ...execution("project_a_follow()"),
+        last_sequence: 1,
+        output_bytes: lateChunk.payload_bytes,
+      },
+    });
+    rejectStaleFollow?.(new Error("late project A follow rejection"));
+    await staleController.settled();
+    for (let index = 0; index < 8; index += 1) await Promise.resolve();
+    await staleController.persistCurrent();
+
+    expect(staleController.getSnapshot()).toBe(snapshotAtDispose);
+    expect(staleController.getSnapshot().state.outputs[0]).toMatchObject({
+      execution_id: staleExecutionId,
+      blocks: [],
+      status: "admitted",
+    });
+    expect(staleSnapshotListener).toHaveBeenCalledTimes(listenerCallsAtDispose);
+    expect(stalePersist).toHaveBeenCalledTimes(persistCallsAtDispose);
+    expect(staleReportError).not.toHaveBeenCalled();
+
+    const freshPersist = vi.fn(async () => undefined);
+    const freshReportError = vi.fn();
+    const freshFollow = vi.fn(async (executionId, _after, listener) => {
+      const targetChunk = { ...chunk(1, "fresh target output"), execution_id: executionId };
+      listener({
+        type: "chunks",
+        project_id: "project:a",
+        execution_id: executionId,
+        first_sequence: 1,
+        last_sequence: 1,
+        chunks: [targetChunk],
+      });
+      listener({
+        type: "terminal",
+        project_id: "project:a",
+        execution_id: executionId,
+        committed_through: 1,
+        execution: {
+          ...execution("project_b_follow()"),
+          last_sequence: 1,
+          output_bytes: targetChunk.payload_bytes,
+        },
+      });
+    });
+    const freshController = new ConsoleInstanceController(EMPTY_STATE);
+    freshController.configure(ports({
+      follow: freshFollow,
+      persist: freshPersist,
+      reportError: freshReportError,
+    }));
+
+    expect(freshController.submit("project_b_follow()", true)).toEqual({ accepted: true, message: null });
+    await freshController.settled();
+    expect(freshFollow).toHaveBeenCalledWith("execution:project_b_follow()", 0, expect.any(Function));
+    expect(freshController.getSnapshot()).toMatchObject({
+      running: false,
+      state: {
+        history: ["project_b_follow()"],
+        outputs: [{
+          execution_id: "execution:project_b_follow()",
+          status: "completed",
+          last_sequence: 1,
+          blocks: [expect.objectContaining({ text: "fresh target output" })],
+        }],
+      },
+    });
+    expect(freshPersist).toHaveBeenCalledTimes(1);
+    expect(freshReportError).not.toHaveBeenCalled();
   });
 
   it("serializes persistence and recovers after a rejected write", async () => {

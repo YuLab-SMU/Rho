@@ -92,6 +92,7 @@ function execution(status: string): RuntimeExecution {
 
 interface FakeStore extends AutomationStore {
   publish(state: WorkbenchStoreSnapshot): void;
+  settled: Mock<() => Promise<void>>;
   startExecution: Mock<(request: RuntimeExecuteRequest) => Promise<RuntimeExecutionStartResponse>>;
   getExecution: Mock<(executionId: string) => Promise<RuntimeExecution>>;
   listExecutions: Mock<(limit?: number) => Promise<readonly RuntimeExecution[]>>;
@@ -201,7 +202,14 @@ describe("acceptance automation", () => {
         selector: ".x",
         all: true,
         attribute: "data-id",
-      })).toEqual({ command: "query", selector: ".x", all: true, attribute: "data-id" });
+        geometry: true,
+      })).toEqual({
+        command: "query",
+        selector: ".x",
+        all: true,
+        attribute: "data-id",
+        geometry: true,
+      });
     });
 
     it("parses every act kind", () => {
@@ -358,6 +366,67 @@ describe("acceptance automation", () => {
       expect(first!.text).toHaveLength(500);
       expect(first!.value).toBe("done");
     });
+
+    it("returns bounded read-only element geometry when explicitly requested", async () => {
+      const item = document.createElement("div");
+      item.className = "q-geometry";
+      item.style.overflowX = "hidden";
+      item.style.textOverflow = "ellipsis";
+      item.style.whiteSpace = "nowrap";
+      document.body.append(item);
+      Object.defineProperties(item, {
+        clientWidth: { configurable: true, value: 170 },
+        clientHeight: { configurable: true, value: 80 },
+        scrollWidth: { configurable: true, value: 171 },
+        scrollHeight: { configurable: true, value: 96 },
+      });
+      vi.spyOn(item, "getBoundingClientRect").mockReturnValue({
+        left: 10,
+        top: 20,
+        right: 180,
+        bottom: 100,
+        width: 170,
+        height: 80,
+        x: 10,
+        y: 20,
+        toJSON: () => ({}),
+      });
+      const surface = createAutomationSurface(createReadyHost());
+      const [first] = await surface.request({
+        command: "query",
+        selector: ".q-geometry",
+        geometry: true,
+      }) as readonly {
+        geometry: {
+          client_width: number;
+          client_height: number;
+          scroll_width: number;
+          scroll_height: number;
+          computed: {
+            display: string;
+            overflow_x: string;
+            overflow_y: string;
+            text_overflow: string;
+            white_space: string;
+            overflow_wrap: string;
+            word_break: string;
+          };
+          rect: { left: number; top: number; right: number; bottom: number; width: number; height: number };
+        };
+      }[];
+      expect(first!.geometry).toMatchObject({
+        client_width: 170,
+        client_height: 80,
+        scroll_width: 171,
+        scroll_height: 96,
+        computed: {
+          overflow_x: "hidden",
+          text_overflow: "ellipsis",
+          white_space: "nowrap",
+        },
+        rect: { left: 10, top: 20, right: 180, bottom: 100, width: 170, height: 80 },
+      });
+    });
   });
 
   describe("act", () => {
@@ -382,12 +451,14 @@ describe("acceptance automation", () => {
 
     it("opens a project and waits for readiness", async () => {
       const host = createReadyHost();
+      host.store.settled.mockRejectedValue(new Error("automation must not pre-drain product mutations"));
       const surface = createAutomationSurface(host);
       const value = await surface.request({
         command: "act",
         action: { kind: "open_project", path: "/tmp/next" },
       });
       expect(host.actions.openProject).toHaveBeenCalledWith("/tmp/next");
+      expect(host.store.settled).not.toHaveBeenCalled();
       expect(value).toEqual({ project: "/tmp/next" });
     });
 
@@ -516,7 +587,22 @@ describe("acceptance automation", () => {
       document.body.addEventListener("keydown", onKey);
       await surface.request({ command: "act", action: { kind: "key", key: "Enter" } });
       expect(onKey).toHaveBeenCalledTimes(1);
+      expect(host.store.settled).toHaveBeenCalledTimes(2);
       document.body.removeEventListener("keydown", onKey);
+
+      const next = document.createElement("button");
+      next.id = "act-tab-target";
+      document.body.append(next);
+      input.focus();
+      await surface.request({ command: "act", action: { kind: "key", key: "Tab" } });
+      expect(document.activeElement).toBe(next);
+      expect(host.store.settled).toHaveBeenCalledTimes(4);
+
+      const activate = vi.fn();
+      next.addEventListener("click", activate);
+      await surface.request({ command: "act", action: { kind: "key", key: "Enter" } });
+      expect(activate).toHaveBeenCalledTimes(1);
+      expect(host.store.settled).toHaveBeenCalledTimes(6);
     });
 
     it("rejects click and type for missing targets", async () => {

@@ -356,8 +356,8 @@ export class ConsoleInstanceController {
     this.#ports = ports;
     if (!this.#recoveryStarted) {
       this.#recoveryStarted = true;
-      void this.#recover().catch((cause: unknown) => {
-        if (!this.#disposed) this.#ports.reportError(cause);
+      void this.#recover(ports).catch((cause: unknown) => {
+        if (!this.#disposed) ports.reportError(cause);
       });
     }
   }
@@ -369,11 +369,11 @@ export class ConsoleInstanceController {
 
   commit(next: ConsoleViewState): Promise<void> {
     this.replaceState(next);
-    return this.#persist(next);
+    return this.#persist(next, this.#ports);
   }
 
   persistCurrent(): Promise<void> {
-    return this.#persist(this.#snapshot.state);
+    return this.#persist(this.#snapshot.state, this.#ports);
   }
 
   submit(
@@ -382,7 +382,8 @@ export class ConsoleInstanceController {
     sourceContext?: RuntimeExecutionSourceContext,
   ): ConsoleExecutionAdmission {
     if (!code.trim()) return { accepted: false, message: "Code has no executable content." };
-    const runtime = this.#ports.runtime;
+    const ports = this.#ports;
+    const runtime = ports.runtime;
     if (runtime == null) {
       return { accepted: false, message: "This Console is not attached to a Runtime." };
     }
@@ -397,7 +398,7 @@ export class ConsoleInstanceController {
     }
 
     this.#publish({ ...this.#snapshot, running: true });
-    this.#execution = this.#execute(runtime, code, clearDraft, sourceContext).finally(() => {
+    this.#execution = this.#execute(ports, runtime, code, clearDraft, sourceContext).finally(() => {
       this.#execution = null;
     });
     return { accepted: true, message: null };
@@ -409,10 +410,11 @@ export class ConsoleInstanceController {
   }
 
   async loadOlder(executionId: string): Promise<void> {
+    const ports = this.#ports;
     const output = this.#snapshot.state.outputs.find((candidate) => candidate.execution_id === executionId);
     const beforeSequence = output?.first_sequence ?? 0;
     if (output == null || beforeSequence <= 1 || output.has_older === false) return;
-    const page = await this.#ports.pageBefore(executionId, beforeSequence);
+    const page = await ports.pageBefore(executionId, beforeSequence);
     if (this.#disposed || page.chunks.length === 0) return;
     const merged = [...page.chunks.map(runtimeOutputChunkBlock), ...output.blocks];
     const bounded = boundBlocksFromStart(merged);
@@ -429,11 +431,12 @@ export class ConsoleInstanceController {
   }
 
   async loadLatest(executionId: string): Promise<void> {
+    const ports = this.#ports;
     const output = this.#snapshot.state.outputs.find((candidate) => candidate.execution_id === executionId);
     if (output == null) return;
     const committedThrough = output.last_sequence ?? 0;
     const page = committedThrough > 0
-      ? await this.#ports.pageBefore(executionId, committedThrough + 1)
+      ? await ports.pageBefore(executionId, committedThrough + 1)
       : null;
     if (this.#disposed) return;
     const outputs = this.#snapshot.state.outputs.map((candidate) => candidate.execution_id === executionId
@@ -454,13 +457,14 @@ export class ConsoleInstanceController {
   }
 
   async #execute(
+    ports: ConsoleInstancePorts,
     runtime: RuntimeDescriptor,
     code: string,
     clearDraft: boolean,
     sourceContext?: RuntimeExecutionSourceContext,
   ): Promise<void> {
     try {
-      const admitted = await this.#ports.start(runtime, code, sourceContext);
+      const admitted = await ports.start(runtime, code, sourceContext);
       if (this.#disposed) return;
       const current = this.#snapshot.state;
       const nextOutputs = boundOutputs([...current.outputs, {
@@ -477,33 +481,35 @@ export class ConsoleInstanceController {
         has_older: false,
         newer_output_omitted: false,
       }]);
-      await this.commit({
+      const nextState = {
         ...current,
         draft: clearDraft ? "" : current.draft,
         history: boundHistory([...current.history, code]),
         history_cursor: null,
         outputs: nextOutputs.outputs,
         released_output_count: current.released_output_count + nextOutputs.released,
-      });
-      await this.#ports.follow(
+      };
+      this.replaceState(nextState);
+      await this.#persist(nextState, ports);
+      await ports.follow(
         admitted.execution.execution_id,
         admitted.committed_through,
-        (frame) => this.#enqueueFrame(frame),
+        (frame) => this.#enqueueFrame(frame, ports),
       );
       await this.#frameTail;
     } catch (cause: unknown) {
-      if (!this.#disposed) this.#ports.reportError(cause);
+      if (!this.#disposed) ports.reportError(cause);
     } finally {
       if (!this.#disposed) this.#publish({ ...this.#snapshot, running: false });
     }
   }
 
-  #enqueueFrame(frame: RuntimeOutputFollowFrame): void {
+  #enqueueFrame(frame: RuntimeOutputFollowFrame, ports: ConsoleInstancePorts): void {
     this.#frameTail = this.#frameTail
       .catch(() => undefined)
-      .then(() => this.#applyFrame(frame))
+      .then(() => this.#applyFrame(frame, ports))
       .catch((cause: unknown) => {
-        if (!this.#disposed) this.#ports.reportError(cause);
+        if (!this.#disposed) ports.reportError(cause);
       });
   }
 
@@ -543,10 +549,14 @@ export class ConsoleInstanceController {
     this.replaceState({ ...this.#snapshot.state, outputs });
   }
 
-  async #repairGap(executionId: string, committedThrough: number): Promise<void> {
+  async #repairGap(
+    executionId: string,
+    committedThrough: number,
+    ports: ConsoleInstancePorts,
+  ): Promise<void> {
     let cursor = this.#lastSequence(executionId);
     for (let pageCount = 0; cursor < committedThrough && pageCount < 100; pageCount += 1) {
-      const page = await this.#ports.page(executionId, cursor);
+      const page = await ports.page(executionId, cursor);
       if (this.#disposed) return;
       const chunks = page.chunks.filter((chunk) => chunk.sequence > cursor);
       if (chunks.length === 0) {
@@ -568,7 +578,10 @@ export class ConsoleInstanceController {
     }
   }
 
-  async #applyFrame(frame: RuntimeOutputFollowFrame): Promise<void> {
+  async #applyFrame(
+    frame: RuntimeOutputFollowFrame,
+    ports: ConsoleInstancePorts,
+  ): Promise<void> {
     if (this.#disposed) return;
     const currentOutput = this.#snapshot.state.outputs.find((output) => output.execution_id === frame.execution_id);
     if (currentOutput == null) return;
@@ -580,25 +593,25 @@ export class ConsoleInstanceController {
       return;
     }
     if (frame.type === "gap") {
-      await this.#repairGap(frame.execution_id, frame.committed_through);
+      await this.#repairGap(frame.execution_id, frame.committed_through, ports);
       return;
     }
     if (frame.type === "checkpoint") {
       if (frame.committed_through > this.#lastSequence(frame.execution_id)) {
-        await this.#repairGap(frame.execution_id, frame.committed_through);
+        await this.#repairGap(frame.execution_id, frame.committed_through, ports);
       }
       return;
     }
     if (frame.type === "chunks") {
       const lastSequence = this.#lastSequence(frame.execution_id);
       if (frame.first_sequence > lastSequence + 1) {
-        await this.#repairGap(frame.execution_id, frame.first_sequence - 1);
+        await this.#repairGap(frame.execution_id, frame.first_sequence - 1, ports);
       }
       this.#appendChunks(frame.execution_id, frame.chunks);
       return;
     }
     if (frame.committed_through > this.#lastSequence(frame.execution_id)) {
-      await this.#repairGap(frame.execution_id, frame.committed_through);
+      await this.#repairGap(frame.execution_id, frame.committed_through, ports);
     }
     const outputs = this.#snapshot.state.outputs.map((output) => output.execution_id === frame.execution_id
       ? {
@@ -613,13 +626,13 @@ export class ConsoleInstanceController {
     this.#publish({ state: { ...this.#snapshot.state, outputs }, running: false });
   }
 
-  async #recover(): Promise<void> {
-    const executions = await this.#ports.list();
+  async #recover(ports: ConsoleInstancePorts): Promise<void> {
+    const executions = await ports.list();
     const recovered: ConsoleOutputRecord[] = [];
     for (const execution of [...executions].reverse()) {
       if (this.#disposed) return;
       const page = execution.last_sequence > 0
-        ? await this.#ports.pageBefore(execution.execution_id, execution.last_sequence + 1)
+        ? await ports.pageBefore(execution.execution_id, execution.last_sequence + 1)
         : null;
       const record = runtimeRecord(execution, page?.chunks ?? []);
       recovered.push({
@@ -643,12 +656,12 @@ export class ConsoleInstanceController {
     const active = executions.find((execution) => ["admitted", "running"].includes(execution.status));
     if (active != null) {
       this.#publish({ ...this.#snapshot, running: true });
-      this.#execution = this.#ports.follow(
+      this.#execution = ports.follow(
         active.execution_id,
         this.#lastSequence(active.execution_id),
-        (frame) => this.#enqueueFrame(frame),
+        (frame) => this.#enqueueFrame(frame, ports),
       ).then(() => this.#frameTail).catch((cause: unknown) => {
-        if (!this.#disposed) this.#ports.reportError(cause);
+        if (!this.#disposed) ports.reportError(cause);
       }).finally(() => {
         if (!this.#disposed) this.#publish({ ...this.#snapshot, running: false });
         this.#execution = null;
@@ -656,16 +669,16 @@ export class ConsoleInstanceController {
     }
   }
 
-  #persist(state: ConsoleViewState): Promise<void> {
+  #persist(state: ConsoleViewState, ports: ConsoleInstancePorts): Promise<void> {
     if (this.#disposed) return Promise.resolve();
     const task = this.#persistTail
       .catch(() => undefined)
       .then(async () => {
-        if (!this.#disposed) await this.#ports.persist(consolePersistentViewState(state));
+        if (!this.#disposed) await ports.persist(consolePersistentViewState(state));
       });
     this.#persistTail = task;
     return task.catch((cause: unknown) => {
-      if (!this.#disposed) this.#ports.reportError(cause);
+      if (!this.#disposed) ports.reportError(cause);
     });
   }
 

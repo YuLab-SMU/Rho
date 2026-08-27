@@ -276,7 +276,138 @@ try {
   }
 
   {
-    const { context, page } = await openWorkbench("&vibe=information-flow", { width: 1440, height: 900 });
+    const { context, page } = await openWorkbench("&vibe=information-flow&agent_runtime=ready", { width: 1440, height: 900 });
+    const agentRuntimeStatus = page.locator(".rho-statusbar-item", { hasText: "Agent runtime ready" });
+    await agentRuntimeStatus.waitFor();
+    if (await agentRuntimeStatus.locator(".rho-status-ready").count() !== 1) {
+      throw new Error("the ready-Agent browser fixture exposed an incoherent status indicator");
+    }
+    const mountedAgentSurface = page.locator("article[data-surface-id='rho.agent']");
+    await mountedAgentSurface.waitFor();
+    const mountedConversationPicker = mountedAgentSurface.getByLabel(/^Conversation for /);
+    if (await mountedConversationPicker.inputValue() !== "agent-conversation:mock-shared") {
+      throw new Error("the mounted Agent fixture did not begin on its declared default Conversation");
+    }
+    const initialAgentEvidence = (await evidence(page)).agentInstances?.find(
+      (instance) => instance.id === "instance:agent-shared",
+    );
+    if (initialAgentEvidence == null) {
+      throw new Error("the mounted Agent fixture did not expose exact durable evidence");
+    }
+    const newConversationButton = mountedAgentSurface.getByRole("button", { name: "New", exact: true });
+    await newConversationButton.click();
+    await page.waitForFunction(({ generation, instanceId, surfaceRevision }) => {
+      const agent = document.querySelector("article[data-surface-id='rho.agent']");
+      const picker = agent?.querySelector("select");
+      const button = [...(agent?.querySelectorAll("button") ?? [])]
+        .find((candidate) => candidate.textContent === "New");
+      const hook = document.querySelector("#rsrPreviewEvidence");
+      const durable = hook == null
+        ? null
+        : JSON.parse(hook.textContent ?? "{}").agentInstances?.find(
+          (instance) => instance.id === instanceId,
+        );
+      return picker instanceof HTMLSelectElement
+        && picker.value.startsWith("agent-conversation:mock-")
+        && picker.value !== "agent-conversation:mock-shared"
+        && button instanceof HTMLButtonElement
+        && !button.disabled
+        && durable?.generation === generation
+        && durable?.conversationId === picker.value
+        && durable.surfaceRevision > surfaceRevision;
+    }, {
+      generation: initialAgentEvidence.generation,
+      instanceId: initialAgentEvidence.id,
+      surfaceRevision: initialAgentEvidence.surfaceRevision,
+    });
+    if (!await newConversationButton.isEnabled()) {
+      throw new Error("the Agent New workflow did not settle its exact durable selection");
+    }
+    const createdConversationId = await mountedConversationPicker.inputValue();
+    if (createdConversationId !== "agent-conversation:mock-2") {
+      throw new Error(`Agent New selected ${createdConversationId} instead of its exact returned Conversation`);
+    }
+
+    const createdAgentEvidence = (await evidence(page)).agentInstances?.find(
+      (instance) => instance.id === initialAgentEvidence.id,
+    );
+    if (createdAgentEvidence == null) {
+      throw new Error("the Agent New workflow did not retain exact durable evidence");
+    }
+    await mountedConversationPicker.selectOption("");
+    await page.waitForFunction(({ generation, instanceId, surfaceRevision }) => {
+      const agent = document.querySelector("article[data-surface-id='rho.agent']");
+      const picker = agent?.querySelector("select");
+      const hook = document.querySelector("#rsrPreviewEvidence");
+      const durable = hook == null
+        ? null
+        : JSON.parse(hook.textContent ?? "{}").agentInstances?.find(
+          (instance) => instance.id === instanceId,
+        );
+      return picker instanceof HTMLSelectElement
+        && picker.value === ""
+        && durable?.generation === generation
+        && durable?.conversationId == null
+        && durable.surfaceRevision > surfaceRevision;
+    }, {
+      generation: createdAgentEvidence.generation,
+      instanceId: createdAgentEvidence.id,
+      surfaceRevision: createdAgentEvidence.surfaceRevision,
+    });
+
+    const emptyAgentEvidence = (await evidence(page)).agentInstances?.find(
+      (instance) => instance.id === initialAgentEvidence.id,
+    );
+    if (emptyAgentEvidence == null) {
+      throw new Error("the no-conversation Agent state did not expose durable evidence");
+    }
+    const sendPrompt = "Trace the exact no-conversation Send identity";
+    const agentComposer = mountedAgentSurface.locator(".rho-agent-composer textarea");
+    await agentComposer.fill(sendPrompt);
+    const sendButton = mountedAgentSurface.getByRole("button", { name: "Send", exact: true });
+    await sendButton.click();
+    await page.waitForFunction(({ generation, instanceId, surfaceRevision, prompt }) => {
+      const agent = document.querySelector("article[data-surface-id='rho.agent']");
+      const picker = agent?.querySelector("select");
+      const exactTurn = agent?.querySelector("[data-turn-id='agent-turn:mock-2']");
+      const newButton = [...(agent?.querySelectorAll("button") ?? [])]
+        .find((candidate) => candidate.textContent === "New");
+      const hook = document.querySelector("#rsrPreviewEvidence");
+      const durable = hook == null
+        ? null
+        : JSON.parse(hook.textContent ?? "{}").agentInstances?.find(
+          (instance) => instance.id === instanceId,
+        );
+      return picker instanceof HTMLSelectElement
+        && picker.value === "agent-conversation:mock-3"
+        && durable?.generation === generation
+        && durable?.conversationId === picker.value
+        && durable.surfaceRevision > surfaceRevision
+        && exactTurn instanceof HTMLElement
+        && exactTurn.textContent?.includes(prompt)
+        && exactTurn.textContent?.includes(`Mock ask response for: ${prompt}`)
+        && newButton instanceof HTMLButtonElement
+        && !newButton.disabled;
+    }, {
+      generation: emptyAgentEvidence.generation,
+      instanceId: emptyAgentEvidence.id,
+      surfaceRevision: emptyAgentEvidence.surfaceRevision,
+      prompt: sendPrompt,
+    });
+    if (await sendButton.isEnabled()) {
+      throw new Error("the settled Agent Send left an empty composer unexpectedly actionable");
+    }
+    if (await agentComposer.inputValue() !== "") {
+      throw new Error("the no-conversation Agent Send workflow did not clear the admitted composer");
+    }
+    const mismatchedConversationId = await mountedConversationPicker.inputValue();
+    if (mismatchedConversationId !== "agent-conversation:mock-3") {
+      throw new Error("the no-conversation Agent Send did not retain its exact returned Conversation");
+    }
+    if (mismatchedConversationId === "agent-conversation:mock-shared") {
+      throw new Error("the mounted Agent fixture did not retain its distinct empty Conversation");
+    }
+
     await page.getByRole("button", { name: "Vibe", exact: true }).click();
     const vibeWorkspace = page.locator(".rho-vibe-workspace");
     await vibeWorkspace.waitFor();
@@ -299,6 +430,12 @@ try {
       throw new Error("Vibe exposed its internal Page revision in the default header");
     }
 
+    const exactAgentReference = vibeWorkspace.locator("[data-block-id='block:vibe-agent-work']");
+    await exactAgentReference.click();
+    await page.waitForFunction(() =>
+      document.querySelector("[data-block-id='block:vibe-agent-work']")?.getAttribute("data-vibe-active") === "true"
+    );
+
     const layerNavigation = vibeWorkspace.getByRole("navigation", { name: "Vibe information layer" });
     const explorationLayer = layerNavigation.getByRole("button", { name: "自主探索", exact: true });
     await explorationLayer.focus();
@@ -314,9 +451,99 @@ try {
         throw new Error(`Vibe exploration focus left the ${region} region body expanded`);
       }
     }
+
+    const selectedAgentRecord = vibeWorkspace.locator("button[data-exploration-conversation]", {
+      hasText: "Project direction",
+    });
+    await selectedAgentRecord.click();
+    await page.waitForFunction(() => {
+      const selected = document.querySelector("button[data-exploration-conversation][aria-current='true']");
+      const task = document.querySelector(".rho-vibe-exploration-task");
+      return selected?.textContent?.includes("Project direction") === true
+        && task?.textContent?.includes("What should we inspect first?") === true;
+    });
+
+    const agentRecordTrigger = vibeWorkspace.getByRole("button", {
+      name: "在 Vibe 中查看 Agent 记录",
+      exact: true,
+    });
+    await agentRecordTrigger.waitFor();
+    await agentRecordTrigger.click();
+    const agentRecordHost = vibeWorkspace.locator(".rho-vibe-agent-record-host");
+    await agentRecordHost.waitFor();
+    if (await page.locator('.rho-statusbar[data-workspace-mode="vibe"]').count() !== 1) {
+      throw new Error("opening the local Agent record host switched away from Vibe");
+    }
+    if (await page.locator(".rho-canvas-studio, article[data-surface-id='rho.agent']").count() !== 0) {
+      throw new Error("opening the local Agent record host mounted a trusted Studio Surface");
+    }
+    await agentRecordHost.getByRole("heading", { name: "Project direction", exact: true }).waitFor();
+    await agentRecordHost.getByRole("region", { name: "Agent 收到的任务" })
+      .getByText("What should we inspect first?", { exact: true })
+      .waitFor();
+    await agentRecordHost.getByRole("region", { name: "Agent 最终回复" })
+      .getByText("Start with the project structure and runtime health.", { exact: true })
+      .waitFor();
+    await agentRecordHost.getByText("显示项目最近的 Agent 工作；尚未与当前手稿内容建立精确对应。", { exact: true }).waitFor();
+    await agentRecordHost.getByText("文件修改建议", { exact: false }).waitFor();
+    const publicRecordText = await agentRecordHost.textContent() ?? "";
+    for (const privateText of ["analysis.R", "Reviewed by Agent"]) {
+      if (publicRecordText.includes(privateText)) {
+        throw new Error(`Vibe Agent public record leaked trusted detail: ${privateText}`);
+      }
+    }
+    for (const trustedAction of [
+      "Approve",
+      "Reject",
+      "Apply",
+      "Undo applied edit",
+      "Stop",
+      "Retry",
+      "Context",
+      "Send",
+    ]) {
+      if (await agentRecordHost.getByRole("button", { name: trustedAction, exact: true }).count() !== 0) {
+        throw new Error(`Vibe Agent public record exposed trusted action: ${trustedAction}`);
+      }
+    }
+    if (await agentRecordHost.getByText(
+      "Auto-approve project tools for this conversation",
+      { exact: true },
+    ).count() !== 0 || await agentRecordHost.locator("textarea, .rho-agent-approval, .rho-agent-file-proposal").count() !== 0) {
+      throw new Error("Vibe Agent public record exposed trusted Agent controls");
+    }
+
+    await agentRecordHost.getByRole("button", { name: "在 Studio 中深入检查", exact: true }).click();
+    await page.locator('.rho-statusbar[data-workspace-mode="studio"]').waitFor();
+    const exactAgentSurface = page.locator("article.rho-surface-focused[data-surface-id='rho.agent']");
+    await exactAgentSurface.waitFor();
+    const conversationPicker = exactAgentSurface.getByLabel(/^Conversation for /);
+    if (await conversationPicker.inputValue() !== "agent-conversation:mock-shared") {
+      throw new Error("the explicit Studio handoff did not preserve the exact Agent Conversation");
+    }
+    if (await exactAgentSurface.getAttribute("data-instance-id") === "instance:agent-shared") {
+      throw new Error("the explicit Studio handoff reused the mismatched default Agent instance");
+    }
+    await exactAgentSurface.locator('[data-turn-id="agent-turn:mock-1"]').waitFor();
+    await exactAgentSurface.getByText("What should we inspect first?", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "Vibe", exact: true }).click();
+    await page.locator('.rho-statusbar[data-workspace-mode="vibe"]').waitFor();
+    await vibeWorkspace.waitFor();
+    if (await vibeWorkspace.getAttribute("data-layout") !== "focus-exploration") {
+      throw new Error("the one-shot Agent return did not restore the exploration focus");
+    }
+    if (await vibeWorkspace.locator(".rho-vibe-agent-record-host").count() !== 0) {
+      throw new Error("the one-shot Agent return remounted the local record host as trusted UI");
+    }
+
     await layerNavigation.getByRole("button", { name: "三联总览", exact: true }).click();
     await page.waitForFunction(() =>
       document.querySelector(".rho-vibe-workspace")?.getAttribute("data-layout") === "overview"
+    );
+    const exactArtifactReference = vibeWorkspace.locator("[data-block-id='block:vibe-artifact']");
+    await exactArtifactReference.click();
+    await page.waitForFunction(() =>
+      document.querySelector("[data-block-id='block:vibe-artifact']")?.getAttribute("data-vibe-active") === "true"
     );
     if (await vibeWorkspace.locator(".rho-vibe-region-body:visible").count() !== 3) {
       throw new Error("Vibe did not restore all three information layers after leaving focus mode");
@@ -384,6 +611,95 @@ try {
   }
 
   {
+    const { context, page } = await openWorkbench("&vibe=information-flow", { width: 720, height: 450 });
+    await page.getByRole("button", { name: "Vibe", exact: true }).click();
+    const vibeWorkspace = page.locator(".rho-vibe-workspace");
+    await vibeWorkspace.waitFor();
+    const layerNavigation = vibeWorkspace.getByRole("navigation", { name: "Vibe information layer" });
+    await layerNavigation.getByRole("button", { name: "自主探索", exact: true }).click();
+    await page.waitForFunction(() =>
+      document.querySelector(".rho-vibe-workspace")?.getAttribute("data-layout") === "focus-exploration"
+    );
+    await vibeWorkspace.getByRole("button", {
+      name: "在 Vibe 中查看 Agent 记录",
+      exact: true,
+    }).click();
+    const agentRecordHost = vibeWorkspace.locator(".rho-vibe-agent-record-host");
+    await agentRecordHost.waitFor();
+    const narrowOverflow = await page.evaluate(() => ({
+      document: document.documentElement.scrollWidth - window.innerWidth,
+      host: (() => {
+        const host = document.querySelector(".rho-vibe-agent-record-host");
+        return host == null ? Number.POSITIVE_INFINITY : host.scrollWidth - host.clientWidth;
+      })(),
+    }));
+    if (narrowOverflow.document > 2 || narrowOverflow.host > 2) {
+      throw new Error(`narrow Agent record host overflowed horizontally: ${JSON.stringify(narrowOverflow)}`);
+    }
+    if (await page.locator('.rho-statusbar[data-workspace-mode="vibe"]').count() !== 1
+      || await page.locator(".rho-canvas-studio, article[data-surface-id='rho.agent']").count() !== 0) {
+      throw new Error("narrow local Agent record host escaped into Studio");
+    }
+
+    const shortHeight = await agentRecordHost.evaluate((host) => {
+      const candidates = [
+        host,
+        host.closest(".rho-vibe-exploration"),
+        host.closest(".rho-vibe-region-body"),
+        host.closest(".rho-vibe-region"),
+        host.closest(".rho-vibe-regions"),
+        host.closest(".rho-vibe-workspace"),
+      ].filter((candidate) => candidate != null);
+      const scrolling = candidates.filter((candidate) => {
+        const overflowY = getComputedStyle(candidate).overflowY;
+        return /(auto|scroll)/.test(overflowY)
+          && candidate.scrollHeight > candidate.clientHeight + 1;
+      });
+      host.scrollTop = host.scrollHeight;
+      const hostRect = host.getBoundingClientRect();
+      const footer = host.querySelector(".rho-vibe-agent-record-actions");
+      const footerRect = footer?.getBoundingClientRect() ?? null;
+      const buttons = [...(footer?.querySelectorAll("button") ?? [])];
+      return {
+        hostScrollable: host.scrollHeight > host.clientHeight + 1,
+        hostScrollTop: host.scrollTop,
+        scrollOwnerCount: scrolling.length,
+        hostIsOnlyScrollOwner: scrolling.length === 1 && scrolling[0] === host,
+        footerVisible: footerRect != null
+          && footerRect.top >= Math.max(0, hostRect.top) - 1
+          && footerRect.bottom <= Math.min(window.innerHeight, hostRect.bottom) + 1,
+        buttonsReachable: buttons.length === 2 && buttons.every((button) => {
+          const rect = button.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0
+            && rect.top >= Math.max(0, hostRect.top) - 1
+            && rect.bottom <= Math.min(window.innerHeight, hostRect.bottom) + 1
+            && rect.left >= Math.max(0, hostRect.left) - 1
+            && rect.right <= Math.min(window.innerWidth, hostRect.right) + 1;
+        }),
+        documentOverflow: document.documentElement.scrollWidth - window.innerWidth,
+      };
+    });
+    if (!shortHeight.hostScrollable || shortHeight.hostScrollTop <= 0
+      || !shortHeight.hostIsOnlyScrollOwner || shortHeight.scrollOwnerCount !== 1) {
+      throw new Error(`short-height Agent record host did not keep one scroll owner: ${JSON.stringify(shortHeight)}`);
+    }
+    if (!shortHeight.footerVisible || !shortHeight.buttonsReachable) {
+      throw new Error(`short-height Agent record footer actions were not reachable: ${JSON.stringify(shortHeight)}`);
+    }
+    if (shortHeight.documentOverflow > 2) {
+      throw new Error(`short-height Agent record host introduced ${shortHeight.documentOverflow}px horizontal overflow`);
+    }
+    const secondaryActions = agentRecordHost.locator(".rho-vibe-agent-record-actions button");
+    for (let index = 0; index < await secondaryActions.count(); index += 1) {
+      await secondaryActions.nth(index).focus();
+      if (!await secondaryActions.nth(index).evaluate((button) => document.activeElement === button)) {
+        throw new Error(`short-height Agent record footer action ${index + 1} was not keyboard reachable`);
+      }
+    }
+    await context.close();
+  }
+
+  {
     const { context, page } = await openWorkbench("&vibe=information-flow", { width: 720, height: 700 });
     await page.getByRole("button", { name: "Vibe", exact: true }).click();
     const vibeWorkspace = page.locator(".rho-vibe-workspace");
@@ -436,7 +752,7 @@ try {
   }
 
   succeeded = true;
-  process.stdout.write("RSR real-interaction acceptance passed: identity, resize, Navigator/plugin tabs, component modes, Source/Console/History, rejection recovery, docking, narrow layout, and Vibe overview/intermediate-preview/focus/narrow editing contracts\n");
+  process.stdout.write("RSR real-interaction acceptance passed: identity, resize, Navigator/plugin tabs, component modes, Source/Console/History, rejection recovery, docking, narrow layout, and Vibe overview/intermediate-preview/local-Agent-record/focus/narrow editing contracts\n");
 } catch (error) {
   if (currentPage != null && !currentPage.isClosed()) {
     await currentPage.screenshot({ path: join(artifactRoot, "failure.png"), fullPage: true }).catch(() => undefined);

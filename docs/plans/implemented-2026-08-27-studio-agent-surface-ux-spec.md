@@ -1,7 +1,7 @@
 # Studio Agent Surface UX
 
-Status: active implementation contract; amended 2026-08-27 for round 3
-(lane `studio-agent-ux-3`)
+Status: implemented D2/R1 presentation contract; rounds 1-3 complete and
+merged-candidate automated/visual verification passed in `0.4.1-dev.22`
 
 Date: 2026-08-27
 Authorization: the user explicitly authorized "优化 Studio 模式中的 Agent 组件
@@ -17,8 +17,10 @@ Work package: studio-agent-ux (lane `studio-agent-ux`,
 base `560dff98cf69662cea9672194a6593f09c2d1a6f`);
 round 2: lane `studio-agent-ux-2`, base `63914e14a1dd`;
 round 3: lane `studio-agent-ux-3`, base `c39924f0290c`
-Mandatory stop: after the restructured Agent Surface, focused tests,
-typecheck/lint, wide/medium/narrow mock preview, and contract review
+Mandatory stop: satisfied 2026-08-27 by the restructured Agent Surface,
+focused and complete merged validation, wide/medium/narrow mock preview,
+formal S3 review, candidate/NEWS reconciliation, and contract review. Any
+further round requires separate authorization.
 
 ## Problem
 
@@ -205,13 +207,13 @@ Reviewed against the overlapping active contracts:
 No schema, persistence, approval, execution, credential, project identity, or
 release conflict was found.
 
-Owned by the parallel `vibe-integration` lane and therefore NOT edited here;
-recorded as integration follow-ups below:
+At the feature-lane checkpoint these shared files were owned by the parallel
+integration lane and were not edited there. They became the integration
+follow-ups below:
 
-- `docs/project/active-document-cross-review.md` needs this document's
-  cross-review row.
-- `docs/README.md` needs this document's index entry.
-- `NEWS.md` needs the user-visible entry after integration verification.
+- add this document's row to `docs/project/active-document-cross-review.md`;
+- add this document's index entry to `docs/README.md`; and
+- add the user-visible `NEWS.md` entry after integration verification.
 
 ## Verification Matrix
 
@@ -222,39 +224,36 @@ recorded as integration follow-ups below:
 - Vite/mock preview in this feature worktree at wide, medium, and narrow
   widths checking hierarchy, disclosures, state copy, no horizontal overflow,
   and composer/Stop reachability;
-- the full `rsr:check` matrix and the s3 visual-acceptance gate are deferred
-  to the integration lane, which owns the shared entry files and the real
-  debug application.
+- at the feature-lane stop, the full `rsr:check` matrix and S3
+  visual-acceptance gate were deferred to the integration lane, which owns the
+  shared entry files and real debug application. Their completed evidence is
+  recorded in the integration closure below.
 
 ## Version, NEWS, And Lifecycle
 
-- This is user-visible desktop behavior inside the unreleased development
-  line. `NEWS.md` is owned by the integration lane; the NEWS entry is a
-  recorded integration follow-up, not skipped.
-- No application or R package version change in this lane; version metadata
-  is integration-lane authority and advances only for a named candidate.
-- Keep this document active while the integration follow-ups and the s3
-  visual-acceptance gate remain open.
+- At the feature-lane stop, this user-visible desktop behavior deferred NEWS
+  and version authority to the integration lane. The closure below records the
+  synchronized candidate and NEWS result; R package versions did not change.
+- Every in-scope gate is closed, so this document moves to `implemented-`.
+  Further behavior requires a new authorized contract or amendment.
 
 ## Definition Of Done
 
-This package reaches its stop point when the restructured Agent Surface keeps
-every existing behavior contract, focused tests and the listed checks pass,
-wide/medium/narrow preview evidence is recorded, the diff is scoped to the
-four lane-owned files, and the integration follow-ups are explicit.
+This package reached its stop point after the restructured Agent Surface kept
+every existing behavior contract, focused tests and the listed checks passed,
+wide/medium/narrow preview evidence was recorded, the feature diff stayed
+scoped to the lane-owned files, and the integration follow-ups below closed.
 
-## Integration Follow-ups
+## Integration Follow-ups — completed 2026-08-27
 
-1. Add the cross-review row for this document to
-   `docs/project/active-document-cross-review.md` (integration lane).
-2. Add the index entry for this document to `docs/README.md` (integration
-   lane).
-3. Add the `NEWS.md` entry after integration verification (integration lane).
-4. Run the complete `rsr:check` matrix and the s3 visual-acceptance gate
-   against the merged result; this lane verified focused tests, typecheck,
-   lint, and mock preview only.
-5. Decide application version impact at the next named integration candidate;
-   no distribution before synchronized metadata.
+1. The integration lane added this document's central cross-review row.
+2. The integration lane added the documentation-index entry.
+3. `NEWS.md` now records the user-visible result.
+4. The complete stable `rsr:check` and formal S3 gate passed against the merged
+   frozen product snapshot; the feature lane's earlier evidence remains
+   separately identified.
+5. Application version authorities are synchronized at `0.4.1-dev.22`; no
+   distribution or release decision is implied.
 
 ## Implementation And Evidence
 
@@ -315,9 +314,9 @@ Browser/mock preview evidence (headless Chromium against the built bundle,
 The mock preview always reports the Agent runtime as degraded (fixture
 fact), so preview screenshots show the truthful degraded state; running,
 waiting, failed, and cancelled states are covered by the focused tests.
-The complete `rsr:check` matrix, the s3 visual-acceptance gate, NEWS,
-cross-review/index entries, and version decisions remain with the
-integration lane as listed above.
+At that feature-lane checkpoint, the complete `rsr:check` matrix, S3 visual
+gate, NEWS, cross-review/index entries, and version decision remained with the
+integration lane. Their completed evidence is recorded below.
 
 ## Round 2 Amendment: Composer-Centric Density And In-Surface Model Switching
 
@@ -473,5 +472,45 @@ Deviation recorded during round-3 preview: the model popover originally
 opened left-anchored and clipped out of the viewport when the surface was
 docked at the right edge; it is now right-anchored in the lane stylesheet so
 it opens leftward and stays in view. No s3 visual-acceptance DOM hook moved;
-the complete `rsr:check` matrix and the s3 gate remain with the integration
-lane as listed in the follow-ups above.
+the complete `rsr:check` matrix and S3 gate were completed by the integration
+lane as recorded below.
+
+## Integration Follow-up Closure — 2026-08-27
+
+All five integration follow-ups are complete. The central cross-review and
+documentation index include this owner, application metadata and `NEWS.md` are
+synchronized at `0.4.1-dev.22`, and R package versions remain unchanged.
+
+The pre-documentation frozen product snapshot fingerprint was
+`df64bc7de536667641f7aa96c6fcfa5c99a83713701af999c000dcd1b9311dcb`.
+The complete stable `rsr:check` passed 76 Vitest files / 578 tests,
+typecheck/lint, generated contracts, production build, browser smoke, real
+interaction acceptance, and the visual-harness self-test. The exact frozen
+debug binary had SHA-256
+`3fb1693239d2b2f64f1966284dd1dd485fe41afa890b67abf6969a63a8650465`.
+
+Formal S3 in the immutable merged run
+`target/visual-acceptance/dev22-final-df64bc7d-3fb16932-s0-s3-s9/` passed 3/3
+gates: Agent Surface, real credential detection, and the restricted Ask turn.
+Both captured S3 frames passed original-resolution review. The same run's S0
+first-view frame verified the Agent composer, visible Ask/Plan/Act controls,
+model summary, and Send action remain distinct and contained at 1024x680.
+Across S0/S3/S9 the run finished 35/35 deterministic gates and 31/31 reviewed
+frames with no pending or failed verdict.
+
+Lifecycle documentation did not change the frozen product sources or frontend
+assets. The exact current debug binary has SHA-256
+`4c9d9b18920d97c0aaea309b61d1bde6ade603f1d3c268d8e3a395f55d02a1cf`.
+Its immutable confirmation run at
+`target/visual-acceptance/dev22-final-1f476c14-4c9d9b18-s0-s3-s9-r2/`
+finished `PASS`: S3 passed 3/3 gates and both captured original-resolution
+frames, while the S0 first-view frame again proved the compressed Agent
+composer has no overlap or clipping. Across S0/S3/S9 the run passed 35/35
+gates and 31/31 frame reviews. The earlier `3fb169...` run remains the
+historical pre-documentation frozen-product PASS and is not presented as the
+current binary.
+
+This closes rounds 1-3 without changing Conversation/Turn, approval,
+file-mutation, execution, credential, Surface identity/focus, or release
+authority. Installation, signing, distribution, and release GO/NO-GO remain
+separate.

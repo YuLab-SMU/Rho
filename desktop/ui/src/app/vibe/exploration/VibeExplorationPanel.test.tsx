@@ -310,9 +310,26 @@ describe("Vibe autonomous exploration panel", () => {
     expect(host?.textContent).not.toContain("Private plugin context");
     expect(host?.textContent).not.toContain("Must not render");
     expect(host?.textContent).not.toContain("secret-2");
-    expect(host?.textContent).not.toContain("批准");
-    expect(host?.textContent).not.toContain("自动批准");
-    expect(host?.textContent).not.toContain("应用文件");
+    expect(host?.querySelector("textarea, .rho-agent-approval, .rho-agent-file-proposal"))
+      .toBeNull();
+    const trustedAgentActions = [
+      "Approve",
+      "Reject",
+      "Apply",
+      "Undo applied edit",
+      "Stop",
+      "Retry",
+      "Context",
+      "Send",
+    ];
+    const hostButtons = [...(host?.querySelectorAll<HTMLButtonElement>("button") ?? [])]
+      .map((button) => button.textContent?.trim() ?? "");
+    for (const trustedAction of trustedAgentActions) {
+      expect(hostButtons).not.toContain(trustedAction);
+    }
+    const hostLabels = [...(host?.querySelectorAll<HTMLLabelElement>("label") ?? [])]
+      .map((label) => label.textContent?.trim() ?? "");
+    expect(hostLabels).not.toContain("Auto-approve project tools for this conversation");
 
     act(() => findButton(container, "在 Studio 中深入检查").click());
     expect(onOpenAgent).toHaveBeenCalledWith({

@@ -42,6 +42,7 @@ export type AutomationRequest =
       readonly selector: string;
       readonly all?: boolean;
       readonly attribute?: string;
+      readonly geometry?: boolean;
     };
 
 export class AutomationRequestError extends Error {}
@@ -296,6 +297,7 @@ export function parseAutomationRequest(raw: unknown): AutomationRequest {
         selector: value.selector,
         ...(value.all === true ? { all: true } : {}),
         ...(attribute == null ? {} : { attribute }),
+        ...(value.geometry === true ? { geometry: true } : {}),
       };
     }
     default:
@@ -399,17 +401,50 @@ export function createAutomationSurface(
     const bounded = (request.all === true ? matches : matches.slice(0, 1)).slice(0, QUERY_MAX_ITEMS);
     return bounded.map((element) => {
       const text = truncateText((element.textContent ?? "").trim(), QUERY_MAX_TEXT);
+      const geometry = request.geometry === true
+        ? (() => {
+            const rect = element.getBoundingClientRect();
+            const style = doc.defaultView?.getComputedStyle(element);
+            return {
+              client_width: element.clientWidth,
+              client_height: element.clientHeight,
+              scroll_width: element.scrollWidth,
+              scroll_height: element.scrollHeight,
+              computed: {
+                display: style?.display ?? "",
+                overflow_x: style?.overflowX ?? "",
+                overflow_y: style?.overflowY ?? "",
+                text_overflow: style?.textOverflow ?? "",
+                white_space: style?.whiteSpace ?? "",
+                overflow_wrap: style?.overflowWrap ?? "",
+                word_break: style?.wordBreak ?? "",
+              },
+              rect: {
+                left: rect.left,
+                top: rect.top,
+                right: rect.right,
+                bottom: rect.bottom,
+                width: rect.width,
+                height: rect.height,
+              },
+            };
+          })()
+        : null;
       if (request.attribute != null) {
-        return { text, value: element.getAttribute(request.attribute) };
+        return {
+          text,
+          value: element.getAttribute(request.attribute),
+          ...(geometry == null ? {} : { geometry }),
+        };
       }
       if (
         element instanceof HTMLInputElement ||
         element instanceof HTMLTextAreaElement ||
         element instanceof HTMLSelectElement
       ) {
-        return { text, value: element.value };
+        return { text, value: element.value, ...(geometry == null ? {} : { geometry }) };
       }
-      return { text };
+      return { text, ...(geometry == null ? {} : { geometry }) };
     });
   }
 
@@ -591,13 +626,55 @@ export function createAutomationSurface(
     element.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
+  function isSequentialFocusTarget(element: HTMLElement): boolean {
+    if (element.tabIndex < 0 || element.matches(":disabled")) return false;
+    if (element.closest("[hidden], [aria-hidden='true'], [inert]")) return false;
+    for (let current: HTMLElement | null = element; current != null; current = current.parentElement) {
+      const style = doc.defaultView?.getComputedStyle(current);
+      if (style?.display === "none" || style?.visibility === "hidden") return false;
+    }
+    return true;
+  }
+
+  function focusNextElement(current: Element): void {
+    const focusable = [...doc.querySelectorAll<HTMLElement>([
+      "a[href]",
+      "button",
+      "input",
+      "select",
+      "textarea",
+      "summary",
+      "[contenteditable='true']",
+      "[tabindex]",
+    ].join(", "))].filter(isSequentialFocusTarget);
+    if (focusable.length === 0) return;
+    const index = focusable.indexOf(current as HTMLElement);
+    focusable[index < 0 || index === focusable.length - 1 ? 0 : index + 1]?.focus();
+  }
+
   function pressKey(key: string, selector?: string): void {
     const target = selector != null
       ? doc.querySelector(selector)
       : doc.activeElement ?? doc.body;
     if (target == null) throw new Error(`No element matches "${selector ?? ""}".`);
-    target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
-    target.dispatchEvent(new KeyboardEvent("keyup", { key, bubbles: true, cancelable: true }));
+    const continueDefault = target.dispatchEvent(
+      new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }),
+    );
+    if (continueDefault && key === "Tab") focusNextElement(target);
+    if (continueDefault && key === "Enter" && target instanceof HTMLButtonElement) target.click();
+    (doc.activeElement ?? target).dispatchEvent(
+      new KeyboardEvent("keyup", { key, bubbles: true, cancelable: true }),
+    );
+  }
+
+  async function settleUiMutations(): Promise<void> {
+    // React handlers can enqueue a controller task one microtask before that
+    // task registers its underlying Store mutation. Drain both layers so a
+    // later project switch cannot strand an old-project Surface update.
+    await Promise.resolve();
+    await host.store.settled();
+    await Promise.resolve();
+    await host.store.settled();
   }
 
   async function act(action: AutomationAction): Promise<unknown> {
@@ -628,6 +705,7 @@ export function createAutomationSurface(
         return null;
       case "key":
         pressKey(action.key, action.selector);
+        await settleUiMutations();
         return null;
       case "wait":
         return waitForCondition(action.until, action.timeout_ms ?? WAIT_DEFAULT_TIMEOUT_MS);

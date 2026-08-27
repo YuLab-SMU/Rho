@@ -3,12 +3,14 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
+  AgentConversationSummary,
   AgentTurnDetail,
   AgentTurnSummary,
+  RunAgentRequest,
   SurfaceInstance,
 } from "../transport";
 import { createMockUiKernelTransport } from "../transport/mock";
-import { AgentSurfaceView } from "./AgentSurfaceView";
+import { AgentSurfaceView, type AgentSurfaceViewState } from "./AgentSurfaceView";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
   .IS_REACT_ACT_ENVIRONMENT = true;
@@ -17,6 +19,37 @@ const mockNow = "2026-08-22T12:00:00Z";
 
 async function settle() {
   for (let index = 0; index < 8; index += 1) await Promise.resolve();
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+}
+
+function makeConversation(overrides: Partial<AgentConversationSummary> & {
+  readonly conversation_id: string;
+}): AgentConversationSummary {
+  return {
+    project_root: "/mock/project",
+    title: "Agent conversation",
+    created_at: mockNow,
+    updated_at: mockNow,
+    archived_at: null,
+    legacy_unthreaded: false,
+    turn_count: 1,
+    status: "completed",
+    latest_turn_id: null,
+    latest_mode: "ask",
+    latest_prompt_preview: null,
+    terminal_reason: "completed",
+    pending_request_id: null,
+    ...overrides,
+  };
 }
 
 function makeTurn(overrides: Partial<AgentTurnSummary> & { readonly turn_id: string }): AgentTurnSummary {
@@ -63,10 +96,17 @@ describe("Studio Agent Surface", () => {
   async function renderAgent(options: {
     readonly transport?: ReturnType<typeof createMockUiKernelTransport>;
     readonly health?: { readonly state: string; readonly label: string; readonly detail: string | null } | null;
+    readonly instance?: SurfaceInstance;
+    readonly persist?: (viewState: AgentSurfaceViewState) => Promise<void>;
+    readonly runConversation?: (
+      current: AgentSurfaceViewState,
+      request: RunAgentRequest,
+    ) => Promise<AgentSurfaceViewState>;
+    readonly reportError?: (error: unknown) => void;
   } = {}) {
     const transport = options.transport ?? createMockUiKernelTransport();
     const surfaces = await transport.loadSurfaces();
-    const instance: SurfaceInstance = {
+    const instance: SurfaceInstance = options.instance ?? {
       instance_id: "surface-instance:agent-test",
       surface_id: "rho.agent",
       project_id: surfaces.project_id,
@@ -85,36 +125,82 @@ describe("Studio Agent Surface", () => {
       },
       lifecycle_state: "active",
     };
-    const persist = vi.fn(async () => undefined);
+    const persist = options.persist ?? vi.fn(async () => undefined);
     const pinTask = vi.fn(async () => undefined);
     const applyFileProposal = vi.fn(async () => {
       throw new Error("applyFileProposal is not expected in this test");
     });
     const undoFileProposal = vi.fn(async () => undefined);
-    const reportError = vi.fn();
+    const reportError = options.reportError ?? vi.fn();
     const setRuntimeOutputContext = vi.fn();
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
     roots.push(root);
-    await act(async () => {
-      root.render(<AgentSurfaceView
-        instance={instance}
-        transport={transport}
-        health={options.health === undefined
-          ? { state: "ready", label: "Agent runtime ready", detail: null }
-          : options.health}
-        persist={persist}
-        pinTask={pinTask}
-        applyFileProposal={applyFileProposal}
-        undoFileProposal={undoFileProposal}
-        reportError={reportError}
-        runtimeOutputContext={null}
-        setRuntimeOutputContext={setRuntimeOutputContext}
-      />);
-      await settle();
-    });
-    return { container, instance, applyFileProposal, persist, pinTask, reportError, root, setRuntimeOutputContext, transport };
+    const health = options.health === undefined
+      ? { state: "ready", label: "Agent runtime ready", detail: null }
+      : options.health;
+    const renderView = async (overrides: {
+      readonly transport?: ReturnType<typeof createMockUiKernelTransport>;
+      readonly health?: { readonly state: string; readonly label: string; readonly detail: string | null } | null;
+      readonly instance?: SurfaceInstance;
+      readonly createConversation?: (
+        current: AgentSurfaceViewState,
+      ) => Promise<AgentSurfaceViewState>;
+      readonly runConversation?: (
+        current: AgentSurfaceViewState,
+        request: RunAgentRequest,
+      ) => Promise<AgentSurfaceViewState>;
+      readonly persist?: (viewState: AgentSurfaceViewState) => Promise<void>;
+      readonly reportError?: (error: unknown) => void;
+    } = {}) => {
+      const renderTransport = overrides.transport ?? transport;
+      const renderPersist = overrides.persist ?? persist;
+      const createConversation = overrides.createConversation ?? (async (current) => {
+        const conversation = await renderTransport.createAgentConversation();
+        const next = { ...current, conversation_id: conversation.conversation_id };
+        await renderPersist(next);
+        return next;
+      });
+      const runConversation = overrides.runConversation ?? (async (current, request) => {
+        const response = await renderTransport.runAgent(request);
+        const next = { ...current, conversation_id: response.conversation_id, composer: "" };
+        await renderPersist(next);
+        return next;
+      });
+      await act(async () => {
+        root.render(<AgentSurfaceView
+          instance={overrides.instance ?? instance}
+          transport={renderTransport}
+          health={overrides.health === undefined ? health : overrides.health}
+          createConversation={createConversation}
+          runConversation={runConversation}
+          persist={renderPersist}
+          pinTask={pinTask}
+          applyFileProposal={applyFileProposal}
+          undoFileProposal={undoFileProposal}
+          reportError={overrides.reportError ?? reportError}
+          runtimeOutputContext={null}
+          setRuntimeOutputContext={setRuntimeOutputContext}
+        />);
+        await settle();
+      });
+    };
+    await renderView(options.runConversation == null
+      ? {}
+      : { runConversation: options.runConversation });
+    return {
+      container,
+      instance,
+      applyFileProposal,
+      persist,
+      pinTask,
+      renderView,
+      reportError,
+      root,
+      setRuntimeOutputContext,
+      transport,
+    };
   }
 
   async function click(element: Element) {
@@ -130,6 +216,15 @@ describe("Studio Agent Surface", () => {
     await act(async () => {
       setter.call(element, value);
       element.dispatchEvent(new Event("input", { bubbles: true }));
+      await settle();
+    });
+  }
+
+  async function selectInput(element: HTMLSelectElement, value: string) {
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!;
+    await act(async () => {
+      setter.call(element, value);
+      element.dispatchEvent(new Event("change", { bubbles: true }));
       await settle();
     });
   }
@@ -515,18 +610,27 @@ describe("Studio Agent Surface", () => {
     expect([...proposal.querySelectorAll("button")].some((button) => button.textContent === "Apply")).toBe(false);
   });
 
-  it("submits through the composer with unchanged runAgent arguments and clears the draft", async () => {
+  it("submits the unchanged Agent request only through the composition-root capability", async () => {
     const transport = createMockUiKernelTransport();
-    const runAgent = vi.fn(transport.runAgent.bind(transport));
-    transport.runAgent = runAgent;
-    const { container, setRuntimeOutputContext } = await renderAgent({ transport });
+    const rawRunAgent = vi.spyOn(transport, "runAgent");
+    const runConversation = vi.fn(async (current: AgentSurfaceViewState) => ({
+      ...current,
+      composer: "",
+    }));
+    const { container, setRuntimeOutputContext } = await renderAgent({
+      runConversation,
+      transport,
+    });
 
     const textarea = container.querySelector<HTMLTextAreaElement>(".rho-agent-composer textarea")!;
     await typeInput(textarea, "What changed since yesterday?");
     const send = container.querySelector<HTMLButtonElement>(".rho-agent-context-controls .rho-primary-action")!;
     await click(send);
 
-    expect(runAgent).toHaveBeenCalledWith({
+    expect(runConversation).toHaveBeenCalledWith(expect.objectContaining({
+      conversation_id: "agent-conversation:mock-shared",
+      composer: "What changed since yesterday?",
+    }), {
       prompt: "What changed since yesterday?",
       mode: "ask",
       task_kind: "agent_turn",
@@ -537,10 +641,708 @@ describe("Studio Agent Surface", () => {
       runtime_output_context: null,
       context_plan_digest: null,
     });
+    expect(rawRunAgent).not.toHaveBeenCalled();
     expect(setRuntimeOutputContext).toHaveBeenCalledWith(null);
     expect(container.querySelector<HTMLTextAreaElement>(".rho-agent-composer textarea")!.value).toBe("");
-    expect(container.querySelector(".rho-agent-timeline")!.textContent)
-      .toContain("Mock ask response for: What changed since yesterday?");
+  });
+
+  it("keeps a no-conversation Send local until its admitted identity workflow succeeds", async () => {
+    const transport = createMockUiKernelTransport();
+    let conversations: readonly AgentConversationSummary[] = [];
+    transport.listAgentConversations = vi.fn(async () => conversations);
+    transport.listAgentTurns = vi.fn(async () => []);
+    const rawRunAgent = vi.spyOn(transport, "runAgent");
+    let invalidate: (() => void) | null = null;
+    transport.subscribeAgentInvalidated = vi.fn((listener) => {
+      invalidate = listener;
+      return () => undefined;
+    });
+    const createdConversation = makeConversation({
+      conversation_id: "agent-conversation:send-created",
+      title: "Created by Send",
+      turn_count: 1,
+      status: "completed",
+      terminal_reason: "completed",
+    });
+    const workflow = deferred<AgentSurfaceViewState>();
+    const runConversation = vi.fn(() => {
+      conversations = [createdConversation];
+      invalidate?.();
+      return workflow.promise;
+    });
+    const persist = vi.fn(async () => undefined);
+    const surfaces = await transport.loadSurfaces();
+    const instance: SurfaceInstance = {
+      instance_id: "surface-instance:agent-test",
+      surface_id: "rho.agent",
+      project_id: surfaces.project_id,
+      origin: { kind: "application", component_id: "rho.agent" },
+      activation_generation: 1,
+      surface_revision: 1,
+      mode_id: "conversation",
+      resource_binding: null,
+      runtime_binding: null,
+      view_group_id: null,
+      view_state: {
+        conversation_id: null,
+        mode: "ask",
+        composer: "",
+        auto_approve: false,
+      },
+      lifecycle_state: "active",
+    };
+    const { container, reportError } = await renderAgent({
+      instance,
+      persist,
+      runConversation,
+      transport,
+    });
+    const textarea = container.querySelector<HTMLTextAreaElement>(".rho-agent-composer textarea")!;
+    await typeInput(textarea, "Start from this prompt");
+    await click(container.querySelector<HTMLButtonElement>(
+      ".rho-agent-context-controls .rho-primary-action",
+    )!);
+
+    const picker = container.querySelector<HTMLSelectElement>(
+      'select[aria-label="Conversation for surface-instance:agent-test"]',
+    )!;
+    expect(runConversation).toHaveBeenCalledWith(expect.objectContaining({
+      conversation_id: null,
+      composer: "Start from this prompt",
+    }), expect.objectContaining({
+      conversation_id: null,
+      prompt: "Start from this prompt",
+    }));
+    expect(rawRunAgent).not.toHaveBeenCalled();
+    expect(persist).not.toHaveBeenCalled();
+    expect(picker.value).toBe("");
+    expect(textarea.value).toBe("Start from this prompt");
+
+    await act(async () => {
+      workflow.resolve({
+        conversation_id: createdConversation.conversation_id,
+        mode: "ask",
+        composer: "",
+        auto_approve: false,
+        file_decisions: {},
+      });
+      await settle();
+    });
+    expect(picker.value).toBe(createdConversation.conversation_id);
+    expect(textarea.value).toBe("");
+    expect(persist).not.toHaveBeenCalled();
+    expect(reportError).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["conversation list rejection", "conversations", "reject"],
+    ["conversation list result", "conversations", "resolve"],
+    ["turn list result", "turns", "resolve"],
+    ["turn detail result", "detail", "resolve"],
+  ] as const)("keeps exact no-conversation Send identity when a superseded %s settles late", async (_label, stage, outcome) => {
+    const transport = createMockUiKernelTransport();
+    const createdConversation = makeConversation({
+      conversation_id: "agent-conversation:send-exact",
+      title: "Exact Send conversation",
+      latest_turn_id: "agent-turn:send-exact",
+      latest_prompt_preview: "Exact Send prompt",
+    });
+    const createdTurn = makeTurn({
+      turn_id: "agent-turn:send-exact",
+      conversation_id: createdConversation.conversation_id,
+      prompt_preview: "Exact Send prompt",
+      final_message: "Exact Send answer",
+    });
+    const createdDetail = makeDetail(createdTurn);
+    const staleConversation = makeConversation({
+      conversation_id: "agent-conversation:send-stale",
+      title: "Stale Send conversation",
+      latest_turn_id: "agent-turn:send-stale",
+      latest_prompt_preview: "STALE SEND PROMPT",
+    });
+    const staleTurn = makeTurn({
+      turn_id: "agent-turn:send-stale",
+      conversation_id: createdConversation.conversation_id,
+      prompt_preview: "STALE SEND PROMPT",
+      final_message: "STALE SEND ANSWER",
+    });
+    const staleDetail = makeDetail(staleTurn);
+    const conversationsGate = deferred<readonly AgentConversationSummary[]>();
+    const turnsGate = deferred<readonly AgentTurnSummary[]>();
+    const detailGate = deferred<AgentTurnDetail | null>();
+    let conversationsCall = 0;
+    let turnsCall = 0;
+    let detailCall = 0;
+    transport.listAgentConversations = vi.fn(() => {
+      conversationsCall += 1;
+      if (conversationsCall === 1) return Promise.resolve([]);
+      if (conversationsCall === 2 && stage === "conversations") return conversationsGate.promise;
+      return Promise.resolve([createdConversation]);
+    });
+    transport.listAgentTurns = vi.fn(() => {
+      turnsCall += 1;
+      if (turnsCall === 1 && stage === "turns") return turnsGate.promise;
+      return Promise.resolve([createdTurn]);
+    });
+    transport.getAgentTurnDetail = vi.fn(() => {
+      detailCall += 1;
+      if (detailCall === 1 && stage === "detail") return detailGate.promise;
+      return Promise.resolve(createdDetail);
+    });
+    let invalidate: (() => void) | null = null;
+    transport.subscribeAgentInvalidated = vi.fn((listener) => {
+      invalidate = listener;
+      return () => undefined;
+    });
+    const runConversation = vi.fn(async (current: AgentSurfaceViewState) => ({
+      ...current,
+      conversation_id: createdConversation.conversation_id,
+      composer: "",
+    }));
+    const persist = vi.fn(async () => undefined);
+    const surfaces = await transport.loadSurfaces();
+    const instance: SurfaceInstance = {
+      instance_id: "surface-instance:agent-test",
+      surface_id: "rho.agent",
+      project_id: surfaces.project_id,
+      origin: { kind: "application", component_id: "rho.agent" },
+      activation_generation: 1,
+      surface_revision: 1,
+      mode_id: "conversation",
+      resource_binding: null,
+      runtime_binding: null,
+      view_group_id: null,
+      view_state: {
+        conversation_id: null,
+        mode: "ask",
+        composer: "Run exact Send",
+        auto_approve: false,
+      },
+      lifecycle_state: "active",
+    };
+    const { container, reportError } = await renderAgent({
+      instance,
+      persist,
+      runConversation,
+      transport,
+    });
+
+    await click(container.querySelector<HTMLButtonElement>(
+      ".rho-agent-context-controls .rho-primary-action",
+    )!);
+    await vi.waitFor(() => {
+      if (stage === "conversations") expect(conversationsCall).toBe(2);
+      if (stage === "turns") expect(turnsCall).toBe(1);
+      if (stage === "detail") expect(detailCall).toBe(1);
+    });
+    await act(async () => {
+      invalidate?.();
+      await settle();
+    });
+    expect(container.textContent).toContain("Exact Send answer");
+
+    await act(async () => {
+      const lateError = new Error(`late ${stage} refresh rejected`);
+      if (stage === "conversations") {
+        if (outcome === "reject") conversationsGate.reject(lateError);
+        else conversationsGate.resolve([staleConversation]);
+      }
+      if (stage === "turns") turnsGate.resolve([staleTurn]);
+      if (stage === "detail") detailGate.resolve(staleDetail);
+      await settle();
+    });
+
+    const picker = container.querySelector<HTMLSelectElement>(
+      'select[aria-label="Conversation for surface-instance:agent-test"]',
+    )!;
+    expect(picker.value).toBe(createdConversation.conversation_id);
+    expect(container.querySelector(`[data-turn-id="${createdTurn.turn_id}"]`)).not.toBeNull();
+    expect(container.textContent).toContain("Exact Send answer");
+    expect(container.textContent).not.toContain("STALE SEND");
+    expect(container.querySelector<HTMLTextAreaElement>(".rho-agent-composer textarea")!.value).toBe("");
+    expect(persist).not.toHaveBeenCalled();
+    expect(reportError).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["conversation list", "conversations"],
+    ["turn list", "turns"],
+    ["turn detail", "detail"],
+  ] as const)("drops a deferred old-activation %s after the exact host activation changes", async (_label, stage) => {
+    const oldConversation = makeConversation({
+      conversation_id: "agent-conversation:activation-a",
+      project_root: "/projects/a",
+      title: "Activation A",
+      latest_turn_id: "agent-turn:activation-a",
+      latest_prompt_preview: "OLD ACTIVATION PROMPT",
+    });
+    const oldTurn = makeTurn({
+      turn_id: "agent-turn:activation-a",
+      conversation_id: oldConversation.conversation_id,
+      project_root: oldConversation.project_root,
+      prompt_preview: "OLD ACTIVATION PROMPT",
+      final_message: "OLD ACTIVATION ANSWER",
+    });
+    const oldDetail = makeDetail(oldTurn);
+    const conversationsGate = deferred<AgentConversationSummary[]>();
+    const turnsGate = deferred<AgentTurnSummary[]>();
+    const detailGate = deferred<AgentTurnDetail | null>();
+    const oldTransport = createMockUiKernelTransport();
+    const oldListConversations = vi.fn(() => stage === "conversations"
+      ? conversationsGate.promise
+      : Promise.resolve([oldConversation]));
+    const oldListTurns = vi.fn(() => stage === "turns"
+      ? turnsGate.promise
+      : Promise.resolve([oldTurn]));
+    const oldGetDetail = vi.fn(() => stage === "detail"
+      ? detailGate.promise
+      : Promise.resolve(oldDetail));
+    oldTransport.listAgentConversations = oldListConversations;
+    oldTransport.listAgentTurns = oldListTurns;
+    oldTransport.getAgentTurnDetail = oldGetDetail;
+    const oldSurface = (await oldTransport.loadSurfaces()).catalog.instances.find(
+      (candidate) => candidate.surface_id === "rho.agent",
+    )!;
+    const oldInstance: SurfaceInstance = {
+      ...oldSurface,
+      instance_id: "surface-instance:agent-test",
+      view_state: {
+        conversation_id: oldConversation.conversation_id,
+        mode: "ask",
+        composer: "",
+        auto_approve: false,
+      },
+    };
+
+    const {
+      container,
+      instance,
+      persist: oldPersist,
+      renderView,
+      reportError: oldReportError,
+    } = await renderAgent({ instance: oldInstance, transport: oldTransport });
+    if (stage === "conversations") expect(oldListConversations).toHaveBeenCalledTimes(1);
+    if (stage === "turns") expect(oldListTurns).toHaveBeenCalledTimes(1);
+    if (stage === "detail") expect(oldGetDetail).toHaveBeenCalledTimes(1);
+    expect(oldPersist).not.toHaveBeenCalled();
+
+    const nextConversation = makeConversation({
+      conversation_id: "agent-conversation:activation-b",
+      project_root: "/projects/b",
+      title: "Activation B",
+      latest_turn_id: "agent-turn:activation-b",
+      latest_prompt_preview: "NEW ACTIVATION PROMPT",
+    });
+    const nextTurn = makeTurn({
+      turn_id: "agent-turn:activation-b",
+      conversation_id: nextConversation.conversation_id,
+      project_root: nextConversation.project_root,
+      prompt_preview: "NEW ACTIVATION PROMPT",
+      final_message: "NEW ACTIVATION ANSWER",
+    });
+    const nextDetail = makeDetail(nextTurn);
+    const nextTransport = createMockUiKernelTransport();
+    const nextListConversations = vi.fn(async () => [nextConversation]);
+    const nextListTurns = vi.fn(async () => [nextTurn]);
+    const nextGetDetail = vi.fn(async () => nextDetail);
+    let invalidateNext: (() => void) | null = null;
+    nextTransport.listAgentConversations = nextListConversations;
+    nextTransport.listAgentTurns = nextListTurns;
+    nextTransport.getAgentTurnDetail = nextGetDetail;
+    nextTransport.subscribeAgentInvalidated = vi.fn((listener) => {
+      invalidateNext = listener;
+      return () => undefined;
+    });
+    const nextPersist = vi.fn(async () => undefined);
+    const nextReportError = vi.fn();
+    const nextInstance: SurfaceInstance = {
+      ...instance,
+      project_id: "project:activation-b",
+      activation_generation: instance.activation_generation + 1,
+      view_state: {
+        conversation_id: nextConversation.conversation_id,
+        mode: "ask",
+        composer: "",
+        auto_approve: false,
+      },
+    };
+
+    await renderView({
+      instance: nextInstance,
+      transport: nextTransport,
+      persist: nextPersist,
+      reportError: nextReportError,
+    });
+
+    expect(nextListConversations).toHaveBeenCalledTimes(1);
+    expect(nextListTurns).toHaveBeenCalledWith(nextConversation.conversation_id, 50);
+    expect(nextGetDetail).toHaveBeenCalledWith(nextTurn.turn_id);
+    expect(container.querySelector(`[data-turn-id="${nextTurn.turn_id}"]`)).not.toBeNull();
+    expect(container.textContent).toContain("NEW ACTIVATION ANSWER");
+    expect(container.querySelector<HTMLSelectElement>(
+      `select[aria-label="Conversation for ${instance.instance_id}"]`,
+    )!.value).toBe(nextConversation.conversation_id);
+
+    await act(async () => {
+      if (stage === "conversations") conversationsGate.resolve([oldConversation]);
+      if (stage === "turns") turnsGate.resolve([oldTurn]);
+      if (stage === "detail") detailGate.resolve(oldDetail);
+      await settle();
+    });
+
+    expect(container.querySelector(`[data-turn-id="${oldTurn.turn_id}"]`)).toBeNull();
+    expect(container.textContent).not.toContain("OLD ACTIVATION PROMPT");
+    expect(container.textContent).toContain("NEW ACTIVATION ANSWER");
+    expect(oldPersist).not.toHaveBeenCalled();
+    expect(oldReportError).not.toHaveBeenCalled();
+    expect(nextReportError).not.toHaveBeenCalled();
+    expect(nextPersist).not.toHaveBeenCalled();
+
+    const callsBeforeInvalidation = nextListConversations.mock.calls.length;
+    await act(async () => {
+      expect(invalidateNext).not.toBeNull();
+      invalidateNext?.();
+      await settle();
+    });
+    expect(nextListConversations).toHaveBeenCalledTimes(callsBeforeInvalidation + 1);
+    expect(container.querySelector(`[data-turn-id="${nextTurn.turn_id}"]`)).not.toBeNull();
+  });
+
+  it("does not project a rejected stale refresh into the newly accepted host", async () => {
+    const staleGate = deferred<AgentConversationSummary[]>();
+    const staleTransport = createMockUiKernelTransport();
+    staleTransport.listAgentConversations = vi.fn(() => staleGate.promise);
+    const staleReportError = vi.fn();
+    const { instance, renderView } = await renderAgent({
+      transport: staleTransport,
+      reportError: staleReportError,
+    });
+
+    const currentConversation = makeConversation({
+      conversation_id: "agent-conversation:current",
+      project_root: "/projects/current",
+      title: "Current activation",
+      turn_count: 0,
+      status: "idle",
+      latest_turn_id: null,
+      terminal_reason: null,
+    });
+    const currentTransport = createMockUiKernelTransport();
+    currentTransport.listAgentConversations = vi.fn(async () => [currentConversation]);
+    currentTransport.listAgentTurns = vi.fn(async () => []);
+    const currentReportError = vi.fn();
+    await renderView({
+      instance: {
+        ...instance,
+        project_id: "project:current",
+        activation_generation: instance.activation_generation + 1,
+      },
+      transport: currentTransport,
+      reportError: currentReportError,
+    });
+
+    await act(async () => {
+      staleGate.reject(new Error("late activation A failure"));
+      await settle();
+    });
+    expect(staleReportError).not.toHaveBeenCalled();
+    expect(currentReportError).not.toHaveBeenCalled();
+  });
+
+  it("persists explicit picker selection before adoption, suppresses its stale refresh, and recovers after failure", async () => {
+    const selectedConversation = makeConversation({
+      conversation_id: "agent-conversation:selected",
+      title: "Selected conversation",
+      turn_count: 0,
+      status: "idle",
+      terminal_reason: null,
+    });
+    const recoveryConversation = makeConversation({
+      conversation_id: "agent-conversation:recovery",
+      title: "Recovery conversation",
+      turn_count: 0,
+      status: "idle",
+      terminal_reason: null,
+    });
+    const staleRefresh = deferred<readonly AgentConversationSummary[]>();
+    const transport = createMockUiKernelTransport();
+    let listCall = 0;
+    transport.listAgentConversations = vi.fn(() => {
+      listCall += 1;
+      if (listCall === 2) return staleRefresh.promise;
+      return Promise.resolve([selectedConversation, recoveryConversation]);
+    });
+    transport.listAgentTurns = vi.fn(async () => []);
+    let invalidate: (() => void) | null = null;
+    transport.subscribeAgentInvalidated = vi.fn((listener) => {
+      invalidate = listener;
+      return () => undefined;
+    });
+    const firstPersist = deferred<void>();
+    let persistCall = 0;
+    const persist = vi.fn(() => {
+      persistCall += 1;
+      if (persistCall === 1) return firstPersist.promise;
+      if (persistCall === 2) return Promise.reject(new Error("explicit selection stale"));
+      return Promise.resolve();
+    });
+    const surfaces = await transport.loadSurfaces();
+    const instance: SurfaceInstance = {
+      instance_id: "surface-instance:agent-test",
+      surface_id: "rho.agent",
+      project_id: surfaces.project_id,
+      origin: { kind: "application", component_id: "rho.agent" },
+      activation_generation: 1,
+      surface_revision: 1,
+      mode_id: "conversation",
+      resource_binding: null,
+      runtime_binding: null,
+      view_group_id: null,
+      view_state: {
+        conversation_id: recoveryConversation.conversation_id,
+        mode: "ask",
+        composer: "",
+        auto_approve: false,
+      },
+      lifecycle_state: "active",
+    };
+    const { container, reportError } = await renderAgent({ instance, persist, transport });
+    const picker = container.querySelector<HTMLSelectElement>(
+      'select[aria-label="Conversation for surface-instance:agent-test"]',
+    )!;
+
+    await act(async () => {
+      invalidate?.();
+      await vi.waitFor(() => expect(listCall).toBe(2));
+    });
+    await selectInput(picker, selectedConversation.conversation_id);
+    expect(persist).toHaveBeenLastCalledWith(expect.objectContaining({
+      conversation_id: selectedConversation.conversation_id,
+    }));
+    expect(picker.value).toBe(recoveryConversation.conversation_id);
+
+    await act(async () => {
+      firstPersist.resolve();
+      await settle();
+    });
+    expect(picker.value).toBe(selectedConversation.conversation_id);
+    await act(async () => {
+      staleRefresh.reject(new Error("late refresh superseded by explicit selection"));
+      await settle();
+    });
+    expect(picker.value).toBe(selectedConversation.conversation_id);
+    expect(reportError).not.toHaveBeenCalled();
+
+    await selectInput(picker, recoveryConversation.conversation_id);
+    expect(picker.value).toBe(selectedConversation.conversation_id);
+    expect(reportError).toHaveBeenCalledTimes(1);
+    expect(reportError).toHaveBeenLastCalledWith(expect.objectContaining({
+      message: "explicit selection stale",
+    }));
+
+    await selectInput(picker, recoveryConversation.conversation_id);
+    expect(picker.value).toBe(recoveryConversation.conversation_id);
+    expect(persist).toHaveBeenCalledTimes(3);
+    expect(reportError).toHaveBeenCalledTimes(1);
+
+    await selectInput(picker, "");
+    expect(picker.value).toBe("");
+    expect(persist).toHaveBeenCalledTimes(4);
+    expect(persist).toHaveBeenLastCalledWith(expect.objectContaining({ conversation_id: null }));
+  });
+
+  it("keeps a deferred New action live across an unrelated same-activation callback rerender", async () => {
+    const sharedConversation = makeConversation({
+      conversation_id: "agent-conversation:mock-shared",
+      title: "Shared conversation",
+      turn_count: 0,
+      status: "idle",
+      terminal_reason: null,
+    });
+    const createdConversation = makeConversation({
+      conversation_id: "agent-conversation:created-during-rerender",
+      title: "Created during rerender",
+      turn_count: 0,
+      status: "idle",
+      terminal_reason: null,
+    });
+    let conversations = [sharedConversation];
+    const createGate = deferred<AgentConversationSummary>();
+    const transport = createMockUiKernelTransport();
+    transport.listAgentConversations = vi.fn(async () => conversations);
+    transport.listAgentTurns = vi.fn(async () => []);
+    transport.createAgentConversation = vi.fn(() => createGate.promise);
+    const {
+      container,
+      persist: actionPersist,
+      renderView,
+      reportError: actionReportError,
+    } = await renderAgent({ transport });
+
+    const newButton = [...container.querySelectorAll<HTMLButtonElement>(".rho-agent-toolbar-action")]
+      .find((button) => button.textContent === "New")!;
+    await click(newButton);
+    expect(newButton.disabled).toBe(true);
+
+    const rerenderPersist = vi.fn(async () => undefined);
+    const rerenderReportError = vi.fn();
+    await renderView({ persist: rerenderPersist, reportError: rerenderReportError });
+    expect(container.querySelector<HTMLButtonElement>(".rho-agent-toolbar-action")!.disabled).toBe(true);
+
+    conversations = [createdConversation, sharedConversation];
+    await act(async () => {
+      createGate.resolve(createdConversation);
+      await settle();
+    });
+
+    const currentNewButton = [...container.querySelectorAll<HTMLButtonElement>(".rho-agent-toolbar-action")]
+      .find((button) => button.textContent === "New")!;
+    expect(currentNewButton.disabled).toBe(false);
+    expect(container.querySelector<HTMLSelectElement>(
+      'select[aria-label="Conversation for surface-instance:agent-test"]',
+    )!.value).toBe(createdConversation.conversation_id);
+    expect(actionPersist).toHaveBeenCalledWith(expect.objectContaining({
+      conversation_id: createdConversation.conversation_id,
+    }));
+    expect(actionReportError).not.toHaveBeenCalled();
+    expect(rerenderReportError).not.toHaveBeenCalled();
+  });
+
+  it("suppresses a rejected synchronous create invalidation after adopting the created conversation", async () => {
+    const sharedConversation = makeConversation({
+      conversation_id: "agent-conversation:mock-shared",
+      title: "Shared conversation",
+      turn_count: 0,
+      status: "idle",
+      terminal_reason: null,
+    });
+    const transport = createMockUiKernelTransport();
+    const listConversations = transport.listAgentConversations.bind(transport);
+    const staleRefresh = deferred<readonly AgentConversationSummary[]>();
+    let listCall = 0;
+    transport.listAgentConversations = vi.fn(async (limit = 50) => {
+      listCall += 1;
+      if (listCall === 1) return [sharedConversation];
+      if (listCall === 2) return staleRefresh.promise;
+      return listConversations(limit);
+    });
+    transport.listAgentTurns = vi.fn(async () => []);
+    const { container, persist, reportError } = await renderAgent({ transport });
+    const newButton = [...container.querySelectorAll<HTMLButtonElement>(".rho-agent-toolbar-action")]
+      .find((button) => button.textContent === "New")!;
+
+    await click(newButton);
+    await act(async () => {
+      await vi.waitFor(() => expect(listCall).toBeGreaterThanOrEqual(3));
+    });
+    const picker = container.querySelector<HTMLSelectElement>(
+      'select[aria-label="Conversation for surface-instance:agent-test"]',
+    )!;
+    const createdConversationId = picker.value;
+    expect(createdConversationId).toMatch(/^agent-conversation:mock-/u);
+    expect(persist).toHaveBeenCalledTimes(1);
+    expect(persist).toHaveBeenLastCalledWith(expect.objectContaining({
+      conversation_id: createdConversationId,
+    }));
+
+    await act(async () => {
+      staleRefresh.reject(new Error("late refresh superseded by New"));
+      await settle();
+    });
+    expect(picker.value).toBe(createdConversationId);
+    expect(persist).toHaveBeenCalledTimes(1);
+    expect(reportError).not.toHaveBeenCalled();
+  });
+
+  it("does not fallback-select a synchronously invalidated conversation when composite persistence fails", async () => {
+    const transport = createMockUiKernelTransport();
+    const listConversations = transport.listAgentConversations.bind(transport);
+    let listCall = 0;
+    transport.listAgentConversations = vi.fn(async (limit = 50) => {
+      listCall += 1;
+      return listCall === 1 ? [] : listConversations(limit);
+    });
+    transport.listAgentTurns = vi.fn(async () => []);
+    const persist = vi.fn(async () => {
+      throw new Error("exact Agent selection persist rejected");
+    });
+    const instance: SurfaceInstance = {
+      instance_id: "surface-instance:agent-test",
+      surface_id: "rho.agent",
+      project_id: (await transport.loadSurfaces()).project_id,
+      origin: { kind: "application", component_id: "rho.agent" },
+      activation_generation: 1,
+      surface_revision: 1,
+      mode_id: "conversation",
+      resource_binding: null,
+      runtime_binding: null,
+      view_group_id: null,
+      view_state: {
+        conversation_id: null,
+        mode: "ask",
+        composer: "",
+        auto_approve: false,
+      },
+      lifecycle_state: "active",
+    };
+    const { container, reportError } = await renderAgent({ instance, persist, transport });
+
+    await click([...container.querySelectorAll<HTMLButtonElement>(".rho-agent-toolbar-action")]
+      .find((button) => button.textContent === "New")!);
+    await act(async () => { await settle(); });
+    const picker = container.querySelector<HTMLSelectElement>(
+      'select[aria-label="Conversation for surface-instance:agent-test"]',
+    )!;
+    expect(picker.value).toBe("");
+    expect([...picker.options].some((option) => option.value.startsWith("agent-conversation:mock-")))
+      .toBe(true);
+    expect(persist).toHaveBeenCalledOnce();
+    expect(reportError).toHaveBeenCalledWith(expect.objectContaining({
+      message: "exact Agent selection persist rejected",
+    }));
+  });
+
+  it("keeps an empty host unselected when an external create invalidates its read projection", async () => {
+    const transport = createMockUiKernelTransport();
+    const listConversations = transport.listAgentConversations.bind(transport);
+    let listCall = 0;
+    transport.listAgentConversations = vi.fn(async (limit = 50) => {
+      listCall += 1;
+      return listCall === 1 ? [] : listConversations(limit);
+    });
+    transport.listAgentTurns = vi.fn(async () => []);
+    const persist = vi.fn(async () => undefined);
+    const surfaces = await transport.loadSurfaces();
+    const instance: SurfaceInstance = {
+      instance_id: "surface-instance:agent-test",
+      surface_id: "rho.agent",
+      project_id: surfaces.project_id,
+      origin: { kind: "application", component_id: "rho.agent" },
+      activation_generation: 1,
+      surface_revision: 1,
+      mode_id: "conversation",
+      resource_binding: null,
+      runtime_binding: null,
+      view_group_id: null,
+      view_state: {
+        conversation_id: null,
+        mode: "ask",
+        composer: "",
+        auto_approve: false,
+      },
+      lifecycle_state: "active",
+    };
+    const { container, reportError } = await renderAgent({ instance, persist, transport });
+
+    const created = await transport.createAgentConversation();
+    await act(async () => { await settle(); });
+    const picker = container.querySelector<HTMLSelectElement>(
+      'select[aria-label="Conversation for surface-instance:agent-test"]',
+    )!;
+    expect([...picker.options].map((option) => option.value)).toContain(created.conversation_id);
+    expect(picker.value).toBe("");
+    expect(persist).not.toHaveBeenCalled();
+    expect(reportError).not.toHaveBeenCalled();
   });
 
   it("shows the degraded banner with dependency diagnostics when the runtime is not ready", async () => {

@@ -4,6 +4,8 @@ import type {
   UiKernelTransport,
   Unsubscribe,
   WorkspacePreparation,
+  WorkspacePreparationProgress,
+  WorkspacePreparationProgressListener,
 } from "./types";
 import { invalidationEvents } from "./invalidation-contract";
 import { createTauriAgentConversationTransport } from "./agent-conversation";
@@ -37,6 +39,67 @@ export type Listen = <T>(
   event: string,
   handler: (event: { readonly payload: T }) => void,
 ) => Promise<Unsubscribe>;
+
+const STARTUP_PROGRESS_TEXT_BYTE_LIMIT = 512;
+const utf8Encoder = new TextEncoder();
+
+function wellFormedProgressText(value: string): string {
+  let result = "";
+  for (let index = 0; index < value.length; index += 1) {
+    const unit = value.charCodeAt(index);
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        result += value.slice(index, index + 2);
+        index += 1;
+      } else {
+        result += "\ufffd";
+      }
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+      result += "\ufffd";
+    } else {
+      result += value[index];
+    }
+  }
+  return result;
+}
+
+function boundedProgressText(value: string | null | undefined): string | undefined {
+  if (value == null || value.trim().length === 0) return undefined;
+  const normalized = wellFormedProgressText(value);
+  if (utf8Encoder.encode(normalized).byteLength <= STARTUP_PROGRESS_TEXT_BYTE_LIMIT) {
+    return normalized;
+  }
+  const suffix = "…";
+  const budget = STARTUP_PROGRESS_TEXT_BYTE_LIMIT - utf8Encoder.encode(suffix).byteLength;
+  let bounded = "";
+  let byteLength = 0;
+  for (const character of normalized) {
+    const characterBytes = utf8Encoder.encode(character).byteLength;
+    if (byteLength + characterBytes > budget) break;
+    bounded += character;
+    byteLength += characterBytes;
+  }
+  return `${bounded}${suffix}`;
+}
+
+function boundedProgressPid(value: number | null | undefined): number | undefined {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0
+    ? value
+    : undefined;
+}
+
+function emitPreparationProgress(
+  listener: WorkspacePreparationProgressListener | undefined,
+  snapshot: WorkspacePreparationProgress,
+) {
+  if (listener == null) return;
+  try {
+    listener(Object.freeze(snapshot));
+  } catch {
+    // Progress is presentation telemetry and cannot control startup admission.
+  }
+}
 
 function boundedJson(value: unknown): string | null {
   if (value == null) return null;
@@ -134,7 +197,11 @@ export function createTauriUiKernelTransport(
   const gitTransport = createTauriGitReadTransport(invoke);
   return {
     source: "tauri",
-    async prepareWorkspace(chooseRscript = false): Promise<WorkspacePreparation> {
+    async prepareWorkspace(
+      chooseRscript = false,
+      onProgress?: WorkspacePreparationProgressListener,
+    ): Promise<WorkspacePreparation> {
+      emitPreparationProgress(onProgress, { stage: "runtime", state: "active" });
       const startup = chooseRscript
         ? await startupTransport.chooseRscript()
         : await startupTransport.bootstrapStartup();
@@ -157,8 +224,17 @@ export function createTauriUiKernelTransport(
           },
         };
       }
+      const runtimeVersion = boundedProgressText(startup.runtime?.r_version);
+      emitPreparationProgress(onProgress, runtimeVersion == null
+        ? { stage: "runtime", state: "complete" }
+        : { stage: "runtime", state: "complete", r_version: runtimeVersion });
+      emitPreparationProgress(onProgress, { stage: "workspace", state: "active" });
       try {
-        await startupTransport.startWorkspace();
+        const workspace = await startupTransport.startWorkspace();
+        const workspacePid = boundedProgressPid(workspace.kernel_pid);
+        emitPreparationProgress(onProgress, workspacePid == null
+          ? { stage: "workspace", state: "complete" }
+          : { stage: "workspace", state: "complete", workspace_pid: workspacePid });
       } catch (error: unknown) {
         const detail = error instanceof Error ? error.message : String(error);
         return {
@@ -175,12 +251,17 @@ export function createTauriUiKernelTransport(
         };
       }
       void agentRuntimeTransport.retryAgentRuntime().catch(() => undefined);
+      emitPreparationProgress(onProgress, { stage: "project", state: "active" });
       try {
         const restored = normalizeProjectSwitchResponse(
           await projectCommands.projectRestoreSession(),
         );
         const restoredStatus = restored.status;
         if (restoredStatus === "ready") {
+          const projectRoot = boundedProgressText(restored.project?.root);
+          emitPreparationProgress(onProgress, projectRoot == null
+            ? { stage: "project", state: "complete" }
+            : { stage: "project", state: "complete", project_root: projectRoot });
           return {
             status: "ready",
             phase: "project_ready",

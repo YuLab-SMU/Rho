@@ -1,6 +1,7 @@
 # Visual Acceptance Automation
 
-Status: implemented VA1 contract; product acceptance remains FAIL
+Status: implemented VA1 contract; the historical full baseline remains FAIL;
+the focused `0.4.1-dev.22` S0/S3/S9 development run records PASS
 
 Date: 2026-08-26
 Authorization: user directed on 2026-08-26 to remove the human-executed
@@ -211,6 +212,56 @@ has no application-version or `NEWS.md` impact because the listener and
 frontend automation surface are unavailable in release builds. Exact-candidate
 installation, distribution, signing, publication, and release decisions remain
 outside this completed contract.
+
+## 2026-08-27 Real-App Foreground Determinism Amendment
+
+An immutable `0.4.1-dev.22` S0/S3/S9 run exposed an orchestration defect after
+browser/mock startup-frame capture returned control to the real macOS debug
+application. The runner's app activation was fire-and-forget and deterministic
+Navigator focus actions could execute while the WKWebView was backgrounded.
+The captured S0 frame was geometrically clean and selected the correct Files
+tab, but the background webview did not establish the required leaf focus.
+
+For real-debug evidence, every structured frontend action must now await a
+bounded, fail-closed foreground confirmation of the exact launched application
+process before the bridge dispatches that action. This strengthens focus and
+keyboard evidence: the existing selector, `document.activeElement`, geometry,
+reachability, timeout, and screenshot criteria remain unchanged. Browser/mock
+collectors are unaffected. The runner does not wait for or retry product
+mutations, reinterpret a deterministic failure, or add frontend/backend
+vocabulary. A harness self-test must prove confirmation completes before
+command dispatch and that a failed confirmation prevents dispatch. Because
+this is external acceptance orchestration only, an unchanged debug binary may
+be rerun after focused harness verification; every output directory remains
+immutable and the failed run remains FAIL.
+
+Completion evidence recorded 2026-08-27: the focused harness self-test and the
+complete stable `rsr:check` passed. The final run used the pre-documentation
+frozen product snapshot fingerprint
+`df64bc7de536667641f7aa96c6fcfa5c99a83713701af999c000dcd1b9311dcb`
+and exact frozen debug binary SHA-256
+`3fb1693239d2b2f64f1966284dd1dd485fe41afa890b67abf6969a63a8650465`.
+`target/visual-acceptance/dev22-final-df64bc7d-3fb16932-s0-s3-s9/` finalized
+`PASS`: S0, S3, and S9 passed 35/35 deterministic gates; all 31 captured PNGs
+received passing original-resolution review; and deterministic failures,
+visual failures, and pending verdicts were all zero. The previously failed
+immutable foreground and pre-repair runs remain failed evidence. This result
+records development PASS only for the three named scenarios and their owning
+product contracts; it does not rewrite the broader historical VA1 baseline or
+make an installed-candidate or release decision.
+
+Post-documentation exact-binary reconciliation: lifecycle documentation did
+not change the frozen product sources or frontend assets. A later debug rebuild
+produced the exact current binary SHA-256
+`4c9d9b18920d97c0aaea309b61d1bde6ade603f1d3c268d8e3a395f55d02a1cf`.
+After explicit macOS Keychain authorization, the immutable run at
+`target/visual-acceptance/dev22-final-1f476c14-4c9d9b18-s0-s3-s9-r2/`
+finalized `PASS`: S0, S3, and S9 passed 35/35 deterministic gates; all 31 PNGs
+passed original-resolution review; and deterministic failures, visual
+failures, and pending verdicts were zero. The first `4c9d9b...` attempt at the
+same stem without `-r2` remains `FAIL` because its browser/mock dependency was
+unavailable; the earlier `3fb169...` run remains the historical
+pre-documentation frozen-product PASS. No run was reclassified.
 
 ## STARTUP-RECOVERY-1 Isolation Amendment
 

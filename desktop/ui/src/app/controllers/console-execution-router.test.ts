@@ -4,6 +4,12 @@ import { ConsoleExecutionRouter } from "./console-execution-router";
 import type { ConsoleExecutionEndpoint } from "./console-execution-router";
 import type { SourceExecutionSubmission } from "../source-execution";
 
+const activation = (
+  epoch = 1,
+  projectId = "project:a",
+  projectRevision = 1,
+) => ({ epoch, projectId, projectRevision });
+
 const execution: SourceExecutionSubmission = {
   kind: "expression",
   code: "1 + 1",
@@ -25,6 +31,7 @@ function endpoint(instanceId: string, accepted = true): ConsoleExecutionEndpoint
 describe("Console execution router", () => {
   it("uses the sole endpoint, then preserves an explicitly preferred Console", async () => {
     const router = new ConsoleExecutionRouter();
+    router.activate(activation());
     const first = endpoint("console:first");
     const second = endpoint("console:second");
     router.register(first);
@@ -40,6 +47,7 @@ describe("Console execution router", () => {
 
   it("requires an explicit choice when multiple endpoints are visible", async () => {
     const router = new ConsoleExecutionRouter();
+    router.activate(activation());
     router.register(endpoint("console:a"));
     router.register(endpoint("console:b"));
     const report = vi.fn();
@@ -51,6 +59,7 @@ describe("Console execution router", () => {
     vi.useFakeTimers();
     try {
       const router = new ConsoleExecutionRouter(250);
+      router.activate(activation());
       const mounted = endpoint("console:mounted");
       const waiting = router.waitFor(mounted.instanceId);
       router.register(mounted);
@@ -66,6 +75,7 @@ describe("Console execution router", () => {
 
   it("deduplicates rapid preparation and admits both requests through the mounted endpoint", async () => {
     const router = new ConsoleExecutionRouter();
+    router.activate(activation());
     const mounted = endpoint("console:new");
     let resolvePreparation: ((value: ConsoleExecutionEndpoint) => void) | undefined;
     const prepare = vi.fn(() => new Promise<ConsoleExecutionEndpoint>((resolve) => {
@@ -82,12 +92,12 @@ describe("Console execution router", () => {
 
   it("keeps admission rejection actionable and clears endpoint truth on project reset", async () => {
     const router = new ConsoleExecutionRouter();
-    router.activateProject("project:a");
+    router.activate(activation());
     router.register(endpoint("console:busy", false));
     const report = vi.fn();
     await expect(router.run("source", execution, vi.fn(), report)).resolves.toBe(false);
     expect(report).toHaveBeenCalledWith("Console is busy.");
-    router.activateProject("project:b");
+    router.activate(activation(2, "project:b", 1));
     const prepare = vi.fn(async () => endpoint("console:new"));
     await expect(router.run("source", execution, prepare, report)).resolves.toBe(true);
     expect(prepare).toHaveBeenCalledTimes(1);
@@ -95,11 +105,38 @@ describe("Console execution router", () => {
 
   it("rejects pending waiters on reset and disposal", async () => {
     const router = new ConsoleExecutionRouter();
+    router.activate(activation());
     const projectWait = router.waitFor("console:project");
     router.reset();
     await expect(projectWait).rejects.toThrow("project changed");
+    await expect(router.waitFor("console:closed"))
+      .rejects.toThrow("project changed");
+    router.activate(activation(2, "project:b", 1));
     const closeWait = router.waitFor("console:close");
     router.dispose();
     await expect(closeWait).rejects.toThrow("workbench closed");
+  });
+
+  it("drops a prepared endpoint when the local project activation changes before submit", async () => {
+    const router = new ConsoleExecutionRouter();
+    router.activate(activation(1, "project:a", 4));
+    let resolvePreparation: ((value: ConsoleExecutionEndpoint) => void) | undefined;
+    const prepared = endpoint("console:shared");
+    const reportA = vi.fn();
+    const runA = router.run("source:a", execution, () => new Promise((resolve) => {
+      resolvePreparation = resolve;
+    }), reportA);
+
+    router.activate(activation(2, "project:a", 5));
+    resolvePreparation?.(prepared);
+
+    await expect(runA).resolves.toBe(false);
+    expect(prepared.submitSource).not.toHaveBeenCalled();
+    expect(reportA).toHaveBeenCalledWith(expect.stringContaining("project changed"));
+
+    const current = endpoint("console:shared");
+    router.register(current);
+    await expect(router.run("source:a2", execution, vi.fn(), vi.fn())).resolves.toBe(true);
+    expect(current.submitSource).toHaveBeenCalledOnce();
   });
 });

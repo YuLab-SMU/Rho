@@ -10,6 +10,7 @@ const generatedStudio = fixture.studio_runtime_snapshot as unknown as StudioRunt
 
 function harness(status: "ready" | "loading" = "ready") {
   let snapshot = structuredClone(generatedStudio);
+  let admissionOpen = true;
   const report = vi.fn();
   const apply = vi.fn<StudioMutationPorts["apply"]>(async () => {
     snapshot = {
@@ -25,16 +26,27 @@ function harness(status: "ready" | "loading" = "ready") {
     getStudio: () => status === "ready"
       ? { status: "ready", source: "mock", snapshot }
       : { status: "loading" },
+    admit: async (projectId, operation) => {
+      if (!admissionOpen) throw new Error("Project transition is in progress.");
+      return operation({ projectId, admissionEpoch: 0 });
+    },
     apply,
     undo,
     redo,
-    report,
+    captureReport: () => report,
     allocateLayoutNodeId: (() => {
       let next = 0;
       return () => `test-node:${next++}`;
     })(),
   };
-  return { controller: new StudioMutationController(ports), apply, undo, redo, report };
+  return {
+    controller: new StudioMutationController(ports),
+    apply,
+    undo,
+    redo,
+    report,
+    setAdmissionOpen: (open: boolean) => { admissionOpen = open; },
+  };
 }
 
 const focusEdit = (instanceId: string): SceneEdit => ({ kind: "set_focus", instance_id: instanceId });
@@ -62,7 +74,7 @@ describe("Studio mutation controller", () => {
     })).resolves.toBe(true);
     expect(current.apply).toHaveBeenCalledWith(expect.objectContaining({
       edit: expect.objectContaining({ kind: "replace_root" }),
-    }));
+    }), expect.anything());
   });
 
   it("treats a self-drop and an unready Studio as no-op admissions", async () => {
@@ -90,6 +102,40 @@ describe("Studio mutation controller", () => {
     expect(current.apply).toHaveBeenCalledTimes(2);
   });
 
+  it("binds each queued failure to the reporter captured at admission", async () => {
+    let snapshot = structuredClone(generatedStudio);
+    let rejectA: ((reason?: unknown) => void) | undefined;
+    const reportA = vi.fn();
+    const reportB = vi.fn();
+    let currentReport = reportA;
+    const apply = vi.fn<StudioMutationPorts["apply"]>()
+      .mockImplementationOnce(() => new Promise<StudioRuntimeSnapshot>((_resolve, reject) => {
+        rejectA = reject;
+      }))
+      .mockRejectedValueOnce(new Error("project B failure"));
+    const ports: StudioMutationPorts = {
+      getStudio: () => ({ status: "ready", source: "mock", snapshot }),
+      admit: async (projectId, operation) => operation({ projectId, admissionEpoch: 0 }),
+      apply,
+      undo: vi.fn(async () => snapshot),
+      redo: vi.fn(async () => snapshot),
+      captureReport: () => currentReport,
+      allocateLayoutNodeId: () => "test-node",
+    };
+    const controller = new StudioMutationController(ports);
+    const first = controller.commit(focusEdit("instance:file-source"));
+    currentReport = reportB;
+    await vi.waitFor(() => expect(rejectA).toBeTypeOf("function"));
+    rejectA?.(new Error("project A failure"));
+    await expect(first).resolves.toBe(false);
+    expect(reportA).toHaveBeenCalledWith("project A failure");
+    expect(reportB).not.toHaveBeenCalled();
+
+    snapshot = { ...snapshot, project_revision: snapshot.project_revision + 1 };
+    await expect(controller.commit(focusEdit("instance:console-a"))).resolves.toBe(false);
+    expect(reportB).toHaveBeenCalledWith("project B failure");
+  });
+
   it("admits undo and redo through the same latest-revision queue", async () => {
     const current = harness();
     await expect(current.controller.undo()).resolves.toBe(true);
@@ -99,5 +145,52 @@ describe("Studio mutation controller", () => {
     expect(current.undo.mock.calls[0]![0]).toMatchObject({
       expected_layout_revision: generatedStudio.scene.layout_revision,
     });
+  });
+
+  it("drains every pre-close queue entry after rejection and recovers after reopen", async () => {
+    const current = harness();
+    let rejectFirst: ((reason?: unknown) => void) | undefined;
+    let resolveSecond: ((snapshot: StudioRuntimeSnapshot) => void) | undefined;
+    current.apply
+      .mockImplementationOnce(() => new Promise<StudioRuntimeSnapshot>((_resolve, reject) => {
+        rejectFirst = reject;
+      }))
+      .mockImplementationOnce(() => new Promise<StudioRuntimeSnapshot>((resolve) => {
+        resolveSecond = resolve;
+      }));
+
+    const first = current.controller.commit(focusEdit("instance:file-source"));
+    const second = current.controller.commit(focusEdit("instance:console-a"));
+    await vi.waitFor(() => expect(rejectFirst).toBeTypeOf("function"));
+    current.setAdmissionOpen(false);
+
+    const rejectedAfterClose = current.controller.commit(focusEdit("instance:agent-shared"));
+    await expect(rejectedAfterClose).resolves.toBe(false);
+    expect(current.apply).toHaveBeenCalledTimes(1);
+
+    let settled = false;
+    const waiting = current.controller.settled().then(() => { settled = true; });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    rejectFirst?.(new Error("first admitted edit failed"));
+    await expect(first).resolves.toBe(false);
+    await vi.waitFor(() => expect(resolveSecond).toBeTypeOf("function"));
+    expect(current.apply).toHaveBeenCalledTimes(2);
+    expect(current.apply.mock.calls.map(([request]) => request.edit)).toEqual([
+      focusEdit("instance:file-source"),
+      focusEdit("instance:console-a"),
+    ]);
+    expect(settled).toBe(false);
+
+    resolveSecond?.(structuredClone(generatedStudio));
+    await expect(second).resolves.toBe(true);
+    await waiting;
+    expect(settled).toBe(true);
+    expect(current.report).toHaveBeenCalledWith("first admitted edit failed");
+
+    current.setAdmissionOpen(true);
+    await expect(current.controller.commit(focusEdit("instance:agent-shared"))).resolves.toBe(true);
+    expect(current.apply).toHaveBeenCalledTimes(3);
   });
 });

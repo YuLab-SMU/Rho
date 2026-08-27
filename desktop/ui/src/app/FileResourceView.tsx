@@ -15,6 +15,17 @@ import type { SourceEditorHandle } from "./SourceEditor";
 import type { SourceExecutionSubmission } from "./source-execution";
 import { workbenchFailureMessage } from "./workbench-failure";
 
+export interface FileMutationWorkflow {
+  readonly updateDraft: (
+    content: ResourceContent,
+    value: string,
+  ) => Promise<ResourceContent>;
+  readonly save: (content: ResourceContent) => Promise<ResourceContent>;
+  readonly runSourceExecution: (
+    execution: SourceExecutionSubmission,
+  ) => Promise<boolean>;
+}
+
 export interface FileResourceViewProps {
   readonly instance: SurfaceInstance;
   readonly registry: ResourceRegistrySnapshot | null;
@@ -24,7 +35,9 @@ export interface FileResourceViewProps {
     resourceRevision: number,
   ) => Promise<ResourceContent>;
   readonly updateDraft: (content: ResourceContent, value: string) => Promise<ResourceContent>;
-  readonly save: (content: ResourceContent) => Promise<ResourceContent>;
+  readonly withMutation: <T>(
+    operation: (workflow: FileMutationWorkflow) => Promise<T>,
+  ) => Promise<T>;
   readonly reload: (content: ResourceContent, discardDirty: boolean) => Promise<ResourceContent>;
   readonly rename: (content: ResourceContent | null, nextId: string) => Promise<void>;
   readonly removeResource: (
@@ -34,7 +47,6 @@ export interface FileResourceViewProps {
   readonly refreshBinding: (descriptor: ResourceDescriptor) => Promise<void>;
   readonly setViewGroup: (viewGroupId: string | null) => Promise<void>;
   readonly persistViewState: (viewState: unknown) => Promise<void>;
-  readonly runSourceExecution: (execution: SourceExecutionSubmission) => Promise<boolean>;
   readonly reportError: (error: unknown) => void;
 }
 
@@ -65,8 +77,8 @@ function resourceMarkup(content: ResourceContent): { html?: string; text?: strin
 }
 
 export function FileResourceView({
-  instance, registry, read, updateDraft, save, reload, rename, removeResource,
-  refreshBinding, setViewGroup, persistViewState, runSourceExecution, reportError,
+  instance, registry, read, updateDraft, withMutation, reload, rename, removeResource,
+  refreshBinding, setViewGroup, persistViewState, reportError,
 }: FileResourceViewProps) {
   const binding = instance.resource_binding;
   const descriptor = registry?.resources.find((candidate) =>
@@ -80,13 +92,16 @@ export function FileResourceView({
   const [localDirty, setLocalDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sourceRunPending, setSourceRunPending] = useState(false);
+  const [savePending, setSavePending] = useState(false);
   const [viewGroup, setViewGroupInput] = useState(instance.view_group_id ?? "");
   const [renamePath, setRenamePath] = useState(binding?.resource_id ?? "");
   const contentRef = useRef<ResourceContent | null>(content);
   const editorValueRef = useRef(editorValue);
   const localDirtyRef = useRef(localDirty);
   const draftCommitRef = useRef<Promise<ResourceContent | null> | null>(null);
+  const savePendingRef = useRef(false);
   const sourceEditorRef = useRef<SourceEditorHandle>(null);
+  const fileResourceRef = useRef<HTMLDivElement>(null);
   contentRef.current = content;
   editorValueRef.current = editorValue;
   localDirtyRef.current = localDirty;
@@ -125,14 +140,16 @@ export function FileResourceView({
     setRenamePath(binding?.resource_id ?? "");
   }, [binding?.resource_id]);
 
-  const commitDraft = (): Promise<ResourceContent | null> => {
+  const commitDraft = (
+    writeDraft: FileResourceViewProps["updateDraft"] = updateDraft,
+  ): Promise<ResourceContent | null> => {
     if (!source || contentRef.current == null || !localDirtyRef.current) {
       return Promise.resolve(contentRef.current);
     }
     if (draftCommitRef.current != null) return draftCommitRef.current;
     const base = contentRef.current;
     const value = editorValueRef.current;
-    const operation: Promise<ResourceContent | null> = updateDraft(base, value).then((next) => {
+    const operation: Promise<ResourceContent | null> = writeDraft(base, value).then((next) => {
       contentRef.current = next;
       setContent(next);
       if (editorValueRef.current === value) {
@@ -148,16 +165,38 @@ export function FileResourceView({
     draftCommitRef.current = operation;
     return operation;
   };
+  const commitDraftAfterLeavingWorkflowActions = () => {
+    void Promise.resolve().then(() => {
+      const active = document.activeElement;
+      const insideWorkflowActions = active instanceof HTMLElement
+        && fileResourceRef.current?.contains(active) === true
+        && active.matches(".rho-file-run, .rho-file-save");
+      if (!insideWorkflowActions) void commitDraft().catch(reportError);
+    });
+  };
   const saveCurrent = async () => {
-    const current = localDirtyRef.current ? await commitDraft() : contentRef.current;
-    if (current == null || !current.dirty) return;
-    const next = await save(current);
-    contentRef.current = next;
-    editorValueRef.current = next.content;
-    localDirtyRef.current = false;
-    setContent(next);
-    setEditorValue(next.content);
-    setLocalDirty(false);
+    if (savePendingRef.current) return;
+    savePendingRef.current = true;
+    setSavePending(true);
+    try {
+      const next = await withMutation(async (workflow) => {
+        const current = localDirtyRef.current
+          ? await commitDraft(workflow.updateDraft)
+          : contentRef.current;
+        if (current == null || !current.dirty) return current;
+        return workflow.save(current);
+      });
+      if (next == null) return;
+      contentRef.current = next;
+      editorValueRef.current = next.content;
+      localDirtyRef.current = false;
+      setContent(next);
+      setEditorValue(next.content);
+      setLocalDirty(false);
+    } finally {
+      savePendingRef.current = false;
+      setSavePending(false);
+    }
   };
   const reloadCurrent = async () => {
     const current = contentRef.current;
@@ -180,7 +219,7 @@ export function FileResourceView({
   const markup = !source && content != null ? resourceMarkup(content) : null;
 
   return (
-    <div className="rho-file-resource">
+    <div className="rho-file-resource" ref={fileResourceRef}>
       <div className="rho-file-commandbar">
         <span className={`rho-resource-state rho-resource-${descriptor?.status ?? "missing"}`}>
           {descriptor?.status ?? "unresolved"}
@@ -208,6 +247,7 @@ export function FileResourceView({
             onMouseDown={(event) => {
               event.preventDefault();
             }}
+            onBlur={commitDraftAfterLeavingWorkflowActions}
             onClick={() => { void sourceEditorRef.current?.runSelectionOrCurrentLine(); }}
           >{sourceRunPending
               ? <><span className="rho-preparation-spinner" aria-hidden="true" /> Preparing…</>
@@ -215,9 +255,13 @@ export function FileResourceView({
           <button
             type="button"
             className={`rho-file-save ${dirty ? "rho-primary-action" : ""}`.trim()}
-            disabled={!dirty}
+            disabled={!dirty || savePending}
+            aria-busy={savePending || undefined}
+            onPointerDown={(event) => { event.preventDefault(); }}
+            onMouseDown={(event) => { event.preventDefault(); }}
+            onBlur={commitDraftAfterLeavingWorkflowActions}
             onClick={() => void saveCurrent().catch(reportError)}
-          >Save</button>
+          >{savePending ? "Saving…" : "Save"}</button>
           <button type="button" className="rho-file-reload" onClick={() => void reloadCurrent().catch(reportError)}>
             {dirty ? "Discard & reload" : "Reload"}
           </button>
@@ -279,21 +323,25 @@ export function FileResourceView({
             setLocalDirty(true);
           }}
           onBlur={(nextView) => {
-            void commitDraft().catch(reportError);
+            commitDraftAfterLeavingWorkflowActions();
             void persistViewState(nextView).catch(reportError);
           }}
           onViewStateChange={(nextView) => {
             void persistViewState(nextView).catch(reportError);
           }}
           onRun={async (execution) => {
-            const current = localDirtyRef.current ? await commitDraft() : contentRef.current;
-            if (binding == null || current == null) {
-              throw new Error("The Source document is not ready for execution.");
-            }
-            return runSourceExecution({
-              ...execution,
-              source_path: binding.resource_id,
-              document_version: current.document_revision,
+            return withMutation(async (workflow) => {
+              const current = localDirtyRef.current
+                ? await commitDraft(workflow.updateDraft)
+                : contentRef.current;
+              if (binding == null || current == null) {
+                throw new Error("The Source document is not ready for execution.");
+              }
+              return workflow.runSourceExecution({
+                ...execution,
+                source_path: binding.resource_id,
+                document_version: current.document_revision,
+              });
             });
           }}
           onRunPendingChange={setSourceRunPending}

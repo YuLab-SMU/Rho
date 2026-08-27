@@ -8,12 +8,16 @@ import { useConsoleProjectActivation } from "./console-project-activation";
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
   .IS_REACT_ACT_ENVIRONMENT = true;
 
-function Harness({ router, projectId }: {
+function Harness({ router, activation }: {
   readonly router: ConsoleExecutionRouter;
-  readonly projectId: string | null;
+  readonly activation: {
+    readonly epoch: number;
+    readonly projectId: string;
+    readonly projectRevision: number;
+  } | null;
 }) {
-  useConsoleProjectActivation(router, projectId);
-  return <div>{projectId}</div>;
+  useConsoleProjectActivation(router, activation);
+  return <div>{activation?.projectId ?? "closed"}</div>;
 }
 
 describe("Console project activation lifecycle", () => {
@@ -35,10 +39,14 @@ describe("Console project activation lifecycle", () => {
 
   it("does not activate a project for a render that never commits", async () => {
     const router = new ConsoleExecutionRouter();
-    const activate = vi.spyOn(router, "activateProject");
+    const activate = vi.spyOn(router, "activate");
     const pending = new Promise<void>(() => undefined);
     function Discarded(): never {
-      useConsoleProjectActivation(router, "project:discarded");
+      useConsoleProjectActivation(router, {
+        epoch: 1,
+        projectId: "project:discarded",
+        projectRevision: 1,
+      });
       throw pending;
     }
     const created = root();
@@ -51,18 +59,26 @@ describe("Console project activation lifecycle", () => {
 
   it("activates committed A/B projects and rejects old-project waiters", async () => {
     const router = new ConsoleExecutionRouter();
-    const activate = vi.spyOn(router, "activateProject");
+    const activate = vi.spyOn(router, "activate");
     const created = root();
     await act(async () => {
-      created.render(<Harness router={router} projectId="project:a" />);
+      created.render(<Harness router={router} activation={{
+        epoch: 1,
+        projectId: "project:a",
+        projectRevision: 4,
+      }} />);
     });
     const waiting = router.waitFor("console:project-a");
     const rejected = expect(waiting).rejects.toThrow("project changed");
     await act(async () => {
-      created.render(<Harness router={router} projectId="project:b" />);
+      created.render(<Harness router={router} activation={{
+        epoch: 2,
+        projectId: "project:b",
+        projectRevision: 1,
+      }} />);
     });
     await rejected;
-    expect(activate.mock.calls.map(([projectId]) => projectId))
+    expect(activate.mock.calls.map(([scope]) => scope?.projectId))
       .toEqual(["project:a", "project:b"]);
   });
 
@@ -70,7 +86,11 @@ describe("Console project activation lifecycle", () => {
     const router = new ConsoleExecutionRouter();
     const created = root();
     await act(async () => {
-      created.render(<Harness router={router} projectId="project:a" />);
+      created.render(<Harness router={router} activation={{
+        epoch: 1,
+        projectId: "project:a",
+        projectRevision: 1,
+      }} />);
     });
     const waiting = router.waitFor("console:closing");
     const rejected = expect(waiting).rejects.toThrow("workbench closed");

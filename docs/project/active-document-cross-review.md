@@ -2,7 +2,8 @@
 
 Status: active documentation coordination record
 
-Review date: 2026-08-27 (VIBE-1 integration and STARTUP-INFO-1 ownership reconciled)
+Review date: 2026-08-27 (PROJECT-TRANSITION-EPOCH-1, VIBE-1R, Studio Agent UX,
+STARTUP-INFO-1, and VA1 final-evidence boundaries reconciled)
 Scope: unfinished or acceptance-active specifications, plans, and release gates
 
 Real-application visual acceptance ownership: the executable workflow and
@@ -57,10 +58,109 @@ and intermediate-width browser interaction, intermediate status-bar
 preservation, and the six-frame S9 real-app visual ledger passed. This fact
 does not activate VIBE-2 or move any scientific-state authority.
 
+### VIBE-1R read-only Agent-record entry correction
+
+The owner's 2026-08-27 revision activates VIBE-1R: `开始探索`,
+`查看 Agent 工作区`, and `在 Vibe 中查看 Agent 记录` expand a
+focus-preserving, read-only Agent record projection inside Vibe's
+autonomous-exploration region. That projection is bound to the same exact
+`rho.agent` identity and exact Conversation/Turn records, and may show only
+durable public task, activity, and outcome. It neither changes the global mode
+to Studio nor flushes Vibe state.
+
+The full trusted `rho.agent` Surface remains Studio-only because it contains
+approval, file apply/undo, auto-approve, credential/context, permission, and
+other mutation or destructive-confirmation controls that the accepted RSR and
+Vibe contracts prohibit inside Vibe content. Only explicit secondary actions
+`在 Studio 中发起探索`, `在 Studio 中发起新的探索`,
+`在 Studio 中提出任务`, `在 Studio 中继续探索`, or
+`在 Studio 中深入检查` may enter that Surface; those exits retain the
+established save-before-leave, Scene placement/focus, and one-shot Vibe return
+contract.
+
+VIBE-1R owns only the local read-only record projection, those focus-preserving
+primary entries, and the explicit Studio exits. Surface Runtime retains exact
+Surface identity, instance, and view-state authority. Agent contracts retain
+Conversation, Turn, approval, execution, and file-mutation authority. The
+accepted RSR contract retains focus, keyboard/document order, accessible
+behavior, responsive reflow, and the trusted-control boundary. Studio Agent UX
+retains full component-internal presentation. VIBE-1R adds no schema, command,
+persistence, credential, approval, execution, filesystem, network,
+public-protocol, candidate, or release authority.
+
+The startup shell exits before `WorkbenchApp`, Vibe, or any Agent record
+projection mounts. VIBE-1R therefore has no state, sequencing, focus, or
+composition overlap with STARTUP-INFO-1.
+
+## 2026-08-27 PROJECT-TRANSITION-EPOCH-1 Workbench repair
+
+`implemented-2026-08-27-project-transition-epoch-repair-spec.md` owns one bounded
+D3/R3 composition-root defect repair: close Workbench session mutation
+admission after any required Vibe save, quiesce already-admitted Studio and
+Surface queues before Store settlement and broker switching, and bind ordinary
+Workbench error projection to an ephemeral local activation epoch plus exact
+project identity/revision. The epoch is not durable truth, does not go on the
+wire, and neither grants nor cancels an operation.
+
+The comparison baseline is captured only after already-admitted controller
+queues and Store mutations are fully settled. A legal source-project mutation
+during drain may advance that baseline. Ready/restored/no-change reconciliation
+uses opaque `project_id` plus authoritative revision data; frontend display
+paths never become identity or normalization authority. Any admitted-before-
+transition continuation requires an unforgeable live Store lease, not a public
+bypass flag.
+
+Agent identity-changing UI workflows use that composition boundary without
+moving Agent or Surface authority. Agent `New` is one Workbench-owned composite
+of raw Agent conversation creation, coherent projection refresh, and exact
+Agent Surface view-state persistence. A `Send` with no current conversation is
+one Workbench-owned composite of raw Agent run/start, coherent refresh, and
+exact Surface persistence of the returned conversation identity. Each
+composite owns one opaque Store lease from admission through its final Surface
+write; `AgentSurfaceView` and `SurfaceView` receive capability-shaped callbacks
+only and never receive the lease.
+
+The composite captures exact project, instance, and `activation_generation`;
+the serialized Surface controller verifies that identity and uses the latest
+authoritative revision for the same project. Pre-close admitted source work may
+complete and the barrier waits for the whole composite, but no old callback may
+write B or a replacement same-root activation. A successful Agent create/run
+remains durable Agent truth if Surface persistence later fails, while the prior
+Surface selection remains authoritative and the failure stays truthful. Read
+refresh never implicitly selects or persists; explicit selection persists
+first; older invalidation generations cannot overwrite a newer explicit,
+`New`, or `Send` selection.
+
+One Studio/Vibe mode gesture owns only composition ordering. It captures the
+current opaque project identity and local activation epoch, waits for existing
+Studio and Surface controller work and then Store mutations to settle,
+revalidates that activation, reads the latest Project UI Profile revision, and
+issues at most one ordinary `set_mode` owner mutation if the requested mode is
+not already true. Project UI Profile retains mode truth, revision, CAS, and
+failure semantics. No stale-message parsing, second mutation, cross-epoch
+rebase, or scenario-runner retry is permitted; a later explicit user gesture
+is the recovery boundary. The existing shared `runVibeTransition` mutex keeps
+mode selection and project switching mutually exclusive, so the product does
+not admit a synthetic project barrier or local-epoch replacement underneath an
+in-flight mode gesture. Quiescence remains rejection-tolerant for earlier task
+outcomes; only failure of the quiescence operation itself prevents the mode
+write, after all sibling queues and the Store have been awaited.
+
+BH2 retains project preflight, blockers, normalized roots, commit,
+rollback/restoration, response outcome, and last-opened-project persistence.
+The accepted RSR and its Surface/Studio/Profile/Runtime/Resource/Agent owners
+retain all identity, revision, CAS, mutation, permission, failure, and recovery
+semantics. WP16-R3 owns only frontend enforcement and bounded presentation of
+already-authoritative rejection. STARTUP-INFO-1 exits before Workbench and has
+no overlap; VIBE-1/VIBE-1R retain only the existing prepare-before-leave and
+presentation boundaries. No schema, command/event, public protocol, approval,
+credential, filesystem, network, backend retry, installer, signing,
+publication, or release authority moves.
+
 ## 2026-08-27 STARTUP-INFO-1 Truthful startup ledger
 
-`active-2026-08-05-startup-performance-spec.md` owns the authorized D2/R3
-STARTUP-INFO-1 workflow. It adds a presentation-only observer around the
+`implemented-2026-08-05-startup-performance-spec.md` owns the implemented
+D2/R3 STARTUP-INFO-1 workflow. It adds a presentation-only observer around the
 existing ordered runtime bootstrap, Workspace R start, and ready-project restore
 await boundaries, then projects those facts as a three-stage startup ledger.
 The callback is not readiness authority: `WorkspacePreparation` and the current
@@ -79,12 +179,30 @@ Tauri event, filesystem, network, credential, approval, execution, or public
 protocol is added.
 
 The startup shell exits before `WorkbenchApp` and Vibe mount, so STARTUP-INFO-1
-does not overlap VIBE-1 information-flow state or composition. Its feature lane
-may implement only the observer, pure model, ledger view, token-only
-`workbench.css`, mock parity, and focused tests. `App.tsx`, this matrix, version
-metadata, and `NEWS.md` remain blocked until the current Vibe integration lane
-finishes; STARTUP-INFO-1B must then obtain a new single-writer integration lane
-before wiring or candidate/version work.
+does not overlap VIBE-1/VIBE-1R information-flow state or composition. Its
+feature lane stopped at the observer, pure model, ledger view, token-only
+`workbench.css`, mock parity, and focused tests. After the prior Vibe integration
+released shared authority, STARTUP-INFO-1B obtained the single-writer integration
+lane and completed `App.tsx`, matrix, version, `NEWS.md`, full affected
+validation, and exact debug-app evidence for the frozen pre-transition
+STARTUP-INFO-1 snapshot of application candidate `0.4.1-dev.22` without moving
+any backend authority. Those historical startup facts do not substitute for
+final merged-candidate validation after the later VIBE-1R, Studio Agent, and
+PROJECT-TRANSITION-EPOCH-1 integrations. That distinct final validation is now
+recorded against the pre-documentation frozen product snapshot fingerprint
+`df64bc7de536667641f7aa96c6fcfa5c99a83713701af999c000dcd1b9311dcb`:
+the complete stable check, locked Rust matrix, exact frozen debug binary, and
+new immutable S0/S3/S9 run passed 35/35 deterministic gates and 31/31 frame
+reviews. The historical pre-transition evidence remains immutable rather than
+being reclassified. Lifecycle documentation did not change the frozen product
+sources or frontend assets. The exact current debug binary has SHA-256
+`4c9d9b18920d97c0aaea309b61d1bde6ade603f1d3c268d8e3a395f55d02a1cf`;
+its immutable confirmation run at
+`target/visual-acceptance/dev22-final-1f476c14-4c9d9b18-s0-s3-s9-r2/`
+also passed S0/S3/S9, 35/35 gates, and 31/31 original-resolution frame reviews
+with no failed or pending verdict. The first dependency-incomplete `4c9d9b...`
+attempt remains `FAIL`, while the `3fb169...` run remains the historical
+pre-documentation frozen-product PASS. No evidence ledger was reclassified.
 
 ## Purpose
 
@@ -115,13 +233,15 @@ semantics.
 | Document | Status after review | Owns | May proceed when |
 | --- | --- | --- | --- |
 | `project/active-development-governance.md` | active; D2/R2 fast-iteration checkpoint amendment authorized 2026-08-26 | required proposal-to-release development lifecycle, risk/test depth, review, versioning, evidence rules, and same-snapshot resumable RSR validation | applies continuously to all non-trivial work; checkpoint evidence is reusable only for an unchanged repository fingerprint and unchanged gate command |
-| `plans/active-2026-08-27-vibe-information-flow-workbench-spec.md` | active D3 direction; VIBE-1 D2/R2 checkpoint implemented and integration-reviewed as `0.4.1-dev.21` on 2026-08-27 | truthful three-region Vibe information hierarchy, local focus/layout projection, exact-reference correspondence, working-manuscript editor extraction, bounded Agent durable-truth projection, typed Run/Artifact/Plot/Check/Evidence projection, Studio transition intent, and VIBE-1 frontend/visual evidence | preserve Page/Profile, Agent, Runtime Output, Check/Evidence, Surface Runtime, Studio token, project-isolation, revision/CAS and release owners; VIBE-2 and formal revision/invalidation/decision/Checkpoint or other scientific-state work require separate owner authorization and a D3/R3 contract; release remains NO-GO |
-| `plans/active-2026-08-05-startup-performance-spec.md` | active; STARTUP-PERF WP1/WP2 implemented and owner-authorized STARTUP-INFO-1 D2/R3 feature slice active | presentation-only progress observation around existing runtime/Workspace/project awaits, pure three-stage startup ledger, bounded returned facts, truthful attention/recovery projection, mock parity, and focused startup evidence | preserve RSR ready-before-Workbench, STARTUP-RECOVERY-1 actions, project/generation guards, Studio tokens and all backend authorities; feature lane cannot edit `App.tsx`, this matrix, versions or `NEWS.md`; STARTUP-INFO-1B waits for Vibe integration release and a new single-writer integration lane; no timer/percentage/ETA, schema, command/event, authority, installer or release expansion |
+| `plans/active-2026-08-27-vibe-information-flow-workbench-spec.md` | active D3 direction; VIBE-1 D2/R2 checkpoint implemented and integration-reviewed as `0.4.1-dev.21`; VIBE-1R implemented and its merged-candidate automated/visual verification passed as `0.4.1-dev.22` on 2026-08-27; VIBE-2 remains unauthorized | truthful three-region Vibe information hierarchy, local focus/layout projection, exact-reference correspondence, working-manuscript editor extraction, bounded Agent durable-truth projection, typed Run/Artifact/Plot/Check/Evidence projection, Studio transition intent, VIBE-1 frontend/visual evidence, and VIBE-1R focus-preserving read-only projection bound to exact `rho.agent` identity plus explicit Studio exits | preserve Page/Profile, Agent Conversation/Turn/approval/execution/file-mutation, Runtime Output, Check/Evidence, Surface identity/instance/view-state, RSR focus/keyboard/accessibility/responsive/trusted-control boundary, Studio Agent UX presentation, project-isolation, revision/CAS, and release owners; VIBE-1R primary entries expand durable public task/activity/outcome locally without mode switch or flush, while the full trusted Agent Surface and all mutation/approval/credential/permission/destructive-confirmation controls remain Studio-only behind explicit secondary actions using the existing save-before-leave transition; the final merged stable check and S9 evidence passed, but VIBE-2 and formal revision/invalidation/decision/Checkpoint or other scientific-state work still require separate owner authorization and a D3/R3 contract; release remains NO-GO |
+| `plans/implemented-2026-08-27-studio-agent-surface-ux-spec.md` | implemented D2/R1 presentation contract; rounds 1-3 implementation and feature evidence landed; merged complete stable `rsr:check`, formal S3, synchronized `0.4.1-dev.22`/`NEWS.md`, and exact evidence reconciliation passed 2026-08-27 | component-internal information hierarchy and presentation for the existing trusted `rho.agent` Surface, including compact conversation/context controls, task-reading-order timeline, distinct decision states, composer-centric Ask/Plan/Act/model controls, bounded technical disclosure, and narrow-width reachability | Agent retains Conversation/Turn/run/approval/file-mutation truth; Surface Runtime retains exact instance/view-state, lifecycle, placement, focus, keyboard/accessibility, and revision/CAS authority; Settings retains Provider/credential configuration; no backend, schema, command, transport, persistence, permission, execution, project-transition, Vibe-host, version, or release authority moves; every in-scope gate is closed, while any later presentation work requires a new authorized contract and release remains NO-GO |
+| `plans/implemented-2026-08-27-project-transition-epoch-repair-spec.md` | implemented D3/R3 PROJECT-TRANSITION-EPOCH-1 defect contract for the undistributed `0.4.1-dev.22` candidate; complete frozen validation and owner-scoped S0/S3/S9 evidence passed on 2026-08-27 | Workbench session-local mutation admission, already-admitted Studio/Surface queue quiescence, rejection-tolerant Store drain, local activation epoch, scoped ordinary action-error projection, capability-only Agent identity composites for `New` and no-current `Send`, one same-project/local-epoch mode gesture that drains current work before at most one latest-Profile owner mutation, shared mode/project-transition mutual exclusion, same-root mock parity, and product regressions consumed by the owner-scoped visual ledger | BH2 keeps preflight/commit/restore/outcome; Agent keeps Conversation/Turn/run truth and Surface Runtime keeps exact instance/view-state revision/CAS; Project UI Profile keeps mode truth, revision, and CAS; `AgentSurfaceView`/`SurfaceView` receive no lease; RSR/Studio/Profile/Runtime/Resource keep their identity/revision/mutation/permission/recovery owners; a quiescence-port failure prevents the mode write only after sibling queues and Store settle, shared transition mutual exclusion prevents an unreachable overlapping mode/project barrier, and no second mode mutation, error-message matching, broad stale loop, harness mutation retry, or cross-activation re-entry is permitted; success/stale/failure/recovery, A -> B, same-root, external invalidation, exact activation replacement, complete stable checks, and final visual review passed; epoch remains ephemeral and off-wire; no schema, command/event, backend retry/cancellation, persistence, credential, approval, filesystem, network, package, signing, publication, or release authority; STARTUP-INFO-1 does not overlap |
+| `plans/implemented-2026-08-05-startup-performance-spec.md` | implemented D2/R3 STARTUP-INFO-1; its frozen pre-transition `0.4.1-dev.22` snapshot passed 23/23 formal S0 gates and 20/20 reviewed frames; the distinct final merged candidate then passed the complete stable/Rust matrix plus 35/35 S0/S3/S9 gates and 31/31 frame reviews on 2026-08-27 | presentation-only progress observation around existing runtime/Workspace/project awaits, pure three-stage startup ledger, bounded returned facts, truthful attention/recovery projection, App admission controller, mock parity, and deterministic startup evidence | preserve RSR ready-before-Workbench, STARTUP-RECOVERY-1 actions, project/generation guards, Studio tokens and all backend authorities; historical and final evidence remain separately identified; no timer/percentage/ETA, schema, command/event, authority, installer, signing, publication, or release expansion |
 | `plans/implemented-2026-08-26-plugin-native-settings-surface-spec.md` | implemented D3/R3 SETTINGS-PLUG-1; `0.4.1-dev.20`, complete affected validation, exact debug-app Models/Components and singleton restore acceptance, and final contract review passed on 2026-08-26 | trusted first-party `rho.settings` Surface, closed module host, Models projection/revision-safe chat and capacity operations, read-only current component catalog, and unplaced-singleton restore | preserve RSR Surface/Command authority and all CRED-UX/CRED-SEC settings, revision, credential, redaction and recovery contracts; no workspace-plugin Settings injection, schema, new mutation/network/filesystem authority, or release scope |
 | `plans/active-2026-08-26-cred-reveal-1a-connection-test-redaction-spec.md` | active D1/R3 CRED-REVEAL-1A; explicitly authorized by owner instruction `开始施工` on 2026-08-26; mandatory stop before 1B | selected-Provider connection-test child stdout/stderr bounds, raw stderr suppression, stable non-secret structured failure projection, removal of inherited sensitive/all-Provider credential and endpoint environment names before selected-only re-addition, fail-safe process-tree reap/test-control cleanup, sentinel/state-preservation regression, and post-test credential review; the existing command adapter may pass state-owned runtime `data_dir` internally only to obtain the validated catalog scrub list | no View UI, secret getter, IPC command name/arguments/result, binding/mock, presenter, OS auth, reveal audit, schema/source/store/network/model-selection/route authority, version, candidate, or release change; current CRED-UX/CRED-SEC no-redisplay and exact-source/no-fallback rules remain authoritative; 1B remains inactive |
 | `plans/proposed-2026-08-26-plugin-native-settings-experience-design-spec.md` | proposed revision-3 D3/R3 design contract; SETTINGS-DESIGN-3 accepted; only CRED-REVEAL-1A is active through its focused handoff, while 1B/MODEL-AUTO-1/SETTINGS-UX1/UX2 remain inactive | proposed primary `Providers / Components` information architecture, secondary soft Model preference, backend-owned deterministic pre-execution Provider/model selection, focused Provider/Connection/Add-or-Replace child screens, mode-specific first-save and replacement recovery, fixed-mask View entry plus an OS-native secure presenter for app-managed credentials, flat Components catalog, and staged CRED-REVEAL-1/MODEL-AUTO-1/SETTINGS-UX1/UX2 gates | current CRED-UX explicit-route authority, schema, no-fallback resolver, migrations, presentation-safe view, and current CRED-SEC no-redisplay/source/redaction rules remain unchanged until their separate D3/R3 amendments are implemented and accepted; product code cannot expose View until accepted CRED-REVEAL-1A connection-test error redaction and CRED-REVEAL-1B focused-window admission/revalidation, fresh OS verification on every attempt, per-Provider credential-operation locking/generation, exact-source eligibility, environment rejection before read, system-store direct reads, first-package file-fallback rejection, blocking durable fail-closed pre-display audit, awaited native close and Rho-owned-buffer clearing, failure recovery, platform acceptance, and no fallback all pass, and the secret must never return through a Settings view, Tauri IPC, generated binding, WebView, React, DOM, mock, or browser state; route UI cannot be hidden/replaced and Providers cannot become the default/fallback until MODEL-AUTO-1 is implemented, fully verified, integrated, contract-reviewed, and accepted, or until one checked-in integration boundary accepts its resolver, lossless migration, persistence, and Settings successor together while the old route UI remains reachable through that boundary; no secret or selected UI row/view state may become runtime/layout authority; RSR retains Surface/Command/view-state authority, Studio retains tokens, existing multi-Provider routes are never guessed into a Provider, and no version/release/publication is implied |
 | `plans/implemented-2026-08-26-startup-unavailable-project-recovery-repair-spec.md` | implemented D1/R3 STARTUP-RECOVERY-1; `0.4.1-dev.19`, complete affected validation, fail-closed acceptance app-data isolation, and exact debug-app recovery passed on 2026-08-26 | truthful unavailable-project startup action through the existing picker plus debug-acceptance app-data isolation | preserve WP1/BH2 project truth and WP9 switch projection; acceptance isolation remains fail closed and debug-only; no schema, command, credential, release, or project-transition authority change |
-| `plans/implemented-2026-08-26-visual-acceptance-automation-spec.md` | implemented VA1 contract; debug bridge, fixed frontend vocabulary, cross-platform fixtures, S0/S1/S2/S3/S7/S8 scenarios, complete affected validation, and the fully reviewed 35-gate local baseline are complete | debug-only real-app visual acceptance lane and retirement of the consolidated human walkthrough | preserve release/profile fail-closed gates and evidence separation; the 12 PASS / 15 FAIL / 8 removed-gate SKIP baseline leaves product repairs in separate follow-up packages rather than silently expanding VA1 |
+| `plans/implemented-2026-08-26-visual-acceptance-automation-spec.md` | implemented VA1 contract; debug bridge, fixed frontend vocabulary, cross-platform fixtures, S0/S1/S2/S3/S7/S8 scenarios, complete affected validation, the fully reviewed historical 35-gate local baseline (12 PASS, 15 FAIL, 8 authorized SKIP), and the 2026-08-27 real-app foreground-determinism amendment are complete; the final dev.22 S0/S3/S9 run recorded development PASS for 35/35 gates and 31/31 frame reviews | debug-only real-app visual acceptance lane, retirement of the consolidated human walkthrough, bounded fail-closed foreground confirmation of the exact debug process before structured real-app actions, and evidence-ledger integrity only; S0/S3/S9 product semantics remain with their Startup, Studio Agent, Vibe, RSR, and transition owners | preserve release/profile fail-closed gates and evidence separation; the final result records development PASS only for S0/S3/S9 on the named frozen candidate and does not rewrite the broader historical VA1 baseline; foregrounding changes no selector/focus/geometry/timeout assertion, product quiescence, mutation retry, result classification, bridge vocabulary, or binary authority; product failures remain owned by separate repair packages rather than silently expanding VA1 |
 | `plans/active-2026-08-10-agpl-license-transition-spec.md` | active; LIC-1 and LIC-2 implementation, affected validation, UI/bundle review, exact-head hosted validation, and protected integration complete; exact candidate and installed distribution acceptance remain open | prospective `AGPL-3.0-only` source-license boundary, synchronized repository metadata, contribution terms, third-party exclusions, fixed installed resource copies, About legal notice, and transition gates | preserve the integrated license/resource boundary; SignPath readiness may reference but not redefine it; exact candidate and installed acceptance remain release-owned |
 | `plans/active-2026-08-11-signpath-application-readiness-spec.md` | active; SP-READY1 implementation, exact-head/main hosted matrices, PR #45/#46 integration, linked attribution, public uninstall guidance, live policy deployment, private reporting, and no-bypass default-branch ruleset complete; a real Free Trial organization/project/test policy now exists; owner MFA audit, Foundation decision, approved-project GitHub App configuration, and production signing remain open | manual-only update admission, public privacy/security/code-signing policies, policy links and uninstall guidance, CODEOWNERS, and deterministic readiness enforcement | preserve completed readiness; FT-SIGN1 may use only its isolated test lane; organization owner separately closes MFA/Foundation/production gates; do not claim Free Trial evidence as public trust or release authority |
 | `plans/active-2026-08-12-signpath-free-trial-smoke-spec.md` | active durable contract; FT-SIGN1 complete after connector rejection, dedicated least-privilege CI identity, official PowerShell/REST transport, protected configuration, exact-head matrix, clean hosted run `31675464182`, downloaded evidence reconciliation, obsolete-variable removal, and leaked-predecessor-run deletion | one manual read-only-permission workflow that rewraps the exact accepted Issue #33 unsigned installer, submits it to the configured Free Trial test policy, validates returned signer/bytes, and uploads a short-lived test-only artifact | preserve exact-schema protected configuration, module pin/hash, source/output fail-closed gates, short retention, and false publication authority; candidate/manual-publish workflows remain unchanged and production signing remains separate |
@@ -1308,6 +1428,16 @@ exact-candidate release gates.
 - define additive artifact acceptance semantics before posture Phase C;
 - approve only one Phase-3 capability workstream at a time per the next-phase
   task plan.
+- **Out-of-scope P1 follow-up:** separately classify and authorize the macOS
+  credential/broker concurrency defect observed during final S3 preflight: a
+  synchronous Keychain lookup can
+  await native user authorization while `project_transition_gate` is held,
+  delaying an otherwise independent project transition. The exact current
+  debug binary's S3 preflight and immutable confirmation run completed after
+  explicit OS authorization. This residual is outside the completed
+  STARTUP-INFO-1, VIBE-1R, Studio Agent UX, PROJECT-TRANSITION-EPOCH-1, and VA1
+  scopes; no credential, Agent, transition, or release authority moves until a
+  bounded follow-up contract is active.
 
 ## Implementation Start Checklist
 

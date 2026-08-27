@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import type {
@@ -146,6 +146,7 @@ export function NavigatorSurfaceView({
   const [tab, setTab] = useState<NavigatorTab>(initialTab);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const searchToggleRef = useRef<HTMLButtonElement>(null);
   const [domain, setDomain] = useState<DomainSurfaceData | null>(null);
   const [recent, setRecent] = useState<DomainSurfaceData | null>(null);
   const [recentOpen, setRecentOpen] = useState(
@@ -155,6 +156,7 @@ export function NavigatorSurfaceView({
       : initialTab !== "files",
   );
   const selectTab = (next: NavigatorTab) => {
+    if (next === tab) return;
     const nextRecentOpen = tab === "files" && next !== "files" ? true : recentOpen;
     setTab(next);
     setRecentOpen(nextRecentOpen);
@@ -221,6 +223,7 @@ export function NavigatorSurfaceView({
           <button
             type="button"
             className="rho-icon-btn rho-navigator-search-toggle"
+            ref={searchToggleRef}
             aria-label={searchOpen ? "Close file search" : "Search project files"}
             aria-expanded={searchOpen}
             onClick={() => {
@@ -248,6 +251,7 @@ export function NavigatorSurfaceView({
               if (event.key === "Escape") {
                 setQuery("");
                 setSearchOpen(false);
+                searchToggleRef.current?.focus();
               }
             }}
           />

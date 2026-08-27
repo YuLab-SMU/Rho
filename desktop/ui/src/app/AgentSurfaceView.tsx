@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import type {
   AgentConversationSummary,
@@ -10,6 +10,7 @@ import type {
   AgentTurnDetail,
   AgentTurnSummary,
   RuntimeOutputReference,
+  RunAgentRequest,
   SurfaceInstance,
   UiKernelTransport,
 } from "../transport";
@@ -37,6 +38,16 @@ export interface AgentFileUndoState {
   readonly expected_after_sha256: string;
   readonly before_content: string;
   readonly created: boolean;
+}
+
+interface AgentRefreshToken {
+  readonly activationVersion: number;
+  readonly generation: number;
+}
+
+interface AgentRefreshOperation {
+  readonly token: AgentRefreshToken;
+  readonly promise: Promise<void>;
 }
 
 function parseAgentFileProposal(event: AgentTurnDetail["events"][number]): AgentFileProposal | null {
@@ -155,6 +166,8 @@ export function AgentSurfaceView({
   instance,
   transport,
   health,
+  createConversation,
+  runConversation,
   persist,
   pinTask,
   applyFileProposal,
@@ -166,6 +179,13 @@ export function AgentSurfaceView({
   readonly instance: SurfaceInstance;
   readonly transport: UiKernelTransport;
   readonly health: { readonly state: string; readonly label: string; readonly detail: string | null } | null;
+  readonly createConversation: (
+    current: AgentSurfaceViewState,
+  ) => Promise<AgentSurfaceViewState>;
+  readonly runConversation: (
+    current: AgentSurfaceViewState,
+    request: RunAgentRequest,
+  ) => Promise<AgentSurfaceViewState>;
   readonly persist: (viewState: AgentSurfaceViewState) => Promise<void>;
   readonly pinTask: (turn: AgentTurnSummary) => Promise<void>;
   readonly applyFileProposal: (
@@ -199,6 +219,30 @@ export function AgentSurfaceView({
   const [capacityDraft, setCapacityDraft] = useState({ context: "", reserve: "" });
   const [modelSwitchBusy, setModelSwitchBusy] = useState(false);
   const [modelQuery, setModelQuery] = useState("");
+  const activationVersionRef = useRef(0);
+  const refreshGenerationRef = useRef(0);
+  const conversationWorkflowRef = useRef<symbol | null>(null);
+  useLayoutEffect(() => {
+    const version = activationVersionRef.current + 1;
+    activationVersionRef.current = version;
+    return () => {
+      if (activationVersionRef.current === version) activationVersionRef.current = version + 1;
+      refreshGenerationRef.current += 1;
+    };
+  }, [
+    instance.activation_generation,
+    instance.instance_id,
+    instance.project_id,
+  ]);
+  const activationIsCurrent = useCallback(
+    (version: number) => activationVersionRef.current === version,
+    [],
+  );
+  const refreshIsCurrent = useCallback(
+    (token: AgentRefreshToken) => activationIsCurrent(token.activationVersion)
+      && refreshGenerationRef.current === token.generation,
+    [activationIsCurrent],
+  );
 
   const contextPlanKey = JSON.stringify([
     view.composer.trim(),
@@ -210,49 +254,84 @@ export function AgentSurfaceView({
     runtimeOutputContext?.range_sha256 ?? null,
   ]);
 
-  const refresh = useCallback(async (preferredConversationId = viewRef.current.conversation_id) => {
-    const nextConversations = await transport.listAgentConversations(50);
-    const selected = nextConversations.some(
-      (conversation) => conversation.conversation_id === preferredConversationId,
-    ) ? preferredConversationId : nextConversations[0]?.conversation_id ?? null;
-    const nextTurns = selected == null ? [] : await transport.listAgentTurns(selected, 50);
-    const loadedDetails = await Promise.all(nextTurns.slice(0, 20).map(async (turn) => [
-      turn.turn_id,
-      await transport.getAgentTurnDetail(turn.turn_id),
-    ] as const));
-    setConversations(nextConversations);
-    setTurns(nextTurns);
-    setDetails(new Map(loadedDetails.flatMap(([turnId, detail]) =>
-      detail == null ? [] : [[turnId, detail] as const]
-    )));
-    if (selected !== viewRef.current.conversation_id) {
-      const next = { ...viewRef.current, conversation_id: selected };
-      viewRef.current = next;
-      setView(next);
-      if (selected != null) await persist(next);
+  const refresh = useCallback((
+    activationVersion: number,
+    preferredConversationId = viewRef.current.conversation_id,
+  ): AgentRefreshOperation => {
+    if (!activationIsCurrent(activationVersion)) {
+      return {
+        token: { activationVersion, generation: refreshGenerationRef.current },
+        promise: Promise.resolve(),
+      };
     }
-    setLoading(false);
-  }, [persist, transport]);
+    const refreshGeneration = refreshGenerationRef.current + 1;
+    refreshGenerationRef.current = refreshGeneration;
+    const token = { activationVersion, generation: refreshGeneration };
+    const promise = (async () => {
+      const nextConversations = await transport.listAgentConversations(50);
+      if (!refreshIsCurrent(token)) return;
+      const preferredIsAvailable = nextConversations.some(
+        (conversation) => conversation.conversation_id === preferredConversationId,
+      );
+      const selected = preferredIsAvailable ? preferredConversationId : null;
+      const nextTurns = selected == null ? [] : await transport.listAgentTurns(selected, 50);
+      if (!refreshIsCurrent(token)) return;
+      const loadedDetails = await Promise.all(nextTurns.slice(0, 20).map(async (turn) => [
+        turn.turn_id,
+        await transport.getAgentTurnDetail(turn.turn_id),
+      ] as const));
+      if (!refreshIsCurrent(token)) return;
+      setConversations(nextConversations);
+      setTurns(nextTurns);
+      setDetails(new Map(loadedDetails.flatMap(([turnId, detail]) =>
+        detail == null ? [] : [[turnId, detail] as const]
+      )));
+      setLoading(false);
+    })();
+    return { token, promise };
+  }, [activationIsCurrent, refreshIsCurrent, transport]);
+  const refreshCurrent = useCallback(async (
+    activationVersion: number,
+    preferredConversationId = viewRef.current.conversation_id,
+  ) => {
+    const operation = refresh(activationVersion, preferredConversationId);
+    try {
+      await operation.promise;
+    } catch (error: unknown) {
+      if (refreshIsCurrent(operation.token)) throw error;
+    }
+  }, [refresh, refreshIsCurrent]);
 
   useEffect(() => {
     const next = initialAgentSurfaceState(instance);
     viewRef.current = next;
     setView(next);
-  }, [instance.instance_id]);
+  }, [
+    instance.activation_generation,
+    instance.instance_id,
+    instance.project_id,
+    instance.surface_revision,
+  ]);
 
   useEffect(() => {
     let active = true;
+    const activationVersion = activationVersionRef.current;
     const load = async () => {
+      const operation = refresh(activationVersion, viewRef.current.conversation_id);
       try {
-        await refresh();
+        await operation.promise;
       } catch (error: unknown) {
-        if (active) reportError(error);
+        if (active && refreshIsCurrent(operation.token)) reportError(error);
       }
     };
     void load();
     const unsubscribe = transport.subscribeAgentInvalidated(() => void load());
-    return () => { active = false; unsubscribe(); };
-  }, [refresh, reportError, transport]);
+    return () => {
+      active = false;
+      refreshGenerationRef.current += 1;
+      unsubscribe();
+    };
+  }, [refresh, refreshIsCurrent, reportError, transport]);
 
   useEffect(() => {
     let active = true;
@@ -286,17 +365,19 @@ export function AgentSurfaceView({
     });
   };
   const loadContextCapacity = async () => {
+    const activationVersion = activationVersionRef.current;
     setCapacityBusy(true);
     try {
       const settings = await transport.loadAgentLlmSettings();
+      if (!activationIsCurrent(activationVersion)) return;
       setLlmSettings(settings);
       const model = settings.models.find((candidate) => candidate.id === settings.selected_model_id)
         ?? settings.models[0];
       selectCapacityModel(model?.id ?? "", settings);
     } catch (error: unknown) {
-      reportError(error);
+      if (activationIsCurrent(activationVersion)) reportError(error);
     } finally {
-      setCapacityBusy(false);
+      if (activationIsCurrent(activationVersion)) setCapacityBusy(false);
     }
   };
   const saveContextCapacity = async () => {
@@ -307,6 +388,7 @@ export function AgentSurfaceView({
       reportError(new Error("Context capacity must use whole token counts."));
       return;
     }
+    const activationVersion = activationVersionRef.current;
     setCapacityBusy(true);
     try {
       const settings = await transport.setAgentContextCapacity({
@@ -315,47 +397,84 @@ export function AgentSurfaceView({
         context_window_tokens: contextWindow,
         reserved_output_tokens: reservedOutput,
       });
+      if (!activationIsCurrent(activationVersion)) return;
       setLlmSettings(settings);
       selectCapacityModel(capacityModelId, settings);
       setContextPreview(null);
     } catch (error: unknown) {
-      reportError(error);
+      if (activationIsCurrent(activationVersion)) reportError(error);
     } finally {
-      setCapacityBusy(false);
+      if (activationIsCurrent(activationVersion)) setCapacityBusy(false);
     }
   };
   const selectChatModel = async (modelId: string) => {
     if (llmSettings == null || modelSwitchBusy) return;
+    const activationVersion = activationVersionRef.current;
     setModelSwitchBusy(true);
     try {
       const settings = await transport.selectAgentChatModel(modelId, llmSettings.revision);
+      if (!activationIsCurrent(activationVersion)) return;
       setLlmSettings(settings);
       setContextPreview(null);
     } catch (error: unknown) {
-      reportError(error);
+      if (activationIsCurrent(activationVersion)) reportError(error);
     } finally {
-      setModelSwitchBusy(false);
+      if (activationIsCurrent(activationVersion)) setModelSwitchBusy(false);
     }
   };
-  const selectConversation = async (conversationId: string) => {
-    const next = { ...view, conversation_id: conversationId };
-    viewRef.current = next;
-    setView(next);
-    await persist(next);
-    await refresh(conversationId);
-  };
-  const newConversation = async () => {
+  const selectConversation = async (
+    conversationId: string,
+    activationVersion = activationVersionRef.current,
+  ) => {
+    const workflow = Symbol("agent-conversation-selection");
+    conversationWorkflowRef.current = workflow;
+    refreshGenerationRef.current += 1;
+    const selectedConversationId = conversationId === "" ? null : conversationId;
+    const next = { ...viewRef.current, conversation_id: selectedConversationId };
     setBusy(true);
     try {
-      const conversation = await transport.createAgentConversation();
-      await selectConversation(conversation.conversation_id);
+      await persist(next);
+      if (!activationIsCurrent(activationVersion)) return;
+      viewRef.current = next;
+      setView(next);
+      await refreshCurrent(activationVersion, selectedConversationId);
     } catch (error: unknown) {
-      reportError(error);
+      if (activationIsCurrent(activationVersion)) reportError(error);
     } finally {
-      setBusy(false);
+      if (conversationWorkflowRef.current === workflow) conversationWorkflowRef.current = null;
+      if (activationIsCurrent(activationVersion)) setBusy(false);
+    }
+  };
+  const newConversation = async () => {
+    const activationVersion = activationVersionRef.current;
+    const workflow = Symbol("agent-conversation-workflow");
+    conversationWorkflowRef.current = workflow;
+    refreshGenerationRef.current += 1;
+    setBusy(true);
+    try {
+      const next = await createConversation(viewRef.current);
+      if (!activationIsCurrent(activationVersion)) return;
+      refreshGenerationRef.current += 1;
+      viewRef.current = next;
+      setView(next);
+      await refreshCurrent(activationVersion, next.conversation_id);
+    } catch (error: unknown) {
+      if (activationIsCurrent(activationVersion)) {
+        reportError(error);
+        refreshGenerationRef.current += 1;
+        try {
+          await refreshCurrent(activationVersion, viewRef.current.conversation_id);
+        } catch (refreshError: unknown) {
+          if (activationIsCurrent(activationVersion)) reportError(refreshError);
+        }
+      }
+    } finally {
+      if (conversationWorkflowRef.current === workflow) conversationWorkflowRef.current = null;
+      if (activationIsCurrent(activationVersion)) setBusy(false);
     }
   };
   const reviewContext = async () => {
+    const activationVersion = activationVersionRef.current;
     const prompt = view.composer.trim();
     if (!prompt || contextReviewBusy || busy || health?.state !== "ready") return;
     setContextReviewBusy(true);
@@ -369,14 +488,16 @@ export function AgentSurfaceView({
         conversation_id: view.conversation_id,
         runtime_output_context: runtimeOutputContext,
       });
+      if (!activationIsCurrent(activationVersion)) return;
       setContextPreview({ key: contextPlanKey, plan });
     } catch (error: unknown) {
-      reportError(error);
+      if (activationIsCurrent(activationVersion)) reportError(error);
     } finally {
-      setContextReviewBusy(false);
+      if (activationIsCurrent(activationVersion)) setContextReviewBusy(false);
     }
   };
   const submit = async () => {
+    const activationVersion = activationVersionRef.current;
     const prompt = view.composer.trim();
     if (!prompt || busy || health?.state !== "ready") return;
     const reviewedPlan = contextPreview?.key === contextPlanKey ? contextPreview.plan : null;
@@ -384,9 +505,12 @@ export function AgentSurfaceView({
       await reviewContext();
       return;
     }
+    const workflow = Symbol("agent-turn-workflow");
+    conversationWorkflowRef.current = workflow;
+    refreshGenerationRef.current += 1;
     setBusy(true);
     try {
-      const response = await transport.runAgent({
+      const next = await runConversation(viewRef.current, {
         prompt,
         mode: view.mode,
         task_kind: "agent_turn",
@@ -397,17 +521,26 @@ export function AgentSurfaceView({
         runtime_output_context: runtimeOutputContext,
         context_plan_digest: reviewedPlan?.plan_digest ?? null,
       });
-      const next = { ...view, conversation_id: response.conversation_id, composer: "" };
+      if (!activationIsCurrent(activationVersion)) return;
+      refreshGenerationRef.current += 1;
       viewRef.current = next;
       setView(next);
-      await persist(next);
       setRuntimeOutputContext(null);
       setContextPreview(null);
-      await refresh(response.conversation_id);
+      await refreshCurrent(activationVersion, next.conversation_id);
     } catch (error: unknown) {
-      reportError(error);
+      if (activationIsCurrent(activationVersion)) {
+        reportError(error);
+        refreshGenerationRef.current += 1;
+        try {
+          await refreshCurrent(activationVersion, viewRef.current.conversation_id);
+        } catch (refreshError: unknown) {
+          if (activationIsCurrent(activationVersion)) reportError(refreshError);
+        }
+      }
     } finally {
-      setBusy(false);
+      if (conversationWorkflowRef.current === workflow) conversationWorkflowRef.current = null;
+      if (activationIsCurrent(activationVersion)) setBusy(false);
     }
   };
   const displayMode = instance.mode_id ?? "conversation";
@@ -431,11 +564,25 @@ export function AgentSurfaceView({
   }
   const activeTurn = turns.find((turn) => turn.status === "running" || turn.status === "waiting");
   const stopActiveTurn = activeTurn == null ? null : () => {
+    const activationVersion = activationVersionRef.current;
     setBusy(true);
     void transport.cancelAgentTurn(activeTurn.turn_id)
-      .then(() => refresh())
-      .catch(reportError)
-      .finally(() => setBusy(false));
+      .then(() => refreshCurrent(activationVersion))
+      .catch((error: unknown) => {
+        if (activationIsCurrent(activationVersion)) reportError(error);
+      })
+      .finally(() => {
+        if (activationIsCurrent(activationVersion)) setBusy(false);
+      });
+  };
+  const runAndRefresh = async (operation: () => Promise<unknown>) => {
+    const activationVersion = activationVersionRef.current;
+    try {
+      await operation();
+      if (activationIsCurrent(activationVersion)) await refreshCurrent(activationVersion);
+    } catch (error: unknown) {
+      if (activationIsCurrent(activationVersion)) reportError(error);
+    }
   };
   const diagnosticsText = runtimeDiagnostics == null ? "Agent runtime diagnostics are loading." : [
     "R",
@@ -468,11 +615,20 @@ export function AgentSurfaceView({
               {health?.detail != null && <p>{health.detail}</p>}
             </div>
             <button type="button" disabled={busy} onClick={() => {
+              const activationVersion = activationVersionRef.current;
               setBusy(true);
               void transport.retryAgentRuntime()
-                .then((diagnostics) => { setRuntimeDiagnostics(diagnostics); return refresh(); })
-                .catch(reportError)
-                .finally(() => setBusy(false));
+                .then((diagnostics) => {
+                  if (!activationIsCurrent(activationVersion)) return;
+                  setRuntimeDiagnostics(diagnostics);
+                  return refreshCurrent(activationVersion);
+                })
+                .catch((error: unknown) => {
+                  if (activationIsCurrent(activationVersion)) reportError(error);
+                })
+                .finally(() => {
+                  if (activationIsCurrent(activationVersion)) setBusy(false);
+                });
             }}>Retry Agent runtime</button>
           </div>
           <details className="rho-agent-runtime-diagnostics">
@@ -489,7 +645,7 @@ export function AgentSurfaceView({
           aria-label={`Conversation for ${instance.instance_id}`}
           value={view.conversation_id ?? ""}
           disabled={busy}
-          onChange={(event) => void selectConversation(event.target.value).catch(reportError)}
+          onChange={(event) => void selectConversation(event.target.value)}
         >
           <option value="">No conversation</option>
           {conversations.map((conversation) => (
@@ -600,8 +756,8 @@ export function AgentSurfaceView({
                     </header>
                     <pre>{approval.code ?? approval.arguments_json}</pre>
                     <div className="rho-agent-decision-actions">
-                      <button type="button" onClick={() => void transport.respondAgentApproval({ request_id: approval.request_id, decision: "approve", reason: null }).then(() => refresh()).catch(reportError)}>Approve</button>
-                      <button type="button" onClick={() => void transport.respondAgentApproval({ request_id: approval.request_id, decision: "reject", reason: "Rejected in Agent Surface" }).then(() => refresh()).catch(reportError)}>Reject</button>
+                      <button type="button" onClick={() => void runAndRefresh(() => transport.respondAgentApproval({ request_id: approval.request_id, decision: "approve", reason: null }))}>Approve</button>
+                      <button type="button" onClick={() => void runAndRefresh(() => transport.respondAgentApproval({ request_id: approval.request_id, decision: "reject", reason: "Rejected in Agent Surface" }))}>Reject</button>
                     </div>
                   </section>
                 ))}
@@ -620,9 +776,11 @@ export function AgentSurfaceView({
                         {outcome == null && !rejected && (
                           <div className="rho-agent-decision-actions">
                             <button type="button" disabled={busy || turn.status === "running" || turn.status === "waiting"} onClick={() => {
+                              const activationVersion = activationVersionRef.current;
                               setBusy(true);
                               void applyFileProposal(turn, event.id, proposal)
                                 .then(({ response, beforeContent }) => {
+                                  if (!activationIsCurrent(activationVersion)) return;
                                   if (response.after_sha256 != null) {
                                     setFileUndo({
                                       turn_id: turn.turn_id,
@@ -633,10 +791,14 @@ export function AgentSurfaceView({
                                       created: proposal.operation === "create",
                                     });
                                   }
-                                  return refresh();
+                                  return refreshCurrent(activationVersion);
                                 })
-                                .catch(reportError)
-                                .finally(() => setBusy(false));
+                                .catch((error: unknown) => {
+                                  if (activationIsCurrent(activationVersion)) reportError(error);
+                                })
+                                .finally(() => {
+                                  if (activationIsCurrent(activationVersion)) setBusy(false);
+                                });
                             }}>Apply</button>
                             <button type="button" onClick={() => commitView({
                               ...view,
@@ -646,11 +808,20 @@ export function AgentSurfaceView({
                         )}
                         {fileUndo?.turn_id === turn.turn_id && fileUndo.proposal_event_id === event.id && (
                           <button type="button" disabled={busy} onClick={() => {
+                            const activationVersion = activationVersionRef.current;
                             setBusy(true);
                             void undoFileProposal(fileUndo)
-                              .then(() => { setFileUndo(null); return refresh(); })
-                              .catch(reportError)
-                              .finally(() => setBusy(false));
+                              .then(() => {
+                                if (!activationIsCurrent(activationVersion)) return;
+                                setFileUndo(null);
+                                return refreshCurrent(activationVersion);
+                              })
+                              .catch((error: unknown) => {
+                                if (activationIsCurrent(activationVersion)) reportError(error);
+                              })
+                              .finally(() => {
+                                if (activationIsCurrent(activationVersion)) setBusy(false);
+                              });
                           }}>Undo applied edit</button>
                         )}
                       </header>
@@ -682,7 +853,7 @@ export function AgentSurfaceView({
                 )}
                 <footer>
                   <button type="button" onClick={() => void pinTask(turn).catch(reportError)}>Pin to Vibe</button>
-                  {(turn.status === "failed" || turn.status === "cancelled") && <button type="button" onClick={() => void transport.retryAgentTurn(turn.turn_id).then(() => refresh()).catch(reportError)}>Retry</button>}
+                  {(turn.status === "failed" || turn.status === "cancelled") && <button type="button" onClick={() => void runAndRefresh(() => transport.retryAgentTurn(turn.turn_id))}>Retry</button>}
                 </footer>
               </article>
             );

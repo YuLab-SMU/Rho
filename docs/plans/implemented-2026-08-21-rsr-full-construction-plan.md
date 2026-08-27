@@ -17,6 +17,16 @@ activated automatically under the same explicit authorization.
 Final integration package: **Wave 13 — hardening and release handoff**, locally
 accepted 2026-08-22.
 
+2026-08-27 reconciliation note: PROJECT-TRANSITION-EPOCH-1 identified a
+composition-root enforcement gap after this construction program completed.
+The accepted backend project/revision/CAS architecture remains unchanged; the
+implemented repair owns only session-local frontend mutation admission, quiescence
+of already-admitted Studio/Surface queues, and epoch-scoped Workbench error
+projection. Its implementation and evidence belong to
+`implemented-2026-08-27-project-transition-epoch-repair-spec.md`; this historical
+construction plan is not reactivated and does not gain a second project-
+transition authority.
+
 Wave 13 acceptance owner: this implemented contract together with the Surface,
 Studio, Vibe, payload-lease, broker-event, accessibility, installed-candidate,
 release and application-version contracts. Hardening may optimize or suspend

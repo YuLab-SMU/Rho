@@ -174,4 +174,8 @@ export type {
   UiSelection,
   WorkspacePreparation,
   WorkspacePreparationIssue,
+  WorkspacePreparationProgress,
+  WorkspacePreparationProgressListener,
+  WorkspacePreparationProgressState,
+  WorkspacePreparationStage,
 } from "./types";

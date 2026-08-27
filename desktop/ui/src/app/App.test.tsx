@@ -4,7 +4,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createMockUiKernelTransport } from "../transport/mock";
 import type { LayoutChild, LayoutNode } from "../transport/types";
+import { WorkbenchProjectionStore } from "../transport/workbench-store";
 import { App } from "./App";
+import type { FileMutationWorkflow } from "./FileResourceView";
+import { ConsoleExecutionRouter } from "./controllers/console-execution-router";
+import { StudioMutationController } from "./controllers/studio-mutation-controller";
+import type { SourceExecutionSubmission } from "./source-execution";
+import {
+  runRevocableFileMutationWorkflow,
+  settleWorkbenchMutationQueues,
+} from "./WorkbenchApp";
 import { workbenchOperationTrace } from "./operation-trace";
 import { loadProjectHistory, saveProjectHistory } from "./project-history";
 import {
@@ -157,7 +166,7 @@ describe("Studio foundation app", () => {
         .click();
       await settle();
     });
-    expect(prepare).toHaveBeenLastCalledWith(true);
+    expect(prepare).toHaveBeenLastCalledWith(true, expect.any(Function));
   });
 
   async function showToolbarComponent(container: HTMLElement, label: string) {
@@ -408,7 +417,9 @@ describe("Studio foundation app", () => {
       [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
         .find((button) => button.textContent === "Vibe")!
         .click();
-      await settle();
+      await vi.waitFor(() => expect(container.querySelector(".rho-canvas-vibe")).not.toBeNull());
+    });
+    await act(async () => {
       container.querySelector<HTMLButtonElement>(".rho-vibe-manuscript-empty button")!.click();
       await settle();
     });
@@ -446,7 +457,9 @@ describe("Studio foundation app", () => {
       [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
         .find((button) => button.textContent === "Vibe")!
         .click();
-      await settle();
+      await vi.waitFor(() => expect(container.querySelector(".rho-canvas-vibe")).not.toBeNull());
+    });
+    await act(async () => {
       container.querySelector<HTMLButtonElement>(".rho-vibe-manuscript-empty button")!.click();
       await settle();
     });
@@ -497,6 +510,218 @@ describe("Studio foundation app", () => {
       release();
       await settle();
     });
+  });
+
+  it("drains controller siblings and the Store before reporting a quiescence failure", async () => {
+    const order: string[] = [];
+    let releaseSibling = () => {};
+    const sibling = new Promise<void>((resolve) => {
+      releaseSibling = resolve;
+    }).then(() => { order.push("controller-sibling"); });
+    const task = settleWorkbenchMutationQueues([
+      Promise.reject(new Error("controller drain failed")),
+      sibling,
+    ], async () => { order.push("store"); });
+
+    await Promise.resolve();
+    expect(order).toEqual([]);
+    releaseSibling();
+    await expect(task).rejects.toThrow("controller drain failed");
+    expect(order).toEqual(["controller-sibling", "store"]);
+
+    await expect(settleWorkbenchMutationQueues([], async () => {
+      throw new Error("Store drain failed");
+    })).rejects.toThrow("Store drain failed");
+  });
+
+  it.each([
+    ["controller", (error: Error) => (
+      vi.spyOn(StudioMutationController.prototype, "settled").mockRejectedValueOnce(error)
+    )],
+    ["Store", (error: Error) => (
+      vi.spyOn(WorkbenchProjectionStore.prototype, "settled").mockRejectedValueOnce(error)
+    )],
+  ] as const)("keeps a %s quiescence failure visible, writes no mode, and recovers", async (
+    boundary,
+    rejectNextSettlement,
+  ) => {
+    const transport = createMockUiKernelTransport();
+    const setMode = vi.spyOn(transport, "setUiProfileMode");
+    const { container } = await renderApp(transport);
+    const failure = new Error(`Injected ${boundary} quiescence failure.`);
+    const settlement = rejectNextSettlement(failure);
+    const vibe = [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
+      .find((button) => button.textContent === "Vibe")!;
+
+    await act(async () => {
+      vibe.click();
+      await vi.waitFor(() => expect(settlement).toHaveBeenCalledOnce());
+      await settle();
+    });
+
+    expect(setMode).not.toHaveBeenCalled();
+    expect(container.querySelector(".rho-action-error")?.textContent ?? "")
+      .toContain(failure.message);
+    expect(container.querySelector<HTMLButtonElement>(
+      ".rho-mode-switch button[aria-pressed='true']",
+    )?.textContent).toBe("Studio");
+
+    await act(async () => {
+      vibe.click();
+      await vi.waitFor(() => expect(
+        container.querySelector<HTMLButtonElement>(
+          ".rho-mode-switch button[aria-pressed='true']",
+        )?.textContent,
+      ).toBe("Vibe"));
+    });
+    expect(setMode).toHaveBeenCalledOnce();
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+  });
+
+  it("waits for Console Profile persistence before one latest-revision Vibe mode write", async () => {
+    const transport = createMockUiKernelTransport();
+    const originalUpdate = transport.updateSurface.bind(transport);
+    let releaseConsolePersistence = () => {};
+    const consolePersistenceBlocked = new Promise<void>((resolve) => {
+      releaseConsolePersistence = resolve;
+    });
+    let markConsoleProfileApplied = () => {};
+    const consoleProfileApplied = new Promise<void>((resolve) => {
+      markConsoleProfileApplied = resolve;
+    });
+    let heldConsolePersistence = false;
+    transport.updateSurface = vi.fn(async (request) => {
+      const viewState = request.mutation.kind === "set_view_state"
+        ? request.mutation.view_state as { readonly schema_version?: number }
+        : null;
+      if (
+        !heldConsolePersistence
+        && request.target.instance_id === "instance:console-a"
+        && viewState?.schema_version === 3
+      ) {
+        heldConsolePersistence = true;
+        const result = await originalUpdate(request);
+        markConsoleProfileApplied();
+        await consolePersistenceBlocked;
+        return result;
+      }
+      return originalUpdate(request);
+    });
+    const setMode = vi.spyOn(transport, "setUiProfileMode");
+    const { container } = await renderApp(transport);
+    await act(async () => {
+      await consoleProfileApplied;
+    });
+    const advanced = (await transport.loadUiProfile()).profile;
+    expect(advanced.revision).toBeGreaterThan(1);
+
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
+        .find((button) => button.textContent === "Vibe")!
+        .click();
+      for (let index = 0; index < 16; index += 1) await Promise.resolve();
+    });
+    expect(setMode).not.toHaveBeenCalled();
+
+    await act(async () => {
+      releaseConsolePersistence();
+      await vi.waitFor(() => expect(
+        container.querySelector<HTMLButtonElement>(
+          ".rho-mode-switch button[aria-pressed='true']",
+        )?.textContent,
+      ).toBe("Vibe"));
+    });
+
+    expect(setMode).toHaveBeenCalledOnce();
+    expect(setMode.mock.calls[0]?.[0].target).toEqual({
+      project_id: advanced.project_id,
+      expected_profile_revision: advanced.revision,
+    });
+    expect((await transport.loadUiProfile()).profile.active_mode).toBe("vibe");
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+  });
+
+  it("reports a sole latest-revision mode failure and recovers on the next explicit gesture", async () => {
+    const transport = createMockUiKernelTransport();
+    const originalUpdate = transport.updateSurface.bind(transport);
+    const originalSetMode = transport.setUiProfileMode.bind(transport);
+    let releaseConsolePersistence = () => {};
+    const consolePersistenceBlocked = new Promise<void>((resolve) => {
+      releaseConsolePersistence = resolve;
+    });
+    let markConsoleProfileApplied = () => {};
+    const consoleProfileApplied = new Promise<void>((resolve) => {
+      markConsoleProfileApplied = resolve;
+    });
+    let heldConsolePersistence = false;
+    transport.updateSurface = vi.fn(async (request) => {
+      const viewState = request.mutation.kind === "set_view_state"
+        ? request.mutation.view_state as { readonly schema_version?: number }
+        : null;
+      if (
+        !heldConsolePersistence
+        && request.target.instance_id === "instance:console-a"
+        && viewState?.schema_version === 3
+      ) {
+        heldConsolePersistence = true;
+        const result = await originalUpdate(request);
+        markConsoleProfileApplied();
+        await consolePersistenceBlocked;
+        return result;
+      }
+      return originalUpdate(request);
+    });
+    const setMode = vi.fn<typeof transport.setUiProfileMode>()
+      .mockRejectedValueOnce(new Error("Injected single mode failure."))
+      .mockImplementation(originalSetMode);
+    transport.setUiProfileMode = setMode;
+    const { container } = await renderApp(transport);
+    await act(async () => {
+      await consoleProfileApplied;
+    });
+    const advanced = (await transport.loadUiProfile()).profile;
+    expect(advanced.revision).toBeGreaterThan(1);
+    const vibe = [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
+      .find((button) => button.textContent === "Vibe")!;
+
+    await act(async () => {
+      vibe.click();
+      for (let index = 0; index < 16; index += 1) await Promise.resolve();
+    });
+    expect(setMode).not.toHaveBeenCalled();
+
+    await act(async () => {
+      releaseConsolePersistence();
+      await vi.waitFor(() => expect(setMode).toHaveBeenCalledOnce());
+      await settle();
+    });
+
+    expect(setMode).toHaveBeenCalledOnce();
+    expect(container.querySelector(".rho-action-error")?.textContent ?? "")
+      .toContain("Injected single mode failure.");
+    expect(setMode.mock.calls[0]?.[0].target).toEqual({
+      project_id: advanced.project_id,
+      expected_profile_revision: advanced.revision,
+    });
+    expect((await transport.loadUiProfile()).profile.active_mode).toBe("studio");
+    expect(container.querySelector<HTMLButtonElement>(
+      ".rho-mode-switch button[aria-pressed='true']",
+    )?.textContent).toBe("Studio");
+
+    await act(async () => {
+      vibe.click();
+      await vi.waitFor(() => expect(
+        container.querySelector<HTMLButtonElement>(
+          ".rho-mode-switch button[aria-pressed='true']",
+        )?.textContent,
+      ).toBe("Vibe"));
+    });
+    expect(setMode).toHaveBeenCalledTimes(2);
+    expect(setMode.mock.calls[1]?.[0].target).toEqual({
+      project_id: advanced.project_id,
+      expected_profile_revision: advanced.revision,
+    });
+    expect(container.querySelector(".rho-action-error")).toBeNull();
   });
 
   it("does not send an old-project mode mutation while a Studio project switch is in flight", async () => {
@@ -624,7 +849,7 @@ describe("Studio foundation app", () => {
       await settle();
     });
     expect(menu.open).toBe(true);
-    expect(menu.querySelector("[role='alert']")?.textContent).toContain("Stop the active run");
+    expect(container.querySelector(".rho-project-switch-error")?.textContent).toContain("Stop the active run");
     expect(container.querySelector(".rho-statusbar")?.textContent).toContain(projectA);
     await act(async () => {
       target.click();
@@ -653,13 +878,15 @@ describe("Studio foundation app", () => {
     expect(workbenchOperationTrace.snapshot()).toEqual([]);
   });
 
-  it("projects restored, fatal, and thrown switch failures without admitting their targets", async () => {
+  it("reopens an advanced exact source after failed_restored and admits new source work", async () => {
     const projectA = "/projects/project-a";
     const projectB = "/projects/project-b";
     saveProjectHistory(window.localStorage, { version: 1, paths: [projectA, projectB] });
     const transport = createMockUiKernelTransport(`?project=${encodeURIComponent(projectA)}`);
-    const failures = vi.fn()
-      .mockResolvedValueOnce({
+    const restoreProject = transport.openProject.bind(transport);
+    const restoreFailure = vi.fn(async () => {
+      await restoreProject(projectA);
+      return {
         status: "failed_restored",
         project: null,
         session: {},
@@ -669,8 +896,61 @@ describe("Studio foundation app", () => {
         message: "Target watcher failed.",
         restored_root: projectA,
         restart_required: false,
-      })
-      .mockResolvedValueOnce({
+      } as const;
+    });
+    transport.openProject = restoreFailure;
+    const setMode = vi.spyOn(transport, "setUiProfileMode");
+    const { container } = await renderApp(transport);
+    const consoleA1 = container.querySelector<HTMLElement>("[data-surface-id='rho.console']")!;
+    const composerA1 = consoleA1.querySelector<HTMLTextAreaElement>("textarea")!;
+    const setTextarea = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+    await act(async () => {
+      setTextarea.call(composerA1, "A1_CACHE_HISTORY()");
+      composerA1.dispatchEvent(new Event("input", { bubbles: true }));
+      composerA1.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+      for (let index = 0; index < 24; index += 1) await Promise.resolve();
+    });
+    await act(async () => {
+      setTextarea.call(composerA1, "A1 activation-local draft");
+      composerA1.dispatchEvent(new Event("input", { bubbles: true }));
+      await settle();
+    });
+    expect(composerA1.value).toBe("A1 activation-local draft");
+    const menu = await openRhoMenu(container);
+    const target = menu.querySelector<HTMLButtonElement>(`[data-project-path='${projectB}']`)!;
+
+    await act(async () => {
+      target.click();
+      for (let index = 0; index < 24; index += 1) await Promise.resolve();
+    });
+    expect(container.querySelector(".rho-project-switch-error")?.textContent).toContain("Rho restored project-a");
+    expect(container.querySelector(".rho-statusbar")?.textContent).toContain(projectA);
+    const consoleA2 = container.querySelector<HTMLElement>("[data-surface-id='rho.console']")!;
+    expect(consoleA2).not.toBe(consoleA1);
+    const composerA2 = consoleA2.querySelector<HTMLTextAreaElement>("textarea")!;
+    expect(composerA2.value).toBe("");
+    await act(async () => {
+      composerA2.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "ArrowUp" }));
+      await settle();
+    });
+    expect(composerA2.value).toBe("");
+
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
+        .find((button) => button.textContent === "Vibe")!
+        .click();
+      await settle();
+    });
+    expect(setMode).toHaveBeenCalledOnce();
+    expect(container.querySelector(".rho-canvas-vibe")).not.toBeNull();
+  });
+
+  it("keeps mutation admission permanently closed after an explicit fatal switch", async () => {
+    const projectA = "/projects/project-a";
+    const projectB = "/projects/project-b";
+    saveProjectHistory(window.localStorage, { version: 1, paths: [projectA, projectB] });
+    const transport = createMockUiKernelTransport(`?project=${encodeURIComponent(projectA)}`);
+    const switchProject = vi.fn(async () => ({
         status: "fatal",
         project: null,
         session: {},
@@ -679,22 +959,137 @@ describe("Studio foundation app", () => {
         reason_code: "project_switch_restore_failed",
         message: "Previous project could not be restored.",
         restored_root: null,
-        restart_required: true,
-      })
-      .mockRejectedValueOnce(new Error("Project validation rejected this directory."));
-    transport.openProject = failures;
+        restart_required: false,
+      } as const));
+    transport.openProject = switchProject;
+    const setMode = vi.spyOn(transport, "setUiProfileMode");
     const { container } = await renderApp(transport);
     const menu = await openRhoMenu(container);
     const target = menu.querySelector<HTMLButtonElement>(`[data-project-path='${projectB}']`)!;
 
-    await act(async () => { target.click(); await settle(); });
-    expect(menu.querySelector("[role='alert']")?.textContent).toContain("Rho restored project-a");
+    await act(async () => {
+      target.click();
+      for (let index = 0; index < 16; index += 1) await Promise.resolve();
+    });
+    const fatalAlert = container.querySelector<HTMLElement>(
+      ".rho-project-switch-error[role='alert']",
+    )!;
+    expect(fatalAlert.textContent).toContain("recovery did not complete");
+    expect(fatalAlert.textContent).toContain("Restart Rho before continuing project work");
+    expect(fatalAlert.closest("details")).toBeNull();
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+    expect(container.querySelector("[data-surface-id]")).toBeNull();
+
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
+        .find((button) => button.textContent === "Vibe")!
+        .click();
+      target.click();
+      await settle();
+    });
+    expect(setMode).not.toHaveBeenCalled();
+    expect(switchProject).toHaveBeenCalledOnce();
     expect(container.querySelector(".rho-statusbar")?.textContent).toContain(projectA);
-    await act(async () => { target.click(); await settle(); });
-    expect(menu.querySelector("[role='alert']")?.textContent).toContain("recovery did not complete");
-    await act(async () => { target.click(); await settle(); });
-    expect(menu.querySelector("[role='alert']")?.textContent).toContain("Project validation rejected");
-    expect(loadProjectHistory(window.localStorage).history.paths).toEqual([projectA, projectB]);
+  });
+
+  it("keeps admission closed when a nominally ready broker response requires restart", async () => {
+    const projectA = "/projects/project-a";
+    const projectB = "/projects/project-b";
+    saveProjectHistory(window.localStorage, { version: 1, paths: [projectA, projectB] });
+    const transport = createMockUiKernelTransport(`?project=${encodeURIComponent(projectA)}`);
+    const openProject = transport.openProject.bind(transport);
+    const switchProject = vi.fn(async (path: string) => ({
+      ...await openProject(path),
+      restart_required: true,
+    }));
+    transport.openProject = switchProject;
+    const setMode = vi.spyOn(transport, "setUiProfileMode");
+    const { container } = await renderApp(transport);
+    const menu = await openRhoMenu(container);
+
+    await act(async () => {
+      menu.querySelector<HTMLButtonElement>(`[data-project-path='${projectB}']`)!.click();
+      for (let index = 0; index < 24; index += 1) await Promise.resolve();
+    });
+    expect(container.querySelector(".rho-statusbar")?.textContent).toContain(projectB);
+    expect(container.querySelector("[data-surface-id]")).toBeNull();
+    expect(container.querySelector(".rho-project-switch-error")?.textContent)
+      .toContain("Restart Rho before continuing project work");
+    expect(container.querySelector(".rho-project-switch-error")?.closest("details")).toBeNull();
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
+        .find((button) => button.textContent === "Vibe")!
+        .click();
+      await settle();
+    });
+    expect(setMode).not.toHaveBeenCalled();
+    expect(switchProject).toHaveBeenCalledOnce();
+  });
+
+  it("refreshes and reopens a coherent source after a thrown broker error", async () => {
+    const projectA = "/projects/project-a";
+    const projectB = "/projects/project-b";
+    saveProjectHistory(window.localStorage, { version: 1, paths: [projectA, projectB] });
+    const transport = createMockUiKernelTransport(`?project=${encodeURIComponent(projectA)}`);
+    transport.openProject = vi.fn().mockRejectedValue(
+      new Error("Project validation rejected this directory."),
+    );
+    const setMode = vi.spyOn(transport, "setUiProfileMode");
+    const { container } = await renderApp(transport);
+    const menu = await openRhoMenu(container);
+
+    await act(async () => {
+      menu.querySelector<HTMLButtonElement>(`[data-project-path='${projectB}']`)!.click();
+      for (let index = 0; index < 24; index += 1) await Promise.resolve();
+    });
+    expect(container.querySelector(".rho-project-switch-error")?.textContent).toContain("Project validation rejected");
+    expect(container.querySelector(".rho-statusbar")?.textContent).toContain(projectA);
+    expect(container.querySelector("[data-surface-id='rho.console']")).not.toBeNull();
+
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
+        .find((button) => button.textContent === "Vibe")!
+        .click();
+      await settle();
+    });
+    expect(setMode).toHaveBeenCalledOnce();
+  });
+
+  it("keeps admission closed when thrown-switch recovery cannot refresh source truth", async () => {
+    const projectA = "/projects/project-a";
+    const projectB = "/projects/project-b";
+    saveProjectHistory(window.localStorage, { version: 1, paths: [projectA, projectB] });
+    const transport = createMockUiKernelTransport(`?project=${encodeURIComponent(projectA)}`);
+    transport.openProject = vi.fn().mockRejectedValue(new Error("Project validation rejected."));
+    const loadProjection = transport.loadWorkbenchProjection.bind(transport);
+    let rejectRefresh = false;
+    transport.loadWorkbenchProjection = vi.fn(async () => {
+      if (rejectRefresh) throw new Error("Previous-project refresh failed.");
+      return loadProjection();
+    });
+    const setMode = vi.spyOn(transport, "setUiProfileMode");
+    const { container } = await renderApp(transport);
+    rejectRefresh = true;
+    const menu = await openRhoMenu(container);
+    const target = menu.querySelector<HTMLButtonElement>(`[data-project-path='${projectB}']`)!;
+
+    await act(async () => {
+      target.click();
+      for (let index = 0; index < 24; index += 1) await Promise.resolve();
+    });
+    expect(container.querySelector("[data-surface-id]")).toBeNull();
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
+        .find((button) => button.textContent === "Vibe")!
+        .click();
+      target.click();
+      await settle();
+    });
+    expect(setMode).not.toHaveBeenCalled();
+    expect(transport.openProject).toHaveBeenCalledOnce();
+    expect(container.querySelector(".rho-statusbar")?.textContent).toContain(projectA);
 
     const summary = menu.querySelector<HTMLElement>("summary")!;
     target.focus();
@@ -705,6 +1100,2086 @@ describe("Studio foundation app", () => {
     expect(menu.open).toBe(false);
     expect(document.activeElement).toBe(summary);
   });
+
+  it("drains a deferred A Pin before A→B without copying it into B", async () => {
+    const projectA = "/projects/project-a";
+    const projectB = "/projects/project-b";
+    saveProjectHistory(window.localStorage, { version: 1, paths: [projectA, projectB] });
+    const transport = createMockUiKernelTransport(`?project=${encodeURIComponent(projectA)}`);
+    const sourceProjectId = (await transport.loadUiProfile()).profile.project_id;
+    const { container } = await renderApp(transport);
+    const loadProjection = transport.loadWorkbenchProjection.bind(transport);
+    let markRefreshRequested = () => {};
+    const refreshRequested = new Promise<void>((resolve) => { markRefreshRequested = resolve; });
+    let releaseRefresh = () => {};
+    const refreshBlocked = new Promise<void>((resolve) => { releaseRefresh = resolve; });
+    let deferNextRefresh = true;
+    transport.loadWorkbenchProjection = vi.fn(async () => {
+      if (deferNextRefresh) {
+        deferNextRefresh = false;
+        markRefreshRequested();
+        await refreshBlocked;
+      }
+      return loadProjection();
+    });
+    const applyPage = vi.spyOn(transport, "applyVibePage");
+    const openProject = vi.spyOn(transport, "openProject");
+    const menu = await openRhoMenu(container);
+
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>("[data-surface-id='rho.agent'] button")]
+        .find((button) => button.textContent === "Pin to Vibe")!
+        .click();
+      await refreshRequested;
+      menu.querySelector<HTMLButtonElement>(`[data-project-path='${projectB}']`)!.click();
+      await Promise.resolve();
+    });
+    expect(openProject).not.toHaveBeenCalled();
+
+    await act(async () => {
+      releaseRefresh();
+      for (let index = 0; index < 32; index += 1) await Promise.resolve();
+    });
+    expect(openProject).toHaveBeenCalledOnce();
+    expect(applyPage).toHaveBeenCalledOnce();
+    expect(applyPage.mock.calls[0]?.[0]).toMatchObject({
+      target: { project_id: sourceProjectId },
+      page_id: "page:project-review",
+    });
+    expect(applyPage.mock.invocationCallOrder[0]).toBeLessThan(
+      openProject.mock.invocationCallOrder[0]!,
+    );
+    expect(container.querySelector(".rho-statusbar")?.textContent).toContain(projectB);
+    expect(JSON.stringify((await transport.loadUiProfile()).profile.vibe_pages))
+      .not.toContain("agent-turn:mock-1");
+
+    const returnMenu = await openRhoMenu(container);
+    await act(async () => {
+      returnMenu.querySelector<HTMLButtonElement>(`[data-project-path='${projectA}']`)!.click();
+      for (let index = 0; index < 24; index += 1) await Promise.resolve();
+    });
+    expect(JSON.stringify((await transport.loadUiProfile()).profile.vibe_pages))
+      .toContain("agent-turn:mock-1");
+  });
+
+  it("drains a deferred A1 Pin before same-root A2 and admits a second A2 Pin", async () => {
+    const projectA = "/projects/project-a";
+    const transport = createMockUiKernelTransport(`?project=${encodeURIComponent(projectA)}`);
+    const openProject = transport.openProject.bind(transport);
+    const reopen = vi.fn(() => openProject(projectA));
+    transport.pickProjectDirectory = reopen;
+    const { container } = await renderApp(transport);
+    const loadProjection = transport.loadWorkbenchProjection.bind(transport);
+    let markRefreshRequested = () => {};
+    const refreshRequested = new Promise<void>((resolve) => { markRefreshRequested = resolve; });
+    let releaseRefresh = () => {};
+    const refreshBlocked = new Promise<void>((resolve) => { releaseRefresh = resolve; });
+    let deferNextRefresh = true;
+    transport.loadWorkbenchProjection = vi.fn(async () => {
+      if (deferNextRefresh) {
+        deferNextRefresh = false;
+        markRefreshRequested();
+        await refreshBlocked;
+      }
+      return loadProjection();
+    });
+    const applyPage = vi.spyOn(transport, "applyVibePage");
+    const menu = await openRhoMenu(container);
+
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>("[data-surface-id='rho.agent'] button")]
+        .find((button) => button.textContent === "Pin to Vibe")!
+        .click();
+      await refreshRequested;
+      menu.querySelector<HTMLButtonElement>(".rho-rho-project")!.click();
+      await Promise.resolve();
+    });
+    expect(reopen).not.toHaveBeenCalled();
+
+    await act(async () => {
+      releaseRefresh();
+      for (let index = 0; index < 32; index += 1) await Promise.resolve();
+    });
+    expect(reopen).toHaveBeenCalledOnce();
+    expect(applyPage).toHaveBeenCalledOnce();
+    expect(JSON.stringify((await transport.loadUiProfile()).profile.vibe_pages))
+      .toContain("agent-turn:mock-1");
+
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>("[data-surface-id='rho.agent'] button")]
+        .find((button) => button.textContent === "Pin to Vibe")!
+        .click();
+      for (let index = 0; index < 20; index += 1) await Promise.resolve();
+    });
+    expect(applyPage).toHaveBeenCalledTimes(2);
+    const profileJson = JSON.stringify((await transport.loadUiProfile()).profile.vibe_pages);
+    expect(profileJson.match(/agent-turn:mock-1/gu)).toHaveLength(2);
+  });
+
+  it("uses the latest same-epoch revision for Console success and visible failure", async () => {
+    const projectA = "/projects/project-a";
+    const transport = createMockUiKernelTransport(`?project=${encodeURIComponent(projectA)}`);
+    const initialProjectRevision = (await transport.loadSnapshot()).context.project_revision;
+    const updateSurface = transport.updateSurface.bind(transport);
+    const advanceProjectRevision = async () => {
+      const [kernel, surfaces, studio, runtimes, resources] = await Promise.all([
+        transport.loadSnapshot(),
+        transport.loadSurfaces(),
+        transport.loadStudio(),
+        transport.loadRuntimes(),
+        transport.loadResources(),
+      ]);
+      const nextProjectRevision = kernel.context.project_revision + 1;
+      transport.publish({
+        ...kernel,
+        context: { ...kernel.context, project_revision: nextProjectRevision },
+      });
+      transport.publishSurfaces({ ...surfaces, project_revision: nextProjectRevision });
+      transport.publishStudio({ ...studio, project_revision: nextProjectRevision });
+      transport.publishRuntimes({ ...runtimes, project_revision: nextProjectRevision });
+      transport.publishResources({ ...resources, project_revision: nextProjectRevision });
+    };
+    let markUpdateRequested = () => {};
+    const updateRequested = new Promise<void>((resolve) => { markUpdateRequested = resolve; });
+    let releaseUpdate = () => {};
+    const updateBlocked = new Promise<void>((resolve) => { releaseUpdate = resolve; });
+    let deferFirstUpdate = true;
+    const pendingSurfaceUpdates = new Set<Promise<unknown>>();
+    let completedConsolePersists = 0;
+    const revisionedUpdate = vi.fn((request: Parameters<typeof transport.updateSurface>[0]) => {
+      const operation = (async () => {
+        const navigatorUpdate = request.target.instance_id === "instance:navigator";
+        if (deferFirstUpdate && navigatorUpdate) {
+          deferFirstUpdate = false;
+          markUpdateRequested();
+          await updateBlocked;
+        }
+        const result = await updateSurface(request);
+        if (navigatorUpdate) await advanceProjectRevision();
+        if (
+          request.target.instance_id === "instance:console-a"
+          && request.mutation.kind === "set_view_state"
+        ) completedConsolePersists += 1;
+        return result;
+      })();
+      pendingSurfaceUpdates.add(operation);
+      void operation.then(
+        () => pendingSurfaceUpdates.delete(operation),
+        () => pendingSurfaceUpdates.delete(operation),
+      );
+      return operation;
+    });
+    transport.updateSurface = revisionedUpdate;
+    const startExecution = vi.spyOn(transport, "startRuntimeExecution");
+    const { container } = await renderApp(transport);
+    const navigator = container.querySelector<HTMLElement>("[data-surface-id='rho.navigator']")!;
+
+    await act(async () => {
+      [...navigator.querySelectorAll<HTMLButtonElement>("[role='tab']")]
+        .find((button) => button.textContent === "History")!
+        .click();
+      await updateRequested;
+    });
+    await act(async () => {
+      const consoleView = container.querySelector<HTMLElement>("[data-surface-id='rho.console']")!;
+      const composer = consoleView.querySelector<HTMLTextAreaElement>("textarea")!;
+      const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+      setValue.call(composer, "SAME_EPOCH_CODE()");
+      composer.dispatchEvent(new Event("input", { bubbles: true }));
+      composer.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+      await Promise.resolve();
+    });
+    expect(startExecution).not.toHaveBeenCalled();
+
+    await act(async () => {
+      releaseUpdate();
+      await vi.waitFor(() => expect(startExecution).toHaveBeenCalledOnce());
+    });
+    expect(startExecution.mock.calls[0]?.[0]).toMatchObject({
+      runtime: {
+        project_id: expect.any(String),
+        expected_project_revision: initialProjectRevision + 1,
+      },
+      code: "SAME_EPOCH_CODE()",
+    });
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+    await act(async () => {
+      await vi.waitFor(() => expect(revisionedUpdate.mock.calls.some(([request]) => (
+        request.target.instance_id === "instance:console-a"
+        && request.mutation.kind === "set_view_state"
+      ))).toBe(true));
+      await vi.waitFor(() => expect(
+        container.querySelector("[data-surface-id='rho.console'] .rho-console-busybar"),
+      ).toBeNull());
+      await vi.waitFor(() => expect(completedConsolePersists).toBeGreaterThan(0));
+      await vi.waitFor(() => expect(pendingSurfaceUpdates.size).toBe(0));
+      await settle();
+    });
+    const settledFirstPhaseUpdateCount = revisionedUpdate.mock.calls.length;
+    await act(async () => {
+      await settle();
+    });
+    expect(revisionedUpdate).toHaveBeenCalledTimes(settledFirstPhaseUpdateCount);
+
+    let markSecondUpdateRequested = () => {};
+    const secondUpdateRequested = new Promise<void>((resolve) => {
+      markSecondUpdateRequested = resolve;
+    });
+    let releaseSecondUpdate = () => {};
+    const secondUpdateBlocked = new Promise<void>((resolve) => { releaseSecondUpdate = resolve; });
+    transport.updateSurface = vi.fn(async (request) => {
+      const navigatorUpdate = request.target.instance_id === "instance:navigator";
+      if (navigatorUpdate) {
+        markSecondUpdateRequested();
+        await secondUpdateBlocked;
+      }
+      const result = await updateSurface(request);
+      if (navigatorUpdate) await advanceProjectRevision();
+      return result;
+    });
+    startExecution.mockRejectedValueOnce(new Error("Rebased Runtime start failed."));
+    await act(async () => {
+      [...navigator.querySelectorAll<HTMLButtonElement>("[role='tab']")]
+        .find((button) => button.textContent === "Files")!
+        .click();
+      await secondUpdateRequested;
+    });
+    await act(async () => {
+      const composer = container.querySelector<HTMLElement>("[data-surface-id='rho.console']")!
+        .querySelector<HTMLTextAreaElement>("textarea")!;
+      const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+      setValue.call(composer, "SAME_EPOCH_FAILURE()");
+      composer.dispatchEvent(new Event("input", { bubbles: true }));
+      composer.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+      await Promise.resolve();
+    });
+    expect(startExecution).toHaveBeenCalledOnce();
+    await act(async () => {
+      releaseSecondUpdate();
+      await vi.waitFor(() => expect(startExecution).toHaveBeenCalledTimes(2));
+      await settle();
+    });
+    const failureAdmissionProjectRevision = (
+      await transport.loadSnapshot()
+    ).context.project_revision;
+    expect(startExecution.mock.calls[1]?.[0]).toMatchObject({
+      runtime: { expected_project_revision: failureAdmissionProjectRevision },
+      code: "SAME_EPOCH_FAILURE()",
+    });
+    expect(container.querySelector(".rho-action-error")?.textContent)
+      .toContain("Rebased Runtime start failed");
+
+    await act(async () => {
+      const composer = container.querySelector<HTMLElement>("[data-surface-id='rho.console']")!
+        .querySelector<HTMLTextAreaElement>("textarea")!;
+      const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+      setValue.call(composer, "SAME_EPOCH_RECOVERY()");
+      composer.dispatchEvent(new Event("input", { bubbles: true }));
+      composer.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+      await vi.waitFor(() => expect(startExecution).toHaveBeenCalledTimes(3));
+      await settle();
+    });
+    expect(startExecution.mock.calls[2]?.[0].code).toBe("SAME_EPOCH_RECOVERY()");
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+  });
+
+  it("creates and persists Agent New as one exact admitted workflow", async () => {
+    const transport = createMockUiKernelTransport();
+    const createAgentConversation = transport.createAgentConversation.bind(transport);
+    const updateSurface = transport.updateSurface.bind(transport);
+    const advanceProjectRevision = async () => {
+      const [kernel, surfaces, studio, runtimes, resources] = await Promise.all([
+        transport.loadSnapshot(),
+        transport.loadSurfaces(),
+        transport.loadStudio(),
+        transport.loadRuntimes(),
+        transport.loadResources(),
+      ]);
+      const nextProjectRevision = kernel.context.project_revision + 1;
+      transport.publishSurfaces({ ...surfaces, project_revision: nextProjectRevision });
+      transport.publishStudio({ ...studio, project_revision: nextProjectRevision });
+      transport.publishRuntimes({ ...runtimes, project_revision: nextProjectRevision });
+      transport.publishResources({ ...resources, project_revision: nextProjectRevision });
+      transport.publish({
+        ...kernel,
+        context: { ...kernel.context, project_revision: nextProjectRevision },
+      });
+      return nextProjectRevision;
+    };
+    let createdConversationId: string | null = null;
+    let createdProjectRevision: number | null = null;
+    const create = vi.fn(async () => {
+      const conversation = await createAgentConversation();
+      createdConversationId = conversation.conversation_id;
+      createdProjectRevision = await advanceProjectRevision();
+      return conversation;
+    });
+    let markPersistRequested = () => {};
+    const persistRequested = new Promise<void>((resolve) => { markPersistRequested = resolve; });
+    let releasePersist = () => {};
+    const persistBlocked = new Promise<void>((resolve) => { releasePersist = resolve; });
+    const update = vi.fn(async (request: Parameters<typeof transport.updateSurface>[0]) => {
+      if (
+        request.target.instance_id === "instance:agent-shared"
+        && request.mutation.kind === "set_view_state"
+        && (request.mutation.view_state as { conversation_id?: unknown }).conversation_id
+          === createdConversationId
+      ) {
+        markPersistRequested();
+        await persistBlocked;
+      }
+      return updateSurface(request);
+    });
+    transport.createAgentConversation = create;
+    transport.updateSurface = update;
+    const initialAgent = (await transport.loadSurfaces()).catalog.instances.find(
+      (instance) => instance.instance_id === "instance:agent-shared",
+    )!;
+    const { container } = await renderApp(transport);
+    const agent = container.querySelector<HTMLElement>("[data-surface-id='rho.agent']")!;
+    const picker = agent.querySelector<HTMLSelectElement>("select[aria-label^='Conversation for']")!;
+    const initialConversationId = picker.value;
+    const newButton = [...agent.querySelectorAll<HTMLButtonElement>(".rho-agent-toolbar-action")]
+      .find((button) => button.textContent === "New")!;
+
+    await act(async () => {
+      newButton.click();
+      await persistRequested;
+    });
+    expect(createdConversationId).toMatch(/^agent-conversation:mock-/u);
+    expect(create).toHaveBeenCalledOnce();
+    expect(picker.value).toBe(initialConversationId);
+    const persisted = update.mock.calls.find(([request]) => (
+      request.target.instance_id === "instance:agent-shared"
+      && request.mutation.kind === "set_view_state"
+      && (request.mutation.view_state as { conversation_id?: unknown }).conversation_id
+        === createdConversationId
+    ));
+    expect(persisted).toBeDefined();
+    expect(persisted![0].target.expected_project_revision).toBe(createdProjectRevision);
+    expect(persisted![0].target.activation_generation).toBe(initialAgent.activation_generation);
+    const persistedIndex = update.mock.calls.findIndex((call) => call === persisted);
+    expect(create.mock.invocationCallOrder[0])
+      .toBeLessThan(update.mock.invocationCallOrder[persistedIndex]!);
+
+    await act(async () => {
+      releasePersist();
+      await vi.waitFor(() => expect(container.querySelector<HTMLSelectElement>(
+        "[data-surface-id='rho.agent'] select[aria-label^='Conversation for']",
+      )?.value).toBe(createdConversationId));
+      await settle();
+    });
+    expect((await transport.loadSurfaces()).catalog.instances.find(
+      (instance) => instance.instance_id === initialAgent.instance_id,
+    )?.view_state).toMatchObject({ conversation_id: createdConversationId });
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+  });
+
+  it("keeps failed Agent creation and stale selection persistence truthful, then recovers", async () => {
+    const transport = createMockUiKernelTransport();
+    const createAgentConversation = transport.createAgentConversation.bind(transport);
+    const updateSurface = transport.updateSurface.bind(transport);
+    const createdConversationIds: string[] = [];
+    const create = vi.fn(async () => {
+      if (create.mock.calls.length === 1) {
+        throw new Error("Agent conversation creation rejected for test.");
+      }
+      const conversation = await createAgentConversation();
+      createdConversationIds.push(conversation.conversation_id);
+      return conversation;
+    });
+    let rejectFirstSelectionPersist = true;
+    const update = vi.fn(async (request: Parameters<typeof transport.updateSurface>[0]) => {
+      const conversationId = request.mutation.kind === "set_view_state"
+        ? (request.mutation.view_state as { conversation_id?: unknown }).conversation_id
+        : null;
+      if (
+        rejectFirstSelectionPersist
+        && request.target.instance_id === "instance:agent-shared"
+        && typeof conversationId === "string"
+        && conversationId !== "agent-conversation:mock-shared"
+      ) {
+        rejectFirstSelectionPersist = false;
+        throw new Error("Agent selection persist stale for test.");
+      }
+      return updateSurface(request);
+    });
+    transport.createAgentConversation = create;
+    transport.updateSurface = update;
+    const { container } = await renderApp(transport);
+    const agent = container.querySelector<HTMLElement>("[data-surface-id='rho.agent']")!;
+    const picker = agent.querySelector<HTMLSelectElement>("select[aria-label^='Conversation for']")!;
+    const newButton = () => [...agent.querySelectorAll<HTMLButtonElement>(".rho-agent-toolbar-action")]
+      .find((button) => button.textContent === "New")!;
+
+    await act(async () => {
+      newButton().click();
+      await settle();
+    });
+    await act(async () => {
+      await vi.waitFor(() => expect(container.querySelector(".rho-action-error")?.textContent)
+        .toContain("Agent conversation creation rejected for test."));
+    });
+    expect(picker.value).toBe("agent-conversation:mock-shared");
+
+    await act(async () => {
+      newButton().click();
+      await vi.waitFor(() => expect(createdConversationIds).toHaveLength(1));
+      await settle();
+    });
+    await act(async () => {
+      await vi.waitFor(() => expect(container.querySelector(".rho-action-error")?.textContent)
+        .toContain("Agent selection persist stale for test."));
+    });
+    const durableButUnselectedId = createdConversationIds[0]!;
+    expect([...picker.options].map((option) => option.value)).toContain(durableButUnselectedId);
+    expect(picker.value).toBe("agent-conversation:mock-shared");
+
+    await act(async () => {
+      newButton().click();
+      await vi.waitFor(() => expect(createdConversationIds).toHaveLength(2));
+      await vi.waitFor(() => expect(picker.value).toBe(createdConversationIds[1]));
+      await settle();
+    });
+    expect(picker.value).not.toBe(durableButUnselectedId);
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+  });
+
+  it("rejects a queued picker persist after exact Agent activation replacement and recovers", async () => {
+    const transport = createMockUiKernelTransport();
+    const updateSurface = transport.updateSurface.bind(transport);
+    const firstCandidate = await transport.createAgentConversation();
+    const replacementCandidate = await transport.createAgentConversation();
+    const initialSurfaces = await transport.loadSurfaces();
+    const initialAgent = initialSurfaces.catalog.instances.find(
+      (instance) => instance.instance_id === "instance:agent-shared",
+    )!;
+    let releaseQueue = () => {};
+    const queueGate = new Promise<void>((resolve) => { releaseQueue = resolve; });
+    let queueIsBlocked = false;
+    const update = vi.fn(async (request: Parameters<typeof transport.updateSurface>[0]) => {
+      if (
+        !queueIsBlocked
+        && request.target.instance_id === initialAgent.instance_id
+        && request.mutation.kind === "set_view_state"
+        && (request.mutation.view_state as { mode?: unknown }).mode === "plan"
+      ) {
+        queueIsBlocked = true;
+        await queueGate;
+        return transport.loadSurfaces();
+      }
+      return updateSurface(request);
+    });
+    transport.updateSurface = update;
+    const { container } = await renderApp(transport);
+    const currentAgent = () => container.querySelector<HTMLElement>(
+      "[data-surface-id='rho.agent']",
+    )!;
+    const currentPicker = () => currentAgent().querySelector<HTMLSelectElement>(
+      "select[aria-label^='Conversation for']",
+    )!;
+    const initialPicker = currentPicker();
+
+    await act(async () => {
+      [...currentAgent().querySelectorAll<HTMLButtonElement>(".rho-agent-mode button")]
+        .find((button) => button.textContent === "plan")!
+        .click();
+      await vi.waitFor(() => expect(queueIsBlocked).toBe(true));
+    });
+    await act(async () => {
+      initialPicker.value = firstCandidate.conversation_id;
+      initialPicker.dispatchEvent(new Event("change", { bubbles: true }));
+      await settle();
+    });
+    expect(update.mock.calls.some(([request]) => (
+      request.mutation.kind === "set_view_state"
+      && (request.mutation.view_state as { conversation_id?: unknown }).conversation_id
+        === firstCandidate.conversation_id
+    ))).toBe(false);
+
+    const replacementGeneration = initialAgent.activation_generation + 1;
+    const replacementSurfaces = structuredClone(await transport.loadSurfaces());
+    const replacementInstances = replacementSurfaces.catalog.instances.map(
+      (instance) => instance.instance_id === initialAgent.instance_id
+        ? {
+            ...instance,
+            activation_generation: replacementGeneration,
+            surface_revision: instance.surface_revision + 1,
+            view_state: initialAgent.view_state,
+        }
+        : instance,
+    );
+    await act(async () => {
+      transport.publishSurfaces({
+        ...replacementSurfaces,
+        catalog: { ...replacementSurfaces.catalog, instances: replacementInstances },
+      });
+      await vi.waitFor(() => expect(currentPicker()).not.toBe(initialPicker));
+    });
+    expect(currentPicker().value).toBe("agent-conversation:mock-shared");
+
+    await act(async () => {
+      releaseQueue();
+      await settle();
+      await settle();
+    });
+    expect(update.mock.calls.some(([request]) => (
+      request.mutation.kind === "set_view_state"
+      && (request.mutation.view_state as { conversation_id?: unknown }).conversation_id
+        === firstCandidate.conversation_id
+    ))).toBe(false);
+    expect(currentPicker().value).toBe("agent-conversation:mock-shared");
+    expect((await transport.loadSurfaces()).catalog.instances.find(
+      (instance) => instance.instance_id === initialAgent.instance_id,
+    )).toMatchObject({
+      activation_generation: replacementGeneration,
+      view_state: { conversation_id: "agent-conversation:mock-shared" },
+    });
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+
+    await act(async () => {
+      currentPicker().value = replacementCandidate.conversation_id;
+      currentPicker().dispatchEvent(new Event("change", { bubbles: true }));
+      await vi.waitFor(() => expect(currentPicker().value)
+        .toBe(replacementCandidate.conversation_id));
+      await settle();
+    });
+    const replacementPersist = update.mock.calls.find(([request]) => (
+      request.mutation.kind === "set_view_state"
+      && (request.mutation.view_state as { conversation_id?: unknown }).conversation_id
+        === replacementCandidate.conversation_id
+    ));
+    expect(replacementPersist).toBeDefined();
+    expect(replacementPersist![0].target).toMatchObject({
+      instance_id: initialAgent.instance_id,
+      activation_generation: replacementGeneration,
+    });
+    expect((await transport.loadSurfaces()).catalog.instances.find(
+      (instance) => instance.instance_id === initialAgent.instance_id,
+    )?.view_state).toMatchObject({ conversation_id: replacementCandidate.conversation_id });
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+  });
+
+  it("keeps a no-conversation Agent Send truthful across revisioned persist failure and recovery", async () => {
+    const transport = createMockUiKernelTransport();
+    const initialKernel = await transport.loadSnapshot();
+    transport.publish({
+      ...initialKernel,
+      health: {
+        ...initialKernel.health,
+        agent: { state: "ready", label: "Agent runtime ready", detail: null },
+      },
+    });
+    const initialSurfaces = await transport.loadSurfaces();
+    const initialAgent = initialSurfaces.catalog.instances.find(
+      (instance) => instance.instance_id === "instance:agent-shared",
+    )!;
+    transport.publishSurfaces({
+      ...initialSurfaces,
+      catalog: {
+        ...initialSurfaces.catalog,
+        instances: initialSurfaces.catalog.instances.map((instance) => (
+          instance.instance_id === initialAgent.instance_id
+            ? {
+                ...instance,
+                surface_revision: instance.surface_revision + 1,
+                view_state: {
+                  conversation_id: null,
+                  mode: "ask",
+                  composer: "",
+                  auto_approve: false,
+                },
+              }
+            : instance
+        )),
+      },
+    });
+    const listAgentConversations = transport.listAgentConversations.bind(transport);
+    const runAgent = transport.runAgent.bind(transport);
+    const updateSurface = transport.updateSurface.bind(transport);
+    let conversationsVisible = false;
+    transport.listAgentConversations = vi.fn((limit = 50) => (
+      conversationsVisible ? listAgentConversations(limit) : Promise.resolve([])
+    ));
+    const advanceProjectRevision = async () => {
+      const [kernel, surfaces, studio, runtimes, resources] = await Promise.all([
+        transport.loadSnapshot(),
+        transport.loadSurfaces(),
+        transport.loadStudio(),
+        transport.loadRuntimes(),
+        transport.loadResources(),
+      ]);
+      const nextProjectRevision = kernel.context.project_revision + 1;
+      transport.publishSurfaces({ ...surfaces, project_revision: nextProjectRevision });
+      transport.publishStudio({ ...studio, project_revision: nextProjectRevision });
+      transport.publishRuntimes({ ...runtimes, project_revision: nextProjectRevision });
+      transport.publishResources({ ...resources, project_revision: nextProjectRevision });
+      transport.publish({
+        ...kernel,
+        context: { ...kernel.context, project_revision: nextProjectRevision },
+      });
+      return nextProjectRevision;
+    };
+    const createdConversationIds: string[] = [];
+    const createdProjectRevisions: number[] = [];
+    const run = vi.fn(async (request: Parameters<typeof transport.runAgent>[0]) => {
+      const response = await runAgent(request);
+      createdConversationIds.push(response.conversation_id);
+      conversationsVisible = true;
+      createdProjectRevisions.push(await advanceProjectRevision());
+      return response;
+    });
+    let releaseFirstPersistFailure = () => {};
+    const firstPersistFailureBlocked = new Promise<void>((resolve) => {
+      releaseFirstPersistFailure = resolve;
+    });
+    let rejectFirstPersist = true;
+    const update = vi.fn(async (request: Parameters<typeof transport.updateSurface>[0]) => {
+      const conversationId = request.mutation.kind === "set_view_state"
+        ? (request.mutation.view_state as { conversation_id?: unknown }).conversation_id
+        : null;
+      if (
+        rejectFirstPersist
+        && request.target.instance_id === initialAgent.instance_id
+        && typeof conversationId === "string"
+      ) {
+        rejectFirstPersist = false;
+        await firstPersistFailureBlocked;
+        throw new Error("Agent Send selection persist stale for test.");
+      }
+      return updateSurface(request);
+    });
+    transport.runAgent = run;
+    transport.updateSurface = update;
+    const { container } = await renderApp(transport);
+    const currentAgent = () => container.querySelector<HTMLElement>(
+      "[data-surface-id='rho.agent']",
+    )!;
+    const currentPicker = () => currentAgent().querySelector<HTMLSelectElement>(
+      "select[aria-label^='Conversation for']",
+    )!;
+    const currentComposer = () => currentAgent().querySelector<HTMLTextAreaElement>(
+      ".rho-agent-composer textarea",
+    )!;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+    await act(async () => {
+      setValue.call(currentComposer(), "Start a durable Agent task");
+      currentComposer().dispatchEvent(new Event("input", { bubbles: true }));
+      await settle();
+    });
+    expect(currentComposer().value).toBe("Start a durable Agent task");
+    expect(currentAgent().querySelector<HTMLButtonElement>(
+      ".rho-agent-context-controls .rho-primary-action",
+    )!.disabled).toBe(false);
+    await act(async () => {
+      currentAgent().querySelector<HTMLButtonElement>(
+        ".rho-agent-context-controls .rho-primary-action",
+      )!.click();
+      await vi.waitFor(() => expect(run).toHaveBeenCalledOnce());
+      await vi.waitFor(() => expect(update.mock.calls.some(([request]) => (
+        request.target.instance_id === initialAgent.instance_id
+        && request.mutation.kind === "set_view_state"
+      ))).toBe(true));
+    });
+    expect(run).toHaveBeenCalledOnce();
+    expect(run.mock.calls[0]?.[0].conversation_id).toBeNull();
+    expect(currentPicker().value).toBe("");
+    expect(currentComposer().value).toBe("Start a durable Agent task");
+    const firstPersist = update.mock.calls.find(([request]) => (
+      request.target.instance_id === initialAgent.instance_id
+      && request.mutation.kind === "set_view_state"
+      && (request.mutation.view_state as { conversation_id?: unknown }).conversation_id
+        === createdConversationIds[0]
+    ));
+    expect(firstPersist).toBeDefined();
+    expect(firstPersist![0].target.expected_project_revision).toBe(createdProjectRevisions[0]);
+    expect(firstPersist![0].target.activation_generation).toBe(initialAgent.activation_generation);
+
+    await act(async () => {
+      releaseFirstPersistFailure();
+      await settle();
+    });
+    await act(async () => {
+      await vi.waitFor(() => expect(container.querySelector(".rho-action-error")?.textContent)
+        .toContain("Agent Send selection persist stale for test."));
+    });
+    expect(currentPicker().value).toBe("");
+    expect(currentComposer().value).toBe("Start a durable Agent task");
+    expect([...currentPicker().options].map((option) => option.value))
+      .toContain(createdConversationIds[0]);
+    expect((await transport.loadSurfaces()).catalog.instances.find(
+      (instance) => instance.instance_id === initialAgent.instance_id,
+    )?.view_state).toMatchObject({ conversation_id: null });
+
+    await act(async () => {
+      currentAgent().querySelector<HTMLButtonElement>(
+        ".rho-agent-context-controls .rho-primary-action",
+      )!.click();
+      await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() => expect(currentPicker().value).toBe(createdConversationIds[1]));
+      await settle();
+    });
+    expect(update.mock.calls.filter(([request]) => (
+      request.target.instance_id === initialAgent.instance_id
+      && request.mutation.kind === "set_view_state"
+      && typeof (request.mutation.view_state as { conversation_id?: unknown }).conversation_id
+        === "string"
+    ))).toHaveLength(2);
+    expect(currentComposer().value).toBe("");
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+  });
+
+  it.each([
+    ["A→B", false],
+    ["same-root A1→A2", true],
+  ])("drains a no-conversation Agent Send before %s and isolates the accepted activation", async (
+    _label,
+    sameRoot,
+  ) => {
+    const projectA = "/projects/project-a";
+    const projectB = "/projects/project-b";
+    saveProjectHistory(window.localStorage, { version: 1, paths: [projectA, projectB] });
+    const transport = createMockUiKernelTransport(`?project=${encodeURIComponent(projectA)}`);
+    const initialKernel = await transport.loadSnapshot();
+    transport.publish({
+      ...initialKernel,
+      health: {
+        ...initialKernel.health,
+        agent: { state: "ready", label: "Agent runtime ready", detail: null },
+      },
+    });
+    const initialSurfaces = await transport.loadSurfaces();
+    const initialAgent = initialSurfaces.catalog.instances.find(
+      (instance) => instance.instance_id === "instance:agent-shared",
+    )!;
+    transport.publishSurfaces({
+      ...initialSurfaces,
+      catalog: {
+        ...initialSurfaces.catalog,
+        instances: initialSurfaces.catalog.instances.map((instance) => (
+          instance.instance_id === initialAgent.instance_id
+            ? {
+                ...instance,
+                surface_revision: instance.surface_revision + 1,
+                view_state: {
+                  conversation_id: null,
+                  mode: "ask",
+                  composer: "",
+                  auto_approve: false,
+                },
+              }
+            : instance
+        )),
+      },
+    });
+    const listAgentConversations = transport.listAgentConversations.bind(transport);
+    const runAgent = transport.runAgent.bind(transport);
+    const updateSurface = transport.updateSurface.bind(transport);
+    const openProject = transport.openProject.bind(transport);
+    let conversationsVisible = false;
+    transport.listAgentConversations = vi.fn((limit = 50) => (
+      conversationsVisible ? listAgentConversations(limit) : Promise.resolve([])
+    ));
+    const advanceProjectRevision = async () => {
+      const [kernel, surfaces, studio, runtimes, resources] = await Promise.all([
+        transport.loadSnapshot(),
+        transport.loadSurfaces(),
+        transport.loadStudio(),
+        transport.loadRuntimes(),
+        transport.loadResources(),
+      ]);
+      const nextProjectRevision = kernel.context.project_revision + 1;
+      transport.publishSurfaces({ ...surfaces, project_revision: nextProjectRevision });
+      transport.publishStudio({ ...studio, project_revision: nextProjectRevision });
+      transport.publishRuntimes({ ...runtimes, project_revision: nextProjectRevision });
+      transport.publishResources({ ...resources, project_revision: nextProjectRevision });
+      transport.publish({
+        ...kernel,
+        context: { ...kernel.context, project_revision: nextProjectRevision },
+      });
+      return nextProjectRevision;
+    };
+    let markRunRequested = () => {};
+    const runRequested = new Promise<void>((resolve) => { markRunRequested = resolve; });
+    let releaseRun = () => {};
+    const runBlocked = new Promise<void>((resolve) => { releaseRun = resolve; });
+    let createdConversationId: string | null = null;
+    let createdProjectRevision: number | null = null;
+    const run = vi.fn(async (request: Parameters<typeof transport.runAgent>[0]) => {
+      if (run.mock.calls.length === 1) {
+        markRunRequested();
+        await runBlocked;
+      }
+      const response = await runAgent(request);
+      conversationsVisible = true;
+      if (run.mock.calls.length === 1) {
+        createdConversationId = response.conversation_id;
+        createdProjectRevision = await advanceProjectRevision();
+      }
+      return response;
+    });
+    let markPersistRequested = () => {};
+    const persistRequested = new Promise<void>((resolve) => { markPersistRequested = resolve; });
+    let releasePersist = () => {};
+    const persistBlocked = new Promise<void>((resolve) => { releasePersist = resolve; });
+    const update = vi.fn(async (request: Parameters<typeof transport.updateSurface>[0]) => {
+      if (
+        update.mock.calls.length >= 1
+        && request.target.instance_id === initialAgent.instance_id
+        && request.mutation.kind === "set_view_state"
+        && (request.mutation.view_state as { conversation_id?: unknown }).conversation_id
+          === createdConversationId
+      ) {
+        markPersistRequested();
+        await persistBlocked;
+      }
+      return updateSurface(request);
+    });
+    const broker = vi.fn(async (path: string) => {
+      const response = await openProject(path);
+      const kernel = await transport.loadSnapshot();
+      transport.publish({
+        ...kernel,
+        health: {
+          ...kernel.health,
+          agent: { state: "ready", label: "Agent runtime ready", detail: null },
+        },
+      });
+      return response;
+    });
+    transport.runAgent = run;
+    transport.updateSurface = update;
+    transport.openProject = broker;
+    if (sameRoot) transport.pickProjectDirectory = vi.fn(() => broker(projectA));
+    const { container } = await renderApp(transport);
+    const menu = await openRhoMenu(container);
+    const currentAgent = () => container.querySelector<HTMLElement>(
+      "[data-surface-id='rho.agent']",
+    )!;
+    const currentComposer = () => currentAgent().querySelector<HTMLTextAreaElement>(
+      ".rho-agent-composer textarea",
+    )!;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+    await act(async () => {
+      setValue.call(currentComposer(), "Admitted before project transition");
+      currentComposer().dispatchEvent(new Event("input", { bubbles: true }));
+      await settle();
+    });
+    await act(async () => {
+      currentAgent().querySelector<HTMLButtonElement>(
+        ".rho-agent-context-controls .rho-primary-action",
+      )!.click();
+      await runRequested;
+    });
+    await act(async () => {
+      const target = sameRoot
+        ? menu.querySelector<HTMLButtonElement>(".rho-rho-project")!
+        : menu.querySelector<HTMLButtonElement>(`[data-project-path='${projectB}']`)!;
+      target.click();
+      await settle();
+    });
+    expect(broker).not.toHaveBeenCalled();
+
+    await act(async () => {
+      releaseRun();
+      await persistRequested;
+    });
+    expect(broker).not.toHaveBeenCalled();
+    const persisted = update.mock.calls.find(([request]) => (
+      request.target.instance_id === initialAgent.instance_id
+      && request.mutation.kind === "set_view_state"
+      && (request.mutation.view_state as { conversation_id?: unknown }).conversation_id
+        === createdConversationId
+    ));
+    expect(persisted).toBeDefined();
+    expect(persisted![0].target.expected_project_revision).toBe(createdProjectRevision);
+    expect(persisted![0].target.activation_generation).toBe(initialAgent.activation_generation);
+
+    await act(async () => {
+      releasePersist();
+      await settle();
+    });
+    await act(async () => {
+      await vi.waitFor(() => expect(broker).toHaveBeenCalledOnce());
+      await vi.waitFor(() => expect(container.querySelector(
+        "[data-surface-id='rho.agent']",
+      )).not.toBeNull());
+    });
+    expect(update.mock.invocationCallOrder[update.mock.calls.indexOf(persisted!)])
+      .toBeLessThan(broker.mock.invocationCallOrder[0]!);
+    const targetPicker = () => currentAgent().querySelector<HTMLSelectElement>(
+      "select[aria-label^='Conversation for']",
+    )!;
+    expect(targetPicker().value === createdConversationId).toBe(sameRoot);
+    const targetConversationIds = [...targetPicker().options].map((option) => option.value);
+    expect(targetConversationIds.includes(createdConversationId!)).toBe(sameRoot);
+    if (!sameRoot) {
+      expect(currentAgent().textContent).not.toContain("Admitted before project transition");
+    }
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+    const targetConversationId = targetPicker().value;
+
+    await act(async () => {
+      setValue.call(currentComposer(), "Target activation retry");
+      currentComposer().dispatchEvent(new Event("input", { bubbles: true }));
+      await settle();
+    });
+    await act(async () => {
+      currentAgent().querySelector<HTMLButtonElement>(
+        ".rho-agent-context-controls .rho-primary-action",
+      )!.click();
+      await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() => expect(currentComposer().value).toBe(""));
+      await settle();
+    });
+    expect(run.mock.calls[1]?.[0].conversation_id).toBe(targetConversationId || null);
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+  });
+
+  it.each([
+    ["A→B", false],
+    ["same-root A1→A2", true],
+  ])("drains Agent New before %s and isolates the accepted target activation", async (
+    _label,
+    sameRoot,
+  ) => {
+    const projectA = "/projects/project-a";
+    const projectB = "/projects/project-b";
+    saveProjectHistory(window.localStorage, { version: 1, paths: [projectA, projectB] });
+    const transport = createMockUiKernelTransport(`?project=${encodeURIComponent(projectA)}`);
+    const createAgentConversation = transport.createAgentConversation.bind(transport);
+    const updateSurface = transport.updateSurface.bind(transport);
+    const openProject = transport.openProject.bind(transport);
+    const initialSurfaces = await transport.loadSurfaces();
+    const initialAgent = initialSurfaces.catalog.instances.find(
+      (instance) => instance.instance_id === "instance:agent-shared",
+    )!;
+    const advanceProjectRevision = async () => {
+      const [kernel, surfaces, studio, runtimes, resources] = await Promise.all([
+        transport.loadSnapshot(),
+        transport.loadSurfaces(),
+        transport.loadStudio(),
+        transport.loadRuntimes(),
+        transport.loadResources(),
+      ]);
+      const nextProjectRevision = kernel.context.project_revision + 1;
+      transport.publishSurfaces({ ...surfaces, project_revision: nextProjectRevision });
+      transport.publishStudio({ ...studio, project_revision: nextProjectRevision });
+      transport.publishRuntimes({ ...runtimes, project_revision: nextProjectRevision });
+      transport.publishResources({ ...resources, project_revision: nextProjectRevision });
+      transport.publish({
+        ...kernel,
+        context: { ...kernel.context, project_revision: nextProjectRevision },
+      });
+      return nextProjectRevision;
+    };
+    let markCreateRequested = () => {};
+    const createRequested = new Promise<void>((resolve) => { markCreateRequested = resolve; });
+    let releaseCreate = () => {};
+    const createBlocked = new Promise<void>((resolve) => { releaseCreate = resolve; });
+    let createdConversationId: string | null = null;
+    let createdProjectRevision: number | null = null;
+    const create = vi.fn(async () => {
+      if (create.mock.calls.length === 1) {
+        markCreateRequested();
+        await createBlocked;
+      }
+      const conversation = await createAgentConversation();
+      if (create.mock.calls.length === 1) {
+        createdConversationId = conversation.conversation_id;
+        createdProjectRevision = await advanceProjectRevision();
+      }
+      return conversation;
+    });
+    let markPersistRequested = () => {};
+    const persistRequested = new Promise<void>((resolve) => { markPersistRequested = resolve; });
+    let releasePersist = () => {};
+    const persistBlocked = new Promise<void>((resolve) => { releasePersist = resolve; });
+    const update = vi.fn(async (request: Parameters<typeof transport.updateSurface>[0]) => {
+      if (
+        request.target.instance_id === initialAgent.instance_id
+        && request.mutation.kind === "set_view_state"
+        && (request.mutation.view_state as { conversation_id?: unknown }).conversation_id
+          === createdConversationId
+      ) {
+        markPersistRequested();
+        await persistBlocked;
+      }
+      return updateSurface(request);
+    });
+    const broker = vi.fn((path: string) => openProject(path));
+    transport.createAgentConversation = create;
+    transport.updateSurface = update;
+    transport.openProject = broker;
+    if (sameRoot) transport.pickProjectDirectory = vi.fn(() => broker(projectA));
+    const { container } = await renderApp(transport);
+    const menu = await openRhoMenu(container);
+    const agent = container.querySelector<HTMLElement>("[data-surface-id='rho.agent']")!;
+
+    await act(async () => {
+      [...agent.querySelectorAll<HTMLButtonElement>(".rho-agent-toolbar-action")]
+        .find((button) => button.textContent === "New")!
+        .click();
+      await createRequested;
+    });
+    await act(async () => {
+      const target = sameRoot
+        ? menu.querySelector<HTMLButtonElement>(".rho-rho-project")!
+        : menu.querySelector<HTMLButtonElement>(`[data-project-path='${projectB}']`)!;
+      target.click();
+      await settle();
+    });
+    expect(broker).not.toHaveBeenCalled();
+
+    await act(async () => {
+      releaseCreate();
+      await persistRequested;
+    });
+    expect(broker).not.toHaveBeenCalled();
+    const persisted = update.mock.calls.find(([request]) => (
+      request.target.instance_id === initialAgent.instance_id
+      && request.mutation.kind === "set_view_state"
+      && (request.mutation.view_state as { conversation_id?: unknown }).conversation_id
+        === createdConversationId
+    ));
+    expect(persisted).toBeDefined();
+    expect(persisted![0].target.expected_project_revision).toBe(createdProjectRevision);
+    expect(persisted![0].target.activation_generation).toBe(initialAgent.activation_generation);
+
+    await act(async () => {
+      releasePersist();
+      await settle();
+    });
+    await act(async () => {
+      await vi.waitFor(() => expect(broker).toHaveBeenCalledOnce());
+      await vi.waitFor(() => expect(
+        container.querySelector("[data-surface-id='rho.agent']"),
+      ).not.toBeNull());
+    });
+    expect(createdConversationId).not.toBeNull();
+    expect(create.mock.invocationCallOrder[0])
+      .toBeLessThan(broker.mock.invocationCallOrder[0]!);
+    expect(update.mock.invocationCallOrder[update.mock.calls.indexOf(persisted!)])
+      .toBeLessThan(broker.mock.invocationCallOrder[0]!);
+    const targetAgent = container.querySelector<HTMLElement>("[data-surface-id='rho.agent']")!;
+    const targetPicker = targetAgent.querySelector<HTMLSelectElement>(
+      "select[aria-label^='Conversation for']",
+    )!;
+    expect(targetPicker.value === createdConversationId).toBe(sameRoot);
+    expect([...targetPicker.options].some((option) => option.value === createdConversationId))
+      .toBe(sameRoot);
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+
+    await act(async () => {
+      [...targetAgent.querySelectorAll<HTMLButtonElement>(".rho-agent-toolbar-action")]
+        .find((button) => button.textContent === "New")!
+        .click();
+      await vi.waitFor(() => expect(create).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() => expect(container.querySelector<HTMLSelectElement>(
+        "[data-surface-id='rho.agent'] select[aria-label^='Conversation for']",
+      )?.value).not.toBe(createdConversationId));
+      await settle();
+    });
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+  });
+
+  it.each([
+    ["A→B", false],
+    ["same-root A1→A2", true],
+  ])(
+    "revokes returned and retained File workflows before the accepted %s Console can use them",
+    async (_label, sameRoot) => {
+      const projectA = "/projects/project-a";
+      const projectB = "/projects/project-b";
+      saveProjectHistory(window.localStorage, { version: 1, paths: [projectA, projectB] });
+      const transport = createMockUiKernelTransport(`?project=${encodeURIComponent(projectA)}`);
+      const openProject = transport.openProject.bind(transport);
+      const broker = vi.fn((path: string) => openProject(path));
+      transport.openProject = broker;
+      if (sameRoot) transport.pickProjectDirectory = vi.fn(() => broker(projectA));
+      const initial = await transport.loadSnapshot();
+      const { container } = await renderApp(transport);
+      const router = new ConsoleExecutionRouter();
+      router.activate({
+        epoch: 1,
+        projectId: initial.project.project_id,
+        projectRevision: initial.context.project_revision,
+      });
+      const sourceSubmit = vi.fn(() => ({ accepted: true, message: null }));
+      router.register({ instanceId: "console:A", submitSource: sourceSubmit });
+      router.markPreferred("console:A");
+      const targetSubmit = vi.fn(() => ({ accepted: true, message: null }));
+      const prepare = vi.fn(async () => ({
+        instanceId: "console:unexpected",
+        submitSource: targetSubmit,
+      }));
+      const report = vi.fn();
+      const updateDraft = vi.fn(async (content: Parameters<FileMutationWorkflow["updateDraft"]>[0]) => {
+        return content;
+      });
+      const save = vi.fn(async (content: Parameters<FileMutationWorkflow["save"]>[0]) => {
+        return content;
+      });
+      const ports: FileMutationWorkflow = {
+        updateDraft,
+        save,
+        runSourceExecution: (execution) => router.run(
+          "source:A",
+          execution,
+          prepare,
+          report,
+        ),
+      };
+      const escaped = await runRevocableFileMutationWorkflow(
+        async (workflow) => workflow,
+        ports,
+      );
+      let retained: FileMutationWorkflow | null = null;
+      await expect(runRevocableFileMutationWorkflow(
+        async (workflow) => {
+          retained = workflow;
+          throw new Error("Outer File workflow rejected for test.");
+        },
+        ports,
+      )).rejects.toThrow("Outer File workflow rejected for test");
+
+      const menu = await openRhoMenu(container);
+      await act(async () => {
+        const target = sameRoot
+          ? menu.querySelector<HTMLButtonElement>(".rho-rho-project")!
+          : menu.querySelector<HTMLButtonElement>(`[data-project-path='${projectB}']`)!;
+        target.click();
+        await vi.waitFor(() => expect(broker).toHaveBeenCalledOnce());
+        await settle();
+      });
+      const target = await transport.loadSnapshot();
+      if (sameRoot) {
+        expect(target.project.project_id).toBe(initial.project.project_id);
+        expect(target.context.project_revision).toBeGreaterThan(initial.context.project_revision);
+      } else {
+        expect(target.project.project_id).not.toBe(initial.project.project_id);
+      }
+      router.activate({
+        epoch: 2,
+        projectId: target.project.project_id,
+        projectRevision: target.context.project_revision,
+      });
+      router.register({ instanceId: "console:target", submitSource: targetSubmit });
+      router.markPreferred("console:target");
+      const execution: SourceExecutionSubmission = {
+        kind: "expression",
+        code: "A_ESCAPED_RUN()",
+        start: 0,
+        end: 15,
+        range: {
+          start_line: 1,
+          start_column: 1,
+          end_line: 1,
+          end_column: 16,
+        },
+        next_cursor: null,
+        source_path: "analysis.R",
+        document_version: 1,
+      };
+      const content = {} as Parameters<FileMutationWorkflow["save"]>[0];
+
+      await expect(escaped.updateDraft(content, "escaped"))
+        .rejects.toThrow("File workflow capability has expired");
+      await expect(escaped.save(content))
+        .rejects.toThrow("File workflow capability has expired");
+      await expect(escaped.runSourceExecution(execution))
+        .rejects.toThrow("File workflow capability has expired");
+      await expect(retained!.updateDraft(content, "retained"))
+        .rejects.toThrow("File workflow capability has expired");
+      await expect(retained!.save(content))
+        .rejects.toThrow("File workflow capability has expired");
+      await expect(retained!.runSourceExecution(execution))
+        .rejects.toThrow("File workflow capability has expired");
+      expect(updateDraft).not.toHaveBeenCalled();
+      expect(save).not.toHaveBeenCalled();
+      expect(sourceSubmit).not.toHaveBeenCalled();
+      expect(targetSubmit).not.toHaveBeenCalled();
+      expect(prepare).not.toHaveBeenCalled();
+      expect(report).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["A→B", false],
+    ["same-root A1→A2", true],
+  ])("drains one dirty File Save composite before %s and admits a target retry", async (
+    _label,
+    sameRoot,
+  ) => {
+    const projectA = "/projects/project-a";
+    const projectB = "/projects/project-b";
+    saveProjectHistory(window.localStorage, { version: 1, paths: [projectA, projectB] });
+    const transport = createMockUiKernelTransport(`?project=${encodeURIComponent(projectA)}`);
+    const updateResourceDraft = transport.updateResourceDraft.bind(transport);
+    const saveResource = transport.saveResource.bind(transport);
+    const openProject = transport.openProject.bind(transport);
+    const advanceProjectRevision = async () => {
+      const [kernel, surfaces, studio, runtimes, resources] = await Promise.all([
+        transport.loadSnapshot(),
+        transport.loadSurfaces(),
+        transport.loadStudio(),
+        transport.loadRuntimes(),
+        transport.loadResources(),
+      ]);
+      const nextProjectRevision = kernel.context.project_revision + 1;
+      transport.publish({
+        ...kernel,
+        context: { ...kernel.context, project_revision: nextProjectRevision },
+      });
+      transport.publishSurfaces({ ...surfaces, project_revision: nextProjectRevision });
+      transport.publishStudio({ ...studio, project_revision: nextProjectRevision });
+      transport.publishRuntimes({ ...runtimes, project_revision: nextProjectRevision });
+      transport.publishResources({ ...resources, project_revision: nextProjectRevision });
+      return nextProjectRevision;
+    };
+    let markDraftRequested = () => {};
+    const draftRequested = new Promise<void>((resolve) => { markDraftRequested = resolve; });
+    let releaseDraft = () => {};
+    const draftBlocked = new Promise<void>((resolve) => { releaseDraft = resolve; });
+    let markSaveRequested = () => {};
+    const saveRequested = new Promise<void>((resolve) => { markSaveRequested = resolve; });
+    let releaseSave = () => {};
+    const saveBlocked = new Promise<void>((resolve) => { releaseSave = resolve; });
+    let firstDraftResult: Awaited<ReturnType<typeof transport.updateResourceDraft>> | null = null;
+    let settledDraftProjectRevision: number | null = null;
+    const updateDraft = vi.fn(async (
+      request: Parameters<typeof transport.updateResourceDraft>[0],
+    ) => {
+      if (updateDraft.mock.calls.length === 1) {
+        markDraftRequested();
+        await draftBlocked;
+      }
+      const result = await updateResourceDraft(request);
+      if (updateDraft.mock.calls.length === 1) {
+        firstDraftResult = result;
+        settledDraftProjectRevision = await advanceProjectRevision();
+      }
+      return result;
+    });
+    const save = vi.fn(async (request: Parameters<typeof transport.saveResource>[0]) => {
+      if (save.mock.calls.length === 1) {
+        markSaveRequested();
+        await saveBlocked;
+      }
+      return saveResource(request);
+    });
+    const broker = vi.fn((path: string) => openProject(path));
+    transport.updateResourceDraft = updateDraft;
+    transport.saveResource = save;
+    transport.openProject = broker;
+    if (sameRoot) transport.pickProjectDirectory = vi.fn(() => broker(projectA));
+    const { container } = await renderApp(transport);
+    const menu = await openRhoMenu(container);
+    const source = container.querySelector<HTMLElement>("[data-surface-id='rho.file-source']")!;
+    const editor = source.querySelector<HTMLTextAreaElement>(".rho-source-editor")!;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+    const sourceMarker = `A_SAVE_${sameRoot ? "SAME_ROOT" : "TO_B"} <- TRUE\n`;
+
+    await act(async () => {
+      setValue.call(editor, sourceMarker);
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+      source.querySelector<HTMLButtonElement>(".rho-file-save")!.click();
+      await draftRequested;
+    });
+    await act(async () => {
+      const target = sameRoot
+        ? menu.querySelector<HTMLButtonElement>(".rho-rho-project")!
+        : menu.querySelector<HTMLButtonElement>(`[data-project-path='${projectB}']`)!;
+      target.click();
+      await settle();
+    });
+    expect(broker).not.toHaveBeenCalled();
+
+    await act(async () => {
+      releaseDraft();
+      await saveRequested;
+    });
+    expect(firstDraftResult).not.toBeNull();
+    expect(save.mock.calls[0]?.[0].expected_document_revision)
+      .toBe(firstDraftResult!.document_revision);
+    expect(save.mock.calls[0]?.[0].target.expected_project_revision)
+      .toBe(settledDraftProjectRevision);
+    expect(broker).not.toHaveBeenCalled();
+
+    await act(async () => {
+      releaseSave();
+      await vi.waitFor(() => expect(
+        broker,
+        container.querySelector(".rho-project-switch-error")?.textContent ?? container.textContent ?? "",
+      ).toHaveBeenCalledOnce());
+      await settle();
+    });
+    await act(async () => {
+      await vi.waitFor(() => expect(
+        container.querySelector("[data-surface-id='rho.file-source']"),
+        container.querySelector(".rho-project-switch-error")?.textContent
+          ?? container.textContent
+          ?? "",
+      ).not.toBeNull());
+    });
+    expect(updateDraft.mock.invocationCallOrder[0])
+      .toBeLessThan(save.mock.invocationCallOrder[0]!);
+    expect(save.mock.invocationCallOrder[0])
+      .toBeLessThan(broker.mock.invocationCallOrder[0]!);
+    const targetEditor = container.querySelector<HTMLTextAreaElement>(
+      "[data-surface-id='rho.file-source'] .rho-source-editor",
+    )!;
+    expect(targetEditor.value.includes(sourceMarker.trim())).toBe(sameRoot);
+    expect(container.querySelector<HTMLButtonElement>(
+      "[data-surface-id='rho.file-source'] .rho-file-save",
+    )?.disabled).toBe(true);
+
+    const targetMarker = `TARGET_SAVE_${sameRoot ? "A2" : "B"} <- TRUE\n`;
+    await act(async () => {
+      setValue.call(targetEditor, targetMarker);
+      targetEditor.dispatchEvent(new Event("input", { bubbles: true }));
+      container.querySelector<HTMLButtonElement>(
+        "[data-surface-id='rho.file-source'] .rho-file-save",
+      )!.click();
+      await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+      await settle();
+    });
+    await act(async () => {
+      await vi.waitFor(() => expect(container.querySelector<HTMLButtonElement>(
+        "[data-surface-id='rho.file-source'] .rho-file-save",
+      )?.disabled).toBe(true));
+      await settle();
+    });
+    const targetProjectId = (await transport.loadResources()).project_id;
+    expect(save.mock.calls[1]?.[0].target.project_id).toBe(targetProjectId);
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+
+    if (!sameRoot) {
+      const returnMenu = await openRhoMenu(container);
+      await act(async () => {
+        returnMenu.querySelector<HTMLButtonElement>(`[data-project-path='${projectA}']`)!.click();
+        await vi.waitFor(() => expect(
+          container.querySelector(".rho-statusbar")?.textContent,
+        ).toContain(projectA));
+      });
+      expect(container.querySelector<HTMLTextAreaElement>(
+        "[data-surface-id='rho.file-source'] .rho-source-editor",
+      )?.value).toBe(sourceMarker);
+    }
+  });
+
+  it.each([
+    ["A→B", false],
+    ["same-root A1→A2", true],
+  ])("drains a rejected File Save before %s, isolates its error, and admits target retry", async (
+    _label,
+    sameRoot,
+  ) => {
+    const projectA = "/projects/project-a";
+    const projectB = "/projects/project-b";
+    saveProjectHistory(window.localStorage, { version: 1, paths: [projectA, projectB] });
+    const transport = createMockUiKernelTransport(`?project=${encodeURIComponent(projectA)}`);
+    const update = vi.spyOn(transport, "updateResourceDraft");
+    const saveResource = transport.saveResource.bind(transport);
+    const openProject = transport.openProject.bind(transport);
+    let markSaveRequested = () => {};
+    const saveRequested = new Promise<void>((resolve) => { markSaveRequested = resolve; });
+    let releaseSaveFailure = () => {};
+    const saveFailureBlocked = new Promise<void>((resolve) => {
+      releaseSaveFailure = resolve;
+    });
+    const save = vi.fn(async (request: Parameters<typeof transport.saveResource>[0]) => {
+      if (save.mock.calls.length === 1) {
+        markSaveRequested();
+        await saveFailureBlocked;
+        throw new Error("Old File save rejected for test.");
+      }
+      return saveResource(request);
+    });
+    const broker = vi.fn((path: string) => openProject(path));
+    transport.saveResource = save;
+    transport.openProject = broker;
+    if (sameRoot) transport.pickProjectDirectory = vi.fn(() => broker(projectA));
+    const { container } = await renderApp(transport);
+    const menu = await openRhoMenu(container);
+    const source = container.querySelector<HTMLElement>("[data-surface-id='rho.file-source']")!;
+    const editor = source.querySelector<HTMLTextAreaElement>(".rho-source-editor")!;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+    const sourceMarker = `OLD_SAVE_FAILURE_${sameRoot ? "A1" : "A"} <- TRUE\n`;
+
+    await act(async () => {
+      setValue.call(editor, sourceMarker);
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+      source.querySelector<HTMLButtonElement>(".rho-file-save")!.click();
+      await saveRequested;
+    });
+    expect(update).toHaveBeenCalledOnce();
+    expect(save).toHaveBeenCalledOnce();
+    expect(broker).not.toHaveBeenCalled();
+
+    await act(async () => {
+      const target = sameRoot
+        ? menu.querySelector<HTMLButtonElement>(".rho-rho-project")!
+        : menu.querySelector<HTMLButtonElement>(`[data-project-path='${projectB}']`)!;
+      target.click();
+      await settle();
+    });
+    expect(broker).not.toHaveBeenCalled();
+
+    await act(async () => {
+      releaseSaveFailure();
+      await settle();
+    });
+    await act(async () => {
+      await vi.waitFor(() => expect(
+        broker,
+        container.querySelector(".rho-project-switch-error")?.textContent
+          ?? container.textContent
+          ?? "",
+      ).toHaveBeenCalledOnce());
+      await vi.waitFor(() => expect(
+        container.querySelector("[data-surface-id='rho.file-source']"),
+      ).not.toBeNull());
+    });
+    expect(save.mock.invocationCallOrder[0])
+      .toBeLessThan(broker.mock.invocationCallOrder[0]!);
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+    const targetEditor = container.querySelector<HTMLTextAreaElement>(
+      "[data-surface-id='rho.file-source'] .rho-source-editor",
+    )!;
+    expect(targetEditor.value.includes(sourceMarker.trim())).toBe(sameRoot);
+
+    const targetMarker = `TARGET_SAVE_RECOVERY_${sameRoot ? "A2" : "B"} <- TRUE\n`;
+    await act(async () => {
+      setValue.call(targetEditor, targetMarker);
+      targetEditor.dispatchEvent(new Event("input", { bubbles: true }));
+      container.querySelector<HTMLButtonElement>(
+        "[data-surface-id='rho.file-source'] .rho-file-save",
+      )!.click();
+      await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+      await settle();
+    });
+    await act(async () => {
+      await vi.waitFor(() => expect(container.querySelector<HTMLButtonElement>(
+        "[data-surface-id='rho.file-source'] .rho-file-save",
+      )?.disabled).toBe(true));
+    });
+    const targetProjectId = (await transport.loadResources()).project_id;
+    expect(save.mock.calls[1]?.[0].target.project_id).toBe(targetProjectId);
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+  });
+
+  it.each([
+    ["A→B", false],
+    ["same-root A1→A2", true],
+  ])("drains dirty File Run preparation before %s, drops the old handoff, and admits the target Run", async (
+    _label,
+    sameRoot,
+  ) => {
+    const projectA = "/projects/project-a";
+    const projectB = "/projects/project-b";
+    saveProjectHistory(window.localStorage, { version: 1, paths: [projectA, projectB] });
+    const transport = createMockUiKernelTransport(`?project=${encodeURIComponent(projectA)}`);
+    const studio = await transport.loadStudio();
+    const nextStudio = structuredClone(studio);
+    const root = nextStudio.scene.root;
+    if (root.kind !== "container") throw new Error("Mock Studio root must be a container.");
+    const center = root.children[1]?.child;
+    if (center?.kind !== "container") throw new Error("Mock Studio center must be a container.");
+    (center as unknown as { children: LayoutChild[] }).children = center.children.slice(0, 1);
+    transport.publishStudio(nextStudio);
+    const updateResourceDraft = transport.updateResourceDraft.bind(transport);
+    const applyStudio = transport.applyStudio.bind(transport);
+    const openProject = transport.openProject.bind(transport);
+    let markDraftRequested = () => {};
+    const draftRequested = new Promise<void>((resolve) => { markDraftRequested = resolve; });
+    let releaseDraft = () => {};
+    const draftBlocked = new Promise<void>((resolve) => { releaseDraft = resolve; });
+    const updateDraft = vi.fn(async (
+      request: Parameters<typeof transport.updateResourceDraft>[0],
+    ) => {
+      if (updateDraft.mock.calls.length === 1) {
+        markDraftRequested();
+        await draftBlocked;
+      }
+      return updateResourceDraft(request);
+    });
+    let markPreparationRequested = () => {};
+    const preparationRequested = new Promise<void>((resolve) => {
+      markPreparationRequested = resolve;
+    });
+    let releasePreparation = () => {};
+    const preparationBlocked = new Promise<void>((resolve) => {
+      releasePreparation = resolve;
+    });
+    const apply = vi.fn(async (request: Parameters<typeof transport.applyStudio>[0]) => {
+      if (apply.mock.calls.length === 1) {
+        markPreparationRequested();
+        await preparationBlocked;
+      }
+      return applyStudio(request);
+    });
+    const broker = vi.fn((path: string) => openProject(path));
+    const execute = vi.spyOn(transport, "startRuntimeExecution");
+    transport.updateResourceDraft = updateDraft;
+    transport.applyStudio = apply;
+    transport.openProject = broker;
+    if (sameRoot) transport.pickProjectDirectory = vi.fn(() => broker(projectA));
+    const { container } = await renderApp(transport);
+    const menu = await openRhoMenu(container);
+    const source = container.querySelector<HTMLElement>("[data-surface-id='rho.file-source']")!;
+    const editor = source.querySelector<HTMLTextAreaElement>(".rho-source-editor")!;
+    const runButton = source.querySelector<HTMLButtonElement>(
+      "[aria-label='Run selection or current R expression in Console']",
+    )!;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+    const sourceCode = `A_RUN_${sameRoot ? "SAME_ROOT" : "TO_B"}()`;
+
+    await act(async () => {
+      setValue.call(editor, `${sourceCode}\n`);
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+      editor.setSelectionRange(0, 0);
+      runButton.click();
+      await draftRequested;
+    });
+    await act(async () => {
+      releaseDraft();
+      await preparationRequested;
+    });
+    expect(updateDraft).toHaveBeenCalledOnce();
+    expect(apply).toHaveBeenCalledOnce();
+    expect(broker).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+
+    await act(async () => {
+      const target = sameRoot
+        ? menu.querySelector<HTMLButtonElement>(".rho-rho-project")!
+        : menu.querySelector<HTMLButtonElement>(`[data-project-path='${projectB}']`)!;
+      target.click();
+      await settle();
+    });
+    expect(broker).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+
+    await act(async () => {
+      releasePreparation();
+      await vi.waitFor(() => expect(
+        broker,
+        container.querySelector(".rho-project-switch-error")?.textContent ?? container.textContent ?? "",
+      ).toHaveBeenCalledOnce());
+      await settle();
+    });
+    await act(async () => {
+      await vi.waitFor(() => expect(
+        container.querySelector("[data-surface-id='rho.file-source']"),
+        container.querySelector(".rho-project-switch-error")?.textContent
+          ?? container.textContent
+          ?? "",
+      ).not.toBeNull());
+    });
+    expect(updateDraft.mock.invocationCallOrder[0])
+      .toBeLessThan(apply.mock.invocationCallOrder[0]!);
+    expect(apply.mock.invocationCallOrder[0])
+      .toBeLessThan(broker.mock.invocationCallOrder[0]!);
+    expect(execute).not.toHaveBeenCalled();
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+    const targetEditor = container.querySelector<HTMLTextAreaElement>(
+      "[data-surface-id='rho.file-source'] .rho-source-editor",
+    )!;
+    expect(targetEditor.value.includes(sourceCode)).toBe(sameRoot);
+
+    const targetCode = `TARGET_RUN_${sameRoot ? "A2" : "B"}()`;
+    await act(async () => {
+      setValue.call(targetEditor, `${targetCode}\n`);
+      targetEditor.dispatchEvent(new Event("input", { bubbles: true }));
+      targetEditor.setSelectionRange(0, 0);
+      container.querySelector<HTMLButtonElement>(
+        "[data-surface-id='rho.file-source'] [aria-label='Run selection or current R expression in Console']",
+      )!.click();
+      await vi.waitFor(() => expect(execute).toHaveBeenCalledOnce());
+      await settle();
+    });
+    const targetRuntime = await transport.loadRuntimes();
+    expect(execute.mock.calls[0]?.[0]).toMatchObject({
+      runtime: {
+        project_id: targetRuntime.project_id,
+        expected_project_revision: targetRuntime.project_revision,
+      },
+      code: targetCode,
+    });
+    expect(execute.mock.calls.some(([request]) => request.code === sourceCode)).toBe(false);
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+  });
+
+  it("drops a not-yet-admitted A Console start before A→B and admits a new B execution", async () => {
+    const projectA = "/projects/project-a";
+    const projectB = "/projects/project-b";
+    saveProjectHistory(window.localStorage, { version: 1, paths: [projectA, projectB] });
+    const transport = createMockUiKernelTransport(`?project=${encodeURIComponent(projectA)}`);
+    const updateSurface = transport.updateSurface.bind(transport);
+    let markUpdateRequested = () => {};
+    const updateRequested = new Promise<void>((resolve) => { markUpdateRequested = resolve; });
+    let releaseUpdate = () => {};
+    const updateBlocked = new Promise<void>((resolve) => { releaseUpdate = resolve; });
+    let deferFirstUpdate = true;
+    const update = vi.fn(async (request: Parameters<typeof transport.updateSurface>[0]) => {
+      if (deferFirstUpdate) {
+        deferFirstUpdate = false;
+        markUpdateRequested();
+        await updateBlocked;
+      }
+      return updateSurface(request);
+    });
+    transport.updateSurface = update;
+    const startExecution = vi.spyOn(transport, "startRuntimeExecution");
+    const openProject = vi.spyOn(transport, "openProject");
+    const { container } = await renderApp(transport);
+    const sourceProjectId = (await transport.loadSurfaces()).project_id;
+    const menu = await openRhoMenu(container);
+    const navigator = container.querySelector<HTMLElement>("[data-surface-id='rho.navigator']")!;
+    const history = [...navigator.querySelectorAll<HTMLButtonElement>("[role='tab']")]
+      .find((button) => button.textContent === "History")!;
+
+    await act(async () => {
+      history.click();
+      await updateRequested;
+    });
+    await act(async () => {
+      const consoleView = container.querySelector<HTMLElement>("[data-surface-id='rho.console']")!;
+      const composer = consoleView.querySelector<HTMLTextAreaElement>("textarea")!;
+      const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+      setValue.call(composer, "A_ONLY_CODE()");
+      composer.dispatchEvent(new Event("input", { bubbles: true }));
+      composer.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      menu.querySelector<HTMLButtonElement>(`[data-project-path='${projectB}']`)!.click();
+      await Promise.resolve();
+    });
+    expect(startExecution).not.toHaveBeenCalled();
+    expect(openProject).not.toHaveBeenCalled();
+
+    await act(async () => {
+      releaseUpdate();
+      await vi.waitFor(() => expect(
+        openProject,
+        container.querySelector(".rho-project-switch-error")?.textContent ?? container.textContent ?? "",
+      ).toHaveBeenCalledOnce());
+    });
+    expect(startExecution).not.toHaveBeenCalled();
+    expect(container.querySelector(".rho-statusbar")?.textContent).toContain(projectB);
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+    expect(update.mock.calls[0]?.[0].target.project_id).toBe(sourceProjectId);
+
+    const navigatorB = container.querySelector<HTMLElement>("[data-surface-id='rho.navigator']")!;
+    update.mockRejectedValueOnce(new Error("B Navigator persistence failed."));
+    await act(async () => {
+      [...navigatorB.querySelectorAll<HTMLButtonElement>("[role='tab']")]
+        .find((button) => button.textContent === "History")!
+        .click();
+      await settle();
+    });
+    expect(container.querySelector(".rho-action-error")?.textContent)
+      .toContain("B Navigator persistence failed");
+    await act(async () => {
+      [...navigatorB.querySelectorAll<HTMLButtonElement>("[role='tab']")]
+        .find((button) => button.textContent === "Files")!
+        .click();
+      await settle();
+    });
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+    const navigatorState = (await transport.loadSurfaces()).catalog.instances.find(
+      (instance) => instance.surface_id === "rho.navigator",
+    )?.view_state as { tab?: unknown } | null;
+    expect(navigatorState?.tab).toBe("files");
+
+    const consoleB = container.querySelector<HTMLElement>("[data-surface-id='rho.console']")!;
+    const composerB = consoleB.querySelector<HTMLTextAreaElement>("textarea")!;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+    await act(async () => {
+      setValue.call(composerB, "B_CURRENT_CODE()");
+      composerB.dispatchEvent(new Event("input", { bubbles: true }));
+      composerB.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+      for (let index = 0; index < 24; index += 1) await Promise.resolve();
+    });
+    expect(startExecution).toHaveBeenCalledOnce();
+    expect(startExecution.mock.calls[0]?.[0].code).toBe("B_CURRENT_CODE()");
+  });
+
+  it("remounts same-id Console on A1→A2 and rejects a pre-admission A1 start", async () => {
+    const projectA = "/projects/project-a";
+    const transport = createMockUiKernelTransport(`?project=${encodeURIComponent(projectA)}`);
+    const reopenProject = transport.openProject.bind(transport);
+    const reopen = vi.fn(() => reopenProject(projectA));
+    transport.pickProjectDirectory = reopen;
+    const updateSurface = transport.updateSurface.bind(transport);
+    let markUpdateRequested = () => {};
+    const updateRequested = new Promise<void>((resolve) => { markUpdateRequested = resolve; });
+    let releaseUpdate = () => {};
+    const updateBlocked = new Promise<void>((resolve) => { releaseUpdate = resolve; });
+    let deferFirstUpdate = true;
+    transport.updateSurface = vi.fn(async (request) => {
+      if (deferFirstUpdate) {
+        deferFirstUpdate = false;
+        markUpdateRequested();
+        await updateBlocked;
+      }
+      return updateSurface(request);
+    });
+    const startExecution = vi.spyOn(transport, "startRuntimeExecution");
+    const { container } = await renderApp(transport);
+    const consoleA1 = container.querySelector<HTMLElement>("[data-surface-id='rho.console']")!;
+    const beforeSurfaces = await transport.loadSurfaces();
+    const beforeInstance = beforeSurfaces.catalog.instances.find(
+      (instance) => instance.instance_id === consoleA1.dataset.instanceId,
+    )!;
+    const menu = await openRhoMenu(container);
+    const navigator = container.querySelector<HTMLElement>("[data-surface-id='rho.navigator']")!;
+
+    await act(async () => {
+      [...navigator.querySelectorAll<HTMLButtonElement>("[role='tab']")]
+        .find((button) => button.textContent === "History")!
+        .click();
+      await updateRequested;
+    });
+    await act(async () => {
+      const composer = consoleA1.querySelector<HTMLTextAreaElement>("textarea")!;
+      const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+      setValue.call(composer, "A1_ONLY_CODE()");
+      composer.dispatchEvent(new Event("input", { bubbles: true }));
+      composer.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      menu.querySelector<HTMLButtonElement>(".rho-rho-project")!.click();
+      await Promise.resolve();
+    });
+    expect(reopen).not.toHaveBeenCalled();
+    expect(startExecution).not.toHaveBeenCalled();
+
+    await act(async () => {
+      releaseUpdate();
+      await vi.waitFor(() => expect(
+        reopen,
+        container.querySelector(".rho-project-switch-error")?.textContent ?? container.textContent ?? "",
+      ).toHaveBeenCalledOnce());
+    });
+    expect(startExecution).not.toHaveBeenCalled();
+    const consoleA2 = container.querySelector<HTMLElement>("[data-surface-id='rho.console']")!;
+    expect(consoleA2).not.toBe(consoleA1);
+    expect(consoleA2.dataset.instanceId).toBe(consoleA1.dataset.instanceId);
+    const afterSurfaces = await transport.loadSurfaces();
+    const afterInstance = afterSurfaces.catalog.instances.find(
+      (instance) => instance.instance_id === consoleA2.dataset.instanceId,
+    )!;
+    expect(afterInstance.activation_generation).toBe(beforeInstance.activation_generation);
+    expect(consoleA2.textContent).not.toContain("A1_ONLY_CODE()");
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+
+    const composerA2 = consoleA2.querySelector<HTMLTextAreaElement>("textarea")!;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+    await act(async () => {
+      setValue.call(composerA2, "A2_CURRENT_CODE()");
+      composerA2.dispatchEvent(new Event("input", { bubbles: true }));
+      composerA2.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+      for (let index = 0; index < 24; index += 1) await Promise.resolve();
+    });
+    expect(startExecution).toHaveBeenCalledOnce();
+    expect(startExecution.mock.calls[0]?.[0].code).toBe("A2_CURRENT_CODE()");
+  });
+
+  it.each([
+    ["A→B", false],
+    ["same-root A1→A2", true],
+  ])("isolates a deferred A Console follow across %s and keeps target follow live", async (_label, sameRoot) => {
+    const projectA = "/projects/project-a";
+    const projectB = "/projects/project-b";
+    saveProjectHistory(window.localStorage, { version: 1, paths: [projectA, projectB] });
+    const transport = createMockUiKernelTransport(`?project=${encodeURIComponent(projectA)}`);
+    const originalFollow = transport.followRuntimeOutput.bind(transport);
+    let markFirstFollowRequested = () => {};
+    const firstFollowRequested = new Promise<void>((resolve) => {
+      markFirstFollowRequested = resolve;
+    });
+    let releaseFirstFollow = () => {};
+    const firstFollowBlocked = new Promise<void>((resolve) => { releaseFirstFollow = resolve; });
+    let firstFollow = true;
+    transport.followRuntimeOutput = vi.fn(async (executionId, afterSequence, listener) => {
+      if (!firstFollow) return originalFollow(executionId, afterSequence, listener);
+      firstFollow = false;
+      const pendingDeliveries: Array<() => void> = [];
+      await originalFollow(executionId, afterSequence, (frame) => {
+        const lateFrame = frame.type === "chunks"
+          ? {
+              ...frame,
+              chunks: frame.chunks.map((chunk, index) => index === 0
+                ? {
+                    ...chunk,
+                    text_payload: "A_LATE_FOLLOW_ONLY",
+                    payload_bytes: 18,
+                  }
+                : chunk),
+            }
+          : frame;
+        pendingDeliveries.push(() => listener(lateFrame));
+      });
+      markFirstFollowRequested();
+      await firstFollowBlocked;
+      for (const deliver of pendingDeliveries) deliver();
+      throw new Error("A late follow rejection");
+    });
+    transport.queueRuntimeEvents([{
+      sequence: 1,
+      runtime_instance_id: "runtime:workspace-r",
+      console_instance_id: "instance:console-a",
+      kind: "workspace_result",
+      payload: {
+        execution: {
+          ok: true,
+          code: "A_FOLLOW_SOURCE()",
+          stdout: "",
+          value: "A_DURABLE_OUTPUT",
+          messages: [],
+          warnings: [],
+          error: null,
+        },
+      },
+    }]);
+    const reopenProject = transport.openProject.bind(transport);
+    const reopen = vi.fn(() => reopenProject(projectA));
+    if (sameRoot) transport.pickProjectDirectory = reopen;
+    const switchProject = sameRoot ? reopen : vi.spyOn(transport, "openProject");
+    const startExecution = vi.spyOn(transport, "startRuntimeExecution");
+    const { container } = await renderApp(transport);
+    const sourceConsole = container.querySelector<HTMLElement>("[data-surface-id='rho.console']")!;
+    const sourceInstance = (await transport.loadSurfaces()).catalog.instances.find(
+      (instance) => instance.instance_id === sourceConsole.dataset.instanceId,
+    )!;
+    const setTextarea = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+
+    await act(async () => {
+      const composer = sourceConsole.querySelector<HTMLTextAreaElement>("textarea")!;
+      setTextarea.call(composer, "A_FOLLOW_SOURCE()");
+      composer.dispatchEvent(new Event("input", { bubbles: true }));
+      composer.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+      await firstFollowRequested;
+    });
+    expect(startExecution).toHaveBeenCalledOnce();
+    expect(transport.followRuntimeOutput).toHaveBeenCalledOnce();
+
+    const menu = await openRhoMenu(container);
+    await act(async () => {
+      if (sameRoot) {
+        menu.querySelector<HTMLButtonElement>(".rho-rho-project")!.click();
+      } else {
+        menu.querySelector<HTMLButtonElement>(`[data-project-path='${projectB}']`)!.click();
+      }
+      await vi.waitFor(() => expect(switchProject).toHaveBeenCalledOnce());
+      for (let index = 0; index < 48; index += 1) await Promise.resolve();
+    });
+    const targetConsole = container.querySelector<HTMLElement>("[data-surface-id='rho.console']")!;
+    expect(sourceConsole.isConnected).toBe(false);
+    expect(targetConsole).not.toBe(sourceConsole);
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+    if (sameRoot) {
+      expect(targetConsole.dataset.instanceId).toBe(sourceConsole.dataset.instanceId);
+      const targetInstance = (await transport.loadSurfaces()).catalog.instances.find(
+        (instance) => instance.instance_id === targetConsole.dataset.instanceId,
+      )!;
+      expect(targetInstance.activation_generation).toBe(sourceInstance.activation_generation);
+    } else {
+      expect(container.querySelector(".rho-statusbar")?.textContent).toContain(projectB);
+      expect(targetConsole.textContent).not.toContain("A_FOLLOW_SOURCE()");
+      expect(targetConsole.textContent).not.toContain("A_DURABLE_OUTPUT");
+    }
+
+    const targetMarker = sameRoot ? "A2_TARGET_FOLLOW" : "B_TARGET_FOLLOW";
+    const targetCode = `${targetMarker}()`;
+    transport.queueRuntimeEvents([{
+      sequence: 1,
+      runtime_instance_id: "runtime:workspace-r",
+      console_instance_id: "instance:console-a",
+      kind: "workspace_result",
+      payload: {
+        execution: {
+          ok: true,
+          code: targetCode,
+          stdout: "",
+          value: targetMarker,
+          messages: [],
+          warnings: [],
+          error: null,
+        },
+      },
+    }]);
+    await act(async () => {
+      const composer = targetConsole.querySelector<HTMLTextAreaElement>("textarea")!;
+      setTextarea.call(composer, targetCode);
+      composer.dispatchEvent(new Event("input", { bubbles: true }));
+      composer.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+      await vi.waitFor(() => expect(startExecution).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() => expect(transport.followRuntimeOutput).toHaveBeenCalledTimes(2));
+      for (let index = 0; index < 16; index += 1) await Promise.resolve();
+    });
+    expect(targetConsole.textContent).toContain(targetMarker);
+    const baselineText = targetConsole.textContent;
+    const baselineEntries = targetConsole.querySelectorAll(".rho-console-entry").length;
+
+    await act(async () => {
+      releaseFirstFollow();
+      for (let index = 0; index < 24; index += 1) await Promise.resolve();
+    });
+    expect(targetConsole.textContent).toBe(baselineText);
+    expect(targetConsole.querySelectorAll(".rho-console-entry")).toHaveLength(baselineEntries);
+    expect(targetConsole.textContent).not.toContain("A_LATE_FOLLOW_ONLY");
+    expect(container.querySelector(".rho-action-error")?.textContent ?? "")
+      .not.toContain("A late follow rejection");
+
+    const otherTab = container.querySelector<HTMLElement>(
+      "[data-rho-tab-instance-id='instance:console-b']",
+    )!;
+    await act(async () => {
+      const dockviewTab = otherTab.closest<HTMLElement>(".dv-tab")!;
+      pointer(dockviewTab, "pointerdown", 10, 10);
+      pointer(dockviewTab, "pointerup", 10, 10);
+      otherTab.click();
+      await settle();
+    });
+    const targetTab = container.querySelector<HTMLElement>(
+      "[data-rho-tab-instance-id='instance:console-a']",
+    )!;
+    await act(async () => {
+      const dockviewTab = targetTab.closest<HTMLElement>(".dv-tab")!;
+      pointer(dockviewTab, "pointerdown", 10, 10);
+      pointer(dockviewTab, "pointerup", 10, 10);
+      targetTab.click();
+      await settle();
+    });
+    const restoredTarget = container.querySelector<HTMLElement>("[data-surface-id='rho.console']")!;
+    expect(restoredTarget.dataset.instanceId).toBe("instance:console-a");
+    expect(restoredTarget.textContent).toContain(targetMarker);
+    expect(restoredTarget.textContent).not.toContain("A_LATE_FOLLOW_ONLY");
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+  });
+
+  it.each([
+    ["A→B", false],
+    ["same-root A1→A2", true],
+  ])("drops a deferred A Runtime reference after %s", async (_label, sameRoot) => {
+    const projectA = "/projects/project-a";
+    const projectB = "/projects/project-b";
+    saveProjectHistory(window.localStorage, { version: 1, paths: [projectA, projectB] });
+    const transport = createMockUiKernelTransport(`?project=${encodeURIComponent(projectA)}`);
+    transport.queueRuntimeEvents([{
+      sequence: 1,
+      runtime_instance_id: "runtime:workspace-r",
+      console_instance_id: "instance:console-a",
+      kind: "workspace_result",
+      payload: {
+        execution: {
+          ok: true,
+          code: "summary(mtcars)",
+          stdout: "summary output",
+          value: "summary value",
+          messages: [],
+          warnings: [],
+          error: null,
+        },
+      },
+    }]);
+    const ready = structuredClone(await transport.loadSnapshot());
+    (ready.health as { agent: typeof ready.health.agent }).agent = {
+      state: "ready",
+      label: "Agent runtime ready",
+      detail: null,
+    };
+    (ready.context as { agent_health: "ready" }).agent_health = "ready";
+    transport.publish(ready);
+    const reopenProject = transport.openProject.bind(transport);
+    const reopen = vi.fn(() => reopenProject(projectA));
+    if (sameRoot) transport.pickProjectDirectory = reopen;
+    const openProject = sameRoot ? null : vi.spyOn(transport, "openProject");
+    const runAgent = vi.spyOn(transport, "runAgent");
+    const { container } = await renderApp(transport);
+    const consoleView = container.querySelector<HTMLElement>("[data-surface-id='rho.console']")!;
+    const composer = consoleView.querySelector<HTMLTextAreaElement>("textarea")!;
+    const setTextarea = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+    await act(async () => {
+      setTextarea.call(composer, "summary(mtcars)");
+      composer.dispatchEvent(new Event("input", { bubbles: true }));
+      composer.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+      for (let index = 0; index < 20; index += 1) await Promise.resolve();
+    });
+    await openInspector(container);
+    await act(async () => {
+      container.querySelector<HTMLElement>("[data-surface-factory='rho.runs']")!
+        .querySelector<HTMLButtonElement>("button")!
+        .click();
+      for (let index = 0; index < 20; index += 1) await Promise.resolve();
+    });
+    const history = container.querySelector<HTMLElement>("[data-surface-id='rho.runs']")!;
+    const createReference = transport.createRuntimeOutputReference.bind(transport);
+    let markReferenceRequested = () => {};
+    const referenceRequested = new Promise<void>((resolve) => { markReferenceRequested = resolve; });
+    let releaseReference = () => {};
+    const referenceBlocked = new Promise<void>((resolve) => { releaseReference = resolve; });
+    transport.createRuntimeOutputReference = vi.fn(async (
+      executionId: string,
+      startSequence?: number,
+      endSequence?: number,
+    ) => {
+      markReferenceRequested();
+      await referenceBlocked;
+      return createReference(executionId, startSequence, endSequence);
+    });
+    const menu = await openRhoMenu(container);
+    await act(async () => {
+      [...history.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "Use output in Agent")!
+        .click();
+      await referenceRequested;
+      if (sameRoot) menu.querySelector<HTMLButtonElement>(".rho-rho-project")!.click();
+      else menu.querySelector<HTMLButtonElement>(`[data-project-path='${projectB}']`)!.click();
+      await vi.waitFor(() => {
+        if (sameRoot) expect(reopen).toHaveBeenCalledOnce();
+        else expect(openProject).toHaveBeenCalledOnce();
+        expect(container.querySelector(".rho-statusbar")?.textContent)
+          .toContain(sameRoot ? projectA : projectB);
+      });
+    });
+
+    await act(async () => {
+      releaseReference();
+      for (let index = 0; index < 16; index += 1) await Promise.resolve();
+    });
+    expect(container.querySelector(".rho-agent-context-chip")).toBeNull();
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+
+    const currentReady = structuredClone(await transport.loadSnapshot());
+    (currentReady.health as { agent: typeof currentReady.health.agent }).agent = {
+      state: "ready",
+      label: "Agent runtime ready",
+      detail: null,
+    };
+    (currentReady.context as { agent_health: "ready" }).agent_health = "ready";
+    await act(async () => {
+      transport.publish(currentReady);
+      await settle();
+    });
+    const agent = container.querySelector<HTMLElement>("[data-surface-id='rho.agent']")!;
+    const agentComposer = agent.querySelector<HTMLTextAreaElement>(".rho-agent-composer textarea")!;
+    await act(async () => {
+      setTextarea.call(agentComposer, "Explain the current project without old output");
+      agentComposer.dispatchEvent(new Event("input", { bubbles: true }));
+      [...agent.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "Send")!
+        .click();
+      for (let index = 0; index < 20; index += 1) await Promise.resolve();
+    });
+    expect(runAgent).toHaveBeenCalledOnce();
+    expect(runAgent.mock.calls[0]?.[0].runtime_output_context).toBeNull();
+  }, 10_000);
 
   it("shows, hides, and persists an optional toolbar component", async () => {
     const transport = createMockUiKernelTransport();
@@ -848,20 +3323,22 @@ describe("Studio foundation app", () => {
   });
 
   it("reloads toolbar preferences when the exact project identity changes", async () => {
-    const transport = createMockUiKernelTransport();
+    const firstPath = "/tmp/toolbar-first";
+    const secondPath = "/tmp/toolbar-other";
+    const transport = createMockUiKernelTransport(`?project=${encodeURIComponent(firstPath)}`);
     const first = await transport.loadUiProfile();
     const firstLayout = setToolbarComponentVisible(defaultToolbarLayout(), "compose", true);
     saveToolbarLayout(window.localStorage, first.profile.project_id, firstLayout);
-    const secondPath = "/tmp/toolbar-other";
     const secondProjectId = `project:mock:${encodeURIComponent(secondPath)}`;
     const secondLayout = setToolbarComponentVisible(defaultToolbarLayout(), "runtime_status", true);
     saveToolbarLayout(window.localStorage, secondProjectId, secondLayout);
+    saveProjectHistory(window.localStorage, { version: 1, paths: [firstPath, secondPath] });
     const { container } = await renderApp(transport);
     expect(container.querySelector("[data-toolbar-component='compose']")).not.toBeNull();
+    const menu = await openRhoMenu(container);
     await act(async () => {
-      await transport.openProject(secondPath);
-      await settle();
-      await settle();
+      menu.querySelector<HTMLButtonElement>(`[data-project-path='${secondPath}']`)!.click();
+      for (let index = 0; index < 20; index += 1) await Promise.resolve();
     });
     expect(container.querySelector("[data-toolbar-component='compose']")).toBeNull();
     expect(container.querySelector("[data-toolbar-component='runtime_status']")).not.toBeNull();
@@ -1599,6 +4076,111 @@ describe("Studio foundation app", () => {
     expect(run.disabled).toBe(false);
   });
 
+  it("reports a delayed current-epoch File Run handoff failure at the advanced revision and recovers", async () => {
+    const transport = createMockUiKernelTransport();
+    const studio = await transport.loadStudio();
+    const nextStudio = structuredClone(studio);
+    const root = nextStudio.scene.root;
+    if (root.kind !== "container") throw new Error("Mock Studio root must be a container.");
+    const center = root.children[1]?.child;
+    if (center?.kind !== "container") throw new Error("Mock Studio center must be a container.");
+    (center as unknown as { children: LayoutChild[] }).children = center.children.slice(0, 1);
+    transport.publishStudio(nextStudio);
+
+    const updateResourceDraft = transport.updateResourceDraft.bind(transport);
+    const applyStudio = transport.applyStudio.bind(transport);
+    const advanceProjectRevision = async () => {
+      const [kernel, surfaces, currentStudio, runtimes, resources] = await Promise.all([
+        transport.loadSnapshot(),
+        transport.loadSurfaces(),
+        transport.loadStudio(),
+        transport.loadRuntimes(),
+        transport.loadResources(),
+      ]);
+      const nextProjectRevision = kernel.context.project_revision + 1;
+      transport.publish({
+        ...kernel,
+        context: { ...kernel.context, project_revision: nextProjectRevision },
+      });
+      transport.publishSurfaces({ ...surfaces, project_revision: nextProjectRevision });
+      transport.publishStudio({ ...currentStudio, project_revision: nextProjectRevision });
+      transport.publishRuntimes({ ...runtimes, project_revision: nextProjectRevision });
+      transport.publishResources({ ...resources, project_revision: nextProjectRevision });
+      return nextProjectRevision;
+    };
+    let settledDraftProjectRevision: number | null = null;
+    const updateDraft = vi.fn(async (
+      request: Parameters<typeof transport.updateResourceDraft>[0],
+    ) => {
+      const result = await updateResourceDraft(request);
+      if (updateDraft.mock.calls.length === 1) {
+        settledDraftProjectRevision = await advanceProjectRevision();
+      }
+      return result;
+    });
+    let markHandoffRequested = () => {};
+    const handoffRequested = new Promise<void>((resolve) => {
+      markHandoffRequested = resolve;
+    });
+    let releaseHandoffFailure = () => {};
+    const handoffFailureBlocked = new Promise<void>((resolve) => {
+      releaseHandoffFailure = resolve;
+    });
+    const apply = vi.fn(async (request: Parameters<typeof transport.applyStudio>[0]) => {
+      if (apply.mock.calls.length === 1) {
+        markHandoffRequested();
+        await handoffFailureBlocked;
+        throw new Error("Console handoff rejected for test.");
+      }
+      return applyStudio(request);
+    });
+    const execute = vi.spyOn(transport, "startRuntimeExecution");
+    transport.updateResourceDraft = updateDraft;
+    transport.applyStudio = apply;
+    const { container } = await renderApp(transport);
+    const source = container.querySelector<HTMLElement>("[data-surface-id='rho.file-source']")!;
+    const editor = source.querySelector<HTMLTextAreaElement>("[aria-label^='Source']")!;
+    const run = source.querySelector<HTMLButtonElement>(
+      "[aria-label='Run selection or current R expression in Console']",
+    )!;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+    const code = "DELAYED_HANDOFF_FAILURE()";
+
+    await act(async () => {
+      setValue.call(editor, `${code}\n`);
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+      editor.setSelectionRange(0, 0);
+      run.click();
+      await handoffRequested;
+    });
+    expect(updateDraft).toHaveBeenCalledOnce();
+    expect(apply).toHaveBeenCalledOnce();
+    expect(settledDraftProjectRevision).not.toBeNull();
+    expect(execute).not.toHaveBeenCalled();
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+
+    await act(async () => {
+      releaseHandoffFailure();
+      await settle();
+    });
+    await act(async () => {
+      await vi.waitFor(() => expect(container.querySelector(".rho-action-error")?.textContent)
+        .toContain("Console handoff rejected for test."));
+    });
+    expect(run.disabled).toBe(false);
+    expect(execute).not.toHaveBeenCalled();
+
+    await act(async () => {
+      run.click();
+      await vi.waitFor(() => expect(execute).toHaveBeenCalledOnce());
+      await settle();
+    });
+    expect(updateDraft).toHaveBeenCalledOnce();
+    expect(apply).toHaveBeenCalledTimes(2);
+    expect(execute.mock.calls[0]?.[0]).toMatchObject({ code });
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+  });
+
   it("creates at most one Console for rapid repeated Run gestures", async () => {
     const transport = createMockUiKernelTransport();
     const studio = await transport.loadStudio();
@@ -1851,19 +4433,33 @@ describe("Studio foundation app", () => {
       await settle();
     });
     expect(navigator.querySelector(".rho-navigator-search")).toBeNull();
+    expect(document.activeElement).toBe(navigator.querySelector(".rho-navigator-search-toggle"));
     expect(navigator.querySelector("[data-nav-file='analysis.R']")).not.toBeNull();
   });
 
   it("makes Navigator sections keyboard-operable and turns recent-output information into an action", async () => {
-    const { container } = await renderApp(createMockUiKernelTransport());
+    const transport = createMockUiKernelTransport();
+    const update = vi.spyOn(transport, "updateSurface");
+    const { container } = await renderApp(transport);
     const navigator = container.querySelector<HTMLElement>("[data-surface-id='rho.navigator']")!;
-    const tabs = [...navigator.querySelectorAll<HTMLButtonElement>("[role='tab']")];
+    const controls = navigator.querySelector<HTMLElement>(".rho-navigator-controls")!;
+    const tablist = controls.querySelector<HTMLElement>(".rho-navigator-tabs")!;
+    const tabs = [...tablist.querySelectorAll<HTMLButtonElement>("[role='tab']")];
+    const searchToggle = controls.querySelector<HTMLButtonElement>(".rho-navigator-search-toggle")!;
     expect(tabs.map((tab) => [tab.textContent, tab.tabIndex, tab.getAttribute("aria-selected")]))
       .toEqual([
         ["Files", 0, "true"],
         ["History", -1, "false"],
         ["Artifacts", -1, "false"],
       ]);
+    expect([...controls.children]).toEqual([tablist, searchToggle]);
+    expect(searchToggle.getAttribute("aria-label")).toBe("Search project files");
+    update.mockClear();
+    await act(async () => {
+      tabs[0]!.click();
+      await settle();
+    });
+    expect(update).not.toHaveBeenCalled();
     await act(async () => {
       tabs[0]!.focus();
       tabs[0]!.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "ArrowRight" }));
@@ -1942,7 +4538,9 @@ describe("Studio foundation app", () => {
     expect(consoleView.querySelectorAll(".rho-console-entry")).toHaveLength(1);
 
     await act(async () => {
-      consoleView.querySelector<HTMLButtonElement>("[aria-label='Filter Console output']")!.click();
+      const filterButton = consoleView.querySelector<HTMLButtonElement>("[aria-label='Filter Console output']");
+      expect(filterButton, consoleView.innerHTML).not.toBeNull();
+      filterButton!.click();
       await settle();
     });
     const filter = consoleView.querySelector<HTMLInputElement>("[aria-label^='Filter output']")!;
@@ -2304,6 +4902,8 @@ describe("Studio foundation app", () => {
 
   it("searches the durable Console journal beyond the mounted transcript and reports incomplete scope", async () => {
     const transport = createMockUiKernelTransport();
+    const startExecution = vi.spyOn(transport, "startRuntimeExecution");
+    const followExecution = vi.spyOn(transport, "followRuntimeOutput");
     const search = vi.spyOn(transport, "searchRuntimeOutput").mockResolvedValue({
       query: "archived warning",
       searched_execution_count: 12,
@@ -2331,7 +4931,14 @@ describe("Studio foundation app", () => {
       composer.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
       for (let index = 0; index < 12; index += 1) await Promise.resolve();
       await settle();
-      consoleView.querySelector<HTMLButtonElement>("[aria-label='Filter Console output']")!.click();
+      expect(consoleView.isConnected).toBe(true);
+      expect(container.querySelector("[data-surface-id='rho.console']")).toBe(consoleView);
+      expect(startExecution).toHaveBeenCalledOnce();
+      await vi.waitFor(() => expect(followExecution).toHaveBeenCalledOnce());
+      expect(followExecution).toHaveBeenCalledOnce();
+      const durableFilterButton = consoleView.querySelector<HTMLButtonElement>("[aria-label='Filter Console output']");
+      expect(durableFilterButton, consoleView.innerHTML).not.toBeNull();
+      durableFilterButton!.click();
       await settle();
     });
     const filter = consoleView.querySelector<HTMLInputElement>("[aria-label^='Filter output']")!;
@@ -2652,6 +5259,282 @@ describe("Studio foundation app", () => {
     expect(container.querySelector(".rho-vibe-manuscript-save-state")?.textContent).toBe("Saved");
   });
 
+  it("opens the local Agent record without flushing or entering Studio", async () => {
+    const transport = createMockUiKernelTransport("?mode=vibe");
+    const profile = structuredClone(await transport.loadUiProfile());
+    const page = profile.profile.vibe_pages.find(
+      (candidate) => candidate.page_id === profile.profile.active_vibe_page_id,
+    )! as unknown as { sections: unknown[]; focused_block_id: string | null };
+    page.sections = [];
+    page.focused_block_id = null;
+    transport.publishUiProfile(profile);
+    const applyPage = vi.spyOn(transport, "applyVibePage");
+    const setMode = vi.spyOn(transport, "setUiProfileMode");
+    const openSurface = vi.spyOn(transport, "openSurface");
+    const updateSurface = vi.spyOn(transport, "updateSurface");
+    const applyStudio = vi.spyOn(transport, "applyStudio");
+    const { container } = await renderApp(transport);
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".rho-vibe-manuscript-empty button")!.click();
+      container.querySelector<HTMLButtonElement>(
+        ".rho-vibe-region-switcher button[data-region='exploration']",
+      )!.click();
+      for (let index = 0; index < 24; index += 1) await Promise.resolve();
+    });
+    expect(container.querySelector(".rho-vibe-manuscript-save-state")?.textContent)
+      .toBe("Unsaved changes");
+    applyPage.mockClear();
+    setMode.mockClear();
+    openSurface.mockClear();
+    updateSurface.mockClear();
+    applyStudio.mockClear();
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(
+        ".rho-vibe-exploration button[data-agent-record-trigger='record']",
+      )!.click();
+      await settle();
+    });
+
+    const host = container.querySelector<HTMLElement>(".rho-vibe-agent-record-host")!;
+    expect(host).not.toBeNull();
+    expect(host.textContent).toContain("What should we inspect first?");
+    expect(host.textContent).toContain("Start with the project structure and runtime health.");
+    expect(container.querySelector(".rho-canvas-vibe")).not.toBeNull();
+    expect(container.querySelector("[data-surface-id='rho.agent']")).toBeNull();
+    expect(container.querySelector(".rho-vibe-manuscript-save-state")?.textContent)
+      .toBe("Unsaved changes");
+    expect(applyPage).not.toHaveBeenCalled();
+    expect(setMode).not.toHaveBeenCalled();
+    expect(openSurface).not.toHaveBeenCalled();
+    expect(updateSurface).not.toHaveBeenCalled();
+    expect(applyStudio).not.toHaveBeenCalled();
+  });
+
+  it("uses the accepted same-root epoch for Vibe verification and drops the deferred A1 read", async () => {
+    const projectA = "/projects/project-a";
+    const transport = createMockUiKernelTransport(
+      `?mode=vibe&project=${encodeURIComponent(projectA)}`,
+    );
+    const profile = structuredClone(await transport.loadUiProfile());
+    const page = profile.profile.vibe_pages.find(
+      (candidate) => candidate.page_id === profile.profile.active_vibe_page_id,
+    )!;
+    const mutablePage = page as unknown as {
+      sections: typeof page.sections;
+      focused_block_id: string | null;
+    };
+    mutablePage.sections = [{
+      section_id: "section:verification-epoch",
+      heading: "Epoch verification",
+      layout: { kind: "flow" },
+      blocks: [{
+        block_id: "block:verification-epoch",
+        content: {
+          kind: "artifact_ref",
+          artifact_id: "artifact:plot-1",
+          label: "Epoch-scoped artifact",
+        },
+      }],
+    }];
+    mutablePage.focused_block_id = "block:verification-epoch";
+    transport.publishUiProfile(profile);
+    const reopenProject = transport.openProject.bind(transport);
+    const reopen = vi.fn(() => reopenProject(projectA));
+    transport.pickProjectDirectory = reopen;
+    const listArtifacts = transport.listArtifactRecords.bind(transport);
+    let markA1ReadRequested = () => {};
+    const a1ReadRequested = new Promise<void>((resolve) => { markA1ReadRequested = resolve; });
+    let releaseA1Read = () => {};
+    const a1ReadBlocked = new Promise<void>((resolve) => { releaseA1Read = resolve; });
+    let firstRead = true;
+    transport.listArtifactRecords = vi.fn(async (...args) => {
+      const records = await listArtifacts(...args);
+      if (firstRead) {
+        firstRead = false;
+        markA1ReadRequested();
+        await a1ReadBlocked;
+        return records.map((record) => ({ ...record, output_path: "plots/A1-stale.png" }));
+      }
+      return records.map((record) => ({ ...record, output_path: "plots/A2-current.png" }));
+    });
+    const { container } = await renderApp(transport);
+    const vibeA1 = container.querySelector<HTMLElement>(".rho-vibe-workspace")!;
+    await a1ReadRequested;
+    await vi.waitFor(() => expect(container.querySelector(".ProseMirror")?.getAttribute("contenteditable"))
+      .toBe("true"));
+    const menu = await openRhoMenu(container);
+
+    await act(async () => {
+      menu.querySelector<HTMLButtonElement>(".rho-rho-project")!.click();
+      for (let index = 0; index < 48; index += 1) await Promise.resolve();
+    });
+    expect(reopen).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(
+      container.querySelector(".rho-vibe-workspace"),
+      container.textContent ?? "",
+    ).not.toBeNull());
+    await vi.waitFor(() => expect(container.querySelector(".rho-vibe-verification")?.textContent)
+      .toContain("plots/A2-current.png"));
+    const vibeA2 = container.querySelector<HTMLElement>(".rho-vibe-workspace")!;
+    expect(vibeA2).not.toBe(vibeA1);
+
+    await act(async () => {
+      releaseA1Read();
+      await settle();
+      await settle();
+    });
+    expect(container.querySelector(".rho-vibe-verification")?.textContent)
+      .toContain("plots/A2-current.png");
+    expect(container.querySelector(".rho-vibe-verification")?.textContent)
+      .not.toContain("plots/A1-stale.png");
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+  });
+
+  it("saves before the explicit Agent Studio handoff and restores Vibe once", async () => {
+    const transport = createMockUiKernelTransport("?mode=vibe");
+    const profile = structuredClone(await transport.loadUiProfile());
+    const page = profile.profile.vibe_pages.find(
+      (candidate) => candidate.page_id === profile.profile.active_vibe_page_id,
+    )! as unknown as { sections: unknown[]; focused_block_id: string | null };
+    page.sections = [];
+    page.focused_block_id = null;
+    transport.publishUiProfile(profile);
+    const surfacesBeforeHandoff = structuredClone(await transport.loadSurfaces());
+    const mountedAgentBeforeHandoff = surfacesBeforeHandoff.catalog.instances.find(
+      (instance) => instance.instance_id === "instance:agent-shared",
+    );
+    if (mountedAgentBeforeHandoff == null) throw new Error("Mock Agent instance is missing");
+    (mountedAgentBeforeHandoff as { view_state: unknown }).view_state = {
+      conversation_id: null,
+      mode: "ask",
+      composer: "",
+      auto_approve: false,
+    };
+    const agentInstanceIdsBeforeHandoff = new Set(
+      surfacesBeforeHandoff.catalog.instances
+        .filter((instance) => instance.surface_id === "rho.agent")
+        .map((instance) => instance.instance_id),
+    );
+    transport.publishSurfaces(surfacesBeforeHandoff);
+    const applyPage = vi.spyOn(transport, "applyVibePage");
+    const setMode = vi.spyOn(transport, "setUiProfileMode");
+    const openSurface = vi.spyOn(transport, "openSurface");
+    const applyStudio = vi.spyOn(transport, "applyStudio");
+    const { container } = await renderApp(transport);
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".rho-vibe-manuscript-empty button")!.click();
+      container.querySelector<HTMLButtonElement>(
+        ".rho-vibe-region-switcher button[data-region='exploration']",
+      )!.click();
+      for (let index = 0; index < 24; index += 1) await Promise.resolve();
+      container.querySelector<HTMLButtonElement>(
+        ".rho-vibe-exploration button[data-agent-record-trigger='record']",
+      )!.click();
+      await settle();
+    });
+    expect(container.querySelector(".rho-vibe-manuscript-save-state")?.textContent)
+      .toBe("Unsaved changes");
+    applyPage.mockClear();
+    setMode.mockClear();
+    openSurface.mockClear();
+    applyStudio.mockClear();
+
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>(".rho-vibe-agent-record-host button")]
+        .find((button) => button.textContent === "在 Studio 中深入检查")!
+        .click();
+      for (let index = 0; index < 48; index += 1) await Promise.resolve();
+    });
+
+    expect(applyPage).toHaveBeenCalledOnce();
+    expect(setMode).toHaveBeenCalledOnce();
+    expect(setMode.mock.calls[0]?.[0]).toMatchObject({ mode: "studio" });
+    expect(applyPage.mock.invocationCallOrder[0]).toBeLessThan(
+      setMode.mock.invocationCallOrder[0]!,
+    );
+    expect(openSurface).toHaveBeenCalledWith(expect.objectContaining({
+      surface_id: "rho.agent",
+      instance_disposition: "new_instance",
+      view_state: expect.objectContaining({
+        conversation_id: "agent-conversation:mock-shared",
+        mode: "ask",
+        composer: "",
+        auto_approve: false,
+      }),
+    }));
+    const surfacesAfterHandoff = await transport.loadSurfaces();
+    const createdExactAgents = surfacesAfterHandoff.catalog.instances.filter((instance) =>
+      instance.surface_id === "rho.agent"
+      && !agentInstanceIdsBeforeHandoff.has(instance.instance_id)
+      && (instance.view_state as { conversation_id?: unknown } | null)?.conversation_id
+        === "agent-conversation:mock-shared"
+    );
+    expect(createdExactAgents).toHaveLength(1);
+    const createdExactAgentId = createdExactAgents[0]!.instance_id;
+    expect(applyStudio).toHaveBeenCalledWith(expect.objectContaining({
+      edit: expect.objectContaining({ instance_id: createdExactAgentId }),
+    }));
+    const agent = container.querySelector<HTMLElement>(
+      `[data-surface-id='rho.agent'][data-instance-id='${createdExactAgentId}']`,
+    )!;
+    expect(agent).not.toBeNull();
+    expect(agent.querySelector<HTMLSelectElement>(
+      `[aria-label='Conversation for ${createdExactAgentId}']`,
+    )?.value).toBe("agent-conversation:mock-shared");
+    expect(agent.textContent).toContain("What should we inspect first?");
+
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
+        .find((button) => button.textContent === "Vibe")!
+        .click();
+      for (let index = 0; index < 32; index += 1) await Promise.resolve();
+    });
+    expect(container.querySelector(".rho-vibe-workspace")?.getAttribute("data-layout"))
+      .toBe("focus-exploration");
+    expect(container.querySelector(".rho-vibe-workspace")?.getAttribute("data-active-region"))
+      .toBe("exploration");
+
+    const restoredProfile = structuredClone(await transport.loadUiProfile());
+    const restoredPage = restoredProfile.profile.vibe_pages.find(
+      (candidate) => candidate.page_id === "page:project-review",
+    )!;
+    const secondPage = {
+      ...structuredClone(restoredPage),
+      page_id: "page:agent-return-check",
+      label: "Agent return check",
+      page_revision: 1,
+      sections: [],
+      focused_block_id: null,
+    };
+    (restoredProfile.profile as { revision: number }).revision += 1;
+    (restoredProfile.profile as { active_vibe_page_id: string | null }).active_vibe_page_id =
+      secondPage.page_id;
+    (restoredProfile.profile as { vibe_pages: typeof restoredProfile.profile.vibe_pages })
+      .vibe_pages = [...restoredProfile.profile.vibe_pages, secondPage];
+    await act(async () => {
+      transport.publishUiProfile(restoredProfile);
+      await settle();
+    });
+    expect(container.querySelector(".rho-vibe-workspace")?.getAttribute("data-layout"))
+      .toBe("overview");
+
+    const originalProfile = structuredClone(await transport.loadUiProfile());
+    (originalProfile.profile as { revision: number }).revision += 1;
+    (originalProfile.profile as { active_vibe_page_id: string | null }).active_vibe_page_id =
+      restoredPage.page_id;
+    await act(async () => {
+      transport.publishUiProfile(originalProfile);
+      await settle();
+    });
+    expect(container.querySelector(".rho-vibe-workspace")?.getAttribute("data-layout"))
+      .toBe("overview");
+    expect(container.querySelector(".rho-vibe-workspace")?.getAttribute("data-active-region"))
+      .toBe("manuscript");
+  });
+
   it("opens one exact referenced artifact in Studio and restores the in-session Vibe focus", async () => {
     const transport = createMockUiKernelTransport();
     const profile = structuredClone(await transport.loadUiProfile());
@@ -2797,6 +5680,82 @@ describe("Studio foundation app", () => {
       .toBe("manuscript");
   });
 
+  it("clears an A1 Vibe return point when a same-project transition is cancelled", async () => {
+    const projectA = "/projects/project-a";
+    const transport = createMockUiKernelTransport(
+      `?mode=vibe&project=${encodeURIComponent(projectA)}`,
+    );
+    const profile = structuredClone(await transport.loadUiProfile());
+    const page = profile.profile.vibe_pages.find(
+      (candidate) => candidate.page_id === profile.profile.active_vibe_page_id,
+    )!;
+    const mutablePage = page as unknown as {
+      sections: typeof page.sections;
+      focused_block_id: string | null;
+    };
+    mutablePage.sections = [{
+      section_id: "section:return-epoch",
+      heading: "Return epoch",
+      layout: { kind: "flow" },
+      blocks: [{
+        block_id: "block:return-epoch",
+        content: {
+          kind: "artifact_ref",
+          artifact_id: "artifact:plot-1",
+          label: "Return-point artifact",
+        },
+      }],
+    }];
+    mutablePage.focused_block_id = "block:return-epoch";
+    transport.publishUiProfile(profile);
+    const cancelPick = vi.fn(async () => ({
+      status: "cancelled",
+      project: null,
+      session: {},
+      unavailable: null,
+      blocker: null,
+      reason_code: null,
+      message: null,
+      restored_root: null,
+      restart_required: false,
+    } as const));
+    transport.pickProjectDirectory = cancelPick;
+    const { container } = await renderApp(transport);
+    await vi.waitFor(() => expect(container.querySelector(".rho-vibe-verification-artifact"))
+      .not.toBeNull());
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(
+        ".rho-vibe-region-switcher button[data-region='verification']",
+      )!.click();
+      await settle();
+    });
+    expect(container.querySelector(".rho-vibe-workspace")?.getAttribute("data-layout"))
+      .toBe("focus-verification");
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>(".rho-vibe-verification button")]
+        .find((button) => button.textContent === "在 Studio 中查看")!
+        .click();
+      await vi.waitFor(() => expect(container.querySelector(".rho-canvas-studio")).not.toBeNull());
+    });
+
+    const menu = await openRhoMenu(container);
+    await act(async () => {
+      menu.querySelector<HTMLButtonElement>(".rho-rho-project")!.click();
+      await vi.waitFor(() => expect(cancelPick).toHaveBeenCalledOnce());
+    });
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
+        .find((button) => button.textContent === "Vibe")!
+        .click();
+      await vi.waitFor(() => expect(container.querySelector(".rho-vibe-workspace")).not.toBeNull());
+    });
+    expect(container.querySelector(".rho-vibe-workspace")?.getAttribute("data-layout"))
+      .toBe("overview");
+    expect(container.querySelector(".rho-vibe-workspace")?.getAttribute("data-active-region"))
+      .toBe("manuscript");
+  });
+
   it("keeps Vibe active when pending manuscript edits fail to save before a mode change", async () => {
     const transport = createMockUiKernelTransport();
     const profile = structuredClone(await transport.loadUiProfile());
@@ -2846,7 +5805,9 @@ describe("Studio foundation app", () => {
       [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
         .find((button) => button.textContent === "Vibe")!
         .click();
-      await settle();
+      await vi.waitFor(() => expect(container.querySelector(".rho-canvas-vibe")).not.toBeNull());
+    });
+    await act(async () => {
       [...container.querySelectorAll<HTMLButtonElement>(".rho-vibe-document-actions button")]
         .find((button) => button.textContent === "导出只读手稿")!
         .click();
@@ -3415,11 +6376,12 @@ describe("Studio foundation app", () => {
   it("offers truthful Environment recovery after a load failure", async () => {
     const transport = createMockUiKernelTransport();
     const loadDomainSurface = transport.loadDomainSurface.bind(transport);
-    let environmentAttempts = 0;
+    let environmentAvailable = false;
     vi.spyOn(transport, "loadDomainSurface").mockImplementation(async (surfaceId) => {
       if (surfaceId !== "rho.environment") return loadDomainSurface(surfaceId);
-      environmentAttempts += 1;
-      if (environmentAttempts === 1) throw new Error("Environment broker unavailable at /Users/alice/private-project");
+      if (!environmentAvailable) {
+        throw new Error("Environment broker unavailable at /Users/alice/private-project");
+      }
       return loadDomainSurface(surfaceId);
     });
     const { container } = await renderApp(transport);
@@ -3430,11 +6392,13 @@ describe("Studio foundation app", () => {
       for (let index = 0; index < 8; index += 1) await Promise.resolve();
     });
     const environment = container.querySelector<HTMLElement>("[data-surface-id='rho.environment']")!;
+    await vi.waitFor(() => expect(environment.querySelector("[role='alert']")).not.toBeNull());
     expect(environment.querySelector("[role='alert']")?.textContent).toContain("Environment broker unavailable");
     expect(environment.querySelector("[role='alert']")?.textContent).toContain("[local path]");
     expect(environment.querySelector("[role='alert']")?.textContent).not.toContain("/Users/alice");
     expect(environment.querySelector(".rho-task-state-error")).not.toBeNull();
     await act(async () => {
+      environmentAvailable = true;
       [...environment.querySelectorAll<HTMLButtonElement>("button")]
         .find((button) => button.textContent === "Try again")!.click();
       await settle();
@@ -3698,15 +6662,56 @@ describe("Studio foundation app", () => {
     expect(preview.textContent).toContain("Refresh");
   });
 
-  it("saves an active local draft in one action and recovers after draft rejection", async () => {
+  it("serializes rapid File Save activation and recovers draft and save failures", async () => {
     const transport = createMockUiKernelTransport();
     const updateDraft = transport.updateResourceDraft.bind(transport);
+    const saveResource = transport.saveResource.bind(transport);
+    const advanceProjectRevision = async () => {
+      const [kernel, surfaces, studio, runtimes, resources] = await Promise.all([
+        transport.loadSnapshot(),
+        transport.loadSurfaces(),
+        transport.loadStudio(),
+        transport.loadRuntimes(),
+        transport.loadResources(),
+      ]);
+      const nextProjectRevision = kernel.context.project_revision + 1;
+      transport.publish({
+        ...kernel,
+        context: { ...kernel.context, project_revision: nextProjectRevision },
+      });
+      transport.publishSurfaces({ ...surfaces, project_revision: nextProjectRevision });
+      transport.publishStudio({ ...studio, project_revision: nextProjectRevision });
+      transport.publishRuntimes({ ...runtimes, project_revision: nextProjectRevision });
+      transport.publishResources({ ...resources, project_revision: nextProjectRevision });
+      return nextProjectRevision;
+    };
+    let settledDraftProjectRevision: number | null = null;
     const update = vi.fn(async (request: Parameters<typeof transport.updateResourceDraft>[0]) => {
       if (update.mock.calls.length === 1) throw new Error("Draft revision rejected for test.");
-      return updateDraft(request);
+      const result = await updateDraft(request);
+      if (update.mock.calls.length === 2) {
+        settledDraftProjectRevision = await advanceProjectRevision();
+      }
+      return result;
     });
-    const save = vi.spyOn(transport, "saveResource");
+    let markSaveFailureRequested = () => {};
+    const saveFailureRequested = new Promise<void>((resolve) => {
+      markSaveFailureRequested = resolve;
+    });
+    let releaseSaveFailure = () => {};
+    const saveFailureBlocked = new Promise<void>((resolve) => {
+      releaseSaveFailure = resolve;
+    });
+    const save = vi.fn(async (request: Parameters<typeof transport.saveResource>[0]) => {
+      if (save.mock.calls.length === 1) {
+        markSaveFailureRequested();
+        await saveFailureBlocked;
+        throw new Error("Resource save rejected for test.");
+      }
+      return saveResource(request);
+    });
     transport.updateResourceDraft = update;
+    transport.saveResource = save;
     const { container } = await renderApp(transport);
     const source = container.querySelector<HTMLElement>("[data-surface-id='rho.file-source']")!;
     const editor = source.querySelector<HTMLTextAreaElement>(".rho-source-editor")!;
@@ -3731,7 +6736,8 @@ describe("Studio foundation app", () => {
 
     await act(async () => {
       source.querySelector<HTMLButtonElement>(".rho-file-save")!.click();
-      for (let index = 0; index < 12; index += 1) await Promise.resolve();
+      source.querySelector<HTMLButtonElement>(".rho-file-save")!.click();
+      await saveFailureRequested;
     });
     expect(update).toHaveBeenCalledTimes(2);
     expect(update.mock.calls[1]?.[0]).toMatchObject({
@@ -3740,7 +6746,110 @@ describe("Studio foundation app", () => {
     });
     expect(save).toHaveBeenCalledOnce();
     expect(save.mock.calls[0]?.[0]).toMatchObject({ expected_document_revision: 2 });
+    expect(save.mock.calls[0]?.[0].target.expected_project_revision)
+      .toBe(settledDraftProjectRevision);
     expect(source.querySelector<HTMLButtonElement>(".rho-file-save")!.disabled).toBe(true);
+    expect(source.querySelector<HTMLButtonElement>(".rho-file-save")!.getAttribute("aria-busy"))
+      .toBe("true");
+    expect(source.querySelector<HTMLButtonElement>(".rho-file-save")!.textContent)
+      .toBe("Saving…");
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+
+    await act(async () => {
+      releaseSaveFailure();
+      await settle();
+    });
+    await act(async () => {
+      await vi.waitFor(() => expect(container.querySelector(".rho-action-error")?.textContent)
+        .toContain("Resource save rejected for test."));
+    });
+    expect(container.querySelector(".rho-action-error")?.textContent)
+      .toContain("Resource save rejected for test.");
+    expect(source.querySelector<HTMLButtonElement>(".rho-file-save")!.disabled).toBe(false);
+    expect(source.querySelector<HTMLButtonElement>(".rho-file-save")!.hasAttribute("aria-busy"))
+      .toBe(false);
+    expect(source.querySelector<HTMLButtonElement>(".rho-file-save")!.textContent).toBe("Save");
+
+    await act(async () => {
+      source.querySelector<HTMLButtonElement>(".rho-file-save")!.click();
+      await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+      await settle();
+    });
+    await act(async () => {
+      await vi.waitFor(() => expect(
+        source.querySelector<HTMLButtonElement>(".rho-file-save")!.disabled,
+      ).toBe(true));
+      await settle();
+    });
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(save.mock.calls[1]?.[0]).toMatchObject({ expected_document_revision: 2 });
+    expect(source.querySelector<HTMLButtonElement>(".rho-file-save")!.disabled).toBe(true);
+    expect(container.querySelector(".rho-action-error")).toBeNull();
+  });
+
+  it("keeps keyboard focus transfer between File workflow actions inside the Save or Run admission", async () => {
+    const transport = createMockUiKernelTransport();
+    const update = vi.spyOn(transport, "updateResourceDraft");
+    const save = vi.spyOn(transport, "saveResource");
+    const execute = vi.spyOn(transport, "startRuntimeExecution");
+    const { container } = await renderApp(transport);
+    const source = container.querySelector<HTMLElement>("[data-surface-id='rho.file-source']")!;
+    const editor = source.querySelector<HTMLTextAreaElement>(".rho-source-editor")!;
+    const run = source.querySelector<HTMLButtonElement>(".rho-file-run")!;
+    const saveButton = source.querySelector<HTMLButtonElement>(".rho-file-save")!;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+
+    await act(async () => {
+      setValue.call(editor, "KEYBOARD_SAVE_WORKFLOW <- TRUE\n");
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+      editor.focus();
+      run.focus();
+      await settle();
+      saveButton.focus();
+      await settle();
+    });
+    expect(document.activeElement).toBe(saveButton);
+    expect(update).not.toHaveBeenCalled();
+
+    await act(async () => {
+      saveButton.dispatchEvent(new KeyboardEvent("keydown", {
+        bubbles: true,
+        cancelable: true,
+        key: "Enter",
+      }));
+      saveButton.click();
+      await vi.waitFor(() => expect(save).toHaveBeenCalledOnce());
+      await settle();
+    });
+    expect(update).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      editor.focus();
+      setValue.call(editor, "KEYBOARD_RUN_WORKFLOW()");
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+      editor.setSelectionRange(0, 0);
+      saveButton.focus();
+      await settle();
+      run.focus();
+      await settle();
+    });
+    expect(document.activeElement).toBe(run);
+    expect(update).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      run.dispatchEvent(new KeyboardEvent("keydown", {
+        bubbles: true,
+        cancelable: true,
+        key: "Enter",
+      }));
+      run.click();
+      await vi.waitFor(() => expect(execute).toHaveBeenCalledOnce());
+      await settle();
+    });
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(save).toHaveBeenCalledOnce();
+    expect(execute.mock.calls[0]?.[0].code).toBe("KEYBOARD_RUN_WORKFLOW()");
+    expect(container.querySelector(".rho-action-error")).toBeNull();
   });
 
   it("renders repeated workspace-plugin Surfaces through trusted React blocks and routes controls per instance", async () => {

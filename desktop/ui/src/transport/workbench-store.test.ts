@@ -209,4 +209,80 @@ describe("WorkbenchProjectionStore", () => {
     await waiting;
     expect(settled).toBe(true);
   });
+
+  it("accepts only a live pre-close lease while mutation admission is closed", async () => {
+    const transport = createMockUiKernelTransport();
+    const store = new WorkbenchProjectionStore(transport);
+    await store.refresh();
+    const current = store.getSnapshot();
+    if (current.status !== "ready") throw new Error("initial projection did not load");
+    const studio = current.snapshot.studio;
+    const request = {
+      project_id: studio.project_id,
+      expected_project_revision: studio.project_revision,
+      expected_layout_revision: studio.scene.layout_revision,
+      edit: {
+        kind: "set_focus" as const,
+        instance_id: "instance:navigator",
+      },
+    };
+
+    let releaseAdmitted: (() => void) | undefined;
+    let capturedLease: Parameters<typeof store.apply>[1];
+    const admitted = store.admitMutation(studio.project_id, async (lease) => {
+      capturedLease = lease;
+      await new Promise<void>((resolve) => { releaseAdmitted = resolve; });
+      return store.apply(request, lease);
+    });
+    store.closeMutationAdmission();
+    await expect(store.apply(request)).rejects.toThrow("transition");
+    await expect(store.apply(request, {
+      projectId: studio.project_id,
+      admissionEpoch: 0,
+    })).rejects.toThrow("no longer valid");
+    releaseAdmitted?.();
+    await expect(admitted).resolves.toBeDefined();
+    await expect(store.apply(request, capturedLease)).rejects.toThrow("no longer valid");
+
+    store.openMutationAdmission();
+    const reopened = store.getSnapshot();
+    if (reopened.status !== "ready") throw new Error("projection did not recover");
+    await expect(store.apply({
+      ...request,
+      expected_project_revision: reopened.snapshot.studio.project_revision,
+      expected_layout_revision: reopened.snapshot.studio.scene.layout_revision,
+    })).resolves.toBeDefined();
+  });
+
+  it("settles every registered mutation even when an earlier sibling rejects", async () => {
+    const transport = createMockUiKernelTransport();
+    const store = new WorkbenchProjectionStore(transport);
+    await store.refresh();
+    const current = store.getSnapshot();
+    if (current.status !== "ready") throw new Error("initial projection did not load");
+    const profile = current.snapshot.profile.profile;
+    let rejectSecond: ((reason?: unknown) => void) | undefined;
+    vi.spyOn(transport, "setUiProfileMode")
+      .mockRejectedValueOnce(new Error("first stale mutation"))
+      .mockImplementationOnce(() => new Promise((_, reject) => { rejectSecond = reject; }));
+    const request = {
+      target: {
+        project_id: profile.project_id,
+        expected_profile_revision: profile.revision,
+      },
+      mode: "vibe" as const,
+    };
+    const first = store.setMode(request);
+    const second = store.setMode(request);
+    void first.catch(() => undefined);
+    void second.catch(() => undefined);
+    let settled = false;
+    const waiting = store.settled().then(() => { settled = true; });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    rejectSecond?.(new Error("second stale mutation"));
+    await Promise.allSettled([first, second]);
+    await waiting;
+    expect(settled).toBe(true);
+  });
 });

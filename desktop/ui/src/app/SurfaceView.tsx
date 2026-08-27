@@ -20,6 +20,7 @@ import type {
   RuntimeOutputFollowFrame,
   RuntimeOutputPage,
   RuntimeOutputReference,
+  RunAgentRequest,
   RuntimeOutputSearchResult,
   RuntimeRegistrySnapshot,
   SurfaceInstance,
@@ -40,7 +41,6 @@ import type { FileResourceViewProps } from "./FileResourceView";
 import { MenuPopover } from "./MenuPopover";
 import { NavigatorSurfaceView } from "./Navigator";
 import { PluginSurfaceView } from "./PluginSurfaceView";
-import type { SourceExecutionSubmission } from "./source-execution";
 import { SurfaceTaskState } from "./SurfaceTaskState";
 import { SettingsSurfaceView } from "./SettingsSurfaceView";
 import { consoleProjectionBlocksText } from "./console-output";
@@ -99,14 +99,10 @@ interface SurfaceViewProps {
   readonly persistConsole: (viewState: ConsolePersistentViewState) => Promise<void>;
   readonly registerConsoleExecution: (endpoint: ConsoleExecutionEndpoint) => () => void;
   readonly markConsolePreferred: (instanceId: string) => void;
-  readonly runSourceExecution: (
-    sourceInstanceId: string,
-    execution: SourceExecutionSubmission,
-  ) => Promise<boolean>;
   readonly resources: ResourceRegistrySnapshot | null;
   readonly readResource: FileResourceViewProps["read"];
   readonly updateResourceDraft: FileResourceViewProps["updateDraft"];
-  readonly saveResource: FileResourceViewProps["save"];
+  readonly withFileMutation: FileResourceViewProps["withMutation"];
   readonly reloadResource: FileResourceViewProps["reload"];
   readonly renameResource: FileResourceViewProps["rename"];
   readonly deleteResource: FileResourceViewProps["removeResource"];
@@ -120,6 +116,13 @@ interface SurfaceViewProps {
   readonly projectRevision: number;
   readonly openCheckEvidence: (path: string) => Promise<void>;
   readonly agentHealth: { readonly state: string; readonly label: string; readonly detail: string | null } | null;
+  readonly createAgentConversation: (
+    current: AgentSurfaceViewState,
+  ) => Promise<AgentSurfaceViewState>;
+  readonly runAgentConversation: (
+    current: AgentSurfaceViewState,
+    request: RunAgentRequest,
+  ) => Promise<AgentSurfaceViewState>;
   readonly persistAgentViewState: (viewState: AgentSurfaceViewState) => Promise<void>;
   readonly persistSurfaceViewState: (viewState: unknown) => Promise<void>;
   readonly pinAgentTask: (turn: AgentTurnSummary) => Promise<void>;
@@ -132,7 +135,7 @@ interface SurfaceViewProps {
   readonly openNavigatorFile: (descriptor: ResourceDescriptor) => Promise<void>;
   readonly openSurfaceById: (surfaceId: string) => void;
   readonly agentRuntimeOutputContext: RuntimeOutputReference | null;
-  readonly setAgentRuntimeOutputContext: (reference: RuntimeOutputReference | null) => void;
+  readonly setAgentRuntimeOutputContext: (reference: RuntimeOutputReference | null) => boolean;
   readonly embedded: boolean;
 }
 
@@ -161,11 +164,12 @@ export function SurfaceView({
   listRuntimeExecutions, loadRuntimeOutputPage, interruptRuntime,
   loadRuntimeOutputPageBefore,
   restartRuntime, persistConsole, registerConsoleExecution, markConsolePreferred,
-  runSourceExecution, resources, readResource, updateResourceDraft,
-  saveResource, reloadResource, renameResource, deleteResource,
+  resources, readResource, updateResourceDraft, withFileMutation,
+  reloadResource, renameResource, deleteResource,
   refreshResourceBinding, setViewGroup, persistFileViewState, reportError,
   pluginTransport, surfaceFactories, pluginDocumentRequest, projectRevision, openCheckEvidence,
-  agentHealth, persistAgentViewState, persistSurfaceViewState, pinAgentTask,
+  agentHealth, createAgentConversation, runAgentConversation, persistAgentViewState,
+  persistSurfaceViewState, pinAgentTask,
   applyAgentFileProposal, undoAgentFileProposal, openNavigatorFile, openSurfaceById,
   agentRuntimeOutputContext, setAgentRuntimeOutputContext,
   embedded,
@@ -184,8 +188,6 @@ export function SurfaceView({
   const [consoleSearchBusy, setConsoleSearchBusy] = useState(false);
   const consoleOutputRef = useRef<HTMLDivElement>(null);
   const consoleCompactionRevisionRef = useRef<number | null>(null);
-  const reportErrorRef = useRef(reportError);
-  reportErrorRef.current = reportError;
   const consoleNeedsCompaction = needsConsoleStateCompaction(instance);
   const [consoleRendererReady, setConsoleRendererReady] = useState(
     () => !consoleNeedsCompaction,
@@ -198,16 +200,28 @@ export function SurfaceView({
     candidate.runtime_instance_id === runtime?.runtime_instance_id &&
     candidate.activation_generation === runtime.activation_generation
   ) ?? null;
-  consoleController.configure({
-    runtime: attached,
-    start: startRuntimeExecution,
-    follow: followRuntimeOutput,
-    list: listRuntimeExecutions,
-    page: loadRuntimeOutputPage,
-    pageBefore: loadRuntimeOutputPageBefore,
-    persist: persistConsole,
+  useLayoutEffect(() => {
+    consoleController.configure({
+      runtime: attached,
+      start: startRuntimeExecution,
+      follow: followRuntimeOutput,
+      list: listRuntimeExecutions,
+      page: loadRuntimeOutputPage,
+      pageBefore: loadRuntimeOutputPageBefore,
+      persist: persistConsole,
+      reportError,
+    });
+  }, [
+    attached,
+    consoleController,
+    followRuntimeOutput,
+    listRuntimeExecutions,
+    loadRuntimeOutputPage,
+    loadRuntimeOutputPageBefore,
+    persistConsole,
     reportError,
-  });
+    startRuntimeExecution,
+  ]);
   useEffect(() => () => consoleController.dispose(), [consoleController]);
   useEffect(() => {
     if (instance.surface_id === "rho.console") {
@@ -225,10 +239,14 @@ export function SurfaceView({
     setConsoleRendererReady(false);
     let active = true;
     void consoleController.persistCurrent()
-      .then(() => { if (active) setConsoleRendererReady(true); })
-      .catch((cause: unknown) => reportErrorRef.current(cause));
+      .then(() => { if (active) setConsoleRendererReady(true); });
     return () => { active = false; };
-  }, [consoleController, consoleNeedsCompaction, instance.surface_id, instance.surface_revision]);
+  }, [
+    consoleController,
+    consoleNeedsCompaction,
+    instance.surface_id,
+    instance.surface_revision,
+  ]);
   const runtimeRecovering = attached != null &&
     (attached.status === "restarting" || attached.status === "starting");
   const consoleBusy = consoleRunning || attached?.status === "busy";
@@ -731,14 +749,13 @@ export function SurfaceView({
           registry={resources}
           read={readResource}
           updateDraft={updateResourceDraft}
-          save={saveResource}
+          withMutation={withFileMutation}
           reload={reloadResource}
           rename={renameResource}
           removeResource={deleteResource}
           refreshBinding={refreshResourceBinding}
           setViewGroup={setViewGroup}
           persistViewState={persistFileViewState}
-          runSourceExecution={(execution) => runSourceExecution(instance.instance_id, execution)}
           reportError={reportError}
         />
       )}
@@ -759,6 +776,8 @@ export function SurfaceView({
           instance={instance}
           transport={pluginTransport}
           health={agentHealth}
+          createConversation={createAgentConversation}
+          runConversation={runAgentConversation}
           persist={persistAgentViewState}
           pinTask={pinAgentTask}
           applyFileProposal={applyAgentFileProposal}
@@ -802,8 +821,7 @@ export function SurfaceView({
           persist={persistSurfaceViewState}
           reportError={reportError}
           useRuntimeOutputInAgent={(reference) => {
-            setAgentRuntimeOutputContext(reference);
-            openSurfaceById("rho.agent");
+            if (setAgentRuntimeOutputContext(reference)) openSurfaceById("rho.agent");
           }}
           openSurfaceById={openSurfaceById}
         />

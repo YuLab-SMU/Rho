@@ -14,15 +14,21 @@
 //   node scripts/visual-acceptance.mjs finalize --run <dir>
 
 import { spawn, execFile, execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { captureStartupBrowserFrames } from "./visual-acceptance/startup-browser.mjs";
+import { captureVibeAgentBrowserFrames } from "./visual-acceptance/vibe-agent-browser.mjs";
+
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const scenarioDirectory = path.join(repositoryRoot, "scripts", "visual-acceptance");
 
 export const EVIDENCE_SCHEMA = "rho_visual_acceptance_v1";
+export const STARTUP_TERMINAL_MESSAGE_PREFIX = "Runtime bootstrap failed:";
+export const STARTUP_LOG_MAX_BYTES = 1024 * 1024;
 
 export const SCENARIOS = Object.freeze([
   { id: "s0", file: "s0-startup.mjs", title: "Startup, project open, first-view file tree" },
@@ -35,6 +41,104 @@ export const SCENARIOS = Object.freeze([
 ]);
 
 export class AcceptanceError extends Error {}
+
+export function acceptanceLaunchEnvironment(output, {
+  parentEnvironment = process.env,
+  rscript = null,
+} = {}) {
+  const environment = {
+    ...parentEnvironment,
+    RHO_ACCEPTANCE_BRIDGE: "1",
+    RHO_ACCEPTANCE_OUTPUT: output,
+  };
+  if (rscript != null) environment.RHO_RSCRIPT = rscript;
+  return environment;
+}
+
+export function parseStartupJsonl(source) {
+  const records = [];
+  const lines = source.split("\n");
+  const hasTrailingNewline = source.endsWith("\n");
+  for (const [index, rawLine] of lines.entries()) {
+    if (rawLine.trim().length === 0) continue;
+    try {
+      records.push(JSON.parse(rawLine));
+    } catch (error) {
+      // The logger appends one JSON object per line. A concurrent read may see
+      // only the final line half-written; earlier malformed lines are not a
+      // truthful acceptance record and fail closed.
+      const isIncompleteTail = index === lines.length - 1 && !hasTrailingNewline;
+      if (!isIncompleteTail) throw new AcceptanceError(`startup JSONL line ${index + 1} is invalid: ${error.message}`);
+    }
+  }
+  return records;
+}
+
+export function readStartupJsonl(file, maxBytes = STARTUP_LOG_MAX_BYTES) {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
+    throw new AcceptanceError("startup log byte bound must be a non-negative safe integer");
+  }
+  const descriptor = fs.openSync(file, "r");
+  try {
+    if (!fs.fstatSync(descriptor).isFile()) {
+      throw new AcceptanceError("startup log is not a regular file");
+    }
+    const chunks = [];
+    let bytesRead = 0;
+    while (bytesRead <= maxBytes) {
+      const remaining = maxBytes + 1 - bytesRead;
+      if (remaining === 0) break;
+      const buffer = Buffer.allocUnsafe(Math.min(64 * 1024, remaining));
+      const count = fs.readSync(descriptor, buffer, 0, buffer.length, null);
+      if (count === 0) break;
+      chunks.push(buffer.subarray(0, count));
+      bytesRead += count;
+    }
+    if (bytesRead > maxBytes) {
+      throw new AcceptanceError(`startup log exceeds the ${maxBytes}-byte acceptance bound`);
+    }
+    return parseStartupJsonl(Buffer.concat(chunks, bytesRead).toString("utf8"));
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+export function terminalStartupRecord(
+  records,
+  prefix = STARTUP_TERMINAL_MESSAGE_PREFIX,
+) {
+  for (let index = records.length - 1; index >= 0; index -= 1) {
+    const record = records[index];
+    const message = record?.event?.message;
+    if (typeof message === "string" && message.startsWith(prefix)) {
+      const token = startupRecordToken(record);
+      return { record, token };
+    }
+  }
+  return null;
+}
+
+export function startupRecordToken(record) {
+  return createHash("sha256")
+    .update(JSON.stringify([record?.timestamp ?? null, record?.event?.message ?? null]))
+    .digest("hex");
+}
+
+export function startupRecordTokenIsPresent(records, token) {
+  return records.some((record) => startupRecordToken(record) === token);
+}
+
+export function pngSha256(file) {
+  const bytes = fs.readFileSync(file);
+  if (bytes.length < 8 || !bytes.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex"))) {
+    throw new AcceptanceError("stable-frame probe is not a PNG");
+  }
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+export function consecutivePngHashesMatch(previousHash, currentHash) {
+  return typeof previousHash === "string" && previousHash.length > 0 && previousHash === currentHash;
+}
 
 function nowIso() {
   return new Date().toISOString();
@@ -103,11 +207,64 @@ async function waitFor(label, probe, { timeoutMs = 60_000, intervalMs = 300 } = 
 // suspended: the page load stalls and `rho://acceptance-eval` events are
 // never handled. Bringing the application to the foreground resumes the
 // webview, so the lane activates the app before probing the frontend and
-// before capturing frames. Best-effort; failures are ignored.
-function activateApp(pid) {
-  if (process.platform !== "darwin" || typeof pid !== "number") return;
-  const script = `tell application "System Events" to set frontmost of (first process whose unix id is ${pid}) to true`;
-  execFile("osascript", ["-e", script], () => undefined);
+// before capturing frames. The confirmation is bounded and fail-closed so a
+// real-app DOM action is never dispatched to a background or unknown process.
+async function activateApp(pid) {
+  if (process.platform !== "darwin") return;
+  if (typeof pid !== "number") {
+    throw new AcceptanceError("exact application PID is unavailable for foreground confirmation");
+  }
+  const script = [
+    'tell application "System Events"',
+    `set targetProcess to first process whose unix id is ${pid}`,
+    "set frontmost of targetProcess to true",
+    "return frontmost of targetProcess",
+    "end tell",
+  ].join("\n");
+  await new Promise((resolve, reject) => {
+    try {
+      execFile("osascript", ["-e", script], { timeout: 5_000 }, (error, stdout) => {
+        if (error != null) {
+          reject(new AcceptanceError(
+            `exact application foreground confirmation failed: ${error.message}`,
+          ));
+          return;
+        }
+        if (stdout.trim().toLowerCase() !== "true") {
+          reject(new AcceptanceError(
+            `exact application ${pid} did not become foreground`,
+          ));
+          return;
+        }
+        resolve();
+      });
+    } catch (error) {
+      reject(new AcceptanceError(
+        `exact application foreground confirmation failed: ${error instanceof Error ? error.message : String(error)}`,
+      ));
+    }
+  });
+}
+
+export async function runForegroundedRealDebugOperation({ pid, activate, operation }) {
+  await activate(pid);
+  return operation();
+}
+
+export async function dispatchRealDebugAction({ pid, action, activate, command }) {
+  return runForegroundedRealDebugOperation({
+    pid,
+    activate,
+    operation: () => command({ command: "act", action }),
+  });
+}
+
+export async function runEvidenceClassCheck({ evidenceClass, pid, activate, check }) {
+  if (evidenceClass === "real_debug_app") {
+    return runForegroundedRealDebugOperation({ pid, activate, operation: check });
+  }
+  if (evidenceClass === "browser_mock") return check();
+  throw new AcceptanceError(`unsupported visual evidence class: ${evidenceClass}`);
 }
 
 function createEvidence(output, appPath) {
@@ -204,15 +361,15 @@ export function renderReport(evidence) {
     "",
     "## Gates",
     "",
-    "| Scenario | Gate | Deterministic | Capture | Visual | Screenshot |",
-    "| --- | --- | --- | --- | --- | --- |",
+    "| Scenario | Gate | Evidence | Deterministic | Capture | Visual | Screenshot |",
+    "| --- | --- | --- | --- | --- | --- | --- |",
   ];
   for (const gate of evidence.gates) {
     lines.push(
-      `| ${reportCell(gate.scenario)} | ${reportCell(gate.name)} | ${reportCell(gate.deterministic_status)} | ${reportCell(gate.screenshot_capture_status ?? (gate.screenshot == null ? "N/A" : "legacy"))} | ${reportCell(gate.visual_status)} | ${reportCell(gate.screenshot)} |`,
+      `| ${reportCell(gate.scenario)} | ${reportCell(gate.name)} | ${reportCell(gate.evidence_class)} | ${reportCell(gate.deterministic_status)} | ${reportCell(gate.screenshot_capture_status ?? (gate.screenshot == null ? "N/A" : "legacy"))} | ${reportCell(gate.visual_status)} | ${reportCell(gate.screenshot)} |`,
     );
-    if (gate.error) lines.push(`|  | error: ${reportCell(gate.error)} |  |  |  |  |`);
-    if (gate.visual_note) lines.push(`|  | visual note: ${reportCell(gate.visual_note)} |  |  |  |  |`);
+    if (gate.error) lines.push(`|  | error: ${reportCell(gate.error)} |  |  |  |  |  |`);
+    if (gate.visual_note) lines.push(`|  | visual note: ${reportCell(gate.visual_note)} |  |  |  |  |  |`);
   }
   return `${lines.join("\n")}\n`;
 }
@@ -227,6 +384,7 @@ function refreshLedger(runDirectory, evidence) {
         frame: gate.screenshot,
         scenario: gate.scenario,
         gate: gate.name,
+        evidence_class: gate.evidence_class ?? "real_debug_app",
         criteria: gate.criteria,
         screenshot_capture_status: gate.screenshot_capture_status
           ?? (gate.screenshot_bytes > 0 ? "PASS" : "UNKNOWN"),
@@ -458,6 +616,141 @@ async function terminateChild(child) {
   return exited;
 }
 
+function runtimeAttentionGateRecord() {
+  return {
+    scenario: "s0",
+    name: "startup-runtime-attention-real-debug",
+    evidence_class: "real_debug_app",
+    deterministic_status: "PASS",
+    screenshot_capture_status: "PENDING",
+    visual_status: "PENDING",
+    visual_note: null,
+    status: "PENDING",
+    error: null,
+    screenshot: "screenshots/s0-startup-runtime-attention.png",
+    criteria: [
+      "精确 debug 应用在真实 R runtime 失败时显示三阶段启动台账，失败阶段明确为 R runtime",
+      "失败态只显示一个 Rho 字标，不出现 RRho、Surface、百分比或 ETA",
+      "Choose Rscript 与 Retry 可辨认，技术细节退居 disclosure，1024×680 下无重叠或横向溢出",
+    ],
+    at: nowIso(),
+    detail: {
+      viewport: { width: 1024, height: 680 },
+      rscript_fixture: "node executable (intentionally not R)",
+      readiness: "startup.jsonl terminal record plus two equal consecutive PNG hashes",
+      automation_endpoint_used: false,
+    },
+  };
+}
+
+async function capturePreReadyRuntimeAttention({
+  appPath,
+  output,
+  stdoutLog,
+  stderrLog,
+}) {
+  const record = runtimeAttentionGateRecord();
+  const descriptorFile = path.join(output, "bridge.json");
+  const logFile = path.join(output, "app-data", "logs", "startup.jsonl");
+  const screenshotRoot = path.resolve(output, "screenshots");
+  const finalFrame = path.join(screenshotRoot, "s0-startup-runtime-attention.png");
+  const probeFiles = [];
+  let child = null;
+  let residualChild = null;
+  try {
+    if (process.platform !== "darwin") {
+      throw new AcceptanceError("real debug-app startup screenshots are supported only on macOS");
+    }
+    if (process.release?.name !== "node" || !fs.statSync(process.execPath).isFile()) {
+      throw new AcceptanceError("the pre-ready non-R fixture must be the current Node executable");
+    }
+    fs.rmSync(descriptorFile, { force: true });
+    child = spawn(appPath, [], {
+      env: acceptanceLaunchEnvironment(output, { rscript: process.execPath }),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    child.stdout.pipe(stdoutLog, { end: false });
+    child.stderr.pipe(stderrLog, { end: false });
+    const descriptor = await waitFor("pre-ready acceptance bridge startup", () => {
+      if (!fs.existsSync(descriptorFile)) return null;
+      const parsed = JSON.parse(fs.readFileSync(descriptorFile, "utf8"));
+      return typeof parsed.port === "number" && parsed.pid === child.pid ? parsed : null;
+    }, { timeoutMs: 45_000 });
+    const bridge = bridgeClient(descriptor.port);
+    await waitFor("pre-ready acceptance bridge health", () => bridge.health(), { timeoutMs: 15_000 });
+    await activateApp(child.pid);
+
+    const terminal = await waitFor("runtime bootstrap terminal startup record", () => {
+      if (!fs.existsSync(logFile)) return null;
+      return terminalStartupRecord(readStartupJsonl(logFile));
+    }, { timeoutMs: 75_000, intervalMs: 250 });
+    await bridge.setWindow(1024, 680);
+    await activateApp(child.pid);
+
+    let previousHash = null;
+    let stable = null;
+    const deadline = Date.now() + 30_000;
+    let attempt = 0;
+    while (Date.now() < deadline) {
+      attempt += 1;
+      if (!startupRecordTokenIsPresent(readStartupJsonl(logFile), terminal.token)) {
+        throw new AcceptanceError("runtime terminal startup record disappeared before screenshot capture");
+      }
+      const probeName = `s0-startup-runtime-attention-probe-${String(attempt).padStart(3, "0")}`;
+      const shot = await bridge.screenshot(probeName);
+      const probeFile = path.resolve(shot.path);
+      if (probeFile !== screenshotRoot && !probeFile.startsWith(`${screenshotRoot}${path.sep}`)) {
+        throw new AcceptanceError("startup screenshot probe escaped the acceptance output");
+      }
+      probeFiles.push(probeFile);
+      const hash = pngSha256(probeFile);
+      if (!startupRecordTokenIsPresent(readStartupJsonl(logFile), terminal.token)) {
+        throw new AcceptanceError("runtime terminal startup record disappeared after screenshot capture");
+      }
+      if (consecutivePngHashesMatch(previousHash, hash)) {
+        fs.renameSync(probeFile, finalFrame);
+        probeFiles.pop();
+        stable = {
+          hash,
+          attempts: attempt,
+          bytes: fs.statSync(finalFrame).size,
+          terminal_token: terminal.token,
+          terminal_message: terminal.record.event.message,
+        };
+        break;
+      }
+      previousHash = hash;
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    }
+    if (stable == null) {
+      throw new AcceptanceError("runtime-attention frontend did not produce two consecutive equal PNG hashes");
+    }
+    record.screenshot_bytes = stable.bytes;
+    record.screenshot_capture_status = "PASS";
+    record.detail = { ...record.detail, ...stable };
+  } catch (error) {
+    record.deterministic_status = "FAIL";
+    record.screenshot_capture_status = "FAIL";
+    record.visual_status = "N/A";
+    record.status = "FAIL";
+    record.error = error instanceof Error ? error.message : String(error);
+    record.screenshot = null;
+  } finally {
+    for (const probeFile of probeFiles) fs.rmSync(probeFile, { force: true });
+    const terminated = await terminateChild(child);
+    if (!terminated) {
+      residualChild = child;
+      record.deterministic_status = "FAIL";
+      record.status = "FAIL";
+      record.error = record.error == null
+        ? "non-R fixture application did not terminate"
+        : `${record.error}; non-R fixture application did not terminate`;
+    }
+    fs.rmSync(descriptorFile, { force: true });
+  }
+  return { record, residualChild };
+}
+
 async function runLane(options) {
   const output = path.resolve(options.output
     ?? path.join(repositoryRoot, "target", "visual-acceptance", nowIso().replaceAll(":", "-")));
@@ -469,12 +762,14 @@ async function runLane(options) {
   fs.mkdirSync(output, { recursive: true });
 
   const evidence = createEvidence(output, appPath);
+  const selected = options.scenarios ?? SCENARIOS.map((scenario) => scenario.id);
   const lockOwner = `${(options.scenarios ?? []).join("+") || "all"}:${process.pid}`;
   const state = { child: null, bridge: null };
   let stdoutLog = null;
   let stderrLog = null;
   let lockHeld = false;
   let preserveChildAndLock = false;
+  let residualFixtureBlocksKeepApp = false;
   const fixturesRoot = path.resolve(options.fixtures ?? path.join(output, "fixtures"));
 
   try {
@@ -489,19 +784,37 @@ async function runLane(options) {
     stdoutLog = fs.createWriteStream(path.join(output, "app-stdout.log"));
     stderrLog = fs.createWriteStream(path.join(output, "app-stderr.log"));
 
-    const launch = async () => {
+    if (selected.includes("s0")) {
+      const { record: runtimeAttention, residualChild } = await capturePreReadyRuntimeAttention({
+        appPath,
+        output,
+        stdoutLog,
+        stderrLog,
+      });
+      evidence.gates.push(runtimeAttention);
+      refreshLedger(output, evidence);
+      if (residualChild != null) {
+        // Keep the exact residual PID attached to the real-window lock. The
+        // outer finalizer retries termination and either releases the lock
+        // after confirmed exit or transfers ownership to this PID. No normal
+        // launch may share its app-data, bridge descriptor, or window.
+        state.child = residualChild;
+        residualFixtureBlocksKeepApp = true;
+        throw new AcceptanceError(
+          `pre-ready fixture application ${residualChild.pid} survived termination; ready-path launch blocked`,
+        );
+      }
+    }
+
+    const launch = async (windowSize = null) => {
       const descriptorFile = path.join(output, "bridge.json");
       fs.rmSync(descriptorFile, { force: true });
       const child = spawn(appPath, [], {
-        env: {
-          ...process.env,
-          RHO_ACCEPTANCE_BRIDGE: "1",
-          RHO_ACCEPTANCE_OUTPUT: output,
-        },
+        env: acceptanceLaunchEnvironment(output),
         stdio: ["ignore", "pipe", "pipe"],
       });
-      child.stdout.pipe(stdoutLog);
-      child.stderr.pipe(stderrLog);
+      child.stdout.pipe(stdoutLog, { end: false });
+      child.stderr.pipe(stderrLog, { end: false });
       state.child = child;
       const bridgeDescriptor = await waitFor("acceptance bridge startup", () => {
         if (!fs.existsSync(descriptorFile)) return null;
@@ -510,18 +823,18 @@ async function runLane(options) {
       }, { timeoutMs: 45_000 });
       const bridge = bridgeClient(bridgeDescriptor.port);
       await waitFor("acceptance bridge health", () => bridge.health(), { timeoutMs: 15_000 });
-      // The bridge serves connections serially and holds one unanswered eval
-      // for its full 300s timeout; an eval emitted before the frontend
-      // listener attaches is lost and strands every later request behind it.
-      // So: activate the app first (a WKWebView born occluded is suspended and
-      // never loads), give the frontend a grace period to install the
-      // listener, and only then probe — patiently, because aborting a probe
-      // client-side does not free the stranded server-side eval.
-      activateApp(child.pid);
+      if (windowSize != null) await bridge.setWindow(windowSize.width, windowSize.height);
+      // The driver awaits each command in sequence, and an unanswered eval can
+      // occupy that sequence for its full 300s timeout. An eval emitted before
+      // the frontend listener attaches is lost, even though the bridge itself
+      // can accept other bounded connections. So: activate the app first (a
+      // WKWebView born occluded is suspended and never loads), give the
+      // frontend a grace period to install the listener, and only then probe.
+      await activateApp(child.pid);
       await new Promise((resolve) => setTimeout(resolve, 12_000));
-      activateApp(child.pid);
+      await activateApp(child.pid);
       await waitFor("frontend automation surface", async () => {
-        activateApp(child.pid);
+        await activateApp(child.pid);
         try {
           const value = await bridge.command({ command: "ready" });
           return value != null && typeof value === "object" ? true : null;
@@ -533,21 +846,56 @@ async function runLane(options) {
       return bridge;
     };
 
-    await launch();
+    await launch(selected.includes("s0") ? { width: 1440, height: 900 } : null);
 
     const context = {
       get bridge() { return state.bridge; },
       command: (request) => state.bridge.command(request),
-      act: (action) => state.bridge.command({ command: "act", action }),
+      // Foregrounding is an exact-app transport precondition only. It does not
+      // retry or add product settling to any action, including open_project.
+      act: (action) => dispatchRealDebugAction({
+        pid: state.child?.pid,
+        action,
+        activate: activateApp,
+        command: (request) => state.bridge.command(request),
+      }),
       ready: () => state.bridge.command({ command: "ready" }),
       snapshot: () => state.bridge.command({ command: "snapshot" }),
       query: (selector, options = {}) => state.bridge.command({ command: "query", selector, ...options }),
       setWindow: (width, height) => state.bridge.setWindow(width, height),
-      restart: async () => {
+      restart: async (windowSize = null) => {
         const terminated = await terminateChild(state.child);
         if (!terminated) throw new AcceptanceError("application did not stop for restart");
-        return launch();
+        return launch(windowSize);
       },
+      captureStartupBrowserFrames: async () => captureStartupBrowserFrames({
+        output,
+        onRecord: (record) => {
+          const problem = reviewableFrameProblem(output, record);
+          if (problem != null) {
+            record.screenshot_capture_status = "FAIL";
+            record.visual_status = "FAIL";
+            record.status = "FAIL";
+            appendGateError(record, `screenshot evidence invalid: ${problem}`);
+          }
+          evidence.gates.push(record);
+          refreshLedger(output, evidence);
+        },
+      }),
+      captureVibeAgentBrowserFrames: async () => captureVibeAgentBrowserFrames({
+        output,
+        onRecord: (record) => {
+          const problem = reviewableFrameProblem(output, record);
+          if (problem != null) {
+            record.screenshot_capture_status = "FAIL";
+            record.visual_status = "FAIL";
+            record.status = "FAIL";
+            appendGateError(record, `screenshot evidence invalid: ${problem}`);
+          }
+          evidence.gates.push(record);
+          refreshLedger(output, evidence);
+        },
+      }),
       fixtures: {
         root: fixturesRoot,
         workingProject: path.join(fixturesRoot, "working-project"),
@@ -561,11 +909,17 @@ async function runLane(options) {
         scenario,
         name,
         check,
-        { screenshot = null, criteria = [], fatal = true } = {},
+        { screenshot = null, criteria = [], fatal = true, evidenceClass = "real_debug_app" } = {},
       ) => {
+        if (screenshot != null && evidenceClass !== "real_debug_app") {
+          throw new AcceptanceError(
+            "browser/mock screenshots must use their isolated collector",
+          );
+        }
         const record = {
           scenario,
           name,
+          evidence_class: evidenceClass,
           deterministic_status: "PASS",
           screenshot_capture_status: screenshot == null ? "N/A" : "PENDING",
           visual_status: screenshot == null ? "N/A" : "PENDING",
@@ -577,7 +931,12 @@ async function runLane(options) {
           at: nowIso(),
         };
         try {
-          const detail = await check();
+          const detail = await runEvidenceClassCheck({
+            evidenceClass,
+            pid: state.child?.pid,
+            activate: activateApp,
+            check,
+          });
           if (detail != null) record.detail = detail;
         } catch (error) {
           record.deterministic_status = "FAIL";
@@ -586,7 +945,7 @@ async function runLane(options) {
         }
         if (screenshot != null) {
           try {
-            activateApp(state.child?.pid);
+            await activateApp(state.child?.pid);
             const shot = await state.bridge.screenshot(screenshot);
             record.screenshot_bytes = shot.bytes;
             record.screenshot_capture_status = "PASS";
@@ -611,6 +970,7 @@ async function runLane(options) {
       skipGate: (scenario, name, reason) => {
         evidence.gates.push({
           scenario, name,
+          evidence_class: "real_debug_app",
           deterministic_status: "SKIP",
           screenshot_capture_status: "N/A",
           visual_status: "N/A",
@@ -626,7 +986,6 @@ async function runLane(options) {
       },
     };
 
-    const selected = options.scenarios ?? SCENARIOS.map((scenario) => scenario.id);
     for (const scenarioId of selected) {
       const descriptor = SCENARIOS.find((scenario) => scenario.id === scenarioId);
       if (descriptor == null) throw new AcceptanceError(`unknown scenario: ${scenarioId}`);
@@ -653,7 +1012,7 @@ async function runLane(options) {
       finalizeStatus(evidence, output);
       refreshLedger(output, evidence);
       if (
-        options.keepApp && state.child != null &&
+        options.keepApp && !residualFixtureBlocksKeepApp && state.child != null &&
         state.child.exitCode == null && state.child.signalCode == null
       ) {
         preserveChildAndLock = true;

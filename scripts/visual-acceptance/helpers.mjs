@@ -64,16 +64,33 @@ export async function waitReady(ctx, timeoutMs = 90_000) {
   }, { timeoutMs });
 }
 
-// Opens a project and waits until the readiness probe reports it as the
-// active project. `open_project` resolves on workbench ready, but the project
-// path handoff can lag one refresh cycle, so this polls.
+function normalizedProjectPath(projectPath) {
+  return path.resolve(path.normalize(projectPath));
+}
+
+export function acceptedProjectReady(before, after, projectPath) {
+  if (after?.rsrReady !== true || typeof after.projectPath !== "string") return false;
+  const expected = normalizedProjectPath(projectPath);
+  if (normalizedProjectPath(after.projectPath) !== expected) return false;
+  if (typeof before?.projectPath !== "string" || normalizedProjectPath(before.projectPath) !== expected) {
+    return true;
+  }
+  const beforeRevision = before.evidence?.projectRevision;
+  const afterRevision = after.evidence?.projectRevision;
+  return Number.isSafeInteger(beforeRevision)
+    && Number.isSafeInteger(afterRevision)
+    && afterRevision > beforeRevision;
+}
+
+// Opens a project and waits until the readiness probe reports the exact
+// normalized path. A same-root activation must also advance project revision.
 export async function openProject(ctx, projectPath, timeoutMs = 90_000) {
+  const before = await withTimeout(ctx.ready(), 10_000, "ready before project open");
   await ctx.act({ kind: "open_project", path: projectPath });
-  const expectedName = path.basename(projectPath);
-  return waitUntil(`project ${expectedName} active`, async () => {
+  const expected = normalizedProjectPath(projectPath);
+  return waitUntil(`project ${expected} active`, async () => {
     const ready = await withTimeout(ctx.ready(), 10_000, "ready");
-    if (ready.rsrReady !== true || ready.projectPath == null) return null;
-    return ready.projectPath.endsWith(expectedName) ? ready : null;
+    return acceptedProjectReady(before, ready, projectPath) ? ready : null;
   }, { timeoutMs });
 }
 

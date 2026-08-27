@@ -4,14 +4,35 @@ import type {
   SurfaceRuntimeSnapshot,
 } from "../../transport";
 import type { SurfaceInstanceMutation, UpdateSurfaceRequest } from "../../transport/types";
-import type { SurfaceStoreSnapshot } from "../../transport/store";
+import type {
+  SurfaceStoreSnapshot,
+  WorkbenchMutationLease,
+} from "../../transport/workbench-store";
 
 export interface SurfaceInstanceMutationPorts {
   readonly getSurfaces: () => SurfaceStoreSnapshot;
-  readonly update: (request: UpdateSurfaceRequest) => Promise<SurfaceRuntimeSnapshot>;
-  readonly suspend: (request: SurfaceInstanceRequest) => Promise<SurfaceRuntimeSnapshot>;
-  readonly resume: (request: SurfaceInstanceRequest) => Promise<SurfaceRuntimeSnapshot>;
+  readonly admit: <T>(
+    projectId: string,
+    operation: (lease: WorkbenchMutationLease) => Promise<T>,
+  ) => Promise<T>;
+  readonly update: (
+    request: UpdateSurfaceRequest,
+    lease: WorkbenchMutationLease,
+  ) => Promise<SurfaceRuntimeSnapshot>;
+  readonly suspend: (
+    request: SurfaceInstanceRequest,
+    lease: WorkbenchMutationLease,
+  ) => Promise<SurfaceRuntimeSnapshot>;
+  readonly resume: (
+    request: SurfaceInstanceRequest,
+    lease: WorkbenchMutationLease,
+  ) => Promise<SurfaceRuntimeSnapshot>;
 }
+
+export type ExactSurfaceInstanceIdentity = Pick<
+  SurfaceInstance,
+  "project_id" | "instance_id" | "activation_generation"
+>;
 
 function requestFor(
   instance: SurfaceInstance,
@@ -34,8 +55,24 @@ export class SurfaceInstanceMutationController {
     this.#ports = ports;
   }
 
-  update(instanceId: string, mutation: SurfaceInstanceMutation): Promise<SurfaceRuntimeSnapshot> {
-    return this.#enqueue(instanceId, (target) => this.#ports.update({ target, mutation }));
+  update(
+    instanceId: string,
+    mutation: SurfaceInstanceMutation,
+    admissionLease?: WorkbenchMutationLease,
+  ): Promise<SurfaceRuntimeSnapshot> {
+    return this.#enqueue(instanceId, (target, lease) => (
+      this.#ports.update({ target, mutation }, lease)
+    ), admissionLease);
+  }
+
+  updateExact(
+    identity: ExactSurfaceInstanceIdentity,
+    mutation: SurfaceInstanceMutation,
+    admissionLease?: WorkbenchMutationLease,
+  ): Promise<SurfaceRuntimeSnapshot> {
+    return this.#enqueue(identity.instance_id, (target, lease) => (
+      this.#ports.update({ target, mutation }, lease)
+    ), admissionLease, identity);
   }
 
   suspend(instanceId: string): Promise<SurfaceRuntimeSnapshot> {
@@ -53,31 +90,50 @@ export class SurfaceInstanceMutationController {
 
   #enqueue(
     instanceId: string,
-    operation: (request: SurfaceInstanceRequest) => Promise<SurfaceRuntimeSnapshot>,
+    operation: (
+      request: SurfaceInstanceRequest,
+      lease: WorkbenchMutationLease,
+    ) => Promise<SurfaceRuntimeSnapshot>,
+    admissionLease?: WorkbenchMutationLease,
+    exactIdentity?: ExactSurfaceInstanceIdentity,
   ): Promise<SurfaceRuntimeSnapshot> {
     const admitted = this.#ports.getSurfaces();
     if (admitted.status !== "ready") {
       return Promise.reject(new Error("Surface Runtime is not ready."));
     }
     const admittedProjectId = admitted.snapshot.project_id;
-    const previous = this.#queues.get(instanceId) ?? Promise.resolve();
-    const task = previous.then(async () => {
-      const current = this.#ports.getSurfaces();
-      if (current.status !== "ready") throw new Error("Surface Runtime is not ready.");
-      if (current.snapshot.project_id !== admittedProjectId) {
-        throw new Error("The project changed before the component update could start.");
-      }
-      const instance = current.snapshot.catalog.instances.find(
-        (candidate) => candidate.instance_id === instanceId,
-      );
-      if (instance == null) throw new Error("The component is no longer available.");
-      return operation(requestFor(instance, current.snapshot.project_revision));
-    });
-    const tail = task.then(() => undefined, () => undefined);
-    this.#queues.set(instanceId, tail);
-    void tail.then(() => {
-      if (this.#queues.get(instanceId) === tail) this.#queues.delete(instanceId);
-    });
-    return task;
+    const enqueue = (lease: WorkbenchMutationLease) => {
+      const previous = this.#queues.get(instanceId) ?? Promise.resolve();
+      const task = previous.then(async () => {
+        const current = this.#ports.getSurfaces();
+        if (current.status !== "ready") throw new Error("Surface Runtime is not ready.");
+        if (current.snapshot.project_id !== admittedProjectId) {
+          throw new Error("The project changed before the component update could start.");
+        }
+        const instance = current.snapshot.catalog.instances.find(
+          (candidate) => candidate.instance_id === instanceId,
+        );
+        if (instance == null) throw new Error("The component is no longer available.");
+        if (
+          exactIdentity != null
+          && (
+            instance.project_id !== exactIdentity.project_id
+            || instance.activation_generation !== exactIdentity.activation_generation
+          )
+        ) {
+          throw new Error("The exact component activation is no longer available.");
+        }
+        return operation(requestFor(instance, current.snapshot.project_revision), lease);
+      });
+      const tail = task.then(() => undefined, () => undefined);
+      this.#queues.set(instanceId, tail);
+      void tail.then(() => {
+        if (this.#queues.get(instanceId) === tail) this.#queues.delete(instanceId);
+      });
+      return task;
+    };
+    return admissionLease == null
+      ? this.#ports.admit(admittedProjectId, enqueue)
+      : enqueue(admissionLease);
   }
 }

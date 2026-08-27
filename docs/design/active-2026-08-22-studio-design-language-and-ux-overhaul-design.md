@@ -34,10 +34,16 @@ WP16-C6 common Surface mutation boundary complete; WP16-C orchestration phase
 complete; WP16-D1 and WP16-D2 component-matrix/navigation/mode/error-state
 presentation slices complete; WP16-D3 Vibe/Compose/status/developer and 200%
 zoom optimization complete; WP16-E automated integration and post-
-implementation review complete. Exact raw-debug-window and owner feel
-acceptance remain open because two pre-existing debug processes were preserved.
-WP16-R1 one-command debug restart owner-authorized, implemented and verified
-2026-08-24.
+implementation review complete. Its original exact raw-debug-window identity
+gate remained open at that checkpoint because two pre-existing debug processes
+were preserved; owner feel acceptance remains open. WP16-R1 one-command debug
+restart later closed that exact-window identity gate and was implemented and
+verified 2026-08-24. WP8-R1 narrow Navigator reachability and WP16-R3 project-transition
+epoch repair implementation plus merged-candidate automated/visual verification
+passed 2026-08-27 under their bounded owning contracts.
+Studio Agent Surface presentation rounds 1-3 also completed under
+`plans/implemented-2026-08-27-studio-agent-surface-ux-spec.md`; that component-
+internal contract does not move the broader Studio design or owner-feel gates.
 
 Date: 2026-08-22
 
@@ -141,6 +147,29 @@ build/identity/start sequence. It must never signal a foreign-path installed
 Rho process, use an ungraceful/force-kill fallback, conceal a timeout or signal
 failure, or broaden product shutdown, persistence, release or installer
 authority.
+
+WP16-R3 authorization record: a release-blocking integration review found that
+the debug acceptance bridge drained Store mutations before project switching,
+while the ordinary Workbench path did not close frontend admission or quiesce
+the Studio/Surface queues. A late project-A Surface rejection could therefore
+repopulate the global action error after B or a same-root A2 activation was
+installed. The owner's existing emergency-correction and no-shortcut
+construction authorization activates the bounded D3/R3
+PROJECT-TRANSITION-EPOCH-1 repair. WP16-R3 owns only session-local
+frontend admission, queue quiescence, and epoch-scoped error presentation at
+the composition root. BH2 keeps project transaction outcomes and restoration;
+RSR/Studio/Profile/Runtime/Resource/Agent owners keep every identity, revision,
+CAS, mutation, permission, and recovery contract. The epoch is ephemeral and
+adds no schema, command, retry policy, cancellation, persistence, credential,
+approval, release, or backend authority.
+
+WP16-R3 closure record: the bounded repair is implemented under
+`plans/implemented-2026-08-27-project-transition-epoch-repair-spec.md`. The
+final App suite passed 133/133, the frozen merged source passed the complete
+stable frontend matrix (76 Vitest files / 578 tests) and locked Rust matrix,
+and its immutable S0/S3/S9 run passed 35/35 gates with 31/31 frames reviewed.
+This closes WP16-R3 only; the Studio contract's separately recorded raw-window
+and owner-feel acceptance items remain open.
 
 ## Problem And Evidence
 
@@ -882,6 +911,63 @@ Implementation and evidence:
   `NEWS.md` records WP8 under the existing `0.4.1-dev.14` candidate. Owner
   focus and interaction acceptance in that exact app remains open and is not
   claimed.
+
+### WP8-R1 — narrow Navigator primary-action reachability (implemented; merged-candidate verification passed 2026-08-27)
+
+The STARTUP-INFO-1 exact-app S0 review found a bounded WP8 presentation defect:
+when Scene geometry compresses the Navigator to roughly 124 px, the horizontal
+tab row can extend behind the Navigator's clipped boundary. `History` is then
+partly cut off while `Artifacts` and the Files search trigger can become
+pointer-inaccessible. Increasing the default pane width or skipping the S0
+gate would conceal rather than repair that state.
+
+This repair restores the common Surface header's grid-shrink contract with
+`min-width: 0`; its title already owns bounded ellipsis while More and Close
+remain token-sized direct actions. It keeps Files, History, and Artifacts as
+direct primary tab buttons. The tab group may wrap onto additional rows when
+its allocated inline space is too small, while the on-demand search trigger
+remains a non-shrinking sibling. It adds no compact-mode state, overflow menu,
+persistence, command, schema, or authority. Existing roving-tab keyboard order
+and tab/panel relationships stay unchanged; accepted Surface Runtime focus,
+accessibility, and responsive-layout authority remains controlling.
+Closing the Files search with Escape restores focus to its still-mounted
+trigger instead of dropping keyboard users to the document body.
+
+Acceptance requires an App regression for the unchanged three-tab/search DOM
+and keyboard contract plus a real 1024×680 S0 geometry gate at the compressed
+Navigator width. That gate must prove the Surface article, common header,
+Navigator section, controls, every tab, and the search trigger are contained;
+each interactive target remains at least the token minimum, with no clipping,
+overlap, or page/control horizontal overflow. The same real-debug path must
+exercise Files → ArrowRight/History → End/Artifacts → Home/Files → Tab/search
+→ Enter/input → Escape/search recovery and record each focused element's
+contained rectangle. The prior clipped frame remains failed evidence.
+
+Closure evidence: the App regressions passed inside the final 133/133 App
+suite. The pre-documentation frozen `0.4.1-dev.22` product snapshot, repository
+fingerprint
+`df64bc7de536667641f7aa96c6fcfa5c99a83713701af999c000dcd1b9311dcb`,
+passed the complete stable `rsr:check` (76 Vitest files / 578 tests). Its exact
+frozen debug binary had SHA-256
+`3fb1693239d2b2f64f1966284dd1dd485fe41afa890b67abf6969a63a8650465`;
+the immutable S0/S3/S9 run at
+`target/visual-acceptance/dev22-final-df64bc7d-3fb16932-s0-s3-s9/` passed
+35/35 deterministic gates and 31/31 reviewed frames. The real 1024x680 S0
+Navigator gate proved the Surface article, common header, Navigator section,
+tabs, and search controls contained with no horizontal overflow, exercised the
+required tab/search/Escape focus path, and its `s0-first-view.png` received a
+passing original-resolution review. That new evidence closes WP8-R1 without
+reclassifying the earlier clipped frame.
+
+Lifecycle documentation did not change the frozen product sources or frontend
+assets. The exact current debug binary has SHA-256
+`4c9d9b18920d97c0aaea309b61d1bde6ade603f1d3c268d8e3a395f55d02a1cf`.
+Its immutable confirmation run at
+`target/visual-acceptance/dev22-final-1f476c14-4c9d9b18-s0-s3-s9-r2/`
+also passed 35/35 gates and 31/31 original-resolution frame reviews; its S0
+first-view gate reconfirmed WP8-R1 at 1024x680. The `3fb169...` run remains the
+historical pre-documentation frozen-product PASS and is not presented as the
+current binary.
 
 ### WP9 — quick project switching from the Rho menu (implemented and verified 2026-08-22)
 
