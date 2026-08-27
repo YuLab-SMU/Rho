@@ -738,6 +738,76 @@ describe("Studio Agent Surface", () => {
     expect(turn.querySelector(".rho-agent-turn-status")).toBeNull();
   });
 
+  it("queues submissions while a turn runs, then dispatches them in order", async () => {
+    const transport = createMockUiKernelTransport();
+    let currentTurn = makeTurn({
+      turn_id: "agent-turn:mock-running",
+      status: "running",
+      finished_at: null,
+      terminal_reason: null,
+      prompt_preview: "First task",
+    });
+    transport.listAgentTurns = async () => [currentTurn];
+    transport.getAgentTurnDetail = async () => makeDetail(currentTurn);
+    const runAgent = vi.fn(transport.runAgent.bind(transport));
+    transport.runAgent = runAgent;
+    const { container } = await renderAgent({ transport });
+
+    const composer = () => container.querySelector<HTMLTextAreaElement>(".rho-agent-composer textarea")!;
+    const send = () => click(container.querySelector(".rho-agent-context-controls .rho-primary-action")!);
+    const queueRows = () => [...container.querySelectorAll(".rho-agent-queue-item")];
+
+    // Two submissions while the turn runs: queued, never dispatched early.
+    await typeInput(composer(), "Second task");
+    await send();
+    await typeInput(composer(), "Third task");
+    await send();
+    expect(runAgent).not.toHaveBeenCalled();
+    expect(queueRows().length).toBe(2);
+    expect(container.querySelector(".rho-agent-queue")!.textContent).toContain("Second task");
+    expect(composer().value).toBe("");
+
+    // Reorder: the second item moves above the first.
+    await click(queueRows()[1]!.querySelector("button[aria-label='Move queued message up']")!);
+    const queueText = container.querySelector(".rho-agent-queue")!.textContent!;
+    expect(queueText.indexOf("Third task")).toBeLessThan(queueText.indexOf("Second task"));
+
+    // Cancel the head: it is removed without any broker call; the running
+    // turn keeps the rest of the queue waiting.
+    await click(queueRows()[0]!.querySelector("button[aria-label='Cancel queued message']")!);
+    expect(runAgent).not.toHaveBeenCalled();
+    expect(queueRows().length).toBe(1);
+
+    // The running turn finishes: the queued head dispatches through the
+    // existing runAgent path with unchanged request shape.
+    currentTurn = {
+      ...currentTurn,
+      status: "completed",
+      finished_at: mockNow,
+      final_message: "First done",
+      terminal_reason: "completed",
+    };
+    await act(async () => {
+      transport.emitAgentTurnEvent({
+        turn_id: currentTurn.turn_id,
+        event: null,
+        turn_update: { status: "completed", final_message: "First done", error_message: null, terminal_reason: "completed" },
+        payload_truncated: false,
+      });
+      await settle();
+    });
+    await act(async () => { await settle(); });
+    expect(runAgent).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: "Second task",
+      mode: "ask",
+      task_kind: "agent_turn",
+      conversation_id: "agent-conversation:mock-shared",
+      runtime_output_context: null,
+      context_plan_digest: null,
+    }));
+    expect(queueRows().length).toBe(0);
+  });
+
   it("shows the degraded banner with dependency diagnostics when the runtime is not ready", async () => {
     const { container } = await renderAgent({
       health: { state: "needs_attention", label: "Agent dependencies need attention", detail: "aisdk is incompatible." },

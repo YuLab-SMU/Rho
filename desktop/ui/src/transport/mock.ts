@@ -186,6 +186,17 @@ export function createMockUiKernelTransport(
     if (invalidationRules.includes(`duplicate:${topic}`)) queueMicrotask(emit);
   };
   const snapshot = copySnapshot(generatedSnapshot);
+  if (search.get("agent_health") === "ready") {
+    // Demo/review runs that must submit through the composer need a ready
+    // Agent runtime; the fixture default stays degraded for the truthful
+    // degraded-state contract.
+    (snapshot.context as { agent_health: string }).agent_health = "ready";
+    (snapshot as { health: { agent: unknown } }).health.agent = {
+      state: "ready",
+      label: "Agent runtime ready",
+      detail: null,
+    };
+  }
   const requestedProject = search.get("project");
   if (requestedProject != null && requestedProject.length > 0) {
     const project = snapshot.project as {

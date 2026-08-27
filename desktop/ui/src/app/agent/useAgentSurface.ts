@@ -5,6 +5,7 @@ import type {
   AgentContextPlanPreview,
   AgentFileMutationResponse,
   AgentLlmSettingsView,
+  AgentMode,
   AgentRuntimeDiagnostics,
   AgentTurnDetail,
   AgentTurnEventFrame,
@@ -26,6 +27,14 @@ import {
   initialAgentSurfaceState,
   type AgentSurfaceViewState,
 } from "./view-state";
+
+export interface AgentQueueItem {
+  readonly id: string;
+  readonly prompt: string;
+  readonly mode: AgentMode;
+  readonly auto_approve: boolean;
+  readonly queued_at: string;
+}
 
 export interface AgentSurfaceViewProps {
   readonly instance: SurfaceInstance;
@@ -80,6 +89,11 @@ export function useAgentSurface({
   const [modelSwitchBusy, setModelSwitchBusy] = useState(false);
   const [modelQuery, setModelQuery] = useState("");
   const [filesReviewOpen, setFilesReviewOpen] = useState(false);
+  const [queue, setQueue] = useState<readonly AgentQueueItem[]>([]);
+  const queueRef = useRef<readonly AgentQueueItem[]>(queue);
+  const queueSequenceRef = useRef(0);
+  const dispatchingRef = useRef(false);
+  const dispatchHaltedRef = useRef(false);
 
   const contextPlanKey = JSON.stringify([
     view.composer.trim(),
@@ -208,6 +222,63 @@ export function useAgentSurface({
     };
     return transport.subscribeAgentTurnEvents(applyFrame);
   }, [transport, requestFrameRefresh]);
+
+  // Sequential work queue: when no turn is active and the runtime is ready,
+  // the head item starts as a normal turn through the existing runAgent
+  // path. Dispatch is single-flight; a failed dispatch is restored and
+  // halted until the user changes the queue (no silent retry storm).
+  useEffect(() => {
+    if (dispatchingRef.current || dispatchHaltedRef.current) return;
+    if (health?.state !== "ready") return;
+    if (turns.some((turn) => turn.status === "running" || turn.status === "waiting")) return;
+    const head = queueRef.current[0];
+    if (head == null) return;
+    dispatchingRef.current = true;
+    const remaining = queueRef.current.slice(1);
+    queueRef.current = remaining;
+    setQueue(remaining);
+    void (async () => {
+      try {
+        const response = await transport.runAgent({
+          prompt: head.prompt,
+          mode: head.mode,
+          task_kind: "agent_turn",
+          model_id: null,
+          auto_approve: head.auto_approve,
+          editor_context: null,
+          conversation_id: viewRef.current.conversation_id,
+          runtime_output_context: null,
+          context_plan_digest: null,
+        });
+        await refresh(response.conversation_id);
+      } catch (error: unknown) {
+        reportError(error);
+        const restored = [head, ...queueRef.current];
+        queueRef.current = restored;
+        setQueue(restored);
+        dispatchHaltedRef.current = true;
+      } finally {
+        dispatchingRef.current = false;
+      }
+    })();
+  }, [health?.state, turns, queue, refresh, reportError, transport]);
+
+  const cancelQueued = (id: string) => {
+    const next = queueRef.current.filter((item) => item.id !== id);
+    queueRef.current = next;
+    setQueue(next);
+    dispatchHaltedRef.current = false;
+  };
+  const moveQueuedUp = (id: string) => {
+    const index = queueRef.current.findIndex((item) => item.id === id);
+    if (index <= 0) return;
+    const next = [...queueRef.current];
+    const [item] = next.splice(index, 1);
+    next.splice(index - 1, 0, item!);
+    queueRef.current = next;
+    setQueue(next);
+    dispatchHaltedRef.current = false;
+  };
 
   useEffect(() => {
     let active = true;
@@ -339,6 +410,27 @@ export function useAgentSurface({
   const submit = async () => {
     const prompt = view.composer.trim();
     if (!prompt || busy || health?.state !== "ready") return;
+    // Work queue: while a turn is running or waiting, a submission joins the
+    // queue instead of blocking or erroring; the composer clears immediately.
+    const turnActive = turnsRef.current.some(
+      (turn) => turn.status === "running" || turn.status === "waiting",
+    );
+    if (turnActive) {
+      queueSequenceRef.current += 1;
+      const item: AgentQueueItem = {
+        id: `queue-${queueSequenceRef.current}`,
+        prompt,
+        mode: view.mode,
+        auto_approve: view.mode === "act" && view.auto_approve,
+        queued_at: new Date().toISOString(),
+      };
+      const next = [...queueRef.current, item];
+      queueRef.current = next;
+      setQueue(next);
+      dispatchHaltedRef.current = false;
+      commitView({ ...view, composer: "" });
+      return;
+    }
     const reviewedPlan = contextPreview?.key === contextPlanKey ? contextPreview.plan : null;
     if (runtimeOutputContext != null && reviewedPlan == null) {
       await reviewContext();
@@ -578,6 +670,9 @@ export function useAgentSurface({
     respondApproval,
     filesReviewOpen,
     setFilesReviewOpen,
+    queue,
+    cancelQueued,
+    moveQueuedUp,
     allProposals,
     pendingProposals,
     proposalOutcomeFor,

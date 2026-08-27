@@ -134,11 +134,26 @@ export function AgentComposer({ vm }: { readonly vm: AgentSurfaceVm }) {
     busy, health, contextReviewBusy, reviewContext, submit,
     activeTurn, stopActiveTurn, runtimeOutputContext, clearRuntimeOutputContext,
     contextPreview, contextPlanKey,
+    queue, cancelQueued, moveQueuedUp,
   } = vm;
   return (
     <div className="rho-agent-composer">
       {activeTurn != null && stopActiveTurn != null && (
         <AgentRunningRow status={activeTurn.status} startedAt={activeTurn.started_at} onStop={stopActiveTurn} />
+      )}
+      {queue.length > 0 && (
+        <ol className="rho-agent-queue" aria-label="Queued follow-ups">
+          {queue.map((item, index) => (
+            <li className="rho-agent-queue-item" key={item.id}>
+              <span className="rho-agent-queue-label">Queued</span>
+              <span className="rho-agent-queue-prompt" title={item.prompt}>{item.prompt}</span>
+              <span className="rho-agent-queue-actions">
+                {index > 0 && <button type="button" aria-label="Move queued message up" onClick={() => moveQueuedUp(item.id)}>↑</button>}
+                <button type="button" aria-label="Cancel queued message" onClick={() => cancelQueued(item.id)}>×</button>
+              </span>
+            </li>
+          ))}
+        </ol>
       )}
       {runtimeOutputContext != null && <div className="rho-agent-context-chip" role="status">
         <div>

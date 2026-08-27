@@ -240,3 +240,65 @@ Deferred within AGX-1 (recorded, not silent): token-level message deltas
 `finished_at` on frames (canonical value lands via the reconciling
 refresh); both are candidates for a follow-up package if the owner wants
 token streaming.
+
+## AGX-2 Contract: Composer Work Queue (sequential, no steering)
+
+Owner decision (recorded above): no interrupt of a running turn. The queue
+is therefore a plain sequential follow-up queue:
+
+- Submitting while a turn is running or waiting enqueues the prompt
+  (prompt + mode, queued-at) instead of blocking or erroring; the composer
+  clears immediately and reports the queued position truthfully.
+- Queued items render as one quiet row per item directly above the
+  composer input: order index, single-line prompt preview, move-up (except
+  the head), and cancel. Cancel removes the item without touching the
+  broker — the item never started, so no cancellation semantics exist.
+- Dispatch: when no turn is running/waiting and the queue is non-empty and
+  the runtime is ready, the head item starts as a normal turn through the
+  existing `runAgent` path (same request shape as a direct submit; queued
+  items carry no runtime-output context — attachments belong to the live
+  composer only). Dispatch is single-flight via the existing busy lane.
+- Stopping the current turn never consumes the queue: the terminal update
+  (live frame or reconciled refresh) triggers the next dispatch.
+- Boundary: the queue is UI-session state and is not persisted; a durable
+  cross-session broker-side queue is a separate package if the owner wants
+  it. No new transport command, no broker change, no new execution
+  authority.
+
+Verification: focused tests for enqueue-while-running (runAgent not
+called), dispatch-on-terminal through the existing path with unchanged
+arguments, cancel-queued without broker calls, move-up reorder, and
+stop-then-dispatch; full suite; preview capture showing
+enqueue → terminal → dispatch.
+
+## AGX-2 Implementation And Evidence (2026-08-27)
+
+Implemented as contracted (sequential queue, no steering, UI-session state):
+
+- View-model (`desktop/ui/src/app/agent/useAgentSurface.ts`):
+  `AgentQueueItem` queue with refs; `submit` enqueues while a turn is
+  running/waiting (composer clears immediately); a single-flight dispatch
+  effect starts the head item through the existing `runAgent` path with the
+  unchanged request shape when no turn is active and the runtime is ready;
+  a failed dispatch restores the item and halts until the user changes the
+  queue (no silent retry storm); `cancelQueued`/`moveQueuedUp` never touch
+  the broker.
+- Composer (`AgentComposer.tsx` + `agent-surface.css`): quiet queued rows
+  directly above the input — label, single-line prompt, move-up, cancel.
+- Mock demo support: `?agent_health=ready` overrides the degraded fixture
+  so review runs can submit through the composer (fixture default stays
+  degraded).
+
+Evidence:
+
+- `npm --prefix desktop run rsr:typecheck` and `rsr:lint`;
+- focused `AgentSurfaceView.test.tsx`: 16 of 16 passed, adding the queue
+  test (enqueue while running without runAgent, move-up reorder,
+  cancel-queued without broker calls, dispatch-on-terminal through
+  runAgent with unchanged arguments, queue drains);
+- full UI suite: 52 files, 345 tests passed;
+- `npm run rsr:build --prefix desktop`;
+- preview capture under `target/agx2-queue/`: submitting while the
+  scripted live turn runs shows the "Queued · prompt · ×" row (composer
+  already cleared); after the live turn completes, the queued item starts
+  as a normal completed turn and the queue empties.
