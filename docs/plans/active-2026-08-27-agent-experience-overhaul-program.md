@@ -144,3 +144,48 @@ All packages implemented and verified at their own gates; the Agent
 experience demonstrably streams, queues, reviews diffs, and carries an
 explicit posture; program-level acceptance (AGX-5) complete; no unowned or
 half-wired state at any integration boundary.
+
+## Owner Decisions
+
+- 2026-08-27, steering semantics: NO interrupt/steering of a running turn
+  ("打断啥，不打断"). AGX-1's event vocabulary therefore contains no
+  steer/inject types — started, activity, message delta, approval
+  requested, terminal. AGX-2 becomes a plain sequential composer queue:
+  submissions while a turn runs are queued and dispatched in order as
+  turns reach terminal states; cancelling the current turn never consumes
+  the queue.
+
+## AGX-1 Contract Cross-review (mandatory stop 1 — resolved 2026-08-27)
+
+Reviewed the AGX-1 contract against the overlapping contracts:
+
+- Approval (`implemented-2026-07-16-wp4-approval-agent-continuation-ux-design.md`
+  and the approval lanes in the broker): AGX-1 emits read-only projections
+  of persisted facts; approval request/response flow, binding, and single-use
+  semantics are untouched. A live "approval requested" frame is exactly the
+  persisted approval event the detail view already renders; responses still
+  travel the existing invoke path.
+- Cancellation/recovery: cancel stays an invoke; the terminal frame is a
+  projection of the persisted terminal event. Missed frames reconcile via
+  the existing invalidated-refresh; crash/reopen re-reads the store, so no
+  recovery semantics change.
+- Payload bounds: frames carry bounded body/code (4 KiB per text field
+  with a truncation flag; full payloads remain fetchable via
+  `getAgentTurnDetail`). This matches the bounded-transport discipline and
+  is testable with boundary payloads.
+- Project isolation: frames carry project_root and are filtered against
+  the active project in the UI; the store remains the isolation authority.
+  Two-project coverage is part of the AGX-1 test matrix.
+- Public protocol: the new `agent://turn-event` channel is additive; no
+  existing command, payload, or hook is renamed or removed. The s3 gate's
+  DOM contract is unaffected (AGX-5 re-baselines it).
+
+No conflict found. AGX-1 implementation is authorized to start.
+
+Governance exception (extension of the round-4 record, AGX-1): the lane
+registry rejected `agx-1-live-turn-events` because
+`startup-info-integration` owns the shared transport files (mock.ts,
+tauri.ts, types.ts) while accepting earlier rounds. The owner-authorized
+AGX program proceeds on the `codex/studio-agent-ux` branch under the same
+recorded exception; integration re-pick plus a full acceptance rerun of the
+transport and agent slices is the recorded follow-up.
