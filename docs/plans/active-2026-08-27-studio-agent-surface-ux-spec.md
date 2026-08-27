@@ -823,3 +823,35 @@ Round 6 evidence passed 2026-08-27 (same four lane files):
   `mode-popover-act.png` (options with hints and check; Act reveals the
   auto-approve toggle; popover probed in view), `surface-medium.png` (~231px
   no overflow).
+
+Round 7 evidence passed 2026-08-27 (the rebuild round; files: the
+`desktop/ui/src/app/agent/` module plus the composition root
+`AgentSurfaceView.tsx`, the spec; CSS and the focused test file untouched):
+
+- `npm --prefix desktop run rsr:typecheck` and `rsr:lint`;
+- full UI suite on the final snapshot: 52 files, 343 tests passed with zero
+  test edits — the public contract (component props, exported types, DOM
+  hooks, hidden-DOM bridges) is unchanged by construction;
+- `npm run rsr:build --prefix desktop`;
+- `git diff --check`;
+- preview smoke on the seeded build: the round-5 and round-6 capture probes
+  re-ran with identical results (entry-only conversation, review surface
+  with five rows and the batch bar, approval strip 80px, composer icon row,
+  mode popover with hints and the Act auto-approve toggle, 231px no
+  overflow), confirming pixel/behavior equivalence after the rebuild.
+
+Structure after the rebuild: `AgentSurfaceView.tsx` is a 27-line composition
+root; `agent/proposals.ts` (pure proposal helpers), `agent/view-state.ts`
+(persisted state + copy), `agent/useAgentSurface.ts` (the view-model hook),
+and the presentation regions `AgentToolbar.tsx` (+ degraded banner,
+capacity form), `AgentTimeline.tsx`, `AgentTurn.tsx` (+ approval strip,
+activity rows), `AgentFilesReview.tsx` (+ batch bar, proposal rows),
+`AgentComposer.tsx` (+ running row, mode menu, model menu, context
+preview).
+
+Integration follow-ups from this round: re-pick this branch's new commits
+(including the new `agent/` module) and re-run the complete `rsr:check`
+matrix plus the s3 visual-acceptance gate; the standing follow-ups
+(cross-review row, docs index, NEWS entry, version decision, foundation.css
+layer-order systemic fix, s3 "modes visible" criterion update from round 6)
+remain as listed earlier in this document.
