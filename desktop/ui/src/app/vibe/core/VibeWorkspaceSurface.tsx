@@ -345,6 +345,7 @@ export const VibeWorkspaceSurface = forwardRef<
         <VibeExplorationPanel
           projectId={page.project_id}
           projectRoot={projectRoot}
+          pageId={page.page_id}
           presentation={viewState.layoutMode === "focus-exploration" ? "focused" : "overview"}
           selection={explorationSelection}
           exactRefs={{
@@ -353,6 +354,7 @@ export const VibeWorkspaceSurface = forwardRef<
           }}
           transport={explorationTransport}
           onSelectionChange={setExplorationSelection}
+          onOpenHost={() => dispatch({ kind: "activate_region", region: "exploration" })}
           onCompose={(selection) => { void openAgent(selection, true); }}
           onOpenAgent={(selection) => { void openAgent(selection, false); }}
           onError={reportError}

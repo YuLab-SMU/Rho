@@ -22,6 +22,7 @@ import type {
   ExplorationConversationView,
   ExplorationTurnView,
 } from "./exploration-model";
+import { VibeAgentRecordHost } from "./VibeAgentRecordHost";
 
 const CONVERSATION_LIMIT = 50;
 const TURN_LIMIT = 50;
@@ -50,14 +51,21 @@ export interface VibeExplorationExactRefs {
 export interface VibeExplorationPanelProps {
   readonly projectId: string;
   readonly projectRoot: string;
+  readonly pageId: string;
   readonly presentation: "overview" | "focused";
   readonly selection: VibeExplorationSelection;
   readonly exactRefs: VibeExplorationExactRefs;
   readonly transport: VibeExplorationTransport;
   readonly onSelectionChange: (selection: VibeExplorationSelection) => void;
+  readonly onOpenHost: () => void;
   readonly onCompose: (selection: VibeExplorationSelection) => void;
   readonly onOpenAgent: (selection: VibeExplorationSelection) => void;
   readonly onError: (error: unknown) => void;
+}
+
+interface AgentRecordHostState {
+  readonly selection: VibeExplorationSelection;
+  readonly trigger: "start" | "record";
 }
 
 interface ExplorationData {
@@ -153,17 +161,22 @@ function keyboardListNavigation(
 export function VibeExplorationPanel({
   projectId,
   projectRoot,
+  pageId,
   presentation,
   selection,
   exactRefs,
   transport,
   onSelectionChange,
+  onOpenHost,
   onCompose,
   onOpenAgent,
   onError,
 }: VibeExplorationPanelProps) {
   const headingId = useId();
+  const hostId = useId();
+  const hostHeadingId = useId();
   const [state, setState] = useState<PanelState>(INITIAL_STATE);
+  const [recordHost, setRecordHost] = useState<AgentRecordHostState | null>(null);
   const stateRef = useRef(state);
   const selectionRef = useRef(selection);
   const exactRefsRef = useRef(exactRefs);
@@ -171,12 +184,77 @@ export function VibeExplorationPanel({
   const projectEpochRef = useRef(0);
   const projectRootRef = useRef(projectRoot);
   const requestGenerationRef = useRef(0);
+  const panelRef = useRef<HTMLElement>(null);
+  const hostHeadingRef = useRef<HTMLHeadingElement>(null);
+  const returnFocusTriggerRef = useRef<AgentRecordHostState["trigger"] | null>(null);
+  const restoreHostFocusRef = useRef(false);
+  const explorationListScrollRef = useRef(0);
+  const hostObservedSelectionRef = useRef(selection);
+  const hostWasOpenRef = useRef(false);
 
   stateRef.current = state;
   selectionRef.current = selection;
   exactRefsRef.current = exactRefs;
   projectRootRef.current = projectRoot;
   callbacksRef.current = { onSelectionChange, onError };
+
+  const openRecordHost = useCallback((
+    trigger: AgentRecordHostState["trigger"],
+    nextSelection: VibeExplorationSelection,
+  ) => {
+    const list = panelRef.current?.querySelector<HTMLElement>(".rho-vibe-exploration-list");
+    explorationListScrollRef.current = list?.scrollTop ?? 0;
+    returnFocusTriggerRef.current = trigger;
+    restoreHostFocusRef.current = false;
+    hostObservedSelectionRef.current = selectionRef.current;
+    setRecordHost({ trigger, selection: nextSelection });
+    onOpenHost();
+  }, [onOpenHost]);
+
+  const closeRecordHost = useCallback((restoreFocus: boolean) => {
+    restoreHostFocusRef.current = restoreFocus;
+    setRecordHost(null);
+  }, []);
+
+  useEffect(() => {
+    const wasOpen = hostWasOpenRef.current;
+    hostWasOpenRef.current = recordHost != null;
+    if (recordHost != null) {
+      if (!wasOpen) hostHeadingRef.current?.focus();
+      return;
+    }
+    const list = panelRef.current?.querySelector<HTMLElement>(".rho-vibe-exploration-list");
+    if (list != null) list.scrollTop = explorationListScrollRef.current;
+    if (!restoreHostFocusRef.current) return;
+    restoreHostFocusRef.current = false;
+    const trigger = returnFocusTriggerRef.current;
+    returnFocusTriggerRef.current = null;
+    const target = trigger == null
+      ? null
+      : panelRef.current?.querySelector<HTMLButtonElement>(
+          `button[data-agent-record-trigger="${trigger}"]`,
+        ) ?? null;
+    const fallback = panelRef.current?.querySelector<HTMLButtonElement>(
+      "button[data-exploration-conversation][aria-current='true']",
+    ) ?? panelRef.current?.querySelector<HTMLButtonElement>(
+      "button[data-exploration-conversation]",
+    ) ?? panelRef.current?.querySelector<HTMLElement>("h2") ?? null;
+    (target ?? fallback)?.focus();
+  }, [recordHost]);
+
+  useEffect(() => {
+    setRecordHost(null);
+    restoreHostFocusRef.current = false;
+    returnFocusTriggerRef.current = null;
+  }, [pageId, projectId, projectRoot]);
+
+  useEffect(() => {
+    if (recordHost == null || sameSelection(hostObservedSelectionRef.current, selection)) return;
+    hostObservedSelectionRef.current = selection;
+    if (sameSelection(recordHost.selection, selection)) return;
+    returnFocusTriggerRef.current = null;
+    closeRecordHost(true);
+  }, [closeRecordHost, recordHost, selection.conversationId, selection.turnId]);
 
   const publish = useCallback((next: PanelState) => {
     stateRef.current = next;
@@ -362,6 +440,7 @@ export function VibeExplorationPanel({
       ...current,
       data: { ...current.data, selectedTurnId: turnId },
     });
+    setRecordHost((host) => host == null ? null : { ...host, selection: next });
     onSelectionChange(next);
   };
 
@@ -424,15 +503,17 @@ export function VibeExplorationPanel({
 
   return (
     <section
+      ref={panelRef}
       className="rho-vibe-exploration"
       data-presentation={presentation}
+      data-agent-host-open={recordHost == null ? undefined : "true"}
       aria-labelledby={headingId}
       aria-busy={state.kind === "loading" || ready?.refreshing === true}
     >
       <header className="rho-vibe-exploration-header">
         <div>
           <span className="rho-eyebrow">Agent 工作</span>
-          <h2 id={headingId}>自主探索</h2>
+          <h2 id={headingId} tabIndex={-1}>自主探索</h2>
         </div>
         {ready != null && ready.data.conversations.length > 0 && (
           <p aria-live="polite">
@@ -472,11 +553,31 @@ export function VibeExplorationPanel({
             </p>
           )}
 
-          {ready.data.conversations.length === 0 ? (
+          {recordHost != null ? (
+            <VibeAgentRecordHost
+              ref={hostHeadingRef}
+              id={hostId}
+              headingId={hostHeadingId}
+              selection={recordHost.selection}
+              conversation={selectedConversation}
+              selectedTurn={selectedTurn}
+              exact={exact}
+              turnNavigation={turnNavigation}
+              onClose={() => closeRecordHost(true)}
+              onCompose={onCompose}
+              onOpenAgent={onOpenAgent}
+            />
+          ) : ready.data.conversations.length === 0 ? (
             <div className="rho-vibe-exploration-state rho-vibe-exploration-state-empty" role="status">
               <strong>尚无自主探索</strong>
               <p>可以从当前手稿提出一个问题；这里不会创建聊天标签页。</p>
-              <button type="button" onClick={() => onCompose(currentSelection)}>开始探索</button>
+              <button
+                type="button"
+                data-agent-record-trigger="start"
+                aria-expanded={false}
+                aria-controls={hostId}
+                onClick={() => openRecordHost("start", currentSelection)}
+              >开始探索</button>
             </div>
           ) : (
             <div className="rho-vibe-exploration-body">
@@ -545,7 +646,13 @@ export function VibeExplorationPanel({
                     {ready.data.turns.length === 0 ? (
                       <div className="rho-vibe-exploration-state rho-vibe-exploration-state-empty" role="status">
                         <strong>会话已建立，尚未开始探索</strong>
-                        <button type="button" onClick={() => onCompose(currentSelection)}>提出任务</button>
+                        <button
+                          type="button"
+                          data-agent-record-trigger="record"
+                          aria-expanded={false}
+                          aria-controls={hostId}
+                          onClick={() => openRecordHost("record", currentSelection)}
+                        >查看 Agent 工作区</button>
                       </div>
                     ) : selectedTurn == null ? (
                       <>
@@ -621,10 +728,13 @@ export function VibeExplorationPanel({
                         )}
 
                         <footer className="rho-vibe-exploration-actions">
-                          <button type="button" onClick={() => onCompose(currentSelection)}>
-                            {selectedConversation.legacyReadOnly ? "发起新的探索" : "调整探索"}
-                          </button>
-                          <button type="button" onClick={() => onOpenAgent(currentSelection)}>打开完整记录</button>
+                          <button
+                            type="button"
+                            data-agent-record-trigger="record"
+                            aria-expanded={false}
+                            aria-controls={hostId}
+                            onClick={() => openRecordHost("record", currentSelection)}
+                          >在 Vibe 中查看 Agent 记录</button>
                         </footer>
                       </>
                     )}

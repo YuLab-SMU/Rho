@@ -92,6 +92,26 @@ function boundedPublicText(value: string | null | undefined, limit = 1_200): str
   return normalized.length <= limit ? normalized : `${normalized.slice(0, limit)}…`;
 }
 
+function publicActivityBody(event: AgentTurnEvent): string | null {
+  const fileProposalFact = "Agent 记录了一项文件修改建议；修改内容和应用操作仅在 Studio 中检查。";
+  if (event.tool === "propose_file_edit") return fileProposalFact;
+  const rawBody = event.body?.trim();
+  if (rawBody == null || rawBody.length === 0) return null;
+  if (!rawBody.startsWith("{")) return boundedPublicText(rawBody);
+  if (rawBody.length > 64_000) {
+    return "结构化活动详情过长；请在 Studio 中检查原始记录。";
+  }
+  try {
+    const payload = JSON.parse(rawBody) as { readonly kind?: unknown };
+    if (payload.kind === "rho.file_edit_proposal") {
+      return fileProposalFact;
+    }
+  } catch {
+    return "结构化活动详情格式不可用；请在 Studio 中检查原始记录。";
+  }
+  return boundedPublicText(rawBody);
+}
+
 export function projectExplorationStatus(
   status: string,
   terminalReason: string | null,
@@ -159,7 +179,7 @@ export function projectExplorationActivities(
         key: `${event.turn_id}:${event.id}`,
         kind: activityKind(event),
         title: boundedPublicText(event.title, 240) ?? "Agent 活动",
-        body: boundedPublicText(event.body),
+        body: publicActivityBody(event),
         timestamp: event.timestamp,
         status: event.status,
         code: boundedPublicText(event.code, 16_000),

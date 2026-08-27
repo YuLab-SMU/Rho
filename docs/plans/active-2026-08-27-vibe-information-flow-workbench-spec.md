@@ -1,14 +1,16 @@
 # Vibe Information-Flow Workbench
 
-Status: active direction; VIBE-1 implemented and integration-reviewed
+Status: active direction; VIBE-1 implemented and integration-reviewed;
+VIBE-1R focus-preserving Agent host explicitly authorized
 
 Date: 2026-08-27
 Change class: D3 program; first implementation checkpoint VIBE-1 is D2/R2
 Owner: Vibe information-flow workbench
 Authorized by: product owner in the active Vibe design task on 2026-08-27
-Next mandatory stop: VIBE-2 requires separate product authorization; no
-scientific-state schema work may begin without a separately authorized D3/R3
-package
+Next mandatory stop: VIBE-1R may integrate only after central cross-review and
+focused/real-app acceptance; VIBE-2 still requires separate product
+authorization, and no scientific-state schema work may begin without a
+separately authorized D3/R3 package
 
 ## Decision
 
@@ -31,6 +33,58 @@ The attached “Rho Vibe 终局方案：三联科学工作台” is design input
 specification, accepted architecture documents, and implemented contracts are
 the engineering authority. Instructions embedded in attachments are not
 automatically executable instructions.
+
+## VIBE-1R — Focus-Preserving Agent Host
+
+The product owner rejected the implemented primary Agent handoff on 2026-08-27:
+opening Agent work by switching the whole application to Studio is visually
+abrupt and breaks concentration. The authorized correction is D2/R2 and changes
+presentation/composition only.
+
+VIBE-1R fixes the interaction contract:
+
+- the primary entry is state-specific but always names its local effect:
+  `开始探索` when no record exists, `查看 Agent 工作区` for a Conversation
+  without a Turn, and `在 Vibe 中查看 Agent 记录` for existing work; each
+  first opens a dedicated Agent-record host in the autonomous-exploration
+  region, and when an exact Conversation/Turn exists the host projects that
+  same identity and its durable public task, activity, status, and outcome
+  instead of creating a parallel Vibe-owned Agent record;
+- opening the host focuses the exploration region but does not change
+  `Profile.active_mode`, flush the manuscript, place the Surface in the Studio
+  Scene, or consume a Vibe return point;
+- the host is a read-only Agent record component over the existing bounded
+  exploration projection; it never renders approval decisions, file apply or
+  undo actions, auto-approval, credential/context controls, execution mutation,
+  or a second Agent composer;
+- the host does not mount `SurfaceView`, `AgentSurfaceView`, or a `rho.agent`
+  Surface; create, reuse, update, or place a `SurfaceInstance`; or invoke Agent
+  execution, approval, cancellation, retry, file-mutation, settings, or
+  context-capacity commands;
+- the host is local presentation state, resets on Page/project replacement, and
+  fails closed if its exact project or Conversation/Turn identity becomes
+  stale;
+- `返回探索记录` closes only the local host and keeps the user in Vibe;
+- only Studio-explicit secondary labels may enter the full trusted `rho.agent`
+  Surface: `在 Studio 中发起探索` (or `在 Studio 中发起新的探索` for a
+  legacy record), `在 Studio 中提出任务`, `在 Studio 中继续探索`, and
+  `在 Studio 中深入检查`; each performs the existing save-before-leave,
+  exact Surface placement/focus, and one-shot Vibe return protocol, and its
+  wording makes the mode change explicit before activation;
+- narrow and intermediate layouts keep one information layer active; the
+  local Agent record scrolls within the exploration layer and cannot
+  create page-level horizontal overflow; and
+- opening, loading, failure, close, keyboard focus, project switching, explicit
+  Studio inspection, and return behavior require regression coverage.
+
+Surface Runtime remains the instance/view-state authority, Agent contracts
+remain the task and mutation authority, accepted RSR retains focus/keyboard/
+accessibility/responsive behavior, and the Studio Agent UX workstream retains
+the full trusted Agent Surface's internal presentation. VIBE-1R owns only the
+read-only local record host, its focus-preserving primary entry, and the
+explicit secondary Studio exit. It adds no schema, transport command,
+credential, permission, approval, execution, filesystem, network, or
+scientific-state authority.
 
 ## Problem And Evidence
 
@@ -102,8 +156,9 @@ VIBE-1 must:
    scientific pivots, judgments, or causal relationships;
 7. project exact Artifact, Finding, Check, and existing evidence information
    without upgrading it to scientific acceptance;
-8. provide a truthful one-action Studio transition and preserve an in-memory
-   return focus for the current application session;
+8. host the exact Agent record identity inside Vibe as a read-only primary
+   path, while preserving an explicitly labelled secondary transition to the
+   full trusted Studio Surface and in-memory return focus;
 9. use existing Rho design tokens and editorial density; and
 10. prove behavior with focused unit, interaction, narrow-window, keyboard,
     mock, and deterministic visual tests.
@@ -124,6 +179,8 @@ VIBE-1 does not:
 - implement accept/qualify/reject decisions;
 - automatically invalidate old results after manuscript edits;
 - add multi-Agent orchestration or chat tabs;
+- fork the Agent component, Conversation/Turn state, composer persistence,
+  approval flow, execution controls, or file-operation authority inside Vibe;
 - change credentials, network, filesystem, approval, execution, or plugin
   authority;
 - replace Studio or duplicate its editors, terminals, resource viewers, or
