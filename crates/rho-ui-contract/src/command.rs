@@ -299,11 +299,6 @@ pub fn application_command_definitions_v1() -> Result<Vec<CommandDefinitionV1>, 
             "Open scientific execution history and recovery actions.",
         ),
         (
-            "artifacts",
-            "Open Artifacts",
-            "Open durable project outputs.",
-        ),
-        (
             "problems",
             "Open Problems",
             "Open actionable project diagnostics.",

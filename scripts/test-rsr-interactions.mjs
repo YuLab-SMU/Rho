@@ -102,7 +102,7 @@ async function evidence(page) {
   return page.locator("#rsrPreviewEvidence").evaluate((element) => JSON.parse(element.textContent ?? "{}"));
 }
 
-async function openHistory(page) {
+async function openSurface(page, surfaceId) {
   let compose = page.getByRole("button", { name: "Compose" });
   if (await compose.count() === 0) {
     await page.getByRole("button", { name: "Customize toolbar" }).click();
@@ -112,9 +112,71 @@ async function openHistory(page) {
     compose = page.getByRole("button", { name: "Compose" });
   }
   await compose.click();
-  const factory = page.locator('[data-surface-factory="rho.runs"]');
+  const factory = page.locator(`[data-surface-factory="${surfaceId}"]`);
   await factory.getByRole("button", { name: "Open", exact: true }).click();
-  await page.locator('article[data-surface-id="rho.runs"]').waitFor();
+  await page.locator(`article[data-surface-id="${surfaceId}"]`).waitFor();
+}
+
+async function openHistory(page) {
+  await openSurface(page, "rho.runs");
+}
+
+async function assertDockviewTitleHierarchy(page, surfaceIds) {
+  await page.waitForFunction((ids) => ids.every((surfaceId) => {
+    const surface = document.querySelector(`article[data-surface-id="${surfaceId}"]`);
+    if (!(surface instanceof HTMLElement) || surface.getClientRects().length === 0) return false;
+    const instanceId = surface.dataset.instanceId;
+    const host = [...document.querySelectorAll("[data-rho-surface-actions-host]")]
+      .find((candidate) => candidate.getAttribute("data-rho-surface-actions-host") === instanceId);
+    return host?.querySelector("[aria-label^='More actions for']") != null;
+  }), surfaceIds);
+  const states = await page.evaluate((ids) => ids.map((surfaceId) => {
+    const surface = document.querySelector(`article[data-surface-id="${surfaceId}"]`);
+    if (!(surface instanceof HTMLElement)) throw new Error(`Missing ${surfaceId}`);
+    const instanceId = surface.dataset.instanceId;
+    const tab = document.querySelector(`[data-rho-tab-instance-id="${instanceId}"]`);
+    const tabTitle = tab?.querySelector(".dv-default-tab-content");
+    const header = tab?.closest(".dv-tabs-and-actions-container");
+    const host = [...document.querySelectorAll("[data-rho-surface-actions-host]")]
+      .find((candidate) => candidate.getAttribute("data-rho-surface-actions-host") === instanceId);
+    const action = host?.querySelector("[aria-label^='More actions for']");
+    if (!(tab instanceof HTMLElement) || !(tabTitle instanceof HTMLElement)
+        || !(header instanceof HTMLElement) || !(action instanceof HTMLElement)) {
+      throw new Error(`Incomplete Dockview title hierarchy for ${surfaceId}`);
+    }
+    const titleRect = tabTitle.getBoundingClientRect();
+    const actionRect = action.getBoundingClientRect();
+    const headerRect = header.getBoundingClientRect();
+    const surfaceRect = surface.getBoundingClientRect();
+    const hit = document.elementFromPoint(
+      actionRect.left + actionRect.width / 2,
+      actionRect.top + actionRect.height / 2,
+    );
+    return {
+      surfaceId,
+      expectedTitle: (surface.getAttribute("aria-label") ?? "").replace(/ component$/, ""),
+      tabTitle: tabTitle.textContent?.trim() ?? "",
+      innerChromeCount: surface.querySelectorAll(":scope > .rho-surface-chrome").length,
+      actionCount: host?.querySelectorAll("[aria-label^='More actions for']").length ?? 0,
+      closeCount: tab.closest(".dv-tab")?.querySelectorAll("[aria-label='Close tab']").length ?? 0,
+      headerOverflow: header.scrollWidth - header.clientWidth,
+      titleActionOverlap: titleRect.right > actionRect.left && actionRect.right > titleRect.left,
+      actionContained: actionRect.left >= headerRect.left - 1 && actionRect.right <= headerRect.right + 1
+        && actionRect.top >= headerRect.top - 1 && actionRect.bottom <= headerRect.bottom + 1,
+      actionHit: hit != null && action.contains(hit),
+      contentFollowsHeader: surfaceRect.top >= headerRect.bottom - 2,
+    };
+  }), surfaceIds);
+  for (const state of states) {
+    const titleMatches = state.tabTitle === state.expectedTitle
+      || state.tabTitle.startsWith(`${state.expectedTitle} · `);
+    if (!titleMatches || state.innerChromeCount !== 0
+        || state.actionCount !== 1 || state.closeCount !== 1 || state.headerOverflow > 2
+        || state.titleActionOverlap || !state.actionContained || !state.actionHit
+        || !state.contentFollowsHeader) {
+      throw new Error(`Dockview title hierarchy regressed: ${JSON.stringify(state)}`);
+    }
+  }
 }
 
 try {
@@ -127,6 +189,7 @@ try {
     if (htmlBuildId !== declared.build_id || (await evidence(page)).buildId !== declared.build_id) {
       throw new Error("DOM, preview evidence, and generated build identity disagree");
     }
+    await assertDockviewTitleHierarchy(page, ["rho.navigator", "rho.console", "rho.file-source"]);
     await page.getByLabel("Rho menu").click();
     await page.getByRole("button", { name: new RegExp(`Development build\\s+${declared.build_id}`) }).waitFor();
 
@@ -160,6 +223,9 @@ try {
     if (await navigator.getByRole("tab", { name: "History", exact: true }).getAttribute("aria-selected") !== "true") {
       throw new Error("Navigator ArrowRight did not activate History");
     }
+    if (await navigator.getByRole("tab", { name: "Artifacts", exact: true }).count() !== 0) {
+      throw new Error("Navigator still exposed the retired Artifacts section");
+    }
     const recentOutputs = navigator.locator(".rho-navigator-recent");
     if (!await recentOutputs.evaluate((element) => element.open)) {
       await recentOutputs.locator("summary").click();
@@ -167,18 +233,21 @@ try {
     if (!await recentOutputs.evaluate((element) => element.open)) {
       throw new Error("Navigator recent outputs did not remain expanded after activation");
     }
-    await navigator.getByRole("button", { name: "View all outputs" }).click();
-    await page.waitForFunction(() =>
-      document.querySelector('article[data-surface-id="rho.navigator"] [role="tab"][aria-selected="true"]')
-        ?.textContent?.trim() === "Artifacts"
-    );
-    if (await navigator.getByRole("tab", { name: "Artifacts", exact: true }).getAttribute("aria-selected") !== "true") {
-      throw new Error("Navigator recent-output action did not activate Artifacts");
+    await navigator.getByRole("button", { name: "Open Plots" }).click();
+    await page.locator("article[data-surface-id='rho.plots']").waitFor();
+    if (await page.locator("article[data-surface-id='rho.artifacts']").count() !== 0) {
+      throw new Error("Navigator recent outputs resurrected the retired Artifacts Surface");
+    }
+    if (await page.getByRole("button", { name: "Open Artifact", exact: true }).count() !== 0) {
+      throw new Error("Workbench still exposed an action targeting the retired Artifacts Surface");
     }
 
     const plugin = page.locator('article[data-surface-id="ui.surface.differential-expression"]');
     await plugin.waitFor();
-    if (await plugin.locator(".rho-surface-title strong").first().textContent() !== "Differential expression") {
+    const pluginInstanceId = await plugin.getAttribute("data-instance-id");
+    const pluginTab = page.locator(`[data-rho-tab-instance-id="${pluginInstanceId}"]`);
+    if ((await pluginTab.textContent())?.trim() !== "Differential expression"
+        || await plugin.locator(":scope > .rho-surface-chrome").count() !== 0) {
       throw new Error("project component exposed its technical Surface identifier");
     }
     await plugin.getByRole("tab", { name: "Configure", exact: true }).click();
@@ -186,7 +255,7 @@ try {
 
     await page.getByRole("tab", { name: "Environment", exact: true }).click();
     const environment = page.locator('article[data-surface-id="rho.environment"]');
-    await environment.getByRole("button", { name: "More actions for Environment" }).click();
+    await page.getByRole("button", { name: "More actions for Environment" }).click();
     await page.getByRole("dialog", { name: "More actions for Environment" })
       .getByRole("button", { name: "Requests", exact: true })
       .click();
@@ -211,6 +280,50 @@ try {
     await page.waitForFunction(() => globalThis.__RHO_RSR_SCENARIO_TRACE__?.runtimeExecuteAttempts.length >= 2);
     await consoleSurface.waitFor({ timeout: 10_000 });
     await consoleSurface.getByText("Mock evaluation: library(ggplot2)", { exact: true }).waitFor({ timeout: 10_000 });
+    const consolePresentation = await consoleSurface.evaluate((surface) => {
+      const entries = [...surface.querySelectorAll(".rho-console-entry")];
+      const command = entries[0]?.querySelector(".rho-console-command");
+      const results = entries[0]?.querySelector(":scope > .rho-console-results");
+      const result = results?.querySelector(".rho-console-result");
+      if (!(command instanceof HTMLElement) || !(results instanceof HTMLElement)
+          || !(result instanceof HTMLElement)) throw new Error("Console command/output fixture is incomplete");
+      const commandStyle = getComputedStyle(command);
+      const entryStyle = getComputedStyle(entries[0]);
+      const resultStyle = getComputedStyle(result);
+      const commandRect = command.getBoundingClientRect();
+      const resultsRect = results.getBoundingClientRect();
+      return {
+        entryCount: entries.length,
+        groupStarts: entries.map((entry) => entry.getAttribute("data-runtime-group-start")),
+        workspaceLabels: entries.flatMap((entry) =>
+          [...entry.querySelectorAll(".rho-console-workspace-label")]
+            .map((label) => label.textContent?.trim() ?? "")
+        ),
+        commandBackground: commandStyle.backgroundColor,
+        entryBackground: entryStyle.backgroundColor,
+        commandBorderWidth: Number.parseFloat(commandStyle.borderInlineStartWidth),
+        commandPadding: Number.parseFloat(commandStyle.paddingInlineStart),
+        commandOverflow: command.scrollWidth - command.clientWidth,
+        outputGap: resultsRect.top - commandRect.bottom,
+        resultBorderWidth: Number.parseFloat(resultStyle.borderLeftWidth),
+        resultBorderColor: resultStyle.borderLeftColor,
+      };
+    });
+    if (consolePresentation.entryCount < 2
+        || consolePresentation.groupStarts[0] !== "true"
+        || consolePresentation.groupStarts[1] !== "false"
+        || JSON.stringify(consolePresentation.workspaceLabels) !== JSON.stringify(["Workspace R"])) {
+      throw new Error(`Console repeated or lost a consecutive Workspace label: ${JSON.stringify(consolePresentation)}`);
+    }
+    if (consolePresentation.commandBackground === consolePresentation.entryBackground
+        || consolePresentation.commandBorderWidth < 3
+        || consolePresentation.commandPadding < 7
+        || consolePresentation.commandOverflow > 1
+        || consolePresentation.outputGap < 7
+        || consolePresentation.resultBorderWidth < 2
+        || consolePresentation.resultBorderColor === "rgba(0, 0, 0, 0)") {
+      throw new Error(`Console command/output boundary is not visually explicit: ${JSON.stringify(consolePresentation)}`);
+    }
     if (await page.getByText("Selection or current R expression is empty or incomplete.", { exact: true }).count() > 0) {
       throw new Error("blank-gap Source execution regressed to an incomplete-selection error");
     }
@@ -233,6 +346,94 @@ try {
     await openHistory(page);
     if (await page.locator('[data-domain-id^="runtime-execution:mock-"]').count() !== 0) {
       throw new Error("rejected execution was falsely recorded in History");
+    }
+    await context.close();
+  }
+
+  {
+    const { context, page } = await openWorkbench();
+    await openSurface(page, "rho.plots");
+    const plots = page.locator('article[data-surface-id="rho.plots"]');
+    const thumbnail = plots.locator("img.rho-domain-output-image").first();
+    await thumbnail.waitFor({ state: "visible" });
+    await thumbnail.evaluate((image) => {
+      if (!(image instanceof HTMLImageElement)) throw new Error("Plot thumbnail is not an image");
+      if (image.complete && image.naturalWidth > 0 && image.naturalHeight > 0) return;
+      return new Promise((resolve, reject) => {
+        const timeout = window.setTimeout(() => reject(new Error("Plot thumbnail did not decode")), 5_000);
+        image.addEventListener("load", () => {
+          window.clearTimeout(timeout);
+          resolve(undefined);
+        }, { once: true });
+        image.addEventListener("error", () => {
+          window.clearTimeout(timeout);
+          reject(new Error("Plot thumbnail failed to decode"));
+        }, { once: true });
+      });
+    });
+    const plotState = await plots.evaluate((surface) => ({
+      text: surface.textContent ?? "",
+      sources: [...surface.querySelectorAll("img")].map((image) => image.getAttribute("src") ?? ""),
+    }));
+    if (plotState.sources.length === 0 || plotState.sources.some((source) => !source.startsWith("data:image/png;base64,"))) {
+      throw new Error(`mock Plot thumbnails did not use PNG data URLs: ${JSON.stringify(plotState.sources)}`);
+    }
+    if (/preview unavailable|payload_json|data_base64|project_root/i.test(plotState.text)) {
+      throw new Error("mock Plots exposed a failed preview or raw transport payload");
+    }
+    await context.close();
+  }
+
+  {
+    const { context, page } = await openWorkbench();
+    await openHistory(page);
+    const history = page.locator('article[data-surface-id="rho.runs"]');
+    const geometry = await history.evaluate(async (surface) => {
+      surface.style.width = "220px";
+      surface.style.maxWidth = "220px";
+      surface.style.flex = "0 0 220px";
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const toolbar = surface.querySelector(".rho-runtime-history-toolbar");
+      const summary = surface.querySelector(".rho-runtime-history-summary");
+      const title = summary?.querySelector("strong");
+      const subtitle = summary?.querySelector("small");
+      const search = toolbar?.querySelector('input[aria-label="Filter History"]');
+      const list = surface.querySelector(".rho-runtime-history-list");
+      const detail = surface.querySelector(".rho-runtime-history-detail");
+      if (!(toolbar instanceof HTMLElement) || !(summary instanceof HTMLElement)
+          || !(title instanceof HTMLElement) || !(subtitle instanceof HTMLElement)
+          || !(search instanceof HTMLElement) || !(list instanceof HTMLElement)
+          || !(detail instanceof HTMLElement)) throw new Error("History narrow-layout fixture is incomplete");
+      const fragments = (element) => {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        return range.getClientRects().length;
+      };
+      const toolbarRect = toolbar.getBoundingClientRect();
+      const searchRect = search.getBoundingClientRect();
+      const listRect = list.getBoundingClientRect();
+      const detailRect = detail.getBoundingClientRect();
+      return {
+        surfaceWidth: surface.getBoundingClientRect().width,
+        toolbarHeight: toolbarRect.height,
+        toolbarOverflow: toolbar.scrollWidth - toolbar.clientWidth,
+        titleFragments: fragments(title),
+        subtitleFragments: fragments(subtitle),
+        titleWhiteSpace: getComputedStyle(title).whiteSpace,
+        subtitleWhiteSpace: getComputedStyle(subtitle).whiteSpace,
+        searchContained: searchRect.left >= toolbarRect.left - 1 && searchRect.right <= toolbarRect.right + 1,
+        stackedBody: Math.abs(listRect.left - detailRect.left) <= 1 && detailRect.top >= listRect.bottom - 1,
+      };
+    });
+    if (geometry.surfaceWidth > 222 || geometry.toolbarOverflow > 2 || geometry.toolbarHeight > 140) {
+      throw new Error(`narrow History toolbar overflowed or grew vertically: ${JSON.stringify(geometry)}`);
+    }
+    if (geometry.titleFragments > 1 || geometry.subtitleFragments > 1
+        || geometry.titleWhiteSpace !== "nowrap" || geometry.subtitleWhiteSpace !== "nowrap") {
+      throw new Error(`narrow History summary wrapped into a text column: ${JSON.stringify(geometry)}`);
+    }
+    if (!geometry.searchContained || !geometry.stackedBody) {
+      throw new Error(`narrow History did not keep its controls and stacked body contained: ${JSON.stringify(geometry)}`);
     }
     await context.close();
   }
@@ -272,6 +473,11 @@ try {
     }
     const horizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     if (horizontalOverflow > 2) throw new Error(`narrow recovery introduced ${horizontalOverflow}px horizontal overflow`);
+    const narrowSurfaceIds = await page.locator("article[data-surface-id]").evaluateAll((surfaces) => surfaces
+      .filter((surface) => surface instanceof HTMLElement && surface.getClientRects().length > 0)
+      .map((surface) => surface.getAttribute("data-surface-id"))
+      .filter((surfaceId) => ["rho.navigator", "rho.console", "rho.file-source"].includes(surfaceId)));
+    if (narrowSurfaceIds.length > 0) await assertDockviewTitleHierarchy(page, narrowSurfaceIds);
     await context.close();
   }
 
@@ -592,11 +798,21 @@ try {
     await page.waitForFunction(() =>
       document.querySelector(".rho-vibe-workspace")?.getAttribute("data-layout") === "focus-verification"
     );
-    const openExactArtifact = vibeWorkspace.getByRole("button", { name: "在 Studio 中查看", exact: true }).first();
-    await openExactArtifact.focus();
-    await openExactArtifact.press("Enter");
+    const artifactCandidate = vibeWorkspace.locator(".rho-vibe-verification-artifact");
+    await artifactCandidate.waitFor();
+    if (await artifactCandidate.getByRole("button", { name: "在 Studio 中查看", exact: true }).count() !== 0) {
+      throw new Error("Vibe artifact verification still targeted the retired Artifacts Surface");
+    }
+    if (await page.locator("[data-surface-id='rho.artifacts']").count() !== 0) {
+      throw new Error("Vibe artifact verification mounted the retired Artifacts Surface");
+    }
+    const openStudio = page.getByRole("button", { name: "Studio", exact: true });
+    await openStudio.focus();
+    await openStudio.press("Enter");
     await page.locator(".rho-canvas-studio").waitFor();
-    await page.locator("[data-surface-id='rho.artifacts'] [data-domain-id='artifact:plot-1']").waitFor();
+    if (await page.locator("[data-surface-id='rho.artifacts']").count() !== 0) {
+      throw new Error("Studio mode restored a retired Artifacts Surface");
+    }
     const returnToVibe = page.getByRole("button", { name: "Vibe", exact: true });
     await returnToVibe.focus();
     await returnToVibe.press("Enter");
@@ -752,7 +968,7 @@ try {
   }
 
   succeeded = true;
-  process.stdout.write("RSR real-interaction acceptance passed: identity, resize, Navigator/plugin tabs, component modes, Source/Console/History, rejection recovery, docking, narrow layout, and Vibe overview/intermediate-preview/local-Agent-record/focus/narrow editing contracts\n");
+  process.stdout.write("RSR real-interaction acceptance passed: identity, resize, Dockview title hierarchy, Navigator/plugin tabs, retired Artifacts Surface, component modes, Source/Console grouping/History, Plot thumbnails, rejection recovery, docking, narrow layout, and Vibe overview/intermediate-preview/local-Agent-record/focus/narrow editing contracts\n");
 } catch (error) {
   if (currentPage != null && !currentPage.isClosed()) {
     await currentPage.screenshot({ path: join(artifactRoot, "failure.png"), fullPage: true }).catch(() => undefined);

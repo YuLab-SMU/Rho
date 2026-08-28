@@ -25,7 +25,7 @@ interface RuntimeHistoryProps {
   readonly persistFilter: (filter: string) => Promise<void>;
   readonly reportError: (cause: unknown) => void;
   readonly useInAgent: (reference: RuntimeOutputReference) => void;
-  readonly openOutputReference: (kind: "plot" | "artifact", id: string) => void;
+  readonly openPlot: (id: string) => void;
 }
 
 function oneLine(value: string): string {
@@ -106,7 +106,7 @@ export function RuntimeHistory({
   persistFilter,
   reportError,
   useInAgent,
-  openOutputReference,
+  openPlot,
 }: RuntimeHistoryProps) {
   const [filter, setFilter] = useState(initialFilter);
   const [executions, setExecutions] = useState<readonly RuntimeExecution[]>([]);
@@ -374,7 +374,7 @@ export function RuntimeHistory({
   return <section className="rho-runtime-history" data-domain-kind="timeline">
     <div className="rho-runtime-history-top">
     <header className="rho-runtime-history-toolbar">
-      <div>
+      <div className="rho-runtime-history-summary">
         <strong>{loading && total === 0
           ? "Loading…"
           : attentionCount > 0
@@ -511,12 +511,12 @@ export function RuntimeHistory({
               const block = runtimeOutputChunkBlock(chunk);
               return <div className={`rho-console-result rho-console-result-${block.kind}`} key={chunk.sequence}>
                 {block.label != null && <strong>{block.label}</strong>}<pre title={block.reference != null ? block.text : undefined}>{block.reference != null ? shortenId(block.text) : block.text}</pre>
-                {block.reference != null && <button
+                {block.reference?.kind === "plot" && <button
                   type="button"
                   className="rho-runtime-output-reference"
                   data-reference-id={block.reference.id}
-                  onClick={() => openOutputReference(block.reference!.kind, block.reference!.id)}
-                >Open {block.reference.kind === "plot" ? "Plot" : "Artifact"}</button>}
+                  onClick={() => openPlot(block.reference!.id)}
+                >Open Plot</button>}
               </div>;
             })}
             {detailLoading && <span role="status">Loading output…</span>}

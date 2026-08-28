@@ -818,6 +818,47 @@ describe("UI Kernel transport and external store", () => {
     ]);
   });
 
+  it("projects Plot records with their Plot identity and without inline image payloads", async () => {
+    const transport = createTauriUiKernelTransport(async <T,>(command: string) => {
+      if (command !== "list_plot_artifacts") throw new Error(`unexpected command ${command}`);
+      return [{
+        plot_id: "plot:exact-preview",
+        run_id: "run:different-identity",
+        source_path: "analysis.R",
+        media_type: "image/png",
+        payload_json: JSON.stringify({ "image/png": "A".repeat(6_000) }),
+        provenance_complete: true,
+        created_at: "2026-08-27T20:00:00Z",
+      }] as T;
+    }, async () => () => undefined);
+
+    const plots = await transport.loadDomainSurface("rho.plots");
+    expect(plots.items).toHaveLength(1);
+    expect(plots.items[0]?.id).toBe("plot:exact-preview");
+    expect(plots.items[0]?.detail).not.toContain("payload_json");
+    expect(plots.items[0]?.detail).not.toContain("AAAA");
+    expect(JSON.parse(plots.items[0]?.detail ?? "{}")).toMatchObject({
+      plot_id: "plot:exact-preview",
+      run_id: "run:different-identity",
+      media_type: "image/png",
+    });
+  });
+
+  it("keeps surface identities ahead of cross-reference identities", async () => {
+    const transport = createTauriUiKernelTransport(async <T,>(command: string) => {
+      if (command !== "list_evidence_claims") throw new Error(`unexpected command ${command}`);
+      return [{
+        claim_id: "claim:primary-card",
+        artifact_id: "artifact:cross-reference",
+        summary: "Claim linked to an artifact",
+      }] as T;
+    }, async () => () => undefined);
+
+    const evidence = await transport.loadDomainSurface("rho.evidence");
+    expect(evidence.items).toHaveLength(1);
+    expect(evidence.items[0]?.id).toBe("claim:primary-card");
+  });
+
   it("keeps startup recovery actionable and never enters an unreconciled workspace", async () => {
     const calls: string[] = [];
     const transport = createTauriUiKernelTransport(async <T,>(command: string) => {

@@ -140,7 +140,6 @@ const FIRST_PARTY_SURFACE_IDS: &[&str] = &[
     "rho.evidence",
     "rho.git",
     "rho.runs",
-    "rho.artifacts",
     "rho.problems",
     "rho.plots",
     "rho.logs",
@@ -390,11 +389,10 @@ impl InternalPlugin for SurfacePlaygroundPlugin {
                 first_party_surface_definition(
                     "rho.navigator",
                     "Navigator",
-                    "Browse project files, execution history, and artifacts as the workbench navigation column; opening a file creates an independent File Source or Preview view.",
+                    "Browse project files and execution history as the workbench navigation column; opening a file creates an independent File Source or Preview view.",
                     &[
                         ("files", "Files", interactive),
                         ("runs", "History", interactive),
-                        ("artifacts", "Artifacts", read_only),
                     ],
                     false,
                 ),
@@ -420,16 +418,6 @@ impl InternalPlugin for SurfacePlaygroundPlugin {
                     "History",
                     "Review broker-owned scientific execution history and recovery state.",
                     &[("history", "History", interactive)],
-                    false,
-                ),
-                first_party_surface_definition(
-                    "rho.artifacts",
-                    "Artifacts",
-                    "Browse durable outputs produced by project runs.",
-                    &[
-                        ("gallery", "Gallery", read_only),
-                        ("list", "List", read_only),
-                    ],
                     false,
                 ),
                 first_party_surface_definition(

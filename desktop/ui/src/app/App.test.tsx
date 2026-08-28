@@ -206,7 +206,11 @@ describe("Studio foundation app", () => {
   }
 
   async function openSurfaceMenu(surface: Element) {
-    const trigger = surface.querySelector<HTMLButtonElement>(".rho-surface-actions [aria-label^='More actions for']");
+    const instanceId = (surface as HTMLElement).dataset.instanceId;
+    const actionsHost = [...document.querySelectorAll<HTMLElement>("[data-rho-surface-actions-host]")]
+      .find((candidate) => candidate.dataset.rhoSurfaceActionsHost === instanceId);
+    const trigger = (actionsHost ?? surface)
+      .querySelector<HTMLButtonElement>(".rho-surface-actions [aria-label^='More actions for']");
     if (trigger == null) throw new Error("Surface action menu trigger is missing.");
     await act(async () => {
       trigger.click();
@@ -217,6 +221,18 @@ describe("Studio foundation app", () => {
         .find((candidate) => candidate.getAttribute("aria-label") === trigger.getAttribute("aria-label"));
     if (menu == null) throw new Error("Surface action menu did not open.");
     return menu;
+  }
+
+  async function closeSurface(surface: HTMLElement) {
+    const tab = document.querySelector<HTMLElement>(
+      `[data-rho-tab-instance-id='${surface.dataset.instanceId}']`,
+    );
+    const close = tab?.closest(".dv-tab")?.querySelector<HTMLButtonElement>("[aria-label='Close tab']");
+    if (close == null) throw new Error("Dockview close action is missing.");
+    await act(async () => {
+      close.click();
+      await settle();
+    });
   }
 
   function installPointerCapture() {
@@ -341,10 +357,7 @@ describe("Studio foundation app", () => {
         .find((button) => button.textContent === "Settings…")!.click();
       await settle();
     });
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>("[data-surface-id='rho.settings'] [aria-label^='Remove surface-instance:']")!.click();
-      await settle();
-    });
+    await closeSurface(container.querySelector<HTMLElement>("[data-surface-id='rho.settings']")!);
     expect(container.querySelector("[data-surface-id='rho.settings']")).toBeNull();
     const restoreMenu = await openRhoMenu(container);
     await act(async () => {
@@ -3441,7 +3454,7 @@ describe("Studio foundation app", () => {
       pointer(document.body, "pointerdown", 600, 600);
       await settle();
     });
-    expect(source.querySelector(".rho-surface-actions .rho-menu-popover-panel")).toBeNull();
+    expect(document.querySelector("[role='dialog'][aria-label='More actions for Source editor']")).toBeNull();
 
     await act(async () => {
       source.querySelector<HTMLButtonElement>("[aria-label^='File information for']")!.click();
@@ -3466,6 +3479,26 @@ describe("Studio foundation app", () => {
     expect(fileActions.textContent).toContain("Apply view group");
     expect(fileActions.textContent).toContain("Rename file");
     expect(fileActions.textContent).toContain("Delete file");
+  });
+
+  it("uses Dockview tabs as the sole component title and hosts management beside them", async () => {
+    const { container } = await renderApp();
+    for (const [surfaceId, title] of [
+      ["rho.navigator", "Navigator"],
+      ["rho.console", "R Console"],
+      ["rho.file-source", "Source editor"],
+    ] as const) {
+      const surface = container.querySelector<HTMLElement>(`[data-surface-id='${surfaceId}']`)!;
+      const instanceId = surface.dataset.instanceId;
+      const tab = container.querySelector<HTMLElement>(`[data-rho-tab-instance-id='${instanceId}']`)!;
+      const actionsHost = [...container.querySelectorAll<HTMLElement>("[data-rho-surface-actions-host]")]
+        .find((candidate) => candidate.dataset.rhoSurfaceActionsHost === instanceId);
+      expect(tab.textContent).toContain(title);
+      expect(surface.querySelector(":scope > .rho-surface-chrome")).toBeNull();
+      expect(actionsHost?.querySelector(`[aria-label='More actions for ${title}']`)).not.toBeNull();
+      expect(surface.querySelector("[aria-label^='Remove']")).toBeNull();
+      expect(tab.closest(".dv-tab")?.querySelector("[aria-label='Close tab']")).not.toBeNull();
+    }
   });
 
   it("runs the complete Source expression in the exact visible Console with provenance and advances once", async () => {
@@ -4385,7 +4418,7 @@ describe("Studio foundation app", () => {
     const navigator = container.querySelector("[data-surface-id='rho.navigator']")!;
     expect(navigator.textContent).toContain("Files");
     expect(navigator.textContent).toContain("History");
-    expect(navigator.textContent).toContain("Artifacts");
+    expect(navigator.querySelector("[role='tab'][aria-label='Artifacts']")).toBeNull();
     const fileRow = navigator.querySelector<HTMLButtonElement>("[data-nav-file='analysis.R']");
     expect(fileRow).not.toBeNull();
     const before = container.querySelectorAll("[data-surface-id='rho.file-source']").length;
@@ -4452,7 +4485,6 @@ describe("Studio foundation app", () => {
       .toEqual([
         ["Files", 0, "true"],
         ["History", -1, "false"],
-        ["Artifacts", -1, "false"],
       ]);
     expect([...controls.children]).toEqual([tablist, searchToggle]);
     expect(searchToggle.getAttribute("aria-label")).toBe("Search project files");
@@ -4486,8 +4518,8 @@ describe("Studio foundation app", () => {
       openOutputs.click();
       await settle();
     });
-    expect(tabs[2]!.getAttribute("aria-selected")).toBe("true");
-    expect(navigator.querySelector("[role='tabpanel']")?.textContent).toContain("plots/qc.png");
+    expect(tabs[1]!.getAttribute("aria-selected")).toBe("true");
+    expect(container.querySelector("[data-surface-id='rho.plots']")).not.toBeNull();
   });
 
   it("keeps the idle Console focused on runtime, output, and one compact composer", async () => {
@@ -4523,7 +4555,106 @@ describe("Studio foundation app", () => {
       await settle();
     });
     expect(restart).toHaveBeenCalledOnce();
-    expect(document.activeElement).toBe(consoleView.querySelector("[aria-label='More actions for R Console']"));
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("More actions for R Console");
+  });
+
+  it("groups consecutive Console commands by Workspace and separates commands from output", async () => {
+    const transport = createMockUiKernelTransport();
+    const initialRuntimes = await transport.loadRuntimes();
+    const runtimeSnapshot = await transport.createRuntime({
+      project_id: initialRuntimes.project_id,
+      runtime_provider_id: initialRuntimes.providers[0]!.definition.runtime_provider_id,
+      expected_project_revision: initialRuntimes.project_revision,
+      expected_snapshot_revision: initialRuntimes.snapshot_revision,
+      display_label: "Auxiliary R",
+    });
+    const auxiliary = runtimeSnapshot.instances.find((runtime) => !runtime.primary_scientific_runtime)!;
+    const { container } = await renderApp(transport);
+    const setTextarea = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+    const setSelect = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!;
+    const consoleView = () => container.querySelector<HTMLElement>("[data-surface-id='rho.console']")!;
+    const run = async (code: string, expectedCount: number) => {
+      const composer = consoleView().querySelector<HTMLTextAreaElement>("textarea")!;
+      await act(async () => {
+        setTextarea.call(composer, code);
+        composer.dispatchEvent(new Event("input", { bubbles: true }));
+        composer.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+        for (let index = 0; index < 12; index += 1) await Promise.resolve();
+      });
+      await vi.waitFor(() => {
+        expect(consoleView().querySelectorAll(".rho-console-entry")).toHaveLength(expectedCount);
+      });
+    };
+
+    await run("first_workspace_command()", 1);
+    await run("second_workspace_command()", 2);
+    let entries = [...consoleView().querySelectorAll<HTMLElement>(".rho-console-entry")];
+    expect(entries.map((entry) => entry.dataset.runtimeGroupStart)).toEqual(["true", "false"]);
+    expect(entries.flatMap((entry) =>
+      [...entry.querySelectorAll<HTMLElement>(".rho-console-workspace-label")].map((label) => label.textContent)
+    )).toEqual(["Workspace R"]);
+    expect(entries[0]?.querySelector(".rho-console-command")?.textContent).toContain("first_workspace_command()");
+    expect(entries[0]?.querySelector(":scope > .rho-console-results")?.textContent)
+      .toContain("Mock evaluation: first_workspace_command()");
+
+    const runtimePicker = consoleView().querySelector<HTMLSelectElement>("[aria-label^='Runtime for']")!;
+    await act(async () => {
+      setSelect.call(runtimePicker, auxiliary.runtime_instance_id);
+      runtimePicker.dispatchEvent(new Event("change", { bubbles: true }));
+      for (let index = 0; index < 12; index += 1) await Promise.resolve();
+    });
+    await vi.waitFor(() => {
+      expect(consoleView().querySelector<HTMLSelectElement>("[aria-label^='Runtime for']")?.value)
+        .toBe(auxiliary.runtime_instance_id);
+    });
+    await run("auxiliary_command()", 3);
+
+    const primary = runtimeSnapshot.instances.find((runtime) => runtime.primary_scientific_runtime)!;
+    const auxiliaryPicker = consoleView().querySelector<HTMLSelectElement>("[aria-label^='Runtime for']")!;
+    await act(async () => {
+      setSelect.call(auxiliaryPicker, primary.runtime_instance_id);
+      auxiliaryPicker.dispatchEvent(new Event("change", { bubbles: true }));
+      for (let index = 0; index < 12; index += 1) await Promise.resolve();
+    });
+    await vi.waitFor(() => {
+      expect(consoleView().querySelector<HTMLSelectElement>("[aria-label^='Runtime for']")?.value)
+        .toBe(primary.runtime_instance_id);
+    });
+    await run("workspace_after_switch()", 4);
+
+    entries = [...consoleView().querySelectorAll<HTMLElement>(".rho-console-entry")];
+    expect(entries.map((entry) => entry.dataset.runtimeGroupStart))
+      .toEqual(["true", "false", "true", "true"]);
+    expect(entries.flatMap((entry) =>
+      [...entry.querySelectorAll<HTMLElement>(".rho-console-workspace-label")].map((label) => label.textContent)
+    )).toEqual(["Workspace R", "Auxiliary R", "Workspace R"]);
+
+    await act(async () => {
+      consoleView().querySelector<HTMLButtonElement>("[aria-label='Filter Console output']")!.click();
+      await settle();
+    });
+    const filter = consoleView().querySelector<HTMLInputElement>("[aria-label^='Filter output']")!;
+    const setInput = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    await act(async () => {
+      setInput.call(filter, "workspace");
+      filter.dispatchEvent(new Event("input", { bubbles: true }));
+      await settle();
+    });
+    entries = [...consoleView().querySelectorAll<HTMLElement>(".rho-console-entry")];
+    expect(entries.map((entry) => entry.dataset.runtimeGroupStart)).toEqual(["true", "false", "true"]);
+    expect(entries.flatMap((entry) =>
+      [...entry.querySelectorAll<HTMLElement>(".rho-console-workspace-label")].map((label) => label.textContent)
+    )).toEqual(["Workspace R", "Workspace R"]);
+
+    await act(async () => {
+      setInput.call(filter, "second_workspace_command");
+      filter.dispatchEvent(new Event("input", { bubbles: true }));
+      await settle();
+    });
+    entries = [...consoleView().querySelectorAll<HTMLElement>(".rho-console-entry")];
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.dataset.runtimeGroupStart).toBe("true");
+    expect(entries[0]?.querySelector(".rho-console-workspace-label")?.textContent).toBe("Workspace R");
   });
 
   it("opens Console output filtering on demand and never leaves a hidden filter active", async () => {
@@ -5538,7 +5669,7 @@ describe("Studio foundation app", () => {
       .toBe("manuscript");
   });
 
-  it("opens one exact referenced artifact in Studio and restores the in-session Vibe focus", async () => {
+  it("keeps exact artifact verification in Vibe without reopening the retired component", async () => {
     const transport = createMockUiKernelTransport();
     const profile = structuredClone(await transport.loadUiProfile());
     const page = profile.profile.vibe_pages.find(
@@ -5571,6 +5702,7 @@ describe("Studio foundation app", () => {
     page.focused_block_id = "block:artifact-review";
     transport.publishUiProfile(profile);
     const openSurface = vi.spyOn(transport, "openSurface");
+    const setMode = vi.spyOn(transport, "setUiProfileMode");
     const { container } = await renderApp(transport);
 
     await act(async () => {
@@ -5590,97 +5722,14 @@ describe("Studio foundation app", () => {
     });
     expect(container.querySelector(".rho-vibe-workspace")?.getAttribute("data-layout"))
       .toBe("focus-verification");
-
-    const setMode = transport.setUiProfileMode.bind(transport);
-    let markStudioModeRequested = () => {};
-    const studioModeRequested = new Promise<void>((resolve) => {
-      markStudioModeRequested = resolve;
-    });
-    let releaseStudioMode = () => {};
-    const studioModeBlocked = new Promise<void>((resolve) => {
-      releaseStudioMode = resolve;
-    });
-    let interceptedStudioMode = false;
-    transport.setUiProfileMode = vi.fn(async (request) => {
-      if (request.mode === "studio" && !interceptedStudioMode) {
-        interceptedStudioMode = true;
-        markStudioModeRequested();
-        await studioModeBlocked;
-      }
-      return setMode(request);
-    });
-
-    await act(async () => {
-      [...container.querySelectorAll<HTMLButtonElement>(".rho-vibe-verification button")]
-        .find((button) => button.textContent === "在 Studio 中查看")!
-        .click();
-      await studioModeRequested;
-      await settle();
-    });
-    expect(container.querySelector(".rho-vibe-workspace")?.getAttribute("data-layout"))
-      .toBe("focus-verification");
     expect(container.querySelector<HTMLElement>("[data-block-id='block:artifact-review']")?.dataset.vibeActive)
       .toBe("true");
-
-    await act(async () => {
-      releaseStudioMode();
-      for (let index = 0; index < 32; index += 1) await Promise.resolve();
-    });
-    expect(openSurface).toHaveBeenCalledWith(expect.objectContaining({
-      surface_id: "rho.artifacts",
-      mode_id: "list",
-      view_state: { selected_id: "artifact:plot-1", filter: "" },
-    }));
-    expect(container.querySelector(".rho-canvas-studio")).not.toBeNull();
-    expect(container.querySelector("[data-surface-id='rho.artifacts'] [data-domain-id='artifact:plot-1']"))
-      .not.toBeNull();
-
-    await act(async () => {
-      [...container.querySelectorAll<HTMLButtonElement>(".rho-mode-switch button")]
-        .find((button) => button.textContent === "Vibe")!
-        .click();
-      for (let index = 0; index < 24; index += 1) await Promise.resolve();
-    });
-    expect(container.querySelector(".rho-vibe-workspace")).not.toBeNull();
-    expect(container.querySelector<HTMLElement>("[data-block-id='block:artifact-review']")?.dataset.vibeActive)
-      .toBe("true");
-    expect(container.querySelector(".rho-vibe-workspace")?.getAttribute("data-layout"))
-      .toBe("focus-verification");
-
-    const pageBProfile = structuredClone(await transport.loadUiProfile());
-    const restoredPage = pageBProfile.profile.vibe_pages.find(
-      (candidate) => candidate.page_id === "page:project-review",
-    )!;
-    const secondPage = {
-      ...structuredClone(restoredPage),
-      page_id: "page:second-review",
-      label: "Second review",
-      page_revision: 1,
-      sections: [],
-      focused_block_id: null,
-    };
-    (pageBProfile.profile as { revision: number }).revision += 1;
-    (pageBProfile.profile as { active_vibe_page_id: string | null }).active_vibe_page_id = secondPage.page_id;
-    (pageBProfile.profile as { vibe_pages: typeof pageBProfile.profile.vibe_pages }).vibe_pages = [
-      ...pageBProfile.profile.vibe_pages,
-      secondPage,
-    ];
-    await act(async () => {
-      transport.publishUiProfile(pageBProfile);
-      await settle();
-    });
-    expect(container.querySelector(".rho-vibe-workspace")?.getAttribute("data-layout")).toBe("overview");
-
-    const pageAProfile = structuredClone(await transport.loadUiProfile());
-    (pageAProfile.profile as { revision: number }).revision += 1;
-    (pageAProfile.profile as { active_vibe_page_id: string | null }).active_vibe_page_id = restoredPage.page_id;
-    await act(async () => {
-      transport.publishUiProfile(pageAProfile);
-      await settle();
-    });
-    expect(container.querySelector(".rho-vibe-workspace")?.getAttribute("data-layout")).toBe("overview");
-    expect(container.querySelector(".rho-vibe-workspace")?.getAttribute("data-active-region"))
-      .toBe("manuscript");
+    expect([...container.querySelectorAll<HTMLButtonElement>(".rho-vibe-verification button")]
+      .some((button) => button.textContent === "在 Studio 中查看")).toBe(false);
+    expect(container.querySelector("[data-surface-id='rho.artifacts']")).toBeNull();
+    expect(container.querySelector("[data-surface-factory='rho.artifacts']")).toBeNull();
+    expect(openSurface).not.toHaveBeenCalled();
+    expect(setMode.mock.calls.some(([request]) => request.mode === "studio")).toBe(false);
   });
 
   it("clears an A1 Vibe return point when a same-project transition is cancelled", async () => {
@@ -5688,6 +5737,18 @@ describe("Studio foundation app", () => {
     const transport = createMockUiKernelTransport(
       `?mode=vibe&project=${encodeURIComponent(projectA)}`,
     );
+    const surfaces = structuredClone(await transport.loadSurfaces());
+    const checkResult = await transport.runCheckProject({
+      project_id: surfaces.project_id,
+      expected_project_revision: surfaces.project_revision,
+    });
+    const checkSurface = surfaces.catalog.instances.find(
+      (instance) => instance.instance_id === "instance:check",
+    )!;
+    (checkSurface as { view_state: unknown }).view_state = {
+      check_result_id: checkResult.result.result_id,
+    };
+    transport.publishSurfaces(surfaces);
     const profile = structuredClone(await transport.loadUiProfile());
     const page = profile.profile.vibe_pages.find(
       (candidate) => candidate.page_id === profile.profile.active_vibe_page_id,
@@ -5703,9 +5764,9 @@ describe("Studio foundation app", () => {
       blocks: [{
         block_id: "block:return-epoch",
         content: {
-          kind: "artifact_ref",
-          artifact_id: "artifact:plot-1",
-          label: "Return-point artifact",
+          kind: "surface_ref",
+          instance_id: "instance:check",
+          live: true,
         },
       }],
     }];
@@ -5724,7 +5785,7 @@ describe("Studio foundation app", () => {
     } as const));
     transport.pickProjectDirectory = cancelPick;
     const { container } = await renderApp(transport);
-    await vi.waitFor(() => expect(container.querySelector(".rho-vibe-verification-artifact"))
+    await vi.waitFor(() => expect(container.querySelector(".rho-vibe-verification-check"))
       .not.toBeNull());
 
     await act(async () => {
@@ -5907,6 +5968,18 @@ describe("Studio foundation app", () => {
 
   it("rejects an exact Studio intent when the latest manuscript block now references another target", async () => {
     const transport = createMockUiKernelTransport();
+    const surfaces = structuredClone(await transport.loadSurfaces());
+    const checkResult = await transport.runCheckProject({
+      project_id: surfaces.project_id,
+      expected_project_revision: surfaces.project_revision,
+    });
+    const checkSurface = surfaces.catalog.instances.find(
+      (instance) => instance.instance_id === "instance:check",
+    )!;
+    (checkSurface as { view_state: unknown }).view_state = {
+      check_result_id: checkResult.result.result_id,
+    };
+    transport.publishSurfaces(surfaces);
     const profile = structuredClone(await transport.loadUiProfile());
     const page = profile.profile.vibe_pages.find(
       (candidate) => candidate.page_id === profile.profile.active_vibe_page_id,
@@ -5918,7 +5991,7 @@ describe("Studio foundation app", () => {
         layout: { kind: "flow" };
         blocks: Array<{
           block_id: string;
-          content: { kind: "artifact_ref"; artifact_id: string; label: string };
+          content: { kind: "surface_ref"; instance_id: string; live: boolean };
         }>;
       }>;
       focused_block_id: string | null;
@@ -5930,9 +6003,9 @@ describe("Studio foundation app", () => {
       blocks: [{
         block_id: "block:stable-id",
         content: {
-          kind: "artifact_ref",
-          artifact_id: "artifact:plot-1",
-          label: "Current QC candidate",
+          kind: "surface_ref",
+          instance_id: "instance:check",
+          live: true,
         },
       }],
     }];
@@ -5960,9 +6033,9 @@ describe("Studio foundation app", () => {
     )! as unknown as typeof page;
     changedPage.page_revision += 1;
     changedPage.sections[0]!.blocks[0]!.content = {
-      kind: "artifact_ref",
-      artifact_id: "artifact:replacement",
-      label: "Replacement candidate",
+      kind: "surface_ref",
+      instance_id: "instance:console-a",
+      live: true,
     };
     (changed.profile as { revision: number }).revision += 1;
 
@@ -6048,10 +6121,7 @@ describe("Studio foundation app", () => {
       setValue.call(secondInput, "survivor draft");
       secondInput.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    await act(async () => {
-      firstCard.querySelector<HTMLButtonElement>("button[aria-label^='Remove']")!.click();
-      await settle();
-    });
+    await closeSurface(firstCard);
     const remaining = container.querySelector<HTMLElement>("[data-surface-id='rho.surface-playground']")!;
     expect(container.querySelectorAll("[data-surface-id='rho.surface-playground']")).toHaveLength(1);
     expect(remaining.dataset.instanceId).toBe(survivorId);
@@ -6470,7 +6540,6 @@ describe("Studio foundation app", () => {
       const fixtures = {
         "rho.runs": [{ id: "run:secret", title: "workspace.execute", subtitle: "analysis.R", status: "failed", detail: "{\"run_id\":\"secret\",\"project_root\":\"/private/project\",\"workspace_id\":\"internal-workspace\",\"source_path\":\"analysis.R\",\"execution_mode\":\"expression\",\"code_preview\":\"plot(x)\",\"error_message\":\"object x not found\",\"started_at\":\"2026-08-22T10:00:00Z\"}" }],
         "rho.render-jobs": [{ id: "render:1", title: "analysis.qmd → HTML", subtitle: "analysis.qmd", status: "completed", detail: "{\"source_path\":\"analysis.qmd\",\"request_type\":\"render\",\"started_at\":\"2026-08-22T10:00:00Z\"}" }],
-        "rho.artifacts": [{ id: "artifact:1", title: "plots/qc.png", subtitle: "image/png", status: "available", detail: "{\"artifact_kind\":\"plot\",\"media_type\":\"image/png\",\"source_path\":\"analysis.R\",\"project_root\":\"/private/project\"}" }],
         "rho.plots": [{ id: "plot:mock-1", title: "QC plot", subtitle: "image/png", status: "ready", detail: "{\"media_type\":\"image/png\",\"source_path\":\"analysis.R\",\"payload_json\":\"private-payload\"}" }],
         "rho.problems": [{ id: "problem:1", title: "object x not found", subtitle: "analysis.R", status: "error", detail: "{\"source_path\":\"analysis.R\",\"line_number\":7,\"workspace_id\":\"internal-workspace\"}" }],
         "rho.logs": [{ id: "log:1", title: "Startup diagnostics", subtitle: "now", status: "current", detail: "{\"detail\":\"Ark ready\\nWorkspace R ready\",\"project_root\":\"/private/project\"}" }],
@@ -6488,6 +6557,7 @@ describe("Studio foundation app", () => {
     });
     const { container } = await renderApp(transport);
     await openInspector(container);
+    expect(container.querySelector("[data-surface-factory='rho.artifacts']")).toBeNull();
     const open = async (surfaceId: string) => {
       await act(async () => {
         container.querySelector<HTMLElement>(`[data-surface-factory='${surfaceId}']`)!
@@ -6539,11 +6609,6 @@ describe("Studio foundation app", () => {
       .some((button) => button.textContent === "Run again")).toBe(false);
     expect(retry).not.toHaveBeenCalled();
 
-    const artifacts = await open("rho.artifacts");
-    expect(artifacts.querySelector("[data-domain-kind='outputs']")).not.toBeNull();
-    expect(artifacts.querySelector(".rho-domain-output-preview")).toBeNull();
-    expect(artifacts.textContent).toContain("Recorded artifacts and provenance");
-    expect(artifacts.querySelector(".rho-domain-row-action")).toBeNull();
     const plots = await open("rho.plots");
     expect(plots.querySelector(".rho-domain-output-image")?.getAttribute("src"))
       .toMatch(/^data:image\/png;base64,/);
@@ -6892,7 +6957,11 @@ describe("Studio foundation app", () => {
     expect(plugin).not.toBeNull();
     expect(plugin?.getAttribute("aria-label")).toBe("Differential expression component");
     expect(plugin?.getAttribute("data-surface-area")).toBe("context");
-    expect(plugin?.querySelector(".rho-surface-title strong")?.textContent).toBe("Differential expression");
+    const pluginTab = container.querySelector<HTMLElement>(
+      `[data-rho-tab-instance-id='${plugin?.dataset.instanceId}']`,
+    );
+    expect(pluginTab?.textContent).toContain("Differential expression");
+    expect(plugin?.querySelector(".rho-surface-title")).toBeNull();
     expect(plugin?.textContent).toContain("Differential expression explorer");
     expect(plugin?.querySelector(".rho-plugin-surface-document > header > span")?.textContent).toBe("Project component");
     expect(plugin?.querySelector(".rho-plugin-document-meta summary")?.textContent).toBe("Document details");

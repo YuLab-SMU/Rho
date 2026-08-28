@@ -1598,6 +1598,9 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
   const surfaceView = (
     instance: SurfaceInstance,
     embedded = false,
+    _nodeId?: string,
+    _paneMemberCount?: number,
+    gestureOwner?: "rho" | "dockview",
   ) => {
     const hostScope = renderedActionScope;
     if (
@@ -2051,6 +2054,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
         });
       }}
       embedded={embedded}
+      dockviewHosted={gestureOwner === "dockview"}
       openNavigatorFile={openNavigatorFile}
       openSurfaceById={openSurfaceById}
       agentRuntimeOutputContext={agentRuntimeOutputContext}

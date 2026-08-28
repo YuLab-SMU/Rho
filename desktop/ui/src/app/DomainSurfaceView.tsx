@@ -20,11 +20,11 @@ import { SurfaceTaskState } from "./SurfaceTaskState";
 import { workbenchFailureMessage } from "./workbench-failure";
 
 export const DOMAIN_SURFACE_IDS = new Set([
-  "rho.evidence", "rho.git", "rho.runs", "rho.artifacts",
+  "rho.evidence", "rho.git", "rho.runs",
   "rho.problems", "rho.plots", "rho.logs", "rho.render-jobs", "rho.help",
 ]);
 const EXACT_TARGET_SURFACE_IDS = new Set([
-  "rho.runs", "rho.artifacts", "rho.plots", "rho.evidence",
+  "rho.runs", "rho.plots", "rho.evidence",
 ]);
 interface DomainSurfaceViewProps {
   readonly instance: SurfaceInstance;
@@ -69,7 +69,7 @@ export function DomainSurfaceView(props: DomainSurfaceViewProps) {
       persistFilter={(nextFilter) => persist(viewStateWithFilter(instance.view_state, nextFilter))}
       reportError={reportError}
       useInAgent={useRuntimeOutputInAgent}
-      openOutputReference={(kind) => openSurfaceById(kind === "plot" ? "rho.plots" : "rho.artifacts")}
+      openPlot={() => openSurfaceById("rho.plots")}
     />;
   }
   return <GenericDomainSurfaceView

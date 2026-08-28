@@ -1,3 +1,4 @@
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex as StdMutex, MutexGuard};
 
@@ -14,6 +15,7 @@ use rho_ui_contract::{
     UiProfileMutationV1, UiProfileRevisionRequestV1, Validate, VibeBlockContentV1, VibeBlockV1,
     VibePageExportV1, VibePageMutationV1, VibePageV1, VibeRichTextDocumentV1, VibeSectionLayoutV1,
     VibeSectionV1, apply_ui_profile_mutation, apply_vibe_page_mutation, export_vibe_page,
+    next_revision, reconcile_scene_instances,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -25,6 +27,7 @@ use crate::{AppState, display_error};
 
 pub(crate) const UI_PROFILE_CHANGED_EVENT: &str = "rho://ui-profile-changed";
 const MAX_STORED_PROFILE_FILE_BYTES: u64 = 5 * 1024 * 1024;
+const RETIRED_FIRST_PARTY_SURFACE_IDS: &[&str] = &["rho.artifacts"];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -337,7 +340,13 @@ impl ProjectUiProfileState {
         }
         let seed = default_profile_seed(&project_id, factories, runtimes)?;
         let immutable = rho_studio_preset(&project_id, &seed.surface_instance_specs)?;
-        let loaded = self.store.load_or_create(&root, &project_id, || Ok(seed))?;
+        let mut loaded = self.store.load_or_create(&root, &project_id, || Ok(seed))?;
+        if let Some(migrated) = migrate_retired_surface_components(&loaded.profile)? {
+            self.store
+                .save(&root, loaded.profile.revision, &migrated)
+                .context("retiring removed first-party Surface components")?;
+            loaded.profile = migrated;
+        }
         let snapshot = Self::snapshot_for(
             loaded.profile,
             loaded.status,
@@ -436,6 +445,96 @@ fn next_scene_id() -> SceneId {
 fn next_node_id() -> LayoutNodeId {
     LayoutNodeId::new(format!("layout-node:{}", Uuid::new_v4().simple()))
         .expect("host-generated layout node ID must be valid")
+}
+
+fn migrate_retired_surface_components(
+    profile: &ProjectUiProfileV1,
+) -> Result<Option<ProjectUiProfileV1>> {
+    let retired = profile
+        .surface_instance_specs
+        .iter()
+        .filter(|spec| RETIRED_FIRST_PARTY_SURFACE_IDS.contains(&spec.surface_id.as_str()))
+        .map(|spec| {
+            let selected_artifact = spec
+                .view_state
+                .get("selected_id")
+                .and_then(serde_json::Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+                .map(str::to_string);
+            (spec.instance_id.to_string(), selected_artifact)
+        })
+        .collect::<BTreeMap<_, _>>();
+    if retired.is_empty() {
+        return Ok(None);
+    }
+
+    let mut next = profile.clone();
+    next.surface_instance_specs
+        .retain(|spec| !retired.contains_key(spec.instance_id.as_str()));
+    let allowed = next
+        .surface_instance_specs
+        .iter()
+        .map(|spec| spec.instance_id.to_string())
+        .collect::<BTreeSet<_>>();
+    for scene in &mut next.studio_scenes {
+        if let Some(reconciled) = reconcile_scene_instances(scene, &allowed, &mut next_node_id)? {
+            *scene = reconciled;
+        }
+    }
+
+    for page in &mut next.vibe_pages {
+        let mut page_changed = false;
+        let mut removed_blocks = BTreeSet::new();
+        for section in &mut page.sections {
+            for block in &mut section.blocks {
+                let VibeBlockContentV1::SurfaceRef { instance_id, .. } = &block.content else {
+                    continue;
+                };
+                let Some(selected_artifact) = retired.get(instance_id.as_str()) else {
+                    continue;
+                };
+                if let Some(artifact_id) = selected_artifact {
+                    block.content = VibeBlockContentV1::ArtifactRef {
+                        artifact_id: artifact_id.clone(),
+                        label: "Recorded artifact".to_string(),
+                    };
+                } else {
+                    removed_blocks.insert(block.block_id.to_string());
+                }
+                page_changed = true;
+            }
+            if !removed_blocks.is_empty() {
+                section
+                    .blocks
+                    .retain(|block| !removed_blocks.contains(block.block_id.as_str()));
+                if let VibeSectionLayoutV1::Grid { placements } = &mut section.layout {
+                    placements
+                        .retain(|placement| !removed_blocks.contains(placement.block_id.as_str()));
+                }
+            }
+        }
+        if page
+            .focused_block_id
+            .as_ref()
+            .is_some_and(|block_id| removed_blocks.contains(block_id.as_str()))
+        {
+            page.focused_block_id = None;
+        }
+        if page_changed {
+            page.page_revision = next_revision("vibe_page.page_revision", page.page_revision)?;
+        }
+    }
+
+    if next
+        .last_focused_surface_instance_id
+        .as_ref()
+        .is_some_and(|instance_id| retired.contains_key(instance_id.as_str()))
+    {
+        next.last_focused_surface_instance_id = None;
+    }
+    next.revision = next_revision("project_ui_profile.revision", profile.revision)?;
+    next.validate()?;
+    Ok(Some(next))
 }
 
 fn next_page_id() -> PageId {
@@ -1193,7 +1292,7 @@ mod tests {
         ApplicationComponentId, RuntimeRegistrySnapshotV1, SurfaceDefinitionV1,
         SurfaceInstancePolicyV1, SurfaceInstanceQuotaClassV1, SurfaceInteractionKindV1,
         SurfaceModeV1, SurfaceOriginV1, SurfacePresentationClassV1, SurfaceRendererKindV1,
-        SurfaceScopeV1, SurfaceSizingHintsV1,
+        SurfaceScopeV1, SurfaceSizingHintsV1, VibeGridPlacementV1,
     };
 
     fn factory(id: &str) -> SurfaceFactoryRegistrationV1 {
@@ -1242,6 +1341,170 @@ mod tests {
             runtime.project_id = project_id.clone();
         }
         fixture
+    }
+
+    #[test]
+    fn retired_artifacts_component_is_pruned_without_losing_durable_artifact_references() {
+        let project = ProjectId::new("project:retired-artifacts").unwrap();
+        let mut profile =
+            default_profile_seed(&project, &[factory("rho.status")], &runtimes(&project)).unwrap();
+        let status_id = profile.surface_instance_specs[0].instance_id.clone();
+        let retired_spec = |instance_id: &str, selected_id: Option<&str>| SurfaceInstanceSpecV1 {
+            instance_id: rho_ui_contract::SurfaceInstanceId::new(instance_id).unwrap(),
+            surface_id: rho_ui_contract::SurfaceId::new("rho.artifacts").unwrap(),
+            origin: SurfaceOriginV1::Application {
+                component_id: ApplicationComponentId::new("rho.artifacts").unwrap(),
+            },
+            mode_id: Some(rho_ui_contract::SurfaceModeId::new("list").unwrap()),
+            resource_binding: None,
+            runtime_attachment_intent: None,
+            view_group_id: None,
+            view_state: selected_id.map_or_else(
+                || json!({}),
+                |selected_id| json!({ "selected_id": selected_id, "filter": "" }),
+            ),
+        };
+        let scene_artifact = retired_spec("surface-instance:artifact-scene", None);
+        let tray_artifact = retired_spec("surface-instance:artifact-tray", None);
+        let exact_artifact = retired_spec(
+            "surface-instance:artifact-exact",
+            Some("artifact:durable-table"),
+        );
+        let generic_artifact = retired_spec("surface-instance:artifact-generic", None);
+        profile.surface_instance_specs.extend([
+            scene_artifact.clone(),
+            tray_artifact.clone(),
+            exact_artifact.clone(),
+            generic_artifact.clone(),
+        ]);
+
+        let scene = &mut profile.studio_scenes[0];
+        scene.root = LayoutNodeV1::Container {
+            node_id: next_node_id(),
+            axis: LayoutAxisV1::Horizontal,
+            children: vec![LayoutChildV1 {
+                child: LayoutNodeV1::Stack(StackNodeV1 {
+                    node_id: next_node_id(),
+                    active_instance_id: scene_artifact.instance_id.clone(),
+                    instances: vec![status_id.clone(), scene_artifact.instance_id.clone()],
+                }),
+                basis: LayoutBasisV1::Fraction { weight: 1 },
+                resizable: true,
+                collapse_priority: None,
+            }],
+        };
+        scene.utility_tray = Some(StackNodeV1 {
+            node_id: next_node_id(),
+            active_instance_id: tray_artifact.instance_id.clone(),
+            instances: vec![tray_artifact.instance_id.clone()],
+        });
+        scene.focused_surface_instance_id = Some(scene_artifact.instance_id.clone());
+        profile.last_focused_surface_instance_id = Some(scene_artifact.instance_id.clone());
+
+        let exact_block = BlockId::new("vibe-block:retired-exact").unwrap();
+        let generic_block = BlockId::new("vibe-block:retired-generic").unwrap();
+        let durable_block = BlockId::new("vibe-block:durable-artifact").unwrap();
+        let page = &mut profile.vibe_pages[0];
+        page.sections = vec![VibeSectionV1 {
+            section_id: SectionId::new("vibe-section:retired-artifacts").unwrap(),
+            heading: Some("Retired artifacts".to_string()),
+            layout: VibeSectionLayoutV1::Grid {
+                placements: [
+                    exact_block.clone(),
+                    generic_block.clone(),
+                    durable_block.clone(),
+                ]
+                .into_iter()
+                .enumerate()
+                .map(|(index, block_id)| VibeGridPlacementV1 {
+                    block_id,
+                    row_start: 1,
+                    column_start: (index + 1) as u8,
+                    column_span: 1,
+                })
+                .collect(),
+            },
+            blocks: vec![
+                VibeBlockV1 {
+                    block_id: exact_block.clone(),
+                    content: VibeBlockContentV1::SurfaceRef {
+                        instance_id: exact_artifact.instance_id.clone(),
+                        live: true,
+                    },
+                },
+                VibeBlockV1 {
+                    block_id: generic_block.clone(),
+                    content: VibeBlockContentV1::SurfaceRef {
+                        instance_id: generic_artifact.instance_id.clone(),
+                        live: true,
+                    },
+                },
+                VibeBlockV1 {
+                    block_id: durable_block,
+                    content: VibeBlockContentV1::ArtifactRef {
+                        artifact_id: "artifact:already-durable".to_string(),
+                        label: "Existing durable artifact".to_string(),
+                    },
+                },
+            ],
+        }];
+        page.focused_block_id = Some(generic_block);
+        let original_page_revision = page.page_revision;
+        profile.validate().unwrap();
+
+        let migrated = migrate_retired_surface_components(&profile)
+            .unwrap()
+            .expect("retired component should migrate");
+        migrated.validate().unwrap();
+        assert!(
+            migrated
+                .surface_instance_specs
+                .iter()
+                .all(|spec| { spec.surface_id.as_str() != "rho.artifacts" })
+        );
+        let migrated_scene = &migrated.studio_scenes[0];
+        assert!(matches!(
+            &migrated_scene.root,
+            LayoutNodeV1::Container { children, .. }
+                if matches!(&children[0].child, LayoutNodeV1::Surface { instance_id, .. } if instance_id == &status_id)
+        ));
+        assert!(migrated_scene.utility_tray.is_none());
+        assert!(migrated_scene.focused_surface_instance_id.is_none());
+        assert!(migrated.last_focused_surface_instance_id.is_none());
+        let migrated_page = &migrated.vibe_pages[0];
+        assert!(migrated_page.focused_block_id.is_none());
+        assert_eq!(migrated_page.sections[0].blocks.len(), 2);
+        assert!(
+            migrated_page.sections[0]
+                .blocks
+                .iter()
+                .any(|block| matches!(
+                    &block.content,
+                    VibeBlockContentV1::ArtifactRef { artifact_id, .. }
+                        if artifact_id == "artifact:durable-table"
+                ))
+        );
+        assert!(
+            migrated_page.sections[0]
+                .blocks
+                .iter()
+                .any(|block| matches!(
+                    &block.content,
+                    VibeBlockContentV1::ArtifactRef { artifact_id, .. }
+                        if artifact_id == "artifact:already-durable"
+                ))
+        );
+        assert!(matches!(
+            &migrated_page.sections[0].layout,
+            VibeSectionLayoutV1::Grid { placements } if placements.len() == 2
+        ));
+        assert_eq!(migrated.revision, profile.revision + 1);
+        assert_eq!(migrated_page.page_revision, original_page_revision + 1);
+        assert!(
+            migrate_retired_surface_components(&migrated)
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]

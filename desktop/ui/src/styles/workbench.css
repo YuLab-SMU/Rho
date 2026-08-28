@@ -821,6 +821,14 @@
   .rho-dockview-scene .dv-react-part { min-width: 0; min-height: 0; }
   .rho-dockview-scene .dv-groupview { border: var(--rho-border); }
   .rho-dockview-scene .dv-tabs-and-actions-container { min-height: var(--rho-control-small); }
+  .rho-dockview-surface-actions-host {
+    display: flex;
+    min-width: 0;
+    height: 100%;
+    align-items: center;
+    padding-inline-end: var(--rho-space-1);
+  }
+  .rho-dockview-surface-actions-host .rho-surface-actions { height: 100%; }
   .rho-dockview-scene .dv-default-tab {
     min-width: 0;
     color: inherit;

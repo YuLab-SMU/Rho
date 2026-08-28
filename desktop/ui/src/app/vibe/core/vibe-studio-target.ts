@@ -3,7 +3,6 @@ import type { VibeExactReferences, VibeRegionRole } from "./vibe-workspace-model
 
 export type VibeStudioTarget =
   | { readonly kind: "surface"; readonly id: string }
-  | { readonly kind: "artifact"; readonly id: string }
   | { readonly kind: "run"; readonly id: string }
   | { readonly kind: "check"; readonly id: string };
 
@@ -38,14 +37,6 @@ export function exactSurfaceRequestForTarget(
     case "run": return {
       surfaceId: "rho.runs",
       modeId: "history",
-      viewState: { selected_id: id, filter: "" },
-      exactIdentityKey: "selected_id",
-      exactIdentity: id,
-      mayCreate: true,
-    };
-    case "artifact": return {
-      surfaceId: "rho.artifacts",
-      modeId: "list",
       viewState: { selected_id: id, filter: "" },
       exactIdentityKey: "selected_id",
       exactIdentity: id,

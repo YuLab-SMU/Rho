@@ -203,12 +203,16 @@ export function validateNavigatorControlsGeometry({
   assertNoVerticalOverflow(controls, "Navigator controls");
   assertNoHorizontalOverflow(tabs, "Navigator tablist");
   assertNoVerticalOverflow(tabs, "Navigator tablist");
-  assertRectContained(header.rect, surface.rect, "Navigator Surface header");
+  if (header.rect.bottom > surface.rect.top + 2
+      || header.rect.left < surface.rect.left - 2
+      || header.rect.right > surface.rect.right + 2) {
+    throw new Error("Navigator Dockview title bar is not aligned immediately above its Surface content");
+  }
   assertRectContained(navigator.rect, surface.rect, "Navigator section");
   assertRectContained(controls.rect, navigator.rect, "Navigator controls");
   assertRectContained(tabs.rect, controls.rect, "Navigator tablist");
 
-  const expectedTabs = ["Files", "History", "Artifacts"];
+  const expectedTabs = ["Files", "History"];
   if (
     tabButtons.length !== expectedTabs.length ||
     tabButtons.some((button, index) => button.label !== expectedTabs[index])
@@ -347,8 +351,8 @@ export default async function s0(ctx) {
       "Navigator Surface article",
     );
     const navigatorHeader = requiredGeometry(
-      await ctx.query('[data-surface-id="rho.navigator"] > .rho-surface-chrome', { geometry: true }),
-      "Navigator Surface header",
+      await ctx.query('.dv-tabs-and-actions-container:has([data-rho-tab-instance-id="instance:navigator"])', { geometry: true }),
+      "Navigator Dockview title bar",
     );
     const navigator = requiredGeometry(
       await ctx.query('.rho-navigator', { geometry: true }),
@@ -422,11 +426,11 @@ export default async function s0(ctx) {
       "Navigator History selection after ArrowRight",
     );
     await ctx.act({ kind: "key", key: "End" });
-    const artifactsFocus = await focusedNavigatorControl("Artifacts", "-artifacts");
+    const historyEndFocus = await focusedNavigatorControl("History after End", "-runs");
     assertEqual(
-      (await ctx.query(navigatorTabSelector(3), { attribute: "aria-selected" }))[0]?.value,
+      (await ctx.query(navigatorTabSelector(2), { attribute: "aria-selected" }))[0]?.value,
       "true",
-      "Navigator Artifacts selection after End",
+      "Navigator History selection after End",
     );
     await ctx.act({ kind: "key", key: "Home" });
     const restoredFilesFocus = await focusedNavigatorControl("Files", "-files");
@@ -527,7 +531,7 @@ export default async function s0(ctx) {
         keyboard: {
           files: filesFocus,
           history: historyFocus,
-          artifacts: artifactsFocus,
+          historyEnd: historyEndFocus,
           restoredFiles: restoredFilesFocus,
           search: searchFocus,
           searchInput: searchInputFocus,
@@ -549,7 +553,7 @@ export default async function s0(ctx) {
       "Navigator 文件树层级清晰（examples/、reports/、.rho/ 等顶层目录可辨认，子项缩进正确）",
       "文件夹与文件的图标/字形和标签文本可读，无截断重叠",
       "底部状态栏显示 Workspace R 运行状态与当前项目路径",
-      "Files、History、Artifacts 与文件搜索均在窄 Navigator 内完整可达、无裁切或重叠",
+      "Files、History 与文件搜索均在窄 Navigator 内完整可达、无裁切或重叠",
       "整体布局无页级横向滚动条，无元素互相遮挡；Navigator 与 Agent composer 关键控件通过真实 DOM 几何断言",
     ],
   });

@@ -24,7 +24,7 @@ const run: DomainSurfaceItem = {
 describe("domain Surface presentation", () => {
   it("assigns distinct jobs to domain Surface families", () => {
     expect(domainPresentationKind("rho.runs")).toBe("timeline");
-    expect(domainPresentationKind("rho.artifacts")).toBe("outputs");
+    expect(domainPresentationKind("rho.plots")).toBe("outputs");
     expect(domainPresentationKind("rho.problems")).toBe("stream");
     expect(domainPresentationKind("rho.evidence")).toBe("claims");
     expect(domainPresentationKind("rho.git")).toBe("git");

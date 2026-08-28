@@ -121,6 +121,25 @@ function recordValue(record: Readonly<Record<string, unknown>>, keys: readonly s
   return null;
 }
 
+const DOMAIN_RECORD_ID_KEYS = [
+  "run_id", "problem_id", "claim_id", "artifact_id", "plot_id", "request_id", "hash", "id",
+] as const;
+
+const DOMAIN_SURFACE_ID_KEYS: Readonly<Record<string, readonly string[]>> = {
+  "rho.runs": ["run_id"],
+  "rho.render-jobs": ["run_id"],
+  "rho.problems": ["problem_id"],
+  "rho.evidence": ["claim_id"],
+  "rho.plots": ["plot_id"],
+  "rho.environment": ["request_id"],
+  "rho.git": ["hash"],
+};
+
+function domainRecordId(surfaceId: string, record: Readonly<Record<string, unknown>>) {
+  return recordValue(record, DOMAIN_SURFACE_ID_KEYS[surfaceId] ?? [])
+    ?? recordValue(record, DOMAIN_RECORD_ID_KEYS);
+}
+
 function collectDomainRecords(value: unknown, output: Readonly<Record<string, unknown>>[]) {
   if (Array.isArray(value)) {
     for (const item of value) collectDomainRecords(item, output);
@@ -128,9 +147,7 @@ function collectDomainRecords(value: unknown, output: Readonly<Record<string, un
   }
   if (typeof value !== "object" || value == null) return;
   const record = value as Readonly<Record<string, unknown>>;
-  const identity = recordValue(record, [
-    "run_id", "problem_id", "claim_id", "artifact_id", "plot_id", "request_id", "hash", "id",
-  ]);
+  const identity = recordValue(record, DOMAIN_RECORD_ID_KEYS);
   if (identity != null) output.push(record);
   for (const nested of Object.values(record)) {
     if (Array.isArray(nested)) collectDomainRecords(nested, output);
@@ -142,9 +159,10 @@ function domainData(surfaceId: string, payload: unknown): DomainSurfaceData {
   const records: Readonly<Record<string, unknown>>[] = [];
   collectDomainRecords(payload, records);
   const items: DomainSurfaceItem[] = records.slice(0, 100).map((record, index) => {
-    const id = recordValue(record, [
-      "run_id", "problem_id", "claim_id", "artifact_id", "plot_id", "request_id", "hash", "id",
-    ]) ?? `${surfaceId}:${index + 1}`;
+    const id = domainRecordId(surfaceId, record) ?? `${surfaceId}:${index + 1}`;
+    const detailRecord = surfaceId === "rho.plots"
+      ? Object.fromEntries(Object.entries(record).filter(([key]) => key !== "payload_json"))
+      : record;
     return {
       id,
       title: recordValue(record, [
@@ -152,7 +170,7 @@ function domainData(surfaceId: string, payload: unknown): DomainSurfaceData {
       ]) ?? id,
       subtitle: recordValue(record, ["source_path", "media_type", "kind", "version", "author", "date", "started_at", "mode", "tool", "request_type"]),
       status: recordValue(record, ["status", "severity", "state"]),
-      detail: boundedJson(record),
+      detail: boundedJson(detailRecord),
     };
   });
   return {
@@ -353,7 +371,6 @@ export function createTauriUiKernelTransport(
           history: await gitTransport.log(30),
         }; break;
         case "rho.runs": payload = await historyTransport.listRuns(100); break;
-        case "rho.artifacts": payload = await historyTransport.listArtifactRecords(100, false); break;
         case "rho.problems": payload = await historyTransport.listProblems(100); break;
         case "rho.plots": payload = await historyTransport.listPlotArtifacts(100, true); break;
         case "rho.logs": payload = { id: "startup-diagnostics", title: "Startup diagnostics", status: "current", detail: await startupTransport.diagnostics() }; break;

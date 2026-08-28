@@ -6,6 +6,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { createPortal } from "react-dom";
 
 import type {
   AgentFileMutationResponse,
@@ -140,6 +141,7 @@ interface SurfaceViewProps {
   readonly agentRuntimeOutputContext: RuntimeOutputReference | null;
   readonly setAgentRuntimeOutputContext: (reference: RuntimeOutputReference | null) => boolean;
   readonly embedded: boolean;
+  readonly dockviewHosted: boolean;
 }
 
 function outputText(output: ConsoleOutputRecord): string {
@@ -156,9 +158,11 @@ function initialDraft(instance: SurfaceInstance, cache: Map<string, string>): st
   return "";
 }
 
-
-
-
+function findDockviewActionsHost(instanceId: string): HTMLElement | null {
+  if (typeof document === "undefined") return null;
+  return [...document.querySelectorAll<HTMLElement>("[data-rho-surface-actions-host]")]
+    .find((candidate) => candidate.dataset.rhoSurfaceActionsHost === instanceId) ?? null;
+}
 export function SurfaceView({
   instance, focused, setFocus, remove, duplicate, suspend, resume, persistDraft, draftCache,
   consoleSessionCache,
@@ -175,7 +179,7 @@ export function SurfaceView({
   persistSurfaceViewState, pinAgentTask,
   applyAgentFileProposal, undoAgentFileProposal, openNavigatorFile, openSurfaceById,
   agentRuntimeOutputContext, setAgentRuntimeOutputContext,
-  embedded,
+  embedded, dockviewHosted,
 }: SurfaceViewProps) {
   const [draft, setDraft] = useState(() => initialDraft(instance, draftCache));
   const [consoleController] = useState(() => new ConsoleInstanceController(
@@ -199,6 +203,26 @@ export function SurfaceView({
   const uxProfile = surfaceUxProfile(instance.surface_id);
   const isStrip = uxProfile.areaRole === "strip";
   const title = uxProfile.label;
+  const dockviewOwnsChrome = dockviewHosted && !embedded && !isStrip;
+  const [dockviewActionsHost, setDockviewActionsHost] = useState<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    if (!dockviewOwnsChrome) {
+      setDockviewActionsHost(null);
+      return undefined;
+    }
+    const syncHost = () => {
+      const next = findDockviewActionsHost(instance.instance_id);
+      setDockviewActionsHost((current) => current === next ? current : next);
+    };
+    syncHost();
+    if (typeof MutationObserver === "undefined") return undefined;
+    const observer = new MutationObserver(syncHost);
+    observer.observe(document.querySelector(".rho-dockview-scene") ?? document.body, {
+      childList: true,
+      subtree: true,
+    });
+    return () => observer.disconnect();
+  }, [dockviewOwnsChrome, instance.instance_id]);
   const attached = runtimes?.instances.find((candidate) =>
     candidate.runtime_instance_id === runtime?.runtime_instance_id &&
     candidate.activation_generation === runtime.activation_generation
@@ -255,10 +279,15 @@ export function SurfaceView({
   const consoleBusy = consoleRunning || attached?.status === "busy";
   const consoleNeedle = consoleState.filter.trim().toLowerCase();
   const transcriptOutputs = consoleTranscriptOutputs(consoleState);
-  const filteredOutputs = transcriptOutputs.flatMap((output) =>
+  let runtimeGroup = 0;
+  const transcriptRows = transcriptOutputs.map((output, index) => {
+    if (index > 0 && transcriptOutputs[index - 1]?.runtime_instance_id !== output.runtime_instance_id) {
+      runtimeGroup += 1;
+    }
+    return { output, ordinal: consoleState.outputs.indexOf(output) + 1, runtimeGroup };
+  });
+  const filteredOutputs = transcriptRows.filter(({ output }) =>
     !consoleNeedle || outputText(output).toLowerCase().includes(consoleNeedle)
-      ? [{ output, ordinal: consoleState.outputs.indexOf(output) + 1 }]
-      : []
   );
   useEffect(() => {
     if (instance.surface_id !== "rho.console" || !consoleNeedle) {
@@ -350,9 +379,90 @@ export function SurfaceView({
       consoleController.replaceState({ ...current, scroll_top: scrollTop, read_cursor: readCursor });
     }
   }, [consoleController, consoleState.follow_tail, consoleTailRevision]);
+  const surfaceManagement = !embedded ? <div
+    className="rho-surface-actions"
+    onPointerDown={(event) => event.stopPropagation()}
+  >
+    <MenuPopover
+      label={`More actions for ${title}`}
+      glyph={<span aria-hidden="true">•••</span>}
+      viewportBound={dockviewOwnsChrome || instance.surface_id === "rho.console"}
+    >
+      <div className="rho-menu-heading"><strong>{title}</strong></div>
+      {instance.lifecycle_state === "active" || instance.lifecycle_state === "hidden"
+        ? <button type="button" data-menu-close onClick={() => void suspend().catch(reportError)}>Pause component</button>
+        : instance.lifecycle_state === "suspended"
+          ? <button type="button" data-menu-close onClick={() => void resume().catch(reportError)}>Resume component</button>
+          : null}
+      {instance.surface_id !== "rho.settings" && (
+        <button type="button" data-menu-close onClick={duplicate}>Duplicate component</button>
+      )}
+      {availableModes.length > 1 && <>
+        <div className="rho-menu-separator" />
+        <div className="rho-menu-heading"><strong>View</strong></div>
+        {availableModes.map((mode) => (
+          <button
+            type="button"
+            data-menu-close
+            aria-pressed={instance.mode_id === mode.mode_id}
+            key={mode.mode_id}
+            onClick={() => void setMode(mode.mode_id).catch(reportError)}
+          >{instance.mode_id === mode.mode_id ? "✓ " : ""}{mode.label}</button>
+        ))}
+      </>}
+      {instance.surface_id === "rho.console" && (
+        <>
+          <div className="rho-menu-separator" />
+          <button
+            type="button"
+            data-menu-close
+            disabled={attached == null || consoleBusy}
+            onClick={() => {
+              if (attached != null) void restartRuntime(attached).catch(reportError);
+            }}
+          >Restart {attached?.display_label ?? "runtime"}</button>
+          <button
+            type="button"
+            data-menu-close
+            disabled={transcriptOutputs.length === 0 && consoleState.filter === ""}
+            onClick={() => {
+              const tail = consoleState.outputs.at(-1) ?? null;
+              setConsoleFilterOpen(false);
+              commitConsole({
+                ...consoleState,
+                filter: "",
+                scroll_top: 0,
+                follow_tail: true,
+                transcript_start_after: tail == null ? consoleState.transcript_start_after : {
+                  execution_id: tail.execution_id,
+                  started_at: tail.started_at ?? "0000-01-01T00:00:00Z",
+                },
+                read_cursor: tail == null ? consoleState.read_cursor : {
+                  execution_id: tail.execution_id,
+                  sequence: tail.last_sequence ?? 0,
+                },
+              });
+            }}
+          >Start new transcript</button>
+        </>
+      )}
+      <div className="rho-menu-separator" />
+      <dl className="rho-menu-facts">
+        <div><dt>Component</dt><dd>{instance.surface_id}</dd></div>
+        <div><dt>Revision</dt><dd>{instance.surface_revision}</dd></div>
+        <div><dt>Runtime</dt><dd>{runtime?.runtime_instance_id ?? (instance.surface_id === "rho.console" ? "Not attached" : "None")}</dd></div>
+      </dl>
+    </MenuPopover>
+    {!dockviewOwnsChrome && <button
+      type="button"
+      className="rho-icon-btn"
+      onClick={remove}
+      aria-label={`Remove ${instance.instance_id} from layout`}
+    >×</button>}
+  </div> : null;
   return (
     <article
-      className={`rho-surface rho-surface-${instance.lifecycle_state} ${focused ? "rho-surface-focused" : ""} ${isStrip ? "rho-surface-strip" : ""}`}
+      className={`rho-surface rho-surface-${instance.lifecycle_state} ${focused ? "rho-surface-focused" : ""} ${isStrip ? "rho-surface-strip" : ""} ${dockviewOwnsChrome ? "rho-surface-dockview-hosted" : ""}`}
       data-instance-id={instance.instance_id}
       data-surface-id={instance.surface_id}
       data-surface-area={uxProfile.areaRole}
@@ -364,82 +474,14 @@ export function SurfaceView({
         if (!embedded) setFocus();
       }}
     >
-      <header className="rho-surface-chrome">
-        <div className="rho-surface-title"><strong>{title}</strong></div>
-        {!embedded && <div className="rho-surface-actions" onPointerDown={(event) => event.stopPropagation()}>
-          <MenuPopover
-            label={`More actions for ${title}`}
-            glyph={<span aria-hidden="true">•••</span>}
-            viewportBound={instance.surface_id === "rho.console"}
-          >
-            <div className="rho-menu-heading"><strong>{title}</strong></div>
-            {instance.lifecycle_state === "active" || instance.lifecycle_state === "hidden"
-              ? <button type="button" data-menu-close onClick={() => void suspend().catch(reportError)}>Pause component</button>
-              : instance.lifecycle_state === "suspended"
-                ? <button type="button" data-menu-close onClick={() => void resume().catch(reportError)}>Resume component</button>
-                : null}
-            {instance.surface_id !== "rho.settings" && (
-              <button type="button" data-menu-close onClick={duplicate}>Duplicate component</button>
-            )}
-            {availableModes.length > 1 && <>
-              <div className="rho-menu-separator" />
-              <div className="rho-menu-heading"><strong>View</strong></div>
-              {availableModes.map((mode) => (
-                <button
-                  type="button"
-                  data-menu-close
-                  aria-pressed={instance.mode_id === mode.mode_id}
-                  key={mode.mode_id}
-                  onClick={() => void setMode(mode.mode_id).catch(reportError)}
-                >{instance.mode_id === mode.mode_id ? "✓ " : ""}{mode.label}</button>
-              ))}
-            </>}
-            {instance.surface_id === "rho.console" && (
-              <>
-                <div className="rho-menu-separator" />
-                <button
-                  type="button"
-                  data-menu-close
-                  disabled={attached == null || consoleBusy}
-                  onClick={() => {
-                    if (attached != null) void restartRuntime(attached).catch(reportError);
-                  }}
-                >Restart {attached?.display_label ?? "runtime"}</button>
-                <button
-                  type="button"
-                  data-menu-close
-                  disabled={transcriptOutputs.length === 0 && consoleState.filter === ""}
-                  onClick={() => {
-                    const tail = consoleState.outputs.at(-1) ?? null;
-                    setConsoleFilterOpen(false);
-                    commitConsole({
-                      ...consoleState,
-                      filter: "",
-                      scroll_top: 0,
-                      follow_tail: true,
-                      transcript_start_after: tail == null ? consoleState.transcript_start_after : {
-                        execution_id: tail.execution_id,
-                        started_at: tail.started_at ?? "0000-01-01T00:00:00Z",
-                      },
-                      read_cursor: tail == null ? consoleState.read_cursor : {
-                        execution_id: tail.execution_id,
-                        sequence: tail.last_sequence ?? 0,
-                      },
-                    });
-                  }}
-                >Start new transcript</button>
-              </>
-            )}
-            <div className="rho-menu-separator" />
-            <dl className="rho-menu-facts">
-              <div><dt>Component</dt><dd>{instance.surface_id}</dd></div>
-              <div><dt>Revision</dt><dd>{instance.surface_revision}</dd></div>
-              <div><dt>Runtime</dt><dd>{runtime?.runtime_instance_id ?? (instance.surface_id === "rho.console" ? "Not attached" : "None")}</dd></div>
-            </dl>
-          </MenuPopover>
-          <button type="button" className="rho-icon-btn" onClick={remove} aria-label={`Remove ${instance.instance_id} from layout`}>×</button>
-        </div>}
-      </header>
+      {dockviewOwnsChrome
+        ? dockviewActionsHost != null && surfaceManagement != null
+          ? createPortal(surfaceManagement, dockviewActionsHost)
+          : null
+        : <header className="rho-surface-chrome">
+            <div className="rho-surface-title"><strong>{title}</strong></div>
+            {surfaceManagement}
+          </header>}
       {instance.lifecycle_state === "suspended" ? (
         <SurfaceTaskState tone="paused" title="Component paused" detail="Its durable binding is preserved while the renderer and derived payloads are released." role="status" className="rho-surface-lifecycle-state">
           <button type="button" onClick={() => void resume().catch(reportError)}>Resume component</button>
@@ -590,7 +632,7 @@ export function SurfaceView({
                 <pre>{hit.preview}</pre>
                 <footer>
                   <button type="button" onClick={() => openSurfaceById("rho.runs")}>Open in History</button>
-                  {hit.reference_kind != null && <button type="button" data-reference-id={hit.reference_id ?? undefined} onClick={() => openSurfaceById(hit.reference_kind === "plot" ? "rho.plots" : "rho.artifacts")}>Open {hit.reference_kind === "plot" ? "Plot" : "Artifact"}</button>}
+                  {hit.reference_kind === "plot" && <button type="button" data-reference-id={hit.reference_id ?? undefined} onClick={() => openSurfaceById("rho.plots")}>Open Plot</button>}
                 </footer>
               </article>)}
             </div>}
@@ -600,10 +642,13 @@ export function SurfaceView({
                 <button type="button" onClick={() => openSurfaceById("rho.runs")}>Open History</button>
               </div>
             )}
-            {filteredOutputs.map(({ output, ordinal }) => (
+            {filteredOutputs.map(({ output, ordinal, runtimeGroup: outputRuntimeGroup }, visibleIndex) => (
               <section
                 className="rho-console-entry"
                 aria-label={`R Console execution ${ordinal}`}
+                data-runtime-group-start={visibleIndex === 0 || filteredOutputs[visibleIndex - 1]?.runtimeGroup !== outputRuntimeGroup
+                  ? "true"
+                  : "false"}
                 key={output.execution_id}
               >
                 {output.has_older && <button
@@ -625,11 +670,11 @@ export function SurfaceView({
                   <button type="button" onClick={() => void consoleController.loadLatest(output.execution_id).catch(reportError)}>Return to latest output</button>
                 </div>}
                 <header>
-                  <span>{
+                  {(visibleIndex === 0 || filteredOutputs[visibleIndex - 1]?.runtimeGroup !== outputRuntimeGroup) && <span className="rho-console-workspace-label">{
                     runtimes?.instances.find((candidate) =>
                       candidate.runtime_instance_id === output.runtime_instance_id
                     )?.display_label ?? "R runtime"
-                  }</span>
+                  }</span>}
                   {(() => {
                     const stateLabel = `${output.status ?? "completed"}${output.output_state != null && !["collecting", "complete"].includes(output.output_state)
                       ? ` · ${output.output_state}`
@@ -645,18 +690,18 @@ export function SurfaceView({
                   <span>#{ordinal}</span>
                   <button type="button" onClick={() => openSurfaceById("rho.runs")}>Open in History</button>
                 </header>
-                <code><span aria-hidden="true">&gt;</span> {output.code}</code>
+                <code className="rho-console-command"><span aria-hidden="true">&gt;</span> {output.code}</code>
                 <div className="rho-console-results">
                   {output.blocks.map((result, index) => (
                     <div className={`rho-console-result rho-console-result-${result.kind}`} key={`${result.kind}:${index}`}>
                       {result.label != null && <strong>{result.label}</strong>}
                       <pre>{result.text}</pre>
-                      {result.reference != null && <button
+                      {result.reference?.kind === "plot" && <button
                         type="button"
                         className="rho-runtime-output-reference"
                         data-reference-id={result.reference.id}
-                        onClick={() => openSurfaceById(result.reference!.kind === "plot" ? "rho.plots" : "rho.artifacts")}
-                      >Open {result.reference.kind === "plot" ? "Plot" : "Artifact"}</button>}
+                        onClick={() => openSurfaceById("rho.plots")}
+                      >Open Plot</button>}
                     </div>
                   ))}
                 </div>
@@ -798,6 +843,7 @@ export function SurfaceView({
           openFile={openNavigatorFile}
           persist={persistSurfaceViewState}
           reportError={reportError}
+          openSurfaceById={openSurfaceById}
         />
       )}
       {instance.surface_id === "rho.environment" && (

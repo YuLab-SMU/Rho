@@ -19,7 +19,7 @@ export function runtimeOutputChunkBlock(chunk: RuntimeOutputChunk): ConsoleProje
         : referenceKind === "artifact" ? "Artifact"
           : "Output",
       text: hasUsableReference
-        ? "Ready to inspect."
+        ? referenceKind === "artifact" ? "Recorded with this execution." : "Ready to inspect."
         : "Referenced output is unavailable.",
       ...(hasUsableReference ? { reference: {
         kind: referenceKind,

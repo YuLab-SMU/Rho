@@ -22,10 +22,10 @@ async function settle(): Promise<void> {
 
 function surface(viewState: unknown, projectId = "project:a"): SurfaceInstance {
   return {
-    instance_id: "surface-instance:artifacts",
-    surface_id: "rho.artifacts",
+    instance_id: "surface-instance:evidence",
+    surface_id: "rho.evidence",
     project_id: projectId,
-    origin: { kind: "application", component_id: "rho.artifacts" },
+    origin: { kind: "application", component_id: "rho.evidence" },
     activation_generation: 1,
     surface_revision: 1,
     mode_id: "records",
@@ -67,22 +67,22 @@ async function renderDomain(data: DomainSurfaceData, viewState: unknown) {
   return { host, persist };
 }
 
-const artifacts: DomainSurfaceData = {
-  surface_id: "rho.artifacts",
+const evidence: DomainSurfaceData = {
+  surface_id: "rho.evidence",
   loaded_at: "2026-08-27T00:00:00Z",
   summary: "2 outputs",
   items: [
     {
-      id: "artifact:local-latest",
-      title: "Latest local table",
-      subtitle: "latest.csv",
+      id: "claim:local-latest",
+      title: "Latest local claim",
+      subtitle: "latest.R",
       status: "ready",
       detail: "A newer output from this project.",
     },
     {
-      id: "artifact:exact",
-      title: "Exact differential-expression table",
-      subtitle: "de.csv",
+      id: "claim:exact",
+      title: "Exact source-backed claim",
+      subtitle: "analysis.R",
       status: "ready",
       detail: "The manuscript-linked output.",
     },
@@ -91,56 +91,56 @@ const artifacts: DomainSurfaceData = {
 
 describe("generic domain exact-target navigation", () => {
   it("gives selected_id priority over filter and preserves it on view-state writes", async () => {
-    const { host, persist } = await renderDomain(artifacts, {
-      selected_id: "artifact:exact",
-      filter: "Latest local table",
+    const { host, persist } = await renderDomain(evidence, {
+      selected_id: "claim:exact",
+      filter: "Latest local claim",
       retained_key: "retained-value",
     });
 
     const records = [...host.querySelectorAll<HTMLElement>("[data-domain-id]")];
-    expect(records.map((record) => record.dataset.domainId)).toEqual(["artifact:exact"]);
-    expect(host.textContent).toContain("Exact differential-expression table");
-    expect(host.textContent).not.toContain("Latest local table");
+    expect(records.map((record) => record.dataset.domainId)).toEqual(["claim:exact"]);
+    expect(host.textContent).toContain("Exact source-backed claim");
+    expect(host.textContent).not.toContain("Latest local claim");
 
-    const input = host.querySelector<HTMLInputElement>("[aria-label='Filter rho.artifacts']")!;
+    const input = host.querySelector<HTMLInputElement>("[aria-label='Filter rho.evidence']")!;
     await act(async () => {
       input.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
       await settle();
     });
     expect(persist).toHaveBeenCalledWith({
-      selected_id: "artifact:exact",
-      filter: "Latest local table",
+      selected_id: "claim:exact",
+      filter: "Latest local claim",
       retained_key: "retained-value",
     });
   });
 
   it("matches generic records by item.id only and never substitutes a local record", async () => {
     const { host } = await renderDomain({
-      ...artifacts,
+      ...evidence,
       items: [{
-        id: "artifact:project-a",
-        title: "artifact:project-b",
-        subtitle: "foreign-id-in-visible-copy.csv",
+        id: "claim:project-a",
+        title: "claim:project-b",
+        subtitle: "foreign-id-in-visible-copy.R",
         status: "ready",
         detail: "The requested foreign identifier appears in searchable text only.",
       }],
-    }, { selected_id: "artifact:project-b", filter: "project-b" });
+    }, { selected_id: "claim:project-b", filter: "project-b" });
 
     expect(host.querySelectorAll("[data-domain-id]")).toHaveLength(0);
     expect(host.querySelector(".rho-domain-exact-unavailable")?.textContent)
       .toContain("Exact target unavailable");
     expect(host.textContent).toContain("No substitute was selected");
-    expect(host.textContent).not.toContain("foreign-id-in-visible-copy.csv");
+    expect(host.textContent).not.toContain("foreign-id-in-visible-copy.R");
   });
 
   it("remounts the exact reader across projects so a late prior-project read cannot replace current truth", async () => {
     const projectA = deferred<DomainSurfaceData>();
     const projectB: DomainSurfaceData = {
-      ...artifacts,
+      ...evidence,
       items: [{
-        id: "artifact:project-b",
-        title: "Project B exact artifact",
-        subtitle: "project-b.csv",
+        id: "claim:project-b",
+        title: "Project B exact claim",
+        subtitle: "project-b.R",
         status: "ready",
         detail: null,
       }],
@@ -166,31 +166,31 @@ describe("generic domain exact-target navigation", () => {
     await act(async () => {
       root.render(<DomainSurfaceView
         {...commonProps}
-        instance={surface({ selected_id: "artifact:project-a" }, "project:a")}
+        instance={surface({ selected_id: "claim:project-a" }, "project:a")}
       />);
       await settle();
     });
     await act(async () => {
       root.render(<DomainSurfaceView
         {...commonProps}
-        instance={surface({ selected_id: "artifact:project-b" }, "project:b")}
+        instance={surface({ selected_id: "claim:project-b" }, "project:b")}
       />);
       await settle();
     });
     projectA.resolve({
-      ...artifacts,
+      ...evidence,
       items: [{
-        id: "artifact:project-a",
-        title: "Project A late artifact",
-        subtitle: "project-a.csv",
+        id: "claim:project-a",
+        title: "Project A late claim",
+        subtitle: "project-a.R",
         status: "ready",
         detail: null,
       }],
     });
     await act(async () => { await settle(); });
 
-    expect(host.querySelector("[data-domain-id='artifact:project-b']")).not.toBeNull();
-    expect(host.textContent).toContain("Project B exact artifact");
-    expect(host.textContent).not.toContain("Project A late artifact");
+    expect(host.querySelector("[data-domain-id='claim:project-b']")).not.toBeNull();
+    expect(host.textContent).toContain("Project B exact claim");
+    expect(host.textContent).not.toContain("Project A late claim");
   });
 });

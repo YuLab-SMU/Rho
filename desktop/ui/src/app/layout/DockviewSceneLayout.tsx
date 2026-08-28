@@ -6,6 +6,7 @@ import {
 } from "dockview-react";
 import type {
   DockviewApi,
+  IDockviewHeaderActionsProps,
   DockviewLayoutMutationEvent,
   IDockviewPanelHeaderProps,
   IDockviewPanelProps,
@@ -114,6 +115,14 @@ function DockviewSurfaceTab(props: IDockviewPanelHeaderProps<DockviewSurfacePara
     data-rho-pane-node-id={props.params.paneNodeId}
     data-rho-tab-instance-id={props.params.instanceId}
     closeActionOverride={() => close(props.params.instanceId)}
+  />;
+}
+
+function DockviewSurfaceHeaderActions({ activePanel }: IDockviewHeaderActionsProps) {
+  if (activePanel == null) return null;
+  return <div
+    className="rho-dockview-surface-actions-host"
+    data-rho-surface-actions-host={activePanel.id}
   />;
 }
 
@@ -810,6 +819,7 @@ export function DockviewSceneLayout(props: DockviewSceneLayoutProps) {
           components={dockviewComponents}
           tabComponents={dockviewTabComponents}
           defaultTabComponent={DockviewSurfaceTab}
+          rightHeaderActionsComponent={DockviewSurfaceHeaderActions}
           theme={themeLight}
           disableAutoResizing={typeof ResizeObserver === "undefined"}
           disableFloatingGroups

@@ -637,22 +637,21 @@ const canonicalTemporaryRoot = fs.realpathSync(os.tmpdir());
   );
 
   const navigatorFixture = {
-    surface: geometry({ clientWidth: 124, width: 124, height: 300 }),
+    surface: geometry({ clientWidth: 124, width: 124, height: 268, top: 32 }),
     header: geometry({ clientWidth: 124, width: 124, height: 32 }),
     navigator: geometry({ clientWidth: 124, width: 124, height: 268, top: 32 }),
     controls: geometry({ clientWidth: 124, width: 124, height: 112, top: 32 }),
-    tabs: geometry({ clientWidth: 88, width: 88, height: 112, top: 32 }),
+    tabs: geometry({ clientWidth: 88, width: 88, height: 76, top: 32 }),
     tabButtons: [
       { label: "Files", geometry: geometry({ clientWidth: 52, width: 52, height: 32, left: 4, top: 36 }) },
       { label: "History", geometry: geometry({ clientWidth: 64, width: 64, height: 32, left: 4, top: 72 }) },
-      { label: "Artifacts", geometry: geometry({ clientWidth: 76, width: 76, height: 32, left: 4, top: 108 }) },
     ],
     searchButton: {
       label: "Search project files",
       geometry: geometry({ clientWidth: 28, width: 28, height: 28, left: 92, top: 74 }),
     },
   };
-  assert.equal(validateNavigatorControlsGeometry(navigatorFixture).controls.length, 4);
+  assert.equal(validateNavigatorControlsGeometry(navigatorFixture).controls.length, 3);
   assert.throws(
     () => validateNavigatorControlsGeometry({
       ...navigatorFixture,

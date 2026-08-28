@@ -108,7 +108,6 @@ function initialViewState(
 function studioTarget(target: VerificationStudioTarget): OpenVibeTargetInStudioIntent["target"] {
   switch (target.kind) {
     case "run": return { kind: "run", id: target.id };
-    case "artifact": return { kind: "artifact", id: target.id };
     case "check": return { kind: "check", id: target.id };
   }
 }

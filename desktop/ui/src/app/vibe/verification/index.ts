@@ -4,9 +4,7 @@ export {
   type VerificationAdapter,
 } from "./verification-adapter";
 export {
-  artifactStudioTarget,
   checkNeedsCoverageWarning,
-  evidenceStudioTarget,
   plotStudioTarget,
   runNeedsAttention,
   verificationFocusKey,

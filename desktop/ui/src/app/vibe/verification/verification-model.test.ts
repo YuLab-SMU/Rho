@@ -1,16 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  artifactStudioTarget,
   checkNeedsCoverageWarning,
-  evidenceStudioTarget,
   plotStudioTarget,
   verificationFocusKey,
 } from "./verification-model";
 import {
-  makeArtifact,
   makeCheck,
-  makeEvidence,
   makeFocus,
   makePlot,
   makeReference,
@@ -50,16 +46,7 @@ describe("verification projection model", () => {
     }))).toBe(true);
   });
 
-  it("derives Studio targets only from exact owning identities", () => {
-    expect(artifactStudioTarget(makeArtifact())).toEqual({
-      kind: "artifact",
-      id: "artifact-differential-expression",
-    });
+  it("derives a Plot Studio target from its exact owning execution", () => {
     expect(plotStudioTarget(makePlot())).toEqual({ kind: "run", id: "run-18" });
-    expect(evidenceStudioTarget(makeEvidence())).toEqual({
-      kind: "artifact",
-      id: "artifact-differential-expression",
-    });
-    expect(evidenceStudioTarget(makeEvidence({ artifact_id: null }))).toBeNull();
   });
 });

@@ -50,7 +50,7 @@ describe("Runtime output presentation", () => {
     expect(artifact).toEqual({
       kind: "value",
       label: "Artifact",
-      text: "Ready to inspect.",
+      text: "Recorded with this execution.",
       reference: {
         kind: "artifact",
         id: "artifact:internal-99",

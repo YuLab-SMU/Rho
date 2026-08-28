@@ -10,12 +10,11 @@ import type {
 } from "../transport/types";
 import { PlotThumbnail } from "./PlotThumbnail";
 
-type NavigatorTab = "files" | "runs" | "artifacts";
+type NavigatorTab = "files" | "runs";
 
 const NAVIGATOR_TABS: readonly { readonly id: NavigatorTab; readonly label: string }[] = [
   { id: "files", label: "Files" },
   { id: "runs", label: "History" },
-  { id: "artifacts", label: "Artifacts" },
 ];
 
 function fileGlyph(resourceId: string): string {
@@ -130,6 +129,7 @@ export function NavigatorSurfaceView({
   openFile,
   persist,
   reportError,
+  openSurfaceById,
 }: {
   readonly instance: SurfaceInstance;
   readonly transport: UiKernelTransport;
@@ -137,10 +137,11 @@ export function NavigatorSurfaceView({
   readonly openFile: (descriptor: ResourceDescriptor) => Promise<void>;
   readonly persist: (viewState: unknown) => Promise<void>;
   readonly reportError: (error: unknown) => void;
+  readonly openSurfaceById: (surfaceId: string) => void;
 }) {
   const initialTab: NavigatorTab = typeof instance.view_state === "object" && instance.view_state != null &&
       "tab" in instance.view_state &&
-      ["files", "runs", "artifacts"].includes(String(instance.view_state.tab))
+      ["files", "runs"].includes(String(instance.view_state.tab))
     ? instance.view_state.tab as NavigatorTab
     : "files";
   const [tab, setTab] = useState<NavigatorTab>(initialTab);
@@ -164,7 +165,7 @@ export function NavigatorSurfaceView({
   };
   const loadDomain = useCallback(async () => {
     try {
-      setDomain(await transport.loadDomainSurface(tab === "runs" ? "rho.runs" : "rho.artifacts"));
+      setDomain(await transport.loadDomainSurface("rho.runs"));
     } catch (cause: unknown) {
       reportError(cause);
     }
@@ -269,7 +270,6 @@ export function NavigatorSurfaceView({
             : <FileTreeRows nodes={visibleFiles} depth={0} openFile={(descriptor) => void openFile(descriptor).catch(reportError)} />
         )}
         {tab === "runs" && <DomainRows data={domain} emptyLabel="No history yet." />}
-        {tab === "artifacts" && <DomainRows data={domain} emptyLabel="No artifacts recorded yet." />}
       </div>
       {(recent?.items.length ?? 0) > 0 && (
         <details
@@ -289,7 +289,7 @@ export function NavigatorSurfaceView({
               <span className="rho-nav-row-label" title={item.subtitle ?? item.title}>{item.title}</span>
             </div>
           ))}
-          <button type="button" className="rho-navigator-open-outputs" onClick={() => selectTab("artifacts")}>View all outputs</button>
+          <button type="button" className="rho-navigator-open-outputs" onClick={() => openSurfaceById("rho.plots")}>Open Plots</button>
         </details>
       )}
     </section>

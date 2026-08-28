@@ -66,7 +66,7 @@
                 .registry()
                 .resolve_application_surfaces()
                 .unwrap();
-            assert_eq!(surfaces.factories().len(), 18);
+            assert_eq!(surfaces.factories().len(), 17);
             assert_eq!(
                 surfaces
                     .factories()
@@ -86,7 +86,6 @@
                     "rho.evidence",
                     "rho.git",
                     "rho.runs",
-                    "rho.artifacts",
                     "rho.problems",
                     "rho.plots",
                     "rho.logs",
@@ -251,7 +250,7 @@
                     .unwrap()
                     .factories()
                     .len(),
-                18
+                17
             );
             assert_eq!(
                 candidate

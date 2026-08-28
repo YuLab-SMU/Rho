@@ -26,10 +26,6 @@ function surfaceReference(
     }
     case "rho.runs":
       return selectedId == null ? null : { kind: "run", id: selectedId, label: "执行记录" };
-    case "rho.artifacts":
-      return selectedId == null
-        ? null
-        : { kind: "artifact", id: selectedId, label: "候选产物" };
     case "rho.plots":
       return selectedId == null ? null : { kind: "plot", id: selectedId, label: "候选图形" };
     case "rho.evidence":

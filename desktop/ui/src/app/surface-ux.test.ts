@@ -4,7 +4,7 @@ import fixture from "../contracts/generated/rsr-contract-fixtures.json";
 import { FIRST_PARTY_SURFACE_UX, humanizeSurfaceId, surfaceDisplayLabel, surfaceUxProfile } from "./surface-ux";
 
 const EXPECTED_FIRST_PARTY = [
-  "rho.agent", "rho.artifacts", "rho.check-result", "rho.console", "rho.environment",
+  "rho.agent", "rho.check-result", "rho.console", "rho.environment",
   "rho.evidence", "rho.file-preview", "rho.file-source", "rho.git", "rho.help",
   "rho.logs", "rho.navigator", "rho.plots", "rho.problems", "rho.render-jobs",
   "rho.runs", "rho.settings", "rho.status", "rho.surface-playground",

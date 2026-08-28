@@ -710,11 +710,7 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
             definition(
                 "rho.navigator",
                 "Navigator",
-                &[
-                    ("files", "Files"),
-                    ("runs", "History"),
-                    ("artifacts", "Artifacts"),
-                ],
+                &[("files", "Files"), ("runs", "History")],
                 false,
             ),
             definition(
@@ -797,11 +793,7 @@ pub fn golden_contract_fixture() -> ContractFixtureV1 {
                     definition(
                         "rho.navigator",
                         "Navigator",
-                        &[
-                            ("files", "Files"),
-                            ("runs", "History"),
-                            ("artifacts", "Artifacts"),
-                        ],
+                        &[("files", "Files"), ("runs", "History")],
                         false,
                     ),
                     definition(

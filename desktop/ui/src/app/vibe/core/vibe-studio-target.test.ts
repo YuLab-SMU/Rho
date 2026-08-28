@@ -26,17 +26,11 @@ function instance(overrides: Partial<SurfaceInstance> = {}): SurfaceInstance {
 }
 
 describe("Vibe exact Studio target mapping", () => {
-  it("maps Run, Artifact and Check identities without fuzzy filter state", () => {
+  it("maps Run and Check identities without fuzzy filter state", () => {
     expect(exactSurfaceRequestForTarget({ kind: "run", id: "run:18" })).toMatchObject({
       surfaceId: "rho.runs",
       modeId: "history",
       viewState: { selected_id: "run:18", filter: "" },
-      mayCreate: true,
-    });
-    expect(exactSurfaceRequestForTarget({ kind: "artifact", id: "artifact:7" })).toMatchObject({
-      surfaceId: "rho.artifacts",
-      modeId: "list",
-      viewState: { selected_id: "artifact:7", filter: "" },
       mayCreate: true,
     });
     expect(exactSurfaceRequestForTarget({ kind: "check", id: "check:3" })).toMatchObject({

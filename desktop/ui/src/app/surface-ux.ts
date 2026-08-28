@@ -17,11 +17,6 @@ export const FIRST_PARTY_SURFACE_UX: Readonly<Record<string, SurfaceUxProfile>> 
     primaryAction: "Send", actionBudget: 3, areaRole: "context", narrowBehavior: "collapse",
     emptyState: "Start by asking about the current project.",
   },
-  "rho.artifacts": {
-    label: "Artifacts", primaryTask: "Inspect generated outputs", defaultFocus: "Newest artifact",
-    primaryAction: "Open", actionBudget: 2, areaRole: "support", narrowBehavior: "stack",
-    emptyState: "Generated artifacts will appear here.",
-  },
   "rho.check-result": {
     label: "Check result", primaryTask: "Review project findings", defaultFocus: "First finding",
     primaryAction: "Open evidence", actionBudget: 2, areaRole: "context", narrowBehavior: "collapse",
@@ -68,7 +63,7 @@ export const FIRST_PARTY_SURFACE_UX: Readonly<Record<string, SurfaceUxProfile>> 
     emptyState: "No operational messages.",
   },
   "rho.navigator": {
-    label: "Navigator", primaryTask: "Find project files, history, and artifacts", defaultFocus: "Files",
+    label: "Navigator", primaryTask: "Find project files and execution history", defaultFocus: "Files",
     primaryAction: "Open", actionBudget: 2, areaRole: "support", narrowBehavior: "retain",
     emptyState: "Project files appear after discovery.",
   },

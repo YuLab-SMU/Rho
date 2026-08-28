@@ -122,7 +122,6 @@ export interface VerificationSnapshot extends VerificationScope {
 
 export type VerificationStudioTarget =
   | { readonly kind: "run"; readonly id: string }
-  | { readonly kind: "artifact"; readonly id: string }
   | { readonly kind: "check"; readonly id: string };
 
 function originKey(origin: VerificationReferenceOrigin): readonly unknown[] {
@@ -174,20 +173,6 @@ export function runNeedsAttention(run: RunSummary): boolean {
   return run.status !== "completed";
 }
 
-export function artifactStudioTarget(
-  artifact: ArtifactRecordSummary,
-): VerificationStudioTarget {
-  return { kind: "artifact", id: artifact.artifact_id };
-}
-
 export function plotStudioTarget(plot: PlotArtifactSummary): VerificationStudioTarget {
   return { kind: "run", id: plot.run_id };
-}
-
-export function evidenceStudioTarget(
-  claim: EvidenceClaim,
-): VerificationStudioTarget | null {
-  return claim.artifact_id == null
-    ? null
-    : { kind: "artifact", id: claim.artifact_id };
 }

@@ -345,6 +345,27 @@ describe("Vibe verification region", () => {
   });
 
   it("uses native keyboard-focusable buttons and emits the exact Studio target", async () => {
+    const reference = makeReference("run", "run-18", "Contrast execution");
+    const focus = makeFocus([reference]);
+    const snapshot = makeSnapshot(focus, {
+      runs: source([{ record: makeRun(), references: [reference] }]),
+    });
+    const onOpenStudio = vi.fn(async () => undefined);
+    const { host } = await renderPane({ focus, adapter: staticAdapter(snapshot), onOpenStudio });
+    const button = [...host.querySelectorAll("button")].find((candidate) => candidate.textContent === "在 Studio 中查看")!;
+    button.focus();
+    expect(document.activeElement).toBe(button);
+    expect(button.tagName).toBe("BUTTON");
+    await act(async () => { button.click(); });
+
+    expect(onOpenStudio).toHaveBeenCalledWith({
+      kind: "run",
+      id: "run-18",
+    });
+    expect(document.activeElement).toBe(button);
+  });
+
+  it("keeps artifact records inspectable without offering the retired Studio component", async () => {
     const reference = makeReference(
       "artifact",
       "artifact-differential-expression",
@@ -356,17 +377,12 @@ describe("Vibe verification region", () => {
     });
     const onOpenStudio = vi.fn(async () => undefined);
     const { host } = await renderPane({ focus, adapter: staticAdapter(snapshot), onOpenStudio });
-    const button = [...host.querySelectorAll("button")].find((candidate) => candidate.textContent === "在 Studio 中查看")!;
-    button.focus();
-    expect(document.activeElement).toBe(button);
-    expect(button.tagName).toBe("BUTTON");
-    await act(async () => { button.click(); });
 
-    expect(onOpenStudio).toHaveBeenCalledWith({
-      kind: "artifact",
-      id: "artifact-differential-expression",
-    });
-    expect(document.activeElement).toBe(button);
+    expect(host.textContent).toContain("differential-expression.csv");
+    expect([...host.querySelectorAll("button")].some((button) => (
+      button.textContent === "在 Studio 中查看"
+    ))).toBe(false);
+    expect(onOpenStudio).not.toHaveBeenCalled();
   });
 
   it("reports a failed Studio transition without moving focus", async () => {

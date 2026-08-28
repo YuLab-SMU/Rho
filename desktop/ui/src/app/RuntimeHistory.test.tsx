@@ -135,7 +135,7 @@ async function renderHistory(options: {
       persistFilter={async () => undefined}
       reportError={vi.fn()}
       useInAgent={vi.fn()}
-      openOutputReference={vi.fn()}
+      openPlot={vi.fn()}
     />);
     await settle();
   });

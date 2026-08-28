@@ -182,10 +182,6 @@ function exactSurfaceReferences(instance: SurfaceInstance | undefined): VibeExac
       const runId = exactViewStateId(instance, "selected_id");
       return { ...EMPTY_REFS, runIds: runId == null ? [] : [runId] };
     }
-    case "rho.artifacts": {
-      const artifactId = exactViewStateId(instance, "selected_id");
-      return { ...EMPTY_REFS, artifactIds: artifactId == null ? [] : [artifactId] };
-    }
     case "rho.plots": {
       const plotId = exactViewStateId(instance, "selected_id");
       return { ...EMPTY_REFS, plotIds: plotId == null ? [] : [plotId] };

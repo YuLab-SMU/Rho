@@ -4,9 +4,7 @@ import type { CheckEvidence, CheckResult } from "../../../transport/check";
 import type { ArtifactRecordSummary, RunSummary } from "../../../transport/history";
 import type { VerificationAdapter } from "./verification-adapter";
 import {
-  artifactStudioTarget,
   checkNeedsCoverageWarning,
-  evidenceStudioTarget,
   plotStudioTarget,
   runNeedsAttention,
   verificationFocusKey,
@@ -185,10 +183,7 @@ function CandidateOutputs({
       <UnresolvedReferences references={snapshot.artifacts.unresolved} />
       <UnresolvedReferences references={snapshot.plots.unresolved} />
       <div className="rho-vibe-verification-records">
-        {snapshot.artifacts.items.map(({ record, references }) => {
-          const target = artifactStudioTarget(record);
-          const targetKey = `${target.kind}:${target.id}`;
-          return (
+        {snapshot.artifacts.items.map(({ record, references }) => (
             <article
               className="rho-vibe-verification-record rho-vibe-verification-artifact"
               data-tone={artifactTone(record)}
@@ -213,15 +208,8 @@ function CandidateOutputs({
                   <div><dt>创建时间</dt><dd>{record.created_at}</dd></div>
                 </dl>
               </details>
-              <StudioAction
-                target={target}
-                opening={openingTarget === targetKey}
-                disabled={openingTarget != null}
-                onOpen={onOpen}
-              />
             </article>
-          );
-        })}
+        ))}
         {snapshot.plots.items.map((item) => {
           const { record, references, preview } = item;
           const target = isNonEmptyRunId(record.run_id) ? plotStudioTarget(record) : null;
@@ -436,14 +424,10 @@ function ProjectChecks({
 function EvidenceLinks({
   snapshot,
   headingId,
-  openingTarget,
-  onOpen,
   onRetry,
 }: {
   readonly snapshot: VerificationSnapshot;
   readonly headingId: string;
-  readonly openingTarget: string | null;
-  readonly onOpen: (target: VerificationStudioTarget) => void;
   readonly onRetry: () => void;
 }) {
   if (snapshot.evidence.status === "unlinked") return null;
@@ -454,10 +438,7 @@ function EvidenceLinks({
       <SourceFailure source={snapshot.evidence} onRetry={onRetry} />
       <UnresolvedReferences references={snapshot.evidence.unresolved} />
       <div className="rho-vibe-verification-records">
-        {snapshot.evidence.items.map(({ record, references }) => {
-          const target = evidenceStudioTarget(record);
-          const targetKey = target == null ? null : `${target.kind}:${target.id}`;
-          return (
+        {snapshot.evidence.items.map(({ record, references }) => (
             <article
               className="rho-vibe-verification-record rho-vibe-verification-evidence-record"
               data-tone={record.linked_evidence_ids.length === 0 ? "warning" : "normal"}
@@ -473,17 +454,8 @@ function EvidenceLinks({
               {record.linked_evidence_ids.length === 0
                 ? <p className="rho-vibe-verification-warning" role="status">尚未建立可审计的证据链接。</p>
                 : <p className="rho-vibe-verification-boundary">已记录 {record.linked_evidence_ids.length} 个结构化链接；这不等于语义支持。</p>}
-              {target != null && targetKey != null && (
-                <StudioAction
-                  target={target}
-                  opening={openingTarget === targetKey}
-                  disabled={openingTarget != null}
-                  onOpen={onOpen}
-                />
-              )}
             </article>
-          );
-        })}
+        ))}
       </div>
     </section>
   );
@@ -630,8 +602,6 @@ export function VerificationPane({
           <EvidenceLinks
             snapshot={currentState.snapshot}
             headingId={`${headingId}-evidence`}
-            openingTarget={openingTarget}
-            onOpen={open}
             onRetry={retry}
           />
           <WorkingBoundary headingId={`${headingId}-boundary`} />

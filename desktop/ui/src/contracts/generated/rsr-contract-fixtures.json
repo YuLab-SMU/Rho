@@ -239,11 +239,6 @@
           "mode_id": "runs",
           "label": "History",
           "interaction_kind": "interactive"
-        },
-        {
-          "mode_id": "artifacts",
-          "label": "Artifacts",
-          "interaction_kind": "interactive"
         }
       ],
       "sizing_hints": {
@@ -1062,31 +1057,6 @@
         },
         {
           "definition": {
-            "command_id": "rho.surface.open.artifacts",
-            "label": "Open Artifacts",
-            "purpose": "Open durable project outputs.",
-            "input_schema": {
-              "properties": {},
-              "type": "object"
-            },
-            "consequence": "Creates one new Surface instance and places it in the active Studio Scene or Vibe Page.",
-            "availability_predicate_id": "rho.predicate.project-ready",
-            "placement_tags": [
-              "palette",
-              "surface_local"
-            ],
-            "origin": {
-              "kind": "application",
-              "component_id": "rho.artifacts"
-            }
-          },
-          "activation_generation": 1,
-          "availability": {
-            "state": "available"
-          }
-        },
-        {
-          "definition": {
             "command_id": "rho.surface.open.console",
             "label": "Open Console",
             "purpose": "Open another Console attached explicitly to a scientific runtime.",
@@ -1681,11 +1651,6 @@
               {
                 "mode_id": "runs",
                 "label": "History",
-                "interaction_kind": "interactive"
-              },
-              {
-                "mode_id": "artifacts",
-                "label": "Artifacts",
                 "interaction_kind": "interactive"
               }
             ],
