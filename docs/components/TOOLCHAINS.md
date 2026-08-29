@@ -171,3 +171,18 @@ ID, host/isolation realization, resolved interpreters, lockfile hashes, R
 system/user/project/effective libraries, installed package versions, `.venv`,
 Python site-packages, platform, and observed system requirements. A changed
 config, target binding, lock, or incompatible runtime invalidates the receipt.
+
+## Target acceptance
+
+```bash
+cargo test -p rho-toolchain --test target_e2e --locked
+cargo test -p rho-toolchain --test remote_multi_effect --locked
+```
+
+The hermetic process-boundary acceptance compiles temporary Docker, Conda,
+OpenSSH, uv, and Python stand-ins, then exercises the production registry,
+Doctor, Target Admission, plan adaptation, journal, Helper, mirror, disconnect,
+and InspectOperation paths. It verifies immutable/offline Docker arguments,
+Conda explicit-spec hashing, authenticated SSH Run/Sync/Lock dispatch, ordered
+multi-effects, and uncertain-to-terminal reconciliation without requiring a
+developer machine's mutable environments or network.
