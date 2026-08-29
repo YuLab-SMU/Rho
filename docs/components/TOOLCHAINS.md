@@ -73,11 +73,12 @@ image Python environment. Run and Live plans use the same immutable,
 read-only, network-disabled container boundary with only the project mounted
 writable. Sync, lock, and package install are rejected because an ephemeral
 container cannot truthfully persist an image environment; rebuild the pinned
-image instead. Local Conda plans execute through the named environment while
-preserving the original command environment, but Doctor remains blocked until
-`conda list --explicit` digest and in-environment runtime validation are
-implemented. SSH remains blocked until the remote Helper exists. No unsupported
-target silently falls back to local execution.
+image instead. Local Conda Doctor now hashes the exact stdout from
+`conda list --explicit`, compares it with the configured digest, then performs
+rig/Rscript, renv/pak/jsonlite, uv lock, `.venv`, and exact Python checks through
+`conda run --no-capture-output --name <environment>`. Conda Run/Live preserves
+the original command environment. SSH remains blocked until the remote Helper
+exists. No unsupported target silently falls back to local execution.
 
 ## Resolution and execution
 

@@ -141,12 +141,32 @@ fn doctor_with_target(
         };
         return Ok(report);
     }
-    if matches!(target.isolation, ComputeIsolation::Conda { .. }) {
-        report.checks.push(failed(
-            "target-adapter",
-            "Conda runtime realization Doctor is not admitted yet",
-        ));
-        report.status = DoctorStatus::Failed;
+    if let ComputeIsolation::Conda {
+        environment,
+        explicit_spec_sha256,
+    } = &target.isolation
+    {
+        match doctor_conda(config, environment, explicit_spec_sha256) {
+            Ok((r_version, rscript, python_version, python, checks)) => {
+                report.r_version = r_version;
+                report.rscript = rscript;
+                report.python_version = python_version;
+                report.python = python;
+                report.checks.extend(checks);
+            }
+            Err(error) => report
+                .checks
+                .push(failed("conda", bounded(&error.to_string()))),
+        }
+        report.status = if report
+            .checks
+            .iter()
+            .all(|check| check.status == DoctorStatus::Ready)
+        {
+            DoctorStatus::Ready
+        } else {
+            DoctorStatus::Failed
+        };
         return Ok(report);
     }
 
@@ -345,6 +365,184 @@ impl DockerProbe<'_> {
             args,
             cwd: self.config.project_root.clone(),
             env: Default::default(),
+        }
+    }
+}
+
+fn doctor_conda(
+    config: &ToolchainConfigDocument,
+    environment: &str,
+    expected_explicit_sha256: &str,
+) -> Result<DockerDoctorOutcome, ToolchainError> {
+    let conda = find_program("conda")
+        .ok_or_else(|| ToolchainError::CommandStart("conda was not found on PATH".to_string()))?;
+    let explicit = Command::new(&conda)
+        .args(["list", "--explicit", "--name", environment])
+        .current_dir(&config.project_root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|error| ToolchainError::CommandStart(error.to_string()))?;
+    if !explicit.status.success() {
+        return Err(ToolchainError::CommandFailed(bounded(
+            &String::from_utf8_lossy(&explicit.stderr),
+        )));
+    }
+    if explicit.stdout.len() > MAX_DOCTOR_OUTPUT_BYTES {
+        return Err(ToolchainError::CommandFailed(
+            "conda explicit specification exceeded the byte bound".to_string(),
+        ));
+    }
+    let actual_explicit_sha256 = hex_sha256(&explicit.stdout);
+    if actual_explicit_sha256 != expected_explicit_sha256 {
+        return Err(ToolchainError::CommandFailed(format!(
+            "Conda explicit specification changed: expected {expected_explicit_sha256}, got {actual_explicit_sha256}"
+        )));
+    }
+    let probe = CondaProbe {
+        config,
+        conda: &conda,
+        environment,
+    };
+    let mut checks = vec![ready(
+        "conda-explicit",
+        format!("environment {environment} matches its explicit specification"),
+    )];
+    let mut r_version = None;
+    let mut rscript = None;
+    if let Some(r) = &config.config.runtime.r {
+        let inventory = execute(&probe.command("rig", &["list", "--json"], &[]))?;
+        let inventory = parse_rig_inventory(&inventory)?;
+        let installation = resolve_r_installation(&inventory, &r.version)?;
+        let selected_rscript = installation.rscript()?;
+        let version =
+            execute(&probe.command(&selected_rscript.to_string_lossy(), &["--version"], &[]))?;
+        if !String::from_utf8_lossy(&version).contains(&r.version.to_string()) {
+            return Err(ToolchainError::CommandFailed(
+                "Conda Rscript reports the wrong R version".to_string(),
+            ));
+        }
+        let lockfile = config.resolve_project_path(&r.lockfile)?;
+        regular_file(&lockfile, &r.lockfile)?;
+        regular_file(
+            &config.project_root.join("renv/activate.R"),
+            "renv/activate.R",
+        )?;
+        regular_file(&config.project_root.join(".Rprofile"), ".Rprofile")?;
+        let null_device = if cfg!(windows) { "NUL" } else { "/dev/null" };
+        execute(&probe.command(
+            &selected_rscript.to_string_lossy(),
+            &[
+                "--no-save",
+                "-e",
+                "if (!(requireNamespace(\"renv\", quietly=TRUE) && requireNamespace(\"pak\", quietly=TRUE))) quit(status=41)",
+            ],
+            &[
+                ("R_PROFILE_USER", null_device),
+                ("R_ENVIRON_USER", null_device),
+            ],
+        ))?;
+        let project = serde_json::to_string(&config.project_root.to_string_lossy().as_ref())?;
+        let expression = format!(
+            "renv::load(project={project}, quiet=TRUE); result <- renv::status(project={project}, sources=FALSE); locked <- result$lockfile$Packages; installed <- result$library$Packages; locked_names <- sort(names(locked)); ok <- all(locked_names %in% names(installed)) && all(vapply(locked_names, function(name) identical(locked[[name]]$Version, installed[[name]]$Version), logical(1))); jsonlite <- if (requireNamespace(\"jsonlite\", quietly=TRUE)) as.character(packageVersion(\"jsonlite\")) else \"\"; cat(\"RHO_CONDA_RENV_READY=\", if (isTRUE(ok)) \"true\" else \"false\", \"\\n\", sep=\"\"); cat(\"RHO_CONDA_JSONLITE=\", jsonlite, \"\\n\", sep=\"\")"
+        );
+        let output = execute(&probe.command(
+            &selected_rscript.to_string_lossy(),
+            &["--no-save", "-e", &expression],
+            &[
+                ("R_PROFILE_USER", null_device),
+                ("R_ENVIRON_USER", null_device),
+                ("RENV_CONFIG_AUTO_SNAPSHOT", "FALSE"),
+            ],
+        ))?;
+        let output = String::from_utf8_lossy(&output);
+        if marker(&output, "RHO_CONDA_RENV_READY=").as_deref() != Some("true")
+            || marker(&output, "RHO_CONDA_JSONLITE=")
+                .as_deref()
+                .is_none_or(str::is_empty)
+        {
+            return Err(ToolchainError::CommandFailed(
+                "Conda R environment does not realize renv.lock and jsonlite".to_string(),
+            ));
+        }
+        r_version = Some(r.version.to_string());
+        rscript = Some(selected_rscript);
+        checks.push(ready(
+            "conda-r",
+            format!("exact R {} and renv lock ready", r.version),
+        ));
+    }
+    let mut python_version = None;
+    let mut python = None;
+    if let Some(python_config) = &config.config.runtime.python {
+        let project = config.resolve_project_path(&python_config.project)?;
+        let lockfile = config.resolve_project_path(&python_config.lockfile)?;
+        regular_file(&project, &python_config.project)?;
+        regular_file(&lockfile, &python_config.lockfile)?;
+        let project_root = project.parent().unwrap().to_string_lossy().into_owned();
+        let version_request = python_config.version.to_string();
+        execute(&probe.command(
+            "uv",
+            &[
+                "sync",
+                "--project",
+                &project_root,
+                "--locked",
+                "--check",
+                "--python",
+                &version_request,
+            ],
+            &[],
+        ))?;
+        let python_path = if cfg!(windows) {
+            project.parent().unwrap().join(".venv/Scripts/python.exe")
+        } else {
+            project.parent().unwrap().join(".venv/bin/python")
+        };
+        executable_file(&python_path, ".venv Python")?;
+        let output = execute(&probe.command(&python_path.to_string_lossy(), &["--version"], &[]))?;
+        if !String::from_utf8_lossy(&output).contains(&version_request) {
+            return Err(ToolchainError::CommandFailed(
+                "Conda Python environment reports the wrong project Python".to_string(),
+            ));
+        }
+        python_version = Some(version_request);
+        python = Some(python_path);
+        checks.push(ready("conda-python", "uv lock and project .venv ready"));
+    }
+    Ok((r_version, rscript, python_version, python, checks))
+}
+
+struct CondaProbe<'a> {
+    config: &'a ToolchainConfigDocument,
+    conda: &'a Path,
+    environment: &'a str,
+}
+
+impl CondaProbe<'_> {
+    fn command(
+        &self,
+        program: &str,
+        program_args: &[&str],
+        environment: &[(&str, &str)],
+    ) -> CommandSpec {
+        let mut args = vec![
+            "run".to_string(),
+            "--no-capture-output".to_string(),
+            "--name".to_string(),
+            self.environment.to_string(),
+            program.to_string(),
+        ];
+        args.extend(program_args.iter().map(|value| (*value).to_string()));
+        CommandSpec {
+            program: self.conda.to_path_buf(),
+            args,
+            cwd: self.config.project_root.clone(),
+            env: environment
+                .iter()
+                .map(|(key, value)| ((*key).to_string(), (*value).to_string()))
+                .collect(),
         }
     }
 }
