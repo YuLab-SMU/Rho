@@ -1,8 +1,13 @@
-use rho_toolchain::{DoctorStatus, doctor_for_target, load_target_registry};
+use anyhow::{Context, Result, bail, ensure};
+use rho_toolchain::{
+    DoctorStatus, TargetAdmission, TargetAdmissionMode, admit_target, doctor_for_target,
+    load_target_registry, load_toolchain_config,
+};
 use serde::Serialize;
 use tauri::State;
 
 use crate::AppState;
+use crate::startup_runtime::runtime_config;
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
 pub(crate) struct ToolchainDoctorCheckView {
@@ -25,6 +30,91 @@ pub(crate) struct ToolchainDoctorView {
     pub(crate) python_version: Option<String>,
     pub(crate) python: Option<String>,
     pub(crate) checks: Vec<ToolchainDoctorCheckView>,
+}
+
+pub(crate) async fn prepare_workspace_target_admission_for(
+    state: &AppState,
+    project_root: &std::path::Path,
+) -> Result<Option<TargetAdmission>> {
+    if !project_root.join("rho.toml").exists() {
+        return Ok(None);
+    }
+    let rho_home = crate::agent_llm::agent_config::rho_home()?;
+    let root_for_task = project_root.to_path_buf();
+    let admission = tauri::async_runtime::spawn_blocking(move || {
+        let targets = load_target_registry(&rho_home)?;
+        admit_target(&root_for_task, &targets, TargetAdmissionMode::Workspace)
+    })
+    .await
+    .context("Workspace Target Admission task failed")??;
+    if admission.host_kind() != "local" || admission.isolation_kind() != "native" {
+        bail!(
+            "Workspace Target Admission selected {}/{}; this desktop build cannot substitute the local Ark runtime for that target",
+            admission.host_kind(),
+            admission.isolation_kind()
+        );
+    }
+    let runtime = runtime_config(state)?;
+    let admitted_rscript = admission
+        .doctor_report()
+        .rscript
+        .as_ref()
+        .context("Workspace Target Admission omitted the configured Rscript")?
+        .canonicalize()
+        .context("resolving the admitted Workspace Rscript")?;
+    let runtime_rscript = runtime
+        .rscript
+        .canonicalize()
+        .context("resolving the desktop Workspace Rscript")?;
+    ensure!(
+        admitted_rscript == runtime_rscript,
+        "Workspace Target Admission resolved another Rscript; restart Rho with the rho.toml runtime"
+    );
+    Ok(Some(admission))
+}
+
+pub(crate) async fn prepare_workspace_target_admission(
+    state: &AppState,
+) -> Result<Option<TargetAdmission>> {
+    let project_root = state.project_root.read().await.clone();
+    *state.target_admission.write().await = None;
+    let admission = prepare_workspace_target_admission_for(state, &project_root).await?;
+    ensure!(
+        *state.project_root.read().await == project_root,
+        "Workspace Target Admission is stale after a project switch"
+    );
+    Ok(admission)
+}
+
+pub(crate) async fn require_target_admission(
+    state: &AppState,
+    mode: TargetAdmissionMode,
+) -> Result<Option<TargetAdmission>> {
+    let project_root = state.project_root.read().await.clone();
+    let configured = project_root.join("rho.toml").exists();
+    let cached = state.target_admission.read().await.clone();
+    if !configured {
+        if cached.is_some() {
+            bail!("rho.toml changed after Workspace Target Admission; restart Workspace R");
+        }
+        return Ok(None);
+    }
+    let cached = cached
+        .context("Target Admission is unavailable for the managed project; restart Workspace R")?;
+    let rho_home = crate::agent_llm::agent_config::rho_home()?;
+    let root_for_task = project_root.clone();
+    let admission = tauri::async_runtime::spawn_blocking(move || {
+        let config = load_toolchain_config(&root_for_task)?;
+        let targets = load_target_registry(&rho_home)?;
+        cached.for_mode(&config, &targets, mode)
+    })
+    .await
+    .context("Target Admission validation task failed")??;
+    ensure!(
+        *state.project_root.read().await == project_root,
+        "Target Admission is stale after a project switch"
+    );
+    Ok(Some(admission))
 }
 
 #[cfg_attr(test, specta::specta)]

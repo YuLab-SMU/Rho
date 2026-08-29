@@ -2,8 +2,9 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use crate::{
-    CommandSpec, ComputeHost, ComputeIsolation, TargetRegistryDocument, ToolchainConfigDocument,
-    ToolchainError, ToolchainPlan, ToolchainPlanKind,
+    CommandSpec, ComputeHost, ComputeIsolation, TargetAdmission, TargetAdmissionMode,
+    TargetRegistryDocument, ToolchainConfigDocument, ToolchainError, ToolchainPlan,
+    ToolchainPlanKind,
 };
 
 const CONTAINER_PROJECT_ROOT: &str = "/workspace";
@@ -13,8 +14,20 @@ const CONTAINER_PROJECT_ROOT: &str = "/workspace";
 pub fn adapt_plan_for_target(
     config: &ToolchainConfigDocument,
     targets: &TargetRegistryDocument,
+    admission: &TargetAdmission,
     plan: &ToolchainPlan,
 ) -> Result<ToolchainPlan, ToolchainError> {
+    admission.validate(
+        config,
+        targets,
+        match plan.kind {
+            ToolchainPlanKind::Run => TargetAdmissionMode::Run,
+            ToolchainPlanKind::Live => TargetAdmissionMode::Live,
+            ToolchainPlanKind::Sync => TargetAdmissionMode::Sync,
+            ToolchainPlanKind::Lock => TargetAdmissionMode::Lock,
+            ToolchainPlanKind::PackageInstall => TargetAdmissionMode::PackageInstall,
+        },
+    )?;
     let target = targets
         .registry
         .resolve(&config.config.compute.default_target)?;
@@ -214,7 +227,7 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
-    use crate::{load_target_registry, load_toolchain_config};
+    use crate::{DoctorReport, DoctorStatus, load_target_registry, load_toolchain_config};
 
     fn configured_target(
         isolation: &str,
@@ -222,6 +235,7 @@ mod tests {
         tempfile::TempDir,
         ToolchainConfigDocument,
         TargetRegistryDocument,
+        TargetAdmission,
     ) {
         let root = tempdir().unwrap();
         fs::write(
@@ -238,12 +252,34 @@ mod tests {
         .unwrap();
         let config = load_toolchain_config(root.path()).unwrap();
         let targets = load_target_registry(root.path()).unwrap();
-        (root, config, targets)
+        let target = targets.registry.resolve("compute").unwrap();
+        let admission = TargetAdmission::from_verified_report(
+            &config,
+            &targets,
+            TargetAdmissionMode::Run,
+            DoctorReport {
+                schema_version: 1,
+                status: DoctorStatus::Ready,
+                project_root: config.project_root.clone(),
+                rho_toml_sha256: config.sha256.clone(),
+                target_id: "compute".to_string(),
+                target_registry_sha256: targets.sha256.clone(),
+                host_kind: target.host_kind().to_string(),
+                isolation_kind: target.isolation_kind().to_string(),
+                r_version: None,
+                rscript: None,
+                python_version: Some("3.12".to_string()),
+                python: Some(config.project_root.join(".venv/bin/python")),
+                checks: Vec::new(),
+            },
+        )
+        .unwrap();
+        (root, config, targets, admission)
     }
 
     #[test]
     fn docker_run_is_immutable_offline_and_project_scoped() {
-        let (root, config, targets) = configured_target(
+        let (root, config, targets, admission) = configured_target(
             "      kind: docker\n      engine: docker\n      image: registry/rho@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         );
         let script = root.path().join("analysis.py");
@@ -259,7 +295,7 @@ mod tests {
             may_update_lockfiles: false,
             may_install_packages: false,
         };
-        let adapted = adapt_plan_for_target(&config, &targets, &logical).unwrap();
+        let adapted = adapt_plan_for_target(&config, &targets, &admission, &logical).unwrap();
         let command = &adapted.commands[0];
         assert_eq!(command.program, PathBuf::from("docker"));
         assert!(command.args.contains(&"--network=none".to_string()));
@@ -276,9 +312,12 @@ mod tests {
 
     #[test]
     fn docker_never_hides_sync_or_lock_in_an_ephemeral_container() {
-        let (_root, config, targets) = configured_target(
+        let (_root, config, targets, admission) = configured_target(
             "      kind: docker\n      image: registry/rho@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         );
+        let sync_admission = admission
+            .for_mode(&config, &targets, TargetAdmissionMode::Sync)
+            .unwrap();
         let sync = ToolchainPlan {
             kind: ToolchainPlanKind::Sync,
             commands: vec![CommandSpec {
@@ -290,12 +329,12 @@ mod tests {
             may_update_lockfiles: false,
             may_install_packages: true,
         };
-        assert!(adapt_plan_for_target(&config, &targets, &sync).is_err());
+        assert!(adapt_plan_for_target(&config, &targets, &sync_admission, &sync).is_err());
     }
 
     #[test]
     fn conda_run_uses_the_pinned_environment_boundary() {
-        let (_root, config, targets) = configured_target(
+        let (_root, config, targets, admission) = configured_target(
             "      kind: conda\n      environment: rho-analysis\n      explicit_spec_sha256: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         );
         let logical = ToolchainPlan {
@@ -309,7 +348,7 @@ mod tests {
             may_update_lockfiles: false,
             may_install_packages: false,
         };
-        let adapted = adapt_plan_for_target(&config, &targets, &logical).unwrap();
+        let adapted = adapt_plan_for_target(&config, &targets, &admission, &logical).unwrap();
         assert_eq!(adapted.commands[0].program, PathBuf::from("conda"));
         assert_eq!(
             &adapted.commands[0].args[..4],

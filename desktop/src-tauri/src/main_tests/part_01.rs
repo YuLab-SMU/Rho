@@ -1053,6 +1053,7 @@
             }),
             project_store: ProjectSessionStore::new(data_dir.to_path_buf()).unwrap(),
             project_root: RwLock::new(project_root.to_path_buf()),
+            target_admission: RwLock::new(None),
             project_watcher: Mutex::new(None),
             session: RwLock::new(None),
             context: Mutex::new(None),

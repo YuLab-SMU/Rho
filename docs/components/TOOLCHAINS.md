@@ -103,6 +103,17 @@ for a `dispatching` or `uncertain` operation identity before inspection; retry
 is a deliberate new operation only after the original terminal truth is known.
 No unsupported target silently falls back to local execution.
 
+A successful Doctor becomes an explicit, mode-specific `TargetAdmission` bound
+to the canonical project, `rho.toml`, target-registry digest, capabilities,
+host/isolation realization, and exact runtime evidence. Workspace, Run, Live,
+Sync, Lock, and package plan construction and target adaptation require that
+admission and reject stale or wrong-mode evidence. The desktop caches only the
+managed project's admitted Workspace realization, revalidates its config and
+target binding before every Run and auxiliary Live process admission, and
+fails closed if `rho.toml` or `targets.yaml` changes. Desktop Workspace R is
+currently local Ark only: an admitted Docker, Conda, or SSH Workspace is
+reported as unsupported instead of being silently launched against local R.
+
 ## Resolution and execution
 
 - `rig list --json` is bounded and parsed into installed R records. Rho accepts

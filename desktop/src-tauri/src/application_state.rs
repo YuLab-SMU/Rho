@@ -33,6 +33,7 @@ pub(crate) struct AppState {
     pub(crate) startup: SyncRwLock<StartupView>,
     pub(crate) project_store: ProjectSessionStore,
     pub(crate) project_root: RwLock<PathBuf>,
+    pub(crate) target_admission: RwLock<Option<rho_toolchain::TargetAdmission>>,
     pub(crate) project_watcher: Mutex<Option<ProjectWatcherControl>>,
     pub(crate) session: RwLock<Option<Arc<ArkSession>>>,
     pub(crate) context: Mutex<Option<Arc<WorkspaceBrokerLane>>>,

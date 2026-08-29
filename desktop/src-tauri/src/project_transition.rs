@@ -201,6 +201,8 @@ where
         .project_transition_repository()
         .active_project_root()
         .await?;
+    let next_target_admission =
+        crate::commands::toolchain::prepare_workspace_target_admission_for(state, &root).await?;
     let mut prepared_extension =
         prepare_extension_project_candidate(state, &normalized_root).await?;
 
@@ -317,6 +319,7 @@ where
     }
 
     *state.project_root.write().await = root.clone();
+    *state.target_admission.write().await = next_target_admission;
     let mut watcher = state.project_watcher.lock().await;
     let previous_watcher = watcher.replace(next_watcher);
     drop(watcher);

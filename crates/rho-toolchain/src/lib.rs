@@ -6,6 +6,7 @@
 //! writes a bounded `environment.json` receipt.
 
 mod adapter;
+mod admission;
 mod command;
 mod config;
 mod doctor;
@@ -19,6 +20,7 @@ mod target;
 use std::path::PathBuf;
 
 pub use adapter::adapt_plan_for_target;
+pub use admission::{TargetAdmission, TargetAdmissionMode, admit_target};
 pub use command::{
     CommandSpec, ToolchainPlan, ToolchainPlanKind, lock_plan, python_run_plan,
     r_package_install_plan, r_run_plan, sync_plan,

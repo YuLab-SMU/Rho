@@ -8,6 +8,7 @@ use rho_extension_runtime::{BoundedJson, ExtensionHost, InternalExtensionRuntime
 use rho_server::coordinator::{AgentPluginContributionAdapter, WorkspaceSnapshotAdapter};
 use rho_server::workspace_lane::{WorkspaceBrokerLane, WorkspaceBrokerState};
 use rho_store::StoreExecutor;
+use rho_toolchain::TargetAdmissionMode;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tauri::State;
@@ -97,6 +98,7 @@ async fn dispatch_workspace_execution_with_id(
     state: &AppState,
     execution_id: Option<&str>,
 ) -> Result<Value> {
+    crate::commands::toolchain::require_target_admission(state, TargetAdmissionMode::Run).await?;
     let session = active_session(state).await?;
     let context = active_context(state).await?;
     let mut context = context.lock().await;

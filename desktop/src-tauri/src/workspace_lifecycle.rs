@@ -8,6 +8,7 @@ use rho_kernel::{ArkLaunchConfig, ArkSession};
 use rho_server::coordinator::bootstrap_bridge;
 use rho_server::workspace_lane::WorkspaceBrokerLane;
 use rho_store::{MigrationOutcome, StoreExecutor, StoreExecutorError, normalize_project_root};
+use rho_toolchain::TargetAdmissionMode;
 use serde_json::{Value, json};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
@@ -350,6 +351,8 @@ pub(crate) async fn monitor_workspace_plugin_heartbeats(app: AppHandle) {
 pub(crate) async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus> {
     let config = runtime_config(state)?;
     if let Some(session) = state.session.read().await.clone() {
+        crate::commands::toolchain::require_target_admission(state, TargetAdmissionMode::Workspace)
+            .await?;
         let context = state.context.lock().await.clone();
         let identity = if let Some(context) = context {
             Some(context.identity())
@@ -359,6 +362,8 @@ pub(crate) async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus>
         return status_from(&config, &session, identity.as_deref());
     }
 
+    let target_admission =
+        crate::commands::toolchain::prepare_workspace_target_admission(state).await?;
     let session = Arc::new(
         ArkSession::launch(&ArkLaunchConfig::new(&config.kernelspec))
             .await
@@ -464,6 +469,7 @@ pub(crate) async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus>
     }
     *state.context.lock().await = Some(context);
     *state.session.write().await = Some(session);
+    *state.target_admission.write().await = target_admission;
     Ok(status)
 }
 

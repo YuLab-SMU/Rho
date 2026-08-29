@@ -173,6 +173,7 @@ fn main() {
                 }),
                 project_store,
                 project_root: RwLock::new(default_project_root()),
+                target_admission: RwLock::new(None),
                 project_watcher: Mutex::new(None),
                 session: RwLock::new(None),
                 context: Mutex::new(None),

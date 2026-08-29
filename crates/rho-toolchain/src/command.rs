@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ComputeHost, ComputeIsolation, TargetRegistryDocument, ToolchainConfigDocument, ToolchainError,
+    TargetAdmission, TargetAdmissionMode, TargetRegistryDocument, ToolchainConfigDocument,
+    ToolchainError,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -35,34 +36,13 @@ pub struct ToolchainPlan {
     pub may_install_packages: bool,
 }
 
-fn admit_local_native(
+fn require_admission(
     config: &ToolchainConfigDocument,
     targets: &TargetRegistryDocument,
+    admission: &TargetAdmission,
+    mode: TargetAdmissionMode,
 ) -> Result<(), ToolchainError> {
-    let target = targets
-        .registry
-        .resolve(&config.config.compute.default_target)?;
-    if let Some(capability) = config
-        .config
-        .compute
-        .required_capabilities
-        .iter()
-        .find(|capability| !target.capabilities.contains(capability))
-    {
-        return Err(ToolchainError::InvalidTarget(format!(
-            "target lacks required capability {capability}"
-        )));
-    }
-    if !matches!(target.host, ComputeHost::Local)
-        || !matches!(target.isolation, ComputeIsolation::Native)
-    {
-        return Err(ToolchainError::InvalidTarget(format!(
-            "{}/{} execution adapter is not admitted yet",
-            target.host_kind(),
-            target.isolation_kind()
-        )));
-    }
-    Ok(())
+    admission.validate(config, targets, mode)
 }
 
 fn contained_existing_path(
@@ -141,12 +121,22 @@ fn rscript_expression(rscript: &Path, project_root: &Path, expression: String) -
 pub fn r_run_plan(
     config: &ToolchainConfigDocument,
     targets: &TargetRegistryDocument,
+    admission: &TargetAdmission,
     rscript: &Path,
     script: &Path,
     args: &[String],
     live: bool,
 ) -> Result<ToolchainPlan, ToolchainError> {
-    admit_local_native(config, targets)?;
+    require_admission(
+        config,
+        targets,
+        admission,
+        if live {
+            TargetAdmissionMode::Live
+        } else {
+            TargetAdmissionMode::Run
+        },
+    )?;
     let (project_root, script) = contained_existing_path(&config.project_root, script)?;
     let mut command_args = vec![
         "--no-save".to_string(),
@@ -175,11 +165,21 @@ pub fn r_run_plan(
 pub fn python_run_plan(
     config: &ToolchainConfigDocument,
     targets: &TargetRegistryDocument,
+    admission: &TargetAdmission,
     uv: &Path,
     command: &[String],
     live: bool,
 ) -> Result<ToolchainPlan, ToolchainError> {
-    admit_local_native(config, targets)?;
+    require_admission(
+        config,
+        targets,
+        admission,
+        if live {
+            TargetAdmissionMode::Live
+        } else {
+            TargetAdmissionMode::Run
+        },
+    )?;
     let python = config.config.runtime.python.as_ref().ok_or_else(|| {
         ToolchainError::InvalidConfig(
             "[runtime.python] is required for Python execution".to_string(),
@@ -222,10 +222,11 @@ pub fn python_run_plan(
 pub fn sync_plan(
     config: &ToolchainConfigDocument,
     targets: &TargetRegistryDocument,
+    admission: &TargetAdmission,
     rscript: Option<&Path>,
     uv: &Path,
 ) -> Result<ToolchainPlan, ToolchainError> {
-    admit_local_native(config, targets)?;
+    require_admission(config, targets, admission, TargetAdmissionMode::Sync)?;
     let mut commands = Vec::new();
     if let Some(r) = &config.config.runtime.r {
         let rscript = rscript.ok_or_else(|| {
@@ -269,10 +270,11 @@ pub fn sync_plan(
 pub fn lock_plan(
     config: &ToolchainConfigDocument,
     targets: &TargetRegistryDocument,
+    admission: &TargetAdmission,
     rscript: Option<&Path>,
     uv: &Path,
 ) -> Result<ToolchainPlan, ToolchainError> {
-    admit_local_native(config, targets)?;
+    require_admission(config, targets, admission, TargetAdmissionMode::Lock)?;
     let mut commands = Vec::new();
     if let Some(r) = &config.config.runtime.r {
         let rscript = rscript.ok_or_else(|| {
@@ -315,10 +317,16 @@ pub fn lock_plan(
 pub fn r_package_install_plan(
     config: &ToolchainConfigDocument,
     targets: &TargetRegistryDocument,
+    admission: &TargetAdmission,
     rscript: &Path,
     package: &str,
 ) -> Result<ToolchainPlan, ToolchainError> {
-    admit_local_native(config, targets)?;
+    require_admission(
+        config,
+        targets,
+        admission,
+        TargetAdmissionMode::PackageInstall,
+    )?;
     if config.config.runtime.r.is_none() {
         return Err(ToolchainError::InvalidConfig(
             "[runtime.r] is required for R package installation".to_string(),
@@ -357,7 +365,10 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
-    use crate::{load_target_registry, load_toolchain_config};
+    use crate::{
+        DoctorReport, DoctorStatus, TargetAdmissionMode, load_target_registry,
+        load_toolchain_config,
+    };
 
     const CONFIG: &str = r#"schema = 1
 [runtime.r]
@@ -377,6 +388,7 @@ lockfile = "uv.lock"
         tempfile::TempDir,
         ToolchainConfigDocument,
         TargetRegistryDocument,
+        TargetAdmission,
     ) {
         let root = tempdir().unwrap();
         fs::write(root.path().join("rho.toml"), CONFIG).unwrap();
@@ -385,17 +397,40 @@ lockfile = "uv.lock"
         fs::write(root.path().join("uv.lock"), "version = 1").unwrap();
         let config = load_toolchain_config(root.path()).unwrap();
         let targets = load_target_registry(root.path()).unwrap();
-        (root, config, targets)
+        let report = DoctorReport {
+            schema_version: 1,
+            status: DoctorStatus::Ready,
+            project_root: config.project_root.clone(),
+            rho_toml_sha256: config.sha256.clone(),
+            target_id: "local".to_string(),
+            target_registry_sha256: None,
+            host_kind: "local".to_string(),
+            isolation_kind: "native".to_string(),
+            r_version: Some("4.5.2".to_string()),
+            rscript: Some(PathBuf::from("/R/Rscript")),
+            python_version: Some("3.12".to_string()),
+            python: Some(config.project_root.join(".venv/bin/python")),
+            checks: Vec::new(),
+        };
+        let admission = TargetAdmission::from_verified_report(
+            &config,
+            &targets,
+            TargetAdmissionMode::Run,
+            report,
+        )
+        .unwrap();
+        (root, config, targets, admission)
     }
 
     #[test]
     fn ordinary_runs_never_install_or_update_locks() {
-        let (root, config, targets) = config();
+        let (root, config, targets, admission) = config();
         let script = root.path().join("analysis.R");
         fs::write(&script, "print(1)").unwrap();
         let r = r_run_plan(
             &config,
             &targets,
+            &admission,
             Path::new("/R/Rscript"),
             &script,
             &["x".into()],
@@ -412,6 +447,7 @@ lockfile = "uv.lock"
         let python = python_run_plan(
             &config,
             &targets,
+            &admission,
             Path::new("uv"),
             &["python".into(), "analysis.py".into()],
             false,
@@ -428,8 +464,8 @@ lockfile = "uv.lock"
     }
 
     #[test]
-    fn nonlocal_target_never_falls_back_to_local_execution() {
-        let (root, _config, _targets) = config();
+    fn stale_local_admission_never_authorizes_a_remote_target() {
+        let (root, _config, _targets, admission) = config();
         let configured = CONFIG.replacen("schema = 1", "schema = 2", 1)
             + "\n[compute]\ndefault_target = \"remote\"\n";
         fs::write(root.path().join("rho.toml"), configured).unwrap();
@@ -444,6 +480,7 @@ lockfile = "uv.lock"
             python_run_plan(
                 &config,
                 &targets,
+                &admission,
                 Path::new("uv"),
                 &["python".to_string()],
                 false,
@@ -454,10 +491,14 @@ lockfile = "uv.lock"
 
     #[test]
     fn sync_and_lock_keep_external_effects_explicit() {
-        let (_root, config, targets) = config();
+        let (_root, config, targets, admission) = config();
+        let sync_admission = admission
+            .for_mode(&config, &targets, TargetAdmissionMode::Sync)
+            .unwrap();
         let sync = sync_plan(
             &config,
             &targets,
+            &sync_admission,
             Some(Path::new("/R/Rscript")),
             Path::new("uv"),
         )
@@ -468,9 +509,13 @@ lockfile = "uv.lock"
         assert!(sync.commands[0].args.join(" ").contains("renv::restore"));
         assert!(sync.commands[1].args.contains(&"--locked".to_string()));
 
+        let lock_admission = admission
+            .for_mode(&config, &targets, TargetAdmissionMode::Lock)
+            .unwrap();
         let lock = lock_plan(
             &config,
             &targets,
+            &lock_admission,
             Some(Path::new("/R/Rscript")),
             Path::new("uv"),
         )

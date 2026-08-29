@@ -25,8 +25,11 @@ Important runtime owners include:
   default to `~/.rho`. Credentials resolve session → environment → config
   literal without a second vault authority;
 - `commands/toolchain.rs` for the read-only project Toolchain Doctor projected
-  in Environment → Toolchains. External sync/lock authority remains in
-  `rho-toolchain`, separate from ordinary run admission.
+  in Environment → Toolchains and the managed-project Target Admission cache.
+  Workspace startup admits the exact local/native R realization before Ark
+  launch; Runtime Run and auxiliary Live entry points revalidate the cached
+  config/registry binding before persistence or process dispatch. External
+  sync/lock authority remains in `rho-toolchain`.
 
 ## Frontend
 
