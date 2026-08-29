@@ -11,6 +11,7 @@ mod doctor;
 mod journal;
 mod receipt;
 mod rig;
+mod target;
 
 use std::path::PathBuf;
 
@@ -19,10 +20,10 @@ pub use command::{
     r_package_install_plan, r_run_plan, sync_plan,
 };
 pub use config::{
-    ExactVersion, PythonToolchainConfig, PythonVersion, RToolchainConfig, RuntimeToolchainConfig,
-    ToolchainConfig, ToolchainConfigDocument, load_toolchain_config,
+    ExactVersion, ProjectComputeConfig, PythonToolchainConfig, PythonVersion, RToolchainConfig,
+    RuntimeToolchainConfig, ToolchainConfig, ToolchainConfigDocument, load_toolchain_config,
 };
-pub use doctor::{DoctorCheck, DoctorReport, DoctorStatus, doctor};
+pub use doctor::{DoctorCheck, DoctorReport, DoctorStatus, doctor, doctor_for_target};
 pub use journal::{
     EffectStatus, ExternalEffectRecord, OperationJournal, OperationKind, OperationStatus,
     execute_journaled_operation, operation_journal_path,
@@ -33,6 +34,10 @@ pub use receipt::{
     write_environment_receipt,
 };
 pub use rig::{RigInstallation, RigInventory, parse_rig_inventory, resolve_r_installation};
+pub use target::{
+    ComputeHost, ComputeIsolation, ComputeTarget, LOCAL_TARGET_ID, TargetRegistry,
+    TargetRegistryDocument, load_target_registry, validate_target_id,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ToolchainError {
@@ -58,6 +63,10 @@ pub enum ToolchainError {
     MissingRscript(PathBuf),
     #[error("toolchain identity is invalid: {0}")]
     InvalidIdentity(String),
+    #[error("compute target is invalid: {0}")]
+    InvalidTarget(String),
+    #[error("compute target was not found: {0}")]
+    TargetNotFound(String),
     #[error("toolchain command failed to start: {0}")]
     CommandStart(String),
     #[error("toolchain command failed: {0}")]

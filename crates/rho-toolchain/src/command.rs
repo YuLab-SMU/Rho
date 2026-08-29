@@ -3,7 +3,9 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{ToolchainConfigDocument, ToolchainError};
+use crate::{
+    ComputeHost, ComputeIsolation, TargetRegistryDocument, ToolchainConfigDocument, ToolchainError,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -31,6 +33,36 @@ pub struct ToolchainPlan {
     pub commands: Vec<CommandSpec>,
     pub may_update_lockfiles: bool,
     pub may_install_packages: bool,
+}
+
+fn admit_local_native(
+    config: &ToolchainConfigDocument,
+    targets: &TargetRegistryDocument,
+) -> Result<(), ToolchainError> {
+    let target = targets
+        .registry
+        .resolve(&config.config.compute.default_target)?;
+    if let Some(capability) = config
+        .config
+        .compute
+        .required_capabilities
+        .iter()
+        .find(|capability| !target.capabilities.contains(capability))
+    {
+        return Err(ToolchainError::InvalidTarget(format!(
+            "target lacks required capability {capability}"
+        )));
+    }
+    if !matches!(target.host, ComputeHost::Local)
+        || !matches!(target.isolation, ComputeIsolation::Native)
+    {
+        return Err(ToolchainError::InvalidTarget(format!(
+            "{}/{} execution adapter is not admitted yet",
+            target.host_kind(),
+            target.isolation_kind()
+        )));
+    }
+    Ok(())
 }
 
 fn contained_existing_path(
@@ -107,13 +139,15 @@ fn rscript_expression(rscript: &Path, project_root: &Path, expression: String) -
 /// this into the underlying `--file=<path>` commandArgs identity; Rho never
 /// rewrites the script as `source()` or a `-e` expression.
 pub fn r_run_plan(
-    project_root: &Path,
+    config: &ToolchainConfigDocument,
+    targets: &TargetRegistryDocument,
     rscript: &Path,
     script: &Path,
     args: &[String],
     live: bool,
 ) -> Result<ToolchainPlan, ToolchainError> {
-    let (project_root, script) = contained_existing_path(project_root, script)?;
+    admit_local_native(config, targets)?;
+    let (project_root, script) = contained_existing_path(&config.project_root, script)?;
     let mut command_args = vec![
         "--no-save".to_string(),
         "--no-restore".to_string(),
@@ -140,10 +174,12 @@ pub fn r_run_plan(
 
 pub fn python_run_plan(
     config: &ToolchainConfigDocument,
+    targets: &TargetRegistryDocument,
     uv: &Path,
     command: &[String],
     live: bool,
 ) -> Result<ToolchainPlan, ToolchainError> {
+    admit_local_native(config, targets)?;
     let python = config.config.runtime.python.as_ref().ok_or_else(|| {
         ToolchainError::InvalidConfig(
             "[runtime.python] is required for Python execution".to_string(),
@@ -185,9 +221,11 @@ pub fn python_run_plan(
 
 pub fn sync_plan(
     config: &ToolchainConfigDocument,
+    targets: &TargetRegistryDocument,
     rscript: Option<&Path>,
     uv: &Path,
 ) -> Result<ToolchainPlan, ToolchainError> {
+    admit_local_native(config, targets)?;
     let mut commands = Vec::new();
     if let Some(r) = &config.config.runtime.r {
         let rscript = rscript.ok_or_else(|| {
@@ -230,9 +268,11 @@ pub fn sync_plan(
 
 pub fn lock_plan(
     config: &ToolchainConfigDocument,
+    targets: &TargetRegistryDocument,
     rscript: Option<&Path>,
     uv: &Path,
 ) -> Result<ToolchainPlan, ToolchainError> {
+    admit_local_native(config, targets)?;
     let mut commands = Vec::new();
     if let Some(r) = &config.config.runtime.r {
         let rscript = rscript.ok_or_else(|| {
@@ -274,9 +314,11 @@ pub fn lock_plan(
 
 pub fn r_package_install_plan(
     config: &ToolchainConfigDocument,
+    targets: &TargetRegistryDocument,
     rscript: &Path,
     package: &str,
 ) -> Result<ToolchainPlan, ToolchainError> {
+    admit_local_native(config, targets)?;
     if config.config.runtime.r.is_none() {
         return Err(ToolchainError::InvalidConfig(
             "[runtime.r] is required for R package installation".to_string(),
@@ -315,7 +357,7 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
-    use crate::load_toolchain_config;
+    use crate::{load_target_registry, load_toolchain_config};
 
     const CONFIG: &str = r#"schema = 1
 [runtime.r]
@@ -331,23 +373,29 @@ project = "pyproject.toml"
 lockfile = "uv.lock"
 "#;
 
-    fn config() -> (tempfile::TempDir, ToolchainConfigDocument) {
+    fn config() -> (
+        tempfile::TempDir,
+        ToolchainConfigDocument,
+        TargetRegistryDocument,
+    ) {
         let root = tempdir().unwrap();
         fs::write(root.path().join("rho.toml"), CONFIG).unwrap();
         fs::write(root.path().join("renv.lock"), "{}").unwrap();
         fs::write(root.path().join("pyproject.toml"), "[project]").unwrap();
         fs::write(root.path().join("uv.lock"), "version = 1").unwrap();
         let config = load_toolchain_config(root.path()).unwrap();
-        (root, config)
+        let targets = load_target_registry(root.path()).unwrap();
+        (root, config, targets)
     }
 
     #[test]
     fn ordinary_runs_never_install_or_update_locks() {
-        let (root, config) = config();
+        let (root, config, targets) = config();
         let script = root.path().join("analysis.R");
         fs::write(&script, "print(1)").unwrap();
         let r = r_run_plan(
-            root.path(),
+            &config,
+            &targets,
             Path::new("/R/Rscript"),
             &script,
             &["x".into()],
@@ -363,6 +411,7 @@ lockfile = "uv.lock"
 
         let python = python_run_plan(
             &config,
+            &targets,
             Path::new("uv"),
             &["python".into(), "analysis.py".into()],
             false,
@@ -379,16 +428,53 @@ lockfile = "uv.lock"
     }
 
     #[test]
+    fn nonlocal_target_never_falls_back_to_local_execution() {
+        let (root, _config, _targets) = config();
+        let configured = CONFIG.replacen("schema = 1", "schema = 2", 1)
+            + "\n[compute]\ndefault_target = \"remote\"\n";
+        fs::write(root.path().join("rho.toml"), configured).unwrap();
+        fs::write(
+            root.path().join("targets.yaml"),
+            "schema: 1\ntargets:\n  remote:\n    host:\n      kind: ssh\n      host: compute.example\n      host_fingerprint: SHA256:abcdefghijklmnopqrstuvwxyz0123456789ABCDE\n      remote_root: /data/projects\n    isolation:\n      kind: native\n",
+        )
+        .unwrap();
+        let config = load_toolchain_config(root.path()).unwrap();
+        let targets = load_target_registry(root.path()).unwrap();
+        assert!(
+            python_run_plan(
+                &config,
+                &targets,
+                Path::new("uv"),
+                &["python".to_string()],
+                false,
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
     fn sync_and_lock_keep_external_effects_explicit() {
-        let (_root, config) = config();
-        let sync = sync_plan(&config, Some(Path::new("/R/Rscript")), Path::new("uv")).unwrap();
+        let (_root, config, targets) = config();
+        let sync = sync_plan(
+            &config,
+            &targets,
+            Some(Path::new("/R/Rscript")),
+            Path::new("uv"),
+        )
+        .unwrap();
         assert_eq!(sync.commands.len(), 2);
         assert!(!sync.may_update_lockfiles);
         assert!(sync.may_install_packages);
         assert!(sync.commands[0].args.join(" ").contains("renv::restore"));
         assert!(sync.commands[1].args.contains(&"--locked".to_string()));
 
-        let lock = lock_plan(&config, Some(Path::new("/R/Rscript")), Path::new("uv")).unwrap();
+        let lock = lock_plan(
+            &config,
+            &targets,
+            Some(Path::new("/R/Rscript")),
+            Path::new("uv"),
+        )
+        .unwrap();
         assert_eq!(lock.commands.len(), 2);
         assert!(lock.may_update_lockfiles);
         assert!(!lock.may_install_packages);

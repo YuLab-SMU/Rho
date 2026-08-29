@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::command::CommandSpec;
 use crate::receipt::validate_identity;
-use crate::{ToolchainConfigDocument, ToolchainError};
+use crate::{TargetRegistryDocument, ToolchainConfigDocument, ToolchainError};
 
 const MAX_JOURNAL_BYTES: usize = 2 * 1024 * 1024;
 const MAX_OUTPUT_PREVIEW_BYTES: usize = 64 * 1024;
@@ -61,6 +61,10 @@ pub struct OperationJournal {
     pub status: OperationStatus,
     pub project_root: PathBuf,
     pub rho_toml_sha256: String,
+    pub target_id: String,
+    pub target_registry_sha256: Option<String>,
+    pub host_kind: String,
+    pub isolation_kind: String,
     pub started_at: String,
     pub finished_at: Option<String>,
     pub partial_effects_possible: bool,
@@ -86,6 +90,7 @@ pub fn execute_journaled_operation(
     operation_id: &str,
     kind: OperationKind,
     commands: &[CommandSpec],
+    targets: &TargetRegistryDocument,
     confirmed: bool,
 ) -> Result<OperationJournal, ToolchainError> {
     if !confirmed {
@@ -97,6 +102,19 @@ pub fn execute_journaled_operation(
         return Err(ToolchainError::InvalidJournal(
             "operation must contain at least one external effect".to_string(),
         ));
+    }
+    let target_id = &config.config.compute.default_target;
+    let target = targets.registry.resolve(target_id)?;
+    let missing_capability = config
+        .config
+        .compute
+        .required_capabilities
+        .iter()
+        .find(|capability| !target.capabilities.contains(capability));
+    if let Some(capability) = missing_capability {
+        return Err(ToolchainError::InvalidJournal(format!(
+            "target lacks required capability {capability}"
+        )));
     }
     let path = operation_journal_path(&config.project_root, operation_id)?;
     ensure_safe_parent(&config.project_root, path.parent().unwrap())?;
@@ -112,6 +130,10 @@ pub fn execute_journaled_operation(
         status: OperationStatus::Running,
         project_root: config.project_root.clone(),
         rho_toml_sha256: config.sha256.clone(),
+        target_id: target_id.clone(),
+        target_registry_sha256: targets.sha256.clone(),
+        host_kind: target.host_kind().to_string(),
+        isolation_kind: target.isolation_kind().to_string(),
         started_at: Utc::now().to_rfc3339(),
         finished_at: None,
         partial_effects_possible: false,
@@ -259,9 +281,13 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
-    use crate::load_toolchain_config;
+    use crate::{load_target_registry, load_toolchain_config};
 
-    fn fixture() -> (tempfile::TempDir, ToolchainConfigDocument) {
+    fn fixture() -> (
+        tempfile::TempDir,
+        ToolchainConfigDocument,
+        TargetRegistryDocument,
+    ) {
         let root = tempdir().unwrap();
         fs::write(
             root.path().join("rho.toml"),
@@ -269,13 +295,14 @@ mod tests {
         )
         .unwrap();
         let config = load_toolchain_config(root.path()).unwrap();
-        (root, config)
+        let targets = load_target_registry(root.path()).unwrap();
+        (root, config, targets)
     }
 
     #[cfg(unix)]
     #[test]
     fn unconfirmed_effects_never_create_operation_state() {
-        let (_root, config) = fixture();
+        let (_root, config, targets) = fixture();
         let commands = vec![CommandSpec {
             program: PathBuf::from("/bin/sh"),
             args: vec!["-c".to_string(), "exit 0".to_string()],
@@ -288,6 +315,7 @@ mod tests {
                 "sync-unconfirmed",
                 OperationKind::Sync,
                 &commands,
+                &targets,
                 false,
             )
             .is_err()
@@ -298,7 +326,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn failed_effect_preserves_truthful_partial_effects_journal() {
-        let (root, config) = fixture();
+        let (root, config, targets) = fixture();
         let marker = root.path().join("effect.txt");
         let commands = vec![CommandSpec {
             program: PathBuf::from("/bin/sh"),
@@ -310,14 +338,24 @@ mod tests {
             env: Default::default(),
         }];
         assert!(
-            execute_journaled_operation(&config, "sync-001", OperationKind::Sync, &commands, true)
-                .is_err()
+            execute_journaled_operation(
+                &config,
+                "sync-001",
+                OperationKind::Sync,
+                &commands,
+                &targets,
+                true,
+            )
+            .is_err()
         );
         assert_eq!(fs::read_to_string(marker).unwrap(), "applied");
         let path = operation_journal_path(&config.project_root, "sync-001").unwrap();
         let journal: OperationJournal = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
         assert_eq!(journal.status, OperationStatus::Failed);
         assert!(journal.partial_effects_possible);
+        assert_eq!(journal.target_id, "local");
+        assert_eq!(journal.host_kind, "local");
+        assert_eq!(journal.isolation_kind, "native");
         assert_eq!(journal.effects[0].exit_code, Some(7));
         assert_eq!(journal.effects[0].status, EffectStatus::Failed);
     }
@@ -325,16 +363,22 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn successful_effects_are_recorded_in_order() {
-        let (_root, config) = fixture();
+        let (_root, config, targets) = fixture();
         let commands = vec![CommandSpec {
             program: PathBuf::from("/bin/sh"),
             args: vec!["-c".to_string(), "printf ok".to_string()],
             cwd: config.project_root.clone(),
             env: Default::default(),
         }];
-        let journal =
-            execute_journaled_operation(&config, "lock-001", OperationKind::Lock, &commands, true)
-                .unwrap();
+        let journal = execute_journaled_operation(
+            &config,
+            "lock-001",
+            OperationKind::Lock,
+            &commands,
+            &targets,
+            true,
+        )
+        .unwrap();
         assert_eq!(journal.status, OperationStatus::Succeeded);
         assert!(!journal.partial_effects_possible);
         assert_eq!(journal.effects[0].stdout_preview, "ok");

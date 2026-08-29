@@ -6416,6 +6416,8 @@ describe("Studio foundation app", () => {
       .find((surface) => surface.querySelector(".rho-toolchain-surface") != null)!;
     expect(toolchain).toBeDefined();
     expect(toolchain.textContent).toContain("Exact project environments are ready");
+    expect(toolchain.textContent).toContain("Target local");
+    expect(toolchain.textContent).toContain("local / native");
     expect(toolchain.textContent).toContain("R 4.5.2");
     expect(toolchain.textContent).toContain("Python 3.12");
     expect(toolchain.textContent).toContain("project library ready");

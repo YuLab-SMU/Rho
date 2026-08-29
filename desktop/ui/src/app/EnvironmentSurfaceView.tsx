@@ -39,8 +39,10 @@ function ToolchainDoctorPanel({
     {error == null && view != null && <div className="rho-toolchain-body">
       <div className={`rho-toolchain-summary rho-toolchain-summary-${view.status}`}>
         <span className={`rho-domain-state rho-domain-${view.status === "ready" ? "ready" : view.status === "failed" ? "error" : "warning"}`}>{view.status}</span>
-        <div><strong>{view.configured ? "rho.toml managed" : "Unmanaged project"}</strong>
-          <small>{view.rho_toml_sha256 == null ? "No configuration digest" : `Config ${view.rho_toml_sha256.slice(0, 12)}`}</small></div>
+        <div><strong>{view.configured ? `Target ${view.target_id}` : "Unmanaged project"}</strong>
+          <small>{view.configured
+            ? `${view.host_kind} / ${view.isolation_kind} · Config ${view.rho_toml_sha256?.slice(0, 12) ?? "unavailable"}`
+            : "No configuration digest"}</small></div>
       </div>
       <div className="rho-toolchain-runtime-grid">
         <article>

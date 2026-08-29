@@ -126,18 +126,67 @@ pub struct RuntimeToolchainConfig {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct ProjectComputeConfig {
+    #[serde(default = "default_target")]
+    pub default_target: String,
+    #[serde(default)]
+    pub required_capabilities: Vec<String>,
+}
+
+fn default_target() -> String {
+    crate::LOCAL_TARGET_ID.to_string()
+}
+
+impl Default for ProjectComputeConfig {
+    fn default() -> Self {
+        Self {
+            default_target: default_target(),
+            required_capabilities: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ToolchainConfig {
     pub schema: u16,
     pub runtime: RuntimeToolchainConfig,
+    #[serde(default)]
+    pub compute: ProjectComputeConfig,
 }
 
 impl ToolchainConfig {
     pub fn validate(&self) -> Result<(), ToolchainError> {
-        if self.schema != 1 {
+        if !matches!(self.schema, 1 | 2) {
             return Err(ToolchainError::InvalidConfig(format!(
-                "unsupported schema {}; expected 1",
+                "unsupported schema {}; expected 1 or 2",
                 self.schema
             )));
+        }
+        if self.schema == 1 && self.compute != ProjectComputeConfig::default() {
+            return Err(ToolchainError::InvalidConfig(
+                "[compute] requires rho.toml schema 2".to_string(),
+            ));
+        }
+        crate::validate_target_id(&self.compute.default_target)?;
+        if self.compute.required_capabilities.len() > 64 {
+            return Err(ToolchainError::InvalidConfig(
+                "compute.required_capabilities exceeds 64 entries".to_string(),
+            ));
+        }
+        let mut capabilities = std::collections::BTreeSet::new();
+        for capability in &self.compute.required_capabilities {
+            if capability.trim() != capability
+                || capability.is_empty()
+                || capability.len() > 128
+                || capability.chars().any(char::is_control)
+                || !capabilities.insert(capability)
+            {
+                return Err(ToolchainError::InvalidConfig(
+                    "compute.required_capabilities contains an invalid or duplicate value"
+                        .to_string(),
+                ));
+            }
         }
         if self.runtime.r.is_none() && self.runtime.python.is_none() {
             return Err(ToolchainError::InvalidConfig(
@@ -311,6 +360,27 @@ lockfile = "uv.lock"
         fs::write(
             root.path().join("rho.toml"),
             READY.replace("lockfile = \"uv.lock\"", "lockfile = \"../uv.lock\""),
+        )
+        .unwrap();
+        assert!(load_toolchain_config(root.path()).is_err());
+    }
+
+    #[test]
+    fn schema_two_selects_a_registered_compute_target_without_embedding_host_secrets() {
+        let root = tempdir().unwrap();
+        let configured = READY.replacen("schema = 1", "schema = 2", 1)
+            + "\n[compute]\ndefault_target = \"lab-gpu\"\nrequired_capabilities = [\"cpu\", \"gpu\"]\n";
+        fs::write(root.path().join("rho.toml"), &configured).unwrap();
+        let document = load_toolchain_config(root.path()).unwrap();
+        assert_eq!(document.config.compute.default_target, "lab-gpu");
+        assert_eq!(
+            document.config.compute.required_capabilities,
+            ["cpu", "gpu"]
+        );
+
+        fs::write(
+            root.path().join("rho.toml"),
+            configured.replacen("schema = 2", "schema = 1", 1),
         )
         .unwrap();
         assert!(load_toolchain_config(root.path()).is_err());

@@ -25,6 +25,50 @@ lockfile = "uv.lock"
 Package names are not duplicated into `rho.toml`: renv and `renv.lock` own the
 R project library, while pyproject and `uv.lock` own Python dependencies.
 
+## Compute targets
+
+Schema 2 may select a machine-local target identity without embedding host
+credentials:
+
+```toml
+schema = 2
+
+[compute]
+default_target = "lab-gpu"
+required_capabilities = ["cpu", "gpu"]
+```
+
+`<Rho home>/targets.yaml` binds that identity to two orthogonal dimensions:
+
+```yaml
+schema: 1
+targets:
+  lab-gpu:
+    host:
+      kind: ssh
+      host: gnode01
+      username: scientist
+      host_fingerprint: SHA256:...
+      remote_root: /data/projects
+    isolation:
+      kind: docker
+      engine: docker
+      image: registry/rho@sha256:...
+    capabilities: [cpu, gpu]
+```
+
+Hosts are `local` or pinned-fingerprint `ssh`; isolation is `native`, immutable
+digest `docker`/`podman`, or a Conda environment with an exact explicit-spec
+digest. The built-in `local` target is always available and cannot be changed
+away from local/native. Missing `targets.yaml` therefore still leaves a stable
+small local compute environment. Passwords and private keys are unsupported in
+the registry and remain in system SSH/credential facilities.
+
+Doctor resolves the project target before probing runtimes. Local/native uses
+the implemented rig/renv/pak/uv path. Other host/isolation combinations are
+reported as not-yet-admitted adapters rather than silently falling back to
+local execution.
+
 ## Resolution and execution
 
 - `rig list --json` is bounded and parsed into installed R records. Rho accepts
@@ -72,8 +116,8 @@ Every run or live activation has a validated receipt at:
 .rho/live/<session-id>/environment.json
 ```
 
-The receipt binds the exact `rho.toml` digest to resolved interpreters,
-lockfile hashes, R system/user/project/effective libraries, installed package
-versions, `.venv`, Python site-packages, platform, and observed system
-requirements. A changed config, lock, or incompatible runtime invalidates the
-receipt.
+The receipt binds the exact `rho.toml` and target-registry digests to target
+ID, host/isolation realization, resolved interpreters, lockfile hashes, R
+system/user/project/effective libraries, installed package versions, `.venv`,
+Python site-packages, platform, and observed system requirements. A changed
+config, target binding, lock, or incompatible runtime invalidates the receipt.

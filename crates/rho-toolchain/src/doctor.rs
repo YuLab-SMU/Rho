@@ -8,7 +8,8 @@ use serde::{Deserialize, Serialize};
 use crate::config::hex_sha256;
 use crate::rig::rig_inventory_command;
 use crate::{
-    CommandSpec, ToolchainConfigDocument, ToolchainError, load_toolchain_config,
+    CommandSpec, ComputeHost, ComputeIsolation, ComputeTarget, LOCAL_TARGET_ID,
+    TargetRegistryDocument, ToolchainConfigDocument, ToolchainError, load_toolchain_config,
     parse_rig_inventory, resolve_r_installation,
 };
 
@@ -36,6 +37,10 @@ pub struct DoctorReport {
     pub status: DoctorStatus,
     pub project_root: PathBuf,
     pub rho_toml_sha256: String,
+    pub target_id: String,
+    pub target_registry_sha256: Option<String>,
+    pub host_kind: String,
+    pub isolation_kind: String,
     pub r_version: Option<String>,
     pub rscript: Option<PathBuf>,
     pub python_version: Option<String>,
@@ -45,21 +50,73 @@ pub struct DoctorReport {
 
 pub fn doctor(project_root: &Path) -> Result<DoctorReport, ToolchainError> {
     let config = load_toolchain_config(project_root)?;
-    doctor_with_config(&config)
+    doctor_with_target(
+        &config,
+        LOCAL_TARGET_ID,
+        &ComputeTarget::local_native(),
+        None,
+    )
 }
 
-fn doctor_with_config(config: &ToolchainConfigDocument) -> Result<DoctorReport, ToolchainError> {
+pub fn doctor_for_target(
+    project_root: &Path,
+    targets: &TargetRegistryDocument,
+) -> Result<DoctorReport, ToolchainError> {
+    let config = load_toolchain_config(project_root)?;
+    let target_id = &config.config.compute.default_target;
+    let target = targets.registry.resolve(target_id)?;
+    doctor_with_target(&config, target_id, target, targets.sha256.clone())
+}
+
+fn doctor_with_target(
+    config: &ToolchainConfigDocument,
+    target_id: &str,
+    target: &ComputeTarget,
+    target_registry_sha256: Option<String>,
+) -> Result<DoctorReport, ToolchainError> {
     let mut report = DoctorReport {
         schema_version: 1,
         status: DoctorStatus::Ready,
         project_root: config.project_root.clone(),
         rho_toml_sha256: config.sha256.clone(),
+        target_id: target_id.to_string(),
+        target_registry_sha256,
+        host_kind: target.host_kind().to_string(),
+        isolation_kind: target.isolation_kind().to_string(),
         r_version: None,
         rscript: None,
         python_version: None,
         python: None,
         checks: vec![ready("rho.toml", "strict configuration loaded")],
     };
+    let missing_capabilities = config
+        .config
+        .compute
+        .required_capabilities
+        .iter()
+        .filter(|capability| !target.capabilities.contains(capability))
+        .cloned()
+        .collect::<Vec<_>>();
+    if !missing_capabilities.is_empty() {
+        report.checks.push(failed(
+            "target-capabilities",
+            format!("target lacks {}", missing_capabilities.join(", ")),
+        ));
+    }
+    if !matches!(target.host, ComputeHost::Local)
+        || !matches!(target.isolation, ComputeIsolation::Native)
+    {
+        report.checks.push(failed(
+            "target-adapter",
+            format!(
+                "{}/{} execution adapter is not admitted yet",
+                target.host_kind(),
+                target.isolation_kind()
+            ),
+        ));
+        report.status = DoctorStatus::Failed;
+        return Ok(report);
+    }
 
     if let Some(r) = &config.config.runtime.r {
         match doctor_r(config, r.version.to_string(), &r.lockfile) {
@@ -343,6 +400,34 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+
+    #[test]
+    fn remote_container_target_is_resolved_before_any_local_runtime_probe() {
+        let root = tempdir().unwrap();
+        fs::write(
+            root.path().join("rho.toml"),
+            "schema = 2\n[runtime.python]\nversion = \"3.12\"\nmanager = \"uv\"\nproject = \"pyproject.toml\"\nlockfile = \"uv.lock\"\n[compute]\ndefault_target = \"lab\"\nrequired_capabilities = [\"gpu\"]\n",
+        )
+        .unwrap();
+        let rho_home = tempdir().unwrap();
+        fs::write(
+            rho_home.path().join("targets.yaml"),
+            "schema: 1\ntargets:\n  lab:\n    host:\n      kind: ssh\n      host: gpu.example\n      host_fingerprint: SHA256:abcdefghijklmnopqrstuvwxyz0123456789ABCDE\n      remote_root: /data/projects\n    isolation:\n      kind: docker\n      image: registry/rho@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n    capabilities: [cpu, gpu]\n",
+        )
+        .unwrap();
+        let targets = crate::load_target_registry(rho_home.path()).unwrap();
+        let report = doctor_for_target(root.path(), &targets).unwrap();
+        assert_eq!(report.target_id, "lab");
+        assert_eq!(report.host_kind, "ssh");
+        assert_eq!(report.isolation_kind, "docker");
+        assert_eq!(report.status, DoctorStatus::Failed);
+        assert!(
+            report
+                .checks
+                .iter()
+                .any(|check| check.id == "target-adapter")
+        );
+    }
 
     #[test]
     fn missing_external_tools_are_reported_without_mutating_the_project() {

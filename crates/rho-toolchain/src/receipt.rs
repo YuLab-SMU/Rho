@@ -55,6 +55,11 @@ pub struct EnvironmentReceipt {
     pub mode: EnvironmentReceiptMode,
     pub project_root: PathBuf,
     pub rho_toml_sha256: String,
+    pub target_id: String,
+    pub target_registry_sha256: Option<String>,
+    pub host_kind: String,
+    pub isolation_kind: String,
+    pub isolation_identity: Option<String>,
     pub created_at: String,
     pub operating_system: String,
     pub architecture: String,
@@ -74,6 +79,24 @@ impl EnvironmentReceipt {
         if self.project_root != config.project_root || self.rho_toml_sha256 != config.sha256 {
             return Err(ToolchainError::InvalidReceipt(
                 "receipt project or rho.toml identity changed".to_string(),
+            ));
+        }
+        crate::validate_target_id(&self.target_id)?;
+        if self.target_id != config.config.compute.default_target {
+            return Err(ToolchainError::InvalidReceipt(
+                "receipt compute target does not match rho.toml".to_string(),
+            ));
+        }
+        if self.host_kind.is_empty() || self.isolation_kind.is_empty() {
+            return Err(ToolchainError::InvalidReceipt(
+                "receipt compute target realization is incomplete".to_string(),
+            ));
+        }
+        if self.target_id == crate::LOCAL_TARGET_ID
+            && (self.host_kind != "local" || self.isolation_kind != "native")
+        {
+            return Err(ToolchainError::InvalidReceipt(
+                "built-in local receipt must remain local/native".to_string(),
             ));
         }
         match (&config.config.runtime.r, &self.r) {
@@ -261,6 +284,11 @@ mod tests {
             mode: EnvironmentReceiptMode::Run,
             project_root: config.project_root.clone(),
             rho_toml_sha256: config.sha256.clone(),
+            target_id: "local".to_string(),
+            target_registry_sha256: None,
+            host_kind: "local".to_string(),
+            isolation_kind: "native".to_string(),
+            isolation_identity: None,
             created_at: "2026-09-01T00:00:00Z".to_string(),
             operating_system: "macos".to_string(),
             architecture: "aarch64".to_string(),
