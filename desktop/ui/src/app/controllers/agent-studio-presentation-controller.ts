@@ -2,6 +2,7 @@ import type {
   AgentTurnSummary,
   LayoutNode,
   ResourceDescriptor,
+  RuntimeDescriptor,
   UiKernelTransport,
 } from "../../transport";
 import type {
@@ -79,11 +80,13 @@ export async function presentAgentTurnInStudio({
       surfaceId,
       modeId,
       resourceBinding,
+      runtimeBinding,
       viewState,
     }: {
       readonly surfaceId: string;
       readonly modeId: string | null;
       readonly resourceBinding: ResourceDescriptor | null;
+      readonly runtimeBinding: RuntimeDescriptor | null;
       readonly viewState: Readonly<Record<string, unknown>>;
     }): Promise<string> => {
       await store.refresh();
@@ -98,6 +101,15 @@ export async function presentAgentTurnInStudio({
         resource_id: resourceBinding.resource_id,
         resource_revision: resourceBinding.resource_revision,
       };
+      const runtime = runtimeBinding == null ? null : {
+        runtime_provider_id: runtimeBinding.runtime_provider_id,
+        runtime_instance_id: runtimeBinding.runtime_instance_id,
+        runtime_kind: runtimeBinding.runtime_kind,
+        project_id: runtimeBinding.project_id,
+        activation_generation: runtimeBinding.activation_generation,
+        state_revision: runtimeBinding.state_revision,
+        attach_capabilities: runtimeBinding.attach_capabilities,
+      };
       const existing = surfaceState.snapshot.catalog.instances.find((instance) =>
         instance.surface_id === surfaceId
         && instance.mode_id === modeId
@@ -106,6 +118,11 @@ export async function presentAgentTurnInStudio({
           : instance.resource_binding?.resource_provider_id === binding.resource_provider_id
             && instance.resource_binding.resource_kind === binding.resource_kind
             && instance.resource_binding.resource_id === binding.resource_id)
+        && (runtime == null
+          ? instance.runtime_binding == null
+          : instance.runtime_binding?.runtime_provider_id === runtime.runtime_provider_id
+            && instance.runtime_binding.runtime_instance_id === runtime.runtime_instance_id
+            && instance.runtime_binding.activation_generation === runtime.activation_generation)
         && JSON.stringify(instance.view_state) === JSON.stringify(viewState));
       if (existing != null) return existing.instance_id;
       const before = new Set(
@@ -116,7 +133,7 @@ export async function presentAgentTurnInStudio({
         project_id: projectId,
         mode_id: modeId,
         resource_binding: binding,
-        runtime_binding: null,
+        runtime_binding: runtime,
         view_group_id: null,
         view_state: viewState,
         instance_disposition: "new_instance",
@@ -142,21 +159,37 @@ export async function presentAgentTurnInStudio({
         surfaceId: "rho.file-source",
         modeId: "source",
         resourceBinding: descriptor,
+        runtimeBinding: null,
         viewState: { cursor_start: 0, cursor_end: 0, scroll_top: 0 },
       }));
     }
 
-    let historyId: string | null = null;
+    let consoleId: string | null = null;
     if (presentation.execution_id != null) {
       const execution = await store.getExecution(presentation.execution_id);
       if (execution.execution_id !== presentation.execution_id) {
         throw new Error("Agent Runtime execution is unavailable in the active project.");
       }
-      historyId = await openPresentationSurface({
-        surfaceId: "rho.runs",
-        modeId: "history",
+      await store.refresh();
+      const runtimeState = store.getRuntimeSnapshot();
+      const attachedRuntime = runtimeState.status !== "ready" ? null : runtimeState.snapshot.instances.find(
+        (runtime) => runtime.runtime_instance_id === execution.runtime_instance_id
+          && runtime.activation_generation === execution.runtime_activation_generation,
+      ) ?? runtimeState.snapshot.instances.find((runtime) => runtime.primary_scientific_runtime) ?? null;
+      consoleId = await openPresentationSurface({
+        surfaceId: "rho.console",
+        modeId: null,
         resourceBinding: null,
-        viewState: { selected_id: presentation.execution_id, filter: "" },
+        runtimeBinding: attachedRuntime,
+        viewState: {
+          schema_version: 4,
+          filter: "",
+          scroll_top: 0,
+          follow_tail: true,
+          transcript_start_after: null,
+          read_cursor: null,
+          pinned_execution_id: presentation.execution_id,
+        },
       });
     }
 
@@ -172,6 +205,7 @@ export async function presentAgentTurnInStudio({
         surfaceId: "rho.plots",
         modeId: presentation.plot_id == null ? "gallery" : "single",
         resourceBinding: null,
+        runtimeBinding: null,
         viewState: { selected_id: presentation.plot_id, filter: "" },
       });
     }
@@ -181,12 +215,13 @@ export async function presentAgentTurnInStudio({
           surfaceId: "rho.environment",
           modeId: "packages",
           resourceBinding: null,
+          runtimeBinding: null,
           viewState: { filter: "" },
         })
       : null;
     const instances: AgentStudioPresentationInstances = {
       source: sourceIds,
-      history: historyId,
+      console: consoleId,
       plots: plotsId,
       environment: environmentId,
     };
@@ -213,7 +248,7 @@ export async function presentAgentTurnInStudio({
       edit: { kind: "replace_root", root },
     }, lease);
     studioState = store.getStudioSnapshot();
-    const firstInstanceId = sourceIds[0] ?? historyId ?? plotsId ?? environmentId;
+    const firstInstanceId = sourceIds[0] ?? consoleId ?? plotsId ?? environmentId;
     if (studioState.status !== "ready" || firstInstanceId == null) {
       throw new Error("Studio result layout did not settle.");
     }

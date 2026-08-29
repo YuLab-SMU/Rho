@@ -16,7 +16,7 @@ export interface AgentStudioPresentationEvent {
 
 export interface AgentStudioPresentationInstances {
   readonly source: readonly string[];
-  readonly history: string | null;
+  readonly console: string | null;
   readonly plots: string | null;
   readonly environment: string | null;
 }
@@ -136,7 +136,7 @@ export function buildAgentStudioPresentationLayout(
   instances: AgentStudioPresentationInstances,
   allocateNodeId: () => string,
 ): LayoutNode {
-  const primary = [...instances.source, ...(instances.history == null ? [] : [instances.history])];
+  const primary = [...instances.source, ...(instances.console == null ? [] : [instances.console])];
   const results = [instances.plots, instances.environment]
     .filter((instanceId): instanceId is string => instanceId != null);
   if (primary.length === 0 && results.length === 0) {

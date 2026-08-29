@@ -13,7 +13,7 @@ import { projectConsoleEvents, type ConsoleProjectionBlock } from "../console-ou
 import { runtimeOutputChunkBlock } from "../runtime-output-presentation";
 import type { ConsoleExecutionAdmission } from "./console-execution-router";
 
-export const CONSOLE_VIEW_STATE_VERSION = 3;
+export const CONSOLE_VIEW_STATE_VERSION = 4;
 export const MAX_CONSOLE_TRANSCRIPT_CACHE_BYTES = 8 * 1024 * 1024;
 export const MAX_CONSOLE_COMMAND_HISTORY_BYTES = 1024 * 1024;
 const MAX_CONSOLE_RECORDS = 100;
@@ -55,6 +55,7 @@ export interface ConsoleViewState {
   readonly follow_tail: boolean;
   readonly transcript_start_after: ConsoleTranscriptCursor | null;
   readonly read_cursor: ConsoleReadCursor | null;
+  readonly pinned_execution_id: string | null;
   readonly outputs: readonly ConsoleOutputRecord[];
   readonly released_output_count: number;
 }
@@ -66,6 +67,7 @@ export interface ConsolePersistentViewState {
   readonly follow_tail: boolean;
   readonly transcript_start_after: ConsoleTranscriptCursor | null;
   readonly read_cursor: ConsoleReadCursor | null;
+  readonly pinned_execution_id: string | null;
 }
 
 export interface ConsoleInstancePorts {
@@ -134,6 +136,12 @@ function transcriptCursor(value: unknown): ConsoleTranscriptCursor | null {
     : null;
 }
 
+function pinnedExecutionId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized.length > 0 && normalized.length <= 256 ? normalized : null;
+}
+
 function readCursor(value: unknown): ConsoleReadCursor | null {
   if (typeof value !== "object" || value == null || Array.isArray(value)) return null;
   const candidate = value as Readonly<Record<string, unknown>>;
@@ -145,6 +153,12 @@ function readCursor(value: unknown): ConsoleReadCursor | null {
     : null;
 }
 
+export function consolePinnedExecutionId(instance: SurfaceInstance): string | null {
+  const candidate = instance.view_state;
+  if (typeof candidate !== "object" || candidate == null || Array.isArray(candidate)) return null;
+  return pinnedExecutionId((candidate as Readonly<Record<string, unknown>>).pinned_execution_id);
+}
+
 export function consolePersistentViewState(state: ConsoleViewState): ConsolePersistentViewState {
   return {
     schema_version: CONSOLE_VIEW_STATE_VERSION,
@@ -153,6 +167,7 @@ export function consolePersistentViewState(state: ConsoleViewState): ConsolePers
     follow_tail: state.follow_tail,
     transcript_start_after: state.transcript_start_after,
     read_cursor: state.read_cursor,
+    pinned_execution_id: state.pinned_execution_id,
   };
 }
 
@@ -167,6 +182,7 @@ export function needsConsoleStateCompaction(instance: SurfaceInstance): boolean 
   if (value.schema_version !== CONSOLE_VIEW_STATE_VERSION) return true;
   if (Object.keys(value).some((key) => ![
     "schema_version", "filter", "scroll_top", "follow_tail", "transcript_start_after", "read_cursor",
+    "pinned_execution_id",
   ].includes(key))) return true;
   const expected = {
     schema_version: CONSOLE_VIEW_STATE_VERSION,
@@ -175,6 +191,7 @@ export function needsConsoleStateCompaction(instance: SurfaceInstance): boolean 
     follow_tail: typeof value.follow_tail === "boolean" ? value.follow_tail : true,
     transcript_start_after: transcriptCursor(value.transcript_start_after),
     read_cursor: readCursor(value.read_cursor),
+    pinned_execution_id: pinnedExecutionId(value.pinned_execution_id),
   };
   return JSON.stringify(candidate) !== JSON.stringify(expected);
 }
@@ -294,7 +311,7 @@ export function initialConsoleState(instance: SurfaceInstance): ConsoleViewState
     return {
       draft: "", history: [], history_cursor: null, filter: "", scroll_top: 0,
       follow_tail: true, transcript_start_after: null, read_cursor: null,
-      outputs: [], released_output_count: 0,
+      pinned_execution_id: null, outputs: [], released_output_count: 0,
     };
   }
   const value = candidate as Partial<ConsoleViewState> & { readonly schema_version?: unknown };
@@ -317,6 +334,7 @@ export function initialConsoleState(instance: SurfaceInstance): ConsoleViewState
     follow_tail: typeof value.follow_tail === "boolean" ? value.follow_tail : true,
     transcript_start_after: transcriptCursor(value.transcript_start_after),
     read_cursor: readCursor(value.read_cursor),
+    pinned_execution_id: pinnedExecutionId(value.pinned_execution_id),
     outputs: boundedOutputs.outputs,
     released_output_count: boundedOutputs.released,
   };

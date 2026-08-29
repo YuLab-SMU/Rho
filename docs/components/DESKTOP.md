@@ -35,8 +35,9 @@ Rust commands. `transport/mock.ts` supports deterministic browser development.
 Controllers under `app/controllers/` serialize project, Surface, Console, and
 Studio mutations. A completed Agent turn may emit one bounded Studio
 presentation request. The Agent Surface preserves the current Scene, creates a
-separate result Scene, and opens only validated project files, executions,
-Plots, and Environment views through the same revision-checked mutation paths
+separate result Scene, and opens only validated project files, a Console pinned
+to the exact Agent execution, Plots, and Environment views through the same
+revision-checked mutation paths
 used by human actions. This handoff never writes Vibe content; Vibe remains the
 narrative flow workspace. CSS is composed from the tokenized files under
 `ui/src/styles/`; `foundation.css` only orders those layers.

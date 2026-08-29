@@ -85,7 +85,7 @@ describe("Agent Studio presentation", () => {
     let sequence = 0;
     const layout = buildAgentStudioPresentationLayout({
       source: ["surface:source"],
-      history: "surface:history",
+      console: "surface:console",
       plots: "surface:plots",
       environment: "surface:environment",
     }, () => `layout:agent:${++sequence}`);

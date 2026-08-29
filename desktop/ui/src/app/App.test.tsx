@@ -70,6 +70,25 @@ describe("Studio foundation app", () => {
 
   it("turns an Agent Studio presentation into an independent code-and-results Scene", async () => {
     const transport = createMockUiKernelTransport();
+    const runtimeSnapshot = await transport.loadRuntimes();
+    const surfaceSnapshot = await transport.loadSurfaces();
+    const runtime = runtimeSnapshot.instances.find((candidate) => candidate.primary_scientific_runtime);
+    const console = surfaceSnapshot.catalog.instances.find((candidate) => candidate.surface_id === "rho.console");
+    if (runtime == null || console == null) throw new Error("mock execution target is unavailable");
+    const started = await transport.startRuntimeExecution({
+      runtime: {
+        project_id: runtimeSnapshot.project_id,
+        runtime_provider_id: runtime.runtime_provider_id,
+        runtime_instance_id: runtime.runtime_instance_id,
+        activation_generation: runtime.activation_generation,
+        expected_project_revision: runtimeSnapshot.project_revision,
+        expected_state_revision: runtime.state_revision,
+      },
+      console_instance_id: console.instance_id,
+      expected_console_revision: console.surface_revision,
+      code: "summary(iris)",
+      source_context: null,
+    });
     const detail = await transport.getAgentTurnDetail("agent-turn:mock-1");
     if (detail == null) throw new Error("mock Agent turn is unavailable");
     transport.getAgentTurnDetail = vi.fn(async (turnId) => turnId === detail.turn.turn_id ? {
@@ -84,7 +103,7 @@ describe("Studio foundation app", () => {
           kind: "rho.studio_presentation",
           title: "Analysis results",
           code_paths: ["analysis.R"],
-          execution_id: null,
+          execution_id: started.execution.execution_id,
           plot_id: null,
           show_plots: true,
           show_environment: false,
@@ -107,6 +126,7 @@ describe("Studio foundation app", () => {
     expect(duplicate).toHaveBeenCalledOnce();
     expect(open.mock.calls.map(([request]) => request.surface_id)).toEqual(expect.arrayContaining([
       "rho.file-source",
+      "rho.console",
       "rho.plots",
     ]));
     expect(apply.mock.calls.some(([request]) => request.edit.kind === "replace_root")).toBe(true);
@@ -121,6 +141,8 @@ describe("Studio foundation app", () => {
       studio_presentations: { "agent-turn:mock-1:4": "presented" },
     }));
     expect(container.querySelector("[data-surface-id='rho.agent']")).toBeNull();
+    expect(container.querySelector("[data-surface-id='rho.console'] .rho-console-command")?.textContent)
+      .toContain("summary(iris)");
   });
 
   it("recovers an unavailable saved project through the project picker instead of Rscript", async () => {
@@ -665,7 +687,7 @@ describe("Studio foundation app", () => {
       if (
         !heldConsolePersistence
         && request.target.instance_id === "instance:console-a"
-        && viewState?.schema_version === 3
+        && viewState?.schema_version === 4
       ) {
         heldConsolePersistence = true;
         const result = await originalUpdate(request);
@@ -729,7 +751,7 @@ describe("Studio foundation app", () => {
       if (
         !heldConsolePersistence
         && request.target.instance_id === "instance:console-a"
-        && viewState?.schema_version === 3
+        && viewState?.schema_version === 4
       ) {
         heldConsolePersistence = true;
         const result = await originalUpdate(request);
@@ -3862,7 +3884,7 @@ describe("Studio foundation app", () => {
     for (const viewState of consoleWrites) {
       expect(new TextEncoder().encode(JSON.stringify(viewState)).byteLength).toBeLessThan(64 * 1024);
       expect(viewState).toEqual(expect.objectContaining({
-        schema_version: 3,
+        schema_version: 4,
         follow_tail: expect.any(Boolean),
       }));
       expect(viewState).not.toHaveProperty("outputs");
@@ -3882,12 +3904,12 @@ describe("Studio foundation app", () => {
       const viewState = request.mutation.kind === "set_view_state"
         ? request.mutation.view_state as { readonly schema_version?: number }
         : null;
-      if (request.target.instance_id === "instance:console-a" && viewState?.schema_version === 3) {
+      if (request.target.instance_id === "instance:console-a" && viewState?.schema_version === 4) {
         consolePersistCount += 1;
       }
       if (
         !heldConsolePersist && request.target.instance_id === "instance:console-a" &&
-        viewState?.schema_version === 3 && consolePersistCount === 2
+        viewState?.schema_version === 4 && consolePersistCount === 2
       ) {
         heldConsolePersist = true;
         await new Promise<void>((resolve) => { releaseConsolePersist = resolve; });

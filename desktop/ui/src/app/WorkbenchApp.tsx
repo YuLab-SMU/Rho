@@ -88,7 +88,10 @@ import {
   type ProjectActivationScope,
   type ProjectTransitionEpochToken,
 } from "./controllers/project-transition-epoch-controller";
-import type { ConsoleViewState } from "./controllers/console-instance-controller";
+import {
+  consolePinnedExecutionId,
+  type ConsoleViewState,
+} from "./controllers/console-instance-controller";
 import { ConsoleRequirementController } from "./controllers/console-requirement-controller";
 import { StudioMutationController } from "./controllers/studio-mutation-controller";
 import { type AgentStudioPresentation } from "./agent/studio-presentation";
@@ -1783,9 +1786,17 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
           }
         }
       }}
-      listRuntimeExecutions={async () => (
-        await runtimeStore.listExecutions(100)
-      ).filter((execution) => execution.console_instance_id === instance.instance_id)}
+      listRuntimeExecutions={async () => {
+        const pinnedExecutionId = consolePinnedExecutionId(instance);
+        const owned = (await runtimeStore.listExecutions(100))
+          .filter((execution) => execution.console_instance_id === instance.instance_id);
+        if (pinnedExecutionId != null) {
+          const pinned = await runtimeStore.getExecution(pinnedExecutionId);
+          return [pinned, ...owned.filter((execution) => execution.execution_id !== pinnedExecutionId)]
+            .sort((left, right) => right.started_at.localeCompare(left.started_at));
+        }
+        return owned;
+      }}
       loadRuntimeOutputPage={(executionId, afterSequence) => (
         runtimeStore.outputPage(executionId, afterSequence)
       )}

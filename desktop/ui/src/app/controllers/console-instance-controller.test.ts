@@ -13,6 +13,7 @@ import {
   CONSOLE_VIEW_STATE_VERSION,
   MAX_CONSOLE_TRANSCRIPT_CACHE_BYTES,
   ConsoleInstanceController,
+  consolePinnedExecutionId,
   consoleTranscriptOutputs,
   consolePersistentViewStateBytes,
   initialConsoleState,
@@ -28,6 +29,7 @@ const EMPTY_STATE: ConsoleViewState = {
   follow_tail: true,
   transcript_start_after: null,
   read_cursor: null,
+  pinned_execution_id: null,
   outputs: [],
   released_output_count: 0,
 };
@@ -166,6 +168,7 @@ describe("Console instance controller", () => {
       follow_tail: true,
       transcript_start_after: null,
       read_cursor: null,
+      pinned_execution_id: null,
     });
     expect(JSON.stringify(vi.mocked(configured.persist).mock.calls[0]?.[0])).not.toContain("outputs");
   });
@@ -436,8 +439,10 @@ describe("Console instance controller", () => {
       follow_tail: false,
       transcript_start_after: { execution_id: "execution:old", started_at: "2026-08-23T00:00:00Z" },
       read_cursor: { execution_id: "execution:new", sequence: 8 },
+      pinned_execution_id: "execution:pinned",
     });
     expect(needsConsoleStateCompaction(compact)).toBe(false);
+    expect(consolePinnedExecutionId(compact)).toBe("execution:pinned");
     expect(initialConsoleState(compact)).toMatchObject({
       draft: "",
       history: [],
@@ -447,6 +452,7 @@ describe("Console instance controller", () => {
       follow_tail: false,
       transcript_start_after: { execution_id: "execution:old", started_at: "2026-08-23T00:00:00Z" },
       read_cursor: { execution_id: "execution:new", sequence: 8 },
+      pinned_execution_id: "execution:pinned",
     });
   });
 
