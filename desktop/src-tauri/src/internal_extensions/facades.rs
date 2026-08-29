@@ -63,6 +63,7 @@ impl BrokerFacade for RunHistoryBrokerFacade {
                 serde_json::from_value(request.payload.value().clone()).map_err(|error| {
                     BrokerError::rejected("runs_request_invalid", error.to_string())
                 })?;
+            #[allow(clippy::infallible_destructuring_match)]
             let repository = match &self.repository {
                 RunHistoryRepository::Ready(repository) => repository,
                 #[cfg(test)]

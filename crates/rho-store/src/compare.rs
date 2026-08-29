@@ -129,6 +129,7 @@ fn field_limited(
 }
 
 impl CompareRunsResponse {
+    #[allow(clippy::too_many_arguments)]
     pub fn compute(
         project_root: String,
         left: &RunDetail,
@@ -201,44 +202,44 @@ fn sha256_hex(data: &str) -> String {
 // ── Section builders ──
 
 fn compare_identity(left: &RunDetail, right: &RunDetail) -> CompareSection {
-    let mut fields = Vec::new();
-
-    fields.push(field(
-        "parent_run_id",
-        compare_opt_string(&left.parent_run_id, &right.parent_run_id),
-        opt_string_value(&left.parent_run_id),
-        opt_string_value(&right.parent_run_id),
-    ));
-    fields.push(field(
-        "origin",
-        compare_string(&left.origin, &right.origin),
-        Some(left.origin.clone()),
-        Some(right.origin.clone()),
-    ));
-    fields.push(field(
-        "request_type",
-        compare_string(&left.request_type, &right.request_type),
-        Some(left.request_type.clone()),
-        Some(right.request_type.clone()),
-    ));
-    fields.push(field(
-        "operation_class",
-        compare_string(&left.operation_class, &right.operation_class),
-        Some(left.operation_class.clone()),
-        Some(right.operation_class.clone()),
-    ));
-    fields.push(field(
-        "status",
-        compare_string(&left.status, &right.status),
-        Some(left.status.clone()),
-        Some(right.status.clone()),
-    ));
-    fields.push(field(
-        "terminal_reason",
-        compare_opt_string(&left.terminal_reason, &right.terminal_reason),
-        opt_string_value(&left.terminal_reason),
-        opt_string_value(&right.terminal_reason),
-    ));
+    let mut fields = vec![
+        field(
+            "parent_run_id",
+            compare_opt_string(&left.parent_run_id, &right.parent_run_id),
+            opt_string_value(&left.parent_run_id),
+            opt_string_value(&right.parent_run_id),
+        ),
+        field(
+            "origin",
+            compare_string(&left.origin, &right.origin),
+            Some(left.origin.clone()),
+            Some(right.origin.clone()),
+        ),
+        field(
+            "request_type",
+            compare_string(&left.request_type, &right.request_type),
+            Some(left.request_type.clone()),
+            Some(right.request_type.clone()),
+        ),
+        field(
+            "operation_class",
+            compare_string(&left.operation_class, &right.operation_class),
+            Some(left.operation_class.clone()),
+            Some(right.operation_class.clone()),
+        ),
+        field(
+            "status",
+            compare_string(&left.status, &right.status),
+            Some(left.status.clone()),
+            Some(right.status.clone()),
+        ),
+        field(
+            "terminal_reason",
+            compare_opt_string(&left.terminal_reason, &right.terminal_reason),
+            opt_string_value(&left.terminal_reason),
+            opt_string_value(&right.terminal_reason),
+        ),
+    ];
 
     let left_dur = compute_duration(&left.started_at, &left.finished_at).map(|ms| ms.to_string());
     let right_dur =

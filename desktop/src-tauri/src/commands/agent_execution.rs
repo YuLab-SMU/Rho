@@ -139,6 +139,7 @@ pub(crate) struct AgentTurnStartResponse {
     pub(crate) task_kind: String,
 }
 
+#[allow(clippy::too_many_arguments)]
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn agent_context_preview(
@@ -247,6 +248,7 @@ pub(crate) async fn agent_context_preview(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 #[cfg_attr(test, specta::specta)]
 #[tauri::command]
 pub(crate) async fn run_agent(
@@ -358,7 +360,6 @@ async fn start_agent_turn(
         .map_err(display_error)?;
     let store_executor = store_executor(state).await.map_err(display_error)?;
     let agent_store = store_executor.agent_repository();
-    let conversation_id;
     let mut agent_runtime_profile = resolved_model.runtime_profile.clone();
     let identity = context.identity();
     let plugin_snapshot = workspace_plugins::agent_plugin_projection_snapshot(
@@ -423,7 +424,7 @@ async fn start_agent_turn(
         state_revision_before: identity.state_revision as i64,
         project_revision_before: identity.project_revision as i64,
     };
-    conversation_id = if let Some(conversation_id) = requested_conversation_id {
+    let conversation_id = if let Some(conversation_id) = requested_conversation_id {
         agent_store
             .create_turn_in_conversation(
                 conversation_id.clone(),
@@ -1014,7 +1015,7 @@ pub(crate) async fn cancel_agent_turn_state(
                 .unwrap_or(false),
             Err(_) => false,
         };
-        if let Ok(session) = active_session(&state).await {
+        if let Ok(session) = active_session(state).await {
             let _ = session.interrupt().await;
         }
         if cancel_requested {

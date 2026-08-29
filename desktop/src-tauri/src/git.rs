@@ -220,10 +220,10 @@ pub fn git_status(project_root: &Path) -> Result<GitStatus> {
                 || idx.contains('U')
                 || idx.contains('T')
             {
-                if idx.chars().next().map_or(false, |c| c != ' ' && c != '?') {
+                if idx.chars().next().is_some_and(|c| c != ' ' && c != '?') {
                     staged += 1;
                 }
-                if idx.chars().nth(1).map_or(false, |c| c != ' ') {
+                if idx.chars().nth(1).is_some_and(|c| c != ' ') {
                     modified += 1;
                 }
             }

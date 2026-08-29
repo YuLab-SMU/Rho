@@ -298,7 +298,7 @@ fn append_credential_audit_locked(
             .then_some(agent_config::CONFIG_SCHEMA_VERSION),
     }))?;
     ensure!(
-        line.len() + 1 <= MAX_CREDENTIAL_AUDIT_ROW_BYTES,
+        line.len() < MAX_CREDENTIAL_AUDIT_ROW_BYTES,
         "The redacted credential audit row exceeds its bounded size."
     );
     let path = credential_audit_path(data_dir);
@@ -418,6 +418,7 @@ impl CrossProcessAuditLock {
         std::fs::create_dir_all(data_dir).context("creating the credential audit directory")?;
         let file = std::fs::OpenOptions::new()
             .create(true)
+            .truncate(false)
             .read(true)
             .write(true)
             .open(data_dir.join(CREDENTIAL_AUDIT_LOCK_FILE_NAME))
@@ -2100,7 +2101,7 @@ pub fn settings_view(
             validation_error,
         ));
     }
-    if let Some(entries) = catalog_cached(data_dir, rscript).ok() {
+    if let Ok(entries) = catalog_cached(data_dir, rscript) {
         project_catalog_capacity(&mut settings, &entries);
     }
     let statuses = credential_status_map(
@@ -2143,7 +2144,7 @@ pub fn settings_view_from_settings(
             format!("{error:#}"),
         ));
     }
-    if let Some(entries) = catalog_cached(data_dir, rscript).ok() {
+    if let Ok(entries) = catalog_cached(data_dir, rscript) {
         project_catalog_capacity(&mut settings, &entries);
     }
     let statuses = credential_status_map(
@@ -2411,16 +2412,15 @@ pub fn discover_models(
         r_environ_user,
         &client,
     )?;
-    if response.status == "ready" && !response.models.is_empty() {
-        if let Some(provider) = settings
+    if response.status == "ready"
+        && !response.models.is_empty()
+        && let Some(provider) = settings
             .providers
             .iter()
             .find(|item| item.id == provider_id)
-        {
-            if let Ok(entries) = catalog_cached(data_dir, rscript) {
-                enrich_discovered_models(provider, &mut response.models, &entries);
-            }
-        }
+        && let Ok(entries) = catalog_cached(data_dir, rscript)
+    {
+        enrich_discovered_models(provider, &mut response.models, &entries);
     }
     Ok(response)
 }
@@ -2476,7 +2476,7 @@ fn discover_models_with_store(
 
     let credential = if provider.api_key_required {
         match resolve_provider_credential_with_runtime(
-            &settings,
+            settings,
             provider,
             credential_store,
             rscript,
@@ -2913,13 +2913,13 @@ fn parse_discovered_models(
             .filter(|value| !value.is_empty() && !value.chars().any(char::is_control))
             .unwrap_or(id);
         let mut capabilities = unknown_capabilities();
-        if format == ModelDiscoveryFormat::Gemini {
-            if let Some(reasoning) = entry.get("thinking").and_then(serde_json::Value::as_bool) {
-                capabilities.insert(
-                    "reasoning".to_string(),
-                    capability_value(if reasoning { "yes" } else { "no" }, "provider_response"),
-                );
-            }
+        if format == ModelDiscoveryFormat::Gemini
+            && let Some(reasoning) = entry.get("thinking").and_then(serde_json::Value::as_bool)
+        {
+            capabilities.insert(
+                "reasoning".to_string(),
+                capability_value(if reasoning { "yes" } else { "no" }, "provider_response"),
+            );
         }
         models.push(AgentDiscoveredModel {
             id: id.to_string(),
@@ -3112,6 +3112,7 @@ pub fn resolve_model_and_credential_for_task(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn resolve_model_and_credential_for_task_with_store(
     data_dir: &Path,
     settings: &AgentLlmSettings,
@@ -5319,16 +5320,18 @@ fn kill_process(pid: u32) -> Result<()> {
             .status()
             .context("cancelling Agent model test")?;
         ensure!(status.success(), "Cancelling the Agent model test failed.");
-        return Ok(());
+        Ok(())
     }
     #[cfg(unix)]
     {
         let _ = signal_r_probe_process_group(pid, 15)
             .context("cancelling Agent model test process group")?;
-        return Ok(());
+        Ok(())
     }
     #[cfg(not(any(windows, unix)))]
-    bail!("Cancelling an Agent model test is unsupported on this platform.")
+    {
+        bail!("Cancelling an Agent model test is unsupported on this platform.")
+    }
 }
 
 fn configure_r_probe(
@@ -5527,7 +5530,7 @@ fn rotate_credential_audit_bytes(bytes: &mut Vec<u8>) -> Result<()> {
             continue;
         }
         ensure!(
-            rotated.len() + line.len() + 1 <= MAX_CREDENTIAL_AUDIT_BYTES,
+            rotated.len() + line.len() < MAX_CREDENTIAL_AUDIT_BYTES,
             "The credential audit tail exceeds its bounded rotation size."
         );
         rotated.extend_from_slice(line);

@@ -862,13 +862,16 @@ fn terminate_and_reap(child: &mut super::RProbeChildGuard<'_>) {
     }
 }
 
+type BoundedReaderOutput = std::result::Result<Zeroizing<Vec<u8>>, ()>;
+type BoundedReaderHandle = JoinHandle<BoundedReaderOutput>;
+
 fn spawn_bounded_reader<R>(
     thread_name: &str,
     mut reader: R,
     limit: u64,
     output_limit_exceeded: Arc<AtomicBool>,
     reader_failed: Arc<AtomicBool>,
-) -> std::result::Result<JoinHandle<std::result::Result<Zeroizing<Vec<u8>>, ()>>, ()>
+) -> std::result::Result<BoundedReaderHandle, ()>
 where
     R: Read + Send + 'static,
 {

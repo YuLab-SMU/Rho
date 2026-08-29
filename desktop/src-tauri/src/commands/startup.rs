@@ -166,11 +166,8 @@ pub(crate) async fn workspace_start(state: State<'_, AppState>) -> Result<Worksp
 pub(crate) async fn workspace_status(state: State<'_, AppState>) -> Result<Value, String> {
     let session = state.session.read().await.clone();
     let context = state.context.lock().await.clone();
-    let workspace = if let Some(context) = context {
-        Some(serde_json::to_value(context.identity().as_ref()).unwrap_or(Value::Null))
-    } else {
-        None
-    };
+    let workspace = context
+        .map(|context| serde_json::to_value(context.identity().as_ref()).unwrap_or(Value::Null));
     Ok(json!({
         "status": if session.is_some() { "idle" } else { "disconnected" },
         "kernel_pid": session.as_ref().and_then(|value| value.child_pid()),

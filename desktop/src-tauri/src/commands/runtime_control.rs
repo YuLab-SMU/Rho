@@ -131,10 +131,10 @@ pub(crate) async fn restart_workspace_locked(state: &AppState) -> Result<Workspa
 
     let old_context = state.context.lock().await.take();
     let old_session = state.session.write().await.take();
-    if active_run_id.is_some() || !render_job_ids.is_empty() {
-        if let Some(session) = old_session.as_ref() {
-            let _ = session.interrupt().await;
-        }
+    if (active_run_id.is_some() || !render_job_ids.is_empty())
+        && let Some(session) = old_session.as_ref()
+    {
+        let _ = session.interrupt().await;
     }
     for task in render_tasks {
         task.abort();
@@ -177,10 +177,9 @@ pub(crate) async fn restart_workspace_locked(state: &AppState) -> Result<Workspa
                     .run
                     .as_ref()
                     .is_some_and(|run| run.status == "completed")
+                    && let Some(artifact) = projection.artifact.as_ref()
                 {
-                    if let Some(artifact) = projection.artifact.as_ref() {
-                        attach_render_artifact(job, artifact);
-                    }
+                    attach_render_artifact(job, artifact);
                 }
                 reconcile_render_job(
                     job,

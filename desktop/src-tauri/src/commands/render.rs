@@ -345,7 +345,7 @@ pub(crate) async fn render_job_status(
     let cutoff = chrono::Utc::now() - chrono::Duration::minutes(5);
     jobs.retain(|_, job| {
         !render_job_is_terminal(&job.status)
-            || job.completed_at.as_ref().map_or(true, |at| {
+            || job.completed_at.as_ref().is_none_or(|at| {
                 chrono::DateTime::parse_from_rfc3339(at)
                     .map(|value| value.with_timezone(&chrono::Utc) >= cutoff)
                     .unwrap_or(true)

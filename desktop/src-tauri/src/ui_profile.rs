@@ -724,18 +724,18 @@ fn rho_studio_scene(
             collapse_priority: Some(20),
         });
     }
-    if children.is_empty() {
-        if let Some(status) = status {
-            children.push(LayoutChildV1 {
-                child: LayoutNodeV1::Surface {
-                    node_id: next_node_id(),
-                    instance_id: status.instance_id.clone(),
-                },
-                basis: LayoutBasisV1::Intrinsic,
-                resizable: false,
-                collapse_priority: None,
-            });
-        }
+    if children.is_empty()
+        && let Some(status) = status
+    {
+        children.push(LayoutChildV1 {
+            child: LayoutNodeV1::Surface {
+                node_id: next_node_id(),
+                instance_id: status.instance_id.clone(),
+            },
+            basis: LayoutBasisV1::Intrinsic,
+            resizable: false,
+            collapse_priority: None,
+        });
     }
     SceneStateV1 {
         scene_id,

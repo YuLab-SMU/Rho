@@ -135,14 +135,7 @@ impl PendingPluginPermissionRegistry {
                             continue;
                         }
                     };
-                    let (
-                        revalidation,
-                        grant_id,
-                        plugin_identity_id,
-                        package_digest,
-                        policy,
-                        network_engine,
-                    ) = {
+                    let admission = {
                         let mut state = self
                             .state
                             .lock()
@@ -152,6 +145,8 @@ impl PendingPluginPermissionRegistry {
                             .get(&key)
                             .context("workspace plugin was disabled before call admission")?;
                         let identity = active.host.identity().clone();
+                        let plugin_identity_id = identity.plugin_id().to_string();
+                        let package_digest = identity.package_digest().to_string();
                         let setup = (|| {
                             let constraints = state
                                 .grants
@@ -170,60 +165,72 @@ impl PendingPluginPermissionRegistry {
                                 .map_err(|error| network_error_code(error.code))?;
                             Ok::<_, &'static str>((policy, initial))
                         })();
-                        let (policy, initial) = match setup {
-                            Ok(setup) => setup,
-                            Err(code) => {
-                                drop(state);
-                                if let Err(persistence_error) = persist_broker_call_event(
-                                    executor,
-                                    context,
-                                    identity.plugin_id().as_str(),
-                                    identity.package_digest().as_str(),
-                                    None,
-                                    "call_denied",
-                                    "failed",
-                                    Some(code),
-                                    serde_json::json!({"operation": "network.fetch"}),
-                                    false,
-                                )
-                                .await
-                                {
-                                    self.cancel_plugin_call(&key, &request_id);
-                                    return Err(persistence_error);
+                        match setup {
+                            Err(code) => Err((plugin_identity_id, package_digest, code)),
+                            Ok((policy, initial)) => {
+                                let revalidation = RevalidationRequest {
+                                    handle_id: handle_id.clone(),
+                                    plugin_id: identity.plugin_id().clone(),
+                                    host_instance_id: identity.host_instance_id().clone(),
+                                    package_digest: identity.package_digest().clone(),
+                                    project_id: identity.project_id().clone(),
+                                    scope_id: identity.project_id().clone(),
+                                    generation: identity.activation_generation(),
+                                    permission: PermissionKind::NetworkFetch,
+                                    permission_use: PermissionUse::NetworkFetch {
+                                        scheme: initial.scheme,
+                                        host: initial.host,
+                                        method: initial.method,
+                                        requested_response_bytes: initial.requested_response_bytes,
+                                    },
+                                    workspace: None,
+                                };
+                                match state.grants.revalidate(revalidation.clone()) {
+                                    Revalidation::Denied(error) => Err((
+                                        plugin_identity_id,
+                                        package_digest,
+                                        grant_error_code(error),
+                                    )),
+                                    Revalidation::Allowed => {
+                                        let grant_id = state
+                                            .grants
+                                            .durable_grant_id_for_handle(&handle_id)
+                                            .context(
+                                                "admitted network handle has no durable grant identity",
+                                            )?
+                                            .to_string();
+                                        Ok((
+                                            revalidation,
+                                            grant_id,
+                                            plugin_identity_id,
+                                            package_digest,
+                                            policy,
+                                            Arc::clone(&state.network_engine),
+                                        ))
+                                    }
                                 }
-                                step = self.resume_plugin_error(&key, &request_id, code)?;
-                                continue;
                             }
-                        };
-                        let revalidation = RevalidationRequest {
-                            handle_id: handle_id.clone(),
-                            plugin_id: identity.plugin_id().clone(),
-                            host_instance_id: identity.host_instance_id().clone(),
-                            package_digest: identity.package_digest().clone(),
-                            project_id: identity.project_id().clone(),
-                            scope_id: identity.project_id().clone(),
-                            generation: identity.activation_generation(),
-                            permission: PermissionKind::NetworkFetch,
-                            permission_use: PermissionUse::NetworkFetch {
-                                scheme: initial.scheme,
-                                host: initial.host,
-                                method: initial.method,
-                                requested_response_bytes: initial.requested_response_bytes,
-                            },
-                            workspace: None,
-                        };
-                        let admitted = state.grants.revalidate(revalidation.clone());
-                        if let Revalidation::Denied(error) = admitted {
-                            drop(state);
+                        }
+                    };
+                    let (
+                        revalidation,
+                        grant_id,
+                        plugin_identity_id,
+                        package_digest,
+                        policy,
+                        network_engine,
+                    ) = match admission {
+                        Ok(admission) => admission,
+                        Err((plugin_identity_id, package_digest, code)) => {
                             if let Err(persistence_error) = persist_broker_call_event(
                                 executor,
                                 context,
-                                identity.plugin_id().as_str(),
-                                identity.package_digest().as_str(),
+                                &plugin_identity_id,
+                                &package_digest,
                                 None,
                                 "call_denied",
                                 "failed",
-                                Some(grant_error_code(error)),
+                                Some(code),
                                 serde_json::json!({"operation": "network.fetch"}),
                                 false,
                             )
@@ -232,26 +239,9 @@ impl PendingPluginPermissionRegistry {
                                 self.cancel_plugin_call(&key, &request_id);
                                 return Err(persistence_error);
                             }
-                            step = self.resume_plugin_error(
-                                &key,
-                                &request_id,
-                                grant_error_code(error),
-                            )?;
+                            step = self.resume_plugin_error(&key, &request_id, code)?;
                             continue;
                         }
-                        let grant_id = state
-                            .grants
-                            .durable_grant_id_for_handle(&handle_id)
-                            .context("admitted network handle has no durable grant identity")?
-                            .to_string();
-                        (
-                            revalidation,
-                            grant_id,
-                            identity.plugin_id().to_string(),
-                            identity.package_digest().to_string(),
-                            policy,
-                            Arc::clone(&state.network_engine),
-                        )
                     };
                     if let Err(error) = persist_broker_call_event(
                         executor,
@@ -429,12 +419,13 @@ impl PendingPluginPermissionRegistry {
                     step = match resume_result {
                         Ok(step) => step,
                         Err(error) => {
-                            let mut state = self
-                                .state
-                                .lock()
-                                .unwrap_or_else(std::sync::PoisonError::into_inner);
-                            remove_active_plugin(&mut state, &key);
-                            drop(state);
+                            {
+                                let mut state = self
+                                    .state
+                                    .lock()
+                                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                                remove_active_plugin(&mut state, &key);
+                            }
                             persist_broker_call_event(
                                 executor,
                                 context,
@@ -549,7 +540,7 @@ impl PendingPluginPermissionRegistry {
                         WorkspaceInspectOperation::Metadata => 64 * 1024,
                         WorkspaceInspectOperation::Preview => 256 * 1024,
                     };
-                    let (prepared, revalidation, grant_id, plugin_identity_id, package_digest) = {
+                    let admission = {
                         let mut state = self
                             .state
                             .lock()
@@ -562,6 +553,8 @@ impl PendingPluginPermissionRegistry {
                             .get(&key)
                             .context("workspace plugin was disabled before call admission")?;
                         let identity = active.host.identity().clone();
+                        let plugin_identity_id = identity.plugin_id().to_string();
+                        let package_digest = identity.package_digest().to_string();
                         let revalidation = RevalidationRequest {
                             handle_id: handle_id.clone(),
                             plugin_id: identity.plugin_id().clone(),
@@ -581,46 +574,53 @@ impl PendingPluginPermissionRegistry {
                             },
                             workspace: context.workspace.clone(),
                         };
-                        let admitted = state.grants.revalidate(revalidation.clone());
-                        if let Revalidation::Denied(error) = admitted {
-                            drop(state);
-                            if let Err(persistence_error) = persist_broker_call_event(
-                                executor,
-                                context,
-                                identity.plugin_id().as_str(),
-                                identity.package_digest().as_str(),
-                                None,
-                                "call_denied",
-                                "failed",
-                                Some(grant_error_code(error)),
-                                serde_json::json!({"operation": "workspace.r.inspect"}),
-                                false,
-                            )
-                            .await
-                            {
-                                self.cancel_plugin_call(&key, &request_id);
-                                return Err(persistence_error);
+                        match state.grants.revalidate(revalidation.clone()) {
+                            Revalidation::Denied(error) => {
+                                Err((plugin_identity_id, package_digest, grant_error_code(error)))
                             }
-                            step = self.resume_plugin_error(
-                                &key,
-                                &request_id,
-                                grant_error_code(error),
-                            )?;
-                            continue;
+                            Revalidation::Allowed => {
+                                let grant_id = state
+                                    .grants
+                                    .durable_grant_id_for_handle(&handle_id)
+                                    .context(
+                                        "admitted Workspace handle has no durable grant identity",
+                                    )?
+                                    .to_string();
+                                Ok((
+                                    prepared,
+                                    revalidation,
+                                    grant_id,
+                                    plugin_identity_id,
+                                    package_digest,
+                                ))
+                            }
                         }
-                        let grant_id = state
-                            .grants
-                            .durable_grant_id_for_handle(&handle_id)
-                            .context("admitted Workspace handle has no durable grant identity")?
-                            .to_string();
-                        (
-                            prepared,
-                            revalidation,
-                            grant_id,
-                            identity.plugin_id().to_string(),
-                            identity.package_digest().to_string(),
-                        )
                     };
+                    let (prepared, revalidation, grant_id, plugin_identity_id, package_digest) =
+                        match admission {
+                            Ok(admission) => admission,
+                            Err((plugin_identity_id, package_digest, code)) => {
+                                if let Err(persistence_error) = persist_broker_call_event(
+                                    executor,
+                                    context,
+                                    &plugin_identity_id,
+                                    &package_digest,
+                                    None,
+                                    "call_denied",
+                                    "failed",
+                                    Some(code),
+                                    serde_json::json!({"operation": "workspace.r.inspect"}),
+                                    false,
+                                )
+                                .await
+                                {
+                                    self.cancel_plugin_call(&key, &request_id);
+                                    return Err(persistence_error);
+                                }
+                                step = self.resume_plugin_error(&key, &request_id, code)?;
+                                continue;
+                            }
+                        };
                     if let Err(error) = persist_broker_call_event(
                         executor,
                         context,
@@ -796,12 +796,13 @@ impl PendingPluginPermissionRegistry {
                     step = match resume_result {
                         Ok(step) => step,
                         Err(error) => {
-                            let mut state = self
-                                .state
-                                .lock()
-                                .unwrap_or_else(std::sync::PoisonError::into_inner);
-                            remove_active_plugin(&mut state, &key);
-                            drop(state);
+                            {
+                                let mut state = self
+                                    .state
+                                    .lock()
+                                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                                remove_active_plugin(&mut state, &key);
+                            }
                             persist_broker_call_event(
                                 executor,
                                 context,

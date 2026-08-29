@@ -314,6 +314,7 @@ pub async fn run_agent_turn(
     result
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn serve_desktop_agent(
     agent: &mut AuthenticatedAgent,
     session: &ArkSession,
@@ -433,6 +434,7 @@ async fn serve_desktop_agent(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn dispatch_agent_workspace_request(
     request_type: &str,
     payload: &Value,

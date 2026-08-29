@@ -1,5 +1,6 @@
 use super::*;
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn record_call_event(
     store: &mut Store<impl StoreConnection>,
     context: &PluginRuntimeContext,

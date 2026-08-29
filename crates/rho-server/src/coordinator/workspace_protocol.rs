@@ -134,7 +134,7 @@ fn bridge_expression(request_type: &str, arguments: &Value) -> Result<(Operation
             )?;
             validate_project_relative_r_source_path(path, "Formatting")?;
             ensure!(
-                source.as_bytes().len() <= 1024 * 1024,
+                source.len() <= 1024 * 1024,
                 "Formatting source must be at most 1 MiB"
             );
             ensure!(
@@ -283,7 +283,7 @@ fn bridge_expression(request_type: &str, arguments: &Value) -> Result<(Operation
                 None | Some(Value::Null) => None,
                 Some(Value::String(value)) => {
                     let value = value.trim();
-                    if value.as_bytes().len() > 256
+                    if value.len() > 256
                         || value
                             .chars()
                             .any(|character| matches!(character, '\0' | '\r' | '\n'))

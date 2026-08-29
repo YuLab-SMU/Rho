@@ -596,6 +596,7 @@ struct AgentContextPlan {
     digest: String,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn plan_agent_context(
     prompt: &str,
     history: &[AgentConversationTurn],
@@ -767,6 +768,7 @@ fn plan_agent_context(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn preview_agent_context_plan(
     prompt: &str,
     history: &[AgentConversationTurn],

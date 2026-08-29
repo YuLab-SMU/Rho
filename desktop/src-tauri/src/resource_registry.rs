@@ -1687,14 +1687,13 @@ mod tests {
         assert!(renamed.dirty);
         assert!(!renamed.stale);
         assert!(
-            registry
+            !registry
                 .inner()
                 .projects
                 .get(&ProjectId::new("project:test").unwrap())
                 .unwrap()
                 .documents
-                .get("analysis.R")
-                .is_none()
+                .contains_key("analysis.R")
         );
     }
 }

@@ -641,6 +641,7 @@ pub(super) fn activate_plugin_durable<'a>(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn activate_plugin_replacement_durable<'a>(
     state: &mut RegistryState,
     context: &PluginRuntimeContext,
@@ -810,6 +811,7 @@ pub(super) fn activate_plugin_replacement_durable<'a>(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn prepare_plugin_activation<'a>(
     state: &mut RegistryState,
     context: &PluginRuntimeContext,

@@ -354,11 +354,7 @@ pub(crate) async fn start_workspace(state: &AppState) -> Result<WorkspaceStatus>
         crate::commands::toolchain::require_target_admission(state, TargetAdmissionMode::Workspace)
             .await?;
         let context = state.context.lock().await.clone();
-        let identity = if let Some(context) = context {
-            Some(context.identity())
-        } else {
-            None
-        };
+        let identity = context.map(|context| context.identity());
         return status_from(&config, &session, identity.as_deref());
     }
 

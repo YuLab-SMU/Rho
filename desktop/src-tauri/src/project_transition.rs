@@ -401,6 +401,7 @@ where
     Ok(ProjectRestoreResponse::ready(project, target_session))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn recover_failed_project_switch(
     state: &AppState,
     previous_ui_root: &Path,

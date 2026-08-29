@@ -57,6 +57,7 @@
         store.update_run_status(run_id, "completed", None).unwrap();
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn add_agent_file_proposal(
         store: &mut Store,
         project_root: &str,

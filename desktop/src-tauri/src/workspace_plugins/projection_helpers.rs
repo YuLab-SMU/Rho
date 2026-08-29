@@ -1,5 +1,6 @@
 use super::*;
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn plugin_view(
     project_root: &str,
     plugin: &DiscoveredPlugin,

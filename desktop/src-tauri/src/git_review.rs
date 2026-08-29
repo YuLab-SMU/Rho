@@ -314,7 +314,7 @@ fn parse_name_status_z(
     output: &str,
 ) -> Result<Vec<GitReviewFile>> {
     let fields: Vec<&str> = output.split_terminator('\0').collect();
-    if fields.len() % 2 != 0 {
+    if !fields.len().is_multiple_of(2) {
         bail!("Git returned malformed name-status metadata");
     }
     let mut files = Vec::new();

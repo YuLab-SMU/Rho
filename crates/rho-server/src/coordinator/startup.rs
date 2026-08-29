@@ -37,7 +37,7 @@ pub async fn probe(
 
     let mut session = ArkSession::launch(&ArkLaunchConfig::new(kernelspec)).await?;
     let run_result = run_probe(
-        &mut session,
+        &session,
         &mut broker,
         &executor,
         rscript,

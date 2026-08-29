@@ -68,13 +68,12 @@ pub(crate) async fn shutdown_application(state: &AppState) -> Result<(), String>
         let _ = session.interrupt().await;
     }
 
-    if let Some(context) = context.as_ref() {
-        if tokio::time::timeout(Duration::from_secs(5), context.lock())
+    if let Some(context) = context.as_ref()
+        && tokio::time::timeout(Duration::from_secs(5), context.lock())
             .await
             .is_err()
-        {
-            write_startup_log("Timed out waiting for Workspace R execution during shutdown");
-        }
+    {
+        write_startup_log("Timed out waiting for Workspace R execution during shutdown");
     }
     drop(context);
 

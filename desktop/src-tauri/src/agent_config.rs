@@ -400,19 +400,20 @@ fn path_identity_bytes(path: &Path) -> Vec<u8> {
     #[cfg(unix)]
     {
         use std::os::unix::ffi::OsStrExt;
-        return path.as_os_str().as_bytes().to_vec();
+        path.as_os_str().as_bytes().to_vec()
     }
     #[cfg(windows)]
     {
         use std::os::windows::ffi::OsStrExt;
-        return path
-            .as_os_str()
+        path.as_os_str()
             .encode_wide()
             .flat_map(u16::to_le_bytes)
-            .collect();
+            .collect()
     }
     #[cfg(not(any(unix, windows)))]
-    path.as_os_str().to_string_lossy().as_bytes().to_vec()
+    {
+        path.as_os_str().to_string_lossy().as_bytes().to_vec()
+    }
 }
 
 fn missing_home_identity(home: &Path) -> String {

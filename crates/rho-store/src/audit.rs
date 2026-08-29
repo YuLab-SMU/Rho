@@ -852,6 +852,7 @@ fn push_finding(
 
 // --- 2a. Evidence Completeness --------------------------------------------
 
+#[allow(clippy::too_many_arguments)]
 fn check_evidence(
     runs: &[crate::run::RunSummary],
     artifacts: &[crate::artifact::ArtifactRecordSummary],
@@ -1017,35 +1018,35 @@ fn check_evidence(
 
     // evidence.env.snapshot_incomplete
     if let Some(snap) = reference_snapshot {
-        if let Some(completeness) = snapshot_completeness(&snap.canonical_json) {
-            if completeness != "complete" {
-                push_finding(
-                    findings,
-                    limits,
-                    truncation_reasons,
-                    truncated,
-                    AuditFinding {
-                        rule_id: "rho.repro.v1.evidence.env.snapshot_incomplete".to_string(),
-                        rule_version: 1,
-                        severity: AuditSeverity::Warning,
-                        category: "evidence".to_string(),
-                        summary: format!(
-                            "Environment snapshot {} reports completeness as '{}'",
-                            snap.snapshot_id, completeness
-                        ),
-                        evidence: vec![AuditEvidence {
-                            kind: "snapshot_id".to_string(),
-                            path: None,
-                            line: None,
-                            column: None,
-                            excerpt: Some(format!("completeness: {completeness}")),
-                            run_id: None,
-                            snapshot_id: Some(snap.snapshot_id.clone()),
-                        }],
-                        limitations: Vec::new(),
-                    },
-                );
-            }
+        if let Some(completeness) = snapshot_completeness(&snap.canonical_json)
+            && completeness != "complete"
+        {
+            push_finding(
+                findings,
+                limits,
+                truncation_reasons,
+                truncated,
+                AuditFinding {
+                    rule_id: "rho.repro.v1.evidence.env.snapshot_incomplete".to_string(),
+                    rule_version: 1,
+                    severity: AuditSeverity::Warning,
+                    category: "evidence".to_string(),
+                    summary: format!(
+                        "Environment snapshot {} reports completeness as '{}'",
+                        snap.snapshot_id, completeness
+                    ),
+                    evidence: vec![AuditEvidence {
+                        kind: "snapshot_id".to_string(),
+                        path: None,
+                        line: None,
+                        column: None,
+                        excerpt: Some(format!("completeness: {completeness}")),
+                        run_id: None,
+                        snapshot_id: Some(snap.snapshot_id.clone()),
+                    }],
+                    limitations: Vec::new(),
+                },
+            );
         }
 
         // evidence.env.lockfile_drift
@@ -1345,7 +1346,7 @@ fn check_packages(
         if file.skipped || file.content.is_empty() {
             continue;
         }
-        for (_line_idx, line) in file.content.lines().enumerate() {
+        for line in file.content.lines() {
             for pkg in extract_packages_from_line(line) {
                 if !used_packages.contains(&pkg) {
                     used_packages.push(pkg);
@@ -1465,38 +1466,38 @@ fn check_packages(
     // packages.version_drift: version differs between snapshot and lockfile
     if let (Some(snapshot), Some(lockfile)) = (snapshot_packages, lockfile_packages) {
         for sp in snapshot {
-            if let Some(lp) = lockfile.iter().find(|lp| lp.name == sp.name) {
-                if sp.version != lp.version {
-                    push_finding(
-                        findings,
-                        limits,
-                        truncation_reasons,
-                        truncated,
-                        AuditFinding {
-                            rule_id: "rho.repro.v1.packages.version_drift".to_string(),
-                            rule_version: 1,
-                            severity: AuditSeverity::Warning,
-                            category: "packages".to_string(),
-                            summary: format!(
-                                "Package '{}' version drift: snapshot={}, lockfile={}",
-                                sp.name, sp.version, lp.version
-                            ),
-                            evidence: vec![AuditEvidence {
-                                kind: "snapshot_id".to_string(),
-                                path: None,
-                                line: None,
-                                column: None,
-                                excerpt: Some(format!(
-                                    "snapshot: {}@{}, lockfile: {}@{}",
-                                    sp.name, sp.version, lp.name, lp.version
-                                )),
-                                run_id: None,
-                                snapshot_id: None,
-                            }],
-                            limitations: Vec::new(),
-                        },
-                    );
-                }
+            if let Some(lp) = lockfile.iter().find(|lp| lp.name == sp.name)
+                && sp.version != lp.version
+            {
+                push_finding(
+                    findings,
+                    limits,
+                    truncation_reasons,
+                    truncated,
+                    AuditFinding {
+                        rule_id: "rho.repro.v1.packages.version_drift".to_string(),
+                        rule_version: 1,
+                        severity: AuditSeverity::Warning,
+                        category: "packages".to_string(),
+                        summary: format!(
+                            "Package '{}' version drift: snapshot={}, lockfile={}",
+                            sp.name, sp.version, lp.version
+                        ),
+                        evidence: vec![AuditEvidence {
+                            kind: "snapshot_id".to_string(),
+                            path: None,
+                            line: None,
+                            column: None,
+                            excerpt: Some(format!(
+                                "snapshot: {}@{}, lockfile: {}@{}",
+                                sp.name, sp.version, lp.name, lp.version
+                            )),
+                            run_id: None,
+                            snapshot_id: None,
+                        }],
+                        limitations: Vec::new(),
+                    },
+                );
             }
         }
     }

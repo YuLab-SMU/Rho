@@ -406,9 +406,11 @@
             success,
             exit_code: success.then_some(0).or(Some(1)),
             stdout,
-            stderr: (!success)
-                .then(|| "probe failed without package output".to_string())
-                .unwrap_or_default(),
+            stderr: if success {
+                String::new()
+            } else {
+                "probe failed without package output".to_string()
+            },
             elapsed_ms: 10,
             timed_out: false,
         }

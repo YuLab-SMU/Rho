@@ -525,6 +525,7 @@ pub(crate) fn calculate_persisted_agent_file_edit(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn append_agent_file_mutation_event(
     store: &mut Store<impl StoreConnection>,
     turn_id: &str,

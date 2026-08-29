@@ -122,6 +122,7 @@ fn tool_environment_operation_arguments(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_tool_approval_required(
     incoming: &Envelope,
     turn_id: &str,

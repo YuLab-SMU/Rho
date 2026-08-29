@@ -502,8 +502,10 @@ pub async fn dispatch_workspace_request_with_execution_id(
     }
     let mut artifact_id = None;
     let mut artifact_media_type = None;
-    if !failed && request_type == "workspace.render_document" {
-        if let Some(output_path) = result.get("output_path").and_then(Value::as_str) {
+    if !failed
+        && request_type == "workspace.render_document"
+        && let Some(output_path) = result.get("output_path").and_then(Value::as_str)
+    {
             let source_path = arguments
                 .get("source_path")
                 .and_then(Value::as_str)
@@ -546,7 +548,6 @@ pub async fn dispatch_workspace_request_with_execution_id(
                 artifact_id = Some(created_artifact_id);
                 artifact_media_type = Some(created_media_type);
             }
-        }
     }
     if !artifact_drafts.is_empty() {
         run_workspace_store_service(executor, move |store| {
