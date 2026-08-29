@@ -1,12 +1,13 @@
-use std::fs;
+use std::collections::BTreeMap;
 use std::io::{Read, Write};
 use std::path::Path;
 
 use rho_toolchain::{
-    EnvironmentReceiptMode, LOCAL_TARGET_ID, OperationJournal, OperationKind, RemoteEffectPayload,
-    RemoteHelperOperation, RemoteHelperRequest, RemoteHelperResponse, TargetRegistry,
-    TargetRegistryDocument, doctor_local_realization, execute_journaled_operation,
-    load_toolchain_config, operation_journal_path, write_environment_receipt,
+    ComputeTarget, EnvironmentReceiptMode, OperationJournal, OperationKind, OperationStatus,
+    RemoteEffectPayload, RemoteHelperOperation, RemoteHelperRequest, RemoteHelperResponse,
+    RemoteInspectPayload, TargetRegistry, TargetRegistryDocument, doctor_local_realization,
+    execute_journaled_operation, load_toolchain_config, read_operation_journal,
+    write_environment_receipt,
 };
 
 const MAX_FRAME_BYTES: u64 = 1024 * 1024;
@@ -14,7 +15,7 @@ const MAX_FRAME_BYTES: u64 = 1024 * 1024;
 fn execute_effect(request: &RemoteHelperRequest, kind: OperationKind) -> RemoteHelperResponse {
     let result = (|| {
         let payload: RemoteEffectPayload = serde_json::from_value(request.payload.clone())?;
-        let mut config = load_toolchain_config(Path::new(&request.project_root))?;
+        let config = load_toolchain_config(Path::new(&request.project_root))?;
         if config.sha256 != request.rho_toml_sha256 {
             return Err(rho_toolchain::ToolchainError::InvalidConfig(
                 "remote rho.toml digest changed before execution".to_string(),
@@ -33,13 +34,15 @@ fn execute_effect(request: &RemoteHelperRequest, kind: OperationKind) -> RemoteH
             ));
         }
         write_environment_receipt(&config, &payload.environment)?;
-        config.config.compute.default_target = LOCAL_TARGET_ID.to_string();
-        config.config.compute.required_capabilities.clear();
+        let mut realization = ComputeTarget::local_native();
+        realization.capabilities = config.config.compute.required_capabilities.clone();
         let targets = TargetRegistryDocument {
             rho_home: config.project_root.clone(),
             path: config.project_root.join("targets.yaml"),
             sha256: Some(request.target_registry_sha256.clone()),
-            registry: TargetRegistry::local_only(),
+            registry: TargetRegistry {
+                targets: BTreeMap::from([(request.target_id.clone(), realization)]),
+            },
         };
         let journal = execute_journaled_operation(
             &config,
@@ -66,11 +69,9 @@ fn execute_effect(request: &RemoteHelperRequest, kind: OperationKind) -> RemoteH
             let partial = serde_json::from_value::<RemoteEffectPayload>(request.payload.clone())
                 .ok()
                 .and_then(|payload| {
-                    operation_journal_path(Path::new(&request.project_root), &payload.operation_id)
+                    read_operation_journal(Path::new(&request.project_root), &payload.operation_id)
                         .ok()
                 })
-                .and_then(|path| fs::read(path).ok())
-                .and_then(|bytes| serde_json::from_slice::<OperationJournal>(&bytes).ok())
                 .is_some_and(|journal| journal.partial_effects_possible);
             RemoteHelperResponse {
                 protocol: request.protocol,
@@ -87,40 +88,64 @@ fn execute_effect(request: &RemoteHelperRequest, kind: OperationKind) -> RemoteH
 }
 
 fn inspect_operation(request: &RemoteHelperRequest) -> RemoteHelperResponse {
-    let operation_id = request
-        .payload
-        .get("operation_id")
-        .and_then(serde_json::Value::as_str);
-    let result = operation_id
-        .ok_or("operation_id is required".to_string())
-        .and_then(|id| {
-            operation_journal_path(Path::new(&request.project_root), id).map_err(|e| e.to_string())
-        })
-        .and_then(|path| fs::read(path).map_err(|e| e.to_string()))
-        .and_then(|bytes| {
-            serde_json::from_slice::<OperationJournal>(&bytes).map_err(|e| e.to_string())
-        });
+    let result = (|| {
+        let payload: RemoteInspectPayload = serde_json::from_value(request.payload.clone())?;
+        let config = load_toolchain_config(Path::new(&request.project_root))?;
+        if config.sha256 != request.rho_toml_sha256
+            || config.config.compute.default_target != request.target_id
+        {
+            return Err(rho_toolchain::ToolchainError::InvalidConfig(
+                "remote operation identity changed before inspection".to_string(),
+            ));
+        }
+        let journal = read_operation_journal(&config.project_root, &payload.operation_id)?;
+        if journal.target_id != request.target_id
+            || journal.target_registry_sha256.as_deref()
+                != Some(request.target_registry_sha256.as_str())
+        {
+            return Err(rho_toolchain::ToolchainError::InvalidJournal(
+                "remote operation target identity differs from the inspection request".to_string(),
+            ));
+        }
+        Ok::<OperationJournal, rho_toolchain::ToolchainError>(journal)
+    })();
     match result {
         Ok(journal) => RemoteHelperResponse {
             protocol: request.protocol,
             request_id: request.request_id.clone(),
             target_id: request.target_id.clone(),
             ok: true,
-            status: "completed".to_string(),
+            status: match journal.status {
+                OperationStatus::Running => "running",
+                OperationStatus::Succeeded => "succeeded",
+                OperationStatus::Failed => "failed",
+            }
+            .to_string(),
             payload: serde_json::to_value(&journal).unwrap(),
             error: None,
             partial_effects_possible: journal.partial_effects_possible,
         },
-        Err(error) => RemoteHelperResponse {
-            protocol: request.protocol,
-            request_id: request.request_id.clone(),
-            target_id: request.target_id.clone(),
-            ok: false,
-            status: "not_found".to_string(),
-            payload: serde_json::Value::Null,
-            error: Some(error),
-            partial_effects_possible: false,
-        },
+        Err(error) => {
+            let status = if matches!(
+                &error,
+                rho_toolchain::ToolchainError::Io(io_error)
+                    if io_error.kind() == std::io::ErrorKind::NotFound
+            ) {
+                "not_found"
+            } else {
+                "failed"
+            };
+            RemoteHelperResponse {
+                protocol: request.protocol,
+                request_id: request.request_id.clone(),
+                target_id: request.target_id.clone(),
+                ok: false,
+                status: status.to_string(),
+                payload: serde_json::Value::Null,
+                error: Some(error.to_string()),
+                partial_effects_possible: false,
+            }
+        }
     }
 }
 

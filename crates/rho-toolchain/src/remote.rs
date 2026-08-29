@@ -6,9 +6,10 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    CommandSpec, ComputeHost, ComputeTarget, EnvironmentReceipt, OperationJournal,
-    RemoteOperationMirror, RemoteOperationMirrorStatus, ToolchainError,
-    create_remote_operation_mirror, update_remote_operation_mirror, validate_target_id,
+    CommandSpec, ComputeHost, ComputeTarget, EnvironmentReceipt, OperationJournal, OperationKind,
+    OperationStatus, RemoteOperationMirror, RemoteOperationMirrorStatus, ToolchainError,
+    create_remote_operation_mirror, read_remote_operation_mirror, update_remote_operation_mirror,
+    validate_target_id,
 };
 
 const MAX_REMOTE_FRAME_BYTES: usize = 1024 * 1024;
@@ -51,6 +52,12 @@ pub struct RemoteEffectPayload {
     pub confirmed: bool,
     pub command: CommandSpec,
     pub environment: EnvironmentReceipt,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RemoteInspectPayload {
+    pub operation_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -222,6 +229,184 @@ pub fn invoke_remote_effect(
     invoke_remote_effect_with(local_project_root, request, || {
         invoke_remote_helper(target_id, target, request)
     })
+}
+
+/// Read the durable remote journal and converge a dispatching or uncertain
+/// local mirror. This operation is read-only and never reruns the effect.
+pub fn reconcile_remote_operation(
+    local_project_root: &Path,
+    target_id: &str,
+    target: &ComputeTarget,
+    operation_id: &str,
+) -> Result<RemoteOperationMirror, ToolchainError> {
+    reconcile_remote_operation_with(local_project_root, operation_id, |request| {
+        invoke_remote_helper(target_id, target, request)
+    })
+}
+
+fn reconcile_remote_operation_with<F>(
+    local_project_root: &Path,
+    operation_id: &str,
+    inspect: F,
+) -> Result<RemoteOperationMirror, ToolchainError>
+where
+    F: FnOnce(&RemoteHelperRequest) -> Result<RemoteHelperResponse, ToolchainError>,
+{
+    let mut mirror = read_remote_operation_mirror(local_project_root, operation_id)?;
+    if mirror.status.is_terminal() {
+        return Ok(mirror);
+    }
+    if mirror.status == RemoteOperationMirrorStatus::Prepared {
+        return Err(ToolchainError::InvalidJournal(
+            "a prepared remote operation was never dispatched and cannot be inspected".to_string(),
+        ));
+    }
+    let request = RemoteHelperRequest {
+        protocol: REMOTE_HELPER_PROTOCOL,
+        request_id: format!("inspect-{}", &mirror.request_sha256[..32]),
+        target_id: mirror.target_id.clone(),
+        project_root: mirror.remote_project_root.clone(),
+        rho_toml_sha256: mirror.rho_toml_sha256.clone(),
+        target_registry_sha256: mirror.target_registry_sha256.clone(),
+        operation: RemoteHelperOperation::InspectOperation,
+        payload: serde_json::to_value(RemoteInspectPayload {
+            operation_id: mirror.operation_id.clone(),
+        })?,
+    };
+    let response = match inspect(&request) {
+        Ok(response) => response,
+        Err(error) => {
+            preserve_reconciliation_uncertainty(
+                local_project_root,
+                &mut mirror,
+                format!("InspectOperation transport failed: {error}"),
+            )?;
+            return Err(error);
+        }
+    };
+    if !response.ok {
+        if response.status == "not_found" && !response.partial_effects_possible {
+            let now = Utc::now().to_rfc3339();
+            mirror.status = RemoteOperationMirrorStatus::Failed;
+            mirror.updated_at = now.clone();
+            mirror.finished_at = Some(now);
+            mirror.partial_effects_possible = false;
+            mirror.remote_status = Some(response.status);
+            mirror.remote_journal = None;
+            mirror.error = Some(response.error.unwrap_or_else(|| {
+                "remote operation journal was not created; no command was admitted".to_string()
+            }));
+            update_remote_operation_mirror(local_project_root, &mirror)?;
+            return Ok(mirror);
+        }
+        let detail = response
+            .error
+            .unwrap_or_else(|| format!("InspectOperation returned {}", response.status));
+        preserve_reconciliation_uncertainty(local_project_root, &mut mirror, detail.clone())?;
+        return Err(ToolchainError::CommandFailed(detail));
+    }
+    let journal: OperationJournal = match serde_json::from_value(response.payload) {
+        Ok(journal) => journal,
+        Err(error) => {
+            let error = ToolchainError::InvalidJournal(format!(
+                "InspectOperation returned an invalid journal: {error}"
+            ));
+            preserve_reconciliation_uncertainty(
+                local_project_root,
+                &mut mirror,
+                error.to_string(),
+            )?;
+            return Err(error);
+        }
+    };
+    if let Err(error) = validate_reconciled_journal(&mirror, &journal, &response.status) {
+        preserve_reconciliation_uncertainty(local_project_root, &mut mirror, error.to_string())?;
+        return Err(error);
+    }
+    mirror.updated_at = Utc::now().to_rfc3339();
+    mirror.remote_status = Some(response.status);
+    mirror.remote_journal = Some(journal.clone());
+    match journal.status {
+        OperationStatus::Running => {
+            mirror.status = RemoteOperationMirrorStatus::Uncertain;
+            mirror.finished_at = None;
+            mirror.partial_effects_possible = true;
+            mirror.error = Some("remote operation is still running".to_string());
+        }
+        OperationStatus::Succeeded => {
+            mirror.status = RemoteOperationMirrorStatus::Succeeded;
+            mirror.finished_at = journal
+                .finished_at
+                .clone()
+                .or_else(|| Some(mirror.updated_at.clone()));
+            mirror.partial_effects_possible = false;
+            mirror.error = None;
+        }
+        OperationStatus::Failed => {
+            mirror.status = RemoteOperationMirrorStatus::Failed;
+            mirror.finished_at = journal
+                .finished_at
+                .clone()
+                .or_else(|| Some(mirror.updated_at.clone()));
+            mirror.partial_effects_possible = journal.partial_effects_possible;
+            mirror.error = journal
+                .error
+                .clone()
+                .or_else(|| Some("remote operation failed".to_string()));
+        }
+    }
+    update_remote_operation_mirror(local_project_root, &mirror)?;
+    Ok(mirror)
+}
+
+fn preserve_reconciliation_uncertainty(
+    local_project_root: &Path,
+    mirror: &mut RemoteOperationMirror,
+    detail: String,
+) -> Result<(), ToolchainError> {
+    mirror.status = RemoteOperationMirrorStatus::Uncertain;
+    mirror.updated_at = Utc::now().to_rfc3339();
+    mirror.finished_at = None;
+    mirror.partial_effects_possible = true;
+    mirror.remote_status = Some("inspection_unavailable".to_string());
+    mirror.error = Some(detail);
+    update_remote_operation_mirror(local_project_root, mirror)
+}
+
+fn validate_reconciled_journal(
+    mirror: &RemoteOperationMirror,
+    journal: &OperationJournal,
+    response_status: &str,
+) -> Result<(), ToolchainError> {
+    let expected_kind = match mirror.operation {
+        RemoteHelperOperation::Run => OperationKind::Run,
+        RemoteHelperOperation::Live => OperationKind::Live,
+        RemoteHelperOperation::Sync => OperationKind::Sync,
+        RemoteHelperOperation::Lock => OperationKind::Lock,
+        RemoteHelperOperation::Doctor | RemoteHelperOperation::InspectOperation => {
+            return Err(ToolchainError::InvalidJournal(
+                "local mirror contains a non-effect operation".to_string(),
+            ));
+        }
+    };
+    let expected_status = match journal.status {
+        OperationStatus::Running => "running",
+        OperationStatus::Succeeded => "succeeded",
+        OperationStatus::Failed => "failed",
+    };
+    if journal.operation_id != mirror.operation_id
+        || journal.kind != expected_kind
+        || journal.project_root != Path::new(&mirror.remote_project_root)
+        || journal.rho_toml_sha256 != mirror.rho_toml_sha256
+        || journal.target_id != mirror.target_id
+        || journal.target_registry_sha256.as_deref() != Some(mirror.target_registry_sha256.as_str())
+        || response_status != expected_status
+    {
+        return Err(ToolchainError::InvalidJournal(
+            "InspectOperation journal identity or status differs from the local mirror".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 fn invoke_remote_effect_with<F>(
@@ -398,5 +583,96 @@ mod tests {
         assert_eq!(mirror.status, RemoteOperationMirrorStatus::Failed);
         assert_eq!(mirror.remote_status.as_deref(), Some("not_dispatched"));
         assert!(mirror.finished_at.is_some());
+    }
+
+    fn uncertain_request(operation_id: &str) -> RemoteHelperRequest {
+        RemoteHelperRequest {
+            protocol: 1,
+            request_id: format!("request-{operation_id}"),
+            target_id: "lab".to_string(),
+            project_root: "/remote/project".to_string(),
+            rho_toml_sha256: "a".repeat(64),
+            target_registry_sha256: "b".repeat(64),
+            operation: RemoteHelperOperation::Run,
+            payload: serde_json::json!({"operation_id": operation_id}),
+        }
+    }
+
+    fn inspected_journal(operation_id: &str, status: OperationStatus) -> OperationJournal {
+        OperationJournal {
+            schema_version: 1,
+            operation_id: operation_id.to_string(),
+            kind: OperationKind::Run,
+            status,
+            project_root: Path::new("/remote/project").to_path_buf(),
+            rho_toml_sha256: "a".repeat(64),
+            target_id: "lab".to_string(),
+            target_registry_sha256: Some("b".repeat(64)),
+            host_kind: "local".to_string(),
+            isolation_kind: "native".to_string(),
+            started_at: "2026-09-01T00:00:00Z".to_string(),
+            finished_at: (status != OperationStatus::Running)
+                .then(|| "2026-09-01T00:00:01Z".to_string()),
+            partial_effects_possible: status == OperationStatus::Failed,
+            effects: Vec::new(),
+            error: (status == OperationStatus::Failed).then(|| "effect failed".to_string()),
+        }
+    }
+
+    #[test]
+    fn inspect_operation_converges_uncertain_mirror_to_remote_success() {
+        let root = tempfile::tempdir().unwrap();
+        let request = uncertain_request("run-reconciled");
+        let _ = invoke_remote_effect_with(root.path(), &request, || {
+            Err(remote_transport(true, "connection reset"))
+        });
+        let mirror = reconcile_remote_operation_with(root.path(), "run-reconciled", |inspect| {
+            assert_eq!(inspect.operation, RemoteHelperOperation::InspectOperation);
+            assert_eq!(inspect.payload["operation_id"], "run-reconciled");
+            Ok(RemoteHelperResponse {
+                protocol: 1,
+                request_id: inspect.request_id.clone(),
+                target_id: "lab".to_string(),
+                ok: true,
+                status: "succeeded".to_string(),
+                payload: serde_json::to_value(inspected_journal(
+                    "run-reconciled",
+                    OperationStatus::Succeeded,
+                ))
+                .unwrap(),
+                error: None,
+                partial_effects_possible: false,
+            })
+        })
+        .unwrap();
+        assert_eq!(mirror.status, RemoteOperationMirrorStatus::Succeeded);
+        assert!(mirror.finished_at.is_some());
+        assert!(mirror.remote_journal.is_some());
+        assert!(!mirror.partial_effects_possible);
+    }
+
+    #[test]
+    fn inspect_not_found_converges_to_known_no_command_admission() {
+        let root = tempfile::tempdir().unwrap();
+        let request = uncertain_request("run-not-found");
+        let _ = invoke_remote_effect_with(root.path(), &request, || {
+            Err(remote_transport(true, "connection reset"))
+        });
+        let mirror = reconcile_remote_operation_with(root.path(), "run-not-found", |inspect| {
+            Ok(RemoteHelperResponse {
+                protocol: 1,
+                request_id: inspect.request_id.clone(),
+                target_id: "lab".to_string(),
+                ok: false,
+                status: "not_found".to_string(),
+                payload: serde_json::Value::Null,
+                error: Some("journal does not exist".to_string()),
+                partial_effects_possible: false,
+            })
+        })
+        .unwrap();
+        assert_eq!(mirror.status, RemoteOperationMirrorStatus::Failed);
+        assert!(!mirror.partial_effects_possible);
+        assert_eq!(mirror.remote_status.as_deref(), Some("not_found"));
     }
 }

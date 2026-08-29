@@ -94,8 +94,13 @@ then uses OpenSSH `BatchMode=yes` plus `StrictHostKeyChecking=yes`. Request and
 response identities bind protocol, request, target, remote project root, and
 configuration digests. Once SSH dispatch begins, a disconnect, invalid frame,
 or missing response is conservatively persisted in the local mirror as
-`uncertain`; it is never reported as a failed operation with no effects. No
-unsupported target silently falls back to local execution.
+`uncertain`; it is never reported as a failed operation with no effects. A
+read-only `InspectOperation` then returns the bounded durable remote journal.
+Only a journal with matching operation, project, target, configuration, kind,
+and status can converge the mirror to `succeeded` or `failed`; a still-running
+journal remains uncertain, while a verified missing pre-spawn journal converges
+to a known no-command-admission failure. No unsupported target silently falls
+back to local execution.
 
 ## Resolution and execution
 

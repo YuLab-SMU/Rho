@@ -32,7 +32,7 @@ pub use doctor::{
 };
 pub use journal::{
     EffectStatus, ExternalEffectRecord, OperationJournal, OperationKind, OperationStatus,
-    execute_journaled_operation, operation_journal_path,
+    execute_journaled_operation, operation_journal_path, read_operation_journal,
 };
 pub use receipt::{
     EnvironmentReceipt, EnvironmentReceiptMode, PythonEnvironmentReceipt, REnvironmentReceipt,
@@ -41,7 +41,8 @@ pub use receipt::{
 };
 pub use remote::{
     RemoteEffectPayload, RemoteHelperOperation, RemoteHelperRequest, RemoteHelperResponse,
-    invoke_remote_effect, invoke_remote_helper, verify_ssh_host_fingerprint,
+    RemoteInspectPayload, invoke_remote_effect, invoke_remote_helper, reconcile_remote_operation,
+    verify_ssh_host_fingerprint,
 };
 pub use remote_mirror::{
     RemoteOperationMirror, RemoteOperationMirrorStatus, create_remote_operation_mirror,

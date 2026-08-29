@@ -265,6 +265,9 @@ pub fn update_remote_operation_mirror(
                 RemoteOperationMirrorStatus::Uncertain
                     | RemoteOperationMirrorStatus::Succeeded
                     | RemoteOperationMirrorStatus::Failed
+            ) | (
+                RemoteOperationMirrorStatus::Uncertain,
+                RemoteOperationMirrorStatus::Succeeded | RemoteOperationMirrorStatus::Failed
             )
         );
     if !allowed {

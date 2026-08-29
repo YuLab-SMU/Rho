@@ -87,6 +87,40 @@ pub fn operation_journal_path(
         .join("operation.json"))
 }
 
+pub fn read_operation_journal(
+    project_root: &Path,
+    operation_id: &str,
+) -> Result<OperationJournal, ToolchainError> {
+    let project_root = project_root.canonicalize()?;
+    let path = operation_journal_path(&project_root, operation_id)?;
+    let metadata = fs::symlink_metadata(&path)?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(ToolchainError::InvalidJournal(
+            "operation journal is not a regular file".to_string(),
+        ));
+    }
+    if metadata.len() > MAX_JOURNAL_BYTES as u64 {
+        return Err(ToolchainError::InvalidJournal(
+            "operation journal exceeds the byte bound".to_string(),
+        ));
+    }
+    let journal: OperationJournal = serde_json::from_slice(&fs::read(path)?)?;
+    if journal.schema_version != 1
+        || journal.operation_id != operation_id
+        || journal.project_root != project_root
+        || journal
+            .effects
+            .iter()
+            .enumerate()
+            .any(|(index, effect)| effect.sequence != index + 1)
+    {
+        return Err(ToolchainError::InvalidJournal(
+            "operation journal identity or effect sequence is invalid".to_string(),
+        ));
+    }
+    Ok(journal)
+}
+
 pub fn execute_journaled_operation(
     config: &ToolchainConfigDocument,
     operation_id: &str,
