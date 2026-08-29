@@ -68,6 +68,61 @@ describe("Studio foundation app", () => {
     return { container, transport };
   }
 
+  it("turns an Agent Studio presentation into an independent code-and-results Scene", async () => {
+    const transport = createMockUiKernelTransport();
+    const detail = await transport.getAgentTurnDetail("agent-turn:mock-1");
+    if (detail == null) throw new Error("mock Agent turn is unavailable");
+    transport.getAgentTurnDetail = vi.fn(async (turnId) => turnId === detail.turn.turn_id ? {
+      ...detail,
+      events: [...detail.events, {
+        id: 4,
+        turn_id: detail.turn.turn_id,
+        timestamp: "2026-08-28T12:00:00Z",
+        event_type: "tool.call_completed",
+        title: "Studio presentation prepared",
+        body: JSON.stringify({
+          kind: "rho.studio_presentation",
+          title: "Analysis results",
+          code_paths: ["analysis.R"],
+          execution_id: null,
+          plot_id: null,
+          show_plots: true,
+          show_environment: false,
+        }),
+        status: "completed",
+        tool: "present_in_studio",
+        request_id: null,
+        code: null,
+        details_json: "{}",
+      }],
+    } : null);
+    const duplicate = vi.spyOn(transport, "duplicateUiProfileScene");
+    const open = vi.spyOn(transport, "openSurface");
+    const apply = vi.spyOn(transport, "applyStudio");
+    const { container } = await renderApp(transport);
+    await act(async () => {
+      for (let index = 0; index < 60; index += 1) await Promise.resolve();
+    });
+
+    expect(duplicate).toHaveBeenCalledOnce();
+    expect(open.mock.calls.map(([request]) => request.surface_id)).toEqual(expect.arrayContaining([
+      "rho.file-source",
+      "rho.plots",
+    ]));
+    expect(apply.mock.calls.some(([request]) => request.edit.kind === "replace_root")).toBe(true);
+    const profile = await transport.loadUiProfile();
+    expect(profile.profile.studio_scenes).toHaveLength(2);
+    expect(profile.profile.studio_scenes.find(
+      (scene) => scene.scene_id === profile.profile.active_studio_scene_id,
+    )?.label).toBe("Result · Analysis results");
+    const surfaces = await transport.loadSurfaces();
+    const agent = surfaces.catalog.instances.find((instance) => instance.surface_id === "rho.agent");
+    expect(agent?.view_state).toEqual(expect.objectContaining({
+      studio_presentations: { "agent-turn:mock-1:4": "presented" },
+    }));
+    expect(container.querySelector("[data-surface-id='rho.agent']")).toBeNull();
+  });
+
   it("recovers an unavailable saved project through the project picker instead of Rscript", async () => {
     const transport = createMockUiKernelTransport();
     transport.prepareWorkspace = vi.fn(async () => ({

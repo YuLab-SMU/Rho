@@ -866,6 +866,7 @@ session <- rho_create_aisdk_session(
     "propose_file_edit creates a reviewable diff and never writes a file, so do not claim the edit was applied.",
     "Use replace_selection only for a non-empty selection in the same path, insert_at_cursor only for the active path, append only when requested, and create only for a new path.",
     "Treat @file references as project-relative paths. If destination or placement is ambiguous, ask instead of guessing.",
+    "When a turn produces or identifies concrete committed results that are best inspected in the operational workbench, call present_in_studio exactly once after the relevant tools succeed. Reference only real file, execution, Plot, or Environment identities returned by the workbench; this arranges Studio after the turn and never writes Vibe content.",
     "When editor context includes a diagnostic and failed-run context, use their source path, range, message, traceback, exact executed code, and bounded outputs as authoritative repair evidence; do not require the user to restate or manually select a known error range.",
     "Respond in the language used by the user and keep the answer concise.",
     tool_notice,

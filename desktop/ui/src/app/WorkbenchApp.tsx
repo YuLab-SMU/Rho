@@ -91,6 +91,10 @@ import {
 import type { ConsoleViewState } from "./controllers/console-instance-controller";
 import { ConsoleRequirementController } from "./controllers/console-requirement-controller";
 import { StudioMutationController } from "./controllers/studio-mutation-controller";
+import { type AgentStudioPresentation } from "./agent/studio-presentation";
+import {
+  presentAgentTurnInStudio as applyAgentStudioPresentation,
+} from "./controllers/agent-studio-presentation-controller";
 import { SurfaceInstanceMutationController } from "./controllers/surface-instance-mutation-controller";
 import { surfaceDisplayLabel, surfaceUxProfile } from "./surface-ux";
 import {
@@ -1561,6 +1565,23 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
       }, lease);
     });
   };
+  const presentAgentTurnInStudio = async (
+    turn: AgentTurnSummary,
+    presentation: AgentStudioPresentation,
+  ) => {
+    const sourceScope = assertRenderedActionScope();
+    return withMutationAdmission(sourceScope.projectId, undefined, (lease) => (
+      applyAgentStudioPresentation({
+        projectId: sourceScope.projectId,
+        turn,
+        presentation,
+        store,
+        transport: pluginTransport,
+        lease,
+        allocateLayoutNodeId,
+      })
+    ));
+  };
   const createConsoleRequirementController = (lease: WorkbenchMutationLease) => (
     new ConsoleRequirementController({
       getSurfaces: surfaceStore.getSurfaceSnapshot,
@@ -1987,6 +2008,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
         reportActionError(null);
       }}
       pinAgentTask={pinAgentTask}
+      presentAgentTurnInStudio={presentAgentTurnInStudio}
       applyAgentFileProposal={async (turn, eventId, proposal, review) => {
         if (resources == null) throw new Error("Resource Registry is not ready.");
         return withMutationAdmission(resources.project_id, undefined, async (lease) => {

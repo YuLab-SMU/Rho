@@ -19,6 +19,7 @@ import {
   type AgentFileUndoState,
   type AgentSurfaceViewState,
 } from "./AgentSurfaceView";
+import type { AgentStudioPresentation } from "./agent/studio-presentation";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
   .IS_REACT_ACT_ENVIRONMENT = true;
@@ -125,6 +126,10 @@ describe("Studio Agent Surface", () => {
     }>;
     readonly undoFileProposal?: (request: AgentFileUndoState) => Promise<void>;
     readonly pinTask?: (turn: AgentTurnSummary) => Promise<void>;
+    readonly presentInStudio?: (
+      turn: AgentTurnSummary,
+      presentation: AgentStudioPresentation,
+    ) => Promise<void>;
     readonly runtimeOutputContext?: RuntimeOutputReference | null;
     readonly reportError?: (error: unknown) => void;
   } = {}) {
@@ -151,6 +156,7 @@ describe("Studio Agent Surface", () => {
     };
     const persist = options.persist ?? vi.fn(async () => undefined);
     const pinTask = options.pinTask ?? vi.fn(async () => undefined);
+    const presentInStudio = options.presentInStudio ?? vi.fn(async () => undefined);
     const applyFileProposal = options.applyFileProposal ?? vi.fn(async () => {
       throw new Error("applyFileProposal is not expected in this test");
     });
@@ -204,6 +210,7 @@ describe("Studio Agent Surface", () => {
           runConversation={runConversation}
           persist={renderPersist}
           pinTask={pinTask}
+          presentInStudio={presentInStudio}
           applyFileProposal={applyFileProposal}
           undoFileProposal={undoFileProposal}
           reportError={overrides.reportError ?? reportError}
@@ -721,6 +728,52 @@ describe("Studio Agent Surface", () => {
       await settle();
     });
     expect(persist).not.toHaveBeenCalled();
+  });
+
+  it("autonomously hands a completed bounded result plan to Studio once", async () => {
+    const transport = createMockUiKernelTransport();
+    const turn = makeTurn({ turn_id: "agent-turn:studio-result", mode: "act" });
+    transport.listAgentTurns = vi.fn(async () => [turn]);
+    transport.getAgentTurnDetail = vi.fn(async () => makeDetail(turn, {
+      events: [{
+        id: 41,
+        turn_id: turn.turn_id,
+        timestamp: mockNow,
+        event_type: "tool.call_completed",
+        title: "Studio presentation prepared",
+        body: JSON.stringify({
+          kind: "rho.studio_presentation",
+          title: "QC results",
+          code_paths: ["analysis/qc.R"],
+          execution_id: "execution:qc",
+          plot_id: "plot:qc",
+          show_plots: true,
+          show_environment: true,
+        }),
+        status: "completed",
+        tool: "present_in_studio",
+        request_id: null,
+        code: null,
+        details_json: "{}",
+      }],
+    }));
+    const presentInStudio = vi.fn(async () => undefined);
+    const { container, persist } = await renderAgent({ transport, presentInStudio });
+    await act(async () => { await settle(); });
+
+    expect(presentInStudio).toHaveBeenCalledOnce();
+    expect(presentInStudio).toHaveBeenCalledWith(turn, expect.objectContaining({
+      title: "QC results",
+      execution_id: "execution:qc",
+    }));
+    expect(persist).toHaveBeenCalledWith(expect.objectContaining({
+      studio_presentations: { "agent-turn:studio-result:41": "presenting" },
+    }));
+    expect(persist).toHaveBeenLastCalledWith(expect.objectContaining({
+      studio_presentations: { "agent-turn:studio-result:41": "presented" },
+    }));
+    expect(container.querySelector(".rho-agent-studio-presentation")?.textContent)
+      .toContain("ready in Studio");
   });
 
   it("persists a rejected file proposal without touching the apply path", async () => {

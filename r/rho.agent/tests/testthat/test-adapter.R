@@ -35,7 +35,8 @@ test_that("aisdk workspace tools target the broker boundary", {
       "install_project_package",
       "update_project_package",
       "remove_project_package",
-      "propose_file_edit"
+      "propose_file_edit",
+      "present_in_studio"
     )
   )
   approvals <- stats::setNames(
@@ -46,6 +47,7 @@ test_that("aisdk workspace tools target the broker boundary", {
   expect_identical(approvals[["read_conversation_turn"]], "automatic")
   expect_identical(approvals[["read_runtime_output"]], "automatic")
   expect_identical(approvals[["propose_file_edit"]], "automatic")
+  expect_identical(approvals[["present_in_studio"]], "automatic")
   expect_true(all(approvals[c(
     "run_r", "initialize_project_environment", "restore_project_environment",
     "snapshot_project_environment", "install_project_package",
@@ -178,6 +180,36 @@ test_that("file edit proposals discard aisdk execution environments", {
   expect_identical(proposal$operation, "replace_selection")
   expect_identical(proposal$content, "geom_point(size = 5)")
   expect_silent(jsonlite::toJSON(proposal, auto_unbox = TRUE, null = "null"))
+})
+
+test_that("Studio presentations are bounded declarative result requests", {
+  proposal <- rho.agent:::rho_studio_presentation(list(
+    title = "QC results",
+    code_paths = list("analysis/qc.R"),
+    execution_id = "agent_workspace_1234",
+    plot_id = "plot:qc",
+    show_plots = TRUE,
+    show_environment = TRUE,
+    .envir = new.env(parent = emptyenv())
+  ))
+
+  expect_named(proposal, c(
+    "kind", "title", "code_paths", "execution_id", "plot_id",
+    "show_plots", "show_environment"
+  ))
+  expect_identical(proposal$kind, "rho.studio_presentation")
+  expect_identical(proposal$code_paths, list("analysis/qc.R"))
+  preview <- rho.agent:::rho_tool_result_preview("present_in_studio", proposal)
+  expect_identical(jsonlite::fromJSON(preview, simplifyVector = FALSE), proposal)
+
+  expect_error(
+    rho.agent:::rho_studio_presentation(list(title = "Escape", code_paths = "../secret")),
+    "project-relative"
+  )
+  expect_error(
+    rho.agent:::rho_studio_presentation(list(title = "Empty")),
+    "at least one"
+  )
 })
 
 test_that("large file edit proposals are not truncated to the default preview limit", {

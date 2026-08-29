@@ -35,6 +35,7 @@ import type {
   AgentFileUndoState,
   AgentSurfaceViewState,
 } from "./AgentSurfaceView";
+import type { AgentStudioPresentation } from "./agent/studio-presentation";
 import { CheckResultView } from "./CheckResultView";
 import { DOMAIN_SURFACE_IDS, DomainSurfaceView } from "./DomainSurfaceView";
 import { EnvironmentSurfaceView } from "./EnvironmentSurfaceView";
@@ -129,6 +130,10 @@ interface SurfaceViewProps {
   readonly persistAgentViewState: (viewState: AgentSurfaceViewState) => Promise<void>;
   readonly persistSurfaceViewState: (viewState: unknown) => Promise<void>;
   readonly pinAgentTask: (turn: AgentTurnSummary) => Promise<void>;
+  readonly presentAgentTurnInStudio: (
+    turn: AgentTurnSummary,
+    presentation: AgentStudioPresentation,
+  ) => Promise<void>;
   readonly applyAgentFileProposal: (
     turn: AgentTurnSummary,
     eventId: number,
@@ -176,7 +181,7 @@ export function SurfaceView({
   refreshResourceBinding, setViewGroup, persistFileViewState, reportError,
   pluginTransport, surfaceFactories, pluginDocumentRequest, projectRevision, openCheckEvidence,
   agentHealth, createAgentConversation, runAgentConversation, persistAgentViewState,
-  persistSurfaceViewState, pinAgentTask,
+  persistSurfaceViewState, pinAgentTask, presentAgentTurnInStudio,
   applyAgentFileProposal, undoAgentFileProposal, openNavigatorFile, openSurfaceById,
   agentRuntimeOutputContext, setAgentRuntimeOutputContext,
   embedded, dockviewHosted,
@@ -828,6 +833,7 @@ export function SurfaceView({
           runConversation={runAgentConversation}
           persist={persistAgentViewState}
           pinTask={pinAgentTask}
+          presentInStudio={presentAgentTurnInStudio}
           applyFileProposal={applyAgentFileProposal}
           undoFileProposal={undoAgentFileProposal}
           reportError={reportError}

@@ -83,6 +83,34 @@
   section.rho-agent-surface .rho-agent-approval .rho-agent-decision-actions button { margin-right: 0; }
   section.rho-agent-surface .rho-agent-approval pre { max-height: 6rem; }
 
+  /* A completed Agent turn can hand its committed work to Studio without
+     adding narrative blocks to Vibe. The row reports the durable handoff. */
+  section.rho-agent-surface .rho-agent-studio-presentation {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: var(--rho-space-3);
+    margin-top: var(--rho-space-3);
+    padding: var(--rho-space-3);
+    border: var(--rho-border);
+    border-left: 3px solid var(--rho-ink);
+    border-radius: var(--rho-radius-1);
+    background: var(--rho-panel);
+  }
+  section.rho-agent-surface .rho-agent-studio-presentation > div {
+    display: grid;
+    min-width: 0;
+    gap: var(--rho-space-1);
+  }
+  section.rho-agent-surface .rho-agent-studio-presentation strong,
+  section.rho-agent-surface .rho-agent-studio-presentation small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  section.rho-agent-surface .rho-agent-studio-presentation small { color: var(--rho-muted); font-size: var(--rho-text-caption); }
+  section.rho-agent-surface .rho-agent-studio-presentation button { min-height: var(--rho-control-small); padding: var(--rho-space-1) var(--rho-space-3); }
+
   /* A file change is a compact one-line decision row; many proposals stay
      scannable. The proposed content expands per row. */
   section.rho-agent-surface .rho-agent-file-proposal { padding: var(--rho-space-2) var(--rho-space-3); border-left: 3px solid var(--rho-ink); }
@@ -372,6 +400,8 @@
     section.rho-agent-surface .rho-agent-turn { padding: var(--rho-space-3); }
     section.rho-agent-surface .rho-agent-context-controls > .rho-primary-action { margin-left: 0; }
     section.rho-agent-surface .rho-agent-file-proposal .rho-agent-decision-actions { flex-basis: 100%; margin-left: 0; justify-content: flex-end; }
+    section.rho-agent-surface .rho-agent-studio-presentation { grid-template-columns: minmax(0, 1fr) auto; }
+    section.rho-agent-surface .rho-agent-studio-presentation button { grid-column: 1 / -1; justify-self: end; }
   }
   @container (max-width: 300px) {
     section.rho-agent-surface .rho-agent-capacity { grid-template-columns: minmax(0, 1fr); }

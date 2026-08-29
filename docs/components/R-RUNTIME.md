@@ -22,5 +22,9 @@ approvals, file proposals, persistence, and redacted public outcomes.
 
 The two roles do not share process authority: Agent orchestration can request
 work, but Workspace R remains the executor for the live scientific session.
-Package APIs are documented by their `DESCRIPTION`, `NAMESPACE`, and generated
-Rd files beside the source.
+`present_in_studio` is a pure Agent tool that emits a bounded declarative
+handoff referencing committed result identities. It does not mutate UI,
+scientific state, or Vibe content; the desktop validates and applies the
+handoff through its Surface, Studio, and profile owners after the turn
+completes. Package APIs are documented by their `DESCRIPTION`, `NAMESPACE`, and
+generated Rd files beside the source.

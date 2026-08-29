@@ -16,6 +16,11 @@ import type {
   UiKernelTransport,
 } from "../transport";
 import { computeLineDiff } from "./agent/diff";
+import {
+  agentStudioPresentationKey,
+  parseAgentStudioPresentation,
+  type AgentStudioPresentation,
+} from "./agent/studio-presentation";
 
 import "../styles/agent-surface.css";
 
@@ -25,6 +30,10 @@ export interface AgentSurfaceViewState {
   readonly composer: string;
   readonly auto_approve: boolean;
   readonly file_decisions: Readonly<Record<string, "rejected">>;
+  readonly studio_presentations?: Readonly<Record<
+    string,
+    "presenting" | "presented" | "failed"
+  >>;
 }
 
 export interface AgentFileProposal {
@@ -119,6 +128,22 @@ function agentFileProposalOutcome(detail: AgentTurnDetail, proposalEventId: numb
   return null;
 }
 
+function studioPresentationStates(value: unknown): Readonly<Record<
+  string,
+  "presenting" | "presented" | "failed"
+>> {
+  const candidate = typeof value === "object" && value != null
+    ? value as Readonly<Record<string, unknown>>
+    : {};
+  return Object.fromEntries(Object.entries(candidate).flatMap(([key, status]) => {
+    if (status === "presented" || status === "failed") return [[key, status] as const];
+    // No in-flight UI operation survives a renderer activation. A persisted
+    // presenting marker therefore becomes explicit retryable recovery.
+    if (status === "presenting") return [[key, "failed" as const]];
+    return [];
+  }));
+}
+
 function initialAgentSurfaceState(instance: SurfaceInstance): AgentSurfaceViewState {
   const candidate = typeof instance.view_state === "object" && instance.view_state != null
     ? instance.view_state as Record<string, unknown>
@@ -134,6 +159,7 @@ function initialAgentSurfaceState(instance: SurfaceInstance): AgentSurfaceViewSt
     file_decisions: typeof candidate.file_decisions === "object" && candidate.file_decisions != null
       ? candidate.file_decisions as Readonly<Record<string, "rejected">>
       : {},
+    studio_presentations: studioPresentationStates(candidate.studio_presentations),
   };
 }
 
@@ -263,6 +289,7 @@ export function AgentSurfaceView({
   runConversation,
   persist,
   pinTask,
+  presentInStudio,
   applyFileProposal,
   undoFileProposal,
   reportError,
@@ -282,6 +309,10 @@ export function AgentSurfaceView({
   ) => Promise<AgentSurfaceViewState>;
   readonly persist: (viewState: AgentSurfaceViewState) => Promise<void>;
   readonly pinTask: (turn: AgentTurnSummary) => Promise<void>;
+  readonly presentInStudio: (
+    turn: AgentTurnSummary,
+    presentation: AgentStudioPresentation,
+  ) => Promise<void>;
   readonly applyFileProposal: (
     turn: AgentTurnSummary,
     eventId: number,
@@ -328,6 +359,7 @@ export function AgentSurfaceView({
     () => new Map(),
   );
   const proposalDiffsRef = useRef<ReadonlyMap<string, AgentProposalDiffState>>(new Map());
+  const presentationInFlightRef = useRef<Set<string>>(new Set());
   const frameRefreshScheduledRef = useRef(false);
   const lastFrameEventIdRef = useRef<number | null>(null);
   const activationVersionRef = useRef(0);
@@ -366,6 +398,7 @@ export function AgentSurfaceView({
     dispatchHaltedRef.current = false;
     dispatchReconcileRef.current = false;
     proposalDiffsRef.current = new Map();
+    presentationInFlightRef.current = new Set();
     frameRefreshScheduledRef.current = false;
     lastFrameEventIdRef.current = null;
     setConversations([]);
@@ -934,6 +967,46 @@ export function AgentSurfaceView({
       endMutation(mutation);
     }
   };
+  const presentStudio = useCallback(async (
+    turn: AgentTurnSummary,
+    eventId: number,
+    presentation: AgentStudioPresentation,
+  ) => {
+    const key = agentStudioPresentationKey(turn.turn_id, eventId);
+    if (presentationInFlightRef.current.has(key)) return;
+    const currentStatus = viewRef.current.studio_presentations?.[key];
+    if (currentStatus === "presented" || currentStatus === "presenting") return;
+    const activationVersion = activationVersionRef.current;
+    presentationInFlightRef.current.add(key);
+    const storeStatus = async (status: "presenting" | "presented" | "failed") => {
+      const current = viewRef.current;
+      const next: AgentSurfaceViewState = {
+        ...current,
+        studio_presentations: {
+          ...(current.studio_presentations ?? {}),
+          [key]: status,
+        },
+      };
+      if (activationIsCurrent(activationVersion)) {
+        viewRef.current = next;
+        setView(next);
+      }
+      await persist(next);
+    };
+    try {
+      await storeStatus("presenting");
+      if (!activationIsCurrent(activationVersion)) return;
+      await presentInStudio(turn, presentation);
+      await storeStatus("presented");
+    } catch (error: unknown) {
+      try {
+        await storeStatus("failed");
+      } catch { /* the original presentation failure remains authoritative */ }
+      if (activationIsCurrent(activationVersion)) reportError(error);
+    } finally {
+      presentationInFlightRef.current.delete(key);
+    }
+  }, [activationIsCurrent, persist, presentInStudio, reportError]);
   const reviewContext = async () => {
     const activationVersion = activationVersionRef.current;
     const current = viewRef.current;
@@ -1165,6 +1238,24 @@ export function AgentSurfaceView({
     turns,
     view.conversation_id,
   ]);
+  useEffect(() => {
+    for (const turn of turns) {
+      if (turn.status !== "completed") continue;
+      const detail = details.get(turn.turn_id);
+      let candidate: ReturnType<typeof parseAgentStudioPresentation> = null;
+      for (let index = (detail?.events.length ?? 0) - 1; index >= 0; index -= 1) {
+        candidate = parseAgentStudioPresentation(detail!.events[index]!);
+        if (candidate != null) break;
+      }
+      if (candidate == null) continue;
+      const key = agentStudioPresentationKey(turn.turn_id, candidate.event.id);
+      if (view.studio_presentations?.[key] != null || presentationInFlightRef.current.has(key)) {
+        continue;
+      }
+      void presentStudio(turn, candidate.event.id, candidate.presentation);
+      break;
+    }
+  }, [details, presentStudio, turns, view.studio_presentations]);
   const displayMode = instance.mode_id ?? "conversation";
   const chatRoute = llmSettings?.capability_routes.find((route) => route.capability === "agent.chat");
   const chatModelLabel = chatRoute?.model_display_name
@@ -1418,10 +1509,17 @@ export function AgentSurfaceView({
               const proposal = parseAgentFileProposal(event);
               return proposal == null ? [] : [{ event, proposal }];
             }) ?? [];
+            const presentations = (detail?.events.flatMap((event) => {
+              const parsed = parseAgentStudioPresentation(event);
+              return parsed == null ? [] : [parsed];
+            }) ?? []).slice(-1);
             const waitingApprovals = detail?.approvals.filter((approval) => approval.status === "waiting") ?? [];
             const proposalEventIds = new Set(proposals.map(({ event }) => event.id));
+            const presentationEventIds = new Set(presentations.map(({ event }) => event.id));
             const activityEvents = detail?.events.filter((event) =>
-              (event.tool != null || event.code != null) && !proposalEventIds.has(event.id)) ?? [];
+              (event.tool != null || event.code != null)
+              && !proposalEventIds.has(event.id)
+              && !presentationEventIds.has(event.id)) ?? [];
             const contextItems = detail?.context_items ?? [];
             return (
               <article className={`rho-agent-turn rho-agent-turn-${turn.status}`} data-turn-id={turn.turn_id} key={turn.turn_id}>
@@ -1462,6 +1560,38 @@ export function AgentSurfaceView({
                     </div>
                   </section>
                 ))}
+                {presentations.map(({ event, presentation }) => {
+                  const key = agentStudioPresentationKey(turn.turn_id, event.id);
+                  const status = view.studio_presentations?.[key];
+                  return (
+                    <section className="rho-agent-studio-presentation" data-presentation-key={key} key={key}>
+                      <div>
+                        <span className="rho-agent-decision-kind">Studio result scene</span>
+                        <strong>{presentation.title}</strong>
+                        <small>{[
+                          presentation.code_paths.length > 0
+                            ? `${presentation.code_paths.length} code ${presentation.code_paths.length === 1 ? "file" : "files"}`
+                            : null,
+                          presentation.execution_id == null ? null : "exact run",
+                          presentation.show_plots ? "Plots" : null,
+                          presentation.show_environment ? "Environment" : null,
+                        ].filter((item) => item != null).join(" · ")}</small>
+                      </div>
+                      <span className="rho-agent-file-outcome" role={status === "presenting" ? "status" : undefined}>
+                        {status === "presented" ? "ready in Studio"
+                          : status === "failed" ? "arrangement failed"
+                            : "arranging Studio…"}
+                      </span>
+                      {status === "failed" && (
+                        <button
+                          type="button"
+                          disabled={turnMutationRenderBlocked(turn)}
+                          onClick={() => void presentStudio(turn, event.id, presentation)}
+                        >Retry in Studio</button>
+                      )}
+                    </section>
+                  );
+                })}
                 {proposals.map(({ event, proposal }) => {
                   const key = `${turn.turn_id}:${event.id}`;
                   const outcome = detail == null ? null : agentFileProposalOutcome(detail, event.id);

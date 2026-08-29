@@ -60,6 +60,56 @@ rho_file_edit_proposal <- function(args) {
   )
 }
 
+rho_studio_presentation <- function(args) {
+  stopifnot(is.list(args) || is.environment(args))
+  scalar_text <- function(name, required = FALSE, maximum = 256L) {
+    item <- args[[name]]
+    if (is.null(item) && !required) return(NULL)
+    if (!is.character(item) || length(item) != 1L || is.na(item) ||
+        !nzchar(trimws(item)) || nchar(item) > maximum) {
+      stop(sprintf("Studio presentation argument `%s` must be one bounded string.", name))
+    }
+    trimws(item)
+  }
+  scalar_flag <- function(name) {
+    item <- args[[name]]
+    if (is.null(item)) return(FALSE)
+    if (!is.logical(item) || length(item) != 1L || is.na(item)) {
+      stop(sprintf("Studio presentation argument `%s` must be one boolean.", name))
+    }
+    isTRUE(item)
+  }
+  code_paths <- unlist(args$code_paths %||% list(), use.names = FALSE)
+  if ((length(code_paths) && (!is.character(code_paths) || anyNA(code_paths))) ||
+      length(code_paths) > 3L) {
+    stop("Studio presentation `code_paths` must contain at most three project-relative paths.")
+  }
+  code_paths <- trimws(as.character(code_paths))
+  invalid_path <- !nzchar(code_paths) |
+    nchar(code_paths) > 512L |
+    grepl("^/|^[A-Za-z]:|(^|/)\\.\\.(/|$)|\\\\", code_paths)
+  if (any(invalid_path)) {
+    stop("Studio presentation code paths must be normalized project-relative paths.")
+  }
+  execution_id <- scalar_text("execution_id")
+  plot_id <- scalar_text("plot_id")
+  show_plots <- scalar_flag("show_plots")
+  show_environment <- scalar_flag("show_environment")
+  if (!length(code_paths) && is.null(execution_id) && is.null(plot_id) &&
+      !show_plots && !show_environment) {
+    stop("Studio presentation must reference at least one inspectable result.")
+  }
+  list(
+    kind = "rho.studio_presentation",
+    title = scalar_text("title", required = TRUE, maximum = 96L),
+    code_paths = as.list(code_paths),
+    execution_id = execution_id,
+    plot_id = plot_id,
+    show_plots = show_plots,
+    show_environment = show_environment
+  )
+}
+
 rho_plugin_schema_bound <- function(value, name) {
   if (is.null(value)) {
     return(NULL)
@@ -315,6 +365,28 @@ rho_create_workspace_tools <- function(plugin_tools = list()) {
       ),
       execute = rho_file_edit_proposal,
       meta = list(validate_arguments = TRUE, rho_approval = "automatic")
+    ),
+    aisdk::tool(
+      name = "present_in_studio",
+      description = paste(
+        "Arrange committed task results in a new Studio result scene after this turn completes.",
+        "Reference only real project files, Runtime execution identities, Plot identities, or the current Environment.",
+        "This creates a bounded presentation request; it never changes scientific state or Vibe content."
+      ),
+      parameters = aisdk::z_object(
+        title = aisdk::z_string("Short result-scene title", min_length = 1L, max_length = 96L),
+        code_paths = aisdk::z_array(
+          aisdk::z_string("Normalized project-relative code path", min_length = 1L, max_length = 512L),
+          max_items = 3L
+        ),
+        execution_id = aisdk::z_string("Exact committed Runtime execution identity", min_length = 1L, max_length = 256L),
+        plot_id = aisdk::z_string("Exact committed Plot identity", min_length = 1L, max_length = 256L),
+        show_plots = aisdk::z_boolean(),
+        show_environment = aisdk::z_boolean(),
+        .required = "title"
+      ),
+      execute = rho_studio_presentation,
+      meta = list(validate_arguments = TRUE, rho_approval = "automatic")
     )
   )
   c(core_tools, rho_create_plugin_tools(plugin_tools))
@@ -426,7 +498,7 @@ rho_run_r_preview <- function(value) {
 
 rho_tool_result_preview <- function(tool, value) {
   parsed <- rho_parse_tool_result(value)
-  if (identical(tool, "propose_file_edit") && is.list(parsed)) {
+  if (tool %in% c("propose_file_edit", "present_in_studio") && is.list(parsed)) {
     return(rho_compact_event_value(parsed, max_chars = 100000L))
   }
   if (identical(tool, "get_workspace_snapshot") && is.list(parsed)) {
