@@ -247,7 +247,7 @@ export function domainSummary(surfaceId: string, items: readonly DomainSurfaceIt
   switch (surfaceId) {
     case "rho.runs": return { title: attention > 0 ? `${attention} ${attention === 1 ? "execution needs" : "executions need"} attention` : `${countLabel} recent ${items.length === 1 ? "execution" : "executions"}`, subtitle: active > 0 ? `${active} currently active` : "Project execution history" };
     case "rho.render-jobs": return { title: active > 0 ? `${active} ${active === 1 ? "render is" : "renders are"} active` : `${countLabel} render ${items.length === 1 ? "job" : "jobs"}`, subtitle: attention > 0 ? `${attention} need attention` : "Document output history" };
-    case "rho.plots": return { title: `${countLabel} session ${items.length === 1 ? "plot" : "plots"}`, subtitle: "Most recent visual outputs" };
+    case "rho.plots": return { title: `${countLabel} project ${items.length === 1 ? "plot" : "plots"}`, subtitle: "Current and historical visual outputs" };
     case "rho.problems": return { title: items.length === 0 ? "No recorded problems" : `${countLabel} ${items.length === 1 ? "problem" : "problems"}`, subtitle: attention > 0 ? `${attention} need attention` : "Run diagnostics" };
     case "rho.logs": return { title: items.length === 0 ? "No diagnostic entries" : "Workbench diagnostics", subtitle: `${countLabel} current ${items.length === 1 ? "entry" : "entries"}` };
     case "rho.evidence": return { title: `${countLabel} evidence ${items.length === 1 ? "claim" : "claims"}`, subtitle: attention > 0 ? `${attention} need linked support` : "Claims linked to project sources" };
@@ -261,7 +261,7 @@ export function domainEmptyState(surfaceId: string, filtered: boolean): { readon
   switch (surfaceId) {
     case "rho.runs": return { title: "No history yet", detail: "Source, Console, Agent, and project-component executions will appear here." };
     case "rho.render-jobs": return { title: "No render jobs yet", detail: "Document renders will appear here when they run." };
-    case "rho.plots": return { title: "No session plots yet", detail: "Plots produced by Workspace R will appear here." };
+    case "rho.plots": return { title: "No project plots yet", detail: "Current and historical plots produced by Workspace R will appear here." };
     case "rho.problems": return { title: "No recorded problems", detail: "Run warnings and errors will appear here." };
     case "rho.logs": return { title: "No diagnostic entries", detail: "Workbench diagnostics will appear when available." };
     case "rho.evidence": return { title: "No evidence claims yet", detail: "Source-backed claims will appear here." };

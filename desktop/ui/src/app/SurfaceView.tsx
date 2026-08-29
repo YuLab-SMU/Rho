@@ -143,6 +143,7 @@ interface SurfaceViewProps {
   readonly undoAgentFileProposal: (request: AgentFileUndoState) => Promise<void>;
   readonly openNavigatorFile: (descriptor: ResourceDescriptor) => Promise<void>;
   readonly openSurfaceById: (surfaceId: string) => void;
+  readonly openPlot: (plotId: string) => void;
   readonly agentRuntimeOutputContext: RuntimeOutputReference | null;
   readonly setAgentRuntimeOutputContext: (reference: RuntimeOutputReference | null) => boolean;
   readonly embedded: boolean;
@@ -182,7 +183,7 @@ export function SurfaceView({
   pluginTransport, surfaceFactories, pluginDocumentRequest, projectRevision, openCheckEvidence,
   agentHealth, createAgentConversation, runAgentConversation, persistAgentViewState,
   persistSurfaceViewState, pinAgentTask, presentAgentTurnInStudio,
-  applyAgentFileProposal, undoAgentFileProposal, openNavigatorFile, openSurfaceById,
+  applyAgentFileProposal, undoAgentFileProposal, openNavigatorFile, openSurfaceById, openPlot,
   agentRuntimeOutputContext, setAgentRuntimeOutputContext,
   embedded, dockviewHosted,
 }: SurfaceViewProps) {
@@ -637,7 +638,7 @@ export function SurfaceView({
                 <pre>{hit.preview}</pre>
                 <footer>
                   <button type="button" onClick={() => openSurfaceById("rho.runs")}>Open in History</button>
-                  {hit.reference_kind === "plot" && <button type="button" data-reference-id={hit.reference_id ?? undefined} onClick={() => openSurfaceById("rho.plots")}>Open Plot</button>}
+                  {hit.reference_kind === "plot" && hit.reference_id != null && <button type="button" data-reference-id={hit.reference_id} onClick={() => openPlot(hit.reference_id!)}>Open Plot</button>}
                 </footer>
               </article>)}
             </div>}
@@ -705,7 +706,7 @@ export function SurfaceView({
                         type="button"
                         className="rho-runtime-output-reference"
                         data-reference-id={result.reference.id}
-                        onClick={() => openSurfaceById("rho.plots")}
+                        onClick={() => openPlot(result.reference!.id)}
                       >Open Plot</button>}
                     </div>
                   ))}
@@ -879,6 +880,7 @@ export function SurfaceView({
             if (setAgentRuntimeOutputContext(reference)) openSurfaceById("rho.agent");
           }}
           openSurfaceById={openSurfaceById}
+          openPlot={openPlot}
         />
       )}
       {instance.surface_id === "rho.surface-playground" && (

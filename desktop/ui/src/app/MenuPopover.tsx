@@ -8,12 +8,14 @@ export function MenuPopover({
   children,
   panelClassName = "",
   viewportBound = false,
+  placement = "auto",
 }: {
   readonly label: string;
   readonly glyph: ReactNode;
   readonly children: ReactNode;
   readonly panelClassName?: string;
   readonly viewportBound?: boolean;
+  readonly placement?: "auto" | "right";
 }) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<{ readonly top: number; readonly left: number } | null>(null);
@@ -54,6 +56,13 @@ export function MenuPopover({
     const parsedGap = Number.parseFloat(tokens.getPropertyValue("--rho-space-2"));
     const inset = Number.isFinite(parsedInset) ? parsedInset : 0;
     const gap = Number.isFinite(parsedGap) ? parsedGap : 0;
+    if (placement === "right") {
+      setPosition({
+        top: Math.max(inset, Math.min(triggerBox.top, window.innerHeight - panelBox.height - inset)),
+        left: Math.max(inset, Math.min(triggerBox.right + gap, window.innerWidth - panelBox.width - inset)),
+      });
+      return;
+    }
     const spaceBelow = window.innerHeight - triggerBox.bottom - inset;
     const spaceAbove = triggerBox.top - inset;
     const preferredTop = spaceBelow >= panelBox.height || spaceBelow >= spaceAbove
@@ -63,7 +72,7 @@ export function MenuPopover({
       top: Math.max(inset, Math.min(preferredTop, window.innerHeight - panelBox.height - inset)),
       left: Math.max(inset, Math.min(triggerBox.right - panelBox.width, window.innerWidth - panelBox.width - inset)),
     });
-  }, [open, viewportBound]);
+  }, [open, placement, viewportBound]);
 
   const menuPanel = open ? (
     <div

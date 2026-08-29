@@ -122,6 +122,7 @@ async function renderHistory(options: {
   readonly transport: HistoryTransport;
   readonly selectedId: string | null;
   readonly filter?: string;
+  readonly openPlot?: (plotId: string) => void;
 }) {
   const host = document.createElement("div");
   document.body.append(host);
@@ -135,7 +136,7 @@ async function renderHistory(options: {
       persistFilter={async () => undefined}
       reportError={vi.fn()}
       useInAgent={vi.fn()}
-      openPlot={vi.fn()}
+      openPlot={options.openPlot ?? vi.fn()}
     />);
     await settle();
   });
@@ -143,6 +144,44 @@ async function renderHistory(options: {
 }
 
 describe("Runtime History exact-target navigation", () => {
+  it("opens the exact historical Plot reference instead of a generic session gallery", async () => {
+    const row = execution({ last_sequence: 1, output_bytes: 8192 });
+    const transport = historyTransport([[row]]);
+    vi.spyOn(transport, "loadRuntimeOutputPage").mockResolvedValue({
+      ...pageFor(row),
+      next_sequence: 1,
+      chunks: [{
+        execution_id: row.execution_id,
+        project_root: row.project_root,
+        sequence: 1,
+        producer_sequence: 1,
+        projection_slot: 0,
+        source_kind: "workspace.plot",
+        presentation_kind: "display_ref",
+        media_type: "image/png",
+        storage_kind: "record_ref",
+        text_payload: null,
+        json_payload: null,
+        reference_kind: "plot",
+        reference_id: "plot:historical",
+        payload_bytes: 8192,
+        payload_sha256: "a".repeat(64),
+        created_at: "2026-08-27T02:00:01Z",
+      }],
+    });
+    const openPlot = vi.fn();
+    const host = await renderHistory({
+      transport,
+      selectedId: row.execution_id,
+      openPlot,
+    });
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>(".rho-runtime-output-reference")!.click();
+      await settle();
+    });
+    expect(openPlot).toHaveBeenCalledWith("plot:historical");
+  });
+
   it.each([
     ["run id", "run:exact"],
     ["execution id", "execution:exact"],

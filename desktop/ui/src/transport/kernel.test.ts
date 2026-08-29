@@ -818,8 +818,10 @@ describe("UI Kernel transport and external store", () => {
     ]);
   });
 
-  it("projects Plot records with their Plot identity and without inline image payloads", async () => {
-    const transport = createTauriUiKernelTransport(async <T,>(command: string) => {
+  it("projects current and historical Plot records without inline image payloads", async () => {
+    const calls: Array<{ readonly command: string; readonly args?: Record<string, unknown> }> = [];
+    const transport = createTauriUiKernelTransport(async <T,>(command: string, args?: Record<string, unknown>) => {
+      calls.push(args === undefined ? { command } : { command, args });
       if (command !== "list_plot_artifacts") throw new Error(`unexpected command ${command}`);
       return [{
         plot_id: "plot:exact-preview",
@@ -833,6 +835,10 @@ describe("UI Kernel transport and external store", () => {
     }, async () => () => undefined);
 
     const plots = await transport.loadDomainSurface("rho.plots");
+    expect(calls).toEqual([{
+      command: "list_plot_artifacts",
+      args: { limit: 100, sessionOnly: false },
+    }]);
     expect(plots.items).toHaveLength(1);
     expect(plots.items[0]?.id).toBe("plot:exact-preview");
     expect(plots.items[0]?.detail).not.toContain("payload_json");

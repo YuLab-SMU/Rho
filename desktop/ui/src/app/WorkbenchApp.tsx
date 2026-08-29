@@ -22,6 +22,7 @@ import type {
   AgentTurnSummary,
   PluginSurfaceDocumentRequest,
   ProjectSwitchResponse,
+  LayoutNode,
   ResourceDescriptor,
   ResourceTarget,
   RuntimeDescriptor,
@@ -61,6 +62,7 @@ import {
 } from "./vibe/verification";
 import { EnvironmentTaskbarPanel } from "./EnvironmentSurfaceView";
 import type { FileMutationWorkflow } from "./FileResourceView";
+import { MenuPopover } from "./MenuPopover";
 import { SurfaceView } from "./SurfaceView";
 import type { SourceExecutionSubmission } from "./source-execution";
 import { ToolbarCustomizer } from "./ToolbarCustomizer";
@@ -118,6 +120,40 @@ import type {
   ToolbarPreferenceLoad,
 } from "./toolbar-model";
 import { projectLabel } from "../transport/normalize";
+
+function layoutInstanceIds(node: LayoutNode): string[] {
+  switch (node.kind) {
+    case "surface": return [node.instance_id];
+    case "stack": return [...node.instances];
+    case "container": return node.children.flatMap((child) => layoutInstanceIds(child.child));
+  }
+}
+
+function surfaceRailGlyph(surfaceId: string): string {
+  switch (surfaceId) {
+    case "rho.navigator": return "N";
+    case "rho.file-source": return "R";
+    case "rho.file-preview": return "P";
+    case "rho.console": return ">_";
+    case "rho.plots": return "▧";
+    case "rho.runs": return "↺";
+    case "rho.agent": return "✦";
+    case "rho.environment": return "◉";
+    case "rho.git": return "⑂";
+    default: return surfaceDisplayLabel(surfaceId).slice(0, 1).toUpperCase();
+  }
+}
+
+function surfaceToolHints(surfaceId: string): readonly string[] {
+  switch (surfaceId) {
+    case "rho.file-source": return ["Run the current expression from the Source toolbar", "Save or reload from the component header"];
+    case "rho.console": return ["Return runs code", "Shift+Return inserts a new line"];
+    case "rho.navigator": return ["Switch between Files and History", "Search the current project tree"];
+    case "rho.plots": return ["Browse current and historical project plots", "Use exact Plot links from Console or History"];
+    case "rho.environment": return ["Inspect Resources, Toolchains, Packages, and Requests"];
+    default: return [surfaceUxProfile(surfaceId).primaryTask];
+  }
+}
 
 interface WorkbenchAppProps {
   readonly transport?: UiKernelTransport;
@@ -987,6 +1023,26 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
     }, lease);
     return created;
     });
+  };
+  const openPlotArtifact = async (plotId: string) => {
+    if (surfaces == null || studio == null) {
+      throw new Error("Plot preview is unavailable while the Surface Runtime loads.");
+    }
+    const existing = surfaces.catalog.instances.find((candidate) => {
+      if (candidate.surface_id !== "rho.plots") return false;
+      const viewState = candidate.view_state;
+      return typeof viewState === "object" && viewState != null
+        && "selected_id" in viewState && viewState.selected_id === plotId;
+    });
+    if (existing != null && findLayoutPlacement(studio.scene.root, existing.instance_id) != null) {
+      await focusAutomationInstance(existing.instance_id);
+      return;
+    }
+    const factory = surfaces.catalog.factories.find(
+      (candidate) => candidate.definition.surface_id === "rho.plots",
+    );
+    if (factory == null) throw new Error("Plots Surface is unavailable.");
+    await openFactory(factory, { selected_id: plotId, filter: "" });
   };
   const openEnvironmentResources = async () => {
     if (surfaces == null || studio == null) {
@@ -2122,6 +2178,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
       dockviewHosted={gestureOwner === "dockview"}
       openNavigatorFile={openNavigatorFile}
       openSurfaceById={openSurfaceById}
+      openPlot={(plotId) => run(openPlotArtifact(plotId))}
       agentRuntimeOutputContext={agentRuntimeOutputContext}
       setAgentRuntimeOutputContext={(reference) => {
         if (!projectTransitionEpochController.accepts(hostScope)) return false;
@@ -2588,6 +2645,11 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
       )
       .map((instance) => instance.surface_id) ?? [],
   );
+  const openSurfaceTools = studio == null
+    ? []
+    : [...new Set(layoutInstanceIds(studio.scene.root))]
+      .map((instanceId) => instances.get(instanceId))
+      .filter((instance): instance is SurfaceInstance => instance != null && instance.lifecycle_state === "active");
   const renderComponentFactory = (factory: SurfaceFactoryRegistration, developer = false) => {
     const surfaceId = factory.definition.surface_id;
     const label = surfaceId.startsWith("rho.")
@@ -2606,6 +2668,63 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
       </div>
       <button type="button" onClick={() => run(openFactory(factory))}>{developer ? "Open preview" : "Open"}</button>
     </article>;
+  };
+  const renderOpenSurfaceTool = (instance: SurfaceInstance) => {
+    const factory = surfaces?.catalog.factories.find(
+      (candidate) => candidate.definition.surface_id === instance.surface_id,
+    );
+    const label = surfaceDisplayLabel(instance.surface_id);
+    const canDuplicate = factory?.definition.instance_policy === "multi_instance";
+    const attachedRuntime = instance.runtime_binding == null
+      ? null
+      : runtimes?.instances.find((runtime) =>
+          runtime.runtime_instance_id === instance.runtime_binding?.runtime_instance_id
+        ) ?? null;
+    return <div
+      className="rho-open-surface-tool"
+      data-surface-tool-instance={instance.instance_id}
+      data-focused={studio?.scene.focused_surface_instance_id === instance.instance_id || undefined}
+      key={instance.instance_id}
+    >
+      <MenuPopover
+        label={`Tools for ${label}`}
+        glyph={<span className="rho-open-surface-glyph" aria-hidden="true">{surfaceRailGlyph(instance.surface_id)}</span>}
+        panelClassName="rho-surface-tool-panel"
+        viewportBound
+        placement="right"
+      >
+        <div className="rho-menu-heading"><strong>{label}</strong><code>{instance.instance_id}</code></div>
+        <dl className="rho-menu-facts">
+          <div><dt>Mode</dt><dd>{instance.mode_id ?? "default"}</dd></div>
+          <div><dt>State</dt><dd>{instance.lifecycle_state}</dd></div>
+          {attachedRuntime != null && <div><dt>Runtime</dt><dd>{attachedRuntime.display_label}</dd></div>}
+        </dl>
+        <button type="button" data-menu-close onClick={() => run(focusAutomationInstance(instance.instance_id))}>Focus component</button>
+        {(factory?.definition.modes.length ?? 0) > 1 && <>
+          <span className="rho-menu-separator" />
+          <span className="rho-surface-tool-label">Component mode</span>
+          {factory?.definition.modes.map((mode) => <button
+            type="button"
+            data-menu-close
+            disabled={instance.mode_id === mode.mode_id}
+            onClick={() => run(surfaceMutationController.update(instance.instance_id, {
+              kind: "set_mode",
+              mode_id: mode.mode_id,
+            }))}
+            key={mode.mode_id}
+          >{mode.label}</button>)}
+        </>}
+        {attachedRuntime != null && <>
+          <span className="rho-menu-separator" />
+          <button type="button" data-menu-close onClick={() => run(runtimeStore.interrupt(runtimeRequest(attachedRuntime, runtimes!.project_revision)))}>Interrupt runtime</button>
+          <button type="button" data-menu-close onClick={() => run(runtimeStore.restart(runtimeRequest(attachedRuntime, runtimes!.project_revision)))}>Restart runtime</button>
+        </>}
+        <span className="rho-menu-separator" />
+        <button type="button" data-menu-close disabled={!canDuplicate} onClick={() => run(duplicate(instance))}>Open another</button>
+        <button type="button" data-menu-close onClick={() => run(commit({ kind: "close_surface_placement", instance_id: instance.instance_id }))}>Close component</button>
+        <ul className="rho-surface-tool-hints">{surfaceToolHints(instance.surface_id).map((hint) => <li key={hint}>{hint}</li>)}</ul>
+      </MenuPopover>
+    </div>;
   };
   const toolbarSplit = Math.ceil(visibleToolbarComponents.length / 2);
   const leftToolbarComponents = visibleToolbarComponents.slice(0, toolbarSplit);
@@ -2751,6 +2870,9 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
             })}
           </nav>
         )}
+        {openSurfaceTools.length > 0 && <nav className="rho-open-surface-rail" aria-label="Open component tools">
+          {openSurfaceTools.map(renderOpenSurfaceTool)}
+        </nav>}
         <div className="rho-toolbar-anchor rho-toolbar-anchor-right">
           <div className="rho-toolbar-lane rho-toolbar-lane-left">
             {leftToolbarComponents.map(renderToolbarComponent)}
@@ -2769,6 +2891,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
             }}
             onPreview={previewToolbarLayout}
             onCommit={commitToolbarLayout}
+            showTrigger={false}
           />
         </div>
         {commandSearchTransient && (

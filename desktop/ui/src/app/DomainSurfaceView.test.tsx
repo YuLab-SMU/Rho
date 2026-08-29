@@ -61,6 +61,7 @@ async function renderDomain(data: DomainSurfaceData, viewState: unknown) {
       reportError={vi.fn()}
       useRuntimeOutputInAgent={vi.fn()}
       openSurfaceById={vi.fn()}
+      openPlot={vi.fn()}
     />);
     await settle();
   });
@@ -114,6 +115,48 @@ describe("generic domain exact-target navigation", () => {
     });
   });
 
+  it("loads an older Plot directly from its exact durable reference beyond the gallery window", async () => {
+    const transport = {
+      loadDomainSurface: vi.fn(async () => ({
+        surface_id: "rho.plots",
+        loaded_at: "2026-08-27T00:00:00Z",
+        summary: "0 plots in gallery window",
+        items: [],
+      })),
+      readPlotArtifact: vi.fn(async () => ({
+        plot_id: "plot:historical",
+        media_type: "image/png",
+        data_base64: "iVBORw0KGgo=",
+      })),
+      subscribeInvalidated: vi.fn(() => () => undefined),
+    } as unknown as UiKernelTransport;
+    const instance = {
+      ...surface({ selected_id: "plot:historical" }),
+      surface_id: "rho.plots",
+      instance_id: "surface-instance:historical-plot",
+    };
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    roots.push(root);
+    await act(async () => {
+      root.render(<DomainSurfaceView
+        instance={instance}
+        transport={transport}
+        persist={vi.fn(async () => undefined)}
+        reportError={vi.fn()}
+        useRuntimeOutputInAgent={vi.fn()}
+        openSurfaceById={vi.fn()}
+        openPlot={vi.fn()}
+      />);
+      await settle();
+    });
+    expect(transport.readPlotArtifact).toHaveBeenCalledWith("plot:historical");
+    expect(host.querySelector(".rho-domain-exact-unavailable")).toBeNull();
+    expect(host.querySelector<HTMLImageElement>("img")?.src).toMatch(/^data:image\/png;base64,/);
+    expect(host.textContent).toContain("Loaded from the exact durable Plot reference");
+  });
+
   it("matches generic records by item.id only and never substitutes a local record", async () => {
     const { host } = await renderDomain({
       ...evidence,
@@ -161,6 +204,7 @@ describe("generic domain exact-target navigation", () => {
       reportError: vi.fn(),
       useRuntimeOutputInAgent: vi.fn(),
       openSurfaceById: vi.fn(),
+      openPlot: vi.fn(),
     };
 
     await act(async () => {

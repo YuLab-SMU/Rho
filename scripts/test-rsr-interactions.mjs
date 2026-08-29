@@ -105,7 +105,8 @@ async function evidence(page) {
 async function openSurface(page, surfaceId) {
   let compose = page.getByRole("button", { name: "Compose" });
   if (await compose.count() === 0) {
-    await page.getByRole("button", { name: "Customize toolbar" }).click();
+    await page.locator('[aria-label="Rho menu"]').click();
+    await page.getByRole("button", { name: "Customize toolbar…" }).click();
     const dialog = page.getByRole("dialog", { name: "Toolbar components" });
     await dialog.getByRole("checkbox", { name: "Compose" }).check();
     await dialog.getByRole("button", { name: "Done" }).click();
@@ -190,6 +191,16 @@ try {
       throw new Error("DOM, preview evidence, and generated build identity disagree");
     }
     await assertDockviewTitleHierarchy(page, ["rho.navigator", "rho.console", "rho.file-source"]);
+    const studioChoice = page.getByRole("button", { name: "Studio", exact: true });
+    const studioCaption = studioChoice.locator("span");
+    if (await studioCaption.evaluate((element) => getComputedStyle(element).opacity) !== "0") {
+      throw new Error("side-rail captions were not hidden by default");
+    }
+    await studioChoice.hover();
+    await page.waitForFunction(() => {
+      const caption = document.querySelector('.rho-mode-switch button[title="Studio mode"] span');
+      return caption != null && getComputedStyle(caption).opacity === "1";
+    });
     await page.getByLabel("Rho menu").click();
     await page.getByRole("button", { name: new RegExp(`Development build\\s+${declared.build_id}`) }).waitFor();
 
@@ -215,6 +226,12 @@ try {
   {
     const { context, page } = await openWorkbench("&plugin=surface");
     const navigator = page.locator('article[data-surface-id="rho.navigator"]');
+    const navigatorToolsTrigger = page.getByRole("button", { name: "Tools for Navigator" });
+    await navigatorToolsTrigger.click();
+    const navigatorTools = page.getByRole("dialog", { name: "Tools for Navigator" });
+    await navigatorTools.getByRole("button", { name: "Focus component" }).waitFor();
+    await navigatorTools.getByText("Search the current project tree").waitFor();
+    await page.keyboard.press("Escape");
     const filesTab = navigator.getByRole("tab", { name: "Files", exact: true });
     await filesTab.focus();
     await filesTab.press("ArrowRight");

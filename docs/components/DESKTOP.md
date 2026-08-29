@@ -45,8 +45,14 @@ facets under `transport/`; generated files in `transport/generated/` mirror
 Rust commands. `transport/mock.ts` supports deterministic browser development.
 
 Controllers under `app/controllers/` serialize project, Surface, Console, and
-Studio mutations. A completed Agent turn may emit one bounded Studio
-presentation request. The Agent Surface preserves the current Scene, creates a
+Studio mutations. The compact left rail keeps Studio/Vibe/Compose captions
+hidden until hover or keyboard focus, exposes one tools button for every placed
+component, and routes toolbar customization through the single Rho menu.
+Component tools provide focus, mode, runtime, duplicate, and close actions.
+Exact Plot links from Console or History open the durable Plot identity, while
+the general Plots view includes both current-session and historical project
+plots. A completed Agent turn may emit one bounded Studio presentation request.
+The Agent Surface preserves the current Scene, creates a
 separate result Scene, and opens only validated project files, a Console pinned
 to the exact Agent execution, Plots, and Environment views through the same
 revision-checked mutation paths

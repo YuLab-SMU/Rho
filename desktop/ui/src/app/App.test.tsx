@@ -249,10 +249,7 @@ describe("Studio foundation app", () => {
   async function showToolbarComponent(container: HTMLElement, label: string) {
     if ([...container.querySelectorAll<HTMLElement>("[data-toolbar-component]")]
       .some((component) => component.textContent?.includes(label))) return;
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>("[aria-label='Customize toolbar']")!.click();
-      await settle();
-    });
+    await openToolbarCustomizer(container);
     const option = [...container.querySelectorAll<HTMLLabelElement>(".rho-toolbar-option label")]
       .find((candidate) => candidate.textContent === label);
     if (option == null) throw new Error(`Toolbar option ${label} is missing.`);
@@ -280,6 +277,16 @@ describe("Studio foundation app", () => {
       });
     }
     return menu;
+  }
+
+  async function openToolbarCustomizer(container: HTMLElement) {
+    if (container.querySelector(".rho-toolbar-customizer") != null) return;
+    const menu = await openRhoMenu(container);
+    await act(async () => {
+      [...menu.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "Customize toolbar…")!.click();
+      await settle();
+    });
   }
 
   async function openSurfaceMenu(surface: Element) {
@@ -354,20 +361,17 @@ describe("Studio foundation app", () => {
     });
   }
 
-  it("starts with only the three fixed toolbar anchors and exposes every optional projection", async () => {
+  it("merges toolbar customization into the two fixed Rho and mode anchors", async () => {
     const { container } = await renderApp();
     const bar = container.querySelector<HTMLElement>(".rho-studio-bar")!;
     expect(bar.querySelector("[aria-label='Rho menu']")).not.toBeNull();
     expect(bar.querySelector(".rho-mode-switch")).not.toBeNull();
-    expect(bar.querySelector("[aria-label='Customize toolbar']")).not.toBeNull();
+    expect(bar.querySelector("[aria-label='Customize toolbar']")).toBeNull();
     expect(bar.querySelectorAll("[data-toolbar-component]")).toHaveLength(0);
     expect(container.querySelector(".rho-statusbar")).not.toBeNull();
     expect(container.querySelector(".rho-statusbar")?.textContent).not.toContain("No tasks running");
 
-    await act(async () => {
-      bar.querySelector<HTMLButtonElement>("[aria-label='Customize toolbar']")!.click();
-      await settle();
-    });
+    await openToolbarCustomizer(container);
     const customizer = bar.querySelector<HTMLElement>(".rho-toolbar-customizer")!;
     expect(customizer.textContent).toContain("Rho menu");
     expect(customizer.textContent).toContain("Studio / Vibe");
@@ -382,15 +386,53 @@ describe("Studio foundation app", () => {
       await settle();
     });
     expect(bar.querySelector(".rho-toolbar-customizer")).toBeNull();
-    await act(async () => {
-      bar.querySelector<HTMLButtonElement>("[aria-label='Customize toolbar']")!.click();
-      await settle();
-    });
+    await openToolbarCustomizer(container);
     await act(async () => {
       document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
       await settle();
     });
     expect(bar.querySelector(".rho-toolbar-customizer")).toBeNull();
+  });
+
+  it("gives every placed component a compact left-rail tools menu", async () => {
+    const transport = createMockUiKernelTransport();
+    const updateSurface = vi.spyOn(transport, "updateSurface");
+    const { container } = await renderApp(transport);
+    const tools = [...container.querySelectorAll<HTMLElement>(".rho-open-surface-tool")];
+    expect(tools.length).toBeGreaterThanOrEqual(6);
+    for (const label of ["Navigator", "Source editor", "R Console", "Environment"]) {
+      expect(container.querySelector(`[aria-label='Tools for ${label}']`)).not.toBeNull();
+    }
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("[aria-label='Tools for Navigator']")!.click();
+      await settle();
+    });
+    const navigatorTools = [...document.querySelectorAll<HTMLElement>(".rho-surface-tool-panel")]
+      .find((panel) => panel.getAttribute("aria-label") === "Tools for Navigator")!;
+    expect(navigatorTools.textContent).toContain("Focus component");
+    expect(navigatorTools.textContent).toContain("Component mode");
+    expect(navigatorTools.textContent).toContain("Files");
+    expect(navigatorTools.textContent).toContain("History");
+    expect(navigatorTools.textContent).toContain("Search the current project tree");
+    await act(async () => {
+      [...navigatorTools.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "History")!.click();
+      await settle();
+    });
+    expect(updateSurface).toHaveBeenCalledWith(expect.objectContaining({
+      mutation: { kind: "set_mode", mode_id: "runs" },
+    }));
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("[aria-label='Tools for R Console']")!.click();
+      await settle();
+    });
+    const consoleTools = [...document.querySelectorAll<HTMLElement>(".rho-surface-tool-panel")]
+      .find((panel) => panel.getAttribute("aria-label") === "Tools for R Console")!;
+    expect(consoleTools.textContent).toContain("Interrupt runtime");
+    expect(consoleTools.textContent).toContain("Restart runtime");
+    expect(consoleTools.textContent).toContain("Shift+Return inserts a new line");
   });
 
   it("opens and focuses the singleton Settings plugin from the menu and command search", async () => {
@@ -3281,10 +3323,7 @@ describe("Studio foundation app", () => {
     expect(container.querySelector("[data-toolbar-component='compose']")).not.toBeNull();
     expect(loadToolbarLayout(window.localStorage, projectId).layout.visible).toEqual(["compose"]);
 
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>("[aria-label='Customize toolbar']")!.click();
-      await settle();
-    });
+    await openToolbarCustomizer(container);
     const compose = [...container.querySelectorAll<HTMLLabelElement>(".rho-toolbar-option label")]
       .find((candidate) => candidate.textContent === "Compose")!;
     await act(async () => {
@@ -3316,10 +3355,7 @@ describe("Studio foundation app", () => {
     saveToolbarLayout(window.localStorage, projectId, configured);
     const { container } = await renderApp(transport);
     expect(container.querySelector("[data-toolbar-component='compose']")).not.toBeNull();
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>("[aria-label='Customize toolbar']")!.click();
-      await settle();
-    });
+    await openToolbarCustomizer(container);
     await act(async () => {
       container.querySelector<HTMLButtonElement>(".rho-toolbar-customizer footer button")!.click();
       await settle();
@@ -3335,10 +3371,7 @@ describe("Studio foundation app", () => {
     saveToolbarLayout(window.localStorage, projectId, defaultToolbarLayout());
     const persist = vi.spyOn(Storage.prototype, "setItem");
     const { container } = await renderApp(transport);
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>("[aria-label='Customize toolbar']")!.click();
-      await settle();
-    });
+    await openToolbarCustomizer(container);
     persist.mockClear();
     const projectRow = container.querySelector<HTMLElement>("[data-toolbar-option-id='project_context']")!;
     const composeRow = container.querySelector<HTMLElement>("[data-toolbar-option-id='compose']")!;
@@ -3364,10 +3397,7 @@ describe("Studio foundation app", () => {
   it("restores a pointer preview on Escape and supports Arrow-key reorder", async () => {
     installPointerCapture();
     const { container } = await renderApp();
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>("[aria-label='Customize toolbar']")!.click();
-      await settle();
-    });
+    await openToolbarCustomizer(container);
     const projectRow = container.querySelector<HTMLElement>("[data-toolbar-option-id='project_context']")!;
     const composeRow = container.querySelector<HTMLElement>("[data-toolbar-option-id='compose']")!;
     Object.defineProperty(projectRow, "getBoundingClientRect", { configurable: true, value: () => rect(0, 100, 240, 40) });

@@ -33,6 +33,7 @@ interface DomainSurfaceViewProps {
   readonly reportError: (error: unknown) => void;
   readonly useRuntimeOutputInAgent: (reference: RuntimeOutputReference) => void;
   readonly openSurfaceById: (surfaceId: string) => void;
+  readonly openPlot: (plotId: string) => void;
 }
 
 function viewStateRecord(viewState: unknown): Readonly<Record<string, unknown>> {
@@ -57,7 +58,7 @@ function viewStateWithFilter(viewState: unknown, filter: string): Readonly<Recor
 }
 
 export function DomainSurfaceView(props: DomainSurfaceViewProps) {
-  const { instance, transport, persist, reportError, useRuntimeOutputInAgent, openSurfaceById } = props;
+  const { instance, transport, persist, reportError, useRuntimeOutputInAgent, openPlot } = props;
   const initialFilter = viewStateFilter(instance.view_state);
   const selectedId = viewStateSelectedId(instance.surface_id, instance.view_state);
   if (instance.surface_id === "rho.runs") {
@@ -69,7 +70,7 @@ export function DomainSurfaceView(props: DomainSurfaceViewProps) {
       persistFilter={(nextFilter) => persist(viewStateWithFilter(instance.view_state, nextFilter))}
       reportError={reportError}
       useInAgent={useRuntimeOutputInAgent}
-      openPlot={() => openSurfaceById("rho.plots")}
+      openPlot={openPlot}
     />;
   }
   return <GenericDomainSurfaceView
@@ -112,7 +113,10 @@ function GenericDomainSurfaceView({
   const exactItem = selectedId == null
     ? null
     : (data?.items ?? []).find((item) => item.id === selectedId) ?? null;
-  const exactUnavailable = selectedId != null && !loading && data != null && exactItem == null;
+  const exactPlotFallback = instance.surface_id === "rho.plots"
+    && selectedId != null && !loading && data != null && exactItem == null;
+  const exactUnavailable = selectedId != null && !loading && data != null
+    && exactItem == null && !exactPlotFallback;
   const items = selectedId == null
     ? modeItems.filter((item) => domainMatches(instance.surface_id, item, filter))
     : exactItem == null ? [] : [exactItem];
@@ -173,10 +177,16 @@ function GenericDomainSurfaceView({
           role="status"
           className="rho-domain-exact-unavailable"
         />}
-        {!loading && !exactUnavailable && items.length === 0 && (() => {
+        {!loading && !exactUnavailable && !exactPlotFallback && items.length === 0 && (() => {
           const empty = domainEmptyState(instance.surface_id, Boolean(filter.trim()));
           return <SurfaceTaskState tone="empty" title={empty.title} detail={empty.detail} role="status" className="rho-domain-empty" />;
         })()}
+        {exactPlotFallback && selectedId != null && <article className="rho-domain-record rho-domain-record-ready" data-domain-id={selectedId}>
+          <PlotThumbnail plotId={selectedId} transport={transport} />
+          <span className="rho-domain-indicator rho-domain-indicator-ready" aria-hidden="true" />
+          <div className="rho-domain-record-copy"><strong>Historical plot</strong><p>Loaded from the exact durable Plot reference.</p></div>
+          <span className="rho-domain-state rho-domain-ready">ready</span>
+        </article>}
         {items.map((item) => {
           const projected = domainItemPresentation(instance.surface_id, item);
           return <article className={`rho-domain-record rho-domain-record-${projected.tone}`} data-domain-id={item.id} key={item.id}>

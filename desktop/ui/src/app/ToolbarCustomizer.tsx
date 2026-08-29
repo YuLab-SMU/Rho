@@ -12,7 +12,7 @@ import type {
   ToolbarPreferenceStatus,
 } from "./toolbar-model";
 
-const FIXED_COMPONENTS = ["Rho menu", "Studio / Vibe", "Customize toolbar"] as const;
+const FIXED_COMPONENTS = ["Rho menu", "Studio / Vibe"] as const;
 
 const OPTIONAL_LABELS: Readonly<Record<ToolbarComponentId, string>> = {
   project_context: "Project context",
@@ -31,6 +31,7 @@ interface ToolbarCustomizerProps {
   readonly onOpenChange: (open: boolean) => void;
   readonly onPreview: (layout: ToolbarLayout) => void;
   readonly onCommit: (layout: ToolbarLayout) => void;
+  readonly showTrigger?: boolean;
 }
 
 interface ReorderGesture {
@@ -91,6 +92,7 @@ export function ToolbarCustomizer({
   onOpenChange,
   onPreview,
   onCommit,
+  showTrigger = true,
 }: ToolbarCustomizerProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const gestureRef = useRef<ReorderGesture | null>(null);
@@ -197,14 +199,14 @@ export function ToolbarCustomizer({
   };
 
   return (
-    <div className="rho-toolbar-customize" ref={rootRef}>
-      <button
+    <div className="rho-toolbar-customize" data-trigger-visible={showTrigger} ref={rootRef}>
+      {showTrigger && <button
         type="button"
         className="rho-toolbar-customize-trigger rho-icon-btn"
         aria-label="Customize toolbar"
         aria-expanded={open}
         onClick={() => onOpenChange(!open)}
-      ><TuneIcon /></button>
+      ><TuneIcon /></button>}
       {open && (
         <section className="rho-toolbar-customizer" role="dialog" aria-label="Toolbar components">
           <header><strong>Toolbar components</strong></header>

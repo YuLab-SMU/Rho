@@ -213,6 +213,7 @@
   .rho-menu-field input { width: 100%; min-width: 0; }
 
   .rho-rho-menu, .rho-toolbar-customize { position: relative; flex: 0 0 auto; }
+  .rho-toolbar-customize[data-trigger-visible="false"] { width: 100%; height: 0; }
   .rho-rho-menu > summary {
     display: flex;
     align-items: center;
