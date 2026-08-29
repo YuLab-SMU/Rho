@@ -3441,6 +3441,11 @@ describe("Studio foundation app", () => {
       createMockUiKernelTransport("?project=%2Ftmp%2FRho%20Lab"),
     );
     expect(container.textContent).toContain("Rho Lab");
+    expect(container.querySelectorAll(".rho-environment-taskbar-metric")).toHaveLength(3);
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("[aria-label='Environment realtime information']")!.click();
+      await settle();
+    });
     expect(container.textContent).toContain("Workspace R ready");
     expect(container.textContent).toContain("Agent runtime needs attention");
     expect(container.textContent).toContain("Source editor");
@@ -6168,6 +6173,10 @@ describe("Studio foundation app", () => {
     expect(container.querySelector("[role='alert']")?.textContent).toContain(
       "Save modified source files before checking: analysis.R",
     );
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("[aria-label='Environment realtime information']")!.click();
+      await settle();
+    });
     expect(container.textContent).toContain("Workspace R ready");
     expect(container.querySelector("[data-surface-id='rho.file-source']")).not.toBeNull();
   });
@@ -6428,6 +6437,28 @@ describe("Studio foundation app", () => {
       await settle();
     });
     expect(doctor).toHaveBeenCalledTimes(doctorCallsBeforeRefresh + 1);
+  });
+
+  it("opens Environment Resources directly from the realtime taskbar panel", async () => {
+    const transport = createMockUiKernelTransport();
+    const monitor = vi.spyOn(transport, "resourceMonitorSnapshot");
+    const { container } = await renderApp(transport);
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("[aria-label='Environment realtime information']")!.click();
+      await settle();
+    });
+    const panel = container.querySelector<HTMLElement>(".rho-environment-taskbar-popover")!;
+    expect(panel.textContent).toContain("Workspace R ready");
+    await act(async () => {
+      [...panel.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "Open Environment Resources")!.click();
+      for (let index = 0; index < 12; index += 1) await Promise.resolve();
+    });
+    const resources = [...container.querySelectorAll<HTMLElement>("[data-surface-id='rho.environment']")]
+      .find((surface) => surface.querySelector(".rho-resource-monitor") != null);
+    expect(resources).toBeDefined();
+    expect(resources?.textContent).toContain("Resource governance");
+    expect(monitor.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
   it("presents Environment inventory semantically with on-demand search and no raw payload", async () => {

@@ -483,11 +483,15 @@ try {
 
   {
     const { context, page } = await openWorkbench("&vibe=information-flow&agent_runtime=ready", { width: 1440, height: 900 });
-    const agentRuntimeStatus = page.locator(".rho-statusbar-item", { hasText: "Agent runtime ready" });
+    const environmentTaskbar = page.getByRole("button", { name: "Environment realtime information" });
+    await environmentTaskbar.waitFor();
+    await environmentTaskbar.click();
+    const agentRuntimeStatus = page.locator(".rho-environment-taskbar-health span", { hasText: "Agent runtime ready" });
     await agentRuntimeStatus.waitFor();
     if (await agentRuntimeStatus.locator(".rho-status-ready").count() !== 1) {
-      throw new Error("the ready-Agent browser fixture exposed an incoherent status indicator");
+      throw new Error("the ready-Agent Environment taskbar fixture exposed an incoherent status indicator");
     }
+    await page.keyboard.press("Escape");
     const mountedAgentSurface = page.locator("article[data-surface-id='rho.agent']");
     await mountedAgentSurface.waitFor();
     const mountedConversationPicker = mountedAgentSurface.getByLabel(/^Conversation for /);
@@ -775,20 +779,20 @@ try {
     }
     const intermediateStatus = await page.evaluate(() => {
       const statusbar = document.querySelector('.rho-statusbar[data-workspace-mode="vibe"]');
-      const items = [...(statusbar?.querySelectorAll(".rho-statusbar-item") ?? [])];
+      const metrics = [...(statusbar?.querySelectorAll(".rho-environment-taskbar-metric") ?? [])];
       const path = statusbar?.querySelector(".rho-statusbar-path");
       return {
-        labels: items.map((item) => item.textContent?.trim() ?? ""),
-        clipped: items.some((item) => item.scrollWidth > item.clientWidth + 1),
+        labels: metrics.map((item) => item.textContent?.trim() ?? ""),
+        clipped: metrics.some((item) => item.scrollWidth > item.clientWidth + 1),
         pathDisplay: path == null ? null : getComputedStyle(path).display,
       };
     });
     if (intermediateStatus.clipped || intermediateStatus.pathDisplay !== "none") {
       throw new Error(`Vibe intermediate status bar clipped authoritative labels: ${JSON.stringify(intermediateStatus)}`);
     }
-    if (!intermediateStatus.labels.some((label) => label.startsWith("Workspace R"))
-      || !intermediateStatus.labels.some((label) => label.startsWith("Agent runtime"))) {
-      throw new Error(`Vibe intermediate status bar lost a runtime label: ${JSON.stringify(intermediateStatus.labels)}`);
+    if (!["CPU", "RAM", "Disk"].every((label) =>
+      intermediateStatus.labels.some((value) => value.startsWith(label)))) {
+      throw new Error(`Vibe intermediate status bar lost an Environment metric: ${JSON.stringify(intermediateStatus.labels)}`);
     }
     await page.setViewportSize({ width: 1440, height: 900 });
 

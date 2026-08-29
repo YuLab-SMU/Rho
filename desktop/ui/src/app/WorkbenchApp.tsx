@@ -59,6 +59,7 @@ import {
   createVerificationAdapter,
   type VerificationScope,
 } from "./vibe/verification";
+import { EnvironmentTaskbarPanel } from "./EnvironmentSurfaceView";
 import type { FileMutationWorkflow } from "./FileResourceView";
 import { SurfaceView } from "./SurfaceView";
 import type { SourceExecutionSubmission } from "./source-execution";
@@ -876,6 +877,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
     factory: SurfaceFactoryRegistration,
     viewStateOverride?: unknown,
     admissionLease?: WorkbenchMutationLease,
+    modeIdOverride?: string,
   ) => {
     if (surfaces == null || studio == null) {
       throw new Error("Surface Runtime is not ready.");
@@ -903,7 +905,7 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
     const opened = await surfaceStore.open({
       surface_id: definition.surface_id,
       project_id: surfaces.project_id,
-      mode_id: definition.modes[0]?.mode_id ?? null,
+      mode_id: modeIdOverride ?? definition.modes[0]?.mode_id ?? null,
       resource_binding: null,
       runtime_binding: consoleBinding,
       view_group_id: null,
@@ -985,6 +987,30 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
     }, lease);
     return created;
     });
+  };
+  const openEnvironmentResources = async () => {
+    if (surfaces == null || studio == null) {
+      throw new Error("Environment Resources is unavailable while the Surface Runtime loads.");
+    }
+    const existing = surfaces.catalog.instances.find(
+      (candidate) => candidate.surface_id === "rho.environment",
+    );
+    const placement = existing == null ? null : findLayoutPlacement(studio.scene.root, existing.instance_id);
+    if (profile?.active_mode === "studio" && existing != null && placement != null) {
+      if (existing.mode_id !== "resources") {
+        await surfaceMutationController.update(existing.instance_id, {
+          kind: "set_mode",
+          mode_id: "resources",
+        });
+      }
+      await focusAutomationInstance(existing.instance_id);
+      return;
+    }
+    const factory = surfaces.catalog.factories.find(
+      (candidate) => candidate.definition.surface_id === "rho.environment",
+    );
+    if (factory == null) throw new Error("Environment Surface is unavailable.");
+    await openFactory(factory, undefined, undefined, "resources");
   };
   const currentProfileSnapshot = () => {
     const current = profileStore.getProfileSnapshot();
@@ -2975,26 +3001,23 @@ export function WorkbenchApp({ transport }: WorkbenchAppProps) {
         data-workspace-mode={profile?.active_mode ?? "loading"}
         aria-label="Workbench status"
       >
-        <span className="rho-statusbar-item">
-          <span className={`rho-status-dot rho-status-${snapshot?.context.workspace_health ?? "unknown"}`} />
-          {snapshot?.health.workspace.label ?? "Connecting"}
-        </span>
-        <span className="rho-statusbar-item">
-          <span className={`rho-status-dot rho-status-${snapshot?.context.agent_health ?? "unknown"}`} />
-          {snapshot?.health.agent.label ?? "Agent"}
-        </span>
-        {(snapshot?.context.active_operations.length ?? 0) > 0 && <span className="rho-statusbar-item" aria-live="polite">
-          {`${snapshot!.context.active_operations.length} task${snapshot!.context.active_operations.length > 1 ? "s" : ""} running`}
-        </span>}
-        <button
-          type="button"
-          className="rho-link"
-          disabled={surfaces?.catalog.factories.some((factory) => factory.definition.surface_id === "rho.logs") !== true}
-          onClick={() => {
+        <EnvironmentTaskbarPanel
+          transport={pluginTransport}
+          workspaceState={snapshot?.context.workspace_health ?? "unknown"}
+          workspaceLabel={snapshot?.health.workspace.label ?? "Workspace connecting"}
+          agentState={snapshot?.context.agent_health ?? "unknown"}
+          agentLabel={snapshot?.health.agent.label ?? "Agent unavailable"}
+          activeOperations={snapshot?.context.active_operations.length ?? 0}
+          openResources={() => run(openEnvironmentResources())}
+          openDiagnostics={() => {
             const logs = surfaces?.catalog.factories.find((factory) => factory.definition.surface_id === "rho.logs");
             if (logs != null) run(openFactory(logs));
           }}
-        >Diagnostics</button>
+          diagnosticsAvailable={surfaces?.catalog.factories.some((factory) => factory.definition.surface_id === "rho.logs") === true}
+        />
+        {(snapshot?.context.active_operations.length ?? 0) > 0 && <span className="rho-statusbar-item" aria-live="polite">
+          {`${snapshot!.context.active_operations.length} task${snapshot!.context.active_operations.length > 1 ? "s" : ""} running`}
+        </span>}
         <span className="rho-statusbar-path" title={snapshot?.project.display_path ?? ""}>{snapshot?.project.display_path ?? ""}</span>
       </footer>
       </div>

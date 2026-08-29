@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { SurfaceInstance, UiKernelTransport } from "../transport";
 import type { ResourceMonitorView } from "../transport/environment";
-import { EnvironmentSurfaceView } from "./EnvironmentSurfaceView";
+import { EnvironmentSurfaceView, EnvironmentTaskbarPanel } from "./EnvironmentSurfaceView";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
   .IS_REACT_ACT_ENVIRONMENT = true;
@@ -131,5 +131,48 @@ describe("Environment resource governance", () => {
     expect(host.textContent).toContain("Resource admission guarded");
     expect(host.textContent).toContain("Memory is under critical pressure");
     expect(host.querySelector("progress")?.getAttribute("value")).toBe("9500");
+  });
+
+  it("turns the status bar into a live three-metric Environment panel", async () => {
+    const transport = {
+      resourceMonitorSnapshot: vi.fn(async () => snapshot),
+      subscribeInvalidated: vi.fn(() => () => undefined),
+    } as unknown as UiKernelTransport;
+    const openResources = vi.fn();
+    const openDiagnostics = vi.fn();
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    roots.push(root);
+    await act(async () => {
+      root.render(<EnvironmentTaskbarPanel
+        transport={transport}
+        workspaceState="ready"
+        workspaceLabel="Workspace R ready"
+        agentState="degraded"
+        agentLabel="Agent runtime needs attention"
+        activeOperations={2}
+        openResources={openResources}
+        openDiagnostics={openDiagnostics}
+        diagnosticsAvailable
+      />);
+      await settle();
+    });
+
+    expect([...host.querySelectorAll(".rho-environment-taskbar-metric")]
+      .map((metric) => metric.textContent)).toEqual(["CPU—", "RAM95%", "Disk—"]);
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>("[aria-label='Environment realtime information']")!.click();
+      await settle();
+    });
+    expect(host.textContent).toContain("Environment realtime");
+    expect(host.textContent).toContain("Workspace R ready");
+    expect(host.textContent).toContain("Agent runtime needs attention");
+    expect(host.textContent).toContain("2 active operations");
+    await act(async () => {
+      [...host.querySelectorAll<HTMLButtonElement>(".rho-environment-taskbar-popover footer button")]
+        .find((button) => button.textContent === "Open Environment Resources")!.click();
+    });
+    expect(openResources).toHaveBeenCalledOnce();
   });
 });

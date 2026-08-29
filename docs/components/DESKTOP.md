@@ -31,8 +31,11 @@ Important runtime owners include:
   config/registry binding and recent resource-governance observation before
   persistence or process dispatch. Environment → Resources refreshes bounded
   local/SSH device telemetry across native, Docker, and Conda target identities
-  every 15 seconds while that view is open. External sync/lock authority
-  remains in `rho-toolchain`.
+  every 15 seconds while that view is open. The workbench taskbar reuses the
+  same typed Environment read surface as a three-metric CPU/RAM/disk panel,
+  refreshes every 10 seconds, and expands to device, runtime, operation, and
+  admission detail with direct Environment Resources and Diagnostics actions.
+  External sync/lock authority remains in `rho-toolchain`.
 
 ## Frontend
 

@@ -149,6 +149,138 @@ function ResourceMonitorPanel({
   </section>;
 }
 
+type ResourceMetric = NonNullable<ResourceMonitorView["targets"][number]["device"]>["metrics"][number];
+
+function TaskbarMetric({
+  label,
+  metric,
+}: {
+  readonly label: string;
+  readonly metric: ResourceMetric | null;
+}) {
+  const value = metric?.utilization_basis_points ?? null;
+  return <span className={`rho-environment-taskbar-metric rho-resource-pressure-${metric?.pressure ?? "unavailable"}`} title={metric?.detail ?? `${label} telemetry unavailable`}>
+    <span>{label}</span>
+    <strong>{value == null ? "—" : formatPercent(value)}</strong>
+    <progress max={10000} value={value ?? 0} aria-hidden="true" />
+  </span>;
+}
+
+export function EnvironmentTaskbarPanel({
+  transport,
+  workspaceState,
+  workspaceLabel,
+  agentState,
+  agentLabel,
+  activeOperations,
+  openResources,
+  openDiagnostics,
+  diagnosticsAvailable,
+}: {
+  readonly transport: UiKernelTransport;
+  readonly workspaceState: string;
+  readonly workspaceLabel: string;
+  readonly agentState: string;
+  readonly agentLabel: string;
+  readonly activeOperations: number;
+  readonly openResources: () => void;
+  readonly openDiagnostics: () => void;
+  readonly diagnosticsAvailable: boolean;
+}) {
+  const [view, setView] = useState<ResourceMonitorView | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const loadingRef = useRef(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const load = useCallback(async () => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+    try {
+      setView(await transport.resourceMonitorSnapshot());
+      setError(null);
+    } catch (cause: unknown) {
+      setError(workbenchFailureMessage(cause, "Resource telemetry unavailable."));
+    } finally {
+      loadingRef.current = false;
+    }
+  }, [transport]);
+  useEffect(() => {
+    void load();
+    return transport.subscribeInvalidated(() => void load());
+  }, [load, transport]);
+  useEffect(() => {
+    const timer = window.setInterval(() => void load(), 10_000);
+    return () => window.clearInterval(timer);
+  }, [load]);
+  useEffect(() => {
+    if (!expanded) return;
+    const closeOnKey = (event: KeyboardEvent) => { if (event.key === "Escape") setExpanded(false); };
+    const closeOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !panelRef.current?.contains(event.target)) setExpanded(false);
+    };
+    window.addEventListener("keydown", closeOnKey);
+    document.addEventListener("pointerdown", closeOutside);
+    return () => {
+      window.removeEventListener("keydown", closeOnKey);
+      document.removeEventListener("pointerdown", closeOutside);
+    };
+  }, [expanded]);
+
+  const target = view?.targets.find((candidate) => candidate.selected) ?? view?.targets[0] ?? null;
+  const metrics = target?.device?.metrics ?? [];
+  const cpu = metrics.find((metric) => metric.kind === "cpu") ?? null;
+  const memory = metrics.find((metric) => metric.kind === "memory") ?? null;
+  const disk = metrics.find((metric) => metric.kind === "disk") ?? null;
+  return <div className="rho-environment-taskbar" ref={panelRef}>
+    <button
+      type="button"
+      className="rho-environment-taskbar-trigger"
+      aria-label="Environment realtime information"
+      aria-expanded={expanded}
+      onClick={() => setExpanded((value) => !value)}
+    >
+      <TaskbarMetric label="CPU" metric={cpu} />
+      <TaskbarMetric label="RAM" metric={memory} />
+      <TaskbarMetric label="Disk" metric={disk} />
+    </button>
+    {expanded && <section className="rho-environment-taskbar-popover" role="dialog" aria-label="Environment realtime details">
+      <header>
+        <div><span className="rho-eyebrow">Environment realtime</span><strong>{target?.target_id ?? "Local environment"}</strong></div>
+        <span className={`rho-domain-state rho-domain-${target?.status === "healthy" ? "ready" : target?.status === "critical" ? "error" : "warning"}`}>{target?.status ?? "loading"}</span>
+      </header>
+      <p>{target == null ? "Resource telemetry is loading." : `${target.host_kind} / ${target.isolation_kind} · ${target.environment_identity} · capabilities ${target.capabilities.join(", ") || "none declared"}`}</p>
+      {target?.device != null && <div className="rho-environment-taskbar-device">
+        <strong>{target.device.host_name}</strong>
+        <small>{target.device.device_id} · {target.device.operating_system} {target.device.architecture} · {target.device.cpu_logical_count} logical CPUs</small>
+      </div>}
+      <div className="rho-environment-taskbar-detail-grid">
+        {metrics.map((metric) => {
+          const available = formatBytes(metric.available);
+          const capacity = formatBytes(metric.capacity);
+          return <div key={metric.resource_id}>
+            <span>{metric.label}</span><strong>{formatPercent(metric.utilization_basis_points)}</strong>
+            <small>{available != null && capacity != null ? `${available} free / ${capacity}` : metric.detail}</small>
+          </div>;
+        })}
+      </div>
+      <div className="rho-environment-taskbar-health">
+        <span><i className={`rho-status-dot rho-status-${workspaceState}`} />{workspaceLabel}</span>
+        <span><i className={`rho-status-dot rho-status-${agentState}`} />{agentLabel}</span>
+        <span>{activeOperations} active {activeOperations === 1 ? "operation" : "operations"}</span>
+      </div>
+      {target != null && <p className={target.admission_allowed ? "rho-resource-admission-ready" : "rho-resource-admission-blocked"}>
+        {target.admission_allowed ? "Resource admission ready" : "Resource admission guarded"} · {target.governance_reasons.join(" · ")}
+      </p>}
+      {error != null && <p className="rho-resource-monitor-error">{error}</p>}
+      <footer>
+        <button type="button" onClick={() => { setExpanded(false); openResources(); }}>Open Environment Resources</button>
+        <button type="button" disabled={!diagnosticsAvailable} onClick={() => { setExpanded(false); openDiagnostics(); }}>Diagnostics</button>
+        <small>{view == null ? "Waiting for first observation" : `Updated ${new Date(view.observed_at).toLocaleTimeString()}`}</small>
+      </footer>
+    </section>}
+  </div>;
+}
+
 export function EnvironmentSurfaceView({
   instance,
   transport,
