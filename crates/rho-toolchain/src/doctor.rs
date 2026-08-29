@@ -9,8 +9,9 @@ use crate::config::hex_sha256;
 use crate::rig::rig_inventory_command;
 use crate::{
     CommandSpec, ComputeHost, ComputeIsolation, ComputeTarget, LOCAL_TARGET_ID,
-    TargetRegistryDocument, ToolchainConfigDocument, ToolchainError, load_toolchain_config,
-    parse_rig_inventory, resolve_r_installation,
+    RemoteHelperOperation, RemoteHelperRequest, TargetRegistryDocument, ToolchainConfigDocument,
+    ToolchainError, invoke_remote_helper, load_toolchain_config, parse_rig_inventory,
+    resolve_r_installation,
 };
 
 const MAX_DOCTOR_OUTPUT_BYTES: usize = 1024 * 1024;
@@ -54,6 +55,22 @@ pub fn doctor(project_root: &Path) -> Result<DoctorReport, ToolchainError> {
         &config,
         LOCAL_TARGET_ID,
         &ComputeTarget::local_native(),
+        None,
+    )
+}
+
+pub fn doctor_local_realization(project_root: &Path) -> Result<DoctorReport, ToolchainError> {
+    let config = load_toolchain_config(project_root)?;
+    let mut target = ComputeTarget::local_native();
+    for capability in &config.config.compute.required_capabilities {
+        if !target.capabilities.contains(capability) {
+            target.capabilities.push(capability.clone());
+        }
+    }
+    doctor_with_target(
+        &config,
+        &config.config.compute.default_target,
+        &target,
         None,
     )
 }
@@ -103,13 +120,12 @@ fn doctor_with_target(
             format!("target lacks {}", missing_capabilities.join(", ")),
         ));
     }
-    if !matches!(target.host, ComputeHost::Local) {
-        report.checks.push(failed(
-            "target-adapter",
-            "SSH execution requires the authenticated remote Toolchain Helper",
-        ));
-        report.status = DoctorStatus::Failed;
-        return Ok(report);
+    if matches!(target.host, ComputeHost::Ssh { .. }) {
+        if !missing_capabilities.is_empty() {
+            report.status = DoctorStatus::Failed;
+            return Ok(report);
+        }
+        return doctor_ssh(config, target, report);
     }
     if let ComputeIsolation::Docker {
         engine,
@@ -192,6 +208,74 @@ fn doctor_with_target(
                 .push(failed("python", bounded(&error.to_string()))),
         }
     }
+    report.status = if report
+        .checks
+        .iter()
+        .all(|check| check.status == DoctorStatus::Ready)
+    {
+        DoctorStatus::Ready
+    } else {
+        DoctorStatus::Failed
+    };
+    Ok(report)
+}
+
+fn doctor_ssh(
+    config: &ToolchainConfigDocument,
+    target: &ComputeTarget,
+    mut report: DoctorReport,
+) -> Result<DoctorReport, ToolchainError> {
+    let ComputeHost::Ssh { remote_root, .. } = &target.host else {
+        return Err(ToolchainError::InvalidTarget(
+            "remote Doctor requires an SSH target".to_string(),
+        ));
+    };
+    let target_registry_sha256 = report.target_registry_sha256.clone().ok_or_else(|| {
+        ToolchainError::InvalidTarget(
+            "SSH target requires a durable targets.yaml digest".to_string(),
+        )
+    })?;
+    let request = RemoteHelperRequest {
+        protocol: 1,
+        request_id: format!("doctor-{}", &config.sha256[..16]),
+        target_id: report.target_id.clone(),
+        project_root: remote_root.clone(),
+        rho_toml_sha256: config.sha256.clone(),
+        target_registry_sha256,
+        operation: RemoteHelperOperation::Doctor,
+        payload: serde_json::to_value(&target.isolation)?,
+    };
+    let response = invoke_remote_helper(&report.target_id, target, &request)?;
+    if !response.ok || response.partial_effects_possible {
+        report.checks.push(failed(
+            "remote-helper",
+            response
+                .error
+                .unwrap_or_else(|| "remote Doctor failed".to_string()),
+        ));
+        report.status = DoctorStatus::Failed;
+        return Ok(report);
+    }
+    let remote: DoctorReport = serde_json::from_value(response.payload)?;
+    if remote.rho_toml_sha256 != config.sha256 {
+        return Err(ToolchainError::CommandFailed(
+            "remote rho.toml digest differs from the local project".to_string(),
+        ));
+    }
+    report.r_version = remote.r_version;
+    report.rscript = remote.rscript;
+    report.python_version = remote.python_version;
+    report.python = remote.python;
+    report.checks.extend(
+        remote
+            .checks
+            .into_iter()
+            .filter(|check| check.id != "rho.toml"),
+    );
+    report.checks.push(ready(
+        "remote-helper",
+        "authenticated remote Doctor completed",
+    ));
     report.status = if report
         .checks
         .iter()
@@ -797,7 +881,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn remote_container_target_is_resolved_before_any_local_runtime_probe() {
+    fn remote_target_never_falls_back_when_ssh_admission_fails() {
         let root = tempdir().unwrap();
         fs::write(
             root.path().join("rho.toml"),
@@ -811,17 +895,8 @@ mod tests {
         )
         .unwrap();
         let targets = crate::load_target_registry(rho_home.path()).unwrap();
-        let report = doctor_for_target(root.path(), &targets).unwrap();
-        assert_eq!(report.target_id, "lab");
-        assert_eq!(report.host_kind, "ssh");
-        assert_eq!(report.isolation_kind, "docker");
-        assert_eq!(report.status, DoctorStatus::Failed);
-        assert!(
-            report
-                .checks
-                .iter()
-                .any(|check| check.id == "target-adapter")
-        );
+        assert!(doctor_for_target(root.path(), &targets).is_err());
+        assert!(!root.path().join(".rho").exists());
     }
 
     #[test]

@@ -26,7 +26,9 @@ pub use config::{
     ExactVersion, ProjectComputeConfig, PythonToolchainConfig, PythonVersion, RToolchainConfig,
     RuntimeToolchainConfig, ToolchainConfig, ToolchainConfigDocument, load_toolchain_config,
 };
-pub use doctor::{DoctorCheck, DoctorReport, DoctorStatus, doctor, doctor_for_target};
+pub use doctor::{
+    DoctorCheck, DoctorReport, DoctorStatus, doctor, doctor_for_target, doctor_local_realization,
+};
 pub use journal::{
     EffectStatus, ExternalEffectRecord, OperationJournal, OperationKind, OperationStatus,
     execute_journaled_operation, operation_journal_path,

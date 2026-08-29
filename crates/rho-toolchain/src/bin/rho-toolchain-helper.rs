@@ -1,7 +1,9 @@
 use std::io::{Read, Write};
 use std::path::Path;
 
-use rho_toolchain::{RemoteHelperOperation, RemoteHelperRequest, RemoteHelperResponse, doctor};
+use rho_toolchain::{
+    RemoteHelperOperation, RemoteHelperRequest, RemoteHelperResponse, doctor_local_realization,
+};
 
 const MAX_FRAME_BYTES: u64 = 1024 * 1024;
 
@@ -28,28 +30,30 @@ fn main() {
         }
     };
     let response = match request.operation {
-        RemoteHelperOperation::Doctor => match doctor(Path::new(&request.project_root)) {
-            Ok(report) => RemoteHelperResponse {
-                protocol: request.protocol,
-                request_id: request.request_id,
-                target_id: request.target_id,
-                ok: true,
-                status: "completed".to_string(),
-                payload: serde_json::to_value(report).unwrap_or(serde_json::Value::Null),
-                error: None,
-                partial_effects_possible: false,
-            },
-            Err(error) => RemoteHelperResponse {
-                protocol: request.protocol,
-                request_id: request.request_id,
-                target_id: request.target_id,
-                ok: false,
-                status: "failed".to_string(),
-                payload: serde_json::Value::Null,
-                error: Some(error.to_string()),
-                partial_effects_possible: false,
-            },
-        },
+        RemoteHelperOperation::Doctor => {
+            match doctor_local_realization(Path::new(&request.project_root)) {
+                Ok(report) => RemoteHelperResponse {
+                    protocol: request.protocol,
+                    request_id: request.request_id,
+                    target_id: request.target_id,
+                    ok: true,
+                    status: "completed".to_string(),
+                    payload: serde_json::to_value(report).unwrap_or(serde_json::Value::Null),
+                    error: None,
+                    partial_effects_possible: false,
+                },
+                Err(error) => RemoteHelperResponse {
+                    protocol: request.protocol,
+                    request_id: request.request_id,
+                    target_id: request.target_id,
+                    ok: false,
+                    status: "failed".to_string(),
+                    payload: serde_json::Value::Null,
+                    error: Some(error.to_string()),
+                    partial_effects_possible: false,
+                },
+            }
+        }
         _ => RemoteHelperResponse {
             protocol: request.protocol,
             request_id: request.request_id,

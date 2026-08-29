@@ -78,10 +78,11 @@ image instead. Local Conda Doctor now hashes the exact stdout from
 rig/Rscript, renv/pak/jsonlite, uv lock, `.venv`, and exact Python checks through
 `conda run --no-capture-output --name <environment>`. Conda Run/Live preserves
 the original command environment. SSH remains blocked until the remote Helper
-exists. The `rho-toolchain-helper --stdio` binary now provides a bounded JSON
-Doctor endpoint for installation on remote hosts; effect operations remain
-explicitly unsupported until remote operation journaling and disconnect
-recovery are complete. Before invoking it, the client obtains the host key with
+exists. The target-aware Doctor now invokes `rho-toolchain-helper --stdio` as
+a bounded JSON endpoint on the remote host, validates the returned project
+`rho.toml` digest, and adopts only matching runtime checks into the local
+report. Effect operations remain explicitly unsupported until remote operation
+journaling and disconnect recovery are complete. Before invoking it, the client obtains the host key with
 `ssh-keyscan`, verifies the exact configured SHA-256 through `ssh-keygen`, and
 then uses OpenSSH `BatchMode=yes` plus `StrictHostKeyChecking=yes`. Request and
 response identities bind protocol, request, target, remote project root, and
